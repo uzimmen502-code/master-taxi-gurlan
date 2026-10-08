@@ -87,7 +87,7 @@ ok('accountId BIR MARTA: ikkinchi xizmat arizasi bir xil kalitga tushadi', async
   const b = await req({ service: 'taxi' }, ctx(A));
   assert.strictEqual(a.accountId, b.accountId);
   const { data } = onlyDoc(db);
-  assert.strictEqual(data.status.courier, caps.COURIER.trial);
+  assert.strictEqual(data.status.courier, caps.COURIER.applied);
   assert.strictEqual(data.status.taxi, caps.TAXI.starter);
 });
 
@@ -107,14 +107,28 @@ ok('`users` hujjati umuman yo\'q bo\'lsa — yaratiladi (Phone Auth bor)', async
 });
 
 // ─── ariza va idempotentlik ───────────────────────────────────────────
-ok('kuryer: `trial` + 3 kunlik oyna', async () => {
+ok('kuryer D-15.5 (manual): `applied` — admin tasdig\'igacha ISHLAMAYDI, sinov oynasi YO\'Q', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
   const res = await api.makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
-  assert.strictEqual(res.status, caps.COURIER.trial);
-  assert.strictEqual(res.trialEndsAt, day(3).toISOString());
+  assert.strictEqual(res.status, caps.COURIER.applied);
+  assert.strictEqual(res.changed, true);
+  assert.strictEqual(res.trialEndsAt, undefined, 'sinov soati yurmaydi');
   const { data } = onlyDoc(db);
-  assert.strictEqual(data.courier.active, true);
-  assert.strictEqual(caps.isEligible(data, 'courier'), true);
+  assert.strictEqual(data.courier.active, true, 'xohish yozildi');
+  assert.strictEqual(caps.isEligible(data, 'courier'), false, 'tasdiqsiz nomzod emas');
+  assert.strictEqual(caps.canFinishActive(data, 'courier'), false);
+  assert.strictEqual((data.window || {}).courier, undefined, 'oyna yozilmaydi');
+  assert.strictEqual(data.review.courier.submittedAt.getTime(), NOW.getTime(), 'ariza vaqti — admin uchun');
+  assert.deepStrictEqual(db.dump('capability_audit'), {}, 'ariza — admin amali emas');
+});
+
+ok('kuryer D-15.5: qayta ariza IDEMPOTENT — `applied` o\'zgarmaydi, ariza vaqti qayta yozilmaydi', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  await api.makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
+  const again = await api.makeRequestCapability({ db, now: () => day(2) })({ service: 'courier' }, ctx(A));
+  assert.strictEqual(again.changed, false);
+  assert.strictEqual(again.status, caps.COURIER.applied);
+  assert.strictEqual(onlyDoc(db).data.review.courier.submittedAt.getTime(), NOW.getTime());
 });
 
 ok('taksi: `starter` + 4 oylik oyna, DARHOL ishlaydi (D-TAXI-1, 2)', async () => {
@@ -192,7 +206,8 @@ async function withTrial(service, over = {}, status) {
 }
 
 ok('kuryer sweeper: grace bir marta, keyin suspended; retry cho\'zmaydi', async () => {
-  const t = await withTrial('courier');
+  // D-15.5 dan oldin ariza bergan, hali `trial` da turgan kuryer (orqaga moslik).
+  const t = await withTrial('courier', caps.windowFor('courier', NOW), caps.COURIER.trial);
   const sw = (n) => silent(() => api.makeCapabilitySweeper({ db: t.db, now: () => day(n) })());
   assert.deepStrictEqual(await sw(2), { graceGranted: 0, suspended: 0, verificationRequired: 0 });
   assert.strictEqual((await sw(4)).graceGranted, 1);

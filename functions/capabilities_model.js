@@ -32,7 +32,8 @@
  * nomzodga `providerId = primaryUid` beradi.
  *
  * ── HAR XIZMATNING O'Z LIFECYCLE'I (T-2) ───────────────────────────────
- * Kuryer: 3 kun sinov + bir martalik 5 kun grace + hujjat (D-15, D-15.1).
+ * Kuryer: ariza → admin tasdig'i (D-15.5); eski sinov yo'li — 3 kun
+ * + bir martalik 5 kun grace + hujjat (D-15, D-15.1).
  * Taksi: 4 oy starter (ishlaydi, bepul) → verification_required →
  * verified (D-TAXI-1…6). Qolganlari (D-SERVICE-1): yoqdi → ishlaydi.
  *
@@ -66,8 +67,19 @@ const COMMON = {
   suspended: 'suspended',
 };
 
-/** Kuryer lifecycle'i (D-15, D-15.1). */
+/** Kuryer lifecycle'i (D-15, D-15.1, D-15.5). */
 const COURIER = {
+  /**
+   * D-15.5 (ega qarori 2026-10-08): odam ilovadan ARIZA berdi, admin
+   * hali ko'rmagan. ISHLAMAYDI — buyurtma olmaydi, nomzod emas, soat
+   * yurmaydi. Faqat admin `approved` yoki `suspended` (rad) qiladi.
+   */
+  applied: 'applied',
+  /**
+   * D-15.5 dan keyin odam o'ziga `trial` OLA OLMAYDI. Holat qoladi:
+   * admin «qo'shish» yo'li (`ADMIN_GRANT_PATH`) va D-15.5 dan oldin
+   * ariza bergan, hali sinovda turgan kuryerlar uchun (orqaga moslik).
+   */
   trial: 'trial',
   /**
    * 3 kun tugadi, BIR MARTALIK 5 kunlik grace ichida. Nomi «expired»
@@ -187,9 +199,10 @@ const simpleLifecycle = {
  */
 const LIFECYCLES = {
   courier: {
-    initial: COURIER.trial,
+    // D-15.5: ariza — `applied`, `trial` emas (admin tasdig'igacha ish yo'q).
+    initial: COURIER.applied,
     statuses: [
-      COMMON.notRegistered, COURIER.trial, COURIER.trialExpired,
+      COMMON.notRegistered, COURIER.applied, COURIER.trial, COURIER.trialExpired,
       COURIER.documentSubmitted, COURIER.underReview, COURIER.approved,
       COURIER.documentRejected, COMMON.suspended,
     ],
@@ -202,7 +215,16 @@ const LIFECYCLES = {
       COURIER.underReview, COURIER.approved,
     ],
     transitions: {
-      [COMMON.notRegistered]: { [COURIER.trial]: ['provider', 'admin'] },
+      [COMMON.notRegistered]: {
+        [COURIER.applied]: ['provider'],
+        // Faqat admin «qo'shish» yo'li (D-15.5: odam o'ziga sinov bermaydi).
+        [COURIER.trial]: ['admin'],
+      },
+      // D-15.5: arizani faqat admin hal qiladi — tasdiq yoki rad.
+      [COURIER.applied]: {
+        [COURIER.approved]: ['admin'],
+        [COMMON.suspended]: ['admin'],
+      },
       [COURIER.trial]: {
         [COURIER.documentSubmitted]: ['provider'],
         [COURIER.trialExpired]: ['system'],
@@ -313,13 +335,14 @@ const ADMIN_GRANT_PATH = {
  * `settings/courier.approvalMode`, admin panelda almashtiriladi
  * (`adminSetCourierApprovalMode`, audit bilan).
  *
- *   manual — ariza → `trial` (D-15: 3 kun + bir martalik 5 kun grace),
- *            admin ro'yxatdan tasdiqlaydi. STANDART.
+ *   manual — ariza → `applied` (D-15.5, ega qarori 2026-10-08): admin
+ *            ro'yxatdan tasdiqlamaguncha ISHLAMAYDI. STANDART.
+ *            (D-15.5 gacha: ariza → `trial`, darhol ishlardi.)
  *   auto   — ariza → darhol `approved`: state machine bo'ylab
- *            (`trial → approved`, admin siyosati sifatida), auditga tushadi.
+ *            (`applied → approved`, admin siyosati sifatida), auditga tushadi.
  *
  * Noma'lum yoki bo'sh qiymat — `manual` (xavfsiz tomon). Rejim faqat
- * ARIZA paytida qo'llanadi: `auto`ga o'tish mavjud `trial`larni
+ * ARIZA paytida qo'llanadi: `auto`ga o'tish mavjud `applied`/`trial`larni
  * o'zgartirmaydi — ularni admin ro'yxatdan tasdiqlaydi.
  */
 const COURIER_APPROVAL_MODES = Object.freeze({ manual: 'manual', auto: 'auto' });
@@ -379,7 +402,9 @@ function isEligible(doc, service) {
  */
 function canFinishActive(doc, service) {
   if (!doc || !isService(service)) return false;
-  return statusOf(doc, service) !== COMMON.notRegistered;
+  const s = statusOf(doc, service);
+  // `applied` (D-15.5) hech qachon ish olmagan — tugatadigani ham yo'q.
+  return s !== COMMON.notRegistered && s !== COURIER.applied;
 }
 
 /** O'tish ruxsat etilganmi (17-qoida: markazlashgan state machine). */

@@ -113,7 +113,7 @@ ok('kelishuv darvozasi hozir hech bir xizmatda yo\'q (matnlar kutilmoqda, 2-bis)
   for (const s of caps.SERVICES) assert.strictEqual(caps.AGREEMENT_GATED[s], false, s);
   const db = makeDb({ [`users/${A}`]: {} });
   const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
-  assert.strictEqual(r.status, caps.COURIER.trial);
+  assert.strictEqual(r.status, caps.COURIER.applied);
 });
 
 // ─── admin status ─────────────────────────────────────────────────────
@@ -213,12 +213,12 @@ ok('GRANT: ilovaga kirmagan raqam → not-found (user_not_registered), HECH NARS
   assert.deepStrictEqual(db.dump('provider_capabilities'), {});
   assert.deepStrictEqual(db.dump('capability_audit'), {});
 });
-ok('GRANT: o\'zi ariza bergan (trial) → already_registered, holat o\'zgarmaydi', async () => {
+ok('GRANT: o\'zi ariza bergan (applied) → already_registered, holat o\'zgarmaydi (ro\'yxatdan tasdiqlanadi)', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
   const r0 = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
   await assert.rejects(() => grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN)),
-    (e) => e.code === 'failed-precondition' && e.details.reason === 'already_registered' && e.details.status === 'trial');
-  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'trial');
+    (e) => e.code === 'failed-precondition' && e.details.reason === 'already_registered' && e.details.status === 'applied');
+  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'applied');
 });
 ok('GRANT: `suspended` kuryerni «qo\'shish» bilan jimgina TIKLAMAYDI', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
@@ -261,11 +261,11 @@ ok('GRANT: oddiy foydalanuvchi chaqira olmaydi; taksi va noto\'g\'ri raqam rad',
 const setMode = (db) => admin.makeAdminSetCourierApprovalMode({ db, now: () => NOW });
 const reqCap = (db) => makeRequestCapability({ db, now: () => NOW });
 
-ok('REJIM: sozlama yo\'q → MANUAL standart: kuryer `trial`, audit yo\'q', async () => {
+ok('REJIM: sozlama yo\'q → MANUAL standart: kuryer `applied` (D-15.5), audit yo\'q', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
   const r = await reqCap(db)({ service: 'courier' }, ctx(A));
-  assert.strictEqual(r.status, 'trial');
-  assert.ok(r.trialEndsAt, 'D-15 sinov oynasi');
+  assert.strictEqual(r.status, 'applied');
+  assert.strictEqual(r.trialEndsAt, undefined, 'D-15.5: tasdiqgacha sinov soati yo\'q');
   assert.deepStrictEqual(db.dump('capability_audit'), {});
 });
 ok('REJIM: AUTO → ariza darhol `approved`, review=auto, audit (kim yoqqani bilan)', async () => {
@@ -279,7 +279,7 @@ ok('REJIM: AUTO → ariza darhol `approved`, review=auto, audit (kim yoqqani bil
   assert.strictEqual(cap.courier.active, true);
   const auto = auditOf(db).filter((a) => a.kind === 'auto_approve');
   assert.strictEqual(auto.length, 1);
-  assert.strictEqual(auto[0].from, 'trial');
+  assert.strictEqual(auto[0].from, 'applied');
   assert.strictEqual(auto[0].to, 'approved');
   assert.strictEqual(auto[0].modeSetBy, ADMIN);
 });
@@ -292,15 +292,15 @@ ok('REJIM: AUTO taksiga TA\'SIR QILMAYDI (starter)', async () => {
 ok('REJIM: noma\'lum qiymat → MANUAL (xavfsiz tomon)', async () => {
   const db = makeDb({ [`users/${A}`]: {}, 'settings/courier': { approvalMode: 'AUTO ' } });
   const r = await reqCap(db)({ service: 'courier' }, ctx(A));
-  assert.strictEqual(r.status, 'trial');
+  assert.strictEqual(r.status, 'applied');
 });
-ok('REJIM: AUTO ga o\'tish mavjud `trial`ni O\'ZGARTIRMAYDI', async () => {
+ok('REJIM: AUTO ga o\'tish mavjud `applied`ni O\'ZGARTIRMAYDI (admin ro\'yxatdan tasdiqlaydi)', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
   const r0 = await reqCap(db)({ service: 'courier' }, ctx(A));
   await setMode(db)({ mode: 'auto' }, ctx(ADMIN));
   const r1 = await reqCap(db)({ service: 'courier' }, ctx(A));
   assert.strictEqual(r1.changed, false);
-  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'trial');
+  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'applied');
 });
 ok('REJIM: `suspended` kuryer AUTO da ham qayta ariza bilan TIKLANMAYDI', async () => {
   const db = makeDb({ [`users/${A}`]: {} });

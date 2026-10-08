@@ -78,15 +78,38 @@ ok('kuryer: ishlaydigan holatlar', () => {
     c.COURIER.underReview, c.COURIER.approved]) {
     assert.strictEqual(c.isWorking('courier', s), true, s);
   }
-  for (const s of [c.COMMON.notRegistered, c.COURIER.documentRejected, c.COMMON.suspended]) {
+  for (const s of [c.COMMON.notRegistered, c.COURIER.applied, c.COURIER.documentRejected, c.COMMON.suspended]) {
     assert.strictEqual(c.isWorking('courier', s), false, s);
   }
 });
-ok('kuryer: odam o\'ziga faqat `trial` so\'raydi, `approved` EMAS (D-14)', () => {
-  assert.strictEqual(c.canTransition('courier', c.COMMON.notRegistered, c.COURIER.trial, 'provider'), true);
+ok('kuryer D-15.5: odam o\'ziga faqat `applied` so\'raydi — `trial` ham, `approved` ham EMAS (D-14)', () => {
+  assert.strictEqual(c.LIFECYCLES.courier.initial, c.COURIER.applied);
+  assert.strictEqual(c.canTransition('courier', c.COMMON.notRegistered, c.COURIER.applied, 'provider'), true);
+  assert.strictEqual(c.canTransition('courier', c.COMMON.notRegistered, c.COURIER.trial, 'provider'), false);
   for (const from of c.LIFECYCLES.courier.statuses) {
     assert.strictEqual(c.canTransition('courier', from, c.COURIER.approved, 'provider'), false, from);
   }
+});
+ok('kuryer D-15.5: `applied` — ish YO\'Q, nomzod emas, tugatadigan ishi ham yo\'q, soat yurmaydi', () => {
+  const d = courierDoc({}, c.COURIER.applied);
+  d.courier.active = true;
+  assert.strictEqual(c.isEligible(d, 'courier'), false);
+  assert.strictEqual(c.canPublishPaid(d, 'courier'), false);
+  assert.strictEqual(c.canFinishActive(d, 'courier'), false);
+  assert.strictEqual(c.nextStep(d, 'courier', day(100)).action, 'none');
+  assert.ok(!c.sweepableStatuses('courier').includes(c.COURIER.applied));
+});
+ok('kuryer D-15.5: `applied` dan faqat admin — tasdiqlaydi yoki rad etadi (suspended)', () => {
+  assert.strictEqual(c.canTransition('courier', c.COURIER.applied, c.COURIER.approved, 'admin'), true);
+  assert.strictEqual(c.canTransition('courier', c.COURIER.applied, c.COMMON.suspended, 'admin'), true);
+  for (const to of c.LIFECYCLES.courier.statuses) {
+    assert.strictEqual(c.canTransition('courier', c.COURIER.applied, to, 'provider'), false, to);
+    assert.strictEqual(c.canTransition('courier', c.COURIER.applied, to, 'system'), false, to);
+  }
+});
+ok('kuryer: admin «qo\'shish» yo\'li o\'zgarmagan (not_registered → trial → approved)', () => {
+  assert.strictEqual(c.canTransition('courier', c.COMMON.notRegistered, c.COURIER.trial, 'admin'), true);
+  assert.deepStrictEqual(c.ADMIN_GRANT_PATH.courier, [c.COURIER.trial, c.COURIER.approved]);
 });
 ok('kuryer: tiklanish suspended -> document_submitted (D-15.1)', () => {
   assert.strictEqual(c.canTransition('courier', c.COMMON.suspended, c.COURIER.documentSubmitted, 'provider'), true);

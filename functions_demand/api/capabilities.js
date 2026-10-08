@@ -99,8 +99,9 @@ function commitAccountId(tx, acc) {
 /**
  * «Men shu xizmatni ko'rsatmoqchiman» — ariza.
  *
- * Natija: xizmat lifecycle'ining BOSHLANG'ICH holati (kuryer `trial`,
- * taksi `starter`, qolganlari `enabled`) + muddat oynasi.
+ * Natija: xizmat lifecycle'ining BOSHLANG'ICH holati (kuryer `applied` —
+ * admin tasdig'ini kutadi, D-15.5; taksi `starter`, qolganlari `enabled`)
+ * + muddat oynasi (kuryer arizasida oyna yo'q).
  *
  * IDEMPOTENT (21-qoida, D-TAXI-2): allaqachon ishlayotgan odamda hech
  * narsa o'zgarmaydi; taksida `window.taxi.startedAt` BIR MARTA yoziladi —
@@ -146,6 +147,11 @@ function makeRequestCapability(deps) {
         }
         return out;
       }
+      // D-15.5: ariza allaqachon admin navbatida (`applied`) — qayta bosish
+      // hech narsani o'zgartirmaydi, ariza vaqti ham qayta yozilmaydi (21-qoida).
+      if (current === lc.initial) {
+        return { accountId, status: current, changed: false };
+      }
 
       /**
        * D-SERVICE-2: `AGREEMENT_GATED[service]` bo'lsa xizmatni BIRINCHI
@@ -183,8 +189,10 @@ function makeRequestCapability(deps) {
       }
 
       const existingWindow = ((doc.window || {})[service]) || null;
+      // D-15.5: `applied` — admin navbatida, sinov soati YURMAYDI.
+      const pendingReview = target === caps.COURIER.applied;
       // BIR MARTA: oyna allaqachon bo'lsa (masalan taksi starter'i), saqlanadi.
-      const window = existingWindow && existingWindow.startedAt
+      const window = pendingReview || (existingWindow && existingWindow.startedAt)
         ? null
         : caps.windowFor(service, now);
 
@@ -195,6 +203,9 @@ function makeRequestCapability(deps) {
         updatedAt: now,
       };
       if (window) patch.window = { [service]: window };
+      // Admin ro'yxatida «ariza qachon berilgan» ko'rinsin; tasdiq/rad
+      // keyin `review.<xizmat>` ga merge bo'ladi, bu maydon saqlanadi.
+      if (pendingReview) patch.review = { [service]: { submittedAt: now } };
       if (autoApproval) {
         patch.review = {
           [service]: { reviewedBy: 'auto', at: now, decision: target, reason: 'approval_mode_auto' },

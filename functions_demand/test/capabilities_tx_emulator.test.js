@@ -59,15 +59,16 @@ const userDoc = async (id) => (await db.collection('users').doc(id).get()).data(
 const capDoc = async (id) => (await db.collection('provider_capabilities').doc(id).get()).data() || {};
 
 (async () => {
-  await check('requestCapability(courier): accountId\'siz foydalanuvchi → trial', async () => {
+  await check('requestCapability(courier): accountId\'siz foydalanuvchi → applied (D-15.5)', async () => {
     await reset({ [`users/${A}`]: { phone: A } });
     const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
-    assert.strictEqual(r.status, caps.COURIER.trial);
+    assert.strictEqual(r.status, caps.COURIER.applied);
     assert.ok(r.accountId.startsWith('acc'));
     assert.strictEqual((await userDoc(A)).accountId, r.accountId, 'users.accountId yozilgan');
     const cap = await capDoc(r.accountId);
-    assert.strictEqual(cap.status.courier, caps.COURIER.trial);
+    assert.strictEqual(cap.status.courier, caps.COURIER.applied);
     assert.strictEqual(cap.identity.primaryUid, A);
+    assert.strictEqual(caps.isEligible(cap, 'courier'), false, 'tasdiqsiz ishlamaydi');
   });
 
   await check('requestCapability(taxi): accountId\'siz foydalanuvchi → starter', async () => {
@@ -77,10 +78,11 @@ const capDoc = async (id) => (await db.collection('provider_capabilities').doc(i
     assert.strictEqual((await capDoc(r.accountId)).status.taxi, caps.TAXI.starter);
   });
 
-  await check('requestCapability: users hujjati umuman yo\'q → yaratiladi + trial', async () => {
+  await check('requestCapability: users hujjati umuman yo\'q → yaratiladi + applied', async () => {
     await reset();
     const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(B));
     assert.strictEqual((await userDoc(B)).accountId, r.accountId);
+    assert.strictEqual(r.status, caps.COURIER.applied);
   });
 
   await check('requestCapability: ikkinchi chaqiruv IDEMPOTENT, accountId o\'sha', async () => {

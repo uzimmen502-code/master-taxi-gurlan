@@ -135,8 +135,10 @@ exports.submitRating = fn.https.onCall(wrapCallable(
 /**
  * D-12…D-16 — «men shu xizmatni ko'rsatmoqchiman».
  *
- * Natija: `status.<xizmat> = 'trial'` + 3 kunlik oyna. Odam O'ZIGA
- * faqat SINOV so'rashi mumkin; `approved` ni faqat admin beradi (D-14),
+ * Natija: xizmatning boshlang'ich holati (`LIFECYCLES[x].initial`):
+ * kuryer `applied` (D-15.5 — admin tasdig'igacha ishlamaydi; `auto`
+ * rejimda darhol `approved`), taksi `starter`, qolganlari `enabled`.
+ * `approved` ni faqat admin (yoki u yoqqan `auto` siyosat) beradi (D-14),
  * shuning uchun `status` ni klient qoidasi umuman yozolmaydi.
  */
 exports.requestCapability = fn.https.onCall(wrapCallable(

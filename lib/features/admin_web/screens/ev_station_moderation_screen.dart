@@ -8,23 +8,66 @@ import '../../../repositories/ev_station_repository.dart';
 import '../services/admin_ev_charging_service.dart';
 import '../services/admin_auth_service.dart';
 
-/// ⚡ EV zaryadlash nuqtalari moderatsiyasi (6-band) — `reportCount > 0`
-/// stansiyalar navbati, har biri uchun report tafsilotlari, harakatlar.
+/// ⚡ EV zaryadlash nuqtalari moderatsiyasi (6-band):
+///   1) `reportCount > 0` — shikoyat navbati;
+///   2) import tekshiruvi — `reviewRequired && !isActive` (open-data importi
+///      shu yerda qo'lda tekshirilib «Xaritaga qaytarish» qilinadi).
 class EvStationModerationScreen extends StatelessWidget {
   const EvStationModerationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final repo = context.read<EvStationRepository>();
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const TabBar(
+            tabs: [
+              Tab(text: 'Шикоятлар'),
+              Tab(text: 'Импорт текшируви'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _StationList(
+                  stream: repo.watchReportedStations(),
+                  emptyText: 'Report qilingan stansiyalar yo\'q.',
+                ),
+                _StationList(
+                  stream: repo.watchReviewRequiredStations(),
+                  emptyText: 'Tekshiruv kutayotgan import stansiyasi yo\'q.',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StationList extends StatelessWidget {
+  const _StationList({required this.stream, required this.emptyText});
+
+  final Stream<List<EvChargingStation>> stream;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<List<EvChargingStation>>(
-      stream: repo.watchReportedStations(),
+      stream: stream,
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(child: Text('Хатолик: ${snap.error}'));
+        }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         final stations = snap.data!;
         if (stations.isEmpty) {
-          return const Center(child: Text('Report qilingan stansiyalar yo\'q.'));
+          return Center(child: Text(emptyText));
         }
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -125,11 +168,19 @@ class _StationModerationTileState extends State<_StationModerationTile> {
           StreamBuilder<List<EvChargingReport>>(
             stream: repo.watchReports(station.id),
             builder: (context, snap) {
-              final reports = snap.data ?? const <EvChargingReport>[];
-              if (reports.isEmpty) {
+              if (!snap.hasData) {
                 return const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text('Yuklanmoqda...'),
+                );
+              }
+              final reports = snap.data!;
+              // Shikoyatsiz stansiya (import tekshiruvi) — avval bu ham
+              // «Yuklanmoqda...» bo'lib abadiy turardi.
+              if (reports.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Shikoyat yo\'q.'),
                 );
               }
               return Column(

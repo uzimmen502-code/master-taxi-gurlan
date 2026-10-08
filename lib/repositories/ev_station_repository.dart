@@ -159,6 +159,20 @@ class EvStationRepository {
         .map((snap) => snap.docs.map(EvChargingStation.fromDoc).toList());
   }
 
+  /// Admin: open-data importida `review_required` bo'lib yashirin
+  /// (`isActive:false`) kelgan stansiyalar — `tools/import_ev_open_data.js`
+  /// ularni «admin qo'lda tekshirib Xaritaga qaytaradi» deb yozadi, lekin
+  /// avval admin ekrani faqat `reportCount > 0`ni ko'rsatardi: bu
+  /// stansiyalarga yetib bo'lmasdi.
+  Stream<List<EvChargingStation>> watchReviewRequiredStations() {
+    return _stations
+        .where('reviewRequired', isEqualTo: true)
+        .where('isActive', isEqualTo: false)
+        .limit(200)
+        .snapshots()
+        .map((snap) => snap.docs.map(EvChargingStation.fromDoc).toList());
+  }
+
   /// Admin: bitta stansiyaning report tafsilotlari.
   Stream<List<EvChargingReport>> watchReports(String stationId) {
     return _stations

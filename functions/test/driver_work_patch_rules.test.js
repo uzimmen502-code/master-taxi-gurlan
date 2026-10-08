@@ -23,8 +23,8 @@
  * Guruhlar:
  *   H. Teshik — FAIL bo'lsa, begona/anonim yozuv o'tyapti.
  *   R. Qonuniy oqim (regression) — ishlashi SHART. R11–R19 — marshrut
- *      YO'LOVCHISINING begona haydovchi hujjatlariga yozuvi (ilovada bor,
- *      1.0.32 da ham): shu sabab begona yozuv to'liq yopilmadi.
+ *      YO'LOVCHISINING begona haydovchi hujjatlariga yozuvi (eski ilovalar,
+ *      1.0.32 da ham) — `RULES_PHASE` ga qarang.
  *
  * Tuzatishdan oldin (2026-10-08, feat/ev-trip-planner dd394d3): 21/40 —
  * H12/H13 dan boshqa barcha H o'tib ketardi.
@@ -34,6 +34,16 @@ const path = require('path');
 const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
 const { increment, serverTimestamp } = require('firebase/firestore');
+
+/**
+ * R11–R19 (yo'lovchi → begona haydovchi hujjati):
+ *   1 — 1-bosqich rules: RUXSAT (eski ilovalar shunday yozadi);
+ *   2 — 2-bosqich rules (`fix/driver-work-patch-phase2-rules`, docs/vazifalar.md
+ *       V-14): RAD — bu yozuvlarni endi server qiladi
+ *       (marshrut_passenger_dispatch_cf.test.js).
+ */
+const RULES_PHASE = 2;
+const passengerCrossWrite = (p) => (RULES_PHASE === 1 ? assertSucceeds(p) : assertFails(p));
 
 const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
 const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
@@ -247,13 +257,13 @@ async function main() {
   await seed();
   // P1 — offer timeout: `_applyDispatchPolicy('timeout')` :1443-1475.
   await check('R11 P1 yo\'lovchi timeout: drivers.todayTimeouts +1 (set merge, increment)',
-    () => assertSucceeds(pdb('drivers').doc(MARSH).set(
+    () => passengerCrossWrite(pdb('drivers').doc(MARSH).set(
       { todayTimeouts: increment(1), updatedAt: serverTimestamp() }, { merge: true })));
   await check('R12 P1 yo\'lovchi timeout: schedules.todayTimeouts +1',
-    () => assertSucceeds(pdb('schedules').doc('sched_marsh').set(
+    () => passengerCrossWrite(pdb('schedules').doc('sched_marsh').set(
       { todayTimeouts: increment(1), updatedAt: serverTimestamp() }, { merge: true })));
   await check('R13 P1 yo\'lovchi timeout: queue streak/hisoblagich + avto-pauza',
-    () => assertSucceeds(pdb('queue').doc(MARSH).set({
+    () => passengerCrossWrite(pdb('queue').doc(MARSH).set({
       dispatchTimeoutStreak: 2, dispatchTimeoutCount: increment(1), todayTimeouts: increment(1),
       lastTimeoutAt: serverTimestamp(), updatedAt: serverTimestamp(),
       isActive: false, autoPausedReason: 'dispatch_timeout_streak', autoPausedAt: serverTimestamp(),
@@ -262,20 +272,20 @@ async function main() {
   // `_writeMarshrutSeatInTransaction` :1072/:1081, `_cancelMarshrutTripInTransaction` :921.
   await seed();
   await check('R14 P2 yo\'lovchi bekor: schedules.seatsLeft +1 (update)',
-    () => assertSucceeds(pdb('schedules').doc('sched_marsh').update({ seatsLeft: 4, updatedAt: serverTimestamp() })));
+    () => passengerCrossWrite(pdb('schedules').doc('sched_marsh').update({ seatsLeft: 4, updatedAt: serverTimestamp() })));
   await check('R15 P2 yo\'lovchi bekor: queue seatsLeft/isActive (update)',
-    () => assertSucceeds(pdb('queue').doc(MARSH).update({ seatsLeft: 4, isActive: true, updatedAt: serverTimestamp() })));
+    () => passengerCrossWrite(pdb('queue').doc(MARSH).update({ seatsLeft: 4, isActive: true, updatedAt: serverTimestamp() })));
   await check('R16 P2 yo\'lovchi bekor: drivers.isBusy=false (set merge)',
-    () => assertSucceeds(pdb('drivers').doc(MARSH).set({ isBusy: false, updatedAt: serverTimestamp() }, { merge: true })));
+    () => passengerCrossWrite(pdb('drivers').doc(MARSH).set({ isBusy: false, updatedAt: serverTimestamp() }, { merge: true })));
   await check('R17 P3 markCancelled: queue dispatchTimeoutStreak=0 (`_resetDriverDispatchStats`)',
-    () => assertSucceeds(pdb('queue').doc(MARSH).set({ dispatchTimeoutStreak: 0, updatedAt: serverTimestamp() }, { merge: true })));
+    () => passengerCrossWrite(pdb('queue').doc(MARSH).set({ dispatchTimeoutStreak: 0, updatedAt: serverTimestamp() }, { merge: true })));
   await check('R18 P2 batch: trip bilan birga — schedules +1, queue, drivers isBusy',
     async () => {
       const b = passenger.batch();
       b.update(pdb('schedules').doc('sched_marsh'), { seatsLeft: 4, updatedAt: serverTimestamp() });
       b.update(pdb('queue').doc(MARSH), { seatsLeft: 4, isActive: true, updatedAt: serverTimestamp() });
       b.set(pdb('drivers').doc(MARSH), { isBusy: false, updatedAt: serverTimestamp() }, { merge: true });
-      await assertSucceeds(b.commit());
+      await passengerCrossWrite(b.commit());
     });
   await seed();
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -283,7 +293,7 @@ async function main() {
     await ctx.firestore().collection('schedules').doc('sched_marsh').update({ seatsLeft: 7 });
   });
   await check('R19 P2 o\'rin to\'la bo\'lsa clamp — seatsLeft o\'zgarmaydi, faqat updatedAt',
-    () => assertSucceeds(pdb('schedules').doc('sched_marsh').update({ seatsLeft: 7, updatedAt: serverTimestamp() })));
+    () => passengerCrossWrite(pdb('schedules').doc('sched_marsh').update({ seatsLeft: 7, updatedAt: serverTimestamp() })));
 
   await testEnv.cleanup();
   const failed = results.filter((r) => !r.p);

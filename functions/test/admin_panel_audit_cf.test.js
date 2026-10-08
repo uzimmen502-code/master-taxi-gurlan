@@ -526,6 +526,55 @@ async function main() {
     assert.strictEqual((await db.collection('device_aliases').doc(ATTACKER).get()).exists, false);
   });
 
+  // ── Q. Marshrut/taksi IDOR: leaveDriverRole, cancel-after-accept, reyting ──
+  await reset();
+  await Promise.all(['trips', 'schedules', 'queue', 'drivers', 'intercity_drivers'].map(wipe));
+  await db.collection('users').doc(DRIVER).set({ role: 'driver' });
+  await db.collection('drivers').doc(DRIVER).set({ isOnline: true, totalRatings: 0, ratingSum: 0 });
+  await check('Q1 leaveDriverRole: anonim / begona raqam — rad', async () => {
+    await rejectsWith(fns.leaveDriverRole.run({ userPhone: DRIVER }, ANON), 'permission-denied');
+    await rejectsWith(fns.leaveDriverRole.run({ userPhone: SUPER }, ctxOf(OTHER)), 'permission-denied');
+    assert.strictEqual((await db.collection('users').doc(SUPER).get()).data().role, 'superadmin');
+  });
+  await check('Q2 leaveDriverRole: o\'zi — driver → user', async () => {
+    await fns.leaveDriverRole.run({ userPhone: DRIVER, clientHandledCleanup: true }, ctxOf(DRIVER));
+    assert.strictEqual((await db.collection('users').doc(DRIVER).get()).data().role, 'user');
+  });
+  await check('Q3 leaveDriverRole: haydovchi hujjati bor dispatcher roli saqlanadi', async () => {
+    await fns.leaveDriverRole.run({ userPhone: DISPATCHER, clientHandledCleanup: true }, ctxOf(DISPATCHER));
+    assert.strictEqual((await db.collection('users').doc(DISPATCHER).get()).data().role, 'dispatcher');
+  });
+  await db.collection('schedules').doc('s1').set({ seats: 4, seatsLeft: 2 });
+  await db.collection('queue').doc(DRIVER).set({ seats: 4, seatsLeft: 2, isActive: true });
+  await db.collection('trips').doc('mt1').set({
+    taxiType: 'marshrut', status: 'accepted', userPhone: CUSTOMER, scheduleId: 's1', acceptedDriverId: DRIVER,
+  });
+  await check('Q4 cancel-after-accept: begona — rad', async () => {
+    await rejectsWith(fns.marshrutPassengerCancelAfterAccept.run({ tripId: 'mt1' }, ctxOf(OTHER)), 'permission-denied');
+    assert.strictEqual((await db.collection('trips').doc('mt1').get()).data().status, 'accepted');
+  });
+  await check('Q5 cancel-after-accept: egasi — bekor, o\'rin qaytadi (reads-before-writes tuzatildi)', async () => {
+    await fns.marshrutPassengerCancelAfterAccept.run({ tripId: 'mt1' }, ctxOf(CUSTOMER));
+    assert.strictEqual((await db.collection('trips').doc('mt1').get()).data().status, 'cancelled');
+    assert.strictEqual((await db.collection('schedules').doc('s1').get()).data().seatsLeft, 3);
+    assert.strictEqual((await db.collection('queue').doc(DRIVER).get()).data().seatsLeft, 3);
+  });
+  await db.collection('trips').doc('lt1').set({
+    taxiType: 'local', status: 'completed', userPhone: CUSTOMER, acceptedDriverId: DRIVER, driverId: DRIVER,
+  });
+  await check('Q6 reyting: begona yo\'lovchi / boshqa haydovchi — rad', async () => {
+    await rejectsWith(fns.updateDriverRating.run({ driverId: DRIVER, rating: 1, tripId: 'lt1' }, ctxOf(OTHER)), 'permission-denied');
+    await rejectsWith(fns.updateDriverRating.run({ driverId: OTHER, rating: 1, tripId: 'lt1' }, ctxOf(CUSTOMER)), 'permission-denied');
+  });
+  await check('Q7 reyting: egasi bir marta (ikkinchisi sanalmaydi)', async () => {
+    await fns.updateDriverRating.run({ driverId: DRIVER, rating: 5, tripId: 'lt1' }, ctxOf(CUSTOMER));
+    await fns.updateDriverRating.run({ driverId: DRIVER, rating: 1, tripId: 'lt1' }, ctxOf(CUSTOMER));
+    const d = (await db.collection('drivers').doc(DRIVER).get()).data();
+    assert.strictEqual(d.totalRatings, 1);
+    assert.strictEqual(d.avgRating, 5);
+    assert.strictEqual((await db.collection('trips').doc('lt1').get()).data().passengerRating, 5);
+  });
+
   // ── N. Gilam / sut — admin o'tishlari (custody) ─────────────────────
   await reset();
   await Promise.all(['carpet_wash_orders', 'agro_pickup_orders'].map(wipe));

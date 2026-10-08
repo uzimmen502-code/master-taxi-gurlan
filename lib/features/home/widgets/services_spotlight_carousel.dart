@@ -243,7 +243,24 @@ class ServiceSpotlightTile extends StatefulWidget {
 
 class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
   static const _radius = 14.0;
-  static const _facePressed = Color(0xFFEEF6D8);
+
+  // Бренд палитраси (2026-10-08). Аввал «неон» лайм юз + қизил ҳошия +
+  // тўқ яшил лаб эди (2026-08 эски бренди).
+  static const _faceTop = AvaLight.surface;
+  static const _faceMid = Color(0xFFFFFBF2);
+  static const _faceBottom = AvaLight.brandSoft;
+  static const _facePressedTop = AvaLight.brandSoft;
+  static const _facePressed = Color(0xFFFFF6E3);
+  static const _facePressedBottom = Color(0xFFFFE2AE);
+
+  /// Ҳошиянинг ҲАММА томони БИТТА рангда бўлиши шарт: юмалоқ бурчакли
+  /// `Border` турли қалинликни чизади, лекин турли рангни чизмайди
+  /// (Flutter `Border.paint` — `visibleColors.length == 1`). Аввал томонлар
+  /// тўрт хил қизил эди — debug'да `A borderRadius can only be given on
+  /// borders with uniform colors` assert, release'да бурчаклар тўғри бурчак
+  /// бўлиб чиқарди. 3D ҳиссини қалинлик (паст 2.0) ва «лаб» сояси беради.
+  static const _border = AvaLight.brandPressed;
+  static const _borderPressed = AvaLight.brandText;
 
   bool _pressed = false;
   bool _busy = false;
@@ -314,47 +331,38 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
                   end: Alignment.bottomCenter,
                   colors: pressed
                       ? const [
-                          Color(0xFFDCE8B0),
+                          _facePressedTop,
                           _facePressed,
-                          Color(0xFFC8D890),
+                          _facePressedBottom,
                         ]
                       : const [
-                          Color(0xFFFFFFFF),
-                          Color(0xFFFAFCF0),
-                          Color(0xFFE8F2C0),
+                          _faceTop,
+                          _faceMid,
+                          _faceBottom,
                         ],
                 ),
                 border: Border(
                   top: BorderSide(
-                    color: pressed
-                        ? const Color(0xFFB71C1C)
-                        : const Color(0xFFFF8A80),
+                    color: pressed ? _borderPressed : _border,
                     width: 1.0,
                   ),
                   left: BorderSide(
-                    color: pressed
-                        ? const Color(0xFFB71C1C)
-                        : const Color(0xFFFF6F60),
+                    color: pressed ? _borderPressed : _border,
                     width: 1.0,
                   ),
                   right: BorderSide(
-                    color: pressed
-                        ? const Color(0xFF8B0000)
-                        : const Color(0xFFC62828),
+                    color: pressed ? _borderPressed : _border,
                     width: pressed ? 1.5 : 1.2,
                   ),
                   bottom: BorderSide(
-                    color: pressed
-                        ? const Color(0xFF6A0000)
-                        : const Color(0xFFB71C1C),
+                    color: pressed ? _borderPressed : _border,
                     width: pressed ? 1.5 : 2.0,
                   ),
                 ),
                 boxShadow: pressed
                     ? [
                         BoxShadow(
-                          color:
-                              const Color(0xFF4E9F00).withValues(alpha: 0.35),
+                          color: AvaLight.brandText.withValues(alpha: 0.35),
                           blurRadius: 0,
                           offset: const Offset(0, 1),
                         ),
@@ -365,10 +373,10 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
                         ),
                       ]
                     : [
-                        BoxShadow(
-                          color: const Color(0xFF3D7A00),
+                        const BoxShadow(
+                          color: AvaLight.brandText,
                           blurRadius: 0,
-                          offset: const Offset(0, 4),
+                          offset: Offset(0, 4),
                         ),
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.28),
@@ -487,7 +495,7 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
                               style: TextStyle(
                                 fontSize: labelSize,
                                 fontWeight: FontWeight.w600,
-                                color: const Color(0xFF102418),
+                                color: AvaLight.ink,
                                 height: 1.05,
                               ),
                             ),

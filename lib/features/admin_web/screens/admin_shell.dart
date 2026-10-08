@@ -198,6 +198,10 @@ class _AdminShellState extends State<AdminShell> {
     //    (`checkDeviceBinding`); бу «fake SMS» оқими ишлатилмайди, сервер
     //    сўровларни ўзи тасдиқлайди, панелнинг тўғридан-тўғри ёзуви эса
     //    rules'да рад этиларди.
+    // Учта такси бўлими иловадаги номлар билан (эга, 2026-10-08): модул
+    // «Ҳудудлар ва хизматлар»да ёпиқ (`hidden`) бўлса ҳам сайдбарда туради —
+    // бўлим фақат роль бўйича фильтрланади (`visibleFor`), модул ҳолатига
+    // боғланмайди.
     _AdminSection(
       group: 'Такси ва транспорт',
       label: 'Такси верификацияси',
@@ -206,13 +210,13 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'Такси ва транспорт',
-      label: '🚕 Такси нархи',
+      label: 'Маҳаллий такси',
       icon: Icons.local_taxi,
-      description: 'Mahalliy taksi: boshlang\'ich, km, koeffitsient',
+      description: 'Нарх: бошланғич, км, коэффициент',
     ),
     _AdminSection(
       group: 'Такси ва транспорт',
-      label: 'Маршрут',
+      label: 'Маршрут такси',
       icon: Icons.directions_bus,
       description: 'Ҳайдовчилар ва сафарлар',
     ),
@@ -224,7 +228,7 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'Такси ва транспорт',
-      label: 'Shaharlararo',
+      label: 'Шаҳарлараро такси',
       icon: Icons.connecting_airports,
       description: 'Intercity haydovchilar va bronlar',
     ),
@@ -583,7 +587,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Харид нархлари') {
       return const ProcurementPricesScreen();
     }
-    if (section.label == '🚕 Такси нархи') {
+    if (section.label == 'Маҳаллий такси') {
       return const TaxiPriceScreen();
     }
     if (section.label == 'Омбор') {
@@ -607,13 +611,13 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Birthday bonus') {
       return const BirthdayBonusScreen();
     }
-    if (section.label == 'Маршрут') {
+    if (section.label == 'Маршрут такси') {
       return const MarshrutAdminScreen();
     }
     if (section.label == 'Dispatch history') {
       return const MarshrutDispatchHistoryScreen();
     }
-    if (section.label == 'Shaharlararo') {
+    if (section.label == 'Шаҳарлараро такси') {
       return const IntercityAdminScreen();
     }
     if (section.label == 'Курьер') {
@@ -1125,7 +1129,7 @@ class _Sidebar extends StatelessWidget {
             .where('status', isEqualTo: 'pending')
             .snapshots()
             .map((s) => s.docs.length);
-      case 'Маршрут':
+      case 'Маршрут такси':
         return db
             .collection('trips')
             .where('taxiType', isEqualTo: 'marshrut')
@@ -1137,7 +1141,7 @@ class _Sidebar extends StatelessWidget {
       // ҳам йўқ — сўров permission-denied, нишон доим 0 эди). Бронлар
       // `intercity_bookings`да; ҳайдовчи тасдиғини кутаётганлари `pending`
       // (`intercityCreateBooking`).
-      case 'Shaharlararo':
+      case 'Шаҳарлараро такси':
         return db
             .collection('intercity_bookings')
             .where('status', isEqualTo: 'pending')

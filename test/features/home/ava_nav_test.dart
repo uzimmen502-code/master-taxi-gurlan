@@ -56,7 +56,7 @@ void main() {
     testWidgets('ҳудуд танланмаган — «Ҳудудни танланг»', (tester) async {
       ServiceConfigHolder.setForTest();
       await _pump(tester, AvaTopBar(onPickRegion: () {}));
-      expect(find.text('AVA'), findsOneWidget);
+      expect(find.byType(AvaLogoBadge), findsOneWidget);
       // Локализациясиз калитнинг ўзи чиқади — муҳими, ҳудуд номи эмас.
       expect(find.text('home_region_pick'), findsOneWidget);
     });
@@ -91,8 +91,41 @@ void main() {
         scale: 1.3,
       );
       expect(tester.takeException(), isNull);
-      // Логотип сиқилиб йўқолмаган.
-      expect(find.text('AVA'), findsOneWidget);
+      // Логотип сиқилиб йўқолмаган — тўлиқ ўлчамда қолган.
+      expect(tester.getSize(find.byType(AvaLogoBadge)),
+          const Size.square(AvaLogoBadge.diameter));
+    });
+
+    // Эга қарори 2026-10-08: эски логотип, қора думалоқ ичида, кичик.
+    testWidgets('логотип — қора доира ичида эски AVA расми', (tester) async {
+      ServiceConfigHolder.setForTest(districtLabel: 'Гурлан');
+      await _pump(tester, AvaTopBar(onPickRegion: () {}));
+      final box = tester.widget<Container>(find.descendant(
+        of: find.byType(AvaLogoBadge),
+        matching: find.byType(Container),
+      ));
+      final deco = box.decoration! as BoxDecoration;
+      expect(deco.shape, BoxShape.circle);
+      expect(deco.color, const Color(0xFF000000));
+      final img = tester.widget<Image>(find.descendant(
+        of: find.byType(AvaLogoBadge),
+        matching: find.byType(Image),
+      ));
+      expect((img.image as AssetImage).assetName, AvaLogoBadge.asset);
+      // Расм доирадан чиқмайди.
+      expect(img.width, lessThan(AvaLogoBadge.diameter));
+    });
+
+    // Чегара: «ўлчови катта бўлиб кетмасин» — босиш майдони минимумидан
+    // сал кичик ёки тенг; қатор баландлигини оширмайди.
+    test('логотип ўлчами кичик: диаметр ≤ AvaTap.minSize', () {
+      expect(AvaLogoBadge.diameter, lessThanOrEqualTo(AvaTap.minSize));
+    });
+
+    testWidgets('скрин-ридер учун «AVA» ёрлиғи бор', (tester) async {
+      ServiceConfigHolder.setForTest();
+      await _pump(tester, AvaTopBar(onPickRegion: () {}));
+      expect(find.bySemanticsLabel('AVA'), findsOneWidget);
     });
   });
 

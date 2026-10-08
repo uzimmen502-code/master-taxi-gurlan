@@ -282,8 +282,49 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
             ],
           ),
         ),
+        _serverSwitchBar(),
         Expanded(child: _tab == 0 ? _tariffTab() : _shipmentsTab()),
       ],
+    );
+  }
+
+  /// Сервер калити — фақат кўрсатиш. Логистика CF'лари (quote/create/
+  /// accept/handover, LEG push) `module_config/logistics_all`га қарайди;
+  /// «Ҳудудлар ва хизматлар»даги `logistics` ҳолати эса фақат иловадаги
+  /// плиткани бошқаради (бошқа ҳужжат). Аввал админ «Ёпиқ» қўйса ҳам
+  /// сервер ишлашда давом этар ва буни ҳеч ерда кўрмасди. Калитни эга
+  /// `functions_demand/tools/enable_module.js` билан бошқаради.
+  Widget _serverSwitchBar() {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _db.collection('module_config').doc('logistics_all').snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final d = snap.data!.data() ?? const <String, dynamic>{};
+        // Сервер семантикаси (`functions_demand/core/config.js` resolveFlags):
+        // enabled/push — фақат `true` бўлса; matching — `false` бўлмаса ёқиқ.
+        String on(bool v) => v ? 'ёқиқ' : 'ўчиқ';
+        final enabled = d['enabled'] == true;
+        String flag(String key) => key == 'matchingEnabled'
+            ? on(d[key] != false)
+            : on(d[key] == true);
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: enabled ? Colors.green.shade50 : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            snap.data!.exists
+                ? 'Сервер калити (module_config/logistics_all): модул ${flag('enabled')} · '
+                    'matching ${flag('matchingEnabled')} · push ${flag('pushEnabled')}. '
+                    '«Ҳудудлар ва хизматлар» фақат иловадаги плиткани бошқаради.'
+                : 'Сервер калити (module_config/logistics_all) йўқ — логистика CF\'лари ўчиқ.',
+            style: const TextStyle(fontSize: 12),
+          ),
+        );
+      },
     );
   }
 

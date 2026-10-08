@@ -71,6 +71,14 @@ async function main() {
   await expectEq('9 xonali so\'rov 12 xonalini topadi', await push.resolveToken(C9), tok('users_C12'));
   await expectEq('formatlangan raqam ham ishlaydi', await push.resolveToken('+998 90 333-00-03'), tok('users_C12'));
 
+  // O-16: kanonik hujjat BOR, lekin tokensiz — begona yaratgan 9 xonali
+  // dublikatning tokeni olinmaydi (push o'g'irlanmaydi).
+  await reset();
+  await db.collection('users').doc(C12).set({ phone: C12 });
+  await db.collection('users').doc(C9).set({ fcmToken: tok('attacker_C9') });
+  await expectEq('kanonik hujjat bor (tokensiz) — 9 xonali dublikat tokeni OLINMAYDI',
+      await push.resolveToken(C12), '');
+
   // ── onlayn: faqat presence ──────────────────────────────────────────
   await reset();
   await presence(A);

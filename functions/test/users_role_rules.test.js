@@ -152,6 +152,49 @@ async function main() {
         .update({ blockedUntil: firebase.firestore.FieldValue.delete(), cancelCount: 0 }));
   });
 
+  // ─── users CREATE (O-16): фақат эгаси, фақат каноник id ────────────
+  const NEWU = '998907770001';
+  await seed();
+  await check('C1 anonim sessiya yangi users hujjatini yarata olmaydi — RAD', async () => {
+    await assertFails(anonCtx().doc(`users/${NEWU}`)
+        .set({ phone: NEWU, name: 'X', fcmToken: 'attacker' }));
+  });
+  await seed();
+  await check('C2 telefonli foydalanuvchi BEGONA raqamga hujjat yarata olmaydi — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${NEWU}`)
+        .set({ phone: NEWU, name: 'X' }));
+  });
+  await seed();
+  await check('C3 ro\'yxatdagi foydalanuvchining 9 xonali dublikati (fcmToken bilan) — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${VICTIM.slice(3)}`)
+        .set({ phone: VICTIM, fcmToken: 'attacker_token' }));
+    await assertFails(anonCtx().doc(`users/${VICTIM.slice(3)}`)
+        .set({ phone: VICTIM, fcmToken: 'attacker_token' }));
+  });
+  await seed();
+  await check('C4 egasi o\'z 9 xonali dublikatini ham yarata olmaydi (split hamyon/push) — RAD', async () => {
+    await assertFails(phoneCtx(NEWU).doc(`users/${NEWU.slice(3)}`)
+        .set({ phone: NEWU, name: 'Ali' }));
+  });
+  await seed();
+  await check('C5 onbording: egasi o\'z kanonik hujjatini yaratadi (ilova payload) — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(NEWU).doc(`users/${NEWU}`).set({
+      phone: NEWU, name: 'Ali', gender: 'male', birthDate: '1990-01-01',
+      birthDateSetAt: now, updatedAt: now,
+    }, { merge: true }));
+  });
+  await seed();
+  await check('C6 FcmService._saveToken: hujjat yo\'q bo\'lsa egasi yaratadi — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(NEWU).doc(`users/${NEWU}`).set({
+      phone: NEWU, phoneDigits: NEWU, fcmToken: 't1', updatedAt: now,
+    }, { merge: true }));
+  });
+  await seed();
+  await check('C7 egasi ham yaratishda bonusBalance / role:admin yoza olmaydi — RAD', async () => {
+    await assertFails(phoneCtx(NEWU).doc(`users/${NEWU}`).set({ phone: NEWU, bonusBalance: 1000000 }));
+    await assertFails(phoneCtx(NEWU).doc(`users/${NEWU}`).set({ phone: NEWU, role: 'admin' }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;

@@ -755,9 +755,16 @@ service cloud.firestore {
       // Баланс ва профил — фақат эга ёки админ
       allow read: if isOwner(userId) || isAdmin();
 
-      // create — Phone Auth'siz web/mobil uchun.
+      // create — FAQAT egasi va FAQAT kanonik id (token telefoni, `998…`).
+      // Avval istalgan sessiya (anonim ham) istalgan id'li hujjat yarata
+      // olardi: ro'yxatdagi foydalanuvchining 9 xonali dublikatiga o'z
+      // `fcmToken`ini yozib push'ini olish, begona raqam uchun "identifikatsiya"
+      // hujjati ochish (hamyon auditi O-16). Ilova hujjatni egasi sifatida
+      // `canonicalPhoneId` bilan yaratadi; server yo'llari Admin SDK.
       // update — Phone Auth (`isOwner`) yoki admin (mehmon patch olib tashlandi).
       allow create: if isAuth()
+          && userDocIdFromPhoneToken() != ''
+          && userId == userDocIdFromPhoneToken()
           && request.resource.data.keys().hasAll(['phone'])
           && !request.resource.data.keys().hasAny([
                'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',

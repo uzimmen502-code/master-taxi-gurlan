@@ -98,13 +98,16 @@ function createCourierPush(deps) {
     if (ids.length === 0) return '';
 
     // D-CLEAN-1: faqat `users.fcmToken` — `couriers` zahirasi olib tashlandi.
+    // BIRINCHI MAVJUD hujjat hal qiladi: kanonik hujjat bor, lekin tokensiz
+    // bo'lsa 9 xonali dublikatga o'tilmaydi — uni begona yaratib, o'z
+    // tokenini yozib, kuryer push'ini olishi mumkin edi (hamyon auditi O-16).
     for (const col of [USERS]) {
       for (const id of ids) {
         try {
           const snap = await db.collection(col).doc(id).get();
           if (!snap.exists) continue;
           const t = (snap.data() || {}).fcmToken;
-          if (tokenOk(t)) return t;
+          return tokenOk(t) ? t : '';
         } catch (e) {
           console.error(`fcmToken o'qilmadi (${col}/${id}): ${e.message}`);
         }

@@ -18182,10 +18182,30 @@ exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
   }
 });
 
+/**
+ * Admin ўтишлари (custody занжири, CLAUDE.md 15). Курьер қадамлари —
+ * `pickup_ready → pickup_in_delivery → picked_up` ва `return_ready →
+ * return_in_delivery → completed` — ФАҚАТ курьер callable'ларида. Аввал
+ * админ ҳар қандай статусни ёза оларди: «Ювиш» `pickup_in_delivery`да
+ * ҳам кўринарди (курьер «олиб кетдим» қадами кейин рад бўлиб, вазифа
+ * курьер рўйхатидан йўқоларди), «Бекор» эса гилам AVA қўлида турганда ҳам
+ * ишларди. Бекор — гилам мижоздан олинмагунча (`picked_up`гача).
+ */
+const CARPET_ADMIN_TRANSITIONS = {
+  new: ['accepted', 'cancelled'],
+  accepted: ['pickup_ready', 'cancelled'],
+  pickup_ready: ['cancelled'],
+  pickup_in_delivery: ['cancelled'],
+  picked_up: ['washing'],
+  washing: ['drying'],
+  drying: ['ready'],
+  ready: ['return_ready'],
+};
+
 /** Admin: gilam yuvish statusini o'zgartirish. */
 exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) => {
   try {
-    await assertAdmin(String(data.adminPhone || ''), context);
+    const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
     const orderId = String(data.orderId || '').trim();
     const status = String(data.status || '').trim();
     const finalPriceRaw = data.finalPrice;
@@ -18197,24 +18217,37 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
       throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
     }
 
-    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
-    const patch = {
-      status,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    if (finalPriceRaw != null && finalPriceRaw !== '') {
-      const finalPrice = parseInt(String(finalPriceRaw), 10);
-      if (Number.isFinite(finalPrice) && finalPrice >= 0) {
-        patch.finalPrice = finalPrice;
+    const ref = db.collection('carpet_wash_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
       }
-    }
-
-    if (status === 'cancelled' && od.status === 'completed') {
-      throw new functions.https.HttpsError('failed-precondition', 'already completed');
-    }
-
-    await ref.update(patch);
+      const od = snap.data() || {};
+      const cur = String(od.status || '');
+      if (cur === status) return; // такрор босиш — ўзгармайди
+      const allowed = CARPET_ADMIN_TRANSITIONS[cur] || [];
+      if (!allowed.includes(status)) {
+        console.warn(JSON.stringify({
+          action: 'adminSetCarpetWashStatus', result: 'refused',
+          errorCode: 'CARPET_TRANSITION_NOT_ALLOWED', orderId, from: cur, to: status,
+          userId: adminUid,
+        }));
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'CARPET_TRANSITION_NOT_ALLOWED', { from: cur, to: status });
+      }
+      const patch = {
+        status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (finalPriceRaw != null && finalPriceRaw !== '') {
+        const finalPrice = parseInt(String(finalPriceRaw), 10);
+        if (Number.isFinite(finalPrice) && finalPrice >= 0) {
+          patch.finalPrice = finalPrice;
+        }
+      }
+      t.update(ref, patch);
+    });
     return { ok: true, orderId, status };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -18601,9 +18634,23 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
 });
 
 /** Admin: agro qabul statusini o'zgartirish. */
+/**
+ * Admin ўтишлари. `accepted → picked_up` — админнинг қўлда йиғиш йўли
+ * (курьерсиз) сақланади, лекин курьер вазифани олган бўлса
+ * (`pickup_in_delivery`) админ уни устидан ёза олмайди — аввал get →
+ * update транзакциясиз эди ва курьер билан пойга бўларди. Бекор — маҳсулот
+ * олинмагунча.
+ */
+const AGRO_ADMIN_TRANSITIONS = {
+  new: ['accepted', 'cancelled'],
+  accepted: ['picked_up', 'cancelled'],
+  pickup_in_delivery: ['cancelled'],
+  picked_up: ['completed'],
+};
+
 exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) => {
   try {
-    await assertAdmin(String(data.adminPhone || ''), context);
+    const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
     const orderId = String(data.orderId || '').trim();
     const status = String(data.status || '').trim();
     const finalPriceRaw = data.finalPrice;
@@ -18615,24 +18662,37 @@ exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) 
       throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
     }
 
-    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
-    const patch = {
-      status,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    if (finalPriceRaw != null && finalPriceRaw !== '') {
-      const finalPrice = parseInt(String(finalPriceRaw), 10);
-      if (Number.isFinite(finalPrice) && finalPrice >= 0) {
-        patch.finalPrice = finalPrice;
+    const ref = db.collection('agro_pickup_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
       }
-    }
-
-    if (status === 'cancelled' && od.status === 'completed') {
-      throw new functions.https.HttpsError('failed-precondition', 'already completed');
-    }
-
-    await ref.update(patch);
+      const od = snap.data() || {};
+      const cur = String(od.status || '');
+      if (cur === status) return;
+      const allowed = AGRO_ADMIN_TRANSITIONS[cur] || [];
+      if (!allowed.includes(status)) {
+        console.warn(JSON.stringify({
+          action: 'adminSetAgroPickupStatus', result: 'refused',
+          errorCode: 'AGRO_TRANSITION_NOT_ALLOWED', orderId, from: cur, to: status,
+          userId: adminUid,
+        }));
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'AGRO_TRANSITION_NOT_ALLOWED', { from: cur, to: status });
+      }
+      const patch = {
+        status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (finalPriceRaw != null && finalPriceRaw !== '') {
+        const finalPrice = parseInt(String(finalPriceRaw), 10);
+        if (Number.isFinite(finalPrice) && finalPrice >= 0) {
+          patch.finalPrice = finalPrice;
+        }
+      }
+      t.update(ref, patch);
+    });
     return { ok: true, orderId, status };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

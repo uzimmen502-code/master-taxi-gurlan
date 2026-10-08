@@ -446,6 +446,60 @@ async function main() {
     assert.strictEqual(m.docs[0].data().fromAdmin, true);
   });
 
+  // ── N. Gilam / sut — admin o'tishlari (custody) ─────────────────────
+  await reset();
+  await Promise.all(['carpet_wash_orders', 'agro_pickup_orders'].map(wipe));
+  const carpet = (id, extra) => db.collection('carpet_wash_orders').doc(id).set({
+    customerPhone: CUSTOMER, carpetCount: 2, status: 'new', pickupCourierId: '', returnCourierId: '', ...extra,
+  });
+  const setCarpet = (orderId, status) =>
+    fns.adminSetCarpetWashStatus.run({ orderId, status }, ctxOf(ADMIN));
+  await carpet('w1', { status: 'pickup_in_delivery', pickupCourierId: '998903000001' });
+  await check('N1 gilam: kuryer yo\'lda — admin «Yuvish» qila olmaydi', async () => {
+    await rejectsWith(setCarpet('w1', 'washing'), 'failed-precondition', 'CARPET_TRANSITION_NOT_ALLOWED');
+  });
+  await carpet('w2', { status: 'washing' });
+  await check('N2 gilam AVA qo\'lida — «Bekor» rad', async () => {
+    await rejectsWith(setCarpet('w2', 'cancelled'), 'failed-precondition');
+    assert.strictEqual((await db.collection('carpet_wash_orders').doc('w2').get()).data().status, 'washing');
+  });
+  await check('N3 gilam: to\'g\'ri oqim washing → drying → ready → return_ready', async () => {
+    for (const s of ['drying', 'ready', 'return_ready']) await setCarpet('w2', s);
+    assert.strictEqual((await db.collection('carpet_wash_orders').doc('w2').get()).data().status, 'return_ready');
+  });
+  await check('N4 gilam: kuryer qadamini (return_in_delivery) admin yoza olmaydi', async () => {
+    await rejectsWith(setCarpet('w2', 'return_in_delivery'), 'failed-precondition');
+  });
+  await carpet('w3', {});
+  await check('N5 gilam: yangi → qabul (narx bilan) → olib ketishga tayyor; olinmaganda bekor', async () => {
+    await fns.adminSetCarpetWashStatus.run({ orderId: 'w3', status: 'accepted', finalPrice: 40000 }, ctxOf(ADMIN));
+    await setCarpet('w3', 'pickup_ready');
+    await setCarpet('w3', 'cancelled');
+    const o = (await db.collection('carpet_wash_orders').doc('w3').get()).data();
+    assert.strictEqual(o.status, 'cancelled');
+    assert.strictEqual(o.finalPrice, 40000);
+  });
+  const agro = (id, extra) => db.collection('agro_pickup_orders').doc(id).set({
+    customerPhone: CUSTOMER, productType: 'milk', status: 'accepted', pickupCourierId: '', ...extra,
+  });
+  const setAgro = (orderId, status) =>
+    fns.adminSetAgroPickupStatus.run({ orderId, status }, ctxOf(ADMIN));
+  await agro('m1', { status: 'pickup_in_delivery', pickupCourierId: '998903000001' });
+  await check('N6 sut: kuryer olgan vazifani admin «Olib ketildi» bilan yoza olmaydi', async () => {
+    await rejectsWith(setAgro('m1', 'picked_up'), 'failed-precondition', 'AGRO_TRANSITION_NOT_ALLOWED');
+  });
+  await agro('m2', {});
+  await check('N7 sut: admin qo\'lda yig\'ish (accepted → picked_up → completed) ishlaydi', async () => {
+    await setAgro('m2', 'picked_up');
+    await setAgro('m2', 'completed');
+    assert.strictEqual((await db.collection('agro_pickup_orders').doc('m2').get()).data().status, 'completed');
+  });
+  await check('N8 sut: olingan mahsulotni bekor qilib bo\'lmaydi; yakunlanganni ham', async () => {
+    await agro('m3', { status: 'picked_up' });
+    await rejectsWith(setAgro('m3', 'cancelled'), 'failed-precondition');
+    await rejectsWith(setAgro('m2', 'cancelled'), 'failed-precondition');
+  });
+
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────
   await reset();
   const signIn = (phone, pin) => fns.adminWebSignIn.run({ phone, ...(pin == null ? {} : { pin }) }, {});

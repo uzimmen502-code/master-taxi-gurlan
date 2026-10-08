@@ -22,8 +22,23 @@ const { encode: geohashEncode } = require('./geo_hash');
 function attachRealty(exports, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
-    assertAdmin, notifyUserInApp,
+    assertAdmin, notifyUserInApp, settlementLedger,
   } = deps;
+
+  /**
+   * Ҳамён ечими учун ledger кўзгуси (ҳамён аудити Y-1). Аввал бу ердаги
+   * харидлар фақат `bonusBalance`ни камайтирарди, passenger_credit эса
+   * камаймасди → ledger текширадиган ечиш/settlement сарфланган пулни
+   * яна ишлатишга йўл берарди. READ фазасида чақирилади (ёзувдан олдин);
+   * калит серверда ясалади — мижоз калитини бошқа CF орқали банд қилиб
+   * кўзгуни ўчириш мумкин бўлмасин.
+   */
+  async function prepareWalletDebit(t, uid, opId) {
+    const ctx = await settlementLedger.prepareBonusInTx(
+        t, db, uid, { idempotencyKey: `realty_${opId}` });
+    if (ctx.jExists) throw fail('aborted', 'ledger_key_conflict');
+    return ctx;
+  }
 
   /** Бепул ОДДИЙ объект лимити — концепциянинг 2-бўлими. */
   const FREE_PLAIN_LIMIT = 2;
@@ -548,6 +563,7 @@ function attachRealty(exports, deps) {
       const listingRef = db.collection('realty_listings').doc(listingId);
       const userRef = db.collection('users').doc(uid);
       const durationMs = days * 24 * 60 * 60 * 1000;
+      const ledgerOpId = db.collection('realty_listings').doc().id;
 
       try {
         return await db.runTransaction(async (t) => {
@@ -572,9 +588,19 @@ function attachRealty(exports, deps) {
                 price, balance,
               });
             }
+            const bonusCtx = await prepareWalletDebit(t, userRef.id, ledgerOpId);
             t.update(userRef, {
               bonusBalance: admin.firestore.FieldValue.increment(-price),
               balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            settlementLedger.commitBonusInTx(t, bonusCtx, {
+              delta: -price,
+              kind: 'realty_tier_purchase',
+              refType: 'realty_listing',
+              refId: listingId,
+              meta: { tier, days },
+              postedBy: uid,
+              postedRole: 'client',
             });
             t.set(userRef.collection('wallet_ledger').doc(), {
               type: 'realty_tier_purchase',
@@ -687,6 +713,7 @@ function attachRealty(exports, deps) {
       }
       const price = await packagePriceFor(size);
       const userRef = db.collection('users').doc(uid);
+      const ledgerOpId = db.collection('realty_listings').doc().id;
 
       try {
         return await db.runTransaction(async (t) => {
@@ -705,9 +732,19 @@ function attachRealty(exports, deps) {
                 price, balance,
               });
             }
+            const bonusCtx = await prepareWalletDebit(t, userRef.id, ledgerOpId);
             t.update(userRef, {
               bonusBalance: admin.firestore.FieldValue.increment(-price),
               balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            settlementLedger.commitBonusInTx(t, bonusCtx, {
+              delta: -price,
+              kind: 'realty_package_purchase',
+              refType: 'realty_package',
+              refId: `${size}`,
+              meta: { size },
+              postedBy: uid,
+              postedRole: 'client',
             });
             t.set(userRef.collection('wallet_ledger').doc(), {
               type: 'realty_package_purchase',
@@ -882,6 +919,7 @@ function attachRealty(exports, deps) {
       if (!plan) throw fail('invalid-argument', 'bad_plan');
 
       const userRef = db.collection('users').doc(uid);
+      const ledgerOpId = db.collection('realty_listings').doc().id;
       try {
         return await db.runTransaction(async (t) => {
           const idemSnap = await t.get(idemRef);
@@ -899,9 +937,19 @@ function attachRealty(exports, deps) {
                 price: plan.price, balance,
               });
             }
+            const bonusCtx = await prepareWalletDebit(t, userRef.id, ledgerOpId);
             t.update(userRef, {
               bonusBalance: admin.firestore.FieldValue.increment(-plan.price),
               balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            settlementLedger.commitBonusInTx(t, bonusCtx, {
+              delta: -plan.price,
+              kind: 'realty_pro_purchase',
+              refType: 'realty_pro',
+              refId: plan.id,
+              meta: { planId: plan.id, objects: plan.objects, days: plan.days },
+              postedBy: uid,
+              postedRole: 'client',
             });
             t.set(userRef.collection('wallet_ledger').doc(), {
               type: 'realty_pro_purchase',

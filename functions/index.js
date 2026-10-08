@@ -57,7 +57,7 @@ attachRelayEscrow(exports, {
 const { attachRealty } = require('./realty');
 attachRealty(exports, {
   functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp, assertAdmin,
-  notifyUserInApp,
+  notifyUserInApp, settlementLedger,
 });
 
 const DEVICE_BINDING_MAX_FAILED = 5;
@@ -13955,9 +13955,26 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
           throw new functions.https.HttpsError(
               'failed-precondition', 'insufficient_balance');
         }
+        // Ledger кўзгуси (READ фазаси) — аввал `bonusBalance` ledger'сиз
+        // камаярди, passenger_credit эса камаймасди (ҳамён аудити Y-1).
+        const bonusCtx = await settlementLedger.prepareBonusInTx(
+            t, db, userRef.id, { idempotencyKey: `tv_ad_${clipRef.id}` });
+        if (bonusCtx.jExists) {
+          throw new functions.https.HttpsError(
+              'aborted', 'LEDGER_KEY_CONFLICT');
+        }
         t.update(userRef, {
           bonusBalance: admin.firestore.FieldValue.increment(-adPrice),
           balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        settlementLedger.commitBonusInTx(t, bonusCtx, {
+          delta: -adPrice,
+          kind: 'tv_ad_purchase',
+          refType: 'tv_clip',
+          refId: clipRef.id,
+          meta: { tier, durationDays, scope },
+          postedBy: uid,
+          postedRole: 'client',
         });
         const ledgerRef = userRef.collection('wallet_ledger').doc();
         t.set(ledgerRef, {
@@ -14071,6 +14088,9 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
 
     const userRef = db.collection('users').doc(uid);
     const clipRef = db.collection('tv_clips').doc(clipId);
+    // Ledger калити серверда (мижоз `idempotencyKey`и эмас — уни бошқа
+    // CF орқали олдиндан банд қилиб, кўзгуни ўчириш мумкин эди).
+    const ledgerOpId = db.collection('tv_clips').doc().id;
 
     const result = await db.runTransaction(async (t) => {
       const idemSnap = await t.get(idemRef);
@@ -14111,9 +14131,25 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
           throw new functions.https.HttpsError(
               'failed-precondition', 'insufficient_balance');
         }
+        // Ledger кўзгуси (ҳамён аудити Y-1).
+        const bonusCtx = await settlementLedger.prepareBonusInTx(
+            t, db, userRef.id, { idempotencyKey: `tv_ad_renew_${ledgerOpId}` });
+        if (bonusCtx.jExists) {
+          throw new functions.https.HttpsError(
+              'aborted', 'LEDGER_KEY_CONFLICT');
+        }
         t.update(userRef, {
           bonusBalance: admin.firestore.FieldValue.increment(-adPrice),
           balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        settlementLedger.commitBonusInTx(t, bonusCtx, {
+          delta: -adPrice,
+          kind: 'tv_ad_renew',
+          refType: 'tv_clip',
+          refId: clipId,
+          meta: { tier, durationDays, scope },
+          postedBy: uid,
+          postedRole: 'client',
         });
         const ledgerRef = userRef.collection('wallet_ledger').doc();
         t.set(ledgerRef, {

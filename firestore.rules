@@ -545,6 +545,14 @@ service cloud.firestore {
           || (a.size() == 9 && b == ('998' + a));
     }
 
+    // AVAGram avto-tasdiq (admin «AVAGram» → АВТО/ҚЎЛДА). Ilova klipni
+    // `active` qilib yozishdan oldin aynan shu maydonni o'qiydi.
+    function tvAutoApproveOn() {
+      return exists(/databases/$(database)/documents/settings/app)
+          && get(/databases/$(database)/documents/settings/app)
+              .data.get('tvAutoApprove', false) == true;
+    }
+
     function tvClipLikeCountNow() {
       return ('likeCount' in resource.data && resource.data.likeCount is int)
           ? resource.data.likeCount
@@ -768,8 +776,15 @@ service cloud.firestore {
             // `provider_capabilities.courier`. Ўзига `role: 'courier'`
             // ёзиш 14 та callable'ни очарди (self_approval_rules.test.js).
             || (isOwner(userId) && usersCarInfoPatch())
+            // `role` клиентдан ўзгармайди — ҳатто админдан ҳам. Аввал
+            // `(notChanged('role') || isAdmin())` эди: admin/dispatcher
+            // тўғридан-тўғри ёзиб ҳар қандай ролни (шу жумладан ўзига
+            // `superadmin`) бера оларди ва `setUserRoleByAdmin`даги SoD
+            // («admin фақат seller/user бера олади») четлаб ўтиларди. Админ
+            // панел ролни фақат шу CF орқали ўзгартиради
+            // (`AdminRoleService`). Тест: functions/test/admin_panel_audit_rules.test.js
             || (
-              (notChanged('role') || isAdmin())
+              notChanged('role')
               && (isOwner(userId) || isAdmin() || usersGuestProfilePatchOnly())
             )
           )
@@ -797,8 +812,14 @@ service cloud.firestore {
         allow read: if isAuth();
         allow create: if (isOwner(userId) && marshrutStateCreateOk())
             || marshrutStateDriverSyncOk(userId);
+        // Админ «Dispatch history» → «Якунланди» (`_completeMarshrutRide`)
+        // сафарни ёпгандан кейин йўловчи ҳолатини тозалайди
+        // (`_clearMarshrutActiveIfMatches`). Аввал админ бу ерга ёза
+        // олмасди: сафар ёпилар, лекин экран «Хатолик» кўрсатар ва
+        // йўловчида `accepted` қолиб кетарди.
         allow update: if (isOwner(userId) && marshrutStatePatchOnly())
-            || marshrutStateDriverSyncOk(userId);
+            || marshrutStateDriverSyncOk(userId)
+            || isAdmin();
         allow delete: if false;
       }
 
@@ -981,7 +1002,7 @@ service cloud.firestore {
     // туғилган кун ўзгартириш сўровида, `status: 'open'`) · `detectAnomaly`
     // CF (Admin SDK) · админ «Risk review» `resolveRiskEvent`.
     //
-    // Тест: functions/test/risk_events_rules.test.js
+    // Тест: functions/test/admin_panel_audit_rules.test.js
     match /risk_events/{id} {
       allow create: if isAdmin()
           || (isOwner(request.resource.data.userId)
@@ -1475,7 +1496,7 @@ service cloud.firestore {
     // (`NewsRepository` — `orderBy createdAt limit 50`) аввал янги версияда
     // ўзгартириш керак (ҳозирги сўров ёпиқ қоидада бутунлай рад бўлади).
     //
-    // Тест: functions/test/admin_news_rules.test.js
+    // Тест: functions/test/admin_panel_audit_rules.test.js
     match /admin_news/{newsId} {
       // Ўқиш — барча фойдаланувчилар (фильтр client-side).
       allow read: if true;
@@ -1927,12 +1948,16 @@ service cloud.firestore {
       // komissiya to'langan/`published` reys. Eski client-side publish
       // flow saqlanmaydi (ega qarori). `isActive: false` (yopish) va
       // boshqa maydonlar — erkin. Admin SDK (CF) qoidadan o'tmaydi.
+      // Kino RUXSATI (`entertainmentAllowed`) — faqat admin: avvalgi
+      // «admin-web PIN» yo'llari (`intercityDriverEntertainmentAllowed
+      // Create/Patch`) auth talab qilmasdi — har kim istalgan haydovchiga
+      // ruxsat yoqib/o'chira olardi. Admin web endi Phone Auth'da
+      // (`isAdmin()`), yagona chaqiruvchi — Shaharlararo → Haydovchilar →
+      // Kino switch (`EntertainmentRepository.setDriverEntertainmentAllowed`).
       allow create: if isAdmin()
-          || (isOwner(id) && intercityPublishGateOk())
-          || intercityDriverEntertainmentAllowedCreate();
+          || (isOwner(id) && intercityPublishGateOk());
       allow update: if isAdmin()
           || (isOwner(id) && intercityPublishGateOk())
-          || intercityDriverEntertainmentAllowedPatch()
           || intercityDriverEntertainmentPatch();
       allow delete: if false;
 
@@ -1951,10 +1976,14 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // ENTERTAINMENT — safar kino katalogi (B variant)
     // ══════════════════════════════════════
+    // Avval `|| entertainmentCatalogCreate()` / `ActivePatch()` («admin web
+    // PIN») auth talab qilmasdi: har kim (hatto kirmagan) istalgan
+    // `downloadUrl` bilan film qo'sha yoki filmlarni yoqib/o'chira olardi.
+    // Yagona yozuvchi — admin web «Kino katalogi» tabi (Phone Auth, `isAdmin()`).
     match /entertainment_catalog/{videoId} {
       allow read: if true;
-      allow create: if isAdmin() || entertainmentCatalogCreate();
-      allow update: if isAdmin() || entertainmentCatalogActivePatch();
+      allow create: if isAdmin() && entertainmentCatalogCreate();
+      allow update: if isAdmin();
       allow delete: if false;
     }
 
@@ -3081,14 +3110,38 @@ service cloud.firestore {
       // 'ad' — faqat CF (publishTvAd, Admin SDK) yozadi: to'lov wallet'dan
       // shu yerda debit qilinadi, klient to'g'ridan-to'g'ri yozsa to'lovsiz
       // reklama joylab qo'yishi mumkin bo'lardi.
-      allow create: if isAuth() && request.resource.data.category != 'ad';
+      //
+      // Moderatsiya (admin «AVAGram» bo'limi): avval `status` tekshirilmasdi —
+      // klient `tvAutoApprove`ni O'ZI o'qib `active`/`pending` tanlardi,
+      // o'zgartirilgan klient QO'LDA rejimda ham `active` yozib moderatsiyani
+      // chetlab o'tardi, `onTvClipSocialPublish` esa uni darhol AVA rasmiy
+      // Instagram/Facebook/YouTube/Telegram sahifalariga joylardi. Endi
+      // `active` faqat `settings/app.tvAutoApprove == true` bo'lsa (ilova
+      // aynan shu shartda `active` yozadi — eski versiya buzilmaydi).
+      // Egasi — faqat token egasi (avval begona `ownerPhone` bilan ham
+      // yaratish mumkin edi). Ijtimoiy tarmoq natija maydonlari — faqat CF.
+      allow create: if isAuth()
+          && request.resource.data.category != 'ad'
+          && (isAdmin()
+              || (phoneDocIdsMatch(userDocIdFromPhoneToken(),
+                      request.resource.data.ownerPhone)
+                  && (request.resource.data.status == 'pending'
+                      || (request.resource.data.status == 'active'
+                          && tvAutoApproveOn()))
+                  && !request.resource.data.keys().hasAny([
+                      'socialPost', 'socialPostedAt', 'socialRetryAt',
+                      'socialVideoUrl'])));
+      // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
+      // joylardi — AVA sahifalariga takroriy post. Endi faqat admin/CF.
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
               && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
               && !request.resource.data.diff(resource.data).affectedKeys()
                   .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
-                           'regionId', 'status', 'rejectReason']))
+                           'regionId', 'status', 'rejectReason',
+                           'socialPost', 'socialPostedAt', 'socialRetryAt',
+                           'socialVideoUrl']))
           || tvClipLikeCountOnly()
           || tvClipViewCountOnly()
           || tvClipCommentCountOnly()

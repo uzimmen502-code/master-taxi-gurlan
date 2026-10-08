@@ -1,0 +1,288 @@
+/**
+ * Admin panel ↔ ilova muvofiqlik auditi (2026-10-07/08) — Firestore rules.
+ *
+ * Qulflanadi:
+ *   risk_events          — avval create/read/update `if true` edi
+ *   admin_news           — create/update auth'siz edi (hammaga push)
+ *   users.role           — admin/dispatcher to'g'ridan-to'g'ri istalgan rol
+ *   entertainment_catalog — «admin PIN» yo'li auth'siz edi
+ *   intercity_drivers.entertainmentAllowed — auth'siz yoqish/o'chirish
+ *   tv_clips create      — moderatsiyani chetlab `active`; begona ownerPhone;
+ *                          socialRetryAt (AVA sahifalariga takroriy post)
+ *   marshrut_state       — admin «Dispatch history → Yakunlandi» yoza olmasdi
+ *
+ * Ishlatish: repo ildizidan
+ *   firebase emulators:exec --only firestore --project demo-rules-test \
+ *     "node functions/test/admin_panel_audit_rules.test.js"
+ */
+'use strict';
+const path = require('path');
+const fs = require('fs');
+const {
+  initializeTestEnvironment,
+  assertSucceeds,
+  assertFails,
+} = require('@firebase/rules-unit-testing');
+
+const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
+const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
+const [HOST, PORT] = EMULATOR_HOST.split(':');
+
+const ADMIN = '998901112233';
+const DISPATCHER = '998901112244';
+const OWNER = '998905556677';
+const STRANGER = '998904445566';
+const DRIVER = '998907778899';
+
+function riskEvent(userId, extra = {}) {
+  return {
+    userId,
+    type: 'birthdate_change_request',
+    severity: 'medium',
+    status: 'open',
+    deviceId: '',
+    message: 'Tug\'ilgan kun o\'zgartirish so\'rovi',
+    meta: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...extra,
+  };
+}
+
+function news(extra = {}) {
+  return {
+    title: 'Yangilik',
+    body: 'Matn',
+    category: 'info',
+    audience: 'all',
+    priority: 0,
+    createdAt: new Date(),
+    ...extra,
+  };
+}
+
+function film(extra = {}) {
+  return {
+    title: 'Safar filmi',
+    storagePath: 'entertainment/1700000000000.mp4',
+    downloadUrl: 'https://example.com/film.mp4',
+    durationSec: 0,
+    active: true,
+    sortOrder: 1,
+    createdAt: new Date(),
+    ...extra,
+  };
+}
+
+function clip(extra = {}) {
+  return {
+    videoUrl: 'https://example.com/v.mp4',
+    posterUrl: '',
+    title: 'Non',
+    price: 0,
+    districtId: 'gurlan',
+    ownerPhone: OWNER,
+    ownerName: 'Aziz',
+    category: 'product',
+    status: 'pending',
+    socialConsent: false,
+    socialNetworks: [],
+    createdAt: new Date(),
+    ...extra,
+  };
+}
+
+async function main() {
+  const testEnv = await initializeTestEnvironment({
+    projectId: 'rules-test-admin-audit',
+    firestore: {
+      rules: fs.readFileSync(RULES_PATH, 'utf8'),
+      host: HOST,
+      port: Number(PORT),
+    },
+  });
+
+  const results = [];
+  function record(name, pass, detail) {
+    results.push({name, pass, detail});
+    console.log(`${pass ? 'PASS' : 'FAIL'} - ${name}${detail ? ' :: ' + detail : ''}`);
+  }
+  async function check(name, fn) {
+    try {
+      await fn();
+      record(name, true);
+    } catch (e) {
+      record(name, false, e.message);
+    }
+  }
+
+  async function seed(tvAutoApprove) {
+    await testEnv.clearFirestore();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.collection('users').doc(ADMIN).set({role: 'admin', phone: '+' + ADMIN});
+      await db.collection('users').doc(DISPATCHER).set({role: 'dispatcher', phone: '+' + DISPATCHER});
+      await db.collection('users').doc(OWNER).set({role: 'user', phone: '+' + OWNER, name: 'Aziz'});
+      await db.collection('users').doc(STRANGER).set({role: 'user', phone: '+' + STRANGER});
+      await db.collection('settings').doc('app').set({tvAutoApprove});
+      await db.collection('risk_events').doc('r1').set(riskEvent(OWNER));
+      await db.collection('admin_news').doc('n1').set(news());
+      await db.collection('entertainment_catalog').doc('f1').set(film());
+      await db.collection('intercity_drivers').doc(DRIVER).set({
+        isActive: false, entertainmentAllowed: false, seats: 4,
+      });
+      await db.collection('tv_clips').doc('c1').set(clip({status: 'active'}));
+      await db.collection('users').doc(OWNER)
+          .collection('marshrut_state').doc('active').set({
+            tripId: 't1', status: 'accepted', updatedAt: new Date(),
+          });
+    });
+  }
+
+  function ctxFor(phone) {
+    return testEnv.authenticatedContext(`uid_${phone}`, {phone_number: '+' + phone});
+  }
+  const unauth = () => testEnv.unauthenticatedContext().firestore();
+  /** Anonim sessiya: auth bor, telefon claim yo'q. */
+  const anon = () => testEnv.authenticatedContext('anon_uid_1', {}).firestore();
+  const as = (phone) => ctxFor(phone).firestore();
+
+  await seed(false);
+
+  // ── risk_events ─────────────────────────────────────────────────────
+  await check('risk_events: kirmagan o\'qiy olmaydi',
+      () => assertFails(unauth().collection('risk_events').doc('r1').get()));
+  await check('risk_events: anonim ro\'yxatni o\'qiy olmaydi',
+      () => assertFails(anon().collection('risk_events').where('status', '==', 'open').get()));
+  await check('risk_events: egasi ham ro\'yxatni o\'qiy olmaydi (faqat admin)',
+      () => assertFails(as(OWNER).collection('risk_events').doc('r1').get()));
+  await check('risk_events: kirmagan yarata olmaydi',
+      () => assertFails(unauth().collection('risk_events').add(riskEvent(OWNER))));
+  await check('risk_events: begona boshqa odam nomidan yarata olmaydi',
+      () => assertFails(as(STRANGER).collection('risk_events').add(riskEvent(OWNER))));
+  await check('risk_events: egasi o\'zi uchun `open` yaratadi (requestBirthDateChange)',
+      () => assertSucceeds(as(OWNER).collection('risk_events').add(riskEvent(OWNER))));
+  await check('risk_events: egasi `resolved` holatda yarata olmaydi',
+      () => assertFails(as(OWNER).collection('risk_events').add(
+          riskEvent(OWNER, {status: 'resolved'}))));
+  await check('risk_events: egasi hodisani yopa olmaydi',
+      () => assertFails(as(OWNER).collection('risk_events').doc('r1').set(
+          {status: 'resolved'}, {merge: true})));
+  await check('risk_events: admin `status==open` ro\'yxatini o\'qiydi (badge + Risk review)',
+      () => assertSucceeds(as(ADMIN).collection('risk_events').where('status', '==', 'open').get()));
+  await check('risk_events: admin yopadi (resolveRiskEvent)',
+      () => assertSucceeds(as(ADMIN).collection('risk_events').doc('r1').set({
+        status: 'resolved', resolvedAt: new Date(), resolvedBy: ADMIN, updatedAt: new Date(),
+      }, {merge: true})));
+
+  // ── admin_news ──────────────────────────────────────────────────────
+  await check('admin_news: o\'qish hamon ochiq (ilova lentasi buzilmaydi)',
+      () => assertSucceeds(unauth().collection('admin_news').doc('n1').get()));
+  await check('admin_news: kirmagan yarata olmaydi (hammaga push)',
+      () => assertFails(unauth().collection('admin_news').add(news())));
+  await check('admin_news: oddiy foydalanuvchi yarata olmaydi',
+      () => assertFails(as(OWNER).collection('admin_news').add(news())));
+  await check('admin_news: oddiy foydalanuvchi pushResendAt ni o\'zgartira olmaydi',
+      () => assertFails(as(OWNER).collection('admin_news').doc('n1').set(
+          {pushResendAt: new Date()}, {merge: true})));
+  await check('admin_news: admin yaratadi (compose)',
+      () => assertSucceeds(as(ADMIN).collection('admin_news').add(news())));
+  await check('admin_news: admin push qayta yuboradi (requestPushResend)',
+      () => assertSucceeds(as(ADMIN).collection('admin_news').doc('n1').set(
+          {pushResendAt: new Date()}, {merge: true})));
+  await check('admin_news: admin ham noto\'g\'ri audience bilan yarata olmaydi',
+      () => assertFails(as(ADMIN).collection('admin_news').add(news({audience: 'hack'}))));
+
+  // ── users.role ──────────────────────────────────────────────────────
+  await check('users.role: dispatcher o\'ziga superadmin yoza olmaydi',
+      () => assertFails(as(DISPATCHER).collection('users').doc(DISPATCHER).update({role: 'superadmin'})));
+  await check('users.role: dispatcher boshqaga admin bera olmaydi',
+      () => assertFails(as(DISPATCHER).collection('users').doc(OWNER).update({role: 'admin'})));
+  await check('users.role: admin ham to\'g\'ridan-to\'g\'ri rol bera olmaydi (faqat CF)',
+      () => assertFails(as(ADMIN).collection('users').doc(OWNER).update({role: 'seller'})));
+  await check('users: admin rolga tegmay profil maydonini yangilaydi',
+      () => assertSucceeds(as(ADMIN).collection('users').doc(OWNER).update({name: 'Aziz A.'})));
+  await check('users: egasi o\'z ismini yangilaydi',
+      () => assertSucceeds(as(OWNER).collection('users').doc(OWNER).update({name: 'Aziz B.'})));
+
+  // ── entertainment_catalog ───────────────────────────────────────────
+  await check('kino: kirmagan katalogga film qo\'sha olmaydi',
+      () => assertFails(unauth().collection('entertainment_catalog').doc('f2').set(film())));
+  await check('kino: oddiy foydalanuvchi film qo\'sha olmaydi',
+      () => assertFails(as(OWNER).collection('entertainment_catalog').doc('f2').set(film())));
+  await check('kino: kirmagan filmni o\'chira (active=false) olmaydi',
+      () => assertFails(unauth().collection('entertainment_catalog').doc('f1').update(
+          {active: false, updatedAt: new Date()})));
+  await check('kino: admin film qo\'shadi (Kino katalogi tabi)',
+      () => assertSucceeds(as(ADMIN).collection('entertainment_catalog').doc('f3').set(film())));
+  await check('kino: admin ham noto\'g\'ri storagePath bilan qo\'sha olmaydi',
+      () => assertFails(as(ADMIN).collection('entertainment_catalog').doc('f4').set(
+          film({storagePath: 'other/x.mp4'}))));
+  await check('kino: admin filmni o\'chiradi/yoqadi',
+      () => assertSucceeds(as(ADMIN).collection('entertainment_catalog').doc('f1').update(
+          {active: false, updatedAt: new Date()})));
+
+  // ── intercity_drivers.entertainmentAllowed ──────────────────────────
+  await check('kino ruxsati: kirmagan haydovchiga yoqa olmaydi',
+      () => assertFails(unauth().collection('intercity_drivers').doc(DRIVER).update(
+          {entertainmentAllowed: true, updatedAt: new Date()})));
+  await check('kino ruxsati: kirmagan yangi hujjat yarata olmaydi',
+      () => assertFails(unauth().collection('intercity_drivers').doc('998900000000').set(
+          {entertainmentAllowed: true, updatedAt: new Date()})));
+  await check('kino ruxsati: begona yoqa olmaydi',
+      () => assertFails(as(STRANGER).collection('intercity_drivers').doc(DRIVER).update(
+          {entertainmentAllowed: true, updatedAt: new Date()})));
+  await check('kino ruxsati: admin yoqadi (Shaharlararo → Kino switch)',
+      () => assertSucceeds(as(ADMIN).collection('intercity_drivers').doc(DRIVER).update(
+          {entertainmentAllowed: true, updatedAt: new Date()})));
+
+  // ── tv_clips (QO'LDA rejim: tvAutoApprove=false) ────────────────────
+  await check('tv_clips: egasi `pending` klip yaratadi',
+      () => assertSucceeds(as(OWNER).collection('tv_clips').add(clip())));
+  await check('tv_clips: QO\'LDA rejimda egasi `active` yarata olmaydi (moderatsiya chetlab)',
+      () => assertFails(as(OWNER).collection('tv_clips').add(clip({status: 'active'}))));
+  await check('tv_clips: begona `ownerPhone` bilan yarata olmaydi',
+      () => assertFails(as(STRANGER).collection('tv_clips').add(clip())));
+  await check('tv_clips: yaratishda socialRetryAt yoza olmaydi',
+      () => assertFails(as(OWNER).collection('tv_clips').add(clip({socialRetryAt: 123}))));
+  await check('tv_clips: `ad` kategoriya hamon faqat CF',
+      () => assertFails(as(OWNER).collection('tv_clips').add(clip({category: 'ad'}))));
+  await check('tv_clips: kirmagan yarata olmaydi',
+      () => assertFails(unauth().collection('tv_clips').add(clip())));
+  await check('tv_clips: egasi socialRetryAt ni o\'zgartira olmaydi (takroriy post)',
+      () => assertFails(as(OWNER).collection('tv_clips').doc('c1').update({socialRetryAt: 999})));
+  await check('tv_clips: egasi sarlavhani tahrirlaydi (updateOwnClip)',
+      () => assertSucceeds(as(OWNER).collection('tv_clips').doc('c1').update({title: 'Yangi'})));
+  await check('tv_clips: admin `active` yaratadi',
+      () => assertSucceeds(as(ADMIN).collection('tv_clips').add(clip({status: 'active'}))));
+  await check('tv_clips: admin socialRetryAt qo\'yadi («Соцсетга жойлаш»)',
+      () => assertSucceeds(as(ADMIN).collection('tv_clips').doc('c1').update({socialRetryAt: 1000})));
+
+  // ── marshrut_state ──────────────────────────────────────────────────
+  const ms = (db) => db.collection('users').doc(OWNER).collection('marshrut_state').doc('active');
+  await check('marshrut_state: admin yo\'lovchi holatini tozalaydi (Dispatch history)',
+      () => assertSucceeds(ms(as(ADMIN)).set({status: 'cleared', updatedAt: new Date()}, {merge: true})));
+  await check('marshrut_state: begona tozalay olmaydi',
+      () => assertFails(ms(as(STRANGER)).set({status: 'cleared', updatedAt: new Date()}, {merge: true})));
+
+  // ── tv_clips (AVTO rejim: tvAutoApprove=true) ───────────────────────
+  await seed(true);
+  await check('tv_clips: AVTO rejimda egasi `active` yaratadi (ilova aynan shunday yozadi)',
+      () => assertSucceeds(as(OWNER).collection('tv_clips').add(clip({status: 'active'}))));
+  await check('tv_clips: AVTO rejimda ham begona ownerPhone — rad',
+      () => assertFails(as(STRANGER).collection('tv_clips').add(clip({status: 'active'}))));
+
+  await testEnv.cleanup();
+
+  const failed = results.filter((r) => !r.pass);
+  console.log(`\n${results.length - failed.length}/${results.length} admin-audit rules checks passed.`);
+  if (failed.length) {
+    console.log('FAILED:', failed.map((f) => f.name).join(' | '));
+    process.exitCode = 1;
+  }
+}
+
+main().catch((e) => {
+  console.error('FATAL', e);
+  process.exitCode = 1;
+});

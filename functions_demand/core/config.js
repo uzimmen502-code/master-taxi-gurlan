@@ -178,6 +178,14 @@ const DEFAULTS = {
      * LEG(n) tugamaguncha ochilmasdi).
      */
     openNextLegOn: 'in_progress',
+    /**
+     * Ishga tushirish bosqichi (CLAUDE.md 42): `internal` — faqat
+     * `testerIds` jo'natadi va LEG oladi; `public` — hamma. Standart —
+     * `internal` (yopiq): hujjatda yozilmasa ham xizmat ommaga ochilmaydi.
+     */
+    stage: 'internal',
+    /** Kanonik telefon ID'lari (ids.toCanonicalId) — jo'natuvchi VA ijrochi. */
+    testerIds: [],
   },
 
   // ─── Javobgarlik shifti (Т-10, Қ-2) ─────────────────────────────────

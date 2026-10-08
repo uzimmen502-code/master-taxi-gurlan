@@ -20,6 +20,7 @@
 const logisticsCandidates = require('../sources/logistics_candidates');
 const { defaultProjection } = require('../matching/orchestrator');
 const { buildPushText } = require('../notify/policy');
+const L = require('../core/logistics');
 
 /** @type {import('../core/types').DemandModuleAdapter} */
 const logisticsAdapter = {
@@ -32,7 +33,10 @@ const logisticsAdapter = {
    * Qattiq filtr: olish nuqtasi nomzodning hududida bo'lishi SHART;
    * hudud kesib o'tiladigan LEG'da yetkazish hududi ham (yoki `freight`).
    */
-  isEligible(demand, candidate) {
+  isEligible(demand, candidate, config) {
+    // INTERNAL bosqich (42-band): LEG faqat sinov ro'yxatidagi ijrochiga.
+    // `acceptLeg` match hujjatini talab qiladi — shu yerda kesilsa, olish ham yo'q.
+    if (!L.isStageAllowed(config, candidate.providerId)) return 'stage_internal';
     const loc = demand.location || {};
     const dest = demand.destination || {};
     const regions = candidate.regionIds || [];

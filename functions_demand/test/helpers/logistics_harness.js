@@ -59,7 +59,11 @@ function seed(extra = {}) {
   return {
     'module_config/global': { enabled: true, matchingEnabled: true, pushEnabled: true },
     // Hududsiz konfig (`CONFIG_REGION = 'all'`): logistika hududlararo.
-    'module_config/logistics_all': { enabled: true, matchingEnabled: true, pushEnabled: false },
+    // `stage: public` ATAYLAB: oqim testlari bosqichsiz ishlaydi; INTERNAL
+    // bosqich — `logistics_stage.test.js` (standart `internal`, yopiq).
+    'module_config/logistics_all': {
+      enabled: true, matchingEnabled: true, pushEnabled: false, logistics: { stage: 'public' },
+    },
     'geo_regions/xorazm': { name: 'Xorazm' },
     'geo_regions/toshkent_shahri': { name: 'Toshkent' },
     'geo_districts/gurlan': { regionId: 'xorazm' },

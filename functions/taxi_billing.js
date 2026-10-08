@@ -177,8 +177,12 @@ function attachTaxiBilling(exports, deps) {
     };
   }
 
-  /** Komissiyani ledger orqali oladi. Yetarli bo'lmasa `insufficient`. */
-  async function charge({ usersDocId, phone, tripId, amount, version, kind, meta }) {
+  /**
+   * Komissiyani ledger orqali oladi. Yetarli bo'lmasa `insufficient`.
+   * `precheck`/`onCommit` — reys holatini AYNI tranzaksiyada tekshirish va
+   * yangilash uchun (hamyon auditi Y-5: avval reys tashqarida o'qilardi).
+   */
+  async function charge({ usersDocId, phone, tripId, amount, version, kind, meta, precheck, onCommit }) {
     const key = `taxiFee:${tripId}:v${version}`;
     try {
       const res = await settlementLedger.postEntry(db, {
@@ -196,6 +200,8 @@ function attachTaxiBilling(exports, deps) {
         mirrorBonus: true,
         walletLedgerType: kind,
         meta: { tripId, ...meta },
+        precheck: precheck || null,
+        onCommit: onCommit || null,
         // D-TAXI-23: wallet manfiyga tushmasin.
         assert: ({ accounts }) => {
           const st = accounts.get(settlementLedger.passengerCreditAccount(usersDocId));
@@ -213,8 +219,20 @@ function attachTaxiBilling(exports, deps) {
     }
   }
 
-  async function refund({ usersDocId, tripId, amount, version, kind, meta }) {
-    const key = `taxiRefund:${tripId}:v${version}`;
+  /**
+   * Qaytim. Kalit MAQSADGA qarab alohida (hamyon auditi Y-5): avval
+   * pasaytirish va bekor qilish bitta `taxiRefund:{trip}:v{version}`
+   * kalitini ishlatardi — pastga reprice'dan keyin bekor qilinsa qolgan
+   * komissiya qaytmasdi (ledger «allaqachon bor» deb hech narsa yozmasdi).
+   */
+  function deltaRefundKey(tripId, version) {
+    return `taxiDeltaRefund:${tripId}:v${version}`;
+  }
+  function cancelRefundKey(tripId) {
+    return `taxiCancelRefund:${tripId}`;
+  }
+
+  async function refund({ usersDocId, tripId, amount, key, kind, meta, precheck, onCommit }) {
     const res = await settlementLedger.postEntry(db, {
       idempotencyKey: key,
       kind,
@@ -226,8 +244,31 @@ function attachTaxiBilling(exports, deps) {
         { account: EARNINGS_ACCOUNT, dr: amount },
         { account: settlementLedger.passengerCreditAccount(usersDocId), cr: amount },
       ],
-    }, { mirrorBonus: true, walletLedgerType: kind, meta: { tripId, ...meta } });
+    }, {
+      mirrorBonus: true, walletLedgerType: kind, meta: { tripId, ...meta },
+      precheck: precheck || null, onCommit: onCommit || null,
+    });
     return { entryId: res.id, idempotent: res.idempotent };
+  }
+
+  /**
+   * Reys hali shu holatdami — tranzaksiya ichida (Y-5). Parallel
+   * reprice/cancel boshqasining eskirgan holatidan hisob qilmasin:
+   * holat o'zgargan bo'lsa `aborted`, ilova qayta urinadi.
+   */
+  function tripGuard(tripRef, expect) {
+    return async (tx) => {
+      const s = await tx.get(tripRef);
+      const t = s.exists ? (s.data() || {}) : null;
+      const ok = t && t.status === expect.status
+        && (Number(t.billingVersion) || 1) === expect.billingVersion
+        && (Number(t.feeAmount) || 0) === expect.feeAmount;
+      if (!ok) {
+        throw err('aborted', 'Reys holati o\'zgardi — qayta urinib ko\'ring',
+            { reason: 'trip_changed' });
+      }
+      return { trip: t };
+    };
   }
 
   /**
@@ -396,17 +437,35 @@ function attachTaxiBilling(exports, deps) {
    */
   async function reclaimWithDebt({ me, usersDocId, tripRef, tripId, amount, when, signals }) {
     const bal = await walletBalance(usersDocId);
-    const takeNow = Math.max(0, Math.min(amount, bal));
+    let takeNow = Math.max(0, Math.min(amount, bal));
     if (takeNow > 0) {
-      await settlementLedger.postEntry(db, {
-        idempotencyKey: `taxiReclaim:${tripId}`,
-        kind: 'taxi_fee_reclaim', refType: 'taxi_trip', refId: tripId,
-        postedBy: 'system', postedRole: 'system',
-        legs: [
-          { account: settlementLedger.passengerCreditAccount(usersDocId), dr: takeNow },
-          { account: EARNINGS_ACCOUNT, cr: takeNow },
-        ],
-      }, { mirrorBonus: true, walletLedgerType: 'taxi_fee_reclaim', meta: { tripId, signals } });
+      const pcId = settlementLedger.passengerCreditAccount(usersDocId);
+      try {
+        await settlementLedger.postEntry(db, {
+          idempotencyKey: `taxiReclaim:${tripId}`,
+          kind: 'taxi_fee_reclaim', refType: 'taxi_trip', refId: tripId,
+          postedBy: 'system', postedRole: 'system',
+          legs: [
+            { account: pcId, dr: takeNow },
+            { account: EARNINGS_ACCOUNT, cr: takeNow },
+          ],
+        }, {
+          mirrorBonus: true, walletLedgerType: 'taxi_fee_reclaim', meta: { tripId, signals },
+          // Balans tashqarida o'qilgan — orada kamaygan bo'lsa wallet manfiyga
+          // tushmasin (hamyon auditi O-13): u holda hammasi QARZ.
+          assert: ({ accounts }) => {
+            const st = accounts.get(pcId);
+            if (st && st.next < 0) {
+              const e = new Error('insufficient');
+              e.insufficient = true;
+              throw e;
+            }
+          },
+        });
+      } catch (e) {
+        if (!(e && e.insufficient)) throw e;
+        takeNow = 0;
+      }
     }
     const outstanding = amount - takeNow;
     if (outstanding > 0) {
@@ -418,22 +477,70 @@ function attachTaxiBilling(exports, deps) {
     await tripRef.update({ reclaimed: true, reclaimedAt: when, reclaimedAmount: takeNow, outstandingTaxiFee: outstanding });
   }
 
-  /** Qarz bo'lsa — yangi komissiyadan OLDIN yopiladi (CANCEL-6). */
+  /**
+   * Qarz bo'lsa — yangi komissiyadan OLDIN yopiladi (CANCEL-6).
+   *
+   * Hamyon auditi O-13: avval kalit sekund-timestamp edi, qarz tashqarida
+   * o'qilib `debt.taxi: 0` alohida yozilardi → parallel publish qarzni ikki
+   * marta yechardi. Endi kalit «raund» hisoblagichidan (`debt.taxiRounds`,
+   * `debt` — server-only maydon), qarz va raund tranzaksiyada qayta
+   * tekshiriladi, nolga tushirish AYNI tranzaksiyada, wallet manfiy emas.
+   */
   async function settleOutstanding(me) {
-    const debt = Number(((me.cap || {}).debt || {}).taxi) || 0;
+    const debtMap = (me.cap || {}).debt || {};
+    const debt = Number(debtMap.taxi) || 0;
     if (debt <= 0) return { settled: 0, outstanding: 0 };
     const bal = await walletBalance(me.usersDocId);
     if (bal < debt) return { settled: 0, outstanding: debt, walletBalance: bal };
-    await settlementLedger.postEntry(db, {
-      idempotencyKey: `taxiDebt:${me.accountId}:${debt}:${Math.floor(now().getTime() / 1000)}`,
-      kind: 'taxi_fee_debt_settlement', refType: 'provider', refId: me.accountId,
-      postedBy: 'system', postedRole: 'system',
-      legs: [
-        { account: settlementLedger.passengerCreditAccount(me.usersDocId), dr: debt },
-        { account: EARNINGS_ACCOUNT, cr: debt },
-      ],
-    }, { mirrorBonus: true, walletLedgerType: 'taxi_fee_debt_settlement', meta: { accountId: me.accountId } });
-    await db.collection(CAPS).doc(me.accountId).set({ debt: { taxi: 0 }, updatedAt: now() }, { merge: true });
+    const round = Number(debtMap.taxiRounds) || 0;
+    const capRef = db.collection(CAPS).doc(me.accountId);
+    const pcId = settlementLedger.passengerCreditAccount(me.usersDocId);
+    let res;
+    try {
+      res = await settlementLedger.postEntry(db, {
+        idempotencyKey: `taxiDebt:${me.accountId}:r${round}`,
+        kind: 'taxi_fee_debt_settlement', refType: 'provider', refId: me.accountId,
+        postedBy: 'system', postedRole: 'system',
+        legs: [
+          { account: pcId, dr: debt },
+          { account: EARNINGS_ACCOUNT, cr: debt },
+        ],
+      }, {
+        mirrorBonus: true, walletLedgerType: 'taxi_fee_debt_settlement',
+        meta: { accountId: me.accountId, round },
+        precheck: async (tx) => {
+          const c = ((await tx.get(capRef)).data() || {}).debt || {};
+          if ((Number(c.taxi) || 0) !== debt || (Number(c.taxiRounds) || 0) !== round) {
+            const e = new Error('debt_changed');
+            e.debtChanged = true;
+            throw e;
+          }
+          return null;
+        },
+        assert: ({ accounts }) => {
+          const st = accounts.get(pcId);
+          if (st && st.next < 0) {
+            const e = new Error('insufficient');
+            e.insufficient = true;
+            throw e;
+          }
+        },
+        onCommit: (tx) => tx.set(capRef, {
+          debt: { taxi: 0, taxiRounds: round + 1 }, updatedAt: now(),
+        }, { merge: true }),
+      });
+    } catch (e) {
+      if (!(e && (e.debtChanged || e.insufficient))) throw e;
+      res = { idempotent: true };
+    }
+    if (res.idempotent) {
+      // Boshqa so'rov yopgan yoki holat o'zgargan — haqiqiy qoldiqni qaytaramiz.
+      const c = ((await capRef.get()).data() || {}).debt || {};
+      const left = Number(c.taxi) || 0;
+      return left > 0
+        ? { settled: 0, outstanding: left, walletBalance: await walletBalance(me.usersDocId) }
+        : { settled: 0, outstanding: 0 };
+    }
     return { settled: debt, outstanding: 0 };
   }
 
@@ -459,44 +566,74 @@ function attachTaxiBilling(exports, deps) {
     const oldFare = trip.farePerSeat;
     const oldFee = Number(trip.feeAmount) || 0;
     const newFee = trip.billable ? fee.feeAmount : 0;
-    const version = (Number(trip.billingVersion) || 1) + 1;
+    const baseVersion = Number(trip.billingVersion) || 1;
+    const version = baseVersion + 1;
+    // Y-5: ledger yozuvi va reys yangilanishi BITTA tranzaksiyada, reys
+    // tashqarida o'qilgan holatda ekani tranzaksiya ichida tekshiriladi.
+    const guard = tripGuard(tripRef, { status: 'published', billingVersion: baseVersion, feeAmount: oldFee });
 
     await db.collection(PRICE_CHANGES).add({
       tripId: tripRef.id, uid: me.phone, accountId: me.accountId,
       oldFare, newFare: fee.farePerSeat, oldFee, newFee, changedAt: when,
     });
 
+    // Kalit allaqachon bor (parallel yoki qayta yuborilgan so'rov) — natija
+    // reysning HOZIRGI holatidan: shu narx shu versiyada qo'llangan bo'lsa
+    // muvaffaqiyat, aks holda boshqa so'rov yutgan → `aborted`.
+    const resolveIdempotent = async () => {
+      const t = (await tripRef.get()).data() || {};
+      if ((Number(t.billingVersion) || 1) >= version && t.farePerSeat === fee.farePerSeat) {
+        return { status: 'ok', idempotent: true, feeAmount: Number(t.feeAmount) || 0 };
+      }
+      throw err('aborted', 'Reys holati o\'zgardi — qayta urinib ko\'ring', { reason: 'trip_changed' });
+    };
+
     if (newFee > oldFee) {
       const delta = newFee - oldFee;
       const c = await charge({
         usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id, amount: delta,
         version, kind: 'taxi_fee_delta', meta: { oldFare, newFare: fee.farePerSeat },
+        precheck: guard,
+        onCommit: (tx) => tx.update(tripRef, {
+          farePerSeat: fee.farePerSeat, grossBasis: fee.grossBasis, feeAmount: newFee,
+          billingVersion: version, repriceStatus: 'ok', pendingFare: null, updatedAt: when,
+        }),
       });
       if (!c.ok) {
         // Qo'shimcha to'lamasdan yangi narx aktiv BO'LMAYDI.
         await tripRef.update({ pendingFare: fee.farePerSeat, pendingFee: newFee, pendingDelta: delta, repriceStatus: 'payment_required', updatedAt: when });
         return { status: 'payment_required', delta, walletBalance: await walletBalance(me.usersDocId) };
       }
-      await tripRef.update({
-        farePerSeat: fee.farePerSeat, grossBasis: fee.grossBasis, feeAmount: newFee,
-        billingVersion: version, repriceStatus: 'ok', pendingFare: null, updatedAt: when,
-      });
+      if (c.idempotent) return resolveIdempotent();
       return { status: 'ok', delta, feeAmount: newFee };
     }
 
     const refundsSoFar = Number(trip.downwardRefunds) || 0;
-    let refunded = 0;
-    if (newFee < oldFee && refundsSoFar < MAX_DOWNWARD_REFUNDS) {
-      refunded = oldFee - newFee;
-      await refund({ usersDocId: me.usersDocId, tripId: tripRef.id, amount: refunded, version, kind: 'taxi_fee_delta_refund', meta: { oldFare, newFare: fee.farePerSeat } });
-    }
-    await tripRef.update({
+    const patch = (refunded) => ({
       farePerSeat: fee.farePerSeat, grossBasis: fee.grossBasis,
       feeAmount: refunded ? newFee : oldFee,
       downwardRefunds: refundsSoFar + (refunded ? 1 : 0),
       billingVersion: version, repriceStatus: 'ok', updatedAt: when,
     });
-    return { status: 'ok', delta: -refunded, feeAmount: refunded ? newFee : oldFee, refundLimited: newFee < oldFee && !refunded };
+    if (newFee < oldFee && refundsSoFar < MAX_DOWNWARD_REFUNDS) {
+      const refunded = oldFee - newFee;
+      const r = await refund({
+        usersDocId: me.usersDocId, tripId: tripRef.id, amount: refunded,
+        key: deltaRefundKey(tripRef.id, version), kind: 'taxi_fee_delta_refund',
+        meta: { oldFare, newFare: fee.farePerSeat },
+        precheck: guard,
+        onCommit: (tx) => tx.update(tripRef, patch(true)),
+      });
+      if (r.idempotent) return resolveIdempotent();
+      return { status: 'ok', delta: -refunded, feeAmount: newFee, refundLimited: false };
+    }
+    // Pul harakati yo'q (narx teng yoki refund chegarasi) — baribir
+    // tranzaksiyada, reys holati o'zgarmagan bo'lsagina.
+    await db.runTransaction(async (tx) => {
+      await guard(tx);
+      tx.update(tripRef, patch(false));
+    });
+    return { status: 'ok', delta: 0, feeAmount: oldFee, refundLimited: newFee < oldFee };
   }
 
   /**
@@ -520,18 +657,43 @@ function attachTaxiBilling(exports, deps) {
     }
     const when = now();
     const amount = Number(trip.feeAmount) || 0;
-    let refundedNow = false;
-    if (trip.status === 'published' && amount > 0 && trip.chargedAt) {
-      await refund({ usersDocId: me.usersDocId, tripId: tripRef.id, amount, version: Number(trip.billingVersion) || 1, kind: 'taxi_fee_refund', meta: { reason: 'cancelled' } });
-      refundedNow = true;
-    }
-    await tripRef.update({
-      status: 'cancelled', cancelledAt: when, refunded: refundedNow, fraudReviewed: false,
+    const cancelPatch = (refunded) => ({
+      status: 'cancelled', cancelledAt: when, refunded, fraudReviewed: false,
       hadAvaBooking: data.hadAvaBooking === true || trip.hadAvaBooking === true,
       'location.cancelLat': numOrNull(data.driverLat), 'location.cancelLng': numOrNull(data.driverLng),
       updatedAt: when,
     });
-    return { status: 'cancelled', refunded: refundedNow, amount };
+    if (trip.status === 'published' && amount > 0 && trip.chargedAt) {
+      // Y-5: o'z kaliti (pasaytirish refund'i bilan to'qnashmaydi) + reys
+      // holati AYNI tranzaksiyada tekshiriladi va `cancelled` qilinadi.
+      const r = await refund({
+        usersDocId: me.usersDocId, tripId: tripRef.id, amount,
+        key: cancelRefundKey(tripRef.id), kind: 'taxi_fee_refund', meta: { reason: 'cancelled' },
+        precheck: tripGuard(tripRef, {
+          status: 'published', billingVersion: Number(trip.billingVersion) || 1, feeAmount: amount,
+        }),
+        onCommit: (tx) => tx.update(tripRef, cancelPatch(true)),
+      });
+      if (r.idempotent) {
+        const t = (await tripRef.get()).data() || {};
+        return { status: t.status, refunded: t.refunded === true, idempotent: true };
+      }
+      return { status: 'cancelled', refunded: true, amount };
+    }
+    // Pulsiz bekor — baribir tranzaksiyada (parallel bekor/charge bilan).
+    const res = await db.runTransaction(async (tx) => {
+      const s = await tx.get(tripRef);
+      const t = s.data() || {};
+      if (t.status === 'cancelled' || t.status === 'completed') {
+        return { status: t.status, refunded: t.refunded === true, idempotent: true };
+      }
+      if (t.status === 'published' && (Number(t.feeAmount) || 0) > 0 && t.chargedAt) {
+        throw err('aborted', 'Reys holati o\'zgardi — qayta urinib ko\'ring', { reason: 'trip_changed' });
+      }
+      tx.update(tripRef, cancelPatch(false));
+      return { status: 'cancelled', refunded: false, amount };
+    });
+    return res;
   }
 
   async function complete(data, context) {

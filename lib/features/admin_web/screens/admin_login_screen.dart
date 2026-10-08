@@ -13,8 +13,9 @@ class AdminLoginScreen extends StatefulWidget {
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
   final _phoneCtrl = TextEditingController();
   final _pinCtrl = TextEditingController();
-  final _codeCtrl = TextEditingController();
-  bool _codeMode = false;
+  // «Maxfiy kod bilan kirish» rejimi olib tashlandi (ega qarori 2026-10-08,
+  // admin audit D-5): umumiy kod shaxsiy PIN'ni chetlab o'tardi; server
+  // `adminWebSignInWithCode` endi har qanday kodni rad etadi.
   String? _error;
 
   @override
@@ -39,18 +40,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   void dispose() {
     _phoneCtrl.dispose();
     _pinCtrl.dispose();
-    _codeCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _submitCode() async {
-    setState(() => _error = null);
-    final auth = context.read<AdminAuthService>();
-    final result = await auth.signInWithCode(_codeCtrl.text);
-    if (!mounted) return;
-    if (result != null) {
-      setState(() => _error = result);
-    }
   }
 
   Future<void> _submitPhone() async {
@@ -87,26 +77,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                           fontSize: 24, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text(
-                    _codeMode
-                        ? 'Maxfiy kirish kodini kiriting (telefon shart emas)'
-                        : 'Admin roli berilgan telefon va shaxsiy PIN. '
-                            'PIN\'ni superadmin beradi.',
+                    'Admin roli berilgan telefon va shaxsiy PIN. '
+                    'PIN\'ni superadmin beradi.',
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 24),
-                  if (_codeMode)
-                    TextField(
-                      controller: _codeCtrl,
-                      obscureText: true,
-                      autofocus: true,
-                      onSubmitted: (_) => _submitCode(),
-                      decoration: const InputDecoration(
-                        labelText: 'Kirish kodi',
-                        prefixIcon: Icon(Icons.key),
-                        border: OutlineInputBorder(),
-                      ),
-                    )
-                  else ...[
+                  ...[
                     TextField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
@@ -158,7 +134,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     child: FilledButton(
                       onPressed: auth.isSendingOtp || auth.isVerifyingOtp
                           ? null
-                          : (_codeMode ? _submitCode : _submitPhone),
+                          : _submitPhone,
                       child: auth.isSendingOtp || auth.isVerifyingOtp
                           ? const SizedBox(
                               width: 20,
@@ -168,25 +144,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                           : const Text('Kirish'),
                     ),
                   ),
-                  if (!_codeMode)
-                    TextButton.icon(
-                      onPressed: () => setState(() {
-                        _codeMode = true;
-                        _error = null;
-                      }),
-                      icon: const Icon(Icons.key, size: 18),
-                      label: const Text('Maxfiy kod bilan kirish'),
-                    ),
-                  if (_codeMode)
-                    TextButton.icon(
-                      onPressed: () => setState(() {
-                        _codeMode = false;
-                        _codeCtrl.clear();
-                        _error = null;
-                      }),
-                      icon: const Icon(Icons.phone, size: 18),
-                      label: const Text('Telefon bilan kirish'),
-                    ),
                 ],
               ),
             ),

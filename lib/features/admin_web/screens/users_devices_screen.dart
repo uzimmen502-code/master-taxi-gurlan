@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/admin_auth_service.dart';
@@ -980,8 +981,8 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
             'foydalanuvchi qilinsinmi?'
         : isAdminGrant
             ? '${widget.phone} рақамига Admin roli berilsinmi?\n\n'
-                'Шундан сўнг у /admin/ га ўз телефони билан '
-                'паролсиз (SMS/OTP сиз) кира олади.'
+                '/admin/ га кириш учун унга superadmin шахсий PIN '
+                'бериши керак («PIN бериш»).'
             : '${widget.phone} рақамига $label roli berilsinmi?';
 
     final ok = await showDialog<bool>(
@@ -1032,10 +1033,9 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
           title: const Text('Админ кириш'),
           content: Text(
             '${widget.phone} энди Admin.\n\n'
-            'Компьютерда /admin/ га кириш:\n'
-            '• ўз телефон рақамини киритиб «Кириш» — '
-            'парол, SMS ва OTP шарт эмас.\n\n'
-            'Зарур бўлса, махфий код билан ҳам кириш мумкин.',
+            'Компьютерда /admin/ га кириш: телефон рақами + шахсий PIN.\n'
+            'PIN\'ни superadmin «PIN бериш» тугмаси билан беради; '
+            'админ кирганидан кейин уни ўзи алмаштиради.',
           ),
           actions: [
             FilledButton(
@@ -1046,6 +1046,87 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         ),
       );
     }
+  }
+
+  static const _panelRoles = {
+    'admin', 'superadmin', 'dispatcher', 'finance', 'auditor',
+  };
+
+  /// Superadmin: panel roli bor одамга янги PIN (D-1). PIN фақат шу ерда
+  /// БИР МАРТА кўринади — серверда хеш.
+  Future<void> _issuePin() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('PIN бериш'),
+        content: Text(
+          '${widget.phone} учун янги PIN яратилсинми?\n\n'
+          'Эски PIN (агар бўлса) ишламай қолади, қулф ечилади.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Бекор'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Яратиш'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    final res = await _roleService.setAdminPin(targetPhone: widget.phone);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res.error != null || res.pin == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.red,
+        content: Text(res.error ?? 'PIN олинмади'),
+      ));
+      return;
+    }
+    final pin = res.pin!;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Янги PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${widget.phone}:'),
+            const SizedBox(height: 8),
+            SelectableText(
+              pin,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Бу PIN фақат ҳозир кўринади. Админга шахсан етказинг — у '
+              'биринчи киришда ўзиникига алмаштиради.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Clipboard.setData(ClipboardData(text: pin)),
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Нусха'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Тайёр'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1070,6 +1151,12 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
             _roleBtn('auditor', Icons.fact_check, Colors.indigo, role),
           ],
           _roleBtn('seller', Icons.point_of_sale, Colors.orange.shade800, role),
+          if (canPriv && _panelRoles.contains(role))
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _issuePin,
+              icon: const Icon(Icons.pin_outlined, size: 18),
+              label: const Text('PIN бериш', style: TextStyle(fontSize: 12)),
+            ),
           if (role != 'user')
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _setRole('user'),

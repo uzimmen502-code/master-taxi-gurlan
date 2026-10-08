@@ -5,8 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart' as fmt;
 
-/// Admin web auth: panel roli bor telefon — SMSsiz/parolsiz
-/// (`adminWebSignIn` custom token). Maxfiy PIN — `adminWebSignInWithCode`.
+/// Admin web auth: panel roli bor telefon + SHAXSIY PIN (`adminWebSignIn`
+/// custom token; ega qarori 2026-10-08, admin audit D-1 — avval faqat
+/// telefon yetarli edi). Maxfiy umumiy kod — `adminWebSignInWithCode`.
 class AdminAuthService extends ChangeNotifier {
   AdminAuthService({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -15,9 +16,6 @@ class AdminAuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   static const _kPhoneKey = 'admin_web_phone';
-
-  /// Legacy operator raqami (PIN orqali ham shu hisobga kiradi).
-  static const String trustedAdminPhoneDigits = '998912778777';
 
   String? _phone;
   String? _phoneDigits;
@@ -28,10 +26,11 @@ class AdminAuthService extends ChangeNotifier {
   bool isVerifyingOtp = false;
   String? otpError;
 
-  bool get isLoggedIn => _phoneDigits != null && _phoneDigits!.isNotEmpty;
+  /// Superadmin bergan (vaqtinchalik) PIN bilan kirildi — admin uni
+  /// almashtirishi kerak (`AdminShell` taklif qiladi).
+  bool mustChangePin = false;
 
-  static bool isTrustedAdminPhone(String rawPhone) =>
-      fmt.phoneDigits(rawPhone) == trustedAdminPhoneDigits;
+  bool get isLoggedIn => _phoneDigits != null && _phoneDigits!.isNotEmpty;
 
   String? get phone => _phone;
   String? get phoneDigits => _phoneDigits;
@@ -109,7 +108,11 @@ class AdminAuthService extends ChangeNotifier {
     return prefs.getString(_kPhoneKey);
   }
 
-  /// Brauzer sessiyasi + saqlangan telefon — SMSsiz qayta kirish.
+  /// Saqlangan telefon (kirish formasini to'ldirish uchun; PIN saqlanmaydi).
+  Future<String?> savedPhone() => _savedPhoneRaw();
+
+  /// Brauzerdagi Firebase Auth sessiyasini tiklash. Avval sessiya bo'lmasa
+  /// saqlangan telefon bilan PIN'siz qayta kirilardi — endi PIN kerak.
   Future<void> restoreSession() async {
     final user = _auth.currentUser;
     if (user != null) {
@@ -131,19 +134,17 @@ class AdminAuthService extends ChangeNotifier {
         await _auth.signOut();
       }
     }
-
-    final saved = await _savedPhoneRaw();
-    if (saved != null && saved.isNotEmpty) {
-      final err = await signInWithPhonePasswordless(saved);
-      if (err == null) return;
-    }
   }
 
-  /// Panel roli bor telefon: SMSsiz — `adminWebSignIn` → custom token.
-  Future<String?> signInWithPhonePasswordless(String rawPhone) async {
+  /// Panel roli bor telefon + shaxsiy PIN — `adminWebSignIn` → custom token.
+  Future<String?> signInWithPhonePin(String rawPhone, String pin) async {
     final digits = fmt.phoneDigits(rawPhone);
     if (digits.length < 9) {
       return 'Telefon raqamini to\'liq kiriting';
+    }
+    final p = pin.trim();
+    if (!RegExp(r'^\d{6,12}$').hasMatch(p)) {
+      return 'PIN — 6–12 та рақам';
     }
     isVerifyingOtp = true;
     otpError = null;
@@ -153,12 +154,14 @@ class AdminAuthService extends ChangeNotifier {
           FirebaseFunctions.instance.httpsCallable('adminWebSignIn');
       final result = await callable.call<Map<String, dynamic>>({
         'phone': digits,
+        'pin': p,
       });
       final data = result.data;
       final token = data['token'] as String?;
       if (token == null || token.isEmpty) {
         return 'Kirish tokeni olinmadi';
       }
+      mustChangePin = data['mustChangePin'] == true;
       await _auth.signInWithCustomToken(token);
       await _auth.currentUser?.getIdToken(true);
       final snap = await _findUserDoc(rawPhone);
@@ -251,26 +254,38 @@ class AdminAuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Telefon bilan parolsiz kirish (SMS/OTP yo'q).
-  Future<bool> sendOtp(String rawPhone) async {
-    final digits = fmt.phoneDigits(rawPhone);
-    if (digits.length < 9) {
-      otpError = 'Telefon raqamini to\'liq kiriting';
+  /// O'z PIN'ini almashtirish (`adminChangeOwnPin`). `null` — muvaffaqiyat.
+  Future<String?> changeOwnPin({
+    required String currentPin,
+    required String newPin,
+  }) async {
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('adminChangeOwnPin')
+          .call<Map<String, dynamic>>({
+        'currentPin': currentPin.trim(),
+        'newPin': newPin.trim(),
+      });
+      mustChangePin = false;
       notifyListeners();
-      return false;
+      return null;
+    } on FirebaseFunctionsException catch (e) {
+      switch (e.message) {
+        case 'ADMIN_PIN_WEAK':
+          return 'PIN жуда оддий (бир хил ёки кетма-кет рақамлар).';
+        case 'ADMIN_PIN_FORMAT':
+          return 'PIN — 6–12 та рақам.';
+        case 'ADMIN_PIN_SAME':
+          return 'Янги PIN эскисидан фарқ қилсин.';
+        case 'ADMIN_PIN_WRONG':
+          return 'Жорий PIN нотўғри.';
+        case 'ADMIN_PIN_LOCKED':
+          return 'Кўп марта нотўғри киритилди — 15 дақиқадан кейин.';
+      }
+      return e.message ?? e.code;
+    } catch (e) {
+      return 'Xatolik: $e';
     }
-    isSendingOtp = true;
-    otpError = null;
-    notifyListeners();
-    final err = await signInWithPhonePasswordless(rawPhone);
-    isSendingOtp = false;
-    if (err != null) {
-      otpError = err;
-      notifyListeners();
-      return false;
-    }
-    notifyListeners();
-    return true;
   }
 
   Future<void> logout() async {
@@ -281,6 +296,7 @@ class AdminAuthService extends ChangeNotifier {
     _phoneDigits = null;
     _displayName = null;
     otpError = null;
+    mustChangePin = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kPhoneKey);
     await prefs.remove('user_phone');

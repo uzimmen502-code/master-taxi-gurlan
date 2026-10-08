@@ -9,6 +9,7 @@ import '../../../core/utils/catalog_search.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
 import '../widgets/market_ad_edit_dialog.dart';
+import '../widgets/market_complaints_bar.dart';
 
 class MarketModerationScreen extends StatefulWidget {
   const MarketModerationScreen({super.key});
@@ -177,6 +178,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
       children: [
         _header(),
         const _MarketAutoApproveBar(),
+        const MarketComplaintsBar(),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())

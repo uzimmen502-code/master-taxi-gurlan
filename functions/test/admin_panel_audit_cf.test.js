@@ -174,11 +174,43 @@ async function main() {
     await db.collection('orders').doc('o5').set(order({ balanceApplied: 0 }));
     await rejectsWith(setStatus('o5', 'delivered'), 'failed-precondition');
   });
-  await check('B6 to\'liq oqim: accepted → ready → in_delivery → delivered', async () => {
-    for (const s of ['accepted', 'ready', 'in_delivery', 'delivered']) await setStatus('o5', s);
-    const o = (await db.collection('orders').doc('o5').get()).data();
+  await check('B6 accepted → ready; «Kuryerda» (ready → in_delivery) admin uchun YO\'Q (ega qarori)', async () => {
+    for (const s of ['accepted', 'ready']) await setStatus('o5', s);
+    const e = await rejectsWith(setStatus('o5', 'in_delivery'), 'failed-precondition');
+    assert.strictEqual(e.details.code, 'ORDER_TRANSITION_NOT_ALLOWED');
+    assert.strictEqual((await db.collection('orders').doc('o5').get()).data().status, 'ready');
+  });
+  await check('B8 kuryer olgan, TO\'LANMAGAN buyurtma — «Yetkazildi» rad (ORDER_NOT_PAID)', async () => {
+    await db.collection('orders').doc('o8').set(order({
+      status: 'in_delivery', fulfillmentStatus: 'courier_picked', courierId: '998903000001',
+      paymentStatus: 'pending', balanceApplied: 0,
+    }));
+    const e = await rejectsWith(setStatus('o8', 'delivered'), 'failed-precondition');
+    assert.strictEqual(e.details.code, 'ORDER_NOT_PAID');
+    assert.strictEqual((await db.collection('orders').doc('o8').get()).data().paymentStatus, 'pending');
+  });
+  await check('B9 to\'langan buyurtma — «Yetkazildi» ishlaydi', async () => {
+    await db.collection('orders').doc('o8').update({ paymentStatus: 'paid' });
+    await setStatus('o8', 'delivered');
+    const o = (await db.collection('orders').doc('o8').get()).data();
     assert.strictEqual(o.status, 'delivered');
     assert.strictEqual(o.fulfillmentStatus, 'completed');
+  });
+  await check('B10 kuryeri bor buyurtmani navbatga qaytarib bo\'lmaydi', async () => {
+    await db.collection('orders').doc('o9').set(order({
+      status: 'in_delivery', fulfillmentStatus: 'courier_picked', courierId: '998903000001', balanceApplied: 0,
+    }));
+    const e = await rejectsWith(setStatus('o9', 'ready'), 'failed-precondition');
+    assert.strictEqual(e.details.code, 'ORDER_HELD_BY_COURIER');
+  });
+  await check('B11 eski «Kuryerda»dan qolgan kuryersiz (etim) buyurtma navbatga qaytadi', async () => {
+    await db.collection('orders').doc('o10').set(order({
+      status: 'in_delivery', fulfillmentStatus: 'courier_picked', balanceApplied: 0,
+    }));
+    await setStatus('o10', 'ready');
+    const o = (await db.collection('orders').doc('o10').get()).data();
+    assert.strictEqual(o.status, 'ready');
+    assert.strictEqual(o.fulfillmentStatus, 'confirmed');
   });
   await check('B7 kuryerdagi buyurtmani admin rad eta olmaydi', async () => {
     await db.collection('orders').doc('o6').set(order({ status: 'ready', fulfillmentStatus: 'courier_picked' }));

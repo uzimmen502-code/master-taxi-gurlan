@@ -7920,12 +7920,21 @@ const ADMIN_ORDER_STATUSES = new Set([
  * тугмаси мижоз бекор қилган (пули қайтган) буюртмани `accepted`га
  * тирилтира оларди. `delivered`/`rejected`/`cancelled` — якуний.
  */
+//
+// Эга қарори 2026-10-08:
+//   - `ready → in_delivery` («Курьерда») админдан олиб ташланди: буюртмани
+//     курьер иловаси олади (`courierCreateRoute` — `courierId` +
+//     `deliveryRouteId`); админ қўйгани курьерсиз «етим» буюртма қиларди.
+//   - `→ delivered` фақат `paymentStatus == 'paid'` бўлса: аввал тўлов
+//     ёзувисиз `paid` деб белгиларди (курьер нақди ҳисобга тушмасди).
+//   - Эски тугмадан қолган етим `in_delivery` (курьерсиз) буюртмани курьер
+//     навбатига (`ready`) қайтариш мумкин — акс ҳолда абадий қотиб қоларди.
 const ADMIN_ORDER_TRANSITIONS = {
   new: ['accepted', 'rejected'],
   accepted: ['ready', 'rejected'],
-  ready: ['in_delivery', 'rejected'],
-  in_delivery: ['delivered'],
-  courier: ['delivered'],
+  ready: ['rejected'],
+  in_delivery: ['delivered', 'ready'],
+  courier: ['delivered', 'ready'],
 };
 // Курьер олиб кетган / етиб келган буюртмани админ рад этмайди
 // (`customerCancelOrder` билан бир хил чегара).
@@ -7938,6 +7947,14 @@ function adminOrderTransitionError(od, next) {
   if (!allowed.includes(next)) return 'ORDER_TRANSITION_NOT_ALLOWED';
   const fs = String(od.fulfillmentStatus || '').trim().toLowerCase();
   if (next === 'rejected' && ORDER_FS_COURIER_HOLDS.has(fs)) {
+    return 'ORDER_HELD_BY_COURIER';
+  }
+  if (next === 'delivered' && String(od.paymentStatus || '').trim() !== 'paid') {
+    return 'ORDER_NOT_PAID';
+  }
+  // Курьери бор буюртмани навбатга қайтармаймиз (курьер маршрутида).
+  if (next === 'ready' && (cur === 'in_delivery' || cur === 'courier')
+      && String(od.courierId || '').trim() !== '') {
     return 'ORDER_HELD_BY_COURIER';
   }
   return null;

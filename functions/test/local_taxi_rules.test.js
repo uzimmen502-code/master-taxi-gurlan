@@ -237,6 +237,12 @@ async function main() {
     () => assertFails(adminDb.collection('settings').doc('prices').set({ local_night_coef: 3 }, { merge: true })));
   await check('C5 admin non narxini (boshqa kalit) yozishi buzilmagan',
     () => assertSucceeds(adminDb.collection('settings').doc('prices').set({ bread_price: 3500 }, { merge: true })));
+  await check('C6b kalibrovka: admin o\'qiydi, hech kim yozmaydi (faqat CF)',
+    async () => {
+      await assertSucceeds(adminDb.collection('local_taxi_calibration').doc('road_factor').get());
+      await assertFails(adminDb.collection('local_taxi_calibration').doc('road_factor').set({ regions: {} }));
+      await assertFails(passenger.collection('local_taxi_calibration').doc('road_factor').get());
+    });
   await check('C6 tarif tarixi: admin o\'qiydi, hech kim yozmaydi',
     async () => {
       await assertSucceeds(adminDb.collection('local_taxi_tariffs').doc('v1').get());

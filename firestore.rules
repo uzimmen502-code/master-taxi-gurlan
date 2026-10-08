@@ -1660,6 +1660,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Yo'l koeffitsienti — haftalik CF hisobi (joriy + runs tarixi).
+    match /local_taxi_calibration/{doc=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Page/IG токенлари — фақат Cloud Functions (Admin SDK).
     match /settings/tv_social {
       allow read, write: if false;

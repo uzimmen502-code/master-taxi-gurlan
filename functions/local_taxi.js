@@ -29,6 +29,16 @@ const DEFAULT_NIGHT_END_H = 6;
 // shahar ichi yo'llari to'g'ri chiziqdan odatda ~25–40% uzun).
 const DEFAULT_ROAD_FACTOR_PERMILLE = 1300;
 const ROUND_TO = 500;
+// Yo'l koeffitsientini haftalik hisoblash (variant D, PROPOSED parametrlar).
+const CALIBRATION_COL = 'local_taxi_calibration';
+const CALIBRATION_DOC = 'road_factor';
+const CALIBRATION_WINDOW_DAYS = 30;
+const CALIBRATION_MAX_TRIPS = 5000;
+const MIN_CALIBRATION_SAMPLES = 30;
+const MIN_STRAIGHT_M = 500; // juda qisqa safarda nisbat shovqinli
+const MIN_RATIO_PERMILLE = 1000;
+const MAX_RATIO_PERMILLE = 3000; // undan katta — xato nuqta (chiqarib tashlanadi)
+const FACTOR_CLAMP = [1000, 2000]; // admin chegarasi bilan bir xil
 const TASHKENT_UTC_OFFSET_H = 5; // DST yo'q
 const PRICES_DOC = ['settings', 'prices'];
 const TARIFF_HISTORY = 'local_taxi_tariffs';
@@ -67,6 +77,36 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2
       + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return Math.round(2 * R * Math.asin(Math.sqrt(a)));
+}
+
+/**
+ * Sof funksiya — mintaqa bo'yicha yo'l koeffitsienti (mediana, permille).
+ * Kiruvchi: [{regionKey, fromLat, fromLng, toLat, toLng, routeM}].
+ * Faqat haqiqiy Directions masofasi bor safarlar (distanceSource 'route').
+ * @return {{[region]: {factorPermille, samples}}} — samples < MIN bo'lsa factor null.
+ */
+function computeRoadFactors(samples) {
+  const byRegion = {};
+  for (const s of samples) {
+    const straight = haversineMeters(s.fromLat, s.fromLng, s.toLat, s.toLng);
+    const routeM = Math.trunc(Number(s.routeM) || 0);
+    if (straight < MIN_STRAIGHT_M || routeM <= 0) continue;
+    const ratio = Math.round((routeM * 1000) / straight);
+    if (ratio < MIN_RATIO_PERMILLE || ratio > MAX_RATIO_PERMILLE) continue;
+    (byRegion[s.regionKey] = byRegion[s.regionKey] || []).push(ratio);
+  }
+  const out = {};
+  for (const [region, list] of Object.entries(byRegion)) {
+    list.sort((a, b) => a - b);
+    const mid = Math.floor(list.length / 2);
+    const median = list.length % 2 ? list[mid] : Math.round((list[mid - 1] + list[mid]) / 2);
+    out[region] = {
+      factorPermille: list.length >= MIN_CALIBRATION_SAMPLES
+        ? Math.min(FACTOR_CLAMP[1], Math.max(FACTOR_CLAMP[0], median)) : null,
+      samples: list.length,
+    };
+  }
+  return out;
 }
 
 function intOr(v, def, min, max) {
@@ -224,15 +264,31 @@ function attachLocalTaxi(exportsObj, deps) {
     // to'g'ri chiziq × yo'l koeffitsienti (tarifda, versiya bilan) bo'yicha
     // hisoblanadi va trip'da `distanceSource: 'estimate'` deb belgilanadi.
     let distanceSource = 'route';
+    let roadFactor = null; // { permille, source }
     if (!route || !(route.distanceMeters > 0)) {
       distanceSource = 'estimate';
+      // Ega qarori 2026-10-08 (variant A + D): koeffitsient — shu mintaqaning
+      // haftalik hisoblangan qiymati; ma'lumot yetarli bo'lmasa tarifdagisi.
+      roadFactor = { permille: prices.roadFactorPermille, source: 'tariff' };
+      try {
+        const cal = await db.collection(CALIBRATION_COL).doc(CALIBRATION_DOC).get();
+        const reg = cal.exists ? ((cal.data().regions || {})[regionKey]) : null;
+        if (reg && Number.isInteger(reg.factorPermille) && reg.samples >= MIN_CALIBRATION_SAMPLES) {
+          roadFactor = { permille: reg.factorPermille, source: `calibrated:${cal.data().runId || ''}` };
+        }
+      } catch (e) {
+        console.error('local_taxi calibration read:', e.message || e);
+      }
       const straight = haversineMeters(fromLat, fromLng, toLat, toLng);
       route = {
         distanceMeters: Number(divRoundHalfUp(
-            BigInt(straight) * BigInt(prices.roadFactorPermille), 1000n)),
+            BigInt(straight) * BigInt(roadFactor.permille), 1000n)),
         polyline: '',
       };
-      log('route_fallback', { regionKey, straightM: straight, estimateM: route.distanceMeters });
+      log('route_fallback', {
+        regionKey, straightM: straight, estimateM: route.distanceMeters,
+        roadFactorPermille: roadFactor.permille, roadFactorSource: roadFactor.source,
+      });
     }
 
     const at = now();
@@ -261,7 +317,8 @@ function attachLocalTaxi(exportsObj, deps) {
         nightPermille: r.nightPermille,
         nightStartH: prices.nightStartH,
         nightEndH: prices.nightEndH,
-        roadFactorPermille: distanceSource === 'estimate' ? prices.roadFactorPermille : null,
+        roadFactorPermille: roadFactor ? roadFactor.permille : null,
+        roadFactorSource: roadFactor ? roadFactor.source : null,
         distancePart: r.distancePart,
       },
     };
@@ -401,6 +458,63 @@ function attachLocalTaxi(exportsObj, deps) {
     });
 
   /**
+   * Haftalik: oxirgi 30 kunlik server narxli, HAQIQIY marshrutli trip'lardan
+   * mintaqa bo'yicha «yo'l / to'g'ri chiziq» medianasi → `local_taxi_calibration/
+   * road_factor` (joriy) + `runs/{runId}` (o'zgarmas tarix). Narxning o'zi
+   * o'zgarmaydi — faqat Directions ishlamagan buyurtmada ishlatiladi va trip
+   * snapshot'ida manbasi (`calibrated:{runId}`) saqlanadi.
+   */
+  async function runRoadFactorCalibration() {
+    const at = now();
+    const since = admin.firestore.Timestamp.fromMillis(
+        at.getTime() - CALIBRATION_WINDOW_DAYS * 24 * 3600 * 1000);
+    // Bitta maydon bo'yicha so'rov — kompozit indeks shart emas; qolganini xotirada.
+    const snap = await db.collection('trips')
+        .where('createdAt', '>=', since)
+        .orderBy('createdAt', 'desc')
+        .limit(CALIBRATION_MAX_TRIPS)
+        .get();
+    const samples = [];
+    for (const doc of snap.docs) {
+      const t = doc.data() || {};
+      if (t.fareSource !== 'server') continue;
+      // 2026-10-08 gacha zaxira yo'q edi — distanceSource yo'q = 'route'.
+      if (t.distanceSource && t.distanceSource !== 'route') continue;
+      const regionKey = (t.tariffSnapshot && t.tariffSnapshot.regionKey)
+        || resolveRegionKey(Number(t.fromLat), Number(t.fromLng));
+      samples.push({
+        regionKey,
+        fromLat: Number(t.fromLat), fromLng: Number(t.fromLng),
+        toLat: Number(t.toLat), toLng: Number(t.toLng),
+        routeM: t.lockedDistanceM,
+      });
+    }
+    const regions = computeRoadFactors(samples);
+    const runId = at.toISOString().slice(0, 10);
+    const payload = {
+      runId,
+      regions,
+      scannedTrips: snap.size,
+      usedSamples: samples.length,
+      windowDays: CALIBRATION_WINDOW_DAYS,
+      minSamples: MIN_CALIBRATION_SAMPLES,
+      computedAt: ts(),
+    };
+    const ref = db.collection(CALIBRATION_COL).doc(CALIBRATION_DOC);
+    const batch = db.batch();
+    batch.set(ref, payload);
+    // Bir kunda qayta ishga tushsa — tarix ustidan yozilmaydi, yangi id.
+    batch.set(ref.collection('runs').doc(`${runId}_${at.getTime()}`), payload);
+    await batch.commit();
+    log('road_factor_calibration', { runId, scanned: snap.size, used: samples.length, regions });
+    return payload;
+  }
+  exportsObj.calibrateLocalTaxiRoadFactor = functions.pubsub
+    .schedule('every monday 03:00')
+    .timeZone('Asia/Tashkent')
+    .onRun(() => runRoadFactorCalibration());
+
+  /**
    * Admin — mahalliy taksi narxi. Har saqlash yangi `localTariffVersion` va
    * o'zgarmas tarix hujjati `local_taxi_tariffs/v{n}` (kim, qachon, nima edi).
    */
@@ -506,6 +620,7 @@ module.exports = {
   computeFare,
   isNightAt,
   haversineMeters,
+  computeRoadFactors,
   distanceCoefPermille,
   LOCAL_TAXI_TYPES,
 };

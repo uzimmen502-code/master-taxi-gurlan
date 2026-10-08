@@ -305,6 +305,7 @@
   "courier_status_en_route": "Йўлда",
   "courier_status_waiting": "Кутилмоқда",
   "courier_submit_payment": "Тўлов қабул қилинди",
+  "courier_task_details_after_claim": "Манзил ва телефон вазифани олганингиздан кейин кўринади",
   "courier_wallet_balance": "💼 Ҳамён қолдиғи: {amount} {currency}",
   "courier_wallet_change": "🔁 Қайтим (+)",
   "courier_wallet_checking": "💼 Ҳамён текширилмоқда…",

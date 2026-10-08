@@ -23,6 +23,7 @@
     "test:couriers-rules": "node test/couriers_rules.test.js",
     "test:routes-rules": "node test/delivery_routes_rules.test.js",
     "test:orders-courier-rules": "node test/orders_courier_rules.test.js",
+    "test:carpet-agro-courier-rules": "node test/carpet_agro_courier_rules.test.js",
     "test:notifications-rules": "node test/notifications_rules.test.js",
     "test:birthdate-rules": "node test/birthdate_requests_rules.test.js",
     "test:device-bindings-rules": "node test/device_bindings_rules.test.js",
@@ -43,7 +44,8 @@
     "test:relay-escrow": "firebase emulators:exec --only firestore --project demo-relay-escrow \"node test/relay_escrow_cf.test.js\"",
     "test:courier-auth": "firebase emulators:exec --only firestore --project demo-courier-auth \"node test/courier_auth.test.js\"",
     "test:courier-cf": "firebase emulators:exec --only firestore --project demo-courier-cf \"node test/courier_callables_cf.test.js\"",
-    "test:courier-orders": "firebase emulators:exec --only firestore --project demo-courier-orders \"node test/courier_orders_cf.test.js\""
+    "test:courier-orders": "firebase emulators:exec --only firestore --project demo-courier-orders \"node test/courier_orders_cf.test.js\"",
+    "test:carpet-agro-tasks": "firebase emulators:exec --only firestore --project demo-carpet-agro-tasks \"node test/carpet_agro_courier_tasks_cf.test.js\""
   },
   "engines": {
     "node": "20"

@@ -18938,6 +18938,106 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
   }
 });
 
+/** Битта жавобдаги гилам/сут вазифалари чегараси (техник ҳимоя, бизнес қоида эмас). */
+const COURIER_SERVICE_TASKS_LIMIT = 200;
+
+const tsMillisOrNull = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
+const strOrEmpty = (v) => (typeof v === 'string' ? v : '');
+
+/**
+ * Гилам/сут курьер экранлари учун умумий рўйхат йўли.
+ *
+ * Нега callable: `carpet_wash_orders` / `agro_pickup_orders` қоидаси фақат
+ * staff ва мижозга ўқиш беради, `courier` эса `isStaff()`да йўқ
+ * (D-SERVICE-4 / D-CLEAN-1, жонли 2026-10-06 дан) — capability курьернинг
+ * тўғридан-тўғри рўйхат сўрови рад этилади. Қоида майдонларни кеса олмайди:
+ * рўйхат очилса, ҳар бир курьер вазифани олмасданоқ ҲАММА мижознинг исми,
+ * телефони, манзили ва изоҳини оларди (40-қоида).
+ *
+ * `spec.claimable` — олиш учун рўйхат: 'new' режим (claim callable'лари
+ * билан бир хил), фақат `spec.preview` майдонлари. Акс ҳолда — ШУ курьер
+ * олган вазифалар (`spec.mine`): 'finish' режим (тўхтатилган курьер ҳам
+ * қўлидагини тугатади), тўлиқ иш майдонлари `spec.details`. Курьер ID —
+ * фақат каноник шакл: claim/mark callable'лари ҳам уни қатъий
+ * солиштиради, бошқа шаклдаги вазифа экранда кўринса-ю амал рад этилмасин.
+ */
+async function listCourierServiceTasks(collection, specs, data, context) {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  const caller = callerPhone(context);
+  if (!/^\d{9,}$/.test(caller)) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone required');
+  }
+  const list = String((data && data.list) || '').trim();
+  const spec = Object.prototype.hasOwnProperty.call(specs, list) ? specs[list] : null;
+  if (!spec) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid list');
+  }
+  const courierId = await resolveAuthorizedCourierUid(
+    caller, spec.claimable ? COURIER_AUTH_MODES.new : COURIER_AUTH_MODES.finish);
+
+  const queries = spec.claimable
+    ? [db.collection(collection).where('status', '==', spec.status)]
+    : spec.mine.map(({ status, field }) => db.collection(collection)
+      .where(field, '==', courierId)
+      .where('status', '==', status));
+  const snaps = await Promise.all(queries.map((q) => q.limit(COURIER_SERVICE_TASKS_LIMIT).get()));
+
+  const tasks = [];
+  for (const snap of snaps) {
+    snap.forEach((doc) => {
+      const od = doc.data() || {};
+      const fields = spec.claimable ? spec.preview(od) : spec.details(od);
+      tasks.push({ id: doc.id, ...fields, createdAtMs: tsMillisOrNull(od.createdAt) });
+    });
+  }
+  tasks.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+  return {
+    tasks,
+    truncated: snaps.some((s) => s.size >= COURIER_SERVICE_TASKS_LIMIT),
+  };
+}
+
+const carpetCountOf = (od) => {
+  const n = Number(od.carpetCount);
+  return Number.isFinite(n) ? n : 0;
+};
+const carpetPreview = (od) => ({ carpetCount: carpetCountOf(od) });
+
+/**
+ * `list`: 'pickup' — `pickup_ready`, 'return' — `return_ready` (олиш учун);
+ * 'active' — шу курьер олган `pickup_in_delivery` / `return_in_delivery`.
+ */
+const CARPET_COURIER_LISTS = {
+  pickup: { claimable: true, status: 'pickup_ready', preview: carpetPreview },
+  return: { claimable: true, status: 'return_ready', preview: carpetPreview },
+  active: {
+    claimable: false,
+    mine: [
+      { status: 'pickup_in_delivery', field: 'pickupCourierId' },
+      { status: 'return_in_delivery', field: 'returnCourierId' },
+    ],
+    details: (od) => ({
+      status: strOrEmpty(od.status),
+      carpetCount: carpetCountOf(od),
+      pickupAddress: strOrEmpty(od.pickupAddress),
+      customerName: strOrEmpty(od.customerName),
+      customerPhone: strOrEmpty(od.customerPhone),
+      pickupArrivedAtMs: tsMillisOrNull(od.pickupArrivedAt),
+      returnArrivedAtMs: tsMillisOrNull(od.returnArrivedAt),
+    }),
+  },
+};
+
+/**
+ * Курьер: гилам вазифалари (`carpet_wash_courier_screen.dart`). Олишдан
+ * олдин фақат id, гилам сони ва вақт; манзил, исм ва телефон — вазифани
+ * олгандан кейин ('active'). Тест: functions/test/carpet_agro_courier_tasks_cf.test.js
+ */
+exports.courierListCarpetTasks = functions.https.onCall((data, context) =>
+  listCourierServiceTasks('carpet_wash_orders', CARPET_COURIER_LISTS, data, context));
+
 // ══════════════════════════════════════
 // AGRO PICKUP — sut va boshqa mahsulot qabuli
 // ══════════════════════════════════════
@@ -19262,6 +19362,46 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError('internal', msg);
   }
 });
+
+const agroLitersOf = (od) => {
+  const n = Number(od.literCount);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * `list`: 'pickup' — `accepted` (олиш учун); 'active' — ФАҚАТ шу курьер
+ * олган `pickup_in_delivery`. Аввал экран ҲАММА `pickup_in_delivery`
+ * вазифаларни оқим қилиб, бегонасини клиентда яширарди.
+ */
+const AGRO_COURIER_LISTS = {
+  pickup: {
+    claimable: true,
+    status: 'accepted',
+    preview: (od) => ({ productType: strOrEmpty(od.productType), literCount: agroLitersOf(od) }),
+  },
+  active: {
+    claimable: false,
+    mine: [{ status: 'pickup_in_delivery', field: 'pickupCourierId' }],
+    details: (od) => ({
+      status: strOrEmpty(od.status),
+      productType: strOrEmpty(od.productType),
+      literCount: agroLitersOf(od),
+      pickupAddress: strOrEmpty(od.pickupAddress),
+      customerName: strOrEmpty(od.customerName),
+      customerPhone: strOrEmpty(od.customerPhone),
+      note: strOrEmpty(od.note),
+      arrivedAtMs: tsMillisOrNull(od.arrivedAt),
+    }),
+  },
+};
+
+/**
+ * Курьер: сут қабул вазифалари (`agro_pickup_courier_screen.dart`). Олишдан
+ * олдин фақат id, маҳсулот, литр ва вақт; манзил, исм, телефон ва изоҳ —
+ * вазифани олгандан кейин ('active'). Тест: functions/test/carpet_agro_courier_tasks_cf.test.js
+ */
+exports.courierListAgroTasks = functions.https.onCall((data, context) =>
+  listCourierServiceTasks('agro_pickup_orders', AGRO_COURIER_LISTS, data, context));
 
 // --- Telegram Wallet Bot (Phase 0) -----------------------------
 const { attachTelegramWalletBot } = require('./telegram_wallet_bot');

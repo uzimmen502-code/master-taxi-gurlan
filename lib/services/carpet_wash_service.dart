@@ -1,6 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/carpet_wash_order.dart';
+
 /// Gilam yuvish Cloud Functions wrapper.
 class CarpetWashService {
   CarpetWashService({FirebaseFunctions? functions})
@@ -8,6 +10,61 @@ class CarpetWashService {
 
   final FirebaseFunctions _functions;
   static const _uuid = Uuid();
+
+  /// `courierListCarpetTasks` рўйхатлари: олиш учун (`pickup_ready`,
+  /// `return_ready`) ва курьернинг ўзи олган вазифалари.
+  static const courierListPickup = 'pickup';
+  static const courierListReturn = 'return';
+  static const courierListActive = 'active';
+
+  /// Курьер вазифалари (`courierListCarpetTasks`).
+  ///
+  /// `carpet_wash_orders` қоидаси курьерга рўйхат бермайди: қоида
+  /// майдонларни кеса олмайди, сервер эса олишдан олдин ([courierListPickup],
+  /// [courierListReturn]) ФАҚАТ id, гилам сони ва вақтни қайтаради — мижоз
+  /// исми, телефони ва манзили вазифани олгандан кейин
+  /// ([courierListActive]) очилади (40-қоида).
+  Future<List<CarpetWashOrder>> listCourierTasks(String list) async {
+    final result = await _functions
+        .httpsCallable('courierListCarpetTasks')
+        .call({'list': list});
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final raw = (data['tasks'] as List?) ?? const [];
+    final fallbackStatus = switch (list) {
+      courierListPickup => CarpetWashOrder.statusPickupReady,
+      courierListReturn => CarpetWashOrder.statusReturnReady,
+      _ => '',
+    };
+    return [
+      for (final m in raw.whereType<Map>())
+        courierTaskFromMap(
+          Map<String, dynamic>.from(m),
+          fallbackStatus: fallbackStatus,
+        ),
+    ];
+  }
+
+  /// `courierListCarpetTasks` элементи → [CarpetWashOrder]. Олиш рўйхатида
+  /// `status` ва мижоз майдонлари келмайди — улар бўш қолади.
+  static CarpetWashOrder courierTaskFromMap(
+    Map<String, dynamic> m, {
+    String fallbackStatus = '',
+  }) {
+    DateTime? at(Object? ms) =>
+        ms is num ? DateTime.fromMillisecondsSinceEpoch(ms.toInt()) : null;
+    return CarpetWashOrder(
+      id: (m['id'] ?? '') as String,
+      customerId: '',
+      customerPhone: (m['customerPhone'] ?? '') as String,
+      customerName: (m['customerName'] ?? '') as String,
+      pickupAddress: (m['pickupAddress'] ?? '') as String,
+      carpetCount: (m['carpetCount'] as num?)?.toInt() ?? 0,
+      status: (m['status'] as String?) ?? fallbackStatus,
+      pickupArrivedAt: at(m['pickupArrivedAtMs']),
+      returnArrivedAt: at(m['returnArrivedAtMs']),
+      createdAt: at(m['createdAtMs']),
+    );
+  }
 
   Future<String> placeOrder({
     required int carpetCount,

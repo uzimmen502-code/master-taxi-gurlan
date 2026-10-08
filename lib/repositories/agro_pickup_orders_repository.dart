@@ -44,15 +44,6 @@ class AgroPickupOrdersRepository {
         .map(_mapSnapshot);
   }
 
-  Stream<List<AgroPickupOrder>> watchByStatus(String status, {int limit = 50}) {
-    return _col
-        .where('status', isEqualTo: status)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map(_mapSnapshot);
-  }
-
   Future<AgroPickupOrder?> getById(String id) async {
     if (id.isEmpty) return null;
     final snap = await _col.doc(id).get();

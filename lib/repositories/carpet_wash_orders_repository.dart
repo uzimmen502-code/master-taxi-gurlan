@@ -24,17 +24,11 @@ class CarpetWashOrdersRepository {
         .map(_mapSnapshot);
   }
 
+  /// Админ панели: барча буюртмалар (тўлиқ ҳужжат). Фақат staff учун —
+  /// қоида курьерга рўйхат бермайди; курьер иловаси
+  /// `CarpetWashService.listCourierTasks`ни ишлатади.
   Stream<List<CarpetWashOrder>> watchAll({int limit = 100}) {
     return _col
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map(_mapSnapshot);
-  }
-
-  Stream<List<CarpetWashOrder>> watchByStatus(String status, {int limit = 50}) {
-    return _col
-        .where('status', isEqualTo: status)
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()

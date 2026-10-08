@@ -1,8 +1,12 @@
 # Кафе ва ресторанлар бўлими — ТАҲЛИЛ ВА ТАКЛИФ
 
-> Ҳолат: **PROPOSED** (эга тасдиқламаган). Сана: 2026-10-08.
+> Ҳолат: §1–§9 — таҳлил (2026-10-08, биринчи ярим). **§10 — эга қарорлари
+> (2026-10-08, иккинчи ярим), §11–§13 — шу қарорлар асосидаги техник режа
+> (PROPOSED, код ҳали ёзилмаган).** §5.4–§5.5 даги эскроу модели §10 билан
+> **БЕКОР** қилинган — §11.2 га қаранг.
+> Сана: 2026-10-08.
 > Манба: `feat/ev-trip-planner` (HEAD `ed0241a`) бўйича код таҳлили ва
-> интернет тадқиқоти (манбалар — §9).
+> интернет тадқиқоти (манбалар — §14).
 > Белгилар: **CONFIRMED** (кодда ёки расмий манбада кўрилган) ·
 > **REPORTED** (янгилик, иккиламчи манба) · **INFERRED** (кучли хулоса) ·
 > **PROPOSED** (таклиф) · **UNKNOWN** (маълумот йўқ).
@@ -23,9 +27,16 @@
   билан шартнома, ресторанда банк ҳисоби ва ИКПУ кодли фискал чек керак.
 - **Қонун:** 2026-12-12 дан «агрегатор заказов» операторига янги
   мажбуриятлар кучга киради (ЗРУ-1173). Юрист кўриги керак.
-- **Таклиф:** 4 босқич. 1-босқич ички тест (INTERNAL): ҳамён ва нақд пул,
-  мавжуд курьерлар. Карта тўлови 3-босқичда.
-- **Эгага 10 та савол бор (§8).** Жавобсиз implementation бошланмайди.
+- **Эга қарори (§10, 2026-10-08):** AVA тўловга аралашмайди — таом пули
+  мижоздан ресторанга тўғридан-тўғри; AVA улуши таом суммасининг 2 %,
+  қабул қилишда ресторан ҳамёнидан; етказиш нархи масофа бўйича алоҳида
+  тариф; ресторан ўз курьерини ишлатиши мумкин; «Таом» модули ўчирилиб,
+  ўрнига «Кафе-Ресторан»; рўйхатдан ўтиш барчага; республика бўйлаб;
+  UI — Хитой иловалари андозаси.
+- **Техник режа (§11–§13):** 1-босқич — ресторан entity + меню, `orders`
+  `type: 'restaurant'`, 2 % ledger орқали, етказиш тарифи, курьер олиш
+  (pull), ички тест (`internal`) → `public`. Карта тўлови (Click Split) —
+  3-босқич. **Код ҳали ёзилмаган.**
 
 ---
 
@@ -57,13 +68,19 @@
    олиб ташланган» дейди. Аммо папка бор, Home'дан очилади
    (`home_screen.dart:318`), 2026-10-07 да ҳам таҳрирланган. Ўчириш режаси
    бекор бўлганми ёки чала қолганми — **UNKNOWN**. Бу 5-саволга таъсир қилади.
-2. **Курьер тайёр буюртмаларни кўра олмаслиги мумкин (INFERRED, production'да
-   текширилмаган).** Курьер экрани `orders where status == 'ready'` сўровини
-   беради (`orders_repository.dart:145`). Rules эса `orders` ни фақат
-   `isStaff()` ёки буюртма эгасига ўқишга беради (`firestore.rules:1385`).
-   `isStaff()` ичида `courier` атайлаб йўқ (`firestore.rules:121-131`,
-   D-CLEAN-1). Ресторан буюртмалари ҳам шу занжирдан ўтади, шунинг учун
-   бу масала олдинроқ ҳал бўлиши керак.
+2. **Курьер тайёр буюртмаларни кўра олмас эди — CONFIRMED 2026-10-08
+   (алоҳида сессия, emulator, жонли ruleset `510ad81c`).** Курьер экрани
+   `orders where status == 'ready'` сўровини берарди
+   (`orders_repository.dart:145`), rules эса `orders` ни фақат `isStaff()`
+   ёки буюртма эгасига ўқишга беради; `isStaff()` ичида `courier` атайлаб
+   йўқ (`firestore.rules:121-131`, D-CLEAN-1). Курьер ҳатто ўз
+   маршрутидаги буюртмаларни ҳам оча олмасди (`getByIds`).
+   **Тузатилди** `6e294b1` (feat/ev-trip-planner да): `courierListReadyOrders`
+   callable (фақат id/МФЙ/координата — телефон ва манзил йўқ), `orders` get
+   қоидаси `isActiveRouteCourierOfOrder`, МФЙ экрани callable орқали;
+   тестлар `orders_courier_rules.test.js`, `courier_orders_cf.test.js`.
+   Deploy ҳолати — ўша сессия хабар қилади. Ресторан буюртмалари учун худди
+   шу намуна ишлатилади (§11.5, `listNearbyRestaurantOrders`).
 3. **`seller` ҳам роль, ҳам capability.** Rules «seller — capability»
    дейди, POS callable'лари эса `users.role=='seller'` ни текширади
    (`index.js:3613, 3900, 3961, 3986, 4028`). Ресторанни `seller` га
@@ -215,7 +232,10 @@ Uzum'да биринчи 3 та етказиш бепул) · баҳо ва ша
 - Ҳар бир ўтиш транзакцияда текширилади ва `order_events` га ёзилади.
   Рухсат этилмаган ўтиш `ORDER_INVALID_TRANSITION` хатосини беради.
 
-### 5.4 Пул оқими (бутун сўм, idempotent)
+### 5.4 Пул оқими (бутун сўм, idempotent) — **БЕКОР (D-REST-1), §11.2 га қаранг**
+
+> Эга 2026-10-08 да «тўлов қисмига AVA аралашмайди» деди. Қуйидаги
+> эскроу жадвали тарих учун қолдирилди; амалдаги модел — §11.2.
 
 Мисол: таомлар 60 000, етказиш 8 000, комиссия 15 %. Рақамлар фақат
 мисол, ставкалар — эга қарори.
@@ -237,7 +257,7 @@ Uzum'да биринчи 3 та етказиш бепул) · баҳо ва ша
 - Мижоз фақат «Таомлар · Етказиш · Жами» ни кўради. Комиссия ва ички
   тақсимот кўрсатилмайди (14, 45-қоида).
 
-### 5.5 Тўлов усуллари босқичлар бўйича
+### 5.5 Тўлов усуллари босқичлар бўйича — **БЕКОР (D-REST-1, D-REST-12), §11.2 га қаранг**
 
 | Усул | Босқич | Пул қаерга тушади | Шарт |
 |---|---|---|---|
@@ -367,7 +387,325 @@ Uzum'да биринчи 3 та етказиш бепул) · баҳо ва ша
 
 ---
 
-## 9. Манбалар
+## 10. Эга қарорлари (2026-10-08) — AVA_DECIDED
+
+§8 даги саволларга жавоблар ва кейинги аниқлаштирувчи саволлар. Ҳар бири
+**AVA_DECIDED**; «Изоҳ» устуни — менинг шарҳим (INFERRED/PROPOSED).
+
+| # | Қарор | Изоҳ |
+|---|---|---|
+| **D-REST-1** | **Тўлов қисмига AVA аралашмайди.** Таом пули мижоздан ресторанга тўғридан-тўғри ўтади (карта/QR ўтказмаси ёки нақд). AVA мижоз пулини ушламайди, эскроу йўқ | §4.3–4.4 даги лицензия хавфи йўқолади: AVA пул ўтказмайди. §5.4–5.5 бекор |
+| **D-REST-2** | AVA улуши — **буюртмадаги таом суммасининг 2 %** (етказиш нархидан эмас) | `itemsTotal` асосида. Такси билан бир хил ставка |
+| **D-REST-3** | 2 % **буюртмани қабул қилишда ресторан ҳамёнидан** ечилади (такси модели). Ҳамёнда етмаса — ресторан қабул қила олмайди, ҳамённи тўлдиради. Буюртма бекор бўлса ёки етказилмаса — 2 % ҳамёнга қайтади | `taxi_billing.js` даги `charge`/`refund` намунаси, `ceil`, idempotent |
+| **D-REST-4** | AVA курьери етказиш нархи — **масофага қараб, алоҳида тариф**: 1 км гача базавий нарх + ҳар кейинги км учун нарх, 500 га яхлитлаш, тунда ×1.5; серверда ҳисобланади, админ вилоят бўйича ўзгартиради, ҳар буюртмада тариф версияси. Ўз курьерли ресторан ўз нархини қўяди (қатъий / масофа / «X сўмдан ортиқ буюртмага бепул») | Намуна — `local_taxi.js` (`settings/prices`, `tariffSnapshot`). Рақамлар (5 000 / 1 500) — PROPOSED, эга админда белгилайди |
+| **D-REST-5** | Ресторан **ўз курьерини ишлата олади** | `deliveryMode: own_courier` ёки `both` |
+| **D-REST-6** | Мавжуд «Таом» модули **ўчирилади**, ўрнига янги **«Кафе-Ресторан»** модули. Бош экранда «Яқиндаги хизматлар» бўлимидан кейин янги бўлим: **«Яқиндаги Кафе-Ресторанлар»** | Янги модул ID `restaurants` (эски `food` конфиги билан аралашмаслик учун). Ўчириш режаси — §13 |
+| **D-REST-7** | Рўйхатдан ўтиш — **барчага** (ЯТТ/МЧЖ ҳам, уйда таом пиширадиганлар ҳам) | Профилда `legalType: individual / yatt / llc`; «уй ошпази» белгиси мижозга кўрсатилади (PROPOSED). Юрист кўриги сақланади (§4.1) |
+| **D-REST-8** | Ресторан панели — **иловада ҳам, вебда ҳам** | Асосий илова Flutter web сифатида ҳам чиқади (тестерлар веб ишлатади) — битта код иккала жойда ишлайди, алоҳида веб-панел керак эмас (INFERRED) |
+| **D-REST-9** | Пилот — **республика бўйлаб** | Географик чеклов йўқ. Хавфсизлик учун `internal → public` босқичи сақланади (§11.7); тариф минтақалари — §11.3 |
+| **D-REST-10** | AVA — юридик шахс; **Click шартномаси олинади** | Карта тўлови (3-босқич) учун. D-REST-1 билан: Click пул оқими ҳам ресторанга тўғридан-тўғри (Split) бўлади |
+| **D-REST-11** | Таом нотўғри ёки етишмаган бўлса — **пулни қабул қилган томон (ресторан) қайтаради** | AVA фақат воситачи: низо ёзуви + рейтинг. AVA пул ушламагани учун қайтаришни бажара олмайди |
+| **D-REST-12** | AVA курьери етказганда таом пули **иккала йўл билан**: (а) мижоз таом пулини ресторанга олдиндан ўтказади (карта/QR), курьерга фақат етказиш пули; (б) **нақд — курьер выкупи**: курьер ресторандан таомни ўз пулига олади, мижоздан жами суммани олади. Нақд буюртмалар фақат выкупни ёққан ва лимити етадиган курьерларга кўринади | Выкуп хавфи ва ҳимояси — §11.2.4 |
+| **D-REST-13** | Бош экранда ресторанлар **рўйхат** кўринишида; карточка ёки «Барчаси» босилганда таомлар менюси **пастга свайп** қилинадиган саҳифа. Ҳар бир кафе-ресторан **ўз логоси, бренди ва таомлари билан алоҳида майдон** (ўз дўкони каби). Андоза — ишлаб турган **Хитой иловалари** (Meituan Waimai, Ele.me), AVA'га мосланади | UI спецификацияси — §12 |
+
+---
+
+## 11. Техник режа — 1-босқич (PROPOSED, эга қарорлари асосида)
+
+### 11.1 Умумий тамойил (ўзгармади)
+
+`orders`, `delivery_routes`, курьер callable'лари, ledger, ҳамён,
+idempotency, push, модул ҳолатлари, админ панел — қайта ишлатилади.
+Янги: ресторан entity + меню, ресторан буюртма ҳолатлари, 2 % ҳисоби,
+етказиш тарифи, курьер выкупи белгиси.
+
+### 11.2 Пул оқими — AVA пул ушламайди (D-REST-1…3, 11, 12)
+
+Иштирокчилар: **М** мижоз · **Р** ресторан · **К** AVA курьери · **A** AVA.
+
+| Оқим | Ким → ким | AVA'да нима қайд этилади |
+|---|---|---|
+| Таом пули `itemsTotal` | **М → Р** тўғридан-тўғри: олдиндан карта/QR (ресторан реквизити буюртма берилгач кўрсатилади) ёки нақд (ўз курьери / олиб кетиш) | Фақат ҳолат: `paymentStatus: unpaid → paid_declared (М «тўладим») → paid (Р «пул келди»)`. Ledger ёзуви **ЙЎҚ** — бу AVA пули эмас |
+| Таом пули, курьер выкупи | **К → Р** (олишда, К ўз пули) ва **М → К** (эшикда, `itemsTotal + deliveryFee`) | `foodPaymentMethod: cash_buyout`, `order_events` да `buyout_paid`, `cash_collected`. Ledger ёзуви ЙЎҚ |
+| Етказиш нархи `deliveryFee` (AVA курьери) | **М → К**: эшикда нақд, ёки М ҳамёни → К ҳамёни (`deliveryPaymentMethod: cash / wallet`) | `wallet` бўлса — `completeLocalTrip` намунаси: Dr `passenger_credit:{М}` / Cr `passenger_credit:{К}`, калит `restDelivery:{orderId}`, `bonusBalance` + `wallet_ledger` кўзгуси. Етмаса — `cash` га тушади (сервер қарори, К кўради) |
+| Етказиш нархи (ўз курьери) | **М → Р** (ресторан нархи) | Фақат сон (`deliveryFee`, `deliveryFeeSource: restaurant`) |
+| **AVA улуши 2 %** | **Р ҳамёни → A** қабул қилишда | `restFee:{orderId}:v1`: Dr `passenger_credit:{Р эгаси}` / Cr `earnings:ava_restaurant_fee`; `assert next ≥ 0` → етмаса `RESTAURANT_WALLET_INSUFFICIENT`, буюртма `placed` да қолади. Snapshot буюртмада: `avaFee: {rateBps: 200, basis: itemsTotal, amount, version: 1, chargedAt}` |
+| 2 % қайтариш | **A → Р ҳамёни** | `restFeeRefund:{orderId}:v1` — `delivered/completed` дан бошқа ҳар қандай якуний ҳолатда (`rejected`, `cancelled`, `delivery_failed`); idempotent |
+
+- Формула: `fee = ceil(itemsTotal × 200 / 10000)` — бутун сўм, `taxi_billing.calculateTaxiFee` билан бир хил ёндашув (T-4). Етказиш нархи базага кирмайди (D-REST-2).
+- **Ресторан ҳамёни = ресторан эгасининг (`ownerUid`) AVA ҳамёни** (`users.bonusBalance`, `passenger_credit:{uid}`) — Telegram бот орқали тўлдирилади, янги ҳамён тизими йўқ (43-қоида). Бир эганинг бир нечта ресторани — бир ҳамён (PROPOSED).
+- Мижозга кўринадиган нарх: «Таомлар · Етказиш · Жами». 2 % кўрсатилмайди (45-қоида).
+
+**11.2.4 Курьер выкупи — хавф ва ҳимоя (PROPOSED, эга кейин тасдиқлайди):**
+
+| Хавф | Ҳимоя |
+|---|---|
+| М эшикда олмайди — К таом ва пулсиз қолади | (1) Выкуп фақат К ўзи ёққанда (`buyout.enabled`) ва `itemsTotal ≤ buyout.limit`; (2) выкупли буюртма учун М да камида 1 та муваффақиятли ресторан буюртмаси бўлиши ёки телефон тасдиғи (`restaurant_customer_stats/{uid}`, CF ёзади); (3) рад этса `strikes += 1`, 2 та → 30 кун фақат олдиндан тўлов; (4) Р таомни қайтариб олиши ва К пулини қайтариши — Р ↔ К ўртасида, AVA низо ёзувида воситачи |
+| К ресторанга пул бермай «олдим» дейди | `pickupCode` (4 рақам) — Р кодни К га фақат пулни олгач айтади; К кодни киритмагунча `picked` бўлмайди |
+| К етказиш пулини олмайди | Эшикда «нақд» ёки `wallet` — К тасдиқлайди; низо — `order_events` |
+
+Выкуп белгилари: `restaurant_courier_prefs/{accountId}` `{buyoutEnabled, buyoutLimit}` — фақат CF (`courierSetBuyoutPrefs`), `provider_capabilities` га тегилмайди (у `demand` codebase'да, паритет нусхаси бор).
+
+### 11.3 Етказиш тарифи (D-REST-4)
+
+- Янги файл `functions/restaurant_delivery_tariff.js`, `local_taxi.js` намунасида: соф `computeDeliveryFee({distanceMeters, prices, night})`, `resolvePrices(doc, regionKey)`, `isNightAt`.
+- Конфиг: `settings/restaurant_delivery` `{base, perKm, nightCoef, nightStart, nightEnd, roadFactor, regions: {xorazm: {...}, ...}, version}`; тарих `restaurant_delivery_tariffs/v{n}` (ким, қачон, аввалги қиймат); `adminSetRestaurantDeliveryPrices` (admin, audit).
+- Формула: `(base + round(км × perKm)) × тун_коэф` → **500 га яхлит**, бутун сўм, BigInt permille. Масофа: Google Directions (`fetchRouteViaGoogle` мавжуд), ишламаса тўғри чизиқ × `roadFactor` (`distanceSource: estimate`).
+- Буюртмада: `deliveryFee`, `deliveryTariffVersion`, `deliveryTariffSnapshot`, `distanceMeters`, `distanceSource`.
+- **Республика (D-REST-9):** `resolveRegionKey` ҳозир фақат 5 минтақани билади (`tashkent, xorazm, samarqand, namangan, default`). Қолган вилоятлар `default` га тушади. Тариф админ экранида минтақа қўшиш имкони — PROPOSED; пилот `default` билан бошланади.
+- Ўз курьери: `restaurants.ownDelivery {feeMode: fixed | distance | free_above, fixedFee, baseFee, perKm, freeAboveAmount, maxKm}` — ресторан ўзи ёзади (rules whitelist, бутун сон ≥ 0), сервер буюртмада шу бўйича ҳисоблайди ва snapshot қилади.
+
+### 11.4 Маълумот модели (§5.2 га ўзгаришлар)
+
+| Коллекция | Ўзгариш |
+|---|---|
+| `restaurants/{id}` | + `legalType` (`individual/yatt/llc`), `ownerUid`, `deliveryMode` (`ava_courier / own_courier / both / pickup_only`), `ownDelivery{}`, `payment {acceptsPrepay, acceptsCash}`, `prepTimeMin`, `minOrderAmount`, `openingHours`, `pausedUntil`, `signatureItemIds[]` (招牌菜 — §12). Server-only: `status` (`applied → approved → suspended / closed`), `ratingAvg`, `ratingCount`, `autoPauseCount`, `createdBy`. **`create` фақат CF** (`restaurantRegister`) |
+| `restaurants/{id}/private/payment` | `cardNumber`, `cardHolder`, `qrImageUrl` — эга ёзади; CF буюртма берилганда snapshot'ини буюртмага кўчиради (`restaurantPayment`) — фақат шу буюртма эгаси кўради. Коллекция ўзи оммавий эмас |
+| `restaurants/{id}/private/legal` | `tin`, `pinfl`, `docs[]` — эга ёзади, finance/admin ўқийди |
+| `restaurants/{id}/members/{uid}` | `role: owner / manager / staff` — фақат CF |
+| `restaurants/{id}/menu_categories`, `menu_items` | §5.2 даги каби; аъзолар тўғридан-тўғри ёзади (улгуржи намунаси), rules whitelist: `price` бутун 0 < p ≤ 50 000 000, `name` ≤ 80, `available` bool, `stopUntil` timestamp, `packagingFee` бутун ≥ 0 (§12), `optionGroups[]` (2-босқич) |
+| `orders/{id}` (`type: 'restaurant'`) | `restaurantId`, `restaurantName`, `restaurantStatus`, `items[]` (snapshot), `itemsTotal`, `packagingTotal`, `deliveryMode`, `deliveryFee`, `deliveryFeeSource` (`ava_tariff / restaurant`), `deliveryTariffVersion`, `deliveryTariffSnapshot`, `deliveryPaymentMethod` (`cash / wallet / none`), `foodPaymentMethod` (`prepay / cash_buyout / cash_to_restaurant / pickup`), `paymentStatus` (`unpaid / paid_declared / paid`), `restaurantPayment` (snapshot), `avaFee{}`, `acceptDeadlineAt`, `prepTimeMin`, `readyAt`, `pickupCode`, `courierId`, `deliveryRouteId`, `address`, `lat/lng`, `phone`, `note`, `utensils` (餐具, §12). Мавжуд `status`/`fulfillmentStatus` §5.3 жадвали бўйича мосланади |
+| `orders/{id}/order_events` | append-only, CF |
+| `restaurant_customer_stats/{uid}` | `completedCount`, `strikes`, `prepayOnlyUntil` — CF only (`users` rules'га тегилмайди) |
+| `restaurant_courier_prefs/{accountId}` | `buyoutEnabled`, `buyoutLimit` — CF only |
+| `restaurant_reviews/{orderId}` | 2-босқич |
+| Storage `restaurant_images/{restaurantId}/{file}` | аъзо ёзади (`firestore.exists(members/{uid})` — storage.rules'да `firestore.*` намунаси бор), ≤ 8 MB, `image/*`; ўқиш оммавий |
+
+### 11.5 Ҳолатлар ва callable'лар
+
+Ресторан буюртмасининг ягона ўтиш жадвали (§5.3) + `delivery_failed`
+(К етказа олмади) ва `accepted` да ҳам курьер олиши мумкин (таом тайёр
+бўлгунча К етиб келади — Хитой иловалари шундай, §12).
+
+Янги файл `functions/restaurant_orders.js`, `attachRestaurantOrders(exports, deps)`
+(`attachLocalTaxi`/`attachTaxiBilling` намунаси), default codebase (ledger ва
+`orders` шу ерда):
+
+| Callable | Ким | Нима қилади (транзакцияда) |
+|---|---|---|
+| `restaurantRegister` | ҳар қандай фойдаланувчи | `restaurants` + `members/{uid}: owner`; `status: applied` ёки `settings/app.restaurantAutoApprove` бўлса `approved` (улгуржи `wholesaleSellerAutoApprove` намунаси, стандарт — админ тасдиғи, PROPOSED) |
+| `placeRestaurantOrder` | мижоз | модул гейти (§11.7) → Р `approved`, очиқ, пауза эмас → меню нархидан **қайта ҳисоб** (мижоз нархи эътиборсиз), `available`/`stopUntil` → `minOrderAmount` → етказиш нархи (§11.3) → `pickupCode` → `orders` (`status: new`, `restaurantStatus: placed`, `acceptDeadlineAt = now + 5 дақ`) + `order_events`; idempotency `wallet_idempotency/{key}` (мавжуд намуна) |
+| `restaurantAcceptOrder` | аъзо | `placed → accepted` (биринчи ютади: таймаут билан бир вақтда келса бири), **2 % ечиш** (`restFee`), `prepTimeMin`; етмаса `RESTAURANT_WALLET_INSUFFICIENT` ва ҳолат ўзгармайди |
+| `restaurantRejectOrder` | аъзо | `placed/accepted → rejected` (сабаб), 2 % refund (idempotent) |
+| `restaurantMarkReady` | аъзо | `accepted → ready`, `readyAt`; `own_courier`/`pickup` да кейин `restaurantMarkDelivered` |
+| `restaurantConfirmPayment` | аъзо | `paymentStatus → paid` (олдиндан ўтказма келди) |
+| `customerMarkPaid` | мижоз | `unpaid → paid_declared` |
+| `customerCancelRestaurantOrder` | мижоз | фақат `placed` → `cancelled` (2 % ҳали ечилмаган) |
+| `expireUnacceptedRestaurantOrders` | жадвал, ҳар дақиқа | `placed` ва `acceptDeadlineAt < now` → `rejected (timeout)`, Р `autoPauseCount += 1`; кетма-кет 3 та → `pausedUntil = +30 дақ` (Uber/DoorDash намунаси, PROPOSED) |
+| `listNearbyRestaurantOrders` | курьер | `courierListReadyOrders` (`6e294b1`, §2.2) намунасида — ресторан буюртмалари учун ўша callable'нинг тармоғи ёки эгизаги (implementation'да ҳал қилинади, иккита рўйхат мантиғи бўлмасин). `accepted/ready`, `deliveryMode ∈ {ava_courier, both}`, `courierId == null`, К presence'идан радиус ичида; **проекция**: Р номи/манзили/координатаси, М тумани ва тахминий масофа, `deliveryFee`, `foodPaymentMethod` (+ выкуп бўлса `itemsTotal`), тайёр бўлиш вақти. М телефони ва аниқ манзили **ЙЎҚ** (40-қоида). `cash_buyout` буюртмалар фақат `buyoutEnabled && itemsTotal ≤ buyoutLimit` К га |
+| `courierClaimRestaurantOrder` | курьер | `courier_auth` ҳуқуқи (`new` режим), К ≠ М, К Р аъзоси эмас, `courierId == null` → биринчи ютади (`COURIER_ASSIGNMENT_CONFLICT`); К нинг актив `delivery_routes` ҳужжатига қўшади ёки яратади (мавжуд курьер экранлари ўзгармай ишлайди); push М га |
+| `courierMarkPicked` (мавжуд, кичик қўшимча) | курьер | `type == 'restaurant'` бўлса: `restaurantStatus == 'ready'` ва `pickupCode` тўғри — акс ҳолда `RESTAURANT_NOT_READY` / `PICKUP_CODE_MISMATCH` |
+| `courierMarkArrived` (мавжуд) | курьер | ўзгармайди (М га қўнғироқ/push) |
+| `courierCompleteRestaurantDelivery` | курьер | `arrived → delivered/completed`; `cashCollected` (выкуп: `itemsTotal + fee`; олдиндан: `fee`); `deliveryPaymentMethod == wallet` → М→К ledger (`restDelivery`), етмаса `cash`; `delivery_failed` тармоғи (сабаб, 2 % refund, М `strikes`); `delivery_routes.currentIndex` олға |
+| `courierSubmitPayment` (мавжуд) | — | **гард:** `type == 'restaurant'` → `USE_RESTAURANT_COMPLETION` (акс ҳолда таом пули `courier_cash`/`admin_clearing` га тушиб, AVA ўзини сотувчи қилиб қўяди) |
+| `courierSetBuyoutPrefs` | курьер | `restaurant_courier_prefs` |
+| `adminSetRestaurantStatus` | admin | `applied → approved / rejected`, `approved ↔ suspended` — сабаб, `admin_audit` |
+| `adminSetRestaurantDeliveryPrices` | admin | §11.3 |
+
+- Ҳар бир ўтиш `order_events` га ёзилади; ноқонуний ўтиш `ORDER_INVALID_TRANSITION`.
+- Push: `onOrderCreate`/`onOrderUpdate` (мавжуд) ресторан буюртмасида **ресторан аъзоларига** (`members`) push + овоз; М га ҳар ўтишда; яқин К ларга «янги буюртма» — `provider_presence` geohash + `courier_push` (аниқ helper implementation'да текширилади). Мавжуд триггерлардаги «pickup → барча `role == seller`» тармоғи ресторан буюртмасига **қўлланмайди**.
+- `settings/app.orderAcceptMode/orderReadyMode == 'auto'` ресторан буюртмасига **қўлланмайди** (`onOrderUpdate` да `type` текшируви) — §2.5.
+- Structured log: `orderId restaurantId userId action result errorCode duration`; телефон/манзил йўқ.
+
+### 11.6 Security Rules
+
+| Йўл | Ўқиш | Ёзиш |
+|---|---|---|
+| `restaurants/{id}` | `status == approved` ҳамма; аъзо/админ — ҳар қандай | create `false` (CF); update аъзо — профил whitelist (типлар текширилади); server-only майдонлар ёпиқ |
+| `…/menu_categories`, `…/menu_items` | ота `approved` ёки аъзо | аъзо — whitelist (§11.4) |
+| `…/members/{uid}` | ўзи/аъзо/админ | `false` |
+| `…/private/payment`, `…/private/legal` | эга, finance, admin | эга — whitelist |
+| `orders` (мавжуд блок) | + `isRestaurantMember(resource.data.restaurantId)` — `where restaurantId == X` list сўрови учун `get(members/{uid})`; **rules тести шарт** (`.get()` default тузоғи — хотира) | ўзгармайди (CF) |
+| `restaurant_customer_stats`, `restaurant_courier_prefs` | ўзи/админ | `false` |
+| `restaurant_delivery_tariffs`, `settings/restaurant_delivery` | admin (мижозга нарх CF орқали) | `false` |
+| Storage `restaurant_images/{rid}/…` | ҳамма | аъзо, ≤ 8 MB, `image/*` |
+
+Эслатма (40-қоида): ресторан аъзоси буюртмани ўқиганда М телефони ва
+манзилини кўради — кичик шаҳарда Р мижозга қўнғироқ қилиши одатий, лекин
+бу эгага кўрсатилди. Хитой иловалари телефонни виртуал рақам билан
+яширади — AVA'да бундай инфратузилма йўқ (UNKNOWN).
+
+### 11.7 Feature flag ва гейт
+
+- `kKnownModuleIds` + `restaurants`; `config/module_defaults.restaurants` — эга админда белгилайди.
+- Сервер гейти: `module_config/restaurants_all {stage: internal | public, testerIds[]}` — logistics намунаси (`getLogisticsAccess`, `tools/set_logistics_stage.js` ни умумлаштириш). `placeRestaurantOrder` ва `restaurantRegister` гейтни текширади. Республика бўйлаб (D-REST-9) = `public` + модул `enabled`.
+- Админ панел: «Кафе-ресторанлар» бўлими — аризалар (approve/reject/suspend, audit), буюртмалар фильтри (`type == restaurant`), тариф муҳаррири, `restaurantAutoApprove`, stage/testers.
+
+### 11.8 Тестлар (ҳар бири ишга туширилади, натижа сони билан ҳисобот)
+
+| Тест | Нима исботлайди |
+|---|---|
+| `functions/test/restaurant_orders_cf.test.js` (emulator, `demo-restaurant-orders`, порт > 15000) | нарх менюдан (мижоз нархи эътиборсиз); `available=false` → хато; `minOrderAmount`; 2 % бир марта (икки марта чақирилса ҳам); параллел accept + таймаут → битта ютади; ҳамён етмаса `placed` қолади; reject → refund idempotent; икки К claim → биттаси; `markPicked` `ready` бўлмаса/код нотўғри → хато; `courierSubmitPayment` гарди; `wallet` етказиш М→К ва етмаса `cash`; `delivery_failed` → refund + strike; М cancel фақат `placed` |
+| `restaurant_delivery_tariff_pure.test.js` | формула, 500 га яхлитлаш, тун, `default` минтақа, версия snapshot |
+| `restaurant_rules.test.js` (`@firebase/rules-unit-testing`) | §11.6 ҳар қатори: оммавий `applied` ни кўрмайди; аъзо `status`/`ratingAvg` ёзолмайди; `price` string/манфий рад; `orders` list `restaurantId` бўйича аъзога ҳа, бегонага йўқ |
+| Storage rules тести (мавжуд `ed0241a` намунаси) | `restaurant_images` аъзо/бегона |
+| Flutter: `restaurant_cart_test`, `restaurant_menu_scroll_sync_test`, `home_restaurants_section_test`, локал калитлар паритети (3 тил) | сават бир ресторандан; жами бутун сон; чап категория ↔ ўнг рўйхат синхрон мантиғи; бош экран бўлими «Яқиндаги хизматлар»дан кейин |
+| Мавжуд: `courier_orders_cf`, `courier_callables_cf`, `courier_auth`, `delivery_routes_rules`, `local_taxi_*`, `taxi_billing_*` | регрессия йўқ |
+
+### 11.9 Deploy тартиби (ҳар қадам эга рухсати билан, 29-қоида)
+
+1. `firestore.rules` — **алоҳида** буйруқ, жонли ruleset устига фақат шу diff (HEAD rules бошқа сессияларнинг deploy қилинмаган ўзгаришларини ташийди — хотира).
+2. Индекслар: `orders(type, restaurantStatus, courierId)`, `orders(restaurantId, createdAt)`, `restaurants(status, geohash)`, `menu_items(categoryId, sort)` — жонли vs файл diff, `--force` йўқ.
+3. Default функциялар **номи бўйича** (янги файл + `courierMarkPicked`, `courierSubmitPayment`, `onOrderCreate`, `onOrderUpdate`).
+4. Hosting (админ бўлими + веб илова) — deploy олдидан ҳамкор сессиялардан жонли SHA сўралади (навбат).
+5. Илова build — эга.
+6. Конфиг: `module_config/restaurants_all` (`internal` + тестерлар) → синов → `public`; `config/module_defaults.restaurants = enabled`; `food = hidden` (§13).
+
+---
+
+## 12. UI спецификацияси — Хитой иловалари андозаси (D-REST-13)
+
+### 12.1 Манба ва ишончлилик
+
+Meituan Waimai (美团外卖) ва Ele.me (饿了么; 2025-11 дан **淘宝闪购 / Taobao
+Shangou**, савдогар иловаси «淘宝闪购商家版») бўйича: UX teardown мақолалари
+(woshipm.com, 2015–2021), Meituan корхона API ҳужжати (маҳсулот/буюртма
+модели), Ele.me веб клони (vue2-elm), янгиликлар (2024–2026). Иловаларнинг
+ўзи логинсиз очилмади — **жонли скриншот йўқ**; эскирган бўлиши мумкин
+бўлган жойлар белгиланган. Манбалар — §14.
+
+Умумий хулоса (CONFIRMED): иккала иловада ҳам **платформа рамкаси бир
+хил, савдогарга фақат ўз расмлари** (логотип, муқова, эълон, «招牌菜»
+имзо таомлар) берилади — бу D-REST-13 даги «ҳар бирининг ўз майдони»
+талабига айнан мос: ўз бренди расмлар орқали, рамка AVA ники.
+
+### 12.2 Бош экран бўлими — «Яқиндаги Кафе-Ресторанлар»
+
+| | Спецификация | Белги |
+|---|---|---|
+| Жойи | `home_screen.dart` да `HomeAdsSection(service)` («Яқиндаги хизматлар») дан **кейин**, кўчмас мулкдан олдин. `AvaSection` каркаси (`moduleId: 'restaurants'`, сарлавҳа доираси, «Барчаси →», 4 ҳолат) | AVA мавжуд намуна |
+| Кўриниш | **Вертикал рўйхат**, 3–5 та энг яқин очиқ ресторан (`AvaInsetPanel` ичида) | D-REST-13 |
+| Карточка (店铺卡片) | Логотип (48, думалоқ бурчак) · номи · ★ рейтинг + сони («Янги» — 5 тадан кам шарҳда) · масофа «1.2 км» · «~35 дақ» (тайёрлаш + йўл) · «Етказиш 8 000» ёки «Бепул» · «Мин. 30 000» · тэглар: «Уй ошпази», «Ўз курьери», «Олиб кетиш». **Чегирма тэглари ЙЎҚ** — Meituan 2024-11 да рўйхатдан «满减» тэгларини олиб, сифат сигналларига (яқинда ижобий баҳо) ўтган | CONFIRMED (Meituan карточка майдонлари; 2024 ўзгариши) |
+| Ёпиқ ресторан | Рўйхат охирида хира, «Ёпиқ · 09:00 да очилади» | PROPOSED |
+| Бўш ҳолат | «Яқинингизда ҳозирча кафе йўқ» + ҳавола «Кафе-ресторанингизни қўшинг» (рўйхатдан ўтиш) | PROPOSED |
+| Маълумот | `restaurants` `status == approved` + фойдаланувчи нуқтасининг geohash қўшнилари (`functions/geo_hash.js` паритети бор), клиентда масофа бўйича тартиб; очиқ/ёпиқ `openingHours` + `pausedUntil` дан (сервер буюртмада қайта текширади) | INFERRED |
+
+### 12.3 «Барчаси» — ресторанлар рўйхати экрани
+
+Юқорида қидирув (ресторан ёки таом номи) · ошхона тури чиплари
+(«Миллий», «Фастфуд», «Пицца», «Шашлик», «Ширинлик», «Ичимлик» — рўйхат
+PROPOSED, ресторан ўзи 1–3 та танлайди) · тартиб: **фақат «Масофа» ва
+«Рейтинг»** (Meituan'даги 综合/评分/距离/销量 дан соддалаштирилган — сотув
+сони маълумоти ҳали йўқ) · фильтр: «Очиқ», «Олиб кетиш», «Бепул етказиш».
+Карточкалар 12.2 билан бир хил.
+
+### 12.4 Ресторан саҳифаси (店铺页) — асосий экран
+
+Эга талаби: карточка босилганда таомлар менюси пастга свайп қилинади.
+
+| Қисм | Спецификация | Белги |
+|---|---|---|
+| Сарлавҳа (скроллда йиғилади, 吸顶) | Муқова расми (бренд) · логотип · номи · ★ + сони · «Етказиш ~35 дақ · 8 000 сўм · Мин. 30 000» · **эълон сатри** (公告: «Бугун ош 12:00 дан») · манзил + масофа · ★ севимли ва улашиш — 2-босқич | CONFIRMED (Meituan/Ele.me сарлавҳа), йиғилиш — UNVERIFIED |
+| Таблар (сарлавҳа остида ёпишади) | **Меню / Шарҳлар / Маълумот** (点菜 / 评价 / 商家). 1-босқич: Меню + Маълумот; Шарҳлар — 2-босқич. «Маълумот»да: манзил, иш вақти, телефон, юридик шакл («Уй ошпази»/ЯТТ/МЧЖ), «Қайта буюртма» (再来一单, 2-босқич) | CONFIRMED |
+| **Меню — икки устунли боғланган скролл (左右联动)** | Чап тор устун: категориялар (ёпишқоқ, ўз скролли, фаоли ажратилган, ҳар бирида саватдаги шу категория таомлари сони badge). Ўнг устун: таомлар категория бўйича, ҳар бўлимнинг ёпишқоқ сарлавҳаси. **Ўнгни скролл қилганда** бўлим тепага етгач чапда шу категория ёнади (олдиндан ҳисобланган бўлим offset'лари). **Чапни босганда** ўнг шу бўлимга скролл қилади; шу скролл ҳодисалари чапни қайта ўзгартирмаслиги учун **қулф (lock)**. Фаол категория чап устундан чиқиб кетса, чап ўзини марказлайди. Биринчи категория — «Тавсия» (招牌菜, ресторан ≤ 6 та имзо таом белгилайди) | CONFIRMED (Meituan-Dianping муҳандиси тавсифи, 2017; Ele.me) |
+| Таом карточкаси | Расм (88×88) · номи · тавсиф (2 қатор) · нарх **«45 000 сўм»** (вариантли бўлса «45 000 сўмдан» — ¥X起) · ўнгда **«+»** → босилгач **«− 1 +»** степпер. «Ойига N та сотилган» (月售) — 2-босқич, маълумот йиғилгач. Карточкани босиш → таом тафсилоти | CONFIRMED |
+| Таом ҳолатлари (Meituan SKU статуслари) | `available=false` ёки `stopUntil > now` → хира, «Тугади», «+» йўқ (已售罄) · сотув соатидан ташқари → «Фақат 12:00–15:00» (非可售时间) · `minQty` бўлса «камида N та» | CONFIRMED (API: 正常/已售完/已抢光/非可售时间), экран кўриниши UNVERIFIED |
+| Вариантлар варағи (选规格) — **2-босқич** | «+» ўрнига «Танлаш» тугмаси. Пастки варақ (Ele.me услуби): **спецификация** гуруҳи (ҳажм — ҳар бири ўз нархи ва қолдиғи, яъни алоҳида SKU) · **атрибут** гуруҳлари (аччиқлик, ҳарорат — чиплар, мажбурий/ихтиёрий, min/max) · пуллик қўшимча (соус +3 000) = янги SKU. Пастда «Саватга қўшиш · 52 000» | CONFIRMED (API модели); min/max — UNVERIFIED |
+| **Ёпишқоқ сават панели** (пастда) | Сават иконкаси + badge · «Жами 60 000 · Етказиш 8 000» · минимумга етмаса **«Мин. буюртмага яна 12 000 сўм»** (还差¥X起送) ва тугма ўчиқ · етса **«Буюртма бериш →»** (去结算). Иконкани босиш → сават варағи: таомлар степпер билан, «Тозалаш» (тасдиқ билан), қадоқлаш ҳақи сатри | CONFIRMED |
+| Бир ресторан — бир сават | Бошқа ресторандан қўшилса: «Саватда «X» таомлари бор. Тозалаб, «Y» дан бошлайсизми?» | CONFIRMED (2015 дан; Meituan 2024-12 дан 3 дўконли саватни **синаяпти** — AVA учун 1-босқичда керак эмас) |
+| Қадоқлаш ҳақи (包装费) | Ҳар таомда ихтиёрий `packagingFee` (бутун сўм, Meituan: 1 ¥ чегара); саватда ва checkout'да алоҳида сатр | CONFIRMED |
+| Анимация | Таом саватга «учиб» тушади (抛物线) — ихтиёрий, 2-босқич | CONFIRMED (Ele.me) |
+
+### 12.5 Буюртма бериш (提交订单)
+
+Майдонлар тартиби (Ele.me/Meituan, AVA'га мосланган):
+
+1. **Манзил** — профил координатаси (эски `AddressGate` қайта ишлатилади), таҳрирлаш.
+2. **Етказиш / Олиб кетиш** (ресторан рухсат берса); «Ҳозир» — режалаштирилган вақт 3-босқич.
+3. **Идиш-товоқ (餐具)**: «Керак эмас» (стандарт) / 1 / 2 / 3… — PROPOSED, экологик стандарт.
+4. **Изоҳ (备注)** ≤ 200 белги.
+5. **Таом пули**: ресторан режимига қараб — «Ресторанга олдиндан (карта/QR)» · «Нақд, курьерга» (выкуп, фақат рухсат бўлса) · «Нақд, ресторанга» (ўз курьери/олиб кетиш).
+6. **Етказиш пули** (AVA курьери): «Нақд, курьерга» · «AVA ҳамёнидан» (баланс кўрсатилади).
+7. **Ҳисоб**: Таомлар · Қадоқлаш · Етказиш · **Жами** (бутун сўм). Тахминий етиб келиш «~35 дақ».
+8. Тугма **«Буюртма бериш»**.
+
+Юборилгач — олдиндан тўлов танланган бўлса: ресторан карта рақами (нусха
+тугмаси) ёки QR, «Тўладим» тугмаси (→ `paid_declared`). Промокод, «қизил
+конверт», ҳисоб-фактура — 1-босқичда **йўқ** (соддалаштириш).
+
+### 12.6 Буюртмани кузатиш
+
+- Вертикал босқичлар: Юборилди → Ресторан қабул қилди («~25 дақ») → Тайёрланмоқда → Тайёр → Курьер олди → Йўлда → Етказилди. (Meituan: 提交→推单→接单→完成; етказиш: 已抢单→骑手到店→已取餐→已送达 — CONFIRMED.)
+- Тугмалар: ресторанга қўнғироқ; курьер олгач — курьерга қўнғироқ; «Бекор қилиш» — фақат `placed`; **«Шошилтириш» (催单)** — 2-босқич, фақат ETA ўтгач ёнади (Meituan қоидаси); «Етказилганини тасдиқлаш» (Ele.me, ETA ўтгач) — 2-босқич.
+- Курьер харитада — 2-босқич (`provider_presence` бор, INFERRED мумкин).
+- Етказилгач: «Баҳолаш» (2-босқич), «Қайта буюртма» (2-босқич).
+- Бош экранда сузувчи «Буюртмангиз йўлда» ёрлиғи — 2-босқич.
+
+### 12.7 Шарҳлар таби (2-босқич)
+
+Умумий ★ + **Таъм / Қадоқлаш / Етказиш** (Ele.me: 味道/包装/配送) · чиплар:
+Барчаси / Ижобий / Салбий / Расмли · ресторан жавоби · курьер 3 поғонали
+баҳо · ресторан ва курьерга аноним · 7 кун ичида · **ўзгармас** (13¹-модда).
+
+### 12.8 Ресторан панели («Менинг кафем», иловада = вебда)
+
+Таблар (淘宝闪购商家版: 订单/消息/管理/经营 дан мосланган): **Буюртмалар / Меню / Дўкон / Ҳисобот**.
+
+| Таб | Мазмуни | Белги |
+|---|---|---|
+| Буюртмалар | Янги буюртма: push + овоз + **5 дақиқалик ҳисоб** (Wolt 3 дақ, §3.2); «Қабул қилиш · AVA ҳақи 1 200 сўм» + тайёрлаш вақти (15/25/40 дақ) · «Рад этиш» (сабаб) · кейин «Тайёр» · олдиндан тўловда «Пул келди» · тарих. Ҳамён етмаса — қизил огоҳлантириш + «Тўлдириш» | AVA (D-REST-3) + CONFIRMED (接单/出餐) |
+| Меню | Категориялар (тартиб) · таом: расм, ном, тавсиф, нарх, қадоқлаш ҳақи, «Бор/Йўқ», «Бугунгача тугади» (沽清), сотув соати · «Тавсия» ≤ 6 та · вариантлар — 2-босқич | CONFIRMED (модел) |
+| Дўкон (店铺装修) | Логотип, муқова (≤ 3 MB тавсия), эълон (公告), иш вақти, тайёрлаш вақти, мин. буюртма, етказиш режими + ўз курьери нархи (§11.3), тўлов реквизити (карта/QR), **Пауза** (暂停营业): 30 дақ / бугунгача / қўлда, юридик шакл | CONFIRMED (функциялар); расм ўлчами — оператор тавсияси |
+| Ҳисобот | Бугун: буюртмалар, тушум, AVA ҳақи; ҳамён баланси + «Тўлдириш» (бот) | AVA |
+| Автоматик қабул (自动接单) | 2-босқич — **эътибор:** бу ҳар буюртмада ҳамёндан 2 % ни автоматик ечади, эга тасдиғи керак | CONFIRMED (функция бор) / PROPOSED (AVA учун) |
+
+Принтер, овозли робот — йўқ (push + овоз етарли).
+
+### 12.9 Курьер томони
+
+Курьер марказида «Кафе буюртмалари» рўйхати (`listNearbyRestaurantOrders`):
+ресторан номи/манзили · ресторангача ва мижозгача тахминий масофа ·
+етказиш пули · «Нақд выкуп 60 000» белгиси (фақат рухсатли курьерга) ·
+«Тайёр бўлади ~15 дақ» · **«Олиш»**. Олгач — мавжуд маршрут экрани; «Олдим»
+да **pickupCode** киритилади; эшикда «Етказдим» + олинган нақд тасдиғи ·
+«Етказа олмадим» (сабаб).
+
+### 12.10 Матнлар (3 тил бирга, хотира қоидаси)
+
+| Калит | uz_Cyrl (эга берди) | uz_Latn (PROPOSED) | ru (PROPOSED) |
+|---|---|---|---|
+| `home_module_restaurants` | Кафе-Ресторан | Kafe-Restoran | Кафе-рестораны |
+| `home_section_restaurants` | Яқиндаги Кафе-Ресторанлар: | Yaqindagi Kafe-Restoranlar: | Ближайшие кафе-рестораны: |
+
+Қолган ~80 та калит implementation'да, учала файлга бирга.
+
+### 12.11 Бренд ва ранг
+
+AVA токенлари (`AvaLight`: бренд `#FFA500`, нарх матни `brandText`, крем фон)
+— рамка AVA ники. Ресторан бренди = логотип + муқова + имзо таомлар
+(Хитой иловаларида ҳам шундай). Ҳар ресторанга ўз ранг схемаси — **йўқ**
+(контраст ва бир хиллик учун, PROPOSED). Логотип/муқова `restaurant_images/`.
+
+### 12.12 Flutter тузилмаси (PROPOSED)
+
+`lib/features/restaurants/` — `data/` (`restaurants_repository`,
+`menu_repository`, `restaurant_orders_repository`), `domain/` (моделлар,
+`RestaurantCart` ChangeNotifier — бир ресторан, бутун сон), `presentation/`
+(`restaurants_list_screen`, `restaurant_screen` + `menu_scroll_sync`
+контроллери, `cart_sheet`, `checkout_sheet`, `order_tracking_screen`),
+`merchant/` (панел), `courier/` (`nearby_restaurant_orders_screen`).
+Бош экран виджети `lib/features/home/widgets/home_restaurants_section.dart`.
+Қайта ишлатилади: `AvaSection`, `AvaInsetPanel`, `AddressGate`,
+`PendingCommerceOrders` (офлайн навбат), `OrdersRepository.watchByUser`,
+`OrderCard`.
+
+---
+
+## 13. «Таом» модулини ўчириш (D-REST-6) — қайтариб бўладиган тартиб
+
+Боғлиқликлар рўйхати `docs/food_decommission_phase0_uz.md` да бор ва ҳозир
+ҳам тўғри (§2.1: модул аслида ўчирилмаган). Тартиб:
+
+| Босқич | Нима | Орқага мослик / хавф |
+|---|---|---|
+| **A. Конфиг** (янги илова чиққан куни, эга админда) | `config/module_defaults.food = hidden` (+ туман/МФЙ қатламлари) | Эски илова версиялари плиткани кўрсатмай қўяди; код ўзгармайди. Қайтариш — `enabled` |
+| **B. Илова коди** (янги модул билан бир релизда) | `lib/features/food/**`, `lib/models/food_product.dart`, `lib/utils/food_catalog.dart`, `home_modules_catalog`/`home_services_catalog` даги `food`, `home_screen._openModule case 'food'`, `courier_services_hub_screen` даги food, `products_manager_screen._enableFoodTab` + food таби, `orders_repository.createFoodOrder` (ўлик код), локал калитлар `home_module_food`, `food`, `food_order`, `nav_food`, `home_feed_tab_food`, `courier_hub_food_*` (3 тил бирга), `assets/images/services/service_food.png`, `bread_image_storage` даги `food_images` йўли | `kKnownModuleIds` да `'food'` **қолади** (эски конфиглар учун, `platform_store` каби). `OrderModel` `type: 'food'` ни кўрсатишда давом этади — **эски буюртмалар тарихи йўқолмайди** (мижоз «Буюртмалар», админ доскаси) |
+| **C. Сервер** (эски илова версиялари тугагач — `users` даги илова версияси бўйича ўлчанади, UNKNOWN қанча вақт) | `placeOrderPostPaid` даги `food` тармоғи, `repriceFoodOrderFromCatalog`, `seedFoodCatalog`, `onSearchIndexFoodProductWrite`, `food_inventory` reset бўлаклари; rules `food_catalog`/`food_inventory`; storage `food_images` | Функциялар номи бўйича; rules алоҳида. Эски илова `food_catalog` ни фақат FoodScreen очилганда ўқийди — A дан кейин очилмайди |
+| **D. Маълумот** (фақат эганинг аниқ буйруғи, 28-қоида) | `food_catalog`, `food_inventory` ҳужжатлари, `food_images/` файллари, қидирув индексидаги food ёзувлари | Аввал backup (export), dry-run рўйхат, кейин ўчириш; `orders` **тегилмайди** |
+
+---
+
+## 14. Манбалар
 
 **Код (feat/ev-trip-planner, `ed0241a`):** `functions/index.js`,
 `functions/settlement_ledger.js`, `functions/courier_auth.js`,

@@ -164,7 +164,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [AvaLight.okSoft, AvaLight.surface2, AvaLight.line],
+            colors: [AvaLight.bg, AvaLight.surface2, AvaLight.line],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -407,8 +407,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: warm
-              ? const [Color(0xFFFFF8E1), AvaLight.okSoft]
-              : const [Color(0xFFE3F2FD), AvaLight.okSoft],
+              ? const [Color(0xFFFFF8E1), AvaLight.brandSoft]
+              : const [AvaLight.surface2, AvaLight.brandSoft],
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
@@ -454,7 +454,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: on ? AvaLight.okSoft : const Color(0xFFF3F4F6),
+            color: on ? AvaLight.brandSoft : AvaLight.chip,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: on ? _green : Colors.transparent,
@@ -497,7 +497,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
         prefixIcon: Icon(icon, color: _green),
         filled: true,
-        fillColor: const Color(0xFFF3F4F6),
+        fillColor: AvaLight.chip,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,

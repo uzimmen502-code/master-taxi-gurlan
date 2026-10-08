@@ -127,7 +127,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              AvaLight.okSoft,
+              AvaLight.bg,
               AvaLight.surface2,
               AvaLight.line,
             ],
@@ -206,8 +206,8 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: on
-                                          ? AvaLight.okSoft
-                                          : const Color(0xFFF3F4F6),
+                                          ? AvaLight.brandSoft
+                                          : AvaLight.chip,
                                       borderRadius: BorderRadius.circular(14),
                                       border: Border.all(
                                         color: on

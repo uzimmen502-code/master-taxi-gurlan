@@ -30,12 +30,17 @@ service cloud.firestore {
     // сервер беради (`requestCapability` → `ensureAccountId`), клиент
     // ҳеч қачон ўзгартирмайди — акс ҳолда бошқанинг starter даврини
     // ўзига олиш мумкин бўларди.
+    // `payoutKycVerified` (payout KYC belgisi) va `security` (qurilma
+    // ko'chirilgandan keyingi `deviceTrustMode: limited` cheklovi) — faqat
+    // server: avval egasi o'ziga KYC belgisini qo'yib yoki cheklovni olib
+    // tashlab pul yechishi mumkin edi (hamyon auditi O-17).
     function walletFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny([
             'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
             'realtyUnlocksLeft', 'realtyOwnerKey',
-            'realtyPro', 'realtyTeamOwner', 'accountId'
+            'realtyPro', 'realtyTeamOwner', 'accountId',
+            'payoutKycVerified', 'security'
           ]);
     }
 
@@ -769,7 +774,8 @@ service cloud.firestore {
           && !request.resource.data.keys().hasAny([
                'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
                'realtyUnlocksLeft', 'realtyOwnerKey',
-               'realtyPro', 'realtyTeamOwner', 'accountId'
+               'realtyPro', 'realtyTeamOwner', 'accountId',
+               'payoutKycVerified', 'security'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 

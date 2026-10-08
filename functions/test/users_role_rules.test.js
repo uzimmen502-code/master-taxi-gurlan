@@ -195,6 +195,34 @@ async function main() {
     await assertFails(phoneCtx(NEWU).doc(`users/${NEWU}`).set({ phone: NEWU, role: 'admin' }));
   });
 
+  // ─── O-17: payout KYC belgisi va qurilma cheklovi — faqat server ─────
+  await seed();
+  await check('K1 egasi o\'ziga payoutKycVerified: true yoza olmaydi — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ payoutKycVerified: true }));
+  });
+  await seed();
+  await check('K2 egasi qurilma cheklovini (security.deviceTrustMode) olib tashlay olmaydi — RAD', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`users/${ATTACKER}`)
+          .update({ security: { deviceTrustMode: 'limited', deviceTrustUntil: new Date(Date.now() + 86400000) } });
+    });
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ security: { deviceTrustMode: 'normal' } }));
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ 'security.deviceTrustMode': 'normal' }));
+  });
+  await seed();
+  await check('K3 yaratishda ham payoutKycVerified / security yozib bo\'lmaydi — RAD', async () => {
+    await assertFails(phoneCtx(NEWU).doc(`users/${NEWU}`).set({ phone: NEWU, payoutKycVerified: true }));
+    await assertFails(phoneCtx(NEWU).doc(`users/${NEWU}`).set({ phone: NEWU, security: { deviceTrustMode: 'normal' } }));
+  });
+  await seed();
+  await check('K4 egasi oddiy profil maydonlarini yozishda davom etadi — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ name: 'Ali', birthDate: '1990-01-01' }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;

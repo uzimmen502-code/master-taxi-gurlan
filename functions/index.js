@@ -5201,6 +5201,17 @@ exports.requestPayout = functions.https.onCall(async (data, context) => {
         'failed-precondition',
         'Payout KYC talab qilinadi — profil yoki admin tasdiqlashini yakunlang');
   }
+  // Qurilma ko'chirilgandan keyin 24 soat pul yechish cheklangan — Telegram
+  // yechishdagi (`assertNotDeviceTrustLimited`) kabi. Avval bu yo'l
+  // tekshirmasdi (hamyon auditi O-17).
+  if (isDeviceTrustLimited(userData)) {
+    const until = (userData.security || {}).deviceTrustUntil;
+    const untilMs = until && typeof until.toDate === 'function' ? until.toDate().getTime() : 0;
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Yangi qurilma: pul yechish 24 soatga cheklangan. Keyinroq urinib ko\'ring.',
+        { code: 'device_trust_limited', untilMs });
+  }
   const bal = userData.bonusBalance || 0;
   if (bal < amount) {
     throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');

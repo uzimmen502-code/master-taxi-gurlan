@@ -159,13 +159,56 @@ async function rejects(promise, code) {
   });
 
   await reset();
-  await check('B4b eski 9 xonali hujjat + 12 xonali userPhone: not-found (kengaytirilmadi)', async () => {
+  await check('B4b eski 9 xonali hujjat + 12 xonali token: shu hamyon, walletUserDocId yoziladi', async () => {
     await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
     const caller = `998${LEGACY9}`;
-    await rejects(place(caller, {
+    const r = await place(caller, {
       userPhone: caller, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
-    }), 'not-found');
+    });
+    assert.strictEqual(r.walletDebit, PLOV_PRICE);
+    assert.strictEqual(await bal(LEGACY9), 40000 - PLOV_PRICE);
+    const order = (await db.collection('orders').doc(r.orderId).get()).data();
+    assert.strictEqual(order.walletUserDocId, LEGACY9);
+  });
+
+  await reset();
+  await check('O1 (O-18) 9 xonali foydalanuvchi bekor qiladi → qaytim shu hujjatga, ledger mos', async () => {
+    await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
+    const caller = `998${LEGACY9}`;
+    const r = await place(caller, {
+      userPhone: caller, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
+    });
+    const c = await fns.customerCancelOrder.run({ orderId: r.orderId }, ctxOf(caller));
+    assert.strictEqual(c.walletRefund, PLOV_PRICE);
     assert.strictEqual(await bal(LEGACY9), 40000);
+    assert.strictEqual(await pcBal(LEGACY9), 0, 'ledger: −narx +narx = 0 (ochilish yozuvisiz)');
+    await journalBalanced();
+  });
+
+  await reset();
+  await check('O2 (O-18) K-1 davridagi buyurtma: qaytim buyurtma egasiga EMAS, yechilgan hamyonga', async () => {
+    // Eski tizimda hujumchi jabrlanuvchi hamyonidan to'lagan holat (journal'da
+    // VICTIM debet, buyurtma egasi ATTACKER, walletUserDocId yo'q).
+    const orderRef = db.collection('orders').doc('old_k1_order');
+    await orderRef.set({
+      type: 'food', userPhone: ATTACKER, phone: ATTACKER, total: PLOV_PRICE,
+      balanceApplied: PLOV_PRICE, cashDue: 0, status: 'new', fulfillmentStatus: 'pending',
+      inventoryDecrements: [],
+    });
+    await ledger.postEntry(db, {
+      idempotencyKey: 'bonus:old_k1_key', kind: 'order_wallet', refType: 'order',
+      refId: 'old_k1_order', postedBy: VICTIM, postedRole: 'client',
+      legs: [
+        { account: ledger.passengerCreditAccount(VICTIM), dr: PLOV_PRICE },
+        { account: 'admin_clearing', cr: PLOV_PRICE },
+      ],
+    }, { mirrorBonus: true });
+    assert.strictEqual(await bal(VICTIM), 200000 - PLOV_PRICE);
+    const c = await fns.customerCancelOrder.run({ orderId: 'old_k1_order' }, ctxOf(ATTACKER));
+    assert.strictEqual(c.walletRefund, PLOV_PRICE);
+    assert.strictEqual(await bal(VICTIM), 200000, 'pul jabrlanuvchiga qaytdi');
+    assert.strictEqual(await bal(ATTACKER), 0, 'hujumchiga hech narsa tushmadi');
+    await journalBalanced();
   });
 
   await reset();

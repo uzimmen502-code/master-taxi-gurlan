@@ -2927,13 +2927,10 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     }));
   }
   const uid12 = callerUid;
-  // Эски 9 хонали `users` ҳужжати — аввалгидек фақат клиент ЎЗ рақамини 9
-  // хонали шаклда юборганда. Кенгайтирилмади: бекор қилишдаги ҳамён қайтими
-  // (`od.userPhone` = 12 хона) 9 хонали ҳужжатни топмайди.
-  const sentDigits = digits(userPhone);
-  const uid9 = (sentDigits.length === 9 && canonicalUid(sentDigits) === callerUid)
-    ? sentDigits
-    : uid12;
+  // Эски 9 хонали `users` ҳужжати ҳам token эгасиники. Бекор қилишдаги
+  // қайтим энди телефондан эмас, буюртмадаги `walletUserDocId`дан (O-18) —
+  // шу сабабли 9 хонали ҳужжатга ўтиш хавфсиз.
+  const uid9 = uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : uid12;
   let userRef = db.collection('users').doc(uid12);
   let userCheck = await userRef.get();
   if (!userCheck.exists && uid9 !== uid12) {
@@ -3133,6 +3130,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       inventoryDecrements,
       total: orderTotal,
       balanceApplied: walletDebit,
+      // Қайтим айнан шу ҳужжатга (O-18) — телефондан қайта тахмин эмас.
+      ...(walletDebit > 0 ? { walletUserDocId: userRef.id } : {}),
       cashDue,
       cashPaid: 0,
       status: 'new',
@@ -3243,6 +3242,32 @@ function orderCancelRefundKey(orderId) {
   return `order_cancel_refund_${orderId}`;
 }
 
+/**
+ * Ҳамёндан АЙНАН қайси `users` ҳужжати ечилган — телефондан тахмин эмас.
+ * 1) `placeOrderPostPaid` буюртмага ёзган `walletUserDocId`;
+ * 2) эски буюртма: ечиш журнали (`kind: order_wallet`) — дебетланган
+ *    `passenger_credit:{id}`. K-1 тузатилгунча бошқанинг ҳамёнидан ечилган
+ *    буюртмада қайтим буюртма эгасига эмас, ечилган ҳамёнга қайтади.
+ * Топилмаса '' — чақирувчи телефон шаклларига ўтади. Фақат `refId` бўйича
+ * сўров (битта майдон индекси), `kind` кодда фильтрланади.
+ */
+async function debitedWalletDocIdInTx(t, orderId, od) {
+  const stored = String(od.walletUserDocId || '').trim();
+  if (stored) return stored;
+  const js = await t.get(db.collection(settlementLedger.COL_JOURNAL)
+      .where('refId', '==', orderId).limit(20));
+  for (const d of js.docs) {
+    const e = d.data() || {};
+    if (e.kind !== 'order_wallet') continue;
+    for (const l of e.legs || []) {
+      if (String(l.account || '').startsWith('passenger_credit:') && (l.dr || 0) > 0) {
+        return settlementLedger.ownerUidOf(l.account);
+      }
+    }
+  }
+  return '';
+}
+
 async function prepareOrderCancelInTx(t, orderRef, od) {
   const decs = Array.isArray(od.inventoryDecrements) ? od.inventoryDecrements : [];
   const inv = [];
@@ -3273,7 +3298,8 @@ async function prepareOrderCancelInTx(t, orderRef, od) {
     // бўлса қайтариш ЖИМГИНА ўтказиб юбориларди, буюртма барибир бекор
     // бўларди (ҳамён аудити O-18).
     const uid12 = canonicalUid(rawPhone);
-    const candidates = [...new Set([
+    const exactId = await debitedWalletDocIdInTx(t, orderRef.id, od);
+    const candidates = exactId ? [exactId] : [...new Set([
       uid12,
       phoneDigitsOnly,
       uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : '',

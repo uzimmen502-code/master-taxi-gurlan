@@ -18,6 +18,7 @@ import '../services/admin_news_read_service.dart';
 import '../utils/count_stream_sum.dart';
 import '../utils/grouped_rows.dart';
 import '../widgets/change_pin_dialog.dart';
+import '../../../models/job_ad.dart';
 import '../../../repositories/news_repository.dart';
 import 'admin_home_ticker_screen.dart';
 import 'admin_news_list_screen.dart';
@@ -269,9 +270,11 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'Бозорлар ва эълонлар',
-      label: 'ИШ ЭЪЛОН',
+      // Ном — иловадаги иккита доира («Эълонлар» ва «Хизматлар», иккаласи
+      // ҳам `jobs` модули) билан бир хил (эга, 2026-10-08; аввал «ИШ ЭЪЛОН»).
+      label: 'Эълонлар ва хизматлар',
       icon: Icons.work_history,
-      description: 'Иш, хизмат, эълон — модерация',
+      description: 'Эълонлар ва хизматлар — модерация',
     ),
     _AdminSection(
       group: 'Бозорлар ва эълонлар',
@@ -517,7 +520,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Буюртма хабар') {
       return const AdminOrderNewsListScreen();
     }
-    if (section.label == 'ИШ ЭЪЛОН') {
+    if (section.label == 'Эълонлар ва хизматлар') {
       return const JobsModerationScreen();
     }
     if (section.label == 'Аҳоли бозори') {
@@ -1035,20 +1038,20 @@ class _Sidebar extends StatelessWidget {
             .where('status', isEqualTo: 'ready')
             .snapshots()
             .map((s) => s.docs.length);
-      case 'ИШ ЭЪЛОН':
+      // Нишон экран КЎРСАТАДИГАН турларнигина санайди (`JobAd.jobsBoardTypes`
+      // — экран ҳам шу рўйхат билан филтрлайди). Аввал бўш ва `announcement`
+      // турлари ҳам саналарди, экранда эса улар йўқ эди: нишон ҳеч қачон
+      // нолга тушмасди. Сўров ҳам чекланган (аввал ҚАНЧА кутаётган эълон
+      // бўлса — бозор эълонлари ҳам — ҳаммасини ўқирди). Индекс: ads
+      // (type, status) — мавжуд.
+      case 'Эълонлар ва хизматлар':
         return db
             .collection('ads')
             .where('status', isEqualTo: 'pending')
+            .where('type', whereIn: JobAd.jobsBoardTypes)
+            .limit(200)
             .snapshots()
-            .map((s) => s.docs.where((d) {
-                  final t = (d.data()['type'] ?? '') as String;
-                  if (t == 'cheap_product') return false;
-                  return t.isEmpty ||
-                      t == 'work' ||
-                      t == 'service' ||
-                      t == 'ad' ||
-                      t == 'announcement';
-                }).length);
+            .map((s) => s.docs.length);
       case 'Аҳоли бозори':
         return db
             .collection('ads')

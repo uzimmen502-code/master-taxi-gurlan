@@ -79,17 +79,13 @@ extension AdKindX on AdKind {
     }
   }
 
+  /// Doskaga (va admin «Эълонлар ва хизматлар» bo'limiga) kiradigan `ads`
+  /// turlari — YAGONA manba: ekran filtri, admin nishoni va admin so'rovi
+  /// shundan oladi.
+  static const List<String> jobsBoardTypes = ['work', 'service', 'ad'];
+
   /// `cheap_product`, legacy `sell` va boshqa turlar doskaga kirmaydi.
-  static bool isJobsBoardType(String? type) {
-    switch (type) {
-      case 'work':
-      case 'service':
-      case 'ad':
-        return true;
-      default:
-        return false;
-    }
-  }
+  static bool isJobsBoardType(String? type) => jobsBoardTypes.contains(type);
 }
 
 /// `ads` collection — иш / хизмат / эълон (mini-OLX).
@@ -147,6 +143,9 @@ class JobAd {
   final String regionId;
 
   static bool isJobsBoardType(String? type) => AdKindX.isJobsBoardType(type);
+
+  /// Қаранг: [AdKindX.jobsBoardTypes].
+  static const List<String> jobsBoardTypes = AdKindX.jobsBoardTypes;
 
   AdKind get kind => AdKindX.parse(type);
 

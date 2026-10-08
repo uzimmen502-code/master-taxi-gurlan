@@ -9,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../../models/order_model.dart';
+import '../../../utils/geo_hash.dart';
 import '../domain/restaurant_models.dart';
 
 class RestaurantsException implements Exception {
@@ -207,6 +208,113 @@ class RestaurantsRepository {
       .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(OrderModel.fromDoc).toList(growable: false));
+
+  /// Олиб кетиш коди — `orders/{id}/private/secrets` (қоида: фақат ресторан
+  /// а'зоси ва админ; курьерга ресторан оғзаки айтади).
+  Stream<String?> watchPickupCode(String orderId) => _orders
+      .doc(orderId)
+      .collection('private')
+      .doc('secrets')
+      .snapshots()
+      .map((d) => d.exists ? (d.data()?['pickupCode'] as String?) : null);
+
+  // ── Ресторан а'зоси — ТЎҒРИДАН-ТЎҒРИ ёзиш (rules whitelist) ──────────
+  // Профил/меню — улгуржи намунаси: server-only майдонлар (`status`,
+  // `ownerUid`, рейтинг…) қоидада ёпиқ; буюртма нархи барибир серверда
+  // менюдан қайта ҳисобланади (18-қоида).
+
+  static const double _geohashPrecisionMeters = 7;
+
+  /// Профил майдонлари (whitelist қоидадаги билан бир хил). `lat`/`lng`
+  /// ўзгарса `geohash` ҳам янгиланади — серверники билан бир хил аниқлик.
+  Future<void> updateProfile(String restaurantId, Map<String, dynamic> patch) {
+    final data = Map<String, dynamic>.from(patch);
+    final lat = data['lat'];
+    final lng = data['lng'];
+    if (lat is num && lng is num) {
+      data['geohash'] = GeoHash.encode(lat.toDouble(), lng.toDouble(), precision: _geohashPrecisionMeters.toInt());
+    }
+    data['updatedAt'] = FieldValue.serverTimestamp();
+    return _restaurants.doc(restaurantId).update(data);
+  }
+
+  /// Пауза: `until` — шу вақтгача; `null` — давом эттириш.
+  Future<void> setPaused(String restaurantId, DateTime? until) => _restaurants.doc(restaurantId).update({
+        'pausedUntil': until == null ? null : Timestamp.fromDate(until),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  Stream<Map<String, dynamic>?> watchPaymentDetails(String restaurantId) =>
+      _restaurants.doc(restaurantId).collection('private').doc('payment').snapshots().map((d) => d.data());
+
+  Future<void> savePaymentDetails(
+    String restaurantId, {
+    required String cardNumber,
+    required String cardHolder,
+    String qrImageUrl = '',
+  }) =>
+      _restaurants.doc(restaurantId).collection('private').doc('payment').set({
+        'cardNumber': cardNumber,
+        'cardHolder': cardHolder,
+        'qrImageUrl': qrImageUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  Future<String> upsertCategory(String restaurantId, {String? id, required String name, required int sort}) async {
+    final col = _restaurants.doc(restaurantId).collection('menu_categories');
+    final ref = id == null ? col.doc() : col.doc(id);
+    await ref.set({
+      'name': name,
+      'sort': sort,
+      if (id == null) 'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    return ref.id;
+  }
+
+  Future<void> deleteCategory(String restaurantId, String id) =>
+      _restaurants.doc(restaurantId).collection('menu_categories').doc(id).delete();
+
+  Future<String> upsertMenuItem(
+    String restaurantId, {
+    String? id,
+    required String name,
+    required int price,
+    String description = '',
+    String photoUrl = '',
+    int packagingFee = 0,
+    String categoryId = '',
+    int sort = 0,
+    bool available = true,
+    DateTime? stopUntil,
+  }) async {
+    final col = _restaurants.doc(restaurantId).collection('menu_items');
+    final ref = id == null ? col.doc() : col.doc(id);
+    await ref.set({
+      'name': name,
+      'price': price,
+      'description': description,
+      'photoUrl': photoUrl,
+      'packagingFee': packagingFee,
+      'categoryId': categoryId,
+      'sort': sort,
+      'available': available,
+      'stopUntil': stopUntil == null ? null : Timestamp.fromDate(stopUntil),
+      if (id == null) 'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    return ref.id;
+  }
+
+  Future<void> setItemAvailability(String restaurantId, String id, {required bool available, DateTime? stopUntil}) =>
+      _restaurants.doc(restaurantId).collection('menu_items').doc(id).update({
+        'available': available,
+        'stopUntil': stopUntil == null ? null : Timestamp.fromDate(stopUntil),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  Future<void> deleteMenuItem(String restaurantId, String id) =>
+      _restaurants.doc(restaurantId).collection('menu_items').doc(id).delete();
 
   // ── Callable'лар ───────────────────────────────────────────────────
 

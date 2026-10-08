@@ -134,6 +134,30 @@ service firebase.storage {
       allow delete: if request.auth != null && wsOwnerPathOk();
     }
 
+    // Kafe-restoran rasmlari (logotip, muqova, taomlar) — faqat restoran
+    // A'ZOSI (`restaurants/{rid}/members/{phone}`, CF yozadi), ≤ 8MB, rasm.
+    // O'qish — hammaga (menyu loginsiz ko'riladi). Cross-service qoida
+    // (Storage → Firestore) — yuqoridagi IAM eslatmasi shu yerga ham taalluqli.
+    // Test: functions/test/storage_restaurant_rules.test.js
+    match /restaurant_images/{restaurantId}/{fileName} {
+      function restPhone() {
+        return request.auth != null && request.auth.token.phone_number is string
+            ? request.auth.token.phone_number.replace('\\+', '')
+            : '';
+      }
+      function isRestaurantMember() {
+        let p = restPhone();
+        return p != ''
+            && firestore.exists(/databases/(default)/documents/restaurants/$(restaurantId)/members/$(p));
+      }
+      allow read: if true;
+      allow write: if request.auth != null
+          && isRestaurantMember()
+          && request.resource.size < 8 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && isRestaurantMember();
+    }
+
     // Davra (Mening yaqinlarim) fotoalbomi. O'qish — download URL bilan hammaga;
     // yozish — authed, faqat .jpg, ≤8MB. A'zolik Firestore qatlamida tekshiriladi.
     match /circles/{circleId}/album/{fileName} {

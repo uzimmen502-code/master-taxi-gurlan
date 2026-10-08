@@ -60,4 +60,28 @@ void main() {
       expect(cyrl.containsKey('restaurants_food_payment_${p}_hint'), isTrue, reason: '$p hint');
     }
   });
+
+  test('restoran paneli — dinamik kalitlar (status, xato, oshxona, rejim, bucket)', () {
+    for (final s in ['applied', 'approved', 'rejected', 'suspended', 'closed']) {
+      expect(cyrl.containsKey('restaurants_m_status_$s'), isTrue, reason: s);
+    }
+    for (final e in ['name', 'location', 'address', 'legal_type', 'delivery_mode', 'delivery_or_pickup', 'payment_method', 'card_number', 'prep_time', 'min_order', 'own_fee', 'hours', 'item']) {
+      expect(cyrl.containsKey('restaurants_m_err_$e'), isTrue, reason: e);
+    }
+    for (final c in ['milliy', 'fastfood', 'pizza', 'shashlik', 'sweets', 'drinks', 'home']) {
+      expect(cyrl.containsKey('restaurants_cuisine_$c'), isTrue, reason: c);
+    }
+    for (final k in ['individual', 'yatt', 'llc']) {
+      expect(cyrl.containsKey('restaurants_m_legal_$k'), isTrue, reason: k);
+    }
+    for (final k in ['ava', 'own', 'none']) {
+      expect(cyrl.containsKey('restaurants_m_delivery_$k'), isTrue, reason: k);
+    }
+    for (final k in ['delivery', 'pickup', 'own']) {
+      expect(cyrl.containsKey('restaurants_m_mode_$k'), isTrue, reason: k);
+    }
+    for (final k in ['fresh', 'active', 'history']) {
+      expect(cyrl.containsKey('restaurants_m_bucket_$k'), isTrue, reason: k);
+    }
+  });
 }

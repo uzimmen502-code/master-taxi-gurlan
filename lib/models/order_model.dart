@@ -62,6 +62,12 @@ class OrderModel {
   final int prepTimeMin;
   final String note;
   final DateTime? acceptDeadlineAt;
+  final int utensils;
+
+  /// AVA ҳақи (2 %): `avaFee.amount` / `charged` / `refunded` — ҳисобот учун.
+  final int avaFeeAmount;
+  final bool avaFeeCharged;
+  final bool avaFeeRefunded;
 
   const OrderModel({
     required this.id,
@@ -105,6 +111,10 @@ class OrderModel {
     this.prepTimeMin = 0,
     this.note = '',
     this.acceptDeadlineAt,
+    this.utensils = 0,
+    this.avaFeeAmount = 0,
+    this.avaFeeCharged = false,
+    this.avaFeeRefunded = false,
   });
 
   bool get isRestaurant => type == 'restaurant';
@@ -261,6 +271,10 @@ class OrderModel {
       prepTimeMin: (d['prepTimeMin'] as num?)?.toInt() ?? 0,
       note: (d['note'] ?? '') as String,
       acceptDeadlineAt: _parseDate(d['acceptDeadlineAt']),
+      utensils: (d['utensils'] as num?)?.toInt() ?? 0,
+      avaFeeAmount: ((d['avaFee'] is Map ? (d['avaFee'] as Map)['amount'] : null) as num?)?.toInt() ?? 0,
+      avaFeeCharged: d['avaFee'] is Map && (d['avaFee'] as Map)['charged'] == true,
+      avaFeeRefunded: d['avaFee'] is Map && (d['avaFee'] as Map)['refunded'] == true,
     );
   }
 }

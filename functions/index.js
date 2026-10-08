@@ -2434,14 +2434,23 @@ async function resolveSellerCatalogLine(kind, inventoryId) {
   throw new functions.https.HttpsError('invalid-argument', 'bad item kind');
 }
 
+/** Ochiq to'lanmagan buyurtmalar so'rovi — kunlik va bitta mahsulot reseti uchun bitta manba. */
+function openUnpaidOrdersQuery() {
+  return db.collection('orders')
+      .where('paymentStatus', '==', 'unpaid')
+      .limit(500);
+}
+
 /** To'lanmagan buyurtmalardan soldToday rezervini yig'ish. */
 async function aggregateOpenOrderStockReservations() {
+  const snap = await openUnpaidOrdersQuery().get();
+  return stockReservationsFromOrderDocs(snap.docs);
+}
+
+/** `{ "<collection>__<id>": qty }` — ochiq to'lanmagan buyurtmalar rezervi. */
+function stockReservationsFromOrderDocs(docs) {
   const reserved = {};
-  const snap = await db.collection('orders')
-      .where('paymentStatus', '==', 'unpaid')
-      .limit(500)
-      .get();
-  for (const doc of snap.docs) {
+  for (const doc of docs) {
     const o = doc.data() || {};
     const fs = String(o.fulfillmentStatus || o.status || '').toLowerCase();
     if (['cancelled', 'canceled', 'completed', 'delivered', 'rejected'].includes(fs)) {
@@ -10330,6 +10339,37 @@ exports.resetSoldStockNow = functions.https.onCall(async (data, context) => {
     ok: true, bread, extras, food, platform, reapplied,
     reservedKeys: Object.keys(reserved).length,
   };
+});
+
+/// Admin: BITTA mahsulotning «сотилган»ини nolga — ochiq to'lanmagan buyurtma
+/// rezervi saqlanadi (kunlik reset bilan bir xil qoida). Avval admin ekrani
+/// klientdan `soldToday: 0` yozardi: ochiq buyurtmalar rezervi yo'qolib,
+/// qoldiq ortiqcha ko'rinar va ombor ortiqcha sotilardi (admin auditi O-8).
+/// Tranzaksiya mahsulot hujjatini o'qiydi — parallel buyurtma yaratish/bekor
+/// qilish (ular ham shu hujjatga yozadi) to'qnashib qayta uriniladi.
+exports.adminResetItemSoldToday = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const col = inventoryCollectionForDecrementKind(String(data.kind || ''));
+  const id = String(data.id || '').trim();
+  if (!id || id.includes('/')) {
+    throw new functions.https.HttpsError('invalid-argument', 'id kerak');
+  }
+  const ref = db.collection(col).doc(id);
+  const key = `${col}__${id}`;
+  const result = await db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    // Hujjat yo'q — sotilgan ham yo'q (buyurtma rezervi hujjatni yaratadi).
+    if (!snap.exists) return { before: 0, reserved: 0, written: false };
+    const orders = await t.get(openUnpaidOrdersQuery());
+    const reserved = Number(stockReservationsFromOrderDocs(orders.docs)[key]) || 0;
+    const before = Number((snap.data() || {}).soldToday) || 0;
+    t.update(ref, { soldToday: reserved });
+    return { before, reserved, written: true };
+  });
+  console.log(JSON.stringify({
+    action: 'adminResetItemSoldToday', col, id, ...result,
+  }));
+  return { ok: true, soldToday: result.reserved, before: result.before };
 });
 
 // ─── P1-2: Heartbeat crash cleanup (drivers + couriers) ───────────────────────

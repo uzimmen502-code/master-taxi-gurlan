@@ -115,11 +115,9 @@ class BreadRepository {
     await _products.doc(id).delete();
   }
 
-  /// `soldToday` ни нолгa қaйтaриш (ҳaр кун тoнггa ёки aдмин қўлдa).
-  Future<void> resetProductSold(String id) async {
-    if (id.isEmpty) return;
-    await _products.doc(id).set({'soldToday': 0}, SetOptions(merge: true));
-  }
+  // `soldToday`ни нолга қайтариш клиентдан ОЛИБ ТАШЛАНДИ (админ аудити O-8):
+  // у очиқ буюртмалар захирасини ўчирарди. Админ — `AdminInventoryService`
+  // (`adminResetItemSoldToday` CF), тунги reset — `resetDailySoldStock`.
 
   /// Қўшимчa мaҳсулoт яратиш/янгилaш.
   Future<String> upsertExtra({
@@ -165,11 +163,6 @@ class BreadRepository {
   Future<void> deleteExtra(String id) async {
     if (id.isEmpty) return;
     await _extras.doc(id).delete();
-  }
-
-  Future<void> resetExtraSold(String id) async {
-    if (id.isEmpty) return;
-    await _extras.doc(id).set({'soldToday': 0}, SetOptions(merge: true));
   }
 
   /// `settings/prices` ҳужжaтини янгилaш (қисмaн merge).

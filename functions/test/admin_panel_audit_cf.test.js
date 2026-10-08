@@ -30,6 +30,8 @@
  *   L  sendSupportChatReply — qo'lda javob `systemOrder: false` (push ketadi)
  *   M  adminWebSignIn — telefon + shaxsiy PIN; qulf; adminSetAdminPin /
  *      adminChangeOwnPin (ega qarori D-1)
+ *   R  adminResetItemSoldToday — bitta mahsulot reseti ochiq to'lanmagan
+ *      buyurtma rezervini saqlaydi (O-8), parallel rad etish bilan izchil
  */
 'use strict';
 const assert = require('assert');
@@ -627,6 +629,59 @@ async function main() {
     await agro('m3', { status: 'picked_up' });
     await rejectsWith(setAgro('m3', 'cancelled'), 'failed-precondition');
     await rejectsWith(setAgro('m2', 'cancelled'), 'failed-precondition');
+  });
+
+  // ── R. Bitta mahsulot «сотилган = 0» — ochiq buyurtma rezervi saqlanadi (O-8) ──
+  await reset();
+  await Promise.all(['extra_products', 'food_inventory'].map(wipe));
+  const resetItem = (kind, id, who = ADMIN) =>
+    fns.adminResetItemSoldToday.run({ adminPhone: who, kind, id }, ctxOf(who));
+  const sold = async (col, id) => (await db.collection(col).doc(id).get()).data().soldToday;
+  await db.collection('bread_products').doc('b1').set({ name: 'Non', totalStock: 20, soldToday: 7 });
+  await db.collection('orders').doc('r_open').set(order({ paymentStatus: 'unpaid' }));
+  await db.collection('orders').doc('r_paid').set(order({ paymentStatus: 'paid' }));
+  await db.collection('orders').doc('r_cancel').set(order({ paymentStatus: 'unpaid', status: 'cancelled', fulfillmentStatus: 'cancelled' }));
+  await check('R1 anonim / oddiy foydalanuvchi — rad, soldToday o\'zgarmaydi', async () => {
+    await rejectsWith(fns.adminResetItemSoldToday.run({ adminPhone: ADMIN, kind: 'bread', id: 'b1' }, ANON), 'permission-denied');
+    await rejectsWith(fns.adminResetItemSoldToday.run({ kind: 'bread', id: 'b1' }, ctxOf(OTHER)), 'permission-denied');
+    assert.strictEqual(await sold('bread_products', 'b1'), 7);
+  });
+  await check('R2 reset: ochiq to\'lanmagan buyurtma rezervi (2) qoladi; to\'langan/bekor sanalmaydi', async () => {
+    const r = await resetItem('bread', 'b1');
+    assert.deepStrictEqual([r.before, r.soldToday], [7, 2]);
+    assert.strictEqual(await sold('bread_products', 'b1'), 2);
+  });
+  await check('R3 qayta chaqiruv — natija o\'sha (idempotent)', async () => {
+    await resetItem('bread', 'b1');
+    assert.strictEqual(await sold('bread_products', 'b1'), 2);
+  });
+  await check('R4 rezervsiz mahsulot → 0; hujjati yo\'q mahsulot yaratilmaydi', async () => {
+    await db.collection('extra_products').doc('e1').set({ name: 'Kunjut', totalStock: 5, soldToday: 3 });
+    await resetItem('extra', 'e1');
+    assert.strictEqual(await sold('extra_products', 'e1'), 0);
+    const r = await resetItem('extra', 'nope');
+    assert.strictEqual(r.soldToday, 0);
+    assert.strictEqual((await db.collection('extra_products').doc('nope').get()).exists, false);
+  });
+  await check('R5 eski food buyurtmasi (items.inventoryId) ham rezerv sifatida sanaladi', async () => {
+    await db.collection('food_inventory').doc('plov').set({ totalStock: 30, soldToday: 9 });
+    await db.collection('orders').doc('r_food').set({
+      userPhone: CUSTOMER, type: 'food', status: 'new', paymentStatus: 'unpaid',
+      items: [{ inventoryId: 'plov', qty: 3 }],
+    });
+    await resetItem('food', 'plov');
+    assert.strictEqual(await sold('food_inventory', 'plov'), 3);
+  });
+  await check('R6 noto\'g\'ri kind / id — invalid-argument', async () => {
+    await rejectsWith(resetItem('wine', 'b1'), 'invalid-argument');
+    await rejectsWith(resetItem('bread', ''), 'invalid-argument');
+  });
+  await check('R7 parallel: reset + admin rad etishi (zaxira qaytadi) — oxiri doim 0, manfiy emas', async () => {
+    await db.collection('bread_products').doc('b1').set({ name: 'Non', totalStock: 20, soldToday: 7 });
+    await db.collection('orders').doc('r_paid').delete();
+    await Promise.all([resetItem('bread', 'b1'), setStatus('r_open', 'rejected')]);
+    assert.strictEqual((await db.collection('orders').doc('r_open').get()).data().status, 'rejected');
+    assert.strictEqual(await sold('bread_products', 'b1'), 0);
   });
 
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────

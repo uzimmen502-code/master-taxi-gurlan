@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +10,7 @@ import '../../../models/service_module_config.dart';
 import '../../../repositories/service_config_repository.dart';
 import '../../home/home_module_gate.dart';
 import '../services/admin_auth_service.dart';
+import '../utils/module_config_changes.dart';
 
 /// Admin — "Ҳудудлар ва хизматлар".
 ///
@@ -103,6 +105,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   final Map<String, ModuleStatus> _defaults = {};
   /// Oxirgi saqlangan baseline — cascade uchun (eski qiymat bilan solishtirish).
   final Map<String, ModuleStatus> _savedDefaults = {};
+
+  /// Serverdagi `config/module_defaults`da YO'Q modullar (ekranda `hidden`
+  /// ko'rinadi). Saqlashda ularning `from`i — `null`: server shu bilan
+  /// solishtiradi.
+  final Set<String> _absentDefaults = {};
 
   /// Geo seed bo'lmaganda (yoki region o'chirilganda) tayanch viloyat.
   static const String _fallbackRegionId = 'xorazm';
@@ -214,6 +221,10 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _savedDefaults
           ..clear()
           ..addAll(_defaults);
+        _absentDefaults
+          ..clear()
+          ..addAll(kKnownModuleIds
+              .where((id) => !defaultsRes.config.modules.containsKey(id)));
         _regions = regions;
         _regionId = regionId;
         _districts = districts;
@@ -365,21 +376,22 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         .where((id) => !remote.modules.containsKey(id))
         .toList(growable: false);
     if (missing.isEmpty) return;
-    final merged = <String, ModuleStatus>{
-      ...remote.modules,
-      for (final id in missing) id: ModuleStatus.hidden,
-    };
+    // Фақат етишмаган модуллар (`null → hidden`) — аввал бутун устун
+    // қайта ёзиларди. Аудитда `source: apk_module_sync`.
     try {
-      await _repo.setModuleDefaults(
-        ServiceModuleConfig(merged),
-        enforce: enforce,
-        updatedBy: 'apk_module_sync',
-      );
+      await _saveModuleConfig({
+        'scope': 'global',
+        'source': 'apk_module_sync',
+        'changes': [
+          for (final id in missing)
+            ModuleChange(id, null, ModuleStatus.hidden).toJson(),
+        ],
+      });
       if (!mounted) return;
-      _savedDefaults
-        ..clear()
-        ..addAll(_defaults);
+      _absentDefaults.removeAll(missing);
     } catch (e) {
+      // Конфликт — бошқа админ аллақачон қўшган; бошқа хато — кейинги
+      // очилишда қайта уринилади.
       debugPrint('[ServiceConfigAdmin] baseline sync: $e');
     }
   }
@@ -492,186 +504,213 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     });
   }
 
-  Future<void> _saveGlobal() async {
-    setState(() => _savingGlobal = true);
-    final messenger = ScaffoldMessenger.of(context);
-    final by = _adminId();
-    final newDefaults = Map<String, ModuleStatus>.from(_defaults);
-    try {
-      // Faqat baseline — barcha zonani ketma-ket yozish UI ni osiltirardi.
-      // Ilova allaqachon faqat manualModules override'ni oladi.
-      await _repo
-          .setModuleDefaults(
-            ServiceModuleConfig(newDefaults),
-            enforce: _enforce,
-            updatedBy: by,
-          )
-          .timeout(const Duration(seconds: 20));
+  /// Callable: модул ҳолатини сақлаш. Сервер ҳар катакнинг `from`ини
+  /// ўзидаги жорий қиймат билан солиштиради (фарқ бўлса — конфликт, ҳеч
+  /// нарса ёзилмайди) ва ҳар сақлашни `admin_audit`га ёзади (эга,
+  /// 2026-10-08). Аввал бу ерда бутун Global устун тўғридан-тўғри Firestore'га
+  /// қайта ёзиларди.
+  Future<int> _saveModuleConfig(Map<String, Object?> payload) async {
+    final res = await FirebaseFunctions.instance
+        .httpsCallable('adminSaveModuleConfig')
+        .call<Object?>(payload)
+        .timeout(const Duration(seconds: 25));
+    final data = res.data;
+    return data is Map ? ((data['applied'] as num?)?.toInt() ?? 0) : 0;
+  }
 
-      for (final districtId in _districtOverrides.keys) {
-        final manual = _manualByDistrict[districtId] ?? const <String>{};
-        final cur = _districtOverrides[districtId] ?? {};
-        _districtOverrides[districtId] = {
-          for (final id in kKnownModuleIds)
-            id: manual.contains(id) ? cur[id] : null,
-        };
-        _savedDistrictOverrides[districtId] =
-            Map<String, ModuleStatus?>.from(_districtOverrides[districtId]!);
-        _savedManualByDistrict[districtId] = Set<String>.from(manual);
-      }
-
-      // Local UI: no-manual kataklar inherit koʻrinsin.
-      for (final areaId in _overrides.keys) {
-        final manual = _manualByArea[areaId] ?? const <String>{};
-        final cur = _overrides[areaId] ?? {};
-        _overrides[areaId] = {
-          for (final id in kKnownModuleIds)
-            id: manual.contains(id) ? cur[id] : null,
-        };
-        _savedOverrides[areaId] =
-            Map<String, ModuleStatus?>.from(_overrides[areaId]!);
-        _savedManualByArea[areaId] = Set<String>.from(manual);
-      }
-
-      _savedDefaults
-        ..clear()
-        ..addAll(newDefaults);
-      _savedEnforce = _enforce;
-
-      if (mounted) setState(() {});
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Global baseline saqlandi',
-            style: TextStyle(color: AppColors.onPrimary)),
-        backgroundColor: AppColors.button,
+  /// Сақланмаган ўзгаришлар — нишон (Global / туман / МФЙ) бўйича, фақат
+  /// ўзгарган катаклар.
+  List<_SaveTarget> _pendingTargets({bool globalOnly = false}) {
+    final out = <_SaveTarget>[];
+    final global = [
+      for (final c
+          in diffModuleStatuses(_savedDefaults, _defaults, kKnownModuleIds))
+        ModuleChange(c.moduleId,
+            _absentDefaults.contains(c.moduleId) ? null : c.from, c.to),
+    ];
+    final enforceChanged = _enforce != _savedEnforce;
+    if (global.isNotEmpty || enforceChanged) {
+      out.add(_SaveTarget(
+        scope: 'global',
+        targetId: '',
+        title: 'Baseline GLOBAL',
+        changes: global,
+        enforce: enforceChanged ? (from: _savedEnforce, to: _enforce) : null,
       ));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
+    }
+    if (globalOnly) return out;
+    for (final did in _districtOverrides.keys) {
+      final changes = diffModuleStatuses(
+        _savedDistrictOverrides[did] ?? const {},
+        _districtOverrides[did] ?? const {},
+        kKnownModuleIds,
       );
-    } finally {
-      if (mounted) setState(() => _savingGlobal = false);
+      if (changes.isEmpty) continue;
+      out.add(_SaveTarget(
+        scope: 'district',
+        targetId: did,
+        title: _districtById[did]?.displayName ?? did,
+        changes: changes,
+      ));
+    }
+    for (final aid in _overrides.keys) {
+      final changes = diffModuleStatuses(
+        _savedOverrides[aid] ?? const {},
+        _overrides[aid] ?? const {},
+        kKnownModuleIds,
+      );
+      if (changes.isEmpty) continue;
+      out.add(_SaveTarget(
+        scope: 'area',
+        targetId: aid,
+        title: _areaById[aid]?.displayName ?? aid,
+        changes: changes,
+      ));
+    }
+    return out;
+  }
+
+  /// Сақланган нишон — фақат юборилган катаклар «сақланган» бўлади (сақлаш
+  /// пайтида бошқа катак ўзгарган бўлса, у сақланмаган бўлиб қолади).
+  void _markSaved(_SaveTarget t) {
+    if (t.scope == 'global') {
+      for (final c in t.changes) {
+        _savedDefaults[c.moduleId] = c.to!;
+        _absentDefaults.remove(c.moduleId);
+      }
+      if (t.enforce != null) _savedEnforce = t.enforce!.to;
+      return;
+    }
+    final isDistrict = t.scope == 'district';
+    final saved = (isDistrict ? _savedDistrictOverrides : _savedOverrides)
+        .putIfAbsent(t.targetId, () => {});
+    final savedMan = (isDistrict ? _savedManualByDistrict : _savedManualByArea)
+        .putIfAbsent(t.targetId, () => <String>{});
+    for (final c in t.changes) {
+      saved[c.moduleId] = c.to;
+      if (c.to == null) {
+        savedMan.remove(c.moduleId);
+      } else {
+        savedMan.add(c.moduleId);
+      }
     }
   }
 
-  Future<void> _saveAll() async {
-    if (!_hasDirtyAny) return;
-    final hadDefaults = _hasDirtyDefaults;
-    final hadMatrix = _hasDirtyMatrix;
-    try {
-      if (hadDefaults) {
-        await _saveGlobal();
-        if (!mounted) return;
-      }
-      if (hadMatrix && _hasDirtyMatrix) {
-        await _saveMatrix();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
+  Future<void> _saveGlobal() => _save(globalOnly: true);
 
-  Future<void> _saveMatrix() async {
-    if (!_hasDirtyMatrix) return;
-    setState(() => _savingMatrix = true);
+  Future<void> _saveAll() => _save();
+
+  /// «Сақлаш»: аввал нима ўзгаришини кўрсатади; тасдиқлангач ҳар нишон
+  /// алоҳида callable. Конфликт бўлса — жадвал сервердан қайта юкланади.
+  Future<void> _save({bool globalOnly = false}) async {
+    final targets = _pendingTargets(globalOnly: globalOnly);
+    if (targets.isEmpty) return;
+    final confirmed = await _confirmChanges(targets);
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _savingGlobal = targets.any((t) => t.scope == 'global');
+      _savingMatrix = targets.any((t) => t.scope != 'global');
+    });
     final messenger = ScaffoldMessenger.of(context);
-    final by = _adminId();
-    var saved = 0;
+    var applied = 0;
     try {
-      for (final districtId in _districtOverrides.keys) {
-        final cur = _districtOverrides[districtId] ?? const {};
-        final prev = _savedDistrictOverrides[districtId] ?? const {};
-        final curMan = _manualByDistrict[districtId] ?? const <String>{};
-        final savedMan = _savedManualByDistrict[districtId] ?? const <String>{};
-        var dirty = curMan.length != savedMan.length ||
-            !curMan.containsAll(savedMan);
-        if (!dirty) {
-          for (final id in kKnownModuleIds) {
-            if (cur[id] != prev[id]) {
-              dirty = true;
-              break;
-            }
-          }
-        }
-        if (!dirty) continue;
-        final district = _districtById[districtId];
-        if (district == null) continue;
-        final manual = Set<String>.from(curMan);
-        final overridden = <String, ModuleStatus>{
-          for (final id in manual)
-            if (cur[id] != null) id: cur[id]!,
-        };
-        await _repo.setDistrictModules(
-          district,
-          ServiceModuleConfig(overridden),
-          manualModules: manual,
-          updatedBy: by,
-        );
-        _districtOverrides[districtId] = {
-          for (final id in kKnownModuleIds)
-            id: manual.contains(id) ? cur[id] : null,
-        };
-        _savedDistrictOverrides[districtId] =
-            Map<String, ModuleStatus?>.from(_districtOverrides[districtId]!);
-        _manualByDistrict[districtId] = manual;
-        _savedManualByDistrict[districtId] = Set<String>.from(manual);
-        saved++;
-      }
-      for (final areaId in _overrides.keys) {
-        final cur = _overrides[areaId] ?? const {};
-        final prev = _savedOverrides[areaId] ?? const {};
-        final curMan = _manualByArea[areaId] ?? const <String>{};
-        final savedMan = _savedManualByArea[areaId] ?? const <String>{};
-        var dirty = curMan.length != savedMan.length ||
-            !curMan.containsAll(savedMan);
-        if (!dirty) {
-          for (final id in kKnownModuleIds) {
-            if (cur[id] != prev[id]) {
-              dirty = true;
-              break;
-            }
-          }
-        }
-        if (!dirty) continue;
-
-        final area = _areaById[areaId];
-        if (area == null) continue;
-
-        final manual = Set<String>.from(curMan);
-        final overridden = <String, ModuleStatus>{
-          for (final id in manual)
-            if (cur[id] != null) id: cur[id]!,
-        };
-        await _repo.setServiceAreaModules(
-          area,
-          ServiceModuleConfig(overridden),
-          manualModules: manual,
-          updatedBy: by,
-        );
-        _overrides[areaId] = {
-          for (final id in kKnownModuleIds)
-            id: manual.contains(id) ? cur[id] : null,
-        };
-        _savedOverrides[areaId] =
-            Map<String, ModuleStatus?>.from(_overrides[areaId]!);
-        _manualByArea[areaId] = manual;
-        _savedManualByArea[areaId] = Set<String>.from(manual);
-        saved++;
+      for (final t in targets) {
+        applied += await _saveModuleConfig(t.toPayload());
+        if (!mounted) return;
+        setState(() => _markSaved(t));
       }
       messenger.showSnackBar(SnackBar(
-        content: Text('$saved ta tuman/zona saqlandi',
+        content: Text('Сақланди: $applied та ўзгариш (журналга ёзилди)',
             style: const TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details;
+      final code = details is Map ? '${details['code'] ?? e.code}' : e.code;
+      if (code == 'MODULE_CONFIG_CONFLICT') {
+        final conflicts = details is Map && details['conflicts'] is List
+            ? details['conflicts'] as List
+            : const [];
+        final names = [
+          for (final c in conflicts)
+            if (c is Map && c['moduleId'] != null)
+              _labelFor('${c['moduleId']}'),
+        ].join(', ');
+        messenger.showSnackBar(SnackBar(
+          content: Text('Бошқа админ шу орада ўзгартирди'
+              '${names.isEmpty ? '' : ': $names'}. Жадвал янгиланди — '
+              'ўзгаришни қайта киритинг. ($code)'),
+          backgroundColor: Colors.orange.shade800,
+          duration: const Duration(seconds: 8),
+        ));
+        if (mounted) await _loadAll();
+      } else {
+        messenger.showSnackBar(SnackBar(
+          content: Text('Сақлаб бўлмади. Қайта уриниб кўринг. ($code)'),
+          backgroundColor: Colors.red,
+        ));
+      }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
-      );
+      messenger.showSnackBar(SnackBar(
+        content: Text('Сақлаб бўлмади. Қайта уриниб кўринг. ($e)'),
+        backgroundColor: Colors.red,
+      ));
     } finally {
-      if (mounted) setState(() => _savingMatrix = false);
+      if (mounted) {
+        setState(() {
+          _savingGlobal = false;
+          _savingMatrix = false;
+        });
+      }
     }
+  }
+
+  /// Сақлашдан олдин — нима ўзгаришини кўрсатиш.
+  Future<bool?> _confirmChanges(List<_SaveTarget> targets) {
+    String st(ModuleStatus? s, String scope) =>
+        s == null ? (scope == 'global' ? 'йўқ' : 'мерос') : _statusLabel(s);
+    String onOff(bool v) => v ? 'ёқилган' : 'ўчиқ';
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ўзгаришларни сақлаш'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final t in targets) ...[
+                  Text(t.title,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  if (t.enforce != null)
+                    Text('  Config-driven rejim (enforce): '
+                        '${onOff(t.enforce!.from)} → ${onOff(t.enforce!.to)}'),
+                  for (final c in t.changes)
+                    Text('  ${_labelFor(c.moduleId)}: '
+                        '${st(c.from, t.scope)} → ${st(c.to, t.scope)}'),
+                  const SizedBox(height: 10),
+                ],
+                Text('Ким ва қачон ўзгартиргани журналга ёзилади.',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Бекор'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Сақлаш'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _setCell(String columnKey, String moduleId, ModuleStatus? status) {
@@ -1568,6 +1607,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     String moduleId, {
     bool isGlobal = false,
   }) async {
+    if (_savingGlobal || _savingMatrix) return;
     final districtId = _districtIdFromKey(areaId);
     ModuleStatus? current;
     if (isGlobal) {
@@ -1584,7 +1624,10 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     // uchun bu variant picker'dan olib tashlanadi.
     final isPlaceholder = HomeModuleGate.placeholderModuleIds.contains(moduleId);
 
-    final picked = await showDialog<ModuleStatus?>(
+    // Ойна ташқарисига босиб ёпилса `showDialog` `null` қайтаради — бу «ҳеч
+    // нарса танланмади». Аввал шу `null` «мерос» деб қабул қилиниб, туман/
+    // МФЙ катагидаги override жимгина ўчарди (эга, 2026-10-08).
+    final picked = await showDialog<CellPick>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(_labelFor(moduleId)),
@@ -1600,7 +1643,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             ),
           if (!isGlobal)
             SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, null),
+              onPressed: () => Navigator.pop(ctx, const CellPick(null)),
               child: Text(_isDistrictKey(areaId)
                   ? 'Global baseline (inherit)'
                   : 'Tuman / baseline (inherit)'),
@@ -1608,7 +1651,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           for (final s in ModuleStatus.values)
             if (!isPlaceholder || s != ModuleStatus.enabled)
               SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, s),
+                onPressed: () => Navigator.pop(ctx, CellPick(s)),
                 child: Row(
                   children: [
                     Icon(Icons.circle, size: 10, color: _statusColor(s)),
@@ -1620,9 +1663,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         ],
       ),
     );
-    if (picked == current) return;
-    if (!mounted) return;
-    _setCell(areaId, moduleId, picked);
+    if (!cellPickChanges(picked, current) || !mounted) return;
+    _setCell(areaId, moduleId, picked!.status);
   }
 
   List<Widget> _legendChips() => [
@@ -1689,6 +1731,34 @@ class _DistrictSpan {
   const _DistrictSpan({required this.district, required this.count});
   final GeoDistrict district;
   final int count;
+}
+
+/// Бир нишон (Global / туман / МФЙ) учун сақланадиган ўзгаришлар —
+/// `adminSaveModuleConfig` callable'и учун.
+class _SaveTarget {
+  const _SaveTarget({
+    required this.scope,
+    required this.targetId,
+    required this.title,
+    required this.changes,
+    this.enforce,
+  });
+
+  /// `global` · `district` · `area`.
+  final String scope;
+  final String targetId;
+  final String title;
+  final List<ModuleChange> changes;
+  final ({bool from, bool to})? enforce;
+
+  Map<String, Object?> toPayload() => {
+        'scope': scope,
+        if (scope != 'global') 'targetId': targetId,
+        'changes': [for (final c in changes) c.toJson()],
+        if (enforce != null)
+          'enforce': {'from': enforce!.from, 'to': enforce!.to},
+        'source': 'admin_ui',
+      };
 }
 
 class _Spinner extends StatelessWidget {

@@ -38,6 +38,8 @@
  *      monoton; mijoz o'qigani javob berilgan chatni qaytarmaydi (O-5)
  *   U  admin_news: onAdminNewsCreate umumiy xabarga targetUserId '';
  *      tools/backfill_admin_news_target (dry-run, apply, idempotent, rollback)
+ *   V  onTvClipDeleted (do'kon mahsulotidan clipId olib tashlanadi),
+ *      onTvClipVideoReplacedV2 (QO'LDA rejimda qayta moderatsiya)
  */
 'use strict';
 const assert = require('assert');
@@ -45,6 +47,9 @@ const assert = require('assert');
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-admin-audit';
 process.env.FUNCTIONS_EMULATOR = 'true';
+// V bo'limi: klip o'chirilganda media tozalash Storage'ga murojaat qiladi —
+// yopiq portga yo'naltiriladi (tez xato, try ichida), haqiqiy GCS'ga chiqmaydi.
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = process.env.FIREBASE_STORAGE_EMULATOR_HOST || '127.0.0.1:1';
 
 const fns = require('../index.js');
 const admin = require('firebase-admin');
@@ -802,6 +807,58 @@ async function main() {
     assert.strictEqual(rb.reverted, 2);
     assert.strictEqual((await db.collection('admin_news').doc('old1').get()).data().targetUserId, undefined);
     assert.strictEqual(await targetOf('ok'), '');
+  });
+
+  // ── V. AVAGram triggerlari: klip o'chirilsa / video almashtirilsa (S-13, S-14) ──
+  await reset();
+  await wipe('tv_shop_items');
+  const clipDoc = (id, data) => db.collection('tv_clips').doc(id).set(data);
+  await check('V1 onTvClipDeleted: do\'kon mahsulotidan faqat shu klip id olib tashlanadi', async () => {
+    await db.collection('tv_shop_items').doc('si1').set({ clipIds: ['c_del', 'c_keep'] });
+    await clipDoc('c_del', { ownerPhone: CUSTOMER, status: 'active', shopItemId: 'si1' });
+    const snap = await db.collection('tv_clips').doc('c_del').get();
+    await db.collection('tv_clips').doc('c_del').delete();
+    await fns.onTvClipDeleted.run(snap, { params: { clipId: 'c_del' } });
+    assert.deepStrictEqual((await db.collection('tv_shop_items').doc('si1').get()).data().clipIds, ['c_keep']);
+  });
+  await check('V2 onTvClipDeleted: mahsulot allaqachon o\'chirilgan bo\'lsa — xato yo\'q', async () => {
+    await clipDoc('c_orphan', { ownerPhone: CUSTOMER, status: 'active', shopItemId: 'gone' });
+    const snap = await db.collection('tv_clips').doc('c_orphan').get();
+    await db.collection('tv_clips').doc('c_orphan').delete();
+    await fns.onTvClipDeleted.run(snap, { params: { clipId: 'c_orphan' } });
+    assert.strictEqual((await db.collection('tv_shop_items').doc('gone').get()).exists, false);
+  });
+  // `transcodeTvClipVideo` Storage manzili bo'lmagan URL'da darhol qaytadi —
+  // test tarmoqqa chiqmaydi.
+  const replaceVideo = async (id, before, after) => {
+    await clipDoc(id, after);
+    const afterSnap = await db.collection('tv_clips').doc(id).get();
+    await fns.onTvClipVideoReplacedV2.run({
+      data: { before: { data: () => before }, after: afterSnap },
+      params: { clipId: id },
+    });
+    return (await db.collection('tv_clips').doc(id).get()).data();
+  };
+  const vid = (n) => ({ videoUrl: `https://example.invalid/v${n}.mp4` });
+  await check('V3 QO\'LDA rejim: tasdiqlangan klip videosi almashtirilsa — qayta moderatsiya', async () => {
+    await db.collection('settings').doc('app').set({ tvAutoApprove: false });
+    const d = await replaceVideo('cv1', { status: 'active', category: 'news', ...vid(1) },
+      { status: 'active', category: 'news', ownerPhone: CUSTOMER, ...vid(2) });
+    assert.strictEqual(d.status, 'pending');
+    assert.strictEqual(d.moderationReason, 'video_replaced');
+  });
+  await check('V4 AVTO rejim / pullik reklama / video o\'zgarmagan — status o\'zgarmaydi', async () => {
+    await db.collection('settings').doc('app').set({ tvAutoApprove: true });
+    let d = await replaceVideo('cv2', { status: 'active', category: 'news', ...vid(1) },
+      { status: 'active', category: 'news', ...vid(2) });
+    assert.strictEqual(d.status, 'active');
+    await db.collection('settings').doc('app').set({ tvAutoApprove: false });
+    d = await replaceVideo('cv3', { status: 'active', category: 'ad', ...vid(1) },
+      { status: 'active', category: 'ad', ...vid(2) });
+    assert.strictEqual(d.status, 'active');
+    d = await replaceVideo('cv4', { status: 'active', category: 'news', ...vid(1) },
+      { status: 'active', category: 'news', ...vid(1), title: 'yangi sarlavha' });
+    assert.strictEqual(d.status, 'active');
   });
 
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────

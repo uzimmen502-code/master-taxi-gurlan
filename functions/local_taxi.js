@@ -615,6 +615,9 @@ function attachLocalTaxi(exportsObj, deps) {
 
 module.exports = {
   attachLocalTaxi,
+  // Mintaqa kalitlari — kafe-restoran yetkazish tarifi ham shu ro'yxatni
+  // tekshiradi (`adminSetRestaurantDeliveryPrices`, 7-qoida).
+  REGION_KEYS,
   resolveRegionKey,
   resolvePrices,
   computeFare,

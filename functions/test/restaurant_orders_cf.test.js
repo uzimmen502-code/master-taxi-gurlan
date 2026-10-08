@@ -557,7 +557,106 @@ async function main() {
     await db.collection('restaurants').doc(rid2).update({ pausedUntil: null });
   });
 
-  // ── 6. Sverka ───────────────────────────────────────────────────────
+  // ── 6. Admin paneli (B4) ────────────────────────────────────────────
+  await check('AD1 tarif: begona/noto\'g\'ri rad; saqlash → v2, tarix v2 (previous v1), audit; yangi buyurtma v2 bilan', async () => {
+    const valid = { base: 6000, perKm: 2000, nightCoef: 1.5, nightStart: 23, nightEnd: 6, roadFactor: 1.3, maxKm: 20, regions: { xorazm: { base: 5500, perKm: 1800 } }, reason: 'yoqilg\'i' };
+    await expectCode(call('adminSetRestaurantDeliveryPrices', valid, STRANGER), 'Admin role required', 'permission-denied');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, base: 0 }, ADMIN), 'PRICE_INVALID');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, perKm: 1500.5 }, ADMIN), 'PRICE_INVALID');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, nightCoef: 5 }, ADMIN), 'NIGHT_COEF_INVALID');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, nightStart: 24 }, ADMIN), 'NIGHT_HOURS_INVALID');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, roadFactor: 3 }, ADMIN), 'ROAD_FACTOR_INVALID');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, regions: { mars: { base: 1, perKm: 1 } } }, ADMIN), 'REGION_UNKNOWN');
+    await expectCode(call('adminSetRestaurantDeliveryPrices', { ...valid, regions: { xorazm: { base: 5500, perKm: 1800, maxKm: 0 } } }, ADMIN), 'MAX_KM_INVALID');
+    const r = await call('adminSetRestaurantDeliveryPrices', valid, ADMIN);
+    assert.strictEqual(r.version, 2, 'seed v1 → v2');
+    const doc = (await db.collection('settings').doc('restaurant_delivery').get()).data();
+    assert.strictEqual(doc.base, 6000);
+    assert.strictEqual(doc.perKm, 2000);
+    assert.strictEqual(doc.version, 2);
+    assert.strictEqual(doc.updatedBy, ADMIN);
+    assert.deepStrictEqual(doc.regions, { xorazm: { base: 5500, perKm: 1800 } });
+    const h = (await db.collection('restaurant_delivery_tariffs').doc('v2').get()).data();
+    assert.strictEqual(h.version, 2);
+    assert.strictEqual(h.previous.version, 1);
+    assert.strictEqual(h.previous.base, 5000);
+    assert.strictEqual(h.changedBy, ADMIN);
+    assert.strictEqual(h.reason, 'yoqilg\'i');
+    const audit = await db.collection('admin_audit').where('kind', '==', 'restaurant_delivery_tariff').get();
+    assert.strictEqual(audit.size, 1);
+    assert.strictEqual(audit.docs[0].data().to, '2');
+    // Yangi buyurtma yangi versiya bilan; narx Xorazm mintaqasidan (Gurlan).
+    const o = await place(rid, CUSTOMER);
+    const od = await order(o.orderId);
+    assert.strictEqual(od.deliveryTariffVersion, 2);
+    assert.strictEqual(od.deliveryTariffSnapshot.base, 5500, 'mintaqa narxi');
+    await call('customerCancelRestaurantOrder', { orderId: o.orderId }, CUSTOMER);
+    // Keyingi testlar uchun — seed tarifi (v3).
+    const back = await call('adminSetRestaurantDeliveryPrices', { ...TARIFF, regions: {}, reason: 'qaytarish' }, ADMIN);
+    assert.strictEqual(back.version, 3);
+    assert.strictEqual(((await db.collection('restaurant_delivery_tariffs').doc('v3').get()).data()).previous.base, 6000);
+  });
+  await check('AD2 avto-tasdiq: o\'chirilsa yangi restoran `applied`; audit; qayta yoqiladi', async () => {
+    await expectCode(call('adminSetRestaurantAutoApprove', { enabled: false }, STRANGER), 'Admin role required', 'permission-denied');
+    await call('adminSetRestaurantAutoApprove', { enabled: false }, ADMIN);
+    assert.strictEqual((await db.collection('settings').doc('app').get()).data().restaurantAutoApprove, false);
+    const r = await call('restaurantRegister', { name: 'Yangi kafe', address: 'x', ...R_LOC, delivery: { mode: 'none', pickup: true } }, CUSTOMER2);
+    assert.strictEqual((await db.collection('restaurants').doc(r.restaurantId).get()).data().status, 'applied');
+    const audit = await db.collection('admin_audit').where('kind', '==', 'restaurant_auto_approve').get();
+    assert.strictEqual(audit.size, 1);
+    await call('adminSetRestaurantAutoApprove', { enabled: true }, ADMIN);
+    assert.strictEqual((await db.collection('settings').doc('app').get()).data().restaurantAutoApprove, true);
+  });
+  await check('AD3 bosqich: internal + testerlar (har xil yozuv) → faqat tester; STAGE_INVALID; `enabled` saqlanadi; public qaytadi', async () => {
+    await db.collection('module_config').doc('restaurants_all').set({ enabled: true }, { merge: true });
+    await expectCode(call('adminSetRestaurantsStage', { stage: 'beta' }, ADMIN), 'STAGE_INVALID');
+    await expectCode(call('adminSetRestaurantsStage', { stage: 'public' }, STRANGER), 'Admin role required', 'permission-denied');
+    const r = await call('adminSetRestaurantsStage', { stage: 'internal', testerIds: [`+${CUSTOMER2}`, CUSTOMER2.slice(3), 'abc'] }, ADMIN);
+    assert.deepStrictEqual(r.testerIds, [CUSTOMER2], 'kanonik, takrorsiz, noto\'g\'ri tashlanadi');
+    const cfg = (await db.collection('module_config').doc('restaurants_all').get()).data();
+    assert.strictEqual(cfg.enabled, true, 'boshqa kalit tegilmadi');
+    assert.strictEqual(cfg.restaurants.stage, 'internal');
+    assert.strictEqual((await call('getRestaurantsAccess', {}, CUSTOMER)).allowed, false);
+    assert.strictEqual((await call('getRestaurantsAccess', {}, CUSTOMER2)).allowed, true);
+    const audit = await db.collection('admin_audit').where('kind', '==', 'restaurants_stage').get();
+    assert.strictEqual(audit.size, 1);
+    assert.strictEqual(audit.docs[0].data().from, 'public');
+    await call('adminSetRestaurantsStage', { stage: 'public', testerIds: [] }, ADMIN);
+    assert.strictEqual((await call('getRestaurantsAccess', {}, CUSTOMER)).allowed, true);
+  });
+  await check('AD4 admin bekor: accepted+kuryerda → cancelled, 2 % qaytadi, marshrutdan olinadi (bo\'sh → yopiladi), audit, idempotent; yakunlangan → ORDER_ALREADY_FINAL', async () => {
+    const r = await place(rid, CUSTOMER);
+    await call('restaurantAcceptOrder', { orderId: r.orderId }, OWNER);
+    await call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_B);
+    const o0 = await pcBal(OWNER);
+    await expectCode(call('adminCancelRestaurantOrder', { orderId: r.orderId, reason: 'x' }, STRANGER), 'Admin role required', 'permission-denied');
+    const res = await call('adminCancelRestaurantOrder', { orderId: r.orderId, reason: 'mijoz qo\'ng\'iroq qildi' }, ADMIN);
+    assert.strictEqual(res.from, 'accepted');
+    assert.strictEqual(res.refundAmount, 1200);
+    assert.strictEqual(await pcBal(OWNER), o0 + 1200, '2 % qaytdi');
+    const od = await order(r.orderId);
+    assert.strictEqual(od.restaurantStatus, 'cancelled');
+    assert.strictEqual(od.status, 'cancelled');
+    assert.strictEqual(od.cancelledBy, `admin:${ADMIN}`);
+    assert.strictEqual(od.avaFee.refunded, true);
+    const route = (await db.collection('delivery_routes').doc(od.deliveryRouteId).get()).data();
+    assert.deepStrictEqual(route.orders, []);
+    assert.strictEqual(route.status, 'completed');
+    assert.strictEqual(route.completedReason, 'admin_cancelled');
+    const again = await call('adminCancelRestaurantOrder', { orderId: r.orderId }, ADMIN);
+    assert.strictEqual(again.idempotent, true);
+    assert.strictEqual(await pcBal(OWNER), o0 + 1200, 'ikkinchi marta qaytmadi');
+    const audit = await db.collection('admin_audit').where('kind', '==', 'restaurant_order_cancel').get();
+    assert.strictEqual(audit.size, 1);
+    const ev = await db.collection('orders').doc(r.orderId).collection('order_events').where('actor', '==', 'admin').get();
+    assert.strictEqual(ev.size, 1);
+    // Yakunlangan (mijoz bekor qilgan) buyurtma — admin ham o'zgartira olmaydi.
+    const r2 = await place(rid, CUSTOMER);
+    await call('customerCancelRestaurantOrder', { orderId: r2.orderId }, CUSTOMER);
+    await expectCode(call('adminCancelRestaurantOrder', { orderId: r2.orderId }, ADMIN), 'ORDER_ALREADY_FINAL');
+  });
+
+  // ── 7. Sverka ───────────────────────────────────────────────────────
   await check('S1 ledger: Σdr == Σcr; passenger_credit == bonusBalance (owner, mijozlar, kuryerlar)', async () => {
     await journalBalanced();
     for (const u of [OWNER, CUSTOMER, CUSTOMER2, COURIER_A, COURIER_B]) {

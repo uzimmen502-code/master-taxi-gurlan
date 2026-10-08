@@ -1859,8 +1859,11 @@ service cloud.firestore {
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
       // нон нархлари (bread_repository.updatePrices) аввалгидек.
       // `anomaly_settings` — панелдаги каби фақат superadmin.
+      // `restaurant_delivery` (кафе-ресторан етказиш тарифи) — фақат CF
+      // `adminSetRestaurantDeliveryPrices` (версия + тарих + audit, 9/41-банд).
       allow create, update: if isAdmin() && docId != 'tv_social'
           && docId != 'wallet_bot'
+          && docId != 'restaurant_delivery'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'
@@ -1877,6 +1880,13 @@ service cloud.firestore {
 
     // Маҳаллий такси тариф тарихи — ўзгармас, фақат CF ёзади.
     match /local_taxi_tariffs/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Кафе-ресторан етказиш тарифи тарихи (`v{n}`) — ўзгармас, фақат CF
+    // (`adminSetRestaurantDeliveryPrices`). Тест: restaurant_rules.test.js
+    match /restaurant_delivery_tariffs/{versionId} {
       allow read: if isAdmin();
       allow write: if false;
     }

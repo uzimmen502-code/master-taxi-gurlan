@@ -89,6 +89,8 @@ async function main() {
     await db.doc(`orders/${O1}/private/secrets`).set({ pickupCode: '1234', pickupAttempts: 0 });
     await db.doc(`restaurant_customer_stats/${CUSTOMER}`).set({ strikes: 0, completedCount: 1 });
     await db.doc(`restaurant_courier_prefs/${COURIER}`).set({ buyoutEnabled: true, buyoutLimit: 100000 });
+    await db.doc('settings/restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
+    await db.doc('restaurant_delivery_tariffs/v1').set({ version: 1, base: 5000, perKm: 1500 });
   });
 
   // ── restaurants ────────────────────────────────────────────────────
@@ -211,6 +213,17 @@ async function main() {
     await assertSucceeds(as(COURIER).doc(`restaurant_courier_prefs/${COURIER}`).get());
     await assertFails(as(COURIER).doc(`restaurant_courier_prefs/${COURIER}`).set({ buyoutEnabled: true, buyoutLimit: 999999999 }));
     await assertFails(as(STRANGER).doc(`restaurant_courier_prefs/${COURIER}`).get());
+  });
+  await check('yetkazish tarifi: o\'qish ochiq; to\'g\'ridan-to\'g\'ri yozish ADMIN uchun ham yo\'q (faqat CF); tarix faqat admin o\'qiydi, hech kim yozmaydi', async () => {
+    await assertSucceeds(as(ADMIN).doc('settings/restaurant_delivery').get());
+    await assertSucceeds(as(CUSTOMER).doc('settings/restaurant_delivery').get());
+    await assertFails(as(ADMIN).doc('settings/restaurant_delivery').update({ base: 1 }));
+    await assertFails(as(ADMIN).doc('settings/restaurant_delivery').set({ base: 1, perKm: 1, version: 9 }));
+    await assertSucceeds(as(ADMIN).doc('restaurant_delivery_tariffs/v1').get());
+    await assertSucceeds(as(ADMIN).collection('restaurant_delivery_tariffs').get());
+    await assertFails(as(STRANGER).doc('restaurant_delivery_tariffs/v1').get());
+    await assertFails(as(ADMIN).doc('restaurant_delivery_tariffs/v2').set({ version: 2 }));
+    await assertSucceeds(as(ADMIN).doc('module_config/restaurants_all').get());
   });
 
   await testEnv.cleanup();

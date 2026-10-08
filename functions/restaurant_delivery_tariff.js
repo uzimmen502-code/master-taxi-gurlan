@@ -167,6 +167,12 @@ module.exports = {
   BASE_METERS,
   ROUND_TO,
   DEFAULT_MAX_KM,
+  // Admin tarif muharriri (`adminSetRestaurantDeliveryPrices`) berilmagan
+  // maydonlar uchun shu standartlarni yozadi — hisob bilan bitta manba.
+  DEFAULT_NIGHT_COEF: DEFAULT_NIGHT_PERMILLE / 1000,
+  DEFAULT_NIGHT_START_H,
+  DEFAULT_NIGHT_END_H,
+  DEFAULT_ROAD_FACTOR: DEFAULT_ROAD_FACTOR_PERMILLE / 1000,
   computeAvaFee,
   resolveDeliveryPrices,
   computeDeliveryFee,

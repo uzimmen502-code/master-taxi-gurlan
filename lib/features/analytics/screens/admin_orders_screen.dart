@@ -234,6 +234,8 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
 
   String _typeUz(String t) {
     switch (t) {
+      case 'restaurant':
+        return 'Кафе-ресторан';
       case 'food':
         return 'Овқат';
       case 'bread':

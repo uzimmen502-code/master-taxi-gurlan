@@ -51,6 +51,8 @@ const ROUTES = 'delivery_routes';
 const IDEMPOTENCY = 'wallet_idempotency';
 const CUSTOMER_STATS = 'restaurant_customer_stats';
 const COURIER_PREFS = 'restaurant_courier_prefs';
+/** Yetkazish tarifi tarixi — o'zgarmas `v{n}` hujjatlar (local_taxi_tariffs namunasi). */
+const TARIFF_HISTORY = 'restaurant_delivery_tariffs';
 const ADMIN_AUDIT = 'admin_audit';
 const MODULE_CONFIG = ['module_config', 'restaurants_all'];
 const TARIFF_DOC = ['settings', 'restaurant_delivery'];
@@ -259,6 +261,25 @@ function attachRestaurantOrders(exportsObj, deps) {
     if (canTransition(from, to)) return from;
     log('transition', { orderId, result: 'denied', errorCode: 'ORDER_INVALID_TRANSITION', from, to });
     throw fail('failed-precondition', 'ORDER_INVALID_TRANSITION', { from, to });
+  }
+
+  /**
+   * Buyurtmani kuryer marshrutidan olib tashlash (WRITE fazasi; `routeSnap`
+   * READ fazasida o'qilgan). Bajariladigan buyurtma qolmasa (hammasi
+   * `currentIndex`dan oldin — yakunlangan) marshrut ham yopiladi; aks holda
+   * kuryer bo'sh «faol» marshrutda qolib, yangisini ololmas edi.
+   */
+  function detachFromRouteInTx(t, routeRef, routeSnap, orderId, reason) {
+    if (!routeRef || !routeSnap || !routeSnap.exists) return { detached: false, routeCompleted: false };
+    const rd = routeSnap.data() || {};
+    const remaining = (Array.isArray(rd.orders) ? rd.orders : []).filter((id) => id !== orderId);
+    const exhausted = remaining.length <= (Number(rd.currentIndex) || 0)
+      && ['active', 'ready'].includes(String(rd.status || ''));
+    t.update(routeRef, {
+      orders: remaining, updatedAt: ts(),
+      ...(exhausted ? { status: 'completed', completedAt: ts(), completedReason: reason } : {}),
+    });
+    return { detached: true, routeCompleted: exhausted };
   }
 
   /**
@@ -535,6 +556,192 @@ function attachRestaurantOrders(exportsObj, deps) {
     });
     log('admin_status', { restaurantId, userId: actor, from, to, result: 'ok' });
     return { ok: true, from, to };
+  });
+
+  /**
+   * Admin — AVA kuryeri yetkazish tarifi (D-REST-4, 9/41-qoida): har saqlash
+   * yangi `version` va o'zgarmas tarix hujjati `restaurant_delivery_tariffs/v{n}`
+   * (`adminSetLocalTaxiPrices` namunasi). Narxlar — ega qarori; server
+   * default yozmaydi (hujjat bo'lmasa `TARIFF_NOT_CONFIGURED` qoladi).
+   * data: { base, perKm, nightCoef, nightStart, nightEnd, roadFactor, maxKm,
+   *         regions: { key: { base, perKm, nightCoef?, maxKm? } }, reason }
+   * Mavjud buyurtmalar o'z `deliveryTariffVersion` bilan qoladi (9-qoida).
+   */
+  exportsObj.adminSetRestaurantDeliveryPrices = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin', 'finance'], 'Admin role required');
+    const d = data || {};
+    const parsePrices = (o, label) => {
+      const base = Number(o && o.base);
+      const perKm = Number(o && o.perKm);
+      if (!Number.isInteger(base) || base <= 0 || base > 10000000
+          || !Number.isInteger(perKm) || perKm < 0 || perKm > 10000000) {
+        throw fail('invalid-argument', 'PRICE_INVALID', { region: label });
+      }
+      const out = { base, perKm };
+      if (o.nightCoef != null && o.nightCoef !== '') {
+        const c = Number(o.nightCoef);
+        if (!Number.isFinite(c) || c < 1 || c > 3) throw fail('invalid-argument', 'NIGHT_COEF_INVALID', { region: label });
+        out.nightCoef = Math.round(c * 1000) / 1000;
+      }
+      if (o.maxKm != null && o.maxKm !== '') {
+        const m = Number(o.maxKm);
+        if (!Number.isInteger(m) || m < 1 || m > 100) throw fail('invalid-argument', 'MAX_KM_INVALID', { region: label });
+        out.maxKm = m;
+      }
+      return out;
+    };
+    const global = parsePrices(d, 'global');
+    // Global: tun soatlari va yo'l koeffitsienti (mintaqasiz).
+    for (const h of [d.nightStart, d.nightEnd]) {
+      if (h != null && h !== '' && !(Number.isInteger(Number(h)) && Number(h) >= 0 && Number(h) <= 23)) {
+        throw fail('invalid-argument', 'NIGHT_HOURS_INVALID');
+      }
+    }
+    if (d.roadFactor != null && d.roadFactor !== '') {
+      const rf = Number(d.roadFactor);
+      if (!Number.isFinite(rf) || rf < 1 || rf > 2) throw fail('invalid-argument', 'ROAD_FACTOR_INVALID');
+    }
+    const regions = {};
+    const rawRegions = d.regions && typeof d.regions === 'object' ? d.regions : {};
+    for (const [k, v] of Object.entries(rawRegions)) {
+      if (!localTaxi.REGION_KEYS.includes(k)) throw fail('invalid-argument', 'REGION_UNKNOWN', { region: k });
+      if (v) regions[k] = parsePrices(v, k);
+    }
+    const reason = str(d.reason, 300);
+    const ref = db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]);
+    const version = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const cur = snap.exists ? (snap.data() || {}) : {};
+      const prevVersion = Number.isInteger(cur.version) ? cur.version : 0;
+      const next = prevVersion + 1;
+      const tariffDoc = {
+        base: global.base,
+        perKm: global.perKm,
+        nightCoef: global.nightCoef != null ? global.nightCoef
+          : (cur.nightCoef != null ? cur.nightCoef : tariff.DEFAULT_NIGHT_COEF),
+        nightStart: d.nightStart != null && d.nightStart !== '' ? Number(d.nightStart)
+          : intOr(cur.nightStart, tariff.DEFAULT_NIGHT_START_H, 0, 23),
+        nightEnd: d.nightEnd != null && d.nightEnd !== '' ? Number(d.nightEnd)
+          : intOr(cur.nightEnd, tariff.DEFAULT_NIGHT_END_H, 0, 23),
+        roadFactor: d.roadFactor != null && d.roadFactor !== '' ? Math.round(Number(d.roadFactor) * 1000) / 1000
+          : (cur.roadFactor != null ? cur.roadFactor : tariff.DEFAULT_ROAD_FACTOR),
+        maxKm: global.maxKm != null ? global.maxKm : intOr(cur.maxKm, tariff.DEFAULT_MAX_KM, 1, 100),
+        regions,
+        version: next,
+        reason,
+        updatedAt: ts(),
+        updatedBy: actor,
+      };
+      t.set(ref, tariffDoc);
+      t.create(db.collection(TARIFF_HISTORY).doc(`v${next}`), {
+        ...tariffDoc,
+        previous: {
+          version: prevVersion,
+          base: cur.base == null ? null : cur.base,
+          perKm: cur.perKm == null ? null : cur.perKm,
+          nightCoef: cur.nightCoef == null ? null : cur.nightCoef,
+          nightStart: cur.nightStart == null ? null : cur.nightStart,
+          nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
+          roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
+          maxKm: cur.maxKm == null ? null : cur.maxKm,
+          regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
+        },
+        changedBy: actor,
+        changedAt: ts(),
+      });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'restaurant_delivery_tariff', actor, target: TARIFF_DOC.join('/'),
+        from: String(prevVersion), to: String(next), reason, at: ts(),
+      });
+      return next;
+    });
+    log('admin_tariff', { userId: actor, version, result: 'ok' });
+    return { ok: true, version };
+  });
+
+  /** Admin — `settings/app.restaurantAutoApprove` (D-REST-7: tasdiq admin yoki avto). */
+  exportsObj.adminSetRestaurantAutoApprove = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const enabled = !!(data && data.enabled === true);
+    const batch = db.batch();
+    batch.set(db.collection(APP_SETTINGS[0]).doc(APP_SETTINGS[1]), {
+      restaurantAutoApprove: enabled, updatedAt: ts(),
+    }, { merge: true });
+    batch.set(db.collection(ADMIN_AUDIT).doc(), {
+      kind: 'restaurant_auto_approve', actor, target: APP_SETTINGS.join('/'),
+      from: '', to: String(enabled), reason: '', at: ts(),
+    });
+    await batch.commit();
+    log('admin_auto_approve', { userId: actor, enabled, result: 'ok' });
+    return { ok: true, enabled };
+  });
+
+  /**
+   * Admin — modul bosqichi (42-qoida): `internal` (faqat `testerIds`) yoki
+   * `public`. `module_config/restaurants_all.restaurants` — merge, boshqa
+   * kalitlar (`enabled`) tegilmaydi. Telefonlar kanonik ID'ga keltiriladi.
+   */
+  exportsObj.adminSetRestaurantsStage = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const stage = data && data.stage;
+    if (!['internal', 'public'].includes(stage)) throw fail('invalid-argument', 'STAGE_INVALID');
+    const raw = Array.isArray(data && data.testerIds) ? data.testerIds : [];
+    if (raw.length > 200) throw fail('invalid-argument', 'TESTERS_TOO_MANY');
+    const testerIds = [...new Set(raw.map((x) => canonicalUid(String(x || ''))).filter((x) => /^998\d{9}$/.test(x)))];
+    const ref = db.collection(MODULE_CONFIG[0]).doc(MODULE_CONFIG[1]);
+    const prev = await ref.get();
+    const prevCfg = prev.exists && prev.data()[MODULE_ID] && typeof prev.data()[MODULE_ID] === 'object'
+      ? prev.data()[MODULE_ID] : {};
+    const batch = db.batch();
+    batch.set(ref, { [MODULE_ID]: { stage, testerIds }, updatedAt: ts(), updatedBy: actor }, { merge: true });
+    batch.set(db.collection(ADMIN_AUDIT).doc(), {
+      kind: 'restaurants_stage', actor, target: MODULE_CONFIG.join('/'),
+      from: String(prevCfg.stage || ''), to: stage, reason: `testers:${testerIds.length}`, at: ts(),
+    });
+    await batch.commit();
+    log('admin_stage', { userId: actor, stage, testers: testerIds.length, result: 'ok' });
+    return { ok: true, stage, testerIds };
+  });
+
+  /**
+   * Admin — buyurtmani bekor qilish (holat jadvalidan tashqari, lekin yakuniy
+   * holat o'zgarmaydi): yechilgan 2 % restoranga qaytadi, kuryer marshrutidan
+   * olinadi, hamma tomonga xabar, audit. Takror chaqiruv — idempotent.
+   */
+  exportsObj.adminCancelRestaurantOrder = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const orderId = str(data && data.orderId, 64);
+    const reason = str(data && data.reason, 300) || 'Admin bekor qildi';
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const out = await db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      const from = String(od.restaurantStatus || '');
+      if (from === RS.cancelled && String(od.cancelledBy || '').startsWith('admin:')) return { idempotent: true };
+      if ([RS.delivered, RS.rejected, RS.cancelled, RS.deliveryFailed].includes(from)) {
+        throw fail('failed-precondition', 'ORDER_ALREADY_FINAL', { from });
+      }
+      const prep = await prepareFeeInTx(t, od, orderId, false);
+      const routeRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+      const routeSnap = routeRef ? await t.get(routeRef) : null;
+      // WRITE fazasi.
+      const refund = commitFeeInTx(t, prep, { orderId, actorId: actor });
+      t.update(orderRef, statusPatch(RS.cancelled, {
+        cancelledAt: ts(), cancelledBy: `admin:${actor}`, cancelReason: reason, rejectReason: reason,
+        'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null,
+      }));
+      const route = detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'admin_cancelled');
+      addEvent(t, orderRef, { from, to: RS.cancelled, actor: 'admin', actorId: actor, reason, meta: { refundAmount: refund.amount, routeCompleted: route.routeCompleted } });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'restaurant_order_cancel', actor, target: orderId, from, to: RS.cancelled, reason, at: ts(),
+      });
+      return { idempotent: false, from, refund: refund.amount, customerUid: od.userPhone, restaurantId: od.restaurantId, courierId: od.courierId };
+    });
+    if (out.idempotent) return { ok: true, idempotent: true };
+    log('admin_cancel', { orderId, userId: actor, from: out.from, refundAmount: out.refund, result: 'ok' });
+    if (out.customerUid) await notifyCustomer(canonicalUid(out.customerUid), { title: 'Buyurtma bekor qilindi', body: reason, orderId });
+    if (out.restaurantId) await notifyMembers(String(out.restaurantId), { title: 'Buyurtma bekor qilindi (admin)', body: reason, orderId });
+    if (out.courierId) await notifyCustomer(canonicalUid(out.courierId), { title: 'Buyurtma bekor bo\'ldi', body: 'Admin buyurtmani bekor qildi', orderId });
+    return { ok: true, from: out.from, refundAmount: out.refund };
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -851,19 +1058,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       const routeSnap = routeRef ? await t.get(routeRef) : null;
       const refund = commitFeeInTx(t, prep, { orderId, actorId: uid });
       t.update(orderRef, statusPatch(RS.rejected, { rejectedAt: ts(), rejectedBy: uid, rejectReason: reason, 'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null }));
-      if (routeSnap && routeSnap.exists) {
-        const rd = routeSnap.data() || {};
-        const remaining = (Array.isArray(rd.orders) ? rd.orders : []).filter((id) => id !== orderId);
-        // Bajariladigan buyurtma qolmadi (hammasi `currentIndex`dan oldin —
-        // yakunlangan) → marshrut ham yopiladi; aks holda kuryer bo'sh
-        // «faol» marshrutda qolib, yangisini ololmas edi.
-        const exhausted = remaining.length <= (Number(rd.currentIndex) || 0)
-          && ['active', 'ready'].includes(String(rd.status || ''));
-        t.update(routeRef, {
-          orders: remaining, updatedAt: ts(),
-          ...(exhausted ? { status: 'completed', completedAt: ts(), completedReason: 'restaurant_rejected' } : {}),
-        });
-      }
+      detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'restaurant_rejected');
       addEvent(t, orderRef, { from, to: RS.rejected, actor: 'restaurant', actorId: uid, reason, meta: { refundAmount: refund.amount } });
       return { ok: true, customerUid: od.userPhone, courierId: od.courierId };
     });

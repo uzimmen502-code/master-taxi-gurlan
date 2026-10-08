@@ -209,6 +209,10 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
                         return _DispatcherBoard(
                           scrollController: _boardScrollController,
                           columns: [
+                            // Сайдбар «Курьер» badge'и шу буюртмаларни санайди
+                            // (`orders.status == 'ready'`) — аввал улар бу
+                            // экранда умуман кўринмасди (админ аудити O-8).
+                            _ReadyOrdersColumn(money: _money, date: _date),
                             _BoardColumn(
                               title: 'Тасдиқланган reysлар',
                               icon: Icons.route,
@@ -280,7 +284,7 @@ class _DispatcherBoard extends StatelessWidget {
   });
 
   final ScrollController scrollController;
-  final List<_BoardColumn> columns;
+  final List<Widget> columns;
 
   @override
   Widget build(BuildContext context) {
@@ -687,6 +691,49 @@ class _BoardColumn extends StatelessWidget {
           Expanded(child: child),
         ],
       ),
+    );
+  }
+}
+
+/// Тайёр (`ready`) буюртмалар — курьер ҳали олмаган. Ўз оқими (stream
+/// `initState`да бир марта) — доска қайта қурилганда қайта уланмайди.
+class _ReadyOrdersColumn extends StatefulWidget {
+  const _ReadyOrdersColumn({required this.money, required this.date});
+
+  final NumberFormat money;
+  final DateFormat date;
+
+  @override
+  State<_ReadyOrdersColumn> createState() => _ReadyOrdersColumnState();
+}
+
+class _ReadyOrdersColumnState extends State<_ReadyOrdersColumn> {
+  late final Stream<List<OrderModel>> _ready =
+      context.read<OrdersRepository>().watchReadyOrders();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<OrderModel>>(
+      stream: _ready,
+      builder: (context, snap) {
+        final orders = snap.data ?? const <OrderModel>[];
+        return _BoardColumn(
+          title: 'Курьер кутмоқда',
+          icon: Icons.inventory_2_outlined,
+          color: Colors.deepOrange,
+          count: orders.length,
+          child: snap.hasError
+              ? _EmptyColumnText('Хатолик: ${snap.error}')
+              : !snap.hasData
+                  ? const Center(child: CircularProgressIndicator())
+                  : _OrderList(
+                      orders: orders,
+                      money: widget.money,
+                      date: widget.date,
+                      emptyText: 'Тайёр буюртма йўқ',
+                    ),
+        );
+      },
     );
   }
 }

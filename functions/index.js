@@ -15501,6 +15501,19 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
   return resultPayload || { ok: true };
 });
 
+/**
+ * Settlement'ning «xo'jayin» hujjati (trip yoki shaharlararo bron) shu
+ * haydovchinikimi. Hamyon auditi O-7/O-8: avval `settlementId/State/Amount`
+ * istalgan trip/bron'ga yozilardi (begona reys holatini buzish).
+ */
+function settlementHostDriverUid(snap, kind) {
+  const d = snap.data() || {};
+  const raw = kind === 'booking'
+    ? (d.driverPhone || d.driverId)
+    : (d.acceptedDriverId || d.driverId);
+  return canonicalUid(String(raw || ''));
+}
+
 exports.openSettlement = functions.https.onCall(async (data, context) => {
   const driverUid = requireCallerUid(context);
   const passengerUid = canonicalUid(data && (data.passengerUid || data.passengerPhone));
@@ -15558,7 +15571,16 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
   const bookingRef = db.collection('intercity_bookings').doc(tripId);
   const created = await db.runTransaction(async (tx) => {
     const ex = await tx.get(ref);
-    if (ex.exists) return false; // idempotent
+    if (ex.exists) {
+      // Idempotent javob faqat O'SHA haydovchiga (O-7): opId oldindan
+      // ma'lum (`settle_trip_{tripId}`) — begona uni egallab olmasin.
+      if (String((ex.data() || {}).driverUid || '') !== driverUid) {
+        throw new functions.https.HttpsError(
+            'permission-denied', 'Settlement boshqa haydovchiga tegishli',
+            { errorCode: 'SETTLEMENT_ID_TAKEN' });
+      }
+      return false; // idempotent
+    }
     const [tripSnap, bookSnap] = await Promise.all([
       tx.get(tripRef), tx.get(bookingRef),
     ]);
@@ -15579,9 +15601,10 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
       settlementState: 'pending',
       settlementAmount,
     };
-    if (tripSnap.exists) {
+    // Faqat shu haydovchining reysi/broniga (O-7).
+    if (tripSnap.exists && settlementHostDriverUid(tripSnap, 'trip') === driverUid) {
       tx.set(tripRef, hostPatch, { merge: true });
-    } else if (bookSnap.exists) {
+    } else if (bookSnap.exists && settlementHostDriverUid(bookSnap, 'booking') === driverUid) {
       tx.set(bookingRef, hostPatch, { merge: true });
     }
     return true;
@@ -15654,8 +15677,13 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
         const [tripSnap, bookSnap] = await Promise.all([
           tx.get(tripRef), tx.get(bookingRef),
         ]);
-        if (tripSnap.exists) hostPatchRef = tripRef;
-        else if (bookSnap.exists) hostPatchRef = bookingRef;
+        // Faqat settlement haydovchisining reysi/broniga (O-7).
+        if (tripSnap.exists && settlementHostDriverUid(tripSnap, 'trip') === fd.driverUid) {
+          hostPatchRef = tripRef;
+        } else if (bookSnap.exists
+            && settlementHostDriverUid(bookSnap, 'booking') === fd.driverUid) {
+          hostPatchRef = bookingRef;
+        }
       }
       return { fd, hostPatchRef };
     },
@@ -15741,24 +15769,31 @@ exports.cancelSettlement = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
           'failed-precondition', `Settlement holati: ${s.state} (pending kerak)`);
     }
-    tx.update(sref, {
-      state: 'cancelled',
-      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-      cancelledBy: callerUid,
-      cancelReason: reason,
-    });
+    // Avval HAMMA o'qish, keyin yozish — aks holda Firestore tranzaksiyani
+    // rad etadi (tripId har doim bor → bekor qilish umuman ishlamas edi).
+    let hostPatchRef = null;
     if (s.tripId) {
       const tripRef = db.collection('trips').doc(s.tripId);
       const bookingRef = db.collection('intercity_bookings').doc(s.tripId);
       const [tripSnap, bookSnap] = await Promise.all([
         tx.get(tripRef), tx.get(bookingRef),
       ]);
-      const hostPatch = { settlementState: 'cancelled' };
-      if (tripSnap.exists) {
-        tx.set(tripRef, hostPatch, { merge: true });
-      } else if (bookSnap.exists) {
-        tx.set(bookingRef, hostPatch, { merge: true });
+      // Faqat settlement haydovchisining reysi/broniga (O-7).
+      if (tripSnap.exists && settlementHostDriverUid(tripSnap, 'trip') === s.driverUid) {
+        hostPatchRef = tripRef;
+      } else if (bookSnap.exists
+          && settlementHostDriverUid(bookSnap, 'booking') === s.driverUid) {
+        hostPatchRef = bookingRef;
       }
+    }
+    tx.update(sref, {
+      state: 'cancelled',
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+      cancelledBy: callerUid,
+      cancelReason: reason,
+    });
+    if (hostPatchRef) {
+      tx.set(hostPatchRef, { settlementState: 'cancelled' }, { merge: true });
     }
   });
 
@@ -15843,13 +15878,36 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
     mirrorBonus: true,
     meta: { tripId, settlementId: opId, driverUid, deferred: true },
     precheck: async (tx) => {
-      const [tripSnap, bookSnap] = await Promise.all([
-        tx.get(tripRef), tx.get(bookingRef),
+      const [tripSnap, bookSnap, setSnap] = await Promise.all([
+        tx.get(tripRef), tx.get(bookingRef), tx.get(sref),
       ]);
+      // Hamyon auditi O-8: avval settlement holati o'qilmasdi — bekor
+      // qilingan settlement `merge` bilan `completed` bo'lib «tirilardi»,
+      // begona tomonlar/summa bilan mavjud yozuv ustidan yozilardi.
+      if (setSnap.exists) {
+        const s = setSnap.data() || {};
+        if (s.state === 'cancelled') {
+          throw new functions.https.HttpsError(
+              'failed-precondition', 'Settlement bekor qilingan',
+              { errorCode: 'SETTLEMENT_CANCELLED' });
+        }
+        if (String(s.driverUid || '') !== driverUid
+            || String(s.passengerUid || '') !== passengerUid
+            || String(s.tripId || '') !== tripId
+            || Number(s.settlementAmount) !== settlementAmount) {
+          throw new functions.https.HttpsError(
+              'failed-precondition', 'Settlement ma\'lumoti mos emas',
+              { errorCode: 'SETTLEMENT_MISMATCH' });
+        }
+      }
+      // Faqat shu haydovchining reysi/broniga yoziladi.
       let hostPatchRef = null;
-      if (tripSnap.exists) hostPatchRef = tripRef;
-      else if (bookSnap.exists) hostPatchRef = bookingRef;
-      return { hostPatchRef };
+      if (tripSnap.exists && settlementHostDriverUid(tripSnap, 'trip') === driverUid) {
+        hostPatchRef = tripRef;
+      } else if (bookSnap.exists && settlementHostDriverUid(bookSnap, 'booking') === driverUid) {
+        hostPatchRef = bookingRef;
+      }
+      return { hostPatchRef, existed: setSnap.exists };
     },
     assert: ({ accounts }) => {
       const da = accounts.get(driverPc);
@@ -15861,18 +15919,22 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
     },
     onCommit: (tx, { entryId, balances, pre }) => {
       resultNext = balances[driverPc] || 0;
-      tx.set(sref, {
+      // openSettlement yozgan asl totalChange/cashGiven/createdAt saqlanadi.
+      const base = (pre && pre.existed) ? {} : {
         tripId,
         driverUid,
         passengerUid,
         totalChange: settlementAmount,
         cashGiven: 0,
         settlementAmount,
+        createdBy: driverUid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      tx.set(sref, {
+        ...base,
         state: 'completed',
         origin: 'deferred',
         attestedBy: 'driver',
-        createdBy: driverUid,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
         journalEntryId: entryId,
       }, { merge: true });

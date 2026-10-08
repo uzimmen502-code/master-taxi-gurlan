@@ -20,6 +20,16 @@ class NewsRepository {
   CollectionReference<Map<String, dynamic>> get _col =>
       _db.collection('admin_news');
 
+  /// Умумий хабарлар (шахсий эмас). Аввал бутун коллекция сўралар ва
+  /// бегона шахсий чеклар (манзил, сумма) ҳам клиентга келарди — фильтр
+  /// фақат экранда эди (админ аудити O-4). Энди сервер фақат
+  /// `targetUserId == ''` ни беради; шахсийлари — алоҳида `whereIn`.
+  /// Индекс `targetUserId + createdAt` аллақачон бор (шахсий сўров).
+  /// ⚠ Эски умумий хабарларда майдон йўқ — релиздан ОЛДИН
+  /// `functions/tools/backfill_admin_news_target.js --apply`.
+  Query<Map<String, dynamic>> get _broadcastCol =>
+      _col.where('targetUserId', isEqualTo: '');
+
   static bool _matchesFeed(NewsItem n, NewsFeedKind feed) {
     switch (feed) {
       case NewsFeedKind.broadcast:
@@ -84,7 +94,7 @@ class NewsRepository {
       if (!controller.isClosed) controller.add(merged.take(limit).toList());
     }
 
-    final subGlobal = _col
+    final subGlobal = _broadcastCol
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
@@ -111,6 +121,12 @@ class NewsRepository {
         personal = const [];
         personalReady = true;
         emit();
+        // Телефонсиз (аноним) сессияга шахсий хабар берилмайди (rules) —
+        // умумий лента ишлайверсин, хато экранга чиқмасин.
+        if (e is FirebaseException && e.code == 'permission-denied') {
+          debugPrint('admin_news personal: permission-denied (телефонсиз сессия)');
+          return;
+        }
         if (!controller.isClosed) controller.addError(e);
       });
     } else {
@@ -410,7 +426,7 @@ class NewsRepository {
     var total = 0;
 
     Query<Map<String, dynamic>> globalQ =
-        _col.orderBy('createdAt', descending: true);
+        _broadcastCol.orderBy('createdAt', descending: true);
     if (lastReadAt != null) {
       globalQ = globalQ.where(
         'createdAt',
@@ -438,7 +454,14 @@ class NewsRepository {
         isGreaterThan: Timestamp.fromDate(lastReadAt),
       );
     }
-    final personalSnap = await personalQ.limit(30).get();
+    final QuerySnapshot<Map<String, dynamic>> personalSnap;
+    try {
+      personalSnap = await personalQ.limit(30).get();
+    } on FirebaseException catch (e) {
+      // Телефонсиз сессия — шахсий хабар йўқ (rules), умумийлари саналди.
+      if (e.code == 'permission-denied') return total;
+      rethrow;
+    }
     for (final d in personalSnap.docs) {
       final n = NewsItem.fromDoc(d);
       if (!_matchesFeed(n, feed)) continue;
@@ -577,8 +600,10 @@ class NewsRepository {
   }
 
   Future<List<NewsItem>> fetchRecent({int limit = 50}) async {
-    final snap =
-        await _col.orderBy('createdAt', descending: true).limit(limit).get();
+    final snap = await _broadcastCol
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
     return snap.docs.map(NewsItem.fromDoc).toList(growable: false);
   }
 

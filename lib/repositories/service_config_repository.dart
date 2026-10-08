@@ -117,21 +117,14 @@ class ServiceConfigRepository {
     }
   }
 
-  /// Admin: global baseline'ni yozish. [enforce] berilsa — bayroq ham yoziladi.
-  Future<void> setModuleDefaults(
-    ServiceModuleConfig config, {
-    bool? enforce,
-    String? updatedBy,
-  }) async {
-    await _defaultsRef.set({
-      ...config.toMap(),
-      if (enforce != null) 'enforce': enforce,
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (updatedBy != null) 'updatedBy': updatedBy,
-    }, SetOptions(merge: true));
-  }
+  // Global baseline va tuman override'i bu yerdan YOZILMAYDI (ega,
+  // 2026-10-08): admin «Ҳудудлар ва хизматлар» faqat `adminSaveModuleConfig`
+  // callable orqali saqlaydi — faqat o'zgargan kataklar, konflikt tekshiruvi
+  // va `admin_audit`. Avvalgi `setModuleDefaults` butun ustunni qayta
+  // yozardi va iz qoldirmasdi.
 
-  /// Admin: MFY override'ni yozish.
+  /// Admin: MFY override'ni yozish (faqat eski seed qoldiqlarini tozalash —
+  /// `_purgeStaleSeedOverrides`; admin tahriri callable orqali).
   ///
   /// `modules` va `manualModules` **toʻliq almashtiriladi** — inherit kalitlari
   /// oʻchadi; faqat [manualModules] dagi farqlar Baseline cascade dan himoyalanadi.
@@ -209,29 +202,6 @@ class ServiceConfigRepository {
           'ServiceConfigRepository.fetchDistrictModulesDetailed: $e\n$st');
       return (config: ServiceModuleConfig.empty, manualModules: <String>{});
     }
-  }
-
-  Future<void> setDistrictModules(
-    GeoDistrict district,
-    ServiceModuleConfig config, {
-    Set<String> manualModules = const {},
-    String? updatedBy,
-  }) async {
-    final manual = manualModules
-        .where((id) => id.trim().isNotEmpty && config.modules.containsKey(id))
-        .toList()
-      ..sort();
-    await _districtModulesRef(district.id).set({
-      'districtId': district.id,
-      'regionId': district.regionId,
-      'modules': {
-        for (final e in config.modules.entries)
-          e.key: {'status': e.value.wire},
-      },
-      'manualModules': manual,
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (updatedBy != null) 'updatedBy': updatedBy,
-    });
   }
 
   Future<

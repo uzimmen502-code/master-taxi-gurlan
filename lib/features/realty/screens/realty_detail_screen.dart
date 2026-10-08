@@ -7,6 +7,8 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_controls.dart';
+import '../widgets/realty_feedback.dart';
 import '../widgets/realty_package_sheet.dart';
 import '../widgets/realty_video_sheet.dart';
 
@@ -35,10 +37,18 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
   bool _loading = true;
   bool _unlocking = false;
 
+  /// AVA риэлтор рақами — ёзувда эмас, созламада (қаранг:
+  /// `RealtyRepository.fetchAgentPhone`). Фақат эга шу усулни
+  /// танлаган бўлса сўралади.
+  String _agentPhone = '';
+
   @override
   void initState() {
     super.initState();
     _loadDetail();
+    if (widget.listing.contactMode == RealtyContactMode.avaAgent) {
+      _loadAgentPhone();
+    }
   }
 
   /// Эга ва очган харидор учун маълумот келади, қолганига `null`.
@@ -49,6 +59,12 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
       _detail = detail;
       _loading = false;
     });
+  }
+
+  Future<void> _loadAgentPhone() async {
+    final phone = await _repo.fetchAgentPhone();
+    if (!mounted || phone.isEmpty) return;
+    setState(() => _agentPhone = phone);
   }
 
   Future<void> _unlock() async {
@@ -68,11 +84,9 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
         if (bought && mounted) await _unlock();
         return;
       }
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_error_generic')),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      // Блокланган ва муддати тугаган эълонда сервер ўринни ЕМАЙДИ —
+      // фойдаланувчи нега очилмаганини билиши керак.
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 
@@ -126,22 +140,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
 
           Row(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: tierColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  context.tr(RealtyTabs.labelKey(r.tier)),
-                  style: const TextStyle(
-                    fontSize: AppText.labelTiny,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              RealtyTierBadge(tier: r.tier),
               const SizedBox(width: 8),
               Text(
                 context.tr(
@@ -273,6 +272,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
                   ? _ContactButton(
                       listing: r,
                       detail: detail,
+                      agentPhone: _agentPhone,
                       color: tierColor,
                     )
                   : ElevatedButton.icon(
@@ -374,18 +374,26 @@ class _ContactButton extends StatelessWidget {
   const _ContactButton({
     required this.listing,
     required this.detail,
+    required this.agentPhone,
     required this.color,
   });
 
   final RealtyListing listing;
   final RealtyDetail detail;
+
+  /// AVA риэлтор хизматининг жорий рақами; бўш бўлса эганинг рақами
+  /// ишлатилади.
+  final String agentPhone;
+
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     final isAgent = listing.contactMode == RealtyContactMode.avaAgent;
     return ElevatedButton.icon(
-      onPressed: () => callPhone(detail.contactPhone(listing.contactMode)),
+      onPressed: () => callPhone(
+        detail.contactPhone(listing.contactMode, agentPhone: agentPhone),
+      ),
       icon: Icon(isAgent ? Icons.support_agent : Icons.call),
       style: ElevatedButton.styleFrom(
         backgroundColor: color,

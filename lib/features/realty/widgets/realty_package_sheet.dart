@@ -6,6 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import 'realty_feedback.dart';
 
 /// Ахборот пакети сотиб олиш варағи (концепция, 4-бўлим).
 ///
@@ -68,26 +69,16 @@ class _PackageSheetState extends State<_PackageSheet> {
       final left = await _repo.purchasePackage(size);
       if (!mounted) return;
       navigator.pop(true);
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          '${context.tr('realty_package_bought')} · '
-          '${context.tr('realty_unlocks_left')}: $left',
-        ),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.plain),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyInfo(
+        messenger,
+        '${context.tr('realty_package_bought')} · '
+        '${context.tr('realty_unlocks_left')}: $left',
+        background: RealtyTabs.colorFor(RealtyTier.plain),
+      );
     } on RealtyException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          e.code == 'insufficient_balance'
-              ? context.tr('realty_error_balance')
-              : context.tr('realty_error_generic'),
-        ),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 

@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/screens/tv_market_feed_screen.dart';
 import '../realty_tabs.dart';
+import 'realty_feedback.dart';
 
 /// Объектга боғланган видеони очиш.
 ///
@@ -23,10 +23,10 @@ Future<void> openRealtyVideo(
       await FirebaseFirestore.instance.collection('tv_clips').doc(clipId).get();
   if (!context.mounted) return;
   if (!snap.exists) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('realty_video_missing')),
-      behavior: SnackBarBehavior.floating,
-    ));
+    showRealtyInfo(
+      ScaffoldMessenger.of(context),
+      context.tr('realty_video_missing'),
+    );
     return;
   }
   final clip = TvClip.fromFirestore(snap);
@@ -76,10 +76,9 @@ class _VideoSheetState extends State<_VideoSheet> {
   }
 
   Future<void> _load() async {
-    final phone = canonicalPhoneId(
-      // Эганинг рақами — клиплар шу бўйича сақланган.
-      await _repo.myOwnerPhone(),
-    );
+    // Эганинг рақами — клиплар шу бўйича сақланган (`tv_clips.ownerPhone`).
+    // Қиймат репозиторийда аллақачон `canonicalPhoneId` дан ўтган.
+    final phone = _repo.myOwnerPhone;
     final clips = phone.isEmpty
         ? const <TvClip>[]
         : await _clips.fetchByOwner(phone);
@@ -101,19 +100,15 @@ class _VideoSheetState extends State<_VideoSheet> {
       );
       if (!mounted) return;
       navigator.pop(true);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_video_linked')),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.plain),
-        behavior: SnackBarBehavior.floating,
-      ));
-    } on RealtyException {
+      showRealtyInfo(
+        messenger,
+        context.tr('realty_video_linked'),
+        background: RealtyTabs.colorFor(RealtyTier.plain),
+      );
+    } on RealtyException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_error_generic')),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 

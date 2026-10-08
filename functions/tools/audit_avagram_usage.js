@@ -27,6 +27,21 @@ db.settings({preferRest: true});
 /** Variant zinapoyasi (functions/index.js TV_CLIP_VARIANT_SPECS). */
 const BITRATES_KBPS = {720: 3000, 480: 1500, 360: 600};
 
+/**
+ * `playbackStats` NAMUNA bo'yicha yoziladi — har playback emas, shu ulushi.
+ *
+ * Shuning uchun bu skript ikki xil maydondan o'qiydi:
+ *   O'RTACHALAR (rebuffer/ko'rish, completion, birinchi kadr) —
+ *     `playbackStats` dan. Tasodifiy namunada o'rtacha o'zgarmaydi.
+ *   ABSOLYUT sonlar (jami ko'rish) — `viewCount` dan. U namuna emas,
+ *     aniq (dedup qilingan) hisoblagich.
+ *
+ * Klient tomondagi jufti: `kTvPlaybackStatsSampleRate`
+ * (lib/features/tv_market/utils/tv_playback_sampling.dart) — ikkisi mos
+ * turishi SHART, buni test tekshiradi.
+ */
+const PLAYBACK_STATS_SAMPLE_RATE = 0.10;
+
 function fmtDur(ms) {
   const s = Math.round(ms / 1000);
   const h = Math.floor(s / 3600);
@@ -42,7 +57,8 @@ function pct(a, b) {
   const snap = await db.collection('tv_clips').get();
   console.log(`=== AVAGram ishlatilishi — ${snap.size} ta klip ===\n`);
 
-  let views = 0;
+  let views = 0;        // namuna hajmi (playbackStats.views)
+  let realViews = 0;    // aniq ko'rish soni (viewCount)
   let completed = 0;
   let watchedMs = 0;
   let bufferMs = 0;
@@ -70,6 +86,9 @@ function pct(a, b) {
       if (!newest || dt > newest) newest = dt;
     }
 
+    // ANIQ ko'rish soni — namuna emas.
+    realViews += Number(d.viewCount || 0);
+
     const p = d.playbackStats || {};
     const v = Number(p.views || 0);
     if (v > 0) clipsWithViews++;
@@ -95,13 +114,23 @@ function pct(a, b) {
   }
 
   console.log('\n--- Ko\'rishlar ---');
-  console.log(`  jami ko'rish     : ${views}`);
+  // ANIQ son — `viewCount` dan (namuna emas).
+  console.log(`  jami ko'rish     : ${realViews}  (viewCount, aniq)`);
   console.log(`  ko'rilgan klip   : ${clipsWithViews} / ${snap.size}` +
       ` (${pct(clipsWithViews, snap.size)})`);
-  console.log(`  jami tomosha     : ${fmtDur(watchedMs)}`);
   if (views > 0) {
-    console.log(`  bir ko'rish      : ${(watchedMs / views / 1000).toFixed(1)} son`);
-    console.log(`  oxirigacha       : ${completed} (${pct(completed, views)})`);
+    // O'RTACHALAR — namunadan; ular tasodifiy namunada o'zgarmaydi.
+    const perView = watchedMs / views;
+    console.log(`  bir ko'rish      : ${(perView / 1000).toFixed(1)} son` +
+        `  (${views} o'lchovdan)`);
+    console.log(`  oxirigacha       : ${pct(completed, views)}`);
+    // Jami tomosha — o'rtachani ANIQ ko'rish soniga ko'paytirib BAHOLAB.
+    console.log(`  jami tomosha ~   : ${fmtDur(perView * realViews)}` +
+        `  (baho: o'rtacha x viewCount)`);
+    console.log(`  namuna ulushi    : ${(PLAYBACK_STATS_SAMPLE_RATE * 100)}%` +
+        `  — o'rtachalar shundan, absolyutlar viewCount'dan`);
+  } else {
+    console.log('  playbackStats    : o\'lchov yo\'q');
   }
 
   console.log('\n--- Sifat (bugungi ishimiz natijasi) ---');
@@ -118,11 +147,20 @@ function pct(a, b) {
   }
 
   // --- Trafik prognozi ---
+  //
+  // `watchedMs` NAMUNA, shuning uchun uni to'g'ridan-to'g'ri ishlatish
+  // trafikni ~10 barobar kam ko'rsatardi. Bir ko'rishga o'rtacha tomosha
+  // (namunadan) ANIQ ko'rish soniga ko'paytiriladi.
   console.log('\n--- Trafik ---');
-  const watchedSec = watchedMs / 1000;
-  for (const [h, kbps] of Object.entries(BITRATES_KBPS)) {
-    const gb = (watchedSec * kbps * 1000) / 8 / 1e9;
-    console.log(`  hammasi ${h}p bo'lsa : ${gb.toFixed(2)} GB`);
+  const watchedSec = views > 0 ? (watchedMs / views) * realViews / 1000 : 0;
+  if (watchedSec <= 0) {
+    console.log('  o\'lchov yo\'q');
+  } else {
+    for (const [h, kbps] of Object.entries(BITRATES_KBPS)) {
+      const gb = (watchedSec * kbps * 1000) / 8 / 1e9;
+      console.log(`  hammasi ${h}p bo'lsa : ${gb.toFixed(2)} GB`);
+    }
+    console.log(`  (baho: ${fmtDur(watchedSec * 1000)} jami tomosha)`);
   }
 
   console.log('\n(Faqat o\'qildi, hech narsa yozilmadi.)');

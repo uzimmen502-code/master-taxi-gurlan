@@ -354,10 +354,19 @@ class TvClip {
     );
   }
 
-  factory TvClip.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data()!;
+  factory TvClip.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      TvClip.fromMap(doc.id, doc.data()!);
+
+  /// Firestore ҳужжатидан ҳам, CDN'даги лента JSON'идан ҳам ўқийди.
+  ///
+  /// Иккиси фақат САНА кўринишида фарқ қилади: Firestore'да `Timestamp`,
+  /// JSON'да эса epoch миллисекунд (`createdAtMs`) — JSON'нинг
+  /// `Timestamp` тури йўқ. Шунинг учун саналар [_asDate] орқали
+  /// ўқилади ва бошқа ҳамма нарса битта жойда қолади: майдон қўшилса
+  /// иккала манба ҳам уни автоматик олади.
+  factory TvClip.fromMap(String id, Map<String, dynamic> d) {
     return TvClip(
-      id: doc.id,
+      id: id,
       videoUrl: (d['videoUrl'] ?? '') as String,
       posterUrl: (d['posterUrl'] ?? '') as String,
       title: (d['title'] ?? '') as String,
@@ -376,12 +385,12 @@ class TvClip {
       commentCount: (d['commentCount'] ?? 0) as int,
       viewCount: (d['viewCount'] ?? 0) as int,
       status: (d['status'] ?? 'active') as String,
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      createdAt: _asDate(d['createdAt']) ?? _asDate(d['createdAtMs']),
       shopItemId: (d['shopItemId'] ?? '') as String,
       wholesaleProductId: (d['wholesaleProductId'] ?? '') as String,
       socialConsent: d['socialConsent'] == true,
       socialNetworks: _parseSocialNetworks(d['socialNetworks']),
-      socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
+      socialPostedAt: _asDate(d['socialPostedAt']),
       socialPost: d['socialPost'] is Map
           ? Map<String, dynamic>.from(d['socialPost'] as Map)
           : const {},
@@ -401,7 +410,7 @@ class TvClip {
       hlsUrl: (d['hlsUrl'] ?? '') as String,
       duration: (d['duration'] ?? 0) as int,
       processingStatus: (d['processingStatus'] ?? 'ready') as String,
-      expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
+      expiresAt: _asDate(d['expiresAt']),
       adDurationDays: (d['adDurationDays'] ?? 0) as int,
       adTier: (d['adTier'] ?? '') as String,
       adScope: (d['adScope'] as String?)?.trim().isNotEmpty == true
@@ -411,6 +420,21 @@ class TvClip {
       showPhone: (d['showPhone'] as bool?) ?? true,
       rejectReason: (d['rejectReason'] ?? '') as String,
     );
+  }
+
+  /// Сана — Firestore `Timestamp`, epoch мс ёки ISO сатр бўлиши мумкин.
+  /// Нотаниш/бузуқ қиймат `null` беради (лента битта клип сабаб
+  /// йиқилмасин).
+  static DateTime? _asDate(Object? v) {
+    if (v == null) return null;
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    if (v is num) {
+      final ms = v.toInt();
+      return ms > 0 ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+    }
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 
   Map<String, dynamic> toMap() => {

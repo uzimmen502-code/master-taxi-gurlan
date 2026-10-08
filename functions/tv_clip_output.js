@@ -401,6 +401,34 @@ class R2Output {
   }
 
   /**
+   * Матнли JSON объектни R2'га ёзади (лента саҳифалари учун).
+   *
+   * Клип файлларидан ФАРҚЛИ: бу ерда `immutable` ЙЎҚ. Лента мазмуни
+   * ўзгариб туради, шунинг учун қисқа TTL + `stale-while-revalidate` —
+   * edge эскисини бериб туриб, фонда янгилайди.
+   * @param {string} key R2 калити.
+   * @param {object} obj JSON'га ўгириладиган объект.
+   * @param {{maxAge?: number, swr?: number}} [opts]
+   * @return {Promise<string>} оммавий URL.
+   */
+  async putJson(key, obj, opts) {
+    const {PutObjectCommand} = this.sdk();
+    const maxAge = (opts && opts.maxAge) || 30;
+    const swr = (opts && opts.swr) || 60;
+    const body = Buffer.from(JSON.stringify(obj), 'utf8');
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: body,
+      ContentLength: body.length,
+      ContentType: 'application/json; charset=utf-8',
+      CacheControl:
+          `public, max-age=${maxAge}, stale-while-revalidate=${swr}`,
+    }));
+    return `${this.publicBase}/${key}`;
+  }
+
+  /**
    * @param {string} prefix калит префикси.
    * @return {Promise<string[]>} барча калитлар (саҳифалаб).
    */

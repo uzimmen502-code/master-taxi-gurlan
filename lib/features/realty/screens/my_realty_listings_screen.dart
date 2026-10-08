@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_feedback.dart';
 import '../widgets/realty_tier_sheet.dart';
 import '../widgets/realty_video_sheet.dart';
 import 'add_realty_listing_screen.dart';
@@ -21,7 +22,13 @@ import 'realty_pro_screen.dart';
 /// (текширувда) ва муддати тугаганлари ҳам чиқади, чунки эга улар
 /// қаердалигини билиши керак.
 class MyRealtyListingsScreen extends StatefulWidget {
-  const MyRealtyListingsScreen({super.key});
+  const MyRealtyListingsScreen({super.key, this.highlightListingId});
+
+  /// Муддат огоҳлантиришидан келганда — шу эълон рўйхат бошига
+  /// қўйилади. Пуллик даража тугаса объект ўчади, шунинг учун эга
+  /// хабарни босганда ҲАЙСИ эълон ҳақида кетаётганини дарҳол кўриши
+  /// керак (200 объектли риэлтор рўйхатида бу муҳим).
+  final String? highlightListingId;
 
   @override
   State<MyRealtyListingsScreen> createState() =>
@@ -127,12 +134,21 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
       _bulkBusy = false;
     });
     if (failed > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${context.tr('realty_bulk_failed')}: $failed'),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(
+        ScaffoldMessenger.of(context),
+        '${context.tr('realty_bulk_failed')}: $failed',
+      );
     }
+  }
+
+  /// Огоҳлантиришдан келган эълонни рўйхат бошига кўчиради. Қолган
+  /// тартиб (янгиси юқорида) ўзгармайди.
+  List<RealtyListing> _withHighlightFirst(List<RealtyListing> items) {
+    final id = widget.highlightListingId;
+    if (id == null || id.isEmpty) return items;
+    final i = items.indexWhere((r) => r.id == id);
+    if (i <= 0) return items;
+    return [items[i], ...items.where((r) => r.id != id)];
   }
 
   @override
@@ -187,7 +203,9 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
               ),
             );
           }
-          final items = snap.data ?? const <RealtyListing>[];
+          final items = _withHighlightFirst(
+            snap.data ?? const <RealtyListing>[],
+          );
           return Column(
             children: [
               Padding(
@@ -375,18 +393,11 @@ class _MyListingTileState extends State<_MyListingTile> {
       await widget.repo.deleteMine(widget.listing.id);
       if (!mounted) return;
       // Рўйхат stream орқали ўзи янгиланади — қўлда олиб ташлаш керак эмас.
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_deleted')),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyInfo(messenger, context.tr('realty_deleted'));
     } on RealtyException {
       if (!mounted) return;
       setState(() => _deleting = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_delete_failed')),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, context.tr('realty_delete_failed'));
     }
   }
 

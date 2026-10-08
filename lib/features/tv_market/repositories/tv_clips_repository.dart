@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../../core/utils/formatters.dart';
 import '../../../repositories/service_config_repository.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
@@ -8,6 +7,7 @@ import '../models/tv_comment.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
 import '../utils/tv_clip_shuffle.dart';
+import '../utils/tv_playback_sampling.dart';
 import 'tv_shop_repository.dart';
 
 /// `fetchNearby`/`fetchByRegion`/`fetchAllActive` учун сахифаланган натижа —
@@ -541,15 +541,20 @@ class TvClipsRepository {
     if (clipId.isEmpty || viewerId.isEmpty) return false;
     final clipRef = _col.doc(clipId);
     final viewRef = clipRef.collection('views').doc(viewerId);
-    final ownerId = canonicalPhoneId(ownerPhone);
-    final profileRef = _db.collection('tv_public_profiles').doc(ownerId);
 
+    // `tv_public_profiles.totalViewCount` БУ ЕРДА ЁЗИЛМАЙДИ.
+    //
+    // Илгари ҳар кўриш учун учинчи ёзув (ва иккинчи ўқиш) шу
+    // транзакцияда бўларди. У энди серверда, кунда бир марта
+    // ҳисобланади (`reconcileTvProfileViews`) — клипларнинг
+    // `viewCount` йиғиндиси + ўчирилганларининг улуши.
+    //
+    // Нима учун: кўриш ёзуви энг кўп такрорланадиган ёзув, профиль
+    // счётчиги эса фақат канал сарлавҳасида кўрсатилади — реал вақтда
+    // аниқ бўлиши шарт эмас. Ўлчов: 10k DAU'да 3 ёзув → 2 ёзув
+    // (`docs/video-architecture/cost_model.py`, E варианти).
     return _db.runTransaction((tx) async {
-      // Firestore: transaction ичида БАРЧА read'лар write'лардан олдин
-      // бўлиши шарт — иккала get() ҳам аввал.
       final viewSnap = await tx.get(viewRef);
-      final profileSnap =
-          ownerId.isNotEmpty ? await tx.get(profileRef) : null;
       final now = DateTime.now();
       if (viewSnap.exists) {
         final ts = viewSnap.data()?['viewedAt'];
@@ -563,17 +568,20 @@ class TvClipsRepository {
         tx.set(viewRef, {'viewedAt': FieldValue.serverTimestamp()});
       }
       tx.update(clipRef, {'viewCount': FieldValue.increment(1)});
-      if (profileSnap != null && profileSnap.exists) {
-        tx.update(profileRef, {'totalViewCount': FieldValue.increment(1)});
-      }
       return true;
     });
   }
 
-  /// Playback sifat metrikalari — bitta ko'rish uchun bitta yozuv
-  /// (event-stream emas, denormalized counter — `viewCount` bilan bir xil
-  /// naqsh). Monitoring Center shu maydonlardan rebuffer ratio, completion
-  /// rate, first-frame time hisoblaydi.
+  /// Playback sifat метрикалари — denormalized counter (`viewCount` билан
+  /// бир хил нақш). Monitoring Center шу майдонлардан rebuffer ratio,
+  /// completion rate, first-frame time ҳисоблайди.
+  ///
+  /// ЁЗУВ НАМУНА БЎЙИЧА: ҳар playback эмас, уларнинг
+  /// [kTvPlaybackStatsSampleRate] улуши. Сабаби ва нима учун ўртачалар
+  /// бузилмаслиги — `tv_playback_sampling.dart` да.
+  ///
+  /// [sampled] — қарор ташқаридан берилиши мумкин (тест учун); `null`
+  /// бўлса шу ерда тасодифий ҳал қилинади.
   Future<void> recordPlaybackStats({
     required String clipId,
     required Duration watched,
@@ -583,8 +591,10 @@ class TvClipsRepository {
     required bool completed,
     required bool skipped,
     bool hadError = false,
+    bool? sampled,
   }) async {
     if (clipId.isEmpty) return;
+    if (!(sampled ?? tvRollPlaybackSample())) return;
     final data = <String, dynamic>{
       'playbackStats.views': FieldValue.increment(1),
       'playbackStats.watchedMs': FieldValue.increment(watched.inMilliseconds),

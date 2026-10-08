@@ -50,6 +50,27 @@ CATALOG_HOT_CAP = 50_000        # upper bound on distinct clips in the hot set
 AGG_INTERVAL_MIN = 5            # server flushes aggregated counters every N min
 
 # ─────────────────────────────────────────────────────────────────────────
+# PHASE 2 — view/stats aggregation variants
+#
+# Two facts that decide this comparison:
+#   1) A DELETE is billed as a write. A Firestore-backed queue therefore costs
+#      TWO writes per event (insert + delete), before any aggregation gain.
+#   2) Aggregation only pays when many events for the SAME clip land in one
+#      window. Within one user's batch the clips are almost all different, so
+#      the win needs a cross-user buffer.
+# ─────────────────────────────────────────────────────────────────────────
+# Share of playbacks that are the first view of that clip by that viewer, i.e.
+# the ones that still need their own `views/{viewerId}` dedup document. That
+# document cannot be merged with anything — it is one doc per viewer per clip.
+DISTINCT_VIEW_RATIO = 0.85
+# Sampling variant: write playbackStats for this share of playbacks only.
+# Averages (rebuffer rate, completion, first frame) survive sampling.
+STATS_SAMPLE_RATE = 0.10
+# Pub/Sub: ~200 B per event, $40 per TiB published.
+PUBSUB_BYTES_PER_EVENT = 200
+PUBSUB_USD_PER_TIB = 40.0
+
+# ─────────────────────────────────────────────────────────────────────────
 # STORAGE ASSUMPTIONS (needed for the R2 storage line; documented defaults)
 # ─────────────────────────────────────────────────────────────────────────
 UPLOAD_FRACTION = 0.01          # 1% of DAU upload one clip per day
@@ -122,6 +143,42 @@ def model(dau):
     }
 
 
+def phase2(dau):
+    """Write cost of each view/stats path, per month."""
+    views = dau * VIEWS_PER_DAU_DAY * DAYS       # playbacks
+    distinct = views * DISTINCT_VIEW_RATIO       # need a dedup doc
+    intervals = DAYS * 24 * 60 / AGG_INTERVAL_MIN
+    active = min(dau * ACTIVE_CLIP_RATIO, CATALOG_HOT_CAP)
+    flush = active * intervals                   # one clip-counter write per interval
+    w = lambda n: n / 1e6 * WRITE_USD_PER_1M     # noqa: E731
+
+    # A — today: recordView (3 writes on distinct views) + stats (1/playback)
+    a = distinct * VIEW_WRITES_PER_VIEW + views * STATS_WRITES_PER_VIEW
+
+    # B — Firestore queue + aggregator: insert + delete per event, plus the
+    #     dedup doc that cannot be merged, plus the flush.
+    b = views * 2 + distinct + flush
+
+    # C — Pub/Sub queue + aggregator: nothing is written to Firestore for the
+    #     queue itself; only the dedup doc and the flush.
+    c = distinct + flush
+    pubsub = (views * PUBSUB_BYTES_PER_EVENT) / (1024 ** 4) * PUBSUB_USD_PER_TIB
+
+    # D — client-side only, no queue: sample playbackStats.
+    d = distinct * VIEW_WRITES_PER_VIEW + views * STATS_SAMPLE_RATE
+
+    # E — D, plus drop profile.totalViewCount from the client transaction
+    #     (derive it in the nightly reconciliation instead): 3 -> 2 writes.
+    e = distinct * 2 + views * STATS_SAMPLE_RATE
+
+    return {
+        "dau": dau, "views": views,
+        "a": w(a), "b": w(b) , "c": w(c) + pubsub, "d": w(d), "e": w(e),
+        "a_n": a, "b_n": b, "c_n": c, "d_n": d, "e_n": e,
+        "pubsub": pubsub,
+    }
+
+
 def fmt(x):
     if x >= 1000:
         return f"${x:,.0f}"
@@ -176,4 +233,33 @@ if __name__ == "__main__":
     line("    of which feed reads", "reads_1k")
     line("    of which writes", "writes_cur_1k")
     line("  R2+optimized", "per1k_optimized")
+    print("=" * 80)
+
+    # ── PHASE 2 ──────────────────────────────────────────────────────────
+    p = [phase2(d) for d in tiers]
+
+    def pline(label, key, formatter=fmt):
+        cells = "  ".join(f"{formatter(r[key]):>14}" for r in p)
+        print(f"{label:<34}{cells}")
+
+    print()
+    print("=" * 80)
+    print("PHASE 2 — view/stats write cost per month, by approach")
+    print("=" * 80)
+    print(f"{'DAU':<34}{hdr}")
+    print("-" * 80)
+    pline("Playbacks / month", "views", lambda v: f"{v:,.0f}")
+    print("-" * 80)
+    pline("A  today (3x distinct + 1x stats)", "a")
+    pline("B  Firestore queue + aggregator", "b")
+    pline("C  Pub/Sub queue + aggregator", "c")
+    pline("D  sample stats 10% (client only)", "d")
+    pline("E  D + drop profile write", "e")
+    print("-" * 80)
+    print("Write COUNT per month (millions)")
+    for k, lbl in [("a_n", "A today"), ("b_n", "B firestore-q"),
+                   ("c_n", "C pubsub-q"), ("d_n", "D sampled"),
+                   ("e_n", "E sampled+2x")]:
+        cells = "  ".join(f"{r[k]/1e6:>13,.1f}M" for r in p)
+        print(f"  {lbl:<32}{cells}")
     print("=" * 80)

@@ -215,6 +215,33 @@ async function main() {
     await rejectsWith(fns.customerCancelOrder.run({ orderId: 'c2' }, ctxOf(OTHER)), 'permission-denied');
   });
 
+  // ── C'. Eski 9 xonali users hujjati (hamyon auditi O-18) ────────────
+  await reset();
+  const LEGACY9 = '901000077';
+  await db.collection('users').doc(LEGACY9).set({ role: 'user', bonusBalance: 0 });
+  await db.collection('orders').doc('c9').set(order({ userPhone: `998${LEGACY9}`, inventoryDecrements: [] }));
+  await check('C5 userPhone 12 xona, users hujjati eski 9 xona — qaytarish TOPILADI', async () => {
+    const r = await setStatus('c9', 'rejected');
+    assert.strictEqual(r.walletRefund, 3000);
+    assert.strictEqual(await userBal(LEGACY9), 3000);
+    assert.strictEqual((await db.collection('users').doc(`998${LEGACY9}`).get()).exists, false,
+      'yangi 12 xonali hujjat yaratilmaydi');
+    await journalBalanced();
+  });
+  await db.collection('orders').doc('c10').set(order({ userPhone: '998901000088', inventoryDecrements: [] }));
+  await check('C6 hamyon hisobi umuman topilmasa — pul jimgina yo\'qolmaydi, bekor qilish rad', async () => {
+    const e = await rejectsWith(setStatus('c10', 'rejected'), 'failed-precondition', 'REFUND_ACCOUNT_NOT_FOUND');
+    assert.ok(e);
+    assert.strictEqual((await db.collection('orders').doc('c10').get()).data().status, 'new');
+  });
+  await check('C7 batch: hisobi yo\'q buyurtma o\'tkaziladi, qolgani rad etiladi', async () => {
+    await db.collection('orders').doc('c11').set(order({ userPhone: `998${LEGACY9}`, balanceApplied: 0, inventoryDecrements: [] }));
+    const r = await fns.adminSetOrderStatusBatch.run({ orderIds: ['c10', 'c11'], status: 'rejected' }, ctxOf(ADMIN));
+    assert.strictEqual(r.updated, 1);
+    assert.deepStrictEqual(r.skipped.map((s) => [s.orderId, s.code]), [['c10', 'REFUND_ACCOUNT_NOT_FOUND']]);
+    assert.strictEqual((await db.collection('orders').doc('c11').get()).data().status, 'rejected');
+  });
+
   // ── D. grantBirthdayBonus ───────────────────────────────────────────
   await reset();
   const year = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent', year: 'numeric' }).format(new Date()));

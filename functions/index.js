@@ -3266,18 +3266,38 @@ async function prepareOrderCancelInTx(t, orderRef, od) {
   let bonusCtx = null;
   const rawPhone = String(od.userPhone || od.phone || '');
   const phoneDigitsOnly = digits(rawPhone);
-  if (walletRefund > 0 && phoneDigitsOnly.length >= 9) {
+  if (walletRefund > 0) {
+    // Ҳужжат id шакллари: каноник 12 хона, хом рақам ва эски 9 хона.
+    // Аввал `userPhone` 12 хонали, `users` ҳужжати эса эски 9 хонали
+    // бўлса қайтариш ЖИМГИНА ўтказиб юбориларди, буюртма барибир бекор
+    // бўларди (ҳамён аудити O-18).
     const uid12 = canonicalUid(rawPhone);
-    customerRef = db.collection('users').doc(uid12);
-    customerSnap = await t.get(customerRef);
-    if (!customerSnap.exists && phoneDigitsOnly !== uid12) {
-      customerRef = db.collection('users').doc(phoneDigitsOnly);
-      customerSnap = await t.get(customerRef);
+    const candidates = [...new Set([
+      uid12,
+      phoneDigitsOnly,
+      uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : '',
+    ].filter((id) => id.length >= 9))];
+    for (const id of candidates) {
+      const ref = db.collection('users').doc(id);
+      const snap = await t.get(ref);
+      if (snap.exists) {
+        customerRef = ref;
+        customerSnap = snap;
+        break;
+      }
     }
-    if (customerSnap.exists) {
-      bonusCtx = await settlementLedger.prepareBonusInTx(
-          t, db, customerRef.id, { idempotencyKey: orderCancelRefundKey(orderRef.id) });
+    if (!customerSnap) {
+      // Ҳамёндан пул олинган, лекин қайтариладиган ҳисоб топилмади —
+      // пулни жимгина йўқотмаймиз: бекор қилиш рад этилади, админ кўради.
+      console.error(JSON.stringify({
+        action: 'orderCancelRefund', result: 'refused', errorCode: 'REFUND_ACCOUNT_NOT_FOUND',
+        orderId: orderRef.id, walletRefund,
+      }));
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'REFUND_ACCOUNT_NOT_FOUND', { orderId: orderRef.id });
     }
+    bonusCtx = await settlementLedger.prepareBonusInTx(
+        t, db, customerRef.id, { idempotencyKey: orderCancelRefundKey(orderRef.id) });
   }
   return { orderRef, od, inv, invSnaps, walletRefund, customerRef, customerSnap, bonusCtx };
 }
@@ -8013,7 +8033,16 @@ exports.adminSetOrderStatusBatch = functions.https.onCall(async (data, context) 
   let walletRefund = 0;
   const skipped = [];
   for (const orderId of orderIds) {
-    const res = await applyAdminOrderStatus(orderId, status, adminUid);
+    let res;
+    try {
+      res = await applyAdminOrderStatus(orderId, status, adminUid);
+    } catch (e) {
+      // Битта буюртманинг хатоси (масалан, REFUND_ACCOUNT_NOT_FOUND)
+      // қолганларини тўхтатмайди — ўтказиб юборилганлар рўйхатига.
+      if (!(e instanceof functions.https.HttpsError)) throw e;
+      skipped.push({ orderId, code: e.message, from: '' });
+      continue;
+    }
     if (res.skipped) {
       skipped.push({ orderId, code: res.skipped, from: res.from || '' });
       continue;

@@ -28,7 +28,7 @@ class MerchantShopTab extends StatefulWidget {
 
 class _MerchantShopTabState extends State<MerchantShopTab> {
   late final RestaurantStorageService _storage = widget.storage ?? RestaurantStorageService();
-  late RestaurantFormData _data = _fromRestaurant(widget.restaurant);
+  late final RestaurantFormData _data = _fromRestaurant(widget.restaurant);
   late final _announcement = TextEditingController(text: widget.restaurant.announcement);
   final _card = TextEditingController();
   final _holder = TextEditingController();
@@ -88,10 +88,13 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
     super.dispose();
   }
 
-  void _snack(String text, {bool error = false}) {
+  /// Матн `mounted` текширувидан КЕЙИН ҳосил қилинади (context async
+  /// бўшлиқдан кейин ишлатилмайди).
+  void _snack({String? key, Object? error, bool isError = false}) {
     if (!mounted) return;
+    final text = error != null ? restaurantsErrorText(context, error) : context.tr(key ?? 'restaurants_err_generic');
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: error ? Colors.red.shade700 : null),
+      SnackBar(content: Text(text), backgroundColor: error != null || isError ? Colors.red.shade700 : null),
     );
   }
 
@@ -102,9 +105,9 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
     try {
       final url = await _storage.uploadImage(restaurantId: _r.id, image: f, kind: kind);
       await widget.repository.updateProfile(_r.id, {kind == 'logo' ? 'logoUrl' : 'coverUrl': url});
-      _snack(context.tr('restaurants_m_saved'));
+      _snack(key: 'restaurants_m_saved');
     } catch (e) {
-      _snack(restaurantsErrorText(context, e), error: true);
+      _snack(error: e);
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -113,7 +116,7 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
   Future<void> _saveProfile() async {
     final errs = _data.validate();
     if (errs.isNotEmpty) {
-      _snack(context.tr('restaurants_m_err_${errs.first}'), error: true);
+      _snack(key: 'restaurants_m_err_${errs.first}', isError: true);
       return;
     }
     setState(() => _saving = true);
@@ -125,15 +128,15 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
       final card = _card.text.replaceAll(RegExp(r'\D'), '');
       if (_paymentLoaded && (card.isNotEmpty || _holder.text.trim().isNotEmpty)) {
         if (card.length != 16) {
-          _snack(context.tr('restaurants_m_err_card_number'), error: true);
+          _snack(key: 'restaurants_m_err_card_number', isError: true);
         } else {
           await widget.repository.savePaymentDetails(_r.id, cardNumber: card, cardHolder: _holder.text.trim());
         }
       }
       setState(() => _dirty = false);
-      _snack(context.tr('restaurants_m_saved'));
+      _snack(key: 'restaurants_m_saved');
     } catch (e) {
-      _snack(restaurantsErrorText(context, e), error: true);
+      _snack(error: e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -150,7 +153,7 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
     try {
       await widget.repository.setPaused(_r.id, until);
     } catch (e) {
-      _snack(restaurantsErrorText(context, e), error: true);
+      _snack(error: e);
     }
   }
 

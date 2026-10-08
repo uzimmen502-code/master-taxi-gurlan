@@ -117,40 +117,11 @@ class ServiceConfigRepository {
     }
   }
 
-  // Global baseline va tuman override'i bu yerdan YOZILMAYDI (ega,
-  // 2026-10-08): admin «Ҳудудлар ва хизматлар» faqat `adminSaveModuleConfig`
-  // callable orqali saqlaydi — faqat o'zgargan kataklar, konflikt tekshiruvi
-  // va `admin_audit`. Avvalgi `setModuleDefaults` butun ustunni qayta
-  // yozardi va iz qoldirmasdi.
-
-  /// Admin: MFY override'ni yozish (faqat eski seed qoldiqlarini tozalash —
-  /// `_purgeStaleSeedOverrides`; admin tahriri callable orqali).
-  ///
-  /// `modules` va `manualModules` **toʻliq almashtiriladi** — inherit kalitlari
-  /// oʻchadi; faqat [manualModules] dagi farqlar Baseline cascade dan himoyalanadi.
-  Future<void> setServiceAreaModules(
-    ServiceArea area,
-    ServiceModuleConfig config, {
-    Set<String> manualModules = const {},
-    String? updatedBy,
-  }) async {
-    final manual = manualModules
-        .where((id) => id.trim().isNotEmpty && config.modules.containsKey(id))
-        .toList()
-      ..sort();
-    await _areaModulesRef(area.id).set({
-      'serviceAreaId': area.id,
-      'districtId': area.districtId,
-      'regionId': area.regionId,
-      'modules': {
-        for (final e in config.modules.entries)
-          e.key: {'status': e.value.wire},
-      },
-      'manualModules': manual,
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (updatedBy != null) 'updatedBy': updatedBy,
-    });
-  }
+  // Modul sozlamasi (global baseline, tuman va MFY override) bu yerdan
+  // YOZILMAYDI (ega, 2026-10-08): admin «Ҳудудлар ва хизматлар» faqat
+  // `adminSaveModuleConfig` callable orqali saqlaydi — faqat o'zgargan
+  // kataklar, konflikt tekshiruvi va `admin_audit`. Firestore rules ham
+  // klient yozuvini yopadi.
 
   Future<ServiceModuleConfig> fetchDistrictModules(String districtId) async {
     final detailed = await fetchDistrictModulesDetailed(districtId);

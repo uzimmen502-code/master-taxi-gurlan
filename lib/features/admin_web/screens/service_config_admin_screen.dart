@@ -2,14 +2,12 @@ import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/geo_area.dart';
 import '../../../models/service_module_config.dart';
 import '../../../repositories/service_config_repository.dart';
 import '../../home/home_module_gate.dart';
-import '../services/admin_auth_service.dart';
 import '../utils/module_config_changes.dart';
 
 /// Admin — "Ҳудудлар ва хизматлар".
@@ -169,7 +167,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       final saved = <String, Map<String, ModuleStatus?>>{};
       final manuals = <String, Set<String>>{};
       final savedManuals = <String, Set<String>>{};
-      final staleSeedAreaIds = <String>[];
+      // Аввал бу ерда «эски seed override'ни тозалаш» бор эди (`manualModules`
+      // бўш, `modules` тўла МФЙ ҳужжатини клиент ўзи бўшатарди). 2026-10-08
+      // да production'да бундай ҳужжат 0/61, илова уларни барибир ўқимайди
+      // (`fetchServiceAreaModules` фақат `manualModules`), МФЙ'га клиент ёзуви
+      // эса rules'да ёпилди — модул созламаси фақат `adminSaveModuleConfig`.
       for (final area in areas) {
         final packed = batch[area.id];
         final cfg = packed?.config ?? ServiceModuleConfig.empty;
@@ -178,9 +180,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           for (final id in kKnownModuleIds)
             id: manual.contains(id) ? cfg.modules[id] : null,
         };
-        if (manual.isEmpty && cfg.modules.isNotEmpty) {
-          staleSeedAreaIds.add(area.id);
-        }
         saved[area.id] = Map<String, ModuleStatus?>.from(overrides[area.id]!);
         manuals[area.id] = Set<String>.from(manual);
         savedManuals[area.id] = Set<String>.from(manual);
@@ -256,9 +255,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _loading = false;
       });
 
-      if (staleSeedAreaIds.isNotEmpty) {
-        unawaited(_purgeStaleSeedOverrides(staleSeedAreaIds));
-      }
       unawaited(_syncMissingBaselineModules(
         defaultsRes.config,
         defaultsRes.enforce,
@@ -310,45 +306,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       _expandedDistricts.clear();
     });
     await _loadAll();
-  }
-
-  /// Eski seed override'larini fonda tozalash (UI ni bloklamaydi).
-  Future<void> _purgeStaleSeedOverrides(List<String> areaIds) async {
-    final by = _adminId();
-    const chunk = 12;
-    var n = 0;
-    for (var i = 0; i < areaIds.length; i += chunk) {
-      final slice = areaIds.sublist(
-        i,
-        i + chunk > areaIds.length ? areaIds.length : i + chunk,
-      );
-      final results = await Future.wait(slice.map((areaId) async {
-        final area = _areaById[areaId];
-        if (area == null) return false;
-        try {
-          await _repo
-              .setServiceAreaModules(
-                area,
-                ServiceModuleConfig.empty,
-                manualModules: const {},
-                updatedBy: by,
-              )
-              .timeout(const Duration(seconds: 12));
-          return true;
-        } catch (_) {
-          return false;
-        }
-      }));
-      n += results.where((ok) => ok).length;
-    }
-    if (!mounted || n == 0) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-        'Eski zona override tozalandi ($n) — endi Baseline barcha tumanga tatbiq',
-        style: const TextStyle(color: AppColors.onPrimary),
-      ),
-      backgroundColor: AppColors.button,
-    ));
   }
 
   Map<String, GeoDistrict> get _districtById => {
@@ -665,6 +622,98 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     }
   }
 
+  /// «Журнал»: ким, қачон, қайси модулни ўзгартирди (`admin_audit`дан,
+  /// сервер орқали — `admin_audit` клиентга ёпиқ).
+  Future<void> _openJournal() async {
+    final future = FirebaseFunctions.instance
+        .httpsCallable('adminListModuleConfigAudit')
+        .call<Object?>({'limit': 100})
+        .timeout(const Duration(seconds: 25))
+        .then((res) {
+      final raw = res.data is Map ? (res.data as Map)['entries'] : null;
+      return <ModuleAuditEntry>[
+        if (raw is List)
+          for (final e in raw)
+            if (e is Map) ModuleAuditEntry.fromMap(e),
+      ];
+    });
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Журнал — модул ўзгаришлари'),
+        content: SizedBox(
+          width: 560,
+          height: 480,
+          child: FutureBuilder<List<ModuleAuditEntry>>(
+            future: future,
+            builder: (ctx, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                final e = snap.error;
+                final code = e is FirebaseFunctionsException ? e.code : '$e';
+                return Center(
+                  child: Text('Журнални юклаб бўлмади. Қайта уриниб кўринг. '
+                      '($code)'),
+                );
+              }
+              final list = snap.data ?? const <ModuleAuditEntry>[];
+              if (list.isEmpty) {
+                return const Center(child: Text('Ҳали ёзув йўқ.'));
+              }
+              return ListView.separated(
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const Divider(height: 16),
+                itemBuilder: (_, i) => _journalTile(list[i]),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Ёпиш'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _journalTile(ModuleAuditEntry e) {
+    String st(ModuleStatus? s) =>
+        s == null ? (e.scope == 'global' ? 'йўқ' : 'мерос') : _statusLabel(s);
+    String two(int v) => v.toString().padLeft(2, '0');
+    final at = e.at;
+    final when = at == null
+        ? '—'
+        : '${two(at.day)}.${two(at.month)}.${at.year} '
+            '${two(at.hour)}:${two(at.minute)}';
+    final target = switch (e.scope) {
+      'global' => 'Baseline GLOBAL',
+      'district' => _districtById[e.targetId]?.displayName ?? e.targetId,
+      _ => _areaById[e.targetId]?.displayName ?? e.targetId,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$when · $target',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          '+${e.actor}'
+          '${e.source == 'apk_module_sync' ? ' · APK модул синхрони' : ''}',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        if (e.enforceFrom != null && e.enforceTo != null)
+          Text('Config-driven rejim (enforce): '
+              '${e.enforceFrom! ? 'ёқилган' : 'ўчиқ'} → '
+              '${e.enforceTo! ? 'ёқилган' : 'ўчиқ'}'),
+        for (final c in e.changes)
+          Text('${_labelFor(c.moduleId)}: ${st(c.from)} → ${st(c.to)}'),
+      ],
+    );
+  }
+
   /// Сақлашдан олдин — нима ўзгаришини кўрсатиш.
   Future<bool?> _confirmChanges(List<_SaveTarget> targets) {
     String st(ModuleStatus? s, String scope) =>
@@ -750,11 +799,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   Map<String, ServiceArea> get _areaById => {
         for (final a in _allAreas) a.id: a,
       };
-
-  String _adminId() =>
-      context.read<AdminAuthService>().phoneDigits ??
-      context.read<AdminAuthService>().phone ??
-      'unknown';
 
   @override
   Widget build(BuildContext context) {
@@ -862,6 +906,15 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
                 style: FilledButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _openJournal,
+                icon: const Icon(Icons.history, size: 18),
+                label: const Text('Журнал'),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                 ),
               ),
               ..._legendChips(),

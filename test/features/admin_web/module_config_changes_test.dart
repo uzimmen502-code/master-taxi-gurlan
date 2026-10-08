@@ -66,4 +66,43 @@ void main() {
       expect(diffModuleStatuses(m, Map.of(m), ids), isEmpty);
     });
   });
+
+  group('ModuleAuditEntry.fromMap — «Журнал» ёзуви', () {
+    test('сервер жавоби тўлиқ ўқилади', () {
+      final e = ModuleAuditEntry.fromMap({
+        'actor': '998912778777',
+        'scope': 'district',
+        'targetId': 'gurlan',
+        'source': 'admin_ui',
+        'changes': [
+          {'moduleId': 'local_taxi', 'from': 'hidden', 'to': 'enabled'},
+          {'moduleId': 'courier', 'from': 'enabled', 'to': null},
+        ],
+        'enforce': null,
+        'at': 1791457200000,
+      });
+      expect(e.actor, '998912778777');
+      expect(e.scope, 'district');
+      expect(e.changes.map((c) => c.toJson()), [
+        {'moduleId': 'local_taxi', 'from': 'hidden', 'to': 'enabled'},
+        {'moduleId': 'courier', 'from': 'enabled', 'to': null},
+      ]);
+      expect(e.enforceFrom, isNull);
+      expect(e.at, DateTime.fromMillisecondsSinceEpoch(1791457200000));
+    });
+
+    test('enforce ўзгариши ва бўш/нотўғри майдонлар йиқитмайди', () {
+      final e = ModuleAuditEntry.fromMap({
+        'scope': 'global',
+        'changes': 'xato',
+        'enforce': {'from': true, 'to': false},
+        'at': null,
+      });
+      expect(e.changes, isEmpty);
+      expect(e.enforceFrom, isTrue);
+      expect(e.enforceTo, isFalse);
+      expect(e.at, isNull);
+      expect(e.actor, '');
+    });
+  });
 }

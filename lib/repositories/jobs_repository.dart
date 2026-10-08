@@ -138,8 +138,14 @@ class JobsRepository {
   }
 
   /// Admin panel учун: фақат Иш топ doskasi (`work|service|ad`).
+  ///
+  /// Тур филтри СЕРВЕРДА (2026-10-08): аввал бутун `ads` коллекциясидан
+  /// охирги [limit] таси олиниб, клиентда филтрланарди — бозор эълонлари
+  /// ўринларни эгаллаб, иш эълонлари рўйхати ва жами сонлари қисқариб
+  /// қоларди. Индекс: ads (type ASC, createdAt DESC).
   Stream<List<JobAd>> watchAllForAdmin({int limit = 500}) {
     return _ads
+        .where('type', whereIn: JobAd.jobsBoardTypes)
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()

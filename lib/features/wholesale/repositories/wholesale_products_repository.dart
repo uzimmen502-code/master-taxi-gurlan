@@ -197,7 +197,15 @@ class WholesaleProductsRepository {
     int limit = 500,
     String? market,
   }) {
-    return _col.limit(limit).snapshots().map((snap) {
+    // Энг янгиси биринчи СЕРВЕРДА (2026-10-08): аввал `limit` тартибсиз эди —
+    // Firestore ID тартибида биринчи [limit] тасини берарди, маҳсулот кўпайса
+    // янги/кутаётганлари рўйхатга тушмай қоларди. Бир майдонли саралаш —
+    // композит индекс керак эмас. `createdAt` ни ҳар доим илова ёзади.
+    return _col
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) {
       final all = snap.docs.map(WholesaleProduct.fromFirestore);
       final list =
           market == null ? all.toList() : filterByMarket(all, market);

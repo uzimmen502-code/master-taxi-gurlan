@@ -31,6 +31,19 @@ String formatTierNote(BuildContext context, WholesaleProduct p) {
   return '${t.minQty}+ ${p.unit}';
 }
 
+/// Бош саҳифа карточкасидаги нарх: «4 743 $» (нарх йўқ бўлса `null`).
+///
+/// «дан» ЙЎҚ (эга саволи, 2026-10-08): аввал «дан 4 743 $» ҳар доим
+/// чиқарди — (1) ўзбекчада «-дан» қўшимча, сўздан кейин туради (русча
+/// «от 4 743» кўчирмаси эди); (2) нарх — биринчи (энг кам миқдор) поғона,
+/// яъни «...дан бошлаб» эмас: битта поғонада бошқа нарх йўқ, бир нечтада
+/// эса бу энг қиммати. Миқдор остидаги изоҳда — «10+ дона»
+/// ([formatTierNote]); тўлиқ поғоналар маҳсулот саҳифасида.
+String? formatShelfPrice(WholesaleProduct p) {
+  if (p.basePrice <= 0) return null;
+  return '${formatPrice(p.basePrice)} ${p.currencyLabel}';
+}
+
 /// Хитой бозори учун етказиш муддати: «14 кун». Маълум бўлмаса бўш.
 String formatDelivery(BuildContext context, WholesaleProduct p) {
   final d = p.deliveryDays;
@@ -239,11 +252,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
           final cover = p.imageUrls.isEmpty ? '' : p.imageUrls.first;
           return AvaTileCard(
             title: p.title,
-            price: p.basePrice > 0
-                ? '${context.tr('home_price_from')} '
-                    '${formatPrice(p.basePrice)} '
-                    '${p.currencyLabel}'
-                : null,
+            price: formatShelfPrice(p),
             priceNote: formatTierNote(context, p),
             // Хитой бозорида етказиш муддати, улгуржида сотувчи номи.
             footnote: p.isChina

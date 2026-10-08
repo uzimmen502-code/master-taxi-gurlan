@@ -620,6 +620,9 @@ module.exports = {
   computeFare,
   isNightAt,
   haversineMeters,
+  // Kafe-restoran yetkazish masofasi ham shu Directions chaqiruvidan
+  // (`restaurant_orders.js`, 4-qoida: ikkinchi nusxa yo'q).
+  fetchRouteViaGoogle,
   computeRoadFactors,
   distanceCoefPermille,
   LOCAL_TAXI_TYPES,

@@ -63,6 +63,9 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 
   double? _pickupLat;
   double? _pickupLng;
+
+  /// Pickup xaritadan / saqlangan joydan tanlangan (GPS emas).
+  bool _pickupManual = false;
   double? _dropoffLat;
   double? _dropoffLng;
 
@@ -133,6 +136,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       _fromCtrl.text = addr;
       _pickupLat = ctrl.pickupLat;
       _pickupLng = ctrl.pickupLng;
+      _pickupManual = false;
     });
   }
 
@@ -157,6 +161,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         _fromCtrl.text = result.label;
         _pickupLat = result.lat;
         _pickupLng = result.lng;
+        _pickupManual = true;
         context.read<LocalTaxiController>().setPickupCoords(
               lat: result.lat,
               lng: result.lng,
@@ -274,6 +279,16 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         _showGpsDialog();
         return;
       }
+      // Manzil majburiy — narx server tomonidan oldindan qotiriladi.
+      final dLat = _dropoffLat;
+      final dLng = _dropoffLng;
+      if (_toCtrl.text.trim().isEmpty ||
+          dLat == null ||
+          dLng == null ||
+          (dLat.abs() < 1e-6 && dLng.abs() < 1e-6)) {
+        _snack(context.tr('local_destination_required'));
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
       final phone = phoneDigits(prefs.getString('user_phone') ?? '');
       if (phone.length >= 9) {
@@ -288,10 +303,14 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         }
       }
       try {
+        // GPS majburiy (2026-07 siyosati), lekin xaritadan / saqlangan
+        // joydan tanlangan pickup GPS bilan almashtirilmaydi.
         final loc = context.read<LocationService>();
         final coords = await loc.getFreshCoords();
-        _pickupLat = coords.lat;
-        _pickupLng = coords.lng;
+        if (!_pickupManual || _pickupLat == null || _pickupLng == null) {
+          _pickupLat = coords.lat;
+          _pickupLng = coords.lng;
+        }
       } on LocationException catch (e) {
         if (!mounted) return;
         final key = switch (e.kind) {
@@ -636,7 +655,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             fromFocus: _fromFocus,
             toFocus: _toFocus,
             fromHint: loc.translate('from'),
-            toHint: loc.translate('to_optional'),
+            toHint: loc.translate('to'),
             mapTooltip: loc.translate('pick_on_map'),
             isGpsLoading: c.isGpsLoading,
             fromSuggestions: const [],
@@ -657,6 +676,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                 _pickupLng = _dropoffLng;
                 _dropoffLat = tLat;
                 _dropoffLng = tLng;
+                _pickupManual = _pickupLat != null;
               });
             },
             onPickFromSug: (_) {},
@@ -680,6 +700,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                           if (p.hasCoordinates) {
                             _pickupLat = p.lat;
                             _pickupLng = p.lng;
+                            _pickupManual = true;
                             context
                                 .read<LocalTaxiController>()
                                 .setPickupCoords(lat: p.lat!, lng: p.lng!);
@@ -728,7 +749,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                                   const SizedBox(width: 8),
                                   Text(
                                       _isSearching
-                                          ? 'Қидирилмоқда...'
+                                          ? context.tr('searching')
                                           : loc.translate('search_driver'),
                                       style: const TextStyle(
                                           fontSize: AppText.bodyLarge,

@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../utils/fare_calculator.dart';
 import '../../../utils/taxi_price_region.dart';
 
 /// Admin — mahalliy taksi narxi (`settings/prices`).
@@ -48,6 +48,12 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
   final _globalBaseCtrl = TextEditingController();
   final _globalPerKmCtrl = TextEditingController();
   final _globalCoefCtrl = TextEditingController(text: '1.0');
+  // Tun koeffitsienti va soatlari (Toshkent vaqti), yo'l koeffitsienti —
+  // server tarifining bir qismi (versiya bilan saqlanadi).
+  final _nightCoefCtrl = TextEditingController(text: '1.5');
+  final _nightStartCtrl = TextEditingController(text: '23');
+  final _nightEndCtrl = TextEditingController(text: '6');
+  final _roadFactorCtrl = TextEditingController(text: '1.3');
   final Map<String, _RegionPriceDraft> _regionDrafts = {};
 
   bool _loading = true;
@@ -74,6 +80,10 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
     _globalBaseCtrl.dispose();
     _globalPerKmCtrl.dispose();
     _globalCoefCtrl.dispose();
+    _nightCoefCtrl.dispose();
+    _nightStartCtrl.dispose();
+    _nightEndCtrl.dispose();
+    _roadFactorCtrl.dispose();
     for (final d in _regionDrafts.values) {
       d.dispose();
     }
@@ -121,6 +131,13 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
           '${(data['local_per_km'] as num?)?.toInt() ?? 1500}';
       _globalCoefCtrl.text =
           '${(data['local_coef'] as num?)?.toDouble() ?? 1.0}';
+      _nightCoefCtrl.text =
+          '${(data['local_night_coef'] as num?)?.toDouble() ?? 1.5}';
+      _nightStartCtrl.text =
+          '${(data['local_night_start'] as num?)?.toInt() ?? 23}';
+      _nightEndCtrl.text = '${(data['local_night_end'] as num?)?.toInt() ?? 6}';
+      _roadFactorCtrl.text =
+          '${(data['local_road_factor'] as num?)?.toDouble() ?? 1.3}';
 
       final regions = data['regions'];
       for (final entry in _regionDrafts.entries) {
@@ -178,24 +195,37 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
     });
 
     try {
+      // Server orqali: har saqlash yangi tarif versiyasi + o'zgarmas tarix
+      // (`local_taxi_tariffs/v{n}`). O'chirilgan mintaqa — yuborilmaydi
+      // (server `regions`ni to'liq almashtiradi).
       final regions = <String, dynamic>{};
       for (final entry in _regionDrafts.entries) {
         final map = _draftToMap(entry.key, entry.value);
-        if (map != null) regions[entry.key] = map;
+        if (map != null) {
+          regions[entry.key] = {
+            'base': map['local_base'],
+            'perKm': map['local_per_km'],
+            'coef': map['local_coef'],
+          };
+        }
       }
 
-      await FirebaseFirestore.instance.collection('settings').doc('prices').set(
-        {
-          'local_base': base,
-          'local_per_km': perKm,
-          'local_coef': coef,
-          if (regions.isNotEmpty) 'regions': regions,
-          'updatedAt': FieldValue.serverTimestamp(),
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('adminSetLocalTaxiPrices')
+          .call(<String, dynamic>{
+        'global': {'base': base, 'perKm': perKm, 'coef': coef},
+        'regions': regions,
+        'night': {
+          'coef': _parseCoef(_nightCoefCtrl.text),
+          'startH': _parseInt(_nightStartCtrl.text, fallback: 23),
+          'endH': _parseInt(_nightEndCtrl.text, fallback: 6),
         },
-        SetOptions(merge: true),
-      );
+        'roadFactor': _parseCoef(_roadFactorCtrl.text),
+      });
+      final version = (res.data is Map ? (res.data as Map)['version'] : null);
       if (mounted) {
-        setState(() => _ok = 'Saqlandi. Yangi narx keyingi qidiruvdan kuchga kiradi.');
+        setState(() => _ok =
+            'Saqlandi (tarif v$version). Yangi narx keyingi buyurtmadan kuchga kiradi.');
       }
     } catch (e) {
       if (mounted) setState(() => _error = 'Saqlashda xatolik: $e');
@@ -238,7 +268,9 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
               const SizedBox(height: 8),
               Text(
                 'Formula: (boshlang\'ich + masofa × km_narx) × koeffitsient. '
-                'Keyin tungi/bayram va masofa koeffitsientlari qo\'llanadi.',
+                'Keyin masofa koeffitsienti va tungi koeffitsient (pastda, avtomatik) '
+                'qo\'llanadi. Narxni server hisoblaydi va har buyurtmaga tarif '
+                'versiyasi bilan qotiradi.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 24),
@@ -276,6 +308,65 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
                 '${formatMoney(globalBase + 5 * globalPerKm)} × $globalCoef '
                 '≈ ${formatMoney(sample5km)}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                'Tungi narx (Toshkent vaqti)',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _coefField(
+                label: 'Tungi koeffitsient (1.0 = o\'chirilgan)',
+                hint: '1.5',
+                controller: _nightCoefCtrl,
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: _intField(
+                    label: 'Boshlanishi (soat, 0–23)',
+                    hint: '23',
+                    controller: _nightStartCtrl,
+                    icon: Icons.nightlight_outlined,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _intField(
+                    label: 'Tugashi (soat, 0–23)',
+                    hint: '6',
+                    controller: _nightEndCtrl,
+                    icon: Icons.wb_sunny_outlined,
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 28),
+              Text(
+                'Xarita ishlamaganda',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Google marshrut bermasa, masofa = to\'g\'ri chiziq × yo\'l '
+                'koeffitsienti. Buyurtma rad etilmaydi. Koeffitsient har dushanba '
+                'oxirgi 30 kunlik safarlardan mintaqa bo\'yicha avtomatik '
+                'hisoblanadi; ma\'lumot yetarli bo\'lmasa (30 tadan kam safar) '
+                'shu qiymat ishlatiladi.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+              const SizedBox(height: 8),
+              _coefField(
+                label: 'Yo\'l koeffitsienti (1.0–2.0)',
+                hint: '1.3',
+                controller: _roadFactorCtrl,
               ),
               const SizedBox(height: 28),
               Text(

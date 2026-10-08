@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
@@ -173,10 +174,12 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     );
   }
 
-  Future<void> _onFinishLocalTrip(int fare) async {
+  /// `true` — safar haqiqatan yakunlandi (xarita holatini tozalash mumkin).
+  Future<bool> _onFinishLocalTrip(int fare) async {
     final c = context.read<DriverHomeController>();
     var walletIntent = 0;
     var lockedFare = 0;
+    var serverPriced = false;
     final tripId = c.acceptedRide?.id;
     if (tripId != null && tripId.isNotEmpty) {
       final snap = await FirebaseFirestore.instance
@@ -184,11 +187,14 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
           .doc(tripId)
           .get();
       final data = snap.data() ?? const <String, dynamic>{};
-      walletIntent =
-          (data['passengerWalletIntent'] as num?)?.toInt() ?? 0;
+      serverPriced = data['fareSource'] == 'server';
+      // Hamyon faqat server narxli trip'da yechiladi (completeLocalTrip).
+      walletIntent = serverPriced
+          ? (data['passengerWalletIntent'] as num?)?.toInt() ?? 0
+          : 0;
       lockedFare = (data['lockedFare'] as num?)?.toInt() ?? 0;
     }
-    if (!mounted) return;
+    if (!mounted) return false;
     final effectiveFare = lockedFare > 0 ? lockedFare : fare;
     final result = await showFareCalculatorDialog(
       context,
@@ -196,24 +202,46 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
       passengerWalletIntent: walletIntent,
       fareLocked: lockedFare > 0,
     );
-    if (!mounted || result == null) return;
-    final earned = await c.finishRide(
-      fare: result.fare,
-      cashPaid: result.cashPaid,
-    );
-    if (!mounted) return;
+    if (!mounted || result == null) return false;
+    final int earned;
+    try {
+      earned = await c.finishRide(
+        fare: result.fare,
+        cashPaid: result.cashPaid,
+      );
+    } catch (e) {
+      debugPrint('finishRide: $e');
+      if (mounted) _showSnack(context.tr('local_finish_failed'), Colors.red);
+      return false;
+    }
+    if (!mounted) return true;
     _showSnack(
         '✅ Сафар якунланди! +${FareCalculator.format(earned)} сўм', _green);
+    // Server hisoblagan naqd ulush (hamyon balansi intent'dan kam bo'lishi
+    // mumkin) — haydovchi kam olgan bo'lsa ogohlantiramiz.
+    final done = c.lastLocalComplete;
+    if (done != null && done.cashPaid < done.cashDue) {
+      _showSnack(
+        context.trMsg('local_cash_short', params: {
+          'amount': FareCalculator.format(done.cashDue - done.cashPaid),
+          'due': FareCalculator.format(done.cashDue),
+        }),
+        Colors.orange,
+      );
+    }
     _maybeShowSettlementNotice(c);
+    return true;
   }
 
-  Future<void> _onAbandonLocalTrip() async {
+  /// `true` — safar tark etildi (server tasdiqladi).
+  Future<bool> _onAbandonLocalTrip() async {
     final c = context.read<DriverHomeController>();
     final result = await c.abandonRide();
-    if (!mounted) return;
+    if (!mounted) return result.success;
     if (!result.success && result.error != null) {
       _showSnack(result.error!, Colors.orange);
     }
+    return result.success;
   }
 
   @override

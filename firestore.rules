@@ -969,12 +969,24 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Risk ҳодисалари.
+    //
+    // Аввал `create`, `read`, `update` — `if true` эди: ҳар ким (ҳатто
+    // кирмаган) ҳодисаларни (телефон, туғилган кун, ҳамён суммалари)
+    // ўқий, сохта ҳодиса ёза ва уни «resolved» қилиб ёпа оларди. «PIN
+    // session» изоҳи `birthdate_change_requests`даги каби эскирган — админ
+    // панел Phone Auth'да.
+    //
+    // Ёзувчилар: `UserRepository._addRiskEvent` (фойдаланувчи ЎЗИ учун,
+    // туғилган кун ўзгартириш сўровида, `status: 'open'`) · `detectAnomaly`
+    // CF (Admin SDK) · админ «Risk review» `resolveRiskEvent`.
+    //
+    // Тест: functions/test/risk_events_rules.test.js
     match /risk_events/{id} {
-      allow create: if true;
-      // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
-      // `isAdmin()`ga qaytaramiz.
-      allow read, update: if true;
-      allow delete: if isAdmin();
+      allow create: if isAdmin()
+          || (isOwner(request.resource.data.userId)
+              && request.resource.data.status == 'open');
+      allow read, update, delete: if isAdmin();
     }
 
     // Marshrut blok holati — faqat o'z telefon raqami yoki admin
@@ -1077,12 +1089,20 @@ service cloud.firestore {
       ];
     }
 
-    // Yo'nalish + yo'lkira qulfi (marshrut o'rtacha/optimal; traffic keyin o'zgarmaydi).
-    function localTripFareLockFields() {
+    // Yo'lkira qulfi (lockedFare, toAddr, tariffVersion ...) — FAQAT server
+    // (`createLocalTaxiTrip` / `lockLocalTripFare`), ega qarori 2026-10-07.
+    // Avval yo'lovchi ham, haydovchi ham `lockedFare`ni istalgan qiymatga
+    // yoza olardi (local_taxi_rules.test.js B5/B6).
+
+    // Eski ilova to'g'ridan yaratadigan trip (rides_repository.createSearchRequest).
+    // Pul/narx maydonlari YO'Q — bunday trip'da hamyon yechilmaydi (completeLocalTrip).
+    function localTripLegacyCreateFields() {
       return [
-        'toAddr', 'toLat', 'toLng',
-        'lockedFare', 'lockedDistanceKm', 'lockedPolyline',
-        'fareLockedAt', 'fareLockVersion', 'estimatedPrice', 'updatedAt'
+        'status', 'userPhone', 'userName', 'userGender', 'userBirthDate',
+        'fromAddr', 'toAddr', 'fromLat', 'fromLng', 'toLat', 'toLng',
+        'geohash4', 'taxiType', 'radiusKm', 'driverId', 'driverName',
+        'price', 'cancelCount', 'createdAt', 'expiresAt',
+        'regionId', 'districtId', 'serviceAreaId'
       ];
     }
 
@@ -1124,18 +1144,14 @@ service cloud.firestore {
           && d.keys().hasAll(['status', 'cancelledBy', 'cancelledAt'])
           && affectedKeys.hasOnly(localTripPassengerCancelFields());
 
-      let isPassengerFareLock = uid == prev.userPhone
-          && prev.status in ['searching', 'accepted']
-          && d.status == prev.status
-          && affectedKeys.hasOnly(localTripFareLockFields());
-
-      let isDriverFareLock = prev.status == 'accepted'
-          && (uid == prev.driverId || uid == prev.acceptedDriverId)
-          && approvedDriverForTaxi(uid, prev.taxiType)
-          && d.status == prev.status
-          && affectedKeys.hasOnly(localTripFareLockFields());
+      // Muddati o'tgan qidiruv qabul qilinmaydi (release'dan keyin — releasedAt+3m).
+      let searchOpen = !('expiresAt' in prev)
+          || prev.expiresAt > request.time
+          || ('releasedAt' in prev && prev.releasedAt is timestamp
+              && prev.releasedAt + duration.value(3, 'm') > request.time);
 
       let isBroadcastAccept = prev.status == 'searching'
+          && searchOpen
           && d.status == 'accepted'
           && uid == d.acceptedDriverId
           && uid == d.driverId
@@ -1156,21 +1172,24 @@ service cloud.firestore {
           && affectedKeys.hasOnly(['arrivedAt'])
           && d.arrivedAt is timestamp;
 
+      // Release'da `releasedAt` = server vaqti (ixtiyoriy). `expirePendingTrips`
+      // qidiruv muddatini shundan +3 daqiqa hisoblaydi — aks holda eski
+      // 3 daqiqalik `expiresAt` o'tgan bo'lib, trip darhol `expired` bo'lardi.
       let isDriverRelease = prev.status == 'accepted'
           && d.status == 'searching'
           && (
             (prev.acceptedDriverId != '' && uid == prev.acceptedDriverId)
             || (prev.driverId != '' && uid == prev.driverId)
           )
-          && affectedKeys.hasOnly(localTripDriverReleaseFields());
+          && affectedKeys.hasOnly(
+               localTripDriverReleaseFields().concat(['releasedAt']))
+          && (!('releasedAt' in affectedKeys) || d.releasedAt == request.time);
 
       return isAuth()
           && prev.taxiType in ['local', 'alone']
           && (
             isPassengerPatch
             || isPassengerCancel
-            || isPassengerFareLock
-            || isDriverFareLock
             || isBroadcastAccept
             || isDriverArrival
             || isDriverRelease
@@ -1208,11 +1227,21 @@ service cloud.firestore {
           || tripDriverRead()
           || tripLocalOfferRead();
 
-      // Яратиш — lokal/intercity taksi
+      // Яратиш. Yangi ilova mahalliy taksini CF `createLocalTaxiTrip` orqali
+      // yaratadi (server narxi). Bu shoxcha — eski ilova uchun: faqat O'Z
+      // telefoni nomidan va narx/hamyon maydonlarisiz (avval istalgan userPhone
+      // + passengerWalletIntent bilan yaratib, begona hamyonni yechish mumkin edi).
       allow create: if isAuth() && (
           (
-            request.resource.data.keys().hasAll(['userPhone', 'fromAddr', 'status'])
+            request.resource.data.keys().hasAll(['userPhone', 'fromAddr', 'status', 'taxiType'])
+            && request.resource.data.keys().hasOnly(localTripLegacyCreateFields())
             && request.resource.data.status == 'searching'
+            && request.resource.data.taxiType in ['local', 'alone']
+            && request.resource.data.get('driverId', '') == ''
+            && userDocIdFromPhoneToken() != ''
+            && phoneDocIdsMatch(
+                 userDocIdFromPhoneToken(),
+                 phoneDigits(request.resource.data.userPhone))
           )
           || (
             request.resource.data.keys().hasAll(['userPhone', 'pickupAddr', 'status', 'taxiType'])
@@ -1430,20 +1459,31 @@ service cloud.firestore {
     // ADMIN_NEWS — админ томонидан фойдаланувчиларга юбориладиган хабарлар
     // ══════════════════════════════════════
     //
-    // Hozircha Firebase Auth йоq (`request.auth` мавжуд эмас). Шунинг учун
-    // server-side admin role'ни Firestore рулaрида текшира олмаймиз.
-    // Client-side `AdminService` ҳимоя сифатида ишлайди.
+    // Аввалги изоҳ «Firebase Auth йўқ, admin role'ни rules'да текшира
+    // олмаймиз» дерди — эскирган: админ панел ва мобил кириш token'га
+    // `phone_number` claim қўяди, `isAdmin()` ишлайди. Create/update'да
+    // ҳеч қандай auth йўқ эди: ҳар ким (ҳатто кирмаган) хабар яратиб,
+    // `onAdminNewsCreate` орқали БАРЧА фойдаланувчига push юбора олар,
+    // `pushResendAt`ни ўзгартириб push'ни қайта-қайта жўнатарди.
     //
-    // Қачон Phone Auth қо'шилса, шу qoidaни yangilash kerak:
-    //   allow create: if get(/databases/$(database)/documents/users/
-    //                     $(request.auth.uid)).data.role == 'admin' && ...
+    // Ёзувчилар: админ «Хабарлар» compose (`NewsRepository.create`) ва
+    // «Push qayta yuborish» (`requestPushResend`); буюртма чеклари ва
+    // ҳолат хабарлари — CF (Admin SDK, rules'дан ташқари).
+    //
+    // ⚠ Ўқиш ҳали `if true`: CF шахсий чекларни (`targetUserId`, манзил,
+    // сумма) ҳам шу ерга ёзади. Ёпиш учун илова сўровини
+    // (`NewsRepository` — `orderBy createdAt limit 50`) аввал янги версияда
+    // ўзгартириш керак (ҳозирги сўров ёпиқ қоидада бутунлай рад бўлади).
+    //
+    // Тест: functions/test/admin_news_rules.test.js
     match /admin_news/{newsId} {
       // Ўқиш — барча фойдаланувчилар (фильтр client-side).
       allow read: if true;
 
-      // Яратиш — мажбурий майдонлар ва типлар тeкширилaди.
+      // Яратиш — фақат админ; мажбурий майдонлар ва типлар тeкширилaди.
       // category ва audience aniq qiymatlardан bo'lsin.
-      allow create: if request.resource.data.keys()
+      allow create: if isAdmin()
+          && request.resource.data.keys()
               .hasAll(['title', 'body', 'category', 'audience', 'createdAt'])
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
@@ -1456,10 +1496,10 @@ service cloud.firestore {
           && request.resource.data.audience in
               ['all', 'user', 'driver', 'courier'];
 
-      // Янгилаш — `createdAt` ўзгармасин, title/body размeри чегаралaнсин.
-      // (Hozircha admin Firebase Console orqали tahrirlaydi — client'дан
-      // yo'q. Phone Auth qo'шилгач — admin role check qo'shamiz.)
-      allow update: if notChanged('createdAt')
+      // Янгилаш — фақат админ; `createdAt` ўзгармасин, title/body
+      // размeри чегаралaнсин.
+      allow update: if isAdmin()
+          && notChanged('createdAt')
           && (
             !('title' in request.resource.data)
             || request.resource.data.title.size() <= 120
@@ -1597,8 +1637,33 @@ service cloud.firestore {
     match /settings/{docId} {
       allow read: if docId != 'courier' && docId != 'tv_social';
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
-      allow create, update: if isAdmin() && docId != 'tv_social';
+      // `prices` ичидаги маҳаллий такси тарифи — фақат CF
+      // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
+      // нон нархлари (bread_repository.updatePrices) аввалгидек.
+      allow create, update: if isAdmin() && docId != 'tv_social'
+          && (
+            docId != 'prices'
+            || !request.resource.data.diff(
+                 resource == null ? {} : resource.data).affectedKeys()
+                 .hasAny(['local_base', 'local_per_km', 'local_coef', 'regions',
+                          'local_night_coef', 'local_night_start', 'local_night_end',
+                          'local_road_factor',
+                          'localTariffVersion', 'localTariffUpdatedAt',
+                          'localTariffUpdatedBy'])
+          );
       allow delete: if false;
+    }
+
+    // Маҳаллий такси тариф тарихи — ўзгармас, фақат CF ёзади.
+    match /local_taxi_tariffs/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Yo'l koeffitsienti — haftalik CF hisobi (joriy + runs tarixi).
+    match /local_taxi_calibration/{doc=**} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Page/IG токенлари — фақат Cloud Functions (Admin SDK).

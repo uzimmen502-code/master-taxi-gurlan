@@ -38,8 +38,11 @@ class DriverUnifiedMapView extends StatefulWidget {
   final Future<void> Function() onStartWork;
   final Future<void> Function() onEndWork;
   final Future<void> Function() onCompleteNonLocalRide;
-  final Future<void> Function(int fare) onFinishLocalTrip;
-  final Future<void> Function() onAbandonLocalTrip;
+  /// `true` — safar yakunlandi; `false` — dialog bekor / xato (holat saqlansin).
+  final Future<bool> Function(int fare) onFinishLocalTrip;
+
+  /// `true` — tark etish server tomonidan qabul qilindi.
+  final Future<bool> Function() onAbandonLocalTrip;
   final void Function(String msg, Color color) onSnack;
 
   @override
@@ -384,8 +387,6 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
           try {
             final locked = await _fareLock.lockFare(
               tripId: ride.id,
-              fromLat: origin.latitude,
-              fromLng: origin.longitude,
               toLat: dest.latitude,
               toLng: dest.longitude,
               toAddr: ride.to.isNotEmpty
@@ -591,10 +592,15 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     if (_finishing) return;
     setState(() => _finishing = true);
     try {
-      await widget.onFinishLocalTrip(_liveFare);
+      final done = await widget.onFinishLocalTrip(_liveFare);
       if (!mounted) return;
-      _resetTripState();
-      setState(() {});
+      if (done) {
+        _resetTripState();
+        setState(() {});
+      } else {
+        // Dialog bekor / xato — navigatsiya, yurilgan km, narx saqlanadi.
+        setState(() => _finishing = false);
+      }
     } catch (_) {
       if (mounted) setState(() => _finishing = false);
     }
@@ -620,7 +626,8 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
       ),
     );
     if (leave != true || !mounted) return;
-    await widget.onAbandonLocalTrip();
+    final left = await widget.onAbandonLocalTrip();
+    if (!mounted || !left) return;
     _resetTripState();
     setState(() {});
   }

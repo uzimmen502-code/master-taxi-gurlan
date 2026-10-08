@@ -457,11 +457,20 @@ abstract final class AvaText {
   /// (14/12) ёзилган: шрифт ўзгарса, махражни ўзгартириш кифоя — қатор
   /// барибир 14 px бўлиб қолади. Бешала қатор бўлими (эълон, хизмат,
   /// шаҳарлараро, туман ичида юк, танишув) шу битта жойдан созланади.
+  ///
+  /// Ҳарфлар ораси [feedRowLetterSpacing] (эга сўрови, 2026-10-08:
+  /// «ҳарфлар ораси кенгроқ бўлса соддароқ ва ўқишга осонроқ»). Ҳарф
+  /// ораси қатор БАЛАНДЛИГИГА таъсир қилмайди — 14 px сақланади.
   static const feedRow = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w400,
     height: 14 / 12,
+    letterSpacing: feedRowLetterSpacing,
   );
+
+  /// Қатор матнининг ҳарф ораси, px. Inter 12 px учун 0 = зич; 0.4 ≈ 3%
+  /// — кўзга сезиларли, лекин сўзлар «сочилиб» кетмайди.
+  static const double feedRowLetterSpacing = 0.4;
 
   /// Изоҳ — 12/400.
   static const caption = TextStyle(

@@ -40,6 +40,31 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "geohash4", "order": "ASCENDING" }
       ]
+    },    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "courierId", "order": "ASCENDING" },
+        { "fieldPath": "restaurantStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "restaurantStatus", "order": "ASCENDING" },
+        { "fieldPath": "acceptDeadlineAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "restaurantId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     },
     {
       "collectionGroup": "realty_listings",

@@ -60,6 +60,17 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
+// Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
+// (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
+// `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.
+const { attachRestaurantOrders } = require('./restaurant_orders');
+attachRestaurantOrders(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, axios,
+  requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES,
+  // `courierAuth` pastda `const` — attach paytida TDZ; modul uni chaqiruvda oladi.
+  get courierAuth() { return courierAuth; },
+  notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),
+});
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {
@@ -878,6 +889,9 @@ exports.onOrderUpdate = functions.firestore
     const before = change.before.data();
     const after  = change.after.data();
     if (before.status === after.status) return;
+    // Restoran buyurtmasi: xabarlar va o'tishlar `restaurant_orders.js` da
+    // (auto `ready` ham qo'llanmaydi — restoran o'zi «Tayyor» deydi).
+    if (String(after.type || '') === 'restaurant') return;
 
     const afterStatus = after.status === 'courier' ? 'in_delivery' : after.status;
     if (
@@ -1015,6 +1029,9 @@ exports.onOrderCreate = functions.firestore
   .onCreate(async (snap) => {
     const order = snap.data() || {};
     const orderType = order.type || 'bread';
+    // Restoran buyurtmasi: restoran a'zolariga push `placeRestaurantOrder`
+    // da; «pickup → barcha seller» yo'li unga tegishli emas.
+    if (String(orderType) === 'restaurant') return;
     const total = order.total || 0;
     const fmt = new Intl.NumberFormat('uz-UZ').format(total);
     const emoji = orderType === 'food' ? 'Ovqat' : 'Non';
@@ -3536,6 +3553,15 @@ exports.customerCancelOrder = functions.https.onCall(async (data, context) => {
   if (existing.exists) {
     return existing.data().result || { ok: true, duplicate: true };
   }
+  // Restoran buyurtmasi — `customerCancelRestaurantOrder` (faqat `placed`,
+  // 2 % hali yechilmagan); bu yerdagi hamyon qaytimi unga tegishli emas.
+  {
+    const guard = await orderRef.get();
+    if (guard.exists && String((guard.data() || {}).type || '') === 'restaurant') {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_RESTAURANT_CANCEL', { code: 'USE_RESTAURANT_CANCEL' });
+    }
+  }
 
   let txDuplicate = null;
   const result = await db.runTransaction(async (t) => {
@@ -4365,6 +4391,10 @@ exports.courierCreateRoute = functions.https.onCall(async (data, context) => {
         if (String(od.status || '') !== 'ready') continue;
         // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan buyurtmani olmaydi.
         if (courierAuth.isOwnOrder(od, courierId)) continue;
+        // Restoran buyurtmasi — faqat `courierClaimRestaurantOrder` (pickup
+        // kodi, vykup limiti, 2 % hisobi o'sha yerda); bu yo'l uni darhol
+        // `in_delivery` qilib qo'yardi.
+        if (String(od.type || '') === 'restaurant') continue;
         validated.push(orderId);
       }
 
@@ -4461,6 +4491,8 @@ exports.courierListReadyOrders = functions.https.onCall(async (data, context) =>
   snap.forEach((doc) => {
     const od = doc.data() || {};
     if (courierAuth.isOwnOrder(od, courierId)) return;
+    // Restoran buyurtmalari — `listNearbyRestaurantOrders` (o'z proeksiyasi).
+    if (String(od.type || '') === 'restaurant') return;
     const created = od.createdAt && typeof od.createdAt.toMillis === 'function'
       ? od.createdAt.toMillis()
       : null;
@@ -5051,6 +5083,15 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
 
   const ref = orderRefOrThrow(orderId);
   await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
+  // Restoran buyurtmasida taom puli AVA niki EMAS (D-REST-1): bu yo'l uni
+  // `courier_cash`/`admin_clearing` ga yozib, AVA ni sotuvchi qilib qo'yardi.
+  {
+    const guard = await ref.get();
+    if (guard.exists && String((guard.data() || {}).type || '') === 'restaurant') {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_RESTAURANT_COMPLETION', { code: 'USE_RESTAURANT_COMPLETION' });
+    }
+  }
   const tx = await db.runTransaction((t) => courierSubmitPaymentTx(t, {
     ref, orderId, courierId, linesIn, lat, lng,
   }));
@@ -8386,6 +8427,12 @@ async function applyAdminOrderStatus(orderId, status, adminUid) {
     const od = snap.data() || {};
     if (String(od.status || '').trim() === status) {
       return { orderId, status, unchanged: true };
+    }
+    // Restoran buyurtmasining holati `restaurantStatus` jadvalidan hosil
+    // bo'ladi (restaurant_orders.js); admin doskasi uni eski `status` orqali
+    // o'zgartirsa ikki holat ajraladi. Admin uchun alohida vosita keyin.
+    if (String(od.type || '') === 'restaurant') {
+      return { orderId, status, skipped: 'RESTAURANT_ORDER_READONLY', from: String(od.status || '') };
     }
     const err = adminOrderTransitionError(od, status);
     if (err) {

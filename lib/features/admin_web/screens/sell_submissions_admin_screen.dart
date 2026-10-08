@@ -298,7 +298,7 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Платформа формаси · омма эълонлари — ИШ ЭЪЛОН',
+                      'Платформа формаси · омма эълонлари — Эълонлар ва хизматлар',
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ],

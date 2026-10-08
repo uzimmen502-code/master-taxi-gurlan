@@ -554,8 +554,26 @@ class RidesRepository {
       if (!tripSnap.exists) return;
 
       final data = tripSnap.data() ?? const <String, dynamic>{};
+      // Yakuniy holatdagi safarni qayta «bekor» qilmaymiz — avval
+      // `completed` safar ham `cancelled` bo'lib qolardi (o'rin ikkinchi
+      // marta qaytarilardi).
+      final curStatus = (data['status'] ?? '') as String;
+      if (const {'completed', 'cancelled', 'expired', 'rejected', 'no_seats'}
+          .contains(curStatus)) {
+        return;
+      }
       final scheduleId = (data['scheduleId'] ?? '') as String;
       final driverId = (data['acceptedDriverId'] ?? '') as String;
+
+      // Barcha o'qishlar YOZUVDAN OLDIN — SDK yozuvdan keyingi o'qishni rad
+      // etib, butun tranzaksiyani bekor qiladi (avval jadval/navbat trip
+      // yozilgandan keyin o'qilardi: bu yo'l `scheduleId` bor safarda
+      // doim yiqilardi).
+      final schedRef =
+          scheduleId.isNotEmpty ? _db.collection('schedules').doc(scheduleId) : null;
+      final queueRef = driverId.isNotEmpty ? _queue.doc(driverId) : null;
+      final schedSnapPre = schedRef != null ? await t.get(schedRef) : null;
+      final queueSnapPre = queueRef != null ? await t.get(queueRef) : null;
 
       t.update(tripRef, {
         'status': 'cancelled',
@@ -565,9 +583,8 @@ class RidesRepository {
         'notifyPassengerReroute': false,
       });
 
-      if (scheduleId.isNotEmpty) {
-        final schedRef = _db.collection('schedules').doc(scheduleId);
-        final schedSnap = await t.get(schedRef);
+      if (schedRef != null && schedSnapPre != null) {
+        final schedSnap = schedSnapPre;
         if (schedSnap.exists) {
           final schedData = schedSnap.data() ?? const <String, dynamic>{};
           final seats = (schedData['seats'] as num?)?.toInt() ?? 1;
@@ -581,9 +598,8 @@ class RidesRepository {
         }
       }
 
-      if (driverId.isNotEmpty) {
-        final queueRef = _queue.doc(driverId);
-        final queueSnap = await t.get(queueRef);
+      if (queueRef != null && queueSnapPre != null) {
+        final queueSnap = queueSnapPre;
         if (queueSnap.exists) {
           final queueData = queueSnap.data() ?? const <String, dynamic>{};
           final seats = (queueData['seats'] as num?)?.toInt() ?? 1;
@@ -875,6 +891,16 @@ class RidesRepository {
         if (acceptedId != requireDriverId) return null;
       }
 
+      final accepted = status == 'accepted';
+      final scheduleId = (data['scheduleId'] ?? '') as String;
+      final driverId = (data['acceptedDriverId'] ??
+          data['targetDriverId'] ??
+          '') as String;
+      // O'qish — yozuvdan OLDIN (`_readMarshrutSeatInTransaction` izohi).
+      final schedDoc = accepted
+          ? await _readMarshrutSeatInTransaction(tx, scheduleId)
+          : null;
+
       final patch = <String, Object?>{
         'status': 'cancelled',
         'cancelledBy': cancelledBy,
@@ -885,14 +911,10 @@ class RidesRepository {
       };
       tx.set(tripRef, patch, SetOptions(merge: true));
 
-      if (status == 'accepted') {
-        final scheduleId = (data['scheduleId'] ?? '') as String;
-        final driverId = (data['acceptedDriverId'] ??
-            data['targetDriverId'] ??
-            '') as String;
-        await _releaseMarshrutSeatInTransaction(
+      if (accepted) {
+        _writeMarshrutSeatInTransaction(
           tx,
-          scheduleId: scheduleId,
+          schedDoc: schedDoc,
           driverId: driverId,
         );
         if (driverId.isNotEmpty) {
@@ -965,6 +987,13 @@ class RidesRepository {
         return;
       }
 
+      final scheduleId = (tripData!['scheduleId'] ?? '') as String;
+      final seatDriverId = acceptedDriverId.isNotEmpty
+          ? acceptedDriverId
+          : (tripData!['targetDriverId'] ?? '') as String;
+      // O'qish — yozuvdan OLDIN (`_readMarshrutSeatInTransaction` izohi).
+      final schedDoc = await _readMarshrutSeatInTransaction(tx, scheduleId);
+
       tx.set(
         tripRef,
         {
@@ -980,13 +1009,9 @@ class RidesRepository {
         SetOptions(merge: true),
       );
 
-      final scheduleId = (tripData!['scheduleId'] ?? '') as String;
-      final seatDriverId = acceptedDriverId.isNotEmpty
-          ? acceptedDriverId
-          : (tripData!['targetDriverId'] ?? '') as String;
-      await _releaseMarshrutSeatInTransaction(
+      _writeMarshrutSeatInTransaction(
         tx,
-        scheduleId: scheduleId,
+        schedDoc: schedDoc,
         driverId: seatDriverId,
       );
       if (seatDriverId.isNotEmpty) {
@@ -1015,16 +1040,30 @@ class RidesRepository {
     );
   }
 
+  /// O'rinni qaytarish — O'QISH fazasi. Tranzaksiyada YOZUVDAN OLDIN
+  /// chaqirilsin: Firestore SDK (Android/iOS/web) yozuvdan keyingi
+  /// o'qishni «all reads before writes» bilan rad etadi va BUTUN
+  /// tranzaksiya bekor bo'ladi. Avval jadval trip yozilgandan keyin
+  /// o'qilardi — `scheduleId` bor marshrut safarini haydovchi yakunlay
+  /// olmas, admin «Dispatch history» yakunlash/bekor qilish va yo'lovchi
+  /// bekor qilishi ishlamasdi (emulator bilan isbotlangan, 2026-10-08).
+  Future<DocumentSnapshot<Map<String, dynamic>>?> _readMarshrutSeatInTransaction(
+    Transaction tx,
+    String scheduleId,
+  ) async {
+    if (scheduleId.isEmpty) return null;
+    return tx.get(_db.collection('schedules').doc(scheduleId));
+  }
+
+  /// O'rinni qaytarish — YOZISH fazasi.
   /// `schedules.seatsLeft` — единствен манба; queue faqat `isActive` (+ mirror seatsLeft).
-  Future<void> _releaseMarshrutSeatInTransaction(
+  void _writeMarshrutSeatInTransaction(
     Transaction tx, {
-    required String scheduleId,
+    required DocumentSnapshot<Map<String, dynamic>>? schedDoc,
     required String driverId,
-  }) async {
-    if (scheduleId.isEmpty) return;
-    final schedRef = _db.collection('schedules').doc(scheduleId);
-    final schedDoc = await tx.get(schedRef);
-    if (!schedDoc.exists) return;
+  }) {
+    if (schedDoc == null || !schedDoc.exists) return;
+    final schedRef = schedDoc.reference;
     final data = schedDoc.data() ?? const <String, dynamic>{};
     final seats = (data['seatsLeft'] as num?)?.toInt() ?? 0;
     final total = (data['seats'] as num?)?.toInt() ?? 0;

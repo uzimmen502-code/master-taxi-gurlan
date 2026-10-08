@@ -9,8 +9,10 @@
 //     фақат иловага кирган рақам ва фақат `not_registered`дан;
 //   • «Тасдиқлаш» / «Тўхтатиш» → `adminSetCapabilityStatus`;
 //   • «Тасдиқлаш режими» → `adminSetCourierApprovalMode` (D-15.3):
-//     Мануал — ариза синовга тушади, админ шу ердан тасдиқлайди;
-//     Авто — ариза дарҳол тасдиқланади. Режим `settings/courier`да.
+//     Мануал — ариза `applied`га тушади (D-15.5, ега қарори 2026-10-08):
+//     курьер админ шу ердан тасдиқламагунча ИШЛАМАЙДИ («Рад этиш» →
+//     `suspended`); Авто — ариза дарҳол тасдиқланади. Режим
+//     `settings/courier`да. Эски `trial`/`trial_expired` ҳам кўринади.
 // Ўтиш `canTransition(..., 'admin')` билан текширилади, ҳар амал
 // `capability_audit`га тушади (41-қоида). Экран фақат чақиради.
 
@@ -31,10 +33,11 @@ class CourierManagementScreen extends StatefulWidget {
 
 class _CourierManagementScreenState extends State<CourierManagementScreen> {
   static const _filters = <String, String>{
-    'trial': 'Тасдиқ кутяпти (синов)',
-    'trial_expired': 'Тасдиқ кутяпти (охирги 5 кун)',
+    'applied': 'Ариза берганлар (тасдиқ кутяпти)',
+    'trial': 'Синовда (эски тартиб)',
+    'trial_expired': 'Синов — охирги 5 кун',
     'approved': 'Тасдиқланган',
-    'suspended': 'Тўхтатилган',
+    'suspended': 'Тўхтатилган / рад этилган',
   };
 
   final _db = FirebaseFirestore.instance;
@@ -43,7 +46,7 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
   bool _adding = false;
   bool _savingMode = false;
   String? _error;
-  String _filter = 'trial';
+  String _filter = 'applied';
   String? _busyAccountId;
 
   HttpsCallable _callable(String name) =>
@@ -180,10 +183,10 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
           children: [
             Text(toAuto
                 ? 'Курьер аризаси ҳеч қандай текширувсиз ДАРҲОЛ тасдиқланади. '
-                    'Ҳозир синовдаги курьерлар ўзгармайди — уларни рўйхатдан '
-                    'тасдиқланг.'
-                : 'Янги аризалар синовга тушади (3 кун + 5 кун). Тасдиқламасангиз, '
-                    'курьер 8 кунда тўхтатилади.'),
+                    'Ҳозир ариза бериб кутаётганлар ўзгармайди — уларни '
+                    'рўйхатдан тасдиқланг.'
+                : 'Янги аризалар «Ариза берганлар» рўйхатига тушади. Курьер сиз '
+                    'тасдиқламагунча буюртма ола олмайди.'),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
@@ -526,16 +529,19 @@ class _CourierCapabilityCard extends StatelessWidget {
     final phone = (identity['primaryUid'] ?? '').toString();
     final status = ((data['status'] as Map?)?['courier'] ?? '').toString();
     final window = ((data['window'] as Map?)?['courier'] as Map?) ?? const {};
+    final review = ((data['review'] as Map?)?['courier'] as Map?) ?? const {};
 
-    // Админ учун рухсат этилган ўтишлар (сервер ҳам текширади).
+    // Админ учун рухсат этилган ўтишлар (сервер ҳам текширади). `applied`
+    // да `suspended` — «рад этиш» (D-15.5).
     final actions = <(String, String, Color)>[
       if (status != 'approved')
         ('approved', 'Тасдиқлаш', Colors.green.shade700),
       if (status != 'suspended')
-        ('suspended', 'Тўхтатиш', Colors.red.shade700),
+        ('suspended', status == 'applied' ? 'Рад этиш' : 'Тўхтатиш', Colors.red.shade700),
     ];
 
     final dates = <String>[
+      if (review['submittedAt'] != null) 'Ариза: ${_fmt(review['submittedAt'])}',
       if (window['startedAt'] != null) 'Бошланган: ${_fmt(window['startedAt'])}',
       if (status == 'trial' && window['endsAt'] != null)
         'Синов тугайди: ${_fmt(window['endsAt'])}',

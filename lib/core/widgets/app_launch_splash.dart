@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../brand_labels.dart';
+import '../theme/ava_tokens.dart';
 
-/// Қора фон: лого нуқтадан ўсиб 3 марта экранга урилади, сўнг UI.
+/// Бренд фони (AVA Primary `#FFA500`, эга тасдиғи 2026-10-08; аввал қора):
+/// лого нуқтадан ўсиб 3 марта экранга урилади, сўнг UI. Сарлавҳа тўқ —
+/// апельсин устида оқ матн 1.97 контраст беради.
+/// `splash_logo.png` — эски логотипнинг шаффоф фонли нусхаси.
 ///
 /// Юқори: AVA + туман. Паст сўзлар йўқ. ~1.8 с.
 class AppLaunchSplash extends StatefulWidget {
@@ -180,7 +184,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
               ),
               if (_overlayVisible)
                 ColoredBox(
-                  color: Colors.black.withValues(
+                  color: AvaLight.brand.withValues(
                     alpha: frame.backgroundOpacity.clamp(0, 1),
                   ),
                   child: IgnorePointer(
@@ -197,14 +201,15 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                               listenToConfig: true,
                               spacing: 6,
                               brandStyle: const TextStyle(
-                                color: Colors.white,
+                                color: AvaLight.brandInk,
                                 fontSize: 34,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 2.0,
                                 height: 1.05,
                               ),
                               districtStyle: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.72),
+                                color:
+                                    AvaLight.brandInk.withValues(alpha: 0.72),
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 1.4,

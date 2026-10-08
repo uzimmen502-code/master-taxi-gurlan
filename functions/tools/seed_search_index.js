@@ -20,6 +20,16 @@ db.settings({ preferRest: true });
 
 const MAX_TOKENS = 64;
 
+/**
+ * `--only=platform` — faqat AVA tovarlari va «platform» xizmat kartasi
+ * (2026-10-07: «AVA do'koni» -> «Ulgurji bozor» matni). E'lon/non/ovqat/yuk
+ * yozuvlariga TEGMAYDI — ular CF trigger'lari bilan yangilanadi, bu
+ * vositadagi nusxa esa CF'dan farqlanib qolgan bo'lishi mumkin.
+ * `--dry-run` — hech narsa yozmaydi, faqat nima yozilishini ko'rsatadi.
+ */
+const ONLY_PLATFORM = process.argv.includes('--only=platform');
+const DRY_RUN = process.argv.includes('--dry-run');
+
 function docId(type, sourceId) {
   return `${type}_${String(sourceId)}`.slice(0, 700);
 }
@@ -69,6 +79,10 @@ async function upsert(entry) {
     if (entry.geo.to) geo.to = String(entry.geo.to).trim();
     if (entry.geo.districtId) geo.districtId = String(entry.geo.districtId).trim();
     if (Object.keys(geo).length) payload.geo = geo;
+  }
+  if (DRY_RUN) {
+    console.log(`  ${docId(type, sourceId)}  «${payload.title}» — ${payload.subtitle}`);
+    return;
   }
   await db.collection('search_index').doc(docId(type, sourceId)).set(payload, { merge: true });
 }
@@ -256,6 +270,7 @@ async function main() {
   let yuk = 0;
 
   for (const s of SERVICES) {
+    if (ONLY_PLATFORM && s.id !== 'platform') continue;
     await upsert({
       type: 'service',
       moduleId: s.moduleId,
@@ -269,6 +284,16 @@ async function main() {
       active: true,
     });
     services += 1;
+  }
+
+  if (ONLY_PLATFORM) {
+    const snap = await db.collection('platform_products').limit(2000).get();
+    for (const doc of snap.docs) {
+      await upsert(productEntry(doc.id, doc.data() || {}));
+      products += 1;
+    }
+    console.log(JSON.stringify({ ok: true, onlyPlatform: true, dryRun: DRY_RUN, services, products }));
+    return;
   }
 
   for (const from of HUBS) {

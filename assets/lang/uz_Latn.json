@@ -1103,6 +1103,7 @@
   "marshrut_call_queue_hint": "7 ta haydovchi — tanlov navbatga ta'sir qilmaydi",
   "marshrut_call_system_info_dialog": "Tizim haydovchilarni navbati bo'yicha chaqiradi",
   "marshrut_cancel_after_accept_confirm": "Haydovchi sizni kutmoqda. Haqiqatan bekor qilasizmi?",
+  "marshrut_cancel_failed": "Bekor qilib bo'lmadi. Qayta urinib ko'ring.",
   "marshrut_cancel_waiting": "Bekor qilish",
   "marshrut_cancel_waiting_hint": "Navbat bekor qilinadi — blok hisoblanmaydi",
   "marshrut_cancel_warning": "⚠️ Hurmatli yo'lovchi! So'nggi 10 daqiqa ichida 5 marta buyurtma bekor qilindi. Yana 2 marta bekor qilsangiz, tizim 10 daqiqaga vaqtincha foydalanishni cheklaydi. Bu boshqa yo'lovchilar va haydovchilar uchun qulaylik yaratish maqsadida joriy etilgan. Iltimos, buyurtma berishda ehtiyot bo'ling.",

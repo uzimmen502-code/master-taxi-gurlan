@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
@@ -30,10 +30,12 @@ class MarshrutAcceptOutcome {
 /// Ikkalasini birlashtirsa ham bo'lardi, lekin "active vs history" — tabiiy
 /// ajratish. Keyinchalik kerak bo'lsa бирлаштириш osongina.
 class RidesRepository {
-  RidesRepository({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+  RidesRepository({FirebaseFirestore? db, FirebaseFunctions? functions})
+      : _db = db ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFirestore _db;
+  final FirebaseFunctions _functions;
 
   CollectionReference<Map<String, dynamic>> get _trips =>
       _db.collection('trips');
@@ -476,31 +478,63 @@ class RidesRepository {
     return !expiresAt.toDate().isAfter(DateTime.now());
   }
 
-  /// Trip'ni "muddati tugаgan" deb belgilash (timeout).
-  Future<void> markExpired(String tripId) async {
-    if (tripId.isEmpty) return;
-    final data = await _expirePendingTripInTransaction(tripId);
-    if (data == null) return;
-    await _applyDispatchPolicy(
-      type: 'timeout',
-      data: data,
-    );
-    await _logDispatchEventFromTrip(
-      tripId: tripId,
-      type: 'timeout',
-      data: data,
-    );
-    await _clearMarshrutActiveIfMatches(
-      userPhone: (data['userPhone'] ?? '') as String,
-      tripId: tripId,
-      status: 'expired',
-    );
+  // Yo'lovchi → HAYDOVCHI hujjatlari (drivers / schedules / queue) endi
+  // faqat SERVERDA (2026-10-08). Avval ilova begona haydovchining
+  // `todayTimeouts`, streak, avto-pauza, `isBusy`, o'rinlarini o'zi yozardi —
+  // shu sabab Firestore rules begona yozuvni yopa olmasdi
+  // (functions/test/driver_work_patch_rules.test.js). CF'lar:
+  // `marshrutPassengerCloseOffer`, `marshrutPassengerCancelAfterAccept`.
+
+  /// Pending taklifni yopish: `expired` | `cancelled`. Qaytaradi — server
+  /// ko'rgan holat (`accepted` bo'lsa hech narsa o'zgarmagan).
+  Future<String> _closeMarshrutOffer(String tripId, String outcome) async {
+    final res = await _functions
+        .httpsCallable('marshrutPassengerCloseOffer')
+        .call<Object?>({'tripId': tripId, 'outcome': outcome});
+    final d = res.data is Map ? (res.data as Map) : const {};
+    return (d['status'] ?? '').toString();
   }
 
-  Future<Map<String, dynamic>?> _expirePendingTripInTransaction(
-    String tripId,
-  ) async {
-    return _db.runTransaction<Map<String, dynamic>?>((tx) async {
+  /// Trip'ni "muddati tugаgan" deb belgilash (timeout / keyingi haydovchi /
+  /// ekrandan chiqish). Timeout hisobi (streak, avto-pauza) — serverda.
+  ///
+  /// Xato bo'lsa (tarmoq) trip `pending` qoladi va 1 daqiqalik sweep
+  /// (`expirePendingTrips`) uni xuddi shu hisob bilan yopadi — shuning uchun
+  /// bu yerda klient o'zi yopmaydi (aks holda hisob yo'qolardi).
+  Future<void> markExpired(String tripId) async {
+    if (tripId.isEmpty) return;
+    try {
+      await _closeMarshrutOffer(tripId, 'expired');
+    } catch (e) {
+      debugPrint('markExpired($tripId): $e');
+    }
+  }
+
+  /// Marshrut pending taklifini bekor qilish (kutish ekranida «Bekor qilish»).
+  /// Orada haydovchi qabul qilgan bo'lsa — qabuldan keyingi bekor (CF, blok
+  /// hisobi bilan; avval ham `onTripUpdate` shunday sanardi).
+  Future<void> markCancelled(String tripId) async {
+    if (tripId.isEmpty) return;
+    String status;
+    try {
+      status = await _closeMarshrutOffer(tripId, 'cancelled');
+    } catch (e) {
+      debugPrint('markCancelled($tripId): $e');
+      // CF yetmasa — faqat O'Z trip'i va holati (pending bo'lsa).
+      // Haydovchi hujjatlariga tegilmaydi.
+      await _cancelOwnPendingMarshrutTrip(tripId);
+      return;
+    }
+    if (status == 'accepted') {
+      await cancelMarshrutByPassenger(
+        tripId: tripId,
+        reason: 'passenger_cancel_after_accept',
+      );
+    }
+  }
+
+  Future<void> _cancelOwnPendingMarshrutTrip(String tripId) async {
+    final data = await _db.runTransaction<Map<String, dynamic>?>((tx) async {
       final ref = _trips.doc(tripId);
       final snap = await tx.get(ref);
       if (!snap.exists) return null;
@@ -509,29 +543,15 @@ class RidesRepository {
       tx.set(
         ref,
         {
-          'status': 'expired',
-          'expiredAt': FieldValue.serverTimestamp(),
+          'status': 'cancelled',
+          'cancelledBy': 'user',
+          'cancelledAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
       );
       return data;
     });
-  }
-
-  /// Marshrut pending taklifini bekor qilish (navbat / timeout / dispose).
-  /// Yo'lovchi blok hisobi CF `onTripUpdate` → `marshrut_block/state`.
-  Future<void> markCancelled(String tripId) async {
-    if (tripId.isEmpty) return;
-    final data = await _cancelMarshrutTripInTransaction(tripId: tripId);
     if (data == null) return;
-    await _resetDriverDispatchStats(
-      (data['acceptedDriverId'] ?? data['targetDriverId']) as String?,
-    );
-    await _logDispatchEventFromTrip(
-      tripId: tripId,
-      type: 'cancelled',
-      data: data,
-    );
     await _clearMarshrutActiveIfMatches(
       userPhone: (data['userPhone'] ?? '') as String,
       tripId: tripId,
@@ -539,115 +559,20 @@ class RidesRepository {
     );
   }
 
-  /// Yo'lovchi qabul qilingan marshrut safarini bekor qiladi.
-  Future<void> cancelMarshrutByPassenger({
+  /// Yo'lovchi qabul qilingan marshrut safarini bekor qiladi — CF
+  /// `marshrutPassengerCancelAfterAccept` (o'rin, `isBusy`, blok hisobi).
+  /// Xato bo'lsa OTILADI — UI xabar ko'rsatadi; safar bekor qilinmagan.
+  /// Qaytaradi: CF javobi (`warning` / `remaining` / `blocked` ...).
+  Future<Map<String, dynamic>> cancelMarshrutByPassenger({
     required String tripId,
     required String reason,
   }) async {
-    if (tripId.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    final phone = normalizeMarshrutPhone(prefs.getString('user_phone') ?? '');
-
-    await _db.runTransaction((t) async {
-      final tripRef = _trips.doc(tripId);
-      final tripSnap = await t.get(tripRef);
-      if (!tripSnap.exists) return;
-
-      final data = tripSnap.data() ?? const <String, dynamic>{};
-      // Yakuniy holatdagi safarni qayta «bekor» qilmaymiz — avval
-      // `completed` safar ham `cancelled` bo'lib qolardi (o'rin ikkinchi
-      // marta qaytarilardi).
-      final curStatus = (data['status'] ?? '') as String;
-      if (const {'completed', 'cancelled', 'expired', 'rejected', 'no_seats'}
-          .contains(curStatus)) {
-        return;
-      }
-      final scheduleId = (data['scheduleId'] ?? '') as String;
-      final driverId = (data['acceptedDriverId'] ?? '') as String;
-
-      // Barcha o'qishlar YOZUVDAN OLDIN — SDK yozuvdan keyingi o'qishni rad
-      // etib, butun tranzaksiyani bekor qiladi (avval jadval/navbat trip
-      // yozilgandan keyin o'qilardi: bu yo'l `scheduleId` bor safarda
-      // doim yiqilardi).
-      final schedRef =
-          scheduleId.isNotEmpty ? _db.collection('schedules').doc(scheduleId) : null;
-      final queueRef = driverId.isNotEmpty ? _queue.doc(driverId) : null;
-      final schedSnapPre = schedRef != null ? await t.get(schedRef) : null;
-      final queueSnapPre = queueRef != null ? await t.get(queueRef) : null;
-
-      t.update(tripRef, {
-        'status': 'cancelled',
-        'cancelledBy': 'passenger',
-        'cancelReason': reason,
-        'cancelledAt': FieldValue.serverTimestamp(),
-        'notifyPassengerReroute': false,
-      });
-
-      if (schedRef != null && schedSnapPre != null) {
-        final schedSnap = schedSnapPre;
-        if (schedSnap.exists) {
-          final schedData = schedSnap.data() ?? const <String, dynamic>{};
-          final seats = (schedData['seats'] as num?)?.toInt() ?? 1;
-          final seatsLeft =
-              ((schedData['seatsLeft'] as num?)?.toInt() ?? 0) + 1;
-          final clamped = seatsLeft.clamp(0, seats);
-          t.update(schedRef, {
-            'seatsLeft': clamped,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      }
-
-      if (queueRef != null && queueSnapPre != null) {
-        final queueSnap = queueSnapPre;
-        if (queueSnap.exists) {
-          final queueData = queueSnap.data() ?? const <String, dynamic>{};
-          final seats = (queueData['seats'] as num?)?.toInt() ?? 1;
-          final seatsLeft =
-              ((queueData['seatsLeft'] as num?)?.toInt() ?? 0) + 1;
-          final clamped = seatsLeft.clamp(0, seats);
-          t.update(queueRef, {
-            'seatsLeft': clamped,
-            'isActive': true,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-        final driverRef = _drivers.doc(driverId);
-        t.set(
-          driverRef,
-          {
-            'isBusy': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      }
-
-      if (phone.isNotEmpty) {
-        t.set(
-          _marshrutActiveRef(phone),
-          {
-            'status': 'cancelled',
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      }
-    });
-
-    try {
-      final snap = await _trips.doc(tripId).get();
-      final tripData = snap.data();
-      await _db.collection('marshrut_dispatch_events').add({
-        'tripId': tripId,
-        'type': 'passenger_cancel_after_accept',
-        'cancelledBy': 'passenger',
-        'cancelReason': reason,
-        'driverId': tripData?['acceptedDriverId'],
-        'userPhone': tripData?['userPhone'],
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
+    if (tripId.isEmpty) return const {};
+    final res = await _functions
+        .httpsCallable('marshrutPassengerCancelAfterAccept')
+        .call<Object?>({'tripId': tripId, 'reason': reason});
+    final d = res.data;
+    return d is Map ? Map<String, dynamic>.from(d) : const {};
   }
 
   /// Bitta trip hujjatini o'qish (push navigatsiya va accepted ekran).

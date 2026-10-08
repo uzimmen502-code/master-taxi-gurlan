@@ -621,10 +621,19 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
     );
     if (confirm == true && context.mounted) {
       final rides = context.read<RidesRepository>();
-      await rides.cancelMarshrutByPassenger(
-        tripId: trip.id,
-        reason: 'passenger_cancel_after_accept',
-      );
+      final messenger = ScaffoldMessenger.of(context);
+      final failedText = context.tr('marshrut_cancel_failed');
+      try {
+        // Faqat server (CF): o'rin, haydovchi `isBusy` va blok hisobi.
+        await rides.cancelMarshrutByPassenger(
+          tripId: trip.id,
+          reason: 'passenger_cancel_after_accept',
+        );
+      } catch (e) {
+        debugPrint('cancelMarshrutByPassenger(${trip.id}): $e');
+        messenger.showSnackBar(SnackBar(content: Text(failedText)));
+        return;
+      }
       if (context.mounted) Navigator.of(context).pop();
     }
   }

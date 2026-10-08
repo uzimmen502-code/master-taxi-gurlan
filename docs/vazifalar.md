@@ -858,3 +858,55 @@ advanced ranking · deeper analytics (BigQuery) · `parseIntent` LLM ·
 
 13.1.1 (billing) → қолган ҳаммаси. Billing тикланмагунча ядро production'да ишламайди
 (индекслар ва қоидалар аллақачон чиқарилган, улар зарарсиз туради).
+
+---
+
+## В-14. Ҳайдовчи иш ҳолатига бегона ёзув — 2-босқич қоидалари (РЕЛИЗДАН КЕЙИН)
+
+**Нима (2026-10-08 топилма).** `drivers` / `schedules` / `queue` update
+қоидаларидаги ёрдамчилар (`driverWorkPatchOnly`, `marshrutDriverRegisterPatch`,
+`scheduleLifecyclePatchOnly`, `queueGuestDispatchPatchOnly`, queue'нинг охирги
+шохчаси) фақат МАҚСАД ҳайдовчининг capability'си ва майдон номларини
+текширарди — ким ёзаётганини эмас. Эмулятор исботи: кирмаган клиент ҳам
+исталган ҳайдовчини offline қилар, GPS'ини силжитар, ўринларини 0 қилар,
+marshrut ҳайдовчининг телефонини (`queue.driverPhone` ҳам) алмаштирарди.
+Тест: `functions/test/driver_work_patch_rules.test.js`.
+
+**Нега бирданига ёпилмади.** Marshrut ЙЎЛОВЧИСИ илова ичидан ҳайдовчининг
+ҳужжатларига ёзади (1.0.32 да ҳам): offer timeout → `todayTimeouts` +1,
+streak, авто-пауза; кутишда бекор → streak 0; қабулдан кейин бекор →
+`isBusy:false`, ўрин +1 (битта транзакцияда). Қатъий `isOwner` эски
+иловаларда «қабулдан кейин бекор»ни бутунлай синдирарди.
+
+**1-босқич (қоидалар, эски илова билан мос).** Бегона ёзувга телефон
+сессияси ШАРТ ва фақат йўловчи шакли (`isBusy:false`, `todayTimeouts` +1,
+ўрин +1, queue dispatch майдонлари). Деплой учун тайёр:
+`deploy/driver-work-rules` (жонли ruleset + шу тузатиш). Фақат қоидалар,
+алоҳида буйруқ. Деплойдан олдин жонли ruleset ўзгармаганини текшириш.
+
+**2-босқич — код (эга қарори 2026-10-08).** Йўловчининг бу ёзувлари серверга
+кўчди: `marshrutPassengerCloseOffer` (янги: expired | cancelled),
+`marshrutPassengerCancelAfterAccept` (қайта чақирув хавфсиз), sweep
+`expirePendingTrips` (ёпиш + timeout сиёсати битта транзакцияда — аввал
+эски снапшот бўйича иккинчи марта санаши мумкин эди). Илова энди
+бегона ҳайдовчи ҳужжатига ЁЗМАЙДИ. Тестлар:
+`functions/test/marshrut_passenger_dispatch_cf.test.js`,
+`test/repositories/rides_repository_marshrut_cf_test.dart`.
+
+**2-босқич — қоидалар (`fix/driver-work-patch-phase2-rules`, деплой қилинмасин).**
+`drivers` / `schedules` / `queue` update → фақат `isOwner` / `isAdmin`.
+Эски иловада (янги CF'ларсиз) йўловчининг қабулдан кейин бекор қилиши
+СИНАДИ — шунинг учун фақат релиздан кейин.
+
+### Тартиб
+
+1. 1-босқич қоидалари (исталган пайт, эга рухсати билан).
+2. CF'лар номи билан: `marshrutPassengerCloseOffer`,
+   `marshrutPassengerCancelAfterAccept`, `expirePendingTrips`
+   (`functions:default` тўлиқ деплой ЭМАС).
+3. Шу кодли илова релизи (1.0.33 ёки кейингиси).
+4. Play Console → Statistics: ~90% ўрнатиш шу build ёки янгироғида →
+   2-босқич қоидалари, алоҳида буйруқ.
+
+В-10 (минимал версия дарвозаси) бу ерда ёрдам бермайди: у 1.0.33 дан
+бошлаб ишлайди, 1.0.32 ва эскиларни блоклай олмайди.

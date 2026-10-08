@@ -31,6 +31,7 @@
  */
 
 const crypto = require('crypto');
+const { toCanonicalId } = require('./ids');
 
 const ORDERS = 'logistics_orders';
 const SHIPMENTS = 'shipments';
@@ -266,6 +267,34 @@ function normalizeConditionFlags(flags) {
   return out.length ? [...new Set(out)] : ['intact'];
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ISHGA TUSHIRISH BOSQICHI (CLAUDE.md 42) — INTERNAL → PUBLIC
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `module_config/logistics_all.logistics.stage`:
+ *   internal — FAQAT `testerIds` (kanonik telefon ID) jo'natadi VA LEG oladi;
+ *   public   — hamma.
+ * Noma'lum/yo'q qiymat — `internal` (yopiq tomonga xato, 53-band): sinov
+ * ro'yxatisiz hech kim kirmaydi. PILOT — UNKNOWN (ega qarori yo'q).
+ */
+const STAGE = { INTERNAL: 'internal', PUBLIC: 'public' };
+
+function stageOf(config) {
+  const s = ((config || {}).logistics || {}).stage;
+  return s === STAGE.PUBLIC ? STAGE.PUBLIC : STAGE.INTERNAL;
+}
+
+/** Shu foydalanuvchi joriy bosqichda logistikadan foydalana oladimi. */
+function isStageAllowed(config, userId) {
+  if (stageOf(config) === STAGE.PUBLIC) return true;
+  const id = toCanonicalId(userId || '');
+  if (!id) return false;
+  const list = ((config || {}).logistics || {}).testerIds;
+  if (!Array.isArray(list)) return false;
+  return list.some((t) => toCanonicalId(String(t || '')) === id);
+}
+
 module.exports = {
   ORDERS,
   SHIPMENTS,
@@ -299,4 +328,7 @@ module.exports = {
   custodyIdempotencyKey,
   handoverKindsFor,
   normalizeConditionFlags,
+  STAGE,
+  stageOf,
+  isStageAllowed,
 };

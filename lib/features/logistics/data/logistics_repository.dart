@@ -58,6 +58,19 @@ class LogisticsRepository {
 
   // ── Мижоз (жўнатувчи) ──────────────────────────────────────────────
 
+  /// INTERNAL босқич (42-банд): модул «Тез кунда» бўлса ҳам синовчи
+  /// кира оладими. Ҳал қилувчи — сервер; бу фақат кириш нуқтаси учун.
+  /// Хато бўлса — `false` (ёпиқ томонга).
+  Future<bool> hasAccess() async {
+    try {
+      final data = await _call(_demand, 'getLogisticsAccess', const {});
+      return data['allowed'] == true;
+    } catch (_) {
+      // Тармоқ/сервер хатоси ҳам — ёпиқ («Тез кунда»), ишдан чиқмайди.
+      return false;
+    }
+  }
+
   Future<LogisticsQuote> quote({
     required LogisticsPoint origin,
     required LogisticsPoint destination,

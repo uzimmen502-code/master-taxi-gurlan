@@ -195,6 +195,11 @@ exports.quoteLogisticsOrder = fn.https.onCall(wrapCallable(
   logisticsApi.makeQuoteLogisticsOrder({ db }),
 ));
 
+/** Ilova kirishi: shu foydalanuvchiga «Jo'natma» ochiqmi (INTERNAL bosqich, 42-band). */
+exports.getLogisticsAccess = fn.https.onCall(wrapCallable(
+  logisticsApi.makeGetLogisticsAccess({ db }),
+));
+
 /** ORDER + SHIPMENT'lar + sirlar + marshrut v1 + LEG(draft). To'lovsiz LEG ochilmaydi. */
 exports.createLogisticsOrder = fn.https.onCall(wrapCallable(
   logisticsApi.makeCreateLogisticsOrder({ db }),

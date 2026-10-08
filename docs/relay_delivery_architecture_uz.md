@@ -1309,6 +1309,25 @@ enabled`); янги илова build'и 1.0.34 (плитка ва оқимлар
 `termsAcceptedAt` юборилмайди), L15; GPS нуқтаси handover'да
 (ихтиёрий майдон бор, илова ҳали юбормайди); офлайн навбат (6.2).
 
+### 10.3 Ишга тушириш босқичи INTERNAL → PUBLIC (2026-10-08, ветв `feat/logistics-internal-stage`)
+
+**What:** `module_config/logistics_all.logistics.stage` (`internal` | `public`) ва
+`logistics.testerIds` (каноник телефон ID). INTERNAL'да фақат рўйхатдагилар:
+(1) нарх олади ва буюртма беради — `requireEnabled` → `module_internal_only`;
+(2) LEG'га мос келади — адаптер `isEligible` → `stage_internal`; `acceptLeg`
+match ҳужжатини талаб қилгани учун рўйхатдан ташқари ижрочи олмайди ҳам.
+Илова: `module_defaults.logistics = soon` бўлса ҳам, `getLogisticsAccess`
+(рўйхатни қайтармайди) `allowed: true` берса — бўлим очилади.
+**Why:** эга 2026-10-07 «аввал ички синовдан» деди; кодда фойдаланувчи
+даражасидаги гейт йўқ эди (42-банд).
+**Impact:** стандарт `internal` + бўш рўйхат — ҳужжатда ёзилмаган бўлса ҳам
+хизмат **ёпиқ** (fail closed). PUBLIC'га ўтиш — `stage: public` (код
+ўзгармайди). Бошқариш: `functions_demand/tools/set_logistics_stage.js`
+(dry-run, `--write`, `logistics_audit`). PILOT — UNKNOWN (эга қарори йўқ).
+**Маълум бўшлиқ (олдиндан бор):** `onProviderAvailable` тескари matching'и
+`module_config/logistics_{вилоят}` ни ўқийди, `logistics_all`ни эмас — бундай
+ҳужжат йўқ, демак логистика учун у ишламайди (ёпиқ томонда).
+
 ---
 
 ## 11. Очиқ саволлар

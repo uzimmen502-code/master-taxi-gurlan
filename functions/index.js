@@ -5872,9 +5872,6 @@ exports.claimCarProfileBonus = functions.https.onCall(async (data, context) => {
   return out;
 });
 
-/** Admin web: SMSsiz kirish — faqat ishonchli operator raqami (server role tekshiruvi). */
-const TRUSTED_ADMIN_WEB_PHONE = '998912778777';
-
 async function findUserDocByPhone(rawPhone) {
   const candidates = [];
   const canon = canonicalUid(rawPhone);
@@ -7230,74 +7227,23 @@ exports.adminChangeOwnPin = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Admin web: maxfiy kod (PIN) bilan kirish — telefonsiz.
- * Kiritilgan kodning sha256 xeshi serverdagi xesh bilan solishtiriladi
- * (kod manba kodida ochiq turmaydi). To'g'ri bo'lsa — ishonchli admin
- * operator (TRUSTED_ADMIN_WEB_PHONE) uchun custom token qaytariladi.
+ * Admin web: umumiy maxfiy kod bilan kirish — O'CHIRILDI (ega qarori
+ * 2026-10-08, admin audit D-5). Avval bitta umumiy kodning sha256 xeshi
+ * shu manba kodida turardi; to'g'ri kod ishonchli operator raqamiga custom
+ * token berar va kerak bo'lsa uning rolini `admin` qilib qo'yardi — shaxsiy
+ * PIN (D-1, `adminWebSignIn`) qoidasini chetlab o'tardi. Funksiya nomi
+ * saqlandi: eski admin sahifasi chaqirsa — tushunarli rad (deploy nomi bilan
+ * yangilanadi, o'chirish shart emas).
  */
-const ADMIN_WEB_CODE_SHA256 =
-  'fca12b2d97e45c6117190cc65bf0f2e83a0c582c961a40796b7ee0c7bac54f9e';
-
-exports.adminWebSignInWithCode = functions.https.onCall(async (data) => {
-  const code = String((data && data.code) || '').trim();
-  if (!code) {
-    throw new functions.https.HttpsError('invalid-argument', 'Kod kiritilmadi');
-  }
-  const hash = crypto.createHash('sha256').update(code).digest('hex');
-  // Doimiy vaqtli (timing-safe) solishtirish — brute-force timing'ni kamaytirish.
-  const a = Buffer.from(hash, 'utf8');
-  const b = Buffer.from(ADMIN_WEB_CODE_SHA256, 'utf8');
-  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-  if (!ok) {
-    throw new functions.https.HttpsError('permission-denied', 'Kod noto\'g\'ri');
-  }
-
-  const phone = TRUSTED_ADMIN_WEB_PHONE;
-  const e164 = `+${phone}`;
-  const adminRoles = ['admin', 'superadmin', 'dispatcher'];
-
-  // Kod to'g'ri — maxfiy kodning o'zi admin huquqini beradi. Operator
-  // hujjati admin bo'lmasa (yoki yo'q bo'lsa) — uni 'admin' qilamiz, shunda
-  // Firebase Console'da qo'lda role o'zgartirish kerak bo'lmaydi.
-  const found = await findUserDocByPhone(phone);
-  const docId = found ? found.docId : canonicalUid(phone);
-  const existingRole = found ? ((found.snap.data() || {}).role || '') : '';
-  let role = existingRole;
-  if (!adminRoles.includes(existingRole)) {
-    await db.collection('users').doc(docId).set({
-      role: 'admin',
-      phone: e164,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    role = 'admin';
-  }
-
-  let authUser;
-  try {
-    authUser = await admin.auth().getUserByPhoneNumber(e164);
-  } catch (e) {
-    if (e.code === 'auth/user-not-found') {
-      authUser = await admin.auth().createUser({ phoneNumber: e164 });
-    } else {
-      throw e;
-    }
-  }
-  // phone_number'ni DOIMIY custom claim sifatida saqlaymiz — shunda ID token
-  // 1 soatdan keyin yangilanganda ham claim yo'qolmaydi (Firestore qoidalari
-  // isAdmin() shu claimga tayanadi).
-  await admin.auth().setCustomUserClaims(authUser.uid, {
-    ...(authUser.customClaims || {}),
-    phone_number: e164,
-  });
-  const token = await admin.auth().createCustomToken(authUser.uid, {
-    phone_number: e164,
-  });
-  return {
-    token,
-    uid: docId,
-    phone: e164,
-    role,
-  };
+exports.adminWebSignInWithCode = functions.https.onCall(async () => {
+  console.warn(JSON.stringify({
+    action: 'adminWebSignInWithCode', result: 'refused',
+    errorCode: 'ADMIN_CODE_LOGIN_DISABLED',
+  }));
+  throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Махфий код билан кириш ўчирилган. Телефон ва шахсий PIN билан киринг.',
+      { code: 'ADMIN_CODE_LOGIN_DISABLED' });
 });
 
 /** Буюртма status patch — `OrdersRepository._statusPatch` билан синхрон. */

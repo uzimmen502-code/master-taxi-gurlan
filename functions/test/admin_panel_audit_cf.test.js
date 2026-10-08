@@ -36,6 +36,8 @@
  *      ochiq qolgan e'loniga bron yo'q (O-13)
  *   T  onSupportChatMessageCreate — awaitingAdmin xabar vaqti bo'yicha
  *      monoton; mijoz o'qigani javob berilgan chatni qaytarmaydi (O-5)
+ *   U  admin_news: onAdminNewsCreate umumiy xabarga targetUserId '';
+ *      tools/backfill_admin_news_target (dry-run, apply, idempotent, rollback)
  */
 'use strict';
 const assert = require('assert');
@@ -762,6 +764,44 @@ async function main() {
     await u2.set({ text: 'Yana savol', fromAdmin: false, createdAt: new Date() });
     await fire(u2);
     assert.strictEqual(await awaitingOf(), true);
+  });
+
+  // ── U. admin_news: umumiy xabarda targetUserId '' (O-4 tayyorgarligi) ──
+  await reset();
+  await Promise.all(['admin_news_backfill', 'config'].map(wipe));
+  const news = (id, extra) => db.collection('admin_news').doc(id).set({
+    title: 't', body: 'b', category: 'info', audience: 'all', createdAt: new Date(), ...extra,
+  });
+  const targetOf = async (id) => (await db.collection('admin_news').doc(id).get()).data().targetUserId;
+  await check('U1 onAdminNewsCreate: maydoni yo\'q umumiy xabar → targetUserId ""; shaxsiyga tegmaydi', async () => {
+    await news('n_bc', {});
+    await news('n_pers', { targetUserId: CUSTOMER, source: 'order_status' });
+    for (const id of ['n_bc', 'n_pers']) {
+      const ref = db.collection('admin_news').doc(id);
+      await fns.onAdminNewsCreate.run(await ref.get(), { params: { newsId: id } });
+    }
+    assert.strictEqual(await targetOf('n_bc'), '');
+    assert.strictEqual(await targetOf('n_pers'), CUSTOMER);
+  });
+  const backfill = require('../tools/backfill_admin_news_target');
+  await check('U2 backfill: faqat yo\'q/null maydon to\'ldiriladi; qayta ishga tushirish — 0; rollback', async () => {
+    await wipe('admin_news');
+    await news('old1', {});
+    await news('old2', { targetUserId: null });
+    await news('ok', { targetUserId: '' });
+    await news('pers', { targetUserId: OTHER });
+    const plan = await backfill.planBackfill(db);
+    assert.deepStrictEqual(plan.ids.sort(), ['old1', 'old2']);
+    const r = await backfill.applyBackfill(db, admin, { log: () => {} });
+    assert.deepStrictEqual([r.planned, r.written, r.remaining], [2, 2, 0]);
+    assert.strictEqual(await targetOf('old1'), '');
+    assert.strictEqual(await targetOf('pers'), OTHER);
+    const again = await backfill.applyBackfill(db, admin, { log: () => {} });
+    assert.strictEqual(again.written, 0);
+    const rb = await backfill.rollbackBackfill(db, admin, r.batchId);
+    assert.strictEqual(rb.reverted, 2);
+    assert.strictEqual((await db.collection('admin_news').doc('old1').get()).data().targetUserId, undefined);
+    assert.strictEqual(await targetOf('ok'), '');
   });
 
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────

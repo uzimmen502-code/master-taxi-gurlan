@@ -170,6 +170,9 @@ class NewsItem {
         'body': body,
         'category': category,
         'audience': audience,
+        // Умумий хабарда '' — илова `targetUserId == ''` билан сўрайди
+        // (майдони йўқ ҳужжат бундай сўровга тушмайди; аудит O-4).
+        'targetUserId': targetUserId,
         if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
         if (ctaLabel.isNotEmpty) 'ctaLabel': ctaLabel,
         if (ctaUrl.isNotEmpty) 'ctaUrl': ctaUrl,

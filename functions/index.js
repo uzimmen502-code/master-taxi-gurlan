@@ -1363,6 +1363,7 @@ exports.onSellSubmissionUpdate = functions.firestore
           body,
           category: 'info',
           audience: 'all',
+          targetUserId: '', // умумий хабар (аудит O-4)
           source: 'sell_offer_forward',
           priority: 6,
           submissionId,
@@ -11429,6 +11430,16 @@ exports.onAdminNewsCreate = functions
   .document('admin_news/{newsId}')
   .onCreate(async (snap) => {
     const d = snap.data() || {};
+    // Умумий хабарда `targetUserId: ''` бўлсин: илова уларни
+    // `where('targetUserId', '==', '')` билан сўрайди, майдони йўқ ҳужжат
+    // эса бундай сўровга тушмайди (админ аудити O-4 — шахсий чекларни
+    // ёпиш режаси). Эски админ панел ва бошқа ёзувчилар учун ҳимоя тўри;
+    // `onAdminNewsUpdate` фақат `pushResendAt`га қарайди — цикл йўқ.
+    if (d.targetUserId === undefined || d.targetUserId === null) {
+      await snap.ref.set({ targetUserId: '' }, { merge: true }).catch((err) => {
+        console.error('admin_news targetUserId normalize:', err.message || err);
+      });
+    }
     await Promise.all([
       deliverAdminNewsPush(snap.ref, d),
       bumpHomeNewsBadge(d).catch((err) => {

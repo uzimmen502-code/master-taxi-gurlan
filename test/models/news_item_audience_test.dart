@@ -56,4 +56,12 @@ void main() {
           isFalse);
     });
   });
+
+  // Аудит O-4: илова умумий хабарларни `targetUserId == ''` билан сўрайди —
+  // майдони йўқ ҳужжат бундай сўровга тушмайди.
+  test('toCreateMap — умумий хабарда targetUserId бўш сатр (майдон бор)', () {
+    final m = news().toCreateMap();
+    expect(m.containsKey('targetUserId'), isTrue);
+    expect(m['targetUserId'], '');
+  });
 }

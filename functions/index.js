@@ -7,6 +7,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const settlementLedger = require('./settlement_ledger');
+const adminPin = require('./admin_pin');
 
 // Yuk birjasi — shaharlararo (yuk_listings) va tuman ichi (yuk_local_drivers).
 // `digits` — hoisted function declaration (pastda), shu yerda ishlatish xavfsiz.
@@ -56,7 +57,7 @@ attachRelayEscrow(exports, {
 const { attachRealty } = require('./realty');
 attachRealty(exports, {
   functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp, assertAdmin,
-  notifyUserInApp,
+  notifyUserInApp, settlementLedger,
 });
 
 const DEVICE_BINDING_MAX_FAILED = 5;
@@ -1993,11 +1994,22 @@ function geoReportStamp(userData) {
   return out;
 }
 
+/**
+ * `creditChange` бир чақирувда ҳамёнга ёзиладиган қайтимнинг юқори чеги
+ * (сўм). Эга қарори 2026-10-08 (ҳамён аудити K-6): 50 000. Чегдан ошса —
+ * рад (қисман ёзилмайди), катта сумма фақат finance `cashExchange` орқали.
+ */
+const CREDIT_CHANGE_MAX_UZS = 50000;
+
 /** Нақд қайтим → Balance (credit) */
 exports.creditChange = functions.https.onCall(async (data, context) => {
+  // `driver` ЙЎҚ: `role: 'driver'`ни ҳар қандай фойдаланувчи ўзига ёза олади
+  // (rules `usersWebLooseDriverPromotion`), сумма эса клиентдан — бу ҳар
+  // кимга чексиз кредит берарди (ҳамён аудити 2026-10-07, K-6). Ҳайдовчи
+  // қайтими 2026-07-09 дан бери Settlement Ledger орқали (йўловчи тасдиғи).
   const operatorUid = await requireCallerRoles(
     context,
-    ['admin', 'superadmin', 'dispatcher', 'driver'],
+    ['admin', 'superadmin', 'dispatcher'],
     'Operator role required',
   );
 
@@ -2012,9 +2024,21 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
   if (!idempotencyKey) {
     throw new functions.https.HttpsError('invalid-argument', 'idempotencyKey required');
   }
+  // Манфий `orderTotal` қайтимни сунъий оширарди; NaN — ички хато эди.
+  if (!Number.isSafeInteger(orderTotal) || orderTotal < 0
+      || !Number.isSafeInteger(cashPaid) || cashPaid < 0) {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'orderTotal/cashPaid: manfiy bo\'lmagan butun son');
+  }
 
   const uid = userUid(userPhone);
   const delta = cashPaid - orderTotal;
+  if (delta > CREDIT_CHANGE_MAX_UZS) {
+    throw new functions.https.HttpsError(
+        'invalid-argument',
+        `Qaytim ${CREDIT_CHANGE_MAX_UZS} so'mdan oshmasin`,
+        { errorCode: 'CREDIT_CHANGE_OVER_LIMIT', limit: CREDIT_CHANGE_MAX_UZS });
+  }
   const idemRef = db.collection('wallet_idempotency').doc(idempotencyKey);
 
   const existing = await idemRef.get();
@@ -2890,8 +2914,23 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
         'invalid-argument', 'orderBase.type must be bread, food or platform');
   }
 
-  const uid9 = userUid(userPhone);
-  const uid12 = canonicalUid(userPhone);
+  // Ҳамён эгаси — ФАҚАТ token телефони (callerUid). Аввал ҳамён клиент
+  // юборган `userPhone` бўйича ечиларди, текширув эса `phone` бўйича эди —
+  // бегона рақам юбориб бировнинг ҳамёнидан тўлаш мумкин эди (ҳамён
+  // аудити 2026-10-07, K-1). `userPhone` энди эгани белгиламайди.
+  if (userPhone && canonicalUid(userPhone) !== callerUid) {
+    console.warn(JSON.stringify({
+      action: 'placeOrderPostPaid',
+      errorCode: 'USER_PHONE_MISMATCH_IGNORED',
+      callerTail: callerUid.slice(-4),
+      sentTail: digits(userPhone).slice(-4),
+    }));
+  }
+  const uid12 = callerUid;
+  // Эски 9 хонали `users` ҳужжати ҳам token эгасиники. Бекор қилишдаги
+  // қайтим энди телефондан эмас, буюртмадаги `walletUserDocId`дан (O-18) —
+  // шу сабабли 9 хонали ҳужжатга ўтиш хавфсиз.
+  const uid9 = uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : uid12;
   let userRef = db.collection('users').doc(uid12);
   let userCheck = await userRef.get();
   if (!userCheck.exists && uid9 !== uid12) {
@@ -3091,6 +3130,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       inventoryDecrements,
       total: orderTotal,
       balanceApplied: walletDebit,
+      // Қайтим айнан шу ҳужжатга (O-18) — телефондан қайта тахмин эмас.
+      ...(walletDebit > 0 ? { walletUserDocId: userRef.id } : {}),
       cashDue,
       cashPaid: 0,
       status: 'new',
@@ -3201,6 +3242,32 @@ function orderCancelRefundKey(orderId) {
   return `order_cancel_refund_${orderId}`;
 }
 
+/**
+ * Ҳамёндан АЙНАН қайси `users` ҳужжати ечилган — телефондан тахмин эмас.
+ * 1) `placeOrderPostPaid` буюртмага ёзган `walletUserDocId`;
+ * 2) эски буюртма: ечиш журнали (`kind: order_wallet`) — дебетланган
+ *    `passenger_credit:{id}`. K-1 тузатилгунча бошқанинг ҳамёнидан ечилган
+ *    буюртмада қайтим буюртма эгасига эмас, ечилган ҳамёнга қайтади.
+ * Топилмаса '' — чақирувчи телефон шаклларига ўтади. Фақат `refId` бўйича
+ * сўров (битта майдон индекси), `kind` кодда фильтрланади.
+ */
+async function debitedWalletDocIdInTx(t, orderId, od) {
+  const stored = String(od.walletUserDocId || '').trim();
+  if (stored) return stored;
+  const js = await t.get(db.collection(settlementLedger.COL_JOURNAL)
+      .where('refId', '==', orderId).limit(20));
+  for (const d of js.docs) {
+    const e = d.data() || {};
+    if (e.kind !== 'order_wallet') continue;
+    for (const l of e.legs || []) {
+      if (String(l.account || '').startsWith('passenger_credit:') && (l.dr || 0) > 0) {
+        return settlementLedger.ownerUidOf(l.account);
+      }
+    }
+  }
+  return '';
+}
+
 async function prepareOrderCancelInTx(t, orderRef, od) {
   const decs = Array.isArray(od.inventoryDecrements) ? od.inventoryDecrements : [];
   const inv = [];
@@ -3225,18 +3292,39 @@ async function prepareOrderCancelInTx(t, orderRef, od) {
   let bonusCtx = null;
   const rawPhone = String(od.userPhone || od.phone || '');
   const phoneDigitsOnly = digits(rawPhone);
-  if (walletRefund > 0 && phoneDigitsOnly.length >= 9) {
+  if (walletRefund > 0) {
+    // Ҳужжат id шакллари: каноник 12 хона, хом рақам ва эски 9 хона.
+    // Аввал `userPhone` 12 хонали, `users` ҳужжати эса эски 9 хонали
+    // бўлса қайтариш ЖИМГИНА ўтказиб юбориларди, буюртма барибир бекор
+    // бўларди (ҳамён аудити O-18).
     const uid12 = canonicalUid(rawPhone);
-    customerRef = db.collection('users').doc(uid12);
-    customerSnap = await t.get(customerRef);
-    if (!customerSnap.exists && phoneDigitsOnly !== uid12) {
-      customerRef = db.collection('users').doc(phoneDigitsOnly);
-      customerSnap = await t.get(customerRef);
+    const exactId = await debitedWalletDocIdInTx(t, orderRef.id, od);
+    const candidates = exactId ? [exactId] : [...new Set([
+      uid12,
+      phoneDigitsOnly,
+      uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : '',
+    ].filter((id) => id.length >= 9))];
+    for (const id of candidates) {
+      const ref = db.collection('users').doc(id);
+      const snap = await t.get(ref);
+      if (snap.exists) {
+        customerRef = ref;
+        customerSnap = snap;
+        break;
+      }
     }
-    if (customerSnap.exists) {
-      bonusCtx = await settlementLedger.prepareBonusInTx(
-          t, db, customerRef.id, { idempotencyKey: orderCancelRefundKey(orderRef.id) });
+    if (!customerSnap) {
+      // Ҳамёндан пул олинган, лекин қайтариладиган ҳисоб топилмади —
+      // пулни жимгина йўқотмаймиз: бекор қилиш рад этилади, админ кўради.
+      console.error(JSON.stringify({
+        action: 'orderCancelRefund', result: 'refused', errorCode: 'REFUND_ACCOUNT_NOT_FOUND',
+        orderId: orderRef.id, walletRefund,
+      }));
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'REFUND_ACCOUNT_NOT_FOUND', { orderId: orderRef.id });
     }
+    bonusCtx = await settlementLedger.prepareBonusInTx(
+        t, db, customerRef.id, { idempotencyKey: orderCancelRefundKey(orderRef.id) });
   }
   return { orderRef, od, inv, invSnaps, walletRefund, customerRef, customerSnap, bonusCtx };
 }
@@ -6688,35 +6776,50 @@ exports.migrateOldBindings = functions.https.onCall(async (data, context) => {
   };
 });
 
+// Kirish xatolari — bitta umumiy xabar: qaysi raqam admin ekanini, PIN
+// berilganmi yoki yo'qmi — tashqaridan ajratib bo'lmasin.
+const ADMIN_SIGNIN_DENIED =
+  'Телефон ёки PIN нотўғри. PIN олиш учун superadmin\'га мурожаат қилинг.';
+
 /**
- * Admin web: telefon bilan SMSsiz / parolsiz kirish.
- * Faqat Firestore'da panel roli bor raqamlar: admin, superadmin,
- * dispatcher, finance, auditor. Rol yo'q bo'lsa — permission-denied.
+ * Admin web: telefon + SHAXSIY PIN (ega qarori 2026-10-08, admin audit D-1).
+ * Avval faqat telefon yetarli edi (SMS/parolsiz) — admin raqamini bilgan
+ * har kim panelga kirardi. PIN: `admin_pin.js` (`admin_credentials/{docId}`,
+ * scrypt, 5 xato → 15 daqiqa qulf). Panel roli: admin, superadmin,
+ * dispatcher, finance, auditor.
  */
 exports.adminWebSignIn = functions.https.onCall(async (data) => {
   const phone = canonicalUid(data.phone || '');
+  const pin = String((data && data.pin) || '').trim();
   if (!phone || phone.length < 9) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'Telefon raqami noto\'g\'ri',
     );
   }
-  const found = await findUserDocByPhone(phone);
-  if (!found) {
-    throw new functions.https.HttpsError('not-found', 'User not found');
+  if (!/^\d{6,12}$/.test(pin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'ADMIN_PIN_REQUIRED');
   }
-  const role = String((found.snap.data() || {}).role || 'user')
-    .trim()
-    .toLowerCase();
-  const panelRoles = [
-    'admin',
-    'superadmin',
-    'dispatcher',
-    'finance',
-    'auditor',
-  ];
-  if (!panelRoles.includes(role)) {
-    throw new functions.https.HttpsError('permission-denied', 'Not an admin');
+  const found = await findUserDocByPhone(phone);
+  const role = found
+    ? String((found.snap.data() || {}).role || 'user').trim().toLowerCase()
+    : '';
+  if (!found || !adminPin.PANEL_ROLES.includes(role)) {
+    throw new functions.https.HttpsError('permission-denied', ADMIN_SIGNIN_DENIED);
+  }
+  const check = await adminPin.checkAdminPin(db, { docId: found.docId, pin });
+  if (!check.ok) {
+    console.warn(JSON.stringify({
+      action: 'adminWebSignIn', result: 'denied', errorCode: check.code,
+      userId: found.docId,
+    }));
+    if (check.code === 'ADMIN_PIN_LOCKED') {
+      throw new functions.https.HttpsError(
+          'resource-exhausted',
+          'Кўп марта нотўғри PIN киритилди. 15 дақиқадан кейин қайта уриниб кўринг.',
+          { code: 'ADMIN_PIN_LOCKED' });
+    }
+    throw new functions.https.HttpsError('permission-denied', ADMIN_SIGNIN_DENIED);
   }
   const e164 = `+${phone}`;
   let authUser;
@@ -6744,7 +6847,72 @@ exports.adminWebSignIn = functions.https.onCall(async (data) => {
     uid: found.docId,
     phone: e164,
     role,
+    mustChangePin: check.mustChange === true,
   };
+});
+
+/**
+ * Superadmin: panel roli bor foydalanuvchiga yangi PIN berish (yoki
+ * unutilganini tiklash — qulf ham ochiladi). PIN tasodifiy, javobda BIR
+ * MARTA qaytadi (serverda faqat xesh). Audit — `admin_audit`.
+ */
+exports.adminSetAdminPin = functions.https.onCall(async (data, context) => {
+  const actorUid = await requireCallerRoles(context, ['superadmin'], 'Faqat superadmin');
+  const target = canonicalUid((data && data.targetPhone) || '');
+  if (!target || target.length < 9) {
+    throw new functions.https.HttpsError('invalid-argument', 'targetPhone');
+  }
+  const found = await findUserDocByPhone(target);
+  const role = found
+    ? String((found.snap.data() || {}).role || 'user').trim().toLowerCase()
+    : '';
+  if (!found || !adminPin.PANEL_ROLES.includes(role)) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'ADMIN_PIN_TARGET_NOT_PANEL_ROLE');
+  }
+  const pin = adminPin.generatePin();
+  await adminPin.storeAdminPin(db, { docId: found.docId, pin, setBy: actorUid });
+  await db.collection('admin_audit').add({
+    kind: 'admin_pin_set', actor: actorUid, target: found.docId, role,
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, pin, target: found.docId };
+});
+
+/** Admin: o'z PIN'ini almashtirish (joriy PIN bilan; xatolar sanaladi). */
+exports.adminChangeOwnPin = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  const tokenPhone = callerPhone(context);
+  const found = tokenPhone ? await findUserDocByPhone(tokenPhone) : null;
+  const role = found
+    ? String((found.snap.data() || {}).role || 'user').trim().toLowerCase()
+    : '';
+  if (!found || !adminPin.PANEL_ROLES.includes(role)) {
+    throw new functions.https.HttpsError('permission-denied', 'Admin only');
+  }
+  const currentPin = String((data && data.currentPin) || '').trim();
+  const newPin = String((data && data.newPin) || '').trim();
+  const weak = adminPin.validateNewPin(newPin);
+  if (weak) {
+    throw new functions.https.HttpsError('invalid-argument', weak);
+  }
+  if (newPin === currentPin) {
+    throw new functions.https.HttpsError('invalid-argument', 'ADMIN_PIN_SAME');
+  }
+  const check = await adminPin.checkAdminPin(db, { docId: found.docId, pin: currentPin });
+  if (!check.ok) {
+    throw new functions.https.HttpsError(
+        check.code === 'ADMIN_PIN_LOCKED' ? 'resource-exhausted' : 'permission-denied',
+        check.code);
+  }
+  await adminPin.storeAdminPin(db, { docId: found.docId, pin: newPin, setBy: found.docId });
+  await db.collection('admin_audit').add({
+    kind: 'admin_pin_changed_self', actor: found.docId,
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
 });
 
 /**
@@ -7859,12 +8027,21 @@ const ADMIN_ORDER_STATUSES = new Set([
  * тугмаси мижоз бекор қилган (пули қайтган) буюртмани `accepted`га
  * тирилтира оларди. `delivered`/`rejected`/`cancelled` — якуний.
  */
+//
+// Эга қарори 2026-10-08:
+//   - `ready → in_delivery` («Курьерда») админдан олиб ташланди: буюртмани
+//     курьер иловаси олади (`courierCreateRoute` — `courierId` +
+//     `deliveryRouteId`); админ қўйгани курьерсиз «етим» буюртма қиларди.
+//   - `→ delivered` фақат `paymentStatus == 'paid'` бўлса: аввал тўлов
+//     ёзувисиз `paid` деб белгиларди (курьер нақди ҳисобга тушмасди).
+//   - Эски тугмадан қолган етим `in_delivery` (курьерсиз) буюртмани курьер
+//     навбатига (`ready`) қайтариш мумкин — акс ҳолда абадий қотиб қоларди.
 const ADMIN_ORDER_TRANSITIONS = {
   new: ['accepted', 'rejected'],
   accepted: ['ready', 'rejected'],
-  ready: ['in_delivery', 'rejected'],
-  in_delivery: ['delivered'],
-  courier: ['delivered'],
+  ready: ['rejected'],
+  in_delivery: ['delivered', 'ready'],
+  courier: ['delivered', 'ready'],
 };
 // Курьер олиб кетган / етиб келган буюртмани админ рад этмайди
 // (`customerCancelOrder` билан бир хил чегара).
@@ -7877,6 +8054,14 @@ function adminOrderTransitionError(od, next) {
   if (!allowed.includes(next)) return 'ORDER_TRANSITION_NOT_ALLOWED';
   const fs = String(od.fulfillmentStatus || '').trim().toLowerCase();
   if (next === 'rejected' && ORDER_FS_COURIER_HOLDS.has(fs)) {
+    return 'ORDER_HELD_BY_COURIER';
+  }
+  if (next === 'delivered' && String(od.paymentStatus || '').trim() !== 'paid') {
+    return 'ORDER_NOT_PAID';
+  }
+  // Курьери бор буюртмани навбатга қайтармаймиз (курьер маршрутида).
+  if (next === 'ready' && (cur === 'in_delivery' || cur === 'courier')
+      && String(od.courierId || '').trim() !== '') {
     return 'ORDER_HELD_BY_COURIER';
   }
   return null;
@@ -7972,7 +8157,16 @@ exports.adminSetOrderStatusBatch = functions.https.onCall(async (data, context) 
   let walletRefund = 0;
   const skipped = [];
   for (const orderId of orderIds) {
-    const res = await applyAdminOrderStatus(orderId, status, adminUid);
+    let res;
+    try {
+      res = await applyAdminOrderStatus(orderId, status, adminUid);
+    } catch (e) {
+      // Битта буюртманинг хатоси (масалан, REFUND_ACCOUNT_NOT_FOUND)
+      // қолганларини тўхтатмайди — ўтказиб юборилганлар рўйхатига.
+      if (!(e instanceof functions.https.HttpsError)) throw e;
+      skipped.push({ orderId, code: e.message, from: '' });
+      continue;
+    }
     if (res.skipped) {
       skipped.push({ orderId, code: res.skipped, from: res.from || '' });
       continue;
@@ -13787,9 +13981,26 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
           throw new functions.https.HttpsError(
               'failed-precondition', 'insufficient_balance');
         }
+        // Ledger кўзгуси (READ фазаси) — аввал `bonusBalance` ledger'сиз
+        // камаярди, passenger_credit эса камаймасди (ҳамён аудити Y-1).
+        const bonusCtx = await settlementLedger.prepareBonusInTx(
+            t, db, userRef.id, { idempotencyKey: `tv_ad_${clipRef.id}` });
+        if (bonusCtx.jExists) {
+          throw new functions.https.HttpsError(
+              'aborted', 'LEDGER_KEY_CONFLICT');
+        }
         t.update(userRef, {
           bonusBalance: admin.firestore.FieldValue.increment(-adPrice),
           balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        settlementLedger.commitBonusInTx(t, bonusCtx, {
+          delta: -adPrice,
+          kind: 'tv_ad_purchase',
+          refType: 'tv_clip',
+          refId: clipRef.id,
+          meta: { tier, durationDays, scope },
+          postedBy: uid,
+          postedRole: 'client',
         });
         const ledgerRef = userRef.collection('wallet_ledger').doc();
         t.set(ledgerRef, {
@@ -13903,6 +14114,9 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
 
     const userRef = db.collection('users').doc(uid);
     const clipRef = db.collection('tv_clips').doc(clipId);
+    // Ledger калити серверда (мижоз `idempotencyKey`и эмас — уни бошқа
+    // CF орқали олдиндан банд қилиб, кўзгуни ўчириш мумкин эди).
+    const ledgerOpId = db.collection('tv_clips').doc().id;
 
     const result = await db.runTransaction(async (t) => {
       const idemSnap = await t.get(idemRef);
@@ -13943,9 +14157,25 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
           throw new functions.https.HttpsError(
               'failed-precondition', 'insufficient_balance');
         }
+        // Ledger кўзгуси (ҳамён аудити Y-1).
+        const bonusCtx = await settlementLedger.prepareBonusInTx(
+            t, db, userRef.id, { idempotencyKey: `tv_ad_renew_${ledgerOpId}` });
+        if (bonusCtx.jExists) {
+          throw new functions.https.HttpsError(
+              'aborted', 'LEDGER_KEY_CONFLICT');
+        }
         t.update(userRef, {
           bonusBalance: admin.firestore.FieldValue.increment(-adPrice),
           balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        settlementLedger.commitBonusInTx(t, bonusCtx, {
+          delta: -adPrice,
+          kind: 'tv_ad_renew',
+          refType: 'tv_clip',
+          refId: clipId,
+          meta: { tier, durationDays, scope },
+          postedBy: uid,
+          postedRole: 'client',
         });
         const ledgerRef = userRef.collection('wallet_ledger').doc();
         t.set(ledgerRef, {
@@ -17952,10 +18182,30 @@ exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
   }
 });
 
+/**
+ * Admin ўтишлари (custody занжири, CLAUDE.md 15). Курьер қадамлари —
+ * `pickup_ready → pickup_in_delivery → picked_up` ва `return_ready →
+ * return_in_delivery → completed` — ФАҚАТ курьер callable'ларида. Аввал
+ * админ ҳар қандай статусни ёза оларди: «Ювиш» `pickup_in_delivery`да
+ * ҳам кўринарди (курьер «олиб кетдим» қадами кейин рад бўлиб, вазифа
+ * курьер рўйхатидан йўқоларди), «Бекор» эса гилам AVA қўлида турганда ҳам
+ * ишларди. Бекор — гилам мижоздан олинмагунча (`picked_up`гача).
+ */
+const CARPET_ADMIN_TRANSITIONS = {
+  new: ['accepted', 'cancelled'],
+  accepted: ['pickup_ready', 'cancelled'],
+  pickup_ready: ['cancelled'],
+  pickup_in_delivery: ['cancelled'],
+  picked_up: ['washing'],
+  washing: ['drying'],
+  drying: ['ready'],
+  ready: ['return_ready'],
+};
+
 /** Admin: gilam yuvish statusini o'zgartirish. */
 exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) => {
   try {
-    await assertAdmin(String(data.adminPhone || ''), context);
+    const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
     const orderId = String(data.orderId || '').trim();
     const status = String(data.status || '').trim();
     const finalPriceRaw = data.finalPrice;
@@ -17967,24 +18217,37 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
       throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
     }
 
-    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
-    const patch = {
-      status,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    if (finalPriceRaw != null && finalPriceRaw !== '') {
-      const finalPrice = parseInt(String(finalPriceRaw), 10);
-      if (Number.isFinite(finalPrice) && finalPrice >= 0) {
-        patch.finalPrice = finalPrice;
+    const ref = db.collection('carpet_wash_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
       }
-    }
-
-    if (status === 'cancelled' && od.status === 'completed') {
-      throw new functions.https.HttpsError('failed-precondition', 'already completed');
-    }
-
-    await ref.update(patch);
+      const od = snap.data() || {};
+      const cur = String(od.status || '');
+      if (cur === status) return; // такрор босиш — ўзгармайди
+      const allowed = CARPET_ADMIN_TRANSITIONS[cur] || [];
+      if (!allowed.includes(status)) {
+        console.warn(JSON.stringify({
+          action: 'adminSetCarpetWashStatus', result: 'refused',
+          errorCode: 'CARPET_TRANSITION_NOT_ALLOWED', orderId, from: cur, to: status,
+          userId: adminUid,
+        }));
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'CARPET_TRANSITION_NOT_ALLOWED', { from: cur, to: status });
+      }
+      const patch = {
+        status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (finalPriceRaw != null && finalPriceRaw !== '') {
+        const finalPrice = parseInt(String(finalPriceRaw), 10);
+        if (Number.isFinite(finalPrice) && finalPrice >= 0) {
+          patch.finalPrice = finalPrice;
+        }
+      }
+      t.update(ref, patch);
+    });
     return { ok: true, orderId, status };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -18371,9 +18634,23 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
 });
 
 /** Admin: agro qabul statusini o'zgartirish. */
+/**
+ * Admin ўтишлари. `accepted → picked_up` — админнинг қўлда йиғиш йўли
+ * (курьерсиз) сақланади, лекин курьер вазифани олган бўлса
+ * (`pickup_in_delivery`) админ уни устидан ёза олмайди — аввал get →
+ * update транзакциясиз эди ва курьер билан пойга бўларди. Бекор — маҳсулот
+ * олинмагунча.
+ */
+const AGRO_ADMIN_TRANSITIONS = {
+  new: ['accepted', 'cancelled'],
+  accepted: ['picked_up', 'cancelled'],
+  pickup_in_delivery: ['cancelled'],
+  picked_up: ['completed'],
+};
+
 exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) => {
   try {
-    await assertAdmin(String(data.adminPhone || ''), context);
+    const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
     const orderId = String(data.orderId || '').trim();
     const status = String(data.status || '').trim();
     const finalPriceRaw = data.finalPrice;
@@ -18385,24 +18662,37 @@ exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) 
       throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
     }
 
-    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
-    const patch = {
-      status,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    if (finalPriceRaw != null && finalPriceRaw !== '') {
-      const finalPrice = parseInt(String(finalPriceRaw), 10);
-      if (Number.isFinite(finalPrice) && finalPrice >= 0) {
-        patch.finalPrice = finalPrice;
+    const ref = db.collection('agro_pickup_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
       }
-    }
-
-    if (status === 'cancelled' && od.status === 'completed') {
-      throw new functions.https.HttpsError('failed-precondition', 'already completed');
-    }
-
-    await ref.update(patch);
+      const od = snap.data() || {};
+      const cur = String(od.status || '');
+      if (cur === status) return;
+      const allowed = AGRO_ADMIN_TRANSITIONS[cur] || [];
+      if (!allowed.includes(status)) {
+        console.warn(JSON.stringify({
+          action: 'adminSetAgroPickupStatus', result: 'refused',
+          errorCode: 'AGRO_TRANSITION_NOT_ALLOWED', orderId, from: cur, to: status,
+          userId: adminUid,
+        }));
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'AGRO_TRANSITION_NOT_ALLOWED', { from: cur, to: status });
+      }
+      const patch = {
+        status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (finalPriceRaw != null && finalPriceRaw !== '') {
+        const finalPrice = parseInt(String(finalPriceRaw), 10);
+        if (Number.isFinite(finalPrice) && finalPrice >= 0) {
+          patch.finalPrice = finalPrice;
+        }
+      }
+      t.update(ref, patch);
+    });
     return { ok: true, orderId, status };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

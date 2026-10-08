@@ -153,12 +153,17 @@ async function requireActiveTariff(db) {
   return t;
 }
 
-async function requireEnabled(db) {
+async function requireEnabled(db, callerId) {
   const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
   if (!flags.enabled) {
     throw fail('unavailable', flags.killReason
       ? 'Xizmat vaqtincha to\'xtatilgan'
       : 'Jo\'natma xizmati sizning hududingizda hali ishga tushmagan', 'module_disabled');
+  }
+  // INTERNAL bosqich (42-band): sinov ro'yxatida bo'lmagan — xizmat «hali
+  // ishga tushmagan». Mavjudligini boshqacha oshkor qilmaymiz.
+  if (!L.isStageAllowed(flags.config, callerId)) {
+    throw fail('unavailable', 'Jo\'natma xizmati hali ishga tushmagan', 'module_internal_only');
   }
   return flags;
 }
@@ -167,10 +172,10 @@ async function requireEnabled(db) {
 // NARX
 // ═══════════════════════════════════════════════════════════════════════
 
-async function quoteOrderInternal(db, data) {
+async function quoteOrderInternal(db, data, callerId) {
   const origin = await validatePoint(db, data.origin, 'origin');
   const destination = await validatePoint(db, data.destination, 'destination');
-  await requireEnabled(db);
+  await requireEnabled(db, callerId);
   const t = await requireActiveTariff(db);
   const parcels = validateParcels(data.parcels);
   const quotes = parcels.map((p) => tariffCore.quoteParcel(t, p, origin, destination));
@@ -181,8 +186,9 @@ async function quoteOrderInternal(db, data) {
 function makeQuoteLogisticsOrder(deps) {
   const { db } = deps;
   return async function quoteLogisticsOrder(data, context) {
-    if (!callerIdFrom(context)) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
-    const q = await quoteOrderInternal(db, data || {});
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const q = await quoteOrderInternal(db, data || {}, callerId);
     return {
       tariffVersion: q.tariff.version,
       currency: 'UZS',
@@ -196,6 +202,22 @@ function makeQuoteLogisticsOrder(deps) {
       })),
       total: q.total,
     };
+  };
+}
+
+/**
+ * Ilova kirish nuqtasi uchun: shu foydalanuvchiga «Jo'natma» ochiqmi.
+ * `module_defaults` «soon» bo'lsa ham sinovchi kira olishi uchun (42-band).
+ * Ro'yxatning o'zi QAYTARILMAYDI (40-band: boshqalarning telefoni).
+ */
+function makeGetLogisticsAccess(deps) {
+  const { db } = deps;
+  return async function getLogisticsAccess(data, context) {
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+    const stage = L.stageOf(flags.config);
+    return { allowed: flags.enabled && L.isStageAllowed(flags.config, callerId), stage };
   };
 }
 
@@ -317,7 +339,7 @@ function makeCreateLogisticsOrder(deps) {
       return { orderId: d.orderId, shipmentIds: d.shipmentIds || [], duplicate: true };
     }
 
-    const q = await quoteOrderInternal(db, input);
+    const q = await quoteOrderInternal(db, input, ownerId);
     const recipient = validateRecipient(input.recipient);
     const adapter = getAdapter(L.MODULE);
     if (!adapter) throw fail('unimplemented', 'logistics adapteri ulanmagan');
@@ -1300,6 +1322,7 @@ module.exports = {
   activateLeg,
   recomputeOrderStatus,
   makeQuoteLogisticsOrder,
+  makeGetLogisticsAccess,
   makeCreateLogisticsOrder,
   makeOnShipmentFunded,
   makeAcceptLeg,

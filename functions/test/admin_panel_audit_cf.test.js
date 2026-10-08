@@ -3,8 +3,16 @@
  * HAQIQIY Firestore Emulator + ledger bilan. functions/index.js export'larini
  * `.run(data, context)` orqali chaqiradi.
  *
- *   firebase emulators:exec --only firestore --project demo-admin-audit \
- *     "node functions/test/admin_panel_audit_cf.test.js"
+ *   firebase emulators:exec --config <cfg> --only firestore,auth \
+ *     --project demo-admin-audit "node <repo>/functions/test/admin_panel_audit_cf.test.js"
+ *
+ * M bo'limi (admin PIN bilan kirish) Auth emulator talab qiladi; repo
+ * `firebase.json`da `auth` emulyatori yo'q, shuning uchun alohida config:
+ *   { "firestore": {"rules": "<repo>/firestore.rules"},
+ *     "emulators": {"firestore": {"port": 18180}, "auth": {"port": 19099},
+ *                   "ui": {"enabled": false}} }
+ * (portlar 15000 dan yuqori — Windows Hyper-V rezervi). Auth'siz faqat
+ * M8/M9 yiqiladi.
  *
  * Qulflanadi:
  *   A  assertAdmin — anonim sessiya klient `adminPhone` bilan kira olmaydi
@@ -20,6 +28,8 @@
  *   J  adminResetTaxiDriversRegistry — superadmin, dry-run, faqat `driver`
  *   K  adminResolveEvReport — reportCount kamayadi, idempotent
  *   L  sendSupportChatReply — qo'lda javob `systemOrder: false` (push ketadi)
+ *   M  adminWebSignIn — telefon + shaxsiy PIN; qulf; adminSetAdminPin /
+ *      adminChangeOwnPin (ega qarori D-1)
  */
 'use strict';
 const assert = require('assert');
@@ -73,7 +83,7 @@ async function reset() {
   await Promise.all(['users', 'orders', 'bread_products', 'wallet_idempotency',
     'payout_requests', 'dating_profiles', 'ads', 'tv_clips', 'settings',
     'queue', 'intercity_drivers', 'schedules', 'driver_requests', 'drivers',
-    'admin_audit', 'ev_charging_stations', 'support_chats', 'admin_news',
+    'admin_audit', 'admin_credentials', 'ev_charging_stations', 'support_chats', 'admin_news',
     ledger.COL_JOURNAL, ledger.COL_ACCOUNTS].map(wipe));
   await db.collection('users').doc(ADMIN).set({ role: 'admin' });
   await db.collection('users').doc(SUPER).set({ role: 'superadmin' });
@@ -174,11 +184,43 @@ async function main() {
     await db.collection('orders').doc('o5').set(order({ balanceApplied: 0 }));
     await rejectsWith(setStatus('o5', 'delivered'), 'failed-precondition');
   });
-  await check('B6 to\'liq oqim: accepted → ready → in_delivery → delivered', async () => {
-    for (const s of ['accepted', 'ready', 'in_delivery', 'delivered']) await setStatus('o5', s);
-    const o = (await db.collection('orders').doc('o5').get()).data();
+  await check('B6 accepted → ready; «Kuryerda» (ready → in_delivery) admin uchun YO\'Q (ega qarori)', async () => {
+    for (const s of ['accepted', 'ready']) await setStatus('o5', s);
+    const e = await rejectsWith(setStatus('o5', 'in_delivery'), 'failed-precondition');
+    assert.strictEqual(e.details.code, 'ORDER_TRANSITION_NOT_ALLOWED');
+    assert.strictEqual((await db.collection('orders').doc('o5').get()).data().status, 'ready');
+  });
+  await check('B8 kuryer olgan, TO\'LANMAGAN buyurtma — «Yetkazildi» rad (ORDER_NOT_PAID)', async () => {
+    await db.collection('orders').doc('o8').set(order({
+      status: 'in_delivery', fulfillmentStatus: 'courier_picked', courierId: '998903000001',
+      paymentStatus: 'pending', balanceApplied: 0,
+    }));
+    const e = await rejectsWith(setStatus('o8', 'delivered'), 'failed-precondition');
+    assert.strictEqual(e.details.code, 'ORDER_NOT_PAID');
+    assert.strictEqual((await db.collection('orders').doc('o8').get()).data().paymentStatus, 'pending');
+  });
+  await check('B9 to\'langan buyurtma — «Yetkazildi» ishlaydi', async () => {
+    await db.collection('orders').doc('o8').update({ paymentStatus: 'paid' });
+    await setStatus('o8', 'delivered');
+    const o = (await db.collection('orders').doc('o8').get()).data();
     assert.strictEqual(o.status, 'delivered');
     assert.strictEqual(o.fulfillmentStatus, 'completed');
+  });
+  await check('B10 kuryeri bor buyurtmani navbatga qaytarib bo\'lmaydi', async () => {
+    await db.collection('orders').doc('o9').set(order({
+      status: 'in_delivery', fulfillmentStatus: 'courier_picked', courierId: '998903000001', balanceApplied: 0,
+    }));
+    const e = await rejectsWith(setStatus('o9', 'ready'), 'failed-precondition');
+    assert.strictEqual(e.details.code, 'ORDER_HELD_BY_COURIER');
+  });
+  await check('B11 eski «Kuryerda»dan qolgan kuryersiz (etim) buyurtma navbatga qaytadi', async () => {
+    await db.collection('orders').doc('o10').set(order({
+      status: 'in_delivery', fulfillmentStatus: 'courier_picked', balanceApplied: 0,
+    }));
+    await setStatus('o10', 'ready');
+    const o = (await db.collection('orders').doc('o10').get()).data();
+    assert.strictEqual(o.status, 'ready');
+    assert.strictEqual(o.fulfillmentStatus, 'confirmed');
   });
   await check('B7 kuryerdagi buyurtmani admin rad eta olmaydi', async () => {
     await db.collection('orders').doc('o6').set(order({ status: 'ready', fulfillmentStatus: 'courier_picked' }));
@@ -213,6 +255,33 @@ async function main() {
   await check('C4 begona mijoz boshqaning buyurtmasini bekor qila olmaydi', async () => {
     await db.collection('orders').doc('c2').set(order());
     await rejectsWith(fns.customerCancelOrder.run({ orderId: 'c2' }, ctxOf(OTHER)), 'permission-denied');
+  });
+
+  // ── C'. Eski 9 xonali users hujjati (hamyon auditi O-18) ────────────
+  await reset();
+  const LEGACY9 = '901000077';
+  await db.collection('users').doc(LEGACY9).set({ role: 'user', bonusBalance: 0 });
+  await db.collection('orders').doc('c9').set(order({ userPhone: `998${LEGACY9}`, inventoryDecrements: [] }));
+  await check('C5 userPhone 12 xona, users hujjati eski 9 xona — qaytarish TOPILADI', async () => {
+    const r = await setStatus('c9', 'rejected');
+    assert.strictEqual(r.walletRefund, 3000);
+    assert.strictEqual(await userBal(LEGACY9), 3000);
+    assert.strictEqual((await db.collection('users').doc(`998${LEGACY9}`).get()).exists, false,
+      'yangi 12 xonali hujjat yaratilmaydi');
+    await journalBalanced();
+  });
+  await db.collection('orders').doc('c10').set(order({ userPhone: '998901000088', inventoryDecrements: [] }));
+  await check('C6 hamyon hisobi umuman topilmasa — pul jimgina yo\'qolmaydi, bekor qilish rad', async () => {
+    const e = await rejectsWith(setStatus('c10', 'rejected'), 'failed-precondition', 'REFUND_ACCOUNT_NOT_FOUND');
+    assert.ok(e);
+    assert.strictEqual((await db.collection('orders').doc('c10').get()).data().status, 'new');
+  });
+  await check('C7 batch: hisobi yo\'q buyurtma o\'tkaziladi, qolgani rad etiladi', async () => {
+    await db.collection('orders').doc('c11').set(order({ userPhone: `998${LEGACY9}`, balanceApplied: 0, inventoryDecrements: [] }));
+    const r = await fns.adminSetOrderStatusBatch.run({ orderIds: ['c10', 'c11'], status: 'rejected' }, ctxOf(ADMIN));
+    assert.strictEqual(r.updated, 1);
+    assert.deepStrictEqual(r.skipped.map((s) => [s.orderId, s.code]), [['c10', 'REFUND_ACCOUNT_NOT_FOUND']]);
+    assert.strictEqual((await db.collection('orders').doc('c11').get()).data().status, 'rejected');
   });
 
   // ── D. grantBirthdayBonus ───────────────────────────────────────────
@@ -375,6 +444,121 @@ async function main() {
     assert.strictEqual(m.size, 1);
     assert.strictEqual(m.docs[0].data().systemOrder, false);
     assert.strictEqual(m.docs[0].data().fromAdmin, true);
+  });
+
+  // ── N. Gilam / sut — admin o'tishlari (custody) ─────────────────────
+  await reset();
+  await Promise.all(['carpet_wash_orders', 'agro_pickup_orders'].map(wipe));
+  const carpet = (id, extra) => db.collection('carpet_wash_orders').doc(id).set({
+    customerPhone: CUSTOMER, carpetCount: 2, status: 'new', pickupCourierId: '', returnCourierId: '', ...extra,
+  });
+  const setCarpet = (orderId, status) =>
+    fns.adminSetCarpetWashStatus.run({ orderId, status }, ctxOf(ADMIN));
+  await carpet('w1', { status: 'pickup_in_delivery', pickupCourierId: '998903000001' });
+  await check('N1 gilam: kuryer yo\'lda — admin «Yuvish» qila olmaydi', async () => {
+    await rejectsWith(setCarpet('w1', 'washing'), 'failed-precondition', 'CARPET_TRANSITION_NOT_ALLOWED');
+  });
+  await carpet('w2', { status: 'washing' });
+  await check('N2 gilam AVA qo\'lida — «Bekor» rad', async () => {
+    await rejectsWith(setCarpet('w2', 'cancelled'), 'failed-precondition');
+    assert.strictEqual((await db.collection('carpet_wash_orders').doc('w2').get()).data().status, 'washing');
+  });
+  await check('N3 gilam: to\'g\'ri oqim washing → drying → ready → return_ready', async () => {
+    for (const s of ['drying', 'ready', 'return_ready']) await setCarpet('w2', s);
+    assert.strictEqual((await db.collection('carpet_wash_orders').doc('w2').get()).data().status, 'return_ready');
+  });
+  await check('N4 gilam: kuryer qadamini (return_in_delivery) admin yoza olmaydi', async () => {
+    await rejectsWith(setCarpet('w2', 'return_in_delivery'), 'failed-precondition');
+  });
+  await carpet('w3', {});
+  await check('N5 gilam: yangi → qabul (narx bilan) → olib ketishga tayyor; olinmaganda bekor', async () => {
+    await fns.adminSetCarpetWashStatus.run({ orderId: 'w3', status: 'accepted', finalPrice: 40000 }, ctxOf(ADMIN));
+    await setCarpet('w3', 'pickup_ready');
+    await setCarpet('w3', 'cancelled');
+    const o = (await db.collection('carpet_wash_orders').doc('w3').get()).data();
+    assert.strictEqual(o.status, 'cancelled');
+    assert.strictEqual(o.finalPrice, 40000);
+  });
+  const agro = (id, extra) => db.collection('agro_pickup_orders').doc(id).set({
+    customerPhone: CUSTOMER, productType: 'milk', status: 'accepted', pickupCourierId: '', ...extra,
+  });
+  const setAgro = (orderId, status) =>
+    fns.adminSetAgroPickupStatus.run({ orderId, status }, ctxOf(ADMIN));
+  await agro('m1', { status: 'pickup_in_delivery', pickupCourierId: '998903000001' });
+  await check('N6 sut: kuryer olgan vazifani admin «Olib ketildi» bilan yoza olmaydi', async () => {
+    await rejectsWith(setAgro('m1', 'picked_up'), 'failed-precondition', 'AGRO_TRANSITION_NOT_ALLOWED');
+  });
+  await agro('m2', {});
+  await check('N7 sut: admin qo\'lda yig\'ish (accepted → picked_up → completed) ishlaydi', async () => {
+    await setAgro('m2', 'picked_up');
+    await setAgro('m2', 'completed');
+    assert.strictEqual((await db.collection('agro_pickup_orders').doc('m2').get()).data().status, 'completed');
+  });
+  await check('N8 sut: olingan mahsulotni bekor qilib bo\'lmaydi; yakunlanganni ham', async () => {
+    await agro('m3', { status: 'picked_up' });
+    await rejectsWith(setAgro('m3', 'cancelled'), 'failed-precondition');
+    await rejectsWith(setAgro('m2', 'cancelled'), 'failed-precondition');
+  });
+
+  // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────
+  await reset();
+  const signIn = (phone, pin) => fns.adminWebSignIn.run({ phone, ...(pin == null ? {} : { pin }) }, {});
+  await check('M1 PIN\'siz kirish — rad (ADMIN_PIN_REQUIRED)', async () => {
+    await rejectsWith(signIn(ADMIN), 'invalid-argument', 'ADMIN_PIN_REQUIRED');
+  });
+  await check('M2 PIN berilmagan admin — umumiy rad (qaysi raqam admin ekani bilinmaydi)', async () => {
+    await rejectsWith(signIn(ADMIN, '482915'), 'permission-denied', 'PIN');
+  });
+  await check('M3 oddiy foydalanuvchi raqami — xuddi shu umumiy rad', async () => {
+    await rejectsWith(signIn(OTHER, '482915'), 'permission-denied', 'PIN');
+  });
+  await check('M4 admin (superadmin emas) boshqaga PIN bera olmaydi', async () => {
+    await rejectsWith(fns.adminSetAdminPin.run({ targetPhone: DISPATCHER }, ctxOf(ADMIN)), 'permission-denied');
+  });
+  await check('M5 panel roli yo\'q foydalanuvchiga PIN berilmaydi', async () => {
+    await rejectsWith(fns.adminSetAdminPin.run({ targetPhone: OTHER }, ctxOf(SUPER)),
+      'failed-precondition', 'ADMIN_PIN_TARGET_NOT_PANEL_ROLE');
+  });
+  let adminPinValue = '';
+  await check('M6 superadmin PIN beradi: javobda bir marta, serverda faqat xesh, audit', async () => {
+    const r = await fns.adminSetAdminPin.run({ targetPhone: ADMIN }, ctxOf(SUPER));
+    assert.match(r.pin, /^\d{6}$/);
+    adminPinValue = r.pin;
+    const cred = (await db.collection('admin_credentials').doc(ADMIN).get()).data();
+    assert.ok(!JSON.stringify(cred).includes(r.pin), 'PIN ochiq saqlanmagan');
+    assert.strictEqual(cred.mustChange, true);
+    const audit = (await db.collection('admin_audit').where('kind', '==', 'admin_pin_set').get()).docs;
+    assert.strictEqual(audit.length, 1);
+    assert.strictEqual(audit[0].data().actor, SUPER);
+  });
+  const wrongPin = adminPinValue === '111222' ? '333444' : '111222';
+  await check('M7 4 ta noto\'g\'ri PIN — rad; 5-chisi — 15 daqiqa qulf; qulfda to\'g\'ri PIN ham rad', async () => {
+    for (let i = 0; i < 4; i += 1) await rejectsWith(signIn(ADMIN, wrongPin), 'permission-denied');
+    await rejectsWith(signIn(ADMIN, wrongPin), 'resource-exhausted');
+    await rejectsWith(signIn(ADMIN, adminPinValue), 'resource-exhausted');
+    const cred = (await db.collection('admin_credentials').doc(ADMIN).get()).data();
+    assert.ok(cred.lockedUntil.toMillis() > Date.now() + 14 * 60 * 1000);
+  });
+  await check('M8 superadmin qayta PIN bersa — qulf ochiladi, yangi PIN bilan kirish (token)', async () => {
+    const r = await fns.adminSetAdminPin.run({ targetPhone: ADMIN }, ctxOf(SUPER));
+    adminPinValue = r.pin;
+    const s = await signIn(ADMIN, adminPinValue);
+    assert.ok(typeof s.token === 'string' && s.token.length > 20, 'custom token');
+    assert.strictEqual(s.role, 'admin');
+    assert.strictEqual(s.mustChangePin, true);
+  });
+  await check('M9 o\'z PIN\'ini almashtirish: zaif / noto\'g\'ri joriy — rad; to\'g\'ri — eski ishlamaydi', async () => {
+    await rejectsWith(fns.adminChangeOwnPin.run({ currentPin: adminPinValue, newPin: '123456' }, ctxOf(ADMIN)),
+      'invalid-argument', 'ADMIN_PIN_WEAK');
+    await rejectsWith(fns.adminChangeOwnPin.run({ currentPin: wrongPin, newPin: '582913' }, ctxOf(ADMIN)),
+      'permission-denied', 'ADMIN_PIN_WRONG');
+    await fns.adminChangeOwnPin.run({ currentPin: adminPinValue, newPin: '582913' }, ctxOf(ADMIN));
+    await rejectsWith(signIn(ADMIN, adminPinValue), 'permission-denied');
+    const s = await signIn(ADMIN, '582913');
+    assert.strictEqual(s.mustChangePin, false);
+  });
+  await check('M10 oddiy foydalanuvchi adminChangeOwnPin chaqira olmaydi', async () => {
+    await rejectsWith(fns.adminChangeOwnPin.run({ currentPin: '1', newPin: '582913' }, ctxOf(OTHER)), 'permission-denied');
   });
 
   const failed = results.filter((x) => !x).length;

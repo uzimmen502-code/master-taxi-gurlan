@@ -178,7 +178,15 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
                               CarpetWashOrder.statusReturnReady,
                             )
                         : null,
-                    onCancel: order.isActive
+                    // Бекор — гилам мижоздан олинмагунча (сервер
+                    // `CARPET_ADMIN_TRANSITIONS` билан бир хил): AVA
+                    // қўлидаги гиламни «бекор» қилиш custody'ни бузарди.
+                    onCancel: const {
+                      CarpetWashOrder.statusNew,
+                      CarpetWashOrder.statusAccepted,
+                      CarpetWashOrder.statusPickupReady,
+                      CarpetWashOrder.statusPickupInDelivery,
+                    }.contains(order.status)
                         ? () => _setStatus(
                               order,
                               CarpetWashOrder.statusCancelled,
@@ -262,8 +270,9 @@ class _OrderCard extends StatelessWidget {
                   _btn('Qabul', onAccept!, AvaLight.ok),
                 if (onPickupReady != null)
                   _btn('Olib ketishga tayyor', onPickupReady!, Colors.orange),
-                if (order.status == CarpetWashOrder.statusPickedUp ||
-                    order.status == CarpetWashOrder.statusPickupInDelivery)
+                // Фақат курьер «олиб кетдим» дегандан кейин
+                // (`pickup_in_delivery`да курьер ҳали йўлда).
+                if (order.status == CarpetWashOrder.statusPickedUp)
                   _btn('Yuvish', onWashing, Colors.blue),
                 if (order.status == CarpetWashOrder.statusWashing)
                   _btn('Quritish', onDrying, Colors.indigo),

@@ -16,6 +16,7 @@ import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_news_read_service.dart';
 import '../utils/count_stream_sum.dart';
+import '../widgets/change_pin_dialog.dart';
 import '../../../repositories/news_repository.dart';
 import 'admin_home_ticker_screen.dart';
 import 'admin_news_list_screen.dart';
@@ -71,7 +72,6 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
   List<Widget?> _pageCache = [];
-  final PendingCodeAutoListener _pendingCodeAuto = PendingCodeAutoListener();
 
   int _visibleIndexFor(int rawIndex, int visibleCount) {
     if (visibleCount <= 0) return 0;
@@ -86,14 +86,18 @@ class _AdminShellState extends State<AdminShell> {
   @override
   void initState() {
     super.initState();
+    // `PendingCodeAutoListener` бу ерда ҲАР админ саҳифасида ишга
+    // тушарди: `pending_codes`ни тинглаб, rules рад этадиган ёзувларни
+    // юборарди. «Код сўровлари» яширилгач (D-2) — ишга туширилмайди.
     _pageCache = List<Widget?>.filled(_sections.length, null);
-    _pendingCodeAuto.start();
-  }
-
-  @override
-  void dispose() {
-    _pendingCodeAuto.dispose();
-    super.dispose();
+    // Superadmin берган вақтинчалик PIN билан кирилган бўлса — алмаштириш
+    // таклифи (D-1).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (context.read<AdminAuthService>().mustChangePin) {
+        showChangePinDialog(context, required: true);
+      }
+    });
   }
 
   static const _sections = [
@@ -252,20 +256,21 @@ class _AdminShellState extends State<AdminShell> {
       // учун бўлим доим хато берарди.
       access: _SectionAccess.ops,
     ),
-    _AdminSection(
-      label: 'Ҳaйдовчи aризалари',
-      icon: Icons.directions_car,
-      description: 'Янги aризалaр',
-    ),
+    // «Ҳaйдовчи aризалари» ва «Код сўровлари» ЯШИРИЛДИ (эга қарори
+    // 2026-10-08, админ аудити D-2). Экранлар, CF ва маълумот жойида —
+    // керак бўлса шу қаторлар қайтарилса бўлим яна очилади.
+    //  • «Ҳaйдовчи aризалари»: илова `driver_requests`га янги ариза
+    //    ёзмайди (фақат эски маълумотдан машина/маршрутни тўлдиради);
+    //    тасдиқ/бекор `provider_capabilities`га таъсир қилмасди. Такси
+    //    ҳуқуқи — «Такси верификацияси».
+    //  • «Код сўровлари»: илова кириши — қурилма боғлаш
+    //    (`checkDeviceBinding`); бу «fake SMS» оқими ишлатилмайди, сервер
+    //    сўровларни ўзи тасдиқлайди, панелнинг тўғридан-тўғри ёзуви эса
+    //    rules'да рад этиларди.
     _AdminSection(
       label: 'Туғилган кун',
       icon: Icons.cake_outlined,
       description: 'Туғилган кун бонуси ва сўровлар',
-    ),
-    _AdminSection(
-      label: 'Код сўровлари',
-      icon: Icons.pin_outlined,
-      description: 'Admin kod (fake SMS)',
     ),
     _AdminSection(
       label: 'Маршрут',
@@ -325,24 +330,32 @@ class _AdminShellState extends State<AdminShell> {
   ];
 
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Чиқиш'),
+        title: const Text('Ҳисоб'),
         content: const Text('Чиқишни тaсдиқлaйcизми?'),
         actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'pin'),
+            icon: const Icon(Icons.lock_reset, size: 18),
+            label: const Text('PIN\'ни алмаштириш'),
+          ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Бекор'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'logout'),
             child: const Text('Чиқиш', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-    if (confirm == true && mounted) {
+    if (!mounted) return;
+    if (choice == 'pin') {
+      await showChangePinDialog(context);
+    } else if (choice == 'logout') {
       await context.read<AdminAuthService>().logout();
     }
   }
@@ -664,18 +677,6 @@ class _Sidebar extends StatelessWidget {
             }),
           ),
         ),
-        if (!compact && sections[selectedIndex].label == 'Код сўровлари')
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const PendingCodeAutoModeSwitch(compact: true),
-            ),
-          ),
         const Divider(color: _divider, height: 1),
         if (kIsWeb) _publicAppLinkTile(context, compact),
         _userTile(auth),

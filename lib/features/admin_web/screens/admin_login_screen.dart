@@ -12,6 +12,7 @@ class AdminLoginScreen extends StatefulWidget {
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
   final _phoneCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
   bool _codeMode = false;
   String? _error;
@@ -26,11 +27,18 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     final auth = context.read<AdminAuthService>();
     if (auth.isLoggedIn) return;
     await auth.restoreSession();
+    if (!mounted || auth.isLoggedIn) return;
+    // Сессия йўқ — фақат телефонни олдиндан тўлдирамиз (PIN сақланмайди).
+    final saved = await auth.savedPhone();
+    if (mounted && saved != null && _phoneCtrl.text.isEmpty) {
+      _phoneCtrl.text = saved;
+    }
   }
 
   @override
   void dispose() {
     _phoneCtrl.dispose();
+    _pinCtrl.dispose();
     _codeCtrl.dispose();
     super.dispose();
   }
@@ -48,10 +56,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   Future<void> _submitPhone() async {
     setState(() => _error = null);
     final auth = context.read<AdminAuthService>();
-    final sent = await auth.sendOtp(_phoneCtrl.text);
+    final err = await auth.signInWithPhonePin(_phoneCtrl.text, _pinCtrl.text);
     if (!mounted) return;
-    if (!sent) {
-      setState(() => _error = auth.otpError ?? 'Kirishda xatolik');
+    if (err != null) {
+      _pinCtrl.clear();
+      setState(() => _error = err);
     }
   }
 
@@ -80,8 +89,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   Text(
                     _codeMode
                         ? 'Maxfiy kirish kodini kiriting (telefon shart emas)'
-                        : 'Admin roli berilgan telefonni kiriting — '
-                            'SMS va parol shart emas',
+                        : 'Admin roli berilgan telefon va shaxsiy PIN. '
+                            'PIN\'ni superadmin beradi.',
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 24),
@@ -97,22 +106,39 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         border: OutlineInputBorder(),
                       ),
                     )
-                  else
+                  else ...[
                     TextField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      onSubmitted: (_) => _submitPhone(),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(
                             RegExp(r'[0-9 +\-()]'))
                       ],
                       decoration: const InputDecoration(
                         labelText: 'Telefon raqam',
-                        hintText: '+998 91 277 87 77',
+                        hintText: '+998 __ ___ __ __',
                         prefixIcon: Icon(Icons.phone),
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _pinCtrl,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 12,
+                      onSubmitted: (_) => _submitPhone(),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'PIN',
+                        prefixIcon: Icon(Icons.lock_outline),
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Container(

@@ -883,10 +883,19 @@ PIN'сиз ўтади.
 Энди `adminGrantCapability` (D-15.2) + экран `provider_capabilities`
 бўйича (фильтр, тасдиқлаш, тўхтатиш — сабаб билан, audit).
 
-**Деплой (ҳали ҚИЛИНМАГАН), ТАРТИБ БИЛАН:**
-1. `functions:demand` → `requestCapability` `acceptServiceAgreement`
-   `adminSetCapabilityStatus` `adminGrantCapability`
-   `adminSetCourierApprovalMode` `adminMigrateTaxiDrivers`; hosting (админ).
+**Деплой, ТАРТИБ БИЛАН:**
+1. ✅ **2026-10-08 ~02:35 UTC (эга рухсати)** — `functions:demand` НОМИ БИЛАН,
+   тоза detached worktree'дан (`52115b3`): `requestCapability`
+   `acceptServiceAgreement` `adminSetCapabilityStatus` `adminMigrateTaxiDrivers`
+   янгиланди, `adminGrantCapability` `adminSetCourierApprovalMode` яратилди
+   (europe-west1, `Deploy complete`). Rollback: шу функцияларни `234b79e`дан
+   номи билан қайта деплой. ⏳ **Hosting (админ «Курьерлар» + сотув рўйхати)
+   НАВБАТДА:** жонли hosting'ни бир неча сессия кетма-кет чиқаряпти (бренд →
+   Улгуржи → шу иш). Делта — фақат 2 админ файл, `deploy/hosting-courier`
+   (`cd6c7ca`); Улгуржи'нинг якуний SHA'си устига cherry-pick қилиниб,
+   жонли бандл хеши солиштирилгач чиқарилади. Ҳозирча админдаги
+   «Курьерлар» экрани ЭСКИ (`couriers`га ёзади) — янги функциялар фақат
+   hosting'дан кейин кўринади.
 2. Админ ҳақиқий курьерларни «Курьерлар» экранидан қўшади.
 3. default (номи билан, `functions:default` тўлиқ эмас): `courierMarkPicked`
    `courierMarkArrived` `courierSubmitPayment` `courierGetCustomerWalletBalance`
@@ -914,6 +923,20 @@ PIN'сиз ўтади.
 - *Regression:* `functions/test/courier_callables_cf.test.js` — ҲАҚИҚИЙ
   `index.js` callable'лари: тузатишдан олдинги коддан **4/8** (ҳужум ўтади),
   кейин **8/8**. Модул: `courier_auth.test.js` **12/12**.
+- ⚠️ *ҚОЛГАН ТЕШИК (2026-10-08 да аниқланди, ОЧИҚ):* бу fix курьер
+  БЎЛМАГАН одамни тўсади. Лекин ўзини ўзи `trial` курьер қилган одам
+  (`requestCapability`, ёки D-15.3 «Авто»да дарҳол `approved`) ўзининг
+  `ready` буюртмасини `courierCreateRoute` билан ўз маршрутига олиб,
+  «нақд 10 000 000» юбориши мумкин — қайтим яна ЎЗ ҳамёнига тушади.
+  Ёпиш: (1) курьер ўзи мижоз бўлган буюртмага тега олмасин (хавфсизлик,
+  PROPOSED); (2) қайтим (`changeCredit`) чегараси — ЭГА ҚАРОРИ керак.
+- ⚠️ *ПАРАЛЛЕЛ ИШ:* бошқа сессия худди шу 3 callable'ни
+  `fix/courier-order-authz`да (worktree `jovial-bardeen-2a4c6d`, COMMIT
+  ҚИЛИНМАГАН) бошқача тузатган: эгалик `od.courierId` бўйича + эгасиз
+  буюртмани атомар claim; энг муҳими — `courierSubmitPayment` битта
+  транзакцияда + `wallet_idempotency` (параллел submit икки марта
+  ечмайди/ёзмайди — бу ерда ЙЎҚ). Default деплойидан ОЛДИН иккаласи битта
+  версияга бирлаштирилиши шарт.
 - ⚠️ *Деплой тартиби:* бу default функциялар деплой қилингач, capability'си
   йўқ курьер буюртмани олиб/топшира олмайди. Шунинг учун АВВАЛ demand
   (accountId fix + `adminGrantCapability`) + hosting → админ ҳақиқий
@@ -1308,6 +1331,32 @@ enabled`); янги илова build'и 1.0.34 (плитка ва оқимлар
 код қўлда киритилади, QR кўрсатилади), L14 (шартлар матни —
 `termsAcceptedAt` юборилмайди), L15; GPS нуқтаси handover'да
 (ихтиёрий майдон бор, илова ҳали юбормайди); офлайн навбат (6.2).
+
+### 10.3 Ишга тушириш босқичи INTERNAL → PUBLIC (2026-10-08, ветв `feat/logistics-internal-stage`)
+
+**What:** `module_config/logistics_all.logistics.stage` (`internal` | `public`) ва
+`logistics.testerIds` (каноник телефон ID). INTERNAL'да фақат рўйхатдагилар:
+(1) нарх олади ва буюртма беради — `requireEnabled` → `module_internal_only`;
+(2) LEG'га мос келади — адаптер `isEligible` → `stage_internal`; `acceptLeg`
+match ҳужжатини талаб қилгани учун рўйхатдан ташқари ижрочи олмайди ҳам.
+Илова: `module_defaults.logistics = soon` бўлса ҳам, `getLogisticsAccess`
+(рўйхатни қайтармайди) `allowed: true` берса — бўлим очилади.
+**Why:** эга 2026-10-07 «аввал ички синовдан» деди; кодда фойдаланувчи
+даражасидаги гейт йўқ эди (42-банд).
+**Impact:** стандарт `internal` + бўш рўйхат — ҳужжатда ёзилмаган бўлса ҳам
+хизмат **ёпиқ** (fail closed). PUBLIC'га ўтиш — `stage: public` (код
+ўзгармайди). Бошқариш: `functions_demand/tools/set_logistics_stage.js`
+(dry-run, `--write`, `logistics_audit`). PILOT — UNKNOWN (эга қарори йўқ).
+**Deploy (эга рухсати, 2026-10-08):** `functions:demand` — 02:52 UTC, тоза
+worktree'дан (`aed6f55` = бу ветв + `feat/ev-trip-planner` `b2d2709`), 36/36
+ACTIVE, `getLogisticsAccess` янги, ўчирилган функция йўқ, ERROR йўқ. Production
+конфигида `stage` ёзилмаган → хизмат ҳамма учун ЁПИҚ (синовчилар рўйхати бўш).
+Hosting — фақат `master-taxi-gurlan`, 03:12 UTC, `deploy/hosting-logistics-3` =
+жонли `8bee7cd` + фақат шу иловa қисми (админ бандли олдинги жонли билан
+байт-ма-байт бир хил); rollback версияси `129eb5dcda2a5a26`; `ava-zona` тегилмади.
+**Маълум бўшлиқ (олдиндан бор):** `onProviderAvailable` тескари matching'и
+`module_config/logistics_{вилоят}` ни ўқийди, `logistics_all`ни эмас — бундай
+ҳужжат йўқ, демак логистика учун у ишламайди (ёпиқ томонда).
 
 ---
 

@@ -78,16 +78,12 @@ function attachTelegramWalletBot(exports, deps) {
       maxTopUp: Math.trunc(Number(d.maxTopUp) || DEFAULT_MAX_TOPUP),
       dailyTopUpLimit: Math.trunc(Number(d.dailyTopUpLimit) || DEFAULT_DAILY_TOPUP),
       maxWithdraw: Math.trunc(Number(d.maxWithdraw) || DEFAULT_MAX_WITHDRAW),
-      // manual (default) | auto — чек келгач админсиз ҳамёнга ёзиш
-      topUpApproveMode:
-          String(d.topUpApproveMode || 'manual').toLowerCase() === 'auto'
-            ? 'auto'
-            : 'manual',
-      // manual (default) | auto — лимит ичида админсиз walletToCash
-      withdrawApproveMode:
-          String(d.withdrawApproveMode || 'manual').toLowerCase() === 'auto'
-            ? 'auto'
-            : 'manual',
+      // Ҳар доим `manual` — сақланган қиймат `auto` бўлса ҳам (ҳамён аудити
+      // 2026-10-07, K-2; эга қарори 2026-10-08). Авто тўлдириш чек расмини
+      // текширмай пул ёзарди; авто ечиш KYC/лимит/pending текширувисиз эди.
+      // Автоматлаштириш фақат тўлов провайдери тасдиғи (webhook) билан.
+      topUpApproveMode: 'manual',
+      withdrawApproveMode: 'manual',
       withdrawAutoLimit: normalizeWithdrawAutoLimit(d.withdrawAutoLimit),
     };
   }
@@ -634,20 +630,45 @@ function attachTelegramWalletBot(exports, deps) {
       patch.maxWithdraw = Math.max(
           1000, Math.trunc(Number(data.maxWithdraw) || DEFAULT_MAX_WITHDRAW));
     }
-    if (data && data.topUpApproveMode != null) {
-      const m = String(data.topUpApproveMode).toLowerCase();
-      patch.topUpApproveMode = m === 'auto' ? 'auto' : 'manual';
-    }
-    if (data && data.withdrawApproveMode != null) {
-      const m = String(data.withdrawApproveMode).toLowerCase();
-      patch.withdrawApproveMode = m === 'auto' ? 'auto' : 'manual';
+    // Авто режим ўчирилган (K-2) — `auto` сўралса рад, жимгина эмас.
+    for (const key of ['topUpApproveMode', 'withdrawApproveMode']) {
+      if (data && data[key] != null) {
+        if (String(data[key]).toLowerCase() === 'auto') {
+          throw new functions.https.HttpsError(
+              'invalid-argument',
+              'Avto tasdiq o\'chirilgan — faqat qo\'lda tasdiq',
+              { errorCode: 'AUTO_MODE_DISABLED', field: key });
+        }
+        patch[key] = 'manual';
+      }
     }
     if (data && data.withdrawAutoLimit != null) {
       patch.withdrawAutoLimit = normalizeWithdrawAutoLimit(data.withdrawAutoLimit);
     }
+    const prev = await loadBotSettings();
     patch.updatedAt = admin.firestore.FieldValue.serverTimestamp();
     patch.updatedBy = caller;
-    await db.doc(SETTINGS_DOC).set(patch, { merge: true });
+    // 41-банд: ким, қачон, нима ўзгарди — созлама билан АЙНИ batch'да.
+    // Карта рақами log/audit'га ёзилмайди — фақат ўзгаргани белгиланади.
+    const changed = {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === 'updatedAt' || k === 'updatedBy') continue;
+      if (prev[k] === v) continue;
+      changed[k] = k === 'depositCardNumber'
+        ? { changed: true }
+        : { from: prev[k] === undefined ? null : prev[k], to: v };
+    }
+    const batch = db.batch();
+    batch.set(db.doc(SETTINGS_DOC), patch, { merge: true });
+    if (Object.keys(changed).length) {
+      batch.set(db.collection('admin_audit').doc(), {
+        kind: 'wallet_bot_settings',
+        actor: caller,
+        changed,
+        at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
     return { ok: true, settings: await loadBotSettings() };
   });
 

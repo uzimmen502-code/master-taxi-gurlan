@@ -171,7 +171,13 @@ class _AgroPickupAdminScreenState extends State<AgroPickupAdminScreen> {
                               AgroPickupOrder.statusCompleted,
                             )
                         : null,
-                    onCancel: order.isActive
+                    // Бекор — маҳсулот олинмагунча (сервер
+                    // `AGRO_ADMIN_TRANSITIONS` билан бир хил).
+                    onCancel: const {
+                      AgroPickupOrder.statusNew,
+                      AgroPickupOrder.statusAccepted,
+                      AgroPickupOrder.statusPickupInDelivery,
+                    }.contains(order.status)
                         ? () => _setStatus(
                               order,
                               AgroPickupOrder.statusCancelled,

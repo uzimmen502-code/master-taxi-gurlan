@@ -397,92 +397,17 @@ class _WalletBotTabState extends State<WalletBotTab>
           onChanged: (v) => setState(() => _enabled = v),
         ),
         const SizedBox(height: 8),
+        // Авто тасдиқ ўчирилган (ҳамён аудити K-2, эга қарори 2026-10-08):
+        // сервер `auto`ни рад этади, чек расмини автоматик текшириб бўлмайди.
         const Text(
-          'Тўлдириш тасдиғи',
+          'Тўлдириш ва ечиш тасдиғи',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-        ),
-        const SizedBox(height: 8),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(
-              value: 'manual',
-              label: Text('Қўлда'),
-              icon: Icon(Icons.person_outline, size: 18),
-            ),
-            ButtonSegment(
-              value: 'auto',
-              label: Text('Авто'),
-              icon: Icon(Icons.bolt, size: 18),
-            ),
-          ],
-          selected: {_topUpApproveMode},
-          onSelectionChanged: (s) {
-            if (s.isEmpty) return;
-            setState(() => _topUpApproveMode = s.first);
-          },
         ),
         Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 12),
           child: Text(
-            _topUpApproveMode == 'auto'
-                ? 'Авто: чек юклангач ҳамёнга дарҳол ёзилади (админ навбатисиз).'
-                : 'Қўлда: чек «Тўлдириш навбати»да кутади, админ тасдиқлайди.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
-        ),
-        const Text(
-          'Ечиш тасдиғи',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-        ),
-        const SizedBox(height: 8),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(
-              value: 'manual',
-              label: Text('Қўлда'),
-              icon: Icon(Icons.person_outline, size: 18),
-            ),
-            ButtonSegment(
-              value: 'auto',
-              label: Text('Авто'),
-              icon: Icon(Icons.bolt, size: 18),
-            ),
-          ],
-          selected: {_withdrawApproveMode},
-          onSelectionChanged: (s) {
-            if (s.isEmpty) return;
-            setState(() => _withdrawApproveMode = s.first);
-          },
-        ),
-        if (_withdrawApproveMode == 'auto') ...[
-          const SizedBox(height: 10),
-          const Text(
-            'Авто лимит (шу сумма ва ундан кичик — админсиз)',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          SegmentedButton<int>(
-            segments: [
-              for (final lim in _withdrawAutoLimits)
-                ButtonSegment(
-                  value: lim,
-                  label: Text(formatPrice(lim)),
-                ),
-            ],
-            selected: {_withdrawAutoLimit},
-            onSelectionChanged: (s) {
-              if (s.isEmpty) return;
-              setState(() => _withdrawAutoLimit = s.first);
-            },
-          ),
-        ],
-        Padding(
-          padding: const EdgeInsets.only(top: 6, bottom: 12),
-          child: Text(
-            _withdrawApproveMode == 'auto'
-                ? 'Авто: ≤ ${formatMoney(_withdrawAutoLimit)} дарҳол ҳамёндан ечилади; '
-                    'каттареси «Ечиш навбати»да кутади. Картага тўлов ҳали қўлда.'
-                : 'Қўлда: барча ечиш аризалари админ тасдиғини кутади.',
+            'Фақат қўлда: чеклар «Тўлдириш навбати»да, ечиш аризалари '
+            '«Ечиш навбати»да админ тасдиғини кутади. Авто режим ўчирилган.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
         ),

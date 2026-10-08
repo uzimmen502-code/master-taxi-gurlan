@@ -13,6 +13,7 @@ import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../models/job_ad.dart';
 import '../jobs/jobs_sections.dart';
 import '../jobs/screens/jobs_screen.dart';
+import '../logistics/data/logistics_repository.dart';
 import '../logistics/screens/logistics_home_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../realty/screens/realty_screen.dart';
@@ -226,20 +227,22 @@ List<ServiceSpotlightItem> buildHomeServices(
       },
     ),
     // AVA Logistics (Relay) — посилка жўнатиш. Admin «Ҳудудлар ва
-    // хизматлар»да `logistics` ёқилмагунча гридда кўринмайди.
+    // хизматлар»да `logistics` ёқилмагунча гридда кўринмайди. «Тез кунда»
+    // бўлса — INTERNAL синовчи (сервер `testerIds`) барибир киради (42-банд).
     ServiceSpotlightItem(
       moduleId: 'logistics',
       label: context.tr('home_module_logistics'),
       icon: Icons.local_post_office_rounded,
       iconColor: Colors.white,
       onTap: () async {
-        if (!ServiceConfigHolder.isOpenable('logistics')) {
-          a.showComingSoon();
+        final phone = phoneDigits(context.read<HomeController>().phone);
+        final openable = ServiceConfigHolder.isOpenable('logistics');
+        if (phone.length < 9) {
+          openable ? needPhoneForAction(context) : a.showComingSoon();
           return;
         }
-        final phone = phoneDigits(context.read<HomeController>().phone);
-        if (phone.length < 9) {
-          needPhoneForAction(context);
+        if (!openable && !await LogisticsRepository().hasAccess()) {
+          a.showComingSoon();
           return;
         }
         await a.push(LogisticsHomeScreen(ownerId: canonicalPhoneId(phone)));

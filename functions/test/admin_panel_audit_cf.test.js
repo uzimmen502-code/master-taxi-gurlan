@@ -32,6 +32,8 @@
  *      adminChangeOwnPin (ega qarori D-1)
  *   R  adminResetItemSoldToday — bitta mahsulot reseti ochiq to'lanmagan
  *      buyurtma rezervini saqlaydi (O-8), parallel rad etish bilan izchil
+ *   S  intercityCreateBooking — admin to'xtatgan (suspended) haydovchining
+ *      ochiq qolgan e'loniga bron yo'q (O-13)
  */
 'use strict';
 const assert = require('assert');
@@ -682,6 +684,46 @@ async function main() {
     await Promise.all([resetItem('bread', 'b1'), setStatus('r_open', 'rejected')]);
     assert.strictEqual((await db.collection('orders').doc('r_open').get()).data().status, 'rejected');
     assert.strictEqual(await sold('bread_products', 'b1'), 0);
+  });
+
+  // ── S. Shaharlararo: to'xtatilgan (suspended) haydovchiga bron yo'q (O-13) ──
+  await reset();
+  await Promise.all(['provider_capabilities', 'intercity_bookings', 'intercity_booking_locks',
+    'intercity_passenger_locks', 'notifications'].map(wipe));
+  const listing = (id) => db.collection('intercity_drivers').doc(id).set({
+    phone: id, name: 'Haydovchi', isActive: true, seats: 4, price: 50000, from: 'Gurlan', to: 'Toshkent',
+  });
+  const capOf = (acc, status) => db.collection('provider_capabilities').doc(acc).set({ status: { taxi: status } });
+  const book = (driverId, who = CUSTOMER) =>
+    fns.intercityCreateBooking.run({ driverId, passengers: 1, pricePerSeat: 50000 }, ctxOf(who));
+  const seatsOf = async (id) => (await db.collection('intercity_drivers').doc(id).get()).data().seats;
+  await listing(DRIVER);
+  await db.collection('users').doc(DRIVER).set({ role: 'driver', accountId: 'acc_drv' });
+  await capOf('acc_drv', 'suspended');
+  await check('S1 suspended haydovchi — bron rad (driver_inactive), o\'rin va bron yozilmaydi', async () => {
+    await rejectsWith(book(DRIVER), 'failed-precondition', 'driver_inactive');
+    assert.strictEqual(await seatsOf(DRIVER), 4);
+    assert.strictEqual((await db.collection('intercity_bookings').get()).size, 0);
+  });
+  await check('S2 qayta verified — bron o\'tadi, o\'rin kamayadi', async () => {
+    await capOf('acc_drv', 'verified');
+    const r = await book(DRIVER);
+    assert.ok(r, 'natija');
+    assert.strictEqual(await seatsOf(DRIVER), 3);
+  });
+  await check('S3 capability\'siz (admin qo\'shgan / eski) e\'lon — bron avvalgidek o\'tadi', async () => {
+    const legacy = '998902000031';
+    await listing(legacy);
+    await book(legacy, OTHER);
+    assert.strictEqual(await seatsOf(legacy), 3);
+  });
+  await check('S4 eski 9 xonali users hujjati orqali suspended — ham rad', async () => {
+    const d12 = '998902000032';
+    await listing(d12);
+    await db.collection('users').doc(d12.slice(3)).set({ role: 'driver', accountId: 'acc_old' });
+    await capOf('acc_old', 'suspended');
+    await rejectsWith(book(d12, FINANCE), 'failed-precondition', 'driver_inactive');
+    assert.strictEqual(await seatsOf(d12), 4);
   });
 
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────

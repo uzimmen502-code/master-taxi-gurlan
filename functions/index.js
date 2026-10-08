@@ -10693,6 +10693,26 @@ function intercityRestoredSeats(driverData, passengers) {
   return restored;
 }
 
+/**
+ * Haydovchining taksi capability holati — tranzaksiya ichida (o'qish).
+ * `users/{12|9 xonali}.accountId` → `provider_capabilities` (courier_auth
+ * bilan bir xil yo'l). Capability yo'q (eski / admin qo'shgan e'lon) → null.
+ */
+async function taxiStatusForPhoneInTx(tx, phone) {
+  const uid12 = canonicalUid(phone);
+  if (!/^\d{9,}$/.test(uid12)) return null;
+  const forms = /^998\d{9}$/.test(uid12) ? [uid12, uid12.slice(3)] : [uid12];
+  for (const id of forms) {
+    const u = await tx.get(db.collection('users').doc(id));
+    if (!u.exists) continue;
+    const accountId = String((u.data() || {}).accountId || '');
+    if (!accountId) return null;
+    const cap = await tx.get(db.collection('provider_capabilities').doc(accountId));
+    return capabilitiesModel.statusOf(cap.exists ? (cap.data() || {}) : {}, 'taxi');
+  }
+  return null;
+}
+
 exports.intercityCreateBooking = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Auth required');
@@ -10752,6 +10772,7 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
     const lockSnap = await tx.get(lockRef);
     const pLockSnap = await tx.get(passengerLockRef);
     const clientSnap = await tx.get(clientRef);
+    const driverTaxiStatus = await taxiStatusForPhoneInTx(tx, driverId);
 
     const activeBlocks = async (snap) => {
       if (!snap.exists) return false;
@@ -10771,6 +10792,18 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
     }
 
     if (driver.isActive === false) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'driver_inactive');
+    }
+    // Админ «Такси верификацияси»да тўхтатган (`suspended`) ҳайдовчининг
+    // аввал чиққан эълони очиқ қолади — брон қабул қилинмайди (админ
+    // аудити O-13). Мижозга `driver_inactive` (эски илова ҳам шу кодни
+    // «рейс қабул қилмайди» деб кўрсатади); диагностика — логда.
+    if (driverTaxiStatus === capabilitiesModel.COMMON.suspended) {
+      console.warn(JSON.stringify({
+        action: 'intercityCreateBooking', result: 'rejected',
+        errorCode: 'DRIVER_SUSPENDED', driverId,
+      }));
       throw new functions.https.HttpsError(
           'failed-precondition', 'driver_inactive');
     }

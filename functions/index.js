@@ -49,6 +49,11 @@ const { attachLocalTaxi } = require('./local_taxi');
 attachLocalTaxi(exports, {
   functions, db, admin, callerPhone, canonicalUid, axios,
 });
+// «Ҳудудлар ва хизматлар»: модул ҳолати фақат шу callable орқали — ўзгарган
+// катаклар, конфликт текшируви ва `admin_audit` битта транзакцияда (эга,
+// 2026-10-08).
+const { attachModuleConfig } = require('./module_config');
+attachModuleConfig(exports, { functions, db, admin, callerPhone, canonicalUid });
 // AVA Logistics eskrou (D-11): pul faqat ledger orqali — u shu yerda;
 // ORDER/SHIPMENT/LEG/custody `functions_demand` da (relay hujjati 7.6).
 const { attachRelayEscrow } = require('./relay_escrow');

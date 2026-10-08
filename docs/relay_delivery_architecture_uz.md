@@ -1324,6 +1324,13 @@ match ҳужжатини талаб қилгани учун рўйхатдан �
 хизмат **ёпиқ** (fail closed). PUBLIC'га ўтиш — `stage: public` (код
 ўзгармайди). Бошқариш: `functions_demand/tools/set_logistics_stage.js`
 (dry-run, `--write`, `logistics_audit`). PILOT — UNKNOWN (эга қарори йўқ).
+**Deploy (эга рухсати, 2026-10-08):** `functions:demand` — 02:52 UTC, тоза
+worktree'дан (`aed6f55` = бу ветв + `feat/ev-trip-planner` `b2d2709`), 36/36
+ACTIVE, `getLogisticsAccess` янги, ўчирилган функция йўқ, ERROR йўқ. Production
+конфигида `stage` ёзилмаган → хизмат ҳамма учун ЁПИҚ (синовчилар рўйхати бўш).
+Hosting — фақат `master-taxi-gurlan`, 03:12 UTC, `deploy/hosting-logistics-3` =
+жонли `8bee7cd` + фақат шу иловa қисми (админ бандли олдинги жонли билан
+байт-ма-байт бир хил); rollback версияси `129eb5dcda2a5a26`; `ava-zona` тегилмади.
 **Маълум бўшлиқ (олдиндан бор):** `onProviderAvailable` тескари matching'и
 `module_config/logistics_{вилоят}` ни ўқийди, `logistics_all`ни эмас — бундай
 ҳужжат йўқ, демак логистика учун у ишламайди (ёпиқ томонда).

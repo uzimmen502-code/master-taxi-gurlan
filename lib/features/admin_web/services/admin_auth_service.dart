@@ -7,7 +7,7 @@ import '../../../core/utils/formatters.dart' as fmt;
 
 /// Admin web auth: panel roli bor telefon + SHAXSIY PIN (`adminWebSignIn`
 /// custom token; ega qarori 2026-10-08, admin audit D-1 — avval faqat
-/// telefon yetarli edi). Maxfiy umumiy kod — `adminWebSignInWithCode`.
+/// telefon yetarli edi). Umumiy maxfiy kod bilan kirish o'chirilgan (D-5).
 class AdminAuthService extends ChangeNotifier {
   AdminAuthService({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -188,54 +188,7 @@ class AdminAuthService extends ChangeNotifier {
     }
   }
 
-  /// Maxfiy kod (PIN) bilan kirish — telefonsiz.
-  /// `adminWebSignInWithCode` CF kodni tekshiradi va ishonchli admin
-  /// operator uchun custom token qaytaradi.
-  Future<String?> signInWithCode(String code) async {
-    final trimmed = code.trim();
-    if (trimmed.isEmpty) {
-      return 'Kirish kodini kiriting';
-    }
-    isVerifyingOtp = true;
-    otpError = null;
-    notifyListeners();
-    try {
-      final callable =
-          FirebaseFunctions.instance.httpsCallable('adminWebSignInWithCode');
-      final result = await callable.call<Map<String, dynamic>>({
-        'code': trimmed,
-      });
-      final data = result.data;
-      final token = data['token'] as String?;
-      final rawPhone = (data['phone'] as String?) ?? '';
-      if (token == null || token.isEmpty) {
-        return 'Kirish tokeni olinmadi';
-      }
-      await _auth.signInWithCustomToken(token);
-      await _auth.currentUser?.getIdToken(true);
-      final snap = await _findUserDoc(rawPhone);
-      if (snap == null) {
-        await _auth.signOut();
-        return 'Admin operator Firestore\'da topilmadi.';
-      }
-      final role = snap.data()?['role'] as String? ?? '';
-      if (!_isPanelRole(role)) {
-        await _auth.signOut();
-        return 'Bu hisob admin emas.';
-      }
-      await _applyAdminSession(rawPhone: rawPhone, snap: snap);
-      return null;
-    } on FirebaseFunctionsException catch (e) {
-      return e.message ?? e.code;
-    } on FirebaseAuthException catch (e) {
-      return e.message ?? e.code;
-    } catch (e) {
-      return 'Xatolik: $e';
-    } finally {
-      isVerifyingOtp = false;
-      notifyListeners();
-    }
-  }
+  // `signInWithCode` (umumiy maxfiy kod) olib tashlandi — admin audit D-5.
 
   Future<void> _applyAdminSession({
     required String rawPhone,

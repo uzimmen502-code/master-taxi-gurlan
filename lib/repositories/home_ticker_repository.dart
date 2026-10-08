@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/home_ticker_ad.dart';
 
@@ -14,6 +15,23 @@ class HomeTickerRepository {
 
   CollectionReference<Map<String, dynamic>> get _col =>
       _db.collection('home_ticker_ads');
+
+  /// Joriy foydalanuvchi roli bilan (`user_role` prefs — `UserRoleSync`
+  /// yozadi). Avval bosh ekran rolni doim `'user'` deb uzatardi: admin
+  /// «Ҳайдовчилар»/«Админлар» uchun yozgan matnlar hech kimga chiqmas,
+  /// «Фойдаланувчилар» matni esa haydovchilarga ham chiqardi.
+  Stream<List<HomeTickerAd>> watchForModuleCurrentRole(
+    String module, {
+    int limit = 40,
+  }) async* {
+    var role = 'user';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = (prefs.getString('user_role') ?? '').trim().toLowerCase();
+      if (saved.isNotEmpty) role = saved;
+    } catch (_) {}
+    yield* watchForModule(module, role, limit: limit);
+  }
 
   /// Berilgan modul (`home_search`) va rol uchun faol matnlar.
   /// Serverda `module`+`active` filter + priority tartib + limit;

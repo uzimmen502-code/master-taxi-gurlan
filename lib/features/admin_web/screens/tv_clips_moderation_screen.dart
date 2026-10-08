@@ -740,7 +740,7 @@ class _ClipsTable extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (c.status != 'active')
+            if (c.status != 'active' && c.status != 'expired')
               IconButton(
                 tooltip: 'Фаоллаштириш',
                 iconSize: 20,
@@ -886,7 +886,11 @@ class _TvClipDetailDialog extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-                if (clip.status != 'active')
+                // `expired` — фаоллаштирилмайди: реклама эгаси пул тўлаб
+                // узайтиради (`renewTvAd`), янгиликнинг медиаси эса
+                // `expireTvContent` томонидан аллақачон ўчирилган — уни
+                // очиш лентага «бузуқ» клип чиқарарди.
+                if (clip.status != 'active' && clip.status != 'expired')
                   FilledButton.icon(
                     onPressed: onActivate,
                     icon: const Icon(Icons.check_circle_outline, size: 18),

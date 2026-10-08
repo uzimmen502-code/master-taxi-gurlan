@@ -22,6 +22,7 @@ import '../../../repositories/trips_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
 import '../../courier/screens/courier_screen.dart';
+import '../../courier/widgets/courier_profile_entry.dart';
 import '../../seller/screens/seller_pos_screen.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_my_shop_screen.dart';
@@ -277,13 +278,22 @@ class _ProfileViewState extends State<_ProfileView> {
                 ),
               ),
             ),
-          if (c.role == 'courier') _rolePanelButton(
-            label: loc.translate('profile_courier_panel'),
-            icon: Icons.delivery_dining,
-            color: AppColors.primary,
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const CourierScreen())),
-          ),
+          // КУРЬЕРЛИК (D-15.5): ҳуқуқ — `provider_capabilities`, роль эмас.
+          // Ариза тугмаси ва панел шу виджетда; телефонсиз меҳмонга йўқ.
+          if (canonicalUserId(c.phone).isNotEmpty)
+            CourierProfileEntry(
+              userId: canonicalUserId(c.phone),
+              legacyCourierRole: c.role == 'courier',
+              panelButton: _rolePanelButton,
+            )
+          else if (c.role == 'courier')
+            _rolePanelButton(
+              label: loc.translate('profile_courier_panel'),
+              icon: Icons.delivery_dining,
+              color: AppColors.primary,
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const CourierScreen())),
+            ),
           if (c.role == 'seller' ||
               c.role == 'admin' ||
               c.role == 'superadmin')

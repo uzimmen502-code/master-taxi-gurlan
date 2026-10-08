@@ -2781,5 +2781,14 @@
   "profile_phone_change_bound_other": "Bu raqam boshqa qurilmaga bog'langan. Boshqa raqam kiriting.",
   "profile_phone_change_has_account": "Bu raqamda AVA hisobi bor. Boshqa raqam kiriting yoki o'sha raqam bilan kiring.",
   "profile_phone_change_login_required": "Raqamni o'zgartirish uchun avval telefon raqamingiz bilan kiring.",
-  "profile_phone_change_failed": "Raqamni o'zgartirib bo'lmadi. Qayta urinib ko'ring."
+  "profile_phone_change_failed": "Raqamni o'zgartirib bo'lmadi. Qayta urinib ko'ring.",
+  "courier_apply_button": "Kuryer bo'lish",
+  "courier_apply_body": "Arizangiz adminga yuboriladi. Admin tasdiqlagach, profilingizda «Kuryer paneli» ochiladi va buyurtma ola boshlaysiz.",
+  "courier_apply_confirm": "Ariza yuborish",
+  "courier_apply_sent": "Ariza yuborildi. Admin tasdiqlagach, «Kuryer paneli» shu yerda paydo bo'ladi.",
+  "courier_apply_approved": "Siz kuryer sifatida tasdiqlandingiz.",
+  "courier_apply_pending": "Kuryerlik arizangiz ko'rib chiqilmoqda",
+  "courier_apply_failed": "Arizani yuborib bo'lmadi. Qayta urinib ko'ring.",
+  "courier_apply_blocked": "Kuryerlik huquqingiz to'xtatilgan. Adminga murojaat qiling.",
+  "courier_suspended_note": "Kuryerlik to'xtatilgan: faqat qo'lingizdagi ishni tugatishingiz mumkin."
 }

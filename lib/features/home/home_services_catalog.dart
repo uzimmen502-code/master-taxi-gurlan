@@ -18,6 +18,8 @@ import '../logistics/screens/logistics_home_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
+import '../restaurants/data/restaurants_repository.dart';
+import '../restaurants/screens/restaurants_list_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
@@ -109,6 +111,22 @@ List<ServiceSpotlightItem> buildHomeServices(
       onTap: () => a.openModule(
         HomeModulesCatalog.byId('food'),
       ),
+    ),
+    // «Кафе-Ресторан» (D-REST-6, 2026-10-08). «Тез кунда» бўлса —
+    // INTERNAL синовчи (сервер `testerIds`) барибир киради (logistics
+    // намунаси, 42-банд).
+    ServiceSpotlightItem(
+      moduleId: 'restaurants',
+      label: context.tr('home_module_restaurants'),
+      imagePath: 'assets/images/services/service_restaurants.png',
+      onTap: () async {
+        final openable = ServiceConfigHolder.isOpenable('restaurants');
+        if (!openable && !await RestaurantsRepository().hasAccess()) {
+          a.showComingSoon();
+          return;
+        }
+        await a.push(const RestaurantsListScreen());
+      },
     ),
     // `jobs` модули — иккита алоҳида плитка (эга қарори, 2026-10-06):
     // «Эълонлар» ва «Хизматлар», ҳар бирининг ўз ранги. Админ дарвозаси

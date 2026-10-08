@@ -38,6 +38,31 @@ class OrderModel {
   final int paidAmount;
   final bool customerConfirmed;
 
+  /// Кафе-ресторан буюртмаси (`type: 'restaurant'`, restaurant_orders.js).
+  /// Ҳолат — `restaurantStatus` (ягона жадвал); `status`/`fulfillmentStatus`
+  /// ундан ҳосил қилинган (эски экранлар учун).
+  final String restaurantId;
+  final String restaurantName;
+  final String restaurantStatus;
+  final int itemsTotal;
+  final int packagingTotal;
+  final int deliveryFee;
+
+  /// `ava_courier` · `own_courier` · `pickup`.
+  final String deliveryMode;
+
+  /// `prepay` · `cash_buyout` · `cash_to_restaurant`.
+  final String foodPaymentMethod;
+
+  /// `cash` · `wallet` · `none`.
+  final String deliveryPaymentMethod;
+
+  /// Олдиндан тўлов реквизити snapshot'и (`cardNumber`, `cardHolder`, `qrImageUrl`).
+  final Map<String, dynamic>? restaurantPayment;
+  final int prepTimeMin;
+  final String note;
+  final DateTime? acceptDeadlineAt;
+
   const OrderModel({
     required this.id,
     required this.type,
@@ -67,7 +92,22 @@ class OrderModel {
     this.paymentMethod = '',
     this.paidAmount = 0,
     this.customerConfirmed = false,
+    this.restaurantId = '',
+    this.restaurantName = '',
+    this.restaurantStatus = '',
+    this.itemsTotal = 0,
+    this.packagingTotal = 0,
+    this.deliveryFee = 0,
+    this.deliveryMode = '',
+    this.foodPaymentMethod = '',
+    this.deliveryPaymentMethod = '',
+    this.restaurantPayment,
+    this.prepTimeMin = 0,
+    this.note = '',
+    this.acceptDeadlineAt,
   });
+
+  bool get isRestaurant => type == 'restaurant';
 
   bool get hasCoordinates => lat != null && lng != null;
 
@@ -105,6 +145,9 @@ class OrderModel {
 
   /// Мижоз бекор: курьер олмаган / етиб келмаган / якунланмаган.
   bool get canCustomerCancel {
+    // Ресторан буюртмаси — фақат ресторан қабул қилгунча (2 % ҳали
+    // ечилмаган; `customerCancelRestaurantOrder`).
+    if (isRestaurant) return restaurantStatus == 'placed';
     if (effectivePayment == 'paid' &&
         effectiveFulfillment == 'completed') {
       return false;
@@ -203,6 +246,21 @@ class OrderModel {
       paymentMethod: (d['paymentMethod'] ?? '') as String,
       paidAmount: (d['paidAmount'] as num?)?.toInt() ?? 0,
       customerConfirmed: d['customerConfirmed'] == true,
+      restaurantId: (d['restaurantId'] ?? '') as String,
+      restaurantName: (d['restaurantName'] ?? '') as String,
+      restaurantStatus: (d['restaurantStatus'] ?? '') as String,
+      itemsTotal: (d['itemsTotal'] as num?)?.toInt() ?? 0,
+      packagingTotal: (d['packagingTotal'] as num?)?.toInt() ?? 0,
+      deliveryFee: (d['deliveryFee'] as num?)?.toInt() ?? 0,
+      deliveryMode: (d['deliveryMode'] ?? '') as String,
+      foodPaymentMethod: (d['foodPaymentMethod'] ?? '') as String,
+      deliveryPaymentMethod: (d['deliveryPaymentMethod'] ?? '') as String,
+      restaurantPayment: d['restaurantPayment'] is Map
+          ? Map<String, dynamic>.from(d['restaurantPayment'] as Map)
+          : null,
+      prepTimeMin: (d['prepTimeMin'] as num?)?.toInt() ?? 0,
+      note: (d['note'] ?? '') as String,
+      acceptDeadlineAt: _parseDate(d['acceptDeadlineAt']),
     );
   }
 }

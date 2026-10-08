@@ -14,6 +14,8 @@ import '../../../models/order_model.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../services/order_payment_service.dart';
 import '../../profile/widgets/order_card.dart';
+import '../../restaurants/data/restaurants_repository.dart';
+import '../../restaurants/screens/restaurant_order_screen.dart';
 import '../customer_orders_hub.dart';
 
 /// Buyurtmalar ekrani — non/taom + gilam + sut bitta ro'yxatda.
@@ -213,7 +215,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (ok != true || !mounted) return;
     setState(() => _cancellingOrderId = order.id);
     try {
-      await OrderPaymentService.customerCancelOrder(orderId: order.id);
+      // Ресторан буюртмаси — ўз callable'и (фақат `placed`, 2 % йўқ);
+      // умумий `customerCancelOrder` уни рад этади (USE_RESTAURANT_CANCEL).
+      if (order.isRestaurant) {
+        await RestaurantsRepository().cancel(order.id);
+      } else {
+        await OrderPaymentService.customerCancelOrder(orderId: order.id);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('order_cancel_ok'))),
@@ -232,6 +240,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   void _openEntryDetail(BuildContext context, CustomerOrderEntry entry) {
+    final food = entry.food;
+    if (food != null && food.isRestaurant) {
+      // Кузатув экрани: босқичлар, тўлов реквизити, «Тўладим», қўнғироқ.
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RestaurantOrderScreen(orderId: food.id),
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,

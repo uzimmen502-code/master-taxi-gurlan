@@ -37,6 +37,9 @@ import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
+import '../restaurants/data/restaurants_repository.dart';
+import '../restaurants/screens/restaurant_screen.dart';
+import '../restaurants/screens/restaurants_list_screen.dart';
 import '../ads/widgets/platform_market_card.dart' show openPlatformProductDetail;
 import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
@@ -72,6 +75,7 @@ import '../realty/screens/realty_map_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
+import 'widgets/home_restaurants_section.dart';
 import 'widgets/home_avagram_section.dart';
 import 'widgets/home_dating_section.dart';
 import 'widgets/home_ev_section.dart';
@@ -305,7 +309,23 @@ class _HomeViewState extends State<_HomeView> {
     await openDatingTelegramBot(context);
   }
 
+  /// «Кафе-Ресторан» (D-REST-6): модул «Тез кунда» бўлса ҳам INTERNAL
+  /// синовчи киради (сервер `testerIds`, logistics намунаси, 42-банд).
+  Future<void> _openRestaurants({double? lat, double? lng}) async {
+    final openable = HomeModuleGate.canOpen('restaurants');
+    if (!openable && !await RestaurantsRepository().hasAccess()) {
+      if (mounted) HomeModuleGate.onTapBlocked(context, 'restaurants');
+      return;
+    }
+    if (!mounted) return;
+    await _push(RestaurantsListScreen(userLat: lat, userLng: lng));
+  }
+
   Future<void> _openModule(HomeModule m) async {
+    if (m.id == 'restaurants') {
+      await _openRestaurants();
+      return;
+    }
     if (!HomeModuleGate.canOpen(m.id)) {
       HomeModuleGate.onTapBlocked(context, m.id);
       return;
@@ -828,6 +848,25 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                               ),
                             ],
+                            // Кафе-ресторанлар — «Яқиндаги хизматлар»дан
+                            // кейин (эга қарори D-REST-6, 2026-10-08).
+                            // Кўриниш дарвозаси виджетнинг ўзида
+                            // (очиқ / синовчи / яширин).
+                            HomeRestaurantsSection(
+                              userLat: user?.address.lat,
+                              userLng: user?.address.lng,
+                              onOpenAll: () => _openRestaurants(
+                                lat: user?.address.lat,
+                                lng: user?.address.lng,
+                              ),
+                              onOpenRestaurant: (r) => _push(
+                                RestaurantScreen(
+                                  restaurant: r,
+                                  userLat: user?.address.lat,
+                                  userLng: user?.address.lng,
+                                ),
+                              ),
+                            ),
                             // Кўчмас мулк — эълонлар оиласининг давоми
                             // (эга қарори, 2026-09-28): «Яқинингиздаги
                             // эълонлар» ва «Хизмат таклифлари»дан кейин,

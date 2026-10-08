@@ -570,11 +570,22 @@ D-REST-14 бўйича аввал занжир: сервер қисми ёзил
 | Rules: `restaurants` (+`members`, `private`, `menu_*`), `orders` а'зо ўқиши (get/list ажратилган), `order_events`, `private/secrets`, `restaurant_customer_stats`, `restaurant_courier_prefs` | `firestore.rules` | ✅ ёзилди, **deploy йўқ** |
 | Индекслар: `orders(type, courierId, restaurantStatus)`, `orders(type, restaurantStatus, acceptDeadlineAt)`, `orders(restaurantId, createdAt)` | `firestore.indexes.json` | ✅ файлда, **deploy йўқ** (жонли vs файл diff, `--force` йўқ) |
 | Тестлар | `restaurant_orders_cf` **25/25** · `restaurant_rules` **13/13** · `restaurant_delivery_tariff_pure` **22/22** · регрессия `courier_orders_cf` 18/18, `orders_courier_rules` 20/20 | ✅ ишга туширилди |
-| Flutter: мижоз (бош экран бўлими, рўйхат, ресторан саҳифаси, сават, checkout, кузатиш), ресторан панели, курьер рўйхати/олиш/код/якун | `lib/features/restaurants/` | ⏳ кейинги қадам (§12) |
+| Flutter — **мижоз йўли** (Б1): бош экран бўлими «Яқиндаги Кафе-Ресторанлар» («Яқиндаги хизматлар»дан кейин, ўз дарвозаси: очиқ / синовчи / яширин), хизмат плиткаси «Кафе-Ресторан», рўйхат экрани (қидирув, масофа/рейтинг, очиқ/олиб кетиш), ресторан саҳифаси (муқова, логотип, эълон, **икки устунли боғланган меню**, ёпишқоқ сават панели, «минимумга яна N сўм»), сават варағи (бир ресторан — бир сават), checkout (манзил `AddressGate`, етказиш/олиб кетиш, идиш-товоқ, изоҳ, таом/етказиш пули усули, сервер нархи), кузатиш экрани (босқичлар, реквизит + «Тўладим», қўнғироқ, бекор), «Буюртмалар» экранида ресторан карточкаси | `lib/features/restaurants/`, `lib/features/home/widgets/home_restaurants_section.dart`, `OrderModel` (+ ресторан майдонлари), `OrderCard`, `kKnownModuleIds` + `restaurants`, 117 та калит × 3 тил | ✅ ёзилди, тестлар: `restaurant_cart` · `menu_scroll_sync` · `restaurant_models` · `home_restaurants_section` · `l10n/restaurants_keys` — тўлиқ suite **881/881**, analyze хато йўқ. Қурилмада кўрилмаган (APK — эга) |
+| Flutter — ресторан панели (рўйхатдан ўтиш, профил, меню, буюртмалар inbox) | `lib/features/restaurants/merchant/` | ⏳ Б2 |
+| Flutter — курьер (яқиндаги рўйхат, олиш, код, якун; маршрут экрани тармоғи) | `lib/features/restaurants/courier/`, `courier_screen` | ⏳ Б3 |
 | Админ: «Кафе-ресторанлар» бўлими (аризалар, буюртмалар, тариф, stage/testers) | `lib/features/admin_web/` | ⏳ |
 | Яқин курьерларга push (`provider_presence` geohash) | `restaurant_orders.js` | ⏳ (ҳозир фақат ресторан а'золари ва мижозга push) |
 | Конфиг: `module_config/restaurants_all` (`internal` + testerIds), `settings/restaurant_delivery` (base/perKm/…), `settings/app.restaurantAutoApprove`, `kKnownModuleIds` + `restaurants` | — | ⏳ эга/админ (deploy'дан кейин) |
 | §13 «Таом» модулини ўчириш | — | ⏳ D-REST-14: занжир клиентда ҳам исботлангач |
+
+Мижоз UI'да §12 дан соддалаштирилганлар (1-босқич, PROPOSED): сарлавҳа
+скроллда йиғилмайди; «Меню / Шарҳлар / Маълумот» таблари ўрнига «Маълумот»
+тугмаси (варақ), шарҳлар — 2-босқич; бош экран бўлими саҳифаланмайди —
+4 та карточка + «Барчаси»; плитка расми ҳозирча `service_food.png`
+нусхаси (`service_restaurants.png`) — брендли иконка эга қарори.
+«Курьер тўлови» масаласи (эга, кечки): `courierSubmitPayment` параллел
+чақирувда хом хато ўрнига қайта уриниш + idempotent натижа — `73cbbbd`,
+`courier_orders_cf` 18/18 ×5.
 
 Implementation'да аниқлашган қарорлар (PROPOSED, эга бошқача деса ўзгаради):
 `delivery: { mode: ava_courier / own_courier / none, pickup: bool, ownFee{} }`

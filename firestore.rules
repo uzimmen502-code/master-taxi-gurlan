@@ -1219,8 +1219,10 @@ service cloud.firestore {
             || (prev.driverId != '' && uid == prev.driverId)
           )
           && affectedKeys.hasOnly(
-               localTripDriverReleaseFields().concat(['releasedAt']))
-          && (!('releasedAt' in affectedKeys) || d.releasedAt == request.time);
+               localTripDriverReleaseFields().concat(['releasedAt', 'arrivedAt']))
+          && (!('releasedAt' in affectedKeys) || d.releasedAt == request.time)
+          // «Yetib keldim» — release'da faqat O'CHIRISH mumkin, qo'yish emas.
+          && (!('arrivedAt' in affectedKeys) || !('arrivedAt' in d));
 
       return isAuth()
           && prev.taxiType in ['local', 'alone']

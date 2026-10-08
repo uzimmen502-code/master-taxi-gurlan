@@ -897,7 +897,8 @@ PIN'сиз ўтади.
    2 админ файл. Текширилди: жонли `/main.dart.js` ва `/admin/main.dart.js`
    build билан хеш бўйича БИР ХИЛ, `/downloads/` 3 APK жойида. Кейинги
    hosting деплойлари `5b2bfcd` устига қурилсин.
-2. Админ ҳақиқий курьерларни «Курьерлар» экранидан қўшади.
+2. ✅ Эга ҳақиқий курьерларни «Курьерлар» экранидан қўшди (3-қадамдан
+   ОЛДИН — ҳамён аудити сессияси эгадан тасдиқ олган, 2026-10-08).
    (D-15.5 — 2026-10-08 15:15: `functions:demand` 6 функцияси ва hosting
    `9bda798` жонли; курьер иловадан ҳам ариза бера олади — тугма APK кутади.)
 3. ✅ **2026-10-08 ~15:25 (эга рухсати)** — HEAD `0c0dc3b` (`e399c66` ни ўз
@@ -910,6 +911,16 @@ PIN'сиз ўтади.
    `courierMarkArrived` `courierSubmitPayment` `courierGetCustomerWalletBalance`
    `courierRecoverOrphanRoute` `courierCreateRoute` `courierMarkCollectionArrived`
    `courierFinalizeCollection` ва 8 та гилам/сут курьер функцияси.
+   Эга ҳам `.claude/worktrees/deploy-courier-fns` (detached `95f4941`) дан
+   18 функцияни (+ `onDeliveryRouteCreate/Assign`, O-16) номи билан чиқарган;
+   gcloud: 18/18 ACTIVE, updateTime 10:23–10:26 UTC. `95f4941`→`0c0dc3b`
+   орасида бу 18 функцияга тегадиган ўзгариш йўқ.
+
+**Ҳали очиқ:** курьер тўловидаги қайтим (`courierSubmitPayment.changeCredit`)
+ЧЕГАРАСИЗ — K-6 даги 50 000 (`CREDIT_CHANGE_MAX_UZS`, `22dc53e`) фақат
+`creditChange` callable'ига қўйилган (кодда текширилди); бир хил чегарани
+қўллаш — эга қарори. K-5: `courierFinalizeCollection` нархи клиентдан.
+Илова «Курьер бўлиш» тугмаси (`3e9121d`) — APK/AAB кутади.
 
 Қоида ва индекс ўзгармади.
 

@@ -1594,15 +1594,37 @@ service cloud.firestore {
     // «Push qayta yuborish» (`requestPushResend`); буюртма чеклари ва
     // ҳолат хабарлари — CF (Admin SDK, rules'дан ташқари).
     //
-    // ⚠ Ўқиш ҳали `if true`: CF шахсий чекларни (`targetUserId`, манзил,
-    // сумма) ҳам шу ерга ёзади. Ёпиш учун илова сўровини
-    // (`NewsRepository` — `orderBy createdAt limit 50`) аввал янги версияда
-    // ўзгартириш керак (ҳозирги сўров ёпиқ қоидада бутунлай рад бўлади).
+    // Ўқиш (админ аудити O-4): аввал `if true` эди — CF шахсий чекларни
+    // (`targetUserId`, манзил, сумма) ҳам шу ерга ёзади ва улар ҳаммага
+    // очиқ эди. Энди умумий (`targetUserId == ''`) — ҳаммага; шахсий —
+    // фақат эгасига; админ — ҳаммаси.
+    //   • `get` — битта ҳужжат, ҳақиқий маълумот бўйича (майдони йўқ эски
+    //     умумий хабар ҳам ўқилади);
+    //   • `list` — сўров чекловидан исботланади. ДИҚҚАТ: бу ерда
+    //     `resource.data.get(..., '') == ''` ЁЗИЛМАСИН — emulator'да
+    //     чекланмаган майдон default'га тенг деб олиниб, ФИЛЬТРСИЗ сўров ҳам
+    //     ўтиб кетди (2026-10-08 probe). Майдонга тўғридан-тўғри мурожаат.
+    // ⚠ DEPLOY ТАРТИБИ: backfill (`backfill_admin_news_target.js --apply`)
+    // → `targetUserId == ''` билан сўровчи илова релизи → эски версиялар
+    // тугагач шу rules (эски илова фильтрсиз сўрайди — рад бўлади).
     //
     // Тест: functions/test/admin_panel_audit_rules.test.js
+    function newsTargetForms() {
+      let d = request.auth.token.phone_number.replace('[^0-9]', '');
+      return [d, '+' + d, d.matches('998[0-9]{9}') ? d.replace('^998', '') : d];
+    }
+
     match /admin_news/{newsId} {
-      // Ўқиш — барча фойдаланувчилар (фильтр client-side).
-      allow read: if true;
+      allow get: if resource.data.get('targetUserId', '') == ''
+          || isAdmin()
+          || (isAuth()
+              && request.auth.token.phone_number is string
+              && resource.data.get('targetUserId', '') in newsTargetForms());
+      allow list: if isAdmin()
+          || resource.data.targetUserId == ''
+          || (isAuth()
+              && request.auth.token.phone_number is string
+              && resource.data.targetUserId in newsTargetForms());
 
       // Яратиш — фақат админ; мажбурий майдонлар ва типлар тeкширилaди.
       // category ва audience aniq qiymatlardан bo'lsin.

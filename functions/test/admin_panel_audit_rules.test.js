@@ -182,7 +182,7 @@ async function main() {
       }, {merge: true})));
 
   // ── admin_news ──────────────────────────────────────────────────────
-  await check('admin_news: o\'qish hamon ochiq (ilova lentasi buzilmaydi)',
+  await check('admin_news: eski umumiy xabar (maydonsiz) get — ochiq',
       () => assertSucceeds(unauth().collection('admin_news').doc('n1').get()));
   await check('admin_news: kirmagan yarata olmaydi (hammaga push)',
       () => assertFails(unauth().collection('admin_news').add(news())));
@@ -198,6 +198,41 @@ async function main() {
           {pushResendAt: new Date()}, {merge: true})));
   await check('admin_news: admin ham noto\'g\'ri audience bilan yarata olmaydi',
       () => assertFails(as(ADMIN).collection('admin_news').add(news({audience: 'hack'}))));
+
+  // ── admin_news o'qish: shaxsiy cheklar yopiq (O-4, 2-bosqich) ───────
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.collection('admin_news').doc('bc').set(news({targetUserId: ''}));
+    await db.collection('admin_news').doc('p_own').set(news({targetUserId: OWNER, body: 'manzil, summa'}));
+    await db.collection('admin_news').doc('p_own9').set(news({targetUserId: OWNER.slice(3)}));
+    await db.collection('admin_news').doc('p_str').set(news({targetUserId: STRANGER, body: 'manzil, summa'}));
+  });
+  const nc = (db) => db.collection('admin_news');
+  const aliases = (p) => [p, '+' + p, p.slice(3)];
+  await check('admin_news: yangi ilova umumiy so\'rovi (targetUserId == "") — kirmagan ham',
+      () => assertSucceeds(nc(unauth()).where('targetUserId', '==', '').orderBy('createdAt', 'desc').limit(50).get()));
+  await check('admin_news: yangi ilova o\'qilmagan sanog\'i (== "" + createdAt >) — o\'tadi',
+      () => assertSucceeds(nc(as(OWNER)).where('targetUserId', '==', '')
+          .where('createdAt', '>', new Date(0)).orderBy('createdAt', 'desc').limit(50).get()));
+  await check('admin_news: shaxsiy whereIn (o\'z aliaslari) — o\'tadi',
+      () => assertSucceeds(nc(as(OWNER)).where('targetUserId', 'in', aliases(OWNER))
+          .orderBy('createdAt', 'desc').limit(30).get()));
+  await check('admin_news: begona aliaslar bilan whereIn — rad',
+      () => assertFails(nc(as(OWNER)).where('targetUserId', 'in', aliases(STRANGER)).limit(30).get()));
+  await check('admin_news: anonim sessiya shaxsiy so\'rovi — rad (ilova jim o\'tkazadi)',
+      () => assertFails(nc(anon()).where('targetUserId', 'in', aliases(OWNER)).limit(30).get()));
+  await check('admin_news: FILTRSIZ so\'rov (eski ilova) — rad',
+      () => assertFails(nc(as(OWNER)).orderBy('createdAt', 'desc').limit(50).get()));
+  await check('admin_news: kirmagan filtrsiz so\'rov — rad',
+      () => assertFails(nc(unauth()).get()));
+  await check('admin_news: begona chekni get — rad',
+      () => assertFails(nc(as(OWNER)).doc('p_str').get()));
+  await check('admin_news: o\'z chekini get (12 va 9 xonali) — o\'tadi', async () => {
+    await assertSucceeds(nc(as(OWNER)).doc('p_own').get());
+    await assertSucceeds(nc(as(OWNER)).doc('p_own9').get());
+  });
+  await check('admin_news: admin filtrsiz ro\'yxat (panel) — o\'tadi',
+      () => assertSucceeds(nc(as(ADMIN)).orderBy('createdAt', 'desc').limit(300).get()));
 
   // ── users.role ──────────────────────────────────────────────────────
   await check('users.role: dispatcher o\'ziga superadmin yoza olmaydi',

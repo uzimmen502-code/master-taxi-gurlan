@@ -124,6 +124,17 @@ async function main() {
   await reset();
   await expectEq('bo\'sh bazada xato tashlamaydi', await push.onlineCourierTokens(), []);
 
+  // ── onlineCouriers: koordinata bilan (kafe-restoran yaqin kuryer push'i) ──
+  await reset();
+  await presence(A, { lat: 41.84, lng: 60.39 });
+  await presence(B, { lat: 'x' });
+  await expectEq('onlineCouriers: id + koordinata; noto\'g\'ri koordinata → null',
+    await push.onlineCouriers(), [{ id: A, lat: 41.84, lng: 60.39 }, { id: B, lat: null, lng: null }]);
+  await reset();
+  await presence(C9, { lat: 41.84, lng: 60.39 });
+  await presence(C12, { lat: 41.85, lng: 60.39 });
+  await expectEq('onlineCouriers: 9 va 12 xonali — bitta yozuv', (await push.onlineCouriers()).length, 1);
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} courier_push checks passed.`);
   if (failed.length) process.exitCode = 1;

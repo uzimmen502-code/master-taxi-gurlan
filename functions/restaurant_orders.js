@@ -74,6 +74,9 @@ const MAX_PRICE = 50000000;
 const PICKUP_CODE_ATTEMPTS = 5;
 const NEARBY_RADIUS_KM_DEFAULT = 15;
 const NEARBY_LIMIT = 100;
+/** Kuryer push'i: eng yaqin nechta kuryer; bitta kuryerga ikki push orasidagi minimal vaqt. */
+const COURIER_PUSH_MAX = 30;
+const COURIER_PUSH_MIN_GAP_MS = 30 * 1000;
 const TASHKENT_UTC_OFFSET_H = 5;
 
 const RS = Object.freeze({
@@ -183,7 +186,7 @@ function attachRestaurantOrders(exportsObj, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger,
     requireCallerRoles, notifyUserInApp, notifyCourierArrivedToCustomer, axios,
-    fetchRoute: fetchRouteOverride, now: nowFn,
+    fetchRoute: fetchRouteOverride, now: nowFn, courierPush,
   } = deps;
   // `courierAuth` index.js da bu attach'dan KEYIN e'lon qilinadi (const, TDZ):
   // shuning uchun yuklashda emas, chaqiruvda olinadi (deps getter).
@@ -442,6 +445,78 @@ function attachRestaurantOrders(exportsObj, deps) {
       });
     } catch (e) {
       console.error('restaurant notifyCustomer:', e.message || e);
+    }
+  }
+
+  /**
+   * Yaqin ONLAYN kuryerlarga «buyurtma bor» taklifi (B5): qabulda va (kuryer
+   * hali olmagan bo'lsa) tayyor bo'lganda. FAQAT FCM — `admin_news` yozilmaydi
+   * (taklif vaqtinchalik; kuryer uni «Restoran buyurtmalari» ro'yxatida
+   * baribir ko'radi), presence/token manbasi — `courier_push.js`.
+   *   - radius `NEARBY_RADIUS_KM_DEFAULT`, eng yaqin `COURIER_PUSH_MAX` ta;
+   *   - mijozning o'zi va restoran a'zolari — yo'q;
+   *   - naqd (vykup) buyurtma — faqat limiti yetadigan kuryer;
+   *   - har kuryerga `COURIER_PUSH_MIN_GAP_MS` dan tez-tez yo'q
+   *     (`restaurant_courier_prefs.lastPushAt`, faqat server yozadi).
+   * Xato push'ni to'xtatmaydi (log), asosiy amalga ta'sir qilmaydi.
+   */
+  async function notifyNearbyCouriers(orderId, od, stage) {
+    const empty = { candidates: 0, notified: 0 };
+    try {
+      if (!courierPush || od.deliveryMode !== 'ava_courier' || od.courierId) return empty;
+      const rLat = Number(od.restaurantLat);
+      const rLng = Number(od.restaurantLng);
+      if (!validLatLng(rLat, rLng)) return empty;
+      const candidates = (await courierPush.onlineCouriers())
+        .filter((c) => c.lat != null && c.lng != null)
+        .map((c) => ({ ...c, distanceM: tariff.haversineMeters(rLat, rLng, c.lat, c.lng) }))
+        .filter((c) => c.distanceM <= NEARBY_RADIUS_KM_DEFAULT * 1000)
+        .sort((a, b) => a.distanceM - b.distanceM)
+        .slice(0, COURIER_PUSH_MAX);
+      if (candidates.length === 0) return empty;
+      const customer = canonicalUid(String(od.userPhone || od.phone || ''));
+      const membersSnap = await db.collection(RESTAURANTS).doc(String(od.restaurantId || '')).collection(MEMBERS).get();
+      const members = new Set(membersSnap.docs.map((m) => canonicalUid(m.id)));
+      const buyout = od.foodPaymentMethod === 'cash_buyout';
+      const foodAmount = (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+      const fee = Number(od.deliveryFee) || 0;
+      const nowMs = now().getTime();
+      let notified = 0;
+      for (const c of candidates) {
+        if (c.id === customer || members.has(c.id)) continue;
+        const prefRef = db.collection(COURIER_PREFS).doc(c.id);
+        const prefSnap = await prefRef.get();
+        const p = prefSnap.exists ? (prefSnap.data() || {}) : {};
+        if (buyout) {
+          const limit = p.buyoutEnabled === true ? intOr(p.buyoutLimit, 0, 0, 100000000) : 0;
+          if (foodAmount > limit) continue;
+        }
+        const lastMs = p.lastPushAt && typeof p.lastPushAt.toMillis === 'function' ? p.lastPushAt.toMillis() : 0;
+        if (nowMs - lastMs < COURIER_PUSH_MIN_GAP_MS) continue;
+        await prefRef.set({ lastPushAt: ts(), lastPushOrderId: orderId, lastPushStage: stage }, { merge: true });
+        notified += 1;
+        const token = await courierPush.resolveToken(c.id);
+        if (!token) continue;
+        const km = (c.distanceM / 1000).toFixed(1);
+        try {
+          await admin.messaging().send({
+            token,
+            notification: {
+              title: stage === 'ready' ? '🍽 Tayyor buyurtma — kuryer kerak' : '🍽 Yangi restoran buyurtmasi',
+              body: `${od.restaurantName || 'Restoran'} · ${km} km · yetkazish ${fee} so'm${buyout ? ` · naqd (vykup ${foodAmount} so'm)` : ''}`,
+            },
+            data: { type: 'restaurant_courier_offer', screen: 'courier', orderId, restaurantId: String(od.restaurantId || ''), stage },
+            android: { priority: 'high' },
+          });
+        } catch (e) {
+          console.error('restaurant courier push FCM:', e.message || e);
+        }
+      }
+      log('courier_push', { orderId, stage, candidates: candidates.length, notified });
+      return { candidates: candidates.length, notified };
+    } catch (e) {
+      console.error('restaurant notifyNearbyCouriers:', e.message || e);
+      return empty;
     }
   }
 
@@ -1029,17 +1104,22 @@ function attachRestaurantOrders(exportsObj, deps) {
       }));
       t.update(rRef, { timeoutStreak: 0, updatedAt: ts() });
       addEvent(t, orderRef, { from: RS.placed, to: RS.accepted, actor: 'restaurant', actorId: uid, meta: { prepTimeMin, feeAmount: fee.amount } });
-      return { ok: true, feeAmount: fee.amount, prepTimeMin, customerUid: od.userPhone };
+      return { ok: true, feeAmount: fee.amount, prepTimeMin, customerUid: od.userPhone, od };
     }), (od) => {
       if (od.restaurantStatus === RS.accepted) return { ok: true, idempotent: true, feeAmount: (od.avaFee || {}).amount || 0 };
       if (od.restaurantStatus !== RS.placed) throw fail('failed-precondition', 'ORDER_INVALID_TRANSITION', { from: od.restaurantStatus, to: RS.accepted });
       return null;
     });
     log('accept', { orderId, userId: uid, result: 'ok', feeAmount: out.feeAmount, durationMs: Date.now() - t0 });
-    if (out.customerUid) {
-      await notifyCustomer(canonicalUid(out.customerUid), { title: '✅ Buyurtma qabul qilindi', body: `Tayyorlanmoqda, ~${out.prepTimeMin} daqiqa`, orderId });
+    let couriersNotified = 0;
+    if (!out.idempotent) {
+      if (out.customerUid) {
+        await notifyCustomer(canonicalUid(out.customerUid), { title: '✅ Buyurtma qabul qilindi', body: `Tayyorlanmoqda, ~${out.prepTimeMin} daqiqa`, orderId });
+      }
+      // Kuryer tayyorlanish vaqtida yo'lga chiqsin (Meituan modeli, §12.9).
+      couriersNotified = (await notifyNearbyCouriers(orderId, out.od || {}, 'accepted')).notified;
     }
-    return { ok: true, feeAmount: out.feeAmount, idempotent: !!out.idempotent };
+    return { ok: true, feeAmount: out.feeAmount, idempotent: !!out.idempotent, couriersNotified };
   });
 
   /** Rad (placed/accepted/ready) — 2 % qaytadi; kuryer biriktirilgan bo'lsa marshrutdan olinadi. */
@@ -1081,13 +1161,16 @@ function attachRestaurantOrders(exportsObj, deps) {
       const from = assertTransition(od, RS.ready, orderId);
       t.update(orderRef, statusPatch(RS.ready, { readyAt: ts(), readyBy: uid }));
       addEvent(t, orderRef, { from, to: RS.ready, actor: 'restaurant', actorId: uid });
-      return { ok: true, customerUid: od.userPhone, courierId: od.courierId, deliveryMode: od.deliveryMode };
+      return { ok: true, customerUid: od.userPhone, courierId: od.courierId, deliveryMode: od.deliveryMode, od };
     });
+    let couriersNotified = 0;
     if (!out.idempotent) {
       if (out.courierId) await notifyCustomer(canonicalUid(out.courierId), { title: '🍽 Buyurtma tayyor', body: 'Restorandan olib ketishingiz mumkin', orderId });
       if (out.deliveryMode === 'pickup' && out.customerUid) await notifyCustomer(canonicalUid(out.customerUid), { title: '🍽 Buyurtmangiz tayyor', body: 'Olib ketishingiz mumkin', orderId });
+      // Kuryer hali olmagan — yaqinlarga yana taklif (shoshilinch).
+      if (!out.courierId) couriersNotified = (await notifyNearbyCouriers(orderId, out.od || {}, 'ready')).notified;
     }
-    return { ok: true };
+    return { ok: true, couriersNotified };
   });
 
   /** Restoran: oldindan to'lov keldi → `paid`. */

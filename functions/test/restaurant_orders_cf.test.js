@@ -322,6 +322,46 @@ async function main() {
   });
 
   // ── 4. Kuryer ───────────────────────────────────────────────────────
+  await check('KP yaqin kuryerlarga push (B5): qabulda — yaqin + limiti yetgan A ha, uzoqdagi B va limitsiz yaqin yo\'q; a\'zo/mijoz yo\'q; tayyor bo\'lganda 30 s ichida takror yo\'q; oldindan to\'lov — limitsiz ham', async () => {
+    const presence = (id, loc) => db.collection('provider_presence').doc(id).set({
+      providerId: id, module: 'courier', isOnline: true, lat: loc.lat, lng: loc.lng,
+      updatedAt: admin.firestore.Timestamp.now(),
+    });
+    const NEAR_NO_LIMIT = '998913000003';
+    await db.collection('users').doc(NEAR_NO_LIMIT).set({ role: 'user', bonusBalance: 0 });
+    await presence(COURIER_A, { lat: R_LOC.lat + 0.001, lng: R_LOC.lng }); // ~110 m
+    await presence(COURIER_B, { lat: 41.3, lng: 69.2 }); // Toshkent — radiusdan tashqarida
+    await presence(NEAR_NO_LIMIT, { lat: R_LOC.lat, lng: R_LOC.lng + 0.002 }); // yaqin, vykup limiti yo'q
+    await presence(OWNER, { lat: R_LOC.lat, lng: R_LOC.lng }); // restoran egasi — a'zo
+    await presence(CUSTOMER, { lat: R_LOC.lat, lng: R_LOC.lng }); // mijozning o'zi
+    const prefOf = async (id) => (await db.collection('restaurant_courier_prefs').doc(id).get()).data() || {};
+
+    const r1 = await place(rid, CUSTOMER, { foodPaymentMethod: 'cash_buyout', deliveryPaymentMethod: 'cash' });
+    const acc = await call('restaurantAcceptOrder', { orderId: r1.orderId }, OWNER);
+    assert.strictEqual(acc.couriersNotified, 1, `faqat A: ${JSON.stringify(acc)}`);
+    assert.strictEqual((await prefOf(COURIER_A)).lastPushOrderId, r1.orderId);
+    assert.strictEqual((await prefOf(COURIER_A)).lastPushStage, 'accepted');
+    assert.strictEqual((await prefOf(COURIER_B)).lastPushOrderId, undefined, 'uzoqdagi B push olmaydi');
+    assert.strictEqual((await prefOf(NEAR_NO_LIMIT)).lastPushOrderId, undefined, 'vykup limitsiz push olmaydi');
+    assert.strictEqual((await prefOf(OWNER)).lastPushOrderId, undefined, 'a\'zo push olmaydi');
+    assert.strictEqual((await prefOf(CUSTOMER)).lastPushOrderId, undefined, 'mijoz push olmaydi');
+    const ready = await call('restaurantMarkReady', { orderId: r1.orderId }, OWNER);
+    assert.strictEqual(ready.couriersNotified, 0, 'A 30 s ichida takror push olmaydi');
+
+    const r2 = await place(rid, CUSTOMER); // prepay/wallet — vykup kerak emas
+    const acc2 = await call('restaurantAcceptOrder', { orderId: r2.orderId }, OWNER);
+    assert.strictEqual(acc2.couriersNotified, 1, 'A throttle, NEAR_NO_LIMIT oldindan to\'lovda mos');
+    assert.strictEqual((await prefOf(NEAR_NO_LIMIT)).lastPushOrderId, r2.orderId);
+
+    // Kuryer olgan buyurtma tayyor bo'lsa — yaqinlarga push yo'q (faqat o'sha kuryerga xabar).
+    await db.collection('restaurant_courier_prefs').doc(NEAR_NO_LIMIT).delete();
+    await call('courierClaimRestaurantOrder', { orderId: r2.orderId }, COURIER_A);
+    const ready2 = await call('restaurantMarkReady', { orderId: r2.orderId }, OWNER);
+    assert.strictEqual(ready2.couriersNotified, 0);
+    for (const id of [r1.orderId, r2.orderId]) await call('restaurantRejectOrder', { orderId: id, reason: 'test' }, OWNER);
+    await Promise.all([COURIER_A, COURIER_B, NEAR_NO_LIMIT, OWNER, CUSTOMER].map((id) => db.collection('provider_presence').doc(id).delete()));
+    await db.collection('restaurant_courier_prefs').doc(COURIER_A).set({ buyoutEnabled: true, buyoutLimit: 100000 });
+  });
   await check('K1 yaqindagilar: faqat ishlaydigan kuryer; proeksiyada telefon/manzil yo\'q; accepted ham ko\'rinadi', async () => {
     await expectCode(call('listNearbyRestaurantOrders', { ...R_LOC }, STRANGER), 'Courier not authorized', 'permission-denied');
     const l = await call('listNearbyRestaurantOrders', { ...R_LOC }, COURIER_A);

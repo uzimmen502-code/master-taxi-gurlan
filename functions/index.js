@@ -69,6 +69,8 @@ const { attachRestaurantOrders } = require('./restaurant_orders');
 attachRestaurantOrders(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, axios,
   requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES,
+  // Yaqin onlayn kuryerlarga «buyurtma bor» push'i (presence + token manbasi).
+  courierPush,
   // `courierAuth` pastda `const` — attach paytida TDZ; modul uni chaqiruvda oladi.
   get courierAuth() { return courierAuth; },
   notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),

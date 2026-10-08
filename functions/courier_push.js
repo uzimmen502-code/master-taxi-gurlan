@@ -117,13 +117,16 @@ function createCourierPush(deps) {
   }
 
   /**
-   * Ҳозир онлайн курьерларнинг КАНОН ID рўйхати.
+   * Ҳозир онлайн курьерлар — КАНОН ID ва охирги координата
+   * (`[{id, lat, lng}]`, координата бўлмаса `null`). Бир одам икки ID
+   * шаклида учраса — битта (биринчиси).
    *
-   * Иккита манба бирлаштирилади (ўтиш даври, 2-банд).
+   * Кафе-ресторан «яқин курьерларга таклиф» push'и (restaurant_orders.js)
+   * шу рўйхатни масофа бўйича саралайди.
    */
-  async function onlineCourierIds() {
+  async function onlineCouriers() {
     const cutoffMs = nowFn().getTime() - MAX_LOCATION_AGE_SEC * 1000;
-    const out = new Set();
+    const out = new Map();
 
     try {
       const snap = await db.collection(PRESENCE)
@@ -138,7 +141,11 @@ function createCourierPush(deps) {
         // Кимлик ФАҚАТ калитдан (18-қоида): ҳужжат ичидаги
         // `providerId` майдонини клиент ёзади.
         const id = canonicalUid(d.id);
-        if (id) out.add(id);
+        if (!id || out.has(id)) continue;
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        const geo = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+        out.set(id, { id, lat: geo ? lat : null, lng: geo ? lng : null });
       }
     } catch (e) {
       console.error(`provider_presence o'qilmadi: ${e.message}`);
@@ -148,7 +155,12 @@ function createCourierPush(deps) {
     // `provider_presence`. Eski ilova versiyalari qo'llab-quvvatlanmaydi
     // (ega qarori, 2026-10-06).
 
-    return [...out];
+    return [...out.values()];
+  }
+
+  /** Ҳозир онлайн курьерларнинг КАНОН ID рўйхати. */
+  async function onlineCourierIds() {
+    return (await onlineCouriers()).map((c) => c.id);
   }
 
   /**
@@ -172,6 +184,7 @@ function createCourierPush(deps) {
     MAX_LOCATION_AGE_SEC,
     idForms,
     resolveToken,
+    onlineCouriers,
     onlineCourierIds,
     onlineCourierTokens,
   };

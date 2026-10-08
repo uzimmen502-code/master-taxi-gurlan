@@ -48,7 +48,12 @@ class TripRequestCard extends StatelessWidget {
     final secs = ride.secsLeft;
     final m = secs ~/ 60;
     final s = secs % 60;
-    final timerColor = secs > 60 ? AppColors.primaryText : secs > 30 ? AppColors.primaryText : _red;
+    // Uch bosqich: oddiy → ogohlantirish (60–30 s) → shoshilinch (<30 s).
+    final timerColor = secs > 60
+        ? AppColors.primaryText
+        : secs > 30
+            ? AppColors.warning
+            : _red;
 
     final name = ride.userName.trim().isNotEmpty
         ? ride.userName.trim()

@@ -1688,6 +1688,29 @@ exports.onTripUpdate = functions.firestore
     // bekor, expired, tark etish, yakun) — haydovchi bo'shatiladi. Avval faqat
     // yo'lovchi bekorida bo'shatilardi → admin bekor qilsa `isBusy` abadiy
     // true qolib, haydovchi boshqa buyurtma ololmasdi.
+    // Haydovchi tark etdi (accepted → searching): oldingi haydovchining
+    // «Yetib keldim» belgisi (`arrivedAt`) o'chiriladi. Aks holda keyingi
+    // haydovchi qabul qilganda yo'lovchi darhol «yetib keldi» ko'radi, yangi
+    // haydovchi esa rules (faqat bir marta) tufayli o'zi belgilay olmaydi.
+    // Faqat o'sha eski qiymat bo'lsa (yangi haydovchi belgilagan bo'lsa tegmaymiz).
+    if (isLocal && before.status === 'accepted' && after.status === 'searching'
+        && after.arrivedAt) {
+      try {
+        const staleMs = after.arrivedAt.toMillis ? after.arrivedAt.toMillis() : null;
+        await db.runTransaction(async (t) => {
+          const cur = await t.get(change.after.ref);
+          const a = (cur.data() || {}).arrivedAt;
+          if (a && a.toMillis && a.toMillis() === staleMs) {
+            t.update(change.after.ref, {
+              arrivedAt: admin.firestore.FieldValue.delete(),
+            });
+          }
+        });
+      } catch (e) {
+        console.error('clear stale arrivedAt failed:', tripId, e.message || e);
+      }
+    }
+
     if (isLocal && before.status === 'accepted' && after.status !== 'accepted') {
       const localDriverId = String(
           before.acceptedDriverId || before.driverId || '');

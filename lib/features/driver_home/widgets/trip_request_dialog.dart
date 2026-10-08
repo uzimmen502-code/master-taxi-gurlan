@@ -26,7 +26,8 @@ class _TripRequestDialog extends StatelessWidget {
 
   static const _blue = AppColors.primaryText;
   static const _green = AppColors.primaryDark;
-  static const _orange = AppColors.primaryText;
+  // Taymer o'rta bosqichi (60–30 s) — asosiy rangdan farq qilishi shart.
+  static const _orange = AppColors.warning;
   static const _red = Color(0xFFB71C1C);
 
   Widget _infoRow(String label, String value) => Padding(

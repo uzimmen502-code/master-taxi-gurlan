@@ -232,6 +232,29 @@ async function main() {
     assert.strictEqual((await db.collection('drivers').doc(DRIVER).get()).data().isBusy, true);
   });
 
+  // ── E. Tark etishda eski «yetib keldim» tozalanadi ──────────────────────
+  const T2 = admin.firestore.Timestamp;
+  await check('E1 accepted → searching: eski arrivedAt o\'chiriladi', async () => {
+    const arrived = T2.fromMillis(Date.now() - 60000);
+    const before = trip({ arrivedAt: arrived });
+    const after = { ...before, status: 'searching', acceptedDriverId: '', driverId: '' };
+    await db.collection('trips').doc('e_ar1').set(after);
+    await fire('e_ar1', before, after);
+    const t = (await db.collection('trips').doc('e_ar1').get()).data();
+    assert.ok(!('arrivedAt' in t), 'arrivedAt hali bor');
+  });
+  await check('E2 yangi haydovchi o\'zi belgilagan arrivedAt\'ga tegilmaydi', async () => {
+    const stale = T2.fromMillis(Date.now() - 600000);
+    const before = trip({ arrivedAt: stale });
+    const after = { ...before, status: 'searching', acceptedDriverId: '', driverId: '' };
+    const fresh = T2.fromMillis(Date.now());
+    // Trigger kechikdi: shu orada yangi haydovchi qabul qilib, o'zi belgiladi.
+    await db.collection('trips').doc('e_ar2').set({ ...trip({}), arrivedAt: fresh });
+    await fire('e_ar2', before, after);
+    const t = (await db.collection('trips').doc('e_ar2').get()).data();
+    assert.strictEqual(t.arrivedAt.toMillis(), fresh.toMillis());
+  });
+
   const failed = results.filter((p) => !p).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

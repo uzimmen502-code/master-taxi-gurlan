@@ -47,6 +47,14 @@ class AdminAuthService extends ChangeNotifier {
     return r == 'superadmin';
   }
 
+  /// Пул амаллари (payout, инкасса, cash exchange, давр қулфи, Telegram
+  /// ҳамён) — серверда `requireCallerRoles(['superadmin', 'finance'])`.
+  /// Auditor фақат кўради (SoD) — тугмалар унга кўрсатилмайди.
+  bool get canWriteFinance {
+    final r = (_role ?? '').trim().toLowerCase();
+    return r == 'finance' || r == 'superadmin';
+  }
+
   /// Operatsion admin (kundalik boshqaruv).
   bool get isOpsAdmin {
     final r = (_role ?? '').trim().toLowerCase();

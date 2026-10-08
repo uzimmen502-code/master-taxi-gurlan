@@ -23,6 +23,9 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
   Map<String, dynamic>? _data;
   bool _refreshing = false;
 
+  /// Payout / инкасса тугмалари — фақат finance/superadmin (auditor кўради).
+  bool get _canWrite => context.read<AdminAuthService>().canWriteFinance;
+
   @override
   void initState() {
     super.initState();
@@ -252,13 +255,16 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
             title: 'Курьер инкассацияси',
             count: _list(queues['courierCashOutstanding']).length,
             color: Colors.brown,
-            trailing: TextButton.icon(
-              onPressed: () => _showInkassaDialog(
-                prefill: _list(queues['courierCashOutstanding']),
-              ),
-              icon: const Icon(Icons.move_to_inbox, size: 18),
-              label: const Text('Қабул'),
-            ),
+            // Auditor фақат кўради (сервер: finance/superadmin).
+            trailing: !_canWrite
+                ? null
+                : TextButton.icon(
+                    onPressed: () => _showInkassaDialog(
+                      prefill: _list(queues['courierCashOutstanding']),
+                    ),
+                    icon: const Icon(Icons.move_to_inbox, size: 18),
+                    label: const Text('Қабул'),
+                  ),
             child: _courierCashList(_list(queues['courierCashOutstanding'])),
           ),
           const SizedBox(height: 10),
@@ -349,21 +355,23 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
             '${r['userName'] ?? ''} +${r['userPhone'] ?? ''}'.trim(),
             style: const TextStyle(fontSize: 11),
           ),
-          trailing: Wrap(
-            spacing: 4,
-            children: [
-              IconButton(
-                tooltip: 'Тасдиқ',
-                icon: const Icon(Icons.check_circle, color: AvaLight.ok),
-                onPressed: id.isEmpty ? null : () => _confirmPayout(id),
-              ),
-              IconButton(
-                tooltip: 'Рад',
-                icon: const Icon(Icons.cancel, color: Colors.red),
-                onPressed: id.isEmpty ? null : () => _rejectPayout(id),
-              ),
-            ],
-          ),
+          trailing: !_canWrite
+              ? null
+              : Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Тасдиқ',
+                      icon: const Icon(Icons.check_circle, color: AvaLight.ok),
+                      onPressed: id.isEmpty ? null : () => _confirmPayout(id),
+                    ),
+                    IconButton(
+                      tooltip: 'Рад',
+                      icon: const Icon(Icons.cancel, color: Colors.red),
+                      onPressed: id.isEmpty ? null : () => _rejectPayout(id),
+                    ),
+                  ],
+                ),
         );
       }).toList(),
     );

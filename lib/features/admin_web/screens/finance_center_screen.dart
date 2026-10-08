@@ -4,11 +4,33 @@ import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../services/admin_auth_service.dart';
 import 'money_control_tab.dart';
 import 'wallet_bot_tab.dart';
+
+/// Auditor (фақат кўриш) учун ёзиш тугмалари ўрнидаги изоҳ.
+class _ReadOnlyNote extends StatelessWidget {
+  const _ReadOnlyNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.visibility_outlined, size: 18, color: Colors.grey),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: const TextStyle(color: Colors.grey)),
+        ),
+      ],
+    );
+  }
+}
 
 /// Finance Center — Settlement Ledger (finance/auditor/superadmin, SoD).
 ///   • Назорат — пул оқими KPI + навбат + инкасса / payout
@@ -94,7 +116,18 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             children: [
               MoneyControlTab(onOpenTab: _goTab),
               const _CashExchangeTab(),
-              const WalletBotTab(),
+              // Созлама ва навбат CF'лари фақат finance/superadmin —
+              // auditor'да таб хато бериб турарди.
+              if (context.watch<AdminAuthService>().canWriteFinance)
+                const WalletBotTab()
+              else
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: _ReadOnlyNote(
+                    'Telegram ҳамён навбати ва созламаси фақат finance / '
+                    'superadmin учун. Ҳамён ҳаракатлари — «Аудит журнали»да.',
+                  ),
+                ),
               const _SettlementsTab(),
               const _JournalTab(),
               const _ClosingTab(),
@@ -257,34 +290,40 @@ class _CashExchangeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canWrite = context.watch<AdminAuthService>().canWriteFinance;
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => _cashExchangeDialog(context, toWallet: true),
-                icon: const Icon(Icons.payments_outlined),
-                label: const Text('Cash Exchange (нақд → ҳамён)'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.onPrimary),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _cashExchangeDialog(context, toWallet: false),
-                icon: const Icon(Icons.account_balance_outlined),
-                label: const Text('Wallet → Cash'),
-              ),
-              TextButton.icon(
-                onPressed: () => _migrateFloatDialog(context),
-                icon: const Icon(Icons.sync_alt, size: 18),
-                label: const Text('Float → ҳамён миграция'),
-              ),
-            ],
-          ),
+          child: !canWrite
+              ? const _ReadOnlyNote(
+                  'Фақат кўриш: нақд ↔ ҳамён амаллари finance / superadmin учун.')
+              : Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          _cashExchangeDialog(context, toWallet: true),
+                      icon: const Icon(Icons.payments_outlined),
+                      label: const Text('Cash Exchange (нақд → ҳамён)'),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: AppColors.onPrimary),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _cashExchangeDialog(context, toWallet: false),
+                      icon: const Icon(Icons.account_balance_outlined),
+                      label: const Text('Wallet → Cash'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _migrateFloatDialog(context),
+                      icon: const Icon(Icons.sync_alt, size: 18),
+                      label: const Text('Float → ҳамён миграция'),
+                    ),
+                  ],
+                ),
         ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
@@ -895,28 +934,32 @@ class _ClosingTabState extends State<_ClosingTab> {
 
   @override
   Widget build(BuildContext context) {
+    final canWrite = context.watch<AdminAuthService>().canWriteFinance;
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _busy ? null : _closeDialog,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 16, height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.lock_clock),
-                  label: const Text('Давр қулфлаш'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryDark,
-                      foregroundColor: AppColors.onPrimary),
+          child: !canWrite
+              ? const _ReadOnlyNote(
+                  'Фақат кўриш: даврни қулфлаш finance / superadmin учун.')
+              : Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _busy ? null : _closeDialog,
+                        icon: _busy
+                            ? const SizedBox(
+                                width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.lock_clock),
+                        label: const Text('Давр қулфлаш'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryDark,
+                            foregroundColor: AppColors.onPrimary),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

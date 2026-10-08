@@ -1993,6 +1993,13 @@ function geoReportStamp(userData) {
   return out;
 }
 
+/**
+ * `creditChange` бир чақирувда ҳамёнга ёзиладиган қайтимнинг юқори чеги
+ * (сўм). Эга қарори 2026-10-08 (ҳамён аудити K-6): 50 000. Чегдан ошса —
+ * рад (қисман ёзилмайди), катта сумма фақат finance `cashExchange` орқали.
+ */
+const CREDIT_CHANGE_MAX_UZS = 50000;
+
 /** Нақд қайтим → Balance (credit) */
 exports.creditChange = functions.https.onCall(async (data, context) => {
   // `driver` ЙЎҚ: `role: 'driver'`ни ҳар қандай фойдаланувчи ўзига ёза олади
@@ -2025,6 +2032,12 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
 
   const uid = userUid(userPhone);
   const delta = cashPaid - orderTotal;
+  if (delta > CREDIT_CHANGE_MAX_UZS) {
+    throw new functions.https.HttpsError(
+        'invalid-argument',
+        `Qaytim ${CREDIT_CHANGE_MAX_UZS} so'mdan oshmasin`,
+        { errorCode: 'CREDIT_CHANGE_OVER_LIMIT', limit: CREDIT_CHANGE_MAX_UZS });
+  }
   const idemRef = db.collection('wallet_idempotency').doc(idempotencyKey);
 
   const existing = await idemRef.get();

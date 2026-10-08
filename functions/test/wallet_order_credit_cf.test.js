@@ -11,7 +11,8 @@
  *      тўлаш мумкин эди.
  * K-6: `creditChange` — `driver` ролини ҳар ким ўзига ёза олади (rules),
  *      шунинг учун ҳайдовчи бу CF'ни чақира олмаслиги керак; сумма
- *      майдонлари манфий бўлмаган бутун сон.
+ *      майдонлари манфий бўлмаган бутун сон; қайтим чеги 50 000 сўм
+ *      (эга қарори 2026-10-08).
  */
 'use strict';
 const assert = require('assert');
@@ -228,6 +229,28 @@ async function rejects(promise, code) {
     });
     assert.strictEqual(r.credited, 0);
     assert.strictEqual(await bal(BUYER), 50000);
+  });
+
+  await reset();
+  await check('C6 chek chegarasi: qaytim aynan 50 000 → yoziladi', async () => {
+    const r = await credit(ADMIN, {
+      userPhone: BUYER, orderTotal: 50000, cashPaid: 100000, idempotencyKey: key(),
+    });
+    assert.strictEqual(r.credited, 50000);
+    assert.strictEqual(await bal(BUYER), 100000);
+    await journalBalanced();
+  });
+
+  await reset();
+  await check('C7 chekdan oshdi: 50 001 → invalid-argument, hech narsa yozilmaydi', async () => {
+    const k = key();
+    await rejects(credit(ADMIN, {
+      userPhone: BUYER, orderTotal: 49999, cashPaid: 100000, idempotencyKey: k,
+    }), 'invalid-argument');
+    assert.strictEqual(await bal(BUYER), 50000);
+    assert.strictEqual(await journalBalanced(), 0);
+    const idem = await db.collection('wallet_idempotency').doc(k).get();
+    assert.strictEqual(idem.exists, false, 'rad etilgan so\'rov idempotency kalitini band qilmasin');
   });
 
   const passed = results.filter(Boolean).length;

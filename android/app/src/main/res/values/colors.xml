@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#36A63A</color>
-    <color name="splash_black">#000000</color>
+    <!-- AVA Primary (ega tasdig'i 2026-10-08; avval qora #000000) -->
+    <color name="splash_bg">#FFA500</color>
     <color name="splash_screen_bg">#000000</color>
 </resources>

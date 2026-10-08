@@ -1067,11 +1067,24 @@ class _Sidebar extends StatelessWidget {
             .snapshots()
             .map((s) => s.docs.length);
       case 'Чат қўллaб-қуввaтлaш':
-        return db
-            .collection('support_chats')
-            .where('lastFromAdmin', isEqualTo: false)
-            .snapshots()
-            .map((s) => s.docs.length);
+        // Илова мижоз ўқиганда ҳам `lastFromAdmin: false` ёзади — жавоб
+        // берилган чатлар ҳам саналарди. `awaitingAdmin`ни сервер ёзади
+        // (сўнгги оддий хабар мижозданми); майдони йўқ эски чатлар —
+        // аввалги қоида бўйича. Иккала тўплам кесишмайди (аудит O-5).
+        return sumCountStreams([
+          db
+              .collection('support_chats')
+              .where('awaitingAdmin', isEqualTo: true)
+              .snapshots()
+              .map((s) => s.docs.length),
+          db
+              .collection('support_chats')
+              .where('lastFromAdmin', isEqualTo: false)
+              .snapshots()
+              .map((s) => s.docs
+                  .where((d) => !d.data().containsKey('awaitingAdmin'))
+                  .length),
+        ]);
       default:
         return null;
     }

@@ -328,6 +328,28 @@ async function main() {
   await check('marshrut_state: begona tozalay olmaydi',
       () => assertFails(ms(as(STRANGER)).set({status: 'cleared', updatedAt: new Date()}, {merge: true})));
 
+  // ── support_chats: awaitingAdmin faqat CF (O-5) ─────────────────────
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection('support_chats').doc(OWNER).set({
+      userPhone: OWNER, lastFromAdmin: true, awaitingAdmin: false,
+    });
+  });
+  const chat = (db, id = OWNER) => db.collection('support_chats').doc(id);
+  await check('support_chats: ilova xabar yuborishi (sendMessage merge) — o\'tadi',
+      () => assertSucceeds(chat(as(OWNER)).set({
+        userPhone: OWNER, updatedAt: new Date(), lastMessage: 'salom', lastFromAdmin: false,
+      }, {merge: true})));
+  await check('support_chats: ilova markUserRead (lastFromAdmin:false) — o\'tadi',
+      () => assertSucceeds(chat(as(OWNER)).set({lastFromAdmin: false}, {merge: true})));
+  await check('support_chats: egasi awaitingAdmin ni yoza olmaydi',
+      () => assertFails(chat(as(OWNER)).set({awaitingAdmin: true}, {merge: true})));
+  await check('support_chats: admin klienti ham awaitingAdmin ni yoza olmaydi',
+      () => assertFails(chat(as(ADMIN)).update({awaitingAdmin: true})));
+  await check('support_chats: yangi chat awaitingAdmin bilan yaratilmaydi',
+      () => assertFails(chat(as(STRANGER), STRANGER).set({userPhone: STRANGER, awaitingAdmin: false})));
+  await check('support_chats: admin badge so\'rovi (awaitingAdmin == true) — o\'tadi',
+      () => assertSucceeds(as(ADMIN).collection('support_chats').where('awaitingAdmin', '==', true).get()));
+
   // ── tv_clips (AVTO rejim: tvAutoApprove=true) ───────────────────────
   await seed(true);
   await check('tv_clips: AVTO rejimda egasi `active` yaratadi (ilova aynan shunday yozadi)',

@@ -1853,6 +1853,25 @@ exports.onTripUpdate = functions.firestore
   });
 
 // Админ/мижоз чат хабарлари учун push
+/**
+ * `support_chats/{chatId}.awaitingAdmin` — хабар вақти бўйича МОНОТОН:
+ * кечикиб ишлаган триггер (эскироқ хабар) янгироқ ҳолатни ўзгартирмайди
+ * (`awaitingAdminMsgAt` транзакцияда солиштирилади). Майдонлар фақат CF.
+ */
+async function markSupportChatAwaiting(chatId, awaiting, msgTime) {
+  const ref = db.collection('support_chats').doc(chatId);
+  const at = msgTime || admin.firestore.Timestamp.now();
+  await db.runTransaction(async (t) => {
+    const s = await t.get(ref);
+    const prev = s.exists ? (s.data() || {}).awaitingAdminMsgAt : null;
+    if (prev && typeof prev.toMillis === 'function' &&
+        prev.toMillis() > at.toMillis()) {
+      return;
+    }
+    t.set(ref, { awaitingAdmin: awaiting, awaitingAdminMsgAt: at }, { merge: true });
+  });
+}
+
 exports.onSupportChatMessageCreate = functions.firestore
   .document('support_chats/{chatId}/messages/{messageId}')
   .onCreate(async (snap, context) => {
@@ -1862,6 +1881,15 @@ exports.onSupportChatMessageCreate = functions.firestore
     const chatId = context.params.chatId;
     const userUid = digits(chatId);
     if (!userUid) return;
+
+    // «Жавоб кутмоқда» (админ badge'и): сўнгги оддий хабар мижозданми.
+    // Аввал badge `lastFromAdmin == false` ни санарди, илова эса мижоз
+    // админ жавобини ЎҚИГАНДА ҳам `lastFromAdmin: false` ёзади — жавоб
+    // берилган чатлар ҳам «кутмоқда»га тушарди (админ аудити O-5).
+    await markSupportChatAwaiting(chatId, !fromAdmin, snap.createTime)
+      .catch((err) => {
+        console.error('support chat awaitingAdmin:', err.message || err);
+      });
 
     if (fromAdmin && userUid) {
       await db.collection('users').doc(userUid).set({

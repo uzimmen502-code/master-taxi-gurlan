@@ -195,6 +195,10 @@ class _ChatTile extends StatelessWidget {
     final phone = doc.id; // chatId == userPhone
     final lastMessage = (d['lastMessage'] ?? '') as String;
     final lastFromAdmin = (d['lastFromAdmin'] ?? false) as bool;
+    // Сайдбар badge'и билан бир хил қоида (`admin_shell.dart`).
+    final awaiting = d.containsKey('awaitingAdmin')
+        ? d['awaitingAdmin'] == true
+        : !lastFromAdmin;
     final updatedAt = (d['updatedAt'] as Timestamp?)?.toDate();
     final timeStr = updatedAt != null
         ? DateFormat('dd.MM HH:mm').format(updatedAt)
@@ -225,6 +229,10 @@ class _ChatTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
                     ),
+                    if (awaiting) ...[
+                      Icon(Icons.circle, size: 9, color: Colors.red.shade400),
+                      const SizedBox(width: 6),
+                    ],
                     Text(timeStr,
                         style: TextStyle(
                             fontSize: 11, color: Colors.grey.shade500)),

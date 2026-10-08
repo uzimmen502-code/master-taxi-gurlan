@@ -34,6 +34,8 @@
  *      buyurtma rezervini saqlaydi (O-8), parallel rad etish bilan izchil
  *   S  intercityCreateBooking — admin to'xtatgan (suspended) haydovchining
  *      ochiq qolgan e'loniga bron yo'q (O-13)
+ *   T  onSupportChatMessageCreate — awaitingAdmin xabar vaqti bo'yicha
+ *      monoton; mijoz o'qigani javob berilgan chatni qaytarmaydi (O-5)
  */
 'use strict';
 const assert = require('assert');
@@ -724,6 +726,42 @@ async function main() {
     await capOf('acc_old', 'suspended');
     await rejectsWith(book(d12, FINANCE), 'failed-precondition', 'driver_inactive');
     assert.strictEqual(await seatsOf(d12), 4);
+  });
+
+  // ── T. Chat «javob kutmoqda» (awaitingAdmin) — monoton (O-5) ────────
+  await reset();
+  const chatRef = db.collection('support_chats').doc(CUSTOMER);
+  // reset() ichki kolleksiyani o'chirmaydi — L1 dagi eski admin xabari qolmasin.
+  await Promise.all((await chatRef.collection('messages').get()).docs.map((d) => d.ref.delete()));
+  const fire = async (msgRef) => fns.onSupportChatMessageCreate.run(
+    await msgRef.get(), { params: { chatId: CUSTOMER, messageId: msgRef.id } });
+  const awaitingOf = async () => (await chatRef.get()).data().awaitingAdmin;
+  const userMsg = chatRef.collection('messages').doc('u1');
+  await userMsg.set({ text: 'Savol', fromAdmin: false, createdAt: new Date() });
+  await check('T1 mijoz xabari → awaitingAdmin: true', async () => {
+    await fire(userMsg);
+    assert.strictEqual(await awaitingOf(), true);
+  });
+  await check('T2 admin javobi → false; mijoz o\'qigani (lastFromAdmin:false) uni qaytarmaydi', async () => {
+    await fns.sendSupportChatReply.run({ chatId: CUSTOMER, text: 'Javob' }, ctxOf(ADMIN));
+    const adminMsg = (await chatRef.collection('messages').where('fromAdmin', '==', true).get()).docs[0].ref;
+    await fire(adminMsg);
+    await chatRef.set({ lastFromAdmin: false }, { merge: true }); // ilova markUserRead
+    assert.strictEqual(await awaitingOf(), false);
+  });
+  await check('T3 kechikkan trigger (eski mijoz xabari) yangi holatni buzmaydi', async () => {
+    await fire(userMsg);
+    assert.strictEqual(await awaitingOf(), false);
+  });
+  await check('T4 tizim (buyurtma) xabari holatni o\'zgartirmaydi; yangi mijoz xabari → true', async () => {
+    const sys = chatRef.collection('messages').doc('s1');
+    await sys.set({ text: 'Buyurtma qabul qilindi', fromAdmin: true, systemOrder: true, createdAt: new Date() });
+    await fire(sys);
+    assert.strictEqual(await awaitingOf(), false);
+    const u2 = chatRef.collection('messages').doc('u2');
+    await u2.set({ text: 'Yana savol', fromAdmin: false, createdAt: new Date() });
+    await fire(u2);
+    assert.strictEqual(await awaitingOf(), true);
   });
 
   // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────

@@ -1547,10 +1547,16 @@ service cloud.firestore {
     match /support_chats/{chatId} {
       allow read: if isAuth()
           && (isOwner(chatId) || request.auth.uid == chatId || isAdmin());
+      // `awaitingAdmin` / `awaitingAdminMsgAt` — «жавоб кутмоқда» (админ
+      // badge'и), фақат CF `onSupportChatMessageCreate` ёзади (аудит O-5).
       allow create: if isAuth()
-          && (isOwner(chatId) || request.auth.uid == chatId);
+          && (isOwner(chatId) || request.auth.uid == chatId)
+          && !request.resource.data.keys()
+              .hasAny(['awaitingAdmin', 'awaitingAdminMsgAt']);
       allow update: if isAuth()
-          && (isOwner(chatId) || request.auth.uid == chatId || isAdmin());
+          && (isOwner(chatId) || request.auth.uid == chatId || isAdmin())
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['awaitingAdmin', 'awaitingAdminMsgAt']);
       allow delete: if false;
 
       match /messages/{messageId} {

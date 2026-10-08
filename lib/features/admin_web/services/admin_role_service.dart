@@ -24,4 +24,24 @@ class AdminRoleService {
       return 'Xatolik: $e';
     }
   }
+
+  /// Superadmin: panel roli bor foydalanuvchiga yangi tasodifiy PIN
+  /// (`adminSetAdminPin`). PIN faqat shu javobda keladi — serverda xesh.
+  Future<({String? pin, String? error})> setAdminPin({
+    required String targetPhone,
+  }) async {
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('adminSetAdminPin')
+          .call<Map<String, dynamic>>({'targetPhone': targetPhone});
+      return (pin: res.data['pin'] as String?, error: null);
+    } on FirebaseFunctionsException catch (e) {
+      if (e.message == 'ADMIN_PIN_TARGET_NOT_PANEL_ROLE') {
+        return (pin: null, error: 'Avval panel roli bering (admin/finance/…).');
+      }
+      return (pin: null, error: e.message ?? e.code);
+    } catch (e) {
+      return (pin: null, error: 'Xatolik: $e');
+    }
+  }
 }

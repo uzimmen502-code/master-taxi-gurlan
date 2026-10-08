@@ -1017,6 +1017,16 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // Admin panel shaxsiy PIN xeshlari (`functions/admin_pin.js`) va admin
+    // amallar auditi — FAQAT Admin SDK. Hech qanday klient (admin ham)
+    // o'qiy/yoza olmaydi: xesh+salt offline brute-force uchun ham yopiq.
+    match /admin_credentials/{docId} {
+      allow read, write: if false;
+    }
+    match /admin_audit/{docId} {
+      allow read, write: if false;
+    }
+
     // Marshrut blok holati — faqat o'z telefon raqami yoki admin
     match /users/{userId}/marshrut_block/{doc} {
       allow read: if isOwner(userId) || isAdmin();

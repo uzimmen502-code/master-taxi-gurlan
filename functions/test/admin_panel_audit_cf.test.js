@@ -3,8 +3,16 @@
  * HAQIQIY Firestore Emulator + ledger bilan. functions/index.js export'larini
  * `.run(data, context)` orqali chaqiradi.
  *
- *   firebase emulators:exec --only firestore --project demo-admin-audit \
- *     "node functions/test/admin_panel_audit_cf.test.js"
+ *   firebase emulators:exec --config <cfg> --only firestore,auth \
+ *     --project demo-admin-audit "node <repo>/functions/test/admin_panel_audit_cf.test.js"
+ *
+ * M bo'limi (admin PIN bilan kirish) Auth emulator talab qiladi; repo
+ * `firebase.json`da `auth` emulyatori yo'q, shuning uchun alohida config:
+ *   { "firestore": {"rules": "<repo>/firestore.rules"},
+ *     "emulators": {"firestore": {"port": 18180}, "auth": {"port": 19099},
+ *                   "ui": {"enabled": false}} }
+ * (portlar 15000 dan yuqori — Windows Hyper-V rezervi). Auth'siz faqat
+ * M8/M9 yiqiladi.
  *
  * Qulflanadi:
  *   A  assertAdmin — anonim sessiya klient `adminPhone` bilan kira olmaydi
@@ -20,6 +28,8 @@
  *   J  adminResetTaxiDriversRegistry — superadmin, dry-run, faqat `driver`
  *   K  adminResolveEvReport — reportCount kamayadi, idempotent
  *   L  sendSupportChatReply — qo'lda javob `systemOrder: false` (push ketadi)
+ *   M  adminWebSignIn — telefon + shaxsiy PIN; qulf; adminSetAdminPin /
+ *      adminChangeOwnPin (ega qarori D-1)
  */
 'use strict';
 const assert = require('assert');
@@ -73,7 +83,7 @@ async function reset() {
   await Promise.all(['users', 'orders', 'bread_products', 'wallet_idempotency',
     'payout_requests', 'dating_profiles', 'ads', 'tv_clips', 'settings',
     'queue', 'intercity_drivers', 'schedules', 'driver_requests', 'drivers',
-    'admin_audit', 'ev_charging_stations', 'support_chats', 'admin_news',
+    'admin_audit', 'admin_credentials', 'ev_charging_stations', 'support_chats', 'admin_news',
     ledger.COL_JOURNAL, ledger.COL_ACCOUNTS].map(wipe));
   await db.collection('users').doc(ADMIN).set({ role: 'admin' });
   await db.collection('users').doc(SUPER).set({ role: 'superadmin' });
@@ -434,6 +444,67 @@ async function main() {
     assert.strictEqual(m.size, 1);
     assert.strictEqual(m.docs[0].data().systemOrder, false);
     assert.strictEqual(m.docs[0].data().fromAdmin, true);
+  });
+
+  // ── M. Admin kirish: telefon + shaxsiy PIN (D-1) ────────────────────
+  await reset();
+  const signIn = (phone, pin) => fns.adminWebSignIn.run({ phone, ...(pin == null ? {} : { pin }) }, {});
+  await check('M1 PIN\'siz kirish — rad (ADMIN_PIN_REQUIRED)', async () => {
+    await rejectsWith(signIn(ADMIN), 'invalid-argument', 'ADMIN_PIN_REQUIRED');
+  });
+  await check('M2 PIN berilmagan admin — umumiy rad (qaysi raqam admin ekani bilinmaydi)', async () => {
+    await rejectsWith(signIn(ADMIN, '482915'), 'permission-denied', 'PIN');
+  });
+  await check('M3 oddiy foydalanuvchi raqami — xuddi shu umumiy rad', async () => {
+    await rejectsWith(signIn(OTHER, '482915'), 'permission-denied', 'PIN');
+  });
+  await check('M4 admin (superadmin emas) boshqaga PIN bera olmaydi', async () => {
+    await rejectsWith(fns.adminSetAdminPin.run({ targetPhone: DISPATCHER }, ctxOf(ADMIN)), 'permission-denied');
+  });
+  await check('M5 panel roli yo\'q foydalanuvchiga PIN berilmaydi', async () => {
+    await rejectsWith(fns.adminSetAdminPin.run({ targetPhone: OTHER }, ctxOf(SUPER)),
+      'failed-precondition', 'ADMIN_PIN_TARGET_NOT_PANEL_ROLE');
+  });
+  let adminPinValue = '';
+  await check('M6 superadmin PIN beradi: javobda bir marta, serverda faqat xesh, audit', async () => {
+    const r = await fns.adminSetAdminPin.run({ targetPhone: ADMIN }, ctxOf(SUPER));
+    assert.match(r.pin, /^\d{6}$/);
+    adminPinValue = r.pin;
+    const cred = (await db.collection('admin_credentials').doc(ADMIN).get()).data();
+    assert.ok(!JSON.stringify(cred).includes(r.pin), 'PIN ochiq saqlanmagan');
+    assert.strictEqual(cred.mustChange, true);
+    const audit = (await db.collection('admin_audit').where('kind', '==', 'admin_pin_set').get()).docs;
+    assert.strictEqual(audit.length, 1);
+    assert.strictEqual(audit[0].data().actor, SUPER);
+  });
+  const wrongPin = adminPinValue === '111222' ? '333444' : '111222';
+  await check('M7 4 ta noto\'g\'ri PIN — rad; 5-chisi — 15 daqiqa qulf; qulfda to\'g\'ri PIN ham rad', async () => {
+    for (let i = 0; i < 4; i += 1) await rejectsWith(signIn(ADMIN, wrongPin), 'permission-denied');
+    await rejectsWith(signIn(ADMIN, wrongPin), 'resource-exhausted');
+    await rejectsWith(signIn(ADMIN, adminPinValue), 'resource-exhausted');
+    const cred = (await db.collection('admin_credentials').doc(ADMIN).get()).data();
+    assert.ok(cred.lockedUntil.toMillis() > Date.now() + 14 * 60 * 1000);
+  });
+  await check('M8 superadmin qayta PIN bersa — qulf ochiladi, yangi PIN bilan kirish (token)', async () => {
+    const r = await fns.adminSetAdminPin.run({ targetPhone: ADMIN }, ctxOf(SUPER));
+    adminPinValue = r.pin;
+    const s = await signIn(ADMIN, adminPinValue);
+    assert.ok(typeof s.token === 'string' && s.token.length > 20, 'custom token');
+    assert.strictEqual(s.role, 'admin');
+    assert.strictEqual(s.mustChangePin, true);
+  });
+  await check('M9 o\'z PIN\'ini almashtirish: zaif / noto\'g\'ri joriy — rad; to\'g\'ri — eski ishlamaydi', async () => {
+    await rejectsWith(fns.adminChangeOwnPin.run({ currentPin: adminPinValue, newPin: '123456' }, ctxOf(ADMIN)),
+      'invalid-argument', 'ADMIN_PIN_WEAK');
+    await rejectsWith(fns.adminChangeOwnPin.run({ currentPin: wrongPin, newPin: '582913' }, ctxOf(ADMIN)),
+      'permission-denied', 'ADMIN_PIN_WRONG');
+    await fns.adminChangeOwnPin.run({ currentPin: adminPinValue, newPin: '582913' }, ctxOf(ADMIN));
+    await rejectsWith(signIn(ADMIN, adminPinValue), 'permission-denied');
+    const s = await signIn(ADMIN, '582913');
+    assert.strictEqual(s.mustChangePin, false);
+  });
+  await check('M10 oddiy foydalanuvchi adminChangeOwnPin chaqira olmaydi', async () => {
+    await rejectsWith(fns.adminChangeOwnPin.run({ currentPin: '1', newPin: '582913' }, ctxOf(OTHER)), 'permission-denied');
   });
 
   const failed = results.filter((x) => !x).length;

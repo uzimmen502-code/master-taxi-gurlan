@@ -7,6 +7,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const settlementLedger = require('./settlement_ledger');
+const adminPin = require('./admin_pin');
 
 // Yuk birjasi — shaharlararo (yuk_listings) va tuman ichi (yuk_local_drivers).
 // `digits` — hoisted function declaration (pastda), shu yerda ishlatish xavfsiz.
@@ -6749,35 +6750,50 @@ exports.migrateOldBindings = functions.https.onCall(async (data, context) => {
   };
 });
 
+// Kirish xatolari — bitta umumiy xabar: qaysi raqam admin ekanini, PIN
+// berilganmi yoki yo'qmi — tashqaridan ajratib bo'lmasin.
+const ADMIN_SIGNIN_DENIED =
+  'Телефон ёки PIN нотўғри. PIN олиш учун superadmin\'га мурожаат қилинг.';
+
 /**
- * Admin web: telefon bilan SMSsiz / parolsiz kirish.
- * Faqat Firestore'da panel roli bor raqamlar: admin, superadmin,
- * dispatcher, finance, auditor. Rol yo'q bo'lsa — permission-denied.
+ * Admin web: telefon + SHAXSIY PIN (ega qarori 2026-10-08, admin audit D-1).
+ * Avval faqat telefon yetarli edi (SMS/parolsiz) — admin raqamini bilgan
+ * har kim panelga kirardi. PIN: `admin_pin.js` (`admin_credentials/{docId}`,
+ * scrypt, 5 xato → 15 daqiqa qulf). Panel roli: admin, superadmin,
+ * dispatcher, finance, auditor.
  */
 exports.adminWebSignIn = functions.https.onCall(async (data) => {
   const phone = canonicalUid(data.phone || '');
+  const pin = String((data && data.pin) || '').trim();
   if (!phone || phone.length < 9) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'Telefon raqami noto\'g\'ri',
     );
   }
-  const found = await findUserDocByPhone(phone);
-  if (!found) {
-    throw new functions.https.HttpsError('not-found', 'User not found');
+  if (!/^\d{6,12}$/.test(pin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'ADMIN_PIN_REQUIRED');
   }
-  const role = String((found.snap.data() || {}).role || 'user')
-    .trim()
-    .toLowerCase();
-  const panelRoles = [
-    'admin',
-    'superadmin',
-    'dispatcher',
-    'finance',
-    'auditor',
-  ];
-  if (!panelRoles.includes(role)) {
-    throw new functions.https.HttpsError('permission-denied', 'Not an admin');
+  const found = await findUserDocByPhone(phone);
+  const role = found
+    ? String((found.snap.data() || {}).role || 'user').trim().toLowerCase()
+    : '';
+  if (!found || !adminPin.PANEL_ROLES.includes(role)) {
+    throw new functions.https.HttpsError('permission-denied', ADMIN_SIGNIN_DENIED);
+  }
+  const check = await adminPin.checkAdminPin(db, { docId: found.docId, pin });
+  if (!check.ok) {
+    console.warn(JSON.stringify({
+      action: 'adminWebSignIn', result: 'denied', errorCode: check.code,
+      userId: found.docId,
+    }));
+    if (check.code === 'ADMIN_PIN_LOCKED') {
+      throw new functions.https.HttpsError(
+          'resource-exhausted',
+          'Кўп марта нотўғри PIN киритилди. 15 дақиқадан кейин қайта уриниб кўринг.',
+          { code: 'ADMIN_PIN_LOCKED' });
+    }
+    throw new functions.https.HttpsError('permission-denied', ADMIN_SIGNIN_DENIED);
   }
   const e164 = `+${phone}`;
   let authUser;
@@ -6805,7 +6821,72 @@ exports.adminWebSignIn = functions.https.onCall(async (data) => {
     uid: found.docId,
     phone: e164,
     role,
+    mustChangePin: check.mustChange === true,
   };
+});
+
+/**
+ * Superadmin: panel roli bor foydalanuvchiga yangi PIN berish (yoki
+ * unutilganini tiklash — qulf ham ochiladi). PIN tasodifiy, javobda BIR
+ * MARTA qaytadi (serverda faqat xesh). Audit — `admin_audit`.
+ */
+exports.adminSetAdminPin = functions.https.onCall(async (data, context) => {
+  const actorUid = await requireCallerRoles(context, ['superadmin'], 'Faqat superadmin');
+  const target = canonicalUid((data && data.targetPhone) || '');
+  if (!target || target.length < 9) {
+    throw new functions.https.HttpsError('invalid-argument', 'targetPhone');
+  }
+  const found = await findUserDocByPhone(target);
+  const role = found
+    ? String((found.snap.data() || {}).role || 'user').trim().toLowerCase()
+    : '';
+  if (!found || !adminPin.PANEL_ROLES.includes(role)) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'ADMIN_PIN_TARGET_NOT_PANEL_ROLE');
+  }
+  const pin = adminPin.generatePin();
+  await adminPin.storeAdminPin(db, { docId: found.docId, pin, setBy: actorUid });
+  await db.collection('admin_audit').add({
+    kind: 'admin_pin_set', actor: actorUid, target: found.docId, role,
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, pin, target: found.docId };
+});
+
+/** Admin: o'z PIN'ini almashtirish (joriy PIN bilan; xatolar sanaladi). */
+exports.adminChangeOwnPin = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  const tokenPhone = callerPhone(context);
+  const found = tokenPhone ? await findUserDocByPhone(tokenPhone) : null;
+  const role = found
+    ? String((found.snap.data() || {}).role || 'user').trim().toLowerCase()
+    : '';
+  if (!found || !adminPin.PANEL_ROLES.includes(role)) {
+    throw new functions.https.HttpsError('permission-denied', 'Admin only');
+  }
+  const currentPin = String((data && data.currentPin) || '').trim();
+  const newPin = String((data && data.newPin) || '').trim();
+  const weak = adminPin.validateNewPin(newPin);
+  if (weak) {
+    throw new functions.https.HttpsError('invalid-argument', weak);
+  }
+  if (newPin === currentPin) {
+    throw new functions.https.HttpsError('invalid-argument', 'ADMIN_PIN_SAME');
+  }
+  const check = await adminPin.checkAdminPin(db, { docId: found.docId, pin: currentPin });
+  if (!check.ok) {
+    throw new functions.https.HttpsError(
+        check.code === 'ADMIN_PIN_LOCKED' ? 'resource-exhausted' : 'permission-denied',
+        check.code);
+  }
+  await adminPin.storeAdminPin(db, { docId: found.docId, pin: newPin, setBy: found.docId });
+  await db.collection('admin_audit').add({
+    kind: 'admin_pin_changed_self', actor: found.docId,
+    at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
 });
 
 /**

@@ -16,6 +16,7 @@ import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_news_read_service.dart';
 import '../utils/count_stream_sum.dart';
+import '../widgets/change_pin_dialog.dart';
 import '../../../repositories/news_repository.dart';
 import 'admin_home_ticker_screen.dart';
 import 'admin_news_list_screen.dart';
@@ -89,6 +90,14 @@ class _AdminShellState extends State<AdminShell> {
     // тушарди: `pending_codes`ни тинглаб, rules рад этадиган ёзувларни
     // юборарди. «Код сўровлари» яширилгач (D-2) — ишга туширилмайди.
     _pageCache = List<Widget?>.filled(_sections.length, null);
+    // Superadmin берган вақтинчалик PIN билан кирилган бўлса — алмаштириш
+    // таклифи (D-1).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (context.read<AdminAuthService>().mustChangePin) {
+        showChangePinDialog(context, required: true);
+      }
+    });
   }
 
   static const _sections = [
@@ -321,24 +330,32 @@ class _AdminShellState extends State<AdminShell> {
   ];
 
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
+    final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Чиқиш'),
+        title: const Text('Ҳисоб'),
         content: const Text('Чиқишни тaсдиқлaйcизми?'),
         actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'pin'),
+            icon: const Icon(Icons.lock_reset, size: 18),
+            label: const Text('PIN\'ни алмаштириш'),
+          ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Бекор'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'logout'),
             child: const Text('Чиқиш', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-    if (confirm == true && mounted) {
+    if (!mounted) return;
+    if (choice == 'pin') {
+      await showChangePinDialog(context);
+    } else if (choice == 'logout') {
       await context.read<AdminAuthService>().logout();
     }
   }

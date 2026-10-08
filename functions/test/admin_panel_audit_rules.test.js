@@ -288,6 +288,18 @@ async function main() {
   await check('settings/app: hamma o\'qiydi (ilova)',
       () => assertSucceeds(settings(unauth(), 'app').get()));
 
+  // ── admin_credentials / admin_audit (faqat Admin SDK) ───────────────
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection('admin_credentials').doc(ADMIN).set({pin: {hash: 'x'}});
+    await ctx.firestore().collection('admin_audit').doc('a1').set({kind: 'x'});
+  });
+  await check('admin_credentials: superadmin ham PIN xeshini o\'qiy olmaydi',
+      () => assertFails(as(SUPER).collection('admin_credentials').doc(ADMIN).get()));
+  await check('admin_credentials: admin o\'z PIN\'ini klientdan yoza olmaydi',
+      () => assertFails(as(ADMIN).collection('admin_credentials').doc(ADMIN).set({pin: {}})));
+  await check('admin_audit: klient o\'qiy/yoza olmaydi',
+      () => assertFails(as(SUPER).collection('admin_audit').doc('a1').get()));
+
   // ── marshrut_state ──────────────────────────────────────────────────
   const ms = (db) => db.collection('users').doc(OWNER).collection('marshrut_state').doc('active');
   await check('marshrut_state: admin yo\'lovchi holatini tozalaydi (Dispatch history)',

@@ -371,6 +371,21 @@ function attachRealty(exports, deps) {
     };
   }
 
+  /**
+   * МАНЗИЛ ФАҚАТ ЁПИҚДА — feature flag (`settings/app.realtyAddressPrivateOnly`,
+   * эга қарори 2026-10-08: кўча/уй пакетдан кейин).
+   *
+   * Нега флаг: Play'даги эски илова манзилни фақат ОЧИҚ ҳужжатдан ўқийди.
+   * Флагсиз ёқилса, эски иловада пакет сотиб олган харидор кўча/уйни
+   * умуман кўрмай қоларди (26-қоида). Шунинг учун тартиб: янги илова
+   * тарқалади → эга флагни `true` қилади → `tools/realty_move_address.js`
+   * эски ёзувлардан очиқ манзилни олиб ташлайди. Стандарт — `false`
+   * (аввалги хатти-ҳаракат: манзил иккала ҳужжатда).
+   */
+  function addressPrivateOnly(app) {
+    return appSetting(app, 'realtyAddressPrivateOnly', false) === true;
+  }
+
   /** `settings/app.realtyAgentPhone` — фақат рақамлар. */
   function agentPhoneFrom(app, contactMode) {
     if (contactMode !== 'ava_agent') return '';
@@ -433,7 +448,10 @@ function attachRealty(exports, deps) {
       title: f.title,
       text: f.text,
       priceText: f.priceText,
-      // `addressText` ОЧИҚ ҳужжатга ЁЗИЛМАЙДИ — ёпиқ `private/detail`да.
+      // Манзил доим ёпиқ `private/detail`да. Очиқ ҳужжатга фақат ўтиш
+      // даврида (қаранг: `addressPrivateOnly`) — Play'даги эски илова
+      // манзилни фақат шу ердан ўқийди.
+      ...(addressPrivateOnly(app) ? {} : { addressText: f.addressText }),
       ...(f.priceAmount === null ? {} : { priceAmount: f.priceAmount }),
       ...(f.rooms === null ? {} : { rooms: f.rooms }),
       ...(f.floor === null ? {} : { floor: f.floor }),
@@ -539,8 +557,9 @@ function attachRealty(exports, deps) {
       title: f.title,
       text: f.text,
       priceText: f.priceText,
-      // Эски ёзувдаги ОЧИҚ манзил таҳрирда тозаланади — энди ёпиқда.
-      addressText: del,
+      // Ўтиш даври тугагач (флаг ёқилгач) очиқ манзил таҳрирда
+      // тозаланади; ундан олдин эски илова учун аввалгидек ёзилади.
+      addressText: addressPrivateOnly(app) ? del : f.addressText,
       priceAmount: f.priceAmount === null ? del : f.priceAmount,
       // Бўш қолдирилган майдон ЎЧИРИЛАДИ — акс ҳолда эски қиймат
       // («3 хона») таҳрирдан кейин ҳам ёзувда қолиб кетарди.

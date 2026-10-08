@@ -182,6 +182,31 @@ realty_alert_hits/{alertId}_{listingId}   ← детерминистик ID = id
 | 4 | Эга сигнали (Б-2) | Кейинги босқич — алоҳида сўралади | UNKNOWN |
 | 6 | Рақамли нарх | Ихтиёрий (орқага мослик) | PROPOSED (стандарт) |
 
+## 8-ter. Амалга оширилди (2026-10-08, `feat/realty-alerts`) — DEPLOY ҚИЛИНМАГАН
+
+| Қисм | Нима | Тест |
+|---|---|---|
+| Хабарнома (сервер) | `functions/realty_alerts.js`: `createRealtyAlert`, `setRealtyAlertStatus`, `onRealtyListingActivated` (trigger), `realtyAlertsExpirySweep` | соф 14/14, emulator 12/12 |
+| Манзил | `realty.js`: манзил доим `private/detail`да; очиқда фақат флаг ўчиқ бўлса (`settings/app.realtyAddressPrivateOnly`, стандарт `false`) | `realty_expiry` 8/8 |
+| Рақамли нарх | `priceAmount` (бутун сўм, ижарада ойига) — ихтиёрий | `realty_expiry` 8/8 |
+| Қоидалар | `realty_alerts`, `realty_alert_hits`, `realty_alert_meta`, `realty_matches` | 6/6 + `realty_rules` 23/23 |
+| Индекслар | `realty_alerts` ×4, `realty_listings` status+geohash4 | — |
+| Миграция | `tools/realty_move_address.js` (dry-run / --execute --backup / --rollback) | emulator 3/3 |
+| Илова | 🔔 «Хабарномалар» (мос эълонлар + хабарномаларим), форма, push `realty_match`, манзил фақат очилгач, рақамли нарх майдони | 9/9; `flutter test` 852 |
+
+**Чиқариш тартиби (эга рухсати билан, 29-қоида):**
+1. Firestore индекслари — `--force`сиз, аввал жонли билан солиштириш.
+2. Firestore rules — АЛОҲИДА буйруқ (жонли асос — HEAD).
+3. default функциялар НОМИ БИЛАН: `createRealtyAlert` `setRealtyAlertStatus`
+   `onRealtyListingActivated` `realtyAlertsExpirySweep` + `realty.js`
+   экспортлари (`fix/realty-audit-p1` билан бирга текширилган).
+4. Илова (APK/AAB).
+5. Янги илова тарқалгач: флаг `realtyAddressPrivateOnly = true`, кейин миграция.
+
+**Очиқ:** эълон тумани ҳали ЭГАНИНГ профилидан (`ownerGeoStamp`) — хабарнома
+аниқ нуқта бўйича ишлагани учун унга таъсир қилмайди, лекин «Менинг туманим»
+харита фильтри учун алоҳида тузатиш керак; Б-2 (эгага сигнал) — эга қарори.
+
 ## 8. Эгадан керакли қарорлар (асл рўйхат)
 
 1. **Архитектура:** A (`realty.js` ичида, тавсия) ёки B (ядро)?

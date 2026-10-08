@@ -274,9 +274,25 @@ async function main() {
     assert.strictEqual(priv.lat, 41.5);
     assert.strictEqual(priv.lng, 60.6);
     assertJittered(pub.areaLat, pub.areaLng, 41.5, 60.6);
-    // Эга қарори 2026-10-08: кўча/уй — ПУЛЛИК, фақат ёпиқ ҳужжатда.
-    assert.ok(!('addressText' in pub), 'манзил очиқ ҳужжатда бўлмаслиги керак');
+    // Эга қарори 2026-10-08: кўча/уй ёпиқ ҳужжатда ДОИМ. Флаг ўчиқ
+    // (стандарт, ўтиш даври) — эски илова учун очиқда ҳам.
     assert.strictEqual(priv.addressText, 'Гурлан, Навоий 12');
+    assert.strictEqual(pub.addressText, 'Гурлан, Навоий 12', 'флаг ўчиқ — эски илова учун очиқда ҳам');
+
+    // Флаг ёқилгач — очиқ ҳужжатда манзил ЙЎҚ.
+    db._store.set('settings/app', {
+      realtyAgentPhone: '998900000001', realtyAddressPrivateOnly: true,
+    });
+    db._store.set(`users/${OWNER}`, { phone: OWNER, name: 'Эга' });
+    // Бепул лимит 2 та — иккинчи эълонга ўрин бор.
+    const res2 = await h.submitRealtyListing({
+      deal: 'sale', tier: 'plain', title: 'Уч хонали', text: 'Марказда',
+      lat: 41.5, lng: 60.6, addressText: 'Гурлан, Навоий 14', contactMode: 'owner',
+    }, ctx(OWNER));
+    const pub2 = db._store.get(`realty_listings/${res2.listingId}`);
+    const priv2 = db._store.get(`realty_listings/${res2.listingId}/private/detail`);
+    assert.ok(!('addressText' in pub2), 'флаг ёқиқ — манзил очиқда бўлмаслиги керак');
+    assert.strictEqual(priv2.addressText, 'Гурлан, Навоий 14');
     console.log('✓ 1) Янги эълон: танлов ёзувда, рақам созламадан');
   }
 
@@ -603,6 +619,8 @@ async function main() {
     const db = makeDb();
     const h = {};
     db._store.set(`users/${OWNER}`, { phone: OWNER, realtyOwnerKey: 'KEY' });
+    // Ўтиш даври тугаган: флаг ёқиқ.
+    db._store.set('settings/app', { realtyAddressPrivateOnly: true });
     // Эски ёзув: манзил ОЧИҚ ҳужжатда қолган.
     seedListing(db, 'A1', { addressText: 'Гурлан, Эски кўча 5' });
     attachRealty(h, {
@@ -642,7 +660,15 @@ async function main() {
       h.updateRealtyListing({ ...base, priceAmount: -1 }, ctx(OWNER)),
       'invalid-argument', 'price_invalid',
     );
-    console.log('✓ 8) Манзил ёпиқ ҳужжатда, эскиси кўчади; рақамли нарх бутун сўм');
+
+    // Флаг ЎЧИҚ (ўтиш даври): таҳрир очиқ манзилни ҳам ёзади — эски
+    // илова харидори кўча/уйни кўришда давом этади.
+    db._store.set('settings/app', {});
+    await h.updateRealtyListing({ ...base, addressText: 'Гурлан, Учинчи кўча 9' }, ctx(OWNER));
+    assert.strictEqual(db._store.get('realty_listings/A1').addressText, 'Гурлан, Учинчи кўча 9');
+    assert.strictEqual(
+      db._store.get('realty_listings/A1/private/detail').addressText, 'Гурлан, Учинчи кўча 9');
+    console.log('✓ 8) Манзил ёпиқ ҳужжатда (флаг), эскиси кўчади; рақамли нарх бутун сўм');
   }
 
   console.log('\nҲаммаси ўтди: realty_expiry.test.js');

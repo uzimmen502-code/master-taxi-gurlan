@@ -883,10 +883,19 @@ PIN'сиз ўтади.
 Энди `adminGrantCapability` (D-15.2) + экран `provider_capabilities`
 бўйича (фильтр, тасдиқлаш, тўхтатиш — сабаб билан, audit).
 
-**Деплой (ҳали ҚИЛИНМАГАН), ТАРТИБ БИЛАН:**
-1. `functions:demand` → `requestCapability` `acceptServiceAgreement`
-   `adminSetCapabilityStatus` `adminGrantCapability`
-   `adminSetCourierApprovalMode` `adminMigrateTaxiDrivers`; hosting (админ).
+**Деплой, ТАРТИБ БИЛАН:**
+1. ✅ **2026-10-08 ~02:35 UTC (эга рухсати)** — `functions:demand` НОМИ БИЛАН,
+   тоза detached worktree'дан (`52115b3`): `requestCapability`
+   `acceptServiceAgreement` `adminSetCapabilityStatus` `adminMigrateTaxiDrivers`
+   янгиланди, `adminGrantCapability` `adminSetCourierApprovalMode` яратилди
+   (europe-west1, `Deploy complete`). Rollback: шу функцияларни `234b79e`дан
+   номи билан қайта деплой. ⏳ **Hosting (админ «Курьерлар» + сотув рўйхати)
+   НАВБАТДА:** жонли hosting'ни бир неча сессия кетма-кет чиқаряпти (бренд →
+   Улгуржи → шу иш). Делта — фақат 2 админ файл, `deploy/hosting-courier`
+   (`cd6c7ca`); Улгуржи'нинг якуний SHA'си устига cherry-pick қилиниб,
+   жонли бандл хеши солиштирилгач чиқарилади. Ҳозирча админдаги
+   «Курьерлар» экрани ЭСКИ (`couriers`га ёзади) — янги функциялар фақат
+   hosting'дан кейин кўринади.
 2. Админ ҳақиқий курьерларни «Курьерлар» экранидан қўшади.
 3. default (номи билан, `functions:default` тўлиқ эмас): `courierMarkPicked`
    `courierMarkArrived` `courierSubmitPayment` `courierGetCustomerWalletBalance`

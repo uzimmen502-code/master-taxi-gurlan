@@ -126,4 +126,33 @@ void main() {
       expect(s, '');
     });
   });
+
+  group('formatShelfPrice — bosh sahifa kartochkasi, «дан»siz (2026-10-08)', () {
+    test('xitoy bozori: bitta pog‘ona — «дан» yo‘q, o‘z valyutasi', () {
+      // Prodakshndagi traktor: 10+ dona, 4 743 $.
+      final p = _p(
+        market: WholesaleProduct.marketChina,
+        currency: '\$',
+        tiers: const [WholesalePriceTier(minQty: 10, price: 4743)],
+      );
+      expect(formatShelfPrice(p), '4 743 \$');
+      expect(formatShelfPrice(p), isNot(contains('дан')));
+    });
+
+    test('ulgurji: so‘m', () {
+      expect(formatShelfPrice(_p()), '9 000 сўм');
+    });
+
+    test('bir nechta pog‘ona — birinchi (kam miqdor) narxi, «дан» yo‘q', () {
+      final p = _p(tiers: const [
+        WholesalePriceTier(minQty: 5, price: 12000),
+        WholesalePriceTier(minQty: 50, price: 9000),
+      ]);
+      expect(formatShelfPrice(p), '12 000 сўм');
+    });
+
+    test('narx yo‘q — null (kartochkada narx qatori chiqmaydi)', () {
+      expect(formatShelfPrice(_p(tiers: const [])), isNull);
+    });
+  });
 }

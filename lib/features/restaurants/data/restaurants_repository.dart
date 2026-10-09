@@ -144,6 +144,15 @@ class NearbyRestaurantOrder {
   }
 }
 
+/// Курьер выкуп созламаси (`courierSetBuyoutPrefs`): ёқилган бўлса нақд
+/// буюртмаларда курьер таом пулини ресторанга ўзи тўлайди, лимитгача.
+class CourierBuyoutPrefs {
+  const CourierBuyoutPrefs({required this.enabled, required this.limit});
+
+  final bool enabled;
+  final int limit;
+}
+
 class RestaurantsRepository {
   RestaurantsRepository({FirebaseFirestore? firestore, FirebaseFunctions? functions})
       : _db = firestore ?? FirebaseFirestore.instance,
@@ -448,6 +457,19 @@ class RestaurantsRepository {
 
   Future<void> setBuyoutPrefs({required bool enabled, required int limit}) =>
       _call('courierSetBuyoutPrefs', {'buyoutEnabled': enabled, 'buyoutLimit': limit});
+
+  /// Курьернинг выкуп созламаси — `restaurant_courier_prefs/{uid}` (қоида:
+  /// фақат ўзи ва админ ўқийди; ёзиш — фақат CF). Йўқ бўлса `null`.
+  Future<CourierBuyoutPrefs?> getBuyoutPrefs(String courierUid) async {
+    if (courierUid.isEmpty) return null;
+    final d = await _db.collection('restaurant_courier_prefs').doc(courierUid).get();
+    if (!d.exists) return null;
+    final m = d.data() ?? const <String, dynamic>{};
+    return CourierBuyoutPrefs(
+      enabled: m['buyoutEnabled'] == true,
+      limit: (m['buyoutLimit'] as num?)?.toInt() ?? 0,
+    );
+  }
 
   // ── Админ ──────────────────────────────────────────────────────────
 

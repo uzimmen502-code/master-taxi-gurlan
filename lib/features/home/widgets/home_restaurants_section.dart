@@ -15,6 +15,7 @@ import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/restaurant_models.dart';
+import '../../restaurants/domain/restaurants_access.dart';
 import '../../restaurants/widgets/restaurant_row.dart';
 import 'ava_section.dart';
 
@@ -41,7 +42,7 @@ class HomeRestaurantsSection extends StatefulWidget {
   /// Тестда алмаштириш учун; стандарт — [RestaurantsRepository.hasAccess].
   final Future<bool> Function()? accessCheck;
 
-  static const moduleId = 'restaurants';
+  static const moduleId = kRestaurantsModuleId;
   static const limit = 20;
   static const visibleRows = 4;
 
@@ -66,16 +67,9 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
   }
 
   Future<void> _resolveGate() async {
-    final id = HomeRestaurantsSection.moduleId;
-    if (ServiceConfigHolder.isOpenable(id)) {
-      _setAllowed(true);
-      return;
-    }
-    if (!ServiceConfigHolder.isVisible(id)) {
-      _setAllowed(false);
-      return;
-    }
-    final ok = await (widget.accessCheck ?? _repo.hasAccess)();
+    final ok = await resolveRestaurantsAccess(
+      accessCheck: widget.accessCheck ?? _repo.hasAccess,
+    );
     _setAllowed(ok);
   }
 

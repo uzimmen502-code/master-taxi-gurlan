@@ -19,6 +19,8 @@ import '../../../repositories/orders_repository.dart';
 import '../../../repositories/provider_presence_repository.dart';
 import '../../../services/courier_route_service.dart';
 import '../../../services/order_payment_service.dart';
+import '../../restaurants/courier/restaurant_courier_logic.dart';
+import '../../restaurants/data/restaurants_repository.dart';
 
 /// Kuryer paneli — marshrut + post-paid to'lov.
 class CourierController extends ChangeNotifier {
@@ -30,14 +32,21 @@ class CourierController extends ChangeNotifier {
     required OrdersRepository ordersRepo,
     required CouriersRepository couriersRepo,
     ProviderPresenceRepository? presenceRepo,
+    RestaurantsRepository? restaurantsRepo,
   })  : _routes = routesRepo,
         _orders = ordersRepo,
         _couriers = couriersRepo,
-        _presence = presenceRepo ?? ProviderPresenceRepository();
+        _presence = presenceRepo ?? ProviderPresenceRepository(),
+        _restaurantsRepo = restaurantsRepo;
 
   final DeliveryRoutesRepository _routes;
   final OrdersRepository _orders;
   final CouriersRepository _couriers;
+  final RestaurantsRepository? _restaurantsRepo;
+
+  /// Ресторан буюртмалари (Б3): callable'лар ва жонли буюртма оқими.
+  late final RestaurantsRepository restaurants =
+      _restaurantsRepo ?? RestaurantsRepository();
 
   /// 13.6.3 — ЎТИШ ДАВРИ: `couriers` ва `provider_presence` ИККАЛАСИГА
   /// ҳам ёзилади.
@@ -89,10 +98,14 @@ class CourierController extends ChangeNotifier {
   bool _advancingRoute = false;
 
   /// Тўлов/етказилди бўлган, лекин reys индекси ҳали ўтмаган буюртма.
-  static bool isOrderFinalized(OrderModel o) =>
-      o.effectivePayment == 'paid' ||
-      o.effectiveFulfillment == 'completed' ||
-      o.status == 'delivered';
+  /// Ресторан буюртмаси — фақат якуний `restaurantStatus`: олдиндан
+  /// тўлангани етказилгунча `paid` бўлади, у ҳали тугамаган.
+  static bool isOrderFinalized(OrderModel o) {
+    if (o.isRestaurant) return isRestaurantOrderFinalized(o);
+    return o.effectivePayment == 'paid' ||
+        o.effectiveFulfillment == 'completed' ||
+        o.status == 'delivered';
+  }
 
   OrderModel? get currentOrder {
     if (_currentOrderIndex < 0 || _currentOrderIndex >= _routeOrders.length) {
@@ -153,6 +166,16 @@ class CourierController extends ChangeNotifier {
       _routeOrders = const [];
       _currentOrderIndex = 0;
       _safeNotify();
+      return;
+    }
+    // Бажариладиган бекат қолмаган «фаол» маршрут (масалан, ресторан
+    // олинган охирги буюртмани рад этган) — ёпамиз; акс ҳолда курьер
+    // бўш маршрутда қолиб, янгисини ололмайди.
+    if (route.isActive && route.currentIndex >= route.orderIds.length) {
+      try {
+        await _routes.completeRoute(route.id);
+      } catch (_) {}
+      await _applyRoute(null);
       return;
     }
     final orders = await _orders.getByIds(route.orderIds);
@@ -313,6 +336,48 @@ class CourierController extends ChangeNotifier {
       _errorMessage = 'courier_error_generic|$e';
       _safeNotify();
     }
+  }
+
+  // ── Ресторан буюртмалари (Б3). Хато чақирувчига қайтади: карточка
+  // матнини ўзи кўрсатади (код нотўғри → диалог очиқ қолади). ──────────
+
+  Future<void> restaurantPickup(String orderId, String code) async {
+    await restaurants.pickup(orderId, pickupCode: code);
+    await _refreshOrder(orderId);
+    _info = 'courier_info_picked';
+    _safeNotify();
+  }
+
+  Future<void> restaurantArrive(String orderId) async {
+    await restaurants.arrive(orderId);
+    await _refreshOrder(orderId);
+    _info = 'courier_info_arrived';
+    _safeNotify();
+  }
+
+  /// `delivered` ёки `delivery_failed`. Натижа — курьерга кўрсатиш учун;
+  /// ҳамён етмаганини аниқлаш учун буюртманинг ЯКУНДАН ОЛДИНГИ ҳолати
+  /// керак (сервер `deliveryPaymentMethod`ни `cash`га алмаштиради).
+  Future<CourierCompletionSummary> restaurantComplete(
+    String orderId, {
+    required bool delivered,
+    required String failReason,
+  }) async {
+    OrderModel? before = _routeOrders
+        .cast<OrderModel?>()
+        .firstWhere((o) => o!.id == orderId, orElse: () => null);
+    before ??= await _orders.getById(orderId);
+    final res = await restaurants.complete(
+      orderId,
+      delivered: delivered,
+      failReason: failReason,
+    );
+    await _refreshOrder(orderId);
+    return CourierCompletionSummary.fromMap(
+      res,
+      order: before ??
+          OrderModel(id: orderId, type: 'restaurant', total: 0, status: '', items: const []),
+    );
   }
 
   Future<Map<String, dynamic>> submitPayment(

@@ -15,6 +15,8 @@ import 'courier_collection_tasks_screen.dart';
 import '../../carpet_wash/screens/carpet_wash_courier_screen.dart';
 import '../../agro_pickup/screens/agro_pickup_courier_screen.dart';
 import 'courier_mfy_selection_screen.dart';
+import '../../restaurants/courier/restaurant_courier_banner.dart';
+import '../../restaurants/courier/restaurant_courier_order_card.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -50,7 +52,19 @@ class _CourierViewState extends State<_CourierView> {
     if (msg.startsWith('courier_')) {
       return context.trMsg(msg);
     }
+    if (msg.startsWith('restaurants_')) {
+      return context.tr(msg);
+    }
     return msg;
+  }
+
+  /// Ресторан буюртмаси олинди (Б3) — маршрут серверда янгиланди.
+  Future<void> _onRestaurantClaimed(CourierController c) async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(context.tr('restaurants_courier_claimed_ok')),
+      behavior: SnackBarBehavior.floating,
+    ));
+    await c.loadActiveRoute();
   }
 
   void _showTransient(CourierController c) {
@@ -94,6 +108,10 @@ class _CourierViewState extends State<_CourierView> {
         _CollectionTasksBanner(courierUid: c.courierUid),
         const _CarpetWashBanner(),
         const _AgroPickupBanner(),
+        RestaurantCourierBanner(
+          courierUid: c.presenceUid,
+          onClaimed: () => _onRestaurantClaimed(c),
+        ),
         Expanded(
           child: !c.hasRoute
               ? _NoRouteView(
@@ -158,6 +176,24 @@ class _CourierViewState extends State<_CourierView> {
           final o = c.routeOrders[i];
           final finalized = CourierController.isOrderFinalized(o);
           final isCurrent = i == c.currentOrderIndex;
+          if (o.isRestaurant) {
+            // Ресторан буюртмаси (Б3): ресторан → код → мижоз → топшириш;
+            // ҳолат карточкада жонли (`watchOrder`).
+            return RestaurantCourierOrderCard(
+              key: ValueKey('rest_${o.id}'),
+              order: o,
+              index: i,
+              isDone: i < c.currentOrderIndex || finalized,
+              isCurrent: isCurrent && !finalized,
+              needsFinalize: isCurrent && finalized,
+              repository: c.restaurants,
+              onPickup: (code) => c.restaurantPickup(o.id, code),
+              onArrive: () => c.restaurantArrive(o.id),
+              onComplete: ({required delivered, required failReason}) =>
+                  c.restaurantComplete(o.id, delivered: delivered, failReason: failReason),
+              onFinalizeRoute: () => c.confirmAndAdvance(orderId: o.id),
+            );
+          }
           return CourierOrderTile(
             order: o,
             index: i,

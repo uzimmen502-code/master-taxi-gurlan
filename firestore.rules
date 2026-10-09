@@ -2828,6 +2828,15 @@ service cloud.firestore {
           // (Хитой). Хитой бозорида валюта ва етказиш муддати ҳам бор.
           && request.resource.data.get('market', 'wholesale')
                in ['wholesale', 'china']
+          // `createdAt` — МАЖБУРИЙ ва фақат СЕРВЕР вақти (2026-10-09).
+          // Илова `FieldValue.serverTimestamp()` юборади (модулнинг биринчи
+          // версияси b361a1c, 2026-09-21 дан бери) — у `request.time`га тенг.
+          // Майдонсиз ҳужжат админ рўйхатида (`orderBy('createdAt')`)
+          // кўринмай қоларди; телефон вақти ёки ўзбошимча сана эса уни
+          // рўйхат бошига/охирига суриб қўярди. Кейин ўзгармайди: ҳеч бир
+          // update йўлининг `hasOnly` рўйхатида `createdAt` йўқ.
+          // Тест: functions/test/wholesale_products_rules.test.js
+          && request.resource.data.createdAt == request.time
           && request.resource.data.keys().hasOnly([
                 'sellerId', 'sellerCompanyName', 'title', 'titleLower',
                 'searchTokens', 'description', 'priceTiers', 'unit',

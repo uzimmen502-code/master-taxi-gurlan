@@ -1416,16 +1416,32 @@ service cloud.firestore {
           && phoneDocIdsMatch(me, string(get(routePath).data.get('courierId', '')));
     }
 
+    // Ресторан а'зоси ўз ресторанининг буюртмаларини ўқийди (`type:
+    // 'restaurant'`, restaurant_orders.js). get — `.get()` билан; list —
+    // фақат тўғридан-тўғри майдон: сўров `where restaurantId == X` бўлиши
+    // шарт (`.get()` default тузоғи — хотира). Тест: restaurant_rules.test.js
+    function isRestaurantMemberOfOrderGet() {
+      let rid = resource.data.get('restaurantId', '');
+      return isAuth() && rid is string && rid != '' && isRestaurantMember(rid);
+    }
+    function isRestaurantMemberOfOrderList() {
+      return isAuth()
+          && resource.data.restaurantId is string
+          && isRestaurantMember(resource.data.restaurantId);
+    }
+
     match /orders/{orderId} {
       allow get: if isAuth() && (
           isStaff()
           || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
           || isActiveRouteCourierOfOrder()
+          || isRestaurantMemberOfOrderGet()
       );
       // `list` — курьер йўли ЙЎҚ (юқорига қаранг).
       allow list: if isAuth() && (
           isStaff()
           || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+          || isRestaurantMemberOfOrderList()
       );
 
       // Яратиш / бекор — фақат CF (placeOrderPostPaid / customerCancelOrder).
@@ -1454,6 +1470,32 @@ service cloud.firestore {
       }
       match /payment_events/{eventId} {
         allow read: if isAdmin();
+        allow write: if false;
+      }
+
+      // Ресторан буюртмаси ҳодисалари (append-only, CF) — эга, ресторан
+      // а'зоси, staff. Ота ҳужжат бир марта `get()` қилинади.
+      function restaurantOrderParent() {
+        return get(/databases/$(database)/documents/orders/$(orderId)).data;
+      }
+      match /order_events/{eventId} {
+        allow read: if isAuth() && (
+            isStaff()
+            || phoneDocIdsMatch(phoneFromToken(),
+                 phoneDigits(restaurantOrderParent().get('userPhone', '')))
+            || (restaurantOrderParent().get('restaurantId', '') != ''
+                && isRestaurantMember(restaurantOrderParent().get('restaurantId', '')))
+        );
+        allow write: if false;
+      }
+      // `private/secrets` — pickupCode: фақат ресторан (курьерга оғзаки
+      // айтади) ва админ; мижоз ва курьер ўқимайди.
+      match /private/{doc} {
+        allow read: if isAdmin() || (
+            isAuth()
+            && restaurantOrderParent().get('restaurantId', '') != ''
+            && isRestaurantMember(restaurantOrderParent().get('restaurantId', ''))
+        );
         allow write: if false;
       }
     }
@@ -1817,8 +1859,11 @@ service cloud.firestore {
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
       // нон нархлари (bread_repository.updatePrices) аввалгидек.
       // `anomaly_settings` — панелдаги каби фақат superadmin.
+      // `restaurant_delivery` (кафе-ресторан етказиш тарифи) — фақат CF
+      // `adminSetRestaurantDeliveryPrices` (версия + тарих + audit, 9/41-банд).
       allow create, update: if isAdmin() && docId != 'tv_social'
           && docId != 'wallet_bot'
+          && docId != 'restaurant_delivery'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'
@@ -1835,6 +1880,13 @@ service cloud.firestore {
 
     // Маҳаллий такси тариф тарихи — ўзгармас, фақат CF ёзади.
     match /local_taxi_tariffs/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Кафе-ресторан етказиш тарифи тарихи (`v{n}`) — ўзгармас, фақат CF
+    // (`adminSetRestaurantDeliveryPrices`). Тест: restaurant_rules.test.js
+    match /restaurant_delivery_tariffs/{versionId} {
       allow read: if isAdmin();
       allow write: if false;
     }
@@ -2870,6 +2922,136 @@ service cloud.firestore {
           || wholesaleProductViewIncrementOk()
           || wholesaleProductVideoLinkOk();
       allow delete: if isAdmin() || wholesaleProductOwnerIsCaller();
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // КАФЕ-РЕСТОРАНЛАР (D-REST-1…14, 2026-10-08; functions/restaurant_orders.js)
+    // ══════════════════════════════════════════════════════════════════
+    // `restaurants/{rid}` фақат CF яратади (`restaurantRegister`): `status`,
+    // `ownerUid`, `walletUserDocId`, рейтинг, `timeoutStreak` — server-only.
+    // А'зо (`members/{uid}`, CF ёзади) профил ва менюни тўғридан-тўғри ёзади
+    // (улгуржи намунаси); нарх `int` — буюртма нархи барибир серверда
+    // менюдан қайта ҳисобланади (18-қоида). Буюртмалар — `orders`
+    // (`type: 'restaurant'`), яратиш/ўтишлар фақат CF.
+    // Тест: functions/test/restaurant_rules.test.js
+    function isRestaurantMember(rid) {
+      let me = userDocIdFromPhoneToken();
+      return me != ''
+          && exists(/databases/$(database)/documents/restaurants/$(rid)/members/$(me));
+    }
+
+    function restaurantApproved(rid) {
+      return exists(/databases/$(database)/documents/restaurants/$(rid))
+          && get(/databases/$(database)/documents/restaurants/$(rid))
+               .data.get('status', '') == 'approved';
+    }
+
+    // Профил — фақат а'зо ўзгартира оладиган майдонлар (whitelist).
+    function restaurantProfilePatchOk() {
+      let d = request.resource.data;
+      let changed = d.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+            'name', 'description', 'cuisineTags', 'address', 'contactPhone',
+            'lat', 'lng', 'geohash', 'logoUrl', 'coverUrl', 'announcement',
+            'openingHours', 'prepTimeMin', 'minOrderAmount', 'delivery',
+            'payment', 'pausedUntil', 'updatedAt'
+          ])
+          && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
+          && d.prepTimeMin is int && d.prepTimeMin >= 5 && d.prepTimeMin <= 180
+          && d.minOrderAmount is int && d.minOrderAmount >= 0
+          && d.delivery is map
+          && d.delivery.get('mode', 'none') in ['ava_courier', 'own_courier', 'none']
+          && d.payment is map;
+    }
+
+    function restaurantMenuItemOk() {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+            'name', 'description', 'photoUrl', 'price', 'packagingFee',
+            'categoryId', 'sort', 'available', 'stopUntil', 'saleHours',
+            'createdAt', 'updatedAt'
+          ])
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
+          && d.price is int && d.price > 0 && d.price <= 50000000
+          && (!('packagingFee' in d)
+              || (d.packagingFee is int && d.packagingFee >= 0 && d.packagingFee <= 50000000))
+          && (!('available' in d) || d.available is bool)
+          && (!('description' in d)
+              || (d.description is string && d.description.size() <= 500))
+          && (!('photoUrl' in d) || (d.photoUrl is string && d.photoUrl.size() <= 500))
+          && (!('stopUntil' in d) || d.stopUntil == null || d.stopUntil is timestamp);
+    }
+
+    function restaurantMenuCategoryOk() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'sort', 'createdAt', 'updatedAt'])
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 60;
+    }
+
+    function restaurantPrivatePatchOk(doc) {
+      let d = request.resource.data;
+      return (doc == 'payment'
+              && d.keys().hasOnly(['cardNumber', 'cardHolder', 'qrImageUrl', 'updatedAt'])
+              && (!('cardNumber' in d)
+                  || (d.cardNumber is string && d.cardNumber.size() <= 16)))
+          || (doc == 'legal'
+              && d.keys().hasOnly(['tin', 'pinfl', 'docs', 'updatedAt']));
+    }
+
+    match /restaurants/{rid} {
+      // get: тасдиқланган — ҳамма (логинсиз ҳам, меню кўриш); а'зо/админ —
+      // ҳар қандай ҳолат.
+      allow get: if resource.data.get('status', '') == 'approved'
+          || isAdmin()
+          || (isAuth() && isRestaurantMember(rid));
+      // list: фақат тўғридан-тўғри майдон (`.get()` default тузоғи):
+      // `where status == 'approved'` ёки эга `where ownerUid == мен`.
+      allow list: if resource.data.status == 'approved'
+          || isAdmin()
+          || (isAuth() && resource.data.ownerUid == userDocIdFromPhoneToken());
+      allow create: if false;
+      allow update: if isAuth() && isRestaurantMember(rid) && restaurantProfilePatchOk();
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if isAdmin() || (isAuth() && isRestaurantMember(rid));
+        allow write: if false;
+      }
+
+      // Реквизит (карта/QR) ва юридик ҳужжатлар — оммавий эмас.
+      match /private/{doc} {
+        allow read: if isAdmin() || isFinanceReader()
+            || (isAuth() && isRestaurantMember(rid));
+        allow create, update: if isAuth() && isRestaurantMember(rid)
+            && restaurantPrivatePatchOk(doc);
+        allow delete: if false;
+      }
+
+      match /menu_categories/{cid} {
+        allow read: if isAdmin() || restaurantApproved(rid)
+            || (isAuth() && isRestaurantMember(rid));
+        allow create, update: if isAuth() && isRestaurantMember(rid)
+            && restaurantMenuCategoryOk();
+        allow delete: if isAuth() && isRestaurantMember(rid);
+      }
+
+      match /menu_items/{iid} {
+        allow read: if isAdmin() || restaurantApproved(rid)
+            || (isAuth() && isRestaurantMember(rid));
+        allow create, update: if isAuth() && isRestaurantMember(rid)
+            && restaurantMenuItemOk();
+        allow delete: if isAuth() && isRestaurantMember(rid);
+      }
+    }
+
+    // Мижоз strike/буюртма сони ва курьер выкуп созламаси — фақат CF ёзади.
+    match /restaurant_customer_stats/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow write: if false;
+    }
+    match /restaurant_courier_prefs/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow write: if false;
     }
 
     // Шикоят — фақат CF `submitJobComplaint` (client create: false).

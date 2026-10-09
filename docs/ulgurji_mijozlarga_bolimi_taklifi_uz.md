@@ -63,76 +63,133 @@
 
 ---
 
-## 4. Архитектура (PROPOSED)
+## 4. Эга қарорлари — AVA_DECIDED (2026-10-09)
 
-### 4.1 Маълумот модели
-
-```
-help_articles/{id}                       ← янги, кичик (FAQ, оферта, тақиқ рўйхати, муддатлар)
-  module: 'wholesale' | 'logistics' | 'restaurants' | 'all'
-  kind:   'faq' | 'offer' | 'prohibited' | 'terms' | 'notice'
-  order, active, version, effectiveFrom, updatedAt, updatedBy
-  title {uz_Cyrl, uz_Latn, ru}, body {uz_Cyrl, uz_Latn, ru}   ← матн базада, админ таҳрирлайди
-  rules: read — ҳамма (active); write — фақат CF (admin callable, audit)
-
-wholesale_sellers/{phone}                ← У1 + қўшимча
-  agreementVersion, agreementAcceptedAt  ← оферта қабул қилинди (capability намунаси)
-  expectedMonthlyWeightG?, highVolume?   ← «шартнома» аризаси белгиси (админ кўради)
-
-orders/{id} type:'wholesale'             ← У3 (бор режа); мурожаат учун:
-  issues/{issueId}  → support_chats га ҳавола, kind, status, createdAt (ўзгармас тарих)
-
-settings/wholesale_delivery (+ tariff history v{n})   ← У2, ресторан намунаси
-```
-
-Янги коллекция биттa (`help_articles`); қолгани мавжуд ҳужжатларга майдон. Тарифлар/оферта **версияли ва санали** (9, 46-бандлар) — BTS каби «01.09.2026 дан» кўринади.
-
-### 4.2 Сервер (Cloud Functions)
-
-| Callable | Вазифа | Намуна |
+| № | Қарор | Натижа |
 |---|---|---|
-| `quoteWholesaleDelivery` | туман→туман зона × пулли вазн + last-mile; `tariffVersion` қайтаради; буюртмасиз чақирилади (кўрсатиш) | `quoteRestaurantDelivery`, relay `quoteLogisticsOrder` |
-| `acceptWholesaleAgreement` | оферта версиясини қабул қилиш (idempotent, вақт сервер) | `acceptServiceAgreement` |
-| `adminUpsertHelpArticle` | FAQ/оферта/тақиқ матни, версия, audit | `adminSetRestaurantDeliveryPrices` аудити |
-| `openWholesaleIssue` | буюртмадан мурожаат: `support_chats` яратади/очади, `orders/{id}/issues` ёзади, админга `awaitingAdmin` | chat `awaitingAdmin` |
-| (мавжуд) `scanHandover`, `confirmDelivery`, custody | кузатув ва код билан топшириш | relay |
+| D-ULG-10 | Ёрдам/хизмат матнлари **Firebase базасида**, админдан **3 тилда**, **версия тарихи** сақланади | `help_articles` + `help_articles/{id}/versions/{n}` (ўзгармас) |
+| D-ULG-11 | «Офислар» → **«Хизмат ҳудудлари»**: ҳозир фақат хизмат кўрсатиладиган туманлар + етказиш муддати; ПВЗ кейин | `service_coverage` кўриниши; модел ПВЗ учун кенгаювчан (`points` бўш) |
+| D-ULG-12 | Риск захираси **етказиш нархи ичида**; ҳақиқий суғурта шартномаси бўлмагунча мижозга «суғурта» сўзи **кўрсатилмайди**; зарар учун **жавобгарлик офертада аниқ** | `riskReserve` ички; офертада «жавобгарлик» бўлими мажбурий майдон |
+| D-ULG-13 | Мурожаат — **тикет + чат**; ҳар тикет буюртма ва етказиш тарихига боғланади | `support_tickets` (янги) ↔ `support_chats` (мавжуд) ↔ `orders`/custody |
+| D-ULG-14 | Катта сотувчиларга **келажакда** алоҳида шартлар; биринчи босқичда **ҳаммага умумий тариф** | `wholesale_sellers.tier` майдони резерв (`standard`), тариф двигатели `tier` параметрини қабул қилади, лекин v1 да фақат `standard` |
 
-Қоидалар: мижоз ҳеч нарсани тўғридан-тўғри ёзмайди (мурожаат ҳам CF орқали — спам/IDOR); ҳамма матн базада, лекин **нарх ва муддат — фақат сервердан**.
-
-### 4.3 Flutter
-
-- `lib/features/wholesale/help/` — «Ёрдам ва хизмат» экрани: 6 карточка (ҳисоблагич, ҳудудлар, оферта/ҳужжатлар, FAQ, мурожаат, менинг буюртмаларим/кузатув); рол бўйича: сотувчига «оферта», «юқори ҳажм аризаси», «тақиқланган рўйхат» олдинда.
-- Товар саҳифасида мини-ҳисоблагич («Етказиш Гурланга ≈ X сўм, ≈ N кун») — У2.
-- Буюртма саҳифасида «Муаммо» тугмаси + кузатув тасмаси — У3/У5.
-- Матнлар 3 тилда базадан; экран ёрлиқлари — `assets/lang` (3 файл, паритет тести).
-
-### 4.4 Админ
-
-«Улгуржи бозор» → «Хизмат маркази» таби: FAQ/оферта муҳаррири (версия, сана, 3 тил), мурожаатлар рўйхати (буюртма + custody + чат бир экранда), «юқори ҳажм» аризалари, тариф версиялари (мавжуд намуна). Ҳар ёзув `admin_audit`.
-
-### 4.5 Хавфсизлик ва қоидалар
-
-- `help_articles` — ўқиш очиқ, ёзиш фақат CF (20-банд).
-- Мурожаат — фақат буюртма эгаси/сотувчиси, LEG ижрочиси; телефон/манзил бошқа томонга проекцияда чиқмайди (40-банд) — BTS'нинг «маълумот фақат рўйхатдаги рақамга» қоидаси.
-- Оферта қабул қилиш — idempotent, вақт сервер (21).
-- Observability: `module: wholesale`, `action: issue_open|agreement_accept|quote`, `orderId` (24).
+Deploy: эга — «ҳозирча production'га deploy қилма». Қуйидагилар фақат код + тест.
 
 ---
 
-## 5. Эга қарорлари
+## 5. Техник режа — янгиланган
 
-| № | Савол | Тавсия |
+### 5.1 Маълумот модели
+
+```
+help_articles/{articleId}
+  module:        'wholesale' | 'logistics' | 'restaurants' | 'all'
+  kind:          'faq' | 'offer' | 'liability' | 'prohibited' | 'terms' | 'notice'
+  slug:          string (бир module+kind ичида ноёб, масалан 'offer-wholesale-seller')
+  order:         int
+  active:        bool
+  version:       int            ← ҳар сақлашда +1 (сервер)
+  effectiveFrom: timestamp      ← «01.09.2026 дан» кўриниши (BTS каби)
+  title:         {uz_Cyrl, uz_Latn, ru}
+  body:          {uz_Cyrl, uz_Latn, ru}   ← markdown-lite (сарлавҳа, рўйхат, қалин)
+  updatedAt, updatedBy (admin uid)
+  versions/{n}   ← ЎЗГАРМАС нусха: ўша title/body/effectiveFrom + changedBy, changedAt, reason
+
+service_coverage/{districtId}            ← D-ULG-11, фақат ўқиш учун проекция (сервер ёзади)
+  regionId, districtId, name{3 тил}
+  modules: { wholesale: { enabled: bool, etaDaysMin, etaDaysMax, lastMileTier: 'A'|'B'|'C' } }
+  points: []                              ← ПВЗ учун резерв (бўш), v1 да ёзилмайди
+  updatedAt
+  — манба: `geo_district_modules` + relay зона матрицаси; `rebuildServiceCoverage` sweeper/trigger
+
+support_tickets/{ticketId}               ← D-ULG-13
+  ticketNo:      int (кетма-кет, ўқилиши осон — «№ 1042»)
+  module:        'wholesale'
+  kind:          'not_delivered' | 'damaged' | 'short' | 'wrong_item' | 'seller_silent'
+                 | 'payment' | 'other'
+  status:        'open' | 'in_progress' | 'waiting_customer' | 'resolved' | 'rejected' | 'closed'
+  openedBy:      uid (канон телефон), openedRole: 'buyer' | 'seller' | 'courier'
+  orderId:       string (мажбурий)        ← буюртма билан боғлиқ
+  shipmentId?, legId?                     ← етказиш тарихи (custody) билан боғлиқ
+  sellerId, buyerId                       ← проекция (сервер ёзади, рухсат учун)
+  chatId:        string (`support_chats` ҳужжати)
+  photos:        [storage path]           ← `tickets/{ticketId}/…`
+  resolution?:   { kind: 'refund' | 'partial_refund' | 'redeliver' | 'no_action', amount?, note, by, at }
+  slaDueAt:      timestamp (очилганда +24 с иш вақти, PROPOSED)
+  createdAt, updatedAt
+  events/{n}     ← ЎЗГАРМАС: ҳолат ўтишлари (from, to, by, at, note) — 16-банд
+
+wholesale_sellers/{phone}                ← У1 + қўшимча
+  agreementVersion:    int, agreementAcceptedAt: timestamp   ← оферта (help_articles offer.version)
+  tier:                'standard'        ← D-ULG-14 резерв; v1 да фақат шу
+  expectedMonthlyWeightG?: int, highVolume?: bool            ← белги, админ кўради
+
+orders/{id} type:'wholesale'             ← У3 режаси; қўшимча:
+  deliveryQuote.internal.riskReserve      ← мижозга кўрсатилмайди (D-ULG-12)
+  openTicketIds: []                       ← тез кўриниш учун проекция (сервер)
+```
+
+Ўзгармаслик: `help_articles/*/versions`, `support_tickets/*/events`, custody — фақат қўшилади.
+
+### 5.2 Сервер (Cloud Functions, default codebase, номма-ном deploy)
+
+| Callable / trigger | Ким | Нима қилади | Idempotency / audit |
+|---|---|---|---|
+| `adminUpsertHelpArticle` | admin, superadmin | 3 тил матн, `effectiveFrom`, `active`; транзакцияда `version+1` ва `versions/{n}` нусха; `kind: offer/liability` учун 3 тил ҳам тўлиқ бўлиши шарт (бўш тилда сақланмайди) | `admin_audit kind: help_article` |
+| `getHelpArticles` ёки тўғридан-тўғри ўқиш | ҳамма | `module in [x,'all'] && active` — rules орқали ўқиш етарли (CF шарт эмас) | — |
+| `acceptWholesaleAgreement` | сотувчи | `offer` ва `liability` мақолаларининг жорий `version`ини қабул қилади; сервер вақти; версия эскирса — қайта қабул талаби (`AGREEMENT_OUTDATED`) | калит `{uid}_{version}`; `agreementAcceptedAt` ўзгармайди |
+| `quoteWholesaleDelivery` | харидор/сотувчи | У2: туман→туман зона × пулли вазн + last-mile + `riskReserve` (ички) → мижозга **битта** `deliveryFee` + `etaDays`; `tariffVersion`, `tier:'standard'` | ўқиш; лимит: 60/дақ/uid (PROPOSED) |
+| `rebuildServiceCoverage` | trigger (`geo_district_modules` ўзгарганда) + кунлик sweeper | `service_coverage` проекциясини қайта ёзади | — |
+| `openSupportTicket` | буюртма эгаси / сотувчиси / фаол LEG ижрочиси | рухсат текшируви серверда; `ticketNo` counter транзакцияда; `support_chats` яратади (`awaitingAdmin: true`); `orders.openTicketIds` янгилайди; админга push | калит `{orderId}_{kind}_{uid}` 10 дақ ичида такрор → мавжуд тикет қайтади |
+| `adminUpdateSupportTicket` | admin, superadmin (finance — `refund`) | ҳолат ўтиши (жадвал), `resolution`; `refund` → мавжуд эскроу/ҳамён йўли (relay REFUND ёки ресторан намунаси) — пул фақат ledger орқали | `events/{n}` + `admin_audit`; `refund` idempotent калит `ticket_{id}_refund` |
+| `onSupportChatMessage` (мавжуд chat оқими) | — | тикет `waiting_customer` ↔ `in_progress` автомат | — |
+
+Ҳолат жадвали (сервер): `open → in_progress → (waiting_customer ↔ in_progress) → resolved | rejected → closed`; `closed` дан ўтиш йўқ; мижоз фақат `resolved`ни `closed`/қайта `open` (7 кун ичида) қила олади.
+
+### 5.3 Flutter
+
+- `lib/features/wholesale/help/` — «Ёрдам ва хизмат»: Хизмат ҳудудлари (туман рўйхати + муддат, «сизнинг туманингиз» юқорида), Ҳисоблагич (У2), FAQ, Оферта ва жавобгарлик (жорий версия + «архив» рўйхати), Мурожаатларим.
+- Тикет экрани: тоифа → матн → расм(лар) → юбориш; кейин чат + ҳолат тасмаси + буюртма карточкаси + custody қадамлари (бор бўлса).
+- Сотувчи рўйхатдан ўтишида оферта/жавобгарлик матни экранда, «Қабул қиламан» → `acceptWholesaleAgreement`; версия янгиланса панелда баннер.
+- Матн тили: `help_articles` дан илова тили бўйича; бўш бўлса fallback `uz_Cyrl` (ва админга «тил тўлдирилмаган» белгиси).
+- Админ: «Улгуржи бозор → Хизмат маркази»: мақолалар (3 тил, версия тарихи, diff), тикетлар (фильтр ҳолат/тоифа/SLA ўтган), буюртма+custody+чат бир экранда, ечим ва қайтариш тугмаси (finance).
+
+### 5.4 Босқичлар
+
+| Босқич | Таркиб | Боғлиқлик |
 |---|---|---|
-| D-ULG-10 | FAQ/оферта матни қаерда: базада (админ таҳрирлайди) ёки `assets/lang` (релиз билан)? | Базада (`help_articles`) — BTS каби санали версия |
-| D-ULG-11 | «Офислар» ўрнига нима кўрсатилади: фақат ёқиқ туманлар, ёки ПВЗ/агент нуқталари ҳам? | Ҳозир — ёқиқ туманлар + муддат; ПВЗ — D-ULG-7 билан бирга |
-| D-ULG-12 | Суғурта: товар суммаси автомат эълон қилинган қиймат, ҳақ ичида яширин `riskReserve` (тавсия) ёки алоҳида қатор «суғурта 1 %»? | Яширин; жавобгарлик = товар суммаси (эскроу бўлса табиий) |
-| D-ULG-13 | Мурожаат канали: фақат чат (тавсия) ёки алоҳида «тикет» модели? | Чат + `orders/{id}/issues` ёзуви (тарих), алоҳида тикет тизими йўқ |
-| D-ULG-14 | «Юқори ҳажм» сотувчиларга шахсий шартлар бўладими (BTS шартнома модели)? | Ҳозир йўқ — фақат белги; шартлар оффлайн, кейин `sellerTier` |
+| ХМ-1 | `help_articles` + `versions`, rules, `adminUpsertHelpArticle`, админ муҳаррири (3 тил, версия), иловада FAQ/оферта/жавобгарлик кўриниши; оферта ва жавобгарлик матнининг ўзи — **эга** | — |
+| ХМ-2 | `service_coverage` проекцияси + sweeper, «Хизмат ҳудудлари» экрани (муддат = relay зона → кун; туман ичи = 1 кун, PROPOSED) | relay тариф матрицаси |
+| ХМ-3 | `acceptWholesaleAgreement` + рўйхатдан ўтишга қўшиш + `tier:'standard'` резерв | ХМ-1 |
+| ХМ-4 | `support_tickets` + `events`, `openSupportTicket`, `adminUpdateSupportTicket`, чат боғланиши, илова тикет экрани, админ тикет панели | У3 (буюртма бўлиши керак); ХМ-1 (тоифа матнлари) |
+| ХМ-5 | Қайтариш (`refund`) — У4 тўлов модели билан бирга | У4 |
 
-Боғлиқлик: 1, 3, 5, 6-бандлар У2 билан бирга (буюртмасиз ҳам фойдали); 2, 9 — У3 олдидан; 4, 7, 8 — У3–У5 билан.
+ХМ-1…3 У3 дан олдин, буюртмасиз ҳам фойдали. Ҳар босқич: emulator rules тести + CF тести + Flutter тест, кейин ҳисобот; deploy — эга буйруғи билан.
 
-## 6. Хавфлар
+---
 
-- FAQ/оферта матни базада бўлса, 3 тилда тўлдириш эга/админ зиммасида — бўш тилда илова эски тилга тушади (fallback керак).
-- Мурожаат оқими кузатувсиз (У5 гача) «қаерда?» саволига жавоб беролмайди — шу сабабли FAQ'да «ҳозирча етказиш сотувчи билан келишилади» дейиш керак.
-- BTS Хоразм офислари рўйхати саҳифадан олинмади — ПВЗ ҳамкорлиги (D-ULG-7) учун алоҳида текширув.
+## 6. Хавфсизлик талаблари — янгиланган
+
+| № | Талаб | Қоида/жой |
+|---|---|---|
+| Х-1 | `help_articles`: ўқиш — `active == true` ҳамма учун (логинсиз ҳам, оферта очиқ ҳужжат); `versions` — фақат admin ўқийди; **ёзиш — ҳеч ким** (фақат CF) | rules + `adminUpsertHelpArticle` |
+| Х-2 | Матн XSS/инъекция: markdown-lite фақат рухсат этилган белгилар (сарлавҳа, рўйхат, қалин, ҳавола `https://` фақат); иловада `Text`/оддий рендер, WebView йўқ; узунлик ≤ 20 000 белги | CF валидация + Flutter рендер |
+| Х-3 | Оферта қабул қилиш — фақат ўз номидан (`isOwner`), сервер вақти, версия боғланади; эскирган версия билан товар қўшиш/буюртма — `AGREEMENT_OUTDATED` (сервер текширади, клиент эмас) | `acceptWholesaleAgreement`, `placeWholesaleOrder` |
+| Х-4 | `service_coverage` — ўқиш очиқ, ёзиш фақат CF; ПВЗ `points` v1 да бўш — клиент уни кўрсатмайди | rules |
+| Х-5 | Тикет очиш — фақат буюртма эгаси, сотувчиси ёки шу буюртманинг **фаол** LEG ижрочиси (server-side, `courier_auth`/relay намунаси); бошқа ҳеч ким (`orders.get` рухсати тикетга ўтмайди) | `openSupportTicket` |
+| Х-6 | Тикетни ўқиш — очган томон, қарши томон (сотувчи/харидор) ва admin; **проекция**: харидор телефони/манзили сотувчига тикет орқали чиқмайди (40-банд), курьерга фақат ўз LEG маълумоти | rules + сервер проекция |
+| Х-7 | Тикет ҳолати, `resolution`, `refund` — фақат CF; `refund` фақат `finance`/`superadmin` роли; пул фақат ledger (`settlement_ledger`), idempotent калит; `events` ўзгармас | `adminUpdateSupportTicket`, rules `write: false` |
+| Х-8 | Расмлар `tickets/{ticketId}/…`: ёзиш — тикет очувчи, ≤ 8 МБ, image/*; ўқиш — тикет томонлари + admin (storage rules, `firestore.exists` текшируви — ресторан `restaurant_images` намунаси) | storage.rules |
+| Х-9 | Спам/DoS: `openSupportTicket` — бир буюртмага бир тоифадан 10 дақиқада 1 та (idempotent калит), бир uid 20 тикет/кун; `quoteWholesaleDelivery` — 60/дақ/uid | CF лимит + counter |
+| Х-10 | «Суғурта» сўзи — илова ва админ матнларида йўқ; `riskReserve` мижозга чиқмайди (`deliveryQuote.internal` проекциядан кесилади) | lint: `test/l10n` да «суғурта/sug'urta/страхов» калити таъқиқи (тест) |
+| Х-11 | Жавобгарлик матни (`kind: liability`) — 3 тил тўлиқ ва `active` бўлмаса оферта қабул қилиш ва буюртма **блокланади** (`LIABILITY_TERMS_MISSING`) | CF |
+| Х-12 | Observability: `module: wholesale`, `action: help_upsert | agreement_accept | ticket_open | ticket_update | coverage_rebuild`, `ticketId`, `orderId`, `result`, `errorCode`; матн/телефон log'га чиқмайди | 24-банд |
+| Х-13 | Admin амаллари (`help_upsert`, тикет ечими, refund) — `admin_audit` (ким, нима, қачон, сабаб) | 41-банд |
+| Х-14 | Rules тестлари: ҳар янги коллекция учун emulator тести (ўқиш/ёзиш/бегона/роль); `.get()` default list тузоғи — list қоидаларида фақат тўғридан-тўғри майдон | хотира: rules list trap |
+
+## 7. Хавфлар
+
+- Оферта/жавобгарлик матни ҳуқуқий ҳужжат — юрист текширувисиз `active` қилинмасин (relay §9 «блокланган» билан бир хил эҳтиёт).
+- Тикет SLA (24 с) — одам ресурси; админда «SLA ўтган» фильтри бўлмаса ваъда бузилади.
+- `service_coverage` муддатлари relay матрицасидан олинади — матрица фаол бўлмагунча «муддат» кўрсатилмайди (бўш эмас, «аниқланмоқда»).
+- Чат ва тикет икки жойда ҳолат юритилса айрилади — ҳолатнинг манбаси фақат `support_tickets`, чат унга ҳавола.

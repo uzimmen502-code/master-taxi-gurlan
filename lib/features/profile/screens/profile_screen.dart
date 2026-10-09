@@ -22,6 +22,7 @@ import '../../../repositories/trips_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
 import '../../courier/screens/courier_screen.dart';
+import '../../restaurants/merchant/restaurant_profile_entry.dart';
 import '../../seller/screens/seller_pos_screen.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_my_shop_screen.dart';
@@ -277,6 +278,13 @@ class _ProfileViewState extends State<_ProfileView> {
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const CourierScreen())),
           ),
+          // КАФЕ-РЕСТОРАН (D-REST-6/7, 2026-10-08): ўз ресторанини очиш ёки
+          // панел — `restaurants.ownerUid`; модул яширин бўлса кўринмайди.
+          if (canonicalUserId(c.phone).isNotEmpty)
+            RestaurantProfileEntry(
+              userId: canonicalUserId(c.phone),
+              panelButton: _rolePanelButton,
+            ),
           if (c.role == 'seller' ||
               c.role == 'admin' ||
               c.role == 'superadmin')

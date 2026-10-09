@@ -21,12 +21,18 @@ class OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isFood = order.type == 'food';
     final isPlatform = order.type == 'platform';
-    final emoji = isPlatform ? '🛒' : (isFood ? '🍽️' : '🫓');
+    final isRestaurant = order.isRestaurant;
+    final emoji = isPlatform ? '🛒' : (isFood || isRestaurant ? '🍽️' : '🫓');
     // AVA товари буюртмаси — «Улгуржи бозор» (2026-10-07 дан «AVA дўкони»
-    // йўқ; буюртма тури `platform` ўзгармаган).
-    final title = isPlatform
-        ? context.tr('wholesale_title')
-        : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
+    // йўқ; буюртма тури `platform` ўзгармаган). Ресторан буюртмаси —
+    // ресторан номи, ҳолати `restaurantStatus` дан (restaurant_orders.js).
+    final title = isRestaurant
+        ? (order.restaurantName.isEmpty
+            ? context.tr('home_module_restaurants')
+            : order.restaurantName)
+        : isPlatform
+            ? context.tr('wholesale_title')
+            : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
     final color = AppColors.primaryText;
 
     final dt = order.createdAt;
@@ -57,6 +63,9 @@ class OrderCard extends StatelessWidget {
           _StatusChip(
             status: order.status,
             fulfillment: order.effectiveFulfillment,
+            labelOverride: isRestaurant && order.restaurantStatus.isNotEmpty
+                ? context.tr('restaurants_status_${order.restaurantStatus}')
+                : null,
           ),
         ]),
         const SizedBox(height: 8),
@@ -82,6 +91,11 @@ class OrderCard extends StatelessWidget {
           _BadgeBox(
             text: '❌ ${order.rejectReason}',
             color: Colors.red,
+          ),
+        if (isRestaurant && order.deliveryFee > 0)
+          Text(
+            '${context.tr('restaurants_delivery_fee')}: ${formatPrice(order.deliveryFee)}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         if (order.balanceApplied > 0) ...[
           const SizedBox(height: 4),
@@ -124,9 +138,17 @@ class OrderCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status, this.fulfillment = ''});
+  const _StatusChip({
+    required this.status,
+    this.fulfillment = '',
+    this.labelOverride,
+  });
   final String status;
   final String fulfillment;
+
+  /// Ресторан буюртмаси: ёрлиқ `restaurantStatus` дан; ранг — эски
+  /// `status` бўйича (ундан ҳосил қилинган).
+  final String? labelOverride;
 
   static const _map = <String, ({String label, Color color})>{
     'new': (label: '🔵 Янги', color: AppColors.primaryText),
@@ -145,7 +167,8 @@ class _StatusChip extends StatelessWidget {
         ? 'cancelled'
         : status;
     final info = _map[key];
-    final label = info?.label ??
+    final label = labelOverride ??
+        info?.label ??
         (key == 'cancelled' ? context.tr('order_status_cancelled') : status);
     final color = info?.color ?? Colors.grey;
     return Container(

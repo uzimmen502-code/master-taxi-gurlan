@@ -37,6 +37,10 @@ const List<String> kKnownModuleIds = [
   // AVA Logistics (Relay) — посилка жўнатиш: ORDER → SHIPMENT → LEG.
   // Admin «Ҳудудлар ва хизматлар»да ёқилмагунча яширин (runtime gate).
   'logistics',
+  // «Кафе-Ресторан» (D-REST-6, 2026-10-08): кўп ресторанли таом буюртмаси.
+  // Эски `food` (AVA'нинг ўз менюси) ўрнига — у §13 тартибида ўчирилади;
+  // янги ID — эски туман конфиглари (`food: enabled`) билан аралашмаслик учун.
+  'restaurants',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

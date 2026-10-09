@@ -31,6 +31,12 @@ class HomeModulesCatalog {
       id: 'food',
       label: 'home_module_food',
     ),
+    // Кафе-ресторанлар (D-REST-6): `food` ўрнига келади, у §13 бўйича
+    // кейинроқ олиб ташланади.
+    HomeModule(
+      id: 'restaurants',
+      label: 'home_module_restaurants',
+    ),
     HomeModule(
       id: 'cheap_products_home',
       label: 'home_module_cheap_products',

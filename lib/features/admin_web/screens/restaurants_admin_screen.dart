@@ -87,9 +87,14 @@ class _RestaurantsAdminScreenState extends State<RestaurantsAdminScreen> {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
           title: const Text('🍽 Кафе-ресторанлар', style: TextStyle(fontWeight: FontWeight.bold)),
-          bottom: const TabBar(
+          // Сариқ AppBar устида Material 3 стандарт танланган таб ранги
+          // (`primary`) кўринмайди — бошқа админ экранлари каби `onPrimary`.
+          bottom: TabBar(
             isScrollable: true,
-            tabs: [
+            labelColor: AppColors.onPrimary,
+            unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.6),
+            indicatorColor: AppColors.onPrimary,
+            tabs: const [
               Tab(text: 'Ресторанлар'),
               Tab(text: 'Буюртмалар'),
               Tab(text: 'Етказиш тарифи'),

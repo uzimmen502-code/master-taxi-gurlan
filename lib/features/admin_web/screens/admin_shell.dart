@@ -31,6 +31,7 @@ import 'ev_station_moderation_screen.dart';
 import 'realty_moderation_screen.dart';
 import 'jobs_moderation_screen.dart';
 import 'logistics_admin_screen.dart';
+import 'restaurants_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
@@ -159,6 +160,12 @@ class _AdminShellState extends State<AdminShell> {
       label: 'AVA Logistics',
       icon: Icons.local_post_office_outlined,
       description: 'Жўнатма тарифи (версияли) ва маршрутлар',
+    ),
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'Кафе-ресторанлар',
+      icon: Icons.restaurant_outlined,
+      description: 'Аризалар, буюртмалар, етказиш тарифи (версияли), босқич',
     ),
 
     // ── Маиший хизмат ва йиғиш ──────────────────────────────────────
@@ -547,6 +554,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVA Logistics') {
       return const LogisticsAdminScreen();
+    }
+    if (section.label == 'Кафе-ресторанлар') {
+      return const RestaurantsAdminScreen();
     }
     if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();

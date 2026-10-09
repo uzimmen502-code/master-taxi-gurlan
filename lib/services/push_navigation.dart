@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/formatters.dart';
 import '../features/chat/screens/chat_screen.dart';
+import '../features/courier/screens/courier_screen.dart';
+import '../features/restaurants/courier/restaurant_nearby_orders_screen.dart';
+import '../features/restaurants/merchant/restaurant_panel_screen.dart';
 import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
 import '../features/intercity_taxi/driver/screens/intercity_driver_panel_screen.dart';
 import '../features/intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
@@ -288,6 +291,37 @@ class PushNavigation {
     // умумий fallback уни Янгиликлар → «Хабарлар» табига олиб боради
     // (`_newsHubTabIndex`да `sell_offer` шу табга бириктирилган):
     // таклиф ҳақидаги хабарнинг ўзи ўша ерда сақланади.
+
+    // ── Кафе-ресторан (restaurant_orders.js) ─────────────────────────
+    // Ресторан а'зосига: `screen: restaurant_orders` + `restaurantId` →
+    // панелнинг «Буюртмалар» таби. Курьерга таклиф
+    // (`type: restaurant_courier_offer`) → курьер панели → яқиндагилар.
+    if (screen == 'restaurant_orders') {
+      final restaurantId = (data['restaurantId'] ?? '').trim();
+      if (restaurantId.isNotEmpty) {
+        await nav.push(
+          MaterialPageRoute(
+            builder: (_) => RestaurantPanelScreen(restaurantId: restaurantId),
+          ),
+        );
+        return;
+      }
+    }
+    if (type == 'restaurant_courier_offer') {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = canonicalUserId(prefs.getString('user_phone') ?? '');
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const CourierScreen()),
+      );
+      if (uid.isNotEmpty) {
+        await nav.push(
+          MaterialPageRoute(
+            builder: (_) => RestaurantNearbyOrdersScreen(courierUid: uid),
+          ),
+        );
+      }
+      return;
+    }
 
     if (screen == 'seller_pos' || type == 'seller_pickup') {
       await nav.push(

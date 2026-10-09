@@ -262,6 +262,15 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           ],
           const SizedBox(height: 6),
           _meta(Icons.phone, s.phone),
+          const SizedBox(height: 4),
+          _meta(
+            Icons.place_outlined,
+            s.hasShipFrom
+                ? '${s.regionId} / ${s.districtId}'
+                    '${s.address.isNotEmpty ? ' — ${s.address}' : ''}'
+                    '${s.lat != null ? ' (GPS)' : ''}'
+                : 'Жўнатиш манзили киритилмаган',
+          ),
           if (s.adminNote.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Text('Admin: ${s.adminNote}',
@@ -585,6 +594,15 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           _meta(Icons.storefront, p.sellerCompanyName.isEmpty
               ? 'Сотувчи номаълум'
               : p.sellerCompanyName),
+          const SizedBox(height: 4),
+          _meta(
+            Icons.scale_outlined,
+            p.hasShippingData
+                ? 'Вазн: ${formatWeightG(p.unitWeightG!)}'
+                    '${p.unitDims != null ? ' · ${p.unitDims!.label}' : ''}'
+                    ' · пулли ${formatWeightG(p.unitChargeableWeightG)}'
+                : 'Вазн/ўлчам киритилмаган (буюртма қилиб бўлмайди)',
+          ),
           if (_isChina) ...[
             const SizedBox(height: 4),
             _meta(

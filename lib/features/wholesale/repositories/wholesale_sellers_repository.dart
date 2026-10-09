@@ -37,6 +37,11 @@ class WholesaleSellersRepository {
     required String companyName,
     String ownerName = '',
     String sellerType = '',
+    String regionId = '',
+    String districtId = '',
+    String address = '',
+    double? lat,
+    double? lng,
   }) async {
     final id = canonicalPhoneId(phone);
     final ref = _col.doc(id);
@@ -50,10 +55,22 @@ class WholesaleSellersRepository {
       companyName: companyName.trim(),
       ownerName: ownerName.trim(),
       sellerType: sellerType,
+      regionId: regionId,
+      districtId: districtId,
+      address: address,
+      lat: lat,
+      lng: lng,
     );
     await ref.set(seller.toFirestoreCreate(autoApproved: autoApproved));
     final saved = await ref.get();
     return WholesaleSeller.fromFirestore(saved);
+  }
+
+  /// Эга — жўнатиш манзилини киритиш/ўзгартириш (эски сотувчилар учун ҳам).
+  Future<void> updateShipFrom(WholesaleSeller seller) async {
+    final id = canonicalPhoneId(seller.phone);
+    if (id.isEmpty) return;
+    await _col.doc(id).update(seller.toFirestoreShipFromUpdate());
   }
 
   Future<WholesaleSeller?> fetchByPhone(String phone) async {

@@ -94,7 +94,7 @@ class PlatformProduct {
   String tierRangeLabel(int index) {
     final t = effectiveTiers;
     if (index < 0 || index >= t.length) return '';
-    if (hasDerivedTiers) return const ['1–9', '10–50', '50+'][index];
+    if (hasDerivedTiers) return kStandardTierBrackets[index].$2;
     return '${t[index].minQty}+';
   }
 

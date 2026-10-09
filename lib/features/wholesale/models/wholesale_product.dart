@@ -3,8 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/price_tier.dart';
 import '../../ads/utils/ad_search_text.dart';
+import 'shipping_dims.dart';
 
 export '../../../models/price_tier.dart' show PriceTier;
+export 'shipping_dims.dart';
 
 /// Нарх поғонаси таърифи `lib/models/price_tier.dart` га кўчирилди
 /// (2026-09-29): энди AVA дўкони товари ҳам айнан шу поғоналар билан
@@ -47,6 +49,8 @@ class WholesaleProduct implements AdSearchable {
     this.market = marketWholesale,
     this.currency = '',
     this.deliveryDays,
+    this.unitWeightG,
+    this.unitDims,
   });
 
   /// Улгуржи бозор (ички сотувчилар) — нархи сўмда.
@@ -104,6 +108,21 @@ class WholesaleProduct implements AdSearchable {
 
   /// Хитой бозори учун етказиш муддати (кун); маълум бўлмаса `null`.
   final int? deliveryDays;
+
+  /// Етказиш ҳақи учун — БИР ДОНА (бир [unit]) товарнинг вазни, грамм.
+  /// Эски товарларда йўқ (У1, 2026-10-09): киритилмагунча буюртма
+  /// қилиб бўлмайди, фақат қўнғироқ (ўтиш даври).
+  final int? unitWeightG;
+
+  /// Бир дона товарнинг ўлчами, см — ҳажмий вазн учун.
+  final ShippingDims? unitDims;
+
+  /// Етказиш ҳақини ҳисоблаш учун маълумот тўлиқми.
+  bool get hasShippingData => (unitWeightG ?? 0) > 0;
+
+  /// Бир дона учун пулли вазн (грамм); маълумот йўқ бўлса 0.
+  int get unitChargeableWeightG =>
+      hasShippingData ? chargeableWeightG(unitWeightG!, unitDims) : 0;
 
   bool get isChina => market == marketChina;
 
@@ -185,8 +204,28 @@ class WholesaleProduct implements AdSearchable {
           : marketWholesale,
       currency: (d['currency'] as String?)?.trim() ?? '',
       deliveryDays: (d['deliveryDays'] as num?)?.toInt(),
+      unitWeightG: _positiveInt(d['unitWeightG']),
+      unitDims: ShippingDims.fromMap(d['unitDims']),
     );
   }
+
+  static int? _positiveInt(dynamic v) {
+    final n = v is num ? v.toInt() : null;
+    return n != null && n > 0 ? n : null;
+  }
+
+  /// Етказиш майдонлари — яратиш ва таҳрирда бир хил; йўқ бўлса ёзилмайди
+  /// (таҳрирда ўчириш = `FieldValue.delete()`, Rules калитга рухсат беради).
+  Map<String, dynamic> _shippingFields({required bool forUpdate}) => {
+        if (unitWeightG != null)
+          'unitWeightG': unitWeightG
+        else if (forUpdate)
+          'unitWeightG': FieldValue.delete(),
+        if (unitDims != null)
+          'unitDims': unitDims!.toMap()
+        else if (forUpdate)
+          'unitDims': FieldValue.delete(),
+      };
 
   /// Яратиш учун — Firestore Rules текширади: `status` фақат `pending`,
   /// ёки [autoApproved] (`settings/app.wholesaleProductAutoApprove` ёқиқ
@@ -209,6 +248,7 @@ class WholesaleProduct implements AdSearchable {
       'market': market,
       if (currency.trim().isNotEmpty) 'currency': currency.trim(),
       if (deliveryDays != null) 'deliveryDays': deliveryDays,
+      ..._shippingFields(forUpdate: false),
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       if (autoApproved) 'publishedAt': FieldValue.serverTimestamp(),
@@ -237,6 +277,7 @@ class WholesaleProduct implements AdSearchable {
       // майдонлар ишлатилмайди, шунинг учун уларга тегилмайди.
       if (isChina) 'currency': currency.trim(),
       if (isChina) 'deliveryDays': deliveryDays ?? FieldValue.delete(),
+      ..._shippingFields(forUpdate: true),
     };
   }
 }

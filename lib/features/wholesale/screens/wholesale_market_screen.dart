@@ -15,6 +15,7 @@ import '../repositories/wholesale_products_repository.dart';
 import '../repositories/wholesale_sellers_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
+import '../widgets/ship_from_fields.dart';
 import '../widgets/wholesale_product_card.dart';
 import 'wholesale_product_detail_screen.dart';
 import 'wholesale_product_form_screen.dart';
@@ -238,6 +239,9 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
   String _sellerType = '';
   bool _registering = false;
 
+  /// Жўнатиш манзили (У1) — етказиш ҳақи учун мажбурий.
+  ShipFromDraft _shipFrom = shipFromDraftFromCurrentArea();
+
   @override
   void dispose() {
     _companyCtrl.dispose();
@@ -261,6 +265,13 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
       );
       return;
     }
+    final shipErr = _shipFrom.validate();
+    if (shipErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr(shipErr))),
+      );
+      return;
+    }
     setState(() => _registering = true);
     try {
       await _sellersRepo.register(
@@ -268,6 +279,11 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         companyName: company,
         ownerName: _ownerCtrl.text.trim(),
         sellerType: _sellerType,
+        regionId: _shipFrom.regionId,
+        districtId: _shipFrom.districtId,
+        address: _shipFrom.address.trim(),
+        lat: _shipFrom.lat,
+        lng: _shipFrom.lng,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -363,6 +379,11 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
             border: const OutlineInputBorder(),
           ),
         ),
+        const SizedBox(height: 16),
+        ShipFromFields(
+          value: _shipFrom,
+          onChanged: (v) => setState(() => _shipFrom = v),
+        ),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _registering ? null : _register,
@@ -438,33 +459,127 @@ class _MyProductsView extends StatelessWidget {
         icon: const Icon(Icons.add),
         label: Text(context.tr('wholesale_new_product')),
       ),
-      body: StreamBuilder<List<WholesaleProduct>>(
-        stream: repo.watchBySeller(seller.phone, market: market),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final items = snap.data ?? const <WholesaleProduct>[];
-          if (items.isEmpty) {
-            return Center(
-                child: Text(context.tr('wholesale_no_products_yet')));
-          }
-          // Расмлар AVA Дўкон (Сотувчи POS) каби — катта, cover, грид карта
-          // (эга қарори, 2026-09-24). Аввал кичик CircleAvatarли ListTile эди.
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.78,
+      body: Column(
+        children: [
+          // Эски сотувчи (У1 дан олдин рўйхатдан ўтган) — жўнатиш манзили
+          // йўқ: етказиш ҳақи ҳисобланмайди, шунинг учун эслатиб турамиз.
+          if (!seller.hasShipFrom)
+            Material(
+              color: Colors.orange.shade50,
+              child: InkWell(
+                onTap: () => _editShipFrom(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(children: [
+                    Icon(Icons.place_outlined, color: Colors.orange.shade800),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        context.tr('wholesale_ship_from_banner'),
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600, color: Colors.orange.shade900),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.orange.shade800),
+                  ]),
+                ),
+              ),
             ),
-            itemCount: items.length,
-            itemBuilder: (_, i) => _myProductTile(context, repo, items[i]),
-          );
-        },
+          Expanded(
+            child: StreamBuilder<List<WholesaleProduct>>(
+              stream: repo.watchBySeller(seller.phone, market: market),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final items = snap.data ?? const <WholesaleProduct>[];
+                if (items.isEmpty) {
+                  return Center(
+                      child: Text(context.tr('wholesale_no_products_yet')));
+                }
+                // Расмлар AVA Дўкон (Сотувчи POS) каби — катта, cover, грид карта
+                // (эга қарори, 2026-09-24). Аввал кичик CircleAvatarли ListTile эди.
+                return GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 0.78,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _myProductTile(context, repo, items[i]),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// Жўнатиш манзилини киритиш/ўзгартириш варағи (эски сотувчилар учун).
+  Future<void> _editShipFrom(BuildContext context) async {
+    var draft = ShipFromDraft(
+      regionId: seller.regionId.isNotEmpty ? seller.regionId : shipFromDraftFromCurrentArea().regionId,
+      districtId: seller.districtId.isNotEmpty ? seller.districtId : shipFromDraftFromCurrentArea().districtId,
+      address: seller.address,
+      lat: seller.lat,
+      lng: seller.lng,
+    );
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(ctx).bottom),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ShipFromFields(value: draft, onChanged: (v) => setSheet(() => draft = v)),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () async {
+                    final err = draft.validate();
+                    if (err != null) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(ctx.tr(err))));
+                      return;
+                    }
+                    try {
+                      await WholesaleSellersRepository().updateShipFrom(WholesaleSeller(
+                        phone: seller.phone,
+                        companyName: seller.companyName,
+                        regionId: draft.regionId,
+                        districtId: draft.districtId,
+                        address: draft.address.trim(),
+                        lat: draft.lat,
+                        lng: draft.lng,
+                      ));
+                      if (ctx.mounted) Navigator.pop(ctx, true);
+                    } catch (e) {
+                      if (!ctx.mounted) return;
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        backgroundColor: Colors.red,
+                        content: Text(ctx.tr('error_generic').replaceAll('{error}', '$e')),
+                      ));
+                    }
+                  },
+                  child: Text(ctx.tr('save')),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (saved == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('wholesale_ship_from_saved'))),
+      );
+    }
   }
 
   /// Ўчириш — ТАСДИҚ билан (2026-09-29).

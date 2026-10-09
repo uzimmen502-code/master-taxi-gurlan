@@ -27,7 +27,7 @@ void main() {
     test('эски товар: ўрта поғона нархи + «10–50 дона»', () {
       final r = platformShelfPrice(_p());
       expect(r.price, '10 000 сўм');
-      expect(r.note, '10–50 дона');
+      expect(r.note, '10–49 дона');
     });
 
     test('админ қўйган поғоналар: биринчи поғона + «N+ дона»', () {

@@ -20,7 +20,7 @@
 const path = require('path');
 const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { serverTimestamp } = require('firebase/firestore');
+const { serverTimestamp, deleteField } = require('firebase/firestore');
 
 const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
 const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
@@ -173,6 +173,74 @@ async function main() {
 
   await check('B15 avto-tasdiq O\'CHIQ: active bilan yaratish — rad etiladi', () =>
     assertFails(col(seller).add(appCreatePayload({ status: 'active' }))));
+
+  // ── C. Yetkazish maydonlari (U1, 2026-10-09): vazn/o'lcham ixtiyoriy, shakli qat'iy ──
+  await seed();
+  await check('C1 unitWeightG + unitDims to\'g\'ri shaklda — yaratiladi', () =>
+    assertSucceeds(col(seller).add(appCreatePayload({ unitWeightG: 1200, unitDims: { l: 30, w: 20, h: 15 } }))));
+  await check('C2 faqat unitWeightG (o\'lchamsiz) — yaratiladi', () =>
+    assertSucceeds(col(seller).add(appCreatePayload({ unitWeightG: 500 }))));
+  await check('C3 unitWeightG 0 / manfiy / satr / 10 t dan ko\'p — rad', async () => {
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 0 })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: -5 })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: '1200' })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 10000001 })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 1.5 })));
+  });
+  await check('C4 unitDims: kalit yetishmasa / begona kalit / 0 / 1001 / satr — rad', async () => {
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: { l: 30, w: 20 } })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: { l: 30, w: 20, h: 15, kg: 1 } })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: { l: 0, w: 20, h: 15 } })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: { l: 1001, w: 20, h: 15 } })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: { l: '30', w: 20, h: 15 } })));
+    await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: [30, 20, 15] })));
+  });
+  await check('C5 egasi tahrirda vaznni qo\'shadi / o\'zgartiradi / o\'chiradi — o\'tadi; noto\'g\'ri — rad', async () => {
+    await assertSucceeds(col(seller).doc(EXISTING).update({ unitWeightG: 900, unitDims: { l: 10, w: 10, h: 10 }, updatedAt: serverTimestamp() }));
+    await assertSucceeds(col(seller).doc(EXISTING).update({ unitWeightG: 950, updatedAt: serverTimestamp() }));
+    await assertFails(col(seller).doc(EXISTING).update({ unitWeightG: 0, updatedAt: serverTimestamp() }));
+    await assertFails(col(seller).doc(EXISTING).update({ unitDims: { l: 10, w: 10 }, updatedAt: serverTimestamp() }));
+    // Ilova o'chirishni FieldValue.delete() bilan yuboradi (toFirestoreOwnerUpdate).
+    await assertSucceeds(col(seller).doc(EXISTING).update({ unitWeightG: deleteField(), unitDims: deleteField(), updatedAt: serverTimestamp() }));
+  });
+  await check('C6 begona (boshqa foydalanuvchi) vazn yoza olmaydi', () =>
+    assertFails(col(other).doc(EXISTING).update({ unitWeightG: 1 })));
+
+  // ── D. Sotuvchi jo'natish manzili (U1) ──────────────────────────────────
+  const sellersCol = (db) => db.collection('wholesale_sellers');
+  const NEW_SELLER = '998901000009';
+  const newSellerDb = ctx(NEW_SELLER);
+  const sellerCreate = (extra = {}) => ({
+    phone: NEW_SELLER, companyName: 'Yangi Savdo', ownerName: '', sellerType: 'wholesaler',
+    approvalStatus: 'pending', createdAt: serverTimestamp(), ...extra,
+  });
+  await check('D1 manzilsiz eski shakl — yaratiladi (orqaga moslik)', () =>
+    assertSucceeds(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate())));
+  await seed();
+  await check('D2 manzil bilan (region/district/address/lat/lng) — yaratiladi', () =>
+    assertSucceeds(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({
+      regionId: 'xorazm', districtId: 'gurlan', address: 'Markaz 1', lat: 41.84, lng: 60.39,
+    }))));
+  await seed();
+  await check('D3 noto\'g\'ri manzil: lat satr / lat yolg\'iz / lat 95 / tuman viloyatsiz / manzil 301 — rad', async () => {
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', lat: '41', lng: 60 })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', lat: 41 })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', lat: 95, lng: 60 })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ districtId: 'g' })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', address: 'a'.repeat(301) })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', warehouse: 'A' })));
+  });
+  await check('D4 egasi keyin manzilini kiritadi/o\'zgartiradi — o\'tadi; approvalStatus bilan birga — rad; begona — rad', async () => {
+    await assertSucceeds(sellersCol(seller).doc(SELLER).update({
+      regionId: 'xorazm', districtId: 'gurlan', address: 'Markaz 1', updatedAt: serverTimestamp(),
+    }));
+    await assertSucceeds(sellersCol(seller).doc(SELLER).update({ lat: 41.84, lng: 60.39, updatedAt: serverTimestamp() }));
+    // Seed'da sotuvchi allaqachon `approved` — o'zgarmagan qiymat affectedKeys'ga
+    // kirmaydi, shuning uchun HAQIQIY o'zgarish bilan tekshiriladi.
+    await assertFails(sellersCol(seller).doc(SELLER).update({ districtId: 'xiva', approvalStatus: 'rejected' }));
+    await assertFails(sellersCol(pendingSeller).doc(PENDING_SELLER).update({ districtId: 'xiva', approvalStatus: 'approved' }));
+    await assertFails(sellersCol(other).doc(SELLER).update({ districtId: 'xiva' }));
+  });
 
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);

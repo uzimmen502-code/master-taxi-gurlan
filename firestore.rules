@@ -2738,6 +2738,20 @@ service cloud.firestore {
                .data.get('wholesaleProductAutoApprove', false) == true;
     }
 
+    // Жўнатиш манзили (У1, 2026-10-09): етказиш ҳақи зонаси `districtId`
+    // бўйича (relay матрицаси). Ихтиёрий — эски сотувчиларда йўқ; бор
+    // бўлса шакли текширилади (ID сатр, манзил ≤300, координата диапазон).
+    function wholesaleSellerShipFromOk() {
+      let d = request.resource.data;
+      return d.get('regionId', '') is string && d.get('regionId', '').size() <= 40
+          && d.get('districtId', '') is string && d.get('districtId', '').size() <= 60
+          && (d.get('districtId', '') == '' || d.get('regionId', '') != '')
+          && d.get('address', '') is string && d.get('address', '').size() <= 300
+          && (!('lat' in d) || (d.lat is number && d.lat >= -90 && d.lat <= 90))
+          && (!('lng' in d) || (d.lng is number && d.lng >= -180 && d.lng <= 180))
+          && (('lat' in d) == ('lng' in d));
+    }
+
     function wholesaleSellerCreateOk(phone) {
       return isAuth()
           && isOwner(phone)
@@ -2753,24 +2767,30 @@ service cloud.firestore {
           )
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && wholesaleSellerShipFromOk()
           && request.resource.data.keys().hasOnly([
                 'phone', 'companyName', 'ownerName', 'sellerType',
-                'approvalStatus', 'createdAt', 'approvedAt', 'approvedBy'
+                'approvalStatus', 'createdAt', 'approvedAt', 'approvedBy',
+                'regionId', 'districtId', 'address', 'lat', 'lng', 'updatedAt'
               ]);
     }
 
-    // Эга — фақат компания/эга исмини ўзгартиради, ҳеч қачон ўзини
-    // тасдиқлай олмайди (`approvalStatus` шу функцияда йўқ).
+    // Эга — компания/эга исми ва жўнатиш манзилини ўзгартиради, ҳеч қачон
+    // ўзини тасдиқлай олмайди (`approvalStatus` шу функцияда йўқ).
     function wholesaleSellerOwnerUpdateOk(phone) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isOwner(phone)
           && request.resource.data.phone == resource.data.phone
-          && changed.hasOnly(['companyName', 'ownerName', 'sellerType', 'updatedAt'])
+          && changed.hasOnly([
+                'companyName', 'ownerName', 'sellerType', 'updatedAt',
+                'regionId', 'districtId', 'address', 'lat', 'lng'
+              ])
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
           && request.resource.data.companyName is string
           && request.resource.data.companyName.size() >= 2
-          && request.resource.data.companyName.size() <= 200;
+          && request.resource.data.companyName.size() <= 200
+          && wholesaleSellerShipFromOk();
     }
 
     // Фақат admin (isAdmin() шу ердаги мажбурий шарт — эга/бошқа ҳеч ким
@@ -2797,6 +2817,23 @@ service cloud.firestore {
 
     function wholesaleProductOwnerIsCaller() {
       return isAuth() && isOwner(resource.data.get('sellerId', ''));
+    }
+
+    // Етказиш маълумоти (У1, 2026-10-09): бир дона вазни (грамм, бутун,
+    // ≤10 т) ва ўлчами (см, бутун, 1..1000, фақат l/w/h). Ихтиёрий —
+    // эски товарларда йўқ; бор бўлса шакли шу. Паритет:
+    // lib/features/wholesale/models/shipping_dims.dart (kMaxUnitWeightG, kMaxDimCm).
+    function wholesaleProductShippingOk() {
+      let d = request.resource.data;
+      return (!('unitWeightG' in d)
+              || (d.unitWeightG is int && d.unitWeightG >= 1 && d.unitWeightG <= 10000000))
+          && (!('unitDims' in d)
+              || (d.unitDims is map
+                  && d.unitDims.keys().hasOnly(['l', 'w', 'h'])
+                  && d.unitDims.keys().hasAll(['l', 'w', 'h'])
+                  && d.unitDims.l is int && d.unitDims.l >= 1 && d.unitDims.l <= 1000
+                  && d.unitDims.w is int && d.unitDims.w >= 1 && d.unitDims.w <= 1000
+                  && d.unitDims.h is int && d.unitDims.h >= 1 && d.unitDims.h <= 1000));
     }
 
     // Яратиш — фақат тасдиқланган сотувчи; ҳолат `pending`, ёки
@@ -2837,13 +2874,15 @@ service cloud.firestore {
           // update йўлининг `hasOnly` рўйхатида `createdAt` йўқ.
           // Тест: functions/test/wholesale_products_rules.test.js
           && request.resource.data.createdAt == request.time
+          && wholesaleProductShippingOk()
           && request.resource.data.keys().hasOnly([
                 'sellerId', 'sellerCompanyName', 'title', 'titleLower',
                 'searchTokens', 'description', 'priceTiers', 'unit',
                 'imageUrls', 'status', 'views', 'videoClipIds',
                 'createdAt', 'updatedAt', 'publishedAt', 'moderatedAt',
                 'moderatedBy',
-                'market', 'currency', 'deliveryDays'
+                'market', 'currency', 'deliveryDays',
+                'unitWeightG', 'unitDims'
               ]);
     }
 
@@ -2861,8 +2900,9 @@ service cloud.firestore {
           && changed.hasOnly([
                 'title', 'titleLower', 'searchTokens', 'description',
                 'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt',
-                'currency', 'deliveryDays'
+                'currency', 'deliveryDays', 'unitWeightG', 'unitDims'
               ])
+          && wholesaleProductShippingOk()
           && request.resource.data.priceTiers is list
           && request.resource.data.priceTiers.size() >= 1
           && request.resource.data.priceTiers.size() <= 5

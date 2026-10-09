@@ -98,6 +98,25 @@ class _WholesaleProductDetailScreenState
                           .replaceAll('{days}', '${p.deliveryDays}'),
                       style: TextStyle(color: Colors.grey.shade700)),
                 ],
+                // Етказиш маълумоти (У1): вазн/ўлчам бўлса — кўрсатилади,
+                // бўлмаса харидор буни билсин (ҳақ ҳисобланмайди).
+                const SizedBox(height: 4),
+                if (p.hasShippingData)
+                  Text(
+                    [
+                      context
+                          .tr('wholesale_weight_line')
+                          .replaceAll('{weight}', formatWeightG(p.unitWeightG!)),
+                      if (p.unitDims != null)
+                        context
+                            .tr('wholesale_dims_line')
+                            .replaceAll('{dims}', p.unitDims!.label),
+                    ].join(' · '),
+                    style: TextStyle(color: Colors.grey.shade700),
+                  )
+                else
+                  Text(context.tr('wholesale_no_shipping_data'),
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
                 if (p.priceTiers.length > 1) ...[
                   const SizedBox(height: 10),
                   Container(

@@ -15,6 +15,11 @@ class WholesaleSeller {
     this.approvedAt,
     this.approvedBy = '',
     this.adminNote = '',
+    this.regionId = '',
+    this.districtId = '',
+    this.address = '',
+    this.lat,
+    this.lng,
   });
 
   static const statusPending = 'pending';
@@ -71,6 +76,18 @@ class WholesaleSeller {
   final String approvedBy;
   final String adminNote;
 
+  /// Жўнатиш манзили (У1, 2026-10-09) — етказиш ҳақи учун зона
+  /// `districtId` бўйича аниқланади (relay матрицаси). `geo_regions` /
+  /// `geo_districts` ID'лари. Эски сотувчиларда бўш.
+  final String regionId;
+  final String districtId;
+  final String address;
+  final double? lat;
+  final double? lng;
+
+  /// Етказиш ҳақини ҳисоблаш учун манзил етарлими (вилоят + туман).
+  bool get hasShipFrom => regionId.isNotEmpty && districtId.isNotEmpty;
+
   bool get isPending => approvalStatus == statusPending;
   bool get isApproved => approvalStatus == statusApproved;
   bool get isRejected => approvalStatus == statusRejected;
@@ -96,8 +113,23 @@ class WholesaleSeller {
       approvedAt: _parseDate(d['approvedAt']),
       approvedBy: (d['approvedBy'] as String?) ?? '',
       adminNote: (d['adminNote'] as String?) ?? '',
+      regionId: (d['regionId'] as String?)?.trim() ?? '',
+      districtId: (d['districtId'] as String?)?.trim() ?? '',
+      address: (d['address'] as String?)?.trim() ?? '',
+      lat: (d['lat'] as num?)?.toDouble(),
+      lng: (d['lng'] as num?)?.toDouble(),
     );
   }
+
+  /// Жўнатиш манзили майдонлари — Rules `wholesaleSellerShipFromOk` шакли:
+  /// координата иккаласи бирга ёки умуман йўқ.
+  Map<String, dynamic> shipFromFields() => {
+        'regionId': regionId.trim(),
+        'districtId': districtId.trim(),
+        'address': address.trim(),
+        if (lat != null && lng != null) 'lat': lat,
+        if (lat != null && lng != null) 'lng': lng,
+      };
 
   /// Рўйхатдан ўтиш учун — Firestore Rules текширади: `approvalStatus`
   /// фақат `pending`, ёки [autoApproved] (`settings/app.wholesaleSellerAutoApprove`
@@ -111,5 +143,15 @@ class WholesaleSeller {
         'createdAt': FieldValue.serverTimestamp(),
         if (autoApproved) 'approvedAt': FieldValue.serverTimestamp(),
         if (autoApproved) 'approvedBy': 'auto',
+        if (hasShipFrom || address.trim().isNotEmpty) ...shipFromFields(),
+      };
+
+  /// Эга жўнатиш манзилини ўзгартириши (`wholesaleSellerOwnerUpdateOk`).
+  /// Координата олиб ташланса — ўчирилади (иккаласи бирга).
+  Map<String, dynamic> toFirestoreShipFromUpdate() => {
+        ...shipFromFields(),
+        if (lat == null || lng == null) 'lat': FieldValue.delete(),
+        if (lat == null || lng == null) 'lng': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
       };
 }

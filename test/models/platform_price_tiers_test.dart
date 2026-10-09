@@ -51,7 +51,7 @@ void main() {
 
     test('Улгуржи карточкаси: «10–50 дона: 10 000 сўм» + «1–9 дона: 10 500 сўм»',
         () {
-      expect(platformWholesalePriceLine(p), '10–50 дона: 10 000 сўм');
+      expect(platformWholesalePriceLine(p), '10–49 дона: 10 000 сўм');
       expect(platformWholesaleSubLine(p), '1–9 дона: 10 500 сўм');
     });
 
@@ -62,7 +62,7 @@ void main() {
     });
 
     test('тафсилотдаги оралиқ ёрлиқлари', () {
-      expect([0, 1, 2].map(p.tierRangeLabel).toList(), ['1–9', '10–50', '50+']);
+      expect([0, 1, 2].map(p.tierRangeLabel).toList(), ['1–9', '10–49', '50+']);
     });
   });
 
@@ -137,7 +137,7 @@ void main() {
     test('оралиқлар Улгуржи сотувчи формаси билан бир хил', () {
       expect(kStandardTierBrackets.map((b) => b.$1).toList(), [1, 10, 50]);
       expect(kStandardTierBrackets.map((b) => b.$2).toList(),
-          ['1–9', '10–50', '50+']);
+          ['1–9', '10–49', '50+']);
     });
   });
 

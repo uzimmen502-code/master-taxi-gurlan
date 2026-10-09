@@ -21,7 +21,7 @@ class _FixedTier {
 
 const _kFixedTiers = <_FixedTier>[
   _FixedTier(1, '1–9'),
-  _FixedTier(10, '10–50'),
+  _FixedTier(10, '10–49'),
   _FixedTier(50, '50+'),
 ];
 
@@ -82,6 +82,12 @@ class _WholesaleProductFormScreenState
   /// Хитой бозори: нарх валютаси (бўш — сўм).
   String _currency = '';
 
+  /// Етказиш учун (У1): бир дона вазни (кг матни) ва ўлчами (см).
+  late final TextEditingController _weightCtrl;
+  late final TextEditingController _dimLCtrl;
+  late final TextEditingController _dimWCtrl;
+  late final TextEditingController _dimHCtrl;
+
   /// Ҳар бир тайёр поғона учун нарх контроллери (тартиби [_kFixedTiers]га мос).
   late final List<TextEditingController> _priceCtrls;
 
@@ -111,6 +117,10 @@ class _WholesaleProductFormScreenState
       text: (e?.deliveryDays ?? 0) > 0 ? '${e!.deliveryDays}' : '',
     );
     _currency = e?.currency.trim() ?? '';
+    _weightCtrl = TextEditingController(text: weightKgFieldText(e?.unitWeightG ?? 0));
+    _dimLCtrl = TextEditingController(text: e?.unitDims == null ? '' : '${e!.unitDims!.l}');
+    _dimWCtrl = TextEditingController(text: e?.unitDims == null ? '' : '${e!.unitDims!.w}');
+    _dimHCtrl = TextEditingController(text: e?.unitDims == null ? '' : '${e!.unitDims!.h}');
     _priceCtrls =
         List.generate(_kFixedTiers.length, (_) => TextEditingController());
     if (e != null) {
@@ -131,10 +141,45 @@ class _WholesaleProductFormScreenState
     _descCtrl.dispose();
     _unitCtrl.dispose();
     _deliveryCtrl.dispose();
+    _weightCtrl.dispose();
+    _dimLCtrl.dispose();
+    _dimWCtrl.dispose();
+    _dimHCtrl.dispose();
     for (final c in _priceCtrls) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Вазн/ўлчам майдонларини ўқийди. Қайтаради: (`weightG`, `dims`) ёки
+  /// хато калити. Иккаласи ҳам ихтиёрий; ўлчам — учаласи бирга ёки бўш;
+  /// ўлчам бор, вазн йўқ — мумкин эмас (ҳажмий вазн ёлғиз маъносиз).
+  ({int? weightG, ShippingDims? dims, String? error}) _collectShipping() {
+    final wRaw = _weightCtrl.text.trim();
+    int? weightG;
+    if (wRaw.isNotEmpty) {
+      weightG = parseWeightKgToGrams(wRaw);
+      if (weightG == null) return (weightG: null, dims: null, error: 'wholesale_err_weight_invalid');
+    }
+    final raws = [_dimLCtrl.text.trim(), _dimWCtrl.text.trim(), _dimHCtrl.text.trim()];
+    final filled = raws.where((s) => s.isNotEmpty).length;
+    ShippingDims? dims;
+    if (filled == 3) {
+      final l = int.tryParse(raws[0]);
+      final w = int.tryParse(raws[1]);
+      final h = int.tryParse(raws[2]);
+      if (l == null || w == null || h == null) {
+        return (weightG: null, dims: null, error: 'wholesale_err_dims_invalid');
+      }
+      dims = ShippingDims(l: l, w: w, h: h);
+      if (!dims.isValid) return (weightG: null, dims: null, error: 'wholesale_err_dims_invalid');
+    } else if (filled != 0) {
+      return (weightG: null, dims: null, error: 'wholesale_err_dims_invalid');
+    }
+    if (dims != null && weightG == null) {
+      return (weightG: null, dims: null, error: 'wholesale_err_weight_invalid');
+    }
+    return (weightG: weightG, dims: dims, error: null);
   }
 
   /// Тўлдирилган поғоналарни йиғади (тўлдириш ихтиёрий). Бўш майдон ўтказиб
@@ -189,6 +234,13 @@ class _WholesaleProductFormScreenState
       );
       return;
     }
+    final shipping = _collectShipping();
+    if (shipping.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr(shipping.error!))),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final uploaded = _newImages.isEmpty
@@ -214,6 +266,8 @@ class _WholesaleProductFormScreenState
         // нарх ҳамиша сўмда, шунинг учун бўш қолдирилади.
         currency: _isChina ? _currency.trim() : '',
         deliveryDays: _isChina && days != null && days > 0 ? days : null,
+        unitWeightG: shipping.weightG,
+        unitDims: shipping.dims,
       );
       String productId;
       if (_isEdit) {
@@ -359,6 +413,8 @@ class _WholesaleProductFormScreenState
             ],
             const SizedBox(height: 16),
             _tiersSection(),
+            const SizedBox(height: 16),
+            _shippingSection(),
             const SizedBox(height: 12),
             TextFormField(
               controller: _unitCtrl,
@@ -416,6 +472,73 @@ class _WholesaleProductFormScreenState
             isDense: true,
           ),
         ),
+      ],
+    );
+  }
+
+  /// Етказиш учун вазн/ўлчам (У1). Пулли вазн жонли кўрсатилади — сотувчи
+  /// катта қути учун ҳажмий вазн ҳақиқийдан ошишини кўради.
+  Widget _shippingSection() {
+    final unit = _unitCtrl.text.trim().isEmpty ? 'дона' : _unitCtrl.text.trim();
+    final s = _collectShipping();
+    String? preview;
+    if (s.error == null && s.weightG != null) {
+      final vol = s.dims?.volumetricWeightG() ?? 0;
+      preview = context
+          .tr('wholesale_chargeable_weight')
+          .replaceAll('{weight}', formatWeightG(chargeableWeightG(s.weightG!, s.dims)))
+          .replaceAll('{vol}', s.dims == null ? '—' : formatWeightG(vol));
+    }
+    InputDecoration deco(String label) => InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(context.tr('wholesale_shipping_section'),
+            style: const TextStyle(
+                fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text(
+          context.tr('wholesale_shipping_help'),
+          style: TextStyle(fontSize: AppText.labelTiny, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: _weightCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+          onChanged: (_) => setState(() {}),
+          decoration: deco(context.tr('wholesale_field_weight_kg').replaceAll('{unit}', unit)),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          for (final (ctrl, key) in [
+            (_dimLCtrl, 'wholesale_field_dim_l'),
+            (_dimWCtrl, 'wholesale_field_dim_w'),
+            (_dimHCtrl, 'wholesale_field_dim_h'),
+          ]) ...[
+            Expanded(
+              child: TextFormField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                onChanged: (_) => setState(() {}),
+                decoration: deco(context.tr(key)),
+              ),
+            ),
+            if (key != 'wholesale_field_dim_h') const SizedBox(width: 8),
+          ],
+        ]),
+        if (preview != null) ...[
+          const SizedBox(height: 6),
+          Text(preview, style: TextStyle(fontSize: AppText.labelTiny, color: AppColors.primaryText)),
+        ] else if (s.error != null) ...[
+          const SizedBox(height: 6),
+          Text(context.tr(s.error!), style: TextStyle(fontSize: AppText.labelTiny, color: Colors.red.shade700)),
+        ],
       ],
     );
   }

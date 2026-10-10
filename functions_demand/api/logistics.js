@@ -1228,18 +1228,6 @@ function makeAdminPlanShipmentRoute(deps) {
     const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
     const ttl = Number((config.logistics || {}).legTtlMinutes) || 3 * 24 * 60;
 
-    // Eski LEG'lar: accepted/in_progress bo'lsa — rad (custody boshlangan).
-    const oldLegs = [];
-    for (const legId of (ship.legIds || [])) {
-      const s = await db.collection(DEMANDS).doc(legId).get();
-      if (!s.exists) continue;
-      const st = (s.data() || {}).status;
-      if ([sm.STATUS.ACCEPTED, sm.STATUS.IN_PROGRESS].includes(st)) {
-        throw fail('failed-precondition', 'LEG allaqachon ijrochiga tayinlangan', 'leg_assigned', { legId });
-      }
-      oldLegs.push({ ref: s.ref, id: legId, status: st });
-    }
-
     const version = (Number(ship.routePlanVersion) || 1) + 1;
     const route = buildRoute({ tariff, shipment: ship, points, version });
     const legRefs = route.legs.map(() => db.collection(DEMANDS).doc());
@@ -1247,46 +1235,74 @@ function makeAdminPlanShipmentRoute(deps) {
     const orderSnap = await db.collection(L.ORDERS).doc(ship.orderId).get();
     const order = { id: ship.orderId, termsAcceptedAt: (orderSnap.data() || {}).termsAcceptedAt || null };
 
-    const batch = db.batch();
-    for (const o of oldLegs) {
-      if (sm.canTransition(o.status, sm.STATUS.CANCELLED)) {
-        batch.update(o.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'replan', cancelledAt: now, updatedAt: now });
+    // Tekshiruv va yozuv BITTA tranzaksiyada (2026-10-10): avval LEG'lar
+    // tranzaksiyasiz o'qilib, keyin batch yozilardi — oradagi `acceptLeg`
+    // qabulini rejalash jimgina o'chirib yuborardi (emulatorda isbotlangan).
+    // `acceptLeg` ham LEG + jo'natmani tranzaksiyada o'qiydi → bitta g'olib.
+    const oldLegs = await db.runTransaction(async (tx) => {
+      const curSnap = await tx.get(shipRef);
+      const cur = curSnap.data() || {};
+      if (![L.SHIPMENT_STATUS.AWAITING_PAYMENT, L.SHIPMENT_STATUS.READY].includes(cur.status)) {
+        throw fail('failed-precondition', 'Marshrut faqat yo\'lga chiqmagan jo\'natmada o\'zgaradi', 'shipment_not_replannable', { status: cur.status });
       }
-    }
-    for (let i = 0; i < route.legs.length; i += 1) {
-      batch.set(legRefs[i], buildLegDemand({
-        ownerId: ship.ownerId, order, shipment: ship, shipmentId, leg: route.legs[i],
-        legIndex: i, legCount: route.legs.length, legIds, adapter, now, ttlMinutes: ttl,
-      }));
-      batch.set(legRefs[i].collection('private').doc('stats'), {
-        matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
+      if ((Number(cur.routePlanVersion) || 1) !== (Number(ship.routePlanVersion) || 1)) {
+        throw fail('failed-precondition', 'Marshrut boshqa admin tomonidan o\'zgartirildi, qayta urining', 'route_changed');
+      }
+      // Eski LEG'lar: accepted/in_progress bo'lsa — rad (custody boshlangan).
+      const legSnaps = await Promise.all((cur.legIds || []).map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+      const old = [];
+      for (const s of legSnaps) {
+        if (!s.exists) continue;
+        const st = (s.data() || {}).status;
+        if ([sm.STATUS.ACCEPTED, sm.STATUS.IN_PROGRESS].includes(st)) {
+          throw fail('failed-precondition', 'LEG allaqachon ijrochiga tayinlangan', 'leg_assigned', { legId: s.id });
+        }
+        old.push({ ref: s.ref, id: s.id, status: st });
+      }
+
+      for (const o of old) {
+        if (sm.canTransition(o.status, sm.STATUS.CANCELLED)) {
+          tx.update(o.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'replan', cancelledAt: now, updatedAt: now });
+        }
+      }
+      for (let i = 0; i < route.legs.length; i += 1) {
+        tx.set(legRefs[i], buildLegDemand({
+          ownerId: ship.ownerId, order, shipment: ship, shipmentId, leg: route.legs[i],
+          legIndex: i, legCount: route.legs.length, legIds, adapter, now, ttlMinutes: ttl,
+        }));
+        tx.set(legRefs[i].collection('private').doc('stats'), {
+          matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
+        });
+      }
+      const planRef = db.collection(L.ROUTE_PLANS).doc(shipmentId);
+      tx.set(planRef, { shipmentId, currentVersion: version, updatedAt: now }, { merge: true });
+      tx.set(planRef.collection('versions').doc(String(ship.routePlanVersion || 1)), { supersededAt: now }, { merge: true });
+      tx.set(planRef.collection('versions').doc(String(version)), {
+        version,
+        legs: route.legs.map((l, i) => ({ ...l, legId: legIds[i] })),
+        reason: reason || 'replan',
+        createdBy: adminId,
+        createdAt: now,
+        supersededAt: null,
       });
-    }
-    const planRef = db.collection(L.ROUTE_PLANS).doc(shipmentId);
-    batch.set(planRef, { shipmentId, currentVersion: version, updatedAt: now }, { merge: true });
-    batch.set(planRef.collection('versions').doc(String(ship.routePlanVersion || 1)), { supersededAt: now }, { merge: true });
-    batch.set(planRef.collection('versions').doc(String(version)), {
-      version,
-      legs: route.legs.map((l, i) => ({ ...l, legId: legIds[i] })),
-      reason: reason || 'replan',
-      createdBy: adminId,
-      createdAt: now,
-      supersededAt: null,
+      // `legProblem` eski marshrutning LEG'iga ishora qiladi — yangi reja
+      // bilan u ma'nosiz (aks holda admin «LEG'ni qayta ochish» tugmasi eski,
+      // bekor qilingan rejaning LEG'ini ochib yuborardi).
+      // `assignedProviderIds` ham bo'shaydi: yuqoridagi tekshiruvdan keyin
+      // hech bir LEG tayinlanmagan, ro'yxatda qolgan har kim — eski reja
+      // izi, u jo'natmani o'qiy olmasin (qoida shu ro'yxatga qaraydi).
+      tx.update(shipRef, {
+        routePlanVersion: version, legIds, legCount: legIds.length, legAssignments: {},
+        assignedProviderIds: [], legProblem: null, updatedAt: now,
+      });
+      tx.set(shipRef.collection('private').doc('internal'), {
+        platformShare: route.split.platformShare,
+        providerPool: route.split.providerPool,
+        legPayouts: route.split.legPayouts,
+        updatedAt: now,
+      }, { merge: true });
+      return old;
     });
-    // `legProblem` eski marshrutning LEG'iga ishora qiladi — yangi reja
-    // bilan u ma'nosiz (aks holda admin «LEG'ni qayta ochish» tugmasi eski,
-    // bekor qilingan rejaning LEG'ini ochib yuborardi).
-    batch.update(shipRef, {
-      routePlanVersion: version, legIds, legCount: legIds.length, legAssignments: {},
-      legProblem: null, updatedAt: now,
-    });
-    batch.set(shipRef.collection('private').doc('internal'), {
-      platformShare: route.split.platformShare,
-      providerPool: route.split.providerPool,
-      legPayouts: route.split.legPayouts,
-      updatedAt: now,
-    }, { merge: true });
-    await batch.commit();
     for (const o of oldLegs) await closeOtherMatches(db, o.id, null, 'cancelled', now);
 
     // To'langan bo'lsa birinchi LEG darhol ochiladi.

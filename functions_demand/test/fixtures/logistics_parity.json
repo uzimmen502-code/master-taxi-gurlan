@@ -96,6 +96,7 @@
     "legs_discontinuous",
     "tariff_missing",
     "leg_assigned",
+    "route_changed",
     "leg_not_expired",
     "leg_superseded",
     "leg_reactivate_failed",

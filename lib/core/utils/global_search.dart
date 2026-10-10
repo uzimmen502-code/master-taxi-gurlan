@@ -138,7 +138,10 @@ class GlobalSearch {
       }
     }
     if (_hasAny(words, _intentFood)) {
-      if (type == SearchIndexEntry.typeFoodProduct || module == 'food') {
+      // Эски food ёзувлари ресторанларга олиб боради (2026-10-11).
+      if (type == SearchIndexEntry.typeFoodProduct ||
+          module == 'food' ||
+          module == 'restaurants') {
         s += 100;
       }
     }

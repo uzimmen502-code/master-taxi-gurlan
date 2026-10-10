@@ -67,9 +67,19 @@ async function main() {
   const png = new Uint8Array(1024);
   const put = (st, p, data = png, contentType = 'image/png') => st.ref(p).put(data, { contentType });
 
-  for (const folder of ['bread_images', 'extra_images', 'oil_images', 'food_images', 'platform_images']) {
+  for (const folder of ['bread_images', 'extra_images', 'oil_images', 'platform_images']) {
     await check(`${folder}: admin rasm yuklaydi`, () => assertSucceeds(put(as(ADMIN), `${folder}/a.png`)));
   }
+  // «Овқат» модули олиб ташланди (2026-10-11): янги расм йўқ, тозалаш — админ.
+  await check('food_images: admin ham yangi rasm yuklay olmaydi', () =>
+    assertFails(put(as(ADMIN), 'food_images/a.png')));
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.storage().ref('food_images/old.png').put(new Uint8Array([1]), { contentType: 'image/png' });
+  });
+  await check('food_images: foydalanuvchi eski rasmni o\'chira olmaydi', () =>
+    assertFails(as(USER).ref('food_images/old.png').delete()));
+  await check('food_images: admin eski rasmni o\'chiradi (tozalash)', () =>
+    assertSucceeds(as(ADMIN).ref('food_images/old.png').delete()));
   await check('bread_images: finance ham yuklaydi (narx/katalog roli)', () =>
     assertSucceeds(put(as(FINANCE), 'bread_images/f.png')));
   await check('bread_images: eski 9 xonali users hujjatidagi dispatcher', () =>

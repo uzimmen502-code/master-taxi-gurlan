@@ -36,7 +36,7 @@ const Map<String, String> _moduleLabels = {
   'yuk_local': 'Yuk: tuman ichida',
   'yuk_intercity': 'Yuk: shaharlararo',
   'courier': 'Kuryer',
-  'food': 'Ovqat',
+  'food': 'Ovqat (olib tashlangan — eski ilova uchun yashiring)',
   'jobs': 'Эълонлар ва хизматлар',
   'cheap_products_home': 'Aholi bozori',
   'bread': 'Non',

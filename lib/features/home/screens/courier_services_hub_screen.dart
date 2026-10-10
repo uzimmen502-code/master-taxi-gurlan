@@ -4,14 +4,13 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../bread/screens/bread_screen.dart';
 import '../../carpet_wash/screens/carpet_wash_screen.dart';
-import '../../food/screens/food_screen.dart';
 
 const _bg = AppColors.lime;
 const _titleDark = AppColors.primaryText;
 const _brandGreen = AppColors.limeDeep;
 const _cardBorder = AppColors.cardBorderMuted;
 
-/// Kuryer xizmati — Non / Taom / Gilam buyurtma yo‘riqnomasi.
+/// Kuryer xizmati — Non / Gilam buyurtma yo‘riqnomasi.
 class CourierServicesHubScreen extends StatelessWidget {
   const CourierServicesHubScreen({super.key});
 
@@ -44,16 +43,6 @@ class CourierServicesHubScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const BreadScreen()),
-            ),
-          ),
-          const SizedBox(height: 10),
-          _ServiceCard(
-            imagePath: 'assets/images/services/service_food.png',
-            title: context.tr('courier_hub_food_title'),
-            subtitle: context.tr('courier_hub_food_subtitle'),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const FoodScreen()),
             ),
           ),
           const SizedBox(height: 10),

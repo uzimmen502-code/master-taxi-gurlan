@@ -357,6 +357,21 @@ async function main() {
   await check('tv_clips: AVTO rejimda ham begona ownerPhone — rad',
       () => assertFails(as(STRANGER).collection('tv_clips').add(clip({status: 'active'}))));
 
+  // «Овқат» модули олиб ташланди (2026-10-11): каталог ва омборга ҳеч ким
+  // (админ ҳам) ёзолмайди; ўқиш тозалангунча қолади (эски APK йиқилмасин).
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection('food_catalog').doc('food_1').set({name: 'Osh', price: 1});
+    await ctx.firestore().collection('food_inventory').doc('food_1').set({totalStock: 0});
+  });
+  for (const col of ['food_catalog', 'food_inventory']) {
+    await check(`${col}: admin ham yoza olmaydi (create/update/delete)`, async () => {
+      await assertFails(as(ADMIN).collection(col).doc('food_2').set({price: 1}));
+      await assertFails(as(ADMIN).collection(col).doc('food_1').update({price: 2}));
+      await assertFails(as(ADMIN).collection(col).doc('food_1').delete());
+    });
+    await check(`${col}: o'qish qoldi`, () => assertSucceeds(unauth().collection(col).doc('food_1').get()));
+  }
+
   await testEnv.cleanup();
 
   const failed = results.filter((r) => !r.pass);

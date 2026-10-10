@@ -9,6 +9,9 @@ const List<String> kKnownModuleIds = [
   'yuk_local',
   'yuk_intercity',
   'courier',
+  // «Овқат» модули олиб ташланди (2026-10-11), калит ЭСКИ илова
+  // версиялари учун қолади: админ уни `hidden` қилса, ўрнатилган эски
+  // APK'ларда ҳам плитка йўқолади.
   'food',
   'jobs',
   'cheap_products_home',

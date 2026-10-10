@@ -676,14 +676,18 @@ async function main() {
     assert.strictEqual(r.soldToday, 0);
     assert.strictEqual((await db.collection('extra_products').doc('nope').get()).exists, false);
   });
-  await check('R5 eski food buyurtmasi (items.inventoryId) ham rezerv sifatida sanaladi', async () => {
-    await db.collection('food_inventory').doc('plov').set({ totalStock: 30, soldToday: 9 });
+  await check('R5 «Овқат» олиб ташланган (2026-10-11): food reset rad; eski food buyurtmasi rezerv yaratmaydi', async () => {
     await db.collection('orders').doc('r_food').set({
       userPhone: CUSTOMER, type: 'food', status: 'new', paymentStatus: 'unpaid',
       items: [{ inventoryId: 'plov', qty: 3 }],
+      inventoryDecrements: [{ kind: 'food', id: 'plov', qty: 3 }],
     });
-    await resetItem('food', 'plov');
-    assert.strictEqual(await sold('food_inventory', 'plov'), 3);
+    await rejectsWith(resetItem('food', 'plov'), 'invalid-argument');
+    // Non rezervi food buyurtmasi bilan aralashmaydi; food_inventory qayta paydo bo'lmaydi.
+    await resetItem('bread', 'b1');
+    assert.strictEqual(await sold('bread_products', 'b1'), 2);
+    assert.strictEqual((await db.collection('food_inventory').doc('plov').get()).exists, false);
+    await db.collection('orders').doc('r_food').delete();
   });
   await check('R6 noto\'g\'ri kind / id — invalid-argument', async () => {
     await rejectsWith(resetItem('wine', 'b1'), 'invalid-argument');

@@ -104,14 +104,6 @@ List<ServiceSpotlightItem> buildHomeServices(
         const YukIntercityScreen(),
       ),
     ),
-    ServiceSpotlightItem(
-      moduleId: 'food',
-      label: context.tr('home_module_food'),
-      imagePath: 'assets/images/services/service_food.png',
-      onTap: () => a.openModule(
-        HomeModulesCatalog.byId('food'),
-      ),
-    ),
     // «Кафе-Ресторан» (D-REST-6, 2026-10-08). «Тез кунда» бўлса —
     // INTERNAL синовчи (сервер `testerIds`) барибир киради (logistics
     // намунаси, 42-банд).

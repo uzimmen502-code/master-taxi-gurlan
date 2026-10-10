@@ -750,6 +750,24 @@ AVA токенлари (`AvaLight`: бренд `#FFA500`, нарх матни `b
 | **C. Сервер** (эски илова версиялари тугагач — `users` даги илова версияси бўйича ўлчанади, UNKNOWN қанча вақт) | `placeOrderPostPaid` даги `food` тармоғи, `repriceFoodOrderFromCatalog`, `seedFoodCatalog`, `onSearchIndexFoodProductWrite`, `food_inventory` reset бўлаклари; rules `food_catalog`/`food_inventory`; storage `food_images` | Функциялар номи бўйича; rules алоҳида. Эски илова `food_catalog` ни фақат FoodScreen очилганда ўқийди — A дан кейин очилмайди |
 | **D. Маълумот** (фақат эганинг аниқ буйруғи, 28-қоида) | `food_catalog`, `food_inventory` ҳужжатлари, `food_images/` файллари, қидирув индексидаги food ёзувлари | Аввал backup (export), dry-run рўйхат, кейин ўчириш; `orders` **тегилмайди** |
 
+### 13.1 Эга қарори 2026-10-11 — D-REST-14 бекор, «Овқат» ҳозир ўчирилади
+
+**Нима:** эга: «Овқат бўлимини барча жойдан олиб ташла, чунки ўрнига
+Кафе-ресторан кириб келди» ва «эски буюртмалар тарихи ҳам керакмас, ўчириб
+ташла». Бу D-REST-14 тартибини («аввал ресторан занжирини исботла, кейин
+ўчир») ва юқоридаги D-банддаги «`orders` тегилмайди» қоидасини бекор қилади.
+**Нега:** кафе-ресторанлар модули «Овқат»нинг ўрнини эгаллайди.
+**Таъсир:** ресторан бўлими прод'да ҳали очилмаган бўлса, мижозда таом
+буюртмаси вақтинча умуман бўлмайди (эга хабардор).
+
+| Босқич | Ҳолат |
+|---|---|
+| B. Илова + админ коди | ✅ коди: `lib/features/food/**`, `FoodProduct`, `FoodCatalog`, бош экран/курьер хаб плиткаси, қидирув (эски ёзувлар → ресторанлар), POS «Овқат» плиткалари, админ «Таом» таби, `food_inventory` репозиторийда, 7 та матн калити ×3. Эски `type:'food'` буюртмалари ва хабарлари мижоз/админ/POS рўйхатлари ва нишонларида кўрсатилмайди (`OrderModel.isRemovedFoodOrder`, `NewsItem.isRemovedFoodOrderNews`). `kKnownModuleIds` да `food` **қолди** — эски APK'ни админда `hidden` қилиш учун |
+| C. Сервер | ✅ коди: `placeOrderPostPaid` ва `sellerPlaceSale` `food` ни рад этади (`FOOD_MODULE_REMOVED`); `seedFoodCatalog`, `onSearchIndexFoodProductWrite` олиб ташланди; тунги/қўлда reset `food_inventory` га тегмайди; қидирувдан «Овқат» хизмат картаси. Бекор қилиш/ҳамён қайтими йўллари эски буюртмалар учун **қолди** (тозалашдан олдин керак). Rules: `food_catalog`/`food_inventory`/`food_images` — ёзиш ёпиқ, ўқиш тозалангунча |
+| A. Конфиг (прод, эга) | ⏳ админ «Ҳудудлар ва хизматлар» → `food` = `hidden` (ўрнатилган эски APK'ларда плитка йўқолади) |
+| D. Маълумот (прод) | ⏳ `functions/tools/food_cleanup.js`: DRY-RUN → `--backup` → `--apply` → (`--restore`). Очиқ «Овқат» буюртмаси бўлса `--apply` рад — аввал админда бекор қилинади (ҳамён қайтими). `journal_entries` ва `wallet_ledger` **ўчирилмайди** (16-қоида). Тест: эмулятор 9/9 |
+| Deploy | ⏳ эга рухсати: rules алоҳида → функциялар номи бўйича (`placeOrderPostPaid`, `sellerPlaceSale`, `resetDailySoldStock`, `resetSoldStockNow`, `adminResetItemSoldToday`, `adminSeedSearchIndex`) → `firebase functions:delete seedFoodCatalog onSearchIndexFoodProductWrite` → hosting (жонли SHA устига) → APK |
+
 ---
 
 ## 15. Иш режаси — қолган вазифалар (2026-10-08, кечки)

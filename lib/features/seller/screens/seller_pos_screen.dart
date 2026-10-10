@@ -9,7 +9,6 @@ import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/bread_product.dart';
-import '../../../models/food_product.dart';
 import '../../../models/order_model.dart';
 import '../controllers/seller_pos_controller.dart';
 
@@ -667,7 +666,6 @@ class _ProductGrid extends StatelessWidget {
             ? 200.0
             : (constraints.maxWidth >= 720 ? 180.0 : 160.0);
         final tiles = <Widget>[
-          ...c.foodProducts.map((p) => _FoodTile(product: p, c: c)),
           ...c.breadProducts.map((p) => _BreadTile(product: p, c: c)),
         ];
         if (tiles.isEmpty) {
@@ -685,28 +683,6 @@ class _ProductGrid extends StatelessWidget {
           itemBuilder: (_, i) => tiles[i],
         );
       },
-    );
-  }
-}
-
-class _FoodTile extends StatelessWidget {
-  const _FoodTile({required this.product, required this.c});
-  final FoodProduct product;
-  final SellerPosController c;
-
-  @override
-  Widget build(BuildContext context) {
-    final stock = c.stockForFood(product);
-    final soldOut = stock <= 0;
-    return _ProductCard(
-      emoji: product.emoji,
-      imageUrl: product.imageUrl,
-      name: product.name,
-      price: product.price,
-      stockLabel: stock >= 999999 ? '∞' : '$stock',
-      soldOut: soldOut,
-      cartQty: c.cartQtyForFood(product),
-      onTap: soldOut ? null : () => c.addFood(product),
     );
   }
 }
@@ -1033,7 +1009,7 @@ Future<void> _showQtyEditorSheet(
                         icon: const Icon(Icons.remove_circle_outline),
                         onPressed: () => c.setQty(
                           l.key,
-                          l.qty - (l.kind == 'food' ? 0.5 : 1),
+                          l.qty - 1,
                         ),
                       ),
                       Text(
@@ -1047,7 +1023,7 @@ Future<void> _showQtyEditorSheet(
                         icon: const Icon(Icons.add_circle_outline),
                         onPressed: () => c.setQty(
                           l.key,
-                          l.qty + (l.kind == 'food' ? 0.5 : 1),
+                          l.qty + 1,
                         ),
                       ),
                     ],
@@ -1425,7 +1401,7 @@ class _CartPanelState extends State<_CartPanel> {
                             visualDensity: VisualDensity.compact,
                             icon: const Icon(Icons.remove_circle_outline),
                             onPressed: () => c.setQty(
-                                l.key, l.qty - (l.kind == 'food' ? 0.5 : 1)),
+                                l.key, l.qty - 1),
                           ),
                           Text(
                             _fmtQty(l.qty),
@@ -1438,7 +1414,7 @@ class _CartPanelState extends State<_CartPanel> {
                             visualDensity: VisualDensity.compact,
                             icon: const Icon(Icons.add_circle_outline),
                             onPressed: () => c.setQty(
-                                l.key, l.qty + (l.kind == 'food' ? 0.5 : 1)),
+                                l.key, l.qty + 1),
                           ),
                         ],
                       ),

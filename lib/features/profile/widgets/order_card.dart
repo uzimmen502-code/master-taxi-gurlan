@@ -19,10 +19,9 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isFood = order.type == 'food';
     final isPlatform = order.type == 'platform';
     final isRestaurant = order.isRestaurant;
-    final emoji = isPlatform ? '🛒' : (isFood || isRestaurant ? '🍽️' : '🫓');
+    final emoji = isPlatform ? '🛒' : (isRestaurant ? '🍽️' : '🫓');
     // AVA товари буюртмаси — «Улгуржи бозор» (2026-10-07 дан «AVA дўкони»
     // йўқ; буюртма тури `platform` ўзгармаган). Ресторан буюртмаси —
     // ресторан номи, ҳолати `restaurantStatus` дан (restaurant_orders.js).
@@ -32,7 +31,7 @@ class OrderCard extends StatelessWidget {
             : order.restaurantName)
         : isPlatform
             ? context.tr('wholesale_title')
-            : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
+            : 'Нон буюртма';
     final color = AppColors.primaryText;
 
     final dt = order.createdAt;

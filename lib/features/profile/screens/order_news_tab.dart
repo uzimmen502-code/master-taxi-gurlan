@@ -132,7 +132,9 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  g.orderType == 'food' ? Icons.restaurant : Icons.bakery_dining,
+                  g.orderType == 'restaurant'
+                      ? Icons.restaurant
+                      : Icons.bakery_dining,
                   color: AppColors.primaryText,
                 ),
               ),

@@ -8,9 +8,6 @@ class OrderReceiptFormat {
   static List<String> lines(OrderModel order) {
     final out = <String>[];
     switch (order.type) {
-      case 'food':
-        out.addAll(_foodItemLines(order));
-        break;
       case 'bread':
         out.addAll(_breadItemLines(order));
         out.addAll(_breadExtraLines(order.extras));
@@ -99,20 +96,14 @@ class OrderReceiptFormat {
     return '• $label: ${formatMoney(order.saltYeastCost)}';
   }
 
-  // ─── Овқат (food_screen / cart_sheet) ───────────────────────────────
+  // ─── Миқдорли қатор (кг/л — улгуржи ва бошқалар) ────────────────────
 
-  static Iterable<String> _foodItemLines(OrderModel order) sync* {
-    for (final it in order.items) {
-      yield '• ${_foodItemLine(it)}';
-    }
-  }
-
-  static String _foodItemLine(OrderItem it) {
+  static String _qtyItemLine(OrderItem it) {
     final prefix = it.emoji.trim().isNotEmpty ? '${it.emoji.trim()} ' : '';
     if (it.qty != null && it.qty! > 0) {
       final q = it.qty!;
       final qty = q == q.roundToDouble() ? '${q.toInt()}' : '$q';
-      final unit = it.unit.isNotEmpty ? ' $it.unit' : '';
+      final unit = it.unit.isNotEmpty ? ' ${it.unit}' : '';
       final lineTotal = it.itemTotal > 0
           ? it.itemTotal
           : (it.unitPrice > 0 ? (it.unitPrice * q).round() : 0);
@@ -132,7 +123,7 @@ class OrderReceiptFormat {
 
   static String _genericItemLine(OrderItem it) {
     if (it.qty != null && it.qty! > 0) {
-      return _foodItemLine(it);
+      return _qtyItemLine(it);
     }
     return _breadBaseLine(it);
   }

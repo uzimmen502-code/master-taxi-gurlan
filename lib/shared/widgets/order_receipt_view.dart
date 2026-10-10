@@ -20,7 +20,7 @@ class OrderReceiptView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lines = OrderReceiptFormat.lines(order);
-    final module = order.type == 'food' ? 'Тайёр овқат' : 'Нон буюртма';
+    final module = order.typeLabelUz;
 
     return Container(
       width: double.infinity,

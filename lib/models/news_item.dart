@@ -56,7 +56,7 @@ class NewsItem {
   final String orderId;
   final String orderStatus;
 
-  /// `bread` | `food`
+  /// `bread` | `platform` | `restaurant` (эски: `food` — кўрсатилмайди)
   final String orderType;
 
   /// FCM broadcast — nechta qurilmaga push yuborilgan (CF yozadi).
@@ -80,6 +80,10 @@ class NewsItem {
       source == 'order_status' ||
       source == 'order_placed' ||
       category == 'order';
+
+  /// Олиб ташланган «Овқат» буюртмасининг хабари (эга, 2026-10-11) — ҳеч бир
+  /// лентада кўрсатилмайди ва саналмайди.
+  bool get isRemovedFoodOrderNews => isOrderNews && orderType == 'food';
 
   /// Ҳамён хабари (Хабарлар → Wallet таб).
   bool get isWalletNews =>

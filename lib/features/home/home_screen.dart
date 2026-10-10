@@ -36,7 +36,6 @@ import '../dating/dating_telegram_bot.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
-import '../food/screens/food_screen.dart';
 import '../restaurants/data/restaurants_repository.dart';
 import '../restaurants/screens/restaurant_screen.dart';
 import '../restaurants/screens/restaurants_list_screen.dart';
@@ -335,9 +334,6 @@ class _HomeViewState extends State<_HomeView> {
       case 'bread':
         screen = const BreadScreen();
         break;
-      case 'food':
-        screen = const FoodScreen();
-        break;
       case 'cheap_products_home':
         screen = const CheapProductsScreen();
         break;
@@ -433,14 +429,11 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
 
-    if (e.type == SearchIndexEntry.typeFoodProduct ||
-        (module == 'food' && e.sourceId.isNotEmpty && e.type != SearchIndexEntry.typeService)) {
-      await _push(
-        FoodScreen(
-          highlightProductId:
-              e.type == SearchIndexEntry.typeFoodProduct ? e.sourceId : null,
-        ),
-      );
+    // «Овқат» модули олиб ташланди (2026-10-11), ўрнига кафе-ресторанлар.
+    // Эски `search_index` food ёзувлари прод'дан ўчирилгунча ресторанларга
+    // олиб борамиз — қидирув натижаси «ўлик» бўлиб қолмасин.
+    if (e.type == SearchIndexEntry.typeFoodProduct || module == 'food') {
+      await _openRestaurants();
       return;
     }
 

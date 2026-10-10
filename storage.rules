@@ -211,10 +211,11 @@ service firebase.storage {
       allow delete: if isCatalogAdmin();
     }
 
-    // Таом каталог расмлари
+    // Таом каталог расмлари — «Овқат» модули олиб ташланди (2026-10-11):
+    // янги юклаш йўқ; ўчириш (тозалаш) админга қолди.
     match /food_images/{name=**} {
       allow read: if true;
-      allow write: if catalogImageOk();
+      allow create, update: if false;
       allow delete: if isCatalogAdmin();
     }
 

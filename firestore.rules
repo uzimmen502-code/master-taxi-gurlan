@@ -1569,10 +1569,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // «Овқат» модули олиб ташланди (эга, 2026-10-11): ҳеч ким ёзолмайди.
+    // Ўқиш прод маълумоти тозалангунча қолади (эски APK йиқилмасин), кейин
+    // бу блок ва `food_inventory` блоки бутунлай олиб ташланади.
     match /food_catalog/{id} {
       allow read: if true;
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow write: if false;
     }
 
     match /platform_products/{id} {
@@ -1587,10 +1589,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // «Овқат» олиб ташланди (2026-10-11) — `food_catalog` изоҳига қаранг.
     match /food_inventory/{id} {
       allow read: if true;
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow write: if false;
     }
 
     match /procurement_products/{code} {

@@ -5,7 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/service_config_holder.dart';
 import '../models/order_model.dart';
 
-/// `orders` collection (non + ovqat buyurtmalari).
+/// `orders` collection (non, ulgurji, kafe-restoran buyurtmalari).
+///
+/// Олиб ташланган «Овқат» буюртмалари (`type:'food'`) рўйхатлардан шу ерда
+/// чиқарилади — [OrderModel.isRemovedFoodOrder].
 class OrdersRepository {
   OrdersRepository({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -18,6 +21,13 @@ class OrdersRepository {
   DocumentReference<Map<String, dynamic>> get _appSettings =>
       _db.collection('settings').doc('app');
 
+  static List<OrderModel> _visible(
+          Iterable<DocumentSnapshot<Map<String, dynamic>>> docs) =>
+      docs
+          .map(OrderModel.fromDoc)
+          .where((o) => !o.isRemovedFoodOrder)
+          .toList();
+
   /// Foydalanuvchining oxirgi buyurtmalari. Telefon turli formatda yozilishi
   /// mumkin bo'lgani uchun aliaslar bo'yicha qidiramiz.
   Future<List<OrderModel>> recentByUser(
@@ -27,7 +37,7 @@ class OrdersRepository {
     if (phoneAliases.isEmpty) return const [];
     final snap =
         await _col.where('userPhone', whereIn: phoneAliases).limit(limit).get();
-    final list = snap.docs.map(OrderModel.fromDoc).toList();
+    final list = _visible(snap.docs);
     list.sort((a, b) {
       final at = a.createdAt;
       final bt = b.createdAt;
@@ -53,7 +63,7 @@ class OrdersRepository {
         .limit(limit)
         .snapshots()
         .map((snap) {
-      final list = snap.docs.map(OrderModel.fromDoc).toList();
+      final list = _visible(snap.docs);
       list.sort((a, b) {
         final at = a.createdAt;
         final bt = b.createdAt;
@@ -98,30 +108,6 @@ class OrdersRepository {
     });
   }
 
-  /// Овқат buyurtmasi yaratish — `type:'food'`. Xato yuz bersa
-  /// [FirebaseException] qaytaradi, caller tomonda catch qilinadi.
-  Future<void> createFoodOrder({
-    required String userName,
-    required String userPhone,
-    required String address,
-    required String phone,
-    required List<Map<String, dynamic>> items,
-    required int total,
-  }) async {
-    await _col.add({
-      'type': 'food',
-      'userName': userName,
-      'userPhone': userPhone,
-      'address': address,
-      'phone': phone,
-      'items': items,
-      'total': total,
-      'status': 'new',
-      'createdAt': FieldValue.serverTimestamp(),
-      ...ServiceConfigHolder.reportStamp(),
-    });
-  }
-
   /// Нон buyurtmasi yaratish. Tayyor map қабул қилинади — pricing/extras
   /// caller тарафда йиғилади. Reference қайтарилади (id кейинги
   /// `BalanceService` чақириқлари учун керак).
@@ -138,7 +124,7 @@ class OrdersRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((s) => s.docs.map(OrderModel.fromDoc).toList());
+        .map((s) => _visible(s.docs));
   }
 
   /// Админ курьер доскаси: `ready` статусдаги барча буюртмалар (тўлиқ ҳужжат).
@@ -149,7 +135,7 @@ class OrdersRepository {
         .where('status', isEqualTo: 'ready')
         .snapshots()
         .map((snap) {
-          final list = snap.docs.map(OrderModel.fromDoc).toList();
+          final list = _visible(snap.docs);
           list.sort((a, b) {
             final ta = a.createdAt;
             final tb = b.createdAt;
@@ -248,7 +234,7 @@ class OrdersRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .get();
-    return snap.docs.map(OrderModel.fromDoc).toList(growable: false);
+    return List.unmodifiable(_visible(snap.docs));
   }
 
   /// Жараёнда муваффақиятсизлик бўлганда оrder ҳужжатини ўчириш (atomicity).

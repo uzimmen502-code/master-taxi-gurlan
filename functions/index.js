@@ -2478,7 +2478,8 @@ function inventoryCollectionForDecrementKind(kind) {
   const k = String(kind || '').toLowerCase();
   if (k === 'bread') return 'bread_products';
   if (k === 'extra') return 'extra_products';
-  if (k === 'food') return 'food_inventory';
+  // `food` (`food_inventory`) — «Овқат» модули олиб ташланди (2026-10-11).
+  // Чақирувчилар хатони ушлаб ўтказиб юборади (захира қайтариш/резерв).
   if (k === 'platform') return 'platform_products';
   throw new functions.https.HttpsError('invalid-argument', 'bad inventory kind');
 }
@@ -2488,23 +2489,6 @@ async function resolveSellerCatalogLine(kind, inventoryId) {
   const id = String(inventoryId || '').trim();
   if (!id) {
     throw new functions.https.HttpsError('invalid-argument', 'inventoryId kerak');
-  }
-  if (kind === 'food') {
-    const snap = await db.collection('food_catalog').doc(id).get();
-    if (!snap.exists) {
-      throw new functions.https.HttpsError('not-found', `Taom topilmadi: ${id}`);
-    }
-    const d = snap.data() || {};
-    const unitPrice = Math.trunc(Number(d.price || 0));
-    if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
-      throw new functions.https.HttpsError('failed-precondition', `Narx yo'q: ${id}`);
-    }
-    return {
-      unitPrice,
-      name: String(d.name || id).trim() || id,
-      emoji: String(d.emoji || ''),
-      unit: String(d.unit || 'dona'),
-    };
   }
   if (kind === 'bread') {
     const snap = await db.collection('bread_products').doc(id).get();
@@ -2585,18 +2569,6 @@ function stockReservationsFromOrderDocs(docs) {
         reserved[key] = (reserved[key] || 0) + qty;
       }
       continue;
-    }
-    // Legacy: food items inventoryId
-    if (String(o.type || '') === 'food') {
-      const items = Array.isArray(o.items) ? o.items : [];
-      for (let i = 0; i < items.length; i += 1) {
-        const it = items[i] || {};
-        const id = String(it.inventoryId || '').trim();
-        const qty = Number(it.qty || it.count || 0);
-        if (!id || !(qty > 0)) continue;
-        const key = `food_inventory__${id}`;
-        reserved[key] = (reserved[key] || 0) + qty;
-      }
     }
   }
   return reserved;
@@ -2731,82 +2703,6 @@ function resolvePaymentMethod(lines) {
   if (kinds.has('wallet')) return 'wallet';
   if (kinds.has('card')) return 'card';
   return 'cash';
-}
-
-/** food_catalog doc — inventoryId `food_N` (seed) ёки legacy. */
-async function loadFoodCatalogDoc(inventoryId) {
-  const id = String(inventoryId || '').trim();
-  if (!id) return null;
-  let snap = await db.collection('food_catalog').doc(id).get();
-  if (!snap.exists && /^\d+$/.test(id)) {
-    snap = await db.collection('food_catalog').doc(`food_${id}`).get();
-  }
-  if (!snap.exists) return null;
-  return { docId: snap.id, data: snap.data() || {} };
-}
-
-/**
- * Food буюртма: нарх/ном фақат food_catalog дан (client price ишончсиз).
- * @returns {{ items: object[], total: number, decrements: object[] }}
- */
-async function repriceFoodOrderFromCatalog(itemsIn) {
-  const raw = Array.isArray(itemsIn) ? itemsIn : [];
-  if (raw.length < 1 || raw.length > 40) {
-    throw new functions.https.HttpsError('invalid-argument', 'items 1..40');
-  }
-  const items = [];
-  const decrements = [];
-  let total = 0;
-  for (let i = 0; i < raw.length; i += 1) {
-    const it = raw[i] || {};
-    const invId = String(it.inventoryId || '').trim();
-    const qty = Number(it.qty);
-    if (!invId) {
-      throw new functions.https.HttpsError(
-          'invalid-argument', `items[${i}]: inventoryId required`);
-    }
-    if (!Number.isFinite(qty) || qty <= 0 || qty > 500) {
-      throw new functions.https.HttpsError(
-          'invalid-argument', `items[${i}]: bad qty`);
-    }
-    const cat = await loadFoodCatalogDoc(invId);
-    if (!cat) {
-      throw new functions.https.HttpsError('not-found', `Taom topilmadi: ${invId}`);
-    }
-    const unitPrice = Math.trunc(Number(cat.data.price || 0));
-    if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
-      throw new functions.https.HttpsError(
-          'failed-precondition', `Narx yo'q: ${invId}`);
-    }
-    const lineTotal = Math.round(unitPrice * qty);
-    if (!Number.isFinite(lineTotal) || lineTotal <= 0) {
-      throw new functions.https.HttpsError('invalid-argument', `items[${i}]: bad total`);
-    }
-    total += lineTotal;
-    const name = String(cat.data.name || invId).trim() || invId;
-    const unit = String(cat.data.unit || it.unit || 'кг');
-    const emoji = String(cat.data.emoji || it.emoji || '🍽');
-    const catalogInv = cat.docId.startsWith('food_') ? cat.docId : invId;
-    items.push({
-      name,
-      emoji,
-      price: unitPrice,
-      qty,
-      unit,
-      total: lineTotal,
-      inventoryId: catalogInv,
-    });
-    decrements.push({
-      kind: 'food',
-      id: catalogInv,
-      qty,
-      label: name,
-    });
-  }
-  if (total <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
-  }
-  return { items, total, decrements };
 }
 
 /**
@@ -3086,7 +2982,7 @@ async function repriceBreadOrderFromCatalog(orderBase) {
   };
 }
 
-/** Буюртма + омбор; food/bread нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */
+/** Буюртма + омбор; bread/platform нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */
 exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
@@ -3113,9 +3009,23 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   }
 
   const orderType = String(orderBase.type || '');
-  if (orderType !== 'bread' && orderType !== 'food' && orderType !== 'platform') {
+  // «Овқат» модули олиб ташланди (эга, 2026-10-11), ўрнига кафе-ресторанлар.
+  // Эски APK'лар ҳам `food` буюртма яратолмасин.
+  if (orderType === 'food') {
+    console.warn(JSON.stringify({
+      action: 'placeOrderPostPaid',
+      result: 'rejected',
+      errorCode: 'FOOD_MODULE_REMOVED',
+      callerTail: callerUid.slice(-4),
+    }));
     throw new functions.https.HttpsError(
-        'invalid-argument', 'orderBase.type must be bread, food or platform');
+        'failed-precondition',
+        'Овқат бўлими ёпилди. Кафе-ресторанлар бўлимидан буюртма беринг.',
+        { code: 'FOOD_MODULE_REMOVED' });
+  }
+  if (orderType !== 'bread' && orderType !== 'platform') {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'orderBase.type must be bread or platform');
   }
 
   // Ҳамён эгаси — ФАҚАТ token телефони (callerUid). Аввал ҳамён клиент
@@ -3151,7 +3061,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     return existing.data().result || { ok: true, duplicate: true };
   }
 
-  // Food/bread: server-side narx (client total/price e'tiborsiz).
+  // Bread/platform: server-side narx (client total/price e'tiborsiz).
   let pricedItems = Array.isArray(orderBase.items) ? orderBase.items : [];
   let pricedExtras = Array.isArray(orderBase.extras) ? orderBase.extras : null;
   let serverSaltYeast = null;
@@ -3161,12 +3071,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   let platformItemsTotal = null;
   let platformDeliveryFee = null;
   let platformDeliveryFeePercent = null;
-  if (orderType === 'food') {
-    const priced = await repriceFoodOrderFromCatalog(orderBase.items);
-    pricedItems = priced.items;
-    serverTotal = priced.total;
-    catalogDecs = priced.decrements;
-  } else if (orderType === 'bread') {
+  if (orderType === 'bread') {
     const priced = await repriceBreadOrderFromCatalog(orderBase);
     pricedItems = priced.items;
     pricedExtras = priced.extras;
@@ -3193,9 +3098,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   }
 
   const orderRef = db.collection('orders').doc();
-  const module = orderType === 'bread'
-      ? 'bread'
-      : (orderType === 'platform' ? 'platform' : 'food');
+  const module = orderType === 'bread' ? 'bread' : 'platform';
   const agg = {};
   const decSource = catalogDecs || decrementsIn;
   for (let i = 0; i < decSource.length; i += 1) {
@@ -3314,9 +3217,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     const inventoryDecrements = Object.keys(agg).map((k) => ({
       kind: agg[k].col === 'bread_products'
           ? 'bread'
-          : (agg[k].col === 'extra_products'
-              ? 'extra'
-              : (agg[k].col === 'platform_products' ? 'platform' : 'food')),
+          : (agg[k].col === 'extra_products' ? 'extra' : 'platform'),
       id: agg[k].id,
       qty: agg[k].qty,
       label: agg[k].label,
@@ -3747,7 +3648,14 @@ exports.sellerPlaceSale = functions.https.onCall(async (data, context) => {
   for (let i = 0; i < itemsIn.length; i += 1) {
     const row = itemsIn[i] || {};
     const kind = String(row.kind || '').toLowerCase();
-    if (kind !== 'food' && kind !== 'bread') {
+    // «Овқат» модули олиб ташланди (2026-10-11) — эски POS ҳам сотолмасин.
+    if (kind === 'food') {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Овқат бўлими ёпилди — фақат нон сотилади.',
+          { code: 'FOOD_MODULE_REMOVED' });
+    }
+    if (kind !== 'bread') {
       throw new functions.https.HttpsError('invalid-argument', 'bad item kind');
     }
     const inventoryId = String(row.inventoryId || '').trim();
@@ -3794,8 +3702,7 @@ exports.sellerPlaceSale = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const hasFood = items.some((it) => it.kind === 'food');
-  const orderType = hasFood ? 'food' : 'bread';
+  const orderType = 'bread';
   const orderRef = db.collection('orders').doc();
   const changeCredit = Math.max(0, cashPaid + walletPaid - computedTotal);
 
@@ -10575,15 +10482,15 @@ exports.resetDailySoldStock = functions.pubsub
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
     const reserved = await aggregateOpenOrderStockReservations();
-    const [bread, extras, food, platform] = await Promise.all([
+    // `food_inventory` — «Овқат» модули олиб ташланди (2026-10-11).
+    const [bread, extras, platform] = await Promise.all([
       _resetCollectionSoldToday('bread_products'),
       _resetCollectionSoldToday('extra_products'),
-      _resetCollectionSoldToday('food_inventory'),
       _resetCollectionSoldToday('platform_products'),
     ]);
     const reapplied = await applyStockReservations(reserved);
     console.log(
-      `Daily stock reset: bread=${bread}, extras=${extras}, food=${food}, platform=${platform}, reapplied=${reapplied}`);
+      `Daily stock reset: bread=${bread}, extras=${extras}, platform=${platform}, reapplied=${reapplied}`);
     return null;
   });
 
@@ -10592,15 +10499,14 @@ exports.resetSoldStockNow = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
   await assertAdmin(adminPhone, context);
   const reserved = await aggregateOpenOrderStockReservations();
-  const [bread, extras, food, platform] = await Promise.all([
+  const [bread, extras, platform] = await Promise.all([
     _resetCollectionSoldToday('bread_products'),
     _resetCollectionSoldToday('extra_products'),
-    _resetCollectionSoldToday('food_inventory'),
     _resetCollectionSoldToday('platform_products'),
   ]);
   const reapplied = await applyStockReservations(reserved);
   return {
-    ok: true, bread, extras, food, platform, reapplied,
+    ok: true, bread, extras, platform, reapplied,
     reservedKeys: Object.keys(reserved).length,
   };
 });
@@ -12287,51 +12193,6 @@ exports.evStaticMap = functions
       console.error('evStaticMap error:', e.message || e);
       res.status(502).send('map unavailable');
     }
-  });
-
-// ONE-TIME: `food_catalog` — seed. Bir marta HTTP GET qiling, keyin exportni o‘chirib qayta deploy.
-exports.seedFoodCatalog = functions
-  .runWith({ timeoutSeconds: 120, memory: '256MB', secrets: ['SEED_SECRET'] })
-  .https.onRequest(async (req, res) => {
-    const expected = process.env.SEED_SECRET;
-    if (!expected || req.query.secret !== expected) {
-      res.status(403).send('Forbidden');
-      return;
-    }
-    res.set('Access-Control-Allow-Origin', '*');
-    const products = [
-      { id: 1, name: 'Ош', emoji: '🍚', price: 45000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Асосий', desc: 'Тозалиги ва мазаси билан', imageUrl: '' },
-      { id: 2, name: 'Товуқ табака', emoji: '🍗', price: 60000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Товуқ', desc: 'Тандирда босиб пишган', imageUrl: '' },
-      { id: 3, name: 'Товуқ қовурдоқ', emoji: '🍳', price: 55000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Товуқ', desc: 'Зираворлар билан қовурилган', imageUrl: '' },
-      { id: 4, name: 'Чўғда пишган товуқ', emoji: '🔥', price: 65000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Товуқ', desc: 'Кўмир устида', imageUrl: '' },
-      { id: 5, name: 'Сарёғда қовурилган товуқ', emoji: '🧈', price: 70000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Товуқ', desc: 'Асл сарёғда', imageUrl: '' },
-      { id: 6, name: 'Қовурилган балиқ', emoji: '🐟', price: 80000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Балиқ', desc: 'Тоза балиқ, зираворлар билан', imageUrl: '' },
-      { id: 7, name: 'Кўмирда пишган балиқ', emoji: '🐠', price: 90000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Балиқ', desc: 'Кўмир ўтида', imageUrl: '' },
-      { id: 8, name: 'Иликли шўрва', emoji: '🍲', price: 25000, unit: 'литр', minQty: 1.0, step: 0.5, category: 'Шўрва', desc: 'Иссиқ, тўйимли', imageUrl: '' },
-      { id: 9, name: 'Мастава', emoji: '🥘', price: 22000, unit: 'литр', minQty: 1.0, step: 0.5, category: 'Шўрва', desc: 'Гуруч билан шўрва', imageUrl: '' },
-      { id: 10, name: 'Димлама', emoji: '🫕', price: 50000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Асосий', desc: 'Сабзавотлар билан дамланган гўшт', imageUrl: '' },
-      { id: 11, name: 'Қовурдоқ', emoji: '🥩', price: 75000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Асосий', desc: 'Пиёз билан қовурилган', imageUrl: '' },
-      { id: 12, name: 'Шашлик', emoji: '🍢', price: 85000, unit: 'кг', minQty: 0.5, step: 0.5, category: 'Асосий', desc: 'Кўмирда пишган', imageUrl: '' },
-      { id: 13, name: 'Сув 0.5 л', emoji: '💧', price: 3000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Тоза ичимлик суви', imageUrl: '' },
-      { id: 14, name: 'Сув 1.5 л', emoji: '💧', price: 6000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Тоза ичимлик суви', imageUrl: '' },
-      { id: 15, name: 'Кола 1 л', emoji: '🥤', price: 10000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Совутилган', imageUrl: '' },
-      { id: 16, name: 'Фанта 1 л', emoji: '🍊', price: 10000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Апельсин', imageUrl: '' },
-      { id: 17, name: 'Спрайт 1 л', emoji: '🫧', price: 10000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Лимон-лайм', imageUrl: '' },
-      { id: 18, name: 'Шарбат 1 л', emoji: '🧃', price: 12000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Табиий шарбат', imageUrl: '' },
-      { id: 19, name: 'Айран 0.5 л', emoji: '🥛', price: 7000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Совутилган', imageUrl: '' },
-      { id: 20, name: 'Сут 1 л', emoji: '🍼', price: 14000, unit: 'дона', minQty: 1, step: 1, category: 'Ичимликлар', desc: 'Тоза сут', imageUrl: '' },
-    ];
-    const batch = admin.firestore().batch();
-    for (const p of products) {
-      const ref = admin.firestore().collection('food_catalog').doc(`food_${p.id}`);
-      batch.set(ref, {
-        ...p,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-    await batch.commit();
-    res.json({ ok: true, count: products.length });
   });
 
 /**
@@ -16937,26 +16798,6 @@ function breadProductToSearchEntry(id, d) {
   };
 }
 
-function foodProductToSearchEntry(id, d) {
-  const name = String(d.name || '').trim();
-  const category = String(d.category || '').trim();
-  const keywords = ['овқат', 'ovqat', 'таом', 'кафе', category];
-  return {
-    type: 'food_product',
-    moduleId: 'food',
-    sourceCollection: 'food_catalog',
-    sourceId: id,
-    title: name,
-    subtitle: category || 'Овқат',
-    price: Math.trunc(Number(d.price) || 0),
-    imageUrl: String(d.imageUrl || '').trim(),
-    iconKey: 'food',
-    keywords,
-    priorityBoost: 4,
-    active: name.length > 0,
-  };
-}
-
 // yukListingToSearchEntry → functions/yuk_intercity.js (yukIntercity.listingToSearchEntry)
 
 const {onDocumentWritten} = require('firebase-functions/v2/firestore');
@@ -17017,24 +16858,6 @@ exports.onSearchIndexBreadProductWrite = onDocumentWritten(
     }
     await upsertSearchIndexEntry(
       breadProductToSearchEntry(id, after.data() || {}),
-    );
-  },
-);
-
-exports.onSearchIndexFoodProductWrite = onDocumentWritten(
-  {
-    document: 'food_catalog/{id}',
-    region: 'europe-west1',
-  },
-  async (event) => {
-    const id = event.params.id;
-    const after = event.data && event.data.after;
-    if (!after || !after.exists) {
-      await deleteSearchIndexEntry('food_product', id);
-      return;
-    }
-    await upsertSearchIndexEntry(
-      foodProductToSearchEntry(id, after.data() || {}),
     );
   },
 );
@@ -17100,15 +16923,6 @@ const SEARCH_SERVICE_SEEDS = [
     subtitle: 'AVA ва сотувчилар товарлари',
     iconKey: 'shop',
     keywords: ['улгуржи', 'ulgurji', 'оптом', 'optom', 'ава', 'ava', 'дўкон', 'дукон', 'магазин'],
-    boost: 20,
-  },
-  {
-    id: 'food',
-    moduleId: 'food',
-    title: 'Овқат',
-    subtitle: 'Таом буюртма',
-    iconKey: 'food',
-    keywords: ['овқат', 'ovqat', 'таом', 'кафе', 'емак'],
     boost: 20,
   },
   {
@@ -17206,7 +17020,6 @@ exports.adminSeedSearchIndex = functions
     let products = 0;
     let ads = 0;
     let bread = 0;
-    let food = 0;
     let yuk = 0;
     let places = 0;
 
@@ -17227,6 +17040,8 @@ exports.adminSeedSearchIndex = functions
     }
     // Eski yagona "Yuk birja" xizmat kartasi — endi yuk_local + yuk_intercity.
     await deleteSearchIndexEntry('service', 'yuk_birja');
+    // «Овқат» модули олиб ташланди (2026-10-11) — хизмат картаси ҳам.
+    await deleteSearchIndexEntry('service', 'food');
 
     for (const from of SEARCH_ROUTE_HUBS) {
       for (const to of SEARCH_ROUTE_DESTS) {
@@ -17294,14 +17109,6 @@ exports.adminSeedSearchIndex = functions
       bread += 1;
     }
 
-    const foodSnap = await db.collection('food_catalog').limit(500).get();
-    for (const doc of foodSnap.docs) {
-      await upsertSearchIndexEntry(
-        foodProductToSearchEntry(doc.id, doc.data() || {}),
-      );
-      food += 1;
-    }
-
     const yukSnap = await db.collection('yuk_listings').limit(500).get();
     for (const doc of yukSnap.docs) {
       await upsertSearchIndexEntry(
@@ -17318,7 +17125,6 @@ exports.adminSeedSearchIndex = functions
       products,
       ads,
       bread,
-      food,
       yuk,
     };
   });

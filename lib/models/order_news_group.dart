@@ -23,8 +23,6 @@ class OrderNewsGroup {
 
   String get moduleLabel {
     switch (orderType) {
-      case 'food':
-        return 'Тайёр овқат';
       case 'bread':
         return 'Нон буюртма';
       default:
@@ -63,7 +61,11 @@ class OrderNewsGroup {
         messages: msgs,
         orderType: standalone && typed.orderType.isEmpty ? '' : type,
       );
-    }).toList();
+    })
+        // Олиб ташланган «Овқат» буюртмалари (эга, 2026-10-11) — тури
+        // ёзилмаган эски хабарлар матндан аниқланади.
+        .where((g) => g.orderType != 'food')
+        .toList();
     groups.sort((a, b) => b.lastUpdate.compareTo(a.lastUpdate));
     return groups;
   }

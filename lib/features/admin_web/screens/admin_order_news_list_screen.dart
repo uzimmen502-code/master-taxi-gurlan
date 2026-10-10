@@ -7,7 +7,75 @@ import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
 import '../services/admin_news_read_service.dart';
 
-/// Admin — mijozga yuborilgan buyurtma status xabarlari (`admin_news`).
+/// Филтр калити: статуссиз буюртма хабарлари (курьер етиб келди, тўлов /
+/// йиғим чеки, ресторан хабарлари).
+@visibleForTesting
+const kOrderNewsOtherFilter = 'other';
+
+/// Карточкадаги ҳолат ёрлиғи: статус хабарида — статус, бошқаларида —
+/// манба (аввал `—` ёки хом `cancelled` чиқарди).
+@visibleForTesting
+String orderNewsStatusLabel(NewsItem n) {
+  switch (n.orderStatus) {
+    case 'new':
+      return 'Юборилди';
+    case 'accepted':
+      return 'Қабул';
+    case 'ready':
+      return 'Тайёр';
+    case 'in_delivery':
+      return 'Йўлда';
+    case 'delivered':
+      return 'Етказилди';
+    case 'rejected':
+      return 'Рад';
+    case 'cancelled':
+      return 'Бекор';
+  }
+  if (n.orderStatus.isNotEmpty) return n.orderStatus;
+  switch (n.source) {
+    case 'courier_arrived':
+      return 'Курьер етиб келди';
+    case 'payment_receipt':
+      return 'Тўлов чеки';
+    case 'collection_receipt':
+      return 'Йиғим чеки';
+    case 'restaurant_order':
+      return 'Ресторан';
+    default:
+      return '—';
+  }
+}
+
+/// Карточкадаги буюртма тури (аввал `food`дан бошқа ҳаммаси «Нон» эди).
+@visibleForTesting
+String orderNewsTypeLabel(NewsItem n) {
+  switch (n.orderType) {
+    case 'food':
+      return '🍽 Тайёр овқат';
+    case 'bread':
+      return '🍞 Нон буюртма';
+    case 'platform':
+      return '🛒 Улгуржи бозор';
+    case 'restaurant':
+      return '🍽 Кафе-ресторан';
+    default:
+      return n.source == 'restaurant_order' ? '🍽 Кафе-ресторан' : '📦 Буюртма';
+  }
+}
+
+/// Филтр: `all`, статус ёки [kOrderNewsOtherFilter].
+@visibleForTesting
+List<NewsItem> filterOrderNews(List<NewsItem> items, String filter) {
+  if (filter == 'all') return items;
+  if (filter == kOrderNewsOtherFilter) {
+    return items.where((n) => n.orderStatus.isEmpty).toList(growable: false);
+  }
+  return items.where((n) => n.orderStatus == filter).toList(growable: false);
+}
+
+/// Admin — буюртма бўйича юборилган автоматик хабарлар (`admin_news`,
+/// `category == 'order'`).
 class AdminOrderNewsListScreen extends StatefulWidget {
   const AdminOrderNewsListScreen({super.key});
 
@@ -19,44 +87,32 @@ class AdminOrderNewsListScreen extends StatefulWidget {
 class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
   static const _orange = AppColors.primary;
   String _statusFilter = 'all';
+  late final Stream<List<NewsItem>> _stream;
 
   @override
   void initState() {
     super.initState();
+    // Битта listener: аввал ҳар build'да янги сўров очиларди (филтр
+    // чипи босилганда ҳам 300 ҳужжат қайта ўқиларди).
+    _stream =
+        context.read<NewsRepository>().watchForAdmin(orderOnly: true, limit: 300);
+  }
+
+  /// Экран очиқ турганда келган хабар ҳам «кўрилган» — белги энг янги
+  /// хабарнинг сервер вақти (админ соатига боғлиқ эмас).
+  void _markSeen(List<NewsItem> all) {
+    if (all.isEmpty) return;
+    final newest = all
+        .map((n) => n.createdAt)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminNewsReadService>().markOrderSeen();
+      if (!mounted) return;
+      context.read<AdminNewsReadService>().markOrderSeen(newest);
     });
-  }
-
-  String _statusLabel(String s) {
-    switch (s) {
-      case 'new':
-        return 'Юборилди';
-      case 'accepted':
-        return 'Қабул';
-      case 'ready':
-        return 'Тайёр';
-      case 'in_delivery':
-        return 'Йўлда';
-      case 'delivered':
-        return 'Етказилди';
-      case 'rejected':
-        return 'Рад';
-      default:
-        return s.isEmpty ? '—' : s;
-    }
-  }
-
-  List<NewsItem> _filter(List<NewsItem> items) {
-    if (_statusFilter == 'all') return items;
-    return items
-        .where((n) => n.orderStatus == _statusFilter)
-        .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final newsRepo = context.read<NewsRepository>();
     return Column(
       children: [
         _header(),
@@ -64,7 +120,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
         const Divider(height: 1),
         Expanded(
           child: StreamBuilder<List<NewsItem>>(
-            stream: newsRepo.watchForAdmin(orderOnly: true, limit: 300),
+            stream: _stream,
             builder: (ctx, snap) {
               if (snap.connectionState == ConnectionState.waiting &&
                   !snap.hasData) {
@@ -76,7 +132,9 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
                       style: const TextStyle(color: Colors.red)),
                 );
               }
-              final items = _filter(snap.data ?? const []);
+              final all = snap.data ?? const <NewsItem>[];
+              _markSeen(all);
+              final items = filterOrderNews(all, _statusFilter);
               if (items.isEmpty) {
                 return Center(
                   child: Column(
@@ -85,14 +143,14 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
                       Icon(Icons.inbox_outlined,
                           size: 48, color: Colors.grey.shade400),
                       const SizedBox(height: 12),
-                      Text('Буюртма хabarlar йўқ',
+                      Text('Буюртма хабарлари йўқ',
                           style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: Colors.grey.shade700)),
                       const SizedBox(height: 6),
                       Text(
-                        'Buyurtma yuborilganda yoki status oвЂzgarganda shu yerda koвЂrinadi',
+                        'Буюртма юборилганда ёки ҳолати ўзгарганда шу ерда кўринади',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             fontSize: 13, color: Colors.grey.shade500),
@@ -101,7 +159,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
                   ),
                 );
               }
-              return _ResponsiveGrid(items: items, statusLabel: _statusLabel);
+              return _ResponsiveGrid(items: items);
             },
           ),
         ),
@@ -144,7 +202,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  'Mijozga yuborilgan avtomatik status xabarlari',
+                  'Буюртма бўйича юборилган автоматик хабарлар',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],
@@ -157,7 +215,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
 
   Widget _filterBar() {
     const filters = [
-      ('all', 'Барчasi'),
+      ('all', 'Барчаси'),
       ('new', 'Юборилди'),
       ('accepted', 'Қабул'),
       ('ready', 'Тайёр'),
@@ -167,6 +225,8 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
       // Мижоз бекор қилгани — CF `cancelled` хабарини ҳам ёзади, аввал
       // филтрда йўқ эди.
       ('cancelled', 'Бекор'),
+      // Статуссиз: курьер етиб келди, тўлов/йиғим чеки, ресторан.
+      (kOrderNewsOtherFilter, 'Бошқа'),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -195,13 +255,9 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
 }
 
 class _ResponsiveGrid extends StatelessWidget {
-  const _ResponsiveGrid({
-    required this.items,
-    required this.statusLabel,
-  });
+  const _ResponsiveGrid({required this.items});
 
   final List<NewsItem> items;
-  final String Function(String) statusLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -219,10 +275,7 @@ class _ResponsiveGrid extends StatelessWidget {
             mainAxisExtent: 260,
           ),
           itemCount: items.length,
-          itemBuilder: (_, i) => _OrderNewsCard(
-            item: items[i],
-            statusLabel: statusLabel,
-          ),
+          itemBuilder: (_, i) => _OrderNewsCard(item: items[i]),
         );
       },
     );
@@ -230,22 +283,17 @@ class _ResponsiveGrid extends StatelessWidget {
 }
 
 class _OrderNewsCard extends StatelessWidget {
-  const _OrderNewsCard({
-    required this.item,
-    required this.statusLabel,
-  });
+  const _OrderNewsCard({required this.item});
 
   final NewsItem item;
-  final String Function(String) statusLabel;
 
   static const _orange = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
-    final typeLabel =
-        item.orderType == 'food' ? '🍽 Тайёр овқат' : '🍞 Нон буюртма';
-    final status = statusLabel(item.orderStatus);
-  final phone = item.targetUserId.isNotEmpty ? item.targetUserId : '—';
+    final typeLabel = orderNewsTypeLabel(item);
+    final status = orderNewsStatusLabel(item);
+    final phone = item.targetUserId.isNotEmpty ? item.targetUserId : '—';
     final orderId = item.orderId.isNotEmpty
         ? (item.orderId.length > 10
             ? '${item.orderId.substring(0, 10)}…'

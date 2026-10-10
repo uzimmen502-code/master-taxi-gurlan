@@ -1629,6 +1629,7 @@
   "order_confirmed": "Буюртма қабул қилинди!",
   "order_invalid_or_busy": "🚫 Буюртма яроқсиз ёки банд",
   "order_status_cancelled": "Бекор",
+  "order_status_in_delivery": "Йўлда",
   "orders_incoming": "📥 Буюртмалар",
   "orders_stopped_offline": "Буюртмалар тўхтатилган",
   "panel_closed_visible_hint": "Телефон ёпиқ бўлса ҳам йўловчилар «{date}» қидирувида кўради.",

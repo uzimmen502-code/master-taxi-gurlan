@@ -428,6 +428,8 @@ function attachRestaurantOrders(exportsObj, deps) {
       const ms = await db.collection(RESTAURANTS).doc(restaurantId).collection(MEMBERS).limit(10).get();
       await Promise.all(ms.docs.map((m) => notifyUserInApp({
         userId: m.id, title, body, category: 'order', source: 'restaurant_order',
+        // Лентада буюртма бўйича гуруҳланади (аввал `orderId`сиз — кўринмасди).
+        extraNews: { orderId: String(orderId || ''), orderType: 'restaurant' },
         dataType: 'restaurant_order', screen: 'restaurant_orders',
         extraData: { orderId, restaurantId, ring: '1' },
         channelId: 'courier_arrival_alarm',
@@ -441,6 +443,7 @@ function attachRestaurantOrders(exportsObj, deps) {
     try {
       await notifyUserInApp({
         userId: uid, title, body, category: 'order', source: 'restaurant_order',
+        extraNews: { orderId: String(orderId || ''), orderType: 'restaurant' },
         dataType: 'restaurant_order', screen: 'orders', extraData: { orderId },
       });
     } catch (e) {

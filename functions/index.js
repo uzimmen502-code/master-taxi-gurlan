@@ -828,6 +828,11 @@ async function notifyUserInApp({
     priority: 7,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     ...extraNews,
+    // Push шу ерда юборилади (пастда) — `onAdminNewsCreate` қайта
+    // юбормасин. Аввал манбаси ADMIN_NEWS_SKIP_PUSH_SOURCES да йўқ
+    // хабарлар (курьер етиб келди, тўлов чеки, ресторан, ҳамён…) мижозга
+    // ИККИ марта борарди, иккинчиси нотўғри экранга (`news`) очиларди.
+    pushDirect: true,
   });
 
   const userDoc = await db.collection('users').doc(uid).get();
@@ -871,9 +876,40 @@ async function notifyCourierArrivedToCustomer(customerPhone, extraData = {}) {
     source: 'courier_arrived',
     dataType: 'courier_arrived',
     screen: 'orders',
+    // `orderId` — иловадаги «Буюртма» лентасида шу буюртма тарихига
+    // қўшилади (аввал йўқ эди: хабар лентада кўринмас, лекин badge'да
+    // саналарди).
+    extraNews: extraData.orderId ? { orderId: String(extraData.orderId) } : {},
     extraData: { ring: '1', ...extraData },
     channelId: 'courier_arrival_alarm',
   });
+}
+
+/** Буюртма тури — мижоз хабари матни учун (`orders.type`). */
+function orderTypeLabel(type) {
+  switch (String(type || '')) {
+    case 'food': return 'Тайёр овқат';
+    case 'platform': return 'Улгуржи бозор';
+    default: return 'Нон';
+  }
+}
+
+/**
+ * Буюртма статус хабарини БИР МАРТА ёзади: ҳужжат ID детерминистик,
+ * `create()` — триггер қайта етказилса (at-least-once) иккинчи хабар ва
+ * иккинчи push бўлмайди. `false` — аллақачон ёзилган.
+ */
+async function createOrderNewsOnce(newsId, data) {
+  try {
+    await db.collection('admin_news').doc(newsId).create(data);
+    return true;
+  } catch (e) {
+    if (e && (e.code === 6 || /already exists/i.test(String(e.message || '')))) {
+      console.log(JSON.stringify({ action: 'orderNews', newsId, result: 'duplicate_skipped' }));
+      return false;
+    }
+    throw e;
+  }
 }
 
 async function getOrderFlowMode(field, defaultValue = 'manual') {
@@ -889,7 +925,7 @@ async function getOrderFlowMode(field, defaultValue = 'manual') {
 // Буюртма статуси ўзгарганда
 exports.onOrderUpdate = functions.firestore
   .document('orders/{orderId}')
-  .onUpdate(async (change) => {
+  .onUpdate(async (change, context) => {
     const before = change.before.data();
     const after  = change.after.data();
     if (before.status === after.status) return;
@@ -953,9 +989,15 @@ exports.onOrderUpdate = functions.firestore
     }
 
     const orderType = after.type || 'bread';
-    const typeLabel = orderType === 'food' ? 'Тайёр овқат' : 'Нон';
+    const typeLabel = orderTypeLabel(orderType);
     const newsBody = [body, typeLabel].filter(Boolean).join('\n');
-    await db.collection('admin_news').add({
+    // Битта ўтиш (event) — битта хабар. eventId бўлмаса (эски runtime) —
+    // аввалгидек тасодифий ID.
+    const eventId = String((context && context.eventId) || '');
+    const newsId = eventId
+      ? `order_status_${change.after.id}_${eventId.replace(/[^A-Za-z0-9_-]/g, '')}`
+      : db.collection('admin_news').doc().id;
+    const created = await createOrderNewsOnce(newsId, {
       title,
       body: newsBody,
       category: 'order',
@@ -968,17 +1010,24 @@ exports.onOrderUpdate = functions.firestore
       priority: 8,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    if (!created) return;
 
     const fcmTitle = `📢 ${title}`;
     const fcmBody = body || typeLabel;
 
     if (token) {
-      await admin.messaging().send({
-        token,
-        notification: { title: fcmTitle, body: fcmBody },
-        data: { type: 'order', status, screen: 'news', tab: 'orders' },
-        android: { priority: 'high' },
-      });
+      try {
+        await admin.messaging().send({
+          token,
+          notification: { title: fcmTitle, body: fcmBody },
+          data: { type: 'order', status, screen: 'news', tab: 'orders' },
+          android: { priority: 'high' },
+        });
+      } catch (e) {
+        // Хабар лентада бор; эскирган token push'ни йиқади — функция хато
+        // бермасин.
+        console.error('onOrderUpdate FCM:', change.after.id, e.message || e);
+      }
     }
   });
 
@@ -1097,10 +1146,11 @@ exports.onOrderCreate = functions.firestore
 
     const uid = canonicalUid(order.userPhone || order.phone || '');
     if (uid.length >= 9) {
-      const typeLabel = orderType === 'food' ? 'Тайёр овқат' : 'Нон';
+      const typeLabel = orderTypeLabel(orderType);
       const receipt = formatOrderReceiptBody(order);
       try {
-        await db.collection('admin_news').add({
+        // Буюртмага битта чек: триггер қайта етказилса иккинчиси ёзилмайди.
+        const created = await createOrderNewsOnce(`order_placed_${snap.id}`, {
           title: '📋 Буюртма юборилди',
           body: `${receipt}\n${typeLabel}`,
           category: 'order',
@@ -1113,8 +1163,8 @@ exports.onOrderCreate = functions.firestore
           priority: 9,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        const userDoc = await db.collection('users').doc(uid).get();
-        const token = userDoc.data()?.fcmToken;
+        const userDoc = created ? await db.collection('users').doc(uid).get() : null;
+        const token = userDoc ? userDoc.data()?.fcmToken : null;
         if (token) {
           await admin.messaging().send({
             token,
@@ -5258,6 +5308,8 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
       source: 'payment_receipt',
       dataType: 'order_payment',
       screen: 'profile',
+      // Лентада шу буюртма тарихига қўшилади (аввал `orderId`сиз эди).
+      extraNews: { orderId },
       extraData: { orderId, changeCredited: String(changeCredit) },
     });
   } catch (e) {
@@ -11624,7 +11676,11 @@ exports.onAdminNewsCreate = functions
       });
     }
     await Promise.all([
-      deliverAdminNewsPush(snap.ref, d),
+      // `notifyUserInApp` push'ни ўзи юборган — иккинчиси керак эмас.
+      // Админнинг «Push qayta yuborish»и (`onAdminNewsUpdate`) ишлайверади.
+      d.pushDirect === true
+        ? Promise.resolve({ skipped: true, reason: 'push_direct', sent: 0 })
+        : deliverAdminNewsPush(snap.ref, d),
       bumpHomeNewsBadge(d).catch((err) => {
         console.error('bumpHomeNewsBadge:', err.message || err);
       }),

@@ -1101,6 +1101,20 @@
       ]
     },
     {
+      "collectionGroup": "admin_news",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "sell_submissions",
       "queryScope": "COLLECTION",
       "fields": [

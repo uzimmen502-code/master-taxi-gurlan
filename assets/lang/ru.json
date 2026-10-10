@@ -1629,6 +1629,7 @@
   "order_confirmed": "Заказ принят!",
   "order_invalid_or_busy": "🚫 Заказ недействителен или занят",
   "order_status_cancelled": "Отменён",
+  "order_status_in_delivery": "В пути",
   "orders_incoming": "📥 Заказы",
   "orders_stopped_offline": "Заказы приостановлены",
   "panel_closed_visible_hint": "Даже при закрытом телефоне пассажиры увидят вас в поиске «{date}».",

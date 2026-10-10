@@ -41,6 +41,15 @@ class NewsRepository {
     }
   }
 
+  /// Шахсий (`targetUserId` ли) хабарлар бу бўлимга тушадими. Буюртма
+  /// хабарлари ҲАММАСИ шахсий — аввал ўқилмаганлар ҳисоби фақат `dialog`
+  /// учун шахсийларни сўрарди ва `countUnreadOrders` доим 0 қайтарарди:
+  /// `recomputeHomeBadgePersonal` (Хабарлар ўқилганда) ўқилмаган буюртма
+  /// хабарларини бош badge'дан ўчириб юборарди.
+  @visibleForTesting
+  static bool feedHasPersonalNews(NewsFeedKind feed) =>
+      feed != NewsFeedKind.broadcast;
+
   static List<NewsItem> _filterForUser(
     Iterable<NewsItem> items, {
     required List<String> audiences,
@@ -441,7 +450,7 @@ class NewsRepository {
       if (ids.add(n.id)) total++;
     }
 
-    if (feed != NewsFeedKind.dialog) return total;
+    if (!feedHasPersonalNews(feed)) return total;
 
     final aliases = phoneAliases(uid);
     final queryAliases = aliases.length > 10 ? aliases.sublist(0, 10) : aliases;
@@ -547,12 +556,25 @@ class NewsRepository {
 
   Future<void> markAllRead(String userId) async => markGeneralRead(userId);
 
-  /// Admin panel — барча `admin_news` (фильтр: буюртма ёки умумiy).
+  /// Буюртма хабарлари — сервер фильтри. Барча ёзувчилар (`order_placed`,
+  /// `order_status`, `notifyUserInApp(category: 'order')`) `category:
+  /// 'order'` ёзади, шунинг учун [NewsItem.isOrderNews] билан тенг.
+  /// Индекс: `admin_news (category ASC, createdAt DESC)`.
+  Query<Map<String, dynamic>> get _orderNewsCol =>
+      _col.where('category', isEqualTo: 'order');
+
+  /// Admin panel — `admin_news` (фильтр: буюртма ёки умумий).
+  ///
+  /// Буюртма бўлими аввал бутун коллекциянинг сўнгги [limit] тасини олиб,
+  /// фильтрни клиентда қиларди — умумий/мурожаат хабарлари кўп бўлса
+  /// буюртма хабарлари рўйхатдан тушиб қоларди (ва аксинча). Энди сервер
+  /// фақат `category == 'order'` ни беради.
   Stream<List<NewsItem>> watchForAdmin({
     required bool orderOnly,
     int limit = 300,
   }) {
-    return _col
+    final base = orderOnly ? _orderNewsCol : _col;
+    return base
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
@@ -564,6 +586,65 @@ class NewsRepository {
         );
   }
 
+  /// Admin sidebar — «Буюртма хабар» бўлимидаги янги хабарлар сони.
+  ///
+  /// Фақат [lastSeenAt] дан кейинги ҳужжатлар сўралади (аввал сайдбар
+  /// доим 300 та ҳужжатли иккинчи listener ушларди). Белги ўзгарса сўров
+  /// қайта очилади. [cap] — badge «99+» дан ортиғини кўрсатмайди.
+  Stream<int> watchAdminOrderUnreadCount({
+    required Listenable readListenable,
+    required DateTime? Function() lastSeenAt,
+    int cap = 100,
+  }) {
+    final controller = StreamController<int>.broadcast();
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? sub;
+    DateTime? subscribedFor;
+    var started = false;
+
+    void subscribe() {
+      final seen = lastSeenAt();
+      if (started && seen == subscribedFor) return;
+      started = true;
+      subscribedFor = seen;
+      unawaited(sub?.cancel());
+      Query<Map<String, dynamic>> q = _orderNewsCol;
+      if (seen != null) {
+        q = q.where('createdAt', isGreaterThan: Timestamp.fromDate(seen));
+      }
+      sub = q
+          .orderBy('createdAt', descending: true)
+          .limit(cap)
+          .snapshots()
+          .listen(
+        (snap) {
+          if (controller.isClosed) return;
+          // Web'да DateTime — миллисекунд; сервер вақти микросекунд. Белги
+          // билан бир миллисекунддаги (яъни кўрилган) хабар саналмасин.
+          final n = seen == null
+              ? snap.docs.length
+              : snap.docs.where((d) {
+                  final at = d.data()['createdAt'];
+                  return at is! Timestamp || at.toDate().isAfter(seen);
+                }).length;
+          controller.add(n);
+        },
+        onError: (Object e, StackTrace st) {
+          if (!controller.isClosed) controller.addError(e, st);
+        },
+      );
+    }
+
+    readListenable.addListener(subscribe);
+    subscribe();
+
+    controller.onCancel = () async {
+      readListenable.removeListener(subscribe);
+      await sub?.cancel();
+    };
+
+    return controller.stream;
+  }
+
   /// Admin sidebar badge — яangi (hali ochilmagan) xabarlar soni.
   Stream<int> watchAdminUnreadCount({
     required bool orderOnly,
@@ -571,6 +652,12 @@ class NewsRepository {
     required DateTime? Function() lastSeenAt,
     int limit = 300,
   }) {
+    if (orderOnly) {
+      return watchAdminOrderUnreadCount(
+        readListenable: readListenable,
+        lastSeenAt: lastSeenAt,
+      );
+    }
     final controller = StreamController<int>.broadcast();
     List<NewsItem> items = const [];
 

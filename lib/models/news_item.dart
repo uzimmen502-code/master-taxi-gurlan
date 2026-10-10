@@ -25,6 +25,7 @@ class NewsItem {
     this.pushBroadcastAt,
     this.submissionId = '',
     this.requestId = '',
+    this.pushDirect = false,
   });
 
   final String id;
@@ -69,6 +70,10 @@ class NewsItem {
 
   /// `driver_requests` ва бошқа сўровлар.
   final String requestId;
+
+  /// Push'ни хабар ёзган функция ўзи юборган (`notifyUserInApp`, CF
+  /// ёзади) — `onAdminNewsCreate` қайта юбормайди.
+  final bool pushDirect;
 
   /// Буюртма хабари (фақат «Буюртма» бўлимида).
   bool get isOrderNews =>
@@ -125,6 +130,7 @@ class NewsItem {
       pushBroadcastAt: (d['pushBroadcastAt'] as Timestamp?)?.toDate(),
       submissionId: (d['submissionId'] ?? '') as String,
       requestId: (d['requestId'] ?? '') as String,
+      pushDirect: d['pushDirect'] == true,
     );
   }
 
@@ -145,7 +151,8 @@ class NewsItem {
       pushBroadcastAt != null || pushSentCount != null;
 
   bool get pushPending {
-    if (hasPushStats || !expectsPushFromAdmin) return false;
+    // `pushDirect` — push аллақачон кетган, статистика ёзилмайди.
+    if (hasPushStats || pushDirect || !expectsPushFromAdmin) return false;
     return DateTime.now().difference(createdAt).inMinutes < 15;
   }
 

@@ -3,6 +3,7 @@ import '../../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
 import '../../../models/order_news_group.dart';
@@ -39,8 +40,14 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
         return 'Рад';
       case 'new':
         return 'Юборилди';
+      // CF `onOrderUpdate` бу статусларни ҳам ёзади — аввал мижозга хом
+      // `in_delivery` / `cancelled` чиқарди.
+      case 'in_delivery':
+        return context.tr('order_status_in_delivery');
+      case 'cancelled':
+        return context.tr('order_status_cancelled');
       default:
-        return s;
+        return s.isEmpty ? '—' : s;
     }
   }
 

@@ -605,6 +605,10 @@ function makeAcceptLeg(deps) {
       const idx = Number(a.legIndex) || 0;
       const pickupPhone = idx === 0 ? leg.ownerId : ((ship.currentCustodian || {}).id || null);
       const loc = leg.location || {};
+      // Keyingi LEG avvalroq olingan bo'lsa (bu LEG bekor qilinib, qayta
+      // olinmoqda) — topshirish nuqtasi kontakti shu yerda ochiladi; aks holda
+      // keyingi ijrochi acceptLeg'da ochadi (pastda, tranzaksiyadan tashqari).
+      const nextProvider = a.nextLegId ? (ship.legAssignments || {})[a.nextLegId] || null : null;
 
       tx.update(legRef, {
         status: sm.STATUS.ACCEPTED,
@@ -621,6 +625,7 @@ function makeAcceptLeg(deps) {
           pickupLat: loc.lat == null ? null : loc.lat,
           pickupLng: loc.lng == null ? null : loc.lng,
           handoverFromKind: a.handoverFromKind || null,
+          ...(nextProvider ? { nextProviderPhone: nextProvider } : {}),
         },
       }, { merge: true });
       const assigned = Array.isArray(ship.assignedProviderIds) ? ship.assignedProviderIds : [];
@@ -644,6 +649,54 @@ function makeAcceptLeg(deps) {
       }
     }
     return { ok: true, legId, shipmentId: out.shipmentId };
+  };
+}
+
+/**
+ * LEG ijrochisi bekor qilganda (`cancelAssignment`) jo'natmadagi izlarni
+ * AYNI tranzaksiyada tozalaydi. Ikki bosqich, chunki haqiqiy SDK yozuvdan
+ * keyingi o'qishni rad etadi: bu funksiya faqat O'QIYDI, qaytargan
+ * `commit(now)` esa YOZADI — chaqiruvchi uni o'z yozuvlari bilan chaqiradi.
+ *
+ * Tozalanadi (2026-10-10, emulatorda isbotlangan bo'shliqlar):
+ *   - `legAssignments[legId]` — eskisi qolsa, keyingi LEG olinganda uning
+ *     ijrochisi telefoni BEKOR QILGANning match'iga yozilardi;
+ *   - `assignedProviderIds`dan ijrochi — boshqa LEG'i qolmagan bo'lsa
+ *     (qoida shu ro'yxat bo'yicha jo'natmani o'qishga ruxsat beradi);
+ *   - oldingi LEG ijrochisi match'idagi `nextProviderPhone` — bekor
+ *     qilganning telefoni u yerda ochiq qolmasin.
+ * Logistika bo'lmasa / eski hujjat (shipmentId yo'q) / jo'natma yo'q → no-op.
+ */
+async function prepareLegCancelInTx(tx, db, leg, legId, providerId) {
+  const a = (leg && leg.attributes) || {};
+  if (!leg || leg.module !== L.MODULE || !a.shipmentId) return () => {};
+  const shipmentRef = db.collection(L.SHIPMENTS).doc(String(a.shipmentId));
+  const shipSnap = await tx.get(shipmentRef);
+  if (!shipSnap.exists) return () => {};
+  const ship = shipSnap.data() || {};
+
+  const legAssignments = { ...(ship.legAssignments || {}) };
+  if (legAssignments[legId] === providerId) delete legAssignments[legId];
+  const assigned = Array.isArray(ship.assignedProviderIds) ? ship.assignedProviderIds : [];
+  const stillHolds = Object.values(legAssignments).includes(providerId);
+
+  const prevLegId = a.dependsOnLegId ? String(a.dependsOnLegId) : null;
+  const prevProvider = prevLegId ? legAssignments[prevLegId] : null;
+  let prevMatchRef = null;
+  if (prevProvider) {
+    const ref = db.collection(MATCHES).doc(`${prevLegId}_${prevProvider}`);
+    const snap = await tx.get(ref);
+    const c = snap.exists ? (snap.data() || {}).contactUnlocked : null;
+    if (c && c.nextProviderPhone === providerId) prevMatchRef = ref;
+  }
+
+  return (now) => {
+    tx.update(shipmentRef, {
+      legAssignments,
+      assignedProviderIds: stillHolds ? assigned : assigned.filter((p) => p !== providerId),
+      updatedAt: now,
+    });
+    if (prevMatchRef) tx.update(prevMatchRef, { 'contactUnlocked.nextProviderPhone': null });
   };
 }
 
@@ -1326,6 +1379,7 @@ module.exports = {
   makeCreateLogisticsOrder,
   makeOnShipmentFunded,
   makeAcceptLeg,
+  prepareLegCancelInTx,
   makeScanHandover,
   makeConfirmDelivery,
   makeCancelLogisticsOrder,

@@ -18,6 +18,9 @@
  *   - cancelAssignment: talab qayta ochiladi, taklif `rejected`, kontakt
  *     yopiladi, trust voqeasi yoziladi
  *   - cancelAssignment: taklif hujjati YO'Q (Relay LEG: `offerId: null`)
+ *   - Relay LEG bekor (2026-10-10): jo'natmada bekor qilgan ijrochi qolmaydi;
+ *     keyingi ijrochi telefoni unga ochilmaydi / undan olinadi; LEG'ni qayta
+ *     olgan ijrochi keyingi ijrochi telefonini oladi
  */
 'use strict';
 const assert = require('assert');
@@ -29,6 +32,7 @@ admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();
 
 const offersApi = require('../api/offers');
+const logisticsApi = require('../api/logistics');
 const config = require('../core/config');
 const sm = require('../core/state_machine');
 
@@ -81,6 +85,41 @@ const offer = (id, clientRequestId, price = 150000) => offersApi.makeSubmitOffer
   { demandId: DEMAND_ID, clientRequestId, price, message: '18:00 gacha' }, ctx(id),
 );
 const accept = (id) => offersApi.makeAcceptOffer(deps())({ demandId: DEMAND_ID, providerId: id }, ctx(OWNER));
+
+// ── Relay: 2 LEG'li jo'natma (LEG1 → LEG2) ──────────────────────────────
+const K1 = '998904440004';
+const K2 = '998905550005';
+const K3 = '998906660006';
+const SHIP = 'shipRelay001';
+const relayLeg = (idx, dependsOnLegId, nextLegId) => ({
+  ownerId: OWNER,
+  module: 'logistics',
+  mode: 'dispatch',
+  status: sm.STATUS.ACTIVE,
+  location: { lat: 41.55, lng: 60.63, addressText: 'Gurlan' },
+  timeWindow: { expiresAt: new Date(NOW.getTime() + 3600 * 1000) },
+  assignment: { providerId: null, offerId: null, acceptedAt: null },
+  attributes: { shipmentId: SHIP, orderId: 'ordRelay001', legIndex: idx, legCount: 2, dependsOnLegId, nextLegId, payout: 10000 },
+});
+async function resetRelay() {
+  const extra = {
+    'demands/LEG1': relayLeg(0, null, 'LEG2'),
+    'demands/LEG2': relayLeg(1, 'LEG1', null),
+    [`shipments/${SHIP}`]: {
+      ownerId: OWNER, status: 'ready', paymentStatus: 'escrow_funded',
+      legIds: ['LEG1', 'LEG2'], legCount: 2, assignedProviderIds: [], legAssignments: {},
+      currentCustodian: { kind: 'sender', id: OWNER, since: NOW },
+    },
+  };
+  for (const k of [K1, K2, K3]) {
+    for (const l of ['LEG1', 'LEG2']) extra[`demand_matches/${l}_${k}`] = { demandId: l, providerId: k, status: 'new' };
+  }
+  await reset(extra);
+}
+const takeLeg = (legId, id) => logisticsApi.makeAcceptLeg(deps())({ legId }, ctx(id));
+const dropLeg = (legId, id) => offersApi.makeCancelAssignment(deps())({ demandId: legId }, ctx(id));
+const ship = () => data(db.collection('shipments').doc(SHIP));
+const matchOf = (legId, id) => data(db.collection('demand_matches').doc(`${legId}_${id}`));
 
 (async () => {
   await check('submitOffer: yangi taklif + tahrir (revision 1), offerCount 1', async () => {
@@ -150,6 +189,62 @@ const accept = (id) => offersApi.makeAcceptOffer(deps())({ demandId: DEMAND_ID, 
     assert.strictEqual(d.assignment.providerId, null);
     const offers = await demandRef().collection('offers').get();
     assert.strictEqual(offers.size, 0, 'yo\'q taklif hujjati yaratilmasligi kerak');
+  });
+
+  await check('LEG bekor: jo\'natmada bekor qilgan ijrochi QOLMAYDI (assignedProviderIds, legAssignments)', async () => {
+    await resetRelay();
+    await takeLeg('LEG1', K1);
+    await dropLeg('LEG1', K1);
+    const s = await ship();
+    assert.deepStrictEqual(s.assignedProviderIds, []);
+    assert.deepStrictEqual(s.legAssignments, {});
+    assert.strictEqual((await data(db.collection('demands').doc('LEG1'))).status, 'active');
+  });
+
+  await check('LEG bekor → keyingi LEG olinsa: telefon BEKOR QILGAN ijrochiga ochilmaydi', async () => {
+    await resetRelay();
+    await takeLeg('LEG1', K1);
+    await dropLeg('LEG1', K1);
+    await takeLeg('LEG2', K2);
+    const m = await matchOf('LEG1', K1);
+    assert.strictEqual(m.status, 'cancelled_by_provider');
+    assert.strictEqual(m.contactUnlocked, null, JSON.stringify(m.contactUnlocked));
+  });
+
+  await check('LEG1 qayta olinsa (LEG2 band): yangi ijrochiga keyingi ijrochi telefoni ochiladi', async () => {
+    await resetRelay();
+    await takeLeg('LEG1', K1);
+    await takeLeg('LEG2', K2);
+    await dropLeg('LEG1', K1);
+    await takeLeg('LEG1', K3);
+    assert.strictEqual(((await matchOf('LEG1', K3)).contactUnlocked || {}).nextProviderPhone, K2);
+    const s = await ship();
+    assert.deepStrictEqual([...s.assignedProviderIds].sort(), [K2, K3].sort());
+    assert.deepStrictEqual(s.legAssignments, { LEG1: K3, LEG2: K2 });
+  });
+
+  await check('LEG2 bekor: oldingi ijrochidan bekor qilganning telefoni OLINADI, o\'z kontakti qoladi', async () => {
+    await resetRelay();
+    await takeLeg('LEG1', K1);
+    await takeLeg('LEG2', K2);
+    assert.strictEqual(((await matchOf('LEG1', K1)).contactUnlocked || {}).nextProviderPhone, K2);
+    await dropLeg('LEG2', K2);
+    const c = (await matchOf('LEG1', K1)).contactUnlocked;
+    assert.strictEqual(c.nextProviderPhone, null);
+    assert.strictEqual(c.ownerPhone, OWNER, 'olish kontakti (1-pog\'ona) saqlanadi');
+    const s = await ship();
+    assert.deepStrictEqual(s.assignedProviderIds, [K1]);
+    assert.deepStrictEqual(s.legAssignments, { LEG1: K1 });
+  });
+
+  await check('LEG bekor: ijrochi boshqa LEG\'ni ham olgan bo\'lsa assignedProviderIds\'da QOLADI', async () => {
+    await resetRelay();
+    await takeLeg('LEG1', K1);
+    await takeLeg('LEG2', K1);
+    await dropLeg('LEG2', K1);
+    const s = await ship();
+    assert.deepStrictEqual(s.assignedProviderIds, [K1]);
+    assert.deepStrictEqual(s.legAssignments, { LEG1: K1 });
   });
 
   await check('cancelDemand: mijoz bekor qiladi, matchlar yopiladi', async () => {

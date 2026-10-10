@@ -22,6 +22,7 @@ const { resolveFlags } = require('../core/config');
 const { validateOfferInput } = require('../core/schema');
 const sm = require('../core/state_machine');
 const trustEvents = require('../trust/events');
+const { prepareLegCancelInTx } = require('./logistics');
 
 const DEMANDS = 'demands';
 const MATCHES = 'demand_matches';
@@ -431,6 +432,8 @@ function makeCancelAssignment(deps) {
       // `tx.get`ni rad etadi (?reads before writes?) ? avval shu tartib
       // teskari edi va har bir bekor qilish xato bilan tugardi.
       const offerSnap = await tx.get(offerRef);
+      // Relay LEG: jo'natmadagi izlar ham shu tranzaksiyada (o'qish shu yerda).
+      const commitLegCancel = await prepareLegCancelInTx(tx, db, demand, demandId, providerId);
 
       tx.update(demandRef, {
         status: sm.STATUS.ACTIVE,
@@ -448,6 +451,7 @@ function makeCancelAssignment(deps) {
           updatedAt: now,
         });
       }
+      commitLegCancel(now);
 
       return { demand, minutesSince };
     });

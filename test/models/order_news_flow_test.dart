@@ -47,7 +47,7 @@ void main() {
   group('OrderNewsGroup.fromItems', () {
     test('orderId сиз буюртма хабари ташланмайди — ўз картаси', () {
       final groups = OrderNewsGroup.fromItems([
-        n('a', orderId: 'o1', orderStatus: 'new', orderType: 'food'),
+        n('a', orderId: 'o1', orderStatus: 'new', orderType: 'platform'),
         n('r', minute: 5, source: 'collection_receipt'),
       ]);
       expect(groups, hasLength(2));
@@ -66,13 +66,13 @@ void main() {
 
     test('чек охирги бўлса ҳам тур — тури ёзилган хабардан (аввал «Нон»)', () {
       final groups = OrderNewsGroup.fromItems([
-        n('a', orderId: 'o1', orderStatus: 'new', orderType: 'food'),
+        n('a', orderId: 'o1', orderStatus: 'new', orderType: 'platform'),
         n('b', minute: 1, orderId: 'o1', orderStatus: 'delivered',
-            orderType: 'food'),
+            orderType: 'platform'),
         n('c', minute: 2, orderId: 'o1', source: 'payment_receipt'),
       ]);
       expect(groups, hasLength(1));
-      expect(groups.single.orderType, 'food');
+      expect(groups.single.orderType, 'platform');
       expect(groups.single.messages.map((m) => m.id), ['a', 'b', 'c']);
     });
 

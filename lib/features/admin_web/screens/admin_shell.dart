@@ -123,7 +123,7 @@ class _AdminShellState extends State<AdminShell> {
       group: 'Буюртма ва етказиш',
       label: 'Буюртмалар',
       icon: Icons.receipt_long,
-      description: 'Нон ва овқат буюртмалари',
+      description: 'Нон, улгуржи ва кафе-ресторан буюртмалари',
       access: _SectionAccess.opsAndFinance,
     ),
     _AdminSection(
@@ -141,7 +141,7 @@ class _AdminShellState extends State<AdminShell> {
       group: 'Буюртма ва етказиш',
       label: 'Маҳсулoтлaр',
       icon: Icons.inventory_2,
-      description: 'Нон, овқaт, нархлaр',
+      description: 'Нон, қўшимча, нархлaр',
     ),
     _AdminSection(
       group: 'Буюртма ва етказиш',
@@ -1023,12 +1023,14 @@ class _Sidebar extends StatelessWidget {
   Stream<int>? _badgeCountStream(BuildContext context, String label) {
     final db = FirebaseFirestore.instance;
     switch (label) {
+      // Олиб ташланган «Овқат» буюртмалари (`type:'food'`) доскада йўқ —
+      // нишон ҳам уларни санамайди.
       case 'Буюртмалар':
         return db
             .collection('orders')
             .where('status', isEqualTo: 'new')
             .snapshots()
-            .map((s) => s.docs.length);
+            .map((s) => s.docs.where((d) => d.data()['type'] != 'food').length);
       case 'Gilam yuvish':
         return db
             .collection('carpet_wash_orders')
@@ -1047,7 +1049,7 @@ class _Sidebar extends StatelessWidget {
             .collection('orders')
             .where('status', isEqualTo: 'ready')
             .snapshots()
-            .map((s) => s.docs.length);
+            .map((s) => s.docs.where((d) => d.data()['type'] != 'food').length);
       // Нишон экран КЎРСАТАДИГАН турларнигина санайди (`JobAd.jobsBoardTypes`
       // — экран ҳам шу рўйхат билан филтрлайди). Аввал бўш ва `announcement`
       // турлари ҳам саналарди, экранда эса улар йўқ эди: нишон ҳеч қачон

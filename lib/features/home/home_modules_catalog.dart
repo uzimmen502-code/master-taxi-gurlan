@@ -8,7 +8,7 @@ import '../../models/home_module.dart';
 /// [HomeModule.label] — `AppLocalizations` kaliti (matn emas).
 /// Ko‘rsatish: [resolveLabel] yoki widget qatlamida `context.tr(module.label)`.
 ///
-/// Vaqtincha yopish: `enabled: false` (masalan, `food` yoki `jobs`).
+/// Vaqtincha yopish: `enabled: false` (masalan, `jobs`).
 class HomeModulesCatalog {
   HomeModulesCatalog._();
 
@@ -27,12 +27,9 @@ class HomeModulesCatalog {
       id: 'bread',
       label: 'home_module_bread',
     ),
-    HomeModule(
-      id: 'food',
-      label: 'home_module_food',
-    ),
-    // Кафе-ресторанлар (D-REST-6): `food` ўрнига келади, у §13 бўйича
-    // кейинроқ олиб ташланади.
+    // `food` («Овқат», AVA'нинг ягона менюси) ОЛИБ ТАШЛАНДИ (эга, 2026-10-11):
+    // ўрнига кафе-ресторанлар. Конфиг калити (`kKnownModuleIds`) эски илова
+    // версиялари учун қолди; эски `type:'food'` буюртмалар тарихда кўринади.
     HomeModule(
       id: 'restaurants',
       label: 'home_module_restaurants',

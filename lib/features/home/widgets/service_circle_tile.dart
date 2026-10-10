@@ -302,10 +302,8 @@ const _kServiceImages = <String, String>{
   'marshrut': 'assets/images/services/service_marshrut.png',
   'yuk_local': 'assets/images/services/service_yuk_local.png',
   'yuk_intercity': 'assets/images/services/service_yuk_birja.png',
-  'food': 'assets/images/services/service_food.png',
-  // «Кафе-Ресторан» (D-REST-6): ҳозирча `food` расмининг нусхаси —
-  // алоҳида брендли иконка эга қарори билан алмаштирилади (§13 B да
-  // `service_food.png` ўчирилганда бу файл қолади).
+  // «Кафе-Ресторан» (D-REST-6): эски `service_food.png` нусхаси —
+  // алоҳида брендли иконка эга қарори билан алмаштирилади.
   'restaurants': 'assets/images/services/service_restaurants.png',
   'jobs': 'assets/images/services/service_jobs.png',
   'cheap_products_home': 'assets/images/services/service_market.png',
@@ -330,6 +328,9 @@ const _kServiceIcons = <String, IconData>{
   // «Хизматлар» — `jobs` модулининг иккинчи плиткаси (дарвоза `jobs`).
   'jobs_services': Icons.handyman_rounded,
   'platform_store': Icons.storefront_rounded,
+  // «Овқат» олиб ташланган (2026-10-11) — `platform_store` каби калити эски
+  // APK'лар учун қолган; белги фақат админ «Ҳудудлар ва хизматлар» рўйхатида.
+  'food': Icons.no_meals_rounded,
   'tv_market': Icons.play_circle_filled_rounded,
   'dating': Icons.favorite_rounded,
   'chatgpt': Icons.auto_awesome_rounded,
@@ -384,10 +385,11 @@ Color olxTintFor(String moduleId) {
     case 'logistics':
       return const Color(0xFF3949AB);
     // ── Овқат ва маҳсулот ───────────────────────────────────────
+    // Олиб ташланган «Овқат» — фақат админ рўйхатида (эски APK калити).
     case 'food':
       return const Color(0xFFFF6B5A);
-    // Кафе-ресторанлар — тўқ зангори-қизил (терракота): таом (маржон) ва
-    // нон (сариқ) билан бир қаторда туради, иккаласидан ҳам тўқроқ.
+    // Кафе-ресторанлар — тўқ зангори-қизил (терракота): нон (сариқ) билан
+    // бир қаторда туради, ундан тўқроқ.
     case 'restaurants':
       return const Color(0xFFB7410E);
     case 'bread':

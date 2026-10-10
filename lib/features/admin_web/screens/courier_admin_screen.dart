@@ -745,7 +745,7 @@ class _OrderMiniCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    order.type == 'food' ? 'Тайёр овқат' : 'Нон',
+                    order.typeLabelUz,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),

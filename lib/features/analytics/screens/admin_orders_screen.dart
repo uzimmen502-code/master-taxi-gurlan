@@ -232,18 +232,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     }
   }
 
-  String _typeUz(String t) {
-    switch (t) {
-      case 'restaurant':
-        return 'Кафе-ресторан';
-      case 'food':
-        return 'Овқат';
-      case 'bread':
-      default:
-        return 'Нон';
-    }
-  }
-
   /// Ustun boshidagi bulk tugmalar.
   List<_BulkActionSpec>? _columnBulkActions(
     String columnStatus,
@@ -599,7 +587,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                                               _nextActions(o, flow),
                                           statusColor: _statusColor,
                                           statusUz: _statusUz,
-                                          typeUz: _typeUz,
                                           money: _money,
                                           date: _date,
                                           actionLabel: _actionLabel,
@@ -718,7 +705,6 @@ class _OrdersColumn extends StatelessWidget {
     required this.nextActions,
     required this.statusColor,
     required this.statusUz,
-    required this.typeUz,
     required this.money,
     required this.date,
     required this.actionLabel,
@@ -735,7 +721,6 @@ class _OrdersColumn extends StatelessWidget {
   final List<String>? Function(OrderModel order) nextActions;
   final Color Function(String status) statusColor;
   final String Function(String status) statusUz;
-  final String Function(String type) typeUz;
   final NumberFormat money;
   final DateFormat date;
   final String Function(String status) actionLabel;
@@ -869,7 +854,7 @@ class _OrdersColumn extends StatelessWidget {
                         next: nextActions(o),
                         statusColor: statusColor(o.status),
                         statusUz: statusUz(o.status),
-                        typeUz: typeUz(o.type),
+                        typeUz: o.typeLabelUz,
                         money: money,
                         date: date,
                         // «Курьерда» устунидаги `ready` — курьерсиз қолган

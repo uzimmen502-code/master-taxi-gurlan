@@ -7,12 +7,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/bread_product.dart';
-import '../../../models/food_product.dart';
 import '../../../models/order_model.dart';
 import '../../../repositories/bread_repository.dart';
-import '../../../repositories/inventory_repository.dart';
 import '../../../services/seller_sale_service.dart';
-import '../../../utils/food_catalog.dart';
 import '../../../utils/wallet_payment.dart';
 
 enum SellerPayMode { cash, wallet, mixed }
@@ -66,17 +63,12 @@ class SellerCartLine {
 class SellerPosController extends ChangeNotifier {
   SellerPosController({
     BreadRepository? breadRepo,
-    InventoryRepository? inventoryRepo,
-  })  : _breadRepo = breadRepo ?? BreadRepository(),
-        _inventoryRepo = inventoryRepo ?? InventoryRepository() {
+  }) : _breadRepo = breadRepo ?? BreadRepository() {
     _init();
   }
 
   final BreadRepository _breadRepo;
-  final InventoryRepository _inventoryRepo;
 
-  StreamSubscription? _foodSub;
-  StreamSubscription? _foodInvSub;
   StreamSubscription? _breadSub;
   StreamSubscription? _ordersSub;
 
@@ -86,9 +78,7 @@ class SellerPosController extends ChangeNotifier {
   SellerOrderFilter orderFilter = SellerOrderFilter.waiting;
   String orderSearch = '';
 
-  List<FoodProduct> foodProducts = const [];
   List<BreadProduct> breadProducts = const [];
-  final Map<String, int> foodStock = {};
   final Map<String, SellerCartLine> cart = {};
   List<OrderModel> pickupOrders = const [];
   String? ordersLoadError;
@@ -115,8 +105,6 @@ class SellerPosController extends ChangeNotifier {
 
   int get cartCount => cart.values.fold(0, (s, l) => s + l.qty.round());
   int get cartTotal => cart.values.fold(0, (s, l) => s + l.lineTotal);
-
-  double cartQtyForFood(FoodProduct p) => cart['food_${p.id}']?.qty ?? 0;
 
   double cartQtyForBread(BreadProduct p) {
     final id = p.firestoreId ?? '';
@@ -203,44 +191,6 @@ class SellerPosController extends ChangeNotifier {
     await _loadDailyTotal();
     unawaited(refreshShiftSummary());
 
-    _foodSub = FirebaseFirestore.instance
-        .collection('food_catalog')
-        .orderBy('id')
-        .snapshots()
-        .listen((snap) async {
-      if (snap.docs.isEmpty) {
-        foodProducts = List<FoodProduct>.from(FoodCatalog.products);
-      } else {
-        foodProducts = snap.docs
-            .map((d) => FoodProduct.fromFirestore(d.data(), d.id))
-            .toList();
-      }
-      notifyListeners();
-    }, onError: (_) {
-      foodProducts = List<FoodProduct>.from(FoodCatalog.products);
-      notifyListeners();
-    });
-
-    _foodInvSub = FirebaseFirestore.instance
-        .collection('food_inventory')
-        .snapshots()
-        .listen((snap) {
-      for (final d in snap.docs) {
-        final data = d.data();
-        final total = (data['totalStock'] as num?)?.toInt() ?? 0;
-        final sold = (data['soldToday'] as num?)?.toInt() ?? 0;
-        if (total <= 0) {
-          foodStock[d.id] = 999999;
-        } else {
-          final r = total - sold;
-          foodStock[d.id] = r < 0 ? 0 : r;
-        }
-      }
-      notifyListeners();
-    }, onError: (e) {
-      debugPrint('seller food_inventory: $e');
-    });
-
     _breadSub = _breadRepo.watchProducts().listen((list) {
       breadProducts = list.where(isPosSellableBread).toList();
       notifyListeners();
@@ -255,7 +205,10 @@ class SellerPosController extends ChangeNotifier {
         .snapshots()
         .listen((snap) {
       ordersLoadError = null;
-      pickupOrders = snap.docs.map(OrderModel.fromDoc).toList();
+      pickupOrders = snap.docs
+          .map(OrderModel.fromDoc)
+          .where((o) => !o.isRemovedFoodOrder)
+          .toList();
       notifyListeners();
     }, onError: (e) {
       debugPrint('seller pickup orders: $e');
@@ -337,42 +290,6 @@ class SellerPosController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadFoodStock() async {
-    for (final p in foodProducts) {
-      try {
-        foodStock[p.inventoryId] =
-            await _inventoryRepo.getRemaining(InventoryKind.food, p.inventoryId);
-      } catch (_) {
-        foodStock[p.inventoryId] = 999999;
-      }
-    }
-    notifyListeners();
-  }
-
-  int stockForFood(FoodProduct p) => foodStock[p.inventoryId] ?? 999999;
-
-  void addFood(FoodProduct p) {
-    final stock = stockForFood(p);
-    if (stock <= 0) return;
-    final key = 'food_${p.id}';
-    final existing = cart[key];
-    final nextQty = (existing?.qty ?? 0) + (p.step > 0 ? p.step : 1);
-    if (stock < 999999 && nextQty > stock) return;
-    _pendingSaleIdem = null;
-    cart[key] = SellerCartLine(
-      key: key,
-      kind: 'food',
-      inventoryId: p.inventoryId,
-      name: p.name,
-      emoji: p.emoji,
-      unitPrice: p.price,
-      unit: p.unit,
-      qty: nextQty,
-    );
-    _syncCashDefault();
-    notifyListeners();
-  }
-
   void addBread(BreadProduct p) {
     if (p.isSoldOut || (p.price ?? 0) <= 0) return;
     final id = p.firestoreId ?? '';
@@ -404,10 +321,7 @@ class SellerPosController extends ChangeNotifier {
       cart.remove(key);
     } else {
       var next = qty;
-      if (line.kind == 'food') {
-        final stock = foodStock[line.inventoryId] ?? 999999;
-        if (stock < 999999 && next > stock) next = stock.toDouble();
-      } else if (line.kind == 'bread') {
+      if (line.kind == 'bread') {
         BreadProduct? bread;
         for (final p in breadProducts) {
           if (p.firestoreId == line.inventoryId) {
@@ -601,7 +515,6 @@ class SellerPosController extends ChangeNotifier {
       sessionTotal += result.total;
       await _persistDailyTotal();
       clearCart();
-      unawaited(_loadFoodStock());
       unawaited(refreshShiftSummary());
       return result;
     } catch (e) {
@@ -664,8 +577,6 @@ class SellerPosController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _foodSub?.cancel();
-    _foodInvSub?.cancel();
     _breadSub?.cancel();
     _ordersSub?.cancel();
     super.dispose();

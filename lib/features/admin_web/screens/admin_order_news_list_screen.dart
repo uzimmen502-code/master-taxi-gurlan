@@ -47,12 +47,11 @@ String orderNewsStatusLabel(NewsItem n) {
   }
 }
 
-/// Карточкадаги буюртма тури (аввал `food`дан бошқа ҳаммаси «Нон» эди).
+/// Карточкадаги буюртма тури. Эски `food` хабарлари рўйхатга тушмайди
+/// ([NewsItem.isRemovedFoodOrderNews]).
 @visibleForTesting
 String orderNewsTypeLabel(NewsItem n) {
   switch (n.orderType) {
-    case 'food':
-      return '🍽 Тайёр овқат';
     case 'bread':
       return '🍞 Нон буюртма';
     case 'platform':

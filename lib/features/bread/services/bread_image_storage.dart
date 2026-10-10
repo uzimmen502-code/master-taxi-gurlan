@@ -28,22 +28,6 @@ class BreadImageStorage {
     return ref.getDownloadURL();
   }
 
-  /// Таом расми (`food_images/`).
-  Future<String> uploadFoodImage({
-    required String docId,
-    required Uint8List bytes,
-    String contentType = 'image/jpeg',
-  }) async {
-    final ext = contentType.contains('png')
-        ? 'png'
-        : contentType.contains('webp')
-            ? 'webp'
-            : 'jpg';
-    final ref = _storage.ref('food_images/$docId.$ext');
-    await ref.putData(bytes, SettableMetadata(contentType: contentType));
-    return ref.getDownloadURL();
-  }
-
   /// Қўшимча маҳсулот расми (`extra_images/`).
   Future<String> uploadExtraImage({
     required String docId,

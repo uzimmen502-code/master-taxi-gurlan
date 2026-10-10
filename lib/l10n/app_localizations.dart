@@ -68,7 +68,6 @@ class AppLocalizations {
     'taxi': 'Такси',
     'intercity_taxi': 'Ш.Такси',
     'bread': 'Нон буюртма',
-    'food': 'Овқат',
     'profile': 'Профил',
 
     // Маҳаллий такси
@@ -139,7 +138,6 @@ class AppLocalizations {
     'added_to_cart': 'саватга қўшилди',
 
     // Овқат
-    'food_order': 'Овқат буюртма',
     'menu': 'Меню',
     'categories': 'Категориялар',
     'all': 'Барчаси',

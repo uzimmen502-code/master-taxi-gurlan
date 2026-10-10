@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// `orders` collection — non/ovqat buyurtmasi.
 class OrderModel {
   final String id;
-  final String type; // bread | food | platform
+  final String type; // bread | platform | restaurant (эски: food)
   final int total;
   final String status; // legacy
   final List<OrderItem> items;
@@ -126,6 +126,18 @@ class OrderModel {
   });
 
   bool get isRestaurant => type == 'restaurant';
+
+  /// Олиб ташланган «Овқат» модулининг буюртмаси (эга, 2026-10-11) — ҳеч
+  /// бир рўйхатда кўрсатилмайди; прод ҳужжатлари алоҳида тозаланади.
+  bool get isRemovedFoodOrder => type == 'food';
+
+  /// Админ доскалари ва чек учун тур номи — ягона манба (аввал уч жойда
+  /// алоҳида ёзилган, улгуржи буюртма «Нон» кўринарди).
+  String get typeLabelUz => switch (type) {
+        'restaurant' => 'Кафе-ресторан',
+        'platform' => 'Улгуржи бозор',
+        _ => 'Нон',
+      };
 
   bool get hasCoordinates => lat != null && lng != null;
 

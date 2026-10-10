@@ -2,10 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Барча модулларнинг inventory'сини бошқарувчи репозиторий.
 ///
-/// Учта collection ушлайди:
+/// Иккита collection ушлайди:
 ///   - `bread_products`     — тайёр нон (totalStock + soldToday)
 ///   - `extra_products`     — қўшимча маҳсулотлар (totalStock + soldToday)
-///   - `food_inventory`     — тайёр овқат (FoodCatalog slug'и бўйича id)
+///
+/// `food_inventory` («Овқат» модули) олиб ташланди — 2026-10-11.
 ///
 /// `totalStock == 0` бўлса — **лимитсиз** (текширилмайди).
 /// Ҳар куни тунда (00:00 Asia/Tashkent) `soldToday`ни нулга қайтариш —
@@ -20,8 +21,6 @@ class InventoryRepository {
       _db.collection('bread_products');
   CollectionReference<Map<String, dynamic>> get _extras =>
       _db.collection('extra_products');
-  CollectionReference<Map<String, dynamic>> get _foodInv =>
-      _db.collection('food_inventory');
 
   DocumentReference<Map<String, dynamic>> _refFor(
       InventoryKind kind, String id) {
@@ -30,8 +29,6 @@ class InventoryRepository {
         return _bread.doc(id);
       case InventoryKind.extra:
         return _extras.doc(id);
-      case InventoryKind.food:
-        return _foodInv.doc(id);
     }
   }
 
@@ -53,8 +50,6 @@ class InventoryRepository {
         return _bread;
       case InventoryKind.extra:
         return _extras;
-      case InventoryKind.food:
-        return _foodInv;
     }
   }
 
@@ -134,7 +129,6 @@ class InventoryRepository {
         if (snap == null) continue;
         if (!snap.exists) {
           // Йўқ ҳужжат бўлса яратамиз — `soldToday = qty` би сақлаймиз.
-          // Бу баъзан Foodga мос келади (admin ҳали stock қўймаган).
           tx.set(snap.reference, {
             'totalStock': 0,
             'soldToday': c.qty,
@@ -197,21 +191,6 @@ class InventoryRepository {
     });
   }
 
-  /// Админ панели: `food_inventory` бўйича жорий захира/сотилган (каталог билан бирлаштириш учун).
-  Stream<Map<String, FoodInventoryDoc>> watchFoodInventory() {
-    return _foodInv.snapshots().map((snap) {
-      final m = <String, FoodInventoryDoc>{};
-      for (final doc in snap.docs) {
-        final d = doc.data();
-        m[doc.id] = FoodInventoryDoc(
-          totalStock: (d['totalStock'] as num?)?.toInt() ?? 0,
-          soldToday: (d['soldToday'] as num?)?.toInt() ?? 0,
-        );
-      }
-      return m;
-    });
-  }
-
   /// Stocking helper — админ "Янги ҳужжат" яратганда керак.
   Future<void> setStock({
     required InventoryKind kind,
@@ -228,19 +207,8 @@ class InventoryRepository {
   }
 }
 
-/// `food_inventory/{id}` ҳужжати учун админ UI снапшоти.
-class FoodInventoryDoc {
-  const FoodInventoryDoc({
-    required this.totalStock,
-    required this.soldToday,
-  });
-
-  final int totalStock;
-  final int soldToday;
-}
-
-/// Қайси collection: bread / extra / food.
-enum InventoryKind { bread, extra, food }
+/// Қайси collection: bread / extra.
+enum InventoryKind { bread, extra }
 
 /// Битта маҳсулот ўзгариши (кам/қўш) — миқдор `num` (дона бутун, кг/л каср).
 class StockChange {
@@ -254,7 +222,6 @@ class StockChange {
   final InventoryKind kind;
 
   /// `bread_products` ёки `extra_products`да — `firestoreId`.
-  /// `food_inventory`да — FoodCatalog slug ёки сатр id.
   final String id;
   final num qty;
 

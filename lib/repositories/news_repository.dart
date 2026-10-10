@@ -27,7 +27,7 @@ class NewsRepository {
       case NewsFeedKind.dialog:
         return n.isDialogNews;
       case NewsFeedKind.order:
-        return n.isOrderNews;
+        return n.isOrderNews && !n.isRemovedFoodOrderNews;
     }
   }
 
@@ -559,6 +559,7 @@ class NewsRepository {
           (snap) => snap.docs
               .map(NewsItem.fromDoc)
               .where((n) => n.isOrderNews == orderOnly)
+              .where((n) => !n.isRemovedFoodOrderNews)
               .toList(growable: false),
         );
   }
@@ -597,12 +598,14 @@ class NewsRepository {
           if (controller.isClosed) return;
           // Web'да DateTime — миллисекунд; сервер вақти микросекунд. Белги
           // билан бир миллисекунддаги (яъни кўрилган) хабар саналмасин.
-          final n = seen == null
-              ? snap.docs.length
-              : snap.docs.where((d) {
-                  final at = d.data()['createdAt'];
-                  return at is! Timestamp || at.toDate().isAfter(seen);
-                }).length;
+          // Олиб ташланган «Овқат» хабарлари рўйхатда йўқ — саналмайди.
+          final n = snap.docs.where((d) {
+            final data = d.data();
+            if (data['orderType'] == 'food') return false;
+            if (seen == null) return true;
+            final at = data['createdAt'];
+            return at is! Timestamp || at.toDate().isAfter(seen);
+          }).length;
           controller.add(n);
         },
         onError: (Object e, StackTrace st) {

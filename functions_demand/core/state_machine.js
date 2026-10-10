@@ -229,6 +229,18 @@ function toMillis(v) {
   return 0;
 }
 
+/**
+ * Talab/LEG muddati o'tganmi — BITTA qoida (7-band): `expiresAt <= now`.
+ * `expireDemandsSweeper` so'rovi ham ayni shu chegarani ishlatadi
+ * (`timeWindow.expiresAt <= now`), shuning uchun «sweeper yopadi, lekin
+ * acceptOffer hali qabul qiladi» oralig'i yo'q. `now` — SERVER vaqti.
+ * `expiresAt` yo'q → muddatsiz (eski hujjatlar).
+ */
+function isPastExpiry(expiresAt, now) {
+  if (!expiresAt) return false;
+  return toMillis(expiresAt) <= now.getTime();
+}
+
 module.exports = {
   STATUS,
   MATCHING_STATE,
@@ -249,4 +261,5 @@ module.exports = {
   disputeOverdue,
   canRate,
   toMillis,
+  isPastExpiry,
 };

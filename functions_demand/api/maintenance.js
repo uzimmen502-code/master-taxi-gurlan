@@ -90,12 +90,25 @@ function makeExpireSweeper(deps) {
     });
     const skipped = snap.size - ids.length;
 
+    // `legProblem` TRANZAKSIYADA: LEG hali JORIY rejada va hali `expired`
+    // bo'lsa. Aks holda (shu orada admin qayta rejaladi / qayta ochdi)
+    // belgi eski reja LEG'iga ishora qilib, admin «qayta ochish» tugmasini
+    // superseded LEG'ga yo'naltirardi (emulatorda isbotlangan, 2026-10-11).
+    let legProblemsWritten = 0;
     for (const p of legProblems) {
       try {
-        await db.collection(L.SHIPMENTS).doc(p.shipmentId).update({
-          legProblem: { legId: p.legId, kind: 'leg_expired', at: now },
-          updatedAt: now,
+        const shipRef = db.collection(L.SHIPMENTS).doc(p.shipmentId);
+        const legRef = db.collection(DEMANDS).doc(p.legId);
+        const wrote = await db.runTransaction(async (tx) => {
+          const [shipSnap, legSnap] = await Promise.all([tx.get(shipRef), tx.get(legRef)]);
+          if (!shipSnap.exists || !legSnap.exists) return false;
+          const legIds = (shipSnap.data() || {}).legIds;
+          if (Array.isArray(legIds) && !legIds.includes(p.legId)) return false;
+          if ((legSnap.data() || {}).status !== sm.STATUS.EXPIRED) return false;
+          tx.update(shipRef, { legProblem: { legId: p.legId, kind: 'leg_expired', at: now }, updatedAt: now });
+          return true;
         });
+        if (wrote) legProblemsWritten += 1;
       } catch (e) {
         console.error(`legProblem yozilmadi (${p.shipmentId}/${p.legId}): ${e.message}`);
       }
@@ -125,8 +138,8 @@ function makeExpireSweeper(deps) {
       }
     }
 
-    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblems.length ? `, ${legProblems.length} ta logistika LEG'i` : ''}${skipped ? `, ${skipped} ta o'zgargan — o'tkazildi` : ''}`);
-    return { expired: ids.length, ids, legProblems: legProblems.length, skipped };
+    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblemsWritten ? `, ${legProblemsWritten} ta logistika LEG'i` : ''}${skipped ? `, ${skipped} ta o'zgargan — o'tkazildi` : ''}`);
+    return { expired: ids.length, ids, legProblems: legProblemsWritten, skipped };
   };
 }
 

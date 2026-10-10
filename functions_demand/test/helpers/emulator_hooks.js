@@ -85,4 +85,44 @@ function dbWithQueryHook(db, collectionName, hook) {
   });
 }
 
-module.exports = { resetEmulator, dbWithHook, dbWithQueryHook };
+/**
+ * POYGA: BIR MARTA `hook` — qaysi biri OLDIN bo'lsa:
+ *   - `queryOn` kolleksiyasidagi so'rov natijasi qaytgandan keyin, yoki
+ *   - `updateOn` kolleksiyasi hujjatiga `ref.update(...)` dan OLDIN.
+ * `updateOn` hujjat havolasi haqiqiy ref'ning Proxy'si — tranzaksiyaga
+ * (`tx.get(ref)`) ham beriladi.
+ */
+function dbWithHooks(db, { queryOn, updateOn }, hook) {
+  let fired = false;
+  const once = async () => { if (!fired) { fired = true; await hook(); } };
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop !== 'collection') {
+        const v = target[prop];
+        return typeof v === 'function' ? v.bind(target) : v;
+      }
+      return (name) => {
+        const col = target.collection(name);
+        if (name !== queryOn && name !== updateOn) return col;
+        return new Proxy(col, {
+          get(c, p) {
+            if (name === queryOn && (p === 'where' || p === 'limit')) return (...a) => wrapQuery(c[p](...a), once);
+            if (name === updateOn && p === 'doc') {
+              return (...a) => new Proxy(c.doc(...a), {
+                get(r, rp) {
+                  if (rp === 'update') return async (...u) => { await once(); return r.update(...u); };
+                  const v = r[rp];
+                  return typeof v === 'function' ? v.bind(r) : v;
+                },
+              });
+            }
+            const v = c[p];
+            return typeof v === 'function' ? v.bind(c) : v;
+          },
+        });
+      };
+    },
+  });
+}
+
+module.exports = { resetEmulator, dbWithHook, dbWithQueryHook, dbWithHooks };

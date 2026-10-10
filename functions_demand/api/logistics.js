@@ -629,8 +629,7 @@ function makeAcceptLeg(deps) {
       if (leg.ownerId === providerId) throw fail('permission-denied', 'O\'z jo\'natmangizni olib bo\'lmaydi', 'self');
       // Birinchi g'olib: ikkinchi chaqiruv shu yerda to'xtaydi.
       sm.assertTransition(leg.status, sm.STATUS.ACCEPTED, 'acceptLeg');
-      const expiresAt = (leg.timeWindow || {}).expiresAt;
-      if (expiresAt && sm.toMillis(expiresAt) < now.getTime()) {
+      if (sm.isPastExpiry((leg.timeWindow || {}).expiresAt, now)) {
         throw fail('failed-precondition', 'LEG muddati tugagan', 'expired');
       }
 

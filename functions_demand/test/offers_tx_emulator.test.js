@@ -18,6 +18,8 @@
  *   - cancelAssignment: talab qayta ochiladi, taklif `rejected`, kontakt
  *     yopiladi, trust voqeasi yoziladi
  *   - cancelAssignment: taklif hujjati YO'Q (Relay LEG: `offerId: null`)
+ *   - acceptOffer/submitOffer muddati (2026-10-11): server vaqti, `<=`
+ *     chegarasi, tranzaksiya ichida, `demand_expired` sababi
  *   - Relay LEG bekor (2026-10-10): jo'natmada bekor qilgan ijrochi qolmaydi;
  *     keyingi ijrochi telefoni unga ochilmaydi / undan olinadi; LEG'ni qayta
  *     olgan ijrochi keyingi ijrochi telefonini oladi
@@ -152,6 +154,57 @@ const matchOf = (legId, id) => data(db.collection('demand_matches').doc(`${legId
     const d = await data(demandRef());
     assert.strictEqual(d.status, 'accepted');
     assert.strictEqual(d.assignment.providerId, won[0].value.providerId);
+  });
+
+  // ── acceptOffer: muddat (ega qarori 2026-10-11) ─────────────────────
+  const setExpiry = (at) => demandRef().update({ 'timeWindow.expiresAt': at });
+  const expectExpired = async () => {
+    await assert.rejects(() => accept(USTA_A), (e) => e.code === 'failed-precondition'
+      && e.details && e.details.reason === 'demand_expired');
+    const d = await data(demandRef());
+    assert.notStrictEqual(d.status, 'accepted');
+    assert.strictEqual(d.assignment.providerId, null);
+    assert.strictEqual((await data(demandRef().collection('offers').doc(USTA_A))).status, 'active');
+    const m = await data(db.collection('demand_matches').doc(`${DEMAND_ID}_${USTA_A}`));
+    assert.notStrictEqual(m.status, 'accepted');
+    assert.ok(!m.contactUnlocked, 'kontakt ochilmaydi');
+  };
+
+  await check('acceptOffer: muddat o\'tgan (sweeper hali yopmagan) — RAD demand_expired, hech narsa o\'zgarmaydi', async () => {
+    await reset();
+    await offer(USTA_A, 'req-offer-0001');
+    await setExpiry(new Date(NOW.getTime() - 60 * 1000));
+    await expectExpired();
+    assert.strictEqual((await data(demandRef())).status, 'active', 'holatni sweeper o\'zgartiradi, acceptOffer emas');
+  });
+
+  await check('acceptOffer: chegara expiresAt == server vaqti — RAD (sweeper bilan bir xil `<=`)', async () => {
+    await reset();
+    await offer(USTA_A, 'req-offer-0001');
+    await setExpiry(NOW);
+    await expectExpired();
+  });
+
+  await check('acceptOffer: chegara expiresAt == server vaqti + 1 ms — QABUL qilinadi', async () => {
+    await reset();
+    await offer(USTA_A, 'req-offer-0001');
+    await setExpiry(new Date(NOW.getTime() + 1));
+    await accept(USTA_A);
+    assert.strictEqual((await data(demandRef())).status, 'accepted');
+  });
+
+  await check('acceptOffer: talab allaqachon `expired` (sweeper yopgan) — RAD demand_expired', async () => {
+    await reset();
+    await offer(USTA_A, 'req-offer-0001');
+    await demandRef().update({ status: 'expired' });
+    await expectExpired();
+  });
+
+  await check('submitOffer: chegara expiresAt == server vaqti — RAD demand_expired', async () => {
+    await reset();
+    await setExpiry(NOW);
+    await assert.rejects(() => offer(USTA_A, 'req-offer-0001'),
+      (e) => e.details && e.details.reason === 'demand_expired');
   });
 
   await check('cancelAssignment: talab QAYTA OCHILADI, taklif rejected, kontakt yopiladi, trust', async () => {

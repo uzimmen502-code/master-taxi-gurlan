@@ -28,10 +28,12 @@ const DEMANDS = 'demands';
 const MATCHES = 'demand_matches';
 const IDEMPOTENCY = 'demand_idempotency';
 
-function fail(code, message) {
+function fail(code, message, reason) {
   const e = new Error(message);
   e.code = code;
   e.httpErrorCode = code;
+  // `details.reason` klientga yetadi (wrapCallable) — UI sabab bo'yicha matn tanlaydi.
+  if (reason) e.details = { reason };
   return e;
 }
 
@@ -84,9 +86,8 @@ function makeSubmitOffer(deps) {
       if (demand.ownerId === providerId) {
         throw fail('permission-denied', 'O\'z so\'rovingizga taklif berib bo\'lmaydi');
       }
-      const expiresAt = (demand.timeWindow || {}).expiresAt;
-      if (expiresAt && sm.toMillis(expiresAt) < now.getTime()) {
-        throw fail('failed-precondition', 'So\'rov muddati tugagan');
+      if (sm.isPastExpiry((demand.timeWindow || {}).expiresAt, now)) {
+        throw fail('failed-precondition', 'So\'rov muddati tugagan', 'demand_expired');
       }
 
       const flags = await resolveFlags(db, demand.module, (demand.location || {}).regionId);
@@ -225,6 +226,13 @@ function makeAcceptOffer(deps) {
 
       if (demand.ownerId !== ownerId) {
         throw fail('permission-denied', 'Bu so\'rov sizga tegishli emas');
+      }
+      // Muddat o'tgan talabda taklif QABUL QILINMAYDI (ega qarori 2026-10-11).
+      // SERVER vaqti, AYNI tranzaksiyada o'qilgan talab bo'yicha: sweeper
+      // hali yopmagan bo'lsa ham. Avval bu tekshiruv yo'q edi va sweeper
+      // poygasida talab ijrochi + ochiq kontakt bilan `expired` qolardi.
+      if (demand.status === sm.STATUS.EXPIRED || sm.isPastExpiry((demand.timeWindow || {}).expiresAt, now)) {
+        throw fail('failed-precondition', 'So\'rov muddati tugagan', 'demand_expired');
       }
       // Birinchi g'olib: ikkinchi chaqiruv shu yerda to'xtaydi.
       sm.assertTransition(demand.status, sm.STATUS.ACCEPTED, 'acceptOffer');

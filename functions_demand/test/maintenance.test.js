@@ -12,7 +12,8 @@
  *     boshqa modul talabida jo'natma yo'q — hech narsa yozilmaydi.
  */
 const assert = require('assert');
-const { FakeFirestore } = require('./fake_firestore');
+// Qat'iy tranzaksiya fake'i (yozuvdan keyin o'qish — xato), sweeper legProblem'ni tranzaksiyada yozadi.
+const { makeDb } = require('./helpers/logistics_harness');
 const maint = require('../api/maintenance');
 const config = require('../core/config');
 
@@ -70,7 +71,7 @@ function seed() {
 }
 
 ok('reopenStaleAssignments: service qayta ochiladi, logistika LEG\'i TEGILMAYDI', async () => {
-  const db = new FakeFirestore(seed()); config.clearCache();
+  const db = makeDb(seed()); config.clearCache();
   const r = await maint.makeReopenStaleAssignments({ db, now: () => NOW })();
   assert.strictEqual(r.reopened, 1, 'faqat service');
   const svc = db.dump('demands').svc1;
@@ -86,7 +87,7 @@ ok('reopenStaleAssignments: service qayta ochiladi, logistika LEG\'i TEGILMAYDI'
 });
 
 ok('expireDemandsSweeper: logistika LEG\'i expired + shipment.legProblem; service — faqat expired', async () => {
-  const db = new FakeFirestore(seed()); config.clearCache();
+  const db = makeDb(seed()); config.clearCache();
   const r = await maint.makeExpireSweeper({ db, now: () => NOW })();
   assert.strictEqual(r.expired, 2);
   assert.strictEqual(r.legProblems, 1);

@@ -3160,6 +3160,5 @@
   "restaurants_m_my_cafes_n": "Мои кафе ({n})",
   "restaurants_m_switch_cafe": "Переключить кафе-ресторан",
   "restaurants_m_add_another": "Открыть ещё кафе-ресторан",
-  "restaurants_m_pending_count": "На рассмотрении заявок: {n}",
-  "restaurants_err_OWNER_RESTAURANT_LIMIT": "Один пользователь может вести не более 10 активных кафе-ресторанов."
+  "restaurants_m_pending_count": "На рассмотрении заявок: {n}"
 }

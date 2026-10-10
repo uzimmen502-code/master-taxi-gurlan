@@ -70,12 +70,6 @@ const STRIKES_FOR_PREPAY_ONLY = 2;
 const PREPAY_ONLY_DAYS = 30;
 const MAX_ITEMS = 30;
 const MAX_QTY = 50;
-/**
- * Bir foydalanuvchi bir nechta kafe-restoran yuritishi mumkin (ega qarori,
- * 2026-10-10 — menejerlik). Chegara faqat suiiste'molga qarshi (PROPOSED);
- * yopilgan/rad etilganlar hisobga olinmaydi.
- */
-const MAX_RESTAURANTS_PER_OWNER = 10;
 const MAX_PRICE = 50000000;
 const PICKUP_CODE_ATTEMPTS = 5;
 const NEARBY_RADIUS_KM_DEFAULT = 15;
@@ -558,13 +552,9 @@ function attachRestaurantOrders(exportsObj, deps) {
     const appSnap = await db.collection(APP_SETTINGS[0]).doc(APP_SETTINGS[1]).get();
     const autoApprove = appSnap.exists && (appSnap.data() || {}).restaurantAutoApprove === true;
 
-    // Bir egada bir nechta restoran — ruxsat; faqat yuqori chegara.
-    const mine = await db.collection(RESTAURANTS).where('ownerUid', '==', uid).get();
-    const activeCount = mine.docs.filter((s) => !['rejected', 'closed'].includes(String((s.data() || {}).status || ''))).length;
-    if (activeCount >= MAX_RESTAURANTS_PER_OWNER) {
-      throw fail('failed-precondition', 'OWNER_RESTAURANT_LIMIT', { limit: MAX_RESTAURANTS_PER_OWNER, count: activeCount });
-    }
-
+    // Bir foydalanuvchi bir nechta kafe-restoran yuritadi (menejerlik,
+    // D-REST-15, ega 2026-10-10): egaga son chegarasi YO'Q — tarmoq
+    // (set) bo'lishi mumkin. Suiiste'mol admin tasdig'i orqali nazorat qilinadi.
     const rRef = db.collection(RESTAURANTS).doc();
     const batch = db.batch();
     batch.set(rRef, {

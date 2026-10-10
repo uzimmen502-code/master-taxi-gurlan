@@ -3160,6 +3160,5 @@
   "restaurants_m_my_cafes_n": "Mening kafelarim ({n})",
   "restaurants_m_switch_cafe": "Kafe-restoranni almashtirish",
   "restaurants_m_add_another": "Yana kafe-restoran ochish",
-  "restaurants_m_pending_count": "{n} ta arizangiz ko'rib chiqilmoqda",
-  "restaurants_err_OWNER_RESTAURANT_LIMIT": "Bir foydalanuvchi ko'pi bilan 10 ta faol kafe-restoran yurita oladi."
+  "restaurants_m_pending_count": "{n} ta arizangiz ko'rib chiqilmoqda"
 }

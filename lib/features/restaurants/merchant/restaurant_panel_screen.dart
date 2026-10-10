@@ -39,6 +39,12 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
   Stream<List<Restaurant>>? _mine;
   String _mineOwner = '';
 
+  /// Жорий ресторан оқими — state'да кешланади: ҳар `setState` (таб
+  /// алмашуви) да янги Firestore listener очилмасин. Алмаштиришда тозаланади.
+  Stream<Restaurant?>? _restaurantStream;
+
+  Stream<Restaurant?> get _restaurant => _restaurantStream ??= _repo.watchRestaurant(_restaurantId);
+
   Stream<List<Restaurant>> _mineFor(String ownerUid) {
     if (_mine == null || _mineOwner != ownerUid) {
       _mineOwner = ownerUid;
@@ -83,7 +89,10 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
     if (picked != _restaurantId) {
       setState(() {
         _restaurantId = picked;
-        _mine = null; // панел қайта қурилади — оқим ҳам янгидан очилади
+        // Панел қайта қурилади — эски обуналар StreamBuilder dispose'ида
+        // бекор бўлади, оқимлар янги ID учун янгидан очилади.
+        _mine = null;
+        _restaurantStream = null;
       });
     }
   }
@@ -93,7 +102,7 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
     final c = context.ava;
     return StreamBuilder<Restaurant?>(
       key: ValueKey('panel_$_restaurantId'),
-      stream: _repo.watchRestaurant(_restaurantId),
+      stream: _restaurant,
       builder: (context, snap) {
         final r = snap.data;
         return Scaffold(

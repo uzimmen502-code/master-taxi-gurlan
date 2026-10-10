@@ -45,6 +45,7 @@ const CUSTOMER2 = '998912000002';
 const COURIER_A = '998913000001';
 const COURIER_B = '998913000002';
 const STRANGER = '998914000001';
+const OWNER2 = '998911000003'; // boshqa restoranning egasi (D-REST-15 — raqib)
 const ADMIN = '998915000001';
 const ACC = { [COURIER_A]: 'accREST0000000000A', [COURIER_B]: 'accREST0000000000B' };
 
@@ -121,7 +122,7 @@ async function reset() {
   await db.collection('module_config').doc('restaurants_all').set({ restaurants: { stage: 'public', testerIds: [] } });
   await db.collection('settings').doc('restaurant_delivery').set(TARIFF);
   await db.collection('settings').doc('app').set({ restaurantAutoApprove: true });
-  for (const u of [OWNER, STAFF, CUSTOMER, CUSTOMER2, STRANGER]) {
+  for (const u of [OWNER, STAFF, CUSTOMER, CUSTOMER2, STRANGER, OWNER2]) {
     await db.collection('users').doc(u).set({ role: 'user', name: `U${u.slice(-4)}`, bonusBalance: 0 });
   }
   await db.collection('users').doc(ADMIN).set({ role: 'admin', bonusBalance: 0 });
@@ -272,6 +273,29 @@ async function main() {
     assert.strictEqual(await pcBal(OWNER), before - 1200, 'ikkinchi marta yechilmadi');
     const wl = await db.collection('users').doc(OWNER).collection('wallet_ledger').where('refId', '==', o1).get();
     assert.strictEqual(wl.size, 1);
+  });
+  await check('A1b D-REST-15: BOSHQA restoran egasi (o\'z restorani bor, a\'zo) begona buyurtmaga tegolmaydi — accept/reject/ready/confirmPayment/delivered → NOT_RESTAURANT_MEMBER, hech narsa o\'zgarmaydi, 2 % yechilmaydi', async () => {
+    const rid2x = await registerRestaurant(OWNER2, { name: 'Raqib kafe' });
+    assert.ok((await db.collection('restaurants').doc(rid2x).collection('members').doc(OWNER2).get()).exists, 'o\'z restoranida a\'zo');
+    // placed buyurtma — qabul urinishi
+    const p = await place(rid, CUSTOMER);
+    await expectCode(call('restaurantAcceptOrder', { orderId: p.orderId, prepTimeMin: 10 }, OWNER2), 'NOT_RESTAURANT_MEMBER', 'permission-denied');
+    assert.strictEqual((await order(p.orderId)).restaurantStatus, 'placed');
+    assert.strictEqual(await bonus(OWNER2), 0, 'raqib hamyonidan yechilmagan');
+    await call('customerCancelRestaurantOrder', { orderId: p.orderId }, CUSTOMER);
+    // accepted buyurtma (o1) — qolgan o'tishlar
+    const before = await order(o1);
+    const evBefore = await events(o1);
+    const balBefore = await pcBal(OWNER);
+    for (const fn of ['restaurantRejectOrder', 'restaurantMarkReady', 'restaurantConfirmPayment', 'restaurantMarkDelivered']) {
+      await expectCode(call(fn, { orderId: o1, reason: 'raqib' }, OWNER2), 'NOT_RESTAURANT_MEMBER', 'permission-denied');
+    }
+    const after = await order(o1);
+    assert.strictEqual(after.restaurantStatus, before.restaurantStatus);
+    assert.strictEqual(after.paymentStatus, before.paymentStatus);
+    assert.strictEqual(after.status, before.status);
+    assert.strictEqual(await events(o1), evBefore, 'hodisa qo\'shilmagan');
+    assert.strictEqual(await pcBal(OWNER), balBefore, 'egasi hamyoni o\'zgarmagan (rad → 2 % qaytmagan)');
   });
   await check('A2 hamyon yetmasa → RESTAURANT_WALLET_INSUFFICIENT, buyurtma placed qoladi, jurnal yo\'q', async () => {
     const r = await place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 12 }] }); // 480 000 → 9 600 > 8 800

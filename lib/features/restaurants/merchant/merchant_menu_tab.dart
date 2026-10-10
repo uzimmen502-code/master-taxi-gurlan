@@ -28,6 +28,10 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
 
   String get _rid => widget.restaurant.id;
 
+  // Оқимлар бир марта очилади (ҳар rebuild'да янги listener эмас).
+  late final Stream<List<MenuCategory>> _cats = widget.repository.watchCategories(_rid);
+  late final Stream<List<MenuItem>> _items = widget.repository.watchMenu(_rid);
+
   Future<void> _guard(Future<void> Function() fn) async {
     try {
       await fn();
@@ -95,11 +99,11 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
   Widget build(BuildContext context) {
     final c = context.ava;
     return StreamBuilder<List<MenuCategory>>(
-      stream: widget.repository.watchCategories(_rid),
+      stream: _cats,
       builder: (context, catSnap) {
         final cats = catSnap.data ?? const <MenuCategory>[];
         return StreamBuilder<List<MenuItem>>(
-          stream: widget.repository.watchMenu(_rid),
+          stream: _items,
           builder: (context, itemSnap) {
             if ((catSnap.connectionState == ConnectionState.waiting && !catSnap.hasData) ||
                 (itemSnap.connectionState == ConnectionState.waiting && !itemSnap.hasData)) {

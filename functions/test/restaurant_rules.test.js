@@ -171,6 +171,24 @@ async function main() {
     await assertFails(as(STAFF).doc(`restaurants/${R1}/menu_categories/c3`).set({ name: 'X', price: 1 }));
   });
 
+  await check('D-REST-15: BOSHQA restoran egasi (OWNER2, o\'z restorani bor) R1 ga rid orqali tegolmaydi — profil, private/payment, members, menyu, kategoriya, list', async () => {
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}`).update({ name: 'Raqib nomi' }));
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}`).update({ delivery: { mode: 'own_courier', pickup: true } }));
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/private/payment`).get());
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/private/payment`).set({ cardNumber: '8600999999999999', cardHolder: 'RAQIB' }));
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/private/legal`).set({ tin: '000' }));
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/members/${OWNER}`).get());
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/members/${OWNER2}`).set({ role: 'owner' }), 'o\'zini a\'zo qilish');
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/menu_items/osh`).update({ price: 1 }));
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/menu_items/osh`).delete());
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/menu_categories/c1`).update({ name: 'X' }));
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}/menu_categories/c9`).set({ name: 'Yangi', sort: 9 }));
+    await assertFails(as(OWNER2).collection('restaurants').where('ownerUid', '==', OWNER).get());
+    // O'ziniki — ishlaydi (nazorat).
+    await assertSucceeds(as(OWNER2).doc(`restaurants/${R2}`).update({ announcement: 'Tez kunda' }));
+    await assertSucceeds(as(OWNER2).doc(`restaurants/${R2}/menu_items/somsa`).update({ available: false }));
+  });
+
   // ── orders ─────────────────────────────────────────────────────────
   await check('orders: restoran a\'zosi get + `where restaurantId ==` list; filtrsiz/boshqa restoran/begona — yo\'q', async () => {
     await assertSucceeds(as(STAFF).doc(`orders/${O1}`).get());

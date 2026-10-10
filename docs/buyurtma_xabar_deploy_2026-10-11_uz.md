@@ -22,14 +22,18 @@
 
 Белгиланг: `[ ]` → `[x]` + сана.
 
-- [ ] **1. Индекс** `admin_news (category ASC, createdAt DESC)` — жонлида йўқ
-  (2026-10-11 текширилди).
+- [x] **1. Индекс** `admin_news (category ASC, createdAt DESC)` — **READY
+  2026-10-11 01:04** (эга `gcloud ... composite create` билан ишга туширди;
+  файл деплойи эмас — у 6 та рухсатсиз realty индексини ҳам яратарди).
   - `--force`сиз; чиқишдаги «Deleting N» қаторини ўқинг (production'да
     файлда йўқ қўлда яратилган индекслар бор).
   - Индекс `READY` бўлмагунча 2-қадам чиқмасин — акс ҳолда админ рўйхати
     `failed-precondition` хатосини беради.
   - Rollback: керак эмас (ишлатилмаган индекс зарарсиз).
-- [ ] **2. Hosting (админ)** — жонли SHA устига шу commit.
+- [ ] **2. Hosting (админ + мижоз веб)** — тайёр: `deploy/hosting-order-news`
+  `26e9d14` = жонли `1e3ec71` + `0c0313e` илова қисми (+ `7b1c5be` «Бекор»
+  филтри). Ишга тушириш:
+  `powershell -ExecutionPolicy Bypass -File D:\projects\ava_gurlan\.claude\deploy-kit-order-news\deploy_hosting_order_news.ps1`
   - Deploy олдидан жонли hash'ни текширинг (hosting навбати бошқа
     сессиялар билан умумий; gitignored `config.dart` ва APK'лар).
   - Rollback: Firebase Console → Hosting → олдинги релиз «Rollback».

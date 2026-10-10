@@ -32,24 +32,36 @@ class OrderNewsGroup {
     }
   }
 
+  /// `orderId`сиз буюртма хабари (масалан йиғим чеки) — ўз картаси. Аввал
+  /// ташлаб юбориларди, лекин таб badge'ида саналарди: мижоз «1 та янги»
+  /// кўрар, очганда ҳеч нарса топмасди.
+  static const _standalonePrefix = 'news:';
+
   static List<OrderNewsGroup> fromItems(List<NewsItem> items) {
     final map = <String, List<NewsItem>>{};
     for (final n in items) {
       if (!n.isOrderNews) continue;
       final id = n.orderId.trim();
-      if (id.isEmpty) continue;
-      map.putIfAbsent(id, () => []).add(n);
+      final key = id.isEmpty ? '$_standalonePrefix${n.id}' : id;
+      map.putIfAbsent(key, () => []).add(n);
     }
     final groups = map.entries.map((e) {
       final msgs = e.value
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      final type = msgs.last.orderType.isNotEmpty
-          ? msgs.last.orderType
-          : (msgs.last.body.contains('овқат') ? 'food' : 'bread');
+      // Тур — тури ёзилган энг сўнгги хабардан: чек/курьер хабарида тур
+      // йўқ, улар охирги бўлса буюртма «Нон» бўлиб қоларди.
+      final typed = msgs.lastWhere(
+        (m) => m.orderType.isNotEmpty,
+        orElse: () => msgs.last,
+      );
+      final type = typed.orderType.isNotEmpty
+          ? typed.orderType
+          : (typed.body.contains('овқат') ? 'food' : 'bread');
+      final standalone = e.key.startsWith(_standalonePrefix);
       return OrderNewsGroup(
-        orderId: e.key,
+        orderId: standalone ? '' : e.key,
         messages: msgs,
-        orderType: type,
+        orderType: standalone && typed.orderType.isEmpty ? '' : type,
       );
     }).toList();
     groups.sort((a, b) => b.lastUpdate.compareTo(a.lastUpdate));

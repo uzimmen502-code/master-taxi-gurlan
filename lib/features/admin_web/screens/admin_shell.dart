@@ -130,7 +130,7 @@ class _AdminShellState extends State<AdminShell> {
       group: 'Буюртма ва етказиш',
       label: 'Буюртма хабар',
       icon: Icons.sms_outlined,
-      description: 'Mijozga ketgan status xabarlari',
+      description: 'Буюртма бўйича автоматик хабарлар',
     ),
     // «Сотиш аризалари» ёрлиғи яширилди (1-босқич, 2026-09-24): СОТИНГ
     // модулига фойдаланувчи томонидан кириш йўли ёпилди, янги ариза

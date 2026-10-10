@@ -40,6 +40,11 @@ function fail(code, message) {
 // 13.2.9 — MUDDAT
 // ═══════════════════════════════════════════════════════════════════════
 
+/** `lastUpdateTime` sharti bajarilmadi (gRPC 9) yoki hujjat yo'q (5). */
+function isPreconditionFailed(e) {
+  return e && (e.code === 9 || e.code === 5 || e.code === 'failed-precondition' || e.code === 'not-found');
+}
+
 function makeExpireSweeper(deps) {
   const { db, now: nowFn, batchSize = 200 } = deps;
 
@@ -54,24 +59,36 @@ function makeExpireSweeper(deps) {
 
     if (snap.empty) return { expired: 0 };
 
-    const batch = db.batch();
+    // Har bir hujjat SHARTLI yopiladi: so'rovdan beri o'zgarmagan bo'lsa
+    // (`lastUpdateTime`). 2026-10-10 gacha bitta shartsiz batch edi — so'rov
+    // va yozuv orasida mijoz taklifni qabul qilsa / kuryer LEG'ni olsa,
+    // qabul `expired` bilan bosib ketilardi (emulatorda isbotlangan).
+    // O'zgargan hujjat o'tkazib yuboriladi: u endi `active` emas yoki
+    // muddati yangilangan — keyingi aylanish qaror qiladi.
+    const patch = { status: sm.STATUS.EXPIRED, expiredAt: now, updatedAt: now };
+    const outcomes = await Promise.all(snap.docs.map(async (d) => {
+      try {
+        await (d.updateTime ? d.ref.update(patch, { lastUpdateTime: d.updateTime }) : d.ref.update(patch));
+        return true;
+      } catch (e) {
+        if (!isPreconditionFailed(e)) console.error(`talab yopilmadi (${d.id}): ${e.message}`);
+        return false;
+      }
+    }));
+
     const ids = [];
     const legProblems = [];
-    for (const d of snap.docs) {
+    snap.docs.forEach((d, i) => {
+      if (!outcomes[i]) return;
       const data = d.data() || {};
-      batch.update(d.ref, {
-        status: sm.STATUS.EXPIRED,
-        expiredAt: now,
-        updatedAt: now,
-      });
       ids.push(d.id);
       // AVA Logistics LEG'i (relay): muddati tugagan LEG jo'natmani
       // «qotirib» qo'ymasin — jo'natmaga admin ko'radigan belgi
       // (`legProblem`), admin `adminReactivateLeg` bilan qayta ochadi.
       const shipmentId = String((data.attributes || {}).shipmentId || '');
       if (data.module === L.MODULE && shipmentId) legProblems.push({ legId: d.id, shipmentId });
-    }
-    await batch.commit();
+    });
+    const skipped = snap.size - ids.length;
 
     for (const p of legProblems) {
       try {
@@ -85,23 +102,31 @@ function makeExpireSweeper(deps) {
     }
 
     // Match yozuvlarini ham yopamiz — taklifchi inbox'ida eskirgan
-    // talab ko'rinib qolmasligi uchun.
+    // talab ko'rinib qolmasligi uchun. Tartib muhim: avval match'lar
+    // o'qiladi, KEYIN talab hali `expired`mi tekshiriladi (admin shu orada
+    // LEG'ni qayta ochgan bo'lsa — tegilmaydi), har match SHARTLI yopiladi
+    // (qayta ochish o'chirgan/yangilagan match qayta «expired» bo'lmaydi).
     for (const id of ids) {
       try {
         const ms = await db.collection(MATCHES).where('demandId', '==', id).get();
         if (ms.empty) continue;
-        const b = db.batch();
-        for (const m of ms.docs) {
-          b.set(m.ref, { status: 'expired', closedAt: now }, { merge: true });
-        }
-        await b.commit();
+        const cur = await db.collection(DEMANDS).doc(id).get();
+        if ((cur.data() || {}).status !== sm.STATUS.EXPIRED) continue;
+        await Promise.all(ms.docs.map(async (m) => {
+          const close = { status: 'expired', closedAt: now };
+          try {
+            await (m.updateTime ? m.ref.update(close, { lastUpdateTime: m.updateTime }) : m.ref.update(close));
+          } catch (e) {
+            if (!isPreconditionFailed(e)) throw e;
+          }
+        }));
       } catch (e) {
         console.error(`match yopilmadi (${id}): ${e.message}`);
       }
     }
 
-    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblems.length ? `, ${legProblems.length} ta logistika LEG'i` : ''}`);
-    return { expired: ids.length, ids, legProblems: legProblems.length };
+    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblems.length ? `, ${legProblems.length} ta logistika LEG'i` : ''}${skipped ? `, ${skipped} ta o'zgargan — o'tkazildi` : ''}`);
+    return { expired: ids.length, ids, legProblems: legProblems.length, skipped };
   };
 }
 

@@ -33,7 +33,8 @@
     "test:analytics": "node test/analytics.test.js",
     "test:caps-tx": "firebase emulators:exec --only firestore --project demo-caps-tx \"node test/capabilities_tx_emulator.test.js\"",
     "test:offers-tx": "firebase emulators:exec --only firestore --project demo-offers-tx \"node test/offers_tx_emulator.test.js\"",
-    "test:replan-tx": "firebase emulators:exec --only firestore --project demo-replan-tx \"node test/logistics_replan_emulator.test.js\""
+    "test:replan-tx": "firebase emulators:exec --only firestore --project demo-replan-tx \"node test/logistics_replan_emulator.test.js\"",
+    "test:activate-tx": "firebase emulators:exec --only firestore --project demo-activate-tx \"node test/logistics_activate_emulator.test.js\""
   },
   "dependencies": {
     "ajv": "^8.17.1",

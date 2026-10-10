@@ -469,6 +469,15 @@ function makeCreateLogisticsOrder(deps) {
  *
  * `opts.allowExpired` — admin qayta ochishi (`adminReactivateLeg`):
  * `expired` → `active` (state machine ruxsat beradi), muddat qaytadan.
+ * `opts.resetMatches` — g'olib ochuvchi eski match'larni o'chiradi (pastda).
+ *
+ * Holat o'tishi TRANZAKSIYADA (2026-10-10, emulatorda isbotlangan): avval
+ * LEG tranzaksiyasiz o'qilib, keyin yozilardi —
+ *   - to'lov triggeri ↔ qayta rejalash: bekor qilingan eski LEG qayta ochilardi;
+ *   - trigger takrori: kuryer olgan (`accepted`) LEG `active`ga qaytardi,
+ *     matching uning match'ini `new` qilardi;
+ *   - ikki admin qayta ochishi: ikkinchisi birinchining yangi match'larini o'chirardi.
+ * Endi faqat BITTA chaqiruv ochadi; joriy marshrutda yo'q LEG ochilmaydi.
  */
 async function activateLeg(deps, legId, opts = {}) {
   const { db, keywordIndex, notify, now: nowFn } = deps;
@@ -476,30 +485,47 @@ async function activateLeg(deps, legId, opts = {}) {
   const ref = db.collection(DEMANDS).doc(legId);
   const snap = await ref.get();
   if (!snap.exists) return { skipped: 'missing' };
-  const d = snap.data() || {};
-  if (d.module !== L.MODULE) return { skipped: 'not_logistics' };
+  const pre = snap.data() || {};
+  if (pre.module !== L.MODULE) return { skipped: 'not_logistics' };
   const allowed = opts.allowExpired ? [sm.STATUS.DRAFT, sm.STATUS.EXPIRED] : [sm.STATUS.DRAFT];
-  if (!allowed.includes(d.status)) return { skipped: `status_${d.status}` };
+  if (!allowed.includes(pre.status)) return { skipped: `status_${pre.status}` };
 
   const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
   if (!flags.enabled) return { skipped: 'disabled' };
   const config = flags.config;
   const ttl = Number((config.logistics || {}).legTtlMinutes) || 3 * 24 * 60;
 
-  sm.assertTransition(d.status, sm.STATUS.ACTIVE, 'activateLeg');
-  const patch = {
-    status: sm.STATUS.ACTIVE,
-    'timeWindow.expiresAt': new Date(now.getTime() + ttl * 60000),
-    activatedAt: now,
-    updatedAt: now,
-  };
-  if (d.status === sm.STATUS.EXPIRED) {
-    patch.reopenedAt = now;
-    patch.reopenReason = opts.reason || 'admin_reactivate';
-    patch.reopenCount = Number(d.reopenCount || 0) + 1;
-    patch.expiredAt = null;
-  }
-  await ref.update(patch);
+  const shipmentId = String((pre.attributes || {}).shipmentId || '');
+  const shipRef = shipmentId ? db.collection(L.SHIPMENTS).doc(shipmentId) : null;
+  const claim = await db.runTransaction(async (tx) => {
+    const [legSnap, shipSnap] = await Promise.all([tx.get(ref), shipRef ? tx.get(shipRef) : null]);
+    if (!legSnap.exists) return { skipped: 'missing' };
+    const d = legSnap.data() || {};
+    // Boshqa chaqiruv allaqachon ochdi / kuryer oldi / bekor qilindi.
+    if (!allowed.includes(d.status)) return { skipped: `status_${d.status}` };
+    const legIds = shipSnap && shipSnap.exists ? (shipSnap.data() || {}).legIds : null;
+    if (Array.isArray(legIds) && !legIds.includes(legId)) return { skipped: 'superseded' };
+
+    sm.assertTransition(d.status, sm.STATUS.ACTIVE, 'activateLeg');
+    const patch = {
+      status: sm.STATUS.ACTIVE,
+      'timeWindow.expiresAt': new Date(now.getTime() + ttl * 60000),
+      activatedAt: now,
+      updatedAt: now,
+    };
+    if (d.status === sm.STATUS.EXPIRED) {
+      patch.reopenedAt = now;
+      patch.reopenReason = opts.reason || 'admin_reactivate';
+      patch.reopenCount = Number(d.reopenCount || 0) + 1;
+      patch.expiredAt = null;
+    }
+    tx.update(ref, patch);
+    return { d };
+  });
+  if (claim.skipped) return claim;
+  const d = claim.d;
+
+  if (opts.resetMatches) await deleteStaleMatches(db, legId);
 
   const demand = { id: legId, ...d, status: sm.STATUS.ACTIVE };
   const adapter = getAdapter(L.MODULE);
@@ -527,6 +553,23 @@ async function activateLeg(deps, legId, opts = {}) {
     }
   }
   return { activated: true, matchedBucket: matchResult ? matchResult.matchedBucket : '0' };
+}
+
+/**
+ * Qayta ochilgan LEG'ning eski match'lari (`expired`) — matching qaytadan
+ * yozadi; eski yozuv qolsa ijrochi inbox'ida «yopiq» bo'lib ko'rinmay qolardi.
+ * LEG allaqachon `active`: oraliqda kimdir olsa, uning match'i o'zgargan —
+ * `lastUpdateTime` sharti uni O'CHIRMAYDI (xato yutiladi, yozuv qoladi).
+ */
+async function deleteStaleMatches(db, legId) {
+  const old = await db.collection(MATCHES).where('demandId', '==', legId).get();
+  for (const m of old.docs) {
+    try {
+      await (m.updateTime ? m.ref.delete({ lastUpdateTime: m.updateTime }) : m.ref.delete());
+    } catch (e) {
+      console.warn(`eski match o'chirilmadi (${m.id}): ${e.message}`);
+    }
+  }
 }
 
 /** Trigger: shipments/{id} `paymentStatus` → escrow_funded bo'lganda LEG-1. */
@@ -598,6 +641,11 @@ function makeAcceptLeg(deps) {
       const ship = shipSnap.data() || {};
       if (![L.SHIPMENT_STATUS.READY, L.SHIPMENT_STATUS.IN_TRANSIT].includes(ship.status)) {
         throw fail('failed-precondition', 'Jo\'natma hali to\'lanmagan yoki yopilgan', 'shipment_not_ready');
+      }
+      // Faqat JORIY marshrut rejasining LEG'i (eski reja LEG'i qandaydir yo'l
+      // bilan `active` qolsa ham — eski payout bilan «etim» ish olinmasin).
+      if (Array.isArray(ship.legIds) && !ship.legIds.includes(legId)) {
+        throw fail('failed-precondition', 'Bu LEG joriy marshrutda yo\'q (qayta rejalangan)', 'leg_superseded', { legId });
       }
 
       // Olish nuqtasi kontakti (Т-9, 1-pog'ona): LEG-1 — jo'natuvchi;
@@ -1363,12 +1411,10 @@ function makeAdminReactivateLeg(deps) {
       throw fail('failed-precondition', 'Logistika moduli o\'chiq', 'module_disabled');
     }
 
-    // Eski match yozuvlari (`expired`) — matching qaytadan yozadi; eski
-    // yozuv qolsa ijrochi inbox'ida «yopiq» bo'lib ko'rinmay qolardi.
-    const old = await db.collection(MATCHES).where('demandId', '==', legId).get();
-    for (const m of old.docs) await m.ref.delete();
-
-    const res = await activateLeg(deps, legId, { allowExpired: true, reason: 'admin_reactivate' });
+    // Eski match'lar FAQAT g'olib ochuvchi tomonidan o'chiriladi (activateLeg
+    // ichida, holat o'tishidan keyin) — aks holda parallel ikkinchi admin
+    // birinchining yangi match'larini o'chirib yuborardi.
+    const res = await activateLeg(deps, legId, { allowExpired: true, reason: 'admin_reactivate', resetMatches: true });
     if (!res.activated) throw fail('failed-precondition', 'LEG qayta ochilmadi', 'leg_reactivate_failed', res);
 
     await shipRef.update({ legProblem: null, updatedAt: now });

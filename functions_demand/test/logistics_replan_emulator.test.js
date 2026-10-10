@@ -25,6 +25,7 @@ const tariffCore = require('../core/tariff');
 const {
   OWNER, K1, ADMIN, ctx, seed, orderPayload, deps, fund,
 } = require('./helpers/logistics_harness');
+const { resetEmulator, dbWithHook } = require('./helpers/emulator_hooks');
 
 const results = [];
 const check = async (name, fn) => {
@@ -34,12 +35,8 @@ const check = async (name, fn) => {
 };
 
 async function reset() {
-  const url = `http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/`
-    + `${process.env.GCLOUD_PROJECT}/databases/(default)/documents`;
-  const res = await fetch(url, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`emulator tozalanmadi: ${res.status}`);
   config.clearCache(); tariffCore.clearCache();
-  await Promise.all(Object.entries(seed()).map(([p, d]) => db.doc(p).set(d)));
+  await resetEmulator(db, seed());
 }
 
 /** To'langan, 1 LEG'li jo'natma; LEG-1 active. */
@@ -57,37 +54,6 @@ const NEW_ROUTE = [
   { from: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
 ];
 
-/**
- * `db` o'rami: `logistics_orders` hujjati o'qilganda (rejalash LEG'larni
- * tekshirib bo'lgan, hali yozmagan payt) bir marta `hook`ni ishga tushiradi.
- */
-function dbWithHook(hook) {
-  let fired = false;
-  return new Proxy(db, {
-    get(target, prop) {
-      if (prop !== 'collection') {
-        const v = target[prop];
-        return typeof v === 'function' ? v.bind(target) : v;
-      }
-      return (name) => {
-        const col = target.collection(name);
-        if (name !== 'logistics_orders') return col;
-        return {
-          doc: (id) => {
-            const ref = col.doc(id);
-            return {
-              id: ref.id,
-              get: async () => {
-                if (!fired) { fired = true; await hook(); }
-                return ref.get();
-              },
-            };
-          },
-        };
-      };
-    },
-  });
-}
 
 (async () => {
   await check('qayta rejalash: assignedProviderIds tozalanadi (eski reja ijrochisi qolmaydi)', async () => {
@@ -107,7 +73,8 @@ function dbWithHook(hook) {
     const shipmentId = await fundedShipment();
     const [oldLeg] = (await ship(shipmentId)).legIds;
     let acceptErr = null;
-    const hooked = dbWithHook(async () => {
+    // `logistics_orders` o'qilganda rejalash LEG'larni tekshirib bo'lgan, hali yozmagan.
+    const hooked = dbWithHook(db, 'logistics_orders', async () => {
       try { await api.makeAcceptLeg(deps(db))({ legId: oldLeg }, ctx(K1)); } catch (e) { acceptErr = e; }
     });
     const plan = api.makeAdminPlanShipmentRoute({ ...deps(db), db: hooked });

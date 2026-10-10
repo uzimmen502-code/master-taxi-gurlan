@@ -35,7 +35,8 @@
     "test:offers-tx": "firebase emulators:exec --only firestore --project demo-offers-tx \"node test/offers_tx_emulator.test.js\"",
     "test:replan-tx": "firebase emulators:exec --only firestore --project demo-replan-tx \"node test/logistics_replan_emulator.test.js\"",
     "test:activate-tx": "firebase emulators:exec --only firestore --project demo-activate-tx \"node test/logistics_activate_emulator.test.js\"",
-    "test:sweeper-tx": "firebase emulators:exec --only firestore --project demo-sweeper-tx \"node test/expire_sweeper_emulator.test.js\""
+    "test:sweeper-tx": "firebase emulators:exec --only firestore --project demo-sweeper-tx \"node test/expire_sweeper_emulator.test.js\"",
+    "test:audit-tx": "firebase emulators:exec --only firestore --project demo-audit-tx \"node test/audit_expired_assignments_emulator.test.js\""
   },
   "dependencies": {
     "ajv": "^8.17.1",

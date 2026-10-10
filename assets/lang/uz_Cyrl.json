@@ -3156,5 +3156,10 @@
   "wholesale_err_dims_invalid": "Ўлчам нотўғри: учаласи ҳам 1–1000 см бўлсин ёки ҳаммаси бўш",
   "wholesale_weight_line": "Вазн: {weight}",
   "wholesale_dims_line": "Ўлчам: {dims}",
-  "wholesale_no_shipping_data": "Етказиш маълумоти киритилмаган — нарх сотувчи билан келишилади"
+  "wholesale_no_shipping_data": "Етказиш маълумоти киритилмаган — нарх сотувчи билан келишилади",
+  "restaurants_m_my_cafes_n": "Менинг кафеларим ({n})",
+  "restaurants_m_switch_cafe": "Кафе-ресторанни алмаштириш",
+  "restaurants_m_add_another": "Яна кафе-ресторан очиш",
+  "restaurants_m_pending_count": "{n} та аризангиз кўриб чиқилмоқда",
+  "restaurants_err_OWNER_RESTAURANT_LIMIT": "Бир фойдаланувчи кўпи билан 10 та фаол кафе-ресторан юрита олади."
 }

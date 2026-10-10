@@ -12,6 +12,7 @@ import 'merchant_menu_tab.dart';
 import 'merchant_orders_tab.dart';
 import 'merchant_report_tab.dart';
 import 'merchant_shop_tab.dart';
+import 'restaurant_register_screen.dart';
 
 class RestaurantPanelScreen extends StatefulWidget {
   const RestaurantPanelScreen({super.key, required this.restaurantId, this.repository, this.initialTab = 0});
@@ -28,11 +29,66 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
   late final RestaurantsRepository _repo = widget.repository ?? RestaurantsRepository();
   late int _tab = widget.initialTab;
 
+  /// Жорий ресторан — эга бир нечта кафе юритса панел ичида алмаштиради
+  /// (менежерлик, эга қарори 2026-10-10); `IndexedStack` таблари қайта
+  /// қурилади (`ValueKey`).
+  late String _restaurantId = widget.restaurantId;
+
+  /// Эганинг барча ресторанлари — алмаштириш варағи учун (ownerUid маълум
+  /// бўлгач уланади; ходим аъзолиги — Б2.7).
+  Stream<List<Restaurant>>? _mine;
+  String _mineOwner = '';
+
+  Stream<List<Restaurant>> _mineFor(String ownerUid) {
+    if (_mine == null || _mineOwner != ownerUid) {
+      _mineOwner = ownerUid;
+      _mine = _repo.watchMine(ownerUid);
+    }
+    return _mine!;
+  }
+
+  Future<void> _switchRestaurant(List<Restaurant> mine) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(ctx.tr('restaurants_m_switch_cafe'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            ),
+            for (final r in mine)
+              ListTile(
+                leading: Icon(r.id == _restaurantId ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                title: Text(r.name),
+                subtitle: Text(ctx.tr('restaurants_m_status_${r.status}')),
+                onTap: () => Navigator.pop(ctx, r.id),
+              ),
+            ListTile(
+              leading: const Icon(Icons.add_rounded),
+              title: Text(ctx.tr('restaurants_m_add_another')),
+              onTap: () => Navigator.pop(ctx, '+'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    if (picked == '+') {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => RestaurantRegisterScreen(repository: _repo)));
+      return;
+    }
+    if (picked != _restaurantId) setState(() => _restaurantId = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
     return StreamBuilder<Restaurant?>(
-      stream: _repo.watchRestaurant(widget.restaurantId),
+      key: ValueKey('panel_$_restaurantId'),
+      stream: _repo.watchRestaurant(_restaurantId),
       builder: (context, snap) {
         final r = snap.data;
         return Scaffold(
@@ -41,8 +97,29 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
             backgroundColor: c.surface,
             surfaceTintColor: c.surface,
             elevation: 0,
-            title: Text(r?.name ?? context.tr('restaurants_m_my_cafe'),
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
+            title: r == null
+                ? Text(context.tr('restaurants_m_my_cafe'),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink))
+                : StreamBuilder<List<Restaurant>>(
+                    stream: _mineFor(r.ownerUid),
+                    builder: (context, ms) {
+                      final mine = ms.data ?? const <Restaurant>[];
+                      final many = mine.length > 1;
+                      final title = Text(r.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink));
+                      if (!many) return title;
+                      return InkWell(
+                        onTap: () => _switchRestaurant(mine),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Flexible(child: title),
+                          Icon(Icons.expand_more_rounded, color: c.ink2),
+                        ]),
+                      );
+                    },
+                  ),
             actions: [
               if (r != null)
                 Padding(
@@ -76,6 +153,7 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
                       ),
                     Expanded(
                       child: IndexedStack(
+                        key: ValueKey('tabs_$_restaurantId'),
                         index: _tab,
                         children: [
                           MerchantOrdersTab(restaurant: r, repository: _repo),

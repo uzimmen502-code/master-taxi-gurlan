@@ -3156,5 +3156,10 @@
   "wholesale_err_dims_invalid": "O'lcham noto'g'ri: uchalasi ham 1–1000 sm bo'lsin yoki hammasi bo'sh",
   "wholesale_weight_line": "Vazn: {weight}",
   "wholesale_dims_line": "O'lcham: {dims}",
-  "wholesale_no_shipping_data": "Yetkazish ma'lumoti kiritilmagan — narx sotuvchi bilan kelishiladi"
+  "wholesale_no_shipping_data": "Yetkazish ma'lumoti kiritilmagan — narx sotuvchi bilan kelishiladi",
+  "restaurants_m_my_cafes_n": "Mening kafelarim ({n})",
+  "restaurants_m_switch_cafe": "Kafe-restoranni almashtirish",
+  "restaurants_m_add_another": "Yana kafe-restoran ochish",
+  "restaurants_m_pending_count": "{n} ta arizangiz ko'rib chiqilmoqda",
+  "restaurants_err_OWNER_RESTAURANT_LIMIT": "Bir foydalanuvchi ko'pi bilan 10 ta faol kafe-restoran yurita oladi."
 }

@@ -173,6 +173,25 @@ async function main() {
     assert.strictEqual(p.data().cardNumber, '8600123412341234');
     await db.collection('restaurants').doc(rid).collection('members').doc(STAFF).set({ role: 'staff' });
   });
+  await check('R1b bir ega bir nechta restoran ochadi (menejerlik); 10 ta faol → OWNER_RESTAURANT_LIMIT; yopilganlar sanalmaydi', async () => {
+    const second = await registerRestaurant(OWNER, { name: 'Ikkinchi kafe' });
+    assert.ok(second && second !== rid, 'ikkinchi restoran yaratildi');
+    const mine = await db.collection('restaurants').where('ownerUid', '==', OWNER).get();
+    assert.strictEqual(mine.size, 2);
+    // 10 ta chegara: to'g'ridan-to'g'ri 8 ta qo'shib to'ldiramiz.
+    for (let i = 0; i < 8; i += 1) {
+      await db.collection('restaurants').add({ name: `Filial ${i}`, ownerUid: OWNER, status: 'approved', createdAt: new Date() });
+    }
+    await expectCode(call('restaurantRegister', { name: 'O\'n birinchi', address: 'x', ...R_LOC, delivery: { mode: 'none', pickup: true } }, OWNER), 'OWNER_RESTAURANT_LIMIT');
+    // Bittasi yopilsa — yana ochish mumkin.
+    const one = (await db.collection('restaurants').where('ownerUid', '==', OWNER).where('name', '==', 'Filial 0').get()).docs[0];
+    await one.ref.update({ status: 'closed' });
+    const again = await call('restaurantRegister', { name: 'O\'n birinchi', address: 'x', ...R_LOC, delivery: { mode: 'none', pickup: true } }, OWNER);
+    assert.ok(again.restaurantId);
+    // Tozalash — keyingi testlar bitta restoran (rid) bilan ishlaydi.
+    const extra = await db.collection('restaurants').where('ownerUid', '==', OWNER).get();
+    for (const s of extra.docs) if (s.id !== rid) await s.ref.delete();
+  });
   await check('R2 modul darvozasi: internal + testersiz → MODULE_INTERNAL_ONLY; public → ok', async () => {
     await db.collection('module_config').doc('restaurants_all').set({ restaurants: { stage: 'internal', testerIds: [] } });
     await expectCode(place(rid, CUSTOMER), 'MODULE_INTERNAL_ONLY');

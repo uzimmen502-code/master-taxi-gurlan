@@ -17,7 +17,9 @@ process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-audit-tx';
 admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
 const db = admin.firestore();
 
-const { runAudit, lockWrites } = require('../tools/audit_expired_assignments');
+const {
+  runAudit, lockWrites, assertWritesLocked, preflight,
+} = require('../tools/audit_expired_assignments');
 const { resetEmulator } = require('./helpers/emulator_hooks');
 
 const results = [];
@@ -73,7 +75,28 @@ const SEED = {
 
 (async () => {
   await resetEmulator(db, SEED);
+
+  await check('assertWritesLocked: blokdan OLDIN — rad etadi va hech narsa YOZMAYDI', async () => {
+    assert.throws(() => assertWritesLocked(db), /ishlamayapti/);
+    const probe = await db.collection('audit_probe_never_written').get();
+    assert.strictEqual(probe.size, 0, 'sinov yozuv qoldirdi');
+  });
+
   lockWrites(admin.firestore);
+
+  await check('assertWritesLocked: blokdan KEYIN — o\'tadi', async () => {
+    assertWritesLocked(db);
+  });
+
+  await check('preflight: count + modul konfigi, hujjat yozilmaydi', async () => {
+    const p = await preflight(db);
+    assert.strictEqual(p.counts.demandsExpired, 3); // bad1, bad2, ok1
+    assert.strictEqual(p.counts.matchesAccepted, 2);
+    assert.strictEqual(p.counts.shipments, 2);
+    assert.strictEqual(p.counts.logisticsLegs, 3);
+    assert.strictEqual(p.moduleConfig.logistics_all, null);
+  });
+
   const report = await runAudit(db, { maxReads: 5000 });
 
   await check('C1: expired + ijrochi — bad1 va bad2 topiladi, ok1 yo\'q', async () => {

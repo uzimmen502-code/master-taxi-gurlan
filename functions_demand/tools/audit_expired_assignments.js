@@ -4,6 +4,7 @@
  *   # Эмулятор (стандарт; FIRESTORE_EMULATOR_HOST шарт):
  *   node functions_demand/tools/audit_expired_assignments.js
  *   # Production — ФАҚАТ эгасининг алоҳида рухсати билан:
+ *   node functions_demand/tools/audit_expired_assignments.js --prod --preflight   # фақат count() + конфиг
  *   node functions_demand/tools/audit_expired_assignments.js --prod [--out <файл.json>] [--max-reads 20000]
  *
  * НЕГА: `expireDemandsSweeper` (ba2b69f гача) сўров ва ёзув орасида
@@ -42,9 +43,13 @@ const OPEN_MATCH = ['new', 'seen', 'offered'];
 
 // ── Ёзишни процесс даражасида ўчириш ──────────────────────────────────
 
+const LOCKED = Symbol.for('ava.auditWriteLocked');
+
 function lockWrites(firestoreNs) {
-  const deny = (what) => function denied() {
-    throw new Error(`READ-ONLY AUDIT: ${what} taqiqlangan`);
+  const deny = (what) => {
+    const fn = function denied() { throw new Error(`READ-ONLY AUDIT: ${what} taqiqlangan`); };
+    fn[LOCKED] = true;
+    return fn;
   };
   const DR = firestoreNs.DocumentReference.prototype;
   for (const m of ['set', 'update', 'create', 'delete']) DR[m] = deny(`DocumentReference.${m}`);
@@ -257,6 +262,51 @@ async function checkRelay(db, budget) {
   return { scannedShipments: ships.length, scannedLegs: legs.length, rows };
 }
 
+/**
+ * Ёзиш блоки ҲАҚИҚАТАН ишлаяптими — биринчи сўровдан ОЛДИН. Credential
+ * (firebase-adminsdk) ёза олади: ҳимоя фақат шу блок, шунинг учун уни
+ * ҳар ишга туширишда текширамиз; ишламаса — аудит бошланмайди.
+ */
+function assertWritesLocked(db) {
+  // Usullar CHAQIRILMAYDI (blok ishlamasa, sinov o'zi production'ga yozib
+  // qo'yardi) — faqat ular `lockWrites` qo'ygan belgili funksiyami tekshiriladi.
+  const ref = db.doc('audit_probe_never_written/x');
+  const fns = [
+    ref.set, ref.update, ref.create, ref.delete,
+    db.collection('audit_probe_never_written').add,
+    db.batch, db.runTransaction, db.bulkWriter, db.recursiveDelete,
+  ];
+  if (!fns.every((f) => typeof f === 'function' && f[LOCKED] === true)) {
+    throw new Error('Yozish bloki ishlamayapti — audit TO\'XTATILDI');
+  }
+}
+
+/**
+ * Hajm va muhit — FAQAT `count()` agregatsiyasi + modul konfigi (hujjat
+ * ma'lumoti o'qilmaydi). Natija audit o'qish chegarasini tanlashga xizmat qiladi.
+ */
+async function preflight(db) {
+  const count = async (q) => (await q.count().get()).data().count;
+  const cfg = async (id) => {
+    const s = await db.collection('module_config').doc(id).get();
+    if (!s.exists) return null;
+    const d = s.data() || {};
+    return { enabled: d.enabled, matchingEnabled: d.matchingEnabled, stage: (d.logistics || {}).stage || null };
+  };
+  return {
+    counts: {
+      demandsExpired: await count(db.collection('demands').where('status', '==', 'expired')),
+      demandsActive: await count(db.collection('demands').where('status', '==', 'active')),
+      demandsAccepted: await count(db.collection('demands').where('status', '==', 'accepted')),
+      matchesAccepted: await count(db.collection('demand_matches').where('status', '==', 'accepted')),
+      matchesOpen: await count(db.collection('demand_matches').where('status', 'in', OPEN_MATCH)),
+      shipments: await count(db.collection('shipments')),
+      logisticsLegs: await count(db.collection('demands').where('module', '==', 'logistics')),
+    },
+    moduleConfig: { global: await cfg('global'), logistics_all: await cfg('logistics_all') },
+  };
+}
+
 async function runAudit(db, opts = {}) {
   const budget = new Budget(opts.maxReads || 20000);
   const startedAt = new Date().toISOString();
@@ -303,7 +353,13 @@ async function main() {
   }
   lockWrites(admin.firestore);
   const db = admin.firestore();
-  console.error(`READ-ONLY audit: ${prod ? `PRODUCTION ${PROD_PROJECT}` : 'emulator'}; o'qish chegarasi ${maxReads}`);
+  assertWritesLocked(db);
+  console.error(`READ-ONLY audit: ${prod ? `PRODUCTION ${PROD_PROJECT}` : 'emulator'}; yozish bloki tekshirildi`);
+  if (args.includes('--preflight')) {
+    console.log(JSON.stringify(await preflight(db), null, 2));
+    return;
+  }
+  console.error(`o'qish chegarasi ${maxReads}`);
   const report = await runAudit(db, { maxReads });
   const text = JSON.stringify(report, null, 2);
   if (out) {
@@ -318,4 +374,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(`AUDIT XATO: ${e.message}`); process.exit(1); });
 }
 
-module.exports = { runAudit, lockWrites, mask };
+module.exports = { runAudit, lockWrites, assertWritesLocked, preflight, mask };

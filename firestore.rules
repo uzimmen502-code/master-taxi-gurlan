@@ -2815,6 +2815,10 @@ service cloud.firestore {
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
           && wholesaleSellerShipFromOk()
+          // Жўнатиш манзили МАЖБУРИЙ (эга, D-GEO-14, 2026-10-11): товар
+          // ҳудуди шундан олинади (`wholesale_geo.js`).
+          && request.resource.data.get('regionId', '') != ''
+          && request.resource.data.get('districtId', '') != ''
           && request.resource.data.keys().hasOnly([
                 'phone', 'companyName', 'ownerName', 'sellerType',
                 'approvalStatus', 'createdAt', 'approvedAt', 'approvedBy',
@@ -2837,7 +2841,11 @@ service cloud.firestore {
           && request.resource.data.companyName is string
           && request.resource.data.companyName.size() >= 2
           && request.resource.data.companyName.size() <= 200
-          && wholesaleSellerShipFromOk();
+          && wholesaleSellerShipFromOk()
+          // Киритилган манзилни бўшатиб бўлмайди (D-GEO-14); эски манзилсиз
+          // сотувчи эса профилини аввалгидек таҳрирлай олади.
+          && (resource.data.get('districtId', '') == ''
+              || request.resource.data.get('districtId', '') != '');
     }
 
     // Фақат admin (isAdmin() шу ердаги мажбурий шарт — эга/бошқа ҳеч ким
@@ -2860,6 +2868,13 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/wholesale_sellers/$(sellerId))
           && get(/databases/$(database)/documents/wholesale_sellers/$(sellerId))
                .data.approvalStatus == 'approved';
+    }
+
+    // Манзилсиз сотувчи товар қўша олмайди (D-GEO-14) — товар ҳудуди
+    // сотувчи манзилидан (`wholesale_geo.js`).
+    function wholesaleProductSellerHasShipFrom(sellerId) {
+      return get(/databases/$(database)/documents/wholesale_sellers/$(sellerId))
+               .data.get('districtId', '') != '';
     }
 
     function wholesaleProductOwnerIsCaller() {
@@ -2889,6 +2904,7 @@ service cloud.firestore {
       return isAuth()
           && isOwner(request.resource.data.get('sellerId', ''))
           && wholesaleProductSellerApproved(request.resource.data.sellerId)
+          && wholesaleProductSellerHasShipFrom(request.resource.data.sellerId)
           && (
             request.resource.data.status == 'pending'
             || (request.resource.data.status == 'active'

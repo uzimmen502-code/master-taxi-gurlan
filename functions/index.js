@@ -79,6 +79,10 @@ attachRestaurantOrders(exports, {
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');
 attachOrderIndex(exports, { db, admin });
+// Улгуржи бозор ҳудуди (сотувчи манзилидан) ва эски синов товарлари
+// (D-GEO-10/14, 2026-10-11).
+const { attachWholesaleGeo } = require('./wholesale_geo');
+attachWholesaleGeo(exports, { functions, db, admin });
 const { attachAdminSectionGrants } = require('./admin_section_grants');
 attachAdminSectionGrants(exports, {
   functions, db, admin, canonicalUid, requireCallerRoles,

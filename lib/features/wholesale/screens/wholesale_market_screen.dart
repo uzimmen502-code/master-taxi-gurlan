@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/fair_mix.dart';
@@ -106,12 +108,34 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
 
   @override
   void dispose() {
+    // D-GEO-10: кейинги сафар яна «Бутун Ўзбекистон»дан очилсин.
+    GeoContext.clearSessionScope(_geoModule);
     _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   bool get _isChina => widget.market == WholesaleProduct.marketChina;
+
+  /// Улгуржи — ҳудудни фойдаланувчи танлайди (Республика / вилоят / туман),
+  /// ҳар сафар Республикадан (D-GEO-10). Хитой — доим Республика.
+  static const _geoModule = 'wholesale_market';
+  GeoScope _scope = GeoContext.scopeFor(_geoModule);
+
+  Stream<List<WholesaleProduct>>? _stream;
+  String _streamKey = '';
+
+  Stream<List<WholesaleProduct>> _productsStream() {
+    final geo = _isChina ? null : _scope;
+    final key = '${geo?.key}|$_query';
+    if (_stream == null || key != _streamKey) {
+      _streamKey = key;
+      _stream = _query.trim().isEmpty
+          ? _productsRepo.getActiveProducts(market: widget.market, geo: geo)
+          : _productsRepo.searchActiveProducts(_query, market: widget.market, geo: geo);
+    }
+    return _stream!;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,12 +180,15 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
           ),
         ),
       ),
+      if (!_isChina)
+        GeoTierBar(
+          moduleId: _geoModule,
+          scope: _scope,
+          onChanged: (s) => setState(() => _scope = s),
+        ),
       Expanded(
         child: StreamBuilder<List<WholesaleProduct>>(
-          stream: _query.trim().isEmpty
-              ? _productsRepo.getActiveProducts(market: widget.market)
-              : _productsRepo.searchActiveProducts(_query,
-                  market: widget.market),
+          stream: _productsStream(),
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {
@@ -449,13 +476,17 @@ class _MyProductsView extends StatelessWidget {
     final repo = WholesaleProductsRepository();
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                WholesaleProductFormScreen(seller: seller, market: market),
-          ),
-        ),
+        // Жўнатиш манзили МАЖБУРИЙ (D-GEO-14): усиз товар қўшиб бўлмайди
+        // (rules ҳам рад этади) — аввал манзил ойнаси.
+        onPressed: () => seller.hasShipFrom
+            ? Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      WholesaleProductFormScreen(seller: seller, market: market),
+                ),
+              )
+            : _editShipFrom(context),
         icon: const Icon(Icons.add),
         label: Text(context.tr('wholesale_new_product')),
       ),

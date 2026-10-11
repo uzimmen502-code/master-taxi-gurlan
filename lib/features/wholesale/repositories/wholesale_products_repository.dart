@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_query.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/wholesale_product.dart';
@@ -99,7 +102,32 @@ class WholesaleProductsRepository {
   Stream<List<WholesaleProduct>> getActiveProducts({
     int limit = feedLimit,
     String? market,
+    GeoScope? geo,
   }) {
+    // Улгуржи ҳудуд фильтри (D-GEO-10): вилоят/туман танланса — товар
+    // ҳудуди (сотувчи манзилидан, сервер ёзади — `wholesale_geo.js`)
+    // бўйича сервер сўрови. Ҳудудсиз товарлар (манзилсиз эски сотувчи)
+    // фақат «Бутун Ўзбекистон»да. Индекс: (status, districtId, publishedAt↓).
+    if (geo != null && geo.level != GeoLevel.nation) {
+      return geoScopedStream<WholesaleProduct>(
+        scope: geo,
+        nation: () => getActiveProducts(limit: limit, market: market),
+        byDistricts: (ids) => _col
+            .where('status', isEqualTo: WholesaleProduct.statusActive)
+            .where('districtId', whereIn: ids)
+            .orderBy('publishedAt', descending: true)
+            .limit(limit * 4)
+            .snapshots()
+            .map((s) {
+          final all = s.docs.map(WholesaleProduct.fromFirestore);
+          return market == null ? all.toList() : filterByMarket(all, market);
+        }),
+        idOf: (p) => p.id,
+        compare: (a, b) => (b.publishedAt?.millisecondsSinceEpoch ?? 0)
+            .compareTo(a.publishedAt?.millisecondsSinceEpoch ?? 0),
+        limit: limit,
+      );
+    }
     final base = _col
         .where('status', isEqualTo: WholesaleProduct.statusActive)
         .orderBy('publishedAt', descending: true);
@@ -146,10 +174,11 @@ class WholesaleProductsRepository {
     String query, {
     int limit = 100,
     String? market,
+    GeoScope? geo,
   }) {
     final q = query.trim();
     final poolLimit = q.isEmpty ? limit : feedLimit;
-    return getActiveProducts(limit: poolLimit, market: market).map((items) {
+    return getActiveProducts(limit: poolLimit, market: market, geo: geo).map((items) {
       final filtered = items.where((p) {
         return CatalogSearch.matches(q, [
           p.title,

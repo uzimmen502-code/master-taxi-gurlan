@@ -28,6 +28,7 @@ const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').s
 const SELLER = '998901000001';
 const PENDING_SELLER = '998901000002';
 const OTHER = '998901000003';
+const NOADDR_SELLER = '998901000004'; // тасдиқланган, лекин манзилсиз (эски)
 const ADMIN = '998909990001';
 const EXISTING = 'existing1';
 
@@ -80,8 +81,12 @@ async function main() {
     await testEnv.withSecurityRulesDisabled(async (c) => {
       const db = c.firestore();
       await db.collection('users').doc(ADMIN).set({ role: 'admin' });
+      // D-GEO-14 (2026-10-11): товар қўшиш учун сотувчида жўнатиш манзили шарт.
       await db.collection('wholesale_sellers').doc(SELLER)
-        .set({ phone: SELLER, companyName: 'Gurlan Savdo', approvalStatus: 'approved' });
+        .set({ phone: SELLER, companyName: 'Gurlan Savdo', approvalStatus: 'approved',
+          regionId: 'xorazm', districtId: 'gurlan', address: 'Markaz 1' });
+      await db.collection('wholesale_sellers').doc(NOADDR_SELLER)
+        .set({ phone: NOADDR_SELLER, companyName: 'Eski Savdo', approvalStatus: 'approved' });
       await db.collection('wholesale_sellers').doc(PENDING_SELLER)
         .set({ phone: PENDING_SELLER, companyName: 'Yangi', approvalStatus: 'pending' });
       await db.collection('settings').doc('app').set({ wholesaleProductAutoApprove: autoApprove });
@@ -214,8 +219,11 @@ async function main() {
     phone: NEW_SELLER, companyName: 'Yangi Savdo', ownerName: '', sellerType: 'wholesaler',
     approvalStatus: 'pending', createdAt: serverTimestamp(), ...extra,
   });
-  await check('D1 manzilsiz eski shakl — yaratiladi (orqaga moslik)', () =>
-    assertSucceeds(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate())));
+  // D-GEO-14 (эга, 2026-10-11): манзил МАЖБУРИЙ — аввал бу ўтарди.
+  await check('D1 manzilsiz ro\'yxatdan o\'tish — RAD (D-GEO-14)', async () => {
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate()));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'xorazm' })));
+  });
   await seed();
   await check('D2 manzil bilan (region/district/address/lat/lng) — yaratiladi', () =>
     assertSucceeds(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({
@@ -240,6 +248,26 @@ async function main() {
     await assertFails(sellersCol(seller).doc(SELLER).update({ districtId: 'xiva', approvalStatus: 'rejected' }));
     await assertFails(sellersCol(pendingSeller).doc(PENDING_SELLER).update({ districtId: 'xiva', approvalStatus: 'approved' }));
     await assertFails(sellersCol(other).doc(SELLER).update({ districtId: 'xiva' }));
+  });
+
+  // ── E. D-GEO-14: манзил мажбурий, товар ҳудуди сервердан ─────────────────
+  await seed();
+  const noAddr = ctx(NOADDR_SELLER);
+  await check('E1 manzilsiz (eski) sotuvchi tovar qo\'sha olmaydi', () =>
+    assertFails(col(noAddr).add(appCreatePayload({ sellerId: NOADDR_SELLER, sellerCompanyName: 'Eski Savdo' }))));
+  await check('E2 manzilsiz sotuvchi profilini tahrirlay oladi va manzil kiritadi', async () => {
+    await assertSucceeds(sellersCol(noAddr).doc(NOADDR_SELLER).update({ companyName: 'Eski Savdo 2', updatedAt: serverTimestamp() }));
+    await assertSucceeds(sellersCol(noAddr).doc(NOADDR_SELLER).update({
+      regionId: 'xorazm', districtId: 'xiva', address: 'Bozor 3', updatedAt: serverTimestamp(),
+    }));
+  });
+  await check('E3 kiritilgan manzilni bo\'shatib bo\'lmaydi', async () => {
+    await assertFails(sellersCol(seller).doc(SELLER).update({ districtId: '', updatedAt: serverTimestamp() }));
+    await assertFails(sellersCol(seller).doc(SELLER).update({ districtId: deleteField(), regionId: deleteField() }));
+  });
+  await check('E4 tovarga hudud (regionId/districtId) ni mijoz yoza olmaydi — faqat server', async () => {
+    await assertFails(col(seller).add(appCreatePayload({ regionId: 'toshkent_shahri', districtId: 'chilonzor' })));
+    await assertFails(col(seller).doc(EXISTING).update({ districtId: 'chilonzor', updatedAt: serverTimestamp() }));
   });
 
   const failed = results.filter((r) => !r).length;

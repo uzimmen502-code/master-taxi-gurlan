@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_query.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/utils/merged_stream.dart';
 import '../models/yuk_local_driver.dart';
 import '../yuk_accept_radius.dart';
 import '../yuk_local_schedule.dart';
@@ -25,41 +26,41 @@ class YukLocalDriversRepository {
 
   /// Каталог (қидирув) — онлайн фильтрсиз; клиентда иш вақти/TTL/GPS.
   ///
-  /// [districtId] берилса рўйхат ҲУДУД БЎЙИЧА филтрланади. Филтр
-  /// серверда бажарилади, шунинг учун лимит ҳар доим шу тумандаги
-  /// эълонларга тегишли — бошқа туман эълонлари лимитни «еб қўймайди».
+  /// Ҳудуд филтри СЕРВЕРДА ([geoScopedStream], 3а-босқич): туман →
+  /// `districtId ==`, вилоят → `districtId in` вилоят туманлари. Лимит ҳар
+  /// доим шу ҳудуд эълонларига тегишли — бошқа ҳудуд лимитни «еб қўймайди».
+  /// Бир майдонли `in` + `limit` — композит индекс керак эмас.
   ///
   /// Эски эълонларда `districtId` йўқ. Firestore'да «майдон йўқ» бўйича
   /// сўров қилиб бўлмайди, шунинг учун улар АЛОҲИДА оқимда келади ва
   /// клиентда қўшилади — backfill қилингунча биронта эълон йўқолиб
   /// кетмайди (`functions/tools/backfill_yuk_local_district.js`).
   /// Backfill'дан кейин иккинчи оқим бўшайди ва уни олиб ташласа бўлади.
-  Stream<List<YukLocalDriver>> watchCatalog({
+  Stream<List<YukLocalDriver>> watchScoped(
+    GeoScope scope, {
     int limit = watchLimit,
-    String districtId = '',
   }) {
-    final id = districtId.trim();
-    if (id.isEmpty) {
-      return _col.limit(limit).snapshots().map(
-            (snap) => snap.docs.map(_fromDoc).toList(),
-          );
-    }
-
-    final scoped = _col
-        .where('districtId', isEqualTo: id)
-        .limit(limit)
-        .snapshots()
-        .map((snap) => snap.docs.map(_fromDoc).toList());
-
-    final legacy = _col
-        .limit(limit)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map(_fromDoc)
-            .where((d) => d.hasNoDistrict)
-            .toList());
-
-    return mergeListStreams(scoped, legacy, idOf: (d) => d.id);
+    int ms(YukLocalDriver d) =>
+        (d.updatedAt ?? d.createdAt)?.millisecondsSinceEpoch ?? 0;
+    return geoScopedStream<YukLocalDriver>(
+      scope: scope,
+      nation: () => _col
+          .limit(limit)
+          .snapshots()
+          .map((snap) => snap.docs.map(_fromDoc).toList()),
+      byDistricts: (ids) => _col
+          .where('districtId', whereIn: ids)
+          .limit(limit)
+          .snapshots()
+          .map((snap) => snap.docs.map(_fromDoc).toList()),
+      legacy: () => _col.limit(limit).snapshots().map((snap) => snap.docs
+          .map(_fromDoc)
+          .where((d) => d.hasNoDistrict)
+          .toList()),
+      idOf: (d) => d.id,
+      compare: (a, b) => ms(b).compareTo(ms(a)),
+      limit: limit,
+    );
   }
 
   /// Ўз эълонлари — `createdAt` бўйича (янги тепада).

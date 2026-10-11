@@ -981,7 +981,8 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('yuk_local')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeYukLocalSection(
-                                key: ValueKey('yuk_local_$_geoKey'),
+                                key: ValueKey(
+                                    'yuk_local_${GeoContext.scopeFor('yuk_local').key}'),
                                 onOpenAll: () => _openYukModule(
                                   'yuk_local',
                                   const YukLocalScreen(),

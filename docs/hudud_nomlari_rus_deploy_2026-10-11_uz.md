@@ -19,7 +19,7 @@
 | | |
 |---|---|
 | Код | `dda6b99` (танлов рўйхатлари) + `0add857` (қолган жойлар, `nameRuShort`) — `feat/ev-trip-planner` |
-| Deploy | **ҳеч бири бажарилмаган**; production'га ҳеч нарса ёзилмаган |
+| Deploy | **ҳеч бири бажарилмаган**; production'га ҳеч нарса ёзилмаган. Hosting build тайёр (3-қадам), deploy ва маълумот ёзиш — эга |
 | Production ҳолати | 2026-10-11 dry run (фақат ўқиш): 220 ҳужжат = файлдаги 14 + 206; 220 таси ёзилади, тўқнашув 0, номсиз ҳужжат 0, ҳужжатсиз ном 0 |
 | Migration | `nameRu` + `nameRuShort` — 2-қадам; илова қисмидан олдин ҳам, кейин ҳам бўлади |
 | Орқага мослик | эски илова янги майдонларни эътиборсиз қолдиради; янги илова улар йўқ ҳужжатда кириллни кўрсатади (ҳозиргидек) |
@@ -36,18 +36,27 @@
 - [ ] **2. Маълумот ёзиш** (production ёзуви):
   - dry run: `node functions/tools/backfill-geo-name-ru.js` — «yoziladi: 220»
     кутилади; «Tegilmaydi» / «Ruscha nomi yo'q» / «Bazada yo'q» бўш бўлиши керак;
-  - кейин: `node functions/tools/backfill-geo-name-ru.js --apply`
+  - кейин (classifier мени блоклади — эга ишга туширади):
+    `node D:\projects\ava_gurlan\functions\tools\backfill-geo-name-ru.js --apply`
   - ⚠ фақат `nameRu`, `nameRuShort` (+ `updatedAt`/`updatedBy`), фақат мавжуд
     ҳужжатга; қўлда ёзилган бошқа қийматга тегилмайди.
   - Rollback: `--apply` чиқарган `functions/tools/geo-name-ru-backup-*.json`
     билан `node functions/tools/backfill-geo-name-ru.js --rollback <файл>`
     (олдин йўқ бўлган майдонлар ўчирилади). Бу JSON'ни commit қилманг.
-- [ ] **3. Hosting (мижоз веб)** — жонли hosting ҳозир `503af80`
-  (`deploy/hosting-food-removal`, 2026-10-11 16:58Z) — deploy branch шу
-  SHA устига иккала commit'нинг илова қисми билан қурилсин, акс ҳолда
-  «Овқат»ни олиб ташлаш қайтиб кетади.
-  - Deploy олдидан жонли hash'ни яна текширинг (навбат бошқа сессиялар
-    билан умумий; gitignored `config.dart` ва APK'лар).
+- [ ] **3. Hosting (мижоз веб + /admin/)** — build ТАЙЁР ва текширилган
+  (2026-10-11): `deploy/hosting-geo-names` `80ba305` = жонли `503af80` +
+  `dda6b99` + `0add857` илова қисми; worktree
+  `.claude/worktrees/deploy-geo-names-hosting/build/hosting`.
+  Classifier мени блоклади — эга ишга туширади:
+  `powershell -ExecutionPolicy Bypass -File D:\projects\ava_gurlan\.claude\deploy-kit-geo-names\deploy_hosting_geo_names.ps1`
+  - Скрипт жонли release (16:58:40Z) ва иккала бандл hash'ини текширади,
+    ўзгарган бўлса ТЎХТАЙДИ (навбат: мен → «Буюртмалар» сессияси →
+    «бир нечта кафе» сессияси; улар менинг SHA'мни кутяпти).
+  - Lineage'да йўқ файллар cherry'дан тушириб қолдирилди:
+    `ship_from_fields.dart` (Улгуржи — deploy қилинмаган), `geo_context`
+    оиласи (`GeoNames.area` ташлаб юборилди; бош саҳифа тугмаси
+    `ServiceConfigHolder.geoLabel`нинг тилли шакли). Locale = жонли + 3 калит.
+  - Admin бандли ҳам ўзгаради (`lib/core` умумий) — кутилган.
   - Rollback: Firebase Console → Hosting → олдинги релиз «Rollback».
 - [ ] **4. APK** — қуриш вақти эга қарори.
 

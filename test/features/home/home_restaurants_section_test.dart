@@ -5,6 +5,7 @@ import 'package:ava_gurlan/features/home/widgets/home_restaurants_section.dart';
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/models/service_module_config.dart';
+import 'package:ava_gurlan/services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,6 +17,21 @@ class _FakeRepo implements RestaurantsRepository {
 
   @override
   Stream<List<Restaurant>> watchApproved({int limit = 50}) => Stream.value(list);
+
+  /// Сервер сўрови ўрнига — ўша радиус филтри (D-GEO-4).
+  @override
+  Stream<List<Restaurant>> watchNearby({
+    required double lat,
+    required double lng,
+    double radiusKm = RestaurantsRepository.nearbyRadiusKm,
+    int perCellLimit = 50,
+  }) {
+    nearbyCalls++;
+    return Stream.value(
+        RestaurantsRepository.withinRadius(list, lat, lng, radiusKm));
+  }
+
+  int nearbyCalls = 0;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
@@ -120,5 +136,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('home_section_restaurants'), findsOneWidget);
     expect(find.text('restaurants_empty_nearby'), findsOneWidget);
+  });
+
+  // ─── D-GEO-4 (геo 4-босқич) ─────────────────────────────────────────
+  testWidgets('GPS бор — профилдан устун; 20 км дан узоғи чиқмайди', (tester) async {
+    final repo = _FakeRepo([
+      _r('gpsYaqin', lat: 41.551, lng: 60.63), // Урганч атрофи
+      _r('profilYaqin', lat: 41.85, lng: 60.39), // Гурлан — GPS'дан ~40 км
+    ]);
+    await tester.pumpWidget(_host(HomeRestaurantsSection(
+      repository: repo,
+      userLat: 41.84, // профил — Гурлан
+      userLng: 60.39,
+      locate: () async => const LocationCoords(lat: 41.55, lng: 60.63),
+      onOpenAll: () {},
+      onOpenRestaurant: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    expect(repo.nearbyCalls, greaterThan(0));
+    expect(find.text('gpsYaqin'), findsOneWidget);
+    expect(find.text('profilYaqin'), findsNothing);
+  });
+
+  testWidgets('координата йўқ — аввалги умумий рўйхат (ном бўйича)', (tester) async {
+    final repo = _FakeRepo([_r('b', lat: 41.0, lng: 69.0), _r('a')]);
+    await tester.pumpWidget(_host(HomeRestaurantsSection(
+      repository: repo,
+      locate: () async => null,
+      onOpenAll: () {},
+      onOpenRestaurant: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    expect(repo.nearbyCalls, 0);
+    expect(find.text('a'), findsOneWidget);
+    expect(find.text('b'), findsOneWidget);
+  });
+
+  group('RestaurantsRepository.withinRadius', () {
+    test('чегара: 20 км ичи — бор, ташқари — йўқ; координатасиз — йўқ; яқини биринчи', () {
+      // 0.1799° кенглик ≈ 20.0 км, 0.1805° ≈ 20.07 км.
+      final r = RestaurantsRepository.withinRadius(
+        [
+          _r('edgeOut', lat: 41.0 + 0.1805, lng: 64.0),
+          _r('edgeIn', lat: 41.0 + 0.1795, lng: 64.0),
+          _r('near', lat: 41.01, lng: 64.0),
+          _r('noCoords'),
+        ],
+        41.0,
+        64.0,
+        20,
+      );
+      expect(r.map((e) => e.id), ['near', 'edgeIn']);
+    });
   });
 }

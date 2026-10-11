@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../services/location_service.dart';
 import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/domain/restaurants_access.dart';
@@ -28,6 +29,7 @@ class HomeRestaurantsSection extends StatefulWidget {
     this.userLng,
     this.repository,
     this.accessCheck,
+    this.locate,
   });
 
   final VoidCallback onOpenAll;
@@ -41,6 +43,10 @@ class HomeRestaurantsSection extends StatefulWidget {
 
   /// Тестда алмаштириш учун; стандарт — [RestaurantsRepository.hasAccess].
   final Future<bool> Function()? accessCheck;
+
+  /// GPS (D-GEO-4: биринчи) — стандарт рухсат сўрамайдиган
+  /// [LocationService.getCoordsIfAllowed]; тестда алмаштирилади.
+  final Future<LocationCoords?> Function()? locate;
 
   static const moduleId = kRestaurantsModuleId;
   static const limit = 20;
@@ -59,11 +65,40 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
   AvaSectionStatus _status = AvaSectionStatus.loading;
   List<Restaurant> _items = const [];
 
+  /// Масофа нуқтаси: GPS (бўлса) → профил манзили.
+  double? _lat;
+  double? _lng;
+  bool _fromGps = false;
+
   @override
   void initState() {
     super.initState();
+    _lat = widget.userLat;
+    _lng = widget.userLng;
     ServiceConfigHolder.revision.addListener(_resolveGate);
     _resolveGate();
+    _loadGps();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeRestaurantsSection old) {
+    super.didUpdateWidget(old);
+    // Профил кечроқ юкланади — GPS бўлмаса шу манзилга ўтамиз.
+    if (_fromGps) return;
+    if (old.userLat == widget.userLat && old.userLng == widget.userLng) return;
+    _lat = widget.userLat;
+    _lng = widget.userLng;
+    if (_allowed == true) _listen();
+  }
+
+  Future<void> _loadGps() async {
+    final locate = widget.locate ?? const LocationService().getCoordsIfAllowed;
+    final c = await locate();
+    if (!mounted || c == null) return;
+    _lat = c.lat;
+    _lng = c.lng;
+    _fromGps = true;
+    if (_allowed == true) _listen();
   }
 
   Future<void> _resolveGate() async {
@@ -88,7 +123,14 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
   void _listen() {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
-    _sub = _repo.watchApproved(limit: HomeRestaurantsSection.limit).listen(
+    final lat = _lat;
+    final lng = _lng;
+    // Координата бор — яқиндагилар сервер сўрови (D-GEO-4); йўқ — аввалги
+    // умумий рўйхат (ном бўйича).
+    final stream = lat != null && lng != null
+        ? _repo.watchNearby(lat: lat, lng: lng)
+        : _repo.watchApproved(limit: HomeRestaurantsSection.limit);
+    _sub = stream.listen(
       (list) {
         if (!mounted) return;
         setState(() {
@@ -111,8 +153,8 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
       final oa = a.isOpenAt(now) ? 0 : 1;
       final ob = b.isOpenAt(now) ? 0 : 1;
       if (oa != ob) return oa - ob;
-      final da = a.distanceKmFrom(widget.userLat, widget.userLng);
-      final db = b.distanceKmFrom(widget.userLat, widget.userLng);
+      final da = a.distanceKmFrom(_lat, _lng);
+      final db = b.distanceKmFrom(_lat, _lng);
       if (da != null && db != null && da != db) return da.compareTo(db);
       if (da == null && db != null) return 1;
       if (da != null && db == null) return -1;
@@ -154,7 +196,7 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
                 if (i > 0) const SizedBox(height: 6),
                 RestaurantRow(
                   restaurant: shown[i],
-                  distanceKm: shown[i].distanceKmFrom(widget.userLat, widget.userLng),
+                  distanceKm: shown[i].distanceKmFrom(_lat, _lng),
                   onTap: () => widget.onOpenRestaurant(shown[i]),
                 ),
               ],

@@ -8,6 +8,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../../../core/utils/merged_stream.dart';
 import '../../../models/order_model.dart';
 import '../../../utils/geo_hash.dart';
 import '../domain/restaurant_models.dart';
@@ -173,6 +174,53 @@ class RestaurantsRepository {
       .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(Restaurant.fromDoc).toList(growable: false));
+
+  /// «Яқиндаги» радиуси (D-GEO-4, геo 4-босқич). PROPOSED: етказиб бериш
+  /// тарифи стандарти 15 км (`DEFAULT_MAX_KM`) + олиб кетиш учун захира.
+  static const nearbyRadiusKm = 20.0;
+
+  /// Яқиндаги тасдиқланган ресторанлар — СЕРВЕР сўрови (D-GEO-4): мавжуд
+  /// `geohash` (7 белги, `restaurantRegister` / [updateProfile] ёзади)
+  /// префикси бўйича 9 та geohash-4 катак (~20×39 км), кейин аниқ масофа
+  /// [radiusKm] ичида. Аввал бутун тасдиқланган рўйхат юкланиб, масофа
+  /// фақат тартиб учун эди. Индекс: (status, geohash).
+  Stream<List<Restaurant>> watchNearby({
+    required double lat,
+    required double lng,
+    double radiusKm = nearbyRadiusKm,
+    int perCellLimit = 50,
+  }) {
+    final cells = GeoHash.neighborsForRadius(lat, lng, precision: 4);
+    Stream<List<Restaurant>> cell(String h) => _restaurants
+        .where('status', isEqualTo: 'approved')
+        .orderBy('geohash')
+        .startAt([h])
+        .endAt(['$h~'])
+        .limit(perCellLimit)
+        .snapshots()
+        .map((s) => s.docs.map(Restaurant.fromDoc).toList(growable: false));
+    var merged = cell(cells.first);
+    for (final h in cells.skip(1)) {
+      merged = mergeListStreams(merged, cell(h), idOf: (r) => r.id);
+    }
+    return merged.map((all) => withinRadius(all, lat, lng, radiusKm));
+  }
+
+  /// [radiusKm] ичидагилар, энг яқини биринчи. Координатасиз — чиқмайди.
+  static List<Restaurant> withinRadius(
+    Iterable<Restaurant> all,
+    double lat,
+    double lng,
+    double radiusKm,
+  ) {
+    final rows = <(Restaurant, double)>[];
+    for (final r in all) {
+      final d = r.distanceKmFrom(lat, lng);
+      if (d != null && d <= radiusKm) rows.add((r, d));
+    }
+    rows.sort((a, b) => a.$2.compareTo(b.$2));
+    return [for (final x in rows) x.$1];
+  }
 
   Stream<Restaurant?> watchRestaurant(String id) => _restaurants
       .doc(id)

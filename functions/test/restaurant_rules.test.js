@@ -112,6 +112,16 @@ async function main() {
     await assertFails(as(STRANGER).collection('restaurants').where('ownerUid', '==', OWNER2).get());
     await assertSucceeds(as(ADMIN).collection('restaurants').get());
   });
+  // Geo 4-bosqich (D-GEO-4): «yaqindagilar» — geohash prefiksi bo'yicha
+  // (`RestaurantsRepository.watchNearby`). status filtrisiz — yo'q.
+  await check('yaqindagilar: approved + geohash prefiks diapazoni ha; status filtrisiz yo\'q', async () => {
+    await assertSucceeds(as(STRANGER).collection('restaurants')
+      .where('status', '==', 'approved').orderBy('geohash').startAt('txp7').endAt('txp7~').limit(50).get());
+    await assertSucceeds(anon().collection('restaurants')
+      .where('status', '==', 'approved').orderBy('geohash').startAt('txp7').endAt('txp7~').get());
+    await assertFails(as(STRANGER).collection('restaurants')
+      .orderBy('geohash').startAt('txp7').endAt('txp7~').get());
+  });
   await check('restoran yaratish — hech kim (faqat CF)', async () => {
     await assertFails(as(OWNER).doc('restaurants/new1').set({ name: 'X', status: 'approved', ownerUid: OWNER }));
     await assertFails(as(ADMIN).doc('restaurants/new2').set({ name: 'X', status: 'approved' }));

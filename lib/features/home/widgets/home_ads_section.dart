@@ -58,9 +58,11 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     _sub = _repo
-        .watchForHome(
-          widget.adType,
-          districtId: GeoContext.active.districtId,
+        // `jobs` модули танлови (туман/вилоят/Республика) — экран билан
+        // бир хил (D-GEO-1).
+        .watchScoped(
+          GeoContext.scopeFor('jobs'),
+          types: [widget.adType],
           limit: HomeAdsSection.limit,
         )
         .listen(

@@ -8,6 +8,8 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/ev_charging_station.dart';
 import '../../../repositories/ev_station_repository.dart';
+import '../../../services/geo_math_service.dart';
+import '../../../services/location_service.dart';
 import 'ava_chip.dart';
 import 'ava_section.dart';
 
@@ -45,6 +47,72 @@ String staticMapUrl({
   return '$kEvStaticMapEndpoint?${params.join('&')}';
 }
 
+/// Бош саҳифа блоки нимани кўрсатади (геo 4-босқич, «яқиндагилар»).
+///
+/// Координата бор: марказ — фойдаланувчи, маркерлар — энг яқин 10 та,
+/// саноқ — [radiusKm] ичидагилар (ичида бўлмаса — марказ энг яқин станция,
+/// саноқ бутун рўйхат). Координата йўқ — аввалги ҳолат (биринчи станция,
+/// бутун рўйхат). Жонли харита ўзгармайди — эга қарори 2026-09-22: барча
+/// нуқталар кўринади.
+class EvHomeView {
+  const EvHomeView({
+    required this.centerLat,
+    required this.centerLng,
+    required this.markers,
+    required this.counted,
+    required this.nearby,
+  });
+
+  final double centerLat;
+  final double centerLng;
+  final List<EvChargingStation> markers;
+  final List<EvChargingStation> counted;
+
+  /// Саноқ [radiusKm] ичидагилар бўйича.
+  final bool nearby;
+
+  static const radiusKm = 20.0;
+
+  static EvHomeView? of(
+    List<EvChargingStation> all, {
+    double? lat,
+    double? lng,
+  }) {
+    if (all.isEmpty) return null;
+    if (lat == null || lng == null) {
+      return EvHomeView(
+        centerLat: all.first.latitude,
+        centerLng: all.first.longitude,
+        markers: all,
+        counted: all,
+        nearby: false,
+      );
+    }
+    final rows = [
+      for (final s in all)
+        (s, const GeoMathService().haversineKm(lat, lng, s.latitude, s.longitude)),
+    ]..sort((a, b) => a.$2.compareTo(b.$2));
+    final sorted = [for (final r in rows) r.$1];
+    final inRadius = [for (final r in rows) if (r.$2 <= radiusKm) r.$1];
+    if (inRadius.isEmpty) {
+      return EvHomeView(
+        centerLat: sorted.first.latitude,
+        centerLng: sorted.first.longitude,
+        markers: sorted,
+        counted: all,
+        nearby: false,
+      );
+    }
+    return EvHomeView(
+      centerLat: lat,
+      centerLng: lng,
+      markers: inRadius,
+      counted: inRadius,
+      nearby: true,
+    );
+  }
+}
+
 /// `evStaticMap` Cloud Function (us-central1).
 const kEvStaticMapEndpoint =
     'https://us-central1-master-taxi-gurlan.cloudfunctions.net/evStaticMap';
@@ -63,10 +131,23 @@ Future<Map<String, String>> evStaticMapHeaders() async {
 
 /// 10-бўлим: EV зарядлаш станциялари.
 class HomeEvSection extends StatefulWidget {
-  const HomeEvSection({super.key, required this.onOpenMap});
+  const HomeEvSection({
+    super.key,
+    required this.onOpenMap,
+    this.userLat,
+    this.userLng,
+    this.locate,
+  });
 
   /// Босилганда ЖОНЛИ харита экрани очилади.
   final VoidCallback onOpenMap;
+
+  /// Профил манзили (захира); GPS рухсати бўлса GPS устун.
+  final double? userLat;
+  final double? userLng;
+
+  /// Стандарт — рухсат сўрамайдиган [LocationService.getCoordsIfAllowed].
+  final Future<LocationCoords?> Function()? locate;
 
   @override
   State<HomeEvSection> createState() => _HomeEvSectionState();
@@ -82,11 +163,24 @@ class _HomeEvSectionState extends State<HomeEvSection> {
   /// `null` — токен ҳали олинмаган; расм фақат шундан кейин сўралади.
   Map<String, String>? _mapHeaders;
 
+  /// GPS'дан олинган нуқта (бўлса) — профилдан устун.
+  LocationCoords? _gps;
+
+  double? get _lat => _gps?.lat ?? widget.userLat;
+  double? get _lng => _gps?.lng ?? widget.userLng;
+
   @override
   void initState() {
     super.initState();
     _listen();
     _loadMapHeaders();
+    _loadGps();
+  }
+
+  Future<void> _loadGps() async {
+    final locate = widget.locate ?? const LocationService().getCoordsIfAllowed;
+    final c = await locate();
+    if (mounted && c != null) setState(() => _gps = c);
   }
 
   Future<void> _loadMapHeaders() async {
@@ -121,11 +215,11 @@ class _HomeEvSectionState extends State<HomeEvSection> {
     super.dispose();
   }
 
-  ({int free, int busy, int unknown}) get _counts {
+  ({int free, int busy, int unknown}) _countsOf(List<EvChargingStation> list) {
     var free = 0;
     var busy = 0;
     var unknown = 0;
-    for (final s in _items) {
+    for (final s in list) {
       switch (s.occupancyState) {
         case 'free':
           free++;
@@ -141,8 +235,8 @@ class _HomeEvSectionState extends State<HomeEvSection> {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final counts = _counts;
-    final center = _items.isEmpty ? null : _items.first;
+    final view = EvHomeView.of(_items, lat: _lat, lng: _lng);
+    final counts = _countsOf(view?.counted ?? const []);
 
     return AvaSection(
       moduleId: 'ev_charging',
@@ -165,14 +259,14 @@ class _HomeEvSectionState extends State<HomeEvSection> {
                   fit: StackFit.expand,
                   children: [
                     ColoredBox(color: c.surface2),
-                    if (center != null && _mapHeaders != null)
+                    if (view != null && _mapHeaders != null)
                       CachedNetworkImage(
                         imageUrl: staticMapUrl(
-                          lat: center.latitude,
-                          lng: center.longitude,
+                          lat: view.centerLat,
+                          lng: view.centerLng,
                           width: 400,
                           height: 140,
-                          markers: _items,
+                          markers: view.markers,
                         ),
                         httpHeaders: _mapHeaders,
                         fit: BoxFit.cover,
@@ -221,6 +315,14 @@ class _HomeEvSectionState extends State<HomeEvSection> {
             spacing: 6,
             runSpacing: 4,
             children: [
+              // Саноқ яқиндагилар бўйича эканини айтамиз (бутун республика
+              // эмас).
+              if (view != null && view.nearby)
+                AvaChip(
+                  key: const ValueKey('home_ev_nearby'),
+                  label: context.tr('home_ev_nearby_radius').replaceAll(
+                      '{n}', EvHomeView.radiusKm.round().toString()),
+                ),
               if (counts.free > 0)
                 AvaChip(
                   label: '${context.tr('home_ev_free')}: ${counts.free}',

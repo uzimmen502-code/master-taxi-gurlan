@@ -35,10 +35,15 @@ class JobsRepository {
   }
 
   /// Берилган тип ва active статусга эга охирги эълонлар.
+  ///
+  /// `orderBy` шарт: аввал йўқ эди — эълонлар [limit]дан кўпайганда
+  /// тасодифий қисм келарди (geo аудит, 0-босқич). Индекс:
+  /// `ads (type, status, createdAt↓)`.
   Stream<List<JobAd>> watchActiveByType(String type, {int limit = 300}) {
     return _ads
         .where('type', isEqualTo: type)
         .where('status', isEqualTo: 'active')
+        .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));
@@ -96,11 +101,13 @@ class JobsRepository {
     return out;
   }
 
-  /// Иш / хизмат / эълон feed (актив).
+  /// Иш / хизмат / эълон feed (актив) — энг янгилари (`orderBy` — юқорига
+  /// қаранг).
   Stream<List<JobAd>> watchAllActive({int limit = 500}) {
     return _ads
         .where('type', whereIn: ['work', 'service', 'ad'])
         .where('status', isEqualTo: 'active')
+        .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));

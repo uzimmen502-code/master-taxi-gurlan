@@ -44,12 +44,24 @@ class EvChargingMapController extends ChangeNotifier {
   /// разъёмига қараб танлайди, шунинг учун унга ҳамма нуқта керак.
   List<EvChargingStation> get allStations => _stations;
 
+  /// GPS йўқ бўлганда харита маркази — Ўзбекистон ўртаси (бутун мамлакат
+  /// кўринади, [fallbackZoom]).
+  static const fallbackLat = 41.3;
+  static const fallbackLng = 64.6;
+  static const fallbackZoom = 5.6;
+
+  /// Харита учун марказ: GPS бўлса — у, бўлмаса — мамлакат ўртаси.
+  double get centerLat => _lat ?? fallbackLat;
+  double get centerLng => _lng ?? fallbackLng;
+
   Future<void> init() async {
+    // Станциялар GPS'га боғлиқ эмас: аввал GPS хатосида `_watchStations`
+    // чақирилмас ва экранда фақат хато матни қоларди (geo аудит, 0-босқич).
+    _watchStations();
     try {
       final coords = await _locationService.getCurrentCoords();
       _lat = coords.lat;
       _lng = coords.lng;
-      _watchStations();
     } catch (e) {
       error = LocationException.userMessage(
         e is LocationException ? e.kind : LocationErrorKind.lookupFailed,

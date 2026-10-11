@@ -145,5 +145,42 @@ void main() {
       expect(filterYukListings(src, tab: 'all', from: 'Андижон', now: _now),
           isEmpty);
     });
+
+    // 3в: йўналиш тартиби.
+    test('тескари йўналиш чиқмайди (Тошкент → Гурлан қидирувида Гурлан → Тошкент йўқ)', () {
+      expect(
+        filterYukListings(src, tab: 'all',
+            from: 'Тошкент', to: 'Гурлан', now: _now),
+        isEmpty,
+      );
+    });
+
+    test('тўхташлар орқали: олдинги тўхташ → кейингиси — бор; тескариси — йўқ', () {
+      expect(
+        _ids(filterYukListings(src, tab: 'all',
+            from: 'Тошкент', to: 'Бухоро', now: _now)),
+        ['stops'],
+      );
+      expect(
+        filterYukListings(src, tab: 'all',
+            from: 'Навоий', to: 'Тошкент', now: _now),
+        isEmpty,
+      );
+    });
+
+    test('чегара: ёнма-ён тўхташлар (Тошкент → Навоий) — бор', () {
+      expect(
+        _ids(filterYukListings(src, tab: 'all',
+            from: 'Тошкент', to: 'Навоий', now: _now)),
+        ['stops'],
+      );
+    });
+
+    test('фақат битта томон берилса — тартиб талаб қилинмайди', () {
+      expect(
+        _ids(filterYukListings(src, tab: 'all', from: 'Тошкент', now: _now)),
+        containsAll(['gt', 'stops']),
+      );
+    });
   });
 }

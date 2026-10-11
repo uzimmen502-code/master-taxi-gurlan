@@ -19,7 +19,7 @@
 | | |
 |---|---|
 | Код | `dda6b99` (танлов рўйхатлари) + `0add857` (қолган жойлар, `nameRuShort`) — `feat/ev-trip-planner` |
-| Deploy | **ҳеч бири бажарилмаган**; production'га ҳеч нарса ёзилмаган. Hosting build тайёр (3-қадам), deploy ва маълумот ёзиш — эга |
+| Deploy | Маълумот (2-қадам) 17:55Z ва hosting `80ba305` (3-қадам) 17:58:35Z — LIVE 2026-10-11. APK — йўқ |
 | Production ҳолати | 2026-10-11 dry run (фақат ўқиш): 220 ҳужжат = файлдаги 14 + 206; 220 таси ёзилади, тўқнашув 0, номсиз ҳужжат 0, ҳужжатсиз ном 0 |
 | Migration | `nameRu` + `nameRuShort` — 2-қадам; илова қисмидан олдин ҳам, кейин ҳам бўлади |
 | Орқага мослик | эски илова янги майдонларни эътиборсиз қолдиради; янги илова улар йўқ ҳужжатда кириллни кўрсатади (ҳозиргидек) |
@@ -47,8 +47,10 @@
   - Rollback: `--apply` чиқарган `functions/tools/geo-name-ru-backup-*.json`
     билан `node functions/tools/backfill-geo-name-ru.js --rollback <файл>`
     (олдин йўқ бўлган майдонлар ўчирилади). Бу JSON'ни commit қилманг.
-- [ ] **3. Hosting (мижоз веб + /admin/)** — build ТАЙЁР ва текширилган
-  (2026-10-11): `deploy/hosting-geo-names` `80ba305` = жонли `503af80` +
+- [x] **3. Hosting (мижоз веб + /admin/)** — LIVE 2026-10-11 17:58:35Z (эга
+  скриптни ишга туширди; жонли бандллар build билан байтма-байт мос, APK'лар
+  жойида). Иккинчи марта ишга туширилганда скрипт «Live release changed» деб
+  тўхтади — бу тўғри: ўз устига қайта deploy қилмайди. Build тафсилоти: `deploy/hosting-geo-names` `80ba305` = жонли `503af80` +
   `dda6b99` + `0add857` илова қисми; worktree
   `.claude/worktrees/deploy-geo-names-hosting/build/hosting`.
   Classifier мени блоклади — эга ишга туширади:

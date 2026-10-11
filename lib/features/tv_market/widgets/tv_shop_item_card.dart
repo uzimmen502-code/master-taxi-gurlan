@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
@@ -118,8 +119,9 @@ class TvShopItemCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 3),
                         Flexible(
-                          child: Text(
-                            item.districtLabel,
+                          child: GeoDistrictText(
+                            item.districtId,
+                            fallback: item.districtLabel,
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 12,

@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/service_config_holder.dart';
@@ -106,7 +107,8 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
   String _place(YukLocalDriver d) {
     final label = d.locationLabel.trim();
     if (label.isNotEmpty) return label;
-    return ServiceConfigHolder.districtLabel;
+    return GeoNames.district(ServiceConfigHolder.districtId, context.contentLang,
+        fallback: ServiceConfigHolder.districtLabel);
   }
 
   @override

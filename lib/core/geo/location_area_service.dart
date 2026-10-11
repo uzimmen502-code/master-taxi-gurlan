@@ -12,6 +12,11 @@ import '../../utils/geo_hash.dart';
 import '../brand_labels.dart';
 import 'district_matcher.dart';
 import 'geo_context.dart';
+import 'geo_names.dart';
+
+/// Бўш номлар (эски ҳужжатда `nameRu` йўқ) солиштиришга кирмайди.
+List<String> _names(List<String> all) =>
+    all.where((n) => n.trim().isNotEmpty).toList(growable: false);
 
 /// Локация таклифи (D-GEO-12): «Сиз ҳозир Чилонзордасиз…» — тасдиқсиз
 /// ўтмайди, «Йўқ» шу туманга 24 соат сўралмайди.
@@ -116,9 +121,10 @@ class LocationAreaService {
     if (marks.isNotEmpty) {
       final p = marks.first;
       final regions = _regions ??= await _repo.fetchRegions();
+      GeoNames.remember(regions: regions);
       final regionIds = matchRegions(
         p.administrativeArea,
-        regions.map((r) => RegionCandidate(id: r.id, names: [r.name, r.nameUz])).toList(),
+        regions.map((r) => RegionCandidate(id: r.id, names: _names([r.name, r.nameUz, r.nameRu, r.nameRuShort]))).toList(),
       );
       // Вилоят аниқланмаса — 200+ туманни ўқимаймиз, таклиф йўқ.
       if (regionIds.isNotEmpty) {
@@ -126,9 +132,10 @@ class LocationAreaService {
         for (final id in regionIds) {
           all.addAll(_districts[id] ??= await _repo.fetchDistricts(id));
         }
+        GeoNames.remember(districts: all);
         final m = matchDistrict(
           [p.subAdministrativeArea, p.locality, p.subLocality],
-          all.map((d) => DistrictCandidate(id: d.id, regionId: d.regionId, names: [d.name, d.nameUz])).toList(),
+          all.map((d) => DistrictCandidate(id: d.id, regionId: d.regionId, names: _names([d.name, d.nameUz, d.nameRu, d.nameRuShort]))).toList(),
           regionIds: regionIds,
         );
         if (m != null) {

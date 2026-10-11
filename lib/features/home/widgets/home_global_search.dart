@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -396,8 +397,10 @@ class _ResultRow extends StatelessWidget {
                           tone: AvaChipTone.brand,
                         ),
                         if (hit.subtitle.isNotEmpty)
-                          Text(
-                            hit.subtitle,
+                          // Видео — туман номи тилга қараб (ID бўйича).
+                          GeoDistrictText(
+                            hit.clip?.districtId ?? '',
+                            fallback: hit.subtitle,
                             style: AvaText.caption.copyWith(color: c.ink3),
                           ),
                       ],

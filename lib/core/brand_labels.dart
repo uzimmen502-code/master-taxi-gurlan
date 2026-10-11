@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'geo/geo_names.dart';
+import 'l10n/l10n_extension.dart';
 import 'service_config_holder.dart';
 
 /// Глобал бренд + туман контексти (икки қаторли иерархия).
@@ -39,6 +41,16 @@ class BrandLabels {
     final label = ServiceConfigHolder.districtLabel.trim();
     return label.isEmpty ? null : label;
   }
+
+  /// [districtContext] фойдаланувчи тилида ([GeoNames]; кирилл — fallback).
+  static String? districtContextFor(String lang) {
+    final label = GeoNames.district(
+      ServiceConfigHolder.districtId,
+      lang,
+      fallback: ServiceConfigHolder.districtLabel,
+    ).trim();
+    return label.isEmpty ? null : label;
+  }
 }
 
 /// Катта бренд + (ихтиёрий) кичик туман қатори.
@@ -60,12 +72,13 @@ class BrandTitleColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.contentLang;
     if (!listenToConfig) {
-      return _build(BrandLabels.districtContext);
+      return _build(BrandLabels.districtContextFor(lang));
     }
-    return ValueListenableBuilder<int>(
-      valueListenable: ServiceConfigHolder.revision,
-      builder: (_, __, ___) => _build(BrandLabels.districtContext),
+    return ListenableBuilder(
+      listenable: Listenable.merge([ServiceConfigHolder.revision, GeoNames.revision]),
+      builder: (_, __) => _build(BrandLabels.districtContextFor(lang)),
     );
   }
 

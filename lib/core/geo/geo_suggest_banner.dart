@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n_extension.dart';
 import '../theme/app_theme.dart';
 import 'geo_context.dart';
+import 'geo_names.dart';
 
 /// «Сиз ҳозир Чилонзордасиз. Шу ҳудуддагиларни кўрсатайми?» (D-GEO-12).
 class GeoSuggestBanner extends StatelessWidget {
@@ -18,8 +19,16 @@ class GeoSuggestBanner extends StatelessWidget {
   final VoidCallback onNo;
 
   @override
-  Widget build(BuildContext context) {
-    final place = area.districtLabel.isNotEmpty ? area.districtLabel : area.label;
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        // Тилли ном фонда келгач қайта чизиш.
+        valueListenable: GeoNames.revision,
+        builder: (context, _, __) => _build(context),
+      );
+
+  Widget _build(BuildContext context) {
+    final lang = context.contentLang;
+    final d = GeoNames.district(area.districtId, lang, fallback: area.districtLabel);
+    final place = d.isNotEmpty ? d : GeoNames.area(area, lang);
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

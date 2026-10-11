@@ -11,8 +11,9 @@
  * Lotin `name` maydoni ikki mustaqil manbadan tasdiqlangan (yuqori
  * ishonch), lekin kirill yozuvlarini ona tilida so'zlashuvchi tomonidan
  * bir marta ko'zdan kechirish tavsiya etiladi — noto'g'ri bo'lsa ham
- * funksional xavf yo'q (faqat matn), admin panel orqali istalgan vaqtda
- * tuzatiladi (`service_config_admin_screen.dart`).
+ * funksional xavf yo'q (faqat matn). Admin panelda nom tahrirlash YO'Q
+ * (2026-10-11 tekshirildi) — xato nom shu fayl + seed orqali tuzatiladi.
+ * Ruscha nomlar: `geo_names_ru.js` + `backfill-geo-name-ru.js`.
  */
 
 const REGIONS = [

@@ -6,7 +6,12 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { REGIONS_RU, DISTRICTS_RU } = require('../tools/data/geo_names_ru');
+const {
+  REGIONS_RU,
+  DISTRICTS_RU,
+  REGIONS_RU_SHORT,
+  DISTRICTS_RU_SHORT,
+} = require('../tools/data/geo_names_ru');
 const { REGIONS, DISTRICTS_BY_REGION } = require('../tools/data/uzbekistan_geo_data');
 const { planNameRu } = require('../tools/backfill-geo-name-ru');
 
@@ -49,34 +54,61 @@ t('номлар — кирилл рус ҳарфлари, ўзбекча ҳар�
   }
 });
 
-t('режа: йўқ nameRu → ёзилади, before = null', () => {
-  const p = planNameRu([{ collection: 'geo_districts', id: 'sirgali' }]);
-  assert.deepStrictEqual(p.writes, [
-    { path: 'geo_districts/sirgali', before: null, nameRu: 'Сергелийский район' },
-  ]);
+t('қисқа номлар: фақат тўлиқ номи борларга, «район»/«город»сиз, тўлиқ номнинг ўзакидан', () => {
+  for (const [map, full] of [[REGIONS_RU_SHORT, REGIONS_RU], [DISTRICTS_RU_SHORT, DISTRICTS_RU]]) {
+    for (const [id, s] of Object.entries(map)) {
+      assert.ok(full[id], `${id}: тўлиқ номи йўқ`);
+      assert.ok(/^[А-Яа-яЁё-]+$/.test(s), `${id}: «${s}»`);
+      assert.ok(!/район|город|область/.test(s), `${id}: «${s}»`);
+      // «Гурлен» ↔ «Гурленский район»: биринчи 3 ҳарф бир хил (тасодифий хатони ушлайди).
+      assert.strictEqual(s.slice(0, 3).toLowerCase(), full[id].slice(0, 3).toLowerCase(), `${id}: «${s}» ↔ «${full[id]}»`);
+    }
+  }
+  // «город X» — илова ўзи қисқартиради; шаҳар номли туман тўлиқ қолади.
+  assert.strictEqual(DISTRICTS_RU_SHORT.urganch_shahri, undefined);
+  assert.strictEqual(DISTRICTS_RU_SHORT.andijon_tumani, undefined);
+  assert.strictEqual(DISTRICTS_RU_SHORT.gurlan, 'Гурлен');
 });
 
-t('режа: бир хил nameRu → қайта ёзилмайди (idempotent)', () => {
-  const p = planNameRu([{ collection: 'geo_districts', id: 'sirgali', nameRu: 'Сергелийский район' }]);
+t('режа: йўқ майдонлар → иккаласи ёзилади, before = null', () => {
+  const p = planNameRu([{ collection: 'geo_districts', id: 'sirgali' }]);
+  assert.deepStrictEqual(p.writes, [{
+    path: 'geo_districts/sirgali',
+    before: { nameRu: null, nameRuShort: null },
+    data: { nameRu: 'Сергелийский район', nameRuShort: 'Сергели' },
+  }]);
+});
+
+t('режа: қисқа шакли йўқ ҳужжат → фақат nameRu', () => {
+  const p = planNameRu([{ collection: 'geo_districts', id: 'urganch_shahri' }]);
+  assert.deepStrictEqual(p.writes[0].data, { nameRu: 'город Ургенч' });
+});
+
+t('режа: бир хил қийматлар → қайта ёзилмайди (idempotent)', () => {
+  const p = planNameRu([{
+    collection: 'geo_districts', id: 'sirgali', nameRu: 'Сергелийский район', nameRuShort: 'Сергели',
+  }]);
   assert.deepStrictEqual(p.writes, []);
   assert.deepStrictEqual(p.conflicts, []);
 });
 
-t('режа: қўлда ёзилган бошқа nameRu → тегилмайди; --overwrite билан ёзилади', () => {
-  const docs = [{ collection: 'geo_regions', id: 'xorazm', nameRu: 'Хорезм' }];
+t('режа: қўлда ёзилган бошқа қиймат → тегилмайди, қолган майдон ёзилади; --overwrite билан ҳаммаси', () => {
+  const docs = [{ collection: 'geo_regions', id: 'xorazm', nameRu: 'Хорезм вилоят' }];
   const p = planNameRu(docs);
-  assert.deepStrictEqual(p.writes, []);
   assert.strictEqual(p.conflicts.length, 1);
+  assert.strictEqual(p.conflicts[0].field, 'nameRu');
+  assert.deepStrictEqual(p.writes, [{
+    path: 'geo_regions/xorazm', before: { nameRuShort: null }, data: { nameRuShort: 'Хорезм' },
+  }]);
   const o = planNameRu(docs, { overwrite: true });
-  assert.deepStrictEqual(o.writes, [
-    { path: 'geo_regions/xorazm', before: 'Хорезм', nameRu: 'Хорезмская область' },
-  ]);
+  assert.deepStrictEqual(o.writes[0].data, { nameRu: 'Хорезмская область', nameRuShort: 'Хорезм' });
+  assert.deepStrictEqual(o.writes[0].before, { nameRu: 'Хорезм вилоят', nameRuShort: null });
 });
 
-t('режа: бўш/пробел nameRu — йўқ деб ҳисобланади', () => {
+t('режа: бўш/пробел қиймат — йўқ деб ҳисобланади', () => {
   const p = planNameRu([{ collection: 'geo_regions', id: 'andijon', nameRu: '  ' }]);
   assert.strictEqual(p.writes.length, 1);
-  assert.strictEqual(p.writes[0].before, null);
+  assert.deepStrictEqual(p.writes[0].before, { nameRu: null });
 });
 
 t('режа: номи йўқ ҳужжат ва ҳужжати йўқ ном алоҳида кўрсатилади', () => {

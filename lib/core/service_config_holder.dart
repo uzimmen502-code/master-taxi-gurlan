@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/service_module_config.dart';
 import '../repositories/service_config_repository.dart';
 import 'brand_labels.dart';
+import 'geo/geo_names.dart';
 
 /// Konfiguratsiyaga asoslangan modul mavjudligi — ilova bo'ylab yagona manba.
 ///
@@ -280,6 +281,7 @@ class ServiceConfigHolder {
     }
     try {
       final region = await _repo.fetchRegion(id);
+      if (region != null) GeoNames.remember(regions: [region]);
       _regionLabel = region?.displayName.trim() ?? '';
     } catch (e, st) {
       debugPrint('ServiceConfigHolder._resolveRegionLabel: $e\n$st');
@@ -294,6 +296,7 @@ class ServiceConfigHolder {
     }
     try {
       final district = await _repo.fetchDistrict(id);
+      if (district != null) GeoNames.remember(districts: [district]);
       final raw = district?.displayName.trim() ?? '';
       _districtLabel =
           raw.isEmpty ? '' : BrandLabels.shortDistrictName(raw);

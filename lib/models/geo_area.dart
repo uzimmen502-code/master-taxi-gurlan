@@ -36,6 +36,7 @@ class GeoRegion {
     required this.name,
     this.nameUz = '',
     this.nameRu = '',
+    this.nameRuShort = '',
     this.code = '',
     this.active = true,
     this.order = 0,
@@ -47,6 +48,9 @@ class GeoRegion {
 
   /// Русча ном (ихтиёрий; эски ҳужжатларда йўқ — [nameFor] fallback).
   final String nameRu;
+
+  /// Русча қисқа ном (сарлавҳа/чип учун: «Гурлен»). Ихтиёрий.
+  final String nameRuShort;
   final String code;
   final bool active;
   final int order;
@@ -65,6 +69,7 @@ class GeoRegion {
       name: (d['name'] ?? '') as String,
       nameUz: (d['nameUz'] ?? '') as String,
       nameRu: (d['nameRu'] ?? '') as String,
+      nameRuShort: (d['nameRuShort'] ?? '') as String,
       code: (d['code'] ?? '') as String,
       active: d['active'] as bool? ?? true,
       order: (d['order'] as num?)?.toInt() ?? 0,
@@ -75,6 +80,7 @@ class GeoRegion {
         'name': name,
         'nameUz': nameUz,
         if (nameRu.isNotEmpty) 'nameRu': nameRu,
+        if (nameRuShort.isNotEmpty) 'nameRuShort': nameRuShort,
         'code': code,
         'active': active,
         'order': order,
@@ -89,6 +95,7 @@ class GeoDistrict {
     required this.name,
     this.nameUz = '',
     this.nameRu = '',
+    this.nameRuShort = '',
     this.code = '',
     this.active = true,
     this.order = 0,
@@ -101,6 +108,9 @@ class GeoDistrict {
 
   /// Русча ном (ихтиёрий; эски ҳужжатларда йўқ — [nameFor] fallback).
   final String nameRu;
+
+  /// Русча қисқа ном (сарлавҳа/чип учун: «Гурлен»). Ихтиёрий.
+  final String nameRuShort;
   final String code;
   final bool active;
   final int order;
@@ -120,6 +130,7 @@ class GeoDistrict {
       name: (d['name'] ?? '') as String,
       nameUz: (d['nameUz'] ?? '') as String,
       nameRu: (d['nameRu'] ?? '') as String,
+      nameRuShort: (d['nameRuShort'] ?? '') as String,
       code: (d['code'] ?? '') as String,
       active: d['active'] as bool? ?? true,
       order: (d['order'] as num?)?.toInt() ?? 0,
@@ -131,6 +142,7 @@ class GeoDistrict {
         'name': name,
         'nameUz': nameUz,
         if (nameRu.isNotEmpty) 'nameRu': nameRu,
+        if (nameRuShort.isNotEmpty) 'nameRuShort': nameRuShort,
         'code': code,
         'active': active,
         'order': order,

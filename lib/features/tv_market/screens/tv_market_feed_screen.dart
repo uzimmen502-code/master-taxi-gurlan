@@ -1072,12 +1072,14 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
               highlightItemId: clip.shopItemId,
               ownerDisplayName: displayName,
               districtLabel: district,
+              districtId: clip.districtId,
             );
     } else {
       screen = TvChannelScreen(
         ownerPhone: clip.ownerPhone,
         ownerDisplayName: displayName,
         districtLabel: district,
+        districtId: clip.districtId,
         highlightClipId: clip.id,
         isOwner: owner,
       );

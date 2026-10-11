@@ -434,6 +434,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                                               highlightItemId: item.id,
                                               ownerDisplayName: item.ownerName,
                                               districtLabel: item.districtLabel,
+                                              districtId: item.districtId,
                                             ),
                                           ),
                                         );

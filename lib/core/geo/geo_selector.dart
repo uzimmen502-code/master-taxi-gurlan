@@ -6,6 +6,7 @@ import '../l10n/l10n_extension.dart';
 import '../theme/app_theme.dart';
 import '../widgets/service_area_picker.dart';
 import 'geo_context.dart';
+import 'geo_names.dart';
 
 /// ID → қисқа номлар («Гурлан», «Хоразм»).
 class GeoAreaResolver {
@@ -17,9 +18,15 @@ class GeoAreaResolver {
     var r = '';
     var d = '';
     try {
-      if (regionId.isNotEmpty) r = (await _repo.fetchRegion(regionId))?.displayName.trim() ?? '';
+      if (regionId.isNotEmpty) {
+        final region = await _repo.fetchRegion(regionId);
+        if (region != null) GeoNames.remember(regions: [region]);
+        r = region?.displayName.trim() ?? '';
+      }
       if (districtId.isNotEmpty) {
-        final raw = (await _repo.fetchDistrict(districtId))?.displayName.trim() ?? '';
+        final district = await _repo.fetchDistrict(districtId);
+        if (district != null) GeoNames.remember(districts: [district]);
+        final raw = district?.displayName.trim() ?? '';
         d = raw.isEmpty ? '' : BrandLabels.shortDistrictName(raw);
       }
     } catch (e) {
@@ -44,6 +51,8 @@ Future<void> showGeoSelectorSheet(
     builder: (ctx) {
       final active = GeoContext.active;
       final home = GeoContext.home;
+      // Ёрлиқлар фойдаланувчи тилида (сақланган кирилл — fallback).
+      final lang = ctx.contentLang;
       Widget tile({
         required IconData icon,
         required String title,
@@ -75,7 +84,7 @@ Future<void> showGeoSelectorSheet(
                 key: const ValueKey('geo_opt_current'),
                 icon: Icons.my_location,
                 title: ctx.tr('geo_selector_current'),
-                subtitle: current.label,
+                subtitle: GeoNames.area(current, lang),
                 selected: active.sameAs(current) && GeoContext.activeSource == GeoAreaSource.location,
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -86,7 +95,7 @@ Future<void> showGeoSelectorSheet(
               key: const ValueKey('geo_opt_home'),
               icon: Icons.home_outlined,
               title: ctx.tr('geo_selector_home'),
-              subtitle: home.label,
+              subtitle: GeoNames.area(home, lang),
               selected: !GeoContext.isAway,
               onTap: () async {
                 Navigator.pop(ctx);
@@ -98,7 +107,7 @@ Future<void> showGeoSelectorSheet(
               icon: Icons.travel_explore,
               title: ctx.tr('geo_selector_other'),
               subtitle: GeoContext.isAway && GeoContext.activeSource == GeoAreaSource.manual
-                  ? active.label
+                  ? GeoNames.area(active, lang)
                   : '',
               selected: GeoContext.isAway && GeoContext.activeSource == GeoAreaSource.manual,
               onTap: () async {

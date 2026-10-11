@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -85,10 +86,11 @@ class _RegionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     return ListenableBuilder(
-      listenable: Listenable.merge([ServiceConfigHolder.revision, GeoContext.revision]),
+      listenable: Listenable.merge(
+          [ServiceConfigHolder.revision, GeoContext.revision, GeoNames.revision]),
       builder: (context, _) {
         // Фаол ҳудуд (D-GEO-1): яшаш жойи ёки танланган/локация ҳудуди.
-        final geo = GeoContext.active.label.trim();
+        final geo = GeoNames.area(GeoContext.active, context.contentLang).trim();
         final chosen = geo.isNotEmpty;
         final away = GeoContext.isAway;
         // Геолокация ёқилмаган / ҳудуд танланмаган — тавсиф талаби

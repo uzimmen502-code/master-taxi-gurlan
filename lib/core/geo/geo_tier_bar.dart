@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/l10n_extension.dart';
 import 'geo_context.dart';
+import 'geo_names.dart';
 import 'geo_selector.dart';
 import 'module_geo_policy.dart';
 
@@ -27,10 +28,14 @@ class GeoTierBar extends StatelessWidget {
   String _label(BuildContext context, GeoLevel l) {
     switch (l) {
       case GeoLevel.district:
-        final d = scope.area.districtLabel.trim();
+        final d = GeoNames.district(scope.area.districtId, context.contentLang,
+                fallback: scope.area.districtLabel)
+            .trim();
         return d.isEmpty ? context.tr('geo_level_district') : d;
       case GeoLevel.region:
-        final r = scope.area.regionLabel.trim();
+        final r = GeoNames.region(scope.area.regionId, context.contentLang,
+                fallback: scope.area.regionLabel)
+            .trim();
         return r.isEmpty ? context.tr('geo_level_region') : r;
       case GeoLevel.nation:
         return context.tr('geo_level_nation');
@@ -49,7 +54,13 @@ class GeoTierBar extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        // Тилли ном фонда келгач қайта чизиш.
+        valueListenable: GeoNames.revision,
+        builder: (context, _, __) => _build(context),
+      );
+
+  Widget _build(BuildContext context) {
     final policy = geoPolicyFor(moduleId);
     if (policy.levels.length < 2) return const SizedBox.shrink();
     return SingleChildScrollView(

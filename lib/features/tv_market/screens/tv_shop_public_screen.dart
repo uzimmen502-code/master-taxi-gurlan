@@ -24,12 +24,16 @@ class TvShopPublicScreen extends StatefulWidget {
     this.highlightItemId = '',
     this.ownerDisplayName = '',
     this.districtLabel = '',
+    this.districtId = '',
   });
 
   final String ownerPhone;
   final String highlightItemId;
   final String ownerDisplayName;
   final String districtLabel;
+
+  /// Туман номини тилга қараб кўрсатиш учун (бўш бўлиши мумкин).
+  final String districtId;
 
   @override
   State<TvShopPublicScreen> createState() => _TvShopPublicScreenState();
@@ -43,6 +47,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   List<TvShopItem> _items = const [];
   String _displayName = '';
   String _district = '';
+  String _districtId = '';
   String _photoUrl = '';
   int _totalViewCount = 0;
   int _clipCount = 0;
@@ -57,6 +62,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
     super.initState();
     _displayName = tvOwnerDisplayName(widget.ownerDisplayName);
     _district = widget.districtLabel.trim();
+    _districtId = widget.districtId.trim();
     _load();
   }
 
@@ -80,6 +86,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
       final photoUrl = photos[canonicalPhoneId(widget.ownerPhone)] ?? '';
       if (_district.isEmpty && sorted.isNotEmpty) {
         _district = sorted.first.districtLabel.trim();
+        _districtId = sorted.first.districtId.trim();
       }
       final totalViews =
           await _profilesRepo.fetchTotalViewCount(widget.ownerPhone);
@@ -212,6 +219,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                         TvChannelHeader(
                           displayName: _displayName,
                           districtLabel: _district,
+                          districtId: _districtId,
                           clipCount: _clipCount > 0 ? _clipCount : null,
                           totalViewCount: _totalViewCount,
                           photoUrl: _photoUrl,

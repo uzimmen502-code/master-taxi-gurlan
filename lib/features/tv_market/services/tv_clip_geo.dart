@@ -1,4 +1,5 @@
 import '../../../core/brand_labels.dart';
+import '../../../core/geo/geo_names.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/service_config_repository.dart';
@@ -52,6 +53,7 @@ class TvClipGeo {
     if (cached != null) return cached;
     try {
       final d = await ServiceConfigRepository().fetchDistrict(id);
+      if (d != null) GeoNames.remember(districts: [d]);
       final raw = d?.displayName.trim() ?? '';
       final label = raw.isEmpty ? '' : BrandLabels.shortDistrictName(raw);
       _labelCache[id] = label;

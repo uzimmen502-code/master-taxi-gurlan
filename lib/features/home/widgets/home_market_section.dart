@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'dart:math';
 
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/utils/formatters.dart';
@@ -101,7 +102,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
   String? _districtNote(String districtId) {
     final area = GeoContext.scopeFor('cheap_products_home').area;
     return districtId.isNotEmpty && districtId == area.districtId
-        ? area.districtLabel
+        ? GeoNames.district(districtId, context.contentLang, fallback: area.districtLabel)
         : null;
   }
 

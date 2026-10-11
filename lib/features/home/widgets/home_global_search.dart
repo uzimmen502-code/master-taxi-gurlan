@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
+import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/search_index_entry.dart';
@@ -155,7 +155,7 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
         _clips
             .searchByTitle(
               query: q,
-              districtId: ServiceConfigHolder.districtId,
+              districtId: GeoContext.active.districtId,
               limit: 6,
             )
             .then((l) => l.map(HomeSearchHit.video).toList())

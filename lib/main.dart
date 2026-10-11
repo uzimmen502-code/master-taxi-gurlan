@@ -53,6 +53,7 @@ import 'services/location_service.dart';
 import 'services/notification_delivery.dart';
 import 'services/notification_service.dart';
 import 'features/dating/services/dating_youth_promo_service.dart';
+import 'core/geo/geo_context.dart';
 import 'core/navigation/app_route_observer.dart';
 import 'core/navigation/home_screen_resolver.dart';
 import 'core/theme/app_theme.dart';
@@ -123,6 +124,8 @@ void main() async {
 
   // Module gating — oxirgi kesh; Firestore refresh Home post-frame'da.
   await ServiceConfigHolder.loadCacheOnly();
+  // Фаол ҳудуд ва модул танловлари (D-GEO-1) — фақат SharedPreferences.
+  await GeoContext.load();
 
   // Minimal versiya darvozasi — kesh'dan (tarmoqsiz, tez). Tarmoq
   // yangilanishi splash tugagach (`_deferredMobileBootstrap`).

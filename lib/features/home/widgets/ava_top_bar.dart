@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
@@ -85,18 +86,14 @@ class _RegionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     return ListenableBuilder(
-      listenable: Listenable.merge([ServiceConfigHolder.revision, GeoNames.revision]),
+      listenable: Listenable.merge(
+          [ServiceConfigHolder.revision, GeoContext.revision, GeoNames.revision]),
       builder: (context, _) {
-        // `ServiceConfigHolder.geoLabel`нинг тилли шакли (сақланган ёрлиқ — fallback).
-        final lang = context.contentLang;
-        final d = GeoNames.district(ServiceConfigHolder.districtId, lang,
-                fallback: ServiceConfigHolder.districtLabel)
-            .trim();
-        final r = GeoNames.region(ServiceConfigHolder.regionId, lang,
-                fallback: ServiceConfigHolder.regionLabel)
-            .trim();
-        final geo = d.isEmpty ? r : (r.isEmpty ? d : '$d, $r');
+        // Фаол ҳудуд (D-GEO-1): яшаш жойи ёки танланган/локация ҳудуди —
+        // фойдаланувчи тилида (GeoNames).
+        final geo = GeoNames.area(GeoContext.active, context.contentLang).trim();
         final chosen = geo.isNotEmpty;
+        final away = GeoContext.isAway;
         // Геолокация ёқилмаган / ҳудуд танланмаган — тавсиф талаби
         // бўйича «Ҳудудни танланг».
         final label = chosen ? geo : context.tr('home_region_pick');
@@ -117,7 +114,9 @@ class _RegionButton extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.location_on_outlined,
+                        // Яшаш жойидан бошқа ҳудуд кўрилаётган бўлса —
+                        // бошқа белги (фойдаланувчи адашмасин).
+                        away ? Icons.travel_explore : Icons.location_on_outlined,
                         size: 18,
                         // brand (#FFA500) крем фонда кам кўринарди —
                         // иконка учун матн-хавфсиз brandText.

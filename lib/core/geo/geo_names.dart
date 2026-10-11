@@ -62,6 +62,15 @@ class GeoNames {
     return fallback;
   }
 
+  /// «Туман, Вилоят» — фойдаланувчи тилида (бош экран тугмаси, D-GEO-1).
+  static String area(GeoArea a, String lang) {
+    final d = district(a.districtId, lang, fallback: a.districtLabel).trim();
+    final r = region(a.regionId, lang, fallback: a.regionLabel).trim();
+    if (d.isEmpty) return r;
+    if (r.isEmpty) return d;
+    return '$d, $r';
+  }
+
   /// Вилоят номи. Номаълум бўлса — [fallback].
   static String region(String id, String lang, {String fallback = ''}) {
     final key = id.trim();

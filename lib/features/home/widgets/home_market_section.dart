@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/geo/geo_context.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
@@ -70,7 +71,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     }
     _sub = _repo
         .watchForHome(
-          districtId: ServiceConfigHolder.districtId,
+          districtId: GeoContext.active.districtId,
           limit: _limit,
         )
         .listen(

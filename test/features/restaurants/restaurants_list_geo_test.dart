@@ -65,7 +65,7 @@ void main() {
     expect(find.text('Toshkent'), findsNothing);
     expect(find.text('restaurants_empty_nearby'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('restaurants_show_all')));
+    await tester.tap(find.byKey(const ValueKey('rest_list_show_all')));
     await tester.pumpAndSettle();
     expect(repo.calls.last, 'approved:100');
     expect(find.text('Toshkent'), findsOneWidget);

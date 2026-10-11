@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
@@ -40,6 +42,10 @@ class _RealtyScreenState extends State<RealtyScreen>
 
   /// null — иккови ҳам (Сотиш ҳам, Ижара ҳам).
   RealtyDeal? _deal;
+
+  /// Ҳудуд (D-GEO-11/15): исталган ҳудуддан қидириш, танлов сақланади.
+  /// Аввал лента доим бутун Республика эди (бош саҳифа эса туман).
+  GeoScope _scope = GeoContext.scopeFor('realty');
 
   bool get _isGuest =>
       FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
@@ -139,16 +145,24 @@ class _RealtyScreenState extends State<RealtyScreen>
             deal: _deal,
             onChanged: (d) => setState(() => _deal = d),
           ),
+          GeoTierBar(
+            moduleId: 'realty',
+            scope: _scope,
+            onChanged: (s) => setState(() => _scope = s),
+          ),
           Expanded(
             child: TabBarView(
               controller: _tabs,
               children: [
                 for (final tier in RealtyTabs.order)
                   _TierFeed(
+                    key: ValueKey('${tier.key}_${_deal?.key}_${_scope.key}'),
                     repo: _repo,
                     tier: tier,
                     deal: _deal,
+                    scope: _scope,
                     onOpen: _openDetail,
+                    onScope: (s) => setState(() => _scope = s),
                   ),
               ],
             ),
@@ -160,24 +174,46 @@ class _RealtyScreenState extends State<RealtyScreen>
 }
 
 
-class _TierFeed extends StatelessWidget {
+class _TierFeed extends StatefulWidget {
   const _TierFeed({
+    super.key,
     required this.repo,
     required this.tier,
     required this.deal,
+    required this.scope,
     required this.onOpen,
+    required this.onScope,
   });
 
   final RealtyRepository repo;
   final RealtyTier tier;
   final RealtyDeal? deal;
+  final GeoScope scope;
   final ValueChanged<RealtyListing> onOpen;
+  final ValueChanged<GeoScope> onScope;
+
+  @override
+  State<_TierFeed> createState() => _TierFeedState();
+}
+
+class _TierFeedState extends State<_TierFeed> {
+  // Оқим state'да (калит — тур/битим/ҳудуд): rebuild янги listener очмасин.
+  late final Stream<List<RealtyListing>> _stream = widget.repo
+      .watchScoped(widget.scope, tier: widget.tier, deal: widget.deal, limit: 50);
+
+  RealtyTier get tier => widget.tier;
+  ValueChanged<RealtyListing> get onOpen => widget.onOpen;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
+    final wider = GeoWiderHint(
+      moduleId: 'realty',
+      scope: widget.scope,
+      onChanged: widget.onScope,
+    );
     return StreamBuilder<List<RealtyListing>>(
-      stream: repo.watchByTier(tier, deal: deal),
+      stream: _stream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -196,10 +232,10 @@ class _TierFeed extends StatelessWidget {
         }
         final items = snap.data ?? const <RealtyListing>[];
         if (items.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(
                 context.tr(
                   tier == RealtyTier.plain
                       ? 'realty_feed_empty'
@@ -208,14 +244,17 @@ class _TierFeed extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: c.ink2, fontSize: AppText.bodyMedium),
               ),
-            ),
+              wider,
+            ],
           );
         }
+        final showWider = items.length < 5;
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 90),
-          itemCount: items.length,
-          itemBuilder: (_, i) =>
-              RealtyCard(listing: items[i], onTap: () => onOpen(items[i])),
+          itemCount: items.length + (showWider ? 1 : 0),
+          itemBuilder: (_, i) => i == items.length
+              ? wider
+              : RealtyCard(listing: items[i], onTap: () => onOpen(items[i])),
         );
       },
     );

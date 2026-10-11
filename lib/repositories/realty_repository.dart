@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/geo/geo_context.dart';
+import '../core/geo/geo_query.dart';
+
 import '../core/utils/formatters.dart';
 import '../models/realty_listing.dart';
 
@@ -99,6 +102,68 @@ class RealtyRepository {
             .map(RealtyListing.fromDoc)
             .where((r) => !r.isExpired)
             .toList());
+  }
+
+  /// Фаол эълонлар оқими — лента, харита ва бош саҳифа учун битта жой.
+  ///
+  /// Учала жойда сўров шакли бир хил эди: `status == active`, ихтиёрий
+  /// [tier] ёки [districtId], ва `createdAt` бўйича тартиб. Учта нусха
+  /// ўрнига битта метод — чегара ёки тартиб ўзгарса, у ҳамма жойда
+  /// бирга ўзгаради.
+  ///
+  /// `orderBy` МАЖБУРИЙ (2026-09-29): усиз Firestore лимитга тушган
+  /// ҳужжатларни ихтиёрий тартибда танлар эди — 300 тадан ошганда
+  /// харитада «энг янгилари» эмас, тасодифий 300 таси кўринарди.
+  ///
+  /// Керакли композит индекслар мавжуд: `status+createdAt`,
+  /// `status+tier+createdAt` ва `status+districtId+createdAt`.
+  Stream<List<RealtyListing>> _watchActive({
+    RealtyTier? tier,
+    RealtyDeal? deal,
+    String districtId = '',
+    required int limit,
+  }) {
+    final id = districtId.trim();
+    Query<Map<String, dynamic>> q = _col.where('status', isEqualTo: 'active');
+    if (tier != null) q = q.where('tier', isEqualTo: tier.key);
+    if (id.isNotEmpty) q = q.where('districtId', isEqualTo: id);
+    return q
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => _live(snap.docs, deal: deal));
+  }
+
+  /// Ҳудуд даражаси бўйича (D-GEO-1/11/15): туман → вилоят (туманлари
+  /// `in`) → Республика. Эълоннинг тумани — уйнинг ўз тумани (2026-10-11
+  /// дан). Индекслар: `status+districtId+createdAt`,
+  /// `status+tier+districtId+createdAt`.
+  Stream<List<RealtyListing>> watchScoped(
+    GeoScope scope, {
+    RealtyTier? tier,
+    RealtyDeal? deal,
+    required int limit,
+  }) {
+    return geoScopedStream<RealtyListing>(
+      scope: scope,
+      nation: () => _watchActive(tier: tier, deal: deal, limit: limit),
+      byDistricts: (ids) {
+        Query<Map<String, dynamic>> q = _col.where('status', isEqualTo: 'active');
+        if (tier != null) q = q.where('tier', isEqualTo: tier.key);
+        return q
+            .where('districtId', whereIn: ids)
+            .orderBy('createdAt', descending: true)
+            .limit(limit)
+            .snapshots()
+            .map((snap) => _live(snap.docs, deal: deal));
+      },
+      legacy: () => _watchActive(tier: tier, deal: deal, limit: 60)
+          .map((l) => l.where((x) => x.districtId.isEmpty).toList()),
+      idOf: (x) => x.id,
+      compare: (a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0)
+          .compareTo(a.createdAt?.millisecondsSinceEpoch ?? 0),
+      limit: limit,
+    );
   }
 
   /// Эганинг очиқ ҳужжатдаги калити (`users/{uid}.realtyOwnerKey`).
@@ -348,6 +413,7 @@ class RealtyRepository {
     num? areaM2,
     List<String> imageUrls = const [],
     String ownerName = '',
+    String districtId = '',
   }) async {
     try {
       final res = await _functions
@@ -356,6 +422,8 @@ class RealtyRepository {
             options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
           )
           .call({
+            // Уйнинг ўз тумани (D-GEO-11) — жонли сервер ҳозирча эътиборсиз қолдиради.
+            if (districtId.trim().isNotEmpty) 'districtId': districtId.trim(),
         'idempotencyKey': _uuid.v4(),
         'deal': deal.key,
         'tier': tier.key,
@@ -410,6 +478,7 @@ class RealtyRepository {
     int? totalFloors,
     num? areaM2,
     List<String> imageUrls = const [],
+    String districtId = '',
   }) async {
     try {
       final res = await _functions
@@ -418,6 +487,8 @@ class RealtyRepository {
             options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
           )
           .call({
+            // Уйнинг ўз тумани (D-GEO-11) — жонли сервер ҳозирча эътиборсиз қолдиради.
+            if (districtId.trim().isNotEmpty) 'districtId': districtId.trim(),
         'listingId': listingId,
         'deal': deal.key,
         'title': title.trim(),

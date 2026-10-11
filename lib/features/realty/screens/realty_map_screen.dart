@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
@@ -44,10 +45,10 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
 
   late RealtyDeal? _deal = widget.deal;
 
-  /// Бўш бўлса — бутун ҳудуд. Фойдаланувчининг ўз тумани билан
-  /// бошланади: бош саҳифа бўлимлари ҳам шундай ишлайди, ва бу
-  /// сўровни 300 талик чегарага тиқилиб қолишдан сақлайди.
-  late String _districtId = ServiceConfigHolder.districtId.trim();
+  /// Ҳудуд (D-GEO-11/15): туман → вилоят → Республика ёки исталган бошқа
+  /// ҳудуд; лента билан умумий танлов, сақланади. Аввал икки ҳолатли
+  /// «менинг туманим / ҳаммаси» калити эди ва эсда қолмасди.
+  GeoScope _scope = GeoContext.scopeFor('realty');
 
   /// Камерани қайта мослаш белгиси — филтр ёки ҳудуд алмашганда ошади.
   int _fitToken = 0;
@@ -61,8 +62,6 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
   /// манзил бўйича жойга бориш пакетсиз фойдаланувчига ўша ахборотни
   /// текинга берган бўлар эди. Қидирув эълон матни ва нархи бўйича.
   String _query = '';
-
-  bool get _hasDistrict => ServiceConfigHolder.districtId.trim().isNotEmpty;
 
   @override
   void dispose() {
@@ -137,8 +136,8 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
         _fitToken++;
       });
 
-  void _setDistrict(String id) => setState(() {
-        _districtId = id;
+  void _setScope(GeoScope s) => setState(() {
+        _scope = s;
         _selectedId = null;
         _fitToken++;
       });
@@ -171,13 +170,7 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
               setState(() => _query = '');
             },
           ),
-          if (_hasDistrict)
-            _ScopeSwitch(
-              districtOnly: _districtId.isNotEmpty,
-              onChanged: (districtOnly) => _setDistrict(
-                districtOnly ? ServiceConfigHolder.districtId.trim() : '',
-              ),
-            ),
+          GeoTierBar(moduleId: 'realty', scope: _scope, onChanged: _setScope),
           const RealtyMapLegend(),
           Expanded(
             child: StreamBuilder<Set<String>>(
@@ -185,10 +178,7 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
               builder: (context, unlockedSnap) {
                 final unlocked = unlockedSnap.data ?? const <String>{};
                 return StreamBuilder<List<RealtyListing>>(
-                  stream: _repo.watchForMap(
-                    deal: _deal,
-                    districtId: _districtId,
-                  ),
+                  stream: _repo.watchScoped(_scope, deal: _deal, limit: 300),
                   builder: (context, snap) {
                     final all = snap.data ?? const <RealtyListing>[];
                     final listings = _filtered(all);
@@ -311,57 +301,6 @@ class _SearchBar extends StatelessWidget {
             borderSide: BorderSide(color: c.line),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// «Туманимда» ↔ «Бутун ҳудуд». Сўров 300 та билан чекланган, шунинг
-/// учун ҳудудни торайтириш — фойдаланувчи учун ҳам, сўров учун ҳам
-/// фойда.
-class _ScopeSwitch extends StatelessWidget {
-  const _ScopeSwitch({required this.districtOnly, required this.onChanged});
-
-  final bool districtOnly;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ava;
-    Widget chip(String labelKey, bool value) {
-      final selected = districtOnly == value;
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: GestureDetector(
-          onTap: () => onChanged(value),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: selected ? c.brand : c.surface,
-              border: Border.all(color: selected ? c.brand : c.line),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              context.tr(labelKey),
-              style: TextStyle(
-                fontSize: AppText.labelLarge,
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : c.ink2,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Row(
-        children: [
-          chip('realty_map_scope_district', true),
-          chip('realty_map_scope_all', false),
-        ],
       ),
     );
   }

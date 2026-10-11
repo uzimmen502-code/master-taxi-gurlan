@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +10,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_selector.dart';
+import '../../../core/geo/location_area_service.dart';
+import '../../ads/widgets/ad_district_field.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -87,6 +93,49 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
   final List<_PhotoItem> _photos = [];
   bool _submitting = false;
 
+  /// Уйнинг ЎЗ тумани (D-GEO-11): пиндан телефон аниқлайди (А вариант),
+  /// эга ўзгартира олади. Эга ўзи танласа — автоматик аниқлаш устидан
+  /// ёзмайди.
+  AdDistrictValue _district = AdDistrictValue.empty;
+  bool _districtByUser = false;
+
+  Future<void> _detectDistrict() async {
+    final p = _point;
+    if (p == null || _districtByUser) return;
+    final area = await LocationAreaService().areaAt(p.lat, p.lng);
+    if (!mounted || _districtByUser) return;
+    if (area != null) {
+      setState(() => _district = AdDistrictValue(
+            districtId: area.districtId,
+            regionId: area.regionId,
+            label: area.label,
+          ));
+    } else if (_district.isEmpty) {
+      // Аниқланмади — сукут: яшаш жойи (эга ўзгартира олади).
+      final home = GeoContext.home;
+      if (home.districtId.isNotEmpty) {
+        setState(() => _district = AdDistrictValue(
+              districtId: home.districtId,
+              regionId: home.regionId,
+              label: home.label,
+            ));
+      }
+    }
+  }
+
+  /// Таҳрирда — эълоннинг жорий тумани (номи билан).
+  Future<void> _loadExistingDistrict(String districtId) async {
+    if (districtId.isEmpty) return;
+    final regionId = widget.existing?.regionId ?? '';
+    final area = await GeoAreaResolver().resolve(regionId, districtId);
+    if (!mounted || _districtByUser) return;
+    setState(() => _district = AdDistrictValue(
+          districtId: districtId,
+          regionId: area.regionId,
+          label: area.label.isEmpty ? districtId : area.label,
+        ));
+  }
+
   Color get _tierColor => RealtyTabs.colorFor(_tier);
 
   int get _imageCount => _photos.length;
@@ -140,6 +189,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     // Нусхада қават, хона, майдон, нарх ва расмлар АТАЙЛАБ бўш
     // қолдирилади — концепцияда айнан шулар ўзгартирилади дейилган.
 
+    if (widget.existing != null) {
+      unawaited(_loadExistingDistrict(widget.existing!.districtId));
+    }
     _loadPoint(source.id);
   }
 
@@ -218,6 +270,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
           );
         }
       });
+      unawaited(_detectDistrict());
     } catch (e) {
       debugPrint('[AddRealty] restoreDraft $e');
     }
@@ -310,6 +363,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         _addressCtrl.text = result.label.trim();
       }
     });
+    unawaited(_detectDistrict());
   }
 
   /// «Сақланган уйлар» — рўйхатдан танлаш, пин қайта қўйилмайди.
@@ -358,6 +412,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       );
       if (_addressCtrl.text.trim().isEmpty) _addressCtrl.text = place.label;
     });
+    unawaited(_detectDistrict());
   }
 
   /// Танланган нуқтани «сақланган уйлар»га қўшиш.
@@ -436,6 +491,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               totalFloors: int.tryParse(_totalFloorsCtrl.text.trim()),
               areaM2: num.tryParse(_areaCtrl.text.trim().replaceAll(',', '.')),
               imageUrls: images,
+              districtId: _district.districtId,
             )
           : await _repo.updateListing(
               listingId: existing.id,
@@ -452,6 +508,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               totalFloors: int.tryParse(_totalFloorsCtrl.text.trim()),
               areaM2: num.tryParse(_areaCtrl.text.trim().replaceAll(',', '.')),
               imageUrls: images,
+              districtId: _district.districtId,
             );
       // Эга олиб ташлаган эски расмлар Storage'да қолиб кетмасин.
       final removed = existing == null
@@ -593,6 +650,18 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               onTap: _pickPoint,
               color: _tierColor,
             ),
+            // Уйнинг ўз тумани (D-GEO-11) — пиндан аниқланади, ўзгартириш
+            // мумкин. Харидор шу туман бўйича қидиради.
+            if (_point != null) ...[
+              const SizedBox(height: 10),
+              AdDistrictField(
+                value: _district,
+                onChanged: (v) => setState(() {
+                  _district = v;
+                  _districtByUser = true;
+                }),
+              ),
+            ],
             // «Сақланган уйлар» — риэлтор бир хил уйга пин қўявермасин.
             Row(
               children: [

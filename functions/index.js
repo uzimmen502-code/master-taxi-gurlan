@@ -75,6 +75,15 @@ attachRestaurantOrders(exports, {
   get courierAuth() { return courierAuth; },
   notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),
 });
+// «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
+// ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
+const { attachOrderIndex } = require('./order_index');
+attachOrderIndex(exports, { db, admin });
+const { attachAdminSectionGrants } = require('./admin_section_grants');
+attachAdminSectionGrants(exports, {
+  functions, db, admin, canonicalUid, requireCallerRoles,
+  PANEL_ROLES: adminPin.PANEL_ROLES,
+});
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {
@@ -9176,12 +9185,25 @@ exports.setUserRoleByAdmin = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('permission-denied', 'Superadmin berish ruxsati yo\'q');
   }
 
-  await ref.set({
+  // Рол ва audit битта batch'да (D-ALL-6, 41-қоида: аввал audit йўқ эди).
+  const batch = db.batch();
+  batch.set(ref, {
     role,
     roleUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     roleUpdatedBy: adminUid,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
+  if (role !== currentRole) {
+    batch.set(db.collection('admin_audit').doc(), {
+      kind: 'role_change',
+      actor: adminUid,
+      target: ref.id,
+      from: currentRole,
+      to: role,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  await batch.commit();
 
   // uid = Firestore doc id (998… yoki legacy 9 xona).
   return { ok: true, uid: ref.id, role };

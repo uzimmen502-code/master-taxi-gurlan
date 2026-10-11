@@ -1032,6 +1032,48 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── «Барча буюртмалар» (D-ALL-5/6/9, 2026-10-11) ────────────────────
+    // Superadmin доим кўради; бошқа панел ходими — фақат админ берган
+    // `all_orders` бўлим рухсати билан. Рол олиб ташланса рухсат ҳам
+    // ишламайди (иккаласи текширилади). Ёзувчи — фақат CF.
+    function userRoleIn(userId, roles) {
+      return userId != ''
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && get(/databases/$(database)/documents/users/$(userId)).data.role in roles;
+    }
+
+    function callerHasPanelRole() {
+      let uid = userDocIdFromPhoneToken();
+      let roles = ['admin', 'superadmin', 'dispatcher', 'finance', 'auditor'];
+      return uid != ''
+          && (userRoleIn(uid, roles)
+              || (uid.size() == 12 && uid[0:3] == '998'
+                  && userRoleIn(uid[3:uid.size()], roles)));
+    }
+
+    function callerHasSectionGrant(section) {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && exists(/databases/$(database)/documents/admin_section_grants/$(uid))
+          && section in get(/databases/$(database)/documents/admin_section_grants/$(uid)).data.sections;
+    }
+
+    function canViewAllOrders() {
+      return isSuperAdmin()
+          || (callerHasPanelRole() && callerHasSectionGrant('all_orders'));
+    }
+
+    match /order_index/{docId} {
+      allow read: if canViewAllOrders();
+      allow write: if false;
+    }
+
+    match /admin_section_grants/{userId} {
+      allow get: if userDocIdFromPhoneToken() == userId || isAdmin();
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
     // Marshrut blok holati — faqat o'z telefon raqami yoki admin
     match /users/{userId}/marshrut_block/{doc} {
       allow read: if isOwner(userId) || isAdmin();
@@ -1863,9 +1905,12 @@ service cloud.firestore {
       // `anomaly_settings` — панелдаги каби фақат superadmin.
       // `restaurant_delivery` (кафе-ресторан етказиш тарифи) — фақат CF
       // `adminSetRestaurantDeliveryPrices` (версия + тарих + audit, 9/41-банд).
+      // `all_orders_stuck` («Барча буюртмалар» чегаралари) — фақат CF/Admin
+      // SDK: ўзгариш audit'сиз бўлмасин (41-банд).
       allow create, update: if isAdmin() && docId != 'tv_social'
           && docId != 'wallet_bot'
           && docId != 'restaurant_delivery'
+          && docId != 'all_orders_stuck'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'

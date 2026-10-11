@@ -80,7 +80,12 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => RestaurantRegisterScreen(repository: _repo)));
       return;
     }
-    if (picked != _restaurantId) setState(() => _restaurantId = picked);
+    if (picked != _restaurantId) {
+      setState(() {
+        _restaurantId = picked;
+        _mine = null; // панел қайта қурилади — оқим ҳам янгидан очилади
+      });
+    }
   }
 
   @override

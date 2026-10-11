@@ -3108,5 +3108,8 @@
   "intercity_other_day": "БОШҚА КУН",
   "home_ev_nearby_radius": "{n} км ичида",
   "yuk_depart_on": "Жўнаш: {d}",
-  "yuk_any_day": "Жўнаш куни: ҳар қандай"
+  "yuk_any_day": "Жўнаш куни: ҳар қандай",
+  "restaurants_m_my_cafes_n": "Менинг кафеларим ({n})",
+  "restaurants_m_switch_cafe": "Кафе-ресторанни алмаштириш",
+  "restaurants_m_add_another": "Яна кафе-ресторан очиш"
 }

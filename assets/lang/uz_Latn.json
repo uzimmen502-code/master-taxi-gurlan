@@ -3108,5 +3108,8 @@
   "intercity_other_day": "BOSHQA KUN",
   "home_ev_nearby_radius": "{n} km ichida",
   "yuk_depart_on": "Jo'nash: {d}",
-  "yuk_any_day": "Jo'nash kuni: har qanday"
+  "yuk_any_day": "Jo'nash kuni: har qanday",
+  "restaurants_m_my_cafes_n": "Mening kafelarim ({n})",
+  "restaurants_m_switch_cafe": "Kafe-restoranni almashtirish",
+  "restaurants_m_add_another": "Yana kafe-restoran ochish"
 }

@@ -3108,5 +3108,8 @@
   "intercity_other_day": "ДРУГОЙ ДЕНЬ",
   "home_ev_nearby_radius": "В радиусе {n} км",
   "yuk_depart_on": "Отправка: {d}",
-  "yuk_any_day": "День отправки: любой"
+  "yuk_any_day": "День отправки: любой",
+  "restaurants_m_my_cafes_n": "Мои кафе ({n})",
+  "restaurants_m_switch_cafe": "Переключить кафе-ресторан",
+  "restaurants_m_add_another": "Открыть ещё кафе-ресторан"
 }

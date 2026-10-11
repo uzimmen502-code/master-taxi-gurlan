@@ -163,9 +163,14 @@ class _RestaurantProfileEntryState extends State<RestaurantProfileEntry> {
       );
     }
     final first = _mine.first;
+    // Бир эга бир нечта кафе юритиши мумкин (менежерлик, 2026-10-10):
+    // битта бўлса номи, кўп бўлса сони; ҳолат изоҳлари ҲАММАСИ бўйича.
     final label = _mine.length == 1
         ? '${context.tr('restaurants_m_my_cafe')} · ${first.name}'
-        : context.tr('restaurants_m_my_cafe');
+        : context.tr('restaurants_m_my_cafes_n').replaceAll('{n}', '${_mine.length}');
+    final pending = _mine.where((r) => r.status == 'applied').length;
+    final suspended = _mine.any((r) => r.status == 'suspended');
+    final rejected = _mine.any((r) => r.status == 'rejected');
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -175,11 +180,14 @@ class _RestaurantProfileEntryState extends State<RestaurantProfileEntry> {
           color: AppColors.primary,
           onTap: _choose,
         ),
-        if (first.status == 'applied')
+        if (pending == 1)
           _note(Icons.hourglass_top_rounded, context.tr('restaurants_m_pending_note'), AppColors.primaryMid),
-        if (first.status == 'suspended')
+        if (pending > 1)
+          _note(Icons.hourglass_top_rounded,
+              context.tr('restaurants_m_pending_count').replaceAll('{n}', '$pending'), AppColors.primaryMid),
+        if (suspended)
           _note(Icons.block_rounded, context.tr('restaurants_m_suspended_note'), Colors.red.shade700),
-        if (first.status == 'rejected')
+        if (rejected)
           _note(Icons.info_outline, context.tr('restaurants_m_rejected_note'), Colors.red.shade700),
       ],
     );

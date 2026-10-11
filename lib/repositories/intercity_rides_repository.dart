@@ -17,6 +17,20 @@ class IntercityRidesRepository {
   static String scheduleDateKey(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// Йўловчи қидируви — шу кундаги актив рейслар, СЕРВЕР филтри (3б-босқич).
+  ///
+  /// Аввал БАРЧА актив рейслар юкланиб, сана клиентда текширилар эди
+  /// (рейс кўпайса ҳар қидирув бутун коллекцияни ўқийди). Иккита тенглик
+  /// шарти — Firestore бир майдонли индексларни бирлаштиради, композит
+  /// индекс шарт эмас.
+  ///
+  /// `scheduleDate`сиз эски ёзувлар энди чиқмайди: майдон 2026-06-14
+  /// (`a6a0ac3`) дан бери ҳар рейс очилишида ёзилади; ундан бери актив
+  /// турган санасиз ёзув — 4 ойлик эскирган рейс (INFERRED).
+  Query<Map<String, dynamic>> _activeOn(DateTime day) => _col
+      .where('isActive', isEqualTo: true)
+      .where('scheduleDate', isEqualTo: scheduleDateKey(day));
+
   List<IntercityRide> _mapSnapshot(
     QuerySnapshot<Map<String, dynamic>> snap, {
     required String fromCity,
@@ -27,14 +41,10 @@ class IntercityRidesRepository {
     required DateTime baseDate,
   }) {
     final dateKey = scheduleDateKey(baseDate);
-    final todayKey = scheduleDateKey(DateTime.now());
 
     final rides = snap.docs
-        .where((d) {
-          final sd = (d.data()['scheduleDate'] as String?)?.trim() ?? '';
-          if (sd.isEmpty) return dateKey == todayKey;
-          return sd == dateKey;
-        })
+        .where((d) =>
+            ((d.data()['scheduleDate'] as String?)?.trim() ?? '') == dateKey)
         .map((d) => IntercityRide.fromDoc(
               d,
               fromCity: fromCity,
@@ -66,7 +76,7 @@ class IntercityRidesRepository {
     final pTo = passengerToRaw ?? toCity;
 
     try {
-      final snap = await _col.where('isActive', isEqualTo: true).get();
+      final snap = await _activeOn(baseDate).get();
       return _mapSnapshot(
         snap,
         fromCity: fromCity,
@@ -99,7 +109,7 @@ class IntercityRidesRepository {
     final pFrom = passengerFromRaw ?? fromCity;
     final pTo = passengerToRaw ?? toCity;
 
-    return _col.where('isActive', isEqualTo: true).snapshots().map((snap) {
+    return _activeOn(baseDate).snapshots().map((snap) {
       return _mapSnapshot(
         snap,
         fromCity: fromCity,

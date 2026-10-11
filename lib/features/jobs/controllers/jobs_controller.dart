@@ -2,6 +2,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../models/job_ad.dart';
@@ -308,7 +310,35 @@ class JobsController extends ChangeNotifier {
 
   Stream<List<JobAd>> watch(String type) => _repo.watchActiveByType(type);
 
-  Stream<List<JobAd>> watchAll() => _repo.watchAllActive();
+  /// Ҳудуд даражаси (D-GEO-1): туман → вилоят → Республика, танлов
+  /// сақланади. Аввал экран доим бутун Республикадан 500 тасини олар эди.
+  GeoScope get scope => _scope;
+  GeoScope _scope = GeoContext.scopeFor('jobs');
+
+  /// Оқим кешланади — қидирув ёзилганда (notify) янги listener очилмасин.
+  Stream<List<JobAd>>? _feed;
+  String _feedKey = '';
+
+  Stream<List<JobAd>> watchAll() {
+    if (_feed == null || _feedKey != _scope.key) {
+      _feedKey = _scope.key;
+      _feed = _repo.watchScoped(_scope).asBroadcastStream();
+    }
+    return _feed!;
+  }
+
+  void setScope(GeoScope s) {
+    if (s == _scope) return;
+    _scope = s;
+    notifyListeners();
+  }
+
+  /// Глобал қидирувдан аниқ эълонга келинганда — у бошқа ҳудудда бўлиши
+  /// мумкин; шунда шу сафарга Республика (сақланмайди).
+  void showNationwideOnce() {
+    _scope = _scope.copyWith(level: GeoLevel.nation);
+    notifyListeners();
+  }
 
   Stream<List<JobAd>> watchMyAds() => _repo.watchAdsByAuthor(userPhone);
 }

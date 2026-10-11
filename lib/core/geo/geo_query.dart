@@ -23,6 +23,9 @@ Stream<List<T>> geoScopedStream<T>({
   required int Function(T a, T b) compare,
   required int limit,
   Future<List<String>> Function(String regionId)? districtsOf,
+  /// Иккинчи `in` шарти бўлса (масалан тур × туман) Firestore чеклови —
+  /// кўпайтма ≤ 30; шунда кичикроқ бўлак берилади.
+  int chunkSize = 30,
 }) {
   List<T> finish(List<T> l) => (l.toList()..sort(compare)).take(limit).toList();
 
@@ -31,7 +34,7 @@ Stream<List<T>> geoScopedStream<T>({
 
   Stream<List<T>> forDistricts(List<String> ids) {
     if (ids.isEmpty) return nation().map(finish);
-    final parts = chunksOf(ids).map(byDistricts).toList();
+    final parts = chunksOf(ids, chunkSize).map(byDistricts).toList();
     var merged = parts.first;
     for (final p in parts.skip(1)) {
       merged = mergeListStreams(merged, p, idOf: idOf);

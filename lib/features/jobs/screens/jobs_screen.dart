@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
@@ -91,6 +92,12 @@ class _JobsViewState extends State<_JobsView> {
   @override
   void initState() {
     super.initState();
+    if (widget.highlightAdId.isNotEmpty) {
+      // Глобал қидирувдан келинган эълон бошқа ҳудудда бўлиши мумкин.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<JobsController>().showNationwideOnce();
+      });
+    }
     if (widget.openAddSheet) {
       // `JobsController` provider'и тайёр бўлгач — биринчи frame'дан кейин.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -214,6 +221,7 @@ class _JobsViewState extends State<_JobsView> {
             ),
           ),
         ),
+        GeoTierBar(moduleId: 'jobs', scope: c.scope, onChanged: c.setScope),
         Expanded(
           child: _Feed(
             kindFilter: widget.kind,
@@ -265,19 +273,33 @@ class _Feed extends StatelessWidget {
           c.feedForTab(all, kind: kindFilter),
           highlight,
         );
+        final wider = GeoWiderHint(
+          moduleId: 'jobs',
+          scope: c.scope,
+          onChanged: c.setScope,
+        );
         if (list.isEmpty) {
-          return _EmptyState(
-            kind: kindFilter,
-            isSearching: c.searchQuery.isNotEmpty,
+          return ListView(
+            children: [
+              _EmptyState(
+                kind: kindFilter,
+                isSearching: c.searchQuery.isNotEmpty,
+              ),
+              wider,
+            ],
           );
         }
+        // Ҳудудда кам — пастда кенгроқ ҳудуд таклифи (2-такомиллаштириш).
+        final showWider = list.length < 5;
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 90),
-          itemCount: list.length,
-          itemBuilder: (_, i) => AdCard(
-            ad: list[i],
-            highlighted: highlight.isNotEmpty && list[i].id == highlight,
-          ),
+          itemCount: list.length + (showWider ? 1 : 0),
+          itemBuilder: (_, i) => i == list.length
+              ? wider
+              : AdCard(
+                  ad: list[i],
+                  highlighted: highlight.isNotEmpty && list[i].id == highlight,
+                ),
         );
       },
     );

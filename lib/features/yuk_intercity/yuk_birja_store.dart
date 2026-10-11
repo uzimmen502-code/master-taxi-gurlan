@@ -85,6 +85,7 @@ class YukBirjaStore extends ChangeNotifier {
       stars: item.stars,
       createdAt: item.createdAt,
       expiresAt: item.expiresAt,
+      departDate: item.departDate,
     );
     _listings.removeWhere((e) => e.id == id);
     _listings.insert(0, withId);
@@ -156,6 +157,7 @@ class YukBirjaStore extends ChangeNotifier {
     String from = '',
     String to = '',
     String vehicleType = '',
+    DateTime? departDay,
   }) =>
       filterYukListings(
         _listings,
@@ -163,6 +165,7 @@ class YukBirjaStore extends ChangeNotifier {
         from: from,
         to: to,
         vehicleType: vehicleType,
+        departDay: departDay,
       );
 
   @override

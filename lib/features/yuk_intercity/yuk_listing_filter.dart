@@ -9,6 +9,8 @@ import '../yuk_shared/yuk_vehicle_types.dart';
 /// келиши шарт — «Тошкент → Урганч» эълони «Урганч → Тошкент» қидирувида
 /// чиқмайди. [vehicleType] — normalize қилинган код бўйича тенглик.
 /// moto/traktor — фақат туман ичи, шаҳарлараро рўйхатда кўринмайди.
+/// Жўнаш куни ўтган эълон кўринмайди. [departDay] берилса — шу куни
+/// жўнайдиганлар ва куни кўрсатилмаган (эски) эълонлар.
 /// Натижа `createdAt` бўйича янги тепада.
 List<YukListing> filterYukListings(
   Iterable<YukListing> source, {
@@ -16,15 +18,20 @@ List<YukListing> filterYukListings(
   String from = '',
   String to = '',
   String vehicleType = '',
+  DateTime? departDay,
   DateTime? now,
 }) {
   final at = now ?? DateTime.now();
+  final day = departDay == null ? null : YukListing.dayOf(departDay);
   final f = from.trim().toLowerCase();
   final t = to.trim().toLowerCase();
   final vt = vehicleType.trim().toLowerCase();
 
   var list = source.where((item) {
-    if (!item.isActive || item.isExpired(at)) return false;
+    if (!item.isActive || item.isExpired(at) || item.departed(at)) return false;
+    if (day != null && item.departDate != null && item.departDate != day) {
+      return false;
+    }
     final code = normalizeYukVehicleType(item.vehicleType);
     if (kYukLocalOnlyVehicleValues.contains(code)) return false;
     final cities = item.routeCities.map((c) => c.toLowerCase()).toList();

@@ -14,6 +14,7 @@ YukListing _listing(
   YukListingStatus status = YukListingStatus.active,
   Duration age = Duration.zero,
   DateTime? expiresAt,
+  DateTime? departDate,
 }) {
   final created = _now.subtract(age);
   return YukListing(
@@ -29,6 +30,7 @@ YukListing _listing(
     status: status,
     createdAt: created,
     expiresAt: expiresAt ?? created.add(YukListing.ttl),
+    departDate: departDate,
   );
 }
 
@@ -42,12 +44,22 @@ void main() {
           _listing('active'),
           _listing('closed', status: YukListingStatus.closed),
           _listing('expired',
-              age: const Duration(hours: 49)), // ttl 48h → expired
+              age: const Duration(days: 5, minutes: 1)), // ttl 5 сутка → expired
         ],
         tab: 'all',
         now: _now,
       );
       expect(_ids(r), ['active']);
+    });
+
+    test('5 сутка: 4 кун 23 соатлик эълон ҳали фаол (аввалги 48 соатдан узоқ)', () {
+      final r = filterYukListings(
+        [_listing('old4d', age: const Duration(days: 4, hours: 23))],
+        tab: 'all',
+        now: _now,
+      );
+      expect(_ids(r), ['old4d']);
+      expect(YukListing.ttl, const Duration(days: 5));
     });
 
     test('createdAt бўйича янги тепада', () {
@@ -174,6 +186,33 @@ void main() {
             from: 'Тошкент', to: 'Навоий', now: _now)),
         ['stops'],
       );
+    });
+
+    test('жўнаш куни: ўтган кун — йўқ; кун филтри — шу кун + санасиз эскилар', () {
+      final today = DateTime(2026, 9, 15);
+      final src = [
+        _listing('yesterday', departDate: DateTime(2026, 9, 14)),
+        _listing('today', departDate: today),
+        _listing('in3', departDate: DateTime(2026, 9, 18)),
+        _listing('legacy'),
+      ];
+      expect(_ids(filterYukListings(src, tab: 'all', now: _now))..sort(),
+          ['in3', 'legacy', 'today']);
+      expect(
+        _ids(filterYukListings(src,
+            tab: 'all', departDay: DateTime(2026, 9, 18, 17), now: _now))
+          ..sort(),
+        ['in3', 'legacy'],
+      );
+    });
+
+    test('departDate Firestore шакли: YYYY-MM-DD ўқилади, нотўғриси — null', () {
+      final ok = YukListing.fromFirestore('a', {'departDate': '2026-10-13'});
+      expect(ok.departDate, DateTime(2026, 10, 13));
+      expect(ok.toJson()['departDate'], '2026-10-13');
+      expect(YukListing.fromFirestore('b', {'departDate': '13.10.2026'}).departDate,
+          isNull);
+      expect(YukListing.fromFirestore('c', const {}).departDate, isNull);
     });
 
     test('фақат битта томон берилса — тартиб талаб қилинмайди', () {

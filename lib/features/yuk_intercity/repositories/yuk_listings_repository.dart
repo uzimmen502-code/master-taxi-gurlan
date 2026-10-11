@@ -12,9 +12,9 @@ class YukListingsRepository {
   final FirebaseFirestore _db;
 
   /// Аввал 10 000 эди — ҳар очилишда шунча ҳужжат ўқилиши мумкин эди.
-  /// Эълон 48 соат яшайди ва муддати ўтганини CF ёпади
+  /// Эълон 5 сутка яшайди ([YukListing.ttl]) ва муддати ўтганини CF ёпади
   /// (`yuk_intercity.js`, `status: closed`), шунинг учун актив тўплам —
-  /// фақат охирги 48 соат эълонлари; энг янги 500 таси етарли (3в-босқич).
+  /// фақат охирги 5 сутка эълонлари; энг янги 500 таси етарли (3в-босқич).
   /// Индекс: (status, createdAt↓) — мавжуд.
   static const int activeWatchLimit = 500;
 
@@ -60,6 +60,8 @@ class YukListingsRepository {
       'stars': item.stars,
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
+      if (item.departDate != null)
+        'departDate': YukListing.dateKey(item.departDate!),
       'updatedAt': FieldValue.serverTimestamp(),
       'clientCreatedAt': Timestamp.fromDate(now),
     });
@@ -80,6 +82,9 @@ class YukListingsRepository {
       'freeSpace': item.freeSpaceKg,
       'price': item.price,
       'comment': item.comment,
+      // Rules `yukListingOwnerUpdateOk` рухсат рўйхатида (2026-10-11).
+      if (item.departDate != null)
+        'departDate': YukListing.dateKey(item.departDate!),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

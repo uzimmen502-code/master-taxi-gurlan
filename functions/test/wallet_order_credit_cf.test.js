@@ -186,6 +186,12 @@ async function rejects(promise, code) {
     assert.strictEqual(await bal(LEGACY9), 40000);
     assert.strictEqual(await pcBal(LEGACY9), 0, 'ledger: −narx +narx = 0 (ochilish yozuvisiz)');
     await journalBalanced();
+    // Ҳамён тарихи модули — буюртма туридан (Улгуржи). Аввал нон бўлмаган
+    // ҳар қандай бекор `food` деб ёзиларди.
+    const refunds = await db.collection('users').doc(LEGACY9).collection('wallet_ledger')
+        .where('type', '==', 'order_cancel_refund').get();
+    assert.strictEqual(refunds.size, 1);
+    assert.strictEqual(refunds.docs[0].data().module, 'platform');
   });
 
   await reset();

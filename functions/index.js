@@ -904,10 +904,20 @@ async function notifyCourierArrivedToCustomer(customerPhone, extraData = {}) {
 /** Буюртма тури — мижоз хабари матни учун (`orders.type`). */
 function orderTypeLabel(type) {
   switch (String(type || '')) {
-    case 'food': return 'Тайёр овқат';
     case 'platform': return 'Улгуржи бозор';
     default: return 'Нон';
   }
+}
+
+/**
+ * Ҳамён тарихи (`wallet_ledger.module`) — буюртма туридан, ягона манба.
+ * Аввал уч жойда алоҳида ёзилган эди: бекор қилишда нон бўлмаган ҳар
+ * қандай буюртма (Улгуржи ҳам) `food`, курьер тўловида эса `bread` деб
+ * ёзиларди. Эски тарих ёзувлари (`food`) ўзгармайди — клиент уни «Taom»
+ * деб кўрсатади.
+ */
+function ledgerModuleOfOrder(type) {
+  return String(type || '').trim() || 'bread';
 }
 
 /**
@@ -1103,7 +1113,7 @@ exports.onOrderCreate = functions.firestore
     if (String(orderType) === 'restaurant') return;
     const total = order.total || 0;
     const fmt = new Intl.NumberFormat('uz-UZ').format(total);
-    const emoji = orderType === 'food' ? 'Ovqat' : 'Non';
+    const emoji = orderType === 'platform' ? 'Ulgurji' : 'Non';
     const title = `Yangi ${emoji} buyurtmasi`;
     const body = `${fmt} sum - ${order.userName || order.userPhone || '-'}`;
 
@@ -3114,7 +3124,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   }
 
   const orderRef = db.collection('orders').doc();
-  const module = orderType === 'bread' ? 'bread' : 'platform';
+  const module = ledgerModuleOfOrder(orderType);
   const agg = {};
   const decSource = catalogDecs || decrementsIn;
   for (let i = 0; i < decSource.length; i += 1) {
@@ -3484,7 +3494,7 @@ function commitOrderCancelInTx(t, ctx, { orderPatch, actorUid, actorRole, create
     t.set(ctx.customerRef.collection('wallet_ledger').doc(ledgerId), {
       type: 'order_cancel_refund',
       amount: ctx.walletRefund,
-      module: String(od.type || 'food') === 'bread' ? 'bread' : 'food',
+      module: ledgerModuleOfOrder(od.type),
       refType: 'order',
       refId: orderId,
       meta: { reason },
@@ -3499,7 +3509,7 @@ function commitOrderCancelInTx(t, ctx, { orderPatch, actorUid, actorRole, create
 }
 
 /**
- * Мижоз: food/bread буюртмани бекор (фақат эрта ҳолат).
+ * Мижоз: нон/улгуржи буюртмани бекор (фақат эрта ҳолат).
  * Захира қайтариш + ҳамён refund (agar balanceApplied > 0).
  */
 exports.customerCancelOrder = functions.https.onCall(async (data, context) => {
@@ -4922,7 +4932,7 @@ async function courierSubmitPaymentTx(t, {
   }
 
   // Barcha o'qishlar tugadi — endi yozuvlar.
-  const module = od.type === 'food' ? 'food' : 'bread';
+  const module = ledgerModuleOfOrder(od.type);
   for (let i = 0; i < normalized.length; i += 1) {
     const lineRef = ref.collection('payment_lines').doc();
     t.set(lineRef, normalized[i]);

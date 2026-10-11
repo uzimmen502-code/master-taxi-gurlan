@@ -2214,7 +2214,7 @@
   "yuk_local_search_count": "{n} ta topildi",
   "yuk_local_search_empty": "Qidiruv bo‘yicha e’lon topilmadi",
   "yuk_local_empty": "Hozircha e'lon yo'q. Yuk tashish uchun e'lon bering.",
-  "yuk_local_need_gps_search": "Yaqindagi mashinalarni ko'rish uchun joylashuv (GPS) kerak.",
+  "yuk_local_gps_hint": "Joylashuv (GPS) yoqilsa, yaqindagi mashinalar birinchi chiqadi va masofa ko'rinadi.",
   "yuk_local_publish_title": "Tuman ichida mashina",
   "yuk_local_edit_title": "E'lonni tahrirlash",
   "yuk_local_publish_hint": "Joylashuv (GPS) va ish vaqti bilan e'lon. Birinchi e'lon — 60 kun, keyingilari — 10 kun.",

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_tier_bar.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
@@ -60,8 +62,29 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   String? _error;
   String _query = '';
 
-  /// Қидирувчида GPS мажбурий — йўқ бўлса рўйхат очилмайди.
+  static const _geoModule = 'yuk_local';
+
+  /// D-GEO-6: аввал туман, вилоят — тугма билан (танлов сақланади).
+  GeoScope _scope = GeoContext.scopeFor(_geoModule);
+
+  /// Очиқ каталог сўровининг калити — фақат доира ўзгарса қайта уланади.
+  String _catalogKey = '';
+
+  /// GPS бор — масофа/ETA бўйича саралаш; йўқ бўлса танланган ҳудуд
+  /// эълонлари масофасиз (3а-босқич; аввал рўйхат умуман ёпиқ эди).
   bool get _hasSearcherGps => _userLat != null && _userLng != null;
+
+  /// Сервер сўрови доираси. Туман даражасида GPS бўлса — вилоят туманлари:
+  /// қўшни туман ҳайдовчиси радиуси етса кўринади
+  /// ([YukLocalRanking.keepForDistrict]). GPS йўқ — фақат туман.
+  GeoScope get _queryScope {
+    if (_scope.level == GeoLevel.district &&
+        _hasSearcherGps &&
+        _scope.area.regionId.trim().isNotEmpty) {
+      return _scope.copyWith(level: GeoLevel.region);
+    }
+    return _scope;
+  }
 
   @override
   void initState() {
@@ -80,11 +103,29 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   Future<void> _bootstrap() async {
     // GPS рухсати диалоги рўйхат юкланишини блокламаслиги керак.
     unawaited(ensureGps());
-    // Ҳудуд бўйича — бош саҳифадаги 5-бўлим билан бир хил рўйхат
-    // чиқсин (у ҳам `ServiceConfigHolder.districtId` ни узатади).
-    _sub = _repo
-        .watchCatalog(districtId: ServiceConfigHolder.districtId)
-        .listen(
+    _subscribeCatalog();
+    if (widget.ownerId.isNotEmpty) {
+      _mineSub = _repo.watchMine(widget.ownerId).listen((list) {
+        if (!mounted) return;
+        setState(() {
+          _mine = list;
+          _recompute();
+        });
+      });
+    } else {
+      _loadingList = false;
+    }
+  }
+
+  /// Каталог оқими — [_queryScope] ўзгарганда (даража тугмаси ёки GPS
+  /// пайдо бўлди/йўқолди) қайта уланади. Эски рўйхат янгиси келгунча
+  /// қолади — экран «милтилламайди».
+  void _subscribeCatalog() {
+    final q = _queryScope;
+    if (_sub != null && q.key == _catalogKey) return;
+    _catalogKey = q.key;
+    _sub?.cancel();
+    _sub = _repo.watchScoped(q).listen(
       (list) {
         if (!mounted) return;
         setState(() {
@@ -102,17 +143,14 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
         });
       },
     );
-    if (widget.ownerId.isNotEmpty) {
-      _mineSub = _repo.watchMine(widget.ownerId).listen((list) {
-        if (!mounted) return;
-        setState(() {
-          _mine = list;
-          _recompute();
-        });
-      });
-    } else {
-      _loadingList = false;
-    }
+  }
+
+  void _setScope(GeoScope s) {
+    setState(() {
+      _scope = s;
+      _recompute();
+    });
+    _subscribeCatalog();
   }
 
   bool _isGpsError(String? key) =>
@@ -123,7 +161,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
       key == 'yuk_local_gps_settings' ||
       key == 'yuk_local_gps_disabled';
 
-  /// Қидирувчи GPS — рўйхат учун мажбурий. Эга эълонлари GPS ўчса ҳам қолади.
+  /// Қидирувчи GPS — масофа бўйича саралаш учун. Йўқ бўлса рўйхат
+  /// танланган ҳудуд бўйича масофасиз қолади.
   Future<void> ensureGps() async {
     if (!mounted) return;
     setState(() => _loadingGps = true);
@@ -192,6 +231,9 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
         _error = 'yuk_local_gps_timeout';
         _recompute();
       });
+    } finally {
+      // GPS пайдо бўлди/йўқолди — сўров доираси ўзгариши мумкин.
+      if (mounted) _subscribeCatalog();
     }
   }
 
@@ -210,10 +252,14 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     final lat = _userLat;
     final lng = _userLng;
 
-    // Қидирувчи GPS йўқ — бошқаларни кўрсатмаймиз; ўз эълонлари қолади.
-    final others = lat != null && lng != null
+    // GPS бор — масофа бўйича; йўқ — танланган ҳудуд эълонлари масофасиз.
+    final all = lat != null && lng != null
         ? _ranker.rank(drivers: _raw, userLat: lat, userLng: lng)
-        : <YukLocalDriverRanked>[];
+        : _ranker.listWithoutGps(drivers: _raw);
+    // Туман даражаси: шу туман + радиуси етадиган қўшни туман ҳайдовчиси.
+    final others = _scope.level == GeoLevel.district
+        ? YukLocalRanking.keepForDistrict(all, _scope.area.districtId)
+        : all;
 
     if (_mine.isEmpty) {
       _ranked = others;
@@ -240,7 +286,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     double road = 0;
     var eta = 0;
     var inRadius = true;
-    if (lat != null && lng != null && mine.hasGps) {
+    final known = lat != null && lng != null && mine.hasGps;
+    if (known) {
       straight =
           const GeoMathService().haversineKm(lat, lng, mine.lat!, mine.lng!);
       road = straight * YukLocalRanking.roadFactor;
@@ -253,6 +300,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
       roadKm: road,
       etaMinutes: eta,
       inRadius: inRadius,
+      distanceKnown: known,
     );
   }
 
@@ -427,18 +475,20 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
                   context.tr('yuk_local_now'),
                   d.locationLabel.isEmpty ? '—' : d.locationLabel,
                 ),
-                _detailRow(
-                  context.tr('yuk_local_to_you'),
-                  context
-                      .tr('yuk_local_radius_km')
-                      .replaceAll('{n}', _km(row.roadKm)),
-                ),
-                _detailRow(
-                  context.tr('yuk_local_eta'),
-                  context
-                      .tr('yuk_local_eta_min')
-                      .replaceAll('{n}', '${row.etaMinutes}'),
-                ),
+                if (row.distanceKnown) ...[
+                  _detailRow(
+                    context.tr('yuk_local_to_you'),
+                    context
+                        .tr('yuk_local_radius_km')
+                        .replaceAll('{n}', _km(row.roadKm)),
+                  ),
+                  _detailRow(
+                    context.tr('yuk_local_eta'),
+                    context
+                        .tr('yuk_local_eta_min')
+                        .replaceAll('{n}', '${row.etaMinutes}'),
+                  ),
+                ],
                 _detailRow(
                   context.tr('yuk_capacity'),
                   d.capacityKg > 0
@@ -568,13 +618,19 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   /// Жой номи, кузов, қамров радиуси ва тўғри масофа — деталь варағида. Жой
   /// номи картага сиғмай кесилади («Гурлан марк…»), кесилган матн эса фойда
   /// бермайди; масофа ва ETA «қанча яқин» саволига аллақачон жавоб беради.
+  ///
+  /// GPS йўқ ([YukLocalDriverRanked.distanceKnown] = false) — масофа ўрнида
+  /// жой номи (у ҳолда «қанча яқин»га бошқа жавоб йўқ).
   String _factsLine(YukLocalDriverRanked row) {
     final d = row.driver;
     return [
       if (d.capacityKg > 0)
         '${formatPrice(d.capacityKg)}${context.tr('yuk_kg_short')}',
-      context.tr('yuk_local_radius_km').replaceAll('{n}', _km(row.roadKm)),
-      context.tr('yuk_local_eta_short').replaceAll('{n}', '${row.etaMinutes}'),
+      if (row.distanceKnown) ...[
+        context.tr('yuk_local_radius_km').replaceAll('{n}', _km(row.roadKm)),
+        context.tr('yuk_local_eta_short').replaceAll('{n}', '${row.etaMinutes}'),
+      ] else if (d.locationLabel.trim().isNotEmpty)
+        d.locationLabel.trim(),
     ].join(' · ');
   }
 
@@ -594,13 +650,14 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     return context.tr('yuk_local_radius_km').replaceAll('{n}', '$km');
   }
 
-  Widget _gpsRequiredBlock(BuildContext context) {
+  /// GPS йўқ — рўйхат ёпилмайди (3а), фақат «ёқсангиз яқинлари биринчи».
+  Widget _gpsHintBlock(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Column(
         children: [
           Text(
-            context.tr('yuk_local_need_gps_search'),
+            context.tr('yuk_local_gps_hint'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: _muted, height: 1.35, fontSize: 13),
           ),
@@ -624,43 +681,58 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
 
   @override
   Widget build(BuildContext context) {
+    // GPS биринчи уриниши тугагунча кутамиз — рўйхат кейин қайта
+    // сараланиб «сакрамасин».
     final loading = _loadingList || (_loadingGps && !_hasSearcherGps && _mine.isEmpty);
-    final needGps = !_hasSearcherGps && !_loadingGps;
-    // GPS йўқ — фақат ўз эълонлари (масофасиз); каталог ёпиқ.
-    final visible = needGps
-        ? _ranked.where((r) => _isMine(r.driver)).toList()
-        : _filtered(context);
+    final noGps = !_hasSearcherGps && !_loadingGps;
+    final visible = _filtered(context);
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _publishHeader(context)),
-        if (!needGps)
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _StickySearchBar(
-              child: _searchField(context),
-            ),
+        SliverToBoxAdapter(
+          child: GeoTierBar(
+            moduleId: _geoModule,
+            scope: _scope,
+            onChanged: _setScope,
           ),
-        if (needGps) SliverToBoxAdapter(child: _gpsRequiredBlock(context)),
-        if (!needGps) SliverToBoxAdapter(child: _headerBlock(context, visible)),
+        ),
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _StickySearchBar(
+            child: _searchField(context),
+          ),
+        ),
+        if (noGps) SliverToBoxAdapter(child: _gpsHintBlock(context)),
+        SliverToBoxAdapter(child: _headerBlock(context, visible)),
         if (loading)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(child: CircularProgressIndicator(color: _accent)),
           )
-        else if (needGps && visible.isEmpty)
-          const SliverToBoxAdapter(child: SizedBox(height: 24))
         else if (visible.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  _query.trim().isEmpty
-                      ? context.tr('yuk_local_empty')
-                      : context.tr('yuk_local_search_empty'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: _muted),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _query.trim().isEmpty
+                          ? context.tr('yuk_local_empty')
+                          : context.tr('yuk_local_search_empty'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: _muted),
+                    ),
+                    // Туманда йўқ — «Вилоят бўйича» таклифи (ўзи ўтмайди).
+                    if (_query.trim().isEmpty)
+                      GeoWiderHint(
+                        moduleId: _geoModule,
+                        scope: _scope,
+                        onChanged: _setScope,
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -769,7 +841,6 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
 
   /// Саноқ / ўз эълонлари — қидирувдан пастда (GPS хатоси тўлиқ экранда).
   Widget _headerBlock(BuildContext context, List<YukLocalDriverRanked> visible) {
-    if (!_hasSearcherGps) return const SizedBox.shrink();
     return Column(
       children: [
         if (_mine.isNotEmpty)
@@ -798,7 +869,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              _query.trim().isEmpty
+              // GPS йўқ — «яқиндаги» дея олмаймиз (масофа номаълум).
+              _query.trim().isEmpty && _hasSearcherGps
                   ? '${visible.length} ${context.tr('yuk_local_nearby_count')}'
                   : context
                       .tr('yuk_local_search_count')

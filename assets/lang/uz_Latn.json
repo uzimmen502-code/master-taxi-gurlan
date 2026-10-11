@@ -544,6 +544,7 @@
   "home_ev_free": "Bo‘sh",
   "home_ev_busy": "Band",
   "home_ev_unknown": "Ma’lumot yo‘q",
+  "home_ev_nearby_radius": "{n} km ichida",
   "ev_mark_free": "Bo‘sh",
   "ev_mark_busy": "Band",
   "ev_occupancy_question": "Hozir qanday?",

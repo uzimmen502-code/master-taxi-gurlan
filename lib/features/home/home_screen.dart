@@ -1044,6 +1044,8 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('ev_charging')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeEvSection(
+                                userLat: user?.address.lat,
+                                userLng: user?.address.lng,
                                 onOpenMap: () =>
                                     _push(const EvChargingMapScreen()),
                               ),

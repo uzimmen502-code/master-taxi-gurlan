@@ -544,6 +544,7 @@
   "home_ev_free": "Свободно",
   "home_ev_busy": "Занято",
   "home_ev_unknown": "Нет данных",
+  "home_ev_nearby_radius": "В радиусе {n} км",
   "ev_mark_free": "Свободно",
   "ev_mark_busy": "Занято",
   "ev_occupancy_question": "Как сейчас?",

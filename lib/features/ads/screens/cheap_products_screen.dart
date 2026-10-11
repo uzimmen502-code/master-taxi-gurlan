@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
@@ -44,6 +46,28 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
   static const _loadErrorMessage =
       'Маълумотларни юклашда хатолик юз берди. Илтимос кейинроқ қайта уриниб кўринг.';
+
+  static const _moduleId = 'cheap_products_home';
+
+  /// Ҳудуд даражаси (D-GEO-1): туман → вилоят → Республика, танлов
+  /// сақланади. Аввал бу экран доим бутун Республикани кўрсатарди, бош
+  /// саҳифа эса фақат туманни (geo аудит).
+  GeoScope _scope = GeoContext.scopeFor(_moduleId);
+
+  /// Оқим state'да — ҳар rebuild'да янги listener очилмасин.
+  Stream<List<AdModel>>? _adsStream;
+  String _streamKey = '';
+
+  Stream<List<AdModel>> _adsFor(AdsRepository repo) {
+    final key = '${_scope.key}|$_query';
+    if (_adsStream == null || key != _streamKey) {
+      _streamKey = key;
+      _adsStream = repo.searchScoped(_query, _scope);
+    }
+    return _adsStream!;
+  }
+
+  void _setScope(GeoScope s) => setState(() => _scope = s);
 
   @override
   void initState() {
@@ -286,9 +310,10 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
               ],
             ),
           ),
+          GeoTierBar(moduleId: _moduleId, scope: _scope, onChanged: _setScope),
           Expanded(
             child: StreamBuilder<List<AdModel>>(
-              stream: repo.searchActiveAds(_query),
+              stream: _adsFor(repo),
               builder: (context, snap) {
                 if ((snap.connectionState == ConnectionState.waiting &&
                         !snap.hasData) ||
@@ -320,19 +345,29 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
                 if (platform.isEmpty && ads.isEmpty && shop.isEmpty) {
                   return Center(
-                    child: Padding(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
-                      child: Text(
-                        CatalogSearch.normalize(_query).isEmpty
-                            ? 'Ҳозирча эълонлар йўқ'
-                            : context
-                                .tr('platform_store_search_none')
-                                .replaceAll('{query}', _query.trim()),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: AppText.bodyLarge,
-                          color: Colors.grey.shade700,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            CatalogSearch.normalize(_query).isEmpty
+                                ? 'Ҳозирча эълонлар йўқ'
+                                : context
+                                    .tr('platform_store_search_none')
+                                    .replaceAll('{query}', _query.trim()),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: AppText.bodyLarge,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          GeoWiderHint(
+                            moduleId: _moduleId,
+                            scope: _scope,
+                            onChanged: _setScope,
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -414,6 +449,14 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         },
                       ),
                     ),
+                    // Ҳудудда эълон кам — кенгроқ ҳудуд таклифи (автоматик
+                    // ўтиб кетмайди, 2-такомиллаштириш).
+                    if (ads.length < 5)
+                      GeoWiderHint(
+                        moduleId: _moduleId,
+                        scope: _scope,
+                        onChanged: _setScope,
+                      ),
                   ],
                 );
               },

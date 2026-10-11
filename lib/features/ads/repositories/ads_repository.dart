@@ -1,5 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_districts_cache.dart';
+import '../../../core/geo/geo_query.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/merged_stream.dart';
@@ -169,6 +173,51 @@ class AdsRepository {
           return bp.compareTo(ap);
         });
       return sorted.take(limit).toList();
+    });
+  }
+
+  static int _newestFirst(AdModel a, AdModel b) {
+    final ap = a.publishedAt?.millisecondsSinceEpoch ?? 0;
+    final bp = b.publishedAt?.millisecondsSinceEpoch ?? 0;
+    return bp.compareTo(ap);
+  }
+
+  /// Ҳудуд даражаси бўйича фаол эълонлар (D-GEO-1, 2-такомиллаштириш):
+  /// туман → вилоят (туманлари `in`) → Республика. Сервер филтри; ҳудудсиз
+  /// эски эълонлар туман/вилоятда ҳам кўринади (backfill'гача).
+  /// Индекс: `ads (type, status, districtId, publishedAt↓)`.
+  Stream<List<AdModel>> watchScoped(GeoScope scope, {int limit = feedLimit}) {
+    return geoScopedStream<AdModel>(
+      scope: scope,
+      nation: () => getActiveAds(limit: limit),
+      byDistricts: (ids) => _cheapQuery()
+          .where('status', isEqualTo: 'active')
+          .where('districtId', whereIn: ids)
+          .orderBy('publishedAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(AdModel.fromFirestore).toList()),
+      legacy: () => getActiveAds(limit: 60)
+          .map((l) => l.where((a) => a.districtId.trim().isEmpty).toList()),
+      idOf: (a) => a.id,
+      compare: _newestFirst,
+      limit: limit,
+    );
+  }
+
+  /// Қидирув ҳудуд ичида: қидирилмаса — [watchScoped]; қидирилса —
+  /// токен ҳовузи ҳудуд бўйича клиентда торайтирилади.
+  Stream<List<AdModel>> searchScoped(String query, GeoScope scope) {
+    final q = query.trim();
+    if (q.isEmpty) return watchScoped(scope, limit: searchLimit);
+    final regionIds = scope.level == GeoLevel.region
+        ? GeoDistrictsCache.districtIdsOf(scope.area.regionId)
+        : Future.value(const <String>[]);
+    return Stream.fromFuture(regionIds).asyncExpand((ids) {
+      final set = ids.toSet();
+      return searchActiveAds(q).map(
+        (l) => l.where((a) => inGeoScope(a.districtId, scope, set)).toList(),
+      );
     });
   }
 

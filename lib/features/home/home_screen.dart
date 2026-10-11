@@ -893,7 +893,8 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('jobs')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
-                                key: ValueKey('ads_ad_$_geoKey'),
+                                key: ValueKey(
+                                    'ads_ad_${GeoContext.scopeFor('jobs').key}'),
                                 adType: 'ad',
                                 titleKey: 'home_section_ads',
                                 onOpenAll: () => _push(
@@ -910,7 +911,8 @@ class _HomeViewState extends State<_HomeView> {
                               ),
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
-                                key: ValueKey('ads_service_$_geoKey'),
+                                key: ValueKey(
+                                    'ads_service_${GeoContext.scopeFor('jobs').key}'),
                                 adType: 'service',
                                 titleKey: 'home_section_services',
                                 onOpenAll: () => _push(

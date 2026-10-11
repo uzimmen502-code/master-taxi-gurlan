@@ -296,7 +296,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                           if (_nearbyMode && (snap.data ?? const []).isEmpty)
                             Align(
                               child: OutlinedButton.icon(
-                                key: const ValueKey('restaurants_show_all'),
+                                key: const ValueKey('rest_list_show_all'),
                                 icon: const Icon(Icons.public, size: 16),
                                 label: Text(context.tr('geo_show_nation')),
                                 onPressed: () => setState(() => _showAll = true),

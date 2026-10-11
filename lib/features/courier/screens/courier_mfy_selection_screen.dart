@@ -31,9 +31,13 @@ class _MfyGroup {
 /// чиқарилгач (D-SERVICE-4 / D-CLEAN-1) қоида уни capability курьерга рад
 /// этади, очиш эса ҳар бир курьерга бутун буюртма ҳужжатини берарди.
 class CourierMfySelectionScreen extends StatefulWidget {
-  const CourierMfySelectionScreen({super.key, this.routeService});
+  const CourierMfySelectionScreen({super.key, this.routeService, this.locate});
 
   final CourierRouteService? routeService;
+
+  /// Курьер GPS'и (D-GEO-3: GPS + 15 км) — стандарт рухсат сўрамайдиган
+  /// [LocationService.getCoordsIfAllowed]; тестда алмаштирилади.
+  final Future<LocationCoords?> Function()? locate;
 
   @override
   State<CourierMfySelectionScreen> createState() =>
@@ -47,12 +51,19 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
       CourierDeliveryRouteOptimizer();
   late final CourierRouteService _routeService =
       widget.routeService ?? CourierRouteService();
-  late Future<List<OrderModel>> _readyOrders = _routeService.listReadyOrders();
+  late Future<List<OrderModel>> _readyOrders = _loadReady();
+
+  /// GPS бўлса — радиус ичидагилар (сервер филтри); йўқ бўлса ҳаммаси.
+  Future<List<OrderModel>> _loadReady() async {
+    final locate = widget.locate ?? const LocationService().getCoordsIfAllowed;
+    final c = await locate();
+    return _routeService.listReadyOrders(lat: c?.lat, lng: c?.lng);
+  }
 
   /// Рўйхатни қайта олиш: pull-to-refresh ва маршрут яратилмаганда
   /// (буюртмани бошқа курьер олиб улгурган бўлиши мумкин).
   Future<void> _reload() async {
-    final next = _routeService.listReadyOrders();
+    final next = _loadReady();
     setState(() {
       _readyOrders = next;
     });

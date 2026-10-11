@@ -239,6 +239,31 @@ async function main() {
     assert.deepStrictEqual(r.orders[1], { id: 'lr1', mfy: 'Navoiy', lat: 41.84, lng: 60.39, createdAtMs: 1000 });
     assert.deepStrictEqual(r.orders[2], { id: 'lrNoGeo', mfy: null, lat: null, lng: null, createdAtMs: null });
     assert.strictEqual(r.truncated, false);
+    assert.strictEqual(r.radiusKm, null, 'GPS\'siz — filtr yo\'q (eski APK)');
+  });
+  // Geo 4-bosqich (D-GEO-3): kuryer GPS'i + 15 km.
+  await check('courierListReadyOrders: GPS berilsa — 15 km ichidagilar + koordinatasizlar; uzoqdagi yo\'q', async () => {
+    await db.collection('orders').doc('lrFar').set({
+      userPhone: CUSTOMER, status: 'ready', mfy: 'Chilonzor', lat: 41.29, lng: 69.2,
+      createdAt: admin.firestore.Timestamp.fromMillis(3000),
+    });
+    // ~16.7 km shimolda (0.15° kenglik) — chegaradan tashqari.
+    await db.collection('orders').doc('lrEdge').set({
+      userPhone: CUSTOMER, status: 'ready', mfy: 'Chegara', lat: 41.84 + 0.15, lng: 60.39,
+      createdAt: admin.firestore.Timestamp.fromMillis(500),
+    });
+    const near = await call('courierListReadyOrders', { lat: 41.84, lng: 60.39 }, A);
+    assert.deepStrictEqual(near.orders.map((o) => o.id), ['lr2', 'lr1', 'lrNoGeo']);
+    assert.strictEqual(near.radiusKm, 15);
+    const wide = await call('courierListReadyOrders', { lat: 41.84, lng: 60.39, radiusKm: 20 }, A);
+    assert.ok(wide.orders.some((o) => o.id === 'lrEdge'), '20 km — chegaradagi kiradi');
+    assert.ok(!wide.orders.some((o) => o.id === 'lrFar'));
+    const all = await listReady(A);
+    assert.ok(all.orders.some((o) => o.id === 'lrFar'), 'GPS\'siz — avvalgidek hammasi');
+    const bad = await call('courierListReadyOrders', { lat: 'x', lng: 60.39 }, A);
+    assert.strictEqual(bad.radiusKm, null, 'noto\'g\'ri koordinata — filtr yo\'q');
+    await db.collection('orders').doc('lrFar').delete();
+    await db.collection('orders').doc('lrEdge').delete();
   });
   await check('courierListReadyOrders: ro\'yxatdagi buyurtmadan courierCreateRoute marshrut quradi', async () => {
     const { orders } = await listReady(B);

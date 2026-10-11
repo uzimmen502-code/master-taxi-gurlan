@@ -48,6 +48,7 @@ attachTaxiBilling(exports, {
 // Mahalliy taksi — SERVER narxi (ega qarori 2026-10-07): trip yaratish,
 // narx qulfi va admin tarif versiyasi. Yakunlash — pastdagi completeLocalTrip.
 const { attachLocalTaxi } = require('./local_taxi');
+const localTaxiGeo = require('./local_taxi');
 attachLocalTaxi(exports, {
   functions, db, admin, callerPhone, canonicalUid, axios,
 });
@@ -4470,26 +4471,55 @@ exports.courierListReadyOrders = functions.https.onCall(async (data, context) =>
     .limit(COURIER_READY_ORDERS_LIMIT)
     .get();
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  // Geo 4-bosqich (D-GEO-3): kuryer GPS'i berilsa — radius ichidagilar
+  // (qo'shni tuman buyurtmasi yashirilmaydi, masofa hal qiladi).
+  // `listNearbyRestaurantOrders` bilan bir xil qoida: koordinatasiz buyurtma
+  // qoladi (joyi noma'lum — MFY bo'yicha ko'rinadi). GPS'siz chaqiruv (eski
+  // APK) — avvalgidek hammasi.
+  const cLat = num(data && data.lat);
+  const cLng = num(data && data.lng);
+  const hasLoc = cLat != null && cLng != null
+    && Math.abs(cLat) <= 90 && Math.abs(cLng) <= 180 && !(cLat === 0 && cLng === 0);
+  const radiusKm = courierReadyRadiusKm(data && data.radiusKm);
   const orders = [];
   snap.forEach((doc) => {
     const od = doc.data() || {};
     if (courierAuth.isOwnOrder(od, courierId)) return;
     // Restoran buyurtmalari — `listNearbyRestaurantOrders` (o'z proeksiyasi).
     if (String(od.type || '') === 'restaurant') return;
+    const oLat = num(od.lat);
+    const oLng = num(od.lng);
+    if (hasLoc && oLat != null && oLng != null
+      && localTaxiGeo.haversineMeters(cLat, cLng, oLat, oLng) > radiusKm * 1000) {
+      return;
+    }
     const created = od.createdAt && typeof od.createdAt.toMillis === 'function'
       ? od.createdAt.toMillis()
       : null;
     orders.push({
       id: doc.id,
       mfy: typeof od.mfy === 'string' ? od.mfy : null,
-      lat: num(od.lat),
-      lng: num(od.lng),
+      lat: oLat,
+      lng: oLng,
       createdAtMs: created,
     });
   });
   orders.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-  return { orders, truncated: snap.size >= COURIER_READY_ORDERS_LIMIT };
+  return {
+    orders,
+    truncated: snap.size >= COURIER_READY_ORDERS_LIMIT,
+    radiusKm: hasLoc ? radiusKm : null,
+  };
 });
+
+/** D-GEO-3: kuryer radiusi — standart 15 km (restoran `NEARBY_RADIUS_KM_DEFAULT`
+ * bilan bir xil), 1..50 oralig'ida. */
+const COURIER_READY_RADIUS_KM_DEFAULT = 15;
+function courierReadyRadiusKm(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return COURIER_READY_RADIUS_KM_DEFAULT;
+  return Math.min(50, Math.max(1, Math.round(n)));
+}
 
 /**
  * Хавфсизлик тўри: курьерда фаол маршрут йўқ, лекин ўзига бириктирилган

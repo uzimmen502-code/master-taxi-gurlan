@@ -1,6 +1,7 @@
 import 'package:ava_gurlan/features/courier/screens/courier_mfy_selection_screen.dart';
 import 'package:ava_gurlan/models/order_model.dart';
 import 'package:ava_gurlan/services/courier_route_service.dart';
+import 'package:ava_gurlan/services/location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,9 +14,11 @@ class _FakeRouteService implements CourierRouteService {
   /// Ҳар чақириқда навбатдаги жавоб (рўйхат ёки хато).
   final List<Object> responses;
   int listCalls = 0;
+  final coords = <(double?, double?)>[];
 
   @override
-  Future<List<OrderModel>> listReadyOrders() async {
+  Future<List<OrderModel>> listReadyOrders({double? lat, double? lng}) async {
+    coords.add((lat, lng));
     final r = responses[listCalls < responses.length
         ? listCalls
         : responses.length - 1];
@@ -47,9 +50,16 @@ OrderModel _stop(String id, String? mfy) =>
       'createdAtMs': 1000,
     });
 
-Future<void> _pump(WidgetTester tester, _FakeRouteService service) async {
+Future<void> _pump(
+  WidgetTester tester,
+  _FakeRouteService service, {
+  LocationCoords? gps,
+}) async {
   await tester.pumpWidget(MaterialApp(
-    home: CourierMfySelectionScreen(routeService: service),
+    home: CourierMfySelectionScreen(
+      routeService: service,
+      locate: () async => gps,
+    ),
   ));
   await tester.pumpAndSettle();
 }
@@ -125,5 +135,19 @@ void main() {
 
     expect(service.listCalls, 2);
     expect(find.text('Navoiy — 1 та'), findsOneWidget);
+  });
+
+  // Geo 4-bosqich (D-GEO-3): GPS bo'lsa serverga uzatiladi (radius filtri).
+  testWidgets('GPS bor — koordinata callable\'ga uzatiladi', (tester) async {
+    final withGps = _FakeRouteService([<OrderModel>[]]);
+    await _pump(tester, withGps,
+        gps: const LocationCoords(lat: 41.84, lng: 60.39));
+    expect(withGps.coords.single, (41.84, 60.39));
+  });
+
+  testWidgets('GPS yo\'q — koordinatasiz (server avvalgidek hammasini beradi)', (tester) async {
+    final noGps = _FakeRouteService([<OrderModel>[]]);
+    await _pump(tester, noGps);
+    expect(noGps.coords.single, (null, null));
   });
 }

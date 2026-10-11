@@ -16,9 +16,14 @@ class CourierRouteService {
   /// қайтаради — мижоз телефони, исми, манзили ва савати курьерга буюртма
   /// маршрутига тушгандан кейин очилади (40-қоида). Шунинг учун қайтган
   /// [OrderModel]ларнинг бошқа майдонлари бўш.
-  Future<List<OrderModel>> listReadyOrders() async {
-    final result =
-        await _functions.httpsCallable('courierListReadyOrders').call();
+  ///
+  /// [lat]/[lng] — курьер GPS'и (D-GEO-3, геo 4-босқич): берилса сервер
+  /// 15 км радиус ичидагиларни (ва координатасизларни) қайтаради; берилмаса
+  /// — аввалгидек ҳаммаси.
+  Future<List<OrderModel>> listReadyOrders({double? lat, double? lng}) async {
+    final result = await _functions.httpsCallable('courierListReadyOrders').call(
+          lat != null && lng != null ? {'lat': lat, 'lng': lng} : null,
+        );
     final data = Map<String, dynamic>.from(result.data as Map);
     final raw = (data['orders'] as List?) ?? const [];
     return [

@@ -85,6 +85,18 @@ class LocationAreaService {
     }
   }
 
+  /// Исталган нуқтанинг тумани (масалан кўчмас мулк пини, D-GEO-11).
+  /// Жойлашув рухсати керак эмас — фақат geocoder. Вебда — `null`.
+  Future<GeoArea?> areaAt(double lat, double lng) async {
+    if (kIsWeb) return null;
+    try {
+      return await _areaFor(lat, lng);
+    } catch (e) {
+      debugPrint('LocationAreaService.areaAt: $e');
+      return null;
+    }
+  }
+
   Future<GeoArea?> _areaFor(double lat, double lng) async {
     final cell = GeoHash.encode(lat, lng, precision: 5);
     final prefs = await SharedPreferences.getInstance();

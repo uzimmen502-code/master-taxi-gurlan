@@ -112,7 +112,7 @@ class OrderReceiptFormat {
     if (it.qty != null && it.qty! > 0) {
       final q = it.qty!;
       final qty = q == q.roundToDouble() ? '${q.toInt()}' : '$q';
-      final unit = it.unit.isNotEmpty ? ' $it.unit' : '';
+      final unit = it.unit.isNotEmpty ? ' ${it.unit}' : '';
       final lineTotal = it.itemTotal > 0
           ? it.itemTotal
           : (it.unitPrice > 0 ? (it.unitPrice * q).round() : 0);

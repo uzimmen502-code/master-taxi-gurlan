@@ -13,6 +13,7 @@ import '../../analytics/screens/admin_orders_screen.dart';
 import '../../analytics/screens/monitoring_center_screen.dart';
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
+import '../services/admin_all_orders_service.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_news_read_service.dart';
 import '../utils/count_stream_sum.dart';
@@ -20,6 +21,7 @@ import '../utils/grouped_rows.dart';
 import '../widgets/change_pin_dialog.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/news_repository.dart';
+import 'admin_all_orders_screen.dart';
 import 'admin_home_ticker_screen.dart';
 import 'admin_news_list_screen.dart';
 import 'admin_order_news_list_screen.dart';
@@ -81,14 +83,32 @@ class _AdminShellState extends State<AdminShell> {
     return rawIndex.clamp(0, visibleCount - 1);
   }
 
+  /// Бўлим рухсатлари (D-ALL-6): роль — сукут, устига админ берган рухсат.
+  final AdminSectionGrantsService _grants = AdminSectionGrantsService();
+  String? _grantsBoundTo;
+
   List<_AdminSection> _visibleSections(AdminAuthService auth) {
     final role = (auth.role ?? '').trim().toLowerCase();
-    return _sections.where((s) => s.visibleFor(role)).toList(growable: false);
+    return _sections
+        .where((s) => s.visibleFor(role, _grants.has))
+        .toList(growable: false);
+  }
+
+  void _onGrantsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _grants.removeListener(_onGrantsChanged);
+    _grants.dispose();
+    super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+    _grants.addListener(_onGrantsChanged);
     // `PendingCodeAutoListener` бу ерда ҲАР админ саҳифасида ишга
     // тушарди: `pending_codes`ни тинглаб, rules рад этадиган ёзувларни
     // юборарди. «Код сўровлари» яширилгач (D-2) — ишга туширилмайди.
@@ -120,11 +140,13 @@ class _AdminShellState extends State<AdminShell> {
       group: 'Буюртма ва етказиш',
       label: 'Буюртмалар',
       icon: Icons.receipt_long,
-      description: 'Нон, улгуржи ва кафе-ресторан буюртмалари',
+      description: 'Барча буюртмалар ва нон/улгуржи/кафе доскаси',
       // finance/auditor кўрарди, лекин `orders` ўқиш `isStaff()` (admin/
       // superadmin/dispatcher/staff), статус CF'лари `assertAdmin` —
-      // уларда доска бўш, нишон 0 эди.
+      // уларда доска бўш, нишон 0 эди. «Барча буюртмалар» таби эса админ
+      // берган бўлим рухсати билан ҳар қандай панел ходимига (D-ALL-5/6).
       access: _SectionAccess.ops,
+      grantSection: 'all_orders',
     ),
     _AdminSection(
       group: 'Буюртма ва етказиш',
@@ -441,6 +463,13 @@ class _AdminShellState extends State<AdminShell> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AdminAuthService>();
+    if (_grantsBoundTo != auth.phone) {
+      // `bind` листенерларни чақиради — build ичида эмас, кадрдан кейин.
+      _grantsBoundTo = auth.phone;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _grants.bind(auth.phone);
+      });
+    }
     final visible = _visibleSections(auth);
     final safeIndex = _visibleIndexFor(_selectedIndex, visible.length);
     if (safeIndex != _selectedIndex) {
@@ -468,7 +497,9 @@ class _AdminShellState extends State<AdminShell> {
       compact: sidebarCompact,
     );
 
-    return Scaffold(
+    return ChangeNotifierProvider<AdminSectionGrantsService>.value(
+      value: _grants,
+      child: Scaffold(
       backgroundColor: AppColors.scaffold,
       drawer: isMedium ? null : Drawer(child: sidebar),
       body: Row(children: [
@@ -497,6 +528,7 @@ class _AdminShellState extends State<AdminShell> {
                 ),
               ],
             ),
+      ),
     );
   }
 
@@ -645,7 +677,7 @@ class _AdminShellState extends State<AdminShell> {
       return const TaxiVerificationScreen();
     }
     if (section.label == 'Буюртмалар') {
-      return const AdminOrdersScreen(embedded: true);
+      return const _OrdersSection();
     }
     if (section.label == 'Gilam yuvish') {
       return const CarpetWashAdminScreen();
@@ -667,6 +699,7 @@ class _AdminSection {
     required this.description,
     this.access = _SectionAccess.ops,
     this.group = '',
+    this.grantSection,
   });
   final String label;
   final IconData icon;
@@ -676,7 +709,18 @@ class _AdminSection {
   /// Сайдбардаги гуруҳ сарлавҳаси (`''` — сарлавҳасиз).
   final String group;
 
-  bool visibleFor(String role) {
+  /// Админ берадиган бўлим рухсати (`admin_section_grants`) — роли етмаса
+  /// ҳам шу рухсат билан кўринади (D-ALL-6). Фақат сервери шу рухсатни
+  /// танийдиган бўлимларда қўйилади.
+  final String? grantSection;
+
+  bool visibleFor(String role, [bool Function(String section)? hasGrant]) {
+    final gs = grantSection;
+    if (gs != null && hasGrant != null && hasGrant(gs)) return true;
+    return _roleAllows(role);
+  }
+
+  bool _roleAllows(String role) {
     final r = role.trim().toLowerCase();
     switch (access) {
       case _SectionAccess.ops:
@@ -698,6 +742,50 @@ class _AdminSection {
 }
 
 enum _SectionAccess { ops, finance, opsAndFinance, users, superOnly }
+
+/// «Буюртмалар» бўлими (D-ALL-1): биринчи таб — «Барча буюртмалар»
+/// (superadmin ёки бўлим рухсати), иккинчи — мавжуд доска (ops роли).
+class _OrdersSection extends StatelessWidget {
+  const _OrdersSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AdminAuthService>();
+    final grants = context.watch<AdminSectionGrantsService>();
+    final canAll = auth.isSuperAdmin || grants.has('all_orders');
+    final canBoard = auth.isOpsAdmin;
+    if (canAll && !canBoard) return const AdminAllOrdersScreen();
+    if (!canAll) return const AdminOrdersScreen(embedded: true);
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Material(
+            color: Colors.white,
+            child: TabBar(
+              labelColor: AppColors.primaryText,
+              indicatorColor: AppColors.primaryText,
+              unselectedLabelColor: Colors.grey.shade600,
+              tabs: const [
+                Tab(icon: Icon(Icons.list_alt, size: 18), text: 'Барча буюртмалар'),
+                Tab(icon: Icon(Icons.view_kanban_outlined, size: 18), text: 'Доска'),
+              ],
+            ),
+          ),
+          const Expanded(
+            child: TabBarView(
+              physics: NeverScrollableScrollPhysics(),
+              children: [
+                AdminAllOrdersScreen(),
+                AdminOrdersScreen(embedded: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _Sidebar extends StatelessWidget {
   const _Sidebar({
@@ -1019,6 +1107,9 @@ class _Sidebar extends StatelessWidget {
       // Олиб ташланган «Овқат» буюртмалари (`type:'food'`) доскада йўқ —
       // нишон ҳам уларни санамайди.
       case 'Буюртмалар':
+        // Бўлим рухсати билан кирган (масалан finance) ходимда доска йўқ —
+        // `orders` ўқиш `isStaff()` рад этади; нишон ҳам йўқ.
+        if (!context.read<AdminAuthService>().isOpsAdmin) return null;
         return db
             .collection('orders')
             .where('status', isEqualTo: 'new')

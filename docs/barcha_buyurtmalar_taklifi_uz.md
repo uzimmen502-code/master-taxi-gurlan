@@ -193,6 +193,29 @@ listener эмас), қаторда қизил белги ва «42 дақиқа�
 | 4 | Админ таб (INTERNAL) | 1, 2 |
 | 5 | Deploy (эга рухсати): rules алоҳида → индекслар → функциялар номи бўйича → backfill → hosting | 1–4 |
 
+## 8.1 Ҳолат — 2026-10-11 (implementation completed, deploy pending)
+
+| # | Иш | Ҳолат |
+|---|---|---|
+| 1 | `functions/order_index.js`: ҳолат жадвали, календарь, `stuckAt`, 5 триггер (`orderIndexOnOrders/Carpet/Milk/Shipments/Demands`, europe-west1) | ✅ `c6824fe`; тест: pure 26/26, CF 18/18 |
+| 2 | `functions/admin_section_grants.js` (`adminSetSectionGrant`) + `setUserRoleByAdmin` audit + rules + 5 индекс | ✅ `c6824fe`; rules 12/12 |
+| 3 | `tools/order_index_backfill.js` (DRY-RUN / --apply / --recompute / --purge --yes) | ✅ `c6824fe`; тест 5/5 |
+| 4 | Админ: «Буюртмалар» → «Барча буюртмалар» / «Доска» таблари, бўлим рухсати сайдбарда, «Фойдаланувчилар»да рухсат тугмаси | ✅ (кейинги commit); widget 6/6, модел 9/9 |
+
+**Deploy тартиби (ҳар қадам эга рухсати билан, 29-қоида):**
+1. `firestore.rules` — **алоҳида** (ичида «Овқат» rules ўзгариши ҳам бор, c7f837a), жонли ruleset ID'ни rollback учун қайд қилиш.
+2. Индекслар — жонли vs файл diff, `--force` йўқ; `order_index` 5 та индекс READY бўлгунча кутиш.
+3. Функциялар **номи бўйича**: `orderIndexOnOrders`, `orderIndexOnCarpet`, `orderIndexOnMilk`, `orderIndexOnShipments`, `orderIndexOnDemands`, `adminSetSectionGrant`, `setUserRoleByAdmin`.
+4. `order_index_backfill.js` DRY-RUN → эгага сонлар → `--apply`.
+5. Hosting — жонли SHA устига (ҳамкор сессиялар навбати).
+6. Superadmin «Фойдаланувчилар»дан керакли ходимларга рухсат беради.
+
+**Очиқ масалалар:**
+- Чегараларни ўзгартириш экрани йўқ — ҳозир `settings/all_orders_stuck` фақат Admin SDK орқали (rules клиентга ёпиқ, 41-қоида); ўзгартиргандан кейин `--recompute`. Керак бўлса — алоҳида callable + audit.
+- Ресторан ва POS буюртмаларида ҳудуд майдони йўқ — ҳудуд бўйича фильтр ҳозир экранда йўқ.
+- `courier` талабларини `in_progress`/`completed`га ўтказадиган сервер йўли топилмади (агент текшируви) — бундай талаблар «Қабул қилинди»да қолиб, 30 дақиқадан кейин «тиқилиб қолган» кўринади. Бу ҳақиқий сигнал бўлиши мумкин, лекин модулни текшириш керак.
+- AVA'нинг ҳақиқий иш вақти ва байрамлар рўйхати — UNKNOWN (сукут: Ду–Ша 08:00–20:00).
+
 ## 9. Эгадан кутилаётганлар
 
 1. §4 чегаралари — шундайми ёки ўзгартирасизми; тунда ҳам ҳисоблансинми.

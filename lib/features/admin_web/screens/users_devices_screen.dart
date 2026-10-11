@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../services/admin_all_orders_service.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_role_service.dart';
 import '../services/device_binding_admin_service.dart';
@@ -1157,6 +1158,10 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
               icon: const Icon(Icons.pin_outlined, size: 18),
               label: const Text('PIN бериш', style: TextStyle(fontSize: 12)),
             ),
+          // D-ALL-6/9: бўлим рухсати — admin ва superadmin беради, фақат
+          // панел ролли ходимга.
+          if (_panelRoles.contains(role) && role != 'superadmin')
+            _SectionGrantToggle(phone: widget.phone),
           if (role != 'user')
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _setRole('user'),
@@ -1192,6 +1197,76 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         backgroundColor: active ? color.withValues(alpha: 0.08) : null,
         side: BorderSide(color: color.withValues(alpha: active ? 0.9 : 0.5)),
       ),
+    );
+  }
+}
+
+/// «Барча буюртмалар» бўлим рухсати (`adminSetSectionGrant`, audit билан).
+class _SectionGrantToggle extends StatefulWidget {
+  const _SectionGrantToggle({required this.phone});
+
+  final String phone;
+
+  @override
+  State<_SectionGrantToggle> createState() => _SectionGrantToggleState();
+}
+
+class _SectionGrantToggleState extends State<_SectionGrantToggle> {
+  static const _section = 'all_orders';
+  late final Stream<bool> _granted =
+      context.read<AdminSectionGrantsService>().watchFor(widget.phone, _section);
+  bool _busy = false;
+
+  Future<void> _toggle(bool grant) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(grant ? 'Рухсат бериш' : 'Рухсатни олиш'),
+        content: Text(grant
+            ? '${widget.phone} га «Барча буюртмалар» (фақат кўриш) рухсати берилсинми?'
+            : '${widget.phone} дан «Барча буюртмалар» рухсати олинсинми?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Бекор')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(grant ? 'Бериш' : 'Олиш')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    final err = await AdminSectionGrantsService.setGrant(
+      targetPhone: widget.phone,
+      section: _section,
+      granted: grant,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: err == null ? AppColors.primary : Colors.red,
+      content: Text(
+        err ?? (grant ? '✅ Рухсат берилди: ${widget.phone}' : '✅ Рухсат олинди: ${widget.phone}'),
+        style: TextStyle(color: err == null ? AppColors.onPrimary : null),
+      ),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<bool>(
+      stream: _granted,
+      builder: (context, snap) {
+        final granted = snap.data == true;
+        return OutlinedButton.icon(
+          onPressed: _busy || !snap.hasData ? null : () => _toggle(!granted),
+          icon: Icon(granted ? Icons.check_circle : Icons.list_alt, size: 18),
+          label: Text(
+            granted ? 'Барча буюртмалар ✓ (олиш)' : 'Барча буюртмалар: рухсат',
+            style: const TextStyle(fontSize: 12),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: granted ? AvaLight.ok : Colors.blueGrey.shade700,
+          ),
+        );
+      },
     );
   }
 }

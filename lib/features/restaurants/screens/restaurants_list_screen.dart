@@ -10,6 +10,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
+import '../../../services/location_service.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
@@ -23,12 +24,20 @@ class RestaurantsListScreen extends StatefulWidget {
     this.userLng,
     this.repository,
     this.cart,
+    this.locate,
   });
 
+  /// Профил манзили (захира) — GPS рухсати бўлса GPS устун (D-GEO-4).
   final double? userLat;
   final double? userLng;
   final RestaurantsRepository? repository;
   final RestaurantCart? cart;
+
+  /// Тестда алмаштириш учун; стандарт — рухсат сўрамайдиган GPS.
+  final Future<LocationCoords?> Function()? locate;
+
+  /// Ном бўйича қидирув ҳовузи (бутун республика, D-GEO-4).
+  static const searchPoolLimit = 300;
 
   @override
   State<RestaurantsListScreen> createState() => _RestaurantsListScreenState();
@@ -46,12 +55,34 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   double? _lat;
   double? _lng;
 
+  /// Координата GPS'дан олинган — профил манзили уни алмаштирмайди.
+  bool _fromGps = false;
+
+  /// Яқинда ресторан йўқ — фойдаланувчи «Бутун Ўзбекистон»ни танлади.
+  bool _showAll = false;
+
+  Stream<List<Restaurant>>? _stream;
+  String _streamKey = '';
+
   @override
   void initState() {
     super.initState();
     _lat = widget.userLat;
     _lng = widget.userLng;
     if (_lat == null || _lng == null) _loadProfileCoords();
+    _loadGps();
+  }
+
+  /// GPS биринчи (D-GEO-4): рухсат аллақачон бўлса — диалогсиз.
+  Future<void> _loadGps() async {
+    final locate = widget.locate ?? const LocationService().getCoordsIfAllowed;
+    final c = await locate();
+    if (!mounted || c == null) return;
+    setState(() {
+      _lat = c.lat;
+      _lng = c.lng;
+      _fromGps = true;
+    });
   }
 
   /// Координата берилмаган бўлса — профил манзилидан (GPS сўралмайди).
@@ -62,13 +93,44 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
       if (uid.length < 9 || !mounted) return;
       final user = await context.read<UserRepository>().getById(uid);
       final a = user?.address;
-      if (!mounted || a == null || a.lat == null || a.lng == null) return;
+      if (!mounted || _fromGps || a == null || a.lat == null || a.lng == null) {
+        return;
+      }
       setState(() {
         _lat = a.lat;
         _lng = a.lng;
       });
     } catch (_) {}
   }
+
+  /// Оқим state'да кешланади — қидирув ёзилганда янги listener очилмасин
+  /// (аввал ҳар `setState`да `watchApproved` қайта уланарди).
+  ///
+  /// - Ном бўйича қидирув — бутун республика (D-GEO-4): тасдиқланганлар
+  ///   ҳовузи, филтр клиентда.
+  /// - Координата бор — яқиндагилар (сервер, [RestaurantsRepository.watchNearby]).
+  /// - Координата йўқ ёки «Бутун Ўзбекистон» — аввалги умумий рўйхат.
+  Stream<List<Restaurant>> _listStream() {
+    final searching = _query.trim().isNotEmpty;
+    final lat = _lat;
+    final lng = _lng;
+    final nearby = !searching && !_showAll && lat != null && lng != null;
+    final key = searching
+        ? 'search'
+        : nearby
+            ? 'near:${lat.toStringAsFixed(3)}:${lng.toStringAsFixed(3)}'
+            : 'all';
+    if (_stream != null && key == _streamKey) return _stream!;
+    _streamKey = key;
+    return _stream = searching
+        ? _repo.watchApproved(limit: RestaurantsListScreen.searchPoolLimit)
+        : nearby
+            ? _repo.watchNearby(lat: lat, lng: lng)
+            : _repo.watchApproved(limit: 100);
+  }
+
+  bool get _nearbyMode =>
+      _query.trim().isEmpty && !_showAll && _lat != null && _lng != null;
 
   @override
   void dispose() {
@@ -200,7 +262,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
             ),
             Expanded(
               child: StreamBuilder<List<Restaurant>>(
-                stream: _repo.watchApproved(limit: 100),
+                stream: _listStream(),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
                     return const Center(child: CircularProgressIndicator());
@@ -219,10 +281,28 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                   if (list.isEmpty) {
                     return Padding(
                       padding: const EdgeInsets.all(12),
-                      child: AvaNoticeRow(
-                        text: context.tr('restaurants_empty_list'),
-                        icon: Icons.restaurant_outlined,
-                        color: c.ink3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AvaNoticeRow(
+                            text: context.tr(_nearbyMode
+                                ? 'restaurants_empty_nearby'
+                                : 'restaurants_empty_list'),
+                            icon: Icons.restaurant_outlined,
+                            color: c.ink3,
+                          ),
+                          // Яқинда йўқ — кенгроқ ҳудуд (ўзи ўтмайди).
+                          if (_nearbyMode && (snap.data ?? const []).isEmpty)
+                            Align(
+                              child: OutlinedButton.icon(
+                                key: const ValueKey('restaurants_show_all'),
+                                icon: const Icon(Icons.public, size: 16),
+                                label: Text(context.tr('geo_show_nation')),
+                                onPressed: () => setState(() => _showAll = true),
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   }

@@ -52,6 +52,35 @@ class LocationService {
     );
   }
 
+  /// Жойлашув РУХСАТИ АЛЛАҚАЧОН берилган бўлса координата, акс ҳолда `null`
+  /// — диалог очилмайди (бош саҳифа блоклари, «яқиндагилар» тартиби: геo
+  /// 4-босқич). Аввал охирги нуқта (тез), йўқ бўлса medium [timeout] билан.
+  Future<LocationCoords?> getCoordsIfAllowed({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    try {
+      final perm = await Geolocator.checkPermission();
+      if (perm != LocationPermission.always &&
+          perm != LocationPermission.whileInUse) {
+        return null;
+      }
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null && _isValidPosition(last)) {
+        return _fromPosition(last, fromLastKnown: true);
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: timeout,
+        ),
+      );
+      return _isValidPosition(pos) ? _fromPosition(pos) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Mahalliy taksi: faqat yangi GPS (cache/lastKnown ishlatilmaydi).
   Future<LocationCoords> getFreshCoords({
     Duration mediumTimeout = const Duration(seconds: 5),

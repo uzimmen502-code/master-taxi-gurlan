@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_context.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -83,11 +84,13 @@ class _RegionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    return ValueListenableBuilder<int>(
-      valueListenable: ServiceConfigHolder.revision,
-      builder: (context, _, __) {
-        final geo = ServiceConfigHolder.geoLabel.trim();
+    return ListenableBuilder(
+      listenable: Listenable.merge([ServiceConfigHolder.revision, GeoContext.revision]),
+      builder: (context, _) {
+        // Фаол ҳудуд (D-GEO-1): яшаш жойи ёки танланган/локация ҳудуди.
+        final geo = GeoContext.active.label.trim();
         final chosen = geo.isNotEmpty;
+        final away = GeoContext.isAway;
         // Геолокация ёқилмаган / ҳудуд танланмаган — тавсиф талаби
         // бўйича «Ҳудудни танланг».
         final label = chosen ? geo : context.tr('home_region_pick');
@@ -108,7 +111,9 @@ class _RegionButton extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.location_on_outlined,
+                        // Яшаш жойидан бошқа ҳудуд кўрилаётган бўлса —
+                        // бошқа белги (фойдаланувчи адашмасин).
+                        away ? Icons.travel_explore : Icons.location_on_outlined,
                         size: 18,
                         // brand (#FFA500) крем фонда кам кўринарди —
                         // иконка учун матн-хавфсиз brandText.

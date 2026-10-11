@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/geo/geo_context.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/session_shuffle.dart';
@@ -64,7 +65,7 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     _sub = _repo
-        .watchCatalog(districtId: ServiceConfigHolder.districtId)
+        .watchCatalog(districtId: GeoContext.active.districtId)
         .listen(
       (all) {
         if (!mounted) return;

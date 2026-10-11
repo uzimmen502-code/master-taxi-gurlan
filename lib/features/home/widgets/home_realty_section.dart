@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
+import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
@@ -131,7 +131,7 @@ class _HomeRealtySectionState extends State<HomeRealtySection> {
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     _sub = _repo
         .watchForHome(
-          districtId: ServiceConfigHolder.districtId,
+          districtId: GeoContext.active.districtId,
           limit: HomeRealtySection.limit,
         )
         .listen(

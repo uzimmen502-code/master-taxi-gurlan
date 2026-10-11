@@ -3154,5 +3154,16 @@
   "restaurants_m_my_cafes_n": "Мои кафе ({n})",
   "restaurants_m_switch_cafe": "Переключить кафе-ресторан",
   "restaurants_m_add_another": "Открыть ещё кафе-ресторан",
-  "restaurants_m_pending_count": "На рассмотрении заявок: {n}"
+  "restaurants_m_pending_count": "На рассмотрении заявок: {n}",
+  "geo_selector_title": "Какой регион показать?",
+  "geo_selector_current": "Где я сейчас",
+  "geo_selector_home": "Где я живу",
+  "geo_selector_other": "Другой регион…",
+  "geo_selector_change_home": "Изменить место жительства",
+  "geo_pick_title": "Выберите регион",
+  "geo_pick_apply": "Показать",
+  "geo_suggest_text": "Вы сейчас в районе «{place}». Показать этот район?",
+  "geo_suggest_yes": "Да",
+  "geo_suggest_no": "Нет",
+  "geo_back_home": "Вернуться к месту жительства"
 }

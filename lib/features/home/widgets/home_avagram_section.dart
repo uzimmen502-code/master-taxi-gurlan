@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
+import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../tv_market/models/tv_clip.dart';
@@ -82,7 +82,7 @@ class _HomeAvagramSectionState extends State<HomeAvagramSection> {
     }
     try {
       final page = await _repo.fetchHomePage(
-        districtId: ServiceConfigHolder.districtId,
+        districtId: GeoContext.active.districtId,
         limit: HomeAvagramSection.limit,
         excludeIds: more ? {for (final c in _clips) c.id} : const {},
         nearbyCursor: more ? _nearbyCursor : null,

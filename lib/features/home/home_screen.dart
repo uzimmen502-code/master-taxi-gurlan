@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_share.dart';
+import '../../core/geo/geo_context.dart';
+import '../../core/geo/geo_selector.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
@@ -157,6 +159,7 @@ class _HomeViewState extends State<_HomeView> {
       if (mounted) setState(() {});
     };
     ServiceConfigHolder.revision.addListener(_configListener!);
+    GeoContext.revision.addListener(_configListener!);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ServiceConfigHolder.bootstrap());
@@ -225,7 +228,14 @@ class _HomeViewState extends State<_HomeView> {
   /// Ҳудудга боғлиқ бўлимлар калити: туман ўзгарса бўлим ҚАЙТА ЯРАТИЛАДИ
   /// ва янги сўров очади. Аввал бўлимлар туманни фақат `initState`да
   /// ўқирди — ҳудуд алмашгач эски туман эълонлари қоларди (geo аудит).
-  String get _geoKey => ServiceConfigHolder.districtId;
+  ///
+  /// Фаол ҳудуд (D-GEO-1) — яшаш жойи ёки танланган/локация ҳудуди.
+  String get _geoKey =>
+      '${GeoContext.active.regionId}:${GeoContext.active.districtId}';
+
+  /// Локациядан аниқланган туман (1б, D-GEO-12/13) — ҳудуд ойнасида
+  /// «Ҳозирги жойим» пункти; `null` — аниқланмаган.
+  GeoArea? _locationArea;
 
   @override
   void dispose() {
@@ -233,6 +243,7 @@ class _HomeViewState extends State<_HomeView> {
     _promoSub?.cancel();
     if (_configListener != null) {
       ServiceConfigHolder.revision.removeListener(_configListener!);
+      GeoContext.revision.removeListener(_configListener!);
     }
     super.dispose();
   }
@@ -693,8 +704,19 @@ class _HomeViewState extends State<_HomeView> {
     await openPlatformProductDetail(context, product, shelf);
   }
 
-  /// Юқори қатордаги ҳудуд тугмаси.
+  /// Юқори қатордаги ҳудуд тугмаси (D-GEO-1, 1-такомиллаштириш): ФАОЛ
+  /// ҳудудни танлайди — профил (яшаш жойи) ЎЗГАРМАЙДИ. Аввал бу тугма
+  /// `ZoneSelectScreen` орқали профилни қайта ёзарди (geo аудит).
   Future<void> _openRegionPicker() async {
+    await showGeoSelectorSheet(
+      context,
+      current: _locationArea,
+      onChangeHome: _openHomeZonePicker,
+    );
+  }
+
+  /// Яшаш жойини ўзгартириш — профилга ёзилади (эски йўл).
+  Future<void> _openHomeZonePicker() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -705,7 +727,6 @@ class _HomeViewState extends State<_HomeView> {
         ),
       ),
     );
-    // Ҳудуд ўзгарган бўлса — бўлимлар янги ҳудуд бўйича қайта тўлади.
     if (mounted) setState(() {});
   }
 

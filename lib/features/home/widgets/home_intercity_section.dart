@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
+import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../../models/intercity_ride.dart';
@@ -81,7 +81,7 @@ class _HomeIntercitySectionState extends State<HomeIntercitySection> {
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     _sub = _repo
         .watchNearbyForHome(
-          districtId: ServiceConfigHolder.districtId,
+          districtId: GeoContext.active.districtId,
           limit: HomeIntercitySection.limit,
         )
         .listen(

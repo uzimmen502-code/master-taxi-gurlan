@@ -3154,5 +3154,16 @@
   "restaurants_m_my_cafes_n": "Менинг кафеларим ({n})",
   "restaurants_m_switch_cafe": "Кафе-ресторанни алмаштириш",
   "restaurants_m_add_another": "Яна кафе-ресторан очиш",
-  "restaurants_m_pending_count": "{n} та аризангиз кўриб чиқилмоқда"
+  "restaurants_m_pending_count": "{n} та аризангиз кўриб чиқилмоқда",
+  "geo_selector_title": "Қайси ҳудудни кўрсатай?",
+  "geo_selector_current": "Ҳозирги жойим",
+  "geo_selector_home": "Яшаш жойим",
+  "geo_selector_other": "Бошқа ҳудуд…",
+  "geo_selector_change_home": "Яшаш жойимни ўзгартириш",
+  "geo_pick_title": "Ҳудудни танланг",
+  "geo_pick_apply": "Кўрсатиш",
+  "geo_suggest_text": "Сиз ҳозир {place}дасиз. Шу ҳудуддагиларни кўрсатайми?",
+  "geo_suggest_yes": "Ҳа",
+  "geo_suggest_no": "Йўқ",
+  "geo_back_home": "Яшаш жойимга қайтиш"
 }

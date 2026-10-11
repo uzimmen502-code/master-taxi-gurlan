@@ -3154,5 +3154,16 @@
   "restaurants_m_my_cafes_n": "Mening kafelarim ({n})",
   "restaurants_m_switch_cafe": "Kafe-restoranni almashtirish",
   "restaurants_m_add_another": "Yana kafe-restoran ochish",
-  "restaurants_m_pending_count": "{n} ta arizangiz ko'rib chiqilmoqda"
+  "restaurants_m_pending_count": "{n} ta arizangiz ko'rib chiqilmoqda",
+  "geo_selector_title": "Qaysi hududni ko‘rsatay?",
+  "geo_selector_current": "Hozirgi joyim",
+  "geo_selector_home": "Yashash joyim",
+  "geo_selector_other": "Boshqa hudud…",
+  "geo_selector_change_home": "Yashash joyimni o‘zgartirish",
+  "geo_pick_title": "Hududni tanlang",
+  "geo_pick_apply": "Ko‘rsatish",
+  "geo_suggest_text": "Siz hozir {place}dasiz. Shu hududdagilarni ko‘rsataymi?",
+  "geo_suggest_yes": "Ha",
+  "geo_suggest_no": "Yo‘q",
+  "geo_back_home": "Yashash joyimga qaytish"
 }

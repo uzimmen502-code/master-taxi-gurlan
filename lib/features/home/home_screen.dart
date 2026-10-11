@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_share.dart';
 import '../../core/geo/geo_context.dart';
 import '../../core/geo/geo_selector.dart';
+import '../../core/geo/geo_suggest_banner.dart';
+import '../../core/geo/location_area_service.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
@@ -171,6 +173,7 @@ class _HomeViewState extends State<_HomeView> {
       final c = context.read<HomeController>();
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
+      unawaited(_checkLocationSuggestion());
     });
   }
 
@@ -179,6 +182,7 @@ class _HomeViewState extends State<_HomeView> {
     if (!mounted) return;
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
     _scheduleDeferredConfigBootstrap();
+    unawaited(_checkLocationSuggestion());
   }
 
   /// Pop анимациясидан кейин silent bootstrap; 45 с ичида такрорланмайди.
@@ -236,6 +240,50 @@ class _HomeViewState extends State<_HomeView> {
   /// Локациядан аниқланган туман (1б, D-GEO-12/13) — ҳудуд ойнасида
   /// «Ҳозирги жойим» пункти; `null` — аниқланмаган.
   GeoArea? _locationArea;
+
+  /// Кўрсатиладиган локация таклифи (D-GEO-12) — `null` бўлса йўқ.
+  GeoArea? _suggestArea;
+  DateTime? _lastLocationCheckAt;
+
+  /// Жорий туманни аниқлаш (рухсат СЎРАМАЙДИ, 10 дақиқада бир марта).
+  Future<void> _checkLocationSuggestion() async {
+    final now = DateTime.now();
+    if (_lastLocationCheckAt != null &&
+        now.difference(_lastLocationCheckAt!) < const Duration(minutes: 10)) {
+      return;
+    }
+    _lastLocationCheckAt = now;
+    final area = await LocationAreaService().detect();
+    if (!mounted) return;
+    final dismissed =
+        area == null ? null : await suggestionDismissedAt(area.districtId);
+    if (!mounted) return;
+    setState(() {
+      _locationArea = area;
+      _suggestArea = shouldSuggestLocation(
+        detected: area,
+        active: GeoContext.active,
+        dismissedAt: dismissed,
+        now: DateTime.now(),
+      )
+          ? area
+          : null;
+    });
+  }
+
+  Future<void> _acceptLocationSuggestion() async {
+    final a = _suggestArea;
+    if (a == null) return;
+    setState(() => _suggestArea = null);
+    await GeoContext.setActive(a, GeoAreaSource.location);
+  }
+
+  Future<void> _declineLocationSuggestion() async {
+    final a = _suggestArea;
+    if (a == null) return;
+    setState(() => _suggestArea = null);
+    await dismissSuggestion(a.districtId, DateTime.now());
+  }
 
   @override
   void dispose() {
@@ -778,6 +826,13 @@ class _HomeViewState extends State<_HomeView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             AvaTopBar(onPickRegion: _openRegionPicker),
+                            if (_suggestArea != null &&
+                                !_suggestArea!.sameAs(GeoContext.active))
+                              GeoSuggestBanner(
+                                area: _suggestArea!,
+                                onYes: _acceptLocationSuggestion,
+                                onNo: _declineLocationSuggestion,
+                              ),
                             _ActiveOrderSlot(onOpen: _openActiveOrder),
                             SizedBox(height: _sectionGap(context, base: 10)),
                             // Ҳамён карточкаси интерфейсдан олиб

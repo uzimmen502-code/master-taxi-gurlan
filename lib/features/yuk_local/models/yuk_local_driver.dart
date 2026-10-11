@@ -242,6 +242,7 @@ class YukLocalDriverRanked {
     required this.roadKm,
     required this.etaMinutes,
     required this.inRadius,
+    this.distanceKnown = true,
   });
 
   final YukLocalDriver driver;
@@ -249,4 +250,8 @@ class YukLocalDriverRanked {
   final double roadKm;
   final int etaMinutes;
   final bool inRadius;
+
+  /// Қидирувчида GPS йўқ — масофа/ETA ҳисобланмаган (танланган ҳудуд
+  /// рўйхати, 3а-босқич). Карта ва деталда км/дақиқа кўрсатилмайди.
+  final bool distanceKnown;
 }

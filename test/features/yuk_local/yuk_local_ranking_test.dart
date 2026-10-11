@@ -18,6 +18,8 @@ YukLocalDriver _driver(
   int workEnd = 24 * 60,
   DateTime? expiresAt,
   bool isDemo = false,
+  String districtId = '',
+  DateTime? updatedAt,
 }) {
   return YukLocalDriver(
     id: id,
@@ -39,8 +41,9 @@ YukLocalDriver _driver(
     workEndMinutes: workEnd,
     expiresAt: expiresAt,
     createdAt: DateTime(2026, 1, 1),
-    updatedAt: DateTime(2026, 1, 1),
+    updatedAt: updatedAt ?? DateTime(2026, 1, 1),
     isDemo: isDemo,
+    districtId: districtId,
   );
 }
 
@@ -182,6 +185,136 @@ void main() {
         'emptyOutRadius',
         'busyNear',
       ]);
+    });
+  });
+
+  group('YukLocalRanking.listWithoutGps — қидирувчида GPS йўқ (3а)', () {
+    test('филтр rank билан бир хил; масофа номаълум, inRadius=true', () {
+      final r = ranker.listWithoutGps(
+        drivers: [
+          _driver('noGps'),
+          _driver('expired',
+              lat: _userLat,
+              lng: _userLng,
+              expiresAt: now.subtract(const Duration(minutes: 1))),
+          _driver('offHours',
+              lat: _userLat, lng: _userLng, workStart: 13 * 60, workEnd: 18 * 60),
+          _driver('ok', lat: _userLat + 0.3, lng: _userLng),
+        ],
+        now: now,
+      );
+      expect(ids(r), ['ok']);
+      expect(r.first.distanceKnown, isFalse);
+      expect(r.first.inRadius, isTrue);
+    });
+
+    test('тартиб: мото → тайёрлик → энг янги янгиланган', () {
+      final r = ranker.listWithoutGps(
+        drivers: [
+          _driver('busyNew',
+              lat: _userLat,
+              lng: _userLng,
+              loadStatus: YukLocalLoadStatus.busy,
+              updatedAt: DateTime(2026, 9, 15)),
+          _driver('emptyOld',
+              lat: _userLat, lng: _userLng, updatedAt: DateTime(2026, 9, 1)),
+          _driver('emptyNew',
+              lat: _userLat, lng: _userLng, updatedAt: DateTime(2026, 9, 14)),
+          _driver('moto',
+              lat: _userLat,
+              lng: _userLng,
+              vehicleType: 'moto',
+              loadStatus: YukLocalLoadStatus.busy,
+              updatedAt: DateTime(2025, 1, 1)),
+        ],
+        now: now,
+      );
+      expect(ids(r), ['moto', 'emptyNew', 'emptyOld', 'busyNew']);
+    });
+  });
+
+  group('YukLocalRanking.keepForDistrict — D-GEO-6 туман даражаси', () {
+    List<YukLocalDriverRanked> ranked(List<YukLocalDriver> d) =>
+        ranker.rank(drivers: d, userLat: _userLat, userLng: _userLng, now: now);
+
+    test('шу туман (радиусдан ташқари бўлса ҳам) ва ҳудудсиз эски — қолади', () {
+      final r = YukLocalRanking.keepForDistrict(
+        ranked([
+          _driver('sameFar',
+              lat: _userLat + 0.3, lng: _userLng, acceptRadiusKm: 5,
+              districtId: 'gurlan'),
+          _driver('legacy', lat: _userLat + 0.3, lng: _userLng, acceptRadiusKm: 5),
+        ]),
+        'gurlan',
+      );
+      expect(ids(r)..sort(), ['legacy', 'sameFar']);
+    });
+
+    test('қўшни туман: радиуси қидирувчига етса кўринади, етмаса — йўқ', () {
+      final r = YukLocalRanking.keepForDistrict(
+        ranked([
+          // ~5.6 км, радиус 10 — етади.
+          _driver('nbReach',
+              lat: _userLat + 0.05, lng: _userLng, acceptRadiusKm: 10,
+              districtId: 'yangiariq'),
+          // ~5.6 км, радиус 5 — етмайди.
+          _driver('nbShort',
+              lat: _userLat + 0.05, lng: _userLng, acceptRadiusKm: 5,
+              districtId: 'yangiariq'),
+        ]),
+        'gurlan',
+      );
+      expect(ids(r), ['nbReach']);
+    });
+
+    test('чегара: масофа радиусга ТЕНГ — кўринади, 1 м ортиқ — йўқ', () {
+      YukLocalDriverRanked at(String id, double km) => YukLocalDriverRanked(
+            driver: _driver(id,
+                lat: _userLat, lng: _userLng, acceptRadiusKm: 5,
+                districtId: 'yangiariq'),
+            straightKm: km,
+            roadKm: km * YukLocalRanking.roadFactor,
+            etaMinutes: 1,
+            inRadius: km <= 5,
+          );
+      final r = YukLocalRanking.keepForDistrict(
+        [at('edge', 5.0), at('over', 5.001)],
+        'gurlan',
+      );
+      expect(ids(r), ['edge']);
+    });
+
+    test('қўшни туман «бутун туман» радиуси — бизнинг туманга етмайди', () {
+      final r = YukLocalRanking.keepForDistrict(
+        ranked([
+          _driver('nbCity',
+              lat: _userLat + 0.01,
+              lng: _userLng,
+              acceptRadiusKm: YukAcceptRadius.citywideKm,
+              districtId: 'yangiariq'),
+        ]),
+        'gurlan',
+      );
+      expect(r, isEmpty);
+    });
+
+    test('GPS йўқ (масофа номаълум) — фақат шу туман ва эскилар', () {
+      final r = YukLocalRanking.keepForDistrict(
+        ranker.listWithoutGps(drivers: [
+          _driver('same', lat: _userLat, lng: _userLng, districtId: 'gurlan'),
+          _driver('nb', lat: _userLat, lng: _userLng, districtId: 'yangiariq'),
+          _driver('legacy', lat: _userLat, lng: _userLng),
+        ], now: now),
+        'gurlan',
+      );
+      expect(ids(r)..sort(), ['legacy', 'same']);
+    });
+
+    test('туман бўш — филтр йўқ', () {
+      final rows = ranked([
+        _driver('a', lat: _userLat, lng: _userLng, districtId: 'x'),
+      ]);
+      expect(YukLocalRanking.keepForDistrict(rows, ''), rows);
     });
   });
 }

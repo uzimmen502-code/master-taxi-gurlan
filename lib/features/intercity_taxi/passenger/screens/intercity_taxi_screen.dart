@@ -416,7 +416,9 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     final err = _controllerRef!.errorMessage;
     if (err == null) return;
     final isNoDriver =
-        err == 'no_driver_today' || err == 'no_driver_tomorrow';
+        err == 'no_driver_today' ||
+        err == 'no_driver_tomorrow' ||
+        err == 'no_driver_on_date';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Row(children: [
         Icon(
@@ -952,7 +954,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     ),
                     c.isToday,
                     () => c.setIsToday(true))),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
                 child: _dateCard(
                     context.tr('tomorrow'),
@@ -961,8 +963,23 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                       yearSuffix:
                           _currentLocale.languageCode == 'ru' ? ' г.' : ' y',
                     ),
-                    !c.isToday,
+                    c.isTomorrow,
                     () => c.setIsToday(false))),
+            const SizedBox(width: 8),
+            // Ихтиёрий кун (3б) — ҳайдовчи рейсни 30 кунгача кўчира олади.
+            Expanded(
+                child: _dateCard(
+                    context.tr('intercity_other_day'),
+                    c.dayOffset >= 2
+                        ? formatPickDateLabel(
+                            c.searchDay(),
+                            yearSuffix: _currentLocale.languageCode == 'ru'
+                                ? ' г.'
+                                : ' y',
+                          )
+                        : '…',
+                    c.dayOffset >= 2,
+                    () => _pickSearchDay(c))),
           ]),
           const SizedBox(height: 24),
           _SearchButton(
@@ -974,6 +991,19 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       ),
     ),
     );
+  }
+
+  Future<void> _pickSearchDay(IntercityTaxiController c) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: c.dayOffset >= 2 ? c.searchDay() : today.add(const Duration(days: 2)),
+      firstDate: today,
+      lastDate: today.add(const Duration(days: IntercityTaxiController.maxDayOffset)),
+    );
+    if (picked == null || !mounted) return;
+    c.setSearchDay(picked);
   }
 
   Widget _dateCard(String title, String date, bool sel, VoidCallback onTap) {
@@ -1010,20 +1040,27 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
               color: sel ? IntercityColors.onPrimary : IntercityColors.textFaint,
             ),
             const SizedBox(width: 6),
-            Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: sel ? IntercityColors.onPrimary : IntercityColors.text)),
-                  Text(date,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: sel ? IntercityColors.onPrimary.withValues(alpha: 0.72) : IntercityColors.textFaint)),
-                ]),
+            // Учта карта (Бугун / Эртага / Бошқа кун) тор экранда сиғсин.
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: sel ? IntercityColors.onPrimary : IntercityColors.text)),
+                      Text(date,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: sel ? IntercityColors.onPrimary.withValues(alpha: 0.72) : IntercityColors.textFaint)),
+                    ]),
+              ),
+            ),
           ],
         ),
       ),

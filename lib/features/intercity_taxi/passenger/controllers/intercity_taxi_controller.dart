@@ -30,7 +30,22 @@ class IntercityTaxiController extends ChangeNotifier {
   String? selectedFromLocation;
   String? selectedToLocation;
   String? selectedDistrict;
-  bool isToday = true;
+
+  /// Қидирув куни — бугундан неча кун кейин (0 = бугун, 1 = эртага).
+  /// Ҳайдовчи рейсни 30 кунгача кўчира олади (ҳайдовчи панели
+  /// `showDatePicker`), шунинг учун йўловчи ҳам шу оралиқда қидиради (3б).
+  int dayOffset = 0;
+  static const maxDayOffset = 30;
+
+  bool get isToday => dayOffset == 0;
+  bool get isTomorrow => dayOffset == 1;
+
+  /// Қидирилаётган кун (соатсиз).
+  DateTime searchDay([DateTime? now]) {
+    final n = now ?? DateTime.now();
+    return DateTime(n.year, n.month, n.day + dayOffset);
+  }
+
   int passengers = 1;
 
   List<IntercityRide> rides = const [];
@@ -131,10 +146,26 @@ class IntercityTaxiController extends ChangeNotifier {
   /// Qidiruv filteri: forma yo'lovchi sonini ko'rsatmaydi — doim 1 dan filtrlash.
   void resetSearchPassengerCount() => resetPassengers();
 
-  void setIsToday(bool v) {
-    if (isToday == v) return;
-    isToday = v;
+  void setIsToday(bool v) => setDayOffset(v ? 0 : 1);
+
+  /// Ихтиёрий кун: [maxDayOffset] дан узоқ ёки ўтган кун — чегарага келади.
+  void setDayOffset(int offset) {
+    final next = offset.clamp(0, maxDayOffset);
+    if (dayOffset == next) return;
+    dayOffset = next;
     notifyListeners();
+  }
+
+  /// Календардан танланган кун → [dayOffset].
+  void setSearchDay(DateTime day, [DateTime? now]) {
+    final n = now ?? DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    final d = DateTime(day.year, day.month, day.day);
+    // DST йўқ (UZ), лекин кунлар фарқини соатдан эмас — UTC санадан оламиз.
+    final diff = DateTime.utc(d.year, d.month, d.day)
+        .difference(DateTime.utc(today.year, today.month, today.day))
+        .inDays;
+    setDayOffset(diff);
   }
 
   void incPassengers() {
@@ -200,7 +231,10 @@ class IntercityTaxiController extends ChangeNotifier {
 
     try {
       final now = DateTime.now();
-      final base = isToday ? now : now.add(const Duration(days: 1));
+      // Бугун — ҳозирги вақт (рейс соати билан солиштириш учун), бошқа
+      // кун — ўша куннинг шу соати (аввалги «эртага» хатти-ҳаракати).
+      final base = DateTime(now.year, now.month, now.day + dayOffset,
+          now.hour, now.minute);
       final fromCity = IntercityPlaces.extractCity(from);
       final toCity = IntercityPlaces.extractCity(to);
       final district = selectedDistrict ?? '';
@@ -249,7 +283,11 @@ class IntercityTaxiController extends ChangeNotifier {
     if (filtered.isEmpty && _allRides.isNotEmpty) {
       errorMessage = 'no_seats_for_passenger_count';
     } else if (filtered.isEmpty) {
-      errorMessage = isToday ? 'no_driver_today' : 'no_driver_tomorrow';
+      errorMessage = isToday
+          ? 'no_driver_today'
+          : isTomorrow
+              ? 'no_driver_tomorrow'
+              : 'no_driver_on_date';
     } else {
       errorMessage = null;
     }

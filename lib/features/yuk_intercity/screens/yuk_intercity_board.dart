@@ -65,6 +65,10 @@ class _YukIntercityBoardState extends State<YukIntercityBoard> {
   String _appliedTo = '';
   String _appliedVehicle = '';
 
+  /// Жўнаш куни филтри (`null` — ҳар қандай кун): драфт ва қўлланилган.
+  DateTime? _draftDay;
+  DateTime? _appliedDay;
+
   /// Пастга скроллда эълон/қидирув яширилади; юқорига — қайта очилади.
   bool _toolsExpanded = true;
 
@@ -138,6 +142,7 @@ class _YukIntercityBoardState extends State<YukIntercityBoard> {
       from: _appliedFrom,
       to: _appliedTo,
       vehicleType: _appliedVehicle,
+      departDay: _appliedDay,
     );
     final hid = (widget.highlightListingId ?? '').trim();
     if (hid.isEmpty) return list;
@@ -180,10 +185,25 @@ class _YukIntercityBoardState extends State<YukIntercityBoard> {
       _appliedFrom = IntercityPlaces.normalizeLocation(_fromCtrl.text);
       _appliedTo = IntercityPlaces.normalizeLocation(_toCtrl.text);
       _appliedVehicle = _draftVehicle;
+      _appliedDay = _draftDay;
       _fromSuggestions = [];
       _toSuggestions = [];
     });
     FocusScope.of(context).unfocus();
+  }
+
+  /// Жўнаш кунини танлаш — бугундан [YukListing.maxDepartDays] кунгача
+  /// (эълонлар 5 сутка яшайди, ундан узоқ кунда эълон бўлмайди).
+  Future<void> _pickDraftDay() async {
+    final today = YukListing.dayOf(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _draftDay ?? today,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: YukListing.maxDepartDays)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _draftDay = YukListing.dayOf(picked));
   }
 
   bool _onListScroll(ScrollNotification n) {
@@ -488,6 +508,10 @@ class _YukIntercityBoardState extends State<YukIntercityBoard> {
                                   onPickFrom: _pickFrom,
                                   onPickTo: _pickTo,
                                   onSearch: _runSearch,
+                                  day: _draftDay,
+                                  onPickDay: _pickDraftDay,
+                                  onClearDay: () =>
+                                      setState(() => _draftDay = null),
                                 ),
                               ],
                             )
@@ -649,7 +673,15 @@ class _FiltersBar extends StatelessWidget {
     required this.onPickFrom,
     required this.onPickTo,
     required this.onSearch,
+    required this.day,
+    required this.onPickDay,
+    required this.onClearDay,
   });
+
+  /// Жўнаш куни филтри (`null` — ҳар қандай кун).
+  final DateTime? day;
+  final VoidCallback onPickDay;
+  final VoidCallback onClearDay;
 
   final TextEditingController fromCtrl;
   final TextEditingController toCtrl;
@@ -777,6 +809,44 @@ class _FiltersBar extends StatelessWidget {
             ],
             onChanged: (v) => onVehicle(v ?? ''),
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('yuk_filter_day'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: day == null
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFFFACC15),
+                    side: BorderSide(
+                      color: day == null
+                          ? const Color(0xFF2D3748)
+                          : const Color(0xFFFACC15),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.centerLeft,
+                  ),
+                  onPressed: onPickDay,
+                  icon: const Icon(Icons.event_outlined, size: 18),
+                  label: Text(
+                    day == null
+                        ? context.tr('yuk_any_day')
+                        : yukDepartLabel(context, day!),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+              if (day != null)
+                IconButton(
+                  tooltip: context.tr('yuk_any_day'),
+                  onPressed: onClearDay,
+                  icon: const Icon(Icons.close, color: Color(0xFF94A3B8)),
+                ),
+            ],
+          ),
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
@@ -798,6 +868,14 @@ class _FiltersBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// «Жўнаш: 14.10» — карта, филтр ва формада бир хил.
+String yukDepartLabel(BuildContext context, DateTime day) {
+  String two(int x) => x.toString().padLeft(2, '0');
+  return context
+      .tr('yuk_depart_on')
+      .replaceAll('{d}', '${two(day.day)}.${two(day.month)}');
 }
 
 String _yukRemainingLabel(BuildContext context, YukListing item) {
@@ -955,12 +1033,21 @@ class _ListingCard extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         // Йўналиш матни қисилмаслиги учун — тугмалар қаторида.
-                        if (item.isDemo) ...[
-                          _Pill(
-                            text: context.tr('yuk_demo_badge'),
-                            fg: const Color(0xFF93C5FD),
-                            bg: const Color(0xFF1E3A5F),
-                          ),
+                        if (item.departDate != null || item.isDemo) ...[
+                          if (item.departDate != null)
+                            _Pill(
+                              text: yukDepartLabel(context, item.departDate!),
+                              fg: const Color(0xFFFACC15),
+                              bg: const Color(0xFF0B0E14),
+                            ),
+                          if (item.departDate != null && item.isDemo)
+                            const SizedBox(width: 4),
+                          if (item.isDemo)
+                            _Pill(
+                              text: context.tr('yuk_demo_badge'),
+                              fg: const Color(0xFF93C5FD),
+                              bg: const Color(0xFF1E3A5F),
+                            ),
                           const Spacer(),
                         ],
                         if (mine) ...[
@@ -1140,7 +1227,34 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
   List<String> _fromSuggestions = [];
   List<String> _toSuggestions = [];
 
+  /// Жўнаш куни — янги эълонда бугун (стандарт).
+  late DateTime _departDay = widget.initial?.departDate ??
+      YukListing.dayOf(DateTime.now());
+
   bool get _editing => widget.initial != null;
+
+  /// Танлаш оралиғи: бугундан (таҳрирда — ўтиб кетмаган кундан) эълон
+  /// ёпилиш кунигача, кўпи билан [YukListing.maxDepartDays].
+  Future<void> _pickDepartDay() async {
+    final today = YukListing.dayOf(DateTime.now());
+    var last = today.add(const Duration(days: YukListing.maxDepartDays));
+    final exp = widget.initial?.expiresAt;
+    if (exp != null && YukListing.dayOf(exp).isBefore(last)) {
+      last = YukListing.dayOf(exp);
+    }
+    if (last.isBefore(today)) last = today;
+    var initial = _departDay;
+    if (initial.isBefore(today)) initial = today;
+    if (initial.isAfter(last)) initial = last;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: today,
+      lastDate: last,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _departDay = YukListing.dayOf(picked));
+  }
 
   @override
   void initState() {
@@ -1277,6 +1391,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
           comment: _comment.text.trim(),
           createdAt: createdAt,
           expiresAt: expiresAt,
+          departDate: _departDay,
           stars: prev?.stars ?? 5,
         ),
       );
@@ -1316,6 +1431,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
         comment: _comment.text.trim(),
         createdAt: createdAt,
         expiresAt: expiresAt,
+        departDate: _departDay,
         stars: prev?.stars ?? 5,
       ),
     );
@@ -1419,6 +1535,24 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
                           setState(() => _toSuggestions = []);
                           _toFocus.unfocus();
                         }),
+                        const SizedBox(height: 10),
+                        // Жўнаш куни (эга қарори 2026-10-11).
+                        OutlinedButton.icon(
+                          key: const ValueKey('yuk_form_depart_day'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFFACC15),
+                            side: const BorderSide(color: Color(0xFF334155)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            alignment: Alignment.centerLeft,
+                          ),
+                          onPressed: _pickDepartDay,
+                          icon: const Icon(Icons.event_outlined, size: 18),
+                          label: Text(yukDepartLabel(context, _departDay)),
+                        ),
                         const SizedBox(height: 10),
                         Text(context.tr('yuk_stops'),
                             style:

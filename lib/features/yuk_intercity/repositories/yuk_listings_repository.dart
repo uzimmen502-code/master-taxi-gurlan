@@ -11,7 +11,12 @@ class YukListingsRepository {
 
   final FirebaseFirestore _db;
 
-  static const int activeWatchLimit = 10000;
+  /// Аввал 10 000 эди — ҳар очилишда шунча ҳужжат ўқилиши мумкин эди.
+  /// Эълон 48 соат яшайди ва муддати ўтганини CF ёпади
+  /// (`yuk_intercity.js`, `status: closed`), шунинг учун актив тўплам —
+  /// фақат охирги 48 соат эълонлари; энг янги 500 таси етарли (3в-босқич).
+  /// Индекс: (status, createdAt↓) — мавжуд.
+  static const int activeWatchLimit = 500;
 
   CollectionReference<Map<String, dynamic>> get _col =>
       _db.collection('yuk_listings');

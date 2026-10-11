@@ -94,6 +94,8 @@ Future<AdDistrictValue?> pickAdDistrict(
   BuildContext context, {
   required AdDistrictValue current,
 }) async {
+  // Тил await'дан олдин олинади (context кейин ишлатилмайди).
+  final lang = context.contentLang;
   final repo = ServiceConfigRepository();
   final regions = await repo.fetchRegions();
   if (!context.mounted || regions.isEmpty) return null;
@@ -105,7 +107,7 @@ Future<AdDistrictValue?> pickAdDistrict(
     builder: (ctx) => _PickSheet<GeoRegion>(
       title: ctx.tr('ad_district_region'),
       items: regions,
-      labelOf: (r) => r.displayName,
+      labelOf: (r) => r.nameFor(lang),
       selectedId: current.regionId,
       idOf: (r) => r.id,
     ),
@@ -122,7 +124,7 @@ Future<AdDistrictValue?> pickAdDistrict(
     builder: (ctx) => _PickSheet<GeoDistrict>(
       title: ctx.tr('ad_district_label'),
       items: districts,
-      labelOf: (d) => d.displayName,
+      labelOf: (d) => d.nameFor(lang),
       selectedId: current.districtId,
       idOf: (d) => d.id,
     ),
@@ -132,7 +134,7 @@ Future<AdDistrictValue?> pickAdDistrict(
   return AdDistrictValue(
     districtId: district.id,
     regionId: region.id,
-    label: '${district.displayName}, ${region.displayName}',
+    label: '${district.nameFor(lang)}, ${region.nameFor(lang)}',
   );
 }
 

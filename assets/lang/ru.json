@@ -3081,5 +3081,8 @@
   "restaurants_err_PICKUP_CODE_LOCKED": "Код введён неверно 5 раз — обратитесь в ресторан или к администратору.",
   "restaurants_err_RESTAURANT_NOT_READY": "Ресторан ещё не отметил заказ готовым.",
   "restaurants_err_USE_RESTAURANT_PICKUP": "Заказ ресторана — используйте кнопку «Забрал (код)».",
-  "restaurants_err_USE_RESTAURANT_ARRIVE": "Заказ ресторана — используйте кнопку «Я на месте»."
+  "restaurants_err_USE_RESTAURANT_ARRIVE": "Заказ ресторана — используйте кнопку «Я на месте».",
+  "geo_region_label": "Регион",
+  "geo_district_label": "Район",
+  "geo_area_label": "Махалля / зона обслуживания"
 }

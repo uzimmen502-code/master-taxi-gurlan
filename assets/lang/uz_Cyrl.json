@@ -3081,5 +3081,8 @@
   "restaurants_err_PICKUP_CODE_LOCKED": "Код 5 марта нотўғри киритилди — ресторан ёки админга мурожаат қилинг.",
   "restaurants_err_RESTAURANT_NOT_READY": "Ресторан буюртмани ҳали «Тайёр» қилмади.",
   "restaurants_err_USE_RESTAURANT_PICKUP": "Ресторан буюртмаси — «Олдим (код)» тугмасидан фойдаланинг.",
-  "restaurants_err_USE_RESTAURANT_ARRIVE": "Ресторан буюртмаси — «Етиб келдим» тугмасидан фойдаланинг."
+  "restaurants_err_USE_RESTAURANT_ARRIVE": "Ресторан буюртмаси — «Етиб келдим» тугмасидан фойдаланинг.",
+  "geo_region_label": "Вилоят",
+  "geo_district_label": "Туман",
+  "geo_area_label": "Маҳалла / хизмат зонаси"
 }

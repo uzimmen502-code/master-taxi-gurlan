@@ -7,12 +7,35 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// [GeoRegion]/[GeoDistrict] hisobot uchun ham ishlatiladi.
 /// Firestore: `geo_regions`, `geo_districts`, `service_areas`.
 
+/// Ҳудуд номи фойдаланувчи тилида ([lang]: `uz_Cyrl` / `uz_Latn` / `ru`).
+///
+/// Ҳужжатда: `name` — лотин, `nameUz` — кирилл, `nameRu` — рус (2026-10-11
+/// дан; эски ҳужжатларда йўқ). Керакли ном бўш бўлса — кириллга, у ҳам бўш
+/// бўлса — лотинга қайтади (ҳеч қачон бўш қолмайди, ном бўлса).
+///
+/// Фақат КЎРСАТИШ учун. Сақланадиган/умумий ёрлиқлар (`districtLabel` ва ҳ.к.)
+/// ўзгаришсиз [GeoRegion.displayName] (кирилл)дан олинади.
+String geoNameFor(
+  String lang, {
+  required String name,
+  required String nameUz,
+  required String nameRu,
+}) {
+  final cyrl = nameUz.isNotEmpty ? nameUz : name;
+  return switch (lang) {
+    'ru' => nameRu.isNotEmpty ? nameRu : cyrl,
+    'uz_Latn' => name.isNotEmpty ? name : nameUz,
+    _ => cyrl,
+  };
+}
+
 /// `geo_regions/{regionId}` — viloyat.
 class GeoRegion {
   const GeoRegion({
     required this.id,
     required this.name,
     this.nameUz = '',
+    this.nameRu = '',
     this.code = '',
     this.active = true,
     this.order = 0,
@@ -21,6 +44,9 @@ class GeoRegion {
   final String id;
   final String name;
   final String nameUz;
+
+  /// Русча ном (ихтиёрий; эски ҳужжатларда йўқ — [nameFor] fallback).
+  final String nameRu;
   final String code;
   final bool active;
   final int order;
@@ -29,12 +55,16 @@ class GeoRegion {
 
   String get displayName => nameUz.isNotEmpty ? nameUz : name;
 
+  /// Фойдаланувчи тилидаги ном ([geoNameFor]).
+  String nameFor(String lang) => geoNameFor(lang, name: name, nameUz: nameUz, nameRu: nameRu);
+
   factory GeoRegion.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
     return GeoRegion(
       id: doc.id,
       name: (d['name'] ?? '') as String,
       nameUz: (d['nameUz'] ?? '') as String,
+      nameRu: (d['nameRu'] ?? '') as String,
       code: (d['code'] ?? '') as String,
       active: d['active'] as bool? ?? true,
       order: (d['order'] as num?)?.toInt() ?? 0,
@@ -44,6 +74,7 @@ class GeoRegion {
   Map<String, dynamic> toMap() => {
         'name': name,
         'nameUz': nameUz,
+        if (nameRu.isNotEmpty) 'nameRu': nameRu,
         'code': code,
         'active': active,
         'order': order,
@@ -57,6 +88,7 @@ class GeoDistrict {
     required this.regionId,
     required this.name,
     this.nameUz = '',
+    this.nameRu = '',
     this.code = '',
     this.active = true,
     this.order = 0,
@@ -66,6 +98,9 @@ class GeoDistrict {
   final String regionId;
   final String name;
   final String nameUz;
+
+  /// Русча ном (ихтиёрий; эски ҳужжатларда йўқ — [nameFor] fallback).
+  final String nameRu;
   final String code;
   final bool active;
   final int order;
@@ -74,6 +109,9 @@ class GeoDistrict {
 
   String get displayName => nameUz.isNotEmpty ? nameUz : name;
 
+  /// Фойдаланувчи тилидаги ном ([geoNameFor]).
+  String nameFor(String lang) => geoNameFor(lang, name: name, nameUz: nameUz, nameRu: nameRu);
+
   factory GeoDistrict.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
     return GeoDistrict(
@@ -81,6 +119,7 @@ class GeoDistrict {
       regionId: (d['regionId'] ?? '') as String,
       name: (d['name'] ?? '') as String,
       nameUz: (d['nameUz'] ?? '') as String,
+      nameRu: (d['nameRu'] ?? '') as String,
       code: (d['code'] ?? '') as String,
       active: d['active'] as bool? ?? true,
       order: (d['order'] as num?)?.toInt() ?? 0,
@@ -91,6 +130,7 @@ class GeoDistrict {
         'regionId': regionId,
         'name': name,
         'nameUz': nameUz,
+        if (nameRu.isNotEmpty) 'nameRu': nameRu,
         'code': code,
         'active': active,
         'order': order,
@@ -106,6 +146,7 @@ class ServiceArea {
     required this.regionId,
     required this.name,
     this.nameUz = '',
+    this.nameRu = '',
     this.type = 'mfy',
     this.active = true,
     this.order = 0,
@@ -117,6 +158,9 @@ class ServiceArea {
   final String name;
   final String nameUz;
 
+  /// Русча ном (ихтиёрий; эски ҳужжатларда йўқ — [nameFor] fallback).
+  final String nameRu;
+
   /// `mfy` | `zone` | kelajakdagi turlar.
   final String type;
   final bool active;
@@ -126,6 +170,9 @@ class ServiceArea {
 
   String get displayName => nameUz.isNotEmpty ? nameUz : name;
 
+  /// Фойдаланувчи тилидаги ном ([geoNameFor]).
+  String nameFor(String lang) => geoNameFor(lang, name: name, nameUz: nameUz, nameRu: nameRu);
+
   factory ServiceArea.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
     return ServiceArea(
@@ -134,6 +181,7 @@ class ServiceArea {
       regionId: (d['regionId'] ?? '') as String,
       name: (d['name'] ?? '') as String,
       nameUz: (d['nameUz'] ?? '') as String,
+      nameRu: (d['nameRu'] ?? '') as String,
       type: (d['type'] ?? 'mfy') as String,
       active: d['active'] as bool? ?? true,
       order: (d['order'] as num?)?.toInt() ?? 0,
@@ -145,6 +193,7 @@ class ServiceArea {
         'regionId': regionId,
         'name': name,
         'nameUz': nameUz,
+        if (nameRu.isNotEmpty) 'nameRu': nameRu,
         'type': type,
         'active': active,
         'order': order,

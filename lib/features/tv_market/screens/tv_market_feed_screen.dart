@@ -1029,7 +1029,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
               for (final d in _districts)
                 ListTile(
                   title: Text(
-                    d.displayName,
+                    d.nameFor(context.contentLang),
                     style: const TextStyle(color: Colors.white),
                   ),
                   trailing: _filterDistrictId == d.id
@@ -1056,7 +1056,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   /// қолади, у ерда маъно аниқ бўлиши муҳимроқ.
   String _filterChipLabel() {
     for (final d in _districts) {
-      if (d.id == _filterDistrictId) return d.displayName;
+      if (d.id == _filterDistrictId) return d.nameFor(context.contentLang);
     }
     return context.tr('tv_market_districts_short');
   }
@@ -1083,7 +1083,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
               for (final r in _regions)
                 ListTile(
                   title: Text(
-                    r.displayName,
+                    r.nameFor(context.contentLang),
                     style: const TextStyle(color: Colors.white),
                   ),
                   trailing: _filterRegionId == r.id
@@ -1145,7 +1145,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   /// Қаранг: [_filterChipLabel] — қисқа/тўлиқ шакл изоҳи.
   String _regionChipLabel() {
     for (final r in _regions) {
-      if (r.id == _filterRegionId) return r.displayName;
+      if (r.id == _filterRegionId) return r.nameFor(context.contentLang);
     }
     return context.tr('tv_market_regions_short');
   }

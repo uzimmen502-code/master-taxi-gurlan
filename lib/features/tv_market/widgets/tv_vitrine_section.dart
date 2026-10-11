@@ -81,7 +81,7 @@ class _TvVitrineSectionState extends State<TvVitrineSection> {
               ),
               for (final d in _districts)
                 ListTile(
-                  title: Text(d.displayName),
+                  title: Text(d.nameFor(context.contentLang)),
                   trailing: _districtId == d.id
                       ? const Icon(Icons.check_rounded)
                       : null,
@@ -100,7 +100,7 @@ class _TvVitrineSectionState extends State<TvVitrineSection> {
   String _chipLabel() {
     if (_districtId.isEmpty) return context.tr('tv_market_all_districts');
     for (final d in _districts) {
-      if (d.id == _districtId) return d.displayName;
+      if (d.id == _districtId) return d.nameFor(context.contentLang);
     }
     return context.tr('tv_market_all_districts');
   }

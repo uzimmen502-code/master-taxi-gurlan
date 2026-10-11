@@ -451,7 +451,7 @@ class _PointFields extends StatelessWidget {
           decoration: deco('logistics_region'),
           items: [
             for (final r in regions)
-              DropdownMenuItem(value: r.id, child: Text(r.displayName)),
+              DropdownMenuItem(value: r.id, child: Text(r.nameFor(context.contentLang))),
           ],
           onChanged: (v) => onChanged(LogisticsPoint(regionId: v ?? '', addressText: point.addressText)),
         ),
@@ -463,7 +463,7 @@ class _PointFields extends StatelessWidget {
           items: [
             DropdownMenuItem(value: '', child: Text(context.tr('logistics_district_any'))),
             for (final d in districts)
-              DropdownMenuItem(value: d.id, child: Text(d.displayName)),
+              DropdownMenuItem(value: d.id, child: Text(d.nameFor(context.contentLang))),
           ],
           onChanged: point.regionId.isEmpty
               ? null

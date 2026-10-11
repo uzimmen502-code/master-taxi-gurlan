@@ -3081,5 +3081,8 @@
   "restaurants_err_PICKUP_CODE_LOCKED": "Kod 5 marta noto'g'ri kiritildi — restoran yoki adminga murojaat qiling.",
   "restaurants_err_RESTAURANT_NOT_READY": "Restoran buyurtmani hali «Tayyor» qilmadi.",
   "restaurants_err_USE_RESTAURANT_PICKUP": "Restoran buyurtmasi — «Oldim (kod)» tugmasidan foydalaning.",
-  "restaurants_err_USE_RESTAURANT_ARRIVE": "Restoran buyurtmasi — «Yetib keldim» tugmasidan foydalaning."
+  "restaurants_err_USE_RESTAURANT_ARRIVE": "Restoran buyurtmasi — «Yetib keldim» tugmasidan foydalaning.",
+  "geo_region_label": "Viloyat",
+  "geo_district_label": "Tuman",
+  "geo_area_label": "Mahalla / xizmat zonasi"
 }

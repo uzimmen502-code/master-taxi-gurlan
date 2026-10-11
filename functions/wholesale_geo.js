@@ -12,10 +12,16 @@
  *    `legacyArchived: true` (қайтариб бўлади, 27-банд); audit — admin_audit.
  *    Чегара сана: `settings/app.wholesaleLegacyCutoff` (биринчи ишга
  *    тушганда ҳозирги вақт ёзилади).
+ *    ФАҚАТ Улгуржи бозори (эга, 2026-10-11: «Хитойдаги ҳақиқий, тозалаш
+ *    фақат Улгуржида»). Аввалги `adminNote`/`status` `legacyPrev*` га
+ *    сақланади; бир марта ишланган (`legacyArchived`) товар қайта
+ *    танланмайди — админ қайта ёқса, унинг қарори бузилмайди.
  */
 'use strict';
 
-const MARKETS = ['wholesale', 'china'];
+/** Тозалаш ишлайдиган бозорлар — Хитой атайлаб йўқ (ҳақиқий товарлар). */
+const LEGACY_MARKETS = ['wholesale'];
+const LEGACY_NOTE = 'legacy_test_cleanup';
 const START_AFTER = 10;
 const BATCH = 400;
 
@@ -77,10 +83,12 @@ function ms(v) {
 }
 
 /**
- * Эски синов товарларини яшириш. Ҳар бозор учун: янги (cutoff'дан кейин
- * яратилган, фаол) товарлар сони N ≥ 10 бўлса — яширилган эскилар сони N
- * га етгунча энг эски фаол эскилар яширилади. Қайта ишга туширилса —
- * ортиқча яширмайди (idempotent: ҳар сафар сонлардан ҳисобланади).
+ * Эски синов товарларини яшириш. [LEGACY_MARKETS] бозорида: янги
+ * (cutoff'дан кейин яратилган, фаол) товарлар сони N ≥ 10 бўлса — ишланган
+ * (`legacyArchived`) эскилар сони N га етгунча энг эски фаол, ҳали
+ * ишланмаган эскилар яширилади. Қайта ишга туширилса — ортиқча яширмайди
+ * (idempotent: ҳар сафар сонлардан ҳисобланади). Админ қайта ёққан товар
+ * ишланган ҳисобланади ва қайта яширилмайди.
  */
 async function runLegacyCleanup(db, admin, { now = Date.now(), log = console.log } = {}) {
   const appRef = db.collection('settings').doc('app');
@@ -89,11 +97,11 @@ async function runLegacyCleanup(db, admin, { now = Date.now(), log = console.log
   if (cutoffMs === null) {
     await appRef.set({ wholesaleLegacyCutoff: admin.firestore.Timestamp.fromMillis(now) }, { merge: true });
     log(JSON.stringify({ action: 'wholesaleLegacyCleanup', result: 'cutoff_initialized', cutoffMs: now }));
-    return { initialized: true, archived: { wholesale: 0, china: 0 } };
+    return { initialized: true, archived: { wholesale: 0 } };
   }
   const cutoff = admin.firestore.Timestamp.fromMillis(cutoffMs);
   const archived = {};
-  for (const market of MARKETS) {
+  for (const market of LEGACY_MARKETS) {
     const newSnap = await db.collection('wholesale_products')
         .where('status', '==', 'active')
         .where('createdAt', '>', cutoff)
@@ -115,15 +123,24 @@ async function runLegacyCleanup(db, admin, { now = Date.now(), log = console.log
         .where('createdAt', '<=', cutoff)
         .orderBy('createdAt', 'asc')
         .get();
-    const pick = oldSnap.docs.filter((d) => marketOf(d.data()) === market).slice(0, need);
+    const pick = oldSnap.docs
+        .filter((d) => {
+          const x = d.data() || {};
+          return marketOf(x) === market && x.legacyArchived !== true;
+        })
+        .slice(0, need);
     if (pick.length === 0) continue;
     const batch = db.batch();
     for (const d of pick) {
+      const x = d.data() || {};
       batch.update(d.ref, {
         status: 'inactive',
         legacyArchived: true,
         legacyArchivedAt: admin.firestore.FieldValue.serverTimestamp(),
-        adminNote: 'legacy_test_cleanup',
+        // Қайтариш учун аввалги қийматлар (27-банд).
+        legacyPrevStatus: String(x.status || 'active'),
+        legacyPrevAdminNote: typeof x.adminNote === 'string' ? x.adminNote : null,
+        adminNote: LEGACY_NOTE,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
@@ -145,6 +162,46 @@ async function runLegacyCleanup(db, admin, { now = Date.now(), log = console.log
     }));
   }
   return { initialized: false, archived };
+}
+
+/**
+ * Қайтариш (rollback, 27-банд): тозалаш яширган ва ҳали шу ҳолатда турган
+ * товарларга аввалги `status`/`adminNote` қайтарилади. Стандарт — DRY-RUN
+ * (ҳеч нарса ёзмайди, номзодлар рўйхати). `legacyArchived` белгиси қолади —
+ * товар «ишланган» ҳисобланади ва тозалаш уни қайта яширмайди.
+ */
+async function restoreLegacyArchived(db, admin, { apply = false, ids = null, actor = 'tool' } = {}) {
+  const snap = await db.collection('wholesale_products').where('legacyArchived', '==', true).get();
+  const only = ids ? new Set(ids) : null;
+  const candidates = snap.docs.filter((d) => {
+    const x = d.data() || {};
+    return (!only || only.has(d.id)) && x.status === 'inactive' && x.adminNote === LEGACY_NOTE;
+  });
+  const result = { candidates: candidates.map((d) => d.id), restored: 0, applied: apply };
+  if (!apply || candidates.length === 0) return result;
+  const FV = admin.firestore.FieldValue;
+  for (let i = 0; i < candidates.length; i += BATCH) {
+    const part = candidates.slice(i, i + BATCH);
+    const batch = db.batch();
+    for (const d of part) {
+      const x = d.data() || {};
+      batch.update(d.ref, {
+        status: x.legacyPrevStatus || 'active',
+        adminNote: typeof x.legacyPrevAdminNote === 'string' ? x.legacyPrevAdminNote : FV.delete(),
+        legacyRestoredAt: FV.serverTimestamp(),
+        updatedAt: FV.serverTimestamp(),
+      });
+    }
+    batch.set(db.collection('admin_audit').doc(), {
+      kind: 'wholesale_legacy_restore',
+      actor: String(actor),
+      productIds: part.map((d) => d.id),
+      at: FV.serverTimestamp(),
+    });
+    await batch.commit();
+    result.restored += part.length;
+  }
+  return result;
 }
 
 function attachWholesaleGeo(exports, { functions, db, admin }) {
@@ -184,5 +241,6 @@ function attachWholesaleGeo(exports, { functions, db, admin }) {
 }
 
 module.exports = {
-  attachWholesaleGeo, syncProductGeo, syncSellerProducts, runLegacyCleanup, marketOf, START_AFTER,
+  attachWholesaleGeo, syncProductGeo, syncSellerProducts, runLegacyCleanup, restoreLegacyArchived,
+  marketOf, START_AFTER, LEGACY_MARKETS, LEGACY_NOTE,
 };

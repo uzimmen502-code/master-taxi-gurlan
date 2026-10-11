@@ -76,6 +76,7 @@ const get = async (id) => (await prod(id).get()).data();
   for (let i = 0; i < 15; i += 1) {
     await prod(`old_w${i}`).set({
       status: 'active', createdAt: ts(CUTOFF - (100 - i) * H), ...(i < 5 ? {} : { market: 'wholesale' }),
+      ...(i === 0 ? { adminNote: 'moderator izohi' } : {}),
     });
   }
   for (let i = 0; i < 10; i += 1) {
@@ -92,13 +93,13 @@ const get = async (id) => (await prod(id).get()).data();
   await check('L2 янги 9 та — ҳали яширилмайди', async () => {
     await addNew(9, 'wholesale');
     const r = await wg.runLegacyCleanup(db, admin, quiet);
-    assert.deepStrictEqual(r.archived, { wholesale: 0, china: 0 });
+    assert.deepStrictEqual(r.archived, { wholesale: 0 });
     assert.deepStrictEqual(await archivedIds(), []);
   });
   await check('L3 10-чи — 10 та ЭНГ ЭСКИ улгуржи яширилади (market йўқлари ҳам), Хитойга тегмайди', async () => {
     await addNew(1, 'wholesale', 9);
     const r = await wg.runLegacyCleanup(db, admin, quiet);
-    assert.deepStrictEqual(r.archived, { wholesale: 10, china: 0 });
+    assert.deepStrictEqual(r.archived, { wholesale: 10 });
     const ids = await archivedIds();
     assert.strictEqual(ids.length, 10);
     assert.ok(ids.every((id) => id.startsWith('old_w')));
@@ -107,10 +108,26 @@ const get = async (id) => (await prod(id).get()).data();
     assert.strictEqual(d.status, 'inactive');
     assert.strictEqual(d.adminNote, 'legacy_test_cleanup');
   });
+  await check('L3b аввалги adminNote ва status сақланади (қайтариш учун)', async () => {
+    const d0 = await get('old_w0');
+    assert.strictEqual(d0.legacyPrevAdminNote, 'moderator izohi');
+    assert.strictEqual(d0.legacyPrevStatus, 'active');
+    const d1 = await get('old_w1');
+    assert.strictEqual(d1.legacyPrevAdminNote, null, 'изоҳ йўқ эди — null');
+  });
   await check('L4 такрор ишга тушиш — ортиқча яширмайди (idempotent)', async () => {
     const r = await wg.runLegacyCleanup(db, admin, quiet);
-    assert.deepStrictEqual(r.archived, { wholesale: 0, china: 0 });
+    assert.deepStrictEqual(r.archived, { wholesale: 0 });
     assert.strictEqual((await archivedIds()).length, 10);
+  });
+  await check('L4b админ қайта ёққан товар қайта яширилмайди ва ўрнига бошқаси ҳам яширилмайди', async () => {
+    await prod('old_w3').update({ status: 'active', adminNote: 'admin qaytardi' });
+    const r = await wg.runLegacyCleanup(db, admin, quiet);
+    assert.deepStrictEqual(r.archived, { wholesale: 0 });
+    const d = await get('old_w3');
+    assert.strictEqual(d.status, 'active');
+    assert.strictEqual(d.adminNote, 'admin qaytardi');
+    assert.strictEqual((await get('old_w10')).status, 'active');
   });
   await check('L5 янги 12 та — жами 12 эски; эски тугаса тўхтайди', async () => {
     await addNew(2, 'wholesale', 10);
@@ -120,11 +137,12 @@ const get = async (id) => (await prod(id).get()).data();
     await wg.runLegacyCleanup(db, admin, quiet);
     assert.strictEqual((await archivedIds()).filter((id) => id.startsWith('old_w')).length, 15);
   });
-  await check('L6 Хитой ўз ҳисобида: 10 янги Хитой — 10 эски Хитой', async () => {
+  await check('L6 Хитой ҲЕЧ ҚАЧОН яширилмайди (эга: «Хитойдаги ҳақиқий»), 10 та янги Хитой бўлса ҳам', async () => {
     await addNew(10, 'china');
     const r = await wg.runLegacyCleanup(db, admin, quiet);
-    assert.strictEqual(r.archived.china, 10);
-    assert.strictEqual((await archivedIds()).filter((id) => id.startsWith('old_c')).length, 10);
+    assert.ok(!('china' in r.archived));
+    assert.strictEqual((await archivedIds()).filter((id) => id.startsWith('old_c')).length, 0);
+    for (let i = 0; i < 10; i += 1) assert.strictEqual((await get(`old_c${i}`)).status, 'active');
   });
   await check('L7 audit ёзуви бор (admin_audit)', async () => {
     const a = await db.collection('admin_audit').where('kind', '==', 'wholesale_legacy_archive').get();
@@ -134,6 +152,32 @@ const get = async (id) => (await prod(id).get()).data();
   });
   await check('L8 янги товарлар ва AVA эмас (яширилмаган)', async () => {
     assert.strictEqual((await get('new_wholesale0')).status, 'active');
+  });
+
+  // ─── Қайтариш (rollback) ────────────────────────────────────────────
+  await check('R1 DRY-RUN — ҳеч нарса ёзмайди, номзодлар = яширилган ҳолатдагилар', async () => {
+    const before = (await get('old_w0')).status;
+    const r = await wg.restoreLegacyArchived(db, admin);
+    assert.strictEqual(r.applied, false);
+    assert.strictEqual(r.restored, 0);
+    assert.ok(r.candidates.includes('old_w0'));
+    assert.ok(!r.candidates.includes('old_w3'), 'админ қайтаргани — номзод эмас');
+    assert.strictEqual((await get('old_w0')).status, before);
+  });
+  await check('R2 APPLY — аввалги status/adminNote қайтади, белги қолади (қайта яширилмайди)', async () => {
+    const r = await wg.restoreLegacyArchived(db, admin, { apply: true, ids: ['old_w0', 'old_w1'] });
+    assert.strictEqual(r.restored, 2);
+    const d0 = await get('old_w0');
+    assert.strictEqual(d0.status, 'active');
+    assert.strictEqual(d0.adminNote, 'moderator izohi');
+    assert.strictEqual(d0.legacyArchived, true);
+    const d1 = await get('old_w1');
+    assert.ok(!('adminNote' in d1), 'изоҳ йўқ эди — ўчирилади');
+    const again = await wg.runLegacyCleanup(db, admin, quiet);
+    assert.deepStrictEqual(again.archived, { wholesale: 0 });
+    assert.strictEqual((await get('old_w0')).status, 'active');
+    const a = await db.collection('admin_audit').where('kind', '==', 'wholesale_legacy_restore').get();
+    assert.strictEqual(a.size, 1);
   });
 
   const failed = results.filter((x) => !x).length;

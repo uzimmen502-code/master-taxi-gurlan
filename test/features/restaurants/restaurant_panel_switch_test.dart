@@ -1,5 +1,7 @@
-// D-REST-15: бир эга бир нечта кафе — панелда алмаштириш ва маълумотлар
-// аралашмаслиги (ҳар таб фақат жорий ресторан ID'сига обуна бўлади).
+// D-REST-15: бир эга бир нечта кафе — панелда алмаштириш, маълумотлар
+// аралашмаслиги ва обуналар тўғри бекор қилиниши (ортиқча Firestore
+// listener йўқ). Ҳар `watch*` чақируви Firestore каби ЯНГИ single-subscription
+// оқим қайтаради; `onListen`/`onCancel` орқали фаол обуналар саналади.
 
 import 'dart:async';
 
@@ -16,44 +18,51 @@ class _FakeRepo implements RestaurantsRepository {
   final Map<String, Restaurant> restaurants;
   final Map<String, List<OrderModel>> orders;
 
-  /// Қайси ресторан ID'лари сўралгани — `method:id` кўринишида, тартиб билан.
+  /// Барча `watch*` чақируvлари — `method:id`, тартиб билан.
   final log = <String>[];
 
-  @override
-  Stream<Restaurant?> watchRestaurant(String id) {
-    log.add('restaurant:$id');
-    return Stream.value(restaurants[id]);
+  /// Ҳозир фаол (бекор қилинмаган) обуналар сони — `method:id` бўйича.
+  final active = <String, int>{};
+
+  int get activeTotal => active.values.fold(0, (a, b) => a + b);
+  Iterable<String> get activeKeys => active.entries.where((e) => e.value > 0).map((e) => e.key);
+
+  Stream<T> _stream<T>(String key, T value) {
+    log.add(key);
+    late final StreamController<T> c;
+    c = StreamController<T>(
+      onListen: () {
+        active[key] = (active[key] ?? 0) + 1;
+        c.add(value);
+      },
+      onCancel: () {
+        active[key] = (active[key] ?? 0) - 1;
+      },
+    );
+    return c.stream;
   }
 
   @override
-  Stream<List<Restaurant>> watchMine(String ownerUid) {
-    log.add('mine:$ownerUid');
-    return Stream.value(restaurants.values.where((r) => r.ownerUid == ownerUid).toList(growable: false));
-  }
+  Stream<Restaurant?> watchRestaurant(String id) => _stream('restaurant:$id', restaurants[id]);
 
   @override
-  Stream<List<OrderModel>> watchRestaurantOrders(String restaurantId, {int limit = 100}) {
-    log.add('orders:$restaurantId');
-    return Stream.value(orders[restaurantId] ?? const []);
-  }
+  Stream<List<Restaurant>> watchMine(String ownerUid) =>
+      _stream('mine:$ownerUid', restaurants.values.where((r) => r.ownerUid == ownerUid).toList(growable: false));
 
   @override
-  Stream<List<MenuCategory>> watchCategories(String restaurantId) {
-    log.add('categories:$restaurantId');
-    return Stream.value(const []);
-  }
+  Stream<List<OrderModel>> watchRestaurantOrders(String restaurantId, {int limit = 100}) =>
+      _stream('orders:$restaurantId', orders[restaurantId] ?? const <OrderModel>[]);
 
   @override
-  Stream<List<MenuItem>> watchMenu(String restaurantId) {
-    log.add('menu:$restaurantId');
-    return Stream.value(const []);
-  }
+  Stream<List<MenuCategory>> watchCategories(String restaurantId) =>
+      _stream('categories:$restaurantId', const <MenuCategory>[]);
 
   @override
-  Stream<Map<String, dynamic>?> watchPaymentDetails(String restaurantId) {
-    log.add('payment:$restaurantId');
-    return Stream.value(null);
-  }
+  Stream<List<MenuItem>> watchMenu(String restaurantId) => _stream('menu:$restaurantId', const <MenuItem>[]);
+
+  @override
+  Stream<Map<String, dynamic>?> watchPaymentDetails(String restaurantId) =>
+      _stream<Map<String, dynamic>?>('payment:$restaurantId', null);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
@@ -77,6 +86,25 @@ Future<void> _pump(WidgetTester t, _FakeRepo repo, String rid) async {
   await t.pumpWidget(MaterialApp(home: RestaurantPanelScreen(restaurantId: rid, repository: repo)));
   await t.pumpAndSettle();
 }
+
+/// Варақ орқали `name` кафесига ўтиш.
+Future<void> _switchTo(WidgetTester t, String currentName, String targetName) async {
+  await t.tap(find.text(currentName));
+  await t.pumpAndSettle();
+  await t.tap(find.text(targetName).last);
+  await t.pumpAndSettle();
+}
+
+/// Панел очиқ ҳолатда кутиладиган фаол обуналар: ресторан 1, меники 1,
+/// буюртмалар 2 (Буюртмалар + Ҳисобот таблари), категория 1, меню 1.
+/// `payment` — `.first` билан ўқилади, тугагач ўзи ёпилади (0).
+Map<String, int> _expectedActive(String rid, String owner) => {
+      'restaurant:$rid': 1,
+      'mine:$owner': 1,
+      'orders:$rid': 2,
+      'categories:$rid': 1,
+      'menu:$rid': 1,
+    };
 
 void main() {
   testWidgets('bitta kafe: sarlavha nomi, almashtirish belgisi yo\'q', (tester) async {
@@ -123,7 +151,7 @@ void main() {
     expect(find.text('restaurants_m_bucket_history 2'), findsNothing);
     expect(find.text('restaurants_m_bucket_history'), findsOneWidget);
 
-    // Almashtirishdan keyin barcha obunalar faqat B uchun: restaurant, orders (×2 tab), menu, categories, payment.
+    // Almashtirishdan keyin barcha obunalar faqat B uchun.
     final after = repo.log.sublist(mark);
     expect(after.where((e) => e.endsWith(':a')), isEmpty, reason: 'A ga yangi obuna bo\'lmasligi kerak: $after');
     for (final m in ['restaurant', 'orders', 'categories', 'menu', 'payment']) {
@@ -142,5 +170,48 @@ void main() {
     expect(find.text('restaurants_m_switch_cafe'), findsNothing);
     expect(find.text('Osh markazi'), findsOneWidget);
     expect(repo.log.length, mark, reason: 'qayta obuna yo\'q');
+  });
+
+  testWidgets('obunalar: ochilganda aniq to\'plam; tab almashuvi yangi listener ochmaydi', (tester) async {
+    final repo = _FakeRepo({'a': _r('a', 'Osh markazi'), 'b': _r('b', 'Somsa uyi')});
+    await _pump(tester, repo, 'a');
+
+    expect(Map.fromEntries(repo.active.entries.where((e) => e.value > 0)), _expectedActive('a', 'owner1'));
+    expect(repo.log.where((e) => e == 'payment:a').length, 1);
+
+    // Pastki navigatsiya: 4 ta tab bo'ylab yurish — hech qanday yangi watch* chaqiruvi yo'q.
+    final calls = repo.log.length;
+    for (final i in [1, 2, 3, 0]) {
+      await tester.tap(find.byType(NavigationDestination).at(i));
+      await tester.pumpAndSettle();
+    }
+    expect(repo.log.length, calls, reason: 'tab almashuvi qayta obuna qilmasligi kerak: ${repo.log.sublist(calls)}');
+    expect(Map.fromEntries(repo.active.entries.where((e) => e.value > 0)), _expectedActive('a', 'owner1'));
+  });
+
+  testWidgets('tez-tez almashtirish A→B→A→B: eski obunalar bekor, faqat joriy kafeniki faol, soni o\'smaydi', (tester) async {
+    final repo = _FakeRepo({'a': _r('a', 'Osh markazi'), 'b': _r('b', 'Somsa uyi')});
+    await _pump(tester, repo, 'a');
+    final baseline = repo.activeTotal;
+
+    await _switchTo(tester, 'Osh markazi', 'Somsa uyi');
+    expect(Map.fromEntries(repo.active.entries.where((e) => e.value > 0)), _expectedActive('b', 'owner1'),
+        reason: 'A ning hamma obunasi bekor bo\'lishi kerak');
+
+    await _switchTo(tester, 'Somsa uyi', 'Osh markazi');
+    expect(Map.fromEntries(repo.active.entries.where((e) => e.value > 0)), _expectedActive('a', 'owner1'));
+
+    await _switchTo(tester, 'Osh markazi', 'Somsa uyi');
+    expect(Map.fromEntries(repo.active.entries.where((e) => e.value > 0)), _expectedActive('b', 'owner1'));
+    expect(repo.activeTotal, baseline, reason: 'listener soni oshib ketmaydi');
+
+    // Har almashtirishda har bir oqim ro'pa-rost BIR marta ochiladi (6 ta watch*, payment bilan).
+    final opens = repo.log.where((e) => e.endsWith(':b')).length;
+    expect(opens, 2 * 6, reason: 'B ikki marta ochildi × 6 oqim: ${repo.log}');
+
+    // Ekran yopilganda hammasi bekor.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    expect(repo.activeTotal, 0, reason: 'dispose: ${repo.activeKeys}');
   });
 }

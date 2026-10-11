@@ -40,6 +40,10 @@ class _MerchantOrdersTabState extends State<MerchantOrdersTab> {
   DateTime _now = DateTime.now();
   String? _busyId;
 
+  /// Оқим бир марта очилади (ҳар rebuild'да янги listener эмас); ресторан
+  /// алмашса таб `ValueKey` билан қайта яратилади.
+  late final Stream<List<OrderModel>> _orders = widget.repository.watchRestaurantOrders(widget.restaurant.id);
+
   @override
   void dispose() {
     _ticker?.cancel();
@@ -179,7 +183,7 @@ class _MerchantOrdersTabState extends State<MerchantOrdersTab> {
   Widget build(BuildContext context) {
     final c = context.ava;
     return StreamBuilder<List<OrderModel>>(
-      stream: widget.repository.watchRestaurantOrders(widget.restaurant.id),
+      stream: _orders,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const Center(child: CircularProgressIndicator());

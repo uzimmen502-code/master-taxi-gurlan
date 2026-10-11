@@ -65,6 +65,7 @@ class MerchantReportTab extends StatefulWidget {
 
 class _MerchantReportTabState extends State<MerchantReportTab> {
   int? _balance;
+  late final Stream<List<OrderModel>> _orders = widget.repository.watchRestaurantOrders(widget.restaurant.id);
 
   @override
   void initState() {
@@ -83,7 +84,7 @@ class _MerchantReportTabState extends State<MerchantReportTab> {
   Widget build(BuildContext context) {
     final c = context.ava;
     return StreamBuilder<List<OrderModel>>(
-      stream: widget.repository.watchRestaurantOrders(widget.restaurant.id),
+      stream: _orders,
       builder: (context, snap) {
         final stats = MerchantDailyStats.compute(snap.data ?? const [], DateTime.now());
         return ListView(

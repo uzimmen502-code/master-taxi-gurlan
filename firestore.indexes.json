@@ -2495,6 +2495,15 @@
         { "fieldPath": "module", "order": "ASCENDING" },
         { "fieldPath": "stuckAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

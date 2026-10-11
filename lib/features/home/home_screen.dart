@@ -222,6 +222,11 @@ class _HomeViewState extends State<_HomeView> {
   }
 
 
+  /// Ҳудудга боғлиқ бўлимлар калити: туман ўзгарса бўлим ҚАЙТА ЯРАТИЛАДИ
+  /// ва янги сўров очади. Аввал бўлимлар туманни фақат `initState`да
+  /// ўқирди — ҳудуд алмашгач эски туман эълонлари қоларди (geo аудит).
+  String get _geoKey => ServiceConfigHolder.districtId;
+
   @override
   void dispose() {
     _deferredBootstrapTimer?.cancel();
@@ -812,6 +817,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('jobs')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
+                                key: ValueKey('ads_ad_$_geoKey'),
                                 adType: 'ad',
                                 titleKey: 'home_section_ads',
                                 onOpenAll: () => _push(
@@ -828,6 +834,7 @@ class _HomeViewState extends State<_HomeView> {
                               ),
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
+                                key: ValueKey('ads_service_$_geoKey'),
                                 adType: 'service',
                                 titleKey: 'home_section_services',
                                 onOpenAll: () => _push(
@@ -868,6 +875,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('realty')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeRealtySection(
+                                key: ValueKey('realty_$_geoKey'),
                                 onOpenAll: () => _push(const RealtyScreen()),
                                 onOpenMap: () =>
                                     _push(const RealtyMapScreen()),
@@ -879,6 +887,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('intercity')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeIntercitySection(
+                                key: ValueKey('intercity_$_geoKey'),
                                 onOpenAll: () => _openModule(
                                   HomeModulesCatalog.byId('intercity'),
                                 ),
@@ -893,6 +902,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('yuk_local')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeYukLocalSection(
+                                key: ValueKey('yuk_local_$_geoKey'),
                                 onOpenAll: () => _openYukModule(
                                   'yuk_local',
                                   const YukLocalScreen(),
@@ -909,6 +919,7 @@ class _HomeViewState extends State<_HomeView> {
                                 'cheap_products_home')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeMarketSection(
+                                key: ValueKey('market_$_geoKey'),
                                 onOpenAll: () => _openModule(
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),
@@ -959,6 +970,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('tv_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAvagramSection(
+                                key: ValueKey('avagram_$_geoKey'),
                                 onOpenAll: () =>
                                     _push(const TvMarketFeedScreen()),
                                 onOpenClip: (clip) => _push(

@@ -165,15 +165,24 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
       ),
       body: controller.loading
           ? const Center(child: CircularProgressIndicator())
-          : controller.error != null
-              ? Center(child: Text(controller.error!))
-              : Column(
+          : Column(
                   children: [
+                    // GPS йўқ — станциялар барибир кўринади, огоҳлантириш
+                    // юқорида (аввал фақат хато матни эди).
+                    if (controller.error != null)
+                      MaterialBanner(
+                        content: Text(controller.error!),
+                        leading: const Icon(Icons.location_off_outlined),
+                        actions: const [SizedBox.shrink()],
+                      ),
                     _buildAddStationAndFilters(controller),
                     Expanded(
                       child: EvMapView(
-                        centerLat: controller.lat!,
-                        centerLng: controller.lng!,
+                        centerLat: controller.centerLat,
+                        centerLng: controller.centerLng,
+                        initialZoom: controller.hasLocation
+                            ? 14
+                            : EvChargingMapController.fallbackZoom,
                         stations: controller.stations,
                         onStationTap: _onStationTap,
                       ),

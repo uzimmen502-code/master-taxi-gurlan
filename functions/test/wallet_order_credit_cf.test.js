@@ -47,10 +47,13 @@ async function wipe(col) {
   await Promise.all(s.docs.map((d) => d.ref.delete()));
 }
 async function reset() {
-  await Promise.all(['users', 'orders', 'food_catalog', 'food_products',
+  await Promise.all(['users', 'orders', 'platform_products', 'settings',
     'wallet_idempotency', ledger.COL_JOURNAL, ledger.COL_ACCOUNTS].map(wipe));
-  await db.collection('food_catalog').doc('food_plov')
+  // «Овқат» модули олиб ташланди (2026-10-11) — ҳамён текширувлари энди
+  // улгуржи буюртмасида; етказиш фоизи 0, жами = маҳсулот нархи.
+  await db.collection('platform_products').doc('plov')
       .set({ name: 'Plov', price: PLOV_PRICE, unit: 'porsiya' });
+  await db.collection('settings').doc('app').set({ platformDeliveryFeePercent: 0 });
   await db.collection('users').doc(BUYER).set({ role: 'user', phone: BUYER, bonusBalance: 50000 });
   await db.collection('users').doc(VICTIM).set({ role: 'user', phone: VICTIM, bonusBalance: 200000 });
   await db.collection('users').doc(ATTACKER).set({ role: 'user', phone: ATTACKER, bonusBalance: 0 });
@@ -77,13 +80,13 @@ async function journalBalanced() {
 }
 let seq = 0;
 const key = () => `test_key_${Date.now()}_${seq++}`;
-/** Овқат буюртмаси (сервер нархи `food_catalog`дан). */
-function foodOrder(extra = {}) {
+/** Улгуржи буюртмаси (сервер нархи `platform_products`дан). */
+function walletOrder(extra = {}) {
   return {
-    type: 'food',
+    type: 'platform',
     userName: 'Test',
     address: 'Gurlan',
-    items: [{ inventoryId: 'food_plov', qty: 1 }],
+    items: [{ productId: 'plov', qty: 1 }],
     useWallet: true,
     balanceApplied: PLOV_PRICE,
     ...extra,
@@ -106,7 +109,7 @@ async function rejects(promise, code) {
   await reset();
   await check('A1 o\'z hamyoni bilan buyurtma: o\'z balansi kamayadi, ledger muvozanatda', async () => {
     const r = await place(BUYER, {
-      userPhone: BUYER, idempotencyKey: key(), orderBase: foodOrder({ phone: BUYER }),
+      userPhone: BUYER, idempotencyKey: key(), orderBase: walletOrder({ phone: BUYER }),
     });
     assert.strictEqual(r.walletDebit, PLOV_PRICE);
     assert.strictEqual(await bal(BUYER), 50000 - PLOV_PRICE);
@@ -120,7 +123,7 @@ async function rejects(promise, code) {
   await check('B1 (K-1) begona userPhone: jabrlanuvchi hamyoniga TEGILMAYDI', async () => {
     const r = await place(ATTACKER, {
       userPhone: VICTIM, idempotencyKey: key(),
-      orderBase: foodOrder({ phone: ATTACKER, balanceApplied: 999999999 }),
+      orderBase: walletOrder({ phone: ATTACKER, balanceApplied: 999999999 }),
     });
     assert.strictEqual(await bal(VICTIM), 200000, 'jabrlanuvchi balansi o\'zgarmasligi kerak');
     assert.strictEqual(await pcBal(VICTIM), 0, 'jabrlanuvchi ledger hisobi o\'zgarmasligi kerak');
@@ -131,7 +134,7 @@ async function rejects(promise, code) {
   await reset();
   await check('B2 (K-1) begona userPhone + o\'z balansi bor: faqat O\'Z hamyoni yechiladi', async () => {
     const r = await place(BUYER, {
-      userPhone: VICTIM, idempotencyKey: key(), orderBase: foodOrder({ phone: BUYER }),
+      userPhone: VICTIM, idempotencyKey: key(), orderBase: walletOrder({ phone: BUYER }),
     });
     assert.strictEqual(await bal(VICTIM), 200000);
     assert.strictEqual(await bal(BUYER), 50000 - PLOV_PRICE);
@@ -142,7 +145,7 @@ async function rejects(promise, code) {
 
   await reset();
   await check('B3 userPhone yuborilmasa ham token egasi uchun ishlaydi', async () => {
-    const r = await place(BUYER, { idempotencyKey: key(), orderBase: foodOrder({ phone: BUYER }) });
+    const r = await place(BUYER, { idempotencyKey: key(), orderBase: walletOrder({ phone: BUYER }) });
     assert.strictEqual(r.walletDebit, PLOV_PRICE);
     assert.strictEqual(await bal(BUYER), 50000 - PLOV_PRICE);
   });
@@ -152,7 +155,7 @@ async function rejects(promise, code) {
     await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
     const caller = `998${LEGACY9}`;
     const r = await place(caller, {
-      userPhone: LEGACY9, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
+      userPhone: LEGACY9, idempotencyKey: key(), orderBase: walletOrder({ phone: caller }),
     });
     assert.strictEqual(r.walletDebit, PLOV_PRICE);
     assert.strictEqual(await bal(LEGACY9), 40000 - PLOV_PRICE);
@@ -163,7 +166,7 @@ async function rejects(promise, code) {
     await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
     const caller = `998${LEGACY9}`;
     const r = await place(caller, {
-      userPhone: caller, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
+      userPhone: caller, idempotencyKey: key(), orderBase: walletOrder({ phone: caller }),
     });
     assert.strictEqual(r.walletDebit, PLOV_PRICE);
     assert.strictEqual(await bal(LEGACY9), 40000 - PLOV_PRICE);
@@ -176,7 +179,7 @@ async function rejects(promise, code) {
     await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
     const caller = `998${LEGACY9}`;
     const r = await place(caller, {
-      userPhone: caller, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
+      userPhone: caller, idempotencyKey: key(), orderBase: walletOrder({ phone: caller }),
     });
     const c = await fns.customerCancelOrder.run({ orderId: r.orderId }, ctxOf(caller));
     assert.strictEqual(c.walletRefund, PLOV_PRICE);
@@ -188,7 +191,9 @@ async function rejects(promise, code) {
   await reset();
   await check('O2 (O-18) K-1 davridagi buyurtma: qaytim buyurtma egasiga EMAS, yechilgan hamyonga', async () => {
     // Eski tizimda hujumchi jabrlanuvchi hamyonidan to'lagan holat (journal'da
-    // VICTIM debet, buyurtma egasi ATTACKER, walletUserDocId yo'q).
+    // VICTIM debet, buyurtma egasi ATTACKER, walletUserDocId yo'q). Тури
+    // атайлаб `food`: олиб ташланган модулнинг эски буюртмаси ҳам қайтимни
+    // тўғри олади (прод тозалашдан олдин шу йўл ишлатилади).
     const orderRef = db.collection('orders').doc('old_k1_order');
     await orderRef.set({
       type: 'food', userPhone: ATTACKER, phone: ATTACKER, total: PLOV_PRICE,
@@ -214,7 +219,7 @@ async function rejects(promise, code) {
   await reset();
   await check('B4c begona raqamning 9 xonali shakli: begona hamyonga o\'tilmaydi', async () => {
     const r = await place(BUYER, {
-      userPhone: VICTIM.slice(3), idempotencyKey: key(), orderBase: foodOrder({ phone: BUYER }),
+      userPhone: VICTIM.slice(3), idempotencyKey: key(), orderBase: walletOrder({ phone: BUYER }),
     });
     assert.strictEqual(await bal(VICTIM), 200000);
     assert.strictEqual(await bal(BUYER), 50000 - PLOV_PRICE);
@@ -224,9 +229,23 @@ async function rejects(promise, code) {
   await reset();
   await check('B5 phone tekshiruvi saqlangan: begona `phone` → permission-denied', async () => {
     await rejects(place(ATTACKER, {
-      userPhone: ATTACKER, idempotencyKey: key(), orderBase: foodOrder({ phone: VICTIM }),
+      userPhone: ATTACKER, idempotencyKey: key(), orderBase: walletOrder({ phone: VICTIM }),
     }), 'permission-denied');
     assert.strictEqual(await bal(VICTIM), 200000);
+  });
+
+  await reset();
+  await check('F1 «Овқат» олиб ташланган: food буюртма рад, ҳамён ва ledger ўзгармайди', async () => {
+    const k = key();
+    await rejects(place(BUYER, {
+      idempotencyKey: k,
+      orderBase: { ...walletOrder({ phone: BUYER }), type: 'food', items: [{ inventoryId: 'food_plov', qty: 1 }] },
+    }), 'failed-precondition');
+    assert.strictEqual(await bal(BUYER), 50000);
+    assert.strictEqual(await journalBalanced(), 0);
+    assert.strictEqual((await db.collection('orders').get()).size, 0, 'buyurtma yozilmasin');
+    const idem = await db.collection('wallet_idempotency').doc(k).get();
+    assert.strictEqual(idem.exists, false, 'rad etilgan so\'rov kalitni band qilmasin');
   });
 
   // ─── K-6: creditChange ──────────────────────────────────────────────

@@ -2909,6 +2909,20 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   }
 
   const orderType = String(orderBase.type || '');
+  // «Овқат» модули олиб ташланди (эга, 2026-10-11), ўрнига кафе-ресторанлар.
+  // Эски APK'лар ҳам `food` буюртма яратолмасин.
+  if (orderType === 'food') {
+    console.warn(JSON.stringify({
+      action: 'placeOrderPostPaid',
+      result: 'rejected',
+      errorCode: 'FOOD_MODULE_REMOVED',
+      callerTail: callerUid.slice(-4),
+    }));
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Овқат бўлими ёпилди. Кафе-ресторанлар бўлимидан буюртма беринг.',
+        { code: 'FOOD_MODULE_REMOVED' });
+  }
   if (orderType !== 'bread' && orderType !== 'food' && orderType !== 'platform') {
     throw new functions.https.HttpsError(
         'invalid-argument', 'orderBase.type must be bread, food or platform');
@@ -3534,6 +3548,13 @@ exports.sellerPlaceSale = functions.https.onCall(async (data, context) => {
   for (let i = 0; i < itemsIn.length; i += 1) {
     const row = itemsIn[i] || {};
     const kind = String(row.kind || '').toLowerCase();
+    // «Овқат» модули олиб ташланди (2026-10-11) — эски POS ҳам сотолмасин.
+    if (kind === 'food') {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Овқат бўлими ёпилди — фақат нон сотилади.',
+          { code: 'FOOD_MODULE_REMOVED' });
+    }
     if (kind !== 'food' && kind !== 'bread') {
       throw new functions.https.HttpsError('invalid-argument', 'bad item kind');
     }

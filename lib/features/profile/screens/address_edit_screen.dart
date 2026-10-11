@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/brand_labels.dart';
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/service_config_holder.dart';
@@ -58,7 +59,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
 
   /// Зона хулосаси — жорий туман номи (маълумот бўлмаса огоҳлантириш).
   String _zoneSummary(BuildContext context) {
-    final district = ServiceConfigHolder.districtLabel.trim();
+    final district = BrandLabels.districtContextFor(context.contentLang) ?? '';
     return district.isEmpty ? context.tr('addr_zone_empty') : district;
   }
 
@@ -277,9 +278,9 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
           children: [
             Text(context.tr('addr_title')),
             Text(
-              BrandLabels.districtContext == null
+              BrandLabels.districtContextFor(context.contentLang) == null
                   ? BrandLabels.brand
-                  : '${BrandLabels.brand} · ${BrandLabels.districtContext}',
+                  : '${BrandLabels.brand} · ${BrandLabels.districtContextFor(context.contentLang)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -464,7 +465,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '${context.tr('addr_district_label')}: $_districtLabel',
+                      '${context.tr('addr_district_label')}: ${GeoNames.district(ServiceConfigHolder.districtId, context.contentLang, fallback: _districtLabel)}',
                       style: TextStyle(
                           fontSize: 12.5,
                           color: Colors.grey.shade700,

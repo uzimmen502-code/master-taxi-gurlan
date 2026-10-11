@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/geo_area.dart';
 import '../../repositories/service_config_repository.dart';
+import '../geo/geo_names.dart';
 import '../l10n/l10n_extension.dart';
 import '../theme/app_theme.dart';
 
@@ -77,6 +78,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
 
   Future<void> _loadRegions() async {
     final regions = await _repo.fetchRegions();
+    GeoNames.remember(regions: regions);
     if (!mounted) return;
     setState(() {
       _regions = regions;
@@ -98,6 +100,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
       _areas = const [];
     });
     final districts = await _repo.fetchDistricts(regionId);
+    GeoNames.remember(districts: districts);
     if (!mounted) return;
     setState(() {
       _districts = districts;

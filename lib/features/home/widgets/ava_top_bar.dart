@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -83,10 +84,18 @@ class _RegionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    return ValueListenableBuilder<int>(
-      valueListenable: ServiceConfigHolder.revision,
-      builder: (context, _, __) {
-        final geo = ServiceConfigHolder.geoLabel.trim();
+    return ListenableBuilder(
+      listenable: Listenable.merge([ServiceConfigHolder.revision, GeoNames.revision]),
+      builder: (context, _) {
+        // `ServiceConfigHolder.geoLabel`нинг тилли шакли (сақланган ёрлиқ — fallback).
+        final lang = context.contentLang;
+        final d = GeoNames.district(ServiceConfigHolder.districtId, lang,
+                fallback: ServiceConfigHolder.districtLabel)
+            .trim();
+        final r = GeoNames.region(ServiceConfigHolder.regionId, lang,
+                fallback: ServiceConfigHolder.regionLabel)
+            .trim();
+        final geo = d.isEmpty ? r : (r.isEmpty ? d : '$d, $r');
         final chosen = geo.isNotEmpty;
         // Геолокация ёқилмаган / ҳудуд танланмаган — тавсиф талаби
         // бўйича «Ҳудудни танланг».

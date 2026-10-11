@@ -41,6 +41,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
   List<TvClip> _clips = const [];
   String _displayName = '';
   String _district = '';
+  String _districtId = '';
   String _photoUrl = '';
   int _followerCount = 0;
   bool _loading = true;
@@ -71,10 +72,13 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
       final displayName =
           fromProfile.isNotEmpty ? fromProfile : fromShop;
       var district = '';
+      var districtId = '';
       if (items.isNotEmpty) {
         district = items.first.districtLabel.trim();
+        districtId = items.first.districtId.trim();
       } else if (clips.isNotEmpty) {
         district = clips.first.districtLabel.trim();
+        districtId = clips.first.districtId.trim();
       }
       final followerCount = await _profilesRepo.fetchFollowerCount(id);
       if (!mounted) return;
@@ -83,6 +87,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
         _clips = clips;
         _displayName = displayName;
         _district = district;
+        _districtId = districtId;
         _photoUrl = photos[id] ?? '';
         _followerCount = followerCount;
         _loading = false;
@@ -150,6 +155,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
               child: TvChannelHeader(
                 displayName: _displayName,
                 districtLabel: _district,
+                districtId: _districtId,
                 photoUrl: _photoUrl,
                 onEditPhoto: _pickPhoto,
                 followerCount: _followerCount,
@@ -214,6 +220,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
               child: TvChannelHeader(
                 displayName: _displayName,
                 districtLabel: _district,
+                districtId: _districtId,
                 photoUrl: _photoUrl,
                 onEditPhoto: _pickPhoto,
                 followerCount: _followerCount,

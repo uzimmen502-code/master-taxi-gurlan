@@ -7,8 +7,11 @@ extension L10nExtension on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this)!;
 
   /// Жорий тил коди: `uz_Cyrl` / `uz_Latn` / `ru` (маълумот номлари учун).
-  String get contentLang =>
-      LocaleUtils.contentLangCode(Localizations.localeOf(this));
+  /// `Localizations`дан ташқарида (мас. ишга тушиш splash'и) — `uz_Cyrl`.
+  String get contentLang {
+    final locale = Localizations.maybeLocaleOf(this);
+    return locale == null ? 'uz_Cyrl' : LocaleUtils.contentLangCode(locale);
+  }
 
   String tr(String key) => AppLocalizations.tr(this, key);
 

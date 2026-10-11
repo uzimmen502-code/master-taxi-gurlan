@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
@@ -92,6 +93,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   List<TvShopItem> _myItems = const [];
   final _shopRepo = TvShopRepository();
   String _districtPreview = '';
+  String _districtPreviewId = '';
+
+  /// Жойлашув ёрлиғи фойдаланувчи тилида (сақланадигани — кирилл).
+  String _districtShown(BuildContext context) => _isEdit
+      ? GeoNames.district(widget.editClip!.districtId, context.contentLang,
+          fallback: widget.editClip!.districtLabel)
+      : GeoNames.district(_districtPreviewId, context.contentLang,
+          fallback: _districtPreview);
 
   String _adTier = tvAdTiers.first;
   int _adDurationDays = tvAdDurationOptions.first;
@@ -182,6 +191,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       if (!mounted) return;
       setState(() {
         _districtPreview = geo.districtLabel;
+        _districtPreviewId = geo.districtId;
         _myItems = items.where((i) => i.isActive).toList();
         if (exists) _openShop = true;
         if (_attachItemId.isNotEmpty) _openShop = true;
@@ -874,7 +884,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               ..._fields(context),
               const SizedBox(height: 10),
               _LocationCard(
-                label: _isEdit ? widget.editClip!.districtLabel : _districtPreview,
+                label: _districtShown(context),
                 showHint: !_isEdit,
               ),
               const SizedBox(height: 20),
@@ -897,7 +907,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   onDaysChanged: (d) => setState(() => _adDurationDays = d),
                   selectedScope: _adScope,
                   scopeMultiplier: _adScopeMultiplier,
-                  districtLabel: _districtPreview,
+                  districtLabel: _districtShown(context),
                   onScopeChanged: (s) => setState(() => _adScope = s),
                 ),
                 const SizedBox(height: 16),

@@ -26,6 +26,7 @@ class TvChannelScreen extends StatefulWidget {
     required this.ownerPhone,
     this.ownerDisplayName = '',
     this.districtLabel = '',
+    this.districtId = '',
     this.highlightClipId = '',
     this.isOwner = false,
   });
@@ -33,6 +34,9 @@ class TvChannelScreen extends StatefulWidget {
   final String ownerPhone;
   final String ownerDisplayName;
   final String districtLabel;
+
+  /// Туман номини тилга қараб кўрсатиш учун (бўш бўлиши мумкин).
+  final String districtId;
   final String highlightClipId;
   final bool isOwner;
 
@@ -48,6 +52,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
   List<TvClip> _clips = const [];
   String _displayName = '';
   String _district = '';
+  String _districtId = '';
   String _photoUrl = '';
   int _totalViewCount = 0;
   String _viewerPhone = '';
@@ -61,6 +66,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
     super.initState();
     _displayName = tvOwnerDisplayName(widget.ownerDisplayName);
     _district = widget.districtLabel.trim();
+    _districtId = widget.districtId.trim();
     _load();
   }
 
@@ -79,6 +85,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
       }
       if (_district.isEmpty && sorted.isNotEmpty) {
         _district = sorted.first.districtLabel.trim();
+        _districtId = sorted.first.districtId.trim();
       }
       final totalViews =
           await _profilesRepo.fetchTotalViewCount(widget.ownerPhone);
@@ -261,6 +268,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
                         child: TvChannelHeader(
                           displayName: _displayName,
                           districtLabel: _district,
+                          districtId: _districtId,
                           clipCount: _clips.length,
                           totalViewCount: _totalViewCount,
                           photoUrl: _photoUrl,

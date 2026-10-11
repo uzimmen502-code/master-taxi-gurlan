@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
@@ -12,6 +13,7 @@ class TvChannelHeader extends StatelessWidget {
     super.key,
     required this.displayName,
     this.districtLabel = '',
+    this.districtId = '',
     this.clipCount,
     this.totalViewCount,
     this.photoUrl = '',
@@ -23,6 +25,9 @@ class TvChannelHeader extends StatelessWidget {
 
   final String displayName;
   final String districtLabel;
+
+  /// Бўлмаса [districtLabel] ўзгаришсиз кўрсатилади.
+  final String districtId;
   final int? clipCount;
   final int? totalViewCount;
   final String photoUrl;
@@ -72,8 +77,9 @@ class TvChannelHeader extends StatelessWidget {
                 ),
                 if (district.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    district,
+                  GeoDistrictText(
+                    districtId,
+                    fallback: district,
                     style: TextStyle(
                       color: Colors.grey.shade600,
                       fontWeight: FontWeight.w600,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
@@ -230,8 +231,9 @@ class _InfoColumn extends StatelessWidget {
             const Icon(Icons.location_on, color: Colors.white70, size: 14),
             const SizedBox(width: 2),
             Flexible(
-              child: Text(
-                clip.districtLabel,
+              child: GeoDistrictText(
+                clip.districtId,
+                fallback: clip.districtLabel,
                 style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 13,

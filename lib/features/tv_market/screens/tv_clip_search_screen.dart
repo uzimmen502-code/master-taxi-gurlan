@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../ads/utils/ad_search_text.dart';
@@ -348,8 +349,9 @@ class _TvClipSearchScreenState extends State<TvClipSearchScreen> {
                         if (clip.districtLabel.trim().isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 3),
-                            child: Text(
-                              clip.districtLabel,
+                            child: GeoDistrictText(
+                              clip.districtId,
+                              fallback: clip.districtLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

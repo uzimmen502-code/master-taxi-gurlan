@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/app_share.dart';
+import '../../../core/geo/geo_names.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
@@ -200,10 +201,10 @@ class _ProfileViewState extends State<_ProfileView> {
     final scaffold = Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: ValueListenableBuilder<int>(
-          valueListenable: ServiceConfigHolder.revision,
-          builder: (_, __, ___) {
-            final district = ServiceConfigHolder.districtLabel;
+        title: ListenableBuilder(
+          listenable: Listenable.merge([ServiceConfigHolder.revision, GeoNames.revision]),
+          builder: (context, _) {
+            final district = BrandLabels.districtContextFor(context.contentLang) ?? '';
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

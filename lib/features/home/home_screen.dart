@@ -1049,7 +1049,8 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('tv_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAvagramSection(
-                                key: ValueKey('avagram_$_geoKey'),
+                                key: ValueKey(
+                                    'avagram_${GeoContext.scopeFor('tv_market').key}'),
                                 onOpenAll: () =>
                                     _push(const TvMarketFeedScreen()),
                                 onOpenClip: (clip) => _push(

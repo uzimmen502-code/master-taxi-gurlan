@@ -7,7 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/geo_area.dart';
@@ -135,9 +136,49 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       if (mounted) setState(() => _quality = q);
     });
     unawaited(_loadMe());
+    // Ҳудуд лентаси (D-GEO-1, 6-такомиллаштириш): «Туманим» → «Вилоятим» →
+    // «Бутун Ўзбекистон», танлов сақланади. Аввал фильтрлар ҳар сафар бўш
+    // (Республика) бошланарди ва эсда қолмасди (geo аудит).
+    _applyScope(GeoContext.scopeFor(_geoModule));
     unawaited(_loadDistricts());
     unawaited(_loadRegions());
     _loadClips();
+  }
+
+  static const _geoModule = 'tv_market';
+
+  void _applyScope(GeoScope s) {
+    switch (s.level) {
+      case GeoLevel.district:
+        _filterRegionId = s.area.regionId;
+        _filterDistrictId = s.area.districtId;
+      case GeoLevel.region:
+        _filterRegionId = s.area.regionId;
+        _filterDistrictId = '';
+      case GeoLevel.nation:
+        _filterRegionId = '';
+        _filterDistrictId = '';
+    }
+  }
+
+  /// Фойдаланувчи фильтрни ўзгартирса — модул танлови сақланади. Фаол
+  /// ҳудуддан бошқа жой атайлаб танланган бўлса `pinned`.
+  void _persistScope() {
+    final active = GeoContext.active;
+    final level = _filterDistrictId.isNotEmpty
+        ? GeoLevel.district
+        : (_filterRegionId.isNotEmpty ? GeoLevel.region : GeoLevel.nation);
+    final area = GeoArea(
+      regionId: _filterRegionId.isNotEmpty ? _filterRegionId : active.regionId,
+      districtId: _filterDistrictId.isNotEmpty ? _filterDistrictId : active.districtId,
+    );
+    final pinned = level != GeoLevel.nation &&
+        (area.regionId != active.regionId ||
+            (level == GeoLevel.district && area.districtId != active.districtId));
+    unawaited(GeoContext.setScope(
+      _geoModule,
+      GeoScope(level: level, area: pinned ? area : active, pinned: pinned),
+    ));
   }
 
   /// `null` = AVAGram (ҳамма category). Интерфейс бир хил — фақат манба фарқ.
@@ -193,7 +234,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   /// бўлса — фойдаланувчининг ўз вилояти.
   Future<void> _loadDistricts() async {
     final regionId =
-        _filterRegionId.isNotEmpty ? _filterRegionId : ServiceConfigHolder.regionId;
+        _filterRegionId.isNotEmpty ? _filterRegionId : GeoContext.active.regionId;
     if (regionId.isEmpty) {
       if (mounted) setState(() => _districts = const []);
       return;
@@ -321,7 +362,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       categories: categories,
       regionId: _filterRegionId.isNotEmpty
           ? _filterRegionId
-          : ServiceConfigHolder.regionId,
+          : GeoContext.active.regionId,
       cursor: cursor,
     );
   }
@@ -1120,6 +1161,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       _filterDistrictId = picked;
       _loading = true;
     });
+    _persistScope();
     await _loadClips();
   }
 
@@ -1177,6 +1219,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       _filterDistrictId = '';
       _loading = true;
     });
+    _persistScope();
     await _loadDistricts();
     await _loadClips();
   }

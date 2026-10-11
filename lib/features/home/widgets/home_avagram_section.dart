@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../tv_market/models/tv_clip.dart';
@@ -81,8 +82,12 @@ class _HomeAvagramSectionState extends State<HomeAvagramSection> {
       setState(() => _status = AvaSectionStatus.loading);
     }
     try {
+      // AVAGram модул танлови (D-GEO-1): Республика танланган бўлса туман
+      // устуворлиги йўқ; акс ҳолда танланган/фаол туман биринчи.
+      final scope = GeoContext.scopeFor('tv_market');
       final page = await _repo.fetchHomePage(
-        districtId: GeoContext.active.districtId,
+        districtId:
+            scope.level == GeoLevel.nation ? '' : scope.area.districtId,
         limit: HomeAvagramSection.limit,
         excludeIds: more ? {for (final c in _clips) c.id} : const {},
         nearbyCursor: more ? _nearbyCursor : null,

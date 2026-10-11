@@ -20,6 +20,7 @@
     "test:assistant": "node test/assistant_chat.test.js",
     "test:ev-static-map": "node test/ev_static_map.test.js",
     "test:geo-parity": "node test/geo_hash_parity.test.js",
+    "test:geo-names-ru": "node test/geo_names_ru.test.js",
     "test:payout-rules": "node test/payout_requests_rules.test.js",
     "test:couriers-rules": "node test/couriers_rules.test.js",
     "test:routes-rules": "node test/delivery_routes_rules.test.js",

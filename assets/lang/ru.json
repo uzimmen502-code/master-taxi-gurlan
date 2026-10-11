@@ -3177,5 +3177,8 @@
   "geo_other_area": "Другой регион",
   "geo_few_results": "В этом районе мало результатов. Посмотреть шире?",
   "geo_show_region": "Показать по области",
-  "geo_show_nation": "Весь Узбекистан"
+  "geo_show_nation": "Весь Узбекистан",
+  "geo_region_label": "Регион",
+  "geo_district_label": "Район",
+  "geo_area_label": "Махалля / зона обслуживания"
 }

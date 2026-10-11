@@ -3177,5 +3177,8 @@
   "geo_other_area": "Boshqa hudud",
   "geo_few_results": "Bu hududda natija kam. Kengroq hududni ko‘rasizmi?",
   "geo_show_region": "Viloyat bo‘yicha ko‘rish",
-  "geo_show_nation": "Butun O‘zbekiston"
+  "geo_show_nation": "Butun O‘zbekiston",
+  "geo_region_label": "Viloyat",
+  "geo_district_label": "Tuman",
+  "geo_area_label": "Mahalla / xizmat zonasi"
 }

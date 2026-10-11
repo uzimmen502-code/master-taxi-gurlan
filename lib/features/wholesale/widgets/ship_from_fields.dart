@@ -149,7 +149,7 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
           key: ValueKey('ship-region-${_regions.length}-$regionValue'),
           initialValue: regionValue,
           decoration: deco('logistics_region'),
-          items: [for (final r in _regions) DropdownMenuItem(value: r.id, child: Text(r.displayName))],
+          items: [for (final r in _regions) DropdownMenuItem(value: r.id, child: Text(r.nameFor(context.contentLang)))],
           onChanged: (id) {
             final rid = id ?? '';
             widget.onChanged(v.copyWith(regionId: rid, districtId: ''));
@@ -161,7 +161,7 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
           key: ValueKey('ship-district-${v.regionId}-${districts.length}-$districtValue'),
           initialValue: districtValue,
           decoration: deco('logistics_district'),
-          items: [for (final d in districts) DropdownMenuItem(value: d.id, child: Text(d.displayName))],
+          items: [for (final d in districts) DropdownMenuItem(value: d.id, child: Text(d.nameFor(context.contentLang)))],
           onChanged: v.regionId.isEmpty ? null : (id) => widget.onChanged(v.copyWith(districtId: id ?? '')),
         ),
         const SizedBox(height: 8),

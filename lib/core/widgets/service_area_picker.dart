@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/geo_area.dart';
 import '../../repositories/service_config_repository.dart';
+import '../l10n/l10n_extension.dart';
 import '../theme/app_theme.dart';
 
 /// Region → District → Service Area (MFY) kaskad tanlovi.
@@ -20,7 +21,7 @@ class ServiceAreaPicker extends StatefulWidget {
     this.repository,
     this.showAreaDropdown = true,
     this.showRegionDropdown = true,
-    this.districtLabel = 'Туман',
+    this.districtLabel,
   });
 
   final String initialRegionId;
@@ -36,8 +37,8 @@ class ServiceAreaPicker extends StatefulWidget {
   /// AVA Хоразм учун: рўйхатдан ўтишда фақат туман етарли.
   final bool showRegionDropdown;
 
-  /// Туман dropdown label (l10n).
-  final String districtLabel;
+  /// Туман dropdown label (l10n). `null` — `geo_district_label`.
+  final String? districtLabel;
 
   /// (regionId, districtId, serviceAreaId) — har biri bo'sh bo'lishi mumkin.
   final void Function(String regionId, String districtId, String serviceAreaId)
@@ -137,18 +138,20 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
 
   @override
   Widget build(BuildContext context) {
+    // Номлар фойдаланувчи тилида (рус танланса — `nameRu`).
+    final lang = context.contentLang;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.showRegionDropdown) ...[
           _dropdown<GeoRegion>(
-            label: 'Вилоят',
+            label: context.tr('geo_region_label'),
             icon: Icons.public,
             value: _regionId.isEmpty ? null : _regionId,
             loading: _loadingRegions,
             items: _regions,
             idOf: (r) => r.id,
-            labelOf: (r) => r.displayName,
+            labelOf: (r) => r.nameFor(lang),
             onChanged: (id) {
               setState(() {
                 _regionId = id ?? '';
@@ -165,14 +168,14 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
           const SizedBox(height: 12),
         ],
         _dropdown<GeoDistrict>(
-          label: widget.districtLabel,
+          label: widget.districtLabel ?? context.tr('geo_district_label'),
           icon: Icons.location_city,
           value: _districtId.isEmpty ? null : _districtId,
           loading: _loadingDistricts ||
               (_loadingRegions && !widget.showRegionDropdown),
           items: _districts,
           idOf: (d) => d.id,
-          labelOf: (d) => d.displayName,
+          labelOf: (d) => d.nameFor(lang),
           onChanged: (id) {
             setState(() {
               _districtId = id ?? '';
@@ -188,13 +191,13 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
         if (widget.showAreaDropdown) ...[
           const SizedBox(height: 12),
           _dropdown<ServiceArea>(
-            label: 'Маҳалла / хизмат зонаси',
+            label: context.tr('geo_area_label'),
             icon: Icons.holiday_village,
             value: _areaId.isEmpty ? null : _areaId,
             loading: _loadingAreas,
             items: _areas,
             idOf: (a) => a.id,
-            labelOf: (a) => a.displayName,
+            labelOf: (a) => a.nameFor(lang),
             onChanged: (id) {
               setState(() => _areaId = id ?? '');
               _emit();
@@ -247,7 +250,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
         ),
       ),
       hint: Text(
-        loading ? 'Yuklanmoqda...' : '—',
+        loading ? context.tr('loading') : '—',
         style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
       ),
       items: [

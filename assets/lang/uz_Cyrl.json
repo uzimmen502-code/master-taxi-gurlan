@@ -3177,5 +3177,8 @@
   "geo_other_area": "Бошқа ҳудуд",
   "geo_few_results": "Бу ҳудудда натижа кам. Кенгроқ ҳудудни кўрасизми?",
   "geo_show_region": "Вилоят бўйича кўриш",
-  "geo_show_nation": "Бутун Ўзбекистон"
+  "geo_show_nation": "Бутун Ўзбекистон",
+  "geo_region_label": "Вилоят",
+  "geo_district_label": "Туман",
+  "geo_area_label": "Маҳалла / хизмат зонаси"
 }

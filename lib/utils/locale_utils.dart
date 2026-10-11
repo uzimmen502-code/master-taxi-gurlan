@@ -138,6 +138,13 @@ class LocaleUtils {
     return uzCyrl;
   }
 
+  /// Ilova matn kodi: `uz_Cyrl` / `uz_Latn` / `ru` (assets/lang fayl nomi).
+  static String contentLangCode(Locale locale) => switch (locale.languageCode) {
+        'ru' => 'ru',
+        'uz' => locale.scriptCode == 'Latn' ? 'uz_Latn' : 'uz_Cyrl',
+        _ => 'uz_Cyrl',
+      };
+
   static bool isCyrillic(Locale locale) =>
       locale.scriptCode == 'Cyrl' || locale.languageCode == 'ru';
 

@@ -3165,5 +3165,12 @@
   "geo_suggest_text": "Сиз ҳозир {place}дасиз. Шу ҳудуддагиларни кўрсатайми?",
   "geo_suggest_yes": "Ҳа",
   "geo_suggest_no": "Йўқ",
-  "geo_back_home": "Яшаш жойимга қайтиш"
+  "geo_back_home": "Яшаш жойимга қайтиш",
+  "geo_level_district": "Туманим",
+  "geo_level_region": "Вилоятим",
+  "geo_level_nation": "Бутун Ўзбекистон",
+  "geo_other_area": "Бошқа ҳудуд",
+  "geo_few_results": "Бу ҳудудда натижа кам. Кенгроқ ҳудудни кўрасизми?",
+  "geo_show_region": "Вилоят бўйича кўриш",
+  "geo_show_nation": "Бутун Ўзбекистон"
 }

@@ -3165,5 +3165,12 @@
   "geo_suggest_text": "Вы сейчас в районе «{place}». Показать этот район?",
   "geo_suggest_yes": "Да",
   "geo_suggest_no": "Нет",
-  "geo_back_home": "Вернуться к месту жительства"
+  "geo_back_home": "Вернуться к месту жительства",
+  "geo_level_district": "Мой район",
+  "geo_level_region": "Моя область",
+  "geo_level_nation": "Весь Узбекистан",
+  "geo_other_area": "Другой регион",
+  "geo_few_results": "В этом районе мало результатов. Посмотреть шире?",
+  "geo_show_region": "Показать по области",
+  "geo_show_nation": "Весь Узбекистан"
 }

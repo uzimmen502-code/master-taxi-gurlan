@@ -995,7 +995,8 @@ class _HomeViewState extends State<_HomeView> {
                                 'cheap_products_home')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeMarketSection(
-                                key: ValueKey('market_$_geoKey'),
+                                key: ValueKey(
+                                    'market_${GeoContext.scopeFor('cheap_products_home').key}'),
                                 onOpenAll: () => _openModule(
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),

@@ -7,7 +7,6 @@ import 'dart:math';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
-import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../ads/models/ad_model.dart';
@@ -69,11 +68,10 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     if (initial && mounted) {
       setState(() => _status = AvaSectionStatus.loading);
     }
+    // Модул танлови (туман/вилоят/Республика, D-GEO-1) — модул экрани
+    // билан бир хил. Аввал бош саҳифа туман, «Барчаси» Республика эди.
     _sub = _repo
-        .watchForHome(
-          districtId: GeoContext.active.districtId,
-          limit: _limit,
-        )
+        .watchScoped(GeoContext.scopeFor('cheap_products_home'), limit: _limit)
         .listen(
       (list) {
         if (!mounted) return;
@@ -97,6 +95,14 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
         if (mounted) setState(() => _status = AvaSectionStatus.error);
       },
     );
+  }
+
+  /// Эълон туманининг номи — фақат ўша туман кўриниб турган бўлса маълум.
+  String? _districtNote(String districtId) {
+    final area = GeoContext.scopeFor('cheap_products_home').area;
+    return districtId.isNotEmpty && districtId == area.districtId
+        ? area.districtLabel
+        : null;
   }
 
   @override
@@ -128,7 +134,9 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             price: ad.price > 0
                 ? '${formatPrice(ad.price)} $kCurrencySum'
                 : null,
-            footnote: ServiceConfigHolder.districtLabel,
+            // Эълоннинг ЎЗ тумани (аввал кўраётганнинг тумани ёзиларди —
+            // ҳудудсиз эски эълонлар ҳам «Гурлан» кўринарди, geo аудит).
+            footnote: _districtNote(ad.districtId),
             onTap: () => widget.onOpenAd(ad),
             image: cover.startsWith('http')
                 ? CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover)

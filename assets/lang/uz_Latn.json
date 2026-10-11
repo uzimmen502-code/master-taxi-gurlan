@@ -3165,5 +3165,12 @@
   "geo_suggest_text": "Siz hozir {place}dasiz. Shu hududdagilarni ko‘rsataymi?",
   "geo_suggest_yes": "Ha",
   "geo_suggest_no": "Yo‘q",
-  "geo_back_home": "Yashash joyimga qaytish"
+  "geo_back_home": "Yashash joyimga qaytish",
+  "geo_level_district": "Tumanim",
+  "geo_level_region": "Viloyatim",
+  "geo_level_nation": "Butun O‘zbekiston",
+  "geo_other_area": "Boshqa hudud",
+  "geo_few_results": "Bu hududda natija kam. Kengroq hududni ko‘rasizmi?",
+  "geo_show_region": "Viloyat bo‘yicha ko‘rish",
+  "geo_show_nation": "Butun O‘zbekiston"
 }

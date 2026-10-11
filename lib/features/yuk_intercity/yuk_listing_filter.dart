@@ -4,9 +4,12 @@ import '../yuk_shared/yuk_vehicle_types.dart';
 /// Шаҳарлараро эълонлар рўйхатини фильтрлаш — Firestore'сиз, pure.
 ///
 /// [tab]: `all` | `cargo` | `truck`. [from]/[to] — маршрут шаҳарлари
-/// (`from`, `stops`, `to`) ичида substring (lowercase). [vehicleType] —
-/// normalize қилинган код бўйича тенглик. moto/traktor — фақат туман ичи,
-/// шаҳарлараро рўйхатда кўринмайди. Натижа `createdAt` бўйича янги тепада.
+/// (`from`, `stops`, `to`) ичида substring (lowercase). Иккаласи берилса
+/// ЙЎНАЛИШ ТАРТИБИ ҳам текширилади (3в): [from] маршрутда [to] дан олдин
+/// келиши шарт — «Тошкент → Урганч» эълони «Урганч → Тошкент» қидирувида
+/// чиқмайди. [vehicleType] — normalize қилинган код бўйича тенглик.
+/// moto/traktor — фақат туман ичи, шаҳарлараро рўйхатда кўринмайди.
+/// Натижа `createdAt` бўйича янги тепада.
 List<YukListing> filterYukListings(
   Iterable<YukListing> source, {
   required String tab,
@@ -25,8 +28,11 @@ List<YukListing> filterYukListings(
     final code = normalizeYukVehicleType(item.vehicleType);
     if (kYukLocalOnlyVehicleValues.contains(code)) return false;
     final cities = item.routeCities.map((c) => c.toLowerCase()).toList();
-    if (f.isNotEmpty && !cities.any((c) => c.contains(f))) return false;
-    if (t.isNotEmpty && !cities.any((c) => c.contains(t))) return false;
+    final fromIdx = f.isEmpty ? -1 : cities.indexWhere((c) => c.contains(f));
+    final toIdx = t.isEmpty ? -1 : cities.lastIndexWhere((c) => c.contains(t));
+    if (f.isNotEmpty && fromIdx < 0) return false;
+    if (t.isNotEmpty && toIdx < 0) return false;
+    if (f.isNotEmpty && t.isNotEmpty && fromIdx >= toIdx) return false;
     if (vt.isNotEmpty && code != normalizeYukVehicleType(vt)) return false;
     return true;
   }).toList();

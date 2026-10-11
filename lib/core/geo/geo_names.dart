@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/geo_area.dart';
 import '../../repositories/service_config_repository.dart';
 import '../brand_labels.dart';
+import 'geo_context.dart';
 
 /// Ҳудуд ID → фойдаланувчи тилидаги қисқа ном (фақат КЎРСАТИШ учун).
 ///

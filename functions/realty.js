@@ -11,8 +11,12 @@ const { encode: geohashEncode } = require('./geo_hash');
  * серверда ҳал бўлиши шарт —
  *   1) бепул ОДДИЙ лимити (эгасига 2 тагача объект) — клиент саноғига
  *      ишониб бўлмайди;
- *   2) ҳудуд тамғаси (`ownerGeoStamp`) — акс ҳолда фойдаланувчи ўз
- *      объектини истаган туманга «кўчириб» қўя оларди;
+ *   2) ҳудуд тамғаси — 2026-10-11 дан (эга, D-GEO-11) УЙНИНГ ЎЗ тумани:
+ *      илова пиндан аниқлаб таклиф қилади, эга тасдиқлайди/ўзгартиради;
+ *      сервер `geo_districts`да борлигини текширади (`propertyGeoStamp` =
+ *      Аҳоли бозоридаги `marketAdGeoStamp`), бўлмаса — эганинг тумани.
+ *      Қолдиқ хавф: туманни атайлаб нотўғри танлаш мумкин (чегаралар
+ *      маълумоти йўқ — D-GEO-13, А вариант);
  *   3) муддат (`expiresAt`) ва статус — тўлов босқичи қўшилганда айнан
  *      шу ерда ҳисобланади.
  *
@@ -24,6 +28,9 @@ function attachRealty(exports, deps) {
     functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
     assertAdmin, notifyUserInApp, settlementLedger,
   } = deps;
+  // Ихтиёрий: эски чақирувчиларда йўқ бўлса — аввалгидек эганинг тумани.
+  const propertyGeoStamp = deps.propertyGeoStamp
+    || ((uid) => ownerGeoStamp(uid));
 
   /**
    * Ҳамён ечими учун ledger кўзгуси (ҳамён аудити Y-1). Аввал бу ердаги
@@ -428,7 +435,8 @@ function attachRealty(exports, deps) {
 
     const app = await appDoc();
     const autoApprove = appSetting(app, 'realtyAutoApprove', true) !== false;
-    const geo = await ownerGeoStamp(uid);
+    // Уйнинг ўз тумани (D-GEO-11); юборилмаса/номаълум — эганинг тумани.
+    const geo = await propertyGeoStamp(uid, d);
     const expiresAt = admin.firestore.Timestamp.fromDate(
       new Date(Date.now() + PLAIN_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
     );
@@ -551,8 +559,20 @@ function attachRealty(exports, deps) {
       ? { lat: Number(current.areaLat), lng: Number(current.areaLng) }
       : jitteredPoint(f.lat, f.lng);
 
+    // Туман фақат янги илова юборганда ўзгаради (эски версия юбормайди —
+    // аввалги тамға сақланади).
+    const newGeo = String((d && d.districtId) || '').trim()
+      ? await propertyGeoStamp(uid, d)
+      : null;
+
     const del = admin.firestore.FieldValue.delete();
     await ref.update({
+      ...(newGeo && newGeo.districtId
+        ? {
+            districtId: newGeo.districtId,
+            ...(newGeo.regionId ? { regionId: newGeo.regionId } : {}),
+          }
+        : {}),
       deal: f.deal,
       title: f.title,
       text: f.text,

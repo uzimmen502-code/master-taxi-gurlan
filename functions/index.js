@@ -89,6 +89,8 @@ const { attachRealty } = require('./realty');
 attachRealty(exports, {
   functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp, assertAdmin,
   notifyUserInApp, settlementLedger,
+  // Уйнинг ўз тумани (D-GEO-11) — Аҳоли бозоридаги текширув (hoisted).
+  propertyGeoStamp: (uid, data) => marketAdGeoStamp(uid, data),
 });
 // «Шундай уй чиқса, хабар бер» (эга қарори 2026-10-08) — `realty_alerts.js`.
 const { attachRealtyAlerts } = require('./realty_alerts');

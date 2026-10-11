@@ -953,7 +953,8 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('realty')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeRealtySection(
-                                key: ValueKey('realty_$_geoKey'),
+                                key: ValueKey(
+                                    'realty_${GeoContext.scopeFor('realty').key}'),
                                 onOpenAll: () => _push(const RealtyScreen()),
                                 onOpenMap: () =>
                                     _push(const RealtyMapScreen()),

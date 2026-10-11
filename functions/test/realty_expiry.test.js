@@ -297,6 +297,63 @@ async function main() {
   }
 
   // ─────────────────────────────────────────────────────────────────
+  // 1b) Уйнинг ЎЗ тумани (D-GEO-11, 2026-10-11): илова юборган туман
+  //     `geo_districts`да бўлса — у; бўлмаса — эганинг тумани.
+  // ─────────────────────────────────────────────────────────────────
+  {
+    const db = makeDb();
+    const h = {};
+    db._store.set(`users/${OWNER}`, { phone: OWNER, name: 'Эга' });
+    db._store.set('geo_districts/chilonzor', { regionId: 'toshkent_shahri', name: 'Chilonzor tumani' });
+    db._store.set('geo_districts/xiva', { regionId: 'xorazm', name: 'Xiva tumani' });
+    // index.js'даги `marketAdGeoStamp` билан бир хил мантиқ.
+    const propertyGeoStamp = async (uid, data) => {
+      const id = String((data && data.districtId) || '').trim();
+      if (id) {
+        const s = await db.collection('geo_districts').doc(id).get();
+        if (s.exists) return { districtId: id, regionId: s.data().regionId };
+      }
+      return ownerGeoStamp(uid);
+    };
+    attachRealty(h, {
+      functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
+      assertAdmin, notifyUserInApp, settlementLedger, propertyGeoStamp,
+    });
+    const base = {
+      deal: 'sale', tier: 'plain', title: 'Икки хонали уй', text: 'Тошкентда',
+      lat: 41.28, lng: 69.2, addressText: 'Чилонзор, 9-мавзе', contactMode: 'owner',
+    };
+    const a = await h.submitRealtyListing({ ...base, districtId: 'chilonzor' }, ctx(OWNER));
+    const pa = db._store.get(`realty_listings/${a.listingId}`);
+    assert.strictEqual(pa.districtId, 'chilonzor', 'уйнинг тумани, эганики эмас');
+    assert.strictEqual(pa.regionId, 'toshkent_shahri');
+
+    const b = await h.submitRealtyListing({ ...base, districtId: 'mars' }, ctx(OWNER));
+    assert.strictEqual(db._store.get(`realty_listings/${b.listingId}`).districtId, 'gurlan',
+      'номаълум туман — эганинг туманига қайтади');
+
+    // Таҳрир: туман юборилса ўзгаради, юборилмаса (эски илова) — сақланади.
+    await h.updateRealtyListing({ ...base, listingId: a.listingId, districtId: 'xiva' }, ctx(OWNER));
+    assert.strictEqual(db._store.get(`realty_listings/${a.listingId}`).districtId, 'xiva');
+    assert.strictEqual(db._store.get(`realty_listings/${a.listingId}`).regionId, 'xorazm');
+    await h.updateRealtyListing({ ...base, listingId: a.listingId }, ctx(OWNER));
+    assert.strictEqual(db._store.get(`realty_listings/${a.listingId}`).districtId, 'xiva',
+      'туман юборилмаса аввалгиси сақланади');
+
+    // Эски чақирувчи (propertyGeoStamp йўқ) — аввалгидек эганинг тумани.
+    const db2 = makeDb();
+    const h2 = {};
+    db2._store.set(`users/${OWNER}`, { phone: OWNER, name: 'Эга' });
+    attachRealty(h2, {
+      functions, db: db2, admin, callerPhone, canonicalUid, ownerGeoStamp,
+      assertAdmin, notifyUserInApp, settlementLedger,
+    });
+    const c = await h2.submitRealtyListing({ ...base, districtId: 'chilonzor' }, ctx(OWNER));
+    assert.strictEqual(db2._store.get(`realty_listings/${c.listingId}`).districtId, 'gurlan');
+    console.log('✓ 1b) Уйнинг ўз тумани: текширилган ID, номаълум — эганики, таҳрирда ўзгаради');
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   // 2) Пуллик даража: ягона муддат (expiresAt === tierUntil)
   // ─────────────────────────────────────────────────────────────────
   {

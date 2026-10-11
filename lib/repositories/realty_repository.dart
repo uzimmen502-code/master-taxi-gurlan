@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/geo/geo_context.dart';
+import '../core/geo/geo_query.dart';
+
 import '../core/utils/formatters.dart';
 import '../models/realty_alert.dart';
 import '../models/realty_listing.dart';
@@ -122,42 +125,37 @@ class RealtyRepository {
         .map((snap) => _live(snap.docs, deal: deal));
   }
 
-  /// Битта TAB лентаси — ОДДИЙ / РЕКЛАМА / СРОЧНО.
-  ///
-  /// Муддати тугаганларни сервер ўчиргунча (`realtyExpirySweep`, кунига
-  /// бир марта) лентада қолиб кетмасин деб клиентда ҳам фильтрланади.
-  Stream<List<RealtyListing>> watchByTier(
-    RealtyTier tier, {
+  /// Ҳудуд даражаси бўйича (D-GEO-1/11/15): туман → вилоят (туманлари
+  /// `in`) → Республика. Эълоннинг тумани — уйнинг ўз тумани (2026-10-11
+  /// дан). Индекслар: `status+districtId+createdAt`,
+  /// `status+tier+districtId+createdAt`.
+  Stream<List<RealtyListing>> watchScoped(
+    GeoScope scope, {
+    RealtyTier? tier,
     RealtyDeal? deal,
-    int limit = 50,
-  }) =>
-      _watchActive(tier: tier, deal: deal, limit: limit);
-
-  /// Харита учун — учала даража TAB'дан қатъи назар бирга кўринади
-  /// (концепция, 7-бўлим: «Харита тури — умумий»).
-  ///
-  /// [districtId] берилса фақат ўша туман — бу 300 талик чегарага
-  /// тиқилиб қолишдан ҳам сақлайди.
-  Stream<List<RealtyListing>> watchForMap({
-    RealtyDeal? deal,
-    String districtId = '',
-    int limit = 300,
-  }) =>
-      _watchActive(deal: deal, districtId: districtId, limit: limit);
-
-  /// Бош саҳифадаги «Кўчмас мулк» бўлими.
-  ///
-  /// Бош саҳифа бўлимлари ТУМАН бўйича филтрланади (`jobs_repository`
-  /// даги `watchForHome` билан бир хил қоида) — тўлиқ доскадан фарқи
-  /// шу. [districtId] бўш бўлса филтр қўлланмайди.
-  ///
-  /// Даража аҳамиятсиз: бош саҳифада учала TAB аралаш кўринади,
-  /// янгиси юқорида.
-  Stream<List<RealtyListing>> watchForHome({
-    required String districtId,
-    int limit = 10,
-  }) =>
-      _watchActive(districtId: districtId, limit: limit);
+    required int limit,
+  }) {
+    return geoScopedStream<RealtyListing>(
+      scope: scope,
+      nation: () => _watchActive(tier: tier, deal: deal, limit: limit),
+      byDistricts: (ids) {
+        Query<Map<String, dynamic>> q = _col.where('status', isEqualTo: 'active');
+        if (tier != null) q = q.where('tier', isEqualTo: tier.key);
+        return q
+            .where('districtId', whereIn: ids)
+            .orderBy('createdAt', descending: true)
+            .limit(limit)
+            .snapshots()
+            .map((snap) => _live(snap.docs, deal: deal));
+      },
+      legacy: () => _watchActive(tier: tier, deal: deal, limit: 60)
+          .map((l) => l.where((x) => x.districtId.isEmpty).toList()),
+      idOf: (x) => x.id,
+      compare: (a, b) => (b.createdAt?.millisecondsSinceEpoch ?? 0)
+          .compareTo(a.createdAt?.millisecondsSinceEpoch ?? 0),
+      limit: limit,
+    );
+  }
 
   /// Эганинг очиқ ҳужжатдаги калити (`users/{uid}.realtyOwnerKey`).
   ///
@@ -371,10 +369,13 @@ class RealtyRepository {
     num? areaM2,
     List<String> imageUrls = const [],
     String ownerName = '',
+    String districtId = '',
   }) async {
     final data = await _call(
       'submitRealtyListing',
       {
+        // Уйнинг ўз тумани (D-GEO-11) — сервер `geo_districts`да текширади.
+        if (districtId.trim().isNotEmpty) 'districtId': districtId.trim(),
         ..._listingPayload(
           deal: deal,
           title: title,
@@ -465,10 +466,12 @@ class RealtyRepository {
     int? totalFloors,
     num? areaM2,
     List<String> imageUrls = const [],
+    String districtId = '',
   }) async {
     final data = await _call(
       'updateRealtyListing',
       {
+        if (districtId.trim().isNotEmpty) 'districtId': districtId.trim(),
         ..._listingPayload(
           deal: deal,
           title: title,

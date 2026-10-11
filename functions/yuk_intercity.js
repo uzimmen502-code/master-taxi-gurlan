@@ -3,7 +3,8 @@
 /**
  * Шаҳарлараро юк биржаси (`yuk_listings`) — Cloud Functions қисми.
  *
- * - runExpiry(now): 48 соат муддати ўтган active → closed + FCM;
+ * - runExpiry(now): `expiresAt` ўтган active → closed + FCM (муддат —
+ *   эълоннинг ўзида: илова 5 сутка ёзади, эски APK 48 соат);
  *   T−6 соат огоҳлантириш (бир марта, `expireSoonNotified`).
  *   `expirePendingTrips` (index.js) ҳар 1 дақиқада чақиради.
  * - attachSearchIndex: `yuk_listings/{id}` → `search_index` trigger.
@@ -121,9 +122,11 @@ function createYukIntercity(deps) {
         batch.set(db.collection('notifications').doc(), {
           targetPhone: ownerKey,
           title: 'Эълонингиз ёпилди',
+          // Муддат эълоннинг ўз `expiresAt`ида (янги APK — 5 сутка, эски —
+          // 48 соат), шунинг учун матнда соат ёзилмайди.
           body: route
-            ? `${route} — 48 соат муддати тугади`
-            : 'Юк биржаси эълони 48 соатдан кейин ёпилди',
+            ? `${route} — эълон муддати тугади`
+            : 'Юк биржаси эълони муддати тугаб ёпилди',
           sent: false,
           type: 'yuk_listing_closed',
           screen: 'yuk_intercity',

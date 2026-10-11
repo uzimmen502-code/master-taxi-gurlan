@@ -3487,7 +3487,18 @@ service cloud.firestore {
           && d.ownerName is string
           && d.phone is string
           && d.createdAt is timestamp
-          && d.expiresAt is timestamp;
+          && d.expiresAt is timestamp
+          // 2026-10-11 (ega: 5 sutka): muddatni klient yozadi — yuqori
+          // chegara 6 sutka (5 sutka + telefon soati farqi zaxirasi).
+          // Eski APK 48 soat yozadi — o'tadi.
+          && d.expiresAt < request.time + duration.value(6, 'd')
+          && yukDepartDateOk(d);
+    }
+
+    // `departDate` — ixtiyoriy, `YYYY-MM-DD` (eski e'lonlarda yo'q).
+    function yukDepartDateOk(d) {
+      return !('departDate' in d)
+          || (d.departDate is string && d.departDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
     }
 
     function yukListingOwnerUpdateOk() {
@@ -3502,8 +3513,9 @@ service cloud.firestore {
           && changed.hasOnly([
             'from', 'to', 'stops', 'vehicleType', 'cargo', 'weight',
             'capacity', 'freeSpace', 'price', 'comment', 'status',
-            'updatedAt', 'closedAt', 'ownerName', 'phone'
+            'updatedAt', 'closedAt', 'ownerName', 'phone', 'departDate'
           ])
+          && yukDepartDateOk(request.resource.data)
           && request.resource.data.status in ['active', 'closed'];
     }
 

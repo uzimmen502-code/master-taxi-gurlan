@@ -28,12 +28,44 @@ class YukListing {
     this.isDemo = false,
     DateTime? createdAt,
     DateTime? expiresAt,
+    DateTime? departDate,
   })  : createdAt = createdAt ?? DateTime.now(),
         expiresAt = expiresAt ??
-            (createdAt ?? DateTime.now()).add(ttl);
+            (createdAt ?? DateTime.now()).add(ttl),
+        departDate = departDate == null ? null : dayOf(departDate);
 
-  /// Эълон актив муддати.
-  static const Duration ttl = Duration(hours: 48);
+  /// Эълон актив муддати — 5 сутка (эга қарори 2026-10-11; аввал 48 соат).
+  /// Муддатни сервер ҳужжатдаги `expiresAt` бўйича ёпади
+  /// (`functions/yuk_intercity.js`), эски APK эса 48 соат ёзишда давом этади.
+  static const Duration ttl = Duration(days: 5);
+
+  /// Жўнаш куни — бугундан [maxDepartDays] кунгача (эълон шу муддат яшайди).
+  static const int maxDepartDays = 4;
+
+  /// Жўнаш куни (соатсиз). Эски эълонларда йўқ — `null` («сана
+  /// кўрсатилмаган», ҳар қандай кун қидирувида чиқади).
+  final DateTime? departDate;
+
+  static DateTime dayOf(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Firestore `departDate` — `YYYY-MM-DD` (шаҳарлараро такси `scheduleDate`
+  /// билан бир хил шакл).
+  static String dateKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static DateTime? parseDateKey(dynamic v) {
+    final s = v?.toString().trim() ?? '';
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return null;
+    final d = DateTime.tryParse(s);
+    return d == null ? null : dayOf(d);
+  }
+
+  /// Жўнаш куни ўтиб кетган — рўйхатда кўрсатилмайди.
+  bool departed([DateTime? now]) {
+    final d = departDate;
+    if (d == null) return false;
+    return d.isBefore(dayOf(now ?? DateTime.now()));
+  }
 
   final String id;
   final YukListingType type;
@@ -99,6 +131,7 @@ class YukListing {
         'isDemo': isDemo,
         'createdAt': createdAt.toIso8601String(),
         'expiresAt': expiresAt.toIso8601String(),
+        if (departDate != null) 'departDate': dateKey(departDate!),
       };
 
   /// `unit == 'kg'` бўлмаса — эски эълон (тонна), кг га айлантирамиз.
@@ -145,6 +178,7 @@ class YukListing {
       isDemo: j['isDemo'] == true,
       createdAt: created,
       expiresAt: expires,
+      departDate: parseDateKey(j['departDate']),
     );
   }
 
@@ -171,6 +205,7 @@ class YukListing {
     double? stars,
     DateTime? createdAt,
     DateTime? expiresAt,
+    DateTime? departDate,
   }) {
     return YukListing(
       id: id,
@@ -193,6 +228,7 @@ class YukListing {
       isDemo: isDemo,
       createdAt: createdAt ?? this.createdAt,
       expiresAt: expiresAt ?? this.expiresAt,
+      departDate: departDate ?? this.departDate,
     );
   }
 }

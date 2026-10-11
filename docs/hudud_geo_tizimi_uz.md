@@ -74,7 +74,9 @@ Deploy йўқ (ҳар бири алоҳида рухсат).
 - 6 та индекс production'да яратилди (`gcloud ... composite create`, фақат қўшиш):
   - ads, realty_listings, intercity_drivers, restaurants — READY;
   - wholesale_products ×2 — қурилмоқда.
-- Rules (жонли `2bdf4c55` + фақат юк қисми) ва 4 та функция — эга ишлатадиган тўплам `.claude/deploy-kit-geo/README_uz.md`. Claude'нинг deploy буйруғини хавфсизлик фильтри тўхтатди.
+- ✅ Rules LIVE `6e8e2372` (09:38:48Z) = жонли `2bdf4c55` + фақат юк қисми; мазмуни текширилди; қайтариш — `2bdf4c55`.
+- ✅ `wholesaleProductGeoSync`, `wholesaleSellerGeoSync` (янги), `courierListReadyOrders` LIVE (09:43Z), тоза worktree `7a51b90` дан, номи билан; бошқа функцияларга тегилмади, логда хато йўқ.
+- `wholesaleLegacyCleanup` — `7a51b90` да тузатилди (фақат Улгуржи — Хитой ҳақиқий, эга; `adminNote` сақланади; қайта ёқилгани қайта яширилмайди; `tools/wholesale_legacy_restore.js`), deploy алоҳида рухсат билан.
 - Атайлаб кейинга қолдирилди:
   - кўчмас мулк callable'лари — `realty.js`да чиқмаган бошқа 4 иш;
   - `expirePendingTrips` — 53 коммит drift, фойдаси фақат матн;

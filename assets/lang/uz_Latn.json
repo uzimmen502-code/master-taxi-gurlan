@@ -1244,6 +1244,8 @@
   "no_co_passengers": "Hozircha boshqa yo'lovchi yo'q",
   "no_driver_today": "Bu yo'nalishda bugun uchun haydovchi yo'q. Keyinroq urinib ko'ring.",
   "no_driver_tomorrow": "Bu yo'nalishda ertaga uchun haydovchi yo'q. Keyinroq urinib ko'ring.",
+  "no_driver_on_date": "Bu yo'nalishda shu kun uchun haydovchi yo'q. Boshqa kunni tanlang yoki keyinroq urinib ko'ring.",
+  "intercity_other_day": "BOSHQA KUN",
   "no_free_driver_now": "Hozir bo'sh haydovchi topilmadi",
   "no_gps_short": "📍 GPS yo'q",
   "no_internet": "Internet ulanishi yo'q",

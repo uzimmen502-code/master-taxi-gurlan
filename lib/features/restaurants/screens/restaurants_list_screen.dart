@@ -33,7 +33,7 @@ class RestaurantsListScreen extends StatefulWidget {
   final RestaurantsRepository? repository;
   final RestaurantCart? cart;
 
-  /// Тестда алмаштириш учун; стандарт — рухсат сўрамайдиган GPS.
+  /// Тестда алмаштириш учун; стандарт — GPS (рухсат сўралади).
   final Future<LocationCoords?> Function()? locate;
 
   /// Ном бўйича қидирув ҳовузи (бутун республика, D-GEO-4).
@@ -73,9 +73,11 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     _loadGps();
   }
 
-  /// GPS биринчи (D-GEO-4): рухсат аллақачон бўлса — диалогсиз.
+  /// GPS биринчи (D-GEO-4). Рухсат сўралади (эга, 2026-10-11) — модул
+  /// экрани очилганда; рад этилса профил манзили қолади. Бош саҳифа блоки
+  /// эса диалог очмайди (илова очилишида сўров чиқмасин).
   Future<void> _loadGps() async {
-    final locate = widget.locate ?? const LocationService().getCoordsIfAllowed;
+    final locate = widget.locate ?? _askGps;
     final c = await locate();
     if (!mounted || c == null) return;
     setState(() {
@@ -85,7 +87,15 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     });
   }
 
-  /// Координата берилмаган бўлса — профил манзилидан (GPS сўралмайди).
+  static Future<LocationCoords?> _askGps() async {
+    try {
+      return await const LocationService().getCurrentCoords();
+    } catch (_) {
+      return null; // рад / ўчиқ / вақт тугади — профил манзили
+    }
+  }
+
+  /// Координата берилмаган бўлса — профил манзилидан.
   Future<void> _loadProfileCoords() async {
     try {
       final prefs = await SharedPreferences.getInstance();

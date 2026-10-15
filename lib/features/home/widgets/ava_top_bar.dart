@@ -15,27 +15,39 @@ class AvaTopBar extends StatelessWidget {
   const AvaTopBar({
     super.key,
     required this.onPickRegion,
-    this.bottomPadding = 6,
+    this.subline,
   });
 
   /// Ҳудуд тугмаси босилганда — вилоят/туман танлаш.
   final VoidCallback onPickRegion;
 
-  /// Қатор остидаги ички чет. Фаол роллар ёзуви тагида бўлса 0 — ёзув
-  /// айнан локация қатори остига тақалади (эга, 2026-10-15).
-  final double bottomPadding;
+  /// Локация матнининг ТАГИДАГИ қўшимча қатор (фаол роллар ёзуви). Бўлса
+  /// ҳудуд тугмаси ихчам (28 dp) бўлади ва ёзув унга 0 px тақалади —
+  /// ўрталаштирилган 48 dp тугма ичидаги бўш жой қолмайди (эга, 2026-10-15).
+  final Widget? subline;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(top: 6, bottom: bottomPadding),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           const AvaLogoBadge(),
           const SizedBox(width: 12),
           // Ҳудуд номи узун бўлса («Шайхонтоҳур, Тошкент шаҳри») логотипни
           // сиқиб қўймасин — тугма қолган жойни олади ва ичида қирқилади.
-          Expanded(child: _RegionButton(onTap: onPickRegion)),
+          Expanded(
+            child: subline == null
+                ? _RegionButton(onTap: onPickRegion)
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _RegionButton(onTap: onPickRegion, compact: true),
+                      subline!,
+                    ],
+                  ),
+          ),
         ],
       ),
     );
@@ -86,9 +98,12 @@ class AvaLogoBadge extends StatelessWidget {
 }
 
 class _RegionButton extends StatelessWidget {
-  const _RegionButton({required this.onTap});
+  const _RegionButton({required this.onTap, this.compact = false});
 
   final VoidCallback onTap;
+
+  /// Ихчам ҳолат: минимал баландлик 28 dp (қўшимча қатор тагида).
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +129,9 @@ class _RegionButton extends StatelessWidget {
               onTap: onTap,
               borderRadius: BorderRadius.circular(AvaRadius.chip),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: AvaTap.minSize),
+                constraints: BoxConstraints(
+                  minHeight: compact ? 28 : AvaTap.minSize,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Row(

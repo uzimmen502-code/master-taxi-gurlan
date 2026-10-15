@@ -931,16 +931,17 @@ class _HomeViewState extends State<_HomeView> {
                               Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Фаол ҳайдовчилик/курьерлик ёзуви — локация матнининг айнан
+                            // тагида (эга, 2026-10-15).
                             AvaTopBar(
                               onPickRegion: _openRegionPicker,
-                              bottomPadding: _driverRoles.hasAnyActiveRole ? 0 : 6,
+                              subline: _driverRoles.hasAnyActiveRole
+                                  ? ActiveRolesStrip(
+                                      roles: _driverRoles,
+                                      onTap: _openProfileTab,
+                                    )
+                                  : null,
                             ),
-                            // Фаол ҳайдовчилик/курьерлик тасмаси (эга, 2026-10-15).
-                            if (_driverRoles.hasAnyActiveRole)
-                              ActiveRolesStrip(
-                                roles: _driverRoles,
-                                onTap: _openProfileTab,
-                              ),
                             if (_suggestArea != null &&
                                 !_suggestArea!.sameAs(GeoContext.active))
                               GeoSuggestBanner(

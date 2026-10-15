@@ -88,6 +88,10 @@ void main() {
 
   group('DriverHubScreen', () {
     testWidgets('автомобиль, 4 тур ва ҳамён кўринади', (t) async {
+      // Узун рўйхат: ListView экрандан ташқарини қурмайди — баланд экран.
+      t.view.physicalSize = const Size(400 * 2, 2400 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
       await t.pumpWidget(_host(
         roles: _starter(const Duration(days: 30)),
         car: {'carModel': 'Chevrolet Cobalt', 'carColor': 'Oq', 'carPlate': '01A123BC', 'carSeats': '4'},
@@ -101,6 +105,21 @@ void main() {
       expect(find.text('work_type_courier'), findsOneWidget);
       expect(find.text('hub_action_publish'), findsOneWidget); // шаҳарлараро — рўйхатдан ўтган
       expect(find.text('work_state_join'), findsWidgets); // қолганлари — «Бўлиш»
+    });
+
+    testWidgets('тугмалар матн ТАГИДА (ён томонда бўлса матн ингичка устунга сиқилади)', (t) async {
+      t.view.physicalSize = const Size(360 * 3, 800 * 3);
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_host(roles: _starter(const Duration(days: 30))));
+      await t.pumpAndSettle();
+      final title = t.getRect(find.text('role_type_intercity'));
+      final btn = t.getRect(find.widgetWithText(FilledButton, 'hub_action_publish'));
+      expect(btn.top, greaterThanOrEqualTo(title.bottom));
+      expect(title.width, greaterThan(150), reason: 'матн кенг қолади');
+      final carTitle = t.getRect(find.text('hub_car_title'));
+      final carBtn = t.getRect(find.widgetWithText(TextButton, 'hub_car_add'));
+      expect(carBtn.top, greaterThanOrEqualTo(carTitle.bottom));
     });
 
     testWidgets('автомобиль йўқ — «қўшиш» тугмаси', (t) async {

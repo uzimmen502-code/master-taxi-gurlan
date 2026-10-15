@@ -225,31 +225,42 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
             '${(int.tryParse(car['carSeats'] ?? '') ?? 0) > 0 ? ' · ${car['carSeats']} 💺' : ''}',
       ],
     ];
+    // Тугма матн ТАГИДА: ён томонда бўлса матн ингичка устунга сиқилади
+    // (қурилмада топилган, 2026-10-15).
     return _card(
       context,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.directions_car_outlined, color: c.brand),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(context.tr('hub_car_title'),
-                    style: AvaText.sectionTitle.copyWith(color: c.ink)),
-                const SizedBox(height: 2),
-                if (has)
-                  for (final l in lines)
-                    Text(l, style: AvaText.body.copyWith(color: c.ink2))
-                else
-                  Text(context.tr('hub_car_empty'),
-                      style: AvaText.body.copyWith(color: c.ink2)),
-              ],
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.directions_car_outlined, color: c.brand),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(context.tr('hub_car_title'),
+                        style: AvaText.sectionTitle.copyWith(color: c.ink)),
+                    const SizedBox(height: 2),
+                    if (has)
+                      for (final l in lines)
+                        Text(l, style: AvaText.body.copyWith(color: c.ink2))
+                    else
+                      Text(context.tr('hub_car_empty'),
+                          style: AvaText.body.copyWith(color: c.ink2)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: _busy ? null : () => _run(widget.onEditCar),
-            child: Text(context.tr(has ? 'hub_car_edit' : 'hub_car_add')),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _busy ? null : () => _run(widget.onEditCar),
+              child: Text(context.tr(has ? 'hub_car_edit' : 'hub_car_add')),
+            ),
           ),
         ],
       ),
@@ -281,31 +292,37 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
     };
     return _card(
       context,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            choice == WorkChoice.courier
-                ? Icons.delivery_dining
-                : Icons.local_taxi_outlined,
-            color: c.brand,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.tr(choice == WorkChoice.courier
-                      ? 'work_type_courier'
-                      : 'role_type_${choice.name}'),
-                  style: AvaText.sectionTitle.copyWith(color: c.ink),
+          Row(
+            children: [
+              Icon(
+                choice == WorkChoice.courier
+                    ? Icons.delivery_dining
+                    : Icons.local_taxi_outlined,
+                color: c.brand,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.tr(choice == WorkChoice.courier
+                          ? 'work_type_courier'
+                          : 'role_type_${choice.name}'),
+                      style: AvaText.sectionTitle.copyWith(color: c.ink),
+                    ),
+                    Text(context.tr(st.key),
+                        style: AvaText.body.copyWith(
+                            color: toneColor, fontWeight: FontWeight.w600)),
+                  ],
                 ),
-                Text(context.tr(st.key),
-                    style: AvaText.body.copyWith(
-                        color: toneColor, fontWeight: FontWeight.w600)),
-              ],
-            ),
+              ),
+            ],
           ),
+          const SizedBox(height: 10),
           FilledButton(
             onPressed: _busy ? null : () => _run(() => widget.onAction(choice, _roles)),
             child: Text(context.tr(joined ? _actionKey(choice) : 'work_state_join')),

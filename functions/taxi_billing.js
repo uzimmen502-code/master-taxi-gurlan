@@ -747,19 +747,13 @@ function attachTaxiBilling(exports, deps) {
     if (!newDeparture || Number.isNaN(newDeparture.getTime())) {
       throw err('invalid-argument', 'departureAt kerak');
     }
-    await db.collection(RESCHEDULES).add({
-      tripId: tripRef.id, uid: me.phone, accountId: me.accountId,
-      oldDepartureAt: trip.departureAt || null, newDepartureAt: Timestamp.fromDate(newDeparture),
-      oldScheduleDate: trip.scheduleDate || '', newScheduleDate: String(data.scheduleDate || trip.scheduleDate || ''),
-      changedAt: when,
+    const w = rescheduleWrites({
+      tripId: tripRef.id, trip, uid: me.phone, accountId: me.accountId,
+      newDeparture, scheduleDate: data.scheduleDate, startTime: data.startTime,
+      when, Timestamp, source: 'driver',
     });
-    await tripRef.update({
-      departureAt: Timestamp.fromDate(newDeparture),
-      scheduleDate: String(data.scheduleDate || trip.scheduleDate || ''),
-      startTime: String(data.startTime || trip.startTime || ''),
-      rescheduleCount: (Number(trip.rescheduleCount) || 0) + 1,
-      updatedAt: when,
-    });
+    await db.collection(RESCHEDULES).add(w.audit);
+    await tripRef.update(w.tripPatch);
 
     let billing = { status: 'unchanged', delta: 0, feeAmount: trip.feeAmount };
     if (typeof data.farePerSeat === 'number' && data.farePerSeat !== trip.farePerSeat) {
@@ -781,6 +775,35 @@ function attachTaxiBilling(exports, deps) {
   };
 }
 
+/**
+ * Kechiktirish yozuvlari: reys patch + audit hujjati. Qo'lda (`reschedule`,
+ * haydovchi) va avtomatik (`intercity_auto_shift.js`, `source: 'auto_shift'`)
+ * KECHIKTIRISH BIR MANBADAN — reys va komissiya saqlanadi, faqat sana/vaqt.
+ * Sof funksiya: yozishni chaqiruvchi (tranzaksiya yoki oddiy) bajaradi.
+ */
+function rescheduleWrites({
+  tripId, trip, uid, accountId, newDeparture, scheduleDate, startTime, when, Timestamp, source,
+}) {
+  const newDate = String(scheduleDate || trip.scheduleDate || '');
+  return {
+    audit: {
+      tripId, uid, accountId, source,
+      oldDepartureAt: trip.departureAt || null,
+      newDepartureAt: Timestamp.fromDate(newDeparture),
+      oldScheduleDate: trip.scheduleDate || '',
+      newScheduleDate: newDate,
+      changedAt: when,
+    },
+    tripPatch: {
+      departureAt: Timestamp.fromDate(newDeparture),
+      scheduleDate: newDate,
+      startTime: String(startTime || trip.startTime || ''),
+      rescheduleCount: (Number(trip.rescheduleCount) || 0) + 1,
+      updatedAt: when,
+    },
+  };
+}
+
 function numOrNull(v) {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
@@ -788,7 +811,8 @@ function numOrNull(v) {
 }
 
 module.exports = {
-  TRIPS, PRICE_CHANGES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT,
+  TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT,
+  rescheduleWrites,
   SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
   calculateTaxiFee, starterNoticeOf, attachTaxiBilling,
 };

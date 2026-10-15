@@ -42,6 +42,7 @@ const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list
 // `settlement_ledger` orqali; capability mantiqi `capabilities_model.js`
 // nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
 const { attachTaxiBilling } = require('./taxi_billing');
+const { runAutoShift } = require('./intercity_auto_shift');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
@@ -15110,39 +15111,15 @@ exports.migratePhoneFormats = functions.https.onCall(
     },
 );
 
+// Шаҳарлараро рейс: жўнашга ≤ 10 дақиқа қолганда салон тўлмаган бўлса 2 соатга
+// суриш (кунига ≤ 4 марта). Мантиқ — `intercity_auto_shift.js`. Эски версия
+// ҳеч ким ёзмайдиган `intercity_drivers.departureTime` ни ўқирди (ишламасди).
 exports.autoUpdateDepartureTime =
     functions.pubsub
-        .schedule('every 5 minutes')
+        .schedule('every 1 minutes')
         .onRun(async () => {
-          const now = new Date();
-          const soon = new Date(now.getTime() + 10 * 60 * 1000);
-
-          const snap = await db
-              .collection('intercity_drivers')
-              .where('isActive', '==', true)
-              .get();
-
-          const batch = db.batch();
-          let count = 0;
-
-          snap.docs.forEach((doc) => {
-            const d = doc.data();
-            const dept = d.departureTime?.toDate?.();
-            if (!dept) return;
-
-            if (dept <= soon && dept >= now) {
-              const newTime = new Date(
-                  dept.getTime() + 2 * 60 * 60 * 1000);
-              batch.update(doc.ref, {
-                departureTime: admin.firestore.Timestamp.fromDate(newTime),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              });
-              count++;
-            }
-          });
-
-          if (count > 0) await batch.commit();
-          console.log(`autoUpdateDepartureTime: ${count} updated`);
+          const stats = await runAutoShift({ db, admin });
+          console.log('autoUpdateDepartureTime', JSON.stringify(stats));
           return null;
         });
 

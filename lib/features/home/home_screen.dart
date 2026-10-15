@@ -931,7 +931,10 @@ class _HomeViewState extends State<_HomeView> {
                               Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            AvaTopBar(onPickRegion: _openRegionPicker),
+                            AvaTopBar(
+                              onPickRegion: _openRegionPicker,
+                              bottomPadding: _driverRoles.hasAnyActiveRole ? 0 : 6,
+                            ),
                             // Фаол ҳайдовчилик/курьерлик тасмаси (эга, 2026-10-15).
                             if (_driverRoles.hasAnyActiveRole)
                               ActiveRolesStrip(

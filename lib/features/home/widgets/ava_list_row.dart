@@ -149,27 +149,6 @@ double avaTileListHeight(
   return h.ceilToDouble();
 }
 
-/// Номлар энг кўпи нечта қаторга чиқади (1 ёки 2) — карточка кенглигида,
-/// тизим шрифти билан ўлчанади. Ҳамма ном бир қаторга сиғса, лента
-/// баландлигига иккинчи қатор учун жой ЗАХИРА ҚИЛИНМАЙДИ.
-int avaTileTitleLines(
-  BuildContext context,
-  Iterable<String> titles, {
-  double width = 148,
-}) {
-  final ts = MediaQuery.textScalerOf(context);
-  final textWidth = width - 16; // карточканинг ички чети 8 + 8
-  for (final title in titles) {
-    final tp = TextPainter(
-      text: TextSpan(text: title, style: AvaText.productName),
-      textDirection: TextDirection.ltr,
-      textScaler: ts,
-      maxLines: 2,
-    )..layout(maxWidth: textWidth);
-    if (tp.computeLineMetrics().length > 1) return 2;
-  }
-  return 1;
-}
 /// Расмли ён томонга айланадиган карточка (6–8-бўлимлар: бозорлар).
 class AvaTileCard extends StatelessWidget {
   const AvaTileCard({
@@ -181,9 +160,14 @@ class AvaTileCard extends StatelessWidget {
     this.footnote,
     this.width = 148,
     this.onTap,
+    this.titleMaxLines = 2,
   });
 
   final String title;
+
+  /// Ном энг кўпи нечта қатор (бозор лентасида 1 — ном кесилади, лента
+  /// баландлигида иккинчи қатор учун жой қолмайди, эга 2026-10-15).
+  final int titleMaxLines;
 
   /// Расм виджети (масалан `CachedNetworkImage`); `null` бўлса ўрин эгаси.
   final Widget? image;
@@ -224,7 +208,7 @@ class AvaTileCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             title,
-            maxLines: 2,
+            maxLines: titleMaxLines,
             overflow: TextOverflow.ellipsis,
             style: AvaText.productName.copyWith(color: c.ink),
           ),

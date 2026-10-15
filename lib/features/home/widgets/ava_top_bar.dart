@@ -12,15 +12,23 @@ import '../../../core/theme/ava_tokens.dart';
 /// [ServiceConfigHolder.revision] га обуна бўлади — ҳудуд ўзгарса тугма
 /// ўзи янгиланади, бутун саҳифани қайта қуриш керак эмас.
 class AvaTopBar extends StatelessWidget {
-  const AvaTopBar({super.key, required this.onPickRegion});
+  const AvaTopBar({
+    super.key,
+    required this.onPickRegion,
+    this.bottomPadding = 6,
+  });
 
   /// Ҳудуд тугмаси босилганда — вилоят/туман танлаш.
   final VoidCallback onPickRegion;
 
+  /// Қатор остидаги ички чет. Фаол роллар ёзуви тагида бўлса 0 — ёзув
+  /// айнан локация қатори остига тақалади (эга, 2026-10-15).
+  final double bottomPadding;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: EdgeInsets.only(top: 6, bottom: bottomPadding),
       child: Row(
         children: [
           const AvaLogoBadge(),

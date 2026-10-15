@@ -67,7 +67,7 @@ class _ActiveRolesStripState extends State<ActiveRolesStrip>
     // Ихчам кўриниш (эга, 2026-10-15): тўқ яшил тасма йўқ — локация қатори
     // тагида майда ҳарфли матн ва кичик милтилловчи нуқта.
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 2),
+      padding: const EdgeInsets.only(left: 4),
       child: Semantics(
         button: widget.onTap != null,
         label: label,
@@ -75,7 +75,7 @@ class _ActiveRolesStripState extends State<ActiveRolesStrip>
           onTap: widget.onTap,
           borderRadius: BorderRadius.circular(6),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -231,12 +231,9 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
       _platform.map(_ShelfEntry.platform).toList(growable: false),
       _items.map(_ShelfEntry.seller).toList(growable: false),
     ]);
-    // Лента баландлиги ҲАҚИҚИЙ мазмундан ҳисобланади: ҳамма ном бир қаторга
-    // сиғса иккинчи қатор учун, нарх изоҳи/пастки қатор йўқ бўлса улар учун
-    // жой захира қилинмайди (карточка остидаги бўш жой, 2026-10-15).
-    final titles = [
-      for (final e in entries) e.platform != null ? e.platform!.name : e.seller!.title,
-    ];
+    // Лента баландлиги ҲАҚИҚИЙ мазмундан ҳисобланади: ном ҳамма вақт 1 қатор
+    // (кесилади), нарх изоҳи/пастки қатор йўқ бўлса улар учун жой захира
+    // қилинмайди (карточка остидаги бўш жой, 2026-10-15).
     final hasNote = entries.any((e) => e.platform != null
         ? platformShelfPrice(e.platform!).note.isNotEmpty
         : formatTierNote(context, e.seller!).isNotEmpty);
@@ -262,7 +259,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
         // кетарди (`avaTileListHeight` изоҳига қаранг).
         rowHeight: avaTileListHeight(
           context,
-          titleLines: avaTileTitleLines(context, titles),
+          titleLines: 1,
           hasPriceNote: hasNote,
           hasFootnote: hasFoot,
         ),
@@ -273,6 +270,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
           final p = entries[i].seller!;
           final cover = p.imageUrls.isEmpty ? '' : p.imageUrls.first;
           return AvaTileCard(
+            titleMaxLines: 1,
             title: p.title,
             price: formatShelfPrice(p),
             priceNote: formatTierNote(context, p),
@@ -304,6 +302,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
       if (bytes != null) image = Image.memory(bytes, fit: BoxFit.cover);
     }
     return AvaTileCard(
+      titleMaxLines: 1,
       title: p.name,
       price: price.price,
       priceNote: price.note,

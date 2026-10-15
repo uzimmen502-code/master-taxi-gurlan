@@ -115,8 +115,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
 
   @override
   Widget build(BuildContext context) {
-    // Баландлик ҳақиқий мазмундан (ном қаторлари, туман изоҳи) ҳисобланади.
-    final titleLines = avaTileTitleLines(context, [for (final a in _items) a.title]);
+    // Баландлик ҳақиқий мазмундан (ном 1 қатор, туман изоҳи) ҳисобланади.
     final hasFoot = _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
     final hasPrice = _items.any((a) => a.price > 0);
     return AvaSection(
@@ -131,7 +130,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
         // Бу бўлимда нарх изоҳи йўқ — қолгани `avaTileListHeight` изоҳида.
         rowHeight: avaTileListHeight(
           context,
-          titleLines: titleLines,
+          titleLines: 1,
           hasPrice: hasPrice,
           hasPriceNote: false,
           hasFootnote: hasFoot,
@@ -141,6 +140,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
           final ad = _items[i];
           final cover = ad.imageUrls.isEmpty ? '' : ad.imageUrls.first;
           return AvaTileCard(
+            titleMaxLines: 1,
             title: ad.title,
             price: ad.price > 0
                 ? '${formatPrice(ad.price)} $kCurrencySum'

@@ -366,18 +366,17 @@ void main() {
     });
 
     // 2026-10-15 (қурилма): лента баландлиги карточка мазмунидан катта эди —
-    // остида катта бўш жой. Энди ҳақиқий мазмун билан ЗИЧ бўлиши шарт.
+    // остида катта бўш жой. Лентада ном ҲАМИША 1 қатор (узуни кесилади),
+    // энди баландлик ҳақиқий мазмун билан ЗИЧ бўлиши шарт.
     for (final scale in [1.0, 1.3]) {
       testWidgets('лента баландлиги карточкадан 8 dp дан кўп катта эмас (×$scale)',
           (tester) async {
         late double listHeight;
-        late int lines;
         await _pump(
           tester,
           Builder(
             builder: (context) {
-              lines = avaTileTitleLines(context, const ['Ун', 'Чой']);
-              listHeight = avaTileListHeight(context, titleLines: lines);
+              listHeight = avaTileListHeight(context, titleLines: 1);
               return SizedBox(
                 height: 600,
                 child: ListView(
@@ -386,7 +385,9 @@ void main() {
                     Align(
                       alignment: Alignment.topLeft,
                       child: AvaTileCard(
-                        title: 'Ун',
+                        // Узун ном 1 қаторга кесилади.
+                        title: 'Жуда узун маҳсулот номи — албатта кесилади',
+                        titleMaxLines: 1,
                         price: '3 800',
                         priceNote: '1+ дона',
                         footnote: 'AVA',
@@ -399,7 +400,7 @@ void main() {
           ),
           scale: scale,
         );
-        expect(lines, 1, reason: 'қисқа номлар — бир қатор');
+        expect(tester.takeException(), isNull);
         final card = tester.getSize(find.byType(AvaTileCard)).height;
         expect(listHeight, greaterThanOrEqualTo(card),
             reason: 'лента ($listHeight) карточкадан ($card) паст');
@@ -407,21 +408,5 @@ void main() {
             reason: 'бўш жой: ${listHeight - card} dp');
       });
     }
-
-    testWidgets('узун ном 2 қаторга ўралади — avaTileTitleLines 2 қайтаради',
-        (tester) async {
-      late int lines;
-      await _pump(
-        tester,
-        Builder(builder: (context) {
-          lines = avaTileTitleLines(
-            context,
-            const ['Жуда узун маҳсулот номи — албатта икки қаторга чиқади'],
-          );
-          return const SizedBox.shrink();
-        }),
-      );
-      expect(lines, 2);
-    });
   });
 }

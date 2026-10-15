@@ -325,6 +325,45 @@ async function main() {
     assert.strictEqual((await db.collection('taxi_fraud_cases').where('tripId', '==', r.tripId).get()).size, 1);
   });
 
+  // ── «AVA haqi» xabari: starter tugashiga 3 kun qolgandan keyingina (ega, 2026-10-15) ──
+  const DAY = 24 * 60 * 60 * 1000;
+  const setDue = (ms) => db.collection('provider_capabilities').doc(ACC)
+    .set({ window: { taxi: { verificationDueAt: new Date(NOW0.getTime() + ms) } } }, { merge: true });
+  await reset({ status: 'starter' });
+  await check('starterNotice: muddat tugashiga 60 kun — xabar YO\'Q', async () => {
+    await setDue(60 * DAY);
+    const q = await api.quote({ farePerSeat: 350000 }, ctx);
+    assert.strictEqual(q.starterNotice, false); assert.ok(q.starterEndsAt);
+    assert.strictEqual(q.feeAmount, 0);
+  });
+  await check('starterNotice: aynan 3 kun qoldi — xabar BOR (chegara)', async () => {
+    await setDue(3 * DAY);
+    assert.strictEqual((await api.quote({ farePerSeat: 350000 }, ctx)).starterNotice, true);
+  });
+  await check('starterNotice: 3 kun + 1 daqiqa qoldi — xabar YO\'Q (chegara)', async () => {
+    await setDue(3 * DAY + 60 * 1000);
+    assert.strictEqual((await api.quote({ farePerSeat: 350000 }, ctx)).starterNotice, false);
+  });
+  await check('starterNotice: 1 kun qoldi — xabar BOR', async () => {
+    await setDue(1 * DAY);
+    assert.strictEqual((await api.quote({ farePerSeat: 350000 }, ctx)).starterNotice, true);
+  });
+  await check('starterNotice: muddat o\'tdi, sweeper hali ulgurmagan starter — xabar BOR', async () => {
+    await setDue(-60 * 1000);
+    assert.strictEqual((await api.quote({ farePerSeat: 350000 }, ctx)).starterNotice, true);
+  });
+  await reset({ status: 'starter' });
+  await check('starterNotice: `verificationDueAt` yo\'q starter — xabar YO\'Q', async () => {
+    const q = await api.quote({ farePerSeat: 350000 }, ctx);
+    assert.strictEqual(q.starterNotice, false); assert.strictEqual(q.starterEndsAt, null);
+  });
+  await reset({ status: 'verified' });
+  await check('starterNotice: verified (pullik) — xabar YO\'Q, hatto muddat yaqin bo\'lsa ham', async () => {
+    await setDue(1 * DAY);
+    const q = await api.quote({ farePerSeat: 350000 }, ctx);
+    assert.strictEqual(q.starterNotice, false); assert.strictEqual(q.feeAmount, 28000);
+  });
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} taxi billing CF checks passed.`);
   if (failed.length) process.exitCode = 1;

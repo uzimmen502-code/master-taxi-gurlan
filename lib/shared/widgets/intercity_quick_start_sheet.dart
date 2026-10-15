@@ -185,9 +185,13 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
       return null;
     }
 
-    // D-TAXI-22: haydovchi summani OLDINDAN ko'radi va tasdiqlaydi.
-    final confirmed = await _confirmFee(quote);
-    if (!confirmed || !mounted) return null;
+    // D-TAXI-22: haydovchi summani OLDINDAN ko'radi va tasdiqlaydi. Haqsiz
+    // (starter) reysda dialog faqat starter tugashiga 3 kun qolganda
+    // chiqadi (ega, 2026-10-15); `starterNotice` ni server belgilaydi.
+    if (quote.feeAmount > 0 || quote.starterNotice) {
+      final confirmed = await _confirmFee(quote);
+      if (!confirmed || !mounted) return null;
+    }
 
     final pos = await _lastKnownPosition();
     try {

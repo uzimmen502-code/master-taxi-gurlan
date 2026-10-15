@@ -54,6 +54,8 @@ const CAPS = 'provider_capabilities';
 const EARNINGS_ACCOUNT = 'earnings:ava_taxi_fee';
 
 const SEAT_BASIS = 4;
+/** Starter tugashiga shuncha kun qolganda haydovchiga «AVA haqi» xabari ko'rsatiladi (ega, 2026-10-15). */
+const STARTER_NOTICE_DAYS = 3;
 /** 2% = 200 bps. Butun son arifmetikasi uchun bps. */
 const RATE_BPS = 200;
 const BILLING_VERSION = 1;
@@ -81,6 +83,23 @@ function calculateTaxiFee(farePerSeat) {
   return {
     farePerSeat: fare, seatBasis: SEAT_BASIS, rateBps: RATE_BPS,
     rate: RATE_BPS / 10000, grossBasis, feeAmount,
+  };
+}
+
+/**
+ * Starter davri tugashiga `STARTER_NOTICE_DAYS` kun yoki kam qolganmi.
+ * Faqat `starter` holatida va `window.taxi.verificationDueAt` bo'lganda.
+ * Muddati o'tgan, lekin sweeper hali `verification_required` qilmagan
+ * starter ham «qolgan» hisoblanadi.
+ */
+function starterNoticeOf(cap, status, nowDate) {
+  if (status !== caps.TAXI.starter) return { starterNotice: false, starterEndsAt: null };
+  const win = ((cap && cap.window) || {}).taxi || {};
+  const dueMs = caps.toMillis(win.verificationDueAt);
+  if (!dueMs) return { starterNotice: false, starterEndsAt: null };
+  return {
+    starterNotice: dueMs - nowDate.getTime() <= STARTER_NOTICE_DAYS * caps.DAY_MS,
+    starterEndsAt: new Date(dueMs).toISOString(),
   };
 }
 
@@ -171,6 +190,7 @@ function attachTaxiBilling(exports, deps) {
     const balance = billable ? await walletBalance(me.usersDocId) : null;
     return {
       allowed: true, reason: 'ok', taxiStatus: status, billable, ...agreementInfo,
+      ...starterNoticeOf(me.cap, status, when),
       ...fee, feeAmount, quotedFee: fee.feeAmount,
       walletBalance: balance,
       sufficient: billable ? balance >= feeAmount : true,
@@ -769,6 +789,6 @@ function numOrNull(v) {
 
 module.exports = {
   TRIPS, PRICE_CHANGES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT,
-  SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS,
-  calculateTaxiFee, attachTaxiBilling,
+  SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
+  calculateTaxiFee, starterNoticeOf, attachTaxiBilling,
 };

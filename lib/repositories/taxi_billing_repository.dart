@@ -30,6 +30,7 @@ class TaxiFeeQuote {
     this.walletBalance,
     this.agreementVersion,
     this.taxiStatus = '',
+    this.starterNotice = false,
   });
 
   /// Эълон қилиш мумкинми (ҳуқуқ + келишув).
@@ -57,6 +58,10 @@ class TaxiFeeQuote {
   final int? agreementVersion;
   final String taxiStatus;
 
+  /// Starter тугашига сервер белгилаган чегарагача (3 кун) қолган —
+  /// фақат шунда ҳақсиз рейсда «AVA хизмат ҳақи» диалоги кўрсатилади.
+  final bool starterNotice;
+
   factory TaxiFeeQuote.fromMap(Map<dynamic, dynamic> m) => TaxiFeeQuote(
         allowed: m['allowed'] == true,
         reason: (m['reason'] ?? '').toString(),
@@ -70,6 +75,7 @@ class TaxiFeeQuote {
         walletBalance: (m['walletBalance'] as num?)?.toInt(),
         agreementVersion: (m['agreementVersion'] as num?)?.toInt(),
         taxiStatus: (m['taxiStatus'] ?? '').toString(),
+        starterNotice: m['starterNotice'] == true,
       );
 }
 

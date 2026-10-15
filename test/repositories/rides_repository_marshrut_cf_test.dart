@@ -28,7 +28,7 @@ class _FakeCallable extends Fake implements HttpsCallable {
     if (handler == null) {
       throw FirebaseFunctionsException(message: 'unavailable', code: 'unavailable');
     }
-    return _FakeResult<T>(handler(parameters as Map));
+    return _FakeResult<T>(handler(parameters));
   }
 }
 

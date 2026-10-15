@@ -932,8 +932,8 @@ class _HomeViewState extends State<_HomeView> {
                                 return HomeInfoTicker(ads: shuffled);
                               },
                             ),
-                            SizedBox(height: _sectionGap(context, base: 12)),
-                            SizedBox(height: _sectionGap(context, base: 12)),
+                            // Карусель ва «Барча хизматлар» сарлавҳаси орасидаги масофа 2 px (эга, 2026-10-15).
+                            const SizedBox(height: 2),
                             // Хизматлар — OLX бош экранидаги жойлашув:
                             // 2 қатор, ёнга скролл, ранг доира ичида расм
                             // (қаранг: [HomeServicesOlxRow] — ўлчамлар

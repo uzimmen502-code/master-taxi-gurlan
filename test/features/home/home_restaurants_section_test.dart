@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:ava_gurlan/core/service_config_holder.dart';
+import 'package:ava_gurlan/features/home/widgets/ava_section.dart';
 import 'package:ava_gurlan/features/home/widgets/home_restaurants_section.dart';
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
@@ -172,6 +173,37 @@ void main() {
     expect(find.text('b'), findsOneWidget);
   });
 
+  testWidgets('масофа «~» билан, қатор битта; координата йўқ — масофа йўқ', (tester) async {
+    await tester.pumpWidget(_host(HomeRestaurantsSection(
+      repository: _FakeRepo([
+        _r('yaqin', lat: 41.85, lng: 60.39),
+        _r('koordinatasiz'),
+      ]),
+      userLat: 41.84,
+      userLng: 60.39,
+      locate: () async => null,
+      onOpenAll: () {},
+      onOpenRestaurant: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    // Фақат координатали ресторанда масофа ёрлиғи («~…») бор.
+    expect(find.textContaining('~'), findsOneWidget);
+    // Ботиқ майдонча + саҳифалагич ишлатилган (бошқа бўлимлардагидек).
+    expect(find.byType(AvaInsetPanel), findsOneWidget);
+    expect(find.byType(AvaRowPager), findsOneWidget);
+  });
+
+  testWidgets('6 та ресторан — саҳифаланади (5 та кўринади), тўлиқ рўйхатга ўтиш бор', (tester) async {
+    await tester.pumpWidget(_host(HomeRestaurantsSection(
+      repository: _FakeRepo([for (var i = 1; i <= 6; i++) _r('r$i')]),
+      onOpenAll: () {},
+      onOpenRestaurant: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('r1'), findsOneWidget);
+    expect(find.text('r5'), findsOneWidget);
+    expect(find.text('home_section_see_all'), findsOneWidget);
+  });
   group('RestaurantsRepository.withinRadius', () {
     test('чегара: 20 км ичи — бор, ташқари — йўқ; координатасиз — йўқ; яқини биринчи', () {
       // 0.1799° кенглик ≈ 20.0 км, 0.1805° ≈ 20.07 км.

@@ -173,11 +173,8 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
   @override
   Widget build(BuildContext context) {
     if (_allowed != true) return const SizedBox.shrink();
-    // Табиий баландликдаги устун (саҳифаловчи `AvaRowPager` ЭМАС): қатор
-    // ичида чиплар катта шрифтда иккинчи қаторга тушиши мумкин — қатъий
-    // баландлик уни кесарди. Кўрсатиладигани — [visibleRows] та, қолгани
-    // «Барчаси →» да.
-    final shown = _items.take(HomeRestaurantsSection.visibleRows).toList(growable: false);
+    // Бошқа бўлимлардагидек (Танишув, Эълонлар): ботиқ майдонча + саҳифаланувчи
+    // бир қаторли рўйхат. Логотип ва чиплар — «Барчаси →» даги тўлиқ рўйхатда.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -189,21 +186,96 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
           onSeeAll: widget.onOpenAll,
           onRetry: _listen,
           emptyLabel: context.tr('restaurants_empty_nearby'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < shown.length; i++) ...[
-                if (i > 0) const SizedBox(height: 6),
-                RestaurantRow(
-                  restaurant: shown[i],
-                  distanceKm: shown[i].distanceKmFrom(_lat, _lng),
-                  onTap: () => widget.onOpenRestaurant(shown[i]),
-                ),
+          child: AvaInsetPanel(
+            child: AvaRowPager(
+              rowHeight: AvaRowPager.textRowHeight(context),
+              onOpenModule: widget.onOpenAll,
+              rows: [
+                for (final r in _items)
+                  _RestaurantTextRow(
+                    restaurant: r,
+                    distanceKm: r.distanceKmFrom(_lat, _lng),
+                    onTap: () => widget.onOpenRestaurant(r),
+                  ),
               ],
-            ],
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Битта ресторан: ● ном · ошхона ........ ~1.2 км. Ёпиқ ресторан хира,
+/// нуқтаси бўш ва «Ёпиқ» ёрлиғи билан. Масофа тўғри чизиқ бўйича (шунинг учун
+/// «~»); координата йўқ бўлса масофа кўрсатилмайди, қатор қолади.
+class _RestaurantTextRow extends StatelessWidget {
+  const _RestaurantTextRow({
+    required this.restaurant,
+    required this.distanceKm,
+    required this.onTap,
+  });
+
+  final Restaurant restaurant;
+  final double? distanceKm;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    final r = restaurant;
+    final open = r.isOpenNow;
+    final textColor = open ? c.inkRow : c.ink3;
+    final cuisine = r.cuisineTags.isEmpty ? '' : r.cuisineTags.first;
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: open ? c.ink : Colors.transparent,
+              shape: BoxShape.circle,
+              border: open ? null : Border.all(color: c.ink3),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              r.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AvaText.feedRow.copyWith(color: textColor),
+            ),
+          ),
+          if (cuisine.isNotEmpty)
+            Flexible(
+              child: Text(
+                ' · $cuisine',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AvaText.feedRow.copyWith(color: c.ink3),
+              ),
+            ),
+          const Spacer(),
+          if (!open)
+            Text(
+              context.tr('restaurants_closed'),
+              style: AvaText.feedRow.copyWith(color: c.ink3),
+            ),
+          if (!open && distanceKm != null)
+            Text(' · ', style: AvaText.feedRow.copyWith(color: c.ink3)),
+          if (distanceKm != null)
+            Text(
+              '~${formatDistanceLabel(context, distanceKm!)}',
+              style: AvaText.feedRow
+                  .copyWith(color: c.brandText, fontWeight: FontWeight.w700),
+            ),
+        ],
+      ),
     );
   }
 }

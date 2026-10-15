@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../utils/locale_utils.dart';
 import 'offline_l10n.dart';
+import 'user_lang_sync.dart';
 
 /// Ilova tili — qurilma + qo‘lda tanlov.
 class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
@@ -39,6 +42,7 @@ class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
     await LocaleUtils.saveLocale(normalized);
     OfflineL10n.invalidate();
     notifyListeners();
+    unawaited(UserLangSync.push(normalized));
   }
 
   /// `setLocale()` kabi, lekin prefs'ga yozmaydi — faqat ekranni jonli
@@ -62,6 +66,7 @@ class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
     _locale = LocaleUtils.resolveFromDevice();
     OfflineL10n.invalidate();
     notifyListeners();
+    unawaited(UserLangSync.push(_locale));
   }
 
   @override

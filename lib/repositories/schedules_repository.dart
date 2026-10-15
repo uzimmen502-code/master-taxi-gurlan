@@ -380,8 +380,11 @@ class SchedulesRepository {
       }
 
       int hour = 8;
+      int minute = 0;
       if (startTime != null && startTime.contains(':')) {
-        hour = int.tryParse(startTime.split(':')[0]) ?? 8;
+        final parts = startTime.split(':');
+        hour = int.tryParse(parts[0]) ?? 8;
+        minute = int.tryParse(parts[1]) ?? 0;
       }
       batch.set(
           intercityRef,
@@ -395,6 +398,7 @@ class SchedulesRepository {
             'seats': seats,
             'price': price ?? 0,
             'hour': hour,
+            'minute': minute,
             'scheduleDate': date,
             'isActive': true,
             'isOnPanel': true,

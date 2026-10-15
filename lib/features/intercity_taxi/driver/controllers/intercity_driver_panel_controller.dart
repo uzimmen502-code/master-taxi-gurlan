@@ -233,11 +233,14 @@ class IntercityDriverPanelController extends ChangeNotifier {
         startTime: startTime,
       );
     }
-    final hour = int.tryParse(startTime.split(':').first) ?? 8;
+    final parts = startTime.split(':');
+    final hour = int.tryParse(parts.first) ?? 8;
+    final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
     await _db.collection('intercity_drivers').doc(driverId).set(
       {
         'scheduleDate': scheduleDate,
         'hour': hour,
+        'minute': minute,
         'updatedAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),

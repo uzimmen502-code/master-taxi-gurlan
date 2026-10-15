@@ -107,6 +107,8 @@ class IntercityRide {
   }) {
     final d = doc.data() ?? const <String, dynamic>{};
     final hour = (d['hour'] as num?)?.toInt() ?? 8;
+    // Эски эълонларда `minute` йўқ — 0 (аввалги кўриниш).
+    final minute = ((d['minute'] as num?)?.toInt() ?? 0).clamp(0, 59);
     final rawStops = d['stops'];
     final stops = rawStops is List
         ? rawStops.map((e) => e.toString()).toList(growable: false)
@@ -124,7 +126,7 @@ class IntercityRide {
       toCity: toCity,
       district: district,
       departureTime:
-          DateTime(baseDate.year, baseDate.month, baseDate.day, hour),
+          DateTime(baseDate.year, baseDate.month, baseDate.day, hour, minute),
       stops: stops,
       routeLabel: (d['routeLabel'] ?? '') as String,
       driverFrom: (d['from'] ?? '') as String,

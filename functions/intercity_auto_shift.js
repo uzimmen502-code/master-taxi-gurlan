@@ -29,6 +29,7 @@
  */
 
 const { TRIPS, RESCHEDULES, rescheduleWrites } = require('./taxi_billing');
+const { render, langOfPhone } = require('./notif_i18n');
 
 const AUTO_SHIFT = Object.freeze({
   triggerMinutes: 10,
@@ -52,11 +53,13 @@ const hhmm = (ms) => {
 };
 
 /** `YYYY-MM-DD` + соат (Тошкент) → UTC мс; нотўғри бўлса null. */
-function deriveDepartureMs(scheduleDate, hour) {
+function deriveDepartureMs(scheduleDate, hour, minute = 0) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(scheduleDate || ''));
   const h = Number(hour);
+  const min = minute == null ? 0 : Number(minute);
   if (!m || !Number.isInteger(h) || h < 0 || h > 23) return null;
-  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), h) - TZ_OFFSET_MS;
+  if (!Number.isInteger(min) || min < 0 || min > 59) return null;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), h, min) - TZ_OFFSET_MS;
 }
 
 const toMs = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : 0);
@@ -71,7 +74,7 @@ function planShift({ listing, tripDepMs, tripTouchedMs, count, nowMs, cfg = AUTO
   if (!Number.isFinite(seatsLeft)) return { action: 'skip', reason: 'seats_unknown' };
   if (seatsLeft <= 0) return { action: 'skip', reason: 'full' };
 
-  const depMs = tripDepMs || deriveDepartureMs(listing.scheduleDate, listing.hour);
+  const depMs = tripDepMs || deriveDepartureMs(listing.scheduleDate, listing.hour, listing.minute);
   if (!depMs) return { action: 'skip', reason: 'no_departure' };
 
   const left = depMs - nowMs;
@@ -94,6 +97,7 @@ function planShift({ listing, tripDepMs, tripTouchedMs, count, nowMs, cfg = AUTO
     newMs,
     newDate: dateStr(newMs),
     newHour: local(newMs).getUTCHours(),
+    newMinute: local(newMs).getUTCMinutes(),
     newStartTime: hhmm(newMs),
     count: (Number(count) || 0) + 1,
   };
@@ -174,11 +178,9 @@ async function shiftOne({ db, admin, Timestamp, FieldValue, doc, nowMs, today })
         if (driverPhone.length >= 9) {
           noticesToSend.push({
             id: `autoshift_stop_${driverId}_${today}_${plan.notify}`,
-            targetPhone: driverPhone,
-            title: '⏱ Рейс автоматик сурилмайди',
-            body: plan.notify === 'cap'
-              ? `Бугун рейс ${AUTO_SHIFT.maxPerDay} марта сурилди. Янги вақтни ўзингиз белгиланг ёки рейсни тугатинг.`
-              : 'Жўнаш вақти кеч бўлгани учун рейс бугун яна сурилмайди. Янги кунга кўчиринг ёки тугатинг.',
+            phone: driverPhone,
+            key: `auto_shift_stop_${plan.notify}`,
+            params: { max: AUTO_SHIFT.maxPerDay },
             type: 'intercity_auto_shift_stop',
           });
         }
@@ -211,6 +213,7 @@ async function shiftOne({ db, admin, Timestamp, FieldValue, doc, nowMs, today })
     }
     tx.update(listingRef, {
       hour: plan.newHour,
+      minute: plan.newMinute, // йўловчи экрани дақиқани кўрсатади
       scheduleDate: plan.newDate,
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -240,18 +243,18 @@ async function shiftOne({ db, admin, Timestamp, FieldValue, doc, nowMs, today })
     if (driverPhone.length >= 9) {
       noticesToSend.push({
         id: `autoshift_drv_${key}`,
-        targetPhone: driverPhone,
-        title: '⏱ Рейс 2 соатга сурилди',
-        body: `Салон тўлмади. Янги жўнаш вақти ${newText} (${plan.count}/${AUTO_SHIFT.maxPerDay}).`,
+        phone: driverPhone,
+        key: 'auto_shift_driver',
+        params: { hours: AUTO_SHIFT.shiftHours, time: newText, n: plan.count, max: AUTO_SHIFT.maxPerDay },
         type: 'intercity_auto_shift',
       });
     }
     for (const p of passengers) {
       noticesToSend.push({
         id: `autoshift_pax_${key}_${p.bookingId}`,
-        targetPhone: p.phone,
-        title: '🕐 Рейс вақти ўзгарди',
-        body: `Жўнаш ${newText} га сурилди. Қулай бўлмаса бронни бекор қилишингиз мумкин.`,
+        phone: p.phone,
+        key: 'auto_shift_passenger',
+        params: { time: newText },
         type: 'intercity_trip_rescheduled',
         bookingId: p.bookingId,
       });
@@ -261,13 +264,16 @@ async function shiftOne({ db, admin, Timestamp, FieldValue, doc, nowMs, today })
 
   // Хабарлар — tranzaksiyadan КЕЙИН, детерминистик id (retry икки марта юбормайди).
   for (const n of noticesToSend) {
-    const { id, ...rest } = n;
     try {
-      await db.collection('notifications').doc(id).set({
-        ...rest, sent: false, createdAt: FieldValue.serverTimestamp(),
+      const lang = await langOfPhone(db, n.phone);
+      const { title, body } = render(n.key, lang, n.params);
+      await db.collection('notifications').doc(n.id).set({
+        targetPhone: n.phone, title, body, type: n.type,
+        ...(n.bookingId ? { bookingId: n.bookingId } : {}),
+        sent: false, createdAt: FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      console.error('intercityAutoShift notify', id, e && e.message ? e.message : e);
+      console.error('intercityAutoShift notify', n.id, e && e.message ? e.message : e);
     }
   }
   return result;

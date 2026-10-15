@@ -84,6 +84,25 @@ const listing = (o = {}) => ({ isActive: true, seats: 2, seatCapacity: 4, schedu
     assert.strictEqual(p.action, 'shift');
     assert.strictEqual(p.newStartTime, '16:00');
   });
+  await check('эълонда minute бор — жўнаш шу дақиқадан ҳисобланади', () => {
+    assert.strictEqual(deriveDepartureMs('2026-10-15', 14, 20), DEP);
+    assert.strictEqual(deriveDepartureMs('2026-10-15', 14, 61), null);
+    const p = planShift({ listing: listing({ minute: 20 }), nowMs: DEP - 10 * MIN });
+    assert.strictEqual(p.action, 'shift');
+    assert.strictEqual(p.newMinute, 20);
+  });
+  await check('хабарлар: уч тилда калитлар ва ўринбосарлар бир хил', () => {
+    const { MESSAGES, LANGS, render } = require('../notif_i18n');
+    const ph = (s) => (s.match(/\{\w+\}/g) || []).sort().join(',');
+    for (const [key, byLang] of Object.entries(MESSAGES)) {
+      assert.deepStrictEqual(Object.keys(byLang).sort(), [...LANGS].sort(), key);
+      for (const part of ['title', 'body']) {
+        const set = new Set(LANGS.map((l) => ph(byLang[l][part])));
+        assert.strictEqual(set.size, 1, `${key}.${part} ўринбосарлар тилларда фарқ қилади`);
+      }
+    }
+    assert.strictEqual(render('auto_shift_passenger', 'zz', { time: '09:05' }).body.includes('09:05'), true);
+  });
   await check('фаол эмас эълон — тегилмайди', () => {
     assert.strictEqual(planShift({ listing: listing({ isActive: false }), tripDepMs: DEP, nowMs: DEP - 5 * MIN }).reason, 'inactive');
   });
@@ -93,7 +112,11 @@ const listing = (o = {}) => ({ isActive: true, seats: 2, seatCapacity: 4, schedu
   const wipe = async (col) => { const s = await db.collection(col).get(); await Promise.all(s.docs.map((d) => d.ref.delete())); };
   const reset = async (o = {}) => {
     await Promise.all(['intercity_drivers', 'taxi_trips', 'taxi_reschedules', 'intercity_bookings',
-      'schedules', 'intercity_auto_shifts', 'notifications'].map(wipe));
+      'schedules', 'intercity_auto_shifts', 'notifications', 'users'].map(wipe));
+    // Тил — иловада сақланган `users.appLang`; B2 да майдон йўқ (эски илова).
+    await db.collection('users').doc(D).set({ appLang: 'uz_Latn' });
+    await db.collection('users').doc('998901110002').set({ appLang: 'ru' });
+    await db.collection('users').doc('998901110003').set({ phone: 'x' });
     await db.collection('intercity_drivers').doc(D).set({
       isActive: true, seats: 2, seatCapacity: 4, scheduleDate: '2026-10-15', hour: 14,
       phoneDigits: D, price: 100000, ...(o.legacy ? {} : { billingTripId: 'T1' }),
@@ -152,6 +175,22 @@ const listing = (o = {}) => ({ isActive: true, seats: 2, seatCapacity: 4, schedu
     const pax = n.filter((x) => x.type === 'intercity_trip_rescheduled').map((x) => x.targetPhone).sort();
     assert.deepStrictEqual(pax, ['998901110002', '998901110003']);
     assert.ok(n.every((x) => x.sent === false));
+  });
+  await check('хабар тили фойдаланувчи тилида: uz_Latn / ru / (майдон йўқ → uz_Cyrl)', async () => {
+    const n = await notifs();
+    const drv = n.find((x) => x.type === 'intercity_auto_shift');
+    assert.ok(drv.title.startsWith('⏱ Reys 2 soatga surildi'), drv.title);
+    assert.ok(drv.body.includes('16:20') && drv.body.includes('(1/4)'), drv.body);
+    const ru = n.find((x) => x.targetPhone === '998901110002');
+    assert.ok(ru.body.includes('Отправление перенесено на 16:20'), ru.body);
+    const cy = n.find((x) => x.targetPhone === '998901110003');
+    assert.ok(cy.body.includes('Жўнаш 16:20 га сурилди'), cy.body);
+    assert.ok(n.every((x) => !/[{}]/.test(x.title + x.body)), 'ўринбосар қолмаган');
+  });
+  await check('эълонга минут ёзилади (йўловчи экрани дақиқани кўрсатади)', async () => {
+    const l = (await db.collection('intercity_drivers').doc(D).get()).data();
+    assert.strictEqual(l.minute, 20);
+    assert.strictEqual(l.hour, 16);
   });
   await check('қайта ишга туширилса (retry/кейинги дақиқа) — икки марта сурилмайди', async () => {
     const st = await run(DEP - 9 * MIN);

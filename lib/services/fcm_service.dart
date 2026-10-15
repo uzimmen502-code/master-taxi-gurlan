@@ -6,8 +6,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/l10n/user_lang_sync.dart';
 import '../core/utils/formatters.dart';
 import '../firebase_options.dart';
+import '../utils/locale_utils.dart';
 import 'arrival_ringer.dart';
 import 'notification_delivery.dart';
 import 'push_navigation.dart';
@@ -152,6 +154,8 @@ class FCMService {
         'phoneDigits': uid,
         // role intentionally omitted — only admin CF / rules change role
         'fcmToken': t,
+        // Сервер хабар матнини шу тилда ёзади (functions/notif_i18n.js).
+        'appLang': UserLangSync.code(await LocaleUtils.effectiveLocale()),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (_) {}

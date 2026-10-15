@@ -314,7 +314,8 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         Text(route,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('🕐 ${context.tr('departure')}: ${hour.toString().padLeft(2, '0')}:00'),
+        Text('🕐 ${context.tr('departure')}: ${hour.toString().padLeft(2, '0')}:'
+            '${((c.tripData?['minute'] as num?)?.toInt() ?? 0).clamp(0, 59).toString().padLeft(2, '0')}'),
         Text(
             total > 0
                 ? context

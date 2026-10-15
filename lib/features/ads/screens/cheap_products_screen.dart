@@ -1,4 +1,5 @@
-import 'dart:async';
+import 'dart:async';
+import '../widgets/market_grid.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -396,15 +397,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                       ),
                     ),
                     Expanded(
-                      child: GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.75,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                        ),
+                      child: MarketProductGrid(
                         itemCount: entries.length,
                         itemBuilder: (_, i) {
                           final e = entries[i];

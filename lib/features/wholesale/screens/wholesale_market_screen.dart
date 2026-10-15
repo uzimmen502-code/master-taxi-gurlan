@@ -1,4 +1,5 @@
-import 'dart:async';
+import 'dart:async';
+import '../../ads/widgets/market_grid.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -207,15 +208,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
               platform.map(_MarketEntry.platform).toList(growable: false),
               items.map(_MarketEntry.seller).toList(growable: false),
             ]);
-            return GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 0.72,
-              ),
-              itemCount: entries.length,
+            return MarketProductGrid(
+                        itemCount: entries.length,
               itemBuilder: (_, i) {
                 final e = entries[i];
                 final avaProduct = e.platform;

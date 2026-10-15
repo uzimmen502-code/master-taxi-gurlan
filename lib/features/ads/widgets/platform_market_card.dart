@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
+import 'market_grid.dart';
 import '../../platform_store/controllers/platform_store_controller.dart';
 import '../../platform_store/screens/platform_product_detail_screen.dart';
 
@@ -47,8 +48,8 @@ class PlatformMarketCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              flex: 3,
+            AspectRatio(
+              aspectRatio: MarketGridMetrics.imageAspect,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -78,60 +79,16 @@ class PlatformMarketCard extends StatelessWidget {
                 ],
               ),
             ),
-            Expanded(
-              flex: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: AppText.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      wholesale
-                          ? _wholesalePriceLine(product)
-                          : formatMoney(product.displayPrice),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.primaryText,
-                        fontWeight: FontWeight.w700,
-                        fontSize: AppText.bodySmall,
-                      ),
-                    ),
-                    if (wholesale)
-                      Text(
-                        _wholesaleSubLine(product),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    const Spacer(),
-                    // Сотувчи номи ўрнида — «AVA» (2026-10-07: «AVA дўкони»
-                    // йўқ, AVA товари Улгуржи бозорнинг бир сотувчиси).
-                    Text(
-                      BrandLabels.brand,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // Сотувчи номи ўрнида — «AVA» (2026-10-07: «AVA дўкони» йўқ, AVA
+            // товари Улгуржи бозорнинг бир сотувчиси).
+            MarketCardText(
+              title: product.name,
+              price: wholesale
+                  ? _wholesalePriceLine(product)
+                  : formatMoney(product.displayPrice),
+              caption: wholesale
+                  ? _wholesaleSubLine(product)
+                  : BrandLabels.brand,
             ),
           ],
         ),

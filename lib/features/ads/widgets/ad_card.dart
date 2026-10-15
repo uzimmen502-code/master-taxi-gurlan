@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../screens/ad_details_screen.dart';
 import '../screens/ad_swipe_screen.dart';
+import 'market_grid.dart';
 
 /// Grid tile for cheap product listing.
 class AdCard extends StatelessWidget {
@@ -43,8 +44,8 @@ class AdCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              flex: 3,
+            AspectRatio(
+              aspectRatio: MarketGridMetrics.imageAspect,
               child: imageUrl != null
                   ? CachedNetworkImage(
                       imageUrl: imageUrl,
@@ -66,44 +67,10 @@ class AdCard extends StatelessWidget {
                       child: Center(child: Icon(Icons.image, size: 40)),
                     ),
             ),
-            Expanded(
-              flex: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ad.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: AppText.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      formatMoney(ad.price),
-                      style: const TextStyle(
-                        color: AppColors.primaryText,
-                        fontWeight: FontWeight.w700,
-                        fontSize: AppText.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      ad.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            MarketCardText(
+              title: ad.title,
+              price: formatMoney(ad.price),
+              caption: ad.description,
             ),
           ],
         ),

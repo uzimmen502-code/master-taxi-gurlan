@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../ads/widgets/market_grid.dart';
 
 /// Очиқ дўкон / Аҳоли бозори — 2 устунли товар плиткаси.
 class TvShopItemGridCard extends StatelessWidget {
@@ -44,8 +45,8 @@ class TvShopItemGridCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 3,
+              AspectRatio(
+                aspectRatio: MarketGridMetrics.imageAspect,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -87,38 +88,11 @@ class TvShopItemGridCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          height: 1.2,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (item.hasPrice)
-                        Text(
-                          formatMoney(item.price),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AvaLight.ok,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+              MarketCardText(
+                title: item.title,
+                titleLines: 2,
+                price: item.hasPrice ? formatMoney(item.price) : null,
+                priceColor: AvaLight.ok,
               ),
             ],
           ),

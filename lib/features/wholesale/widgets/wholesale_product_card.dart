@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../ads/widgets/market_grid.dart';
 import '../models/wholesale_product.dart';
 
 class WholesaleProductCard extends StatelessWidget {
@@ -16,6 +16,10 @@ class WholesaleProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final moq = context
+        .tr('wholesale_moq_short')
+        .replaceAll('{qty}', '${product.moq}')
+        .replaceAll('{unit}', product.unit);
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 0,
@@ -26,10 +30,10 @@ class WholesaleProductCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             AspectRatio(
-              aspectRatio: 1.2,
+              aspectRatio: MarketGridMetrics.imageAspect,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -66,45 +70,14 @@ class WholesaleProductCard extends StatelessWidget {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: AppText.bodyMedium, fontWeight: FontWeight.w400),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    product.priceLine,
-                    style: const TextStyle(
-                        fontSize: AppText.labelSmall,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryText),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    context
-                        .tr('wholesale_moq_short')
-                        .replaceAll('{qty}', '${product.moq}')
-                        .replaceAll('{unit}', product.unit),
-                    style: TextStyle(
-                        fontSize: AppText.labelTiny, color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    product.sellerCompanyName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: AppText.labelTiny, color: Colors.grey.shade500),
-                  ),
-                ],
-              ),
+            // Изоҳ — битта қатор: «МОҚ · сотувчи» (катак баландлиги шу қатор
+            // сонига мослаб ҳисобланган, MarketGridMetrics).
+            MarketCardText(
+              title: product.title,
+              price: product.priceLine,
+              caption: product.sellerCompanyName.isEmpty
+                  ? moq
+                  : '$moq · ${product.sellerCompanyName}',
             ),
           ],
         ),

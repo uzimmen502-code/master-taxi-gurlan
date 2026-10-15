@@ -614,17 +614,30 @@ class _HomeViewState extends State<_HomeView> {
 
   /// «＋» менюси учун ҳайдовчи ҳолати (кэш): индикатор ва «Ҳайдовчи панели».
   DriverRoles _driverRoles = DriverRoles.none;
+  bool _driverRolesLoaded = false;
 
   Future<void> _refreshDriverRoles() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
     if (uid.length < 9) return;
     final roles = await context.read<DriverRepository>().driverRoles(uid);
-    if (mounted) setState(() => _driverRoles = roles);
+    if (!mounted) return;
+    setState(() {
+      _driverRoles = roles;
+      _driverRolesLoaded = true;
+    });
   }
 
   /// «＋» — видео / эълон / маҳсулот / хизмат / сотувчи / ҳайдовчи.
   Future<void> _openCreateSheet() async {
-    unawaited(_refreshDriverRoles());
+    // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — ҳолат ҳали юкланмаган
+    // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз.
+    if (!_driverRolesLoaded) {
+      await _refreshDriverRoles()
+          .timeout(const Duration(milliseconds: 1500), onTimeout: () {});
+      if (!mounted) return;
+    } else {
+      unawaited(_refreshDriverRoles());
+    }
     final action = await showAvaCreateSheet(context, driverRoles: _driverRoles);
     if (action == null || !mounted) return;
 

@@ -115,6 +115,10 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
 
   @override
   Widget build(BuildContext context) {
+    // Баландлик ҳақиқий мазмундан (ном қаторлари, туман изоҳи) ҳисобланади.
+    final titleLines = avaTileTitleLines(context, [for (final a in _items) a.title]);
+    final hasFoot = _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
+    final hasPrice = _items.any((a) => a.price > 0);
     return AvaSection(
       moduleId: 'cheap_products_home',
       title: context.tr('home_module_cheap_products'),
@@ -125,7 +129,13 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       // Икки қатор, ёнга скролл (қаранг: [AvaProductShelf]).
       child: AvaProductShelf(
         // Бу бўлимда нарх изоҳи йўқ — қолгани `avaTileListHeight` изоҳида.
-        rowHeight: avaTileListHeight(context, hasPriceNote: false),
+        rowHeight: avaTileListHeight(
+          context,
+          titleLines: titleLines,
+          hasPrice: hasPrice,
+          hasPriceNote: false,
+          hasFootnote: hasFoot,
+        ),
         itemCount: _items.length,
         itemBuilder: (context, i) {
           final ad = _items[i];

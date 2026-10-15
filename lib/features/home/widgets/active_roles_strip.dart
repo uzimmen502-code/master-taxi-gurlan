@@ -21,7 +21,7 @@ String? activeRolesLabel(DriverRoles r, String Function(String key) tr) {
   return tr(key).replaceAll('{parts}', parts);
 }
 
-/// Локация қатори остидаги тўқ яшил тасма. Нуқта секин милтиллайди
+/// Локация қатори остидаги ихчам матн (тасма эмас). Нуқта секин милтиллайди
 /// (матн эмас); тизимда «анимацияни камайтириш» ёқилган бўлса — қимирламайди.
 class ActiveRolesStrip extends StatefulWidget {
   const ActiveRolesStrip({super.key, required this.roles, this.onTap});
@@ -35,8 +35,6 @@ class ActiveRolesStrip extends StatefulWidget {
 
 class _ActiveRolesStripState extends State<ActiveRolesStrip>
     with SingleTickerProviderStateMixin {
-  static const _darkGreen = Color(0xFF1B5E20);
-
   late final AnimationController _pulse;
 
   @override
@@ -66,53 +64,52 @@ class _ActiveRolesStripState extends State<ActiveRolesStrip>
       _pulse.repeat(reverse: true);
     }
 
+    // Ихчам кўриниш (эга, 2026-10-15): тўқ яшил тасма йўқ — локация қатори
+    // тагида майда ҳарфли матн ва кичик милтилловчи нуқта.
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 2),
+      padding: const EdgeInsets.only(left: 4, bottom: 2),
       child: Semantics(
         button: widget.onTap != null,
         label: label,
-        child: Material(
-          color: _darkGreen,
-          borderRadius: BorderRadius.circular(20),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: widget.onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FadeTransition(
-                    opacity: reduce
-                        ? const AlwaysStoppedAnimation(1.0)
-                        : Tween<double>(begin: 1.0, end: 0.25).animate(
-                            CurvedAnimation(
-                                parent: _pulse, curve: Curves.easeInOut),
-                          ),
-                    child: Container(
-                      width: 9,
-                      height: 9,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF76FF03),
-                        shape: BoxShape.circle,
-                      ),
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FadeTransition(
+                  opacity: reduce
+                      ? const AlwaysStoppedAnimation(1.0)
+                      : Tween<double>(begin: 1.0, end: 0.25).animate(
+                          CurvedAnimation(
+                              parent: _pulse, curve: Curves.easeInOut),
+                        ),
+                  child: Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade600,
+                      shape: BoxShape.circle,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey.shade800,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

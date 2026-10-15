@@ -121,22 +121,55 @@ double avaTileListHeight(
   bool hasPrice = true,
   bool hasPriceNote = true,
   bool hasFootnote = true,
+  int titleLines = 2,
 }) {
-  // Матн қатори учун захира: шрифт баландлиги × қатор оралиғи.
-  const lineFactor = 1.5;
   final ts = MediaQuery.textScalerOf(context);
-  double line(double size) => ts.scale(size) * lineFactor;
+
+  // Битта қаторнинг ҲАҚИҚИЙ баландлиги: стилнинг ўз шрифти ва қатор
+  // оралиғи (`height`) билан ўлчанади. Аввал `шрифт × 1.5` тахмини
+  // ишлатилар эди — у ҳақиқий 1.2–1.3 дан 15–25% катта бўлгани учун
+  // карточка остида катта бўш жой қоларди (қурилмада, 2026-10-15).
+  double line(TextStyle style) {
+    final tp = TextPainter(
+      text: TextSpan(text: 'Ag', style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: ts,
+      maxLines: 1,
+    )..layout();
+    return tp.height;
+  }
 
   // Квадрат расм (кенглик − ички чет) + ўша ички четнинг ўзи = кенглик,
   // устига карточка чегараси ва яхлитлаш учун кичик захира.
-  var h = width + 8;
-  h += 8 + line(AvaText.productName.fontSize ?? 13) * 2; // ном — 2 қатор
-  if (hasPrice) h += 4 + line(AvaText.price.fontSize ?? 14);
-  if (hasPriceNote) h += line(AvaText.caption.fontSize ?? 12);
-  if (hasFootnote) h += 2 + line(AvaText.caption.fontSize ?? 12);
-  return h;
+  var h = width + 4;
+  h += 8 + line(AvaText.productName) * titleLines;
+  if (hasPrice) h += 4 + line(AvaText.price);
+  if (hasPriceNote) h += line(AvaText.caption);
+  if (hasFootnote) h += 2 + line(AvaText.caption);
+  return h.ceilToDouble();
 }
 
+/// Номлар энг кўпи нечта қаторга чиқади (1 ёки 2) — карточка кенглигида,
+/// тизим шрифти билан ўлчанади. Ҳамма ном бир қаторга сиғса, лента
+/// баландлигига иккинчи қатор учун жой ЗАХИРА ҚИЛИНМАЙДИ.
+int avaTileTitleLines(
+  BuildContext context,
+  Iterable<String> titles, {
+  double width = 148,
+}) {
+  final ts = MediaQuery.textScalerOf(context);
+  final textWidth = width - 16; // карточканинг ички чети 8 + 8
+  for (final title in titles) {
+    final tp = TextPainter(
+      text: TextSpan(text: title, style: AvaText.productName),
+      textDirection: TextDirection.ltr,
+      textScaler: ts,
+      maxLines: 2,
+    )..layout(maxWidth: textWidth);
+    if (tp.computeLineMetrics().length > 1) return 2;
+  }
+  return 1;
+}
 /// Расмли ён томонга айланадиган карточка (6–8-бўлимлар: бозорлар).
 class AvaTileCard extends StatelessWidget {
   const AvaTileCard({

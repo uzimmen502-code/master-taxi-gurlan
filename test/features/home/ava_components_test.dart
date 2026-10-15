@@ -326,7 +326,9 @@ void main() {
                   children: const [
                     AvaTileCard(
                       title: 'Жуда узун маҳсулот номи — икки қаторга сиғади',
-                      price: 'дан 3 800 сўм',
+                      // Қисқа нарх: тест шрифти (Ahem) ҳарфларни кенг чизади ва узун
+                      // нархни иккинчи қаторга ўрайди — қурилмадаги Roboto да бундай эмас.
+                      price: '3 800',
                       priceNote: '1+ дона',
                       footnote: 'Sunlight',
                     ),
@@ -361,6 +363,65 @@ void main() {
         return const SizedBox.shrink();
       }), scale: 1.3);
       expect(big, greaterThan(small));
+    });
+
+    // 2026-10-15 (қурилма): лента баландлиги карточка мазмунидан катта эди —
+    // остида катта бўш жой. Энди ҳақиқий мазмун билан ЗИЧ бўлиши шарт.
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('лента баландлиги карточкадан 8 dp дан кўп катта эмас (×$scale)',
+          (tester) async {
+        late double listHeight;
+        late int lines;
+        await _pump(
+          tester,
+          Builder(
+            builder: (context) {
+              lines = avaTileTitleLines(context, const ['Ун', 'Чой']);
+              listHeight = avaTileListHeight(context, titleLines: lines);
+              return SizedBox(
+                height: 600,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: const [
+                    Align(
+                      alignment: Alignment.topLeft,
+                      child: AvaTileCard(
+                        title: 'Ун',
+                        price: '3 800',
+                        priceNote: '1+ дона',
+                        footnote: 'AVA',
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          scale: scale,
+        );
+        expect(lines, 1, reason: 'қисқа номлар — бир қатор');
+        final card = tester.getSize(find.byType(AvaTileCard)).height;
+        expect(listHeight, greaterThanOrEqualTo(card),
+            reason: 'лента ($listHeight) карточкадан ($card) паст');
+        expect(listHeight - card, lessThanOrEqualTo(8),
+            reason: 'бўш жой: ${listHeight - card} dp');
+      });
+    }
+
+    testWidgets('узун ном 2 қаторга ўралади — avaTileTitleLines 2 қайтаради',
+        (tester) async {
+      late int lines;
+      await _pump(
+        tester,
+        Builder(builder: (context) {
+          lines = avaTileTitleLines(
+            context,
+            const ['Жуда узун маҳсулот номи — албатта икки қаторга чиқади'],
+          );
+          return const SizedBox.shrink();
+        }),
+      );
+      expect(lines, 2);
     });
   });
 }

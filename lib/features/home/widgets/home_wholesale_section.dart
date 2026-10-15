@@ -231,6 +231,23 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
       _platform.map(_ShelfEntry.platform).toList(growable: false),
       _items.map(_ShelfEntry.seller).toList(growable: false),
     ]);
+    // Лента баландлиги ҲАҚИҚИЙ мазмундан ҳисобланади: ҳамма ном бир қаторга
+    // сиғса иккинчи қатор учун, нарх изоҳи/пастки қатор йўқ бўлса улар учун
+    // жой захира қилинмайди (карточка остидаги бўш жой, 2026-10-15).
+    final titles = [
+      for (final e in entries) e.platform != null ? e.platform!.name : e.seller!.title,
+    ];
+    final hasNote = entries.any((e) => e.platform != null
+        ? platformShelfPrice(e.platform!).note.isNotEmpty
+        : formatTierNote(context, e.seller!).isNotEmpty);
+    final hasFoot = entries.any((e) {
+      if (e.platform != null) return true; // «AVA»
+      final p = e.seller!;
+      final text = p.isChina && formatDelivery(context, p).isNotEmpty
+          ? formatDelivery(context, p)
+          : p.sellerCompanyName;
+      return text.isNotEmpty;
+    });
     return AvaSection(
       // Хитой бўлимида ўз белгиси (аввал унда ҳам Улгуржи белгиси турарди).
       moduleId: WholesaleProduct.moduleIdFor(widget.market),
@@ -243,7 +260,12 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
       child: AvaProductShelf(
         // Қатъий 214 эмас — шрифт 130% бўлганда матн карточкадан тошиб
         // кетарди (`avaTileListHeight` изоҳига қаранг).
-        rowHeight: avaTileListHeight(context),
+        rowHeight: avaTileListHeight(
+          context,
+          titleLines: avaTileTitleLines(context, titles),
+          hasPriceNote: hasNote,
+          hasFootnote: hasFoot,
+        ),
         itemCount: entries.length,
         itemBuilder: (context, i) {
           final ava = entries[i].platform;

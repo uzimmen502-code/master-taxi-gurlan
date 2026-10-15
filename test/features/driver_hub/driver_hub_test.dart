@@ -47,8 +47,9 @@ void main() {
       expect(hubVerifKind(DriverRoles.none, _now), HubVerifKind.none);
     });
 
-    test('starter: 4 кун — оддий, 3 кун — огоҳлантириш (чегара)', () {
-      expect(hubVerifKind(_starter(const Duration(days: 4)), _now), HubVerifKind.starter);
+    test('starter: 4+ кун — ҳеч нарса кўрсатилмайди, 3 кун ва кам — огоҳлантириш (чегара)', () {
+      expect(hubVerifKind(_starter(const Duration(days: 4)), _now), HubVerifKind.none);
+      expect(hubVerifKind(_starter(const Duration(days: 123)), _now), HubVerifKind.none);
       expect(hubVerifKind(_starter(const Duration(days: 3)), _now), HubVerifKind.ending);
       expect(hubVerifKind(_starter(const Duration(hours: 1)), _now), HubVerifKind.ending);
     });
@@ -120,6 +121,12 @@ void main() {
       final carTitle = t.getRect(find.text('hub_car_title'));
       final carBtn = t.getRect(find.widgetWithText(TextButton, 'hub_car_add'));
       expect(carBtn.top, greaterThanOrEqualTo(carTitle.bottom));
+    });
+
+    testWidgets('бепул давр узоқ — «Текширув» карточкаси УМУМАН йўқ', (t) async {
+      await t.pumpWidget(_host(roles: _starter(const Duration(days: 123))));
+      await t.pumpAndSettle();
+      expect(find.text('hub_verif_title'), findsNothing);
     });
 
     testWidgets('автомобиль йўқ — «қўшиш» тугмаси', (t) async {

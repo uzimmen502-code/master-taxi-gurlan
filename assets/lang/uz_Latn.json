@@ -87,7 +87,6 @@
   "hub_action_go_work": "Ishga chiqish",
   "hub_action_open": "Panelni ochish",
   "hub_verif_title": "Tekshiruv",
-  "hub_verif_starter": "Bepul davr: {days} kun qoldi",
   "hub_verif_ending": "Bepul davr tugashiga {days} kun qoldi. Keyin kelishuv va admin tekshiruvi talab qilinadi.",
   "hub_verif_required": "Bepul davr tugadi. Mavjud ish davom etadi, yangi pullik reys ochish uchun tekshiruvdan o'tish kerak.",
   "hub_verif_submit": "Tekshiruvga yuborish",

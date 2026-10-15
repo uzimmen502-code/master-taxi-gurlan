@@ -7,9 +7,6 @@ enum HubVerifKind {
   /// Ҳайдовчи эмас — карточка кўрсатилмайди.
   none,
 
-  /// 4 ойлик бепул давр, муддат узоқ.
-  starter,
-
   /// Бепул давр тугашига ≤ [hubVerifEndingDays] кун.
   ending,
 
@@ -31,8 +28,10 @@ HubVerifKind hubVerifKind(DriverRoles r, DateTime now) {
   switch (r.taxiStatus) {
     case 'starter':
       final days = r.starterDaysLeft(now);
+      // Бепул давр узоқ бўлса ҳеч нарса кўрсатилмайди — «N кун қолди» ҳайдовчини
+      // қўрқитади (эга, 2026-10-15). Фақат охирги [hubVerifEndingDays] кунда.
       if (days == null) return HubVerifKind.none;
-      return days <= hubVerifEndingDays ? HubVerifKind.ending : HubVerifKind.starter;
+      return days <= hubVerifEndingDays ? HubVerifKind.ending : HubVerifKind.none;
     case 'verification_required':
       return r.agreementAccepted
           ? HubVerifKind.requiredPending

@@ -160,11 +160,6 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
     final c = context.ava;
     final days = _roles.starterDaysLeft(widget.clock());
     final (String text, Color tone, Color soft) = switch (kind) {
-      HubVerifKind.starter => (
-          context.tr('hub_verif_starter').replaceAll('{days}', '${days ?? 0}'),
-          c.ok,
-          c.okSoft,
-        ),
       HubVerifKind.ending => (
           context.tr('hub_verif_ending').replaceAll('{days}', '${days ?? 0}'),
           c.warn,

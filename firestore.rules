@@ -2744,16 +2744,40 @@ service cloud.firestore {
       return isAdmin() && isCheapProductAdData(resource.data);
     }
 
+    // `ads` ўқишдаги эгалик шохи: [phone] — эълондаги телефон майдони.
+    // Токендаги телефон '' бўлса (бўш `phone_number` claim) эгаси йўқ
+    // эълон учун `phoneDocIdsMatch('', '')` true берарди — шунинг учун
+    // камида 9 рақам. (Claim'сиз аноним токенда ифода хато → рад.)
+    function adReaderIsPhone(phone) {
+      let me = userDocIdFromPhoneToken();
+      return me.size() >= 9 && phoneDocIdsMatch(me, phoneDigits(phone));
+    }
+
     match /ads/{id} {
       // Jobs board: барча; cheap_product: active/owner; admin — барча BOZOR.
       // Create — фақат CF (`submitJobAd` / `submitMarketAd`).
-      allow read: if isAdmin()
+      //
+      // ЎҚИШ get/list га бўлинган (2026-10-08). Аввал битта `allow read`
+      // эди ва рўйхат сўровида `resource.data.get('type', '')` сўровда
+      // чекланмаган майдон учун '' берарди → `!isCheapProductAdData` true
+      // → ФИЛТРСИЗ сўров (ҳатто кирмаган) бозорнинг pending/рад этилган
+      // эълонларини эгасининг телефони билан қайтарарди. Шунинг учун
+      // `list` да фақат тўғридан-тўғри майдон (`resource.data.X`):
+      // сўров фильтри уни исботлай олмаса шох хато → false.
+      // `.get(field, default)` фақат `get` да (битта ҳужжат).
+      allow get: if isAdmin()
           || !isCheapProductAdData(resource.data)
           || resource.data.status == 'active'
-          || (isAuth()
-              && phoneDocIdsMatch(
-                   userDocIdFromPhoneToken(),
-                   phoneDigits(resource.data.get('ownerId', ''))));
+          || adReaderIsPhone(resource.data.get('ownerId', ''));
+      // Ҳар шох иловадаги сўровга мос (functions/test/ads_list_rules.test.js):
+      // тур фильтри (Иш топ лентаси) · `status == active` (лента, қидирув) ·
+      // `ownerId` (бозор «Менинг эълонларим», лимит) · `authorPhone`
+      // (Иш топ «Менинг эълонларим», кунлик лимит — тур фильтри йўқ).
+      allow list: if isAdmin()
+          || resource.data.type != 'cheap_product'
+          || resource.data.status == 'active'
+          || adReaderIsPhone(resource.data.ownerId)
+          || adReaderIsPhone(resource.data.authorPhone);
       allow create: if false;
       allow update: if adOwnerPatchOk()
           || adModerationPatchOk()

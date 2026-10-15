@@ -96,4 +96,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, WorkChoice.courier);
   });
-}
+  group('confirmBecomeDriver', () {
+    Future<bool?> run(WidgetTester tester, String tapKey) async {
+      bool? result;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () async =>
+                  result = await confirmBecomeDriver(context, WorkChoice.intercity),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('work_confirm_title'), findsOneWidget);
+      await tester.tap(find.text(tapKey));
+      await tester.pumpAndSettle();
+      return result;
+    }
+
+    testWidgets('«Бекор қилиш» — false (рўйхатдан ўтказилмайди)', (tester) async {
+      expect(await run(tester, 'cancel'), isFalse);
+    });
+
+    testWidgets('«Тасдиқлаш» — true', (tester) async {
+      expect(await run(tester, 'confirm'), isTrue);
+    });
+  });}

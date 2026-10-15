@@ -113,3 +113,30 @@ Future<WorkChoice?> showWorkRolesSheet(
     },
   );
 }
+
+/// Янги ҳайдовчи сифатида рўйхатдан ўтишдан олдин тасдиқ. Тур танланиши
+/// ЎЗИ рўйхатдан ўтказмайди: капабилити (`starter`) ва ариза шундан кейин
+/// юборилади — «Бекор қилиш» ҳеч нарса ёзмайди (эга, 2026-10-15: «＋» орқали
+/// кириб ҳайдовчи бўлишни бекор қилиб бўлмади).
+Future<bool> confirmBecomeDriver(BuildContext context, WorkChoice choice) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(ctx.tr('work_confirm_title')),
+      content: Text(
+        ctx.tr('work_confirm_body').replaceAll('{type}', ctx.tr('role_type_${choice.name}')),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(ctx.tr('cancel')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(ctx.tr('confirm')),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}

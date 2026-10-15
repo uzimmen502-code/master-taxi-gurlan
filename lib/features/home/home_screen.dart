@@ -694,6 +694,10 @@ class _HomeViewState extends State<_HomeView> {
       choices: choices,
     );
     if (picked == null || !mounted) return;
+    // Ҳали ҳайдовчи бўлмаган тур — аввал тасдиқ (бекор қилиш ҳеч нарса ёзмайди).
+    if (picked != WorkChoice.courier && !_driverRoles.types.contains(picked.name)) {
+      if (!await confirmBecomeDriver(context, picked) || !mounted) return;
+    }
     switch (picked) {
       case WorkChoice.intercity:
         await IntercityDriverOnboarding.run(context);

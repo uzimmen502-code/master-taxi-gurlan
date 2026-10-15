@@ -75,6 +75,8 @@
   "work_state_pending": "Ariza ko'rib chiqilmoqda",
   "work_state_suspended": "To'xtatilgan",
   "work_type_courier": "Kuryer",
+  "work_confirm_title": "Haydovchi bo'lish",
+  "work_confirm_body": "Siz {type} haydovchisi sifatida ro'yxatdan o'tasiz. Keyin profildan chiqish mumkin.",
   "book": "BRON",
   "book_btn": "BRON",
   "booked": "✅ O'rin Bron Qilindi!",

@@ -75,6 +75,8 @@
   "work_state_pending": "Ариза кўриб чиқилмоқда",
   "work_state_suspended": "Тўхтатилган",
   "work_type_courier": "Курьер",
+  "work_confirm_title": "Ҳайдовчи бўлиш",
+  "work_confirm_body": "Сиз {type} ҳайдовчиси сифатида рўйхатдан ўтасиз. Кейин профилдан чиқиш мумкин.",
   "book": "БРОН",
   "book_btn": "БРОН",
   "booked": "✅ Ўрин Брон Қилинди!",

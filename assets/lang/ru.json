@@ -75,6 +75,8 @@
   "work_state_pending": "Заявка на рассмотрении",
   "work_state_suspended": "Приостановлено",
   "work_type_courier": "Курьер",
+  "work_confirm_title": "Стать водителем",
+  "work_confirm_body": "Вы зарегистрируетесь как водитель: {type}. Позже можно выйти из профиля.",
   "book": "БРОНЬ",
   "book_btn": "БРОНЬ",
   "booked": "✅ Место забронировано!",

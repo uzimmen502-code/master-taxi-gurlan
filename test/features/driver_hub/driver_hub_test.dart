@@ -72,8 +72,8 @@ void main() {
       expect(hubVerifKind(b, _now), HubVerifKind.requiredPending);
     });
 
-    test('verified ва suspended (types бўш бўлса ҳам)', () {
-      expect(hubVerifKind(const DriverRoles(taxiStatus: 'verified'), _now), HubVerifKind.verified);
+    test('verified — кўрсатилмайди; suspended (types бўш бўлса ҳам) — кўринади', () {
+      expect(hubVerifKind(const DriverRoles(taxiStatus: 'verified'), _now), HubVerifKind.none);
       expect(hubVerifKind(const DriverRoles(taxiStatus: 'suspended'), _now), HubVerifKind.suspended);
     });
   });
@@ -131,13 +131,9 @@ void main() {
       expect(find.text('hub_verif_title'), findsNothing);
     });
 
-    testWidgets('одатий ҳолат: «Текширув» матни ва тугмаси кўздан яширин (эга қарори)', (t) async {
-      expect(hubShowVerification, isFalse);
-      for (final roles in [
-        _starter(const Duration(days: 2)),
-        const DriverRoles(types: ['intercity'], taxiStatus: 'verification_required'),
-        const DriverRoles(taxiStatus: 'suspended'),
-      ]) {
+    testWidgets('одатий созлама: фақат 3 ҳолатда «Текширув» чиқади, бошқасида яширин (эга қарори)', (t) async {
+      expect(hubShowVerification, isTrue);
+      Future<void> pumpDefault(DriverRoles roles) async {
         await t.pumpWidget(MaterialApp(
           theme: AppTheme.light,
           home: DriverHubScreen(
@@ -153,6 +149,25 @@ void main() {
           ),
         ));
         await t.pumpAndSettle();
+      }
+
+      // Кўринади: тугашига ≤ 3 кун, текширув талаб қилинган, тўхтатилган.
+      await pumpDefault(_starter(const Duration(days: 2)));
+      expect(find.text('hub_verif_title'), findsOneWidget);
+      expect(find.text('hub_verif_ending'), findsOneWidget);
+      await pumpDefault(const DriverRoles(types: ['intercity'], taxiStatus: 'verification_required'));
+      expect(find.text('hub_verif_title'), findsOneWidget);
+      expect(find.text('hub_verif_submit'), findsOneWidget);
+      await pumpDefault(const DriverRoles(taxiStatus: 'suspended'));
+      expect(find.text('hub_verif_title'), findsOneWidget);
+
+      // Яширин: бепул давр узоқ, тасдиқланган, ҳайдовчи эмас.
+      for (final roles in [
+        _starter(const Duration(days: 123)),
+        const DriverRoles(types: ['intercity'], taxiStatus: 'verified'),
+        DriverRoles.none,
+      ]) {
+        await pumpDefault(roles);
         expect(find.text('hub_verif_title'), findsNothing);
         expect(find.text('hub_verif_submit'), findsNothing);
       }

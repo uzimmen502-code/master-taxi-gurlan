@@ -180,7 +180,6 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
           c.warn,
           c.warnSoft,
         ),
-      HubVerifKind.verified => (context.tr('hub_verif_verified'), c.ok, c.okSoft),
       HubVerifKind.suspended => (
           context.tr('hub_verif_suspended'),
           c.danger,

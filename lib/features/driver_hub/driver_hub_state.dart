@@ -16,15 +16,15 @@ enum HubVerifKind {
   /// Келишув қабул қилинган, админ текшируви кутилмоқда.
   requiredPending,
 
-  verified,
   suspended,
 }
 
-/// «Текширув» карточкаси иш панелида кўринадими. Эга қарори (2026-10-15):
-/// матн ва майдонча кўздан ЯШИРИЛСИН — код сақланади (қайта ёқиш учун битта
-/// ўзгартириш). Яширинганда ҳам сервер келишувни пуллик рейс олдидан ўзи
-/// тақдим қилади (`ensureTaxiCapability`), шунинг учун йўл бекилмайди.
-const bool hubShowVerification = false;
+/// «Текширув» карточкаси иш панелида кўринадими (умумий калит). Эга қарори
+/// (2026-10-15): бепул давр узоқ бўлса — ЯШИРИН ([hubVerifKind] `none`);
+/// кўринади: тугашига ≤ 3 кун қолганда, текширув талаб қилинганда ва
+/// тўхтатилганда. Тасдиқланган ҳайдовчига ҳам кўрсатилмайди. Калитни `false`
+/// қилиш карточкани бутунлай ўчиради (код сақланади).
+const bool hubShowVerification = true;
 
 /// Огоҳлантириш чегараси. Сервердаги `STARTER_NOTICE_DAYS` (taxi_billing.js)
 /// билан бир хил: бу ерда фақат рангни/матнни танлайди, ҳуқуқ бермайди.
@@ -43,7 +43,8 @@ HubVerifKind hubVerifKind(DriverRoles r, DateTime now) {
           ? HubVerifKind.requiredPending
           : HubVerifKind.requiredToSubmit;
     case 'verified':
-      return HubVerifKind.verified;
+      // Тасдиқланган — кўрсатиладиган нарса йўқ (эга: фақат 3 ҳолатда чиқсин).
+      return HubVerifKind.none;
     case 'suspended':
       // `types` бу ҳолатда бўш (ишламайдиган статус) — `taxiStatus` ўзи етарли.
       return HubVerifKind.suspended;

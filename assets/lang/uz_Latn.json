@@ -91,7 +91,6 @@
   "hub_verif_required": "Bepul davr tugadi. Mavjud ish davom etadi, yangi pullik reys ochish uchun tekshiruvdan o'tish kerak.",
   "hub_verif_submit": "Tekshiruvga yuborish",
   "hub_verif_pending": "So'rov yuborilgan. Admin tekshiruvi kutilmoqda.",
-  "hub_verif_verified": "Tekshiruvdan o'tgan",
   "hub_verif_suspended": "To'xtatilgan. Adminga murojaat qiling.",
   "hub_verif_submit_failed": "Yuborib bo'lmadi. Qayta urinib ko'ring.",
   "hub_wallet": "Hamyon va AVA haqi",

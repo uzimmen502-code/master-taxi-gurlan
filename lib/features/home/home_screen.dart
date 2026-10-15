@@ -177,6 +177,7 @@ class _HomeViewState extends State<_HomeView> {
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
       unawaited(_checkLocationSuggestion());
+      unawaited(_refreshDriverRoles());
     });
   }
 
@@ -186,6 +187,7 @@ class _HomeViewState extends State<_HomeView> {
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
     _scheduleDeferredConfigBootstrap();
     unawaited(_checkLocationSuggestion());
+    unawaited(_refreshDriverRoles());
   }
 
   /// Pop анимациясидан кейин silent bootstrap; 45 с ичида такрорланмайди.

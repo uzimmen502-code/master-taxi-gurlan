@@ -242,7 +242,24 @@ class DriverRepository {
         return DriverRoles(
           courierOnline: courierOnline,
           courierStatus: courierStatus,
+          taxiStatus: status,
         );
+      }
+      final dueRaw = (((cap['window'] as Map?)?['taxi'] as Map?)?['verificationDueAt']);
+      final starterEndsAt = dueRaw is Timestamp ? dueRaw.toDate() : null;
+      var agreementAccepted = false;
+      if (status == 'verification_required') {
+        final accountId =
+            ((cap['identity'] as Map?)?['accountId'] ?? '').toString();
+        if (accountId.isNotEmpty) {
+          // Ишора ўқилмаса индикатор йиқилмасин — `false` қолади.
+          try {
+            final ag =
+                await _db.collection('service_agreements').doc(accountId).get();
+            final t = ag.data()?['taxi'];
+            agreementAccepted = t is Map && t['acceptedAt'] != null;
+          } catch (_) {}
+        }
       }
       final raw = ((cap['taxi'] as Map?)?['taxiTypes'] as List?)
               ?.map((e) => e.toString() == 'alone' ? 'local' : e.toString())
@@ -254,6 +271,9 @@ class DriverRepository {
         return DriverRoles(
           courierOnline: courierOnline,
           courierStatus: courierStatus,
+          taxiStatus: status,
+          starterEndsAt: starterEndsAt,
+          agreementAccepted: agreementAccepted,
         );
       }
 
@@ -280,6 +300,9 @@ class DriverRepository {
         active: active,
         courierOnline: courierOnline,
         courierStatus: courierStatus,
+        taxiStatus: status,
+        starterEndsAt: starterEndsAt,
+        agreementAccepted: agreementAccepted,
       );
     } catch (_) {
       return DriverRoles(courierOnline: courierOnline);

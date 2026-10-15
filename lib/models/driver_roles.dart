@@ -8,9 +8,34 @@ class DriverRoles {
     this.active = const {},
     this.courierOnline = false,
     this.courierStatus = '',
+    this.taxiStatus = '',
+    this.starterEndsAt,
+    this.agreementAccepted = false,
   });
 
+  /// Такси келишуви қабул қилинганми (`service_agreements/{accountId}.taxi`).
+  /// Фақат кўрсатиш учун ишора: «текширувга юбориш»да ҳал қилувчи — сервер
+  /// (`requestCapability.agreementRequired`), версияни ҳам у айтади.
+  final bool agreementAccepted;
+
   static const none = DriverRoles();
+
+  /// `provider_capabilities.status.taxi` (`starter`, `verification_required`,
+  /// `verified`, `suspended`…); бўш — ўқилмаган ёки ҳайдовчи эмас.
+  final String taxiStatus;
+
+  /// `window.taxi.verificationDueAt` — 4 ойлик starter тугайдиган сана
+  /// (сервер ёзган; фақат `starter` ҳолатида маъноли).
+  final DateTime? starterEndsAt;
+
+  /// Starter тугашига қолган тўлиқ кунлар (`now` дан), мусбат бўлса.
+  int? starterDaysLeft(DateTime now) {
+    final end = starterEndsAt;
+    if (taxiStatus != 'starter' || end == null) return null;
+    final left = end.difference(now);
+    if (left.isNegative) return 0;
+    return (left.inHours / 24).ceil();
+  }
 
   /// Ишлайдиган ҳолатдаги (`starter`/`verification_required`/`verified`)
   /// тур декларациялари: `intercity`, `local`, `marshrut` — шу тартибда.

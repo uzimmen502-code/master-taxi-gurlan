@@ -56,6 +56,8 @@ import '../courier/screens/courier_screen.dart';
 import '../../repositories/courier_capability_repository.dart';
 import '../courier/widgets/courier_apply_flow.dart';
 import 'widgets/work_roles_sheet.dart';
+import '../driver_hub/screens/driver_hub_screen.dart';
+import '../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
@@ -679,8 +681,8 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
-  /// «＋» → «Ҳайдовчи / Курьер»: иш тури ва ҳар бирининг ҳолати; танланган
-  /// тур учун рўйхатдан ўтиш ёки панелни очиш оқими бошланади.
+  /// «＋» → «Ҳайдовчи / Курьер»: ягона «Иш панели» (автомобиль, турлар, текширув,
+  /// ҳамён). Амаллар мавжуд оқимларни чақиради — [_runWorkChoice] ва ҳ.к.
   Future<void> _openWork() async {
     final choices = <WorkChoice>[
       if (HomeModuleGate.canOpen('intercity')) WorkChoice.intercity,
@@ -688,14 +690,46 @@ class _HomeViewState extends State<_HomeView> {
       if (HomeModuleGate.canOpen('marshrut')) WorkChoice.marshrut,
       WorkChoice.courier,
     ];
-    final picked = await showWorkRolesSheet(
-      context,
-      roles: _driverRoles,
+    final uid = phoneDigits(context.read<HomeController>().phone);
+    final driverRepo = context.read<DriverRepository>();
+    await _push(DriverHubScreen(
       choices: choices,
-    );
-    if (picked == null || !mounted) return;
-    // Ҳали ҳайдовчи бўлмаган тур — аввал тасдиқ (бекор қилиш ҳеч нарса ёзмайди).
-    if (picked != WorkChoice.courier && !_driverRoles.types.contains(picked.name)) {
+      loadRoles: () => driverRepo.driverRoles(uid),
+      loadCar: () => UserRepository().getCarInfo(canonicalPhoneId(uid)),
+      onAction: _runWorkChoice,
+      onEditCar: () => _push(
+        const ProfileScreen(autoOpenCarEdit: true, returnAfterSave: true),
+      ),
+      onSubmitVerification: _submitTaxiVerification,
+      onOpenWallet: () => openWalletScreen(context),
+    ));
+    if (mounted) unawaited(_refreshDriverRoles());
+  }
+
+  /// «Текширувга юбориш»: сервер ҳал қилади (`requestCapability`) — келишув
+  /// керак бўлса варақ тақдим қилинади, қабул қилингач админ текшируви
+  /// кутилади. Янги ҳолат (`verified` ва ҳ.к.) фақат админ/тизим томонидан.
+  Future<HubSubmitResult> _submitTaxiVerification() async {
+    try {
+      final res = await context.read<DriverRepository>().requestTaxiCapability();
+      if ((res['accountId'] ?? '').toString().isEmpty) return HubSubmitResult.failed;
+      if (res['agreementRequired'] != true) return HubSubmitResult.alreadySent;
+      if (!mounted) return HubSubmitResult.cancelled;
+      final ok = await showTaxiAgreementSheet(
+        context,
+        version: (res['agreementVersion'] as int?) ?? 1,
+        primaryColor: AppColors.primary,
+      );
+      return ok ? HubSubmitResult.sent : HubSubmitResult.cancelled;
+    } catch (_) {
+      return HubSubmitResult.failed;
+    }
+  }
+
+  /// Иш панелидаги тур амали: ҳали ҳайдовчи бўлмаган тур — аввал тасдиқ
+  /// (бекор қилиш ҳеч нарса ёзмайди), кейин мавжуд оқим.
+  Future<void> _runWorkChoice(WorkChoice picked, DriverRoles roles) async {
+    if (picked != WorkChoice.courier && !roles.types.contains(picked.name)) {
       if (!await confirmBecomeDriver(context, picked) || !mounted) return;
     }
     switch (picked) {

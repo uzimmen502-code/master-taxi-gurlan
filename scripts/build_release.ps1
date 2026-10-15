@@ -1,4 +1,4 @@
-# Master Taxi Gurlan — Release Build Script
+# Master Taxi Gurlan - Release Build Script
 # Run from: C:\projects\ava_gurlan
 
 param(
@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "C:\projects\ava_gurlan"
+$ProjectDir = Split-Path -Parent $PSScriptRoot
 $ApkSource  = "$ProjectDir\build\app\outputs\flutter-apk\app-release.apk"
 $ApkDest    = "$ProjectDir\web\downloads\master-taxi-gurlan.apk"
 
@@ -36,7 +36,7 @@ if (-not (Test-Path $ApkSource)) {
 $apkSize = (Get-Item $ApkSource).Length / 1MB
 Write-Host "APK size: $([math]::Round($apkSize, 1)) MB"
 if ($apkSize -lt 30) {
-  throw "APK too small ($apkSize MB) — possibly corrupted"
+  throw "APK too small ($apkSize MB) - possibly corrupted"
 }
 
 Write-Host "`n=== 5. Copy APK to downloads ===" -ForegroundColor Cyan

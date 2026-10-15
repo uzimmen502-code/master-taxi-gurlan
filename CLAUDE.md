@@ -216,19 +216,35 @@ Migration керак бўлса — аввал migration стратегияси.
 migration · mass update · experimental function · shadow feature ни
 эгасининг аниқ рухсатисиз ишга туширма.
 
-## 29. DEPLOY'НИ ЎЗБОШИМЧАЛИК БИЛАН ҚИЛМА
+## 29. ТОПШИРИҚ — DEPLOY'ГАЧА, ХАВФСИЗ ТАРЗДА
 
-Код тайёр бўлиши ва production'га deploy қилиш — икки хил ҳаракат.
-Deploy'дан олдин: tests · build · diff · security · migration · config ·
-rollback текширилсин. Эгаси production deploy'ни аниқ сўрамаса, автоматик
-production'га чиқарма.
+> Эгаси, 2026-10-15: аввалги «аниқ сўрамаса deploy қилма» қоидаси бекор.
+> Сабаб: D-REST-15 бир кун «код тайёр, deploy yo'q» ҳолатида қолиб кетди.
+
+Эгаси тасдиқлаган вазифа commit · push · production deploy'ни ҳам ўз ичига
+олади. Алоҳида рухсат сўрама, иккинчи марта сўратма — вазифани production'гача
+(веб/функция/rules) олиб бор ва жонлида текшир.
+
+Хавфсизлик шартлари бекор бўлмайди — deploy'дан олдин: tests · build · diff ·
+security · migration · config · rollback тайёр. Firestore rules ҳар доим
+алоҳида командада (functions билан бирга эмас). Hosting — жонли SHA устига,
+параллел сессиялар навбати билан. Functions — ном бўйича, пинланган worktree
+ва `--config <abs>\firebase.json` билан. Deploy'дан кейин жонлини исботла
+(release вақти, bundle hash, function version) ва ҳисоботда ёз.
+
+Тўхтаб сўраш фақат: data loss · outage · payment · security хавфи аниқ
+кўринса (50-банд), ёки 28-банддаги production тажрибаси/destructive ишлар
+бўлса. Deploy қилиб бўлмаса (classifier, навбат, APK керак) — ҳисоботда очиқ
+ёз: «production'да ҲАЛИ йўқ — сабаб: …».
 
 ## 30. GIT'ДА ХАВФСИЗ ИШЛА
 
 Иш бошлашдан олдин `git status`, branch, recent commits текшир.
-User'нинг uncommitted ишини ўчирма. Аниқ рухсатсиз қилма:
-`reset --hard` · `clean -fd` · force push · shared branch'да `rebase` ·
-branch deletion.
+User'нинг uncommitted ишини ўчирма. Ўз ишингни commit ва push қилиш
+рухсат талаб қилмайди (29-банд); фақат аниқ йўлларни stage қил
+(`git add -A` эмас — параллел сессиялар бир дарахтда ишлайди). Аниқ
+рухсатсиз қилма: `reset --hard` · `clean -fd` · force push · shared
+branch'да `rebase` · branch deletion.
 
 ## 31. КИЧИК ВА ТУШУНАРЛИ ЎЗГАРТИРИШ ҚИЛ
 

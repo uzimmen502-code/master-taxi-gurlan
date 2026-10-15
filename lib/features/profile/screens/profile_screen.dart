@@ -11,6 +11,7 @@ import '../../../core/brand_labels.dart';
 import '../../../core/app_share.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/driver_status_chip.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../l10n/app_localizations.dart';
@@ -258,6 +259,11 @@ class _ProfileViewState extends State<_ProfileView> {
       body: SingleChildScrollView(
         child: Column(children: [
           _header(c, loc),
+          if (canonicalUserId(c.phone).isNotEmpty)
+            DriverStatusChip(
+              key: ValueKey(canonicalUserId(c.phone)),
+              userId: canonicalUserId(c.phone),
+            ),
           if (!c.hasUsableAddress) _addressWarning(loc),
           _cards(c, loc),
           // ТАЛАБ ВА ТАКЛИФЛАР (эга қарори, 2026-10-03).

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../models/driver_roles.dart';
 
 /// Пастки менюнинг таблари.
 enum AvaNavTab { home, avagram, create, messages, cabinet }
@@ -240,22 +241,30 @@ class _CreateItem extends StatelessWidget {
 enum AvaCreateAction { video, ad, product, service, seller, driver }
 
 /// Танланган амални қайтаради; бекор қилинса `null`.
-Future<AvaCreateAction?> showAvaCreateSheet(BuildContext context) {
+///
+/// [driverRoles] — ҳайдовчи бўлса «Ҳайдовчи бўлиш» ўрнига «Ҳайдовчи панели»
+/// ва фаол турда яшил белги чиқади.
+Future<AvaCreateAction?> showAvaCreateSheet(
+  BuildContext context, {
+  DriverRoles driverRoles = DriverRoles.none,
+}) {
   return showModalBottomSheet<AvaCreateAction>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (ctx) => const _CreateSheet(),
+    builder: (ctx) => _CreateSheet(driverRoles: driverRoles),
   );
 }
 
 class _CreateSheet extends StatelessWidget {
-  const _CreateSheet();
+  const _CreateSheet({this.driverRoles = DriverRoles.none});
+
+  final DriverRoles driverRoles;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    const items = <(AvaCreateAction, IconData, String)>[
+    final items = <(AvaCreateAction, IconData, String)>[
       (AvaCreateAction.video, Icons.videocam_outlined, 'home_create_video'),
       (AvaCreateAction.ad, Icons.campaign_outlined, 'home_create_ad'),
       (
@@ -269,7 +278,11 @@ class _CreateSheet extends StatelessWidget {
         'home_create_service'
       ),
       (AvaCreateAction.seller, Icons.storefront_outlined, 'home_create_seller'),
-      (AvaCreateAction.driver, Icons.local_taxi_outlined, 'become_driver'),
+      (
+        AvaCreateAction.driver,
+        Icons.local_taxi_outlined,
+        driverRoles.isDriver ? 'driver_panel_open' : 'become_driver',
+      ),
     ];
 
     return SafeArea(
@@ -321,6 +334,18 @@ class _CreateSheet extends StatelessWidget {
                             style: AvaText.body.copyWith(color: c.ink),
                           ),
                         ),
+                        if (action == AvaCreateAction.driver &&
+                            driverRoles.hasActive) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade600,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         Icon(
                           Icons.chevron_right_rounded,
                           size: 20,

@@ -50,6 +50,8 @@ import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
+import '../../models/driver_roles.dart';
+import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
@@ -608,9 +610,20 @@ class _HomeViewState extends State<_HomeView> {
     if (mounted) _onHomeResurface();
   }
 
-  /// «＋» — видео / эълон / маҳсулот / хизмат / сотувчи.
+  /// «＋» менюси учун ҳайдовчи ҳолати (кэш): индикатор ва «Ҳайдовчи панели».
+  DriverRoles _driverRoles = DriverRoles.none;
+
+  Future<void> _refreshDriverRoles() async {
+    final uid = phoneDigits(context.read<HomeController>().phone);
+    if (uid.length < 9) return;
+    final roles = await context.read<DriverRepository>().driverRoles(uid);
+    if (mounted) setState(() => _driverRoles = roles);
+  }
+
+  /// «＋» — видео / эълон / маҳсулот / хизмат / сотувчи / ҳайдовчи.
   Future<void> _openCreateSheet() async {
-    final action = await showAvaCreateSheet(context);
+    unawaited(_refreshDriverRoles());
+    final action = await showAvaCreateSheet(context, driverRoles: _driverRoles);
     if (action == null || !mounted) return;
 
     final phone = canonicalPhoneId(context.read<HomeController>().phone);
@@ -685,6 +698,7 @@ class _HomeViewState extends State<_HomeView> {
       case 'marshrut':
         await _push(const MarshrutTaxiScreen(startDriverOnOpen: true));
     }
+    if (mounted) unawaited(_refreshDriverRoles());
   }
 
   /// Хизмат каталоги учун амаллар — каталог экранга боғланиб қолмасин.

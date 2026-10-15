@@ -5,6 +5,7 @@ import '../core/utils/formatters.dart';
 import '../features/demand_offer/data/demand_repository.dart'
     show kDemandCoreRegion;
 import '../models/driver_model.dart';
+import '../models/driver_roles.dart';
 import '../models/driver_stats.dart';
 import 'user_repository.dart';
 
@@ -222,6 +223,49 @@ class DriverRepository {
         (taxiType == 'alone' && types.contains('local')) ||
         (taxiType == 'local' && types.contains('alone'));
     return (approved: typeOk, status: status);
+  }
+
+  /// Ҳайдовчи индикатори: ишлайдиган ҳолатдаги турлар ва улардан ҳозир
+  /// фаоллари. Хато бўлса индикатор жим йўқолади (`none`), экран йиқилмайди.
+  Future<DriverRoles> driverRoles(String uid) async {
+    try {
+      final cap = await _taxiCapability(uid);
+      if (cap == null) return DriverRoles.none;
+      final status = ((cap['status'] as Map?)?['taxi'] ?? '').toString();
+      if (!const {'starter', 'verification_required', 'verified'}
+          .contains(status)) {
+        return DriverRoles.none;
+      }
+      final raw = ((cap['taxi'] as Map?)?['taxiTypes'] as List?)
+              ?.map((e) => e.toString() == 'alone' ? 'local' : e.toString())
+              .toSet() ??
+          const <String>{};
+      const order = ['intercity', 'local', 'marshrut'];
+      final types = order.where(raw.contains).toList(growable: false);
+      if (types.isEmpty) return DriverRoles.none;
+
+      final id = canonicalPhoneId(uid);
+      final active = <String>{};
+      if (types.contains('intercity')) {
+        final ic = await _db.collection('intercity_drivers').doc(id).get();
+        if (ic.data()?['isActive'] == true) active.add('intercity');
+      }
+      if (types.contains('local') || types.contains('marshrut')) {
+        final d = await _db.collection('drivers').doc(id).get();
+        final data = d.data() ?? const <String, dynamic>{};
+        if (data['isOnline'] == true) {
+          final t = (data['taxiType'] ?? '').toString();
+          if (t == 'marshrut' && types.contains('marshrut')) {
+            active.add('marshrut');
+          } else if ((t == 'local' || t == 'alone') && types.contains('local')) {
+            active.add('local');
+          }
+        }
+      }
+      return DriverRoles(types: types, active: active);
+    } catch (_) {
+      return DriverRoles.none;
+    }
   }
 
   /// `users/{uid}.accountId` → `provider_capabilities/{accountId}` (9/12 хонали).

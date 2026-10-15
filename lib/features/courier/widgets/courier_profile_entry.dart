@@ -15,13 +15,13 @@
 //
 // Ҳолат профил очилганда БИР МАРТА ўқилади (listener йўқ, 36-қоида).
 
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../repositories/courier_capability_repository.dart';
 import '../screens/courier_screen.dart';
+import 'courier_apply_flow.dart';
 
 /// Профилдаги роль тугмаси (`_rolePanelButton`) — кўриниш бир хил бўлсин.
 typedef ProfilePanelButtonBuilder = Widget Function({
@@ -88,59 +88,14 @@ class _CourierProfileEntryState extends State<CourierProfileEntry> {
 
   Future<void> _apply() async {
     if (_busy) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('courier_apply_button')),
-        content: Text(ctx.tr('courier_apply_body')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(ctx.tr('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(ctx.tr('courier_apply_confirm')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-
     setState(() => _busy = true);
-    try {
-      final status = await _repo.apply();
-      if (!mounted) return;
-      setState(() => _status = status.isEmpty ? _status : status);
-      _snack(context.tr(
-        CourierCapabilityRepository.panelStatuses.contains(status)
-            ? 'courier_apply_approved'
-            : 'courier_apply_sent',
-      ));
-    } on FirebaseFunctionsException catch (e) {
-      // 25-қоида: фойдаланувчига тушунарли матн, ички код — log'да.
-      debugPrint('courier_apply: ${e.code} ${e.message}');
-      if (!mounted) return;
-      _snack(
-        context.tr(e.code == 'failed-precondition'
-            ? 'courier_apply_blocked'
-            : 'courier_apply_failed'),
-        isError: true,
-      );
-      _load();
-    } catch (e) {
-      debugPrint('courier_apply: $e');
-      if (mounted) _snack(context.tr('courier_apply_failed'), isError: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red.shade700 : null,
-    ));
+    final r = await runCourierApplyFlow(context, repository: _repo);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (r.status != null && r.status!.isNotEmpty) _status = r.status;
+    });
+    if (r.failed) _load();
   }
 
   @override

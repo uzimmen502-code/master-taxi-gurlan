@@ -28,10 +28,10 @@ Future<AvaCreateAction?> _open(WidgetTester tester, {required String tapKey}) as
 }
 
 void main() {
-  testWidgets('«＋» менюсида «Ҳайдовчи бўлиш» бор ва driver қайтаради',
+  testWidgets('«＋» менюсида «Ҳайдовчи / Курьер» бор ва driver қайтаради',
       (tester) async {
-    final r = await _open(tester, tapKey: 'become_driver');
-    expect(r, AvaCreateAction.driver);
+    final r = await _open(tester, tapKey: 'work_entry_join');
+    expect(r, AvaCreateAction.work);
   });
 
   testWidgets('«＋» менюсида аввалги бешта амал сақланган', (tester) async {
@@ -56,7 +56,7 @@ void main() {
       'home_create_product',
       'home_create_service',
       'home_create_seller',
-      'become_driver',
+      'work_entry_join',
     ]) {
       expect(find.text(key), findsOneWidget, reason: key);
     }

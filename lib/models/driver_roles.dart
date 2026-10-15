@@ -7,6 +7,7 @@ class DriverRoles {
     this.types = const [],
     this.active = const {},
     this.courierOnline = false,
+    this.courierStatus = '',
   });
 
   static const none = DriverRoles();
@@ -20,6 +21,10 @@ class DriverRoles {
 
   /// Курьер ҳозир онлайн.
   final bool courierOnline;
+
+  /// `provider_capabilities.status.courier` (`not_registered`, `applied`,
+  /// `trial`…); бўш — ҳолат ўқилмаган.
+  final String courierStatus;
 
   bool get isDriver => types.isNotEmpty;
   bool get hasActive => active.isNotEmpty;

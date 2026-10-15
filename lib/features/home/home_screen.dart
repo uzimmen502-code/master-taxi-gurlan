@@ -52,6 +52,10 @@ import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
 import '../../models/driver_roles.dart';
 import 'widgets/active_roles_strip.dart';
+import '../courier/screens/courier_screen.dart';
+import '../../repositories/courier_capability_repository.dart';
+import '../courier/widgets/courier_apply_flow.dart';
+import 'widgets/work_roles_sheet.dart';
 import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
@@ -670,54 +674,70 @@ class _HomeViewState extends State<_HomeView> {
         await _push(
           WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
         );
-      case AvaCreateAction.driver:
-        await _openBecomeDriver();
+      case AvaCreateAction.work:
+        await _openWork();
     }
   }
 
-  /// «＋» → «Ҳайдовчи бўлиш»: такси тури танланади, кейин шу тур учун
-  /// рўйхатдан ўтиш ва ишга чиқиш оқими бошланади.
-  Future<void> _openBecomeDriver() async {
-    const all = <(String, String)>[
-      ('intercity', 'home_module_intercity'),
-      ('local_taxi', 'home_module_local'),
-      ('marshrut', 'home_module_marshrut'),
+  /// «＋» → «Ҳайдовчи / Курьер»: иш тури ва ҳар бирининг ҳолати; танланган
+  /// тур учун рўйхатдан ўтиш ёки панелни очиш оқими бошланади.
+  Future<void> _openWork() async {
+    final choices = <WorkChoice>[
+      if (HomeModuleGate.canOpen('intercity')) WorkChoice.intercity,
+      if (HomeModuleGate.canOpen('local_taxi')) WorkChoice.local,
+      if (HomeModuleGate.canOpen('marshrut')) WorkChoice.marshrut,
+      WorkChoice.courier,
     ];
-    final types = all.where((t) => HomeModuleGate.canOpen(t.$1)).toList();
-    if (types.isEmpty) {
-      _showTezKundaSnack();
-      return;
-    }
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final t in types)
-              ListTile(
-                leading: const Icon(Icons.local_taxi_outlined),
-                title: Text(ctx.tr(t.$2)),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(ctx).pop(t.$1),
-              ),
-          ],
-        ),
-      ),
+    final picked = await showWorkRolesSheet(
+      context,
+      roles: _driverRoles,
+      choices: choices,
     );
     if (picked == null || !mounted) return;
     switch (picked) {
-      case 'intercity':
+      case WorkChoice.intercity:
         await IntercityDriverOnboarding.run(context);
-      case 'local_taxi':
+      case WorkChoice.local:
         await _push(const LocalTaxiScreen(startDriverOnOpen: true));
-      case 'marshrut':
+      case WorkChoice.marshrut:
         await _push(const MarshrutTaxiScreen(startDriverOnOpen: true));
+      case WorkChoice.courier:
+        await _openCourierWork();
     }
     if (mounted) unawaited(_refreshDriverRoles());
   }
 
+  /// Курьер: панели бор — панел; ариза кўриб чиқилмоқда — хабар; акс ҳолда
+  /// профилдаги билан БИР ХИЛ ариза оқими ([runCourierApplyFlow]).
+  Future<void> _openCourierWork() async {
+    var status = _driverRoles.courierStatus;
+    if (status.isEmpty) {
+      final uid = phoneDigits(context.read<HomeController>().phone);
+      try {
+        status = await CourierCapabilityRepository().fetchStatus(uid);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.tr('courier_apply_failed'))),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+    }
+    if (CourierCapabilityRepository.panelStatuses.contains(status) ||
+        CourierCapabilityRepository.finishOnlyStatuses.contains(status)) {
+      await _push(const CourierScreen());
+      return;
+    }
+    if (status == CourierCapabilityRepository.applied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('courier_apply_pending'))),
+      );
+      return;
+    }
+    await runCourierApplyFlow(context);
+  }
   /// Хизмат каталоги учун амаллар — каталог экранга боғланиб қолмасин.
   HomeServiceActions get _serviceActions => HomeServiceActions(
         push: _push,

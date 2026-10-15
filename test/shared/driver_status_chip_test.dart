@@ -83,7 +83,7 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('driver_panel_open'), findsOneWidget);
-    expect(find.text('become_driver'), findsNothing);
+    expect(find.text('work_entry_open'), findsOneWidget);
+    expect(find.text('work_entry_join'), findsNothing);
   });
 }

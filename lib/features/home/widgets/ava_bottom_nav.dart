@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/driver_roles.dart';
+import '../../../repositories/courier_capability_repository.dart';
 
 /// Пастки менюнинг таблари.
 enum AvaNavTab { home, avagram, create, messages, cabinet }
@@ -238,7 +239,7 @@ class _CreateItem extends StatelessWidget {
 }
 
 /// «＋» босилганда пастдан чиқадиган меню.
-enum AvaCreateAction { video, ad, product, service, seller, driver }
+enum AvaCreateAction { video, ad, product, service, seller, work }
 
 /// Танланган амални қайтаради; бекор қилинса `null`.
 ///
@@ -261,6 +262,12 @@ class _CreateSheet extends StatelessWidget {
 
   final DriverRoles driverRoles;
 
+  /// Ҳайдовчи ёки курьер сифатида ишлайдиган (панели бор) фойдаланувчи.
+  bool get _hasWork =>
+      driverRoles.isDriver ||
+      driverRoles.courierOnline ||
+      CourierCapabilityRepository.panelStatuses.contains(driverRoles.courierStatus);
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
@@ -279,9 +286,9 @@ class _CreateSheet extends StatelessWidget {
       ),
       (AvaCreateAction.seller, Icons.storefront_outlined, 'home_create_seller'),
       (
-        AvaCreateAction.driver,
+        AvaCreateAction.work,
         Icons.local_taxi_outlined,
-        driverRoles.isDriver ? 'driver_panel_open' : 'become_driver',
+        _hasWork ? 'work_entry_open' : 'work_entry_join',
       ),
     ];
 
@@ -334,8 +341,8 @@ class _CreateSheet extends StatelessWidget {
                             style: AvaText.body.copyWith(color: c.ink),
                           ),
                         ),
-                        if (action == AvaCreateAction.driver &&
-                            driverRoles.hasActive) ...[
+                        if (action == AvaCreateAction.work &&
+                            driverRoles.hasAnyActiveRole) ...[
                           Container(
                             width: 8,
                             height: 8,

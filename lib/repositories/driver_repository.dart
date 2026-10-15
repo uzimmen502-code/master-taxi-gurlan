@@ -234,10 +234,15 @@ class DriverRepository {
     try {
       final cap = await _taxiCapability(uid);
       if (cap == null) return DriverRoles(courierOnline: courierOnline);
+      final courierStatus =
+          ((cap['status'] as Map?)?['courier'] ?? '').toString();
       final status = ((cap['status'] as Map?)?['taxi'] ?? '').toString();
       if (!const {'starter', 'verification_required', 'verified'}
           .contains(status)) {
-        return DriverRoles(courierOnline: courierOnline);
+        return DriverRoles(
+          courierOnline: courierOnline,
+          courierStatus: courierStatus,
+        );
       }
       final raw = ((cap['taxi'] as Map?)?['taxiTypes'] as List?)
               ?.map((e) => e.toString() == 'alone' ? 'local' : e.toString())
@@ -245,7 +250,12 @@ class DriverRepository {
           const <String>{};
       const order = ['intercity', 'local', 'marshrut'];
       final types = order.where(raw.contains).toList(growable: false);
-      if (types.isEmpty) return DriverRoles(courierOnline: courierOnline);
+      if (types.isEmpty) {
+        return DriverRoles(
+          courierOnline: courierOnline,
+          courierStatus: courierStatus,
+        );
+      }
 
       final id = canonicalPhoneId(uid);
       final active = <String>{};
@@ -269,6 +279,7 @@ class DriverRepository {
         types: types,
         active: active,
         courierOnline: courierOnline,
+        courierStatus: courierStatus,
       );
     } catch (_) {
       return DriverRoles(courierOnline: courierOnline);

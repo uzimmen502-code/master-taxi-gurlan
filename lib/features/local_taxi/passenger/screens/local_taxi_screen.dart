@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../shared/widgets/become_driver_button.dart';
 import '../../../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/map_picker_result.dart';
@@ -27,7 +26,10 @@ import 'local_taxi_active_trip_screen.dart';
 import 'searching_screen.dart';
 
 class LocalTaxiScreen extends StatelessWidget {
-  const LocalTaxiScreen({super.key});
+  const LocalTaxiScreen({super.key, this.startDriverOnOpen = false});
+
+  /// «＋» менюсидан «Ҳайдовчи бўлиш»: экран очилиши билан ҳайдовчи оқими бошланади.
+  final bool startDriverOnOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -39,13 +41,15 @@ class LocalTaxiScreen extends StatelessWidget {
         c.init();
         return c;
       },
-      child: const _LocalTaxiView(),
+      child: _LocalTaxiView(startDriverOnOpen: startDriverOnOpen),
     );
   }
 }
 
 class _LocalTaxiView extends StatefulWidget {
-  const _LocalTaxiView();
+  const _LocalTaxiView({required this.startDriverOnOpen});
+
+  final bool startDriverOnOpen;
 
   @override
   State<_LocalTaxiView> createState() => _LocalTaxiViewState();
@@ -80,6 +84,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onGpsTap();
       _tryResumeActiveTrip();
+      if (widget.startDriverOnOpen) _onDriverTap();
     });
   }
 
@@ -639,13 +644,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          BecomeDriverButton(
-            onTap: _isSubmitting ? null : _onDriverTap,
-            loading: _isSubmitting,
-            color: AppColors.primaryText,
-          ),
-        ],
       ),
       body: Column(
         children: [

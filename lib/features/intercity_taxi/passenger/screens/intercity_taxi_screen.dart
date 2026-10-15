@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
@@ -10,19 +9,11 @@ import '../../../../core/l10n/locale_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
-import '../../../../shared/widgets/become_driver_button.dart';
-import '../../../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../../../models/intercity_ride.dart';
-import '../../../../repositories/driver_repository.dart';
-import '../../../../repositories/user_repository.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../../repositories/intercity_rides_repository.dart';
-import '../../../../shared/widgets/driver_car_info_dialog.dart';
 import '../../../../utils/intercity_places.dart';
 import '../../../../utils/locale_utils.dart';
-import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
-import '../../../../shared/widgets/driver_route_application_dialog.dart';
-import '../../../../shared/widgets/driver_application_feedback.dart';
 import '../controllers/intercity_taxi_controller.dart';
 import '../controllers/me_and_passengers_controller.dart';
 import '../intercity_colors.dart';
@@ -32,8 +23,6 @@ import '../widgets/intercity_ride_card.dart';
 import '../widgets/intercity_pickup_sheet.dart';
 import '../widgets/intercity_settlement_watcher.dart';
 import '../widgets/me_and_passengers_panel.dart';
-import '../../driver/intercity_driver_resume.dart';
-import '../../driver/screens/intercity_driver_panel_screen.dart';
 
 class IntercityTaxiScreen extends StatelessWidget {
   final String? autoFrom;
@@ -98,7 +87,6 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
   IntercityTaxiController? _controllerRef;
   MeAndPassengersController? _panelRef;
   bool _pickupPromptHandled = false;
-  bool _isSubmitting = false;
 
   Timer? _debounce;
   bool _showFromSug = false;
@@ -503,163 +491,6 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     super.dispose();
   }
 
-  Future<void> _onIntercityDriverTap() async {
-    if (_isSubmitting) return;
-    setState(() => _isSubmitting = true);
-    HapticFeedback.mediumImpact();
-    try {
-      await _runIntercityDriverTap();
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
-    }
-  }
-
-  Future<void> _runIntercityDriverTap() async {
-    final prefs = await SharedPreferences.getInstance();
-    final phone = prefs.getString('user_phone') ?? '';
-    final uid = phoneDigits(phone);
-    if (!mounted) return;
-
-    if (uid.length < 9) {
-      _showSnack(
-        context.tr('fill_phone_in_profile'),
-        IntercityColors.warning,
-      );
-      return;
-    }
-
-    if (!await ensureCarInfoViaProfile(context)) return;
-    if (!mounted) return;
-
-    final driverRepo = context.read<DriverRepository>();
-    final access = await driverRepo.taxiAccess(
-      uid: uid,
-      taxiType: 'intercity',
-    );
-    final approved = access.approved;
-    if (!mounted) return;
-
-    if (approved) {
-      // D-TAXI-24.1: starter tugagan (`verification_required`) — kelishuvni
-      // tizim o'zi taqdim qiladi; rad etilsa ham mavjud ish davom etadi
-      // (D-TAXI-5), yangi pullik reys oldidan server yana so'raydi.
-      if (access.status == 'verification_required') {
-        await ensureTaxiCapability(
-          context,
-          requestCapability: driverRepo.requestTaxiCapability,
-          primaryColor: IntercityColors.primary,
-        );
-        if (!mounted) return;
-      }
-      if (await IntercityDriverResume.openPanelIfActive(context, driverId: uid)) {
-        return;
-      }
-      if (!mounted) return;
-      final started = await showDriverCarInfoDialog(
-        context: context,
-        taxiType: 'intercity',
-        primaryColor: IntercityColors.primary,
-      );
-      if (!mounted || !started) return;
-      final args = await IntercityDriverResume.loadPanelArgs(uid);
-      if (args == null || !mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => IntercityDriverPanelScreen(
-            driverId: args.driverId,
-            driverName: args.driverName,
-            driverPhone: args.driverPhone,
-            driverCar: args.driverCar,
-            driverPlate: args.driverPlate,
-          ),
-        ),
-      );
-      return;
-    }
-
-    // D-TAXI-1 / D-TAXI-24.1: darhol `starter` — kelishuvsiz, admin
-    // tasdig'isiz. Kelishuv 4 oy o'tib tizim tomonidan taqdim qilinadi.
-    final capOk = await ensureTaxiCapability(
-      context,
-      requestCapability: driverRepo.requestTaxiCapability,
-      primaryColor: IntercityColors.primary,
-    );
-    if (!capOk || !mounted) return;
-
-    final result = await showDriverRouteApplicationDialog(
-      context,
-      taxiType: 'intercity',
-    );
-    if (result == null || !mounted) return;
-
-    final carUid = canonicalPhoneId(uid);
-    final carFromProfile = await UserRepository().getCarInfo(carUid);
-    if (carFromProfile == null || !mounted) return;
-    final carModel = carFromProfile['carModel'] ?? '';
-    final carColor = carFromProfile['carColor'] ?? '';
-    final carPlate = carFromProfile['carPlate'] ?? '';
-    await prefs.setString('car_model', carModel);
-    await prefs.setString('car_color', carColor);
-    await prefs.setString('car_plate', carPlate);
-    final carSeats = int.tryParse(carFromProfile['carSeats'] ?? '') ?? 0;
-    if (carSeats > 0) await prefs.setInt('car_seats', carSeats);
-
-    final name = prefs.getString('user_name') ?? '';
-    final car =
-        '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
-
-    try {
-      final submitResult = await driverRepo.submitDriverApplication(
-        uid: uid,
-        name: name,
-        phone: phone,
-        car: car,
-        plate: carPlate,
-        taxiType: 'intercity',
-        routeFrom: result.from,
-        routeTo: result.to,
-        routeStops: result.midStops,
-      );
-      if (!mounted) return;
-      if (submitResult.autoApproved) {
-        await prefs.setString('user_role', 'driver');
-        if (!mounted) return;
-        _showSnack(
-          context.tr('intercity_driver_mode_activated'),
-          IntercityColors.primary,
-        );
-      } else {
-        await showDriverApplicationPendingFeedback(
-          context,
-          result: submitResult,
-          resentMessageKey: 'intercity_driver_request_sent',
-          snackColor: IntercityColors.warning,
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      _showSnack(
-        context.tr('driver_mode_error').replaceAll('{error}', '$e'),
-        IntercityColors.danger,
-      );
-    }
-  }
-
-  void _showSnack(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: color,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      content: Text(
-        message,
-        style: color == IntercityColors.primary
-            ? const TextStyle(color: IntercityColors.onPrimary)
-            : null,
-      ),
-    ));
-  }
-
   void _callDriver(String phone) {
     callPhone(phone);
   }
@@ -699,13 +530,6 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
               ),
               title: Text(context.tr('intercity_taxi'),
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              actions: [
-                BecomeDriverButton(
-                  onTap: _onIntercityDriverTap,
-                  loading: _isSubmitting,
-                  color: AppColors.primaryText,
-                ),
-              ],
             ),
       body: Stack(
         children: [

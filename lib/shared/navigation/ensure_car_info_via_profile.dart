@@ -8,7 +8,10 @@ import '../../repositories/user_repository.dart';
 
 /// Avtomobil ma'lumotlari to'liq emas bo'lsa profilga yo'naltiradi.
 /// Saqlansa `true`. Bekor qilinsa bosh sahifaga qaytadi va `false`.
-Future<bool> ensureCarInfoViaProfile(BuildContext context) async {
+Future<bool> ensureCarInfoViaProfile(
+  BuildContext context, {
+  bool goHomeOnCancel = true,
+}) async {
   final prefs = await SharedPreferences.getInstance();
   final phone = prefs.getString('user_phone') ?? '';
   final uid = canonicalPhoneId(phoneDigits(phone));
@@ -30,7 +33,7 @@ Future<bool> ensureCarInfoViaProfile(BuildContext context) async {
 
   if (saved == true) return true;
 
-  if (context.mounted) {
+  if (goHomeOnCancel && context.mounted) {
     Navigator.of(context).pushAndRemoveUntil(appHomeRoute(), (_) => false);
   }
   return false;

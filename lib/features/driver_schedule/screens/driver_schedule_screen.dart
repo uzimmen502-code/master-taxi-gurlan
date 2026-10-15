@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
+import '../../../shared/widgets/intercity_billing_flow.dart';
 import '../../../shared/widgets/mfy_field.dart';
 import '../../../shared/widgets/seat_selector.dart';
 import '../../../core/theme/app_theme.dart';
@@ -52,6 +53,31 @@ class DriverScheduleScreen extends StatelessWidget {
           initialRouteReversed: initialRouteReversed,
           initialSeats: initialSeats,
         );
+        if (taxiType == 'intercity') {
+          // Шаҳарлараро рейс тўловсиз эълон қилинмайди (D-TAXI-13).
+          final flow = IntercityBillingFlow();
+          c.intercityPublisher = ({
+            required farePerSeat,
+            required from,
+            required to,
+            required scheduleDate,
+            required startTime,
+            required seats,
+            required departureAt,
+          }) =>
+              flow.publish(
+                ctx,
+                primaryColor: AppColors.primary,
+                farePerSeat: farePerSeat,
+                from: from,
+                to: to,
+                scheduleDate: scheduleDate,
+                startTime: startTime,
+                seats: seats,
+                departureAt: departureAt,
+              );
+          c.intercityRefund = flow.refundQuietly;
+        }
         c.init();
         return c;
       },

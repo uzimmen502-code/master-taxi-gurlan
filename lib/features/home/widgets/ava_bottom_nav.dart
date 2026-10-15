@@ -237,7 +237,7 @@ class _CreateItem extends StatelessWidget {
 }
 
 /// «＋» босилганда пастдан чиқадиган меню.
-enum AvaCreateAction { video, ad, product, service, seller }
+enum AvaCreateAction { video, ad, product, service, seller, driver }
 
 /// Танланган амални қайтаради; бекор қилинса `null`.
 Future<AvaCreateAction?> showAvaCreateSheet(BuildContext context) {
@@ -269,6 +269,7 @@ class _CreateSheet extends StatelessWidget {
         'home_create_service'
       ),
       (AvaCreateAction.seller, Icons.storefront_outlined, 'home_create_seller'),
+      (AvaCreateAction.driver, Icons.local_taxi_outlined, 'become_driver'),
     ];
 
     return SafeArea(

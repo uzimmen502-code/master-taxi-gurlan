@@ -9,6 +9,16 @@ import '../../../models/marshrut_driver_profile.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 
+typedef IntercityPublisher = Future<String?> Function({
+  required int farePerSeat,
+  required String from,
+  required String to,
+  required String scheduleDate,
+  required String startTime,
+  required int seats,
+  required DateTime departureAt,
+});
+
 /// Haydovchining bugungi reys (schedule)'ни рўйxатдан ўтказадиган universal
 /// controller — `marshrut`, `alone`, `intercity` учун ишлайди.
 ///
@@ -59,6 +69,13 @@ class DriverScheduleController extends ChangeNotifier {
 
   final SchedulesRepository _schedulesRepo;
   final MarshrutDriverRepository _marshrutDriverRepo;
+
+  /// Шаҳарлараро рейсни тўлов оқими орқали эълон қилади (экран беради:
+  /// диалоглар контекст талаб қилади). Бўш бўлса шаҳарлараро сақлаш рад этилади.
+  IntercityPublisher? intercityPublisher;
+
+  /// Тўлов ўтиб, рейс рўйхатга тушмаса комиссияни қайтаради.
+  Future<void> Function(String tripId)? intercityRefund;
 
   bool get isMarshrut => taxiType == 'marshrut';
   bool get isAlone => taxiType == 'alone';
@@ -476,28 +493,62 @@ class DriverScheduleController extends ChangeNotifier {
           plannedStartAt: plannedStartAt,
         );
       } else {
-        await _schedulesRepo.registerDriverSchedule(
-          driverId: uid,
-          taxiType: taxiType,
-          driverName: driverName,
-          driverPhone: driverPhone,
-          driverCar: driverCar,
-          driverPlate: driverPlate,
-          date: dateStr,
-          expiresAt: midnight,
-          seats: seats,
-          fromText: fromText,
-          toText: toText,
-          stops: stops,
-          direction: dir,
-          startTime: isAlone
-              ? _fmt(startTime)
-              : (isIntercity ? _fmt(departureTime) : null),
-          endTime: isAlone ? _fmt(endTime) : null,
-          price: isIntercity
-              ? int.tryParse(priceText.trim().replaceAll(' ', '')) ?? 0
-              : null,
-        );
+        final price = isIntercity
+            ? int.tryParse(priceText.trim().replaceAll(' ', '')) ?? 0
+            : null;
+        // Шаҳарлараро рейс — фақат тўлов оқими орқали (D-TAXI-13); тўловсиз
+        // эълон йўли йўқ. Хабарни оқим ўзи кўрсатади.
+        String? billingTripId;
+        if (isIntercity) {
+          final publish = intercityPublisher;
+          if (publish == null) {
+            isSaving = false;
+            errorMessage = 'Рейсни эълон қилиб бўлмади. Қайта уриниб кўринг.';
+            notifyListeners();
+            return false;
+          }
+          billingTripId = await publish(
+            farePerSeat: price ?? 0,
+            from: fromText,
+            to: toText,
+            scheduleDate: dateStr,
+            startTime: _fmt(departureTime),
+            seats: seats,
+            departureAt: DateTime(day.year, day.month, day.day,
+                departureTime.hour, departureTime.minute),
+          );
+          if (billingTripId == null) {
+            isSaving = false;
+            notifyListeners();
+            return false;
+          }
+        }
+        try {
+          await _schedulesRepo.registerDriverSchedule(
+            driverId: uid,
+            taxiType: taxiType,
+            driverName: driverName,
+            driverPhone: driverPhone,
+            driverCar: driverCar,
+            driverPlate: driverPlate,
+            date: dateStr,
+            expiresAt: midnight,
+            seats: seats,
+            fromText: fromText,
+            toText: toText,
+            stops: stops,
+            direction: dir,
+            startTime: isAlone
+                ? _fmt(startTime)
+                : (isIntercity ? _fmt(departureTime) : null),
+            endTime: isAlone ? _fmt(endTime) : null,
+            price: price,
+            billingTripId: billingTripId,
+          );
+        } catch (_) {
+          if (billingTripId != null) await intercityRefund?.call(billingTripId);
+          rethrow;
+        }
       }
       isSaving = false;
       notifyListeners();

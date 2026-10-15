@@ -50,6 +50,7 @@ import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
+import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../../models/job_ad.dart';
@@ -639,6 +640,50 @@ class _HomeViewState extends State<_HomeView> {
         await _push(
           WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
         );
+      case AvaCreateAction.driver:
+        await _openBecomeDriver();
+    }
+  }
+
+  /// «＋» → «Ҳайдовчи бўлиш»: такси тури танланади, кейин шу тур учун
+  /// рўйхатдан ўтиш ва ишга чиқиш оқими бошланади.
+  Future<void> _openBecomeDriver() async {
+    const all = <(String, String)>[
+      ('intercity', 'home_module_intercity'),
+      ('local_taxi', 'home_module_local'),
+      ('marshrut', 'home_module_marshrut'),
+    ];
+    final types = all.where((t) => HomeModuleGate.canOpen(t.$1)).toList();
+    if (types.isEmpty) {
+      _showTezKundaSnack();
+      return;
+    }
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final t in types)
+              ListTile(
+                leading: const Icon(Icons.local_taxi_outlined),
+                title: Text(ctx.tr(t.$2)),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(ctx).pop(t.$1),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    switch (picked) {
+      case 'intercity':
+        await IntercityDriverOnboarding.run(context);
+      case 'local_taxi':
+        await _push(const LocalTaxiScreen(startDriverOnOpen: true));
+      case 'marshrut':
+        await _push(const MarshrutTaxiScreen(startDriverOnOpen: true));
     }
   }
 

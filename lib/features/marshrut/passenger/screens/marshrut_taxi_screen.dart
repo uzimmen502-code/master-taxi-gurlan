@@ -44,7 +44,10 @@ import 'marshrut_waiting_screen.dart';
 /// Ko'rsatadi: MFY tanlash, qidiruv, natijalar (GPS faqat masofa filtri uchun, banner yo'q).
 /// natijalar ro'yxati va "ЧАҚИРИШ" tugmasi marshrut waiting flow'iga ulaydi.
 class MarshrutTaxiScreen extends StatelessWidget {
-  const MarshrutTaxiScreen({super.key});
+  const MarshrutTaxiScreen({super.key, this.startDriverOnOpen = false});
+
+  /// «＋» менюсидан «Ҳайдовчи бўлиш»: экран очилиши билан ҳайдовчи оқими бошланади.
+  final bool startDriverOnOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -58,13 +61,15 @@ class MarshrutTaxiScreen extends StatelessWidget {
         c.initBlockWatch();
         return c;
       },
-      child: const _MarshrutTaxiView(),
+      child: _MarshrutTaxiView(startDriverOnOpen: startDriverOnOpen),
     );
   }
 }
 
 class _MarshrutTaxiView extends StatefulWidget {
-  const _MarshrutTaxiView();
+  const _MarshrutTaxiView({required this.startDriverOnOpen});
+
+  final bool startDriverOnOpen;
 
   @override
   State<_MarshrutTaxiView> createState() => _MarshrutTaxiViewState();
@@ -97,6 +102,11 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     _searchCtrl!.addListener(_onSearchBlockUpdate);
     _loadMfyHistory();
     _loadPendingReminder();
+    if (widget.startDriverOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openDriverPanel();
+      });
+    }
   }
 
   Future<void> _loadPendingReminder() async {
@@ -640,51 +650,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Opacity(
-              opacity: _isSubmitting ? 0.6 : 1,
-              child: GestureDetector(
-                onTap: _isSubmitting ? null : _openDriverPanel,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_isSubmitting) ...[
-                        const SizedBox(
-                          width: 13,
-                          height: 13,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.primaryText,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Text(
-                        _isSubmitting
-                            ? context.tr('loading')
-                            : context.tr('become_driver'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(children: [
           if (c.isBlockActive && c.effectiveCancelCount >= 7)

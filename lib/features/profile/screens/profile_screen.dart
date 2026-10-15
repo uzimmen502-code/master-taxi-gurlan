@@ -259,11 +259,6 @@ class _ProfileViewState extends State<_ProfileView> {
       body: SingleChildScrollView(
         child: Column(children: [
           _header(c, loc),
-          if (canonicalUserId(c.phone).isNotEmpty)
-            DriverStatusChip(
-              key: ValueKey(canonicalUserId(c.phone)),
-              userId: canonicalUserId(c.phone),
-            ),
           if (!c.hasUsableAddress) _addressWarning(loc),
           _cards(c, loc),
           // ТАЛАБ ВА ТАКЛИФЛАР (эга қарори, 2026-10-03).
@@ -427,6 +422,14 @@ class _ProfileViewState extends State<_ProfileView> {
                   style: const TextStyle(fontSize: 12, color: AppColors.onPrimary)),
             ),
           ),
+          // Ҳайдовчи индикатори — ҳедерда: карталар 20 px юқорига сурилгани
+          // учун ҳедердан пастдаги чип уларнинг остида қолар эди.
+          if (canonicalUserId(c.phone).isNotEmpty)
+            DriverStatusChip(
+              key: ValueKey(canonicalUserId(c.phone)),
+              userId: canonicalUserId(c.phone),
+              alignment: Alignment.center,
+            ),
         ]),
       ),
     );

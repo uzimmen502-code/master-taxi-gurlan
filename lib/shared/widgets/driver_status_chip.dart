@@ -10,9 +10,17 @@ import '../../repositories/driver_repository.dart';
 /// «Ҳайдовчи». Босилса барча турлар ва уларнинг ҳолати чиқади.
 /// Ҳайдовчи бўлмаса умуман кўринмайди.
 class DriverStatusChip extends StatefulWidget {
-  const DriverStatusChip({super.key, required this.userId, this.load});
+  const DriverStatusChip({
+    super.key,
+    required this.userId,
+    this.load,
+    this.alignment = Alignment.centerLeft,
+  });
 
   final String userId;
+
+  /// Чипнинг жойи (ҳедерда — марказда).
+  final Alignment alignment;
 
   /// Тест учун: ҳолатни юклаш ўрнига шу функция.
   final Future<DriverRoles> Function(String uid)? load;
@@ -51,7 +59,7 @@ class _DriverStatusChipState extends State<DriverStatusChip> {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Align(
-            alignment: Alignment.centerLeft,
+            alignment: widget.alignment,
             child: Semantics(
               button: true,
               label: text,
@@ -62,9 +70,10 @@ class _DriverStatusChipState extends State<DriverStatusChip> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
+                    // Оқ фон: ҳедернинг тўқ тусида ҳам, очиқ фонда ҳам ўқилади.
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: color.withValues(alpha: 0.5)),
+                    border: Border.all(color: color.withValues(alpha: 0.6)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

@@ -26,7 +26,11 @@ class DriverHubScreen extends StatefulWidget {
     required this.onSubmitVerification,
     required this.onOpenWallet,
     this.clock = DateTime.now,
+    this.showVerification = hubShowVerification,
   });
+
+  /// «Текширув» карточкасини кўрсатиш (одатда [hubShowVerification] — яширин).
+  final bool showVerification;
 
   final List<WorkChoice> choices;
   final Future<DriverRoles> Function() loadRoles;
@@ -155,6 +159,7 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
   }
 
   Widget _verificationCard(BuildContext context) {
+    if (!widget.showVerification) return const SizedBox.shrink();
     final kind = hubVerifKind(_roles, widget.clock());
     if (kind == HubVerifKind.none) return const SizedBox.shrink();
     final c = context.ava;

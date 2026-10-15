@@ -20,6 +20,7 @@ Widget _host({
   Future<void> Function(WorkChoice, DriverRoles)? onAction,
   Future<HubSubmitResult> Function()? onSubmit,
   Future<void> Function()? onEditCar,
+  bool showVerification = true, // карточка логикаси текширилади; одатий — яширин
 }) =>
     MaterialApp(
       theme: AppTheme.light,
@@ -38,6 +39,7 @@ Widget _host({
         onSubmitVerification: onSubmit ?? () async => HubSubmitResult.sent,
         onOpenWallet: () async {},
         clock: () => _now,
+        showVerification: showVerification,
       ),
     );
 
@@ -127,6 +129,33 @@ void main() {
       await t.pumpWidget(_host(roles: _starter(const Duration(days: 123))));
       await t.pumpAndSettle();
       expect(find.text('hub_verif_title'), findsNothing);
+    });
+
+    testWidgets('одатий ҳолат: «Текширув» матни ва тугмаси кўздан яширин (эга қарори)', (t) async {
+      expect(hubShowVerification, isFalse);
+      for (final roles in [
+        _starter(const Duration(days: 2)),
+        const DriverRoles(types: ['intercity'], taxiStatus: 'verification_required'),
+        const DriverRoles(taxiStatus: 'suspended'),
+      ]) {
+        await t.pumpWidget(MaterialApp(
+          theme: AppTheme.light,
+          home: DriverHubScreen(
+            key: UniqueKey(),
+            choices: const [WorkChoice.intercity],
+            loadRoles: () async => roles,
+            loadCar: () async => null,
+            onAction: (_, __) async {},
+            onEditCar: () async {},
+            onSubmitVerification: () async => HubSubmitResult.sent,
+            onOpenWallet: () async {},
+            clock: () => _now,
+          ),
+        ));
+        await t.pumpAndSettle();
+        expect(find.text('hub_verif_title'), findsNothing);
+        expect(find.text('hub_verif_submit'), findsNothing);
+      }
     });
 
     testWidgets('автомобиль йўқ — «қўшиш» тугмаси', (t) async {

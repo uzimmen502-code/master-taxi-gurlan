@@ -149,6 +149,10 @@ class _Row extends StatelessWidget {
     return SizedBox(
       height: ServiceCircleTile.tileHeight,
       child: Row(
+        // Устки қаторга тираб қўйилади: 2 қаторли ёрлиқли катак марказлаштирилса
+        // доираси бошқалардан юқорида қолади (ёрлиқ-доира оралиғи 2 px бўлгач
+        // қурилмада кўринди).
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final item in items)
             SizedBox(

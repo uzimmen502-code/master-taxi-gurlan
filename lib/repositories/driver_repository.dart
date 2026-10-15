@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../core/utils/formatters.dart';
 import '../features/demand_offer/data/demand_repository.dart'
     show kDemandCoreRegion;
+import '../features/demand_offer/domain/canonical_id.dart' show canonicalUserId;
 import '../models/driver_model.dart';
 import '../models/driver_roles.dart';
 import '../models/driver_stats.dart';
@@ -225,16 +226,18 @@ class DriverRepository {
     return (approved: typeOk, status: status);
   }
 
-  /// Ҳайдовчи индикатори: ишлайдиган ҳолатдаги турлар ва улардан ҳозир
-  /// фаоллари. Хато бўлса индикатор жим йўқолади (`none`), экран йиқилмайди.
+  /// Ҳайдовчи/курьер индикатори: ишлайдиган ҳолатдаги такси турлари ва улардан
+  /// ҳозир фаоллари, шунингдек курьер онлайнми. Хато бўлса индикатор жим
+  /// йўқолади (`none`), экран йиқилмайди.
   Future<DriverRoles> driverRoles(String uid) async {
+    final courierOnline = await _courierOnline(uid);
     try {
       final cap = await _taxiCapability(uid);
-      if (cap == null) return DriverRoles.none;
+      if (cap == null) return DriverRoles(courierOnline: courierOnline);
       final status = ((cap['status'] as Map?)?['taxi'] ?? '').toString();
       if (!const {'starter', 'verification_required', 'verified'}
           .contains(status)) {
-        return DriverRoles.none;
+        return DriverRoles(courierOnline: courierOnline);
       }
       final raw = ((cap['taxi'] as Map?)?['taxiTypes'] as List?)
               ?.map((e) => e.toString() == 'alone' ? 'local' : e.toString())
@@ -242,7 +245,7 @@ class DriverRepository {
           const <String>{};
       const order = ['intercity', 'local', 'marshrut'];
       final types = order.where(raw.contains).toList(growable: false);
-      if (types.isEmpty) return DriverRoles.none;
+      if (types.isEmpty) return DriverRoles(courierOnline: courierOnline);
 
       final id = canonicalPhoneId(uid);
       final active = <String>{};
@@ -262,12 +265,28 @@ class DriverRepository {
           }
         }
       }
-      return DriverRoles(types: types, active: active);
+      return DriverRoles(
+        types: types,
+        active: active,
+        courierOnline: courierOnline,
+      );
     } catch (_) {
-      return DriverRoles.none;
+      return DriverRoles(courierOnline: courierOnline);
     }
   }
 
+  /// Курьер онлайнми: `provider_presence/{канон 12 хонали}.isOnline` (уни
+  /// фақат курьер юборади; эскирганини `presenceSweeper` offline қилади).
+  Future<bool> _courierOnline(String uid) async {
+    try {
+      final id = canonicalUserId(uid);
+      if (id.isEmpty) return false;
+      final s = await _db.collection('provider_presence').doc(id).get();
+      return s.data()?['isOnline'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
   /// `users/{uid}.accountId` → `provider_capabilities/{accountId}` (9/12 хонали).
   Future<Map<String, dynamic>?> _taxiCapability(String uid) async {
     for (final id in _driverDocIds(uid)) {

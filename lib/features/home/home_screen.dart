@@ -51,6 +51,7 @@ import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
 import '../../models/driver_roles.dart';
+import 'widgets/active_roles_strip.dart';
 import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
@@ -615,6 +616,7 @@ class _HomeViewState extends State<_HomeView> {
   /// «＋» менюси учун ҳайдовчи ҳолати (кэш): индикатор ва «Ҳайдовчи панели».
   DriverRoles _driverRoles = DriverRoles.none;
   bool _driverRolesLoaded = false;
+  bool _driverRolesLoading = false;
 
   Future<void> _refreshDriverRoles() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
@@ -858,6 +860,16 @@ class _HomeViewState extends State<_HomeView> {
     final uid = phoneDigits(home.phone);
     final userRepo = context.read<UserRepository>();
 
+    // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — тайёр бўлганда
+    // ҳайдовчи/курьер ҳолати бир марта юкланади.
+    if (!_driverRolesLoaded && !_driverRolesLoading && uid.length >= 9) {
+      _driverRolesLoading = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refreshDriverRoles().whenComplete(() => _driverRolesLoading = false);
+      });
+    }
+
     return Scaffold(
       backgroundColor: _bg,
       bottomNavigationBar: AvaBottomNav(
@@ -900,6 +912,12 @@ class _HomeViewState extends State<_HomeView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             AvaTopBar(onPickRegion: _openRegionPicker),
+                            // Фаол ҳайдовчилик/курьерлик тасмаси (эга, 2026-10-15).
+                            if (_driverRoles.hasAnyActiveRole)
+                              ActiveRolesStrip(
+                                roles: _driverRoles,
+                                onTap: _openProfileTab,
+                              ),
                             if (_suggestArea != null &&
                                 !_suggestArea!.sameAs(GeoContext.active))
                               GeoSuggestBanner(
@@ -947,7 +965,8 @@ class _HomeViewState extends State<_HomeView> {
                               ),
                               onTitleTap: _openAllServices,
                             ),
-                            const SizedBox(height: 16),
+                            // Қидирув майдончаси юқоридаги бўлимга 2 px яқин (эга, 2026-10-15).
+                            const SizedBox(height: 2),
                             HomeGlobalSearchBar(
                               onOpenEntry: _openSearchEntry,
                               onOpenClip: (clip) => _push(

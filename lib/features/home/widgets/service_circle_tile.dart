@@ -41,8 +41,8 @@ class ServiceCircleTile extends StatefulWidget {
   /// 60 — яхлит қиймат (аниқ 15% 59.5 бўлар эди, фарқи 0.5px).
   static const double circleSize = 60;
 
-  /// Доира билан ёзув ораси.
-  static const double labelGap = 12;
+  /// Доира билан ёзув ораси — 12 → **2** (эга, 2026-10-15).
+  static const double labelGap = 2;
 
   /// Ёзув энг кўпи шунча қаторга ўралади.
   ///
@@ -86,9 +86,10 @@ class ServiceCircleTile extends StatefulWidget {
   /// қолар, у эса аслида ИККИ ҚАТОР ОРАСИДАГИ масофага айланиб,
   /// «қаторлар орасини максимал қисқартир» талабини бекор қилар эди.
   ///
-  /// Ҳисоб: 60 доира + 12 оралиқ + 2 қатор × 6.5px × 1.25 × 1.15
-  /// (шрифт масштаби чегараси) ≈ 90.7 → 92.
-  static const double tileHeight = 92;
+  /// Ҳисоб: 60 доира + 2 оралиқ + 2 қатор × 6.5px × 1.25 × 1.15
+  /// (шрифт масштаби чегараси) ≈ 80.7 → 82 (оралиқ 12 → 2 бўлгани учун
+  /// 92 → 82: қаторлар ва доиралар ораси ҳам шунча қисқарди).
+  static const double tileHeight = 82;
 
   @override
   State<ServiceCircleTile> createState() => _ServiceCircleTileState();

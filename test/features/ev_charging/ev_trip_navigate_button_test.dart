@@ -265,6 +265,25 @@ void main() {
       await _expectVisibleAndTappable(tester, h);
     });
 
+    // REGRESSIYA (qurilmada topilgan): varaqa barmoq bilan tortilganda har kadrdagi
+    // setState `snapSizes` ro'yxatini QAYTA yaratardi; Flutter uni identitet
+    // bo'yicha solishtirib har kadrda snap chaqiradi va tortish bekor bo'lardi.
+    testWidgets('barmoq bilan qadamma-qadam tortilgan varaqa qo\'yib yuborilgach joyida qoladi',
+        (tester) async {
+      await _pump(tester);
+      final top0 = tester.getTopLeft(_header).dy;
+      final g = await tester.startGesture(tester.getCenter(_header));
+      for (var i = 0; i < 10; i++) {
+        await g.moveBy(const Offset(0, -45));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await g.up();
+      await tester.pumpAndSettle();
+      final top1 = tester.getTopLeft(_header).dy;
+      expect(top1, lessThan(top0 - 250),
+          reason: 'varaqa tortilgan joyida qolishi kerak (top0=$top0, top1=$top1)');
+    });
+
     testWidgets('past ekranda (400x500) ham har holatda ekran ichida',
         (tester) async {
       final h = await _pump(tester, size: const Size(400, 500));

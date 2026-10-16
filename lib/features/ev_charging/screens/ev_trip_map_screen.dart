@@ -746,6 +746,22 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     }
     setState(() {});
   }
+  // `DraggableScrollableSheet` `snapSizes`ни ИДЕНТИТЕТ бўйича солиштиради:
+  // ҳар build'да янги рўйхат берилса, варақа ҳар кадрда snap'га қайтиб,
+  // бармоқ билан тортиш бекор бўлади. Шу сабабли рўйхат peek ўзгармагунча
+  // бир хил объект сифатида сақланади.
+  List<double>? _snapSizesCache;
+  double _snapSizesPeek = -1;
+
+  List<double> _stableSnapSizes(double peekFraction) {
+    if (_snapSizesCache == null || _snapSizesPeek != peekFraction) {
+      _snapSizesPeek = peekFraction;
+      _snapSizesCache = List.unmodifiable(
+          [0.6.clamp(peekFraction, _maxSheetFraction).toDouble()]);
+    }
+    return _snapSizesCache!;
+  }
+
   Future<void> _toggleSheet(double peekFraction) async {
     if (!_sheetCtrl.isAttached) return;
     final expanded = _sheetCtrl.size > peekFraction + 0.05;
@@ -909,9 +925,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                       minChildSize: peekFraction,
                       maxChildSize: _maxSheetFraction,
                       snap: true,
-                      snapSizes: [
-                        0.6.clamp(peekFraction, _maxSheetFraction).toDouble()
-                      ],
+                      snapSizes: _stableSnapSizes(peekFraction),
                       builder: (context, scroll) => _PlanSheet(
                         plan: plan,
                         onReplaceStop: _canReplace ? _openAlternatives : null,

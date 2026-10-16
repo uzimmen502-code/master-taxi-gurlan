@@ -9,8 +9,9 @@
  * Qulflanadi:
  *   1) e'lon qilingan qiymat (declaredValue) MAJBURIY: yo'q yoki <= 0 bo'lsa
  *      quote ham, create ham rad (chunki yo'qolsa qaytariladigan summa G shu);
- *   2) adminMarkShipmentLost: faqat admin/superadmin, faqat in_transit/disputed +
- *      eskrou to'langan, posilka IJROCHIDA bo'lsa; idempotent.
+ *   2) adminMarkShipmentLost: faqat admin/superadmin (dispatcher EMAS), faqat in_transit/disputed +
+ *      eskrou to'langan, posilka IJROCHIDA bo'lsa; LEG disputed, keyingi LEG'lar bekor, incident,
+ *      audit, ORDER problem; custody tarixiga tegilmaydi; idempotent.
  */
 const assert = require('assert');
 const api = require('../api/logistics');

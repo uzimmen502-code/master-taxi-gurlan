@@ -7,6 +7,8 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../controllers/ev_car_tracker.dart';
+import '../controllers/ev_trip_alternatives.dart';
+import '../controllers/ev_trip_controller.dart';
 import '../controllers/ev_trip_nav_relay.dart';
 import '../controllers/ev_route_progress.dart';
 import '../controllers/ev_trip_planner.dart';
@@ -14,10 +16,12 @@ import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
 import '../widgets/ev_map_top_overlay.dart';
 import '../widgets/ev_next_stops_card.dart';
+import '../widgets/ev_trip_alternatives_sheet.dart';
 import '../widgets/ev_trip_map_view.dart';
 import '../widgets/ev_trip_dot_icon.dart';
 import '../widgets/ev_trip_plan_view.dart';
 import '../widgets/ev_trip_station_sheet.dart';
+import '../widgets/ev_trip_undo_chip.dart';
 
 /// Харитага узатиладиган ҳолат — `GoogleMap` платформа кўринишисиз
 /// тестлаш учун харита ташқаридан қурилади ([EvTripMapBuilder]).
@@ -107,7 +111,13 @@ class EvTripMapScreen extends StatefulWidget {
     this.maxWaypoints,
     this.routeMinutes = 0,
     this.car,
+    this.controller,
   });
+
+  /// Reja holati (qayta hisob, "Almashtirish", "Qaytarish"). Berilmasa -
+  /// ekran ichida [plan]/[corridorStations] dan tarmoqsiz kontroller quriladi.
+  /// Berilsa (EvTripScreen) reja o'zgarishi o'sha ekranda ham ko'rinadi.
+  final EvTripController? controller;
 
   final EvTripPlan plan;
   final List<EvRoutePoint> route;
@@ -191,8 +201,20 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   static const int _segmentBacktrack = 3;
 
   late final EvCarTracker _car;
-  late final EvTripSelection _selection;
+  late final EvTripController _trip;
+  late final bool _ownsTrip;
+  late EvTripSelection _selection;
   final _sheetCtrl = DraggableScrollableController();
+
+  /// Oxirgi o'zgarishdan oldingi tanlov ("Қайтариш" uchun) va shu o'zgarish
+  /// shu ekranda qilinganmi (umumiy kontrollerda oldingi seansdan qolgan
+  /// qaytarish holati ko'rsatilmasin).
+  EvTripSelection? _undoSelection;
+  bool _undoArmed = false;
+
+  /// "Навигация" kamida bir marta muvaffaqiyatli ochilgan: reja o'zgarsa
+  /// haydovchiga Google Maps'da yo'lni yangilash eslatiladi.
+  bool _navSent = false;
 
   EvRouteProgress? _progress;
   int _segmentHint = 0;
@@ -217,11 +239,21 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     // Харита статус бар ва пастки соҳа остигача.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     WidgetsBinding.instance.addObserver(this);
+    _ownsTrip = widget.controller == null;
+    _trip = widget.controller ??
+        EvTripController.seeded(
+          plan: widget.plan,
+          route: widget.route,
+          corridor: widget.corridorStations,
+          routeMinutes: widget.routeMinutes,
+          destinationLat: widget.destinationLat,
+          destinationLng: widget.destinationLng,
+        );
     // Бошланғич танлов — тавсия этилган (асосий) тўхташлар; чеклов
     // платформага қараб (мобил веб 3, бошқа 9) - ЯГОНА манба.
     _selection = EvTripSelection.recommended(
-      widget.plan,
-      widget.corridorStations,
+      _plan,
+      _trip.corridorStations,
       maxWaypoints: widget.maxWaypoints ?? mapsMaxWaypoints(),
     )..addListener(_onSelection);
     _car = EvCarTracker(
@@ -240,6 +272,8 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     _selection
       ..removeListener(_onSelection)
       ..dispose();
+    _undoSelection?.dispose();
+    if (_ownsTrip) _trip.dispose();
     _sheetCtrl.dispose();
     // Бошқа экранлар учун одатдаги тизим панелларига қайтарилади.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
@@ -284,13 +318,146 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     if (mounted) setState(() {});
   }
 
+  /// Joriy reja: kontrollerdagi (almashtirish/qayta hisobdan keyin), yo'q
+  /// bo'lsa - ekranga berilgan dastlabki reja.
+  EvTripPlan get _plan => _trip.plan ?? widget.plan;
+
+  /// Stansiyani almashtirish va qayta hisob: mashina ma'lum, reja boshlang'ich
+  /// shartlari ma'lum.
+  bool get _canReplace => widget.car != null && _plan.canReplan;
+
+  /// Stansiya varag'ida "Almashtirish" ko'rsatiladigan reja to'xtashining
+  /// indeksi (rejadagi to'xtash emas - `-1`).
+  int _stopIndexOf(String stationId) =>
+      _plan.stops.indexWhere((s) => s.station.id == stationId);
+
   /// Станция маркери босилди: ихчам варақа (тавсия/заҳира белгиси, масофа,
   /// зарядлаш маълумоти, қўшиш/олиб ташлаш).
   void _onStationTap(String id) {
     final candidate = _selection.candidateById(id);
     if (candidate == null || !mounted) return;
-    EvTripStationSheet.show(context,
-        selection: _selection, candidate: candidate);
+    final stopIndex = _stopIndexOf(id);
+    EvTripStationSheet.show(
+      context,
+      selection: _selection,
+      candidate: candidate,
+      onReplace: _canReplace && stopIndex >= 0
+          ? () => _openAlternatives(stopIndex)
+          : null,
+    );
+  }
+
+  // ---- Almashtirish (haydovchi qarori) va "Qaytarish" ----
+
+  /// [stopIndex]-to'xtash uchun alternativalar varag'i. Tanlansa - stansiya
+  /// almashtiriladi va reja qayta hisoblanadi. [large] - yo'lda: katta tugmalar.
+  Future<void> _openAlternatives(int stopIndex, {bool large = false}) async {
+    final car = widget.car;
+    final plan = _plan;
+    if (car == null || !plan.canReplan) return;
+    if (stopIndex < 0 || stopIndex >= plan.stops.length) return;
+    final rows = EvTripAlternatives.build(
+      plan: plan,
+      stopIndex: stopIndex,
+      corridor: _trip.corridorStations,
+      car: car,
+      excludedStationIds: _trip.excludedStationIds,
+      pinnedStationIds: _trip.pinnedStationIds,
+      carAlongKm: _carAlongKm,
+    );
+    final picked = await EvTripAlternativesSheet.show(context,
+        alternatives: rows, large: large);
+    if (picked == null || !mounted) return;
+    _replaceStop(stopIndex, picked.station.id);
+  }
+
+  void _replaceStop(int stopIndex, String newStationId) {
+    final car = widget.car;
+    if (car == null) return;
+    final oldPlan = _plan;
+    final oldSelection = _selection;
+    if (stopIndex < 0 || stopIndex >= oldPlan.stops.length) return;
+    final oldId = oldPlan.stops[stopIndex].station.id;
+
+    final result = _trip.replaceStop(
+        stopIndex: stopIndex, newStationId: newStationId, car: car);
+    if (result == EvReplaceResult.unavailable) {
+      _toast(context.tr('ev_replace_failed'));
+      return;
+    }
+    _planChanged(
+      previousPlan: oldPlan,
+      previousSelection: oldSelection,
+      replacedOldId: oldId,
+      replacedNewId: newStationId,
+    );
+  }
+
+  /// Reja o'zgardi (almashtirish yoki qayta hisob): tanlov yangi rejaga
+  /// ergashadi, Google Maps'ga yuborish holati yangi tanlovdan qayta
+  /// hisoblanadi, "Qaytarish" yoqiladi.
+  void _planChanged({
+    required EvTripPlan previousPlan,
+    required EvTripSelection previousSelection,
+    String? replacedOldId,
+    String? replacedNewId,
+  }) {
+    final next = EvTripSelection.followPlan(
+      previous: previousSelection,
+      previousPlan: previousPlan,
+      nextPlan: _plan,
+      corridor: _trip.corridorStations,
+      replacedOldId: replacedOldId,
+      replacedNewId: replacedNewId,
+    );
+    previousSelection.removeListener(_onSelection);
+    if (!identical(_undoSelection, previousSelection)) {
+      _undoSelection?.dispose();
+    }
+    _undoSelection = previousSelection;
+    _selection = next..addListener(_onSelection);
+
+    // Google Maps'ga yuborilgan marshrut eskirdi: bo'laklab yuborish
+    // holati yangi tanlovdan qayta boshlanadi.
+    final hadNav = _navSent;
+    _relay.reset();
+    _cardOpen = false;
+    _cardDismissed = false;
+    _undoArmed = true;
+    setState(() {});
+    if (hadNav) _toast(context.tr('ev_replan_nav_hint'));
+  }
+
+  /// "Қайтариш": reja ham, tanlov ham o'zgarishdan oldingi holatga qaytadi.
+  void _undoChange() {
+    if (!_undoArmed || !_trip.undo()) return;
+    final restored = _undoSelection;
+    _undoSelection = null;
+    if (restored != null) {
+      _selection
+        ..removeListener(_onSelection)
+        ..dispose();
+      _selection = restored..addListener(_onSelection);
+    }
+    _relay.reset();
+    _cardOpen = false;
+    _cardDismissed = false;
+    _undoArmed = false;
+    setState(() {});
+  }
+
+  void _dismissUndo() {
+    _undoArmed = false;
+    _undoSelection?.dispose();
+    _undoSelection = null;
+    _trip.discardUndo();
+    setState(() {});
+  }
+
+  void _toast(String text) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
   }
 
   void _onUserGesture() {
@@ -306,7 +473,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       widget.destinationLng.isFinite &&
       widget.originLat.isFinite &&
       widget.originLng.isFinite &&
-      (widget.plan.isOk || widget.route.isNotEmpty);
+      (_plan.isOk || widget.route.isNotEmpty);
 
   /// Йўл бошидан машинанинг масофаси (км, режа масштабида); GPS йўқ ёки
   /// машина йўлда эмас — `null`.
@@ -399,6 +566,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       return;
     }
     // Янги навигация — бўлаклаш қайтадан бошланади.
+    _navSent = true;
     _relay.reset();
     _cardOpen = false;
     _cardDismissed = false;
@@ -471,8 +639,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final fix = _car.fix;
+    final plan = _plan;
     final peekPx = peekContentHeight(
-            showTime: showsPeekTime(widget.plan, widget.routeMinutes)) +
+            showTime: showsPeekTime(plan, widget.routeMinutes)) +
         mq.padding.bottom;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -506,8 +675,8 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
             final peekFraction = (peekPx / height).clamp(0.08, 0.5).toDouble();
             final data = EvTripMapRenderData(
               route: widget.route,
-              corridorStations: widget.corridorStations,
-              plan: widget.plan,
+              corridorStations: _trip.corridorStations,
+              plan: plan,
               candidates: _selection.candidates,
               selectedNumbers: _selection.numbers,
               onStationTap: _onStationTap,
@@ -530,6 +699,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
             // «Кейинги тўхташлар»: чип ҳар доим; катта карточка — машина
             // юборилган охирги тўхташдан ўтгач ёки ҳайдовчи чипни босса.
             final pending = _pending;
+            final showUndo = _undoArmed && _trip.canUndo;
             final showCard = pending.isNotEmpty &&
                 (_cardOpen ||
                     (!_cardDismissed && _relay.hasPassedLastSent(_carAlongKm)));
@@ -561,7 +731,8 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                       0.6.clamp(peekFraction, _maxSheetFraction).toDouble()
                     ],
                     builder: (context, scroll) => _PlanSheet(
-                      plan: widget.plan,
+                      plan: plan,
+                      onReplaceStop: _canReplace ? _openAlternatives : null,
                       scrollController: scroll,
                       onHeaderTap: () => _toggleSheet(peekFraction),
                       expanded: _extent > peekFraction + 0.05,
@@ -594,31 +765,48 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                     onTap: _navigate,
                   ),
                 ),
-                if (pending.isNotEmpty)
+                if (pending.isNotEmpty || showUndo)
                   Positioned(
                     top: mq.padding.top + kToolbarHeight + 4,
                     left: 12,
                     right: 12,
-                    child: showCard
-                        ? EvNextStopsCard(
-                            count: pending.length,
-                            busy: _launching,
-                            onContinue: _continueNavigation,
-                            onClose: () => setState(() {
-                              _cardOpen = false;
-                              _cardDismissed = true;
-                            }),
-                          )
-                        : Align(
-                            alignment: Alignment.centerRight,
-                            child: EvNextStopsChip(
-                              count: pending.length,
-                              onTap: () => setState(() {
-                                _cardOpen = true;
-                                _cardDismissed = false;
-                              }),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showUndo)
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: EvTripUndoChip(
+                              onUndo: _undoChange,
+                              onClose: _dismissUndo,
                             ),
                           ),
+                        if (showUndo && pending.isNotEmpty)
+                          const SizedBox(height: 8),
+                        if (pending.isNotEmpty)
+                          showCard
+                              ? EvNextStopsCard(
+                                  count: pending.length,
+                                  busy: _launching,
+                                  onContinue: _continueNavigation,
+                                  onClose: () => setState(() {
+                                    _cardOpen = false;
+                                    _cardDismissed = true;
+                                  }),
+                                )
+                              : Align(
+                                  alignment: Alignment.centerRight,
+                                  child: EvNextStopsChip(
+                                    count: pending.length,
+                                    onTap: () => setState(() {
+                                      _cardOpen = true;
+                                      _cardDismissed = false;
+                                    }),
+                                  ),
+                                ),
+                      ],
+                    ),
                   ),
               ],
             );
@@ -776,9 +964,13 @@ class _PlanSheet extends StatelessWidget {
     required this.onOpenNavigator,
     required this.routeMinutes,
     required this.car,
+    this.onReplaceStop,
   });
 
   final EvTripPlan plan;
+
+  /// To'xtash kartochkasidagi "Almashtirish" (null - tugma yo'q).
+  final ValueChanged<int>? onReplaceStop;
   final ScrollController scrollController;
   final VoidCallback onHeaderTap;
   final bool expanded;
@@ -893,6 +1085,7 @@ class _PlanSheet extends StatelessWidget {
               onOpenNavigator: onOpenNavigator,
               routeMinutes: routeMinutes,
               car: car,
+              onReplaceStop: onReplaceStop,
             ),
           ],
         ),

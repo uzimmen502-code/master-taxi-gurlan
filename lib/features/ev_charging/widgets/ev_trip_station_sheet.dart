@@ -24,9 +24,13 @@ class EvTripStationSheet extends StatelessWidget {
     required this.canAdd,
     required this.maxWaypoints,
     required this.onToggle,
+    this.onReplace,
   });
 
   final EvTripCandidate candidate;
+
+  /// Тавсия этилган (режадаги) тўхташ учун «Алмаштириш». `null` — тугма йўқ.
+  final VoidCallback? onReplace;
 
   /// Танланган бўлса — йўл бўйича тартиб рақами (1'дан); бўлмаса `null`.
   final int? number;
@@ -47,6 +51,7 @@ class EvTripStationSheet extends StatelessWidget {
     BuildContext context, {
     required EvTripSelection selection,
     required EvTripCandidate candidate,
+    VoidCallback? onReplace,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -66,6 +71,13 @@ class EvTripStationSheet extends StatelessWidget {
           selection.toggle(candidate.id);
           Navigator.of(sheetContext).pop();
         },
+        onReplace: onReplace == null
+            ? null
+            : () {
+                // Avval varaqa yopiladi, keyin almashtirish varag'i ochiladi.
+                Navigator.of(sheetContext).pop();
+                onReplace();
+              },
       ),
     );
   }
@@ -202,6 +214,32 @@ class EvTripStationSheet extends StatelessWidget {
                 ),
               ),
             ),
+            if (onReplace != null) ...[
+              const SizedBox(height: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 56),
+                child: OutlinedButton.icon(
+                  key: const ValueKey('ev_station_sheet_replace'),
+                  onPressed: onReplace,
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 24),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryText,
+                    side: const BorderSide(
+                        color: AppColors.primaryText, width: 1.4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  label: Text(
+                    context.tr('ev_alt_swap'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

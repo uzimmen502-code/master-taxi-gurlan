@@ -49,6 +49,21 @@ void main() {
     // band/bo'sh belgisi (mavjud kalitlar qayta ishlatiladi)
     'home_ev_free',
     'home_ev_busy',
+    // Phase 2: stansiyani almashtirish (alternativalar) va "Qaytarish"
+    'ev_alt_swap',
+    'ev_alt_title',
+    'ev_alt_hint',
+    'ev_alt_none',
+    'ev_alt_current',
+    'ev_alt_choose',
+    'ev_alt_power_unknown',
+    'ev_alt_stops',
+    'ev_alt_time_delta',
+    'ev_alt_unreachable',
+    'ev_undo',
+    'ev_replan_done',
+    'ev_replan_nav_hint',
+    'ev_replace_failed',
   ];
 
   final dict = <String, Map<String, dynamic>>{};
@@ -116,6 +131,23 @@ void main() {
         expect(dict[l]![k], contains('{n}'), reason: '$l/$k');
       }
       expect(dict[l]!['ev_trip_at_least'], contains('{t}'), reason: l);
+      expect(dict[l]!['ev_alt_stops'], contains('{n}'), reason: l);
+      expect(dict[l]!['ev_alt_stops'], contains('{d}'), reason: l);
+      expect(dict[l]!['ev_alt_time_delta'], contains('{d}'), reason: l);
+    }
+  });
+
+  test('"Almashtirish" va "Qaytarish" matnlari uch tilda to\'g\'ri va qisqa', () {
+    expect(dict['uz_Cyrl']!['ev_alt_swap'], 'Алмаштириш');
+    expect(dict['uz_Latn']!['ev_alt_swap'], 'Almashtirish');
+    expect(dict['ru']!['ev_alt_swap'], 'Заменить');
+    expect(dict['uz_Cyrl']!['ev_undo'], 'Қайтариш');
+    expect(dict['uz_Latn']!['ev_undo'], 'Qaytarish');
+    for (final l in langs) {
+      for (final k in const ['ev_alt_swap', 'ev_undo', 'ev_alt_choose']) {
+        expect((dict[l]![k] as String).length, lessThanOrEqualTo(14),
+            reason: '$l/$k');
+      }
     }
   });
 

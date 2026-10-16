@@ -22,10 +22,15 @@ class EvTripPlanView extends StatelessWidget {
     required this.onOpenNavigator,
     this.routeMinutes = 0,
     this.car,
+    this.onReplaceStop,
   });
 
   final EvTripPlan plan;
   final VoidCallback onOpenNavigator;
+
+  /// Тўхташ карточкасидаги «Алмаштириш» (режадаги тўхташ индекси, 0'дан).
+  /// `null` — тугма йўқ (алмаштириш мумкин эмас).
+  final ValueChanged<int>? onReplaceStop;
 
   /// Google маршрутидаги жами йўл вақти (дақиқа); 0 — номаълум (кўрсатилмайди).
   final int routeMinutes;
@@ -44,7 +49,13 @@ class EvTripPlanView extends StatelessWidget {
         if (plan.warnings.isNotEmpty) _warnings(context),
         const SizedBox(height: 8),
         for (var i = 0; i < plan.stops.length; i++)
-          _StopCard(stop: plan.stops[i], index: i + 1, car: car),
+          _StopCard(
+            stop: plan.stops[i],
+            index: i + 1,
+            car: car,
+            onReplace:
+                onReplaceStop == null ? null : () => onReplaceStop!(i),
+          ),
         if (plan.isOk && plan.stops.isNotEmpty) ...[
           const SizedBox(height: 12),
           SizedBox(
@@ -252,11 +263,17 @@ String evTripStationSpecLine(EvChargingStation s) {
 }
 
 class _StopCard extends StatelessWidget {
-  const _StopCard({required this.stop, required this.index, this.car});
+  const _StopCard({
+    required this.stop,
+    required this.index,
+    this.car,
+    this.onReplace,
+  });
 
   final EvTripStop stop;
   final int index;
   final EvCarSpec? car;
+  final VoidCallback? onReplace;
 
   @override
   Widget build(BuildContext context) {
@@ -372,6 +389,24 @@ class _StopCard extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ),
+          ],
+          if (onReplace != null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                key: ValueKey('ev_stop_replace_$index'),
+                onPressed: onReplace,
+                icon: const Icon(Icons.swap_horiz_rounded, size: 20),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryText,
+                  minimumSize: const Size(0, 44),
+                  textStyle: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+                label: Text(context.tr('ev_alt_swap')),
+              ),
+            ),
           ],
         ],
       ),

@@ -134,6 +134,11 @@ class EvTripController extends ChangeNotifier {
 
   bool get hasPlan => _plan != null;
 
+  /// Haydovchi tanlagan (almashtirgan) va rad etgan stansiyalar - "Almashtirish"
+  /// ro'yxatini hisoblash uchun (o'zgartirib bo'lmaydi).
+  Set<String> get pinnedStationIds => Set.unmodifiable(_pinned);
+  Set<String> get excludedStationIds => Set.unmodifiable(_excluded);
+
   /// «Қаерга борамиз?» — асосий чақирув.
   ///
   /// Хато бўлса [error] тўлади ва [plan] `null` қолади: ярим-ёлғон режа

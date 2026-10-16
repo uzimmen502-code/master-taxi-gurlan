@@ -162,6 +162,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
         onOpenNavigator: _openNavigator,
         routeMinutes: _controller.routeMinutes,
         car: _planCar,
+        controller: _controller,
       ),
     ));
   }

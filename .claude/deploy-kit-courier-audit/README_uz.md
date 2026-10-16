@@ -61,6 +61,21 @@ Skript: `deploy_d1_lost_parcel.ps1` (faqat functions; default 5 ta → demand 12
   `logistics_incidents/{id}` yaratilgan, mijoz/kuryer hamyoni o'zgargan, `platform_accrual` = 0.
 - Rollback: o'sha nomlarni `cecf2ae`/oldingi deploy worktree'idan qayta deploy; yangi 2 callable → `firebase functions:delete`.
 
+## 3-bosqich: Shaharlararo taksi auditi (commitlar 7accc51…aea0d8d, 11 ta)
+Skript: `deploy_intercity.ps1` (functions:default 9 ta → rules alohida). `production'da HALI yo'q` (classifier rad etdi).
+- H2 baho (`updateIntercityDriverRating`): faqat o'z yakunlangan broni, butun 1..5, bir bron = bir baho.
+- publish/reschedule tekshiruvi: `departure_in_past` (now-5 daq), `route_required`, `seats_invalid` (1..8), `schedule_invalid`;
+  `departureAt` yo'q bo'lsa eski tolerant xulq. Narx min/max QO'SHILMAGAN (qaror kerak).
+- M1: ixtiyoriy `requestId` - takror chaqiruv ikkinchi marta yechmaydi (`taxi_publish_requests`, server-only).
+- H3: `hadAvaBooking` serverda `intercity_bookings`dan hisoblanadi (mijoz qiymati e'tiborsiz). Qaytarish SIYOSATI o'zgarmagan.
+- M4 `expirePendingTrips` har bron tranzaksiyada; M5 eslatma soati UTC+5; M6 avto-surish oldindan saralash; L2 `cancelCause`;
+  H6 `rescheduleTaxiTrip`: bronlar + schedules + intercity_drivers + yo'lovchilarga 3 tilli xabar.
+- H1 rules: qayta yoqish faqat `status=='published'` va o'z `taxi_trips`i bilan. Rules deploy ALOHIDA.
+- INDEKS (egasi tasdig'i, --force YO'Q): `intercity_bookings` (status ASC, departureTime ASC) - eslatma uchun; fayl o'zgartirilmagan.
+- Ilova (fix/courier-audit-flutter, 6 commit): o'tgan vaqt bloki + aqlli boshlang'ich vaqt, requestId, sabablar 3 tilda, yo'lovchi paneli
+  faqat o'z broni, o'tgan reyslar yashirin, bo'sh holat, reysni tugatish tartibi. Eski serverda ham ishlaydi (requestId e'tiborsiz).
+- Rollback: o'sha nomlar `cecf2ae` yoki oldingi deploy worktree'idan; rules - oldingi ruleset manbasini API'dan.
+
 ## Ochiq (egasi qarori)
 - `legChainSweeper`/`relayEscrowReconcile`/`courierCashPendingSweep` birinchi ishga tushganda loglarni kuzating.
 - `acceptLeg` endi `users.accountId → provider_capabilities` yo'lini ishlatadi (logistika hozir `internal`, hech kimga ochiq emas).

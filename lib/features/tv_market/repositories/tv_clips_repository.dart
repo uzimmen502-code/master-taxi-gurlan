@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/formatters.dart' show phonesMatch;
 import '../../../repositories/service_config_repository.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
@@ -430,6 +431,41 @@ class TvClipsRepository {
         .limit(limit)
         .get();
     return snap.docs.map(TvClip.fromFirestore).toList();
+  }
+
+  /// Эълон/ресторанга боғланган ФАОЛ видео (`linkId` бўйича). Клип эгаси
+  /// [ownerPhone] (эълон эгаси) билан бир хил бўлмаса — кўрсатилмайди:
+  /// бегона одам ўз клипини чужой эълонга "боғлаб" қўя олмасин.
+  /// Фақат тенглик фильтрлари — индекс керак эмас.
+  Future<TvClip?> fetchLinked({
+    required String linkId,
+    required String ownerPhone,
+  }) async {
+    if (linkId.isEmpty) return null;
+    final snap = await _col
+        .where('linkId', isEqualTo: linkId)
+        .where('status', isEqualTo: 'active')
+        .limit(10)
+        .get();
+    for (final c in _playable(snap.docs)) {
+      if (phonesMatch(c.ownerPhone, ownerPhone)) return c;
+    }
+    return null;
+  }
+
+  /// Рўйхат учун: шу тур (`linkKind`) бўйича фаол боғланган клиплар,
+  /// `linkId → клип` — БИР сўров (ҳар карта учун алоҳида сўров эмас, 36-қоида).
+  /// Эгалик текшируви карта томонида (`phonesMatch`). Чегара — [limit].
+  Future<Map<String, TvClip>> fetchLinkedMap(
+    String linkKind, {
+    int limit = 200,
+  }) async {
+    final snap = await _col
+        .where('linkKind', isEqualTo: linkKind)
+        .where('status', isEqualTo: 'active')
+        .limit(limit)
+        .get();
+    return {for (final c in _playable(snap.docs)) c.linkId: c};
   }
 
   /// Эгаси ўз клипини ўчиради — аввал Firestore, сўнг файллар.

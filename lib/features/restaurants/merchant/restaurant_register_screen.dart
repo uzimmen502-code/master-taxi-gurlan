@@ -11,6 +11,9 @@ import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'restaurant_form_fields.dart';
 import 'restaurant_panel_screen.dart';
 import 'restaurant_register_form.dart';
+import 'dart:async';
+import '../../tv_market/services/tv_clip_link.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 class RestaurantRegisterScreen extends StatefulWidget {
   const RestaurantRegisterScreen({super.key, this.repository, this.homeCook = false});
@@ -32,6 +35,9 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   );
   bool _sending = false;
   bool _phoneLoaded = false;
+
+  /// Рўйхатдан ўтгач таомлар обзори видеосини жойлаш (ихтиёрий).
+  bool _withVideo = false;
 
   @override
   void initState() {
@@ -65,9 +71,16 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr(status == 'approved' ? 'restaurants_m_submitted_approved' : 'restaurants_m_submitted_pending'))),
       );
-      Navigator.of(context).pushReplacement(
+      final nav = Navigator.of(context);
+      // `pushReplacement` панел ёпилгунча тугамайди — кутмаймиз.
+      unawaited(nav.pushReplacement(
         MaterialPageRoute(builder: (_) => RestaurantPanelScreen(restaurantId: rid, repository: _repo)),
-      );
+      ));
+      // Ихтиёрий таомлар обзори видеоси: ресторан ЯРАТИЛДИ; видео бекор
+      // қилинса/йиқилса таъсир йўқ.
+      if (_withVideo && rid.isNotEmpty) {
+        await TvClipLink.publish(nav, kind: TvClipLink.kindRestaurant, linkId: rid);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,7 +114,12 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
                     showLegalType: !widget.homeCook,
                     legalTypeOptions: RestaurantFormData.cafeLegalTypes,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
+                  VideoOptionTile(
+                    value: _withVideo,
+                    onChanged: (v) => setState(() => _withVideo = v),
+                  ),
+                  const SizedBox(height: 12),
                   FilledButton(
                     onPressed: _sending ? null : _submit,
                     style: FilledButton.styleFrom(

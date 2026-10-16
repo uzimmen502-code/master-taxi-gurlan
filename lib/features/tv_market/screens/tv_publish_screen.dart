@@ -38,7 +38,21 @@ class TvPublishScreen extends StatefulWidget {
     this.attachItemId = '',
     this.editClip,
     this.hideShopOption = false,
+    this.linkKind = '',
+    this.linkId = '',
+    this.organicOnly = false,
   });
+
+  /// Видео ЭГАСИНИНГ ўз эълонига/ресторанига қўшилаётган бўлса: клип яратилганда
+  /// `linkKind`/`linkId` шу заҳоти ёзилади (алоҳида иккинчи ёзув ва "энг сўнгги
+  /// клип" тахмини йўқ). Қиймат ва маъно — [TvClip.linkKind].
+  final String linkKind;
+  final String linkId;
+
+  /// `true` — фақат оддий видео (Товар/Хизмат): пуллик реклама ва 48 соатлик
+  /// «Янгилик» сегментлари кўринмайди ва матндан автотаклиф ишламайди. Боғланган
+  /// видео эълон каби узоқ яшаши ва реклама тўловига тушмаслиги учун.
+  final bool organicOnly;
 
   /// Мавжуд товар/хизматга яна ролик қўшиш.
   final String attachItemId;
@@ -119,6 +133,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _attachItemId = widget.attachItemId;
+    if (widget.organicOnly) {
+      _category = widget.linkKind == 'service' ? 'service' : 'product';
+      _categoryTouched = true; // автотаклиф «Янгилик»ка ўтказмасин
+    }
     final edit = widget.editClip;
     if (edit != null) {
       _titleCtrl.text = edit.title;
@@ -782,6 +800,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         status: autoApprove ? 'active' : 'pending',
         showPhone: _showPhone,
         shopItemId: shopItemId,
+        linkKind: widget.linkKind,
+        linkId: widget.linkId,
         socialConsent: _socialNetworks.isNotEmpty,
         socialNetworks: _socialNetworks.toList(),
         searchTokens: TvClipSearch.buildTokens(
@@ -1029,12 +1049,12 @@ class _TvPublishScreenState extends State<TvPublishScreen>
             value: 'service',
             label: Text(context.tr('tv_publish_service')),
           ),
-          if (!_isEdit)
+          if (!_isEdit && !widget.organicOnly)
             ButtonSegment(
               value: 'ad',
               label: Text(context.tr('tv_publish_ad')),
             ),
-          if (!_isEdit)
+          if (!_isEdit && !widget.organicOnly)
             ButtonSegment(
               value: 'news',
               label: Text(context.tr('tv_publish_news')),

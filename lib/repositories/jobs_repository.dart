@@ -213,11 +213,37 @@ class JobsRepository {
     required DateTime expiresAt,
     String title = '',
     String priceText = '',
+  }) async =>
+      (await addAdWithId(
+        type: type,
+        text: text,
+        authorName: authorName,
+        authorPhone: authorPhone,
+        address: address,
+        isUrgent: isUrgent,
+        expiresAt: expiresAt,
+        title: title,
+        priceText: priceText,
+      ))
+          .status;
+
+  /// [addAd] билан бир хил, лекин яратилган эълон `id`си ҳам қайтади — унга
+  /// ихтиёрий видео боғлаш учун ([TvClipLink]).
+  Future<({String adId, String status})> addAdWithId({
+    required String type,
+    required String text,
+    required String authorName,
+    required String authorPhone,
+    required String address,
+    required bool isUrgent,
+    required DateTime expiresAt,
+    String title = '',
+    String priceText = '',
   }) async {
     if (!JobAd.isJobsBoardType(type)) {
       throw StateError('Номаълум эълон тури');
     }
-    final result = await JobAdService.submitAd(
+    return JobAdService.submitAd(
       type: type,
       text: text,
       authorName: authorName,
@@ -226,7 +252,6 @@ class JobsRepository {
       address: address,
       isUrgent: isUrgent,
     );
-    return result.status;
   }
 
   /// Муаллиф ўз эълони (authorPhone текшируви).

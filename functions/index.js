@@ -43,7 +43,9 @@ const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list
 // `settlement_ledger` orqali; capability mantiqi `capabilities_model.js`
 // nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
 const { attachTaxiBilling } = require('./taxi_billing');
-const { runAutoShift } = require('./intercity_auto_shift');
+const { runAutoShift, hhmm: tashkentHhmm } = require('./intercity_auto_shift');
+// Shaharlararo bron muddati - har bron o'z tranzaksiyasida (audit M4, 2026-10).
+const intercityExpiry = require('./intercity_expiry');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
@@ -11224,15 +11226,8 @@ async function intercityCallerIsAdmin(caller) {
   }
 }
 
-/** Seat qaytarish — har doim seatCapacity bilan cheklanadi. */
-function intercityRestoredSeats(driverData, passengers) {
-  const d = driverData || {};
-  const seats = Number(d.seats) || 0;
-  const restored = seats + (Number(passengers) || 1);
-  const cap = d.seatCapacity != null ? Number(d.seatCapacity) : null;
-  if (cap != null && Number.isFinite(cap)) return Math.min(restored, cap);
-  return restored;
-}
+/** Seat qaytarish — har doim seatCapacity bilan cheklanadi (bitta manba: intercity_expiry.js). */
+const intercityRestoredSeats = intercityExpiry.restoredSeats;
 
 /**
  * Haydovchining taksi capability holati — tranzaksiya ichida (o'qish).
@@ -11464,6 +11459,27 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
   });
 });
 
+/**
+ * Audit L2: bron bekor qilish sababi (`intercity_bookings.cancelCause`):
+ *   passenger | driver_reject | trip_ended | new_trip | admin
+ * Faqat HAYDOVCHI (yoki admin) `trip_ended`/`new_trip` ni ko'rsata oladi: yangi ilova
+ * `cause` yuboradi, ESKI ilova esa `reason` matnini ("рейсни бекор", "янги рейс" /
+ * "yangi reys") - orqaga moslik uchun shu matnlar faqat haydovchi/admin uchun hisobga
+ * olinadi. Yo'lovchi yuborgan matn/`cause` hech qachon "reys tugadi" ma'nosini bermaydi
+ * (aks holda haydovchiga xabar yuborilmay qolardi).
+ */
+const INTERCITY_DRIVER_CAUSES = ['trip_ended', 'new_trip'];
+function intercityCancelCause({isPassenger, isDriver, reason, clientCause}) {
+  if (isPassenger) return 'passenger';
+  // Bu yerdan faqat haydovchi yoki admin o'tadi (ishtirokchi emas = permission-denied).
+  const c = String(clientCause || '');
+  if (INTERCITY_DRIVER_CAUSES.includes(c)) return c;
+  const r = String(reason || '');
+  if (r.includes('рейсни бекор')) return 'trip_ended';
+  if (r.includes('янги рейс') || r.includes('yangi reys')) return 'new_trip';
+  return isDriver ? 'driver_reject' : 'admin';
+}
+
 exports.intercityCancelBooking = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Auth required');
@@ -11516,9 +11532,15 @@ exports.intercityCancelBooking = functions.https.onCall(async (data, context) =>
         updatedAt: now,
       });
     }
+    // Audit L2: bekor SABABI serverda aniqlanadi (`cancelCause`), yo'lovchiga
+    // xabar mazmuni shunga bog'liq - klient yuborgan erkin matnga EMAS.
+    const cancelCause = intercityCancelCause({
+      isPassenger, isDriver, reason, clientCause: data.cause,
+    });
     tx.update(bookingRef, {
       status: 'cancelled',
       cancelReason: reason,
+      cancelCause,
       cancelledAt: now,
     });
     if (clientRef && clientSnap && clientSnap.exists) {
@@ -11536,7 +11558,9 @@ exports.intercityCancelBooking = functions.https.onCall(async (data, context) =>
       });
     }
 
-    return {ok: true, booking: b, byDriver: isDriver && !isPassenger};
+    return {
+      ok: true, booking: b, cancelCause, byDriver: isDriver && !isPassenger,
+    };
   });
 
   if (!outcome || outcome.ok !== true) {
@@ -11548,7 +11572,8 @@ exports.intercityCancelBooking = functions.https.onCall(async (data, context) =>
       intercityRouteText(null, b);
   const passengerPhone = digits(b.userPhone || '');
   const driverPhone = digits(b.driverPhone || b.driverId || '');
-  const tripEnded = reason.includes('рейсни бекор') || reason.includes('yangi reys');
+  const tripEnded = outcome.cancelCause === 'trip_ended' ||
+      outcome.cancelCause === 'new_trip';
 
   const writes = [];
   if (passengerPhone.length >= 9) {
@@ -11653,32 +11678,57 @@ exports.updateIntercityDriverRating = functions.https.onCall(async (data, contex
     throw new functions.https.HttpsError(
         'unauthenticated', 'Auth required');
   }
-  const {driverId, rating, bookingId} = data;
-  if (!driverId || !rating ||
+  // Audit H2 (2026-10): avval chaqiruvchi bron egasimi, bron `completed`mi,
+  // haydovchi bron bilan mosmi — HECH NARSA tekshirilmasdi (istalgan
+  // foydalanuvchi istalgan haydovchiga istalgan baho yoza olardi), bron
+  // tranzaksiyadan TASHQARIDA o'qilgani uchun parallel chaqiruv bahoni
+  // ikki marta sanardi. Endi hammasi BITTA tranzaksiyada; haydovchi
+  // BRONDAN olinadi (klient `driverId`si faqat moslik tekshiruvi uchun).
+  const caller = callerPhone(context);
+  const rating = data && data.rating;
+  const bookingId = String((data && data.bookingId) || '').trim();
+  const clientDriverId = String((data && data.driverId) || '').trim();
+  const reject = (code, msg, errorCode) => {
+    console.warn(JSON.stringify({
+      action: 'updateIntercityDriverRating', result: 'rejected', errorCode, bookingId,
+    }));
+    return new functions.https.HttpsError(code, msg);
+  };
+  if (typeof rating !== 'number' || !Number.isInteger(rating) ||
       rating < 1 || rating > 5) {
-    throw new functions.https.HttpsError(
-        'invalid-argument', 'Invalid rating');
+    throw reject('invalid-argument', 'Invalid rating', 'RATING_INVALID');
+  }
+  if (!bookingId) {
+    throw reject('invalid-argument', 'bookingId', 'BOOKING_ID_MISSING');
   }
 
-  const bookingSnap = await db.collection('intercity_bookings')
-      .doc(bookingId).get();
-  if (!bookingSnap.exists) {
-    throw new functions.https.HttpsError(
-        'not-found', 'Booking not found');
-  }
-  if (bookingSnap.data()?.passengerRating) {
-    return {ok: true, skipped: true};
-  }
+  const bookingRef = db.collection('intercity_bookings').doc(bookingId);
+  const out = await db.runTransaction(async (t) => {
+    const bookingSnap = await t.get(bookingRef);
+    if (!bookingSnap.exists) {
+      throw reject('not-found', 'Booking not found', 'BOOKING_NOT_FOUND');
+    }
+    const b = bookingSnap.data() || {};
+    if (!intercityPhoneMatch(caller, b.userPhone)) {
+      throw reject('permission-denied', 'not_passenger', 'RATING_NOT_PASSENGER');
+    }
+    if (b.passengerRating) return {ok: true, skipped: true};
+    if (String(b.status || '') !== 'completed') {
+      throw reject('failed-precondition', 'booking_not_completed',
+          'RATING_BOOKING_NOT_COMPLETED');
+    }
+    const driverId = String(b.driverId || '').trim();
+    if (!driverId) {
+      throw reject('failed-precondition', 'booking_no_driver', 'RATING_NO_DRIVER');
+    }
+    if (clientDriverId && !intercityPhoneMatch(clientDriverId, driverId)) {
+      throw reject('invalid-argument', 'driver_mismatch', 'RATING_DRIVER_MISMATCH');
+    }
 
-  const driverRef = db.collection('intercity_drivers')
-      .doc(driverId);
-  const bookingRef = db.collection('intercity_bookings')
-      .doc(bookingId);
-
-  await db.runTransaction(async (t) => {
+    const driverRef = db.collection('intercity_drivers').doc(driverId);
     const snap = await t.get(driverRef);
-    if (!snap.exists) return;
-    const d = snap.data();
+    if (!snap.exists) return {ok: true, skipped: true};
+    const d = snap.data() || {};
     const totalRatings = (d.totalRatings ?? 0) + 1;
     const ratingSum = (d.ratingSum ?? 0) + rating;
     const avgRating =
@@ -11696,8 +11746,9 @@ exports.updateIntercityDriverRating = functions.https.onCall(async (data, contex
       ratedAt: admin.firestore.FieldValue
           .serverTimestamp(),
     });
+    return {ok: true};
   });
-  return {ok: true};
+  return out;
 });
 
 exports.onIntercityPickupUpdated = functions.firestore
@@ -11766,10 +11817,12 @@ async function sendIntercityDepartureReminders() {
     const phone = digits(b.userPhone || '');
     if (phone.length < 9) continue;
 
-    const dep = b.departureTime && b.departureTime.toDate
-      ? b.departureTime.toDate()
-      : new Date();
-    const depText = `${String(dep.getHours()).padStart(2, '0')}:${String(dep.getMinutes()).padStart(2, '0')}`;
+    // Audit M5: soat Toshkent (UTC+5) bo'yicha - `getHours()` server vaqt zonasi
+    // (Cloud Functions'da UTC) bo'yicha 5 soat kam ko'rsatardi. Avto-surish bilan bir xil yordamchi.
+    const depMs = b.departureTime && b.departureTime.toMillis
+      ? b.departureTime.toMillis()
+      : nowMs;
+    const depText = tashkentHhmm(depMs);
     const driverName = b.driverName || 'Ҳайдовчи';
     const route = [b.fromCity, b.toCity].filter(Boolean).join(' → ') || 'Шаҳарлараро';
 
@@ -12314,83 +12367,26 @@ exports.expirePendingTrips = functions.pubsub
       }
     }
 
-    // intercity_bookings → expired + seat qaytarish
+    // intercity_bookings → expired + seat qaytarish. Audit M4 (2026-10): har bron O'Z
+    // tranzaksiyasida (`intercity_expiry.js`) - holat qayta tekshiriladi (accept/cancel
+    // bilan poyga), o'rin seatCapacity'dan oshmaydi, ikki marta qaytmaydi.
     const expiredIntercityDriverIds = new Set();
+    let intercityExpired = 0;
     for (const doc of intercitySnap.docs) {
-      const booking = doc.data();
-      const passengers = booking.passengers || 1;
-      const driverId = booking.driverId || '';
-      if (driverId) expiredIntercityDriverIds.add(driverId);
-
-      batch.update(doc.ref, {
-        status: 'expired',
-        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      const userKey = digits(booking.userPhone || '');
-      if (userKey.length >= 9) {
-        const notifRef = db.collection('notifications').doc();
-        batch.set(notifRef, {
-          targetPhone: userKey,
-          title: '⏱ Брон муддати ўтди',
-          body: 'Ҳайдовчи жавоб бермади. Бошқа ҳайдовчи танланг.',
-          sent: false,
-          type: 'intercity_booking_cancelled',
-          bookingId: doc.id,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      try {
+        const res = await intercityExpiry.expireIntercityBooking({
+          db, admin, bookingRef: doc.ref, nowMs: now.toMillis(),
         });
-        writes++;
-      }
-
-      // O'rinni qaytarish (agar haqiqiy driver bo'lsa)
-      if (driverId && !['1', '2', '3', '4', '5'].includes(driverId)) {
-        const driverRef = db.collection('intercity_drivers').doc(driverId);
-        batch.update(driverRef, {
-          seats: admin.firestore.FieldValue.increment(passengers),
-        });
-      }
-
-      // Doimiy mijoz statistikasi — cancelBooking kabi qaytarish
-      const totalAmount = Number(booking.totalAmount) || 0;
-      if (driverId && userKey.length >= 9 && totalAmount > 0) {
-        const clientRef = db.collection('intercity_drivers')
-          .doc(driverId)
-          .collection('clients')
-          .doc(userKey);
-        const clientSnap = await clientRef.get();
-        if (clientSnap.exists) {
-          batch.update(clientRef, {
-            bookingCount: admin.firestore.FieldValue.increment(-1),
-            totalSpent: admin.firestore.FieldValue.increment(-totalAmount),
-            lastBookingAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          writes++;
+        if (res.ok) {
+          intercityExpired += 1;
+          if (res.driverId) expiredIntercityDriverIds.add(res.driverId);
         }
-      }
-
-      if (driverId && userKey.length >= 9) {
-        batch.delete(
-          db.collection('intercity_booking_locks').doc(`${driverId}_${userKey}`),
-        );
-        writes++;
-      }
-
-      const bookingId = doc.id;
-      if (userKey.length >= 9) {
-        const passengerLockRef = db.collection('intercity_passenger_locks').doc(userKey);
-        const passengerLockSnap = await passengerLockRef.get();
-        if (passengerLockSnap.exists
-            && passengerLockSnap.data()?.bookingId === bookingId) {
-          batch.delete(passengerLockRef);
-          writes++;
-        }
-      }
-
-      writes++;
-      if (writes >= 450) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
+      } catch (e) {
+        // Keyingi daqiqada qayta uriniladi (bron hali `pending`; tranzaksiya idempotent).
+        console.error(JSON.stringify({
+          action: 'expireIntercityBooking', result: 'error', errorCode: 'INTERCITY_EXPIRE_FAILED',
+          bookingId: doc.id, message: e && e.message,
+        }));
       }
     }
 
@@ -12401,7 +12397,7 @@ exports.expirePendingTrips = functions.pubsub
     }
 
     console.log(
-      `expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}`
+      `expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}, intercityExpired=${intercityExpired}`
         + `, yukClosed=${yukStats.closed}, yukWarn=${yukStats.warn}`,
     );
     return null;

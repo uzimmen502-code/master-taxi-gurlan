@@ -37,6 +37,14 @@ const MESSAGES = {
     ru: { title: '⏱ Рейс больше не переносится автоматически', body: 'Время отправления слишком позднее, поэтому рейс сегодня больше не переносится. Перенесите на другой день или завершите.' },
   },
 
+  // ── Ҳайдовчи рейсни қўлда кўчирди (`rescheduleTaxiTrip`, audit H6, 2026-10). Матн PROPOSED —
+  // эга тасдиқлайди (рус тили ҳам). `{date}` — КК.ОО, `{time}` — СС:ДД (Тошкент).
+  reschedule_passenger: {
+    uz_Cyrl: { title: '🕐 Рейс вақти ўзгарди', body: 'Рейс {date} куни соат {time} га кўчирилди. Қулай бўлмаса бронни бекор қилишингиз мумкин.' },
+    uz_Latn: { title: '🕐 Reys vaqti o\'zgardi', body: 'Reys {date} kuni soat {time} ga ko\'chirildi. Qulay bo\'lmasa bronni bekor qilishingiz mumkin.' },
+    ru: { title: '🕐 Время рейса изменилось', body: 'Отправление перенесено на {date}, {time}. Если неудобно, можно отменить бронь.' },
+  },
+
   // ── Йўқолган посилка (AVA Logistics, D1, 2026-10-16). Матнлар PROPOSED — эга тасдиқлайди
   // (рус тили ҳам ҳали эга кўриб чиқмаган). `{amount}` — посилка қиймати G, `{left}` — қолган қарз.
   lost_customer_full: {
@@ -128,4 +136,15 @@ async function langOfPhone(db, phone) {
   return DEFAULT_LANG;
 }
 
-module.exports = { MESSAGES, LANGS, DEFAULT_LANG, normalizeLang, render, langOfPhone };
+/** `langOfPhone`нинг транзакция ичидаги варианти (ёзишдан ОЛДИН чақирилади). */
+async function langOfPhoneTx(tx, db, phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  const ids = d.length === 9 ? [`998${d}`, d] : [d];
+  for (const id of ids) {
+    const s = await tx.get(db.collection('users').doc(id));
+    if (s.exists) return normalizeLang((s.data() || {}).appLang);
+  }
+  return DEFAULT_LANG;
+}
+
+module.exports = { MESSAGES, LANGS, DEFAULT_LANG, normalizeLang, render, langOfPhone, langOfPhoneTx };

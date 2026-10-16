@@ -1,0 +1,426 @@
+/**
+ * Shaharlararo taksi auditi (2026-10) - taxi_billing.js qismi.
+ * HAQIQIY ledger + Firestore Emulator (Admin SDK), soat inyeksiya qilinadi.
+ *
+ *   firebase emulators:exec --only firestore --project demo-taxi-audit \
+ *     "node functions/test/taxi_intercity_audit_cf.test.js"
+ *
+ * Qulflanadi:
+ *   M2/H5  publish/reschedule kirish tekshiruvi (PUL TEGILMASDAN OLDIN):
+ *          departure_in_past / route_required / seats_invalid / schedule_invalid;
+ *          departureAt yo'q (eski ilova) - eski tolerant xulq.
+ *   M1     publish idempotentligi (ixtiyoriy requestId): qayta chaqiruv yangi reys
+ *          ochmaydi va qayta yechmaydi (ketma-ket, parallel, payment_required).
+ *   H3     cancel: `hadAvaBooking` SERVER hisoblaydi (intercity_bookings), klient
+ *          qiymati e'tiborga olinmaydi; refund siyosati O'ZGARMAGAN.
+ *   H6     rescheduleTaxiTrip: bronlar vaqti, yo'lovchi xabarlari (3 til), schedules
+ *          e'loni va intercity_drivers bir xil; qayta chaqiruv idempotent.
+ */
+'use strict';
+const assert = require('assert');
+const admin = require('firebase-admin');
+const functions = require('firebase-functions');
+
+process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:18080';
+process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-taxi-audit';
+if (!/^demo-/.test(process.env.GCLOUD_PROJECT)) throw new Error('demo-* loyiha kerak');
+admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT });
+const db = admin.firestore();
+const Timestamp = admin.firestore.Timestamp;
+
+const settlementLedger = require('../settlement_ledger');
+const { attachTaxiBilling } = require('../taxi_billing');
+
+const DRIVER = '998901110001';
+const OTHER = '998901110002';
+const ACC = 'accDRV000000000000000A';
+const NOW0 = new Date('2026-10-06T06:00:00Z');
+let clock = NOW0;
+
+const digits = (v) => String(v || '').replace(/\D/g, '');
+const api = attachTaxiBilling({}, {
+  functions, db, admin,
+  callerPhone: (ctx) => digits(ctx.auth.token.phone_number),
+  canonicalUid: (v) => { const d = digits(v); return d.length === 9 ? `998${d}` : d; },
+  settlementLedger,
+  notifyUserInApp: async () => {},
+  now: () => clock,
+});
+const ctx = { auth: { token: { phone_number: `+${DRIVER}` } } };
+
+const results = [];
+const check = async (name, fn) => {
+  try { await fn(); results.push(true); console.log(`PASS - ${name}`); } catch (e) {
+    results.push(false); console.log(`FAIL - ${name} :: ${e.message}`);
+  }
+};
+async function wipe(col) {
+  const s = await db.collection(col).get();
+  await Promise.all(s.docs.map((d) => d.ref.delete()));
+}
+async function reset({ wallet = 200000 } = {}) {
+  clock = NOW0;
+  await Promise.all(['users', 'provider_capabilities', 'service_agreements', 'taxi_trips', 'taxi_reschedules',
+    'taxi_publish_requests', 'taxi_fraud_cases', 'intercity_bookings', 'intercity_drivers', 'schedules',
+    'notifications', settlementLedger.COL_JOURNAL, settlementLedger.COL_ACCOUNTS].map(wipe));
+  await db.collection('users').doc(DRIVER).set({ role: 'user', accountId: ACC, bonusBalance: 0 });
+  await db.collection('provider_capabilities').doc(ACC).set({
+    identity: { accountId: ACC, primaryUid: DRIVER }, taxi: { active: true }, status: { taxi: 'verified' },
+    window: { taxi: { billingGraceUntil: null } },
+  });
+  await db.collection('service_agreements').doc(ACC).set({ taxi: { version: require('../capabilities_model').AGREEMENT_VERSIONS.taxi, acceptedAt: NOW0 } });
+  if (wallet > 0) await topUp(wallet, 'init');
+}
+async function topUp(amount, key) {
+  await settlementLedger.postEntry(db, {
+    idempotencyKey: `topup:${DRIVER}:${key}`, kind: 'test_topup',
+    legs: [{ account: 'admin_clearing', dr: amount }, { account: settlementLedger.passengerCreditAccount(DRIVER), cr: amount }],
+  });
+}
+const balance = async () => ((await db.collection(settlementLedger.COL_ACCOUNTS).doc(settlementLedger.passengerCreditAccount(DRIVER)).get()).data() || {}).balance || 0;
+const trip = async (id) => (await db.collection('taxi_trips').doc(id).get()).data();
+const tripCount = async () => (await db.collection('taxi_trips').get()).size;
+const journalCount = async () => (await db.collection(settlementLedger.COL_JOURNAL).get()).size;
+const pub = (over = {}) => api.publish({
+  farePerSeat: 350000, from: 'Urganch', to: 'Toshkent', scheduleDate: '2026-10-07', startTime: '08:00',
+  departureAt: '2026-10-07T03:00:00Z', seats: 4, ...over,
+}, ctx);
+const reasonOf = (e) => (e && e.details && e.details.reason) || '';
+async function expectReason(promise, reason, code = 'failed-precondition') {
+  await assert.rejects(promise, (e) => {
+    assert.strictEqual(reasonOf(e), reason, `sabab ${reasonOf(e)} (${e.code}): ${e.message}`);
+    assert.strictEqual(e.code, code);
+    return true;
+  });
+}
+const ts = (ms) => Timestamp.fromMillis(ms);
+
+async function main() {
+  // ══ M2/H5: publish kirish tekshiruvi ═════════════════════════════════
+  await reset();
+  await check('publish: o\'tgan jo\'nash vaqti (now-6 daq) -> departure_in_past, reys YO\'Q, pul tegilmaydi', async () => {
+    const before = await balance(); const j = await journalCount();
+    await expectReason(pub({ departureAt: new Date(NOW0.getTime() - 6 * 60000).toISOString() }), 'departure_in_past');
+    assert.strictEqual(await tripCount(), 0); assert.strictEqual(await balance(), before);
+    assert.strictEqual(await journalCount(), j);
+  });
+  await check('publish: chegara - now-5 daq QABUL, now-5 daq-1 soniya RAD', async () => {
+    const ok = await pub({ departureAt: new Date(NOW0.getTime() - 5 * 60000).toISOString() });
+    assert.strictEqual(ok.status, 'published');
+    await expectReason(pub({ departureAt: new Date(NOW0.getTime() - 5 * 60000 - 1000).toISOString() }), 'departure_in_past');
+  });
+  await check('publish: noto\'g\'ri sana satri (departureAt: "abc") -> departure_in_past (jim null EMAS)', async () => {
+    const n = await tripCount();
+    await expectReason(pub({ departureAt: 'abc' }), 'departure_in_past');
+    assert.strictEqual(await tripCount(), n);
+  });
+  await check('publish: departureAt YO\'Q (eski ilova) - eski tolerant xulq, departureAt=null', async () => {
+    const r = await api.publish({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent' }, ctx);
+    assert.strictEqual(r.status, 'published');
+    assert.strictEqual((await trip(r.tripId)).departureAt, null);
+  });
+  await check('publish: from/to bo\'sh yoki faqat bo\'shliq -> route_required', async () => {
+    await expectReason(pub({ from: '   ' }), 'route_required');
+    await expectReason(pub({ to: '' }), 'route_required');
+    await expectReason(pub({ from: undefined }), 'route_required');
+  });
+  await check('publish: seats 0 / 9 / 2.5 / "abc" -> seats_invalid; yo\'q -> 4; "3" -> 3 (tolerant)', async () => {
+    for (const s of [0, 9, 2.5, -1, 'abc']) await expectReason(pub({ seats: s }), 'seats_invalid');
+    const r1 = await api.publish({ farePerSeat: 100000, from: 'A', to: 'B' }, ctx);
+    assert.strictEqual((await trip(r1.tripId)).seats, 4);
+    const r2 = await pub({ seats: '3' }); assert.strictEqual((await trip(r2.tripId)).seats, 3);
+    const r3 = await pub({ seats: 1 }); assert.strictEqual((await trip(r3.tripId)).seats, 1);
+    const r4 = await pub({ seats: 8 }); assert.strictEqual((await trip(r4.tripId)).seats, 8);
+  });
+  await check('publish: scheduleDate/startTime formati -> schedule_invalid; bo\'sh/yo\'q - tolerant', async () => {
+    for (const d of ['07.10.2026', '2026-13-01', '2026-02-30', '2026-1-7', 'ertaga']) {
+      await expectReason(pub({ scheduleDate: d }), 'schedule_invalid');
+    }
+    for (const t of ['8:00', '24:00', '08:60', '0800', 'ertalab']) {
+      await expectReason(pub({ startTime: t }), 'schedule_invalid');
+    }
+    const ok = await pub({ scheduleDate: '', startTime: '' });
+    assert.strictEqual(ok.status, 'published');
+  });
+  await check('publish: tekshiruv QARZ YOPISHDAN OLDIN - noto\'g\'ri kirishda qarz tegilmaydi', async () => {
+    await db.collection('provider_capabilities').doc(ACC).set({ debt: { taxi: 5000, taxiRounds: 0 } }, { merge: true });
+    const j = await journalCount(); const bal = await balance();
+    await expectReason(pub({ seats: 99 }), 'seats_invalid');
+    assert.strictEqual(await journalCount(), j); assert.strictEqual(await balance(), bal);
+    assert.strictEqual(((await db.collection('provider_capabilities').doc(ACC).get()).data().debt || {}).taxi, 5000);
+    await db.collection('provider_capabilities').doc(ACC).set({ debt: { taxi: 0 } }, { merge: true });
+  });
+
+  // ══ M2: reschedule ═══════════════════════════════════════════════════
+  await reset();
+  await check('reschedule: o\'tgan vaqt -> departure_in_past, reys o\'zgarmaydi, audit YO\'Q', async () => {
+    const r = await pub();
+    await expectReason(api.reschedule({ tripId: r.tripId, departureAt: new Date(NOW0.getTime() - 10 * 60000).toISOString() }, ctx), 'departure_in_past');
+    assert.strictEqual((await trip(r.tripId)).rescheduleCount, undefined);
+    assert.strictEqual((await db.collection('taxi_reschedules').get()).size, 0);
+  });
+  await check('reschedule: noto\'g\'ri scheduleDate/startTime -> schedule_invalid; departureAt yo\'q -> invalid-argument (eski)', async () => {
+    const r = await pub();
+    await expectReason(api.reschedule({ tripId: r.tripId, departureAt: '2026-10-09T03:00:00Z', scheduleDate: '09/10' }, ctx), 'schedule_invalid');
+    await expectReason(api.reschedule({ tripId: r.tripId, departureAt: '2026-10-09T03:00:00Z', startTime: '25:00' }, ctx), 'schedule_invalid');
+    await assert.rejects(() => api.reschedule({ tripId: r.tripId }, ctx), (e) => e.code === 'invalid-argument');
+  });
+
+  // ══ M1: publish idempotentligi ═══════════════════════════════════════
+  await reset();
+  await check('requestId formati: qisqa / belgi / 65 uzun -> request_id_invalid; hujjat yaratilmaydi', async () => {
+    for (const rid of ['short', 'has space!!!', 'x'.repeat(65), 'bad/slash/1234']) {
+      await expectReason(pub({ requestId: rid }), 'request_id_invalid', 'invalid-argument');
+    }
+    assert.strictEqual((await db.collection('taxi_publish_requests').get()).size, 0);
+    assert.strictEqual(await tripCount(), 0);
+  });
+  await check('requestId: ketma-ket qayta chaqiruv -> BIR reys, BIR yechim, bir xil tripId', async () => {
+    const a = await pub({ requestId: 'req-AAAA-0001' });
+    const bal = await balance(); const j = await journalCount();
+    const b = await pub({ requestId: 'req-AAAA-0001' });
+    assert.strictEqual(b.tripId, a.tripId); assert.strictEqual(b.status, 'published');
+    assert.strictEqual(b.idempotent, true); assert.strictEqual(b.feeAmount, a.feeAmount);
+    assert.strictEqual(await tripCount(), 1); assert.strictEqual(await balance(), bal);
+    assert.strictEqual(await journalCount(), j);
+    const rq = await db.collection('taxi_publish_requests').doc(`${DRIVER}_req-AAAA-0001`).get();
+    assert.ok(rq.exists); assert.strictEqual(rq.data().tripId, a.tripId);
+  });
+  await check('requestId: PARALLEL 2 ta chaqiruv -> BIR reys, komissiya BIR marta', async () => {
+    const before = await balance();
+    const [a, b] = await Promise.all([pub({ requestId: 'req-BBBB-0002' }), pub({ requestId: 'req-BBBB-0002' })]);
+    assert.strictEqual(a.tripId, b.tripId);
+    assert.strictEqual((await db.collection('taxi_trips').where('driverUid', '==', DRIVER).get()).docs
+      .filter((d) => d.id === a.tripId).length, 1);
+    assert.strictEqual(await tripCount(), 2, 'req-AAAA + req-BBBB = 2 reys');
+    assert.strictEqual(before - await balance(), 28000, 'komissiya bir marta');
+  });
+  await check('requestId: boshqa requestId -> yangi reys (alohida harakat)', async () => {
+    const a = await pub({ requestId: 'req-CCCC-0003' }); const b = await pub({ requestId: 'req-DDDD-0004' });
+    assert.notStrictEqual(a.tripId, b.tripId);
+  });
+  await check('requestId YO\'Q -> eski xulq: ikki chaqiruv = ikki reys', async () => {
+    const n = await tripCount();
+    await pub(); await pub();
+    assert.strictEqual(await tripCount(), n + 2);
+  });
+  await check('requestId: payment_required natijasi ham qayta chaqiruvda O\'SHA reys, yangi reys/yechim YO\'Q', async () => {
+    await reset({ wallet: 10000 }); // fee 28 000 > 10 000
+    const a = await pub({ requestId: 'req-EEEE-0005' });
+    assert.strictEqual(a.status, 'payment_required');
+    await topUp(100000, 'later');
+    const bal = await balance(); const j = await journalCount();
+    const b = await pub({ requestId: 'req-EEEE-0005' });
+    assert.strictEqual(b.tripId, a.tripId); assert.strictEqual(b.status, 'payment_required');
+    assert.strictEqual(await tripCount(), 1); assert.strictEqual(await balance(), bal);
+    assert.strictEqual(await journalCount(), j, 'qayta chaqiruv pul harakatini yaratmaydi');
+  });
+  await check('requestId: kirish xatosida hujjat qolmaydi (keyin to\'g\'ri chaqiruv ishlaydi)', async () => {
+    await reset();
+    await expectReason(pub({ requestId: 'req-FFFF-0006', seats: 99 }), 'seats_invalid');
+    assert.strictEqual((await db.collection('taxi_publish_requests').get()).size, 0);
+    const ok = await pub({ requestId: 'req-FFFF-0006' });
+    assert.strictEqual(ok.status, 'published');
+  });
+  await check('requestId: fee 0 (starter) yo\'li ham idempotent', async () => {
+    await reset();
+    await db.collection('provider_capabilities').doc(ACC).set({ status: { taxi: 'starter' } }, { merge: true });
+    const a = await pub({ requestId: 'req-GGGG-0007' }); const b = await pub({ requestId: 'req-GGGG-0007' });
+    assert.strictEqual(a.tripId, b.tripId); assert.strictEqual(await tripCount(), 1);
+    assert.strictEqual(b.status, 'published'); assert.strictEqual(b.feeAmount, 0);
+  });
+  await check('requestId: boshqa haydovchining kaliti to\'qnashmaydi (kalit = driverUid_requestId)', async () => {
+    await reset();
+    const a = await pub({ requestId: 'req-HHHH-0008' });
+    await db.collection('taxi_publish_requests').doc(`${OTHER}_req-HHHH-0008`).set({ tripId: 'foreign', status: 'published' });
+    const b = await pub({ requestId: 'req-HHHH-0008' });
+    assert.strictEqual(b.tripId, a.tripId);
+  });
+
+  // ══ H3: hadAvaBooking SERVER hisoblaydi ══════════════════════════════
+  const seedBooking = (id, over = {}) => db.collection('intercity_bookings').doc(id).set({
+    driverId: DRIVER, userPhone: '998905550001', status: 'confirmed', passengers: 1,
+    createdAt: ts(NOW0.getTime() + 60000), departureTime: ts(NOW0.getTime() + 3600000), ...over,
+  });
+  const hadOf = async (tripId) => (await trip(tripId)).hadAvaBooking;
+  await reset();
+  await check('H3: bron YO\'Q, klient hadAvaBooking:true yuboradi -> server false yozadi (klient e\'tiborsiz)', async () => {
+    const r = await pub();
+    const c = await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    assert.strictEqual(c.status, 'cancelled');
+    assert.strictEqual(await hadOf(r.tripId), false);
+  });
+  await check('H3: tasdiqlangan bron BOR, klient false yuboradi -> true', async () => {
+    const r = await pub(); await seedBooking('b1');
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: false }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), true);
+  });
+  await check('H3: completed bron ham sanaladi; 9 xonali driverId shakli ham', async () => {
+    const r = await pub(); await seedBooking('b2', { status: 'completed', driverId: DRIVER.slice(3) });
+    await api.cancel({ tripId: r.tripId }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), true);
+  });
+  await check('H3: faqat pending / cancelled / expired bronlar sanalmaydi', async () => {
+    await reset();
+    const r = await pub();
+    await seedBooking('p1', { status: 'pending' }); await seedBooking('p2', { status: 'cancelled' });
+    await seedBooking('p3', { status: 'expired' });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), false);
+  });
+  await check('H3: reysdan OLDINGI (boshqa reysning) va BOSHQA haydovchining broni sanalmaydi', async () => {
+    await reset();
+    const r = await pub();
+    await seedBooking('old1', { createdAt: ts(NOW0.getTime() - 3600000), status: 'completed' });
+    await seedBooking('oth1', { driverId: OTHER });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), false);
+  });
+  await check('H3: pul siyosati O\'ZGARMAGAN - bron bor bo\'lsa ham bekorda komissiya to\'liq qaytadi (CANCEL-9)', async () => {
+    await reset();
+    const before = await balance();
+    const r = await pub(); await seedBooking('c1', { status: 'completed' });
+    assert.strictEqual(before - await balance(), 28000);
+    const c = await api.cancel({ tripId: r.tripId }, ctx);
+    assert.strictEqual(c.refunded, true); assert.strictEqual(await balance(), before);
+  });
+  await check('H3: fraud baholash SERVER qiymatidan: bron yo\'q + klient true -> had_ava_booking signali YO\'Q (normal)', async () => {
+    await reset();
+    const r = await pub({ departureAt: '2026-10-07T03:00:00Z' });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true, driverLat: 41.55, driverLng: 60.63 }, ctx);
+    await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
+    clock = new Date('2026-10-07T15:00:00Z');
+    await pub({ from: 'Toshkent', to: 'Urganch', farePerSeat: 100000, driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' });
+    const t = await trip(r.tripId);
+    assert.strictEqual(t.fraudReviewed, true); assert.strictEqual(t.fraudVerdict, 'normal');
+    assert.ok(!(t.fraudSignals || []).includes('had_ava_booking'));
+  });
+  await check('H3: fraud baholash SERVER qiymatidan: tasdiqlangan bron bor -> had_ava_booking signali BOR', async () => {
+    await reset();
+    const r = await pub({ departureAt: '2026-10-07T03:00:00Z' });
+    await seedBooking('f1');
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: false, driverLat: 41.55, driverLng: 60.63 }, ctx);
+    await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
+    clock = new Date('2026-10-07T15:00:00Z');
+    await pub({ from: 'Toshkent', to: 'Urganch', farePerSeat: 100000, driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' });
+    const t = await trip(r.tripId);
+    assert.ok((t.fraudSignals || []).includes('had_ava_booking'));
+    assert.strictEqual(t.fraudVerdict, 'confirmed');
+  });
+
+  // ══ H6: reschedule - bronlar, xabarlar, e'lon bir xil ═════════════════
+  const P1 = '998905550001'; const P2 = '998905550002'; const P3 = '998905550003';
+  const NEW_DEP = '2026-10-09T10:30:00Z'; // Toshkent 15:30, 9-oktabr
+  async function seedListing(tripId) {
+    await db.collection('users').doc(P1).set({ appLang: 'uz_Latn' });
+    await db.collection('users').doc(P2).set({ appLang: 'ru' });
+    // P3: appLang yo'q -> uz_Cyrl
+    await db.collection('intercity_drivers').doc(DRIVER).set({
+      isActive: true, billingTripId: tripId, hour: 8, minute: 0, scheduleDate: '2026-10-07', seats: 2, seatCapacity: 4,
+      phone: DRIVER, phoneDigits: DRIVER, price: 350000,
+    });
+    await db.collection('schedules').doc('s1').set({
+      driverId: DRIVER, taxiType: 'intercity', date: '2026-10-07', startTime: '08:00', isActive: true,
+      expiresAt: ts(Date.UTC(2026, 9, 7, 18, 59, 59)), seats: 4, seatsLeft: 2,
+    });
+    await db.collection('schedules').doc('s_old').set({ // boshqa kundagi nofaol e'lon - tegilmaydi
+      driverId: DRIVER, taxiType: 'intercity', date: '2026-10-05', startTime: '08:00', isActive: false,
+      expiresAt: ts(Date.UTC(2026, 9, 5, 18, 59, 59)),
+    });
+    const dep = Date.UTC(2026, 9, 7, 3, 0);
+    await db.collection('intercity_bookings').doc('bk1').set({ driverId: DRIVER, userPhone: P1, status: 'pending', passengers: 1, departureTime: ts(dep), departureReminderSent: true });
+    await db.collection('intercity_bookings').doc('bk2').set({ driverId: DRIVER, userPhone: P2, status: 'confirmed', passengers: 1, departureTime: ts(dep), departureReminderSent: true });
+    await db.collection('intercity_bookings').doc('bk3').set({ driverId: DRIVER, userPhone: P3, status: 'confirmed', passengers: 1, departureTime: ts(dep) });
+    await db.collection('intercity_bookings').doc('bk_cancelled').set({ driverId: DRIVER, userPhone: P3, status: 'cancelled', departureTime: ts(dep) });
+    await db.collection('intercity_bookings').doc('bk_other').set({ driverId: OTHER, userPhone: P3, status: 'confirmed', departureTime: ts(dep) });
+  }
+  await reset();
+  let rt;
+  await check('H6: reschedule -> bronlar vaqti yangi, eslatma qayta, bekor/begona bron tegilmaydi', async () => {
+    rt = (await pub()).tripId; await seedListing(rt);
+    const r = await api.reschedule({ tripId: rt, departureAt: NEW_DEP, scheduleDate: '2026-10-09', startTime: '15:30' }, ctx);
+    assert.strictEqual(r.rescheduled, true);
+    const newMs = Date.parse(NEW_DEP);
+    for (const id of ['bk1', 'bk2', 'bk3']) {
+      const b = (await db.collection('intercity_bookings').doc(id).get()).data();
+      assert.strictEqual(b.departureTime.toMillis(), newMs, id);
+      assert.strictEqual(b.departureReminderSent, false, id);
+      assert.ok(b.rescheduledAt, id);
+    }
+    const dep = Date.UTC(2026, 9, 7, 3, 0);
+    assert.strictEqual((await db.collection('intercity_bookings').doc('bk_cancelled').get()).data().departureTime.toMillis(), dep);
+    assert.strictEqual((await db.collection('intercity_bookings').doc('bk_other').get()).data().departureTime.toMillis(), dep);
+  });
+  await check('H6: yo\'lovchilarga xabar - uch tilda (appLang), sana va vaqt bilan; boshqalarga YO\'Q', async () => {
+    const n = await db.collection('notifications').get();
+    const byPhone = Object.fromEntries(n.docs.map((d) => [d.data().targetPhone, d.data()]));
+    assert.strictEqual(n.size, 3, `3 ta xabar kutilgan, ${n.size}`);
+    assert.ok(byPhone[P1].body.includes('09.10') && byPhone[P1].body.includes('15:30'));
+    assert.ok(/ga ko'chirildi/.test(byPhone[P1].body), 'uz_Latn');
+    assert.ok(/Отправление перенесено/.test(byPhone[P2].body), 'ru');
+    assert.ok(/кўчирилди/.test(byPhone[P3].body), 'uz_Cyrl (appLang yo\'q)');
+    for (const d of n.docs) {
+      assert.strictEqual(d.data().type, 'intercity_trip_rescheduled'); assert.strictEqual(d.data().sent, false);
+      assert.ok(['bk1', 'bk2', 'bk3'].includes(d.data().bookingId));
+    }
+  });
+  await check('H6: schedules e\'loni sana/startTime/expiresAt (kun oxiri, Toshkent) yangilandi; nofaol e\'lon tegilmadi', async () => {
+    const s = (await db.collection('schedules').doc('s1').get()).data();
+    assert.strictEqual(s.date, '2026-10-09'); assert.strictEqual(s.startTime, '15:30');
+    assert.strictEqual(s.expiresAt.toMillis(), Date.UTC(2026, 9, 9, 18, 59, 59));
+    assert.strictEqual(s.isActive, true);
+    const o = (await db.collection('schedules').doc('s_old').get()).data();
+    assert.strictEqual(o.date, '2026-10-05');
+  });
+  await check('H6: intercity_drivers e\'loni (scheduleDate/hour/minute) bir xil; seats/price tegilmadi', async () => {
+    const d = (await db.collection('intercity_drivers').doc(DRIVER).get()).data();
+    assert.strictEqual(d.scheduleDate, '2026-10-09'); assert.strictEqual(d.hour, 15); assert.strictEqual(d.minute, 30);
+    assert.strictEqual(d.seats, 2); assert.strictEqual(d.price, 350000); assert.strictEqual(d.isActive, true);
+  });
+  await check('H6: IDEMPOTENT - xuddi shu so\'rov qayta: yangi xabar/audit/rescheduleCount YO\'Q', async () => {
+    const t0 = await trip(rt); const audits = (await db.collection('taxi_reschedules').get()).size;
+    const r = await api.reschedule({ tripId: rt, departureAt: NEW_DEP, scheduleDate: '2026-10-09', startTime: '15:30' }, ctx);
+    assert.strictEqual(r.rescheduled, true); assert.strictEqual(r.idempotent, true);
+    assert.strictEqual((await db.collection('notifications').get()).size, 3);
+    assert.strictEqual((await db.collection('taxi_reschedules').get()).size, audits);
+    assert.strictEqual((await trip(rt)).rescheduleCount, t0.rescheduleCount);
+  });
+  await check('H6: PARALLEL ikki xil vaqt - ikkalasi ham yaxlit; oxirgi g\'olib bron vaqti == reys vaqti', async () => {
+    const [a, b] = [Date.UTC(2026, 9, 10, 5, 0), Date.UTC(2026, 9, 10, 6, 0)];
+    await Promise.allSettled([
+      api.reschedule({ tripId: rt, departureAt: new Date(a).toISOString(), scheduleDate: '2026-10-10', startTime: '10:00' }, ctx),
+      api.reschedule({ tripId: rt, departureAt: new Date(b).toISOString(), scheduleDate: '2026-10-10', startTime: '11:00' }, ctx),
+    ]);
+    const t = await trip(rt);
+    const bk = (await db.collection('intercity_bookings').doc('bk2').get()).data();
+    assert.strictEqual(bk.departureTime.toMillis(), t.departureAt.toMillis());
+    const s = (await db.collection('schedules').doc('s1').get()).data();
+    assert.strictEqual(s.startTime, t.startTime);
+  });
+  await check('H6: narx ham o\'zgarsa - faqat farq (eski xulq saqlanadi), bronlar yaxlit', async () => {
+    const before = await balance();
+    const r = await api.reschedule({ tripId: rt, departureAt: '2026-10-11T05:00:00Z', scheduleDate: '2026-10-11', startTime: '10:00', farePerSeat: 400000 }, ctx);
+    assert.strictEqual(r.billing.delta, 4000);
+    assert.strictEqual(before - await balance(), 4000);
+  });
+  await check('H6: e\'londa billingTripId boshqa reys bo\'lsa intercity_drivers tegilmaydi', async () => {
+    await reset();
+    const t1 = (await pub()).tripId;
+    await db.collection('intercity_drivers').doc(DRIVER).set({ isActive: true, billingTripId: 'someOtherTrip', hour: 8, minute: 0, scheduleDate: '2026-10-07' });
+    await api.reschedule({ tripId: t1, departureAt: NEW_DEP, scheduleDate: '2026-10-09', startTime: '15:30' }, ctx);
+    const d = (await db.collection('intercity_drivers').doc(DRIVER).get()).data();
+    assert.strictEqual(d.scheduleDate, '2026-10-07'); assert.strictEqual(d.hour, 8);
+  });
+  await check('H6: scheduleDate/startTime berilmasa departureAt\'dan (Toshkent) hosil bo\'ladi', async () => {
+    await reset();
+    const t1 = (await pub()).tripId;
+    await api.reschedule({ tripId: t1, departureAt: '2026-10-09T10:30:00Z' }, ctx);
+    const t = await trip(t1);
+    assert.strictEqual(t.scheduleDate, '2026-10-09'); assert.strictEqual(t.startTime, '15:30');
+  });
+
+  const failed = results.filter((r) => !r).length;
+  console.log(`\n${results.length - failed}/${results.length} taxi intercity audit CF checks passed.`);
+  if (failed) process.exitCode = 1;
+}
+main().catch((e) => { console.error('FATAL', e); process.exitCode = 1; });

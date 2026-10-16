@@ -103,6 +103,28 @@ function planShift({ listing, tripDepMs, tripTouchedMs, count, nowMs, cfg = AUTO
   };
 }
 
+/** Қарорни ўзгартирмаслик учун: ±шунча дақиқа захира (рейс ва эълон вақти бироз фарқ қилса ҳам транзакцияда қарор). */
+const PREFILTER_SLACK_MIN = 5;
+
+/**
+ * Audit M6 (2026-10): ҳар дақиқада 2 соатлик ойнадаги ҲАР эълон учун транзакция очилар
+ * эди (эълон + рейс + ҳисоблагич = 3+ ўқиш), ҳолбуки ≤10 дақиқа ойнасидагилар бироз.
+ * Аллақачон ўқилган snapshot'даги `hour/minute`дан жўнаш вақти ҳисобланади
+ * (`deriveDepartureMs`); ойнадан (≤10 дақ) ЗАХИРАДАН ҳам ташқарида бўлса сабаб қайтарилади
+ * (`planShift` билан бир хил: `not_yet` / `departed`), акс ҳолда `null` — қарор
+ * транзакцияда (рейс `departureAt` манбаси билан). `minute` йўқ (эски эълон) —
+ * рейс вақти аниқ эмас, сараланмайди.
+ */
+function prefilterSkip(listing, nowMs, cfg = AUTO_SHIFT) {
+  if (typeof listing.minute !== 'number') return null;
+  const depMs = deriveDepartureMs(listing.scheduleDate, listing.hour, listing.minute);
+  if (!depMs) return null;
+  const left = depMs - nowMs;
+  if (left > (cfg.triggerMinutes + PREFILTER_SLACK_MIN) * MIN) return 'not_yet';
+  if (left <= -PREFILTER_SLACK_MIN * MIN) return 'departed';
+  return null;
+}
+
 /**
  * Ҳар дақиқада (`expirePendingTrips` эмас — алоҳида `autoUpdateDepartureTime`).
  * Фақат БУГУНГИ, соати жорий/кейинги соат бўлган фаол эълонлар ўқилади.
@@ -119,10 +141,14 @@ async function runAutoShift({ db, admin, nowMs = Date.now() }) {
     .where('hour', 'in', [hourNow, hourNow + 1])
     .get();
 
-  const stats = { checked: snap.size, shifted: 0, skipped: {}, errors: 0 };
+  const stats = { checked: snap.size, opened: 0, shifted: 0, skipped: {}, errors: 0 };
   const skip = (r) => { stats.skipped[r] = (stats.skipped[r] || 0) + 1; };
 
   for (const doc of snap.docs) {
+    // Audit M6: oynadan aniq tashqaridagi e'lon uchun tranzaksiya (3+ o'qish) ochilmaydi.
+    const early = prefilterSkip(doc.data() || {}, nowMs);
+    if (early) { skip(early); continue; }
+    stats.opened += 1;
     try {
       const out = await shiftOne({ db, admin, Timestamp, FieldValue, doc, nowMs, today });
       if (out.action === 'shift') stats.shifted += 1; else skip(out.reason);

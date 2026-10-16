@@ -233,6 +233,23 @@ class ServiceConfigRepository {
     }
   }
 
+  /// BARCHA viloyatlarning tumanlari - bitta so'rov (EV safar yordamchisining
+  /// manzil qidiruvi uchun; `fetchDistricts`ni 14 marta chaqirishdan arzon).
+  /// Hujjatlar o'qishi ochiq (`geo_districts` rules: `allow read: if true`).
+  Future<List<GeoDistrict>> fetchAllDistricts({bool activeOnly = true}) async {
+    try {
+      Query<Map<String, dynamic>> q = _db.collection(GeoDistrict.collection);
+      if (activeOnly) q = q.where('active', isEqualTo: true);
+      final snap = await q.get();
+      final list = snap.docs.map(GeoDistrict.fromDoc).toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+      return list;
+    } catch (e, st) {
+      debugPrint('ServiceConfigRepository.fetchAllDistricts: $e\n$st');
+      return const [];
+    }
+  }
+
   Future<List<ServiceArea>> fetchServiceAreas(
     String districtId, {
     bool activeOnly = true,

@@ -7,7 +7,8 @@ import '../../../models/ev_charging_station.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
 import '../controllers/ev_trip_controller.dart';
-import '../data/ev_trip_destinations.dart';
+import '../data/ev_trip_geo_catalog.dart';
+import '../data/ev_trip_place_search.dart';
 import '../models/ev_trip_plan.dart';
 import '../widgets/ev_car_sheet.dart';
 import '../widgets/ev_trip_map_view.dart';
@@ -46,14 +47,19 @@ class _EvTripScreenState extends State<EvTripScreen> {
 
   OilVehicle? _car;
   bool _carLoading = true;
-  EvTripDestination? _destination;
+  EvTripPlace? _destination;
   double _soc = 80;
+
+  /// Qo'lda yozilgan 22 shahar darhol; tizimdagi barcha viloyat/tumanlar
+  /// yuklangach (seans davomida bir marta) qo'shiladi.
+  EvTripPlaceIndex _places = EvTripPlaceIndex.build();
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _loadCar();
+    _loadPlaces();
   }
 
   @override
@@ -85,6 +91,12 @@ class _EvTripScreenState extends State<EvTripScreen> {
     });
   }
 
+  Future<void> _loadPlaces() async {
+    final index = await EvTripGeoCatalog.load();
+    if (!mounted) return;
+    setState(() => _places = index);
+  }
+
   Future<void> _editCar() async {
     final saved = await EvCarSheet.show(
       context,
@@ -111,8 +123,11 @@ class _EvTripScreenState extends State<EvTripScreen> {
     await _controller.planTrip(
       originLat: widget.originLat,
       originLng: widget.originLng,
+      // Tayyor koordinata bor bo'lsa shu; tuman/viloyatda koordinata yo'q -
+      // matnli manzil Google Directions'ga beriladi.
       destinationLat: dest.lat,
       destinationLng: dest.lng,
+      destinationText: dest.hasCoords ? null : dest.routeText,
       car: car,
       socPercent: _soc.round(),
       stations: widget.stations,
@@ -120,13 +135,15 @@ class _EvTripScreenState extends State<EvTripScreen> {
   }
 
   void _openNavigator() {
-    final dest = _destination;
-    if (dest == null) return;
+    // Haqiqiy koordinata: tayyor yoki Google topgan tugash nuqtasi.
+    final destLat = _controller.destinationLat;
+    final destLng = _controller.destinationLng;
+    if (destLat == null || destLng == null) return;
     openMapsEvTripRoute(
       originLat: widget.originLat,
       originLng: widget.originLng,
-      destinationLat: dest.lat,
-      destinationLng: dest.lng,
+      destinationLat: destLat,
+      destinationLng: destLng,
       stops: _controller.navigationStops,
     );
   }
@@ -257,7 +274,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                dest.nameFor(lang),
+                dest.displayFor(lang),
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
@@ -275,7 +292,9 @@ class _EvTripScreenState extends State<EvTripScreen> {
       );
     }
 
-    final matches = EvTripDestination.search(_searchCtrl.text);
+    // Xotirada qidiruv: tarmoq so'rovi yo'q. Bo'sh maydon - mashhur shaharlar;
+    // yozilganda - eng mos 8 ta (uch tildagi nom bo'yicha).
+    final matches = _places.search(_searchCtrl.text, lang);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -321,7 +340,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
                 for (final d in matches)
                   ListTile(
                     dense: true,
-                    title: Text(d.nameFor(lang)),
+                    title: Text(d.displayFor(lang)),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => setState(() {
                       _destination = d;
@@ -412,7 +431,9 @@ class _EvTripScreenState extends State<EvTripScreen> {
   /// қолган станциялар. Қолганлари ҳам кўрсатилади: ҳайдовчи «яна қаерда
   /// станция бор» саволига режани очмасдан жавоб топсин.
   Widget _mapBlock(EvTripPlan plan) {
-    final dest = _destination!;
+    // Tugash nuqtasi: tayyor koordinata yoki Google topgan end_location.
+    final destLat = _controller.destinationLat ?? _destination?.lat ?? 0;
+    final destLng = _controller.destinationLng ?? _destination?.lng ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -424,8 +445,8 @@ class _EvTripScreenState extends State<EvTripScreen> {
               route: _controller.routePoints,
               corridorStations: _controller.corridorStations,
               plan: plan,
-              destinationLat: dest.lat,
-              destinationLng: dest.lng,
+              destinationLat: destLat,
+              destinationLng: destLng,
             ),
           ),
         ),

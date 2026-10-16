@@ -8,6 +8,18 @@ import '../config.dart';
 import '../models/directions_result.dart';
 import '../models/route_candidate.dart';
 
+/// Google manzil uchun yo'l topa olmadi (`ZERO_RESULTS` / `NOT_FOUND` yoki
+/// bo'sh `routes`). Tarmoq/kalit xatosidan ajratiladi: foydalanuvchiga
+/// "bu manzilga yo'l topilmadi" deyiladi, "internetni tekshiring" emas.
+/// Oddiy [Exception] sifatida ham ushlanadi (eski `catch`lar buzilmaydi).
+class DirectionsNoRouteException implements Exception {
+  const DirectionsNoRouteException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'Exception: $message';
+}
+
 class GoogleDirectionsService {
   GoogleDirectionsService({http.Client? client})
       : _client = client ?? http.Client();
@@ -160,10 +172,36 @@ class GoogleDirectionsService {
     return _parseDirectionsJson(json);
   }
 
+  /// Origin → MATNLI manzil (masalan `Gurlan tumani, Xorazm, Uzbekistan`).
+  ///
+  /// Tuman/viloyat hujjatlarida koordinata yo'q, shuning uchun manzil Google'ga
+  /// matn bo'lib beriladi; natijadagi [DirectionsResult.endLat]/[endLng] -
+  /// Google topgan haqiqiy tugash nuqtasi (xaritada belgi qo'yish uchun).
+  /// `region=uz` - bir xil nomli joylarda O'zbekistonni afzal ko'radi.
+  /// Yo'l topilmasa [DirectionsNoRouteException].
+  Future<DirectionsResult> fetchSimpleRouteToText({
+    required double originLat,
+    required double originLng,
+    required String destinationText,
+  }) async {
+    final text = destinationText.trim();
+    if (text.isEmpty) {
+      throw const DirectionsNoRouteException('Directions API: manzil bo\'sh');
+    }
+    final json = await _requestDirectionsJson(
+      origin: '$originLat,$originLng',
+      destination: text,
+      waypoints: '',
+      region: 'uz',
+    );
+    return _parseDirectionsJson(json);
+  }
+
   Future<Map<String, dynamic>> _requestDirectionsJson({
     required String origin,
     required String destination,
     required String waypoints,
+    String? region,
   }) async {
     final Map<String, dynamic> json;
 
@@ -188,6 +226,7 @@ class GoogleDirectionsService {
         'language': 'uz',
         'key': AppConfig.mapsApiKey,
         if (waypoints.isNotEmpty) 'waypoints': waypoints,
+        if (region != null) 'region': region,
       };
       final uri = Uri.https(
           'maps.googleapis.com', '/maps/api/directions/json', params);
@@ -206,6 +245,9 @@ class GoogleDirectionsService {
     final status = json['status'] as String? ?? 'UNKNOWN';
     if (status != 'OK') {
       final message = json['error_message'] as String? ?? status;
+      if (status == 'ZERO_RESULTS' || status == 'NOT_FOUND') {
+        throw DirectionsNoRouteException('Directions API: $message');
+      }
       throw Exception('Directions API: $message');
     }
     return json;
@@ -216,12 +258,16 @@ class GoogleDirectionsService {
     bool expectWaypointOrder = false,
   }) {
     final routes = json['routes'] as List? ?? const [];
-    if (routes.isEmpty) throw Exception('Directions API: route topilmadi');
+    if (routes.isEmpty) {
+      throw const DirectionsNoRouteException('Directions API: route topilmadi');
+    }
 
     final route = Map<String, dynamic>.from(routes.first as Map);
     final legs = route['legs'] as List? ?? const [];
     var distanceMeters = 0;
     var durationSeconds = 0;
+    double? endLat;
+    double? endLng;
     for (final rawLeg in legs) {
       final leg = Map<String, dynamic>.from(rawLeg as Map);
       final distance =
@@ -230,6 +276,12 @@ class GoogleDirectionsService {
           Map<String, dynamic>.from((leg['duration'] as Map?) ?? const {});
       distanceMeters += (distance['value'] as num?)?.toInt() ?? 0;
       durationSeconds += (duration['value'] as num?)?.toInt() ?? 0;
+      // Oxirgi leg'ning end_location'i = marshrutning tugash nuqtasi.
+      final end = leg['end_location'];
+      if (end is Map) {
+        endLat = (end['lat'] as num?)?.toDouble();
+        endLng = (end['lng'] as num?)?.toDouble();
+      }
     }
 
     final overview = Map<String, dynamic>.from(
@@ -247,6 +299,8 @@ class GoogleDirectionsService {
       durationMin: (durationSeconds / 60).ceil(),
       polyline: polyline,
       waypointOrder: waypointOrder,
+      endLat: endLat,
+      endLng: endLng,
     );
   }
 }

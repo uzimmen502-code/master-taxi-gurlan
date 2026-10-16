@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../models/ev_charging_station.dart';
+import '../../../models/directions_result.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../services/google_directions_service.dart';
 import '../../../services/polyline_decoder.dart';
@@ -47,6 +48,8 @@ class EvTripController extends ChangeNotifier {
   List<EvRoutePoint> _routePoints = const [];
   double _routeKm = 0;
   int _routeMinutes = 0;
+  double? _destinationLat;
+  double? _destinationLng;
 
   bool get loading => _loading;
   String? get error => _error;
@@ -62,6 +65,13 @@ class EvTripController extends ChangeNotifier {
   double get routeKm => _routeKm;
   int get routeMinutes => _routeMinutes;
 
+  /// Manzilning HAQIQIY koordinatasi: tayyor koordinata berilgan bo'lsa shu,
+  /// matnli manzil bo'lsa - Google topgan tugash nuqtasi (end_location).
+  /// Reja yo'q bo'lsa null.
+  double? get destinationLat => _destinationLat;
+  double? get destinationLng => _destinationLng;
+  bool get hasDestination => _destinationLat != null && _destinationLng != null;
+
   bool get hasPlan => _plan != null;
 
   /// «Қаерга борамиз?» — асосий чақирув.
@@ -71,8 +81,9 @@ class EvTripController extends ChangeNotifier {
   Future<void> planTrip({
     required double originLat,
     required double originLng,
-    required double destinationLat,
-    required double destinationLng,
+    double? destinationLat,
+    double? destinationLng,
+    String? destinationText,
     required EvCarSpec car,
     required int socPercent,
     required List<EvChargingStation> stations,
@@ -81,15 +92,32 @@ class EvTripController extends ChangeNotifier {
     _loading = true;
     _error = null;
     _plan = null;
+    _destinationLat = null;
+    _destinationLng = null;
     notifyListeners();
 
     try {
-      final result = await _directions.fetchSimpleRoute(
-        originLat: originLat,
-        originLng: originLng,
-        destinationLat: destinationLat,
-        destinationLng: destinationLng,
-      );
+      final text = destinationText?.trim() ?? '';
+      final DirectionsResult result;
+      if (destinationLat != null && destinationLng != null) {
+        result = await _directions.fetchSimpleRoute(
+          originLat: originLat,
+          originLng: originLng,
+          destinationLat: destinationLat,
+          destinationLng: destinationLng,
+        );
+      } else if (text.isNotEmpty) {
+        // Tuman/viloyatda koordinata yo'q - manzil Google'ga matn bo'lib
+        // beriladi (koordinata o'ylab topilmaydi).
+        result = await _directions.fetchSimpleRouteToText(
+          originLat: originLat,
+          originLng: originLng,
+          destinationText: text,
+        );
+      } else {
+        _error = 'route_geometry_missing';
+        return;
+      }
 
       final points = _decoder
           .decode(result.polyline)
@@ -104,6 +132,10 @@ class EvTripController extends ChangeNotifier {
 
       _routePoints = points;
       _routeMinutes = result.durationMin;
+      // Tugash nuqtasi: tayyor koordinata, yo'qsa Google end_locationi,
+      // u ham yo'q bo'lsa marshrut chizig'ining oxirgi nuqtasi.
+      _destinationLat = destinationLat ?? result.endLat ?? points.last.lat;
+      _destinationLng = destinationLng ?? result.endLng ?? points.last.lng;
 
       // Overview polyline соддалаштирилган — унинг узунлиги Google'нинг
       // йўл масофасидан бир оз қисқа чиқади. Иккита ўлчов аралашиб
@@ -111,8 +143,9 @@ class EvTripController extends ChangeNotifier {
       // ҳақиқий йўл масофасига масштабланади.
       final geometryKm = EvTripPlanner.routeLengthKm(points);
       _routeKm = result.distanceKm > 0 ? result.distanceKm : geometryKm;
-      final scale =
-          (geometryKm > 0 && result.distanceKm > 0) ? result.distanceKm / geometryKm : 1.0;
+      final scale = (geometryKm > 0 && result.distanceKm > 0)
+          ? result.distanceKm / geometryKm
+          : 1.0;
 
       final raw = EvTripPlanner.corridor(
         route: points,
@@ -135,6 +168,10 @@ class EvTripController extends ChangeNotifier {
         car: car,
         startSocPercent: socPercent,
       );
+    } on DirectionsNoRouteException {
+      // Google bu manzilga yo'l topmadi (ZERO_RESULTS) - tarmoq xatosi emas.
+      _error = 'route_geometry_missing';
+      _plan = null;
     } catch (e) {
       _error = 'route_request_failed';
       _plan = null;
@@ -173,8 +210,9 @@ class EvTripController extends ChangeNotifier {
     required int socPercent,
     double passedKm = 0,
   }) {
-    _corridor =
-        _corridor.where((c) => c.station.id != stationId).toList(growable: false);
+    _corridor = _corridor
+        .where((c) => c.station.id != stationId)
+        .toList(growable: false);
     replan(car: car, socPercent: socPercent, passedKm: passedKm);
   }
 
@@ -184,6 +222,8 @@ class EvTripController extends ChangeNotifier {
     _routePoints = const [];
     _routeKm = 0;
     _routeMinutes = 0;
+    _destinationLat = null;
+    _destinationLng = null;
     _error = null;
     _loading = false;
     notifyListeners();

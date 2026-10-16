@@ -13,6 +13,7 @@ import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
 import '../widgets/ev_map_top_overlay.dart';
 import '../widgets/ev_trip_map_view.dart';
+import '../widgets/ev_trip_dot_icon.dart';
 import '../widgets/ev_trip_plan_view.dart';
 import '../widgets/ev_trip_station_sheet.dart';
 
@@ -701,7 +702,8 @@ class _MapLegend extends StatelessWidget {
       children: [
         _dot(const Color(0xFFD32F2F), context.tr('ev_trip_legend_primary')),
         _dot(const Color(0xFFF57C00), context.tr('ev_trip_legend_backup')),
-        _dot(const Color(0xFF388E3C), context.tr('ev_trip_legend_other')),
+        // Харитадаги хира нуқта билан бир хил нейтрал ранг.
+        _dot(EvTripDotIcon.color, context.tr('ev_trip_legend_other')),
       ],
     );
   }

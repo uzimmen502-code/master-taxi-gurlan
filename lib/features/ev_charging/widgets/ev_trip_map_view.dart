@@ -9,6 +9,7 @@ import '../controllers/ev_trip_planner.dart';
 import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
 import 'ev_car_marker_icon.dart';
+import 'ev_trip_dot_icon.dart';
 import 'ev_trip_stop_icon.dart';
 
 export '../controllers/ev_trip_selection.dart' show EvTripMarkerKind;
@@ -55,7 +56,23 @@ class EvTripMapGeometry {
   /// кўрсатилмайди (асосий устун).
   static Map<String, EvTripMarkerKind> markerKinds(EvTripPlan plan) =>
       evTripMarkerKinds(plan);
+
+  /// Маркер кўриниши: танланган — рақамли қизил доира; танланмаган асосий —
+  /// қизил игна, заҳира — тўқ сариқ игна; режага кирмаган «бошқа» станция —
+  /// кичик хира нуқта (тавсия этилганлар кўриниш марказида қолсин).
+  static EvTripMarkerStyle markerStyle(
+          EvTripMarkerKind kind, int? selectedNumber) =>
+      selectedNumber != null
+          ? EvTripMarkerStyle.numbered
+          : switch (kind) {
+              EvTripMarkerKind.primary => EvTripMarkerStyle.primaryPin,
+              EvTripMarkerKind.backup => EvTripMarkerStyle.backupPin,
+              EvTripMarkerKind.other => EvTripMarkerStyle.mutedDot,
+            };
 }
+
+/// Станция маркерининг чизилиш тури ([EvTripMapGeometry.markerStyle]).
+enum EvTripMarkerStyle { numbered, primaryPin, backupPin, mutedDot }
 
 /// ⚡ Сафар режасининг харитаси: маршрут чизиғи, рақамланган асосий
 /// тўхташлар, заҳиралар ва йўл бўйидаги қолган станциялар.
@@ -95,7 +112,7 @@ class EvTripMapView extends StatefulWidget {
 
   /// Ҳайдовчи танлаган станциялар: id → йўл бўйича тартиб рақами. Танланган
   /// маркер рақамли қизил доира; қолганлар ўз тури рангида (асосий қизил,
-  /// заҳира тўқ сариқ, бошқа яшил).
+  /// заҳира тўқ сариқ, бошқа — кичик хира нуқта).
   final Map<String, int> selectedNumbers;
 
   /// Станция маркери босилди (id).
@@ -224,15 +241,6 @@ class _EvTripMapViewState extends State<EvTripMapView> {
     };
   }
 
-  static double _hueFor(EvTripMarkerKind kind, int? selectedNumber) {
-    if (selectedNumber != null) return BitmapDescriptor.hueRed;
-    return switch (kind) {
-      EvTripMarkerKind.primary => BitmapDescriptor.hueRed,
-      EvTripMarkerKind.backup => BitmapDescriptor.hueOrange,
-      EvTripMarkerKind.other => BitmapDescriptor.hueGreen,
-    };
-  }
-
   Set<Marker> _markers(BuildContext context) {
     final markers = <Marker>{};
 
@@ -240,18 +248,31 @@ class _EvTripMapViewState extends State<EvTripMapView> {
     for (final c in widget.candidates) {
       final s = c.station;
       final number = widget.selectedNumbers[c.id];
+      final style = EvTripMapGeometry.markerStyle(c.kind, number);
       final selectedIcon = number == null ? null : _numberIcons[number];
+      final dot = style == EvTripMarkerStyle.mutedDot ? _dotIcon : null;
+
+      // Танланган — рақамли қизил доира (иконка тайёр бўлгунча оддий
+      // қизил маркер); танланмаган асосий қизил, заҳира тўқ сариқ игна;
+      // «бошқа» — хира нуқта (иконка тайёр бўлгунча кўринмайди).
+      final BitmapDescriptor icon = switch (style) {
+        EvTripMarkerStyle.numbered => selectedIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        EvTripMarkerStyle.primaryPin =>
+          BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        EvTripMarkerStyle.backupPin =>
+          BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        EvTripMarkerStyle.mutedDot => dot ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
+      };
+      final centered = selectedIcon != null || dot != null;
 
       markers.add(Marker(
         markerId: MarkerId('ev_trip_${s.id}'),
         position: LatLng(s.latitude, s.longitude),
-        // Танланган — рақамли қизил доира (иконка тайёр бўлгунча оддий
-        // қизил маркер); танланмаган — ўз тури ранги.
-        icon: selectedIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(_hueFor(c.kind, number)),
-        anchor: selectedIcon != null
-            ? const Offset(0.5, 0.5)
-            : const Offset(0.5, 1.0),
+        icon: icon,
+        visible: style != EvTripMarkerStyle.mutedDot || dot != null,
+        anchor: centered ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
         // Танланганлар устда, кейин асосий, заҳира, бошқалар.
         zIndexInt: number != null
             ? 4
@@ -303,6 +324,18 @@ class _EvTripMapViewState extends State<EvTripMapView> {
     }
   }
 
+  /// Хира нуқта иконкаси — бир марта чизилади ([EvTripDotIcon] кеши).
+  BitmapDescriptor? _dotIcon;
+  bool _dotRequested = false;
+
+  void _ensureDotIcon() {
+    if (_dotRequested) return;
+    _dotRequested = true;
+    EvTripDotIcon.load().then((icon) {
+      if (mounted) setState(() => _dotIcon = icon);
+    });
+  }
+
   void _ensureCarIcon() {
     if (_carIconRequested || !widget.hasCar) return;
     _carIconRequested = true;
@@ -315,6 +348,7 @@ class _EvTripMapViewState extends State<EvTripMapView> {
   Widget build(BuildContext context) {
     _ensureCarIcon();
     _ensureNumberIcons();
+    _ensureDotIcon();
     final first = widget.route.isNotEmpty
         ? LatLng(widget.route.first.lat, widget.route.first.lng)
         : LatLng(widget.destinationLat, widget.destinationLng);

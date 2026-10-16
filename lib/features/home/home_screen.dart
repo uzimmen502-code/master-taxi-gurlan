@@ -64,8 +64,6 @@ import '../../shared/car/car_edit_dialog.dart';
 import '../assistant/assistant_entry.dart';
 import '../book/screens/ava_book_screen.dart';
 import '../restaurants/merchant/restaurant_entry_flow.dart';
-import '../tv_market/repositories/tv_shop_repository.dart';
-import '../tv_market/screens/tv_my_shop_screen.dart';
 import '../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
@@ -719,13 +717,6 @@ class _HomeViewState extends State<_HomeView> {
               WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
             );
         }
-      case AvaCreateAction.shop:
-        // Дўкон бор — «Менинг дўконим», йўқ — очиш оқими (Кабинетдаги каби).
-        final hasShop = await TvShopRepository().hasShop(phone);
-        if (!mounted) return;
-        await _push(
-          hasShop ? TvMyShopScreen(ownerPhone: phone) : const TvPublishScreen(),
-        );
       case AvaCreateAction.driver:
         await _openWork();
       case AvaCreateAction.courier:

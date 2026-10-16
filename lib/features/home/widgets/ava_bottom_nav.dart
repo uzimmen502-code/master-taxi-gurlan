@@ -240,14 +240,13 @@ class _CreateItem extends StatelessWidget {
 
 /// «＋» — «Менинг бизнесим»: фойдаланувчи ўз ишини шу ердан бошлайди.
 ///
-/// Тартиб (эга, 2026-10-16): видео · эълон · хизмат · онлайн дўкон · дўкон ·
+/// Тартиб (эга, 2026-10-16): видео · эълон · хизмат · онлайн дўкон ·
 /// ҳайдовчи · курьер · уй ошпази · кафе/ресторан · юк ташувчи · китоб · AI.
 enum AvaCreateAction {
   video,
   ad,
   service,
   shopOnline,
-  shop,
   driver,
   courier,
   homeCook,
@@ -321,7 +320,6 @@ Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
 /// қисқа изоҳда кўринсин (эга, 2026-10-16).
 const _subtitleKeys = <AvaCreateAction, String>{
   AvaCreateAction.shopOnline: 'home_create_shop_online_hint',
-  AvaCreateAction.shop: 'tv_shop_open_hint',
 };
 
 class _CreateSheet extends StatelessWidget {
@@ -357,7 +355,6 @@ class _CreateSheet extends StatelessWidget {
         'home_create_shop_online',
         false
       ),
-      (AvaCreateAction.shop, Icons.storefront_outlined, 'tv_shop_open_cta', false),
       (
         AvaCreateAction.driver,
         Icons.local_taxi_outlined,

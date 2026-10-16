@@ -51,7 +51,6 @@ const _allKeys = [
   'home_create_ad',
   'home_create_service',
   'home_create_shop_online',
-  'tv_shop_open_cta',
   'home_create_driver',
   'home_create_courier',
   'home_create_home_cook',
@@ -62,7 +61,7 @@ const _allKeys = [
 ];
 
 void main() {
-  testWidgets('сарлавҳа «Менинг бизнесим» ва 12 банд ЭГА БЕРГАН ТАРТИБДА', (tester) async {
+  testWidgets('сарлавҳа «Менинг бизнесим» ва 11 банд ЭГА БЕРГАН ТАРТИБДА', (tester) async {
     await _open(tester);
     expect(find.text('home_create_title'), findsOneWidget);
     var prevTop = -1.0;
@@ -74,13 +73,14 @@ void main() {
     }
   });
 
-  testWidgets('ўхшаш икки дўкон банди изоҳ билан ажратилган, бошқаларида изоҳ йўқ', (tester) async {
+  testWidgets('«Онлайн Дўкон очиш» изоҳи бор; «Дўкон очиш» (AVAGram) банди ЙЎҚ (эга, 2026-10-17)', (tester) async {
     await _open(tester);
     expect(find.text('home_create_shop_online_hint'), findsOneWidget);
-    expect(find.text('tv_shop_open_hint'), findsOneWidget);
-    // Изоҳ ўз банди тагида туради (бошқа банд қаторига тушиб қолмайди).
-    final shop = tester.getTopLeft(find.text('tv_shop_open_cta')).dy;
-    final hint = tester.getTopLeft(find.text('tv_shop_open_hint')).dy;
+    expect(find.text('tv_shop_open_cta'), findsNothing);
+    expect(find.text('tv_shop_open_hint'), findsNothing);
+    // Изоҳ ўз банди тагида туради.
+    final shop = tester.getTopLeft(find.text('home_create_shop_online')).dy;
+    final hint = tester.getTopLeft(find.text('home_create_shop_online_hint')).dy;
     final next = tester.getTopLeft(find.text('home_create_driver')).dy;
     expect(hint, greaterThan(shop));
     expect(hint, lessThan(next));
@@ -104,7 +104,6 @@ void main() {
       'home_create_ad': AvaCreateAction.ad,
       'home_create_service': AvaCreateAction.service,
       'home_create_shop_online': AvaCreateAction.shopOnline,
-      'tv_shop_open_cta': AvaCreateAction.shop,
       'home_create_driver': AvaCreateAction.driver,
       'home_create_courier': AvaCreateAction.courier,
       'home_create_home_cook': AvaCreateAction.homeCook,

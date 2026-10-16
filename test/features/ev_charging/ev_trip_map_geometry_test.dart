@@ -107,23 +107,6 @@ void main() {
         arrivalSocPercent: 40,
       );
       expect(EvTripMapGeometry.markerKinds(plan), isEmpty);
-      expect(EvTripMapGeometry.stopNumbers(plan), isEmpty);
-    });
-  });
-
-  group('EvTripMapGeometry.stopNumbers', () {
-    test('тартиб рақами 1 дан бошланади', () {
-      final plan = EvTripPlan(
-        status: EvTripPlanStatus.ok,
-        stops: [_stop('a'), _stop('b'), _stop('c')],
-        totalKm: 900,
-        arrivalSocPercent: 25,
-      );
-
-      final numbers = EvTripMapGeometry.stopNumbers(plan);
-      expect(numbers['a'], 1);
-      expect(numbers['b'], 2);
-      expect(numbers['c'], 3);
     });
   });
 }

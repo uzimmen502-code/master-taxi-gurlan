@@ -173,11 +173,13 @@ class EvTripStop {
 
   /// Фақат очиқ манбадан импорт, ҳеч ким тасдиқламаган — ҳайдовчига
   /// «бу текширилмаган» деб кўрсатилиши ШАРТ.
-  bool get isUnverifiedImport =>
-      station.isImported &&
-      station.confirmationCount == 0 &&
-      station.status == 'unknown';
+  bool get isUnverifiedImport => evStationIsUnverifiedImport(station);
 }
+
+/// Фақат очиқ манбадан импорт қилинган, ҳеч ким тасдиқламаган станция
+/// (режадаги тўхташда ҳам, харитадаги бошқа станцияда ҳам бир хил қоида).
+bool evStationIsUnverifiedImport(EvChargingStation s) =>
+    s.isImported && s.confirmationCount == 0 && s.status == 'unknown';
 
 enum EvTripPlanStatus {
   /// Режа тузилди.

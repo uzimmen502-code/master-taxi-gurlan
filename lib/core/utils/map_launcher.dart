@@ -38,7 +38,7 @@ const int kMapsMaxWaypoints = 9;
 const int kMapsMobileWebMaxWaypoints = 3;
 
 /// Оралиқ нуқталарнинг амалдаги энг кўп сони — ЯГОНА манба:
-/// `openMapsEvTripRoute` ҳам, EV навигация рўйхати (`evNavigationWaypoints`)
+/// `openMapsEvTripRoute` ҳам, EV танлов ҳолати (`EvTripSelection`)
 /// ҳам шундан фойдаланади. Мобил веб (браузер Android/iOS'да) — 3, қолган
 /// ҳамма жойда — [kMapsMaxWaypoints]. Параметрлар тест учун.
 int mapsMaxWaypoints({bool? isWeb, TargetPlatform? platform}) {

@@ -2,19 +2,20 @@ import 'dart:async';
 
 import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/ev_charging/controllers/ev_car_tracker.dart';
-import 'package:ava_gurlan/features/ev_charging/controllers/ev_navigation_waypoints.dart';
 import 'package:ava_gurlan/features/ev_charging/controllers/ev_trip_planner.dart';
+import 'package:ava_gurlan/features/ev_charging/controllers/ev_trip_selection.dart';
 import 'package:ava_gurlan/features/ev_charging/models/ev_trip_plan.dart';
 import 'package:ava_gurlan/features/ev_charging/screens/ev_trip_map_screen.dart';
 import 'package:ava_gurlan/features/ev_charging/widgets/ev_map_top_overlay.dart';
-import 'package:ava_gurlan/features/ev_charging/widgets/ev_navigation_backup_sheet.dart';
+import 'package:ava_gurlan/features/ev_charging/widgets/ev_trip_station_sheet.dart';
 import 'package:ava_gurlan/models/ev_charging_station.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Xaritadagi katta "Navigatsiya" tugmasi: joylashuvi (varaqa yopiq / ochiq /
 // sudralayotganda), bosilganda chaqiriladigan funksiya (asl koordinata va
-// oraliq nuqtalar), zaxiralarni tanlash varag'i, o'chiq holat va xatolar.
+// oraliq nuqtalar = haydovchi tanlagan stansiyalar), chegaradan oshish xabari,
+// o'chiq holat va xatolar.
 // `AppLocalizations` ulanmagan: `context.tr(key)` kalitning o'zini qaytaradi.
 // Xarita `mapBuilder` bilan soxta, GPS - soxta oqim.
 
@@ -98,9 +99,11 @@ class _H {
   bool throwError = false;
   Completer<bool>? hold;
   final source = _Source();
+  EvTripMapRenderData? last;
 }
 
 const _btn = ValueKey('ev_trip_navigate_button');
+const _label = ValueKey('ev_trip_navigate_label');
 
 Future<_H> _pump(
   WidgetTester tester, {
@@ -146,10 +149,13 @@ Future<_H> _pump(
                     if (h.hold != null) return h.hold!.future;
                     return h.result;
                   },
-                  mapBuilder: (context, data) => const ColoredBox(
-                    color: Color(0xFFCCDDEE),
-                    child: SizedBox.expand(),
-                  ),
+                  mapBuilder: (context, data) {
+                    h.last = data;
+                    return const ColoredBox(
+                      color: Color(0xFFCCDDEE),
+                      child: SizedBox.expand(),
+                    );
+                  },
                 ),
               ),
             ),
@@ -189,10 +195,9 @@ void main() {
     testWidgets('matn, ikonka, rang, o\'lcham', (tester) async {
       await _pump(tester);
       expect(find.byKey(_btn), findsOneWidget);
-      expect(
-          find.descendant(
-              of: find.byKey(_btn), matching: find.text('ev_trip_navigate')),
-          findsOneWidget);
+      // Tanlangan (tavsiya etilgan) 2 ta to'xtash soni tugmada.
+      expect(tester.widget<Text>(find.byKey(_label)).data,
+          'ev_trip_navigate · 2');
       expect(
           find.descendant(
               of: find.byKey(_btn),
@@ -201,8 +206,7 @@ void main() {
 
       final m = tester.widget<Material>(find.byKey(_btn));
       expect(m.color, AppColors.primaryDark);
-      final text = tester.widget<Text>(find.descendant(
-          of: find.byKey(_btn), matching: find.text('ev_trip_navigate')));
+      final text = tester.widget<Text>(find.byKey(_label));
       expect(text.style!.color, AppColors.onPrimary);
 
       final r = tester.getRect(find.byKey(_btn));
@@ -290,14 +294,13 @@ void main() {
     });
   });
 
-  group('bosilganda: Google Maps chaqiruvi', () {
-    testWidgets('zaxira yo\'q: varaqasiz darhol; asl koordinatalar + asosiylar',
-        (tester) async {
+  group('bosilganda: Google Maps chaqiruvi (haydovchi tanlovi)', () {
+    testWidgets('zaxira yo\'q: darhol; asl koordinatalar + tavsiya etilgan '
+        'asosiylar', (tester) async {
       final h = await _pump(tester, plan: _planNoBackups());
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
 
-      expect(find.byType(EvNavigationBackupSheet), findsNothing);
       expect(h.calls, hasLength(1));
       final c = h.calls.single;
       expect(c.originLat, closeTo(_lat(0), 1e-12));
@@ -308,137 +311,149 @@ void main() {
           [_lat(200), _lat(400)]);
     });
 
-    testWidgets('zaxira bor: varaqa chiqadi, hammasi O\'CHIQ, Davom etish - '
-        'faqat asosiylar', (tester) async {
+    testWidgets('zaxira bor: varaqa chiqmaydi, darhol; zaxiralar o\'chiq '
+        '(faqat tavsiya etilgan asosiylar)', (tester) async {
       final h = await _pump(tester, plan: _planWithBackups());
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
 
-      expect(find.byType(EvNavigationBackupSheet), findsOneWidget);
-      expect(h.calls, isEmpty, reason: 'tanlovdan oldin ochilmaydi');
-      expect(find.text('ev_trip_nav_backups_title'), findsOneWidget);
-      final switches = find.byType(SwitchListTile);
-      expect(switches, findsNWidgets(3));
-      for (final s in tester.widgetList<SwitchListTile>(switches)) {
-        expect(s.value, isFalse);
-      }
-      // Asosiy to'xtashlar ro'yxatda yo'q (ular doim kiradi).
-      Finder inSheet(String text) => find.descendant(
-          of: find.byType(EvNavigationBackupSheet), matching: find.text(text));
-      expect(inSheet('ST-s1'), findsNothing);
-      expect(inSheet('ST-s2'), findsNothing);
-      expect(inSheet('ST-b1-'), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backups_continue')));
-      await tester.pumpAndSettle();
-      expect(find.byType(EvNavigationBackupSheet), findsNothing);
+      expect(find.byType(EvTripStationSheet), findsNothing);
       expect(h.calls, hasLength(1));
       expect(h.calls.single.stops.map((s) => s.lat).toList(),
           [_lat(200), _lat(400)]);
     });
 
-    testWidgets('tanlangan zaxira yo\'l tartibida qo\'shiladi', (tester) async {
+    testWidgets('haydovchi qo\'shgan/olib tashlagan stansiyalar yo\'l '
+        'tartibida jo\'natiladi', (tester) async {
       final h = await _pump(tester, plan: _planWithBackups());
+      h.last!.onStationTap('b1-'); // zaxira (170 km)
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+      await tester.pumpAndSettle();
+      h.last!.onStationTap('b2+'); // zaxira (415 km)
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+      await tester.pumpAndSettle();
+      h.last!.onStationTap('s1'); // tavsiya etilganni olib tashlash
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backup_b1-')));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backup_b2+')));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backups_continue')));
-      await tester.pumpAndSettle();
-
       expect(h.calls, hasLength(1));
       expect(h.calls.single.stops.map((s) => s.lat).toList(), [
-        _lat(170), // b1- (tanlangan)
-        _lat(200), // s1
+        _lat(170), // b1- (qo'shildi)
         _lat(400), // s2
-        _lat(415), // b2+ (tanlangan)
+        _lat(415), // b2+ (qo'shildi)
       ]);
     });
 
-    testWidgets('"Faqat asosiy to\'xtashlar" tanlovdan qat\'i nazar asosiylar',
+    testWidgets('hammasi olib tashlansa: faqat manzilga (oraliq nuqta yo\'q)',
         (tester) async {
-      final h = await _pump(tester, plan: _planWithBackups());
+      final h = await _pump(tester, plan: _planNoBackups());
+      for (final id in ['s1', 's2']) {
+        h.last!.onStationTap(id);
+        await tester.pumpAndSettle();
+        await tester
+            .tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+        await tester.pumpAndSettle();
+      }
+      expect(tester.widget<Text>(find.byKey(_label)).data, 'ev_trip_navigate');
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backup_b1+')));
-      await tester.pump();
-      await tester
-          .tap(find.byKey(const ValueKey('ev_nav_backups_primary_only')));
-      await tester.pumpAndSettle();
-
       expect(h.calls, hasLength(1));
-      expect(h.calls.single.stops.map((s) => s.lat).toList(),
-          [_lat(200), _lat(400)]);
+      expect(h.calls.single.stops, isEmpty);
+      expect(h.calls.single.destLat, closeTo(_lat(640), 1e-12));
     });
 
-    testWidgets('varaqa yopilsa (pastga/orqaga) hech narsa ochilmaydi',
-        (tester) async {
+    testWidgets('tugmada tanlanganlar soni: "Navigatsiya · N", o\'zgarsa '
+        'yangilanadi', (tester) async {
       final h = await _pump(tester, plan: _planWithBackups());
-      await tester.tap(find.byKey(_btn));
+      String label() => tester.widget<Text>(find.byKey(_label)).data!;
+      expect(label(), 'ev_trip_navigate · 2');
+
+      h.last!.onStationTap('b1+');
       await tester.pumpAndSettle();
-      expect(find.byType(EvNavigationBackupSheet), findsOneWidget);
-      await tester.tapAt(const Offset(200, 20)); // to'siq (barrier)
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
       await tester.pumpAndSettle();
-      expect(find.byType(EvNavigationBackupSheet), findsNothing);
-      expect(h.calls, isEmpty);
-      expect(find.byType(EvTripMapScreen), findsOneWidget);
+      expect(label(), 'ev_trip_navigate · 3');
+      expect(h.last!.selectedNumbers.length, 3);
+
+      h.last!.onStationTap('b1+');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+      await tester.pumpAndSettle();
+      expect(label(), 'ev_trip_navigate · 2');
     });
 
-    testWidgets('chegara (max 3, 2 asosiy): 1 ta zaxira sig\'adi, qolgan '
-        'o\'chiriladi, matnda chegara', (tester) async {
+    testWidgets('aniq chegarada (3/3): xabar yo\'q, Google Maps ochiladi', (tester) async {
       final h =
           await _pump(tester, plan: _planWithBackups(), maxWaypoints: 3);
+      // 2 asosiy + 1 zaxira = 3 (chegarada) - hali ruxsat.
+      h.last!.onStationTap('b1+');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
-
-      SwitchListTile tile(String id) => tester
-          .widget<SwitchListTile>(find.byKey(ValueKey('ev_nav_backup_$id')));
-
-      expect(find.byKey(const ValueKey('ev_nav_backups_limit')), findsNothing);
-      expect(tile('b1-').onChanged, isNotNull);
-
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backup_b1+')));
-      await tester.pump();
-
-      // Joy tugadi: tanlanmaganlar o'chiq (disabled), tanlangani yoqiq va
-      // o'chirilishi mumkin; chegara matni chiqdi.
-      expect(find.byKey(const ValueKey('ev_nav_backups_limit')), findsOneWidget);
-      expect(tile('b1-').onChanged, isNull);
-      expect(tile('b2+').onChanged, isNull);
-      expect(tile('b1+').value, isTrue);
-      expect(tile('b1+').onChanged, isNotNull);
-
-      // Tanlovni qaytarsak yana yoqiladi.
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backup_b1+')));
-      await tester.pump();
-      expect(tile('b1-').onChanged, isNotNull);
-      expect(find.byKey(const ValueKey('ev_nav_backups_limit')), findsNothing);
-
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backup_b1-')));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('ev_nav_backups_continue')));
-      await tester.pumpAndSettle();
-      expect(h.calls.single.stops, hasLength(3));
-      expect(h.calls.single.stops.map((s) => s.lat).toList(),
-          [_lat(170), _lat(200), _lat(400)]);
+      expect(h.calls, hasLength(1));
+      expect(find.byKey(const ValueKey('ev_trip_over_limit_message')),
+          findsNothing);
     });
 
-    testWidgets('asosiylar chegarani to\'ldirsa (mobil veb, max 2): varaqa '
-        'yo\'q, faqat asosiylar', (tester) async {
+    testWidgets('tavsiyalar chegaradan ko\'p (mobil veb 3, 4 asosiy): xabar, '
+        'launcher chaqirilmaydi; kamaytirilgach ochiladi', (tester) async {
+      final plan = EvTripPlan(
+        status: EvTripPlanStatus.ok,
+        stops: [
+          _stop('a', 100),
+          _stop('b', 200),
+          _stop('c', 300),
+          _stop('d', 400),
+        ],
+        totalKm: 640,
+        arrivalSocPercent: 25,
+      );
+      final h = await _pump(tester, plan: plan, maxWaypoints: 3);
+      expect(tester.widget<Text>(find.byKey(_label)).data,
+          'ev_trip_navigate · 4');
+
+      await tester.tap(find.byKey(_btn));
+      await tester.pump();
+      expect(h.calls, isEmpty, reason: 'launcher chaqirilmadi');
+      expect(find.byKey(const ValueKey('ev_trip_over_limit_message')),
+          findsOneWidget);
+      // Xabar chegara va tanlangan sonni ko'rsatadi (kalit o'rniga matn
+      // ulanmagan, o'rinbosarlar almashtirilgan bo'lishi mumkin emas).
+      expect(find.text('ev_trip_sel_over_limit'), findsOneWidget);
+
+      // Haydovchi bittasini olib tashlaydi - endi ruxsat.
+      h.last!.onStationTap('b');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(_btn));
+      await tester.pumpAndSettle();
+      expect(h.calls, hasLength(1));
+      expect(h.calls.single.stops.map((s) => s.lat).toList(),
+          [_lat(100), _lat(300), _lat(400)]);
+    });
+
+    testWidgets('asosiylar chegarani to\'ldirsa (max 2, 2 asosiy): xabarsiz, '
+        'ochiladi', (tester) async {
       final h =
           await _pump(tester, plan: _planWithBackups(), maxWaypoints: 2);
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
-      expect(find.byType(EvNavigationBackupSheet), findsNothing);
       expect(h.calls.single.stops.map((s) => s.lat).toList(),
           [_lat(200), _lat(400)]);
+      expect(find.byKey(const ValueKey('ev_trip_over_limit_message')),
+          findsNothing);
     });
 
-    testWidgets('reja tayyor emas (uzilish), marshrut bor: faqat manzilga, '
-        'oraliq nuqta ham, varaqa ham yo\'q', (tester) async {
+    testWidgets('reja tayyor emas (uzilish), marshrut bor: tanlov bo\'sh, '
+        'faqat manzilga', (tester) async {
       final h = await _pump(tester,
           plan: _planWithBackups(status: EvTripPlanStatus.gapTooLarge));
       expect(
@@ -446,7 +461,6 @@ void main() {
           reason: 'faol');
       await tester.tap(find.byKey(_btn));
       await tester.pumpAndSettle();
-      expect(find.byType(EvNavigationBackupSheet), findsNothing);
       expect(h.calls, hasLength(1));
       expect(h.calls.single.stops, isEmpty);
       expect(h.calls.single.destLat, closeTo(_lat(640), 1e-12));

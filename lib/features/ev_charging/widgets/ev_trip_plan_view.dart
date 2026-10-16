@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/ev_charging_station.dart';
 import '../models/ev_trip_plan.dart';
 
 /// ⚡ Сафар режасининг кўриниши — асосий ва заҳира станциялар, ораларидаги
@@ -184,6 +185,18 @@ class EvTripPlanView extends StatelessWidget {
   }
 }
 
+/// Станциянинг қисқа тавсифи: зарядлаш турлари · қувват · разъёмлар
+/// (режадаги тўхташ карточкаси ва харитадаги станция варағида бир хил).
+String evTripStationSpecLine(EvChargingStation s) {
+  final power = s.powerKw ?? s.sitePowerKw;
+  final types = s.chargingTypes.join('+');
+  return [
+    if (types.isNotEmpty) types,
+    if (power != null) '$power kW',
+    if (s.connectors.isNotEmpty) s.connectors.join(' · '),
+  ].join(' · ');
+}
+
 class _StopCard extends StatelessWidget {
   const _StopCard({required this.stop, required this.index});
 
@@ -195,8 +208,6 @@ class _StopCard extends StatelessWidget {
     final km = context.tr('ev_trip_km');
     final s = stop.station;
     final title = s.hasName ? s.name!.trim() : context.tr('ev_trip_station');
-    final power = s.powerKw ?? s.sitePowerKw;
-    final types = s.chargingTypes.join('+');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -240,11 +251,7 @@ class _StopCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            [
-              if (types.isNotEmpty) types,
-              if (power != null) '$power kW',
-              if (s.connectors.isNotEmpty) s.connectors.join(' · '),
-            ].join(' · '),
+            evTripStationSpecLine(s),
             style: const TextStyle(fontSize: 13, color: Colors.black87),
           ),
           const SizedBox(height: 4),

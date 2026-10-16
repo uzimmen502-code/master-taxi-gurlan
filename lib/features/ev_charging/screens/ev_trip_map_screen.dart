@@ -7,14 +7,14 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../controllers/ev_car_tracker.dart';
-import '../controllers/ev_navigation_waypoints.dart';
 import '../controllers/ev_route_progress.dart';
 import '../controllers/ev_trip_planner.dart';
+import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
 import '../widgets/ev_map_top_overlay.dart';
-import '../widgets/ev_navigation_backup_sheet.dart';
 import '../widgets/ev_trip_map_view.dart';
 import '../widgets/ev_trip_plan_view.dart';
+import '../widgets/ev_trip_station_sheet.dart';
 
 /// Харитага узатиладиган ҳолат — `GoogleMap` платформа кўринишисиз
 /// тестлаш учун харита ташқаридан қурилади ([EvTripMapBuilder]).
@@ -23,6 +23,9 @@ class EvTripMapRenderData {
     required this.route,
     required this.corridorStations,
     required this.plan,
+    required this.candidates,
+    required this.selectedNumbers,
+    required this.onStationTap,
     required this.destinationLat,
     required this.destinationLng,
     required this.progress,
@@ -37,6 +40,14 @@ class EvTripMapRenderData {
   final List<EvRoutePoint> route;
   final List<EvCorridorStation> corridorStations;
   final EvTripPlan plan;
+
+  /// Йўл бўйидаги барча станциялар (ҳаммаси чизилади) ва ҳайдовчи
+  /// танлаганларининг тартиб рақамлари (id → 1, 2, ...).
+  final List<EvTripCandidate> candidates;
+  final Map<String, int> selectedNumbers;
+
+  /// Станция маркери босилди (id) — станция варағи очилади.
+  final ValueChanged<String> onStationTap;
   final double destinationLat;
   final double destinationLng;
   final EvRouteProgress? progress;
@@ -71,7 +82,11 @@ typedef EvRouteLauncher = Future<bool> Function({
 ///    станциялар, манзил — ва жонли машина маркери (GPS оқими);
 ///  * босиб ўтилган қисм хира, қолгани маршрут рангида;
 ///  * режанинг барча тафсилотлари ([EvTripPlanView]) — пастдан тортиб
-///    очиладиган варақада (йиғиқ ҳолатда бир қатор хулоса).
+///    очиладиган варақада (йиғиқ ҳолатда бир қатор хулоса);
+///  * йўл бўйидаги БАРЧА станциялар кўринади; ҳар бири босилса станция
+///    варағи очилади ва ҳайдовчи уни тўхташ режасига қўшади/олиб ташлайди
+///    ([EvTripSelection]) — илова фақат тавсия қилади. «Навигация» Google
+///    Maps'ни ҳайдовчи танлаган тўхташлар билан очади.
 class EvTripMapScreen extends StatefulWidget {
   const EvTripMapScreen({
     super.key,
@@ -133,8 +148,9 @@ class EvTripMapScreen extends StatefulWidget {
 
 class _EvTripMapScreenState extends State<EvTripMapScreen>
     with WidgetsBindingObserver {
-  /// Варақанинг йиғиқ (peek) баландлиги: тутқич + бир қатор хулоса.
-  static const double _peekContentPx = 84;
+  /// Варақанинг йиғиқ (peek) баландлиги: тутқич + хулоса (катта шрифтда
+  /// икки қатор).
+  static const double _peekContentPx = 100;
   static const double _maxSheetFraction = 0.88;
 
   /// Катта «Навигация» тугмаси: баландлиги ва варақа/экран четидан бўшлиқ.
@@ -150,6 +166,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   static const int _segmentBacktrack = 3;
 
   late final EvCarTracker _car;
+  late final EvTripSelection _selection;
   final _sheetCtrl = DraggableScrollableController();
 
   EvRouteProgress? _progress;
@@ -164,6 +181,13 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     // Харита статус бар ва пастки соҳа остигача.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     WidgetsBinding.instance.addObserver(this);
+    // Бошланғич танлов — тавсия этилган (асосий) тўхташлар; чеклов
+    // платформага қараб (мобил веб 3, бошқа 9) - ЯГОНА манба.
+    _selection = EvTripSelection.recommended(
+      widget.plan,
+      widget.corridorStations,
+      maxWaypoints: widget.maxWaypoints ?? mapsMaxWaypoints(),
+    )..addListener(_onSelection);
     _car = EvCarTracker(
       source: widget.locationSource ?? const GeolocatorCarLocationSource(),
     )..addListener(_onCar);
@@ -175,6 +199,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     WidgetsBinding.instance.removeObserver(this);
     _car
       ..removeListener(_onCar)
+      ..dispose();
+    _selection
+      ..removeListener(_onSelection)
       ..dispose();
     _sheetCtrl.dispose();
     // Бошқа экранлар учун одатдаги тизим панелларига қайтарилади.
@@ -211,6 +238,19 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     setState(() => _progress = progress);
   }
 
+  void _onSelection() {
+    if (mounted) setState(() {});
+  }
+
+  /// Станция маркери босилди: ихчам варақа (тавсия/заҳира белгиси, масофа,
+  /// зарядлаш маълумоти, қўшиш/олиб ташлаш).
+  void _onStationTap(String id) {
+    final candidate = _selection.candidateById(id);
+    if (candidate == null || !mounted) return;
+    EvTripStationSheet.show(context,
+        selection: _selection, candidate: candidate);
+  }
+
   void _onUserGesture() {
     if (_follow) setState(() => _follow = false);
   }
@@ -226,35 +266,36 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       widget.originLng.isFinite &&
       (widget.plan.isOk || widget.route.isNotEmpty);
 
-  /// «Навигация»: Google Maps'да бошидан охиригача йўл. Режадаги асосий
-  /// станциялар доим оралиқ нуқта. Заҳиралар ИХТИЁРИЙ (Google'да ихтиёрий
-  /// нуқта йўқ, шунинг учун танлов иловада): заҳира бўлса аввал танлаш
-  /// варағи очилади, ҳаммаси ўчиқ; бўлмаса — дарҳол очилади. Режа тайёр
-  /// бўлмаса — оралиқ нуқталарсиз, фақат манзилга.
+  /// «Навигация»: Google Maps'да бошидан охиригача йўл, оралиқ нуқталар =
+  /// ҲАЙДОВЧИ ТАНЛАГАН станциялар (йўл бўйича тартибда). Ҳеч нарса
+  /// танланмаган бўлса — фақат манзилга. Google Maps'да ҳар оралиқ нуқта
+  /// мажбурий тўхташ ва сони чекланган: танланганлар чекловдан кўп бўлса,
+  /// илова ўзбошимчалик билан қирқмайди — дўстона хабар чиқади ва
+  /// ҳайдовчи камайтиргунча ҳеч нарса очилмайди.
   Future<void> _navigate() async {
     if (_launching || !_canNavigate) return;
+    if (_selection.isOverLimit) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          key: const ValueKey('ev_trip_over_limit_message'),
+          duration: const Duration(seconds: 6),
+          content: Text(context
+              .tr('ev_trip_sel_over_limit')
+              .replaceAll('{n}', '${_selection.maxWaypoints}')
+              .replaceAll('{c}', '${_selection.count}')),
+        ));
+      return;
+    }
     _launching = true;
     var opened = false;
     try {
-      var selected = const <String>{};
-      // Платформага қараб чеклов (мобил веб 3, бошқа 9) - ЯГОНА манба.
-      final max = widget.maxWaypoints ?? mapsMaxWaypoints();
-      final options = evNavigationBackupOptions(widget.plan);
-      final capacity = evNavigationBackupCapacity(widget.plan, max: max);
-      if (options.isNotEmpty && capacity > 0) {
-        final picked = await EvNavigationBackupSheet.show(context,
-            options: options, capacity: capacity, maxWaypoints: max);
-        if (picked == null) return; // варақа ёпилди - ҳеч нарса очилмайди
-        selected = picked;
-        if (!mounted) return;
-      }
       opened = await widget.routeLauncher(
         originLat: widget.originLat,
         originLng: widget.originLng,
         destinationLat: widget.destinationLat,
         destinationLng: widget.destinationLng,
-        stops: evNavigationWaypoints(widget.plan,
-            selectedBackupIds: selected, max: max),
+        stops: _selection.waypoints,
       );
     } catch (_) {
       opened = false;
@@ -281,8 +322,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
     if (builder != null) return builder(context, d);
     return EvTripMapView(
       route: d.route,
-      corridorStations: d.corridorStations,
-      plan: d.plan,
+      candidates: d.candidates,
+      selectedNumbers: d.selectedNumbers,
+      onStationTap: d.onStationTap,
       destinationLat: d.destinationLat,
       destinationLng: d.destinationLng,
       progress: d.progress,
@@ -334,6 +376,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
               route: widget.route,
               corridorStations: widget.corridorStations,
               plan: widget.plan,
+              candidates: _selection.candidates,
+              selectedNumbers: _selection.numbers,
+              onStationTap: _onStationTap,
               destinationLat: widget.destinationLat,
               destinationLng: widget.destinationLng,
               progress: _progress,
@@ -405,6 +450,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                   height: _navHeight,
                   child: _NavigateButton(
                     enabled: _canNavigate,
+                    count: _selection.count,
                     onTap: _navigate,
                   ),
                 ),
@@ -440,11 +486,17 @@ double navButtonBottom({
 }
 
 /// Катта «Навигация» тугмаси: бренд ранги (primaryDark), матн/иконка
-/// onPrimary, 56 dp. Ишламаса — кулранг, босилмайди.
+/// onPrimary, 56 dp. Ишламаса — кулранг, босилмайди. Танланган тўхташлар
+/// бор бўлса сони ёнида: «Навигация · 3» (катта шрифтда FittedBox кичрайтиради).
 class _NavigateButton extends StatelessWidget {
-  const _NavigateButton({required this.enabled, required this.onTap});
+  const _NavigateButton({
+    required this.enabled,
+    required this.count,
+    required this.onTap,
+  });
 
   final bool enabled;
+  final int count;
   final VoidCallback onTap;
 
   static const _disabledBg = Color(0xFFBDBDBD);
@@ -475,7 +527,10 @@ class _NavigateButton extends StatelessWidget {
                     Icon(Icons.navigation_rounded, color: fg, size: 28),
                     const SizedBox(width: 10),
                     Text(
-                      context.tr('ev_trip_navigate'),
+                      count > 0
+                          ? '${context.tr('ev_trip_navigate')} · $count'
+                          : context.tr('ev_trip_navigate'),
+                      key: const ValueKey('ev_trip_navigate_label'),
                       maxLines: 1,
                       style: TextStyle(
                         fontSize: 20,
@@ -602,8 +657,9 @@ class _PlanSheet extends StatelessWidget {
                           child: Text(
                             EvTripMapScreen.peekText(context, plan),
                             key: const ValueKey('ev_trip_sheet_peek'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            // Катта шрифтда (1.3) қирқилмайди: икки қаторга
+                            // ўтади, йиғиқ варақа шунга етарли баланд.
+                            maxLines: 2,
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,

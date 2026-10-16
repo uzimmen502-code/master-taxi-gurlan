@@ -3,25 +3,15 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controllers/ev_route_progress.dart';
 import '../controllers/ev_trip_planner.dart';
+import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
 import 'ev_car_marker_icon.dart';
+import 'ev_trip_stop_icon.dart';
 
-/// Харитадаги маркер тури.
-enum EvTripMarkerKind {
-  /// Режадаги асосий тўхташ — рақами билан.
-  primary,
-
-  /// Заҳира вариант.
-  backup,
-
-  /// Маршрут бўйидаги бошқа станция — режага кирмаган, лекин ҳайдовчи
-  /// кўриб турсин (хотиржамлик учун).
-  other,
-}
+export '../controllers/ev_trip_selection.dart' show EvTripMarkerKind;
 
 /// ⚡ Сафар харитасининг ТОЗА ҳисоблари — виджетдан ажратилган, шунинг
 /// учун `GoogleMap` платформа кўриниши керак бўлмайди ва тестланади.
@@ -63,28 +53,8 @@ class EvTripMapGeometry {
 
   /// Станция ID → маркер тури. Асосий тўхташ заҳира сифатида ҳам
   /// кўрсатилмайди (асосий устун).
-  static Map<String, EvTripMarkerKind> markerKinds(EvTripPlan plan) {
-    final kinds = <String, EvTripMarkerKind>{};
-    for (final stop in plan.stops) {
-      for (final b in stop.backups) {
-        kinds[b.station.id] = EvTripMarkerKind.backup;
-      }
-    }
-    // Асосийлар охирида — заҳира белгисини босиб кетади.
-    for (final stop in plan.stops) {
-      kinds[stop.station.id] = EvTripMarkerKind.primary;
-    }
-    return kinds;
-  }
-
-  /// Асосий тўхташнинг рақами (1'дан бошлаб); тўхташ эмас — `null`.
-  static Map<String, int> stopNumbers(EvTripPlan plan) {
-    final numbers = <String, int>{};
-    for (var i = 0; i < plan.stops.length; i++) {
-      numbers[plan.stops[i].station.id] = i + 1;
-    }
-    return numbers;
-  }
+  static Map<String, EvTripMarkerKind> markerKinds(EvTripPlan plan) =>
+      evTripMarkerKinds(plan);
 }
 
 /// ⚡ Сафар режасининг харитаси: маршрут чизиғи, рақамланган асосий
@@ -101,10 +71,11 @@ class EvTripMapView extends StatefulWidget {
   const EvTripMapView({
     super.key,
     required this.route,
-    required this.corridorStations,
-    required this.plan,
+    required this.candidates,
     required this.destinationLat,
     required this.destinationLng,
+    this.selectedNumbers = const {},
+    this.onStationTap,
     this.progress,
     this.carLat,
     this.carLng,
@@ -115,10 +86,20 @@ class EvTripMapView extends StatefulWidget {
   });
 
   final List<EvRoutePoint> route;
-  final List<EvCorridorStation> corridorStations;
-  final EvTripPlan plan;
+
+  /// Йўл бўйидаги БАРЧА станциялар (коридор) — ҳаммаси чизилади, яшириш ёки
+  /// кластерлаш йўқ.
+  final List<EvTripCandidate> candidates;
   final double destinationLat;
   final double destinationLng;
+
+  /// Ҳайдовчи танлаган станциялар: id → йўл бўйича тартиб рақами. Танланган
+  /// маркер рақамли қизил доира; қолганлар ўз тури рангида (асосий қизил,
+  /// заҳира тўқ сариқ, бошқа яшил).
+  final Map<String, int> selectedNumbers;
+
+  /// Станция маркери босилди (id).
+  final ValueChanged<String>? onStationTap;
 
   final EvRouteProgress? progress;
   final double? carLat;
@@ -243,38 +224,44 @@ class _EvTripMapViewState extends State<EvTripMapView> {
     };
   }
 
+  static double _hueFor(EvTripMarkerKind kind, int? selectedNumber) {
+    if (selectedNumber != null) return BitmapDescriptor.hueRed;
+    return switch (kind) {
+      EvTripMarkerKind.primary => BitmapDescriptor.hueRed,
+      EvTripMarkerKind.backup => BitmapDescriptor.hueOrange,
+      EvTripMarkerKind.other => BitmapDescriptor.hueGreen,
+    };
+  }
+
   Set<Marker> _markers(BuildContext context) {
-    final km = context.tr('ev_trip_km');
-    final offRoute = context.tr('ev_trip_off_route');
-    final kinds = EvTripMapGeometry.markerKinds(widget.plan);
-    final numbers = EvTripMapGeometry.stopNumbers(widget.plan);
     final markers = <Marker>{};
 
-    for (final c in widget.corridorStations) {
+    // БАРЧА коридор станциялари чизилади (яширилмайди, кластерланмайди).
+    for (final c in widget.candidates) {
       final s = c.station;
-      final kind = kinds[s.id] ?? EvTripMarkerKind.other;
-      final number = numbers[s.id];
-      final name = s.hasName ? s.name!.trim() : '⚡';
+      final number = widget.selectedNumbers[c.id];
+      final selectedIcon = number == null ? null : _numberIcons[number];
 
       markers.add(Marker(
         markerId: MarkerId('ev_trip_${s.id}'),
         position: LatLng(s.latitude, s.longitude),
-        icon: BitmapDescriptor.defaultMarkerWithHue(switch (kind) {
-          EvTripMarkerKind.primary => BitmapDescriptor.hueRed,
-          EvTripMarkerKind.backup => BitmapDescriptor.hueOrange,
-          EvTripMarkerKind.other => BitmapDescriptor.hueGreen,
-        }),
-        // Асосий тўхташлар устда турсин — рақамлари босилиб кетмасин.
-        zIndexInt: switch (kind) {
-          EvTripMarkerKind.primary => 3,
-          EvTripMarkerKind.backup => 2,
-          EvTripMarkerKind.other => 1,
-        },
-        infoWindow: InfoWindow(
-          title: number != null ? '$number. $name' : name,
-          snippet: '${c.alongKm.round()} $km'
-              '${c.offRouteKm >= 1 ? ' · $offRoute ${c.offRouteKm.round()} $km' : ''}',
-        ),
+        // Танланган — рақамли қизил доира (иконка тайёр бўлгунча оддий
+        // қизил маркер); танланмаган — ўз тури ранги.
+        icon: selectedIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(_hueFor(c.kind, number)),
+        anchor: selectedIcon != null
+            ? const Offset(0.5, 0.5)
+            : const Offset(0.5, 1.0),
+        // Танланганлар устда, кейин асосий, заҳира, бошқалар.
+        zIndexInt: number != null
+            ? 4
+            : switch (c.kind) {
+                EvTripMarkerKind.primary => 3,
+                EvTripMarkerKind.backup => 2,
+                EvTripMarkerKind.other => 1,
+              },
+        // Босилганда ўз варағимиз очилади; хаританинг ўз ёзув ойнаси йўқ.
+        onTap: () => widget.onStationTap?.call(s.id),
       ));
     }
 
@@ -282,7 +269,7 @@ class _EvTripMapViewState extends State<EvTripMapView> {
       markerId: const MarkerId('ev_trip_destination'),
       position: LatLng(widget.destinationLat, widget.destinationLng),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-      zIndexInt: 4,
+      zIndexInt: 5,
     ));
 
     if (widget.hasCar) {
@@ -295,11 +282,25 @@ class _EvTripMapViewState extends State<EvTripMapView> {
         rotation: widget.carHeading,
         flat: true,
         anchor: const Offset(0.5, 0.5),
-        zIndexInt: 5,
+        zIndexInt: 6,
       ));
     }
 
     return markers;
+  }
+
+  /// Танланган станциялар учун рақамли иконкалар (рақам → иконка). Кеш
+  /// EvTripStopIconда; бу ерда фақат тайёр бўлганлари сақланади.
+  final Map<int, BitmapDescriptor> _numberIcons = {};
+  final Set<int> _numberRequested = {};
+
+  void _ensureNumberIcons() {
+    for (final n in widget.selectedNumbers.values) {
+      if (!_numberRequested.add(n)) continue;
+      EvTripStopIcon.load(n).then((icon) {
+        if (mounted) setState(() => _numberIcons[n] = icon);
+      });
+    }
   }
 
   void _ensureCarIcon() {
@@ -313,6 +314,7 @@ class _EvTripMapViewState extends State<EvTripMapView> {
   @override
   Widget build(BuildContext context) {
     _ensureCarIcon();
+    _ensureNumberIcons();
     final first = widget.route.isNotEmpty
         ? LatLng(widget.route.first.lat, widget.route.first.lng)
         : LatLng(widget.destinationLat, widget.destinationLng);

@@ -3255,5 +3255,14 @@
   "geo_show_nation": "Бутун Ўзбекистон",
   "geo_region_label": "Вилоят",
   "geo_district_label": "Туман",
-  "geo_area_label": "Маҳалла / хизмат зонаси"
+  "geo_area_label": "Маҳалла / хизмат зонаси",
+  "taxi_reason_agreement_required": "Аввал такси хизмати келишувини қабул қилинг, сўнг қайта уриниб кўринг.",
+  "taxi_reason_outstanding_debt": "Аввалги AVA хизмат ҳақи қарзи ёпилмаган. Ҳамённи тўлдиринг ва қайта уриниб кўринг.",
+  "taxi_reason_no_capability": "Аввал профилда такси хизматини ёқинг.",
+  "taxi_reason_departure_in_past": "Жўнаш вақти ўтиб кетган. Ҳозирдан кейинги вақтни танланг.",
+  "taxi_reason_route_required": "Қаердан ва қаерга шаҳарларини киритинг.",
+  "taxi_reason_seats_invalid": "Ўриндиқлар сони нотўғри. Сонни текшириб, қайта уриниб кўринг.",
+  "taxi_reason_schedule_invalid": "Сана ёки вақт нотўғри. Қайта танланг.",
+  "taxi_reason_not_published": "Бу рейс энди фаол эмас.",
+  "taxi_reason_trip_changed": "Рейс ҳолати ўзгарди. Қайта уриниб кўринг."
 }

@@ -3255,5 +3255,14 @@
   "geo_show_nation": "Весь Узбекистан",
   "geo_region_label": "Регион",
   "geo_district_label": "Район",
-  "geo_area_label": "Махалля / зона обслуживания"
+  "geo_area_label": "Махалля / зона обслуживания",
+  "taxi_reason_agreement_required": "Сначала примите соглашение сервиса такси, затем повторите попытку.",
+  "taxi_reason_outstanding_debt": "Предыдущая плата AVA не погашена. Пополните кошелёк и повторите попытку.",
+  "taxi_reason_no_capability": "Сначала включите услугу такси в профиле.",
+  "taxi_reason_departure_in_past": "Время отправления уже прошло. Выберите время позже текущего.",
+  "taxi_reason_route_required": "Укажите города отправления и назначения.",
+  "taxi_reason_seats_invalid": "Неверное число мест. Проверьте и повторите попытку.",
+  "taxi_reason_schedule_invalid": "Неверная дата или время. Выберите заново.",
+  "taxi_reason_not_published": "Этот рейс уже не активен.",
+  "taxi_reason_trip_changed": "Состояние рейса изменилось. Повторите попытку."
 }

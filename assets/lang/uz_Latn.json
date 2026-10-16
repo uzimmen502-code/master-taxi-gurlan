@@ -3255,5 +3255,14 @@
   "geo_show_nation": "Butun O‘zbekiston",
   "geo_region_label": "Viloyat",
   "geo_district_label": "Tuman",
-  "geo_area_label": "Mahalla / xizmat zonasi"
+  "geo_area_label": "Mahalla / xizmat zonasi",
+  "taxi_reason_agreement_required": "Avval taksi xizmati kelishuvini qabul qiling, so'ng qayta urinib ko'ring.",
+  "taxi_reason_outstanding_debt": "Avvalgi AVA xizmat haqi qarzi yopilmagan. Hamyonni to'ldiring va qayta urinib ko'ring.",
+  "taxi_reason_no_capability": "Avval profilda taksi xizmatini yoqing.",
+  "taxi_reason_departure_in_past": "Jo'nash vaqti o'tib ketgan. Hozirdan keyingi vaqtni tanlang.",
+  "taxi_reason_route_required": "Qaerdan va qaerga shaharlarini kiriting.",
+  "taxi_reason_seats_invalid": "O'rindiqlar soni noto'g'ri. Sonni tekshirib, qayta urinib ko'ring.",
+  "taxi_reason_schedule_invalid": "Sana yoki vaqt noto'g'ri. Qayta tanlang.",
+  "taxi_reason_not_published": "Bu reys endi faol emas.",
+  "taxi_reason_trip_changed": "Reys holati o'zgardi. Qayta urinib ko'ring."
 }

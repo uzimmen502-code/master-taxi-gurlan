@@ -45,6 +45,7 @@ import 'tv_ad_pricing_admin_screen.dart';
 import 'carpet_wash_admin_screen.dart';
 import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
+import 'courier_tasks_admin_screen.dart';
 import 'courier_management_screen.dart';
 import 'taxi_verification_screen.dart';
 import 'driver_applications_screen.dart';
@@ -171,6 +172,15 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Курьерлар',
       icon: Icons.people_alt_outlined,
       description: 'Курьерларни бошқариш',
+    ),
+    // Сервер: `adminListStaleTasks` / `adminSetCourierTaskPayoutPct` — фақат
+    // admin/superadmin (dispatcher ЭМАС), шунинг учун `users` рухсати.
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'Курьер вазифалари',
+      icon: Icons.assignment_late_outlined,
+      description: 'Қотиб қолган вазифалар, курьер ҳақи фоизи',
+      access: _SectionAccess.users,
     ),
     _AdminSection(
       group: 'Буюртма ва етказиш',
@@ -591,6 +601,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVA Logistics') {
       return const LogisticsAdminScreen();
+    }
+    if (section.label == 'Курьер вазифалари') {
+      return const CourierTasksAdminScreen();
     }
     if (section.label == 'Кафе-ресторанлар') {
       return const RestaurantsAdminScreen();

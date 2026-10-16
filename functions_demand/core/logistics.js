@@ -386,22 +386,31 @@ function normalizeConditionFlags(flags) {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * `module_config/logistics_all.logistics.stage`:
- *   internal — FAQAT `testerIds` (kanonik telefon ID) jo'natadi VA LEG oladi;
- *   public   — hamma.
- * Noma'lum/yo'q qiymat — `internal` (yopiq tomonga xato, 53-band): sinov
- * ro'yxatisiz hech kim kirmaydi. PILOT — UNKNOWN (ega qarori yo'q).
+ * `module_config/logistics_all.logistics.stage` (lug'at: CLAUDE.md 42, ega
+ * qarori 2026-10-16 D8):
+ *   off      - HECH KIM (sinovchi ham): yangi buyurtma ham, yangi LEG ham yo'q;
+ *   internal - FAQAT `testerIds` (kanonik telefon ID) jo'natadi VA LEG oladi;
+ *   pilot    - hozircha INTERNAL bilan AYNAN bir xil (faqat `testerIds`).
+ *              PILOT qoidasi (kim kiradi, hudud/limit) - UNKNOWN: ega qarori
+ *              yo'q; farqlanadigan qoida chiqsa shu yerda qo'shiladi;
+ *   public   - hamma.
+ * Noma'lum/yo'q qiymat - `internal` (yopiq tomonga xato, 53-band): sinov
+ * ro'yxatisiz hech kim kirmaydi. Eski qiymatlar (internal/public) o'zgarmadi.
  */
-const STAGE = { INTERNAL: 'internal', PUBLIC: 'public' };
+const STAGE = {
+  OFF: 'off', INTERNAL: 'internal', PILOT: 'pilot', PUBLIC: 'public',
+};
 
 function stageOf(config) {
   const s = ((config || {}).logistics || {}).stage;
-  return s === STAGE.PUBLIC ? STAGE.PUBLIC : STAGE.INTERNAL;
+  return Object.values(STAGE).includes(s) ? s : STAGE.INTERNAL;
 }
 
 /** Shu foydalanuvchi joriy bosqichda logistikadan foydalana oladimi. */
 function isStageAllowed(config, userId) {
-  if (stageOf(config) === STAGE.PUBLIC) return true;
+  const stage = stageOf(config);
+  if (stage === STAGE.PUBLIC) return true;
+  if (stage === STAGE.OFF) return false;
   const id = toCanonicalId(userId || '');
   if (!id) return false;
   const list = ((config || {}).logistics || {}).testerIds;

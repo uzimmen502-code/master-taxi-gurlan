@@ -25,7 +25,7 @@
  */
 
 const { callerIdFrom, toCanonicalId, candidateIdsFor } = require('../core/ids');
-const { resolveFlags, getModuleConfig } = require('../core/config');
+const { resolveFlags, getModuleConfig, clearCache: clearConfigCache } = require('../core/config');
 const sm = require('../core/state_machine');
 const tariffCore = require('../core/tariff');
 const L = require('../core/logistics');
@@ -1929,9 +1929,127 @@ function makeAdminMarkShipmentLost(deps) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ADMIN - ishga tushirish bosqichi va sinovchilar (D8, ega qarori 2026-10-16)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Sinovchilar ro'yxati chegarasi (hujjat o'lchami / suiiste'mol himoyasi, biznes qoida emas). */
+const STAGE_TESTERS_MAX = 500;
+/** Server konfigni shuncha soniya keshlaydi (`core/config.js`) - o'zgarish shu ichida kuchga kiradi. */
+const STAGE_EFFECTIVE_WITHIN_SECONDS = 60;
+
+function parseTesterList(raw) {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) throw fail('invalid-argument', 'Sinovchilar ro\'yxati massiv bo\'lishi kerak', 'tester_invalid');
+  const out = [];
+  for (const item of raw) {
+    const s = String(item === null || item === undefined ? '' : item).trim();
+    if (!s) continue;
+    const id = toCanonicalId(s);
+    if (!id) throw fail('invalid-argument', 'Telefon raqami noto\'g\'ri', 'tester_invalid');
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * `adminSetLogisticsStage({ stage?, addTesterIds?, removeTesterIds?, testerIds?, reason? })`
+ * - `tools/set_logistics_stage.js` ning callable shakli. Faqat admin/superadmin
+ * (dispatcher EMAS: bosqich butun xizmatni ochadi/yopadi). `module_config/
+ * logistics_all.logistics.{stage,testerIds}` ni YANGILAYDI (boshqa kalitlar
+ * tegilmaydi; hujjat yo'q bo'lsa YARATMAYDI - CLI kabi), bitta tranzaksiyada
+ * `logistics_audit` (41-band). Telefonlar javobga ham, auditga ham CHIQMAYDI
+ * (faqat soni, 40-band). O'zgarish yo'q -> `unchanged: true`, audit yo'q.
+ * `testerIds` (to'liq almashtirish) `addTesterIds`/`removeTesterIds` bilan birga berilmaydi.
+ */
+function makeAdminSetLogisticsStage(deps) {
+  const { db, now: nowFn } = deps;
+  const ref = db.collection('module_config').doc(`${L.MODULE}_${CONFIG_REGION}`);
+
+  return async function adminSetLogisticsStage(data, context) {
+    const now = nowFn ? nowFn() : new Date();
+    const adminId = await assertStrictAdmin(db, context);
+    const d = data || {};
+    const reason = String(d.reason || '').trim().slice(0, 300);
+    try {
+      let nextStageArg = null;
+      if (d.stage !== undefined && d.stage !== null) {
+        if (!Object.values(L.STAGE).includes(d.stage)) {
+          throw fail('invalid-argument', 'Bosqich noma\'lum', 'stage_invalid', { allowed: Object.values(L.STAGE) });
+        }
+        nextStageArg = d.stage;
+      }
+      const add = parseTesterList(d.addTesterIds);
+      const remove = parseTesterList(d.removeTesterIds);
+      const replace = parseTesterList(d.testerIds);
+      if (replace !== undefined && (add !== undefined || remove !== undefined)) {
+        throw fail('invalid-argument', 'testerIds va add/remove birga berilmaydi', 'tester_args_conflict');
+      }
+      if (nextStageArg === null && add === undefined && remove === undefined && replace === undefined) {
+        throw fail('invalid-argument', 'O\'zgartirish yo\'q', 'nothing_to_change');
+      }
+
+      const out = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw fail('failed-precondition', 'Logistika moduli konfigi yo\'q', 'module_config_missing');
+        const cur = (snap.data() || {}).logistics || {};
+        const curStage = L.stageOf({ logistics: cur });
+        const curList = (Array.isArray(cur.testerIds) ? cur.testerIds : [])
+          .map((t) => toCanonicalId(String(t))).filter(Boolean);
+        let nextList;
+        if (replace !== undefined) {
+          nextList = replace;
+        } else {
+          nextList = curList.filter((t) => !(remove || []).includes(t));
+          for (const t of (add || [])) if (!nextList.includes(t)) nextList.push(t);
+        }
+        if (nextList.length > STAGE_TESTERS_MAX) {
+          throw fail('invalid-argument', `Sinovchilar ${STAGE_TESTERS_MAX} tadan oshmasin`, 'testers_limit');
+        }
+        const nextStage = nextStageArg === null ? curStage : nextStageArg;
+        const added = nextList.filter((t) => !curList.includes(t)).length;
+        const removed = curList.filter((t) => !nextList.includes(t)).length;
+        const sameList = added === 0 && removed === 0;
+        if (nextStage === curStage && sameList) {
+          return { unchanged: true, stage: curStage, testerCount: curList.length, added: 0, removed: 0 };
+        }
+        tx.update(ref, {
+          'logistics.stage': nextStage,
+          'logistics.testerIds': nextList,
+          updatedAt: now,
+          updatedBy: adminId,
+        });
+        tx.set(db.collection(TARIFF_AUDIT).doc(), {
+          kind: 'stage_update',
+          from: { stage: curStage, testerCount: curList.length },
+          to: { stage: nextStage, testerCount: nextList.length },
+          added,
+          removed,
+          by: adminId,
+          reason,
+          at: now,
+        });
+        return { unchanged: false, stage: nextStage, testerCount: nextList.length, added, removed };
+      });
+      clearConfigCache();
+      console.log(JSON.stringify({
+        action: 'adminSetLogisticsStage', result: out.unchanged ? 'unchanged' : 'ok', stage: out.stage,
+        testerCount: out.testerCount, added: out.added, removed: out.removed,
+      }));
+      return { ok: true, ...out, effectiveWithinSeconds: STAGE_EFFECTIVE_WITHIN_SECONDS };
+    } catch (e) {
+      console.error(JSON.stringify({
+        action: 'adminSetLogisticsStage', result: 'denied', errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN',
+      }));
+      throw e;
+    }
+  };
+}
+
 module.exports = {
   TARIFF_AUDIT,
   MAX_PARCELS,
+  STAGE_TESTERS_MAX,
   CONFIG_REGION,
   validatePoint,
   validateParcels,
@@ -1956,4 +2074,5 @@ module.exports = {
   makeAdminPlanShipmentRoute,
   makeAdminReactivateLeg,
   makeAdminMarkShipmentLost,
+  makeAdminSetLogisticsStage,
 };

@@ -251,6 +251,15 @@ exports.adminMarkShipmentLost = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminMarkShipmentLost({ db }),
 ));
 
+/**
+ * ADMIN — ishga tushirish bosqichi (off | internal | pilot | public) va sinovchilar
+ * (D8, ega qarori 2026-10-16): `tools/set_logistics_stage.js` ning callable shakli.
+ * Faqat admin/superadmin; `logistics_audit` (41-band); kuchga kirishi ≤ 60 s.
+ */
+exports.adminSetLogisticsStage = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminSetLogisticsStage({ db }),
+));
+
 // ═══════════════════════════════════════════════════════════════════════
 // ULGURJI / XITOY BOZORI — admin
 // ═══════════════════════════════════════════════════════════════════════

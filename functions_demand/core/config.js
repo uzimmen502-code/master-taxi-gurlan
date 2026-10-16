@@ -179,9 +179,10 @@ const DEFAULTS = {
      */
     openNextLegOn: 'in_progress',
     /**
-     * Ishga tushirish bosqichi (CLAUDE.md 42): `internal` — faqat
-     * `testerIds` jo'natadi va LEG oladi; `public` — hamma. Standart —
-     * `internal` (yopiq): hujjatda yozilmasa ham xizmat ommaga ochilmaydi.
+     * Ishga tushirish bosqichi (CLAUDE.md 42; lug'at `core/logistics.js` STAGE):
+     * `off` — hech kim; `internal` / `pilot` — faqat `testerIds` jo'natadi va
+     * LEG oladi; `public` — hamma. Standart — `internal` (yopiq): hujjatda
+     * yozilmasa ham xizmat ommaga ochilmaydi.
      */
     stage: 'internal',
     /** Kanonik telefon ID'lari (ids.toCanonicalId) — jo'natuvchi VA ijrochi. */

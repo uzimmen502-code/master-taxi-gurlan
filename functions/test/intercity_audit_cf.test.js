@@ -150,6 +150,86 @@ const seedBooking = (id, over = {}) => db.collection('intercity_bookings').doc(i
     assert.strictEqual((await get('intercity_bookings/r7')).passengerRating, undefined);
   });
 
+  // ══ M4: bron muddati (expirePendingTrips) ════════════════════════════
+  const past = () => ts(Date.now() - 60000);
+  const seedExpiring = async (id, over = {}) => {
+    await seedBooking(id, { status: 'pending', expiresAt: past(), passengers: 2, totalAmount: 100000, userGender: 'male', ...over });
+    await db.collection('intercity_drivers').doc(D).collection('clients').doc(P1)
+      .set({ bookingCount: 1, totalSpent: 100000 }, { merge: true });
+    await db.collection('intercity_booking_locks').doc(`${D}_${P1}`).set({ bookingId: id, driverId: D });
+    await db.collection('intercity_passenger_locks').doc(P1).set({ bookingId: id, driverId: D });
+  };
+  await reset(); await seedDriver({ seats: 1, seatCapacity: 4 });
+  await check('M4: muddati o\'tgan pending -> expired, o\'rin qaytdi, mijoz statistikasi va qulflar tozalandi, xabar bor', async () => {
+    await seedExpiring('e1');
+    await fns.expirePendingTrips.run({});
+    assert.strictEqual((await get('intercity_bookings/e1')).status, 'expired');
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 3);
+    const c = await get(`intercity_drivers/${D}/clients/${P1}`);
+    assert.strictEqual(c.bookingCount, 0); assert.strictEqual(c.totalSpent, 0);
+    assert.ok(!(await db.doc(`intercity_booking_locks/${D}_${P1}`).get()).exists);
+    assert.ok(!(await db.doc(`intercity_passenger_locks/${P1}`).get()).exists);
+    const n = (await notifsTo(P1)).filter((x) => x.bookingId === 'e1');
+    assert.strictEqual(n.length, 1); assert.strictEqual(n[0].type, 'intercity_booking_cancelled');
+  });
+  await check('M4: ikkinchi ishga tushirish o\'rinni YANA qaytarmaydi (idempotent)', async () => {
+    await fns.expirePendingTrips.run({}); await fns.expirePendingTrips.run({});
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 3);
+    assert.strictEqual((await notifsTo(P1)).filter((x) => x.bookingId === 'e1').length, 1);
+  });
+  await check('M4: o\'rin seatCapacity\'dan OSHMAYDI (3 + 2 -> 4)', async () => {
+    await seedDriver({ seats: 3, seatCapacity: 4 }); await seedExpiring('e2');
+    await fns.expirePendingTrips.run({});
+    assert.strictEqual((await get('intercity_bookings/e2')).status, 'expired');
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 4);
+  });
+  await check('M4: haydovchi hujjati yo\'q - bron baribir expired bo\'ladi (avval butun batch yiqilardi)', async () => {
+    await db.collection('intercity_drivers').doc(D).delete(); await seedExpiring('e3');
+    await fns.expirePendingTrips.run({});
+    assert.strictEqual((await get('intercity_bookings/e3')).status, 'expired');
+    assert.ok(!(await db.doc(`intercity_drivers/${D}`).get()).exists, 'hujjat qayta yaratilmadi');
+  });
+  await check('M4: qulf BOSHQA (yangi) bronga tegishli bo\'lsa o\'chirilmaydi', async () => {
+    await seedDriver({ seats: 1, seatCapacity: 4 }); await seedExpiring('e4');
+    await db.collection('intercity_booking_locks').doc(`${D}_${P1}`).set({ bookingId: 'newer', driverId: D });
+    await fns.expirePendingTrips.run({});
+    assert.strictEqual((await get('intercity_bookings/e4')).status, 'expired');
+    assert.strictEqual((await get(`intercity_booking_locks/${D}_${P1}`)).bookingId, 'newer');
+  });
+  await check('M4: confirmed bron muddati o\'tgan bo\'lsa ham tegilmaydi (#10)', async () => {
+    await seedDriver({ seats: 1, seatCapacity: 4 });
+    await seedBooking('e5', { status: 'confirmed', expiresAt: past(), passengers: 1 });
+    await fns.expirePendingTrips.run({});
+    assert.strictEqual((await get('intercity_bookings/e5')).status, 'confirmed');
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 1);
+  });
+  const { expireIntercityBooking } = require('../intercity_expiry');
+  await check('M4 (poyga): so\'rovdan keyin haydovchi qabul qildi (confirmed) - tranzaksiya qayta tekshiradi, o\'rin QAYTMAYDI', async () => {
+    await seedDriver({ seats: 1, seatCapacity: 4 }); await seedExpiring('e6');
+    await db.collection('intercity_bookings').doc('e6').update({ status: 'confirmed' }); // accept yutdi
+    const r = await expireIntercityBooking({ db, admin, bookingRef: db.collection('intercity_bookings').doc('e6'), nowMs: Date.now() });
+    assert.strictEqual(r.skipped, 'not_pending');
+    assert.strictEqual((await get('intercity_bookings/e6')).status, 'confirmed');
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 1);
+    assert.ok((await db.doc(`intercity_booking_locks/${D}_${P1}`).get()).exists, 'qulf tegilmadi');
+  });
+  await check('M4 (poyga): bekor qilingan bron expired qilinmaydi; muddati hali o\'tmagan ham', async () => {
+    await seedDriver({ seats: 1, seatCapacity: 4 }); await seedExpiring('e7');
+    await db.collection('intercity_bookings').doc('e7').update({ status: 'cancelled' });
+    const ref = db.collection('intercity_bookings').doc('e7');
+    assert.strictEqual((await expireIntercityBooking({ db, admin, bookingRef: ref, nowMs: Date.now() })).skipped, 'not_pending');
+    await db.collection('intercity_bookings').doc('e7').update({ status: 'pending', expiresAt: ts(Date.now() + 600000) });
+    assert.strictEqual((await expireIntercityBooking({ db, admin, bookingRef: ref, nowMs: Date.now() })).skipped, 'not_expired');
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 1);
+  });
+  await check('M4 (poyga): parallel ikki expire - o\'rin faqat BIR marta', async () => {
+    await seedDriver({ seats: 0, seatCapacity: 4 }); await seedExpiring('e8');
+    const ref = db.collection('intercity_bookings').doc('e8');
+    const out = await Promise.all([1, 2, 3].map(() => expireIntercityBooking({ db, admin, bookingRef: ref, nowMs: Date.now() })));
+    assert.strictEqual(out.filter((o) => o.ok).length, 1);
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 2);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} intercity audit CF checks passed.`);
   process.exit(failed ? 1 : 0);

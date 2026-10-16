@@ -44,6 +44,8 @@ const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list
 // nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
 const { attachTaxiBilling } = require('./taxi_billing');
 const { runAutoShift } = require('./intercity_auto_shift');
+// Shaharlararo bron muddati - har bron o'z tranzaksiyasida (audit M4, 2026-10).
+const intercityExpiry = require('./intercity_expiry');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
@@ -11224,15 +11226,8 @@ async function intercityCallerIsAdmin(caller) {
   }
 }
 
-/** Seat qaytarish — har doim seatCapacity bilan cheklanadi. */
-function intercityRestoredSeats(driverData, passengers) {
-  const d = driverData || {};
-  const seats = Number(d.seats) || 0;
-  const restored = seats + (Number(passengers) || 1);
-  const cap = d.seatCapacity != null ? Number(d.seatCapacity) : null;
-  if (cap != null && Number.isFinite(cap)) return Math.min(restored, cap);
-  return restored;
-}
+/** Seat qaytarish — har doim seatCapacity bilan cheklanadi (bitta manba: intercity_expiry.js). */
+const intercityRestoredSeats = intercityExpiry.restoredSeats;
 
 /**
  * Haydovchining taksi capability holati — tranzaksiya ichida (o'qish).
@@ -12340,83 +12335,26 @@ exports.expirePendingTrips = functions.pubsub
       }
     }
 
-    // intercity_bookings → expired + seat qaytarish
+    // intercity_bookings → expired + seat qaytarish. Audit M4 (2026-10): har bron O'Z
+    // tranzaksiyasida (`intercity_expiry.js`) - holat qayta tekshiriladi (accept/cancel
+    // bilan poyga), o'rin seatCapacity'dan oshmaydi, ikki marta qaytmaydi.
     const expiredIntercityDriverIds = new Set();
+    let intercityExpired = 0;
     for (const doc of intercitySnap.docs) {
-      const booking = doc.data();
-      const passengers = booking.passengers || 1;
-      const driverId = booking.driverId || '';
-      if (driverId) expiredIntercityDriverIds.add(driverId);
-
-      batch.update(doc.ref, {
-        status: 'expired',
-        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      const userKey = digits(booking.userPhone || '');
-      if (userKey.length >= 9) {
-        const notifRef = db.collection('notifications').doc();
-        batch.set(notifRef, {
-          targetPhone: userKey,
-          title: '⏱ Брон муддати ўтди',
-          body: 'Ҳайдовчи жавоб бермади. Бошқа ҳайдовчи танланг.',
-          sent: false,
-          type: 'intercity_booking_cancelled',
-          bookingId: doc.id,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      try {
+        const res = await intercityExpiry.expireIntercityBooking({
+          db, admin, bookingRef: doc.ref, nowMs: now.toMillis(),
         });
-        writes++;
-      }
-
-      // O'rinni qaytarish (agar haqiqiy driver bo'lsa)
-      if (driverId && !['1', '2', '3', '4', '5'].includes(driverId)) {
-        const driverRef = db.collection('intercity_drivers').doc(driverId);
-        batch.update(driverRef, {
-          seats: admin.firestore.FieldValue.increment(passengers),
-        });
-      }
-
-      // Doimiy mijoz statistikasi — cancelBooking kabi qaytarish
-      const totalAmount = Number(booking.totalAmount) || 0;
-      if (driverId && userKey.length >= 9 && totalAmount > 0) {
-        const clientRef = db.collection('intercity_drivers')
-          .doc(driverId)
-          .collection('clients')
-          .doc(userKey);
-        const clientSnap = await clientRef.get();
-        if (clientSnap.exists) {
-          batch.update(clientRef, {
-            bookingCount: admin.firestore.FieldValue.increment(-1),
-            totalSpent: admin.firestore.FieldValue.increment(-totalAmount),
-            lastBookingAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          writes++;
+        if (res.ok) {
+          intercityExpired += 1;
+          if (res.driverId) expiredIntercityDriverIds.add(res.driverId);
         }
-      }
-
-      if (driverId && userKey.length >= 9) {
-        batch.delete(
-          db.collection('intercity_booking_locks').doc(`${driverId}_${userKey}`),
-        );
-        writes++;
-      }
-
-      const bookingId = doc.id;
-      if (userKey.length >= 9) {
-        const passengerLockRef = db.collection('intercity_passenger_locks').doc(userKey);
-        const passengerLockSnap = await passengerLockRef.get();
-        if (passengerLockSnap.exists
-            && passengerLockSnap.data()?.bookingId === bookingId) {
-          batch.delete(passengerLockRef);
-          writes++;
-        }
-      }
-
-      writes++;
-      if (writes >= 450) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
+      } catch (e) {
+        // Keyingi daqiqada qayta uriniladi (bron hali `pending`; tranzaksiya idempotent).
+        console.error(JSON.stringify({
+          action: 'expireIntercityBooking', result: 'error', errorCode: 'INTERCITY_EXPIRE_FAILED',
+          bookingId: doc.id, message: e && e.message,
+        }));
       }
     }
 
@@ -12427,7 +12365,7 @@ exports.expirePendingTrips = functions.pubsub
     }
 
     console.log(
-      `expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}`
+      `expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}, intercityExpired=${intercityExpired}`
         + `, yukClosed=${yukStats.closed}, yukWarn=${yukStats.warn}`,
     );
     return null;

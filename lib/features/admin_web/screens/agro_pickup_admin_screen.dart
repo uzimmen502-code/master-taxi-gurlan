@@ -8,6 +8,8 @@ import '../../../models/agro_pickup_order.dart';
 import '../../../repositories/agro_pickup_orders_repository.dart';
 import '../../../services/agro_pickup_service.dart';
 import '../services/admin_auth_service.dart';
+import '../utils/courier_task_release.dart';
+import '../widgets/release_task_dialog.dart';
 
 /// Admin — sut qabul buyurtmalari.
 class AgroPickupAdminScreen extends StatefulWidget {
@@ -48,6 +50,7 @@ class _AgroPickupAdminScreenState extends State<AgroPickupAdminScreen> {
     AgroPickupOrder order,
     String status, {
     int? finalPrice,
+    String? reason,
   }) async {
     final phone = _adminPhone(context);
     if (phone.isEmpty) return;
@@ -57,6 +60,7 @@ class _AgroPickupAdminScreenState extends State<AgroPickupAdminScreen> {
         orderId: order.id,
         status: status,
         finalPrice: finalPrice,
+        reason: reason,
       );
     } catch (e) {
       if (!mounted) return;
@@ -64,6 +68,17 @@ class _AgroPickupAdminScreenState extends State<AgroPickupAdminScreen> {
         SnackBar(content: Text('$e')),
       );
     }
+  }
+
+  /// «Kuryerdan olish» (B1): kuryer yo'qolsa vazifa qaytarib olinadi.
+  Future<void> _release(AgroPickupOrder order, String target) async {
+    final reason = await showReleaseTaskDialog(
+      context,
+      taskLabel: '${order.customerName.isNotEmpty ? order.customerName : order.customerPhone} · ${order.literCount} L',
+      resultLabel: target,
+    );
+    if (reason == null || !mounted) return;
+    await _setStatus(order, target, reason: reason);
   }
 
   Future<void> _acceptOrder(AgroPickupOrder order) async {
@@ -171,6 +186,9 @@ class _AgroPickupAdminScreenState extends State<AgroPickupAdminScreen> {
                               AgroPickupOrder.statusCompleted,
                             )
                         : null,
+                    onRelease: agroReleaseTarget(order.status) == null
+                        ? null
+                        : () => _release(order, agroReleaseTarget(order.status)!),
                     // Бекор — маҳсулот олинмагунча (сервер
                     // `AGRO_ADMIN_TRANSITIONS` билан бир хил).
                     onCancel: const {
@@ -201,6 +219,7 @@ class _OrderCard extends StatelessWidget {
     this.onAccept,
     this.onPickedUp,
     this.onComplete,
+    this.onRelease,
     this.onCancel,
   });
 
@@ -209,6 +228,7 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback? onAccept;
   final VoidCallback? onPickedUp;
   final VoidCallback? onComplete;
+  final VoidCallback? onRelease;
   final VoidCallback? onCancel;
 
   @override
@@ -272,6 +292,11 @@ class _OrderCard extends StatelessWidget {
                   FilledButton.tonal(
                     onPressed: onComplete,
                     child: const Text('Yakunlash'),
+                  ),
+                if (onRelease != null)
+                  OutlinedButton(
+                    onPressed: onRelease,
+                    child: const Text('Kuryerdan olish'),
                   ),
                 if (onCancel != null)
                   TextButton(

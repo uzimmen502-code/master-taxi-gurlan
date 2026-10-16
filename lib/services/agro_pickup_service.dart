@@ -97,12 +97,14 @@ class AgroPickupService {
     required String orderId,
     required String status,
     int? finalPrice,
+    String? reason,
   }) async {
     await _functions.httpsCallable('adminSetAgroPickupStatus').call({
       'adminPhone': adminPhone,
       'orderId': orderId,
       'status': status,
       if (finalPrice != null) 'finalPrice': finalPrice,
+      if (reason != null && reason.isNotEmpty) 'reason': reason,
     });
   }
 

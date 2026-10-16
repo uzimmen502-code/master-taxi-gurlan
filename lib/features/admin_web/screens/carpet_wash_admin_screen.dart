@@ -8,6 +8,8 @@ import '../../../models/carpet_wash_order.dart';
 import '../../../repositories/carpet_wash_orders_repository.dart';
 import '../../../services/carpet_wash_service.dart';
 import '../services/admin_auth_service.dart';
+import '../utils/courier_task_release.dart';
+import '../widgets/release_task_dialog.dart';
 
 /// Admin — gilam yuvish buyurtmalari boshqaruvi.
 class CarpetWashAdminScreen extends StatefulWidget {
@@ -48,6 +50,7 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
     CarpetWashOrder order,
     String status, {
     int? finalPrice,
+    String? reason,
   }) async {
     final phone = _adminPhone(context);
     if (phone.isEmpty) return;
@@ -57,6 +60,7 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
         orderId: order.id,
         status: status,
         finalPrice: finalPrice,
+        reason: reason,
       );
     } catch (e) {
       if (!mounted) return;
@@ -64,6 +68,17 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
         SnackBar(content: Text('$e')),
       );
     }
+  }
+
+  /// «Kuryerdan olish» (B1): kuryer yo'qolsa vazifa qaytarib olinadi.
+  Future<void> _release(CarpetWashOrder order, String target) async {
+    final reason = await showReleaseTaskDialog(
+      context,
+      taskLabel: '${order.customerName.isNotEmpty ? order.customerName : order.customerPhone} · ${order.carpetCount} ta gilam',
+      resultLabel: target,
+    );
+    if (reason == null || !mounted) return;
+    await _setStatus(order, target, reason: reason);
   }
 
   Future<void> _acceptOrder(CarpetWashOrder order) async {
@@ -178,6 +193,9 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
                               CarpetWashOrder.statusReturnReady,
                             )
                         : null,
+                    onRelease: carpetReleaseTarget(order.status) == null
+                        ? null
+                        : () => _release(order, carpetReleaseTarget(order.status)!),
                     // Бекор — гилам мижоздан олинмагунча (сервер
                     // `CARPET_ADMIN_TRANSITIONS` билан бир хил): AVA
                     // қўлидаги гиламни «бекор» қилиш custody'ни бузарди.
@@ -213,6 +231,7 @@ class _OrderCard extends StatelessWidget {
     required this.onDrying,
     required this.onReady,
     this.onReturnReady,
+    this.onRelease,
     this.onCancel,
   });
 
@@ -224,6 +243,7 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback onDrying;
   final VoidCallback onReady;
   final VoidCallback? onReturnReady;
+  final VoidCallback? onRelease;
   final VoidCallback? onCancel;
 
   @override
@@ -280,6 +300,8 @@ class _OrderCard extends StatelessWidget {
                   _btn('Tayyor', onReady, AvaLight.ok),
                 if (onReturnReady != null)
                   _btn('Qaytarishga tayyor', onReturnReady!, Colors.deepOrange),
+                if (onRelease != null)
+                  _btn('Kuryerdan olish', onRelease!, Colors.brown),
                 if (onCancel != null)
                   _btn('Bekor', onCancel!, Colors.red),
               ],

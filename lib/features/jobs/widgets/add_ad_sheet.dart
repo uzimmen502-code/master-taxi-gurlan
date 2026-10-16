@@ -6,6 +6,8 @@ import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
 import '../jobs_colors.dart';
 import 'urgent_toggle.dart';
+import '../../tv_market/services/tv_clip_link.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 /// Янги эълон қўшиш bottom sheet — тур танлаш.
 ///
@@ -47,6 +49,9 @@ class _AddAdViewState extends State<_AddAdView> {
   late AdKind _kind = widget.presetKind ?? AdKind.ad;
   bool _isUrgent = false;
   bool _submitting = false;
+
+  /// Эълондан кейин видео жойлаш (ихтиёрий, [TvClipLink]).
+  bool _withVideo = false;
 
   Color get _color => JobsColors.accentFor(_kind);
 
@@ -92,6 +97,8 @@ class _AddAdViewState extends State<_AddAdView> {
     setState(() => _submitting = true);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final withVideo = _withVideo;
+    final kind = _kind;
     final result = await c.submitAd(
       type: _kind.key,
       title: _titleCtrl.text,
@@ -123,6 +130,17 @@ class _AddAdViewState extends State<_AddAdView> {
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
+    // Ихтиёрий видео: эълон ЯРАТИЛДИ; видео бекор қилинса/йиқилса таъсир йўқ.
+    final adId = result.adId ?? '';
+    if (withVideo && adId.isNotEmpty) {
+      await TvClipLink.publish(
+        navigator,
+        kind: kind == AdKind.service
+            ? TvClipLink.kindService
+            : TvClipLink.kindAd,
+        linkId: adId,
+      );
+    }
   }
 
   InputDecoration _fieldDecoration({
@@ -328,6 +346,11 @@ class _AddAdViewState extends State<_AddAdView> {
                                 setState(() => _isUrgent = !_isUrgent),
                           ),
                         ],
+                        if (_kind == AdKind.ad || _kind == AdKind.service)
+                          VideoOptionTile(
+                            value: _withVideo,
+                            onChanged: (v) => setState(() => _withVideo = v),
+                          ),
                       ],
                     ),
                   ),

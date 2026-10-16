@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/geo/geo_tier_bar.dart';
+import '../../tv_market/models/tv_clip.dart';
+import '../../tv_market/repositories/tv_clips_repository.dart';
+import '../../tv_market/services/tv_clip_link.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
@@ -85,6 +90,30 @@ class _JobsView extends StatefulWidget {
 class _JobsViewState extends State<_JobsView> {
   final _searchCtrl = TextEditingController();
 
+  /// Эгалари ўз эълонига қўшган видео: `эълон id → клип`. Битта сўров
+  /// (`TvClipLink`); эгалик карточка томонида текширилади.
+  Map<String, TvClip> _linked = const {};
+
+  Future<void> _loadLinked() async {
+    try {
+      final repo = TvClipsRepository();
+      final r = await Future.wait([
+        repo.fetchLinkedMap(TvClipLink.kindAd),
+        repo.fetchLinkedMap(TvClipLink.kindService),
+      ]);
+      if (!mounted) return;
+      setState(() => _linked = {...r[0], ...r[1]});
+    } catch (_) {
+      // Видео — қўшимча; юкланмаса рўйхат ишлайверади.
+    }
+  }
+
+  void _onLinkChanged() => unawaited(_loadLinked());
+
+  /// Карточка учун: клип эгаси = эълон эгаси бўлсагина.
+  TvClip? _clipFor(JobAd ad) =>
+      TvClipLink.ownedClip(_linked, ad.id, ad.authorPhone);
+
   /// Бўлим ранги — AppBar, қидирув, юкланиш (эга қарори: бўлимлар рангда
   /// фарқ қилсин).
   Color get _color => JobsColors.accentFor(widget.kind);
@@ -92,6 +121,8 @@ class _JobsViewState extends State<_JobsView> {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadLinked());
+    TvClipLink.changes.addListener(_onLinkChanged);
     if (widget.highlightAdId.isNotEmpty) {
       // Глобал қидирувдан келинган эълон бошқа ҳудудда бўлиши мумкин.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -108,6 +139,7 @@ class _JobsViewState extends State<_JobsView> {
 
   @override
   void dispose() {
+    TvClipLink.changes.removeListener(_onLinkChanged);
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -227,6 +259,7 @@ class _JobsViewState extends State<_JobsView> {
             kindFilter: widget.kind,
             highlightAdId: widget.highlightAdId,
             color: color,
+            clipFor: _clipFor,
           ),
         ),
       ]),
@@ -239,12 +272,16 @@ class _Feed extends StatelessWidget {
   const _Feed({
     required this.kindFilter,
     required this.color,
+    required this.clipFor,
     this.highlightAdId = '',
   });
 
   final AdKind kindFilter;
   final Color color;
   final String highlightAdId;
+
+  /// Эълон учун эгаси қўшган видео (эгалик текширилган) ёки `null`.
+  final TvClip? Function(JobAd ad) clipFor;
 
   @override
   Widget build(BuildContext context) {
@@ -299,6 +336,7 @@ class _Feed extends StatelessWidget {
               : AdCard(
                   ad: list[i],
                   highlighted: highlight.isNotEmpty && list[i].id == highlight,
+                  linkedClip: clipFor(list[i]),
                 ),
         );
       },

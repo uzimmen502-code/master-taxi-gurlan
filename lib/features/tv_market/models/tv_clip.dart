@@ -74,6 +74,8 @@ class TvClip {
     this.createdAt,
     this.shopItemId = '',
     this.wholesaleProductId = '',
+    this.linkKind = '',
+    this.linkId = '',
     this.socialConsent = false,
     this.socialNetworks = const [],
     this.socialPostedAt,
@@ -148,6 +150,14 @@ class TvClip {
   /// Боғланган улгуржи маҳсулот (`wholesale_products/{id}`) — видеообзор
   /// ёки пуллик реклама. Бўш = улгуржига алоқасиз.
   final String wholesaleProductId;
+
+  /// Умумий боғлаш (эгаси ЎЗ эълонига қўшган видео): `linkKind` — `ad` |
+  /// `service` | `market_ad` | `restaurant`, `linkId` — шу ҳужжат ID'си.
+  /// Улгуржи эски `wholesaleProductId` орқали қолади. Бўш = боғланмаган.
+  /// Қоида: клип эгаси ўз клипида ёза олади, эълон ҳужжатига тегилмайди;
+  /// кўрсатишда клип эгаси = эълон эгаси текширилади (бегона боғлаш йўқ).
+  final String linkKind;
+  final String linkId;
   final bool socialConsent;
   /// `instagram` | `facebook` | `youtube` | `telegram`
   final List<String> socialNetworks;
@@ -285,6 +295,8 @@ class TvClip {
     int? viewCount,
     String? shopItemId,
     String? wholesaleProductId,
+    String? linkKind,
+    String? linkId,
     bool? socialConsent,
     List<String>? socialNetworks,
     DateTime? socialPostedAt,
@@ -335,6 +347,8 @@ class TvClip {
       createdAt: createdAt,
       shopItemId: shopItemId ?? this.shopItemId,
       wholesaleProductId: wholesaleProductId ?? this.wholesaleProductId,
+      linkKind: linkKind ?? this.linkKind,
+      linkId: linkId ?? this.linkId,
       socialConsent: socialConsent ?? this.socialConsent,
       socialNetworks: socialNetworks ?? this.socialNetworks,
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
@@ -388,6 +402,8 @@ class TvClip {
       createdAt: _asDate(d['createdAt']) ?? _asDate(d['createdAtMs']),
       shopItemId: (d['shopItemId'] ?? '') as String,
       wholesaleProductId: (d['wholesaleProductId'] ?? '') as String,
+      linkKind: (d['linkKind'] ?? '') as String,
+      linkId: (d['linkId'] ?? '') as String,
       socialConsent: d['socialConsent'] == true,
       socialNetworks: _parseSocialNetworks(d['socialNetworks']),
       socialPostedAt: _asDate(d['socialPostedAt']),
@@ -462,6 +478,10 @@ class TvClip {
         if (shopItemId.isNotEmpty) 'shopItemId': shopItemId,
         if (wholesaleProductId.isNotEmpty)
           'wholesaleProductId': wholesaleProductId,
+        if (linkKind.isNotEmpty && linkId.isNotEmpty) ...{
+          'linkKind': linkKind,
+          'linkId': linkId,
+        },
         'socialConsent': socialConsent,
         if (socialNetworks.isNotEmpty) 'socialNetworks': socialNetworks,
         if (socialPostedAt != null)

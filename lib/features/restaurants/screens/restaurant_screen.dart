@@ -24,6 +24,7 @@ import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_cart_sheet.dart';
 import '../widgets/restaurant_checkout_sheet.dart';
 import '../widgets/restaurant_row.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 class RestaurantScreen extends StatefulWidget {
   const RestaurantScreen({
@@ -457,6 +458,11 @@ class _Header extends StatelessWidget {
                           ],
                         ),
                       ],
+                      // Эгаси қўшган таомлар обзори видеоси (бор бўлсагина).
+                      LinkedVideoButton(
+                        linkId: r.id,
+                        ownerPhone: r.ownerUid,
+                      ),
                     ],
                   ),
                 ),

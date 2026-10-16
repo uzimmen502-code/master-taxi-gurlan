@@ -5,6 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/l10n/l10n_extension.dart';
+import '../../tv_market/models/tv_clip.dart';
+import '../../tv_market/services/tv_clip_link.dart';
 import '../controllers/jobs_controller.dart';
 import '../jobs_colors.dart';
 import 'complaint_sheet.dart';
@@ -16,9 +19,14 @@ class AdCard extends StatelessWidget {
     super.key,
     required this.ad,
     this.highlighted = false,
+    this.linkedClip,
   });
 
   final JobAd ad;
+
+  /// Эълон эгаси қўшган видео (бор бўлса «▶» тугмаси чиқади). Эгалик
+  /// текшируви чақирувчида ([JobsScreen]).
+  final TvClip? linkedClip;
 
   /// Бош саҳифадаги қатордан айнан шу эълонга келинган — кўз дарҳол
   /// топиши учун контури қалин ва ранги ажралиб туради.
@@ -236,6 +244,25 @@ class AdCard extends StatelessWidget {
               ]),
             ),
             const SizedBox(width: 8),
+            if (linkedClip != null) ...[
+              Tooltip(
+                message: context.tr('link_video_open'),
+                child: Material(
+                  color: JobsColors.fieldFill,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    onTap: () => TvClipLink.open(context, linkedClip!),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(Icons.play_circle_outline_rounded,
+                          size: 18, color: color),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
             Material(
               // Таҳрирлаш / Қўнғироқ — иккала табда ҳам бир хил кўк CTA.
               color: canEdit ? JobsColors.accentBlue : color,

@@ -17,6 +17,8 @@ import '../../onboarding/screens/phone_reverify_screen.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
 import '../widgets/ad_district_field.dart';
+import '../../tv_market/services/tv_clip_link.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 /// Онлайн бозорга янги эълон жойлаш — профессионал форма.
 class CreateAdScreen extends StatefulWidget {
@@ -39,6 +41,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   final List<XFile> _newImages = [];
   bool _loading = false;
   bool _checkedLimit = false;
+
+  /// Эълондан кейин видео жойлаш (ихтиёрий, [TvClipLink]).
+  bool _withVideo = false;
 
   static const _ink = AvaLight.ink;
   static const _muted = AvaLight.ink2;
@@ -224,7 +229,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         ownerId: ownerId,
         images: _newImages,
       );
-      await repo.createAd(
+      final adId = await repo.createAd(
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         price: int.parse(_priceCtrl.text.trim()),
@@ -239,7 +244,13 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('create_ad_success'))),
       );
-      Navigator.pop(context);
+      final nav = Navigator.of(context);
+      nav.pop();
+      // Эълон ЯРАТИЛДИ; видео ихтиёрий қўшимча — бекор қилинса ёки йиқилса
+      // эълонга таъсир қилмайди.
+      if (_withVideo && adId.isNotEmpty) {
+        await TvClipLink.publish(nav, kind: TvClipLink.kindMarket, linkId: adId);
+      }
     } catch (e) {
       // Best-effort тозалаш: бу ҳам йиқилса фойдаланувчига кўрсатадиган
       // янги хато йўқ — у аллақачон асосий хатони кўради.
@@ -519,6 +530,12 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Ихтиёрий видеоролик (эга, 2026-10-16): эълон сақлангач
+                  // видео жойлаш ойнаси очилади, видео шу эълонга боғланади.
+                  VideoOptionTile(
+                    value: _withVideo,
+                    onChanged: (v) => setState(() => _withVideo = v),
+                  ),
                 ],
               ),
             ),

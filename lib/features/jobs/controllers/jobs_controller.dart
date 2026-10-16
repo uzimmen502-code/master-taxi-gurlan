@@ -153,7 +153,7 @@ class JobsController extends ChangeNotifier {
     return 'Хатолик: $e';
   }
 
-  Future<({bool success, String? error, String? status})> submitAd({
+  Future<({bool success, String? error, String? status, String? adId})> submitAd({
     required String type,
     required String text,
     required bool isUrgent,
@@ -168,6 +168,7 @@ class JobsController extends ChangeNotifier {
         success: false,
         error: 'Сарлавҳани киритинг (камида 3 белги)',
         status: null,
+        adId: null,
       );
     }
     if (body.length < 3) {
@@ -175,16 +176,23 @@ class JobsController extends ChangeNotifier {
         success: false,
         error: 'Матнни киритинг (камида 3 белги)',
         status: null,
+        adId: null,
       );
     }
     if (!JobAd.isJobsBoardType(type)) {
-      return (success: false, error: 'Номаълум эълон тури', status: null);
+      return (
+        success: false,
+        error: 'Номаълум эълон тури',
+        status: null,
+        adId: null,
+      );
     }
     if (phoneDigits(userPhone).length < 9) {
       return (
         success: false,
         error: 'Профилда телефон рақамини киритинг',
         status: null,
+        adId: null,
       );
     }
     try {
@@ -195,13 +203,14 @@ class JobsController extends ChangeNotifier {
           success: false,
           error: '⚠️ Кунига максимум $dailyAdLimit та эълон!',
           status: null,
+          adId: null,
         );
       }
       final days = isUrgent
           ? AdKindX.urgentExpiryDays
           : AdKindX.parse(type).expiresInDays;
       final expiresAt = DateTime.now().add(Duration(days: days));
-      final status = await _repo.addAd(
+      final created = await _repo.addAdWithId(
         type: type,
         text: body,
         title: t,
@@ -212,9 +221,14 @@ class JobsController extends ChangeNotifier {
         isUrgent: isUrgent,
         expiresAt: expiresAt,
       );
-      return (success: true, error: null, status: status);
+      return (
+        success: true,
+        error: null,
+        status: created.status,
+        adId: created.adId,
+      );
     } catch (e) {
-      return (success: false, error: _cfError(e), status: null);
+      return (success: false, error: _cfError(e), status: null, adId: null);
     }
   }
 

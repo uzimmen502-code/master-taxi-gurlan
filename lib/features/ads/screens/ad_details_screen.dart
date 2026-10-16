@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_image_slider.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 /// Single ad detail with call action.
 class AdDetailsScreen extends StatefulWidget {
@@ -303,6 +304,8 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                       ),
                     ),
                   ],
+                  // Сотувчи ўзи қўшган видеоролик (бор бўлсагина кўринади).
+                  LinkedVideoButton(linkId: ad.id, ownerPhone: ad.ownerId),
                   const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
                     const Text(

@@ -254,6 +254,70 @@ const seedBooking = (id, over = {}) => db.collection('intercity_bookings').doc(i
     assert.strictEqual((await notifsTo(P2)).filter((x) => x.type === 'intercity_departure_reminder').length, 0);
   });
 
+  // ══ L2: bekor sababi ═══════════════════════════════════════════════
+  const TITLE_ENDED = '❌ Рейс бекор — бронингиз ҳам ёпилди';
+  const TITLE_PAX = '❌ Брон бекор қилинди';
+  const TITLE_DRV = '❌ Ҳайдовчи бронни рад этди';
+  const TITLE_TO_DRIVER = '❌ Йўловчи бронни бекор қилди';
+  async function cancelCase(id, caller, data, status = 'confirmed') {
+    await reset(); await seedDriver(); await seedBooking(id, { status });
+    await call('intercityCancelBooking', { bookingId: id, ...data }, caller);
+    return {
+      b: await get(`intercity_bookings/${id}`),
+      pax: await notifsTo(P1),
+      drv: await notifsTo(D),
+    };
+  }
+  await check('L2: haydovchi eski ilova matni "рейсни бекор" -> "Рейс бекор" xabari, cancelCause=trip_ended, haydovchiga xabar YO\'Q', async () => {
+    const r = await cancelCase('l1', D, { reason: 'Ҳайдовчи рейсни бекор қилди' });
+    assert.strictEqual(r.pax[0].title, TITLE_ENDED); assert.strictEqual(r.b.cancelCause, 'trip_ended');
+    assert.strictEqual(r.b.cancelReason, 'Ҳайдовчи рейсни бекор қилди', 'eski matn saqlanadi');
+    assert.strictEqual(r.drv.length, 0);
+  });
+  await check('L2: haydovchi eski "yangi reys" matni -> new_trip, "Рейс бекор"', async () => {
+    const r = await cancelCase('l2', D, { reason: 'Ҳайдовчи янги рейс очди — аввалги бронлар бекор' });
+    // kirill "янги рейс" (ilovaning haqiqiy matni) - avval tripEnded sifatida tanilmagan edi
+    assert.strictEqual(r.pax[0].title, TITLE_ENDED); assert.strictEqual(r.b.cancelCause, 'new_trip');
+  });
+  await check('L2: eski lotin matni "yangi reys" (haydovchi) ham ishlaydi', async () => {
+    const r = await cancelCase('l2b', D, { reason: 'Haydovchi yangi reys ochdi' });
+    assert.strictEqual(r.pax[0].title, TITLE_ENDED); assert.strictEqual(r.b.cancelCause, 'new_trip');
+  });
+  await check('L2: aniq `cause`: trip_ended (matnsiz) - haydovchi', async () => {
+    const r = await cancelCase('l3', D, { cause: 'trip_ended', reason: 'x' });
+    assert.strictEqual(r.pax[0].title, TITLE_ENDED); assert.strictEqual(r.b.cancelCause, 'trip_ended');
+  });
+  await check('L2: yo\'lovchi "рейсни бекор" matni yuborsa - YO\'LOVCHI bekori bo\'lib qoladi: haydovchiga xabar boradi', async () => {
+    const r = await cancelCase('l4', P1, { reason: 'Ҳайдовчи рейсни бекор қилди (soxta)' });
+    assert.strictEqual(r.b.cancelCause, 'passenger');
+    assert.strictEqual(r.pax[0].title, TITLE_PAX);
+    assert.strictEqual(r.drv.length, 1); assert.strictEqual(r.drv[0].title, TITLE_TO_DRIVER);
+  });
+  await check('L2: yo\'lovchi `cause: trip_ended` yuborsa ham e\'tiborsiz', async () => {
+    const r = await cancelCase('l5', P1, { cause: 'trip_ended', reason: '' });
+    assert.strictEqual(r.b.cancelCause, 'passenger'); assert.strictEqual(r.drv.length, 1);
+  });
+  await check('L2: haydovchi sababsiz rad etadi (pending) -> driver_reject, "Ҳайдовчи бронни рад этди"', async () => {
+    const r = await cancelCase('l6', D, { reason: '' }, 'pending');
+    assert.strictEqual(r.b.cancelCause, 'driver_reject'); assert.strictEqual(r.pax[0].title, TITLE_DRV);
+  });
+  await check('L2: noma\'lum `cause` qiymati e\'tiborsiz (haydovchi) -> driver_reject', async () => {
+    const r = await cancelCase('l7', D, { cause: 'bogus', reason: '' });
+    assert.strictEqual(r.b.cancelCause, 'driver_reject');
+  });
+  await check('L2: admin bekor qiladi -> cancelCause=admin, yo\'lovchiga oddiy bekor xabari', async () => {
+    const r = await cancelCase('l8', ADMIN, { reason: 'admin' });
+    assert.strictEqual(r.b.cancelCause, 'admin'); assert.strictEqual(r.pax[0].title, TITLE_PAX);
+  });
+  await check('L2: o\'rin qaytishi o\'zgarmagan (cap bilan), ikkinchi bekor {ok:false, skipped}', async () => {
+    await reset(); await seedDriver({ seats: 1, seatCapacity: 4 }); await seedBooking('l9', { status: 'confirmed', passengers: 2 });
+    await call('intercityCancelBooking', { bookingId: 'l9', reason: '' }, P1);
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 3);
+    const again = await call('intercityCancelBooking', { bookingId: 'l9', reason: '' }, P1);
+    assert.deepStrictEqual({ ok: again.ok, skipped: again.skipped }, { ok: false, skipped: 'not_active' });
+    assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 3);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} intercity audit CF checks passed.`);
   process.exit(failed ? 1 : 0);

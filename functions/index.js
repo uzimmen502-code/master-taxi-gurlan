@@ -11459,6 +11459,27 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
   });
 });
 
+/**
+ * Audit L2: bron bekor qilish sababi (`intercity_bookings.cancelCause`):
+ *   passenger | driver_reject | trip_ended | new_trip | admin
+ * Faqat HAYDOVCHI (yoki admin) `trip_ended`/`new_trip` ni ko'rsata oladi: yangi ilova
+ * `cause` yuboradi, ESKI ilova esa `reason` matnini ("рейсни бекор", "янги рейс" /
+ * "yangi reys") - orqaga moslik uchun shu matnlar faqat haydovchi/admin uchun hisobga
+ * olinadi. Yo'lovchi yuborgan matn/`cause` hech qachon "reys tugadi" ma'nosini bermaydi
+ * (aks holda haydovchiga xabar yuborilmay qolardi).
+ */
+const INTERCITY_DRIVER_CAUSES = ['trip_ended', 'new_trip'];
+function intercityCancelCause({isPassenger, isDriver, reason, clientCause}) {
+  if (isPassenger) return 'passenger';
+  // Bu yerdan faqat haydovchi yoki admin o'tadi (ishtirokchi emas = permission-denied).
+  const c = String(clientCause || '');
+  if (INTERCITY_DRIVER_CAUSES.includes(c)) return c;
+  const r = String(reason || '');
+  if (r.includes('рейсни бекор')) return 'trip_ended';
+  if (r.includes('янги рейс') || r.includes('yangi reys')) return 'new_trip';
+  return isDriver ? 'driver_reject' : 'admin';
+}
+
 exports.intercityCancelBooking = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Auth required');
@@ -11511,9 +11532,15 @@ exports.intercityCancelBooking = functions.https.onCall(async (data, context) =>
         updatedAt: now,
       });
     }
+    // Audit L2: bekor SABABI serverda aniqlanadi (`cancelCause`), yo'lovchiga
+    // xabar mazmuni shunga bog'liq - klient yuborgan erkin matnga EMAS.
+    const cancelCause = intercityCancelCause({
+      isPassenger, isDriver, reason, clientCause: data.cause,
+    });
     tx.update(bookingRef, {
       status: 'cancelled',
       cancelReason: reason,
+      cancelCause,
       cancelledAt: now,
     });
     if (clientRef && clientSnap && clientSnap.exists) {
@@ -11531,7 +11558,9 @@ exports.intercityCancelBooking = functions.https.onCall(async (data, context) =>
       });
     }
 
-    return {ok: true, booking: b, byDriver: isDriver && !isPassenger};
+    return {
+      ok: true, booking: b, cancelCause, byDriver: isDriver && !isPassenger,
+    };
   });
 
   if (!outcome || outcome.ok !== true) {
@@ -11543,7 +11572,8 @@ exports.intercityCancelBooking = functions.https.onCall(async (data, context) =>
       intercityRouteText(null, b);
   const passengerPhone = digits(b.userPhone || '');
   const driverPhone = digits(b.driverPhone || b.driverId || '');
-  const tripEnded = reason.includes('рейсни бекор') || reason.includes('yangi reys');
+  const tripEnded = outcome.cancelCause === 'trip_ended' ||
+      outcome.cancelCause === 'new_trip';
 
   const writes = [];
   if (passengerPhone.length >= 9) {

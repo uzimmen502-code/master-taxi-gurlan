@@ -103,6 +103,67 @@ function starterNoticeOf(cap, status, nowDate) {
   };
 }
 
+// ── Kirish tekshiruvi (audit M2/H5, 2026-10) ───────────────────────────
+// `publish` oldin hech narsani tekshirmasdi: o'tgan jo'nash vaqti qabul qilinar,
+// noto'g'ri sana jimgina `null` bo'lardi, from/to bo'sh, `seats` cheksiz, sana/vaqt
+// erkin matn. Tekshiruv PUL TEGILMASDAN OLDIN (qarz yopish ham pul harakati).
+// Eski ilovalar uchun TOLERANT: `departureAt` yo'q bo'lsa eski xulq (null), `seats`
+// yo'q bo'lsa 4, `scheduleDate`/`startTime` bo'sh bo'lsa o'tkazib yuboriladi.
+// Narx chegarasi (min/max) QO'SHILMAGAN - ega qarori kutilmoqda.
+
+/** Jo'nash vaqti shu davrdan ko'p o'tgan bo'lsa rad etiladi (soat farqi / sekin tarmoq uchun zaxira). */
+const DEPARTURE_PAST_TOLERANCE_MS = 5 * 60 * 1000;
+const SEATS_MIN = 1;
+const SEATS_MAX = 8;
+const SCHEDULE_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const SCHEDULE_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+function isRealDate(y, m, d) {
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** `departureAt` (ISO satr yoki ms). Yo'q/bo'sh -> {present:false}; noto'g'ri -> {present:true, date:null}. */
+function parseDeparture(raw) {
+  if (!raw) return { present: false, date: null };
+  if (typeof raw !== 'string' && typeof raw !== 'number') return { present: true, date: null };
+  const d = new Date(raw);
+  return { present: true, date: Number.isNaN(d.getTime()) ? null : d };
+}
+
+/** @returns {string|null} xato tafsiloti yoki null (yaroqli). */
+function departureProblem(date, nowMs) {
+  if (!date) return 'invalid_date';
+  if (date.getTime() < nowMs - DEPARTURE_PAST_TOLERANCE_MS) return 'in_past';
+  return null;
+}
+
+/** `scheduleDate` YYYY-MM-DD (haqiqiy sana), `startTime` HH:MM; bo'sh/yo'q - ruxsat. */
+function parseSchedule(scheduleDate, startTime) {
+  const sd = scheduleDate === undefined || scheduleDate === null ? '' : scheduleDate;
+  const st = startTime === undefined || startTime === null ? '' : startTime;
+  if (typeof sd !== 'string' || typeof st !== 'string') return { ok: false };
+  const date = sd.trim();
+  const time = st.trim();
+  if (date) {
+    const m = SCHEDULE_DATE_RE.exec(date);
+    if (!m || !isRealDate(Number(m[1]), Number(m[2]), Number(m[3]))) return { ok: false };
+  }
+  if (time && !SCHEDULE_TIME_RE.test(time)) return { ok: false };
+  return { ok: true, scheduleDate: date, startTime: time };
+}
+
+/** `seats`: yo'q -> 4 (eski ilova); aks holda butun son SEATS_MIN..SEATS_MAX (raqamli satr ham). */
+function parseSeats(raw) {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, seats: SEAT_BASIS };
+  let n = Number.NaN;
+  if (typeof raw === 'number') n = raw;
+  else if (typeof raw === 'string' && raw.trim() !== '') n = Number(raw);
+  if (!Number.isInteger(n) || n < SEATS_MIN || n > SEATS_MAX) return { ok: false };
+  return { ok: true, seats: n };
+}
+
 function attachTaxiBilling(exports, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger,
@@ -291,12 +352,42 @@ function attachTaxiBilling(exports, deps) {
     };
   }
 
+  const inputError = (reason, message, detail) => err('failed-precondition', message,
+    detail ? { reason, detail } : { reason });
+
+  /**
+   * Audit M2/H5: `publish` kirishini tekshiradi va tozalaydi. Xato -
+   * `failed-precondition` + `details.reason` (ilova uch tilli matn tanlaydi,
+   * 25-qoida); pul harakati bundan KEYIN.
+   */
+  function validatePublishInput(data, nowMs) {
+    const dep = parseDeparture(data.departureAt);
+    if (dep.present) {
+      const problem = departureProblem(dep.date, nowMs);
+      if (problem) throw inputError('departure_in_past', 'Jo\'nash vaqti noto\'g\'ri yoki o\'tib ketgan', problem);
+    }
+    const from = typeof data.from === 'string' ? data.from.trim() : '';
+    const to = typeof data.to === 'string' ? data.to.trim() : '';
+    if (!from || !to) throw inputError('route_required', 'Yo\'nalish (qayerdan/qayerga) kerak');
+    const seats = parseSeats(data.seats);
+    if (!seats.ok) throw inputError('seats_invalid', `Joylar soni ${SEATS_MIN}..${SEATS_MAX} butun son bo'lishi kerak`);
+    const sched = parseSchedule(data.scheduleDate, data.startTime);
+    if (!sched.ok) throw inputError('schedule_invalid', 'Sana (YYYY-MM-DD) yoki vaqt (HH:MM) formati noto\'g\'ri');
+    return {
+      departureAt: dep.date, from, to, seats: seats.seats,
+      scheduleDate: sched.scheduleDate, startTime: sched.startTime,
+    };
+  }
+
   /**
    * E'LON (D-TAXI-13): narx → komissiya → to'lov → `published`.
    * To'lovsiz `published` BO'LMAYDI. Snapshot — D-TAXI-21.
    */
   async function publish(data, context) {
     const me = await resolveCaller(context);
+    data = data || {};
+    // Audit M2/H5: kirish tekshiruvi - qarz yopish va komissiyadan OLDIN.
+    const input = validatePublishInput(data, now().getTime());
     // D-TAXI-CANCEL-6: avval qarz, keyin yangi komissiya.
     const debt = await settleOutstanding(me);
     if (debt.outstanding > 0) {
@@ -308,18 +399,18 @@ function attachTaxiBilling(exports, deps) {
 
     const when = now();
     const tripRef = db.collection(TRIPS).doc();
-    const departureAt = data.departureAt ? new Date(data.departureAt) : null;
+    const departureAt = input.departureAt;
     const snapshot = {
       driverUid: me.phone,
       usersDocId: me.usersDocId,
       accountId: me.accountId,
       taxiType: 'intercity',
-      from: String(data.from || '').trim(),
-      to: String(data.to || '').trim(),
-      scheduleDate: String(data.scheduleDate || ''),
-      startTime: String(data.startTime || ''),
-      departureAt: departureAt && !Number.isNaN(departureAt.getTime()) ? Timestamp.fromDate(departureAt) : null,
-      seats: Number(data.seats) || SEAT_BASIS,
+      from: input.from,
+      to: input.to,
+      scheduleDate: input.scheduleDate,
+      startTime: input.startTime,
+      departureAt: departureAt ? Timestamp.fromDate(departureAt) : null,
+      seats: input.seats,
       // D-TAXI-21 snapshot
       farePerSeat: q.farePerSeat,
       seatBasis: SEAT_BASIS,
@@ -334,7 +425,7 @@ function attachTaxiBilling(exports, deps) {
       status: 'payment_required',
       // D-TAXI-14 — location qaydi
       location: {
-        originDeclared: String(data.from || '').trim(),
+        originDeclared: input.from,
         originLat: numOrNull(data.originLat),
         originLng: numOrNull(data.originLng),
         driverLat: numOrNull(data.driverLat),
@@ -743,13 +834,19 @@ function attachTaxiBilling(exports, deps) {
     if (trip.status !== 'published') throw err('failed-precondition', 'Reys e\'lon holatida emas', { reason: 'not_published' });
 
     const when = now();
-    const newDeparture = data.departureAt ? new Date(data.departureAt) : null;
-    if (!newDeparture || Number.isNaN(newDeparture.getTime())) {
+    const newDeparture = parseDeparture(data.departureAt).date;
+    if (!newDeparture) {
       throw err('invalid-argument', 'departureAt kerak');
     }
+    // Audit M2: yangi vaqt o'tmishda bo'lmasin; sana/vaqt formati to'g'ri bo'lsin.
+    if (departureProblem(newDeparture, when.getTime())) {
+      throw inputError('departure_in_past', 'Yangi jo\'nash vaqti o\'tib ketgan', 'in_past');
+    }
+    const sched = parseSchedule(data.scheduleDate, data.startTime);
+    if (!sched.ok) throw inputError('schedule_invalid', 'Sana (YYYY-MM-DD) yoki vaqt (HH:MM) formati noto\'g\'ri');
     const w = rescheduleWrites({
       tripId: tripRef.id, trip, uid: me.phone, accountId: me.accountId,
-      newDeparture, scheduleDate: data.scheduleDate, startTime: data.startTime,
+      newDeparture, scheduleDate: sched.scheduleDate, startTime: sched.startTime,
       when, Timestamp, source: 'driver',
     });
     await db.collection(RESCHEDULES).add(w.audit);
@@ -815,4 +912,5 @@ module.exports = {
   rescheduleWrites,
   SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
   calculateTaxiFee, starterNoticeOf, attachTaxiBilling,
+  DEPARTURE_PAST_TOLERANCE_MS, SEATS_MIN, SEATS_MAX,
 };

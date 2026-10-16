@@ -324,6 +324,41 @@ async function main() {
     assert.strictEqual(rec.projectionOk, true, JSON.stringify(rec.mismatches));
   });
 
+  // R1 (C-1): courier_field_cash ledger posti yiqilsa, «naqd qo'lda» yozuvi
+  // YO'QOLMASLIGI kerak: niyat tranzaksiyada saqlanadi, sweeper/takror chaqiruv tiklaydi.
+  await check('naqd ledger posti yiqilsa: niyat saqlanadi, sweeper BIR marta tiklaydi, takror ikkilamaydi', async () => {
+    await reset({ wallet: 0 });
+    await seedOrder('fc1', { total: 30000 });
+    const realPost = settlementLedger.postEntry;
+    settlementLedger.postEntry = async (d, entry, opts) => {
+      if (String(entry.idempotencyKey).startsWith('courierCash:')) throw new Error('boom');
+      return realPost(d, entry, opts);
+    };
+    try {
+      const r = await submit('fc1', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(r.ok, true);
+    } finally { settlementLedger.postEntry = realPost; }
+    const jRef = db.collection(settlementLedger.COL_JOURNAL).doc('courierCash:fc1');
+    assert.strictEqual((await jRef.get()).exists, false, 'post yiqilgan edi');
+    assert.strictEqual((await db.collection('courier_cash_pending').doc('fc1').get()).exists, true, 'niyat saqlanmagan');
+    await fns.courierCashPendingSweep.run({});
+    assert.strictEqual((await jRef.get()).exists, false, 'sweeper yangi niyatga tegmasligi kerak (60 s kutish)');
+    await db.collection('courier_cash_pending').doc('fc1').update({
+      createdAt: admin.firestore.Timestamp.fromMillis(Date.now() - 10 * 60 * 1000),
+    });
+    await fns.courierCashPendingSweep.run({});
+    assert.strictEqual((await jRef.get()).exists, true, 'sweeper tiklamadi');
+    assert.strictEqual((await db.collection('courier_cash_pending').doc('fc1').get()).exists, false, 'niyat o\'chmagan');
+    const cashAcc = () => db.collection(settlementLedger.COL_ACCOUNTS)
+      .doc(settlementLedger.courierCashAccount(`998${A.slice(3)}`)).get();
+    assert.strictEqual(Math.abs(((await cashAcc()).data() || {}).balance || 0), 30000, 'kuryer naqd balansi');
+    // takror chaqiruv va takror sweeper — ikkilanmaydi
+    const again = await submit('fc1', A, [{ kind: 'cash', amount: 30000 }]);
+    assert.strictEqual(again.idempotent, true);
+    await fns.courierCashPendingSweep.run({});
+    assert.strictEqual(Math.abs(((await cashAcc()).data() || {}).balance || 0), 30000, 'ikkilandi');
+  });
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} o'tdi.`);
   process.exit(failed.length ? 1 : 0);

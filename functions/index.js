@@ -5069,6 +5069,28 @@ async function courierSubmitPaymentTx(t, {
     });
   }
 
+  // R1 (C-1): kuryer qo'lidagi naqd/karta niyati to'lov bilan BIR tranzaksiyada
+  // saqlanadi — ledger posti (tranzaksiyadan tashqarida) yiqilsa ham yozuv
+  // yo'qolmaydi; `postCourierFieldCash` / `courierCashPendingSweep` tiklaydi.
+  const fieldCashSums = normalized.reduce((acc, l) => {
+    const a = parseInt(String(l.amount || 0), 10) || 0;
+    if (l.kind === 'cash') acc.cashSum += a;
+    else if (l.kind === 'card') acc.cardSum += a;
+    return acc;
+  }, { cashSum: 0, cardSum: 0 });
+  if (fieldCashSums.cashSum + fieldCashSums.cardSum > 0) {
+    t.set(db.collection('courier_cash_pending').doc(orderId), {
+      orderId,
+      courierUid: canonicalUid(courierId),
+      cashSum: fieldCashSums.cashSum,
+      cardSum: fieldCashSums.cardSum,
+      orderTotal,
+      module,
+      attempts: 0,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
   const result = {
     ok: true,
     orderTotal,
@@ -5141,6 +5163,81 @@ async function runCourierSubmitTx(args) {
   throw new functions.https.HttpsError('aborted', 'CONTENTION_RETRY', { code: 'CONTENTION_RETRY' });
 }
 
+/**
+ * Kuryer qo'lidagi naqd/karta → `courier_cash` ledger (inkassagacha).
+ * Niyat `courier_cash_pending/{orderId}` hujjatida (to'lov tranzaksiyasida
+ * yoziladi). Post muvaffaqiyatli bo'lsa hujjat o'chadi; yiqilsa qoladi va
+ * takror chaqiruv / `courierCashPendingSweep` qayta uradi. `postEntry`
+ * idempotent (`courierCash:{orderId}`) — ikki marta yozilmaydi.
+ * Hisob kaliti har doim 12 raqam (998…) — receiveCourierCash bilan mos.
+ * @returns {Promise<boolean>} post qilindi (yoki niyat yo'q)
+ */
+async function postCourierFieldCash(orderId) {
+  const pRef = db.collection('courier_cash_pending').doc(orderId);
+  const snap = await pRef.get();
+  if (!snap.exists) return true;
+  const p = snap.data() || {};
+  const cashSum = Math.trunc(Number(p.cashSum) || 0);
+  const cardSum = Math.trunc(Number(p.cardSum) || 0);
+  const fieldCash = cashSum + cardSum;
+  try {
+    if (fieldCash > 0) {
+      const courierCashUid = String(p.courierUid || '');
+      await settlementLedger.postEntry(db, {
+        idempotencyKey: `courierCash:${orderId}`,
+        kind: 'courier_field_cash',
+        refType: 'order',
+        refId: orderId,
+        postedBy: courierCashUid,
+        postedRole: 'courier',
+        legs: [
+          { account: settlementLedger.courierCashAccount(courierCashUid), dr: fieldCash },
+          { account: 'admin_clearing', cr: fieldCash },
+        ],
+      }, {
+        mirrorBonus: false,
+        meta: {
+          module: p.module,
+          orderTotal: p.orderTotal,
+          cashSum,
+          cardSum,
+          method: cardSum > 0 && cashSum > 0 ? 'mixed' : (cardSum > 0 ? 'card' : 'cash'),
+        },
+      });
+    }
+    await pRef.delete();
+    return true;
+  } catch (e) {
+    console.error(JSON.stringify({
+      action: 'postCourierFieldCash', orderId, result: 'failed',
+      errorCode: 'COURIER_CASH_LEDGER_FAILED', message: String((e && e.message) || e).slice(0, 200),
+    }));
+    try {
+      await pRef.update({
+        attempts: admin.firestore.FieldValue.increment(1),
+        lastError: String((e && e.message) || e).slice(0, 200),
+      });
+    } catch (_) { /* niyat hujjati saqlanadi — keyingi sweeper urinadi */ }
+    return false;
+  }
+}
+
+/** R1: yiqilgan `courier_field_cash` postlarini qayta uradi (har 5 daqiqa). */
+exports.courierCashPendingSweep = functions.pubsub
+  .schedule('every 5 minutes')
+  .onRun(async () => {
+    const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - 60 * 1000);
+    const snap = await db.collection('courier_cash_pending')
+      .where('createdAt', '<', cutoff).limit(100).get();
+    let ok = 0;
+    let failed = 0;
+    for (const d of snap.docs) {
+      if (await postCourierFieldCash(d.id)) ok += 1; else failed += 1;
+    }
+    console.log(JSON.stringify({ action: 'courierCashPendingSweep', scanned: snap.size, ok, failed }));
+    return null;
+  });
+
 exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
@@ -5171,9 +5268,14 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   const tx = await runCourierSubmitTx({
     ref, orderId, courierId, linesIn, lat, lng,
   });
-  if (tx.done) return tx.result;
+  if (tx.done) {
+    // Takror chaqiruv: avvalgi urinishda ledger posti yiqilgan bo'lsa, tiklaymiz
+    // (niyat hujjati bor bo'lsa; postEntry idempotent).
+    if (tx.result && tx.result.idempotent) await postCourierFieldCash(orderId);
+    return tx.result;
+  }
   const {
-    normalized, orderTotal, totalSubmitted, changeCredit, walletSum, customerUid, module,
+    normalized, orderTotal, totalSubmitted, changeCredit, walletSum, customerUid,
   } = tx;
   const { newBalance } = tx.result;
 
@@ -5190,41 +5292,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   }
 
   // Курьер қўлидаги нақд/карта → courier_cash (инкассациягача).
-  // Ҳисоб калити ҳар доим 12 рақам (998…) — receiveCourierCash билан мос.
-  const fieldCash = cashSum + cardSum;
-  if (fieldCash > 0) {
-    try {
-      const courierCashUid = canonicalUid(courierId);
-      await settlementLedger.postEntry(db, {
-        idempotencyKey: `courierCash:${orderId}`,
-        kind: 'courier_field_cash',
-        refType: 'order',
-        refId: orderId,
-        postedBy: courierCashUid,
-        postedRole: 'courier',
-        legs: [
-          {
-            account: settlementLedger.courierCashAccount(courierCashUid),
-            dr: fieldCash,
-          },
-          { account: 'admin_clearing', cr: fieldCash },
-        ],
-      }, {
-        mirrorBonus: false,
-        meta: {
-          module,
-          orderTotal,
-          cashSum,
-          cardSum,
-          method: cardSum > 0 && cashSum > 0
-            ? 'mixed'
-            : (cardSum > 0 ? 'card' : 'cash'),
-        },
-      });
-    } catch (e) {
-      console.error('courierSubmitPayment courier_cash ledger:', e.message || e);
-    }
-  }
+  await postCourierFieldCash(orderId);
 
   const receiptLines = [];
   receiptLines.push(

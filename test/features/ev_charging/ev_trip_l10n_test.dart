@@ -35,6 +35,21 @@ void main() {
     'ev_trip_no_charging',
     'ev_trip_gap_title',
     'ev_trip_km',
+    // yo'l va zaryadlash vaqti, keyingi to'xtashlar (Phase 1)
+    'ev_trip_unit_h',
+    'ev_trip_unit_min',
+    'ev_trip_drive_time',
+    'ev_trip_charge_time',
+    'ev_trip_at_least',
+    'ev_trip_charge_time_note',
+    'ev_trip_next_stops',
+    'ev_trip_continue',
+    'ev_trip_nav_sent_first',
+    'ev_trip_nav_sent_next',
+    'ev_trip_nav_sent_last',
+    // band/bo'sh belgisi (mavjud kalitlar qayta ishlatiladi)
+    'home_ev_free',
+    'home_ev_busy',
   ];
 
   final dict = <String, Map<String, dynamic>>{};
@@ -90,11 +105,49 @@ void main() {
     expect(dict['uz_Cyrl']!['ev_trip_remove_stop'], 'Режадан олиб ташлаш');
   });
 
-  test('chegara xabarlarida {n} (va {c}) o\'rinbosarlari uch tilda bor', () {
+  test('o\'rinbosarlar ({n}, {t}) uch tilda bor', () {
     for (final l in langs) {
       expect(dict[l]!['ev_trip_sel_full'], contains('{n}'), reason: l);
       expect(dict[l]!['ev_trip_sel_over_limit'], contains('{n}'), reason: l);
       expect(dict[l]!['ev_trip_sel_over_limit'], contains('{c}'), reason: l);
+      for (final k in const [
+        'ev_trip_next_stops',
+        'ev_trip_nav_sent_first',
+        'ev_trip_nav_sent_next',
+        'ev_trip_nav_sent_last',
+      ]) {
+        expect(dict[l]![k], contains('{n}'), reason: '$l/$k');
+      }
+      expect(dict[l]!['ev_trip_at_least'], contains('{t}'), reason: l);
+    }
+  });
+
+  test('"dastlabki N ta to\'xtash yuborildi" matni uch tilda to\'g\'ri', () {
+    expect(
+        dict['uz_Cyrl']!['ev_trip_nav_sent_first'],
+        "Google Maps'га дастлабки {n} та тўхташ юборилди. "
+        'Қолганлари кейин таклиф қилинади');
+    expect(
+        dict['uz_Latn']!['ev_trip_nav_sent_first'],
+        "Google Maps'ga dastlabki {n} ta to'xtash yuborildi. "
+        'Qolganlari keyin taklif qilinadi');
+    expect(dict['ru']!['ev_trip_nav_sent_first'], contains('{n}'));
+  });
+
+  test('vaqt birliklari 3 tilda alohida (qattiq h/min yo\'q)', () {
+    expect(dict['uz_Cyrl']!['ev_trip_unit_h'], 'с');
+    expect(dict['uz_Cyrl']!['ev_trip_unit_min'], 'дақ');
+    expect(dict['uz_Latn']!['ev_trip_unit_h'], 's');
+    expect(dict['uz_Latn']!['ev_trip_unit_min'], 'daq');
+    expect(dict['ru']!['ev_trip_unit_h'], 'ч');
+    expect(dict['ru']!['ev_trip_unit_min'], 'мин');
+  });
+
+  test('"Davom etish" va "Keyingi to\'xtashlar" matnlari qisqa', () {
+    for (final l in langs) {
+      expect((dict[l]!['ev_trip_continue'] as String).length,
+          lessThanOrEqualTo(14),
+          reason: l);
     }
   });
 

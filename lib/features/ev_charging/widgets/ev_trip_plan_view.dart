@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/ev_charging_station.dart';
 import '../models/ev_trip_plan.dart';
+import 'ev_occupancy_badge.dart';
 
 /// ⚡ Сафар режасининг кўриниши — асосий ва заҳира станциялар, ораларидаги
 /// масофа, заряд прогнози.
@@ -260,10 +261,20 @@ class _StopCard extends StatelessWidget {
             '${stop.offRouteKm >= 1 ? '  ·  ${context.tr('ev_trip_off_route')} ${stop.offRouteKm.round()} $km' : ''}',
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
-          if (stop.isUnverifiedImport) ...[
+          if (stop.isUnverifiedImport || s.occupancyFresh) ...[
             const SizedBox(height: 6),
-            _badge(context.tr('ev_trip_unverified'), const Color(0xFFFFF3E0),
-                const Color(0xFFE65100)),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Бўш/Банд — фақат янги (30 дақиқа) белги бўлса.
+                EvOccupancyBadge(station: s),
+                if (stop.isUnverifiedImport)
+                  _badge(context.tr('ev_trip_unverified'),
+                      const Color(0xFFFFF3E0), const Color(0xFFE65100)),
+              ],
+            ),
           ],
           if (stop.hasBackup) ...[
             const SizedBox(height: 10),

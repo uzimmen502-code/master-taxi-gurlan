@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
+import 'ev_occupancy_badge.dart';
 import 'ev_trip_plan_view.dart' show evTripStationSpecLine;
 import 'ev_trip_stop_icon.dart';
 
@@ -85,10 +86,21 @@ class EvTripStationSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (candidate.kind != EvTripMarkerKind.other) ...[
+            if (candidate.kind != EvTripMarkerKind.other ||
+                s.occupancyFresh) ...[
               Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: _KindBadge(kind: candidate.kind),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (candidate.kind != EvTripMarkerKind.other)
+                      _KindBadge(kind: candidate.kind),
+                    // Бўш/Банд — фақат янги (30 дақиқа) белги бўлса.
+                    EvOccupancyBadge(station: s),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
             ],

@@ -684,6 +684,7 @@
   "home_create_home_cook": "Uy oshpazi bo‘lish",
   "home_create_cargo": "Yuk tashuvchi bo‘lish",
   "home_create_shop_where": "Mahsulotni qayerga qo‘shamiz?",
+  "home_create_shop_online_hint": "Aholi bozori yoki Ulgurji bozorda mahsulot soting",
   "home_section_see_all": "Barchasi",
   "home_section_empty": "Hozircha taklif yo‘q",
   "home_section_error": "Yuklab bo‘lmadi",

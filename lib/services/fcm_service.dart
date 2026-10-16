@@ -13,6 +13,7 @@ import '../utils/locale_utils.dart';
 import 'arrival_ringer.dart';
 import 'notification_delivery.dart';
 import 'push_navigation.dart';
+import 'user_audience.dart';
 
 /// Background FCM — илова ёпиқ/фонда ҳам local notification (#16).
 @pragma('vm:entry-point')
@@ -106,10 +107,9 @@ class FCMService {
           final body = data['body'] as String? ?? '';
           final taxiType = data['taxiType'] as String? ?? 'local';
           final prefs = await SharedPreferences.getInstance();
-          final userRole = prefs.getString('user_role') ?? 'user';
+          final isDriver = UserAudience.taxiDriverFrom(prefs);
 
-          if (type == 'driver_request_approved' &&
-              userRole != 'driver') {
+          if (type == 'driver_request_approved' && !isDriver) {
             await change.doc.reference.update({'sent': true});
             continue;
           }

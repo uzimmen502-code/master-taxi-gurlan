@@ -42,6 +42,7 @@ import '../features/demand_offer/presentation/demand_detail/demand_match_detail_
 import '../features/demand_offer/ui_adapters/service_ui_adapter.dart';
 import '../features/logistics/ui/logistics_ui_adapter.dart';
 import '../main.dart';
+import 'user_audience.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
 class PushNavigation {
@@ -227,8 +228,7 @@ class PushNavigation {
     if (type == 'local_trip_accepted') {
       final tripId = (data['tripId'] ?? '').trim();
       final prefs = await SharedPreferences.getInstance();
-      final userRole = prefs.getString('user_role') ?? 'user';
-      if (userRole != 'driver') {
+      if (!UserAudience.taxiDriverFrom(prefs)) {
         await prefs.setString('resume_local_trip_id', tripId);
         await nav.pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LocalTaxiScreen()),
@@ -398,8 +398,7 @@ class PushNavigation {
 
     if (type == 'driver_request_approved') {
       final prefs = await SharedPreferences.getInstance();
-      final userRole = prefs.getString('user_role') ?? 'user';
-      if (userRole != 'driver') {
+      if (!UserAudience.taxiDriverFrom(prefs)) {
         _showPassiveSnack(nav, 'driver_request_approved_snack');
         await prefs.remove('pending_driver_open');
         return;

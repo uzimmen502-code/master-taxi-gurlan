@@ -56,6 +56,7 @@ import '../courier/screens/courier_screen.dart';
 import '../../repositories/courier_capability_repository.dart';
 import '../courier/widgets/courier_apply_flow.dart';
 import 'widgets/work_roles_sheet.dart';
+import '../../services/user_audience.dart';
 import '../driver_hub/driver_hub_actions.dart';
 import '../driver_hub/screens/driver_hub_screen.dart';
 import '../../shared/car/car_edit_dialog.dart';
@@ -635,6 +636,9 @@ class _HomeViewState extends State<_HomeView> {
     final uid = phoneDigits(context.read<HomeController>().phone);
     if (uid.length < 9) return;
     final roles = await context.read<DriverRepository>().driverRoles(uid);
+    // Аудитория белгиси (янгиликлар, тасма, push) — ҳуқуқдан; фақат ҳолат
+    // ҳақиқатан ўқилганда (узилишда "ҳайдовчи эмас" деб ёзиб юбормаймиз).
+    if (roles.known) unawaited(UserAudience.saveTaxiDriver(roles.isDriver));
     if (!mounted) return;
     setState(() {
       _driverRoles = roles;

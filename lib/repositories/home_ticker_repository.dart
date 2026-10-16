@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/home_ticker_ad.dart';
+import '../services/user_audience.dart';
 
 /// `home_ticker_ads` — bosh ekran begushchaya qator matnlari.
 class HomeTickerRepository {
@@ -24,12 +24,8 @@ class HomeTickerRepository {
     String module, {
     int limit = 40,
   }) async* {
-    var role = 'user';
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final saved = (prefs.getString('user_role') ?? '').trim().toLowerCase();
-      if (saved.isNotEmpty) role = saved;
-    } catch (_) {}
+    // Аудитория: админ роли + ҳайдовчилик ҳуқуқдан (`UserAudience`).
+    final role = await UserAudience.current();
     yield* watchForModule(module, role, limit: limit);
   }
 

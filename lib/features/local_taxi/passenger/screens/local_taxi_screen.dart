@@ -24,6 +24,7 @@ import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
 import '../../../../shared/widgets/driver_application_feedback.dart';
 import 'local_taxi_active_trip_screen.dart';
 import 'searching_screen.dart';
+import '../../../../services/user_audience.dart';
 
 class LocalTaxiScreen extends StatelessWidget {
   const LocalTaxiScreen({super.key, this.startDriverOnOpen = false});
@@ -551,6 +552,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           if (!mounted) return;
           if (submitResult.autoApproved) {
             await prefs.setString('user_role', 'driver');
+            await UserAudience.saveTaxiDriver(true);
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               backgroundColor: LocalTaxiColors.primary,
@@ -573,6 +575,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         }
 
         await prefs.setString('user_role', 'driver');
+        await UserAudience.saveTaxiDriver(true);
         await driverRepo.approveDriverAutomatically(
           uid: uid,
           name: name,

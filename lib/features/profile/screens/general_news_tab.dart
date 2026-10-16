@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
+import '../../../services/user_audience.dart';
 
 /// Умумий админ янгиликлари (буюртма хабарларисиз).
 class GeneralNewsTab extends StatefulWidget {
@@ -22,7 +23,7 @@ class _GeneralNewsTabState extends State<GeneralNewsTab> {
 
   Future<({List<String> audiences, String userId})> _userContext() async {
     final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('user_role') ?? 'user';
+    final role = UserAudience.fromPrefs(prefs);
     final phone = prefs.getString('user_phone') ?? '';
     return (audiences: ['all', role], userId: phoneDigits(phone));
   }

@@ -11,6 +11,7 @@ import 'general_news_tab.dart';
 import 'messages_tab.dart';
 import 'order_news_tab.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../services/user_audience.dart';
 
 /// Хабарлар — «Янгилик», «Хабарлар», «Буюртма».
 class NewsHubScreen extends StatefulWidget {
@@ -74,7 +75,7 @@ class _NewsHubScreenState extends State<NewsHubScreen>
   Future<void> _loadContext() async {
     final prefs = await SharedPreferences.getInstance();
     _uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
-    _role = prefs.getString('user_role') ?? 'user';
+    _role = UserAudience.fromPrefs(prefs);
     if (_uid.length < 9 && mounted) {
       setState(() {
         _unreadBroadcast = 0;

@@ -11,7 +11,13 @@ class DriverRoles {
     this.taxiStatus = '',
     this.starterEndsAt,
     this.agreementAccepted = false,
+    this.known = false,
   });
+
+  /// Ҳуқуқ ҳолати ҲАҚИҚАТАН ўқилдими. Ўқишда хато бўлса `false` — бундай
+  /// натижадан «ҳайдовчи эмас» деб хулоса чиқарилмайди (аудитория белгиси
+  /// тасодифий узилишда йўқолиб қолмасин).
+  final bool known;
 
   /// Такси келишуви қабул қилинганми (`service_agreements/{accountId}.taxi`).
   /// Фақат кўрсатиш учун ишора: «текширувга юбориш»да ҳал қилувчи — сервер

@@ -30,6 +30,7 @@ const courierPush = createCourierPush({ db, canonicalUid });
 // Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
 // paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
 const capabilitiesModel = require('./capabilities_model');
+const driverAudience = require('./driver_audience');
 // Kuryer avtorizatsiyasi: 'new' / 'finish' rejimlari + buyurtma egaligi.
 const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth');
 // Xarid narxi faqat katalogdan (K-5): yig'ib olish va kuryer to'lovidagi mahsulot.
@@ -2052,11 +2053,14 @@ exports.sendDailyOnboardingPromo = functions.pubsub
       .limit(500)
       .get();
 
+    // Ҳайдовчи — ҳуқуқдан (янги оқимда `role: driver` ёзилмайди).
+    const driverUids = await driverAudience.taxiDriverUids(db);
     const tasks = [];
     for (const doc of usersSnap.docs) {
       const u = doc.data() || {};
       const role = String(u.role || 'user');
       if (role === 'admin' || role === 'driver' || role === 'courier') continue;
+      if (driverUids.has(canonicalUid(doc.id))) continue;
       const token = u.fcmToken || '';
       if (!token) continue;
 
@@ -11651,40 +11655,12 @@ function adminNewsFcmPayload(d) {
   };
 }
 
-/** Аудитория бўйича FCM tokenlar (битта token — битта user). */
-async function collectFcmTokensForAudience(audience) {
-  const aud = String(audience || 'all');
-  const tokens = new Set();
-  let query = db.collection('users');
-  if (aud === 'driver') {
-    query = query.where('role', '==', 'driver');
-  } else if (aud === 'courier') {
-    query = query.where('role', '==', 'courier');
-  } else if (aud === 'user') {
-    query = query.where('role', '==', 'user');
-  }
-
-  let lastDoc = null;
-  const pageSize = 400;
-  for (;;) {
-    let q = query.orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize);
-    if (lastDoc) q = q.startAfter(lastDoc);
-    const snap = await q.get();
-    if (snap.empty) break;
-    for (const doc of snap.docs) {
-      const data = doc.data() || {};
-      const t = data.fcmToken;
-      if (typeof t !== 'string' || t.length < 10) continue;
-      if (aud === 'user') {
-        const role = String(data.role || 'user');
-        if (role !== 'user') continue;
-      }
-      tokens.add(t);
-    }
-    lastDoc = snap.docs[snap.docs.length - 1];
-    if (snap.size < pageSize) break;
-  }
-  return [...tokens];
+/**
+ * Аудитория бўйича FCM tokenlar (битта token — битта user). «Ҳайдовчи»
+ * ҳуқуқдан аниқланади — `driver_audience.js`.
+ */
+function collectFcmTokensForAudience(audience) {
+  return driverAudience.collectFcmTokensForAudience(db, audience);
 }
 
 async function sendFcmBroadcast(tokens, payload) {

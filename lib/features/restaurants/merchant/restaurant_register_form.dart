@@ -60,6 +60,11 @@ class RestaurantFormData {
   String closeTime;
 
   static const legalTypes = ['individual', 'yatt', 'llc'];
+
+  /// «Уй ошпази» — `individual` ([Restaurant.isHomeCook]); кафе-ресторан —
+  /// `yatt`/`llc` («＋» менюсида икки алоҳида банд, эга 2026-10-16).
+  static const homeCookLegalType = 'individual';
+  static const cafeLegalTypes = ['yatt', 'llc'];
   static const deliveryModes = ['ava_courier', 'own_courier', 'none'];
 
   /// Тавсия этиладиган ошхона турлари (PROPOSED; матн калитлари

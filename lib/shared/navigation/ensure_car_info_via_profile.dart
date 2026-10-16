@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/utils/formatters.dart';
-import '../../shared/navigation/app_home_route.dart';
-import '../../features/profile/screens/profile_screen.dart';
 import '../../repositories/user_repository.dart';
+import '../car/car_edit_dialog.dart';
+import 'app_home_route.dart';
 
-/// Avtomobil ma'lumotlari to'liq emas bo'lsa profilga yo'naltiradi.
+/// Avtomobil ma'lumotlari to'liq emas bo'lsa kiritish oynasini ochadi
+/// (Kabinet/profil ekrani orqali EMAS — oyna `shared/car` da).
 /// Saqlansa `true`. Bekor qilinsa bosh sahifaga qaytadi va `false`.
 Future<bool> ensureCarInfoViaProfile(
   BuildContext context, {
@@ -21,14 +22,10 @@ Future<bool> ensureCarInfoViaProfile(
   if (_isComplete(car)) return true;
 
   if (!context.mounted) return false;
-  final saved = await Navigator.push<bool>(
+  final saved = await showCarEditDialog(
     context,
-    MaterialPageRoute(
-      builder: (_) => const ProfileScreen(
-        autoOpenCarEdit: true,
-        returnAfterSave: true,
-      ),
-    ),
+    uid: phoneDigits(phone),
+    driverFlow: true,
   );
 
   if (saved == true) return true;

@@ -238,132 +238,255 @@ class _CreateItem extends StatelessWidget {
   }
 }
 
-/// «＋» босилганда пастдан чиқадиган меню.
-enum AvaCreateAction { video, ad, product, service, seller, work }
+/// «＋» — «Менинг бизнесим»: фойдаланувчи ўз ишини шу ердан бошлайди.
+///
+/// Тартиб (эга, 2026-10-16): видео · эълон · хизмат · онлайн дўкон · дўкон ·
+/// ҳайдовчи · курьер · уй ошпази · кафе/ресторан · юк ташувчи · китоб · AI.
+enum AvaCreateAction {
+  video,
+  ad,
+  service,
+  shopOnline,
+  shop,
+  driver,
+  courier,
+  homeCook,
+  cafe,
+  cargo,
+  book,
+  assistant,
+}
+
+/// «Онлайн Дўкон очиш» ичидаги танлов: маҳсулот қаерга қўшилади.
+enum AvaShopTarget { retail, wholesale }
 
 /// Танланган амални қайтаради; бекор қилинса `null`.
 ///
-/// [driverRoles] — ҳайдовчи бўлса «Ҳайдовчи бўлиш» ўрнига «Ҳайдовчи панели»
-/// ва фаол турда яшил белги чиқади.
+/// [driverRoles] — ҳайдовчи/курьер бўлса «…бўлиш» ўрнига «…панели» ва фаол
+/// турда яшил белги чиқади. [hidden] — модули яширин бўлган бандлар
+/// (масалан, кафе-ресторан `hidden` бўлса «Уй ошпази» ва «Кафе» кўринмайди).
 Future<AvaCreateAction?> showAvaCreateSheet(
   BuildContext context, {
   DriverRoles driverRoles = DriverRoles.none,
+  Set<AvaCreateAction> hidden = const {},
 }) {
   return showModalBottomSheet<AvaCreateAction>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (ctx) => _CreateSheet(driverRoles: driverRoles),
+    builder: (ctx) => _CreateSheet(driverRoles: driverRoles, hidden: hidden),
+  );
+}
+
+/// «Онлайн Дўкон очиш» → маҳсулот қаерга қўшилади: Аҳоли бозори ёки Улгуржи.
+Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
+  return showModalBottomSheet<AvaShopTarget>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) {
+      final c = ctx.ava;
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AvaSpace.screen, 0, AvaSpace.screen, AvaSpace.screen),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                ctx.tr('home_create_shop_where'),
+                style: AvaText.sectionTitle.copyWith(color: c.ink),
+              ),
+              const SizedBox(height: 12),
+              _CreateRow(
+                icon: Icons.storefront_outlined,
+                label: ctx.tr('tv_shop_to_market'),
+                onTap: () => Navigator.of(ctx).pop(AvaShopTarget.retail),
+              ),
+              _CreateRow(
+                icon: Icons.inventory_2_outlined,
+                label: ctx.tr('home_module_wholesale'),
+                onTap: () => Navigator.of(ctx).pop(AvaShopTarget.wholesale),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }
 
 class _CreateSheet extends StatelessWidget {
-  const _CreateSheet({this.driverRoles = DriverRoles.none});
+  const _CreateSheet({
+    this.driverRoles = DriverRoles.none,
+    this.hidden = const {},
+  });
 
   final DriverRoles driverRoles;
+  final Set<AvaCreateAction> hidden;
 
-  /// Ҳайдовчи ёки курьер сифатида ишлайдиган (панели бор) фойдаланувчи.
-  bool get _hasWork =>
-      driverRoles.isDriver ||
+  /// Курьер панели бор (ёки тўхтатилган, лекин қўлдаги ишни тугатиши керак).
+  bool get _courierHasPanel =>
       driverRoles.courierOnline ||
-      CourierCapabilityRepository.panelStatuses.contains(driverRoles.courierStatus);
+      CourierCapabilityRepository.panelStatuses
+          .contains(driverRoles.courierStatus);
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final items = <(AvaCreateAction, IconData, String)>[
-      (AvaCreateAction.video, Icons.videocam_outlined, 'home_create_video'),
-      (AvaCreateAction.ad, Icons.campaign_outlined, 'home_create_ad'),
-      (
-        AvaCreateAction.product,
-        Icons.add_shopping_cart_outlined,
-        'home_create_product'
-      ),
+    final items = <(AvaCreateAction, IconData, String, bool)>[
+      (AvaCreateAction.video, Icons.videocam_outlined, 'home_create_video', false),
+      (AvaCreateAction.ad, Icons.campaign_outlined, 'home_create_ad', false),
       (
         AvaCreateAction.service,
         Icons.handyman_outlined,
-        'home_create_service'
+        'home_create_service',
+        false
       ),
-      (AvaCreateAction.seller, Icons.storefront_outlined, 'home_create_seller'),
       (
-        AvaCreateAction.work,
-        Icons.local_taxi_outlined,
-        _hasWork ? 'work_entry_open' : 'work_entry_join',
+        AvaCreateAction.shopOnline,
+        Icons.add_shopping_cart_outlined,
+        'home_create_shop_online',
+        false
       ),
-    ];
+      (AvaCreateAction.shop, Icons.storefront_outlined, 'tv_shop_open_cta', false),
+      (
+        AvaCreateAction.driver,
+        Icons.local_taxi_outlined,
+        driverRoles.isDriver ? 'home_create_driver_open' : 'home_create_driver',
+        driverRoles.hasActive,
+      ),
+      (
+        AvaCreateAction.courier,
+        Icons.delivery_dining,
+        _courierHasPanel ? 'home_create_courier_open' : 'home_create_courier',
+        driverRoles.courierOnline,
+      ),
+      (
+        AvaCreateAction.homeCook,
+        Icons.soup_kitchen_outlined,
+        'home_create_home_cook',
+        false
+      ),
+      (AvaCreateAction.cafe, Icons.restaurant_outlined, 'restaurants_m_open_cafe', false),
+      (
+        AvaCreateAction.cargo,
+        Icons.local_shipping_outlined,
+        'home_create_cargo',
+        false
+      ),
+      (AvaCreateAction.book, Icons.menu_book_outlined, 'book_menu_title', false),
+      (
+        AvaCreateAction.assistant,
+        Icons.auto_awesome_outlined,
+        'home_module_chatgpt',
+        false
+      ),
+    ].where((e) => !hidden.contains(e.$1)).toList();
 
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AvaSpace.screen,
-          0,
-          AvaSpace.screen,
-          AvaSpace.screen,
+      child: ConstrainedBox(
+        // 12 банд кичик экранга сиғмайди — рўйхат айланади, сарлавҳа туради.
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              context.tr('home_create_title'),
-              style: AvaText.sectionTitle.copyWith(color: c.ink),
-            ),
-            const SizedBox(height: 12),
-            for (final (action, icon, key) in items)
-              InkWell(
-                onTap: () => Navigator.of(context).pop(action),
-                borderRadius: BorderRadius.circular(AvaRadius.card),
-                child: ConstrainedBox(
-                  constraints:
-                      const BoxConstraints(minHeight: AvaTap.minSize),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: c.brandSoft,
-                            borderRadius:
-                                BorderRadius.circular(AvaRadius.card - 2),
-                          ),
-                          child: Icon(icon, size: 20, color: c.brand),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            context.tr(key),
-                            style: AvaText.body.copyWith(color: c.ink),
-                          ),
-                        ),
-                        if (action == AvaCreateAction.work &&
-                            driverRoles.hasAnyActiveRole) ...[
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade600,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 20,
-                          color: c.ink3,
-                        ),
-                      ],
-                    ),
-                  ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AvaSpace.screen,
+            0,
+            AvaSpace.screen,
+            AvaSpace.screen,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.tr('home_create_title'),
+                style: AvaText.sectionTitle.copyWith(color: c.ink),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final (action, icon, key, active) in items)
+                      _CreateRow(
+                        icon: icon,
+                        label: context.tr(key),
+                        active: active,
+                        onTap: () => Navigator.of(context).pop(action),
+                      ),
+                  ],
                 ),
               ),
-          ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Варақадаги битта қатор: белги · матн · (фаол бўлса яшил нуқта) · ›.
+class _CreateRow extends StatelessWidget {
+  const _CreateRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AvaRadius.card),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: AvaTap.minSize),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: c.brandSoft,
+                  borderRadius: BorderRadius.circular(AvaRadius.card - 2),
+                ),
+                child: Icon(icon, size: 20, color: c.brand),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AvaText.body.copyWith(color: c.ink),
+                ),
+              ),
+              if (active) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade600,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Icon(Icons.chevron_right_rounded, size: 20, color: c.ink3),
+            ],
+          ),
         ),
       ),
     );

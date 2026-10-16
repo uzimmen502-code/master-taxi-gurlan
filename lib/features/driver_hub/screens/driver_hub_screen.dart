@@ -25,9 +25,23 @@ class DriverHubScreen extends StatefulWidget {
     required this.onEditCar,
     required this.onSubmitVerification,
     required this.onOpenWallet,
+    this.onDeleteCar,
+    this.onEndShift,
+    this.onLeaveDriver,
     this.clock = DateTime.now,
     this.showVerification = hubShowVerification,
   });
+
+  /// Автомобилни ўчириш (тасдиқни ўзи сўрайди). `true` — ўчирилди.
+  /// `null` — тугма кўринмайди.
+  final Future<bool> Function()? onDeleteCar;
+
+  /// Сменани тугатиш (онлайн ҳайдовчи → офлайн). Тугма фақат маҳаллий ёки
+  /// маршрут тури онлайн бўлганда кўринади. `null` — тугма йўқ.
+  final Future<void> Function()? onEndShift;
+
+  /// «Ҳайдовчиликдан чиқиш» (тасдиқни ўзи сўрайди). `null` — тугма йўқ.
+  final Future<void> Function()? onLeaveDriver;
 
   /// «Текширув» карточкасини кўрсатиш (одатда [hubShowVerification] — яширин).
   final bool showVerification;
@@ -76,6 +90,14 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  /// Смена тугатиш: фақат онлайн бўла оладиган турлар (маҳаллий, маршрут);
+  /// шаҳарлараро «фаол» — рейс, смена эмас.
+  bool get _canEndShift =>
+      widget.onEndShift != null &&
+      (_roles.isActive('local') || _roles.isActive('marshrut'));
+
+  bool get _canLeave => widget.onLeaveDriver != null && _roles.isDriver;
 
   /// Бир вақтда битта амал; тугагач ҳолат янгиланади.
   Future<void> _run(Future<void> Function() action) async {
@@ -132,6 +154,23 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _busy ? null : () => _run(widget.onOpenWallet),
                   ),
+                  if (_canEndShift) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _run(widget.onEndShift!),
+                      icon: const Icon(Icons.stop_circle_outlined),
+                      label: Text(context.tr('end_shift')),
+                    ),
+                  ],
+                  if (_canLeave) ...[
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: c.danger),
+                      onPressed: _busy ? null : () => _run(widget.onLeaveDriver!),
+                      icon: const Icon(Icons.exit_to_app),
+                      label: Text(context.tr('leave_driver_permanent')),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -256,9 +295,24 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
           ),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _busy ? null : () => _run(widget.onEditCar),
-              child: Text(context.tr(has ? 'hub_car_edit' : 'hub_car_add')),
+            child: Wrap(
+              spacing: 4,
+              children: [
+                if (has && widget.onDeleteCar != null)
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: c.danger),
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() async {
+                              await widget.onDeleteCar!();
+                            }),
+                    child: Text(context.tr('delete')),
+                  ),
+                TextButton(
+                  onPressed: _busy ? null : () => _run(widget.onEditCar),
+                  child: Text(context.tr(has ? 'hub_car_edit' : 'hub_car_add')),
+                ),
+              ],
             ),
           ),
         ],

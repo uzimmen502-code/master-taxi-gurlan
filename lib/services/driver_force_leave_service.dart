@@ -8,6 +8,7 @@ import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import 'driver_role_service.dart';
 import 'fcm_service.dart';
+import 'user_audience.dart';
 
 /// Marshrut haydovchi rejimidan to'liq chiqish — panel va profil bir xil pipeline.
 class DriverForceLeaveService {
@@ -41,6 +42,7 @@ class DriverForceLeaveService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_role', 'user');
+    await UserAudience.saveTaxiDriver(false);
     await prefs.remove('car_model');
     await prefs.remove('car_color');
     await prefs.remove('car_plate');

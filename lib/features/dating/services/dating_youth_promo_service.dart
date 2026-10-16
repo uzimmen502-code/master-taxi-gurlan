@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/offline_l10n.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../services/notification_delivery.dart';
+import '../../../services/user_audience.dart';
 
 /// Рўйхатдаги ёши 18–23 бўлган фойдаланувчига иловага кирганда
 /// танишув промо push (ротатсия, 3 тил).
@@ -27,7 +28,7 @@ class DatingYouthPromoService {
       final phone = phoneDigits(prefs.getString('user_phone') ?? '');
       if (phone.length < 9) return;
 
-      final role = prefs.getString('user_role') ?? 'user';
+      final role = UserAudience.fromPrefs(prefs);
       if (role == 'driver' ||
           role == 'courier' ||
           role == 'admin' ||

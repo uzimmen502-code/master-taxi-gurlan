@@ -233,7 +233,9 @@ class DriverRepository {
     final courierOnline = await _courierOnline(uid);
     try {
       final cap = await _taxiCapability(uid);
-      if (cap == null) return DriverRoles(courierOnline: courierOnline);
+      if (cap == null) {
+        return DriverRoles(courierOnline: courierOnline, known: true);
+      }
       final courierStatus =
           ((cap['status'] as Map?)?['courier'] ?? '').toString();
       final status = ((cap['status'] as Map?)?['taxi'] ?? '').toString();
@@ -243,6 +245,7 @@ class DriverRepository {
           courierOnline: courierOnline,
           courierStatus: courierStatus,
           taxiStatus: status,
+          known: true,
         );
       }
       final dueRaw = (((cap['window'] as Map?)?['taxi'] as Map?)?['verificationDueAt']);
@@ -274,6 +277,7 @@ class DriverRepository {
           taxiStatus: status,
           starterEndsAt: starterEndsAt,
           agreementAccepted: agreementAccepted,
+          known: true,
         );
       }
 
@@ -303,6 +307,7 @@ class DriverRepository {
         taxiStatus: status,
         starterEndsAt: starterEndsAt,
         agreementAccepted: agreementAccepted,
+        known: true,
       );
     } catch (_) {
       return DriverRoles(courierOnline: courierOnline);

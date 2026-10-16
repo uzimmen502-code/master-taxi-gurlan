@@ -14,6 +14,7 @@ import '../../../shared/widgets/taxi_agreement_sheet.dart';
 import '../passenger/intercity_colors.dart';
 import 'intercity_driver_resume.dart';
 import 'screens/intercity_driver_panel_screen.dart';
+import '../../../services/user_audience.dart';
 
 /// «Ҳайдовчи бўлиш» — шаҳарлараро: рўйхатдан ўтиш ва ишга чиқиш БИТТА
 /// узлуксиз оқим. Аввал ҳайдовчи рўйхатдан ўтгач яна тугмани босиши керак
@@ -124,6 +125,7 @@ class IntercityDriverOnboarding {
 
     if (submitResult.autoApproved) {
       await prefs.setString('user_role', 'driver');
+      await UserAudience.saveTaxiDriver(true);
       if (!context.mounted) return;
       _snack(context, context.tr('intercity_driver_mode_activated'),
           IntercityColors.primary);

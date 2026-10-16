@@ -11653,32 +11653,57 @@ exports.updateIntercityDriverRating = functions.https.onCall(async (data, contex
     throw new functions.https.HttpsError(
         'unauthenticated', 'Auth required');
   }
-  const {driverId, rating, bookingId} = data;
-  if (!driverId || !rating ||
+  // Audit H2 (2026-10): avval chaqiruvchi bron egasimi, bron `completed`mi,
+  // haydovchi bron bilan mosmi — HECH NARSA tekshirilmasdi (istalgan
+  // foydalanuvchi istalgan haydovchiga istalgan baho yoza olardi), bron
+  // tranzaksiyadan TASHQARIDA o'qilgani uchun parallel chaqiruv bahoni
+  // ikki marta sanardi. Endi hammasi BITTA tranzaksiyada; haydovchi
+  // BRONDAN olinadi (klient `driverId`si faqat moslik tekshiruvi uchun).
+  const caller = callerPhone(context);
+  const rating = data && data.rating;
+  const bookingId = String((data && data.bookingId) || '').trim();
+  const clientDriverId = String((data && data.driverId) || '').trim();
+  const reject = (code, msg, errorCode) => {
+    console.warn(JSON.stringify({
+      action: 'updateIntercityDriverRating', result: 'rejected', errorCode, bookingId,
+    }));
+    return new functions.https.HttpsError(code, msg);
+  };
+  if (typeof rating !== 'number' || !Number.isInteger(rating) ||
       rating < 1 || rating > 5) {
-    throw new functions.https.HttpsError(
-        'invalid-argument', 'Invalid rating');
+    throw reject('invalid-argument', 'Invalid rating', 'RATING_INVALID');
+  }
+  if (!bookingId) {
+    throw reject('invalid-argument', 'bookingId', 'BOOKING_ID_MISSING');
   }
 
-  const bookingSnap = await db.collection('intercity_bookings')
-      .doc(bookingId).get();
-  if (!bookingSnap.exists) {
-    throw new functions.https.HttpsError(
-        'not-found', 'Booking not found');
-  }
-  if (bookingSnap.data()?.passengerRating) {
-    return {ok: true, skipped: true};
-  }
+  const bookingRef = db.collection('intercity_bookings').doc(bookingId);
+  const out = await db.runTransaction(async (t) => {
+    const bookingSnap = await t.get(bookingRef);
+    if (!bookingSnap.exists) {
+      throw reject('not-found', 'Booking not found', 'BOOKING_NOT_FOUND');
+    }
+    const b = bookingSnap.data() || {};
+    if (!intercityPhoneMatch(caller, b.userPhone)) {
+      throw reject('permission-denied', 'not_passenger', 'RATING_NOT_PASSENGER');
+    }
+    if (b.passengerRating) return {ok: true, skipped: true};
+    if (String(b.status || '') !== 'completed') {
+      throw reject('failed-precondition', 'booking_not_completed',
+          'RATING_BOOKING_NOT_COMPLETED');
+    }
+    const driverId = String(b.driverId || '').trim();
+    if (!driverId) {
+      throw reject('failed-precondition', 'booking_no_driver', 'RATING_NO_DRIVER');
+    }
+    if (clientDriverId && !intercityPhoneMatch(clientDriverId, driverId)) {
+      throw reject('invalid-argument', 'driver_mismatch', 'RATING_DRIVER_MISMATCH');
+    }
 
-  const driverRef = db.collection('intercity_drivers')
-      .doc(driverId);
-  const bookingRef = db.collection('intercity_bookings')
-      .doc(bookingId);
-
-  await db.runTransaction(async (t) => {
+    const driverRef = db.collection('intercity_drivers').doc(driverId);
     const snap = await t.get(driverRef);
-    if (!snap.exists) return;
-    const d = snap.data();
+    if (!snap.exists) return {ok: true, skipped: true};
+    const d = snap.data() || {};
     const totalRatings = (d.totalRatings ?? 0) + 1;
     const ratingSum = (d.ratingSum ?? 0) + rating;
     const avgRating =
@@ -11696,8 +11721,9 @@ exports.updateIntercityDriverRating = functions.https.onCall(async (data, contex
       ratedAt: admin.firestore.FieldValue
           .serverTimestamp(),
     });
+    return {ok: true};
   });
-  return {ok: true};
+  return out;
 });
 
 exports.onIntercityPickupUpdated = functions.firestore

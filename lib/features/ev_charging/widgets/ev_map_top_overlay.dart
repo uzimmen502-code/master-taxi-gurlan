@@ -299,21 +299,24 @@ class EvPaidAddStationBar extends StatelessWidget {
           width: double.infinity,
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.add_rounded,
-                color: AppColors.onPrimary,
-                size: 22,
-                shadows: halo,
-              ),
-              SizedBox(width: 6),
-              Flexible(
-                child: Text(
+          // Тизим шрифти катта (масалан 1.3) бўлса матн «…» билан кесилмасин:
+          // бутун қатор бир бутун кичраяди, бўш жойда ўз ўлчамида қолади.
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.add_rounded,
+                  color: AppColors.onPrimary,
+                  size: 22,
+                  shadows: halo,
+                ),
+                SizedBox(width: 6),
+                Text(
                   'Станция қўшиш',
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                   style: TextStyle(
                     color: AppColors.onPrimary,
                     fontSize: 15,
@@ -322,10 +325,10 @@ class EvPaidAddStationBar extends StatelessWidget {
                     shadows: halo,
                   ),
                 ),
-              ),
-              SizedBox(width: 8),
-              _PaidBadge(),
-            ],
+                SizedBox(width: 8),
+                _PaidBadge(),
+              ],
+            ),
           ),
         ),
       ),

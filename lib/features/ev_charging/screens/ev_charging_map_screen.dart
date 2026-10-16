@@ -200,7 +200,11 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
             : EvChargingMapController.fallbackZoom,
         stations: controller.stations,
         onStationTap: _onStationTap,
-        padding: EdgeInsets.only(top: topInset),
+        // Пастда: тизим навигация тугмалари устида Google логотипи қолмасин.
+        padding: EdgeInsets.only(
+          top: topInset,
+          bottom: MediaQuery.paddingOf(context).bottom,
+        ),
       ),
     );
   }

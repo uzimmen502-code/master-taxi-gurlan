@@ -144,6 +144,35 @@ void main() {
     expect(adds, 2);
   });
 
+  testWidgets(
+      'тор экран + шрифт 1.3 (реал телефон): «Станция қўшиш» кесилмайди, '
+      'белги ва «пуллик» панель ичида қолади', (tester) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2460); // 360 dp кенглик
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.3)),
+        child: child!,
+      ),
+      home: _layout(),
+    ));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final bar = tester.getRect(find.byType(EvPaidAddStationBar));
+    final text = tester.getRect(find.text('Станция қўшиш'));
+    final badge = tester.getRect(find.text('пуллик'));
+    expect(text.left, greaterThanOrEqualTo(bar.left));
+    expect(badge.right, lessThanOrEqualTo(bar.right + 0.5));
+    // Матн «…» га кесилмаган: бутун матн кичик ҳам бўлса ўлчанади (render бор).
+    final t = tester.widget<Text>(find.text('Станция қўшиш'));
+    expect(t.softWrap, isFalse);
+    expect(t.overflow, isNot(TextOverflow.ellipsis));
+  });
+
   testWidgets('орқага стрелка экрандан чиқади (pop)', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(

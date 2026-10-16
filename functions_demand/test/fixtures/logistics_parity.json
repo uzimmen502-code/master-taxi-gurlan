@@ -17,7 +17,9 @@
     "settled",
     "escrow_frozen",
     "refund_pending",
-    "refunded"
+    "refunded",
+    "loss_pending",
+    "loss_settled"
   ],
   "orderStatuses": [
     "empty",
@@ -63,6 +65,13 @@
     "parcel_invalid",
     "parcels_count",
     "declared_value_required",
+    "shipment_not_lossable",
+    "payment_not_lossable",
+    "custodian_not_provider",
+    "declared_value_missing",
+    "courier_account_missing",
+    "loss_reason_required",
+    "loss_op_id",
     "recipient_name",
     "recipient_phone",
     "tariff_not_active",

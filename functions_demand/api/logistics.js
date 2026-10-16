@@ -24,7 +24,7 @@
  * (`submitOffer`) LEG uchun ishlatilmaydi — narx tarifdan (D-8).
  */
 
-const { callerIdFrom, toCanonicalId } = require('../core/ids');
+const { callerIdFrom, toCanonicalId, candidateIdsFor } = require('../core/ids');
 const { resolveFlags, getModuleConfig } = require('../core/config');
 const sm = require('../core/state_machine');
 const tariffCore = require('../core/tariff');
@@ -35,7 +35,7 @@ const capabilitiesSource = require('../sources/capabilities');
 const { SERVICES_BY_LEG_KIND } = require('../sources/logistics_candidates');
 const caps = require('../core/capabilities');
 const geoHash = require('../geo/geo_hash');
-const { assertAnalyticsAdmin } = require('../analytics/access');
+const { assertAnalyticsAdmin, assertStrictAdmin } = require('../analytics/access');
 
 const DEMANDS = 'demands';
 const MATCHES = 'demand_matches';
@@ -1745,6 +1745,190 @@ function makeAdminReactivateLeg(deps) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ADMIN — posilka YO'QOLDI (D1, ega qarori 2026-10-16)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `adminMarkShipmentLost({ shipmentId, reason, note?, opId })` — faqat admin/superadmin.
+ *
+ * BITTA tranzaksiya (cancel -> refund_pending -> trigger naqshi bilan bir xil):
+ *   - SHIPMENT `in_transit|disputed` -> `lost`, `paymentStatus`
+ *     `escrow_funded|escrow_frozen` -> `loss_pending`;
+ *   - yo'qolgan LEG (`currentLegId`, posilka qo'lidagi ijrochi) `in_progress` -> `disputed`
+ *     (LEG state machine'dagi yagona «muammo» holati; `completed` EMAS — haq to'lanmaydi;
+ *     `cancelled` EMAS — ish bekor bo'lmadi, yo'qoldi); keyingi LEG'lar `cancelled`;
+ *   - `logistics_incidents/{shipmentId}` (G, kuryer, mijoz, admin, sabab) + `events/declared`
+ *     + `logistics_audit` (41-band) — hammasi AYNI tranzaksiyada.
+ * PUL bu yerda YO'Q: default codebase `onLogisticsShipmentUpdate` (+ reconcile) `loss_pending`
+ * ni ko'rib G ni kuryer hamyonidan mijozga o'tkazadi (`functions/relay_escrow.js`).
+ *
+ * G = `priceSnapshot.declaredValue` (muhrlangan). Jazo = G (qo'shimcha to'lov EMAS).
+ * Idempotent: incident bor bo'lsa hech narsa yozilmaydi, birinchi natija qaytadi.
+ * Parallel ikki chaqiruv: tranzaksiya qayta uriniladi va ikkinchisi incident'ni ko'radi.
+ */
+function makeAdminMarkShipmentLost(deps) {
+  const { db, now: nowFn } = deps;
+
+  async function run(data, context, adminId, now) {
+    const d = data || {};
+    const shipmentId = String(d.shipmentId || '').trim();
+    const reason = String(d.reason || '').trim().slice(0, 300);
+    const note = String(d.note || '').trim().slice(0, 1000);
+    const opId = String(d.opId || '').trim();
+    if (!shipmentId) throw fail('invalid-argument', 'shipmentId majburiy');
+    if (reason.length < 3) throw fail('invalid-argument', 'Yo\'qolish sababi majburiy (kamida 3 belgi)', 'loss_reason_required');
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(opId)) throw fail('invalid-argument', 'opId (6-64 belgi: harf, raqam, _ -)', 'loss_op_id');
+
+    const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
+    const incRef = db.collection(L.INCIDENTS).doc(shipmentId);
+
+    const out = await db.runTransaction(async (tx) => {
+      const [shipSnap, incSnap] = await Promise.all([tx.get(shipRef), tx.get(incRef)]);
+      if (!shipSnap.exists) throw fail('not-found', 'Jo\'natma topilmadi');
+      const ship = shipSnap.data() || {};
+      if (incSnap.exists) {
+        const inc = incSnap.data() || {};
+        return {
+          idempotent: true, status: ship.status, paymentStatus: ship.paymentStatus,
+          goodsValue: inc.goodsValue, legId: inc.legId, accountId: (inc.courier || {}).accountId,
+        };
+      }
+
+      if (![L.SHIPMENT_STATUS.IN_TRANSIT, L.SHIPMENT_STATUS.DISPUTED].includes(ship.status)) {
+        throw fail('failed-precondition', 'Faqat yo\'lda yoki nizoli jo\'natma yo\'qolgan deb belgilanadi', 'shipment_not_lossable', { status: ship.status });
+      }
+      if (![L.PAYMENT_STATUS.ESCROW_FUNDED, L.PAYMENT_STATUS.ESCROW_FROZEN].includes(ship.paymentStatus)) {
+        throw fail('failed-precondition', 'To\'lov holati yo\'qolishga mos emas', 'payment_not_lossable', { paymentStatus: ship.paymentStatus });
+      }
+      const cur = ship.currentCustodian || {};
+      const courierUid = toCanonicalId(cur.id);
+      if (cur.kind !== L.CUSTODIAN_KIND.PROVIDER || !courierUid) {
+        throw fail('failed-precondition', 'Posilka ijrochi qo\'lida emas — yo\'qolgan deb belgilab bo\'lmaydi', 'custodian_not_provider', { kind: cur.kind || null });
+      }
+      const goodsValue = L.goodsValueOf(ship);
+      if (!goodsValue) {
+        throw fail('failed-precondition', 'Posilka qiymati yozilmagan — qo\'lda hal qilinadi', 'declared_value_missing');
+      }
+      const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
+      const idx = legIds.indexOf(ship.currentLegId);
+      if (idx < 0) throw fail('failed-precondition', 'Joriy LEG marshrutda yo\'q', 'leg_superseded', { legId: ship.currentLegId || null });
+      const legId = legIds[idx];
+
+      // Barcha o'qishlar — yozuvdan OLDIN.
+      const legSnaps = await Promise.all(legIds.slice(idx).map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+      const userSnaps = await Promise.all(candidateIdsFor(courierUid).map((id) => tx.get(db.collection('users').doc(id))));
+
+      const lostLeg = legSnaps[0].exists ? (legSnaps[0].data() || {}) : null;
+      if (!lostLeg || lostLeg.module !== L.MODULE) throw fail('failed-precondition', 'LEG topilmadi', 'shipment_missing');
+      if ((lostLeg.assignment || {}).providerId !== courierUid) {
+        throw fail('failed-precondition', 'Custody zanjiri mos emas', 'custody_mismatch');
+      }
+      if (![sm.STATUS.IN_PROGRESS, sm.STATUS.DISPUTED].includes(lostLeg.status)) {
+        throw fail('failed-precondition', 'LEG olish holatida emas', 'leg_not_in_progress', { status: lostLeg.status });
+      }
+      const accountId = String((userSnaps.find((s) => s.exists && (s.data() || {}).accountId) || { data: () => ({}) }).data().accountId || '');
+      if (!accountId) {
+        throw fail('failed-precondition', 'Kuryer hisobi (accountId) topilmadi — qarzni yozib bo\'lmaydi', 'courier_account_missing');
+      }
+
+      // ── YOZUV ──
+      tx.update(shipRef, {
+        status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.LOST, 'adminMarkShipmentLost'),
+        paymentStatus: L.assertPaymentTransition(ship.paymentStatus, L.PAYMENT_STATUS.LOSS_PENDING, 'adminMarkShipmentLost'),
+        lostAt: now,
+        lostLegId: legId,
+        lossIncidentId: shipmentId,
+        updatedAt: now,
+      });
+      if (lostLeg.status === sm.STATUS.IN_PROGRESS) {
+        sm.assertTransition(lostLeg.status, sm.STATUS.DISPUTED, 'adminMarkShipmentLost');
+        tx.update(legSnaps[0].ref, { status: sm.STATUS.DISPUTED, lostAt: now, updatedAt: now });
+      }
+      const laterLegIds = [];
+      for (let i = 1; i < legSnaps.length; i += 1) {
+        const s = legSnaps[i];
+        if (!s.exists) continue;
+        if (sm.canTransition((s.data() || {}).status, sm.STATUS.CANCELLED)) {
+          tx.update(s.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'lost', cancelledAt: now, updatedAt: now });
+          laterLegIds.push(s.id);
+        }
+      }
+      tx.set(incRef, {
+        type: 'lost',
+        status: 'declared',
+        shipmentId,
+        orderId: ship.orderId || null,
+        trackingNumber: ship.trackingNumber || '',
+        legId,
+        legIndex: idx,
+        courier: { uid: courierUid, accountId },
+        customer: { uid: ship.ownerId },
+        /** G — mijozga qaytariladigan summa; yetkazish haqi QAYTARILMAYDI (ega qarori). */
+        goodsValue,
+        customerPrice: Number((ship.priceSnapshot || {}).customerPrice) || 0,
+        tariffVersion: (ship.priceSnapshot || {}).tariffVersion || null,
+        /** Default codebase to'ldiradi (relay_escrow.js settleLoss): hisoblangunga qadar null. */
+        refundedNow: null,
+        outstanding: null,
+        paidTotal: 0,
+        declaredBy: adminId,
+        reason,
+        note,
+        opId,
+        declaredAt: now,
+        updatedAt: now,
+      });
+      tx.set(incRef.collection('events').doc('declared'), {
+        type: 'declared', amount: goodsValue, by: adminId, reason, at: now,
+      });
+      tx.set(db.collection(TARIFF_AUDIT).doc(`lost_${shipmentId}`), {
+        kind: 'shipment_lost', shipmentId, legId, goodsValue, by: adminId, reason, at: now,
+      });
+      return {
+        idempotent: false, status: L.SHIPMENT_STATUS.LOST, paymentStatus: L.PAYMENT_STATUS.LOSS_PENDING,
+        goodsValue, legId, accountId, orderId: ship.orderId || null, closeLegIds: [legId, ...laterLegIds],
+      };
+    });
+
+    if (!out.idempotent) {
+      // Tranzaksiyadan TASHQARIDA: matchlar yopiladi (kuryerda qabul qiluvchi PII qolmasin),
+      // ORDER holati qayta hisoblanadi (`lost` -> `problem`). Yiqilsa ham yo'qolish yozilgan.
+      try {
+        for (const id of out.closeLegIds) await closeOtherMatches(db, id, null, 'cancelled', now);
+        await recomputeOrderStatus(db, out.orderId, now);
+      } catch (e) {
+        console.error(JSON.stringify({
+          action: 'adminMarkShipmentLost.after', result: 'error', errorCode: 'LOSS_POST_STEPS_FAILED',
+          shipmentId, legId: out.legId, message: e.message,
+        }));
+      }
+    }
+    console.log(JSON.stringify({
+      action: 'adminMarkShipmentLost', result: out.idempotent ? 'idempotent' : 'ok', shipmentId, legId: out.legId,
+      accountId: out.accountId, goodsValue: out.goodsValue,
+    }));
+    return {
+      ok: true, idempotent: out.idempotent, shipmentId, legId: out.legId, status: out.status,
+      paymentStatus: out.paymentStatus, goodsValue: out.goodsValue,
+    };
+  }
+
+  return async function adminMarkShipmentLost(data, context) {
+    const now = nowFn ? nowFn() : new Date();
+    const adminId = await assertStrictAdmin(db, context);
+    try {
+      return await run(data, context, adminId, now);
+    } catch (e) {
+      console.error(JSON.stringify({
+        action: 'adminMarkShipmentLost', result: 'denied', shipmentId: String((data || {}).shipmentId || ''),
+        errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN',
+      }));
+      throw e;
+    }
+  };
+}
+
 module.exports = {
   TARIFF_AUDIT,
   MAX_PARCELS,
@@ -1771,4 +1955,5 @@ module.exports = {
   makeAdminActivateLogisticsTariff,
   makeAdminPlanShipmentRoute,
   makeAdminReactivateLeg,
+  makeAdminMarkShipmentLost,
 };

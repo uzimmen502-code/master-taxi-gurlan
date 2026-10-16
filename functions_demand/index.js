@@ -242,6 +242,15 @@ exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminReactivateLeg(logisticsDeps),
 ));
 
+/**
+ * ADMIN — posilka YO'QOLDI (D1, ega qarori 2026-10-16): faqat admin/superadmin.
+ * Bitta tranzaksiya: jo'natma `lost` + `loss_pending`, LEG `disputed`, incident, audit.
+ * Pulni (G mijozga, kuryer hamyonidan) default codebase trigger/reconcile hisoblaydi.
+ */
+exports.adminMarkShipmentLost = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminMarkShipmentLost({ db }),
+));
+
 // ═══════════════════════════════════════════════════════════════════════
 // ULGURJI / XITOY BOZORI — admin
 // ═══════════════════════════════════════════════════════════════════════

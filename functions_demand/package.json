@@ -37,7 +37,8 @@
     "test:activate-tx": "firebase emulators:exec --only firestore --project demo-activate-tx \"node test/logistics_activate_emulator.test.js\"",
     "test:sweeper-tx": "firebase emulators:exec --only firestore --project demo-sweeper-tx \"node test/expire_sweeper_emulator.test.js\"",
     "test:audit-tx": "firebase emulators:exec --only firestore --project demo-audit-tx \"node test/audit_expired_assignments_emulator.test.js\"",
-    "test:logaudit-tx": "firebase emulators:exec --only firestore --project demo-logaudit-tx \"node test/logistics_audit_emulator.test.js\""
+    "test:logaudit-tx": "firebase emulators:exec --only firestore --project demo-logaudit-tx \"node test/logistics_audit_emulator.test.js\"",
+    "test:loss-tx": "firebase emulators:exec --only firestore --project demo-loss-tx \"node test/logistics_loss_emulator.test.js\""
   },
   "dependencies": {
     "ajv": "^8.17.1",

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ava_gurlan/features/customer_confirm/customer_confirm_controller.dart';
+import 'package:ava_gurlan/features/customer_confirm/customer_confirm_gate.dart';
 import 'package:ava_gurlan/features/customer_confirm/screens/customer_confirm_screen.dart';
 import 'package:ava_gurlan/features/customer_confirm/widgets/customer_confirm_banner.dart';
 import 'package:ava_gurlan/features/customer_confirm/widgets/customer_confirm_card.dart';
@@ -49,6 +50,9 @@ CustomerConfirmation _c(String module, String id, String step,
         {String title = '', CustomerConfirmDetails? details}) =>
     CustomerConfirmation(
         module: module, id: id, step: step, title: title, details: details);
+
+/// Xususiyat yoqiq (module_config/customer_confirm.enabled == true) — gate testi alohida.
+CustomerConfirmGate _openGate() => CustomerConfirmGate(reader: () async => true);
 
 Widget _app(Widget child) => MaterialApp(home: Scaffold(body: SingleChildScrollView(child: child)));
 
@@ -214,7 +218,7 @@ void main() {
   group('CustomerConfirmBanner', () {
     testWidgets('ro\'yxat bo\'sh — hech narsa ko\'rinmaydi', (tester) async {
       final svc = _FakeService([<CustomerConfirmation>[]]);
-      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc)));
+      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc, gate: _openGate())));
       await tester.pumpAndSettle();
       expect(find.text('customer_confirm_title'), findsNothing);
       expect(find.byType(CustomerConfirmCard), findsNothing);
@@ -225,7 +229,7 @@ void main() {
       final svc = _FakeService([
         const CustomerConfirmException('not-found', ''),
       ]);
-      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc)));
+      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc, gate: _openGate())));
       await tester.pumpAndSettle();
       expect(find.text('customer_confirm_title'), findsNothing);
       expect(find.textContaining('customer_confirm_err'), findsNothing);
@@ -237,7 +241,7 @@ void main() {
         [_c('carpet', 'a', CustomerConfirmStep.handoverPickup)],
         <CustomerConfirmation>[],
       ]);
-      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc)));
+      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc, gate: _openGate())));
       await tester.pumpAndSettle();
       expect(find.text('customer_confirm_title'), findsOneWidget);
       expect(find.text('customer_confirm_btn_handover'), findsOneWidget);
@@ -257,7 +261,7 @@ void main() {
       ])
         ..confirmError =
             const CustomerConfirmException('failed-precondition', 'STATE_CHANGED');
-      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc)));
+      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc, gate: _openGate())));
       await tester.pumpAndSettle();
       await tester.tap(find.text('customer_confirm_btn_received'));
       await tester.pumpAndSettle();
@@ -273,7 +277,7 @@ void main() {
           _c('agro', 'c', 'handover_pickup'),
         ],
       ]);
-      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc)));
+      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc, gate: _openGate())));
       await tester.pumpAndSettle();
       expect(find.byType(CustomerConfirmCard), findsNWidgets(2));
       expect(find.textContaining('customer_confirm_more'), findsOneWidget);
@@ -284,7 +288,7 @@ void main() {
         <CustomerConfirmation>[],
         [_c('carpet', 'a', CustomerConfirmStep.handoverPickup)],
       ]);
-      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc)));
+      await tester.pumpWidget(_app(CustomerConfirmBanner(service: svc, gate: _openGate())));
       await tester.pumpAndSettle();
       expect(find.byType(CustomerConfirmCard), findsNothing);
 

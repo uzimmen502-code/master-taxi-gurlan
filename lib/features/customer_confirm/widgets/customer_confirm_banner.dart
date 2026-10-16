@@ -5,6 +5,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../models/customer_confirm.dart';
 import '../../../services/customer_confirm_service.dart';
 import '../customer_confirm_controller.dart';
+import '../customer_confirm_gate.dart';
 import '../screens/customer_confirm_screen.dart';
 import 'customer_confirm_card.dart';
 
@@ -17,10 +18,15 @@ class CustomerConfirmBanner extends StatefulWidget {
   const CustomerConfirmBanner({
     super.key,
     this.service,
+    this.gate,
     this.maxInline = 2,
   });
 
   final CustomerConfirmService? service;
+
+  /// Хусусият ёқиқлиги (`module_config/customer_confirm`). Берилмаса —
+  /// иловадаги умумий нусха. Ўчиқ бўлса Cloud Function чақирилмайди.
+  final CustomerConfirmGate? gate;
 
   /// Шундан ортиғи «Яна N та» орқали алоҳида экранда.
   final int maxInline;
@@ -32,7 +38,10 @@ class CustomerConfirmBanner extends StatefulWidget {
 class _CustomerConfirmBannerState extends State<CustomerConfirmBanner>
     with WidgetsBindingObserver {
   late final CustomerConfirmController _ctrl =
-      CustomerConfirmController(service: widget.service);
+      CustomerConfirmController(
+    service: widget.service,
+    gate: widget.gate ?? CustomerConfirmGate.instance,
+  );
 
   @override
   void initState() {
@@ -56,7 +65,8 @@ class _CustomerConfirmBannerState extends State<CustomerConfirmBanner>
     if (mounted) setState(() {});
   }
 
-  void _onSignal() => _ctrl.load();
+  // Push келди — хусусият ёқилган бўлиши мумкин: кешни четлаб қайта текширамиз.
+  void _onSignal() => _ctrl.load(forceGate: true);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/customer_confirm.dart';
 import '../../services/customer_confirm_service.dart';
+import 'customer_confirm_gate.dart';
 
 /// FCM `customer_confirm` келганда (илова очиқ) очиқ банер/экран рўйхатини
 /// қайта юклаши учун сигнал. Қиймат аҳамиятсиз — ўзгариши керак.
@@ -14,10 +15,17 @@ abstract final class CustomerConfirmSignal {
 /// рухсат ва ҳолат — сервер (`getCustomerPendingConfirmations`,
 /// `customerConfirmHandover`).
 class CustomerConfirmController extends ChangeNotifier {
-  CustomerConfirmController({CustomerConfirmService? service})
-      : _service = service ?? CustomerConfirmService();
+  /// [gate] берилса — рўйхат чақируви ФАҚАТ `module_config/customer_confirm`
+  /// ёқиқ бўлганда қилинади (бош саҳифа блоки). Берилмаса — ҳар доим чақиради
+  /// (тўлиқ экран: push босилган, хусусият ёқиқлиги маълум).
+  CustomerConfirmController({
+    CustomerConfirmService? service,
+    CustomerConfirmGate? gate,
+  })  : _service = service ?? CustomerConfirmService(),
+        _gate = gate;
 
   final CustomerConfirmService _service;
+  final CustomerConfirmGate? _gate;
 
   List<CustomerConfirmation> _items = const [];
   bool _loading = false;
@@ -47,11 +55,21 @@ class CustomerConfirmController extends ChangeNotifier {
 
   /// Рўйхатни юклайди. Хато бўлса эски рўйхат сақланади ([loadError] қўйилади):
   /// тармоқ узилиши тасдиқ кутаётган мижозни рўйхатсиз қолдирмасин.
-  Future<void> load() async {
+  ///
+  /// Gate берилган бўлса ва хусусият ўчиқ / ҳужжат йўқ / ўқиб бўлмаган бўлса —
+  /// Cloud Function чақирилмайди, рўйхат бўш. [forceGate] — gate кешини
+  /// четлаб қайта ўқийди (push келганда).
+  Future<void> load({bool forceGate = false}) async {
     if (_loading) return;
     _loading = true;
     _notify();
     try {
+      final gate = _gate;
+      if (gate != null && !await gate.isEnabled(force: forceGate)) {
+        _items = const [];
+        _loadError = null;
+        return;
+      }
       _items = await _service.listPending();
       _loaded = true;
       _loadError = null;

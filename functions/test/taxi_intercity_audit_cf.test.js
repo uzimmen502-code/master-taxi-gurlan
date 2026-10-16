@@ -308,6 +308,117 @@ async function main() {
     assert.strictEqual(t.fraudVerdict, 'confirmed');
   });
 
+  // ══ H6: reschedule - bronlar, xabarlar, e'lon bir xil ═════════════════
+  const P1 = '998905550001'; const P2 = '998905550002'; const P3 = '998905550003';
+  const NEW_DEP = '2026-10-09T10:30:00Z'; // Toshkent 15:30, 9-oktabr
+  async function seedListing(tripId) {
+    await db.collection('users').doc(P1).set({ appLang: 'uz_Latn' });
+    await db.collection('users').doc(P2).set({ appLang: 'ru' });
+    // P3: appLang yo'q -> uz_Cyrl
+    await db.collection('intercity_drivers').doc(DRIVER).set({
+      isActive: true, billingTripId: tripId, hour: 8, minute: 0, scheduleDate: '2026-10-07', seats: 2, seatCapacity: 4,
+      phone: DRIVER, phoneDigits: DRIVER, price: 350000,
+    });
+    await db.collection('schedules').doc('s1').set({
+      driverId: DRIVER, taxiType: 'intercity', date: '2026-10-07', startTime: '08:00', isActive: true,
+      expiresAt: ts(Date.UTC(2026, 9, 7, 18, 59, 59)), seats: 4, seatsLeft: 2,
+    });
+    await db.collection('schedules').doc('s_old').set({ // boshqa kundagi nofaol e'lon - tegilmaydi
+      driverId: DRIVER, taxiType: 'intercity', date: '2026-10-05', startTime: '08:00', isActive: false,
+      expiresAt: ts(Date.UTC(2026, 9, 5, 18, 59, 59)),
+    });
+    const dep = Date.UTC(2026, 9, 7, 3, 0);
+    await db.collection('intercity_bookings').doc('bk1').set({ driverId: DRIVER, userPhone: P1, status: 'pending', passengers: 1, departureTime: ts(dep), departureReminderSent: true });
+    await db.collection('intercity_bookings').doc('bk2').set({ driverId: DRIVER, userPhone: P2, status: 'confirmed', passengers: 1, departureTime: ts(dep), departureReminderSent: true });
+    await db.collection('intercity_bookings').doc('bk3').set({ driverId: DRIVER, userPhone: P3, status: 'confirmed', passengers: 1, departureTime: ts(dep) });
+    await db.collection('intercity_bookings').doc('bk_cancelled').set({ driverId: DRIVER, userPhone: P3, status: 'cancelled', departureTime: ts(dep) });
+    await db.collection('intercity_bookings').doc('bk_other').set({ driverId: OTHER, userPhone: P3, status: 'confirmed', departureTime: ts(dep) });
+  }
+  await reset();
+  let rt;
+  await check('H6: reschedule -> bronlar vaqti yangi, eslatma qayta, bekor/begona bron tegilmaydi', async () => {
+    rt = (await pub()).tripId; await seedListing(rt);
+    const r = await api.reschedule({ tripId: rt, departureAt: NEW_DEP, scheduleDate: '2026-10-09', startTime: '15:30' }, ctx);
+    assert.strictEqual(r.rescheduled, true);
+    const newMs = Date.parse(NEW_DEP);
+    for (const id of ['bk1', 'bk2', 'bk3']) {
+      const b = (await db.collection('intercity_bookings').doc(id).get()).data();
+      assert.strictEqual(b.departureTime.toMillis(), newMs, id);
+      assert.strictEqual(b.departureReminderSent, false, id);
+      assert.ok(b.rescheduledAt, id);
+    }
+    const dep = Date.UTC(2026, 9, 7, 3, 0);
+    assert.strictEqual((await db.collection('intercity_bookings').doc('bk_cancelled').get()).data().departureTime.toMillis(), dep);
+    assert.strictEqual((await db.collection('intercity_bookings').doc('bk_other').get()).data().departureTime.toMillis(), dep);
+  });
+  await check('H6: yo\'lovchilarga xabar - uch tilda (appLang), sana va vaqt bilan; boshqalarga YO\'Q', async () => {
+    const n = await db.collection('notifications').get();
+    const byPhone = Object.fromEntries(n.docs.map((d) => [d.data().targetPhone, d.data()]));
+    assert.strictEqual(n.size, 3, `3 ta xabar kutilgan, ${n.size}`);
+    assert.ok(byPhone[P1].body.includes('09.10') && byPhone[P1].body.includes('15:30'));
+    assert.ok(/ga ko'chirildi/.test(byPhone[P1].body), 'uz_Latn');
+    assert.ok(/Отправление перенесено/.test(byPhone[P2].body), 'ru');
+    assert.ok(/кўчирилди/.test(byPhone[P3].body), 'uz_Cyrl (appLang yo\'q)');
+    for (const d of n.docs) {
+      assert.strictEqual(d.data().type, 'intercity_trip_rescheduled'); assert.strictEqual(d.data().sent, false);
+      assert.ok(['bk1', 'bk2', 'bk3'].includes(d.data().bookingId));
+    }
+  });
+  await check('H6: schedules e\'loni sana/startTime/expiresAt (kun oxiri, Toshkent) yangilandi; nofaol e\'lon tegilmadi', async () => {
+    const s = (await db.collection('schedules').doc('s1').get()).data();
+    assert.strictEqual(s.date, '2026-10-09'); assert.strictEqual(s.startTime, '15:30');
+    assert.strictEqual(s.expiresAt.toMillis(), Date.UTC(2026, 9, 9, 18, 59, 59));
+    assert.strictEqual(s.isActive, true);
+    const o = (await db.collection('schedules').doc('s_old').get()).data();
+    assert.strictEqual(o.date, '2026-10-05');
+  });
+  await check('H6: intercity_drivers e\'loni (scheduleDate/hour/minute) bir xil; seats/price tegilmadi', async () => {
+    const d = (await db.collection('intercity_drivers').doc(DRIVER).get()).data();
+    assert.strictEqual(d.scheduleDate, '2026-10-09'); assert.strictEqual(d.hour, 15); assert.strictEqual(d.minute, 30);
+    assert.strictEqual(d.seats, 2); assert.strictEqual(d.price, 350000); assert.strictEqual(d.isActive, true);
+  });
+  await check('H6: IDEMPOTENT - xuddi shu so\'rov qayta: yangi xabar/audit/rescheduleCount YO\'Q', async () => {
+    const t0 = await trip(rt); const audits = (await db.collection('taxi_reschedules').get()).size;
+    const r = await api.reschedule({ tripId: rt, departureAt: NEW_DEP, scheduleDate: '2026-10-09', startTime: '15:30' }, ctx);
+    assert.strictEqual(r.rescheduled, true); assert.strictEqual(r.idempotent, true);
+    assert.strictEqual((await db.collection('notifications').get()).size, 3);
+    assert.strictEqual((await db.collection('taxi_reschedules').get()).size, audits);
+    assert.strictEqual((await trip(rt)).rescheduleCount, t0.rescheduleCount);
+  });
+  await check('H6: PARALLEL ikki xil vaqt - ikkalasi ham yaxlit; oxirgi g\'olib bron vaqti == reys vaqti', async () => {
+    const [a, b] = [Date.UTC(2026, 9, 10, 5, 0), Date.UTC(2026, 9, 10, 6, 0)];
+    await Promise.allSettled([
+      api.reschedule({ tripId: rt, departureAt: new Date(a).toISOString(), scheduleDate: '2026-10-10', startTime: '10:00' }, ctx),
+      api.reschedule({ tripId: rt, departureAt: new Date(b).toISOString(), scheduleDate: '2026-10-10', startTime: '11:00' }, ctx),
+    ]);
+    const t = await trip(rt);
+    const bk = (await db.collection('intercity_bookings').doc('bk2').get()).data();
+    assert.strictEqual(bk.departureTime.toMillis(), t.departureAt.toMillis());
+    const s = (await db.collection('schedules').doc('s1').get()).data();
+    assert.strictEqual(s.startTime, t.startTime);
+  });
+  await check('H6: narx ham o\'zgarsa - faqat farq (eski xulq saqlanadi), bronlar yaxlit', async () => {
+    const before = await balance();
+    const r = await api.reschedule({ tripId: rt, departureAt: '2026-10-11T05:00:00Z', scheduleDate: '2026-10-11', startTime: '10:00', farePerSeat: 400000 }, ctx);
+    assert.strictEqual(r.billing.delta, 4000);
+    assert.strictEqual(before - await balance(), 4000);
+  });
+  await check('H6: e\'londa billingTripId boshqa reys bo\'lsa intercity_drivers tegilmaydi', async () => {
+    await reset();
+    const t1 = (await pub()).tripId;
+    await db.collection('intercity_drivers').doc(DRIVER).set({ isActive: true, billingTripId: 'someOtherTrip', hour: 8, minute: 0, scheduleDate: '2026-10-07' });
+    await api.reschedule({ tripId: t1, departureAt: NEW_DEP, scheduleDate: '2026-10-09', startTime: '15:30' }, ctx);
+    const d = (await db.collection('intercity_drivers').doc(DRIVER).get()).data();
+    assert.strictEqual(d.scheduleDate, '2026-10-07'); assert.strictEqual(d.hour, 8);
+  });
+  await check('H6: scheduleDate/startTime berilmasa departureAt\'dan (Toshkent) hosil bo\'ladi', async () => {
+    await reset();
+    const t1 = (await pub()).tripId;
+    await api.reschedule({ tripId: t1, departureAt: '2026-10-09T10:30:00Z' }, ctx);
+    const t = await trip(t1);
+    assert.strictEqual(t.scheduleDate, '2026-10-09'); assert.strictEqual(t.startTime, '15:30');
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} taxi intercity audit CF checks passed.`);
   if (failed) process.exitCode = 1;

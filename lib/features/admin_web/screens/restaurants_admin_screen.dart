@@ -532,7 +532,6 @@ class _TariffTabState extends State<_TariffTab> {
       final d = RestaurantTariffDraft.fromDoc(doc.data());
       _ctrl('base', d.base);
       _ctrl('perKm', d.perKm);
-      _ctrl('nightCoef', d.nightCoef);
       _ctrl('nightStart', d.nightStart);
       _ctrl('nightEnd', d.nightEnd);
       _ctrl('roadFactor', d.roadFactor);
@@ -557,7 +556,6 @@ class _TariffTabState extends State<_TariffTab> {
     d
       ..base = _c['base']!.text
       ..perKm = _c['perKm']!.text
-      ..nightCoef = _c['nightCoef']!.text
       ..nightStart = _c['nightStart']!.text
       ..nightEnd = _c['nightEnd']!.text
       ..roadFactor = _c['roadFactor']!.text
@@ -638,7 +636,22 @@ class _TariffTabState extends State<_TariffTab> {
           children: [
             _NumField(ctrl: _c['base']!, label: 'Базавий (1 км гача), сўм', width: 200),
             _NumField(ctrl: _c['perKm']!, label: 'Ҳар кейинги км, сўм', width: 200),
-            _NumField(ctrl: _c['nightCoef']!, label: 'Тун коэф. (1..3)', width: 140, decimal: true),
+            // Умумий тун коэффициентини ФАҚАТ «AVA ҳақи» картаси ўзгартиради
+            // (`adminSetRestaurantFeeSettings`); бу ерда фақат кўрсатилади.
+            SizedBox(
+              width: 260,
+              child: InputDecorator(
+                key: const ValueKey('tariff_night_coef_readonly'),
+                decoration: const InputDecoration(
+                  labelText: 'Тун коэф. (ўзгартириб бўлмайди)',
+                  helperText: '«AVA ҳақи» картасида ўзгартирилади',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  enabled: false,
+                ),
+                child: Text(d.nightCoef.isEmpty ? 'созланмаган' : '×${d.nightCoef}'),
+              ),
+            ),
             _NumField(ctrl: _c['nightStart']!, label: 'Тун бошланиши (соат)', width: 160),
             _NumField(ctrl: _c['nightEnd']!, label: 'Тун тугаши (соат)', width: 160),
             _NumField(ctrl: _c['roadFactor']!, label: 'Йўл коэф. (1..2)', width: 140, decimal: true),

@@ -106,7 +106,9 @@ class RestaurantTariffDraft {
       }
     }
 
-    prices('Умумий', base, perKm, nightCoef, maxKm, required: true);
+    // Умумий тун коэффициенти бу формада ТАҲРИРЛАНМАЙДИ ( `adminSetRestaurantFeeSettings`
+    // — ягона таҳрирловчи) — шунинг учун текширилмайди ҳам, юборилмайди ҳам.
+    prices('Умумий', base, perKm, '', maxKm, required: true);
     for (final h in [('тун бошланиши', nightStart), ('тун тугаши', nightEnd)]) {
       if (h.$2.trim().isEmpty) continue;
       final v = int.tryParse(h.$2.trim());
@@ -126,13 +128,18 @@ class RestaurantTariffDraft {
 
   /// `adminSetRestaurantDeliveryPrices` учун — фақат тўлдирилган майдонлар,
   /// рақамлар сон сифатида (сервер қайта текширади).
+  ///
+  /// Умумий `nightCoef` ЮБОРИЛМАЙДИ: сервер уни юборилмаса транзакция ичида
+  /// ўқиган жорий қийматда қолдиради (`cur.nightCoef`), шу сабабли бу форма
+  /// «AVA ҳақи» картасидаги янгироқ қийматни ҳеч қачон босиб ўтолмайди.
+  /// ([nightCoef] майдони фақат кўрсатиш учун.) Ҳудуд `nightCoef`лари — бошқа
+  /// майдон, ўзгармайди.
   Map<String, dynamic> toPayload({String reason = ''}) {
     final out = <String, dynamic>{
       'base': int.parse(base.trim()),
       'perKm': int.parse(perKm.trim()),
       'reason': reason.trim(),
     };
-    if (nightCoef.trim().isNotEmpty) out['nightCoef'] = _parseDouble(nightCoef);
     if (nightStart.trim().isNotEmpty) out['nightStart'] = int.parse(nightStart.trim());
     if (nightEnd.trim().isNotEmpty) out['nightEnd'] = int.parse(nightEnd.trim());
     if (roadFactor.trim().isNotEmpty) out['roadFactor'] = _parseDouble(roadFactor);

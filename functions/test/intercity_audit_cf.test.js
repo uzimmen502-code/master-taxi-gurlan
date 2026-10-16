@@ -230,6 +230,30 @@ const seedBooking = (id, over = {}) => db.collection('intercity_bookings').doc(i
     assert.strictEqual((await get(`intercity_drivers/${D}`)).seats, 2);
   });
 
+  // ══ M5: eslatma soati ═══════════════════════════════════════════════
+  const hhmmTashkent = (ms) => {
+    const d = new Date(ms + 5 * 3600000);
+    return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  };
+  await reset(); await seedDriver();
+  await check('M5: eslatma soati Toshkent (UTC+5) bo\'yicha, server UTC bo\'lsa ham', async () => {
+    assert.strictEqual(new Date(Date.UTC(2026, 0, 1, 10, 0)).getHours(), 10, 'test jarayoni UTC\'da bo\'lishi shart');
+    const dep = Date.now() + 30 * 60000;
+    await seedBooking('m5a', { status: 'confirmed', departureTime: ts(dep), fromCity: 'Gurlan', toCity: 'Toshkent' });
+    await fns.expirePendingTrips.run({});
+    const n = (await notifsTo(P1)).filter((x) => x.type === 'intercity_departure_reminder');
+    assert.strictEqual(n.length, 1);
+    assert.ok(n[0].body.includes(`соат ${hhmmTashkent(dep)} да`), `matn: ${n[0].body}, kutilgan ${hhmmTashkent(dep)}`);
+    assert.strictEqual((await get('intercity_bookings/m5a')).departureReminderSent, true);
+  });
+  await check('M5: eslatma BIR marta; oyna tashqarisidagi bron (5 daq / 2 soat) eslatma olmaydi', async () => {
+    await seedBooking('m5b', { status: 'confirmed', userPhone: P2, departureTime: ts(Date.now() + 5 * 60000) });
+    await seedBooking('m5c', { status: 'confirmed', userPhone: P2, departureTime: ts(Date.now() + 120 * 60000) });
+    await fns.expirePendingTrips.run({});
+    assert.strictEqual((await notifsTo(P1)).filter((x) => x.type === 'intercity_departure_reminder').length, 1);
+    assert.strictEqual((await notifsTo(P2)).filter((x) => x.type === 'intercity_departure_reminder').length, 0);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} intercity audit CF checks passed.`);
   process.exit(failed ? 1 : 0);

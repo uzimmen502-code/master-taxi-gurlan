@@ -43,7 +43,7 @@ const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list
 // `settlement_ledger` orqali; capability mantiqi `capabilities_model.js`
 // nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
 const { attachTaxiBilling } = require('./taxi_billing');
-const { runAutoShift } = require('./intercity_auto_shift');
+const { runAutoShift, hhmm: tashkentHhmm } = require('./intercity_auto_shift');
 // Shaharlararo bron muddati - har bron o'z tranzaksiyasida (audit M4, 2026-10).
 const intercityExpiry = require('./intercity_expiry');
 attachTaxiBilling(exports, {
@@ -11787,10 +11787,12 @@ async function sendIntercityDepartureReminders() {
     const phone = digits(b.userPhone || '');
     if (phone.length < 9) continue;
 
-    const dep = b.departureTime && b.departureTime.toDate
-      ? b.departureTime.toDate()
-      : new Date();
-    const depText = `${String(dep.getHours()).padStart(2, '0')}:${String(dep.getMinutes()).padStart(2, '0')}`;
+    // Audit M5: soat Toshkent (UTC+5) bo'yicha - `getHours()` server vaqt zonasi
+    // (Cloud Functions'da UTC) bo'yicha 5 soat kam ko'rsatardi. Avto-surish bilan bir xil yordamchi.
+    const depMs = b.departureTime && b.departureTime.toMillis
+      ? b.departureTime.toMillis()
+      : nowMs;
+    const depText = tashkentHhmm(depMs);
     const driverName = b.driverName || 'Ҳайдовчи';
     const route = [b.fromCity, b.toCity].filter(Boolean).join(' → ') || 'Шаҳарлараро';
 

@@ -9104,7 +9104,7 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
       });
       // D5: kuryer haqi = finalValue'dan foiz (o'qish fazasida); ledger'ga YOZILMAYDI.
       const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildFields('collection', totalValue, payoutSettings, courierId);
+      const fields = courierTaskPayout.buildPayout('collection', taskId, totalValue, payoutSettings, courierId);
 
       t.update(customerRef, {
         bonusBalance: admin.firestore.FieldValue.increment(walletDelta),
@@ -9172,9 +9172,10 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
         withdrawnFromBalance,
         finalItems: normalizedItems,
         finalValue: totalValue,
-        ...fields,
-        courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      // D5: kuryer haqi - SERVERGA XOS hujjatga (vazifa hujjatini mijoz/kuryer o'qiydi).
+      courierTaskPayout.writePayoutInTx(
+        t, db, 'collection', taskId, fields, admin.firestore.FieldValue.serverTimestamp());
 
       const submissionId = String(task.submissionId || '');
       if (submissionId) {
@@ -19495,13 +19496,13 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
       // D5: kuryer haqi = finalPrice'dan foiz (sozlama o'qish fazasida). Yakunlovchi
       // kuryer - qaytaruvchi (`returnCourierId`); olib ketgan kuryer haqi - ochiq savol.
       const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildFields('carpet', od.finalPrice, payoutSettings, courierId);
+      const fields = courierTaskPayout.buildPayout('carpet', orderId, od.finalPrice, payoutSettings, courierId);
       t.update(ref, {
         status: 'completed',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...fields,
-        courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      courierTaskPayout.writePayoutInTx(
+        t, db, 'carpet', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
       return fields;
     });
     courierTaskPayout.logPayout('carpet', orderId, payoutFields);
@@ -19801,19 +19802,34 @@ exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) 
       }
       // D5: yakunda narx ma'lum bo'ladi - kuryer olib ketgan bo'lsa, haq shu
       // qadamda (qayta) hisoblanadi: faqat baza o'zgargan yoki haq hali yo'q bo'lsa.
+      // Haq alohida serverga xos hujjatda (vazifa hujjatida EMAS) - avval o'qiladi (o'qish
+      // fazasi), keyin yoziladi.
       let fields = null;
+      let prevPayout = null;
       if (status === 'completed' && od.pickupCourierId) {
         const base = patch.finalPrice !== undefined ? patch.finalPrice : od.finalPrice;
-        if (od.courierPayout == null || od.courierPayoutBase !== base) {
+        const pSnap = await t.get(courierTaskPayout.payoutRef(db, 'agro', orderId));
+        const pd = pSnap.exists ? (pSnap.data() || {}) : null;
+        if (!pd || pd.payout == null || pd.base !== base) {
           const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-          fields = courierTaskPayout.buildFields(
-              'agro', base, payoutSettings, String(od.pickupCourierId));
-          Object.assign(patch, fields, {
-            courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          fields = courierTaskPayout.buildPayout(
+              'agro', orderId, base, payoutSettings, String(od.pickupCourierId));
+          if (pd) {
+            prevPayout = {
+              payout: pd.payout == null ? null : pd.payout,
+              base: pd.base == null ? null : pd.base,
+              bps: pd.bps == null ? null : pd.bps,
+              version: pd.version == null ? null : pd.version,
+              reason: pd.reason == null ? null : pd.reason,
+            };
+          }
         }
       }
       t.update(ref, patch);
+      if (fields) {
+        courierTaskPayout.writePayoutInTx(
+          t, db, 'agro', orderId, fields, admin.firestore.FieldValue.serverTimestamp(), prevPayout);
+      }
       return fields;
     });
     if (payoutLog) {
@@ -19967,13 +19983,13 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
       // qo'yiladi - noma'lum bo'lsa `price_unknown`, `adminSetAgroPickupStatus`
       // 'completed' qadamida qayta hisoblanadi.
       const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildFields('agro', od.finalPrice, payoutSettings, courierId);
+      const fields = courierTaskPayout.buildPayout('agro', orderId, od.finalPrice, payoutSettings, courierId);
       t.update(ref, {
         status: 'picked_up',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...fields,
-        courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      courierTaskPayout.writePayoutInTx(
+        t, db, 'agro', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
       return fields;
     });
     courierTaskPayout.logPayout('agro', orderId, payoutFields, { step: 'courier_picked_up' });

@@ -44,8 +44,28 @@ Future<AvaCreateAction?> showAvaCreateSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => _BusinessSheet(driverRoles: driverRoles, hidden: hidden),
+    builder: (ctx) => _Scaled(
+      child: _BusinessSheet(driverRoles: driverRoles, hidden: hidden),
+    ),
   );
+}
+
+/// Тизим шрифти катта қилинган қурилмада (1.3–1.5×) варақа «тўлиб» кетмасин:
+/// изоҳлар кесилмасин, бир экранга кўпроқ гуруҳ сиғсин. Ассистент варағидаги
+/// каби чегара (`assistant_entry.dart`); матн ҳамон бироз катталашади.
+class _Scaled extends StatelessWidget {
+  const _Scaled({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return MediaQuery(
+      data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.15)),
+      child: child,
+    );
+  }
 }
 
 /// «Онлайн Дўкон очиш» → маҳсулот қаерга қўшилади: Аҳоли бозори ёки Улгуржи.
@@ -59,7 +79,8 @@ Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
     ),
     builder: (ctx) {
       final c = ctx.ava;
-      return SafeArea(
+      return _Scaled(
+          child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -99,7 +120,7 @@ Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
             ],
           ),
         ),
-      );
+      ));
     },
   );
 }

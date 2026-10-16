@@ -260,4 +260,44 @@ void main() {
       expect(result, e.value, reason: e.key);
     }
   });
+
+  testWidgets('тизим шрифти 2× бўлса ҳам варақа 1.15× дан катталашмайди (изоҳ кесилмайди, overflow йўқ)', (tester) async {
+    tester.view.physicalSize = const Size(360 * 2, 800 * 2);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    Future<double> titleHeight(double scale) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => showAvaCreateSheet(context),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      final h = tester.getSize(find.text('home_create_title')).height;
+      expect(tester.takeException(), isNull);
+      // Варақани ёпиб, кейинги ўлчамга ўтамиз.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      return h;
+    }
+
+    final base = await titleHeight(1.0);
+    final big = await titleHeight(2.0);
+    final capped = await titleHeight(1.15);
+    // 2× ва 1.15× бир хил (чегара ишлаяпти); 1× дан катта.
+    expect(big, closeTo(capped, 0.5));
+    expect(big, greaterThan(base));
+  });
 }

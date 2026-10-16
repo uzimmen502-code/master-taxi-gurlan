@@ -28,6 +28,7 @@ class DriverHubScreen extends StatefulWidget {
     this.onDeleteCar,
     this.onEndShift,
     this.onLeaveDriver,
+    this.onLeaveType,
     this.clock = DateTime.now,
     this.showVerification = hubShowVerification,
   });
@@ -42,6 +43,10 @@ class DriverHubScreen extends StatefulWidget {
 
   /// «Ҳайдовчиликдан чиқиш» (тасдиқни ўзи сўрайди). `null` — тугма йўқ.
   final Future<void> Function()? onLeaveDriver;
+
+  /// Битта турдан чиқиш (тасдиқни ўзи сўрайди). Тугма фақат қўшилган ва
+  /// ҳозир ФАОЛ бўлмаган тур картасида кўринади. `null` — тугма йўқ.
+  final Future<void> Function(WorkChoice choice)? onLeaveType;
 
   /// «Текширув» карточкасини кўрсатиш (одатда [hubShowVerification] — яширин).
   final bool showVerification;
@@ -380,6 +385,15 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
             onPressed: _busy ? null : () => _run(() => widget.onAction(choice, _roles)),
             child: Text(context.tr(joined ? _actionKey(choice) : 'work_state_join')),
           ),
+          if (joined &&
+              choice != WorkChoice.courier &&
+              widget.onLeaveType != null &&
+              !_roles.isActive(choice.name))
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: c.danger),
+              onPressed: _busy ? null : () => _run(() => widget.onLeaveType!(choice)),
+              child: Text(context.tr('hub_leave_type')),
+            ),
         ],
       ),
     );

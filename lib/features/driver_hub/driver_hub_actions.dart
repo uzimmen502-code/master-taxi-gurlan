@@ -7,6 +7,7 @@ import '../../repositories/driver_repository.dart';
 import '../../repositories/marshrut_driver_repository.dart';
 import '../../repositories/rides_repository.dart';
 import '../../services/driver_force_leave_service.dart';
+import 'driver_type_leave.dart';
 
 /// Ҳайдовчи панелидаги «Сменани тугатиш» ва «Ҳайдовчиликдан чиқиш».
 ///
@@ -78,6 +79,58 @@ Future<void> endDriverShiftWithConfirm(
       backgroundColor: Colors.red,
     ));
   }
+}
+
+/// Битта тур бўйича «Чиқиш»: тасдиқ → сервер (`leaveDriverType`) → хабар.
+/// Фаол иш бўлса сервер рад этади ва ҳеч нарса ўзгармайди.
+Future<DriverTypeLeaveResult> leaveDriverTypeWithConfirm(
+  BuildContext context, {
+  required String uid,
+  required String taxiType,
+  LeaveTypeCallable? callable,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(ctx.tr('hub_leave_type_confirm_title')),
+      content: Text(ctx
+          .tr('hub_leave_type_confirm_body')
+          .replaceAll('{type}', ctx.tr('role_type_$taxiType'))),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(ctx.tr('cancel')),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(ctx.tr('confirm')),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return DriverTypeLeaveResult.failed;
+  if (!context.mounted) return DriverTypeLeaveResult.failed;
+  final messenger = ScaffoldMessenger.of(context);
+  final texts = {
+    DriverTypeLeaveResult.left: context.tr('hub_leave_type_done'),
+    DriverTypeLeaveResult.alreadyLeft: context.tr('hub_leave_type_done'),
+    DriverTypeLeaveResult.blockedActive: context.tr('hub_leave_type_active'),
+    DriverTypeLeaveResult.failed: context.tr('error_generic'),
+  };
+  final res = await leaveDriverType(
+    uid: uid,
+    taxiType: taxiType,
+    callable: callable,
+  );
+  final good = res == DriverTypeLeaveResult.left ||
+      res == DriverTypeLeaveResult.alreadyLeft;
+  messenger.showSnackBar(SnackBar(
+    content: Text(texts[res]!),
+    backgroundColor: good ? AvaLight.ok : Colors.red,
+  ));
+  return res;
 }
 
 /// «Ҳайдовчиликдан чиқиш»: сафарлар бекор, эълонлар ўчади, офлайн, роль

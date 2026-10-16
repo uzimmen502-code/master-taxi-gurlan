@@ -765,6 +765,13 @@ class _HomeViewState extends State<_HomeView> {
         driverRepo: driverRepo,
       ),
       onLeaveDriver: () => leaveDriverModeWithConfirm(context, ridesRepo: ridesRepo),
+      onLeaveType: (choice) async {
+        await leaveDriverTypeWithConfirm(
+          context,
+          uid: canonicalPhoneId(uid),
+          taxiType: choice.name,
+        );
+      },
       onSubmitVerification: _submitTaxiVerification,
       onOpenWallet: () => openWalletScreen(context),
     ));

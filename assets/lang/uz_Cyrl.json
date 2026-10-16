@@ -2553,6 +2553,8 @@
   "ev_trip_legend_primary": "Асосий тўхташ",
   "ev_trip_legend_backup": "Заҳира",
   "ev_trip_legend_other": "Йўл бўйидаги бошқа станциялар",
+  "ev_trip_show_map": "Харитада кўриш",
+  "ev_trip_recenter": "Менинг жойим",
   "activity_empty_incoming": "Ҳозирча сизга мос сўров йўқ",
   "activity_empty_my": "Ҳозирча сўров юборилмаган",
   "activity_incoming": "Менга келган сўровлар",

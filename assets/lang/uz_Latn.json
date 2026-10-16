@@ -2553,6 +2553,8 @@
   "ev_trip_legend_primary": "Asosiy to'xtash",
   "ev_trip_legend_backup": "Zaxira",
   "ev_trip_legend_other": "Yo'l bo'yidagi boshqa stansiyalar",
+  "ev_trip_show_map": "Xaritada ko'rish",
+  "ev_trip_recenter": "Mening joyim",
   "activity_empty_incoming": "Hozircha sizga mos so'rov yo'q",
   "activity_empty_my": "Hozircha so'rov yuborilmagan",
   "activity_incoming": "Menga kelgan so'rovlar",

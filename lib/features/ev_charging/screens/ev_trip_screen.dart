@@ -9,10 +9,9 @@ import '../../../repositories/oil_change_repository.dart';
 import '../controllers/ev_trip_controller.dart';
 import '../data/ev_trip_geo_catalog.dart';
 import '../data/ev_trip_place_search.dart';
-import '../models/ev_trip_plan.dart';
 import '../widgets/ev_car_sheet.dart';
-import '../widgets/ev_trip_map_view.dart';
 import '../widgets/ev_trip_plan_view.dart';
+import 'ev_trip_map_screen.dart';
 
 /// ⚡ «Қаерга борамиз?» — EV сафар ёрдамчиси.
 ///
@@ -132,6 +131,29 @@ class _EvTripScreenState extends State<EvTripScreen> {
       socPercent: _soc.round(),
       stations: widget.stations,
     );
+
+    // Reja tayyor - to'liq ekranli jonli xarita. Holat (kontroller) shu
+    // ekranda qoladi: orqaga qaytilganda reja yo'qolmaydi.
+    if (mounted && _controller.plan != null) _openMap();
+  }
+
+  /// To'liq ekranli xarita (reja + jonli mashina). Tugash nuqtasi:
+  /// tayyor koordinata yoki Google topgan end_location.
+  Future<void> _openMap() async {
+    final plan = _controller.plan;
+    final destLat = _controller.destinationLat;
+    final destLng = _controller.destinationLng;
+    if (plan == null || destLat == null || destLng == null) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => EvTripMapScreen(
+        plan: plan,
+        route: _controller.routePoints,
+        corridorStations: _controller.corridorStations,
+        destinationLat: destLat,
+        destinationLng: destLng,
+        onOpenNavigator: _openNavigator,
+      ),
+    ));
   }
 
   void _openNavigator() {
@@ -172,7 +194,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
           ],
           if (plan != null) ...[
             const SizedBox(height: 20),
-            _mapBlock(plan),
+            _showMapButton(),
             const SizedBox(height: 16),
             EvTripPlanView(plan: plan, onOpenNavigator: _openNavigator),
           ],
@@ -427,56 +449,21 @@ class _EvTripScreenState extends State<EvTripScreen> {
 
   // ---- Харита ----
 
-  /// Маршрут чизиғи + рақамланган тўхташлар + заҳиралар + йўл бўйидаги
-  /// қолган станциялар. Қолганлари ҳам кўрсатилади: ҳайдовчи «яна қаерда
-  /// станция бор» саволига режани очмасдан жавоб топсин.
-  Widget _mapBlock(EvTripPlan plan) {
-    // Tugash nuqtasi: tayyor koordinata yoki Google topgan end_location.
-    final destLat = _controller.destinationLat ?? _destination?.lat ?? 0;
-    final destLng = _controller.destinationLng ?? _destination?.lng ?? 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            height: 280,
-            child: EvTripMapView(
-              route: _controller.routePoints,
-              corridorStations: _controller.corridorStations,
-              plan: plan,
-              destinationLat: destLat,
-              destinationLng: destLng,
-            ),
-          ),
+  /// Hisoblangan reja uchun to'liq ekranli xaritani qayta ochish.
+  Widget _showMapButton() {
+    return SizedBox(
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: _openMap,
+        icon: const Icon(Icons.map_rounded, size: 20),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primaryText,
+          side: const BorderSide(color: AppColors.primaryText, width: 1.4),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 14,
-          runSpacing: 6,
-          children: [
-            _legend(const Color(0xFFD32F2F), context.tr('ev_trip_legend_primary')),
-            _legend(const Color(0xFFF57C00), context.tr('ev_trip_legend_backup')),
-            _legend(const Color(0xFF388E3C), context.tr('ev_trip_legend_other')),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _legend(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 5),
-        Text(label,
-            style: const TextStyle(fontSize: 12, color: Colors.black54)),
-      ],
+        label: Text(context.tr('ev_trip_show_map')),
+      ),
     );
   }
 

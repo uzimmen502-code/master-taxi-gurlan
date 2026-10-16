@@ -12,6 +12,34 @@ class EvRoutePoint {
   final double lng;
 }
 
+/// Нуқтанинг маршрутдаги энг яқин жойи ([EvTripPlanner.locate] натижаси).
+class EvRouteLocation {
+  const EvRouteLocation({
+    required this.segmentIndex,
+    required this.fractionInSegment,
+    required this.alongKm,
+    required this.offRouteKm,
+    required this.lat,
+    required this.lng,
+  });
+
+  /// Энг яқин сегмент: `route[segmentIndex]` → `route[segmentIndex + 1]`.
+  final int segmentIndex;
+
+  /// Сегмент ичидаги жой (0 — боши, 1 — охири).
+  final double fractionInSegment;
+
+  /// Чизиқ боши ВА шу нуқта орасидаги масофа (км, геометрия бўйича).
+  final double alongKm;
+
+  /// Нуқта чизиқдан қанча узоқда (км).
+  final double offRouteKm;
+
+  /// Нуқтанинг чизиққа проекцияси.
+  final double lat;
+  final double lng;
+}
+
 /// ⚡ EV сафар ёрдамчиси — ҳисоб ядроси.
 ///
 /// Иккита алоҳида босқич:
@@ -104,6 +132,61 @@ class EvTripPlanner {
       total += _distanceKm(route[i - 1], route[i]);
     }
     return total;
+  }
+
+  /// Нуқтанинг маршрут чизиғидаги энг яқин жойи — "машина йўлнинг қаерида"
+  /// (босиб ўтилган/қолган қисмни ажратиш учун). Ҳисоб [corridor] билан
+  /// бир хил проекция ([_projectOnSegment]) ва бир хил масофа ўлчови.
+  ///
+  /// [fromSegment] — қидирув шу сегментдан бошланади: чизиқ ўзининг
+  /// олдинги қисмига яқин қайтса (U-шакл), машина "орқага сакраб" кетмасин
+  /// деб чақирувчи охирги маълум сегментни беради. Тенг масофада ОЛДИНГИ
+  /// сегмент танланади.
+  static EvRouteLocation? locate({
+    required List<EvRoutePoint> route,
+    required double lat,
+    required double lng,
+    int fromSegment = 0,
+  }) {
+    if (route.length < 2) return null;
+    final lastSegment = route.length - 2;
+    final start = fromSegment.clamp(0, lastSegment);
+
+    // Ҳар вершинагача жамланган масофа ([corridor]даги каби).
+    final cumKm = List<double>.filled(route.length, 0);
+    for (var i = 1; i < route.length; i++) {
+      cumKm[i] = cumKm[i - 1] + _distanceKm(route[i - 1], route[i]);
+    }
+
+    var bestSeg = start;
+    var bestOffKm = double.infinity;
+    var bestAlongInSeg = 0.0;
+    for (var i = start; i <= lastSegment; i++) {
+      final p = _projectOnSegment(
+        lat: lat,
+        lng: lng,
+        a: route[i],
+        b: route[i + 1],
+      );
+      if (p.offKm < bestOffKm) {
+        bestOffKm = p.offKm;
+        bestSeg = i;
+        bestAlongInSeg = p.alongKm;
+      }
+    }
+
+    final a = route[bestSeg];
+    final b = route[bestSeg + 1];
+    final segKm = _distanceKm(a, b);
+    final fraction = segKm > 0 ? (bestAlongInSeg / segKm).clamp(0.0, 1.0) : 0.0;
+    return EvRouteLocation(
+      segmentIndex: bestSeg,
+      fractionInSegment: fraction,
+      alongKm: cumKm[bestSeg] + fraction * segKm,
+      offRouteKm: bestOffKm,
+      lat: a.lat + (b.lat - a.lat) * fraction,
+      lng: a.lng + (b.lng - a.lng) * fraction,
+    );
   }
 
   // ---------------------------------------------------------------------

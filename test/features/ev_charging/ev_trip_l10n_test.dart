@@ -13,6 +13,13 @@ void main() {
     'ev_trip_not_found',
     'ev_trip_error_geometry',
     'ev_trip_error_route',
+    // to'liq ekranli xarita
+    'ev_trip_show_map',
+    'ev_trip_recenter',
+    'ev_trip_charge_stops',
+    'ev_trip_no_charging',
+    'ev_trip_gap_title',
+    'ev_trip_km',
   ];
 
   final dict = <String, Map<String, dynamic>>{};

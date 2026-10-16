@@ -17,7 +17,13 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
+import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
 import '../../logistics/domain/tariff_adjust.dart';
+import '../services/admin_logistics_service.dart';
+import '../utils/logistics_tariff_inputs.dart';
+import '../widgets/logistics_loss_dialogs.dart';
+import '../widgets/logistics_loss_list.dart';
+import '../widgets/logistics_stage_panel.dart';
 
 class LogisticsAdminScreen extends StatefulWidget {
   const LogisticsAdminScreen({super.key});
@@ -45,6 +51,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
   };
 
   final _db = FirebaseFirestore.instance;
+  final _logistics = AdminLogisticsService();
   int _tab = 0;
   String _filter = '';
   bool _busy = false;
@@ -273,6 +280,8 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
                 segments: const [
                   ButtonSegment(value: 0, label: Text('Тариф'), icon: Icon(Icons.price_change_outlined)),
                   ButtonSegment(value: 1, label: Text('Жўнатмалар'), icon: Icon(Icons.local_post_office_outlined)),
+                  ButtonSegment(value: 2, label: Text('Йўқолганлар'), icon: Icon(Icons.report_gmailerrorred_outlined)),
+                  ButtonSegment(value: 3, label: Text('Босқич'), icon: Icon(Icons.tune)),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -283,7 +292,14 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
           ),
         ),
         _serverSwitchBar(),
-        Expanded(child: _tab == 0 ? _tariffTab() : _shipmentsTab()),
+        Expanded(
+          child: switch (_tab) {
+            0 => _tariffTab(),
+            1 => _shipmentsTab(),
+            2 => LogisticsLossList(service: _logistics),
+            _ => LogisticsStagePanel(service: _logistics),
+          },
+        ),
       ],
     );
   }
@@ -520,6 +536,24 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     if (res != null) _snack('LEG қайта очилди: ${res['legId']} (ижрочилар: ${res['matchedBucket']})');
   }
 
+  /// «Йўқолди» (D1): диалог чақирувни ўзи бажаради (`opId` диалогда), бу ерда
+  /// фақат натижа хабари. Сервер рад этса — диалогда хато кўринади.
+  Future<void> _markLost(String shipmentId, Map<String, dynamic> s) async {
+    final res = await showMarkShipmentLostDialog(
+      context,
+      service: _logistics,
+      shipmentId: shipmentId,
+      label: (s['trackingNumber'] ?? shipmentId).toString(),
+    );
+    if (res == null) return;
+    final value = res['goodsValue'];
+    _snack(
+      '${res['idempotent'] == true ? 'Аввал ҳам белгиланган. ' : ''}'
+      'Йўқолган деб белгиланди${value is num ? ' · товар қиймати: ${logisticsMoney(value.toInt())} сўм' : ''}. '
+      'Пул ҳисоби сервер томонидан бажарилади — «Йўқолганлар» табида кўринг.',
+    );
+  }
+
   Future<String?> _askReason(String title) async {
     final ctrl = TextEditingController();
     return showDialog<String>(
@@ -580,6 +614,15 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
               icon: const Icon(Icons.history, size: 16),
               label: const Text('Custody'),
             ),
+            // Тугма фақат кўрсатма; рухсат (in_transit/disputed, ижрочи қўлида,
+            // тўлов ҳолати) серверда текширилади (`adminMarkShipmentLost`).
+            if ((status == 'in_transit' || status == 'disputed') && cust['kind'] == 'provider')
+              OutlinedButton.icon(
+                onPressed: _busy ? null : () => _markLost(id, s),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
+                icon: const Icon(Icons.report_gmailerrorred_outlined, size: 16),
+                label: const Text('Йўқолди'),
+              ),
             if (replannable)
               FilledButton.tonalIcon(
                 onPressed: _busy ? null : () => _replan(id, s),
@@ -621,6 +664,7 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
   late final List<int> _brackets;
   late final Map<String, List<TextEditingController>> _cells; // zone → [b0..bn, extraPerKg]
   late final TextEditingController _margin;
+  late final TextEditingController _divisor;
   late final Map<String, TextEditingController> _legShare;
   final _pct = TextEditingController(text: '-10');
   int _step = 1000;
@@ -641,6 +685,8 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
         ],
     };
     final internal = widget.base['internal'] is Map ? widget.base['internal'] as Map : const {};
+    final div = widget.base['volumetricDivisor'];
+    _divisor = TextEditingController(text: div is num ? div.toInt().toString() : '');
     _margin = TextEditingController(
       text: internal['platformMarginBps'] is num ? bpsToPercentText((internal['platformMarginBps'] as num).toInt()) : '',
     );
@@ -672,6 +718,7 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
       }
     }
     _margin.dispose();
+    _divisor.dispose();
     for (final c in _legShare.values) {
       c.dispose();
     }
@@ -755,7 +802,19 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
     } else {
       internal['legShareBps'] = null;
     }
-    return {...widget.base, 'version': widget.version, 'prices': prices, 'internal': internal};
+    final divisor = parseVolumetricDivisor(_divisor.text);
+    if (divisor.error != null) {
+      _error = divisor.error;
+      return null;
+    }
+    return {
+      ...widget.base,
+      'version': widget.version,
+      // Бўш майдон — ҳужжатдаги қиймат ўзгармайди (ўйлаб топилмайди).
+      if (divisor.value != null) 'volumetricDivisor': divisor.value,
+      'prices': prices,
+      'internal': internal,
+    };
   }
 
   void _save() {
@@ -888,6 +947,31 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
                 'Бутун сўм. Қатор тўлиқ бўш бўлса — шу зонага нарх йўқ (матритсада ишлатилса фаоллашмайди). '
                 '«+1 кг» бўш бўлса — оғир посилка нархи йўқ, фаоллаштириб бўлмайди; 0 — қўшимча ҳақ олинмайди.',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 14),
+              // ── Ҳажмий вазн бўлувчиси (12-банд; қиймат — эга қарори) ──
+              const Text('Ҳажмий вазн', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 220,
+                    child: TextField(
+                      controller: _divisor,
+                      decoration: deco('Бўлувчи (У×Э×Б / бўлувчи)'),
+                      style: cellStyle,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Мусбат бутун сон. Бўш қолса — ҳужжатдаги қиймат ўзгармайди. '
+                      'Чегаравий вазн = max(ҳақиқий, ҳажмий).',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               // ── Ички улушлар (14-банд: мижозга кўрсатилмайди) ──

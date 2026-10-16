@@ -72,6 +72,7 @@ class _FakeAgroService implements AgroPickupService {
     required String orderId,
     required String status,
     int? finalPrice,
+    String? reason,
   }) =>
       throw UnimplementedError();
 }

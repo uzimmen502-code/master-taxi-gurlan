@@ -65,13 +65,22 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
 });
+// Mijoz tasdig'i — «Oldim» / «Berdim» (D2/D7, ega qarori 2026-10-16): AVA kuryeri
+// oqimlarida kuryer qadamini mijoz O'Z qurilmasida tasdiqlaydi. Sozlama faqat server:
+// `server_config/customer_confirm` (standart OFF). Modul yadrolari `registerHandler`
+// bilan shu yerga ulanadi (restoran: restaurant_orders.js; gilam/agro/yig'ib olish: pastda).
+const { createCustomerConfirm } = require('./customer_confirm');
+const customerConfirm = createCustomerConfirm({
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
+});
+customerConfirm.attach(exports);
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
 // `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.
 const { attachRestaurantOrders } = require('./restaurant_orders');
 attachRestaurantOrders(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, axios,
-  requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES,
+  requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES, customerConfirm,
   // Yaqin onlayn kuryerlarga «buyurtma bor» push'i (presence + token manbasi).
   courierPush,
   // `courierAuth` pastda `const` — attach paytida TDZ; modul uni chaqiruvda oladi.
@@ -8945,8 +8954,405 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
   }
 });
 
+// ── Йиғиб олиш: якун ядроси — курьер ҳам, мижоз тасдиғи ҳам шуни ишлатади (D2/D7, 7-қоида) ─────────
+// Мижоз тасдиғи ёқилган бўлса (`server_config/customer_confirm`) курьер ЯКУНЛАМАЙДИ: киритган
+// сон/нақд вазифага «кутиш белгиси» сифатида ёзилади, мижоз «ҳа» деганидан КЕЙИН шу ядро
+// (католог/режа билан қайта текширилиб) ишга тушади. Пул калитлари ўзгармаган
+// (`bonus:collection_{taskId}`), шунинг учун қайта уриниш икки марта тўламайди.
+const COLLECTION_ACTIVE_STATUSES = ['assigned', 'collecting'];
+
+/**
+ * Курьер чақируви текширувлари (тартиб ЎЗГАРМАГАН). `alreadyCompleted` — идемпотент жавоб.
+ * Аввалги коддаги `courierFinalizeCollection` текширувлари билан айнан бир хил.
+ */
+function collectionValidate(task, { courierId, taskId, itemsIn }) {
+  // F9 (audit 2026-10-16): egalik AVVAL — begona kuryer yakunlangan vazifaning
+  // pul natijasini (idempotent javob) ko'rmasin.
+  if (String(task.courierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your task');
+  }
+  // Idempotency: якунланган бўлса — сақланган натижани қайтарамиз.
+  if (task.status === 'completed') {
+    return {
+      alreadyCompleted: {
+        ok: true,
+        alreadyCompleted: true,
+        V: parseInt(String(task.finalValue ?? 0), 10) || 0,
+        cashGiven: parseInt(String(task.cashGiven ?? 0), 10) || 0,
+        walletDelta: parseInt(String(task.walletDelta ?? 0), 10) || 0,
+        walletCredit: parseInt(String(task.walletCredited ?? 0), 10) || 0,
+        withdrawnFromBalance:
+          parseInt(String(task.withdrawnFromBalance ?? 0), 10) || 0,
+        newBalance: null,
+      },
+    };
+  }
+  // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan vazifani yakunlamaydi —
+  // yakun mijoz hamyoniga pul yozadi (qiymat kuryer kiritgan qatorlardan).
+  if (courierAuth.isOwnOrder({ userPhone: task.customerPhone || task.customerUid }, courierId)) {
+    console.warn(JSON.stringify({
+      action: 'courierFinalizeCollection', taskId, result: 'denied', errorCode: 'COURIER_OWN_ORDER',
+    }));
+    throw new functions.https.HttpsError('permission-denied', 'Own order', { reason: 'COURIER_OWN_ORDER' });
+  }
+  if (!COLLECTION_ACTIVE_STATUSES.includes(String(task.status || ''))) {
+    throw new functions.https.HttpsError('failed-precondition', 'task not active');
+  }
+  if (!task.arrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+
+  // K-5 (ega qarori 2026-10-08): narx VAZIFA YARATILGANDA qotgan —
+  // `task.items` (server yozgan, `adminCreateCollectionTask` katalogdan).
+  // Kuryer faqat kod va miqdorni beradi; vazifada yo'q mahsulot — rad.
+  const snapshotByCode = new Map();
+  for (const it of (Array.isArray(task.items) ? task.items : [])) {
+    const code = String((it || {}).code || '').trim();
+    if (code && !snapshotByCode.has(code)) snapshotByCode.set(code, it);
+  }
+  const normalizedItems = [];
+  let totalValue = 0;
+  for (let i = 0; i < itemsIn.length; i += 1) {
+    const row = itemsIn[i] || {};
+    const code = String(row.code || '').trim();
+    const qty = Number(row.qty);
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', `items[${i}]: code required`);
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        `items[${i}]: qty must be positive`,
+      );
+    }
+    const snap = snapshotByCode.get(code);
+    if (!snap) {
+      throw new functions.https.HttpsError('failed-precondition', `Vazifada yo'q mahsulot: ${code}`,
+        { reason: 'ITEM_NOT_IN_TASK', code });
+    }
+    const unitPrice = parseInt(String(snap.unitPrice ?? 0), 10);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new functions.https.HttpsError('failed-precondition', `Vazifa narxi noto'g'ri: ${code}`,
+        { reason: 'TASK_PRICE_INVALID', code });
+    }
+    procurementCatalog.logMismatch('courierFinalizeCollection', taskId, code, row.unitPrice, unitPrice);
+    const label = String(snap.label || code);
+    const unit = String(snap.unit || '');
+    const lineTotal = Math.round(qty * unitPrice);
+    totalValue += lineTotal;
+    normalizedItems.push({ code, label, unit, qty, unitPrice, lineTotal });
+  }
+  return { normalizedItems, totalValue };
+}
+
+/** Mijoz `users` hujjati ref'i (12 xonali, bo'lmasa 9 xonali) — avvalgi mantiq. */
+async function resolveCollectionCustomerRef(task) {
+  const customerPhone = String(task.customerPhone || task.customerUid || '');
+  const uid9 = userUid(customerPhone);
+  const uid12 = canonicalUid(customerPhone);
+  let customerRef = db.collection('users').doc(uid12);
+  let customerSnap = await customerRef.get();
+  if (!customerSnap.exists && uid9 !== uid12) {
+    customerRef = db.collection('users').doc(uid9);
+    customerSnap = await customerRef.get();
+  }
+  if (!customerSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'customer user not found');
+  }
+  return customerRef;
+}
+
+/** `cashGiven > V + balans` — avvalgi xabar matni o'zgarmagan. */
+function assertCollectionCash(cashGiven, totalValue, prevBalance) {
+  const maxCash = totalValue + prevBalance;
+  if (cashGiven > maxCash) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `cash_exceeds_balance: cashGiven ${cashGiven} > max ${maxCash} ` +
+        `(V ${totalValue} + balance ${prevBalance})`,
+    );
+  }
+}
+
+/**
+ * Бир атом транзакция: status guard (идемпотентлик) + баланс текшируви
+ * + барча ёзувлар. M (нақд) V дан ошса — фарқ мижоз кошелёгидан олинади.
+ * `confirmStep` бўш — курьер йўли; тўлдирилган — мижоз тасдиғи (белги ўчади, из қолади).
+ */
+async function collectionCommitInTx(t, {
+  taskRef, taskId, courierId, customerRef, task, normalizedItems, totalValue, cashGiven, confirmStep,
+}) {
+  const walletDelta = totalValue - cashGiven; // ишорали: + кредит, - ечиш
+  const withdrawnFromBalance = Math.max(0, cashGiven - totalValue);
+  const walletCredit = Math.max(0, totalValue - cashGiven);
+
+  const fresh = await t.get(taskRef);
+  const freshData = fresh.data() || {};
+  if (!fresh.exists || !COLLECTION_ACTIVE_STATUSES.includes(String(freshData.status || ''))) {
+    throw new functions.https.HttpsError('failed-precondition', 'task not active');
+  }
+
+  const customerInTxn = await t.get(customerRef);
+  const prevBalance =
+    parseInt(String(customerInTxn.data()?.bonusBalance ?? 0), 10) || 0;
+
+  assertCollectionCash(cashGiven, totalValue, prevBalance);
+  const newBalance = prevBalance + walletDelta;
+
+  // Ledger ko'zgusi (READ fazasi) — kredit→admin_clearing, naqd echish→admin_cash.
+  const bonusFunding = walletDelta >= 0 ? 'admin_clearing' : 'admin_cash';
+  const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, customerRef.id, {
+    idempotencyKey: `collection_${taskId}`,
+    fundingAccount: bonusFunding,
+  });
+  // D5: kuryer haqi = finalValue'dan foiz (o'qish fazasida); ledger'ga YOZILMAYDI.
+  const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
+  const fields = courierTaskPayout.buildPayout('collection', taskId, totalValue, payoutSettings, courierId);
+
+  t.update(customerRef, {
+    bonusBalance: admin.firestore.FieldValue.increment(walletDelta),
+    balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  if (totalValue > 0) {
+    t.set(customerRef.collection('wallet_ledger').doc(), {
+      type: 'supplier_credit',
+      amount: totalValue,
+      module: 'collection',
+      refType: 'collection',
+      refId: taskId,
+      meta: { totalValue, cashGiven },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: 'courier_collection',
+    });
+  }
+  if (cashGiven > 0) {
+    t.set(customerRef.collection('wallet_ledger').doc(), {
+      type: 'collection_cashout',
+      amount: -cashGiven,
+      module: 'collection',
+      refType: 'collection',
+      refId: taskId,
+      meta: { totalValue, withdrawnFromBalance },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: 'courier_collection',
+    });
+  }
+
+  // Ledger ko'zgusi (WRITE fazasi) — net walletDelta (signed).
+  if (walletDelta !== 0) {
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta: walletDelta,
+      kind: 'collection',
+      refType: 'collection',
+      refId: taskId,
+      meta: { module: 'collection', totalValue, cashGiven },
+      postedBy: 'courier_collection',
+      postedRole: 'courier',
+    });
+  }
+
+  for (let i = 0; i < normalizedItems.length; i += 1) {
+    const item = normalizedItems[i];
+    t.set(
+      db.collection('warehouse_stock').doc(item.code),
+      {
+        code: item.code,
+        label: item.label,
+        unit: item.unit,
+        quantity: admin.firestore.FieldValue.increment(item.qty),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+
+  t.update(taskRef, {
+    status: 'completed',
+    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    cashGiven,
+    walletDelta,
+    walletCredited: walletCredit,
+    withdrawnFromBalance,
+    finalItems: normalizedItems,
+    finalValue: totalValue,
+    ...customerConfirm.clearPatch(freshData),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+  // D5: kuryer haqi - SERVERGA XOS hujjatga (vazifa hujjatini mijoz/kuryer o'qiydi).
+  courierTaskPayout.writePayoutInTx(
+    t, db, 'collection', taskId, fields, admin.firestore.FieldValue.serverTimestamp());
+
+  const submissionId = String(task.submissionId || '');
+  if (submissionId) {
+    t.set(
+      db.collection('sell_submissions').doc(submissionId),
+      {
+        status: 'reviewed',
+        collectionCompleted: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+  return { fields, newBalance, walletDelta, walletCredit, withdrawnFromBalance };
+}
+
+/** Tranzaksiyadan KEYIN: kuryer haqi jurnali + mijozga dalolatnoma push'i (xato oqimni to'xtatmaydi). */
+async function collectionAfterCommit({
+  taskId, customerRef, normalizedItems, totalValue, cashGiven, commit,
+}) {
+  courierTaskPayout.logPayout('collection', taskId, commit.fields);
+
+  const receiptLines = [];
+  receiptLines.push(`Маҳсулотлар қабул қилинди: ${totalValue} сўм.`);
+  for (let i = 0; i < normalizedItems.length; i += 1) {
+    const it = normalizedItems[i];
+    receiptLines.push(
+      `• ${it.label}: ${it.qty}${it.unit ? ` ${it.unit}` : ''} × ${it.unitPrice} = ${it.lineTotal} сўм`,
+    );
+  }
+  if (cashGiven > 0) {
+    receiptLines.push(`💵 Нақд берилди: ${cashGiven} сўм.`);
+  }
+  if (commit.walletCredit > 0) {
+    receiptLines.push(`💼 Кошелёкка қўшилди: ${commit.walletCredit} сўм.`);
+  }
+  if (commit.withdrawnFromBalance > 0) {
+    receiptLines.push(
+      `💼 Кошелёкдан нақд олинди: ${commit.withdrawnFromBalance} сўм.`,
+    );
+  }
+  receiptLines.push(`💼 Янги баланс: ${commit.newBalance} сўм`);
+
+  try {
+    await notifyUserInApp({
+      userId: customerRef.id,
+      title: '✅ Маҳсулот қабул қилинди',
+      body: receiptLines.join('\n'),
+      category: 'order',
+      source: 'collection_receipt',
+      dataType: 'order_payment',
+      screen: 'profile',
+      extraData: { taskId },
+    });
+  } catch (e) {
+    console.error('courierFinalizeCollection receipt push:', e.message || e);
+  }
+}
+
+/**
+ * Мижоз тасдиғи сўрови: ЯГОНА транзакцияда авваламбор барча текширувлар (худди якундагидек),
+ * кейин кутиш белгиси ёзилади (пул/ҳолат ўзгармайди). Белги бор ва киритилган сон/нақд
+ * БИР ХИЛ бўлса — ўша жавоб; ФАРҚ қилса — рад (мижоз кўрган рақамлар тасдиқдан олдин
+ * жимгина алмашиб қолмасин, 14-қоида); тузатиш — админ ёки белгини бекор қилиш (очиқ савол).
+ */
+async function collectionRequestConfirm({ taskRef, taskId, courierId, itemsIn, cashGiven, customerRef }) {
+  return db.runTransaction(async (t) => {
+    const fresh = await t.get(taskRef);
+    if (!fresh.exists) {
+      throw new functions.https.HttpsError('not-found', 'task not found');
+    }
+    const task = fresh.data() || {};
+    const v = collectionValidate(task, { courierId, taskId, itemsIn });
+    if (v.alreadyCompleted) return { completed: v.alreadyCompleted };
+    const customerInTxn = await t.get(customerRef);
+    const prevBalance = parseInt(String(customerInTxn.data()?.bonusBalance ?? 0), 10) || 0;
+    assertCollectionCash(cashGiven, v.totalValue, prevBalance);
+    const entered = itemsIn.map((row) => ({ code: String((row || {}).code || '').trim(), qty: Number((row || {}).qty) }));
+    const cur = task.awaitingCustomerConfirm;
+    if (cur && cur.step === 'finalize') {
+      const key = (rows) => JSON.stringify([...rows].sort((a, b) => String(a.code).localeCompare(String(b.code)) || a.qty - b.qty)
+        .map((r) => [r.code, r.qty]));
+      const same = key(Array.isArray(cur.items) ? cur.items : []) === key(entered)
+        && (parseInt(String(cur.cashGiven ?? 0), 10) || 0) === cashGiven;
+      if (!same) {
+        throw new functions.https.HttpsError('failed-precondition', 'AWAITING_OTHER_INPUT',
+          { reason: 'AWAITING_OTHER_INPUT', code: 'AWAITING_OTHER_INPUT' });
+      }
+      return { awaiting: true, created: false, task };
+    }
+    const rq = customerConfirm.requestInTx(t, taskRef, task, {
+      step: 'finalize',
+      courierId,
+      extra: {
+        items: entered,
+        cashGiven,
+        // Faqat KO'RSATISH uchun (server hisoblagan); pul tasdiqda ushbu qatordan EMAS, qayta hisoblanadi.
+        display: { totalValue: v.totalValue, lines: v.normalizedItems.map((l) => ({
+          code: l.code, label: l.label, unit: l.unit, qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal,
+        })) },
+      },
+    });
+    return {
+      awaiting: true,
+      created: rq.created,
+      task,
+      markerLike: { cashGiven, display: { totalValue: v.totalValue, lines: v.normalizedItems } },
+    };
+  });
+}
+
+const groupThousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+customerConfirm.registerHandler('collection', {
+  collection: 'collection_tasks',
+  phoneField: 'customerPhone',
+  customerPhoneOf: (td) => td.customerPhone || td.customerUid || '',
+  statusOf: (td) => String(td.status || ''),
+  describe: (td, marker) => {
+    if (marker.step !== 'finalize' || !COLLECTION_ACTIVE_STATUSES.includes(String(td.status || ''))) return null;
+    const d = marker.display;
+    const lines = d && Array.isArray(d.lines) ? d.lines : [];
+    if (lines.length === 0) return null;
+    const units = new Set(lines.map((l) => l.unit));
+    const qtySum = Math.round(lines.reduce((a, l) => a + Number(l.qty), 0) * 1000) / 1000;
+    return {
+      key: 'confirm_collection_finalize',
+      params: {
+        summary: lines.map((l) => `${l.label}: ${l.qty}${l.unit ? ` ${l.unit}` : ''}`).join(', '),
+        amount: groupThousands(d.totalValue),
+      },
+      details: {
+        // Bitta qator — o'sha qator; bir nechta qator va bir xil birlik — yig'indi; aralash birlik — null.
+        qty: lines.length === 1 ? lines[0].qty : (units.size === 1 ? qtySum : null),
+        unit: units.size === 1 ? String(lines[0].unit || '') : '',
+        amount: d.totalValue,
+        productLabel: lines.map((l) => l.label).join(', '),
+        cashGiven: parseInt(String(marker.cashGiven ?? 0), 10) || 0,
+        lines: lines.map((l) => ({ productLabel: l.label, qty: l.qty, unit: l.unit, amount: l.lineTotal })),
+      },
+    };
+  },
+  confirm: async (t, { ref, id, od, marker, step }) => {
+    const courierId = canonicalUid(String(marker.courierId || ''));
+    const itemsIn = Array.isArray(marker.items) ? marker.items : [];
+    const cashGiven = parseInt(String(marker.cashGiven ?? 0), 10);
+    if (!Number.isFinite(cashGiven) || cashGiven < 0 || itemsIn.length < 1) {
+      throw new functions.https.HttpsError('failed-precondition', 'task not active');
+    }
+    // Pul harakatidan OLDIN hamma narsa qayta tekshiriladi: vazifa holati, egalik,
+    // vazifa narxlari (qotgan katalog) va mijoz balansi.
+    const v = collectionValidate(od, { courierId, taskId: id, itemsIn });
+    if (v.alreadyCompleted) {
+      throw new functions.https.HttpsError('failed-precondition', 'task not active');
+    }
+    const customerRef = await resolveCollectionCustomerRef(od);
+    const commit = await collectionCommitInTx(t, {
+      taskRef: ref, taskId: id, courierId, customerRef, task: od,
+      normalizedItems: v.normalizedItems, totalValue: v.totalValue, cashGiven, confirmStep: step,
+    });
+    return {
+      status: 'completed',
+      after: () => collectionAfterCommit({
+        taskId: id, customerRef, normalizedItems: v.normalizedItems, totalValue: v.totalValue, cashGiven, commit,
+      }),
+    };
+  },
+});
+
 /** Курьер: йиғиб олишни якунлаш — кошелёк кредити + омбор + далолатнома.
  *  Тескари иқтисод: платформа мижозга маҳсулот учун ТЎЛАЙДИ.
+ *  Мижоз тасдиғи ёқилган бўлса — `{ ok, awaitingCustomer: true, step: 'finalize' }` (юқоридаги ядро).
  */
 exports.courierFinalizeCollection = functions.https.onCall(async (data, context) => {
   try {
@@ -8980,262 +9386,33 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     }
     const task = taskSnap.data() || {};
 
-    // F9 (audit 2026-10-16): egalik AVVAL — begona kuryer yakunlangan vazifaning
-    // pul natijasini (idempotent javob) ko'rmasin.
-    if (String(task.courierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your task');
-    }
-    // Idempotency: якунланган бўлса — сақланган натижани қайтарамиз.
-    if (task.status === 'completed') {
-      return {
-        ok: true,
-        alreadyCompleted: true,
-        V: parseInt(String(task.finalValue ?? 0), 10) || 0,
-        cashGiven: parseInt(String(task.cashGiven ?? 0), 10) || 0,
-        walletDelta: parseInt(String(task.walletDelta ?? 0), 10) || 0,
-        walletCredit: parseInt(String(task.walletCredited ?? 0), 10) || 0,
-        withdrawnFromBalance:
-          parseInt(String(task.withdrawnFromBalance ?? 0), 10) || 0,
-        newBalance: null,
-      };
-    }
-    // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan vazifani yakunlamaydi —
-    // yakun mijoz hamyoniga pul yozadi (qiymat kuryer kiritgan qatorlardan).
-    if (courierAuth.isOwnOrder({ userPhone: task.customerPhone || task.customerUid }, courierId)) {
-      console.warn(JSON.stringify({
-        action: 'courierFinalizeCollection', taskId, result: 'denied', errorCode: 'COURIER_OWN_ORDER',
-      }));
-      throw new functions.https.HttpsError('permission-denied', 'Own order', { reason: 'COURIER_OWN_ORDER' });
-    }
-    if (!['assigned', 'collecting'].includes(String(task.status || ''))) {
-      throw new functions.https.HttpsError('failed-precondition', 'task not active');
-    }
-    if (!task.arrivedAt) {
-      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+    const v = collectionValidate(task, { courierId, taskId, itemsIn });
+    if (v.alreadyCompleted) return v.alreadyCompleted;
+    const { normalizedItems, totalValue } = v;
+
+    const customerRef = await resolveCollectionCustomerRef(task);
+
+    // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer pulni o'zi harakatlantira olmaydi.
+    if (await customerConfirm.isGated('collection', task.customerPhone || task.customerUid || '')) {
+      const g = await collectionRequestConfirm({ taskRef, taskId, courierId, itemsIn, cashGiven, customerRef });
+      if (g.completed) return g.completed;
+      await customerConfirm.afterRequest('collection', taskId, 'finalize', g.task, g.markerLike, g.created);
+      return customerConfirm.awaitingResponse('finalize');
     }
 
-    // K-5 (ega qarori 2026-10-08): narx VAZIFA YARATILGANDA qotgan —
-    // `task.items` (server yozgan, `adminCreateCollectionTask` katalogdan).
-    // Kuryer faqat kod va miqdorni beradi; vazifada yo'q mahsulot — rad.
-    const snapshotByCode = new Map();
-    for (const it of (Array.isArray(task.items) ? task.items : [])) {
-      const code = String((it || {}).code || '').trim();
-      if (code && !snapshotByCode.has(code)) snapshotByCode.set(code, it);
-    }
-    const normalizedItems = [];
-    let totalValue = 0;
-    for (let i = 0; i < itemsIn.length; i += 1) {
-      const row = itemsIn[i] || {};
-      const code = String(row.code || '').trim();
-      const qty = Number(row.qty);
-      if (!code) {
-        throw new functions.https.HttpsError('invalid-argument', `items[${i}]: code required`);
-      }
-      if (!Number.isFinite(qty) || qty <= 0) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          `items[${i}]: qty must be positive`,
-        );
-      }
-      const snap = snapshotByCode.get(code);
-      if (!snap) {
-        throw new functions.https.HttpsError('failed-precondition', `Vazifada yo'q mahsulot: ${code}`,
-          { reason: 'ITEM_NOT_IN_TASK', code });
-      }
-      const unitPrice = parseInt(String(snap.unitPrice ?? 0), 10);
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        throw new functions.https.HttpsError('failed-precondition', `Vazifa narxi noto'g'ri: ${code}`,
-          { reason: 'TASK_PRICE_INVALID', code });
-      }
-      procurementCatalog.logMismatch('courierFinalizeCollection', taskId, code, row.unitPrice, unitPrice);
-      const label = String(snap.label || code);
-      const unit = String(snap.unit || '');
-      const lineTotal = Math.round(qty * unitPrice);
-      totalValue += lineTotal;
-      normalizedItems.push({ code, label, unit, qty, unitPrice, lineTotal });
-    }
-
-    const customerPhone = String(task.customerPhone || task.customerUid || '');
-    const uid9 = userUid(customerPhone);
-    const uid12 = canonicalUid(customerPhone);
-    let customerRef = db.collection('users').doc(uid12);
-    let customerSnap = await customerRef.get();
-    if (!customerSnap.exists && uid9 !== uid12) {
-      customerRef = db.collection('users').doc(uid9);
-      customerSnap = await customerRef.get();
-    }
-    if (!customerSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'customer user not found');
-    }
-
-    // Бир атом транзакция: status guard (идемпотентлик) + баланс текшируви
-    // + барча ёзувлар. M (нақд) V дан ошса — фарқ мижоз кошелёгидан олинади.
-    const walletDelta = totalValue - cashGiven; // ишорали: + кредит, - ечиш
-    const withdrawnFromBalance = Math.max(0, cashGiven - totalValue);
-    const walletCredit = Math.max(0, totalValue - cashGiven);
-    let newBalance = 0;
-
-    const payoutFields = await db.runTransaction(async (t) => {
-      const fresh = await t.get(taskRef);
-      const freshData = fresh.data() || {};
-      if (!fresh.exists || !['assigned', 'collecting'].includes(String(freshData.status || ''))) {
-        throw new functions.https.HttpsError('failed-precondition', 'task not active');
-      }
-
-      const customerInTxn = await t.get(customerRef);
-      const prevBalance =
-        parseInt(String(customerInTxn.data()?.bonusBalance ?? 0), 10) || 0;
-
-      const maxCash = totalValue + prevBalance;
-      if (cashGiven > maxCash) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          `cash_exceeds_balance: cashGiven ${cashGiven} > max ${maxCash} ` +
-            `(V ${totalValue} + balance ${prevBalance})`,
-        );
-      }
-      newBalance = prevBalance + walletDelta;
-
-      // Ledger ko'zgusi (READ fazasi) — kredit→admin_clearing, naqd echish→admin_cash.
-      const bonusFunding = walletDelta >= 0 ? 'admin_clearing' : 'admin_cash';
-      const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, customerRef.id, {
-        idempotencyKey: `collection_${taskId}`,
-        fundingAccount: bonusFunding,
-      });
-      // D5: kuryer haqi = finalValue'dan foiz (o'qish fazasida); ledger'ga YOZILMAYDI.
-      const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildFields('collection', totalValue, payoutSettings, courierId);
-
-      t.update(customerRef, {
-        bonusBalance: admin.firestore.FieldValue.increment(walletDelta),
-        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      if (totalValue > 0) {
-        t.set(customerRef.collection('wallet_ledger').doc(), {
-          type: 'supplier_credit',
-          amount: totalValue,
-          module: 'collection',
-          refType: 'collection',
-          refId: taskId,
-          meta: { totalValue, cashGiven },
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          createdBy: 'courier_collection',
-        });
-      }
-      if (cashGiven > 0) {
-        t.set(customerRef.collection('wallet_ledger').doc(), {
-          type: 'collection_cashout',
-          amount: -cashGiven,
-          module: 'collection',
-          refType: 'collection',
-          refId: taskId,
-          meta: { totalValue, withdrawnFromBalance },
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          createdBy: 'courier_collection',
-        });
-      }
-
-      // Ledger ko'zgusi (WRITE fazasi) — net walletDelta (signed).
-      if (walletDelta !== 0) {
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
-          delta: walletDelta,
-          kind: 'collection',
-          refType: 'collection',
-          refId: taskId,
-          meta: { module: 'collection', totalValue, cashGiven },
-          postedBy: 'courier_collection',
-          postedRole: 'courier',
-        });
-      }
-
-      for (let i = 0; i < normalizedItems.length; i += 1) {
-        const item = normalizedItems[i];
-        t.set(
-          db.collection('warehouse_stock').doc(item.code),
-          {
-            code: item.code,
-            label: item.label,
-            unit: item.unit,
-            quantity: admin.firestore.FieldValue.increment(item.qty),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
-
-      t.update(taskRef, {
-        status: 'completed',
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        cashGiven,
-        walletDelta,
-        walletCredited: walletCredit,
-        withdrawnFromBalance,
-        finalItems: normalizedItems,
-        finalValue: totalValue,
-        ...fields,
-        courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      const submissionId = String(task.submissionId || '');
-      if (submissionId) {
-        t.set(
-          db.collection('sell_submissions').doc(submissionId),
-          {
-            status: 'reviewed',
-            collectionCompleted: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
-      return fields;
-    });
-    courierTaskPayout.logPayout('collection', taskId, payoutFields);
-
-    const receiptLines = [];
-    receiptLines.push(`Маҳсулотлар қабул қилинди: ${totalValue} сўм.`);
-    for (let i = 0; i < normalizedItems.length; i += 1) {
-      const it = normalizedItems[i];
-      receiptLines.push(
-        `• ${it.label}: ${it.qty}${it.unit ? ` ${it.unit}` : ''} × ${it.unitPrice} = ${it.lineTotal} сўм`,
-      );
-    }
-    if (cashGiven > 0) {
-      receiptLines.push(`💵 Нақд берилди: ${cashGiven} сўм.`);
-    }
-    if (walletCredit > 0) {
-      receiptLines.push(`💼 Кошелёкка қўшилди: ${walletCredit} сўм.`);
-    }
-    if (withdrawnFromBalance > 0) {
-      receiptLines.push(
-        `💼 Кошелёкдан нақд олинди: ${withdrawnFromBalance} сўм.`,
-      );
-    }
-    receiptLines.push(`💼 Янги баланс: ${newBalance} сўм`);
-
-    try {
-      await notifyUserInApp({
-        userId: customerRef.id,
-        title: '✅ Маҳсулот қабул қилинди',
-        body: receiptLines.join('\n'),
-        category: 'order',
-        source: 'collection_receipt',
-        dataType: 'order_payment',
-        screen: 'profile',
-        extraData: { taskId },
-      });
-    } catch (e) {
-      console.error('courierFinalizeCollection receipt push:', e.message || e);
-    }
+    const commit = await db.runTransaction((t) => collectionCommitInTx(t, {
+      taskRef, taskId, courierId, customerRef, task, normalizedItems, totalValue, cashGiven, confirmStep: '',
+    }));
+    await collectionAfterCommit({ taskId, customerRef, normalizedItems, totalValue, cashGiven, commit });
 
     return {
       ok: true,
       V: totalValue,
       cashGiven,
-      walletDelta,
-      walletCredit,
-      withdrawnFromBalance,
-      newBalance,
+      walletDelta: commit.walletDelta,
+      walletCredit: commit.walletCredit,
+      withdrawnFromBalance: commit.withdrawnFromBalance,
+      newBalance: commit.newBalance,
     };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -19224,6 +19401,8 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
           userId: adminUid,
         }));
       }
+      // Mijoz tasdig'i kutilayotgan bo'lsa (D2/D7) holat o'zgargach belgi ma'nosiz: tozalanadi.
+      Object.assign(patch, customerConfirm.clearPatch(od));
       t.update(ref, patch);
     });
     return { ok: true, orderId, status };
@@ -19372,6 +19551,85 @@ exports.courierMarkCarpetArrived = functions.https.onCall(async (data, context) 
   }
 });
 
+// ── Gilam: kuryer qadami va mijoz tasdig'i BIR XIL yadroni ishlatadi (D2/D7, 7-qoida) ──────────
+// Tekshiruvlar kuryer chaqiruvidagi bilan aynan bir xil; xato kodlari o'zgarmagan.
+function assertCarpetPickupReady(od, courierId) {
+  if (String(od.status || '') !== 'pickup_in_delivery') {
+    throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+  }
+  if (String(od.pickupCourierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+  }
+  if (!od.pickupArrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+}
+
+function assertCarpetReturnReady(od, courierId) {
+  if (String(od.status || '') !== 'return_in_delivery') {
+    throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+  }
+  if (String(od.returnCourierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your return task');
+  }
+  if (!od.returnArrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+}
+
+/** `confirmStep` bo'sh — kuryer yo'li (eski yozuv); to'ldirilgan — mijoz tasdig'i (belgi o'chadi, iz qoladi). */
+function carpetPickedUpWrite(t, ref, od, courierId, confirmStep) {
+  t.update(ref, {
+    status: 'picked_up',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...customerConfirm.clearPatch(od),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+}
+
+async function carpetDeliveredCore(t, ref, od, orderId, courierId, confirmStep) {
+  // D5: kuryer haqi = finalPrice'dan foiz (sozlama o'qish fazasida). Yakunlovchi
+  // kuryer - qaytaruvchi (`returnCourierId`); olib ketgan kuryer haqi - ochiq savol.
+  const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
+  const fields = courierTaskPayout.buildPayout('carpet', orderId, od.finalPrice, payoutSettings, courierId);
+  t.update(ref, {
+    status: 'completed',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...customerConfirm.clearPatch(od),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+  courierTaskPayout.writePayoutInTx(
+    t, db, 'carpet', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
+  return fields;
+}
+
+customerConfirm.registerHandler('carpet', {
+  collection: 'carpet_wash_orders',
+  phoneField: 'customerPhone',
+  customerPhoneOf: (od) => od.customerPhone,
+  statusOf: (od) => String(od.status || ''),
+  describe: (od, marker) => {
+    if (marker.step === 'handover_pickup' && od.status === 'pickup_in_delivery') {
+      return { key: 'confirm_carpet_pickup', params: {} };
+    }
+    if (marker.step === 'handover_return' && od.status === 'return_in_delivery') {
+      return { key: 'confirm_carpet_return', params: {} };
+    }
+    return null;
+  },
+  confirm: async (t, { ref, id, od, marker, step }) => {
+    const courierId = canonicalUid(String(marker.courierId || ''));
+    if (step === 'handover_pickup') {
+      assertCarpetPickupReady(od, courierId);
+      carpetPickedUpWrite(t, ref, od, courierId, step);
+      return { status: 'picked_up' };
+    }
+    assertCarpetReturnReady(od, courierId);
+    const fields = await carpetDeliveredCore(t, ref, od, id, courierId, step);
+    return { status: 'completed', after: () => courierTaskPayout.logPayout('carpet', id, fields) };
+  },
+});
+
 /** Kuryer: gilam olib ketildi (pickup_in_delivery → picked_up). */
 exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context) => {
   try {
@@ -19386,26 +19644,25 @@ exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context)
     }
 
     const ref = db.collection('carpet_wash_orders').doc(orderId);
-    await db.runTransaction(async (t) => {
+    const gated = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) {
         throw new functions.https.HttpsError('not-found', 'order not found');
       }
       const od = snap.data() || {};
-      if (String(od.status || '') !== 'pickup_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      assertCarpetPickupReady(od, courierId);
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer o'zi yakunlay olmaydi.
+      if (await customerConfirm.isGated('carpet', od.customerPhone)) {
+        const rq = customerConfirm.requestInTx(t, ref, od, { step: 'handover_pickup', courierId });
+        return { od, created: rq.created };
       }
-      if (String(od.pickupCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-      }
-      if (!od.pickupArrivedAt) {
-        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-      }
-      t.update(ref, {
-        status: 'picked_up',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      carpetPickedUpWrite(t, ref, od, courierId, '');
+      return null;
     });
+    if (gated) {
+      await customerConfirm.afterRequest('carpet', orderId, 'handover_pickup', gated.od, {}, gated.created);
+      return customerConfirm.awaitingResponse('handover_pickup');
+    }
     return { ok: true, orderId };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -19477,34 +19734,25 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
     }
 
     const ref = db.collection('carpet_wash_orders').doc(orderId);
-    const payoutFields = await db.runTransaction(async (t) => {
+    const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) {
         throw new functions.https.HttpsError('not-found', 'order not found');
       }
       const od = snap.data() || {};
-      if (String(od.status || '') !== 'return_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+      assertCarpetReturnReady(od, courierId);
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer o'zi yakunlay olmaydi.
+      if (await customerConfirm.isGated('carpet', od.customerPhone)) {
+        const rq = customerConfirm.requestInTx(t, ref, od, { step: 'handover_return', courierId });
+        return { gated: true, od, created: rq.created };
       }
-      if (String(od.returnCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your return task');
-      }
-      if (!od.returnArrivedAt) {
-        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-      }
-      // D5: kuryer haqi = finalPrice'dan foiz (sozlama o'qish fazasida). Yakunlovchi
-      // kuryer - qaytaruvchi (`returnCourierId`); olib ketgan kuryer haqi - ochiq savol.
-      const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildFields('carpet', od.finalPrice, payoutSettings, courierId);
-      t.update(ref, {
-        status: 'completed',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...fields,
-        courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      return fields;
+      return { gated: false, fields: await carpetDeliveredCore(t, ref, od, orderId, courierId, '') };
     });
-    courierTaskPayout.logPayout('carpet', orderId, payoutFields);
+    if (out.gated) {
+      await customerConfirm.afterRequest('carpet', orderId, 'handover_return', out.od, {}, out.created);
+      return customerConfirm.awaitingResponse('handover_return');
+    }
+    courierTaskPayout.logPayout('carpet', orderId, out.fields);
     return { ok: true, orderId, status: 'completed' };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -19799,21 +20047,38 @@ exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) 
           userId: adminUid,
         }));
       }
+      // Mijoz tasdig'i kutilayotgan bo'lsa (D2/D7) holat o'zgargach belgi ma'nosiz: tozalanadi.
+      Object.assign(patch, customerConfirm.clearPatch(od));
       // D5: yakunda narx ma'lum bo'ladi - kuryer olib ketgan bo'lsa, haq shu
       // qadamda (qayta) hisoblanadi: faqat baza o'zgargan yoki haq hali yo'q bo'lsa.
+      // Haq alohida serverga xos hujjatda (vazifa hujjatida EMAS) - avval o'qiladi (o'qish
+      // fazasi), keyin yoziladi.
       let fields = null;
+      let prevPayout = null;
       if (status === 'completed' && od.pickupCourierId) {
         const base = patch.finalPrice !== undefined ? patch.finalPrice : od.finalPrice;
-        if (od.courierPayout == null || od.courierPayoutBase !== base) {
+        const pSnap = await t.get(courierTaskPayout.payoutRef(db, 'agro', orderId));
+        const pd = pSnap.exists ? (pSnap.data() || {}) : null;
+        if (!pd || pd.payout == null || pd.base !== base) {
           const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-          fields = courierTaskPayout.buildFields(
-              'agro', base, payoutSettings, String(od.pickupCourierId));
-          Object.assign(patch, fields, {
-            courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          fields = courierTaskPayout.buildPayout(
+              'agro', orderId, base, payoutSettings, String(od.pickupCourierId));
+          if (pd) {
+            prevPayout = {
+              payout: pd.payout == null ? null : pd.payout,
+              base: pd.base == null ? null : pd.base,
+              bps: pd.bps == null ? null : pd.bps,
+              version: pd.version == null ? null : pd.version,
+              reason: pd.reason == null ? null : pd.reason,
+            };
+          }
         }
       }
       t.update(ref, patch);
+      if (fields) {
+        courierTaskPayout.writePayoutInTx(
+          t, db, 'agro', orderId, fields, admin.firestore.FieldValue.serverTimestamp(), prevPayout);
+      }
       return fields;
     });
     if (payoutLog) {
@@ -19934,6 +20199,54 @@ exports.courierMarkAgroPickupArrived = functions.https.onCall(async (data, conte
   }
 });
 
+// ── Agro: kuryer qadami va mijoz tasdig'i BIR XIL yadroni ishlatadi (D2/D7, 7-qoida) ──────────
+function assertAgroPickupReady(od, courierId) {
+  if (String(od.status || '') !== 'pickup_in_delivery') {
+    throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+  }
+  if (String(od.pickupCourierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+  }
+  if (!od.arrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+}
+
+async function agroPickedUpCore(t, ref, od, orderId, courierId, confirmStep) {
+  // D5: kuryerning oxirgi qadami. Narx (finalPrice) odatda admin yakunida
+  // qo'yiladi - noma'lum bo'lsa `price_unknown`, `adminSetAgroPickupStatus`
+  // 'completed' qadamida qayta hisoblanadi.
+  const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
+  const fields = courierTaskPayout.buildPayout('agro', orderId, od.finalPrice, payoutSettings, courierId);
+  t.update(ref, {
+    status: 'picked_up',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...customerConfirm.clearPatch(od),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+  courierTaskPayout.writePayoutInTx(
+    t, db, 'agro', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
+  return fields;
+}
+
+customerConfirm.registerHandler('agro', {
+  collection: 'agro_pickup_orders',
+  phoneField: 'customerPhone',
+  customerPhoneOf: (od) => od.customerPhone,
+  statusOf: (od) => String(od.status || ''),
+  describe: (od, marker) => (marker.step === 'handover_pickup' && od.status === 'pickup_in_delivery'
+    ? { key: 'confirm_agro_pickup', params: {} } : null),
+  confirm: async (t, { ref, id, od, marker, step }) => {
+    const courierId = canonicalUid(String(marker.courierId || ''));
+    assertAgroPickupReady(od, courierId);
+    const fields = await agroPickedUpCore(t, ref, od, id, courierId, step);
+    return {
+      status: 'picked_up',
+      after: () => courierTaskPayout.logPayout('agro', id, fields, { step: 'customer_confirmed' }),
+    };
+  },
+});
+
 /** Kuryer: sut olib ketildi (pickup_in_delivery → picked_up). */
 exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) => {
   try {
@@ -19948,35 +20261,25 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
     }
 
     const ref = db.collection('agro_pickup_orders').doc(orderId);
-    const payoutFields = await db.runTransaction(async (t) => {
+    const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) {
         throw new functions.https.HttpsError('not-found', 'order not found');
       }
       const od = snap.data() || {};
-      if (String(od.status || '') !== 'pickup_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      assertAgroPickupReady(od, courierId);
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer o'zi yakunlay olmaydi.
+      if (await customerConfirm.isGated('agro', od.customerPhone)) {
+        const rq = customerConfirm.requestInTx(t, ref, od, { step: 'handover_pickup', courierId });
+        return { gated: true, od, created: rq.created };
       }
-      if (String(od.pickupCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-      }
-      if (!od.arrivedAt) {
-        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-      }
-      // D5: kuryerning oxirgi qadami. Narx (finalPrice) odatda admin yakunida
-      // qo'yiladi - noma'lum bo'lsa `price_unknown`, `adminSetAgroPickupStatus`
-      // 'completed' qadamida qayta hisoblanadi.
-      const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildFields('agro', od.finalPrice, payoutSettings, courierId);
-      t.update(ref, {
-        status: 'picked_up',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...fields,
-        courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      return fields;
+      return { gated: false, fields: await agroPickedUpCore(t, ref, od, orderId, courierId, '') };
     });
-    courierTaskPayout.logPayout('agro', orderId, payoutFields, { step: 'courier_picked_up' });
+    if (out.gated) {
+      await customerConfirm.afterRequest('agro', orderId, 'handover_pickup', out.od, {}, out.created);
+      return customerConfirm.awaitingResponse('handover_pickup');
+    }
+    courierTaskPayout.logPayout('agro', orderId, out.fields, { step: 'courier_picked_up' });
     return { ok: true, orderId, status: 'picked_up' };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

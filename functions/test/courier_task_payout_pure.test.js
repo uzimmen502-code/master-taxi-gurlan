@@ -48,36 +48,50 @@ check('resolveRate: sozlangan → {bps, version}; yo\'q hujjat / modul / noma\'l
   assert.strictEqual(p.resolveRate(doc, '__proto__'), null);
 });
 
-check('buildFields: sozlangan → courierPayout + bps + version + base + kuryer', () => {
-  const f = p.buildFields('carpet', 40000, doc, '998901110001');
+check('buildPayout: sozlangan -> payout + bps + version + base + kuryer + modul/vazifa (vazifa hujjatiga EMAS, alohida hujjatga)', () => {
+  const f = p.buildPayout('carpet', 't1', 40000, doc, '998901110001');
   assert.deepStrictEqual(f, {
-    courierPayout: 6000, courierPayoutBps: 1500, courierPayoutVersion: 7,
-    courierPayoutBase: 40000, courierPayoutCourierId: '998901110001', courierPayoutReason: null,
+    module: 'carpet', taskId: 't1', courierId: '998901110001',
+    payout: 6000, bps: 1500, version: 7, base: 40000, reason: null,
   });
 });
-check('buildFields: foiz sozlanmagan → courierPayout null, sabab not_configured (versiya hujjatniki)', () => {
-  const f = p.buildFields('carpet', 40000, null, 'c1');
-  assert.deepStrictEqual(f, {
-    courierPayout: null, courierPayoutBps: null, courierPayoutVersion: 0,
-    courierPayoutBase: 40000, courierPayoutCourierId: 'c1', courierPayoutReason: 'not_configured',
-  });
-  assert.strictEqual(p.buildFields('carpet', 40000, { version: 4, modules: {} }, 'c1').courierPayoutVersion, 4);
+check('buildPayout: natijada courierPayout* nomli maydon YO\'Q (vazifa hujjatiga oqib ketmasin)', () => {
+  const f = p.buildPayout('carpet', 't1', 40000, doc, 'c1');
+  assert.deepStrictEqual(Object.keys(f).filter((k) => /^courierPayout/.test(k)), []);
+  assert.strictEqual(p.buildFields, undefined, 'eski buildFields olib tashlangan');
 });
-check('buildFields: narx noma\'lum (0 / yo\'q / float / satr) → null, sabab price_unknown, foiz saqlanadi', () => {
+check('buildPayout: foiz sozlanmagan -> payout null, sabab not_configured (versiya hujjatniki)', () => {
+  const f = p.buildPayout('carpet', 't1', 40000, null, 'c1');
+  assert.deepStrictEqual(f, {
+    module: 'carpet', taskId: 't1', courierId: 'c1',
+    payout: null, bps: null, version: 0, base: 40000, reason: 'not_configured',
+  });
+  assert.strictEqual(p.buildPayout('carpet', 't1', 40000, { version: 4, modules: {} }, 'c1').version, 4);
+});
+check('buildPayout: narx noma\'lum (0 / yo\'q / float / satr) -> null, sabab price_unknown, foiz saqlanadi', () => {
   for (const base of [0, undefined, null, 12.5, '40000', -3]) {
-    const f = p.buildFields('carpet', base, doc, 'c1');
-    assert.strictEqual(f.courierPayout, null, String(base));
-    assert.strictEqual(f.courierPayoutReason, 'price_unknown', String(base));
-    assert.strictEqual(f.courierPayoutBps, 1500, 'foiz keyin qayta hisoblash uchun');
-    assert.strictEqual(f.courierPayoutBase, null);
+    const f = p.buildPayout('carpet', 't1', base, doc, 'c1');
+    assert.strictEqual(f.payout, null, String(base));
+    assert.strictEqual(f.reason, 'price_unknown', String(base));
+    assert.strictEqual(f.bps, 1500, 'foiz keyin qayta hisoblash uchun');
+    assert.strictEqual(f.base, null);
   }
 });
-check('buildFields: 0 % sozlangan → courierPayout 0 (null emas), sabab yo\'q', () => {
-  const f = p.buildFields('agro', 20000, doc, 'c1');
-  assert.strictEqual(f.courierPayout, 0);
-  assert.strictEqual(f.courierPayoutReason, null);
+check('buildPayout: 0 % sozlangan -> payout 0 (null emas), sabab yo\'q', () => {
+  const f = p.buildPayout('agro', 't1', 20000, doc, 'c1');
+  assert.strictEqual(f.payout, 0);
+  assert.strictEqual(f.reason, null);
 });
 
+check('payoutDocId: {modul}_{vazifaId}; noma\'lum modul / bo\'sh yoki "/" li id -> xato', () => {
+  assert.strictEqual(p.PAYOUT_COLLECTION, 'courier_task_payouts');
+  assert.strictEqual(p.payoutDocId('carpet', 'abc'), 'carpet_abc');
+  assert.strictEqual(p.payoutDocId('collection', 'X1'), 'collection_X1');
+  assert.throws(() => p.payoutDocId('bread', 'abc'));
+  assert.throws(() => p.payoutDocId('carpet', ''));
+  assert.throws(() => p.payoutDocId('carpet', 'a/b'));
+  assert.throws(() => p.payoutDocId('carpet', undefined));
+});
 check('validatePctInput: modul va bps tekshiruvi; null = sozlamani olib tashlash', () => {
   assert.deepStrictEqual(p.validatePctInput({ module: 'carpet', bps: 1500 }), { module: 'carpet', bps: 1500 });
   assert.deepStrictEqual(p.validatePctInput({ module: 'agro', bps: null }), { module: 'agro', bps: null });

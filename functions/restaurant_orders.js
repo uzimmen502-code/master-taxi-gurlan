@@ -187,6 +187,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger,
     requireCallerRoles, notifyUserInApp, notifyCourierArrivedToCustomer, axios,
     fetchRoute: fetchRouteOverride, now: nowFn, courierPush,
+    // Mijoz tasdig'i (D2/D7): `customer_confirm.js`. Yo'q bo'lsa — eski oqim (gate yo'q).
+    customerConfirm,
   } = deps;
   // `courierAuth` index.js da bu attach'dan KEYIN e'lon qilinadi (const, TDZ):
   // shuning uchun yuklashda emas, chaqiruvda olinadi (deps getter).
@@ -1510,21 +1512,18 @@ function attachRestaurantOrders(exportsObj, deps) {
   });
 
   /**
-   * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
-   * yoki `delivery_failed` (2 % restoranga qaytadi, mijozga strike).
-   * Idempotent: `wallet_idempotency/rest_complete_{orderId}`.
+   * Yakun tranzaksiyasi — YAGONA yadro (7-qoida): kuryerning `courierCompleteRestaurantDelivery`
+   * chaqiruvi ham, mijozning tasdig'i (`customerConfirmHandover`, modul `restaurant`) ham shuni
+   * ishlatadi.
+   *   `gate: true` (kuryer chaqiruvi) va mijoz tasdig'i shu mijoz uchun YOQILGAN bo'lsa,
+   *   'delivered' YAKUNLANMAYDI: faqat kutish belgisi yoziladi (holat va pul o'zgarmaydi).
+   *   `confirmStep` — mijoz tasdig'i: yadro bajariladi, belgi o'chadi, tasdiq izi yoziladi.
+   * Sozlama o'chiq bo'lsa yo'l AVVALGI kod bilan bir xil. Pul kalitlari o'zgarmagan
+   * (`rest_complete_{id}`, `restDelivery_{id}`), shuning uchun qayta urinish ikki marta to'lamaydi.
    */
-  exportsObj.courierCompleteRestaurantDelivery = functions.https.onCall(async (data, context) => {
-    const t0 = Date.now();
-    const uid = requirePhoneUid(context);
-    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
-    const orderId = str(data && data.orderId, 64);
-    const outcome = (data && data.outcome) === 'failed' ? 'failed' : 'delivered';
-    const failReason = FAIL_REASONS.includes(data && data.failReason) ? data.failReason : 'other';
-    const orderRef = db.collection(ORDERS).doc(orderId);
-    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
-    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
-    const out = await db.runTransaction(async (t) => {
+  async function completeInTx(t, {
+    orderRef, idemRef, orderId, courierId, outcome, failReason, gate, confirmStep,
+  }) {
       // READ fazasi.
       const [idemSnap, od] = await Promise.all([t.get(idemRef), getOrderInTx(t, orderRef)]);
       courierAuthOf().assertOrderActionable(od, courierId, 'courierCompleteRestaurantDelivery', orderId);
@@ -1539,6 +1538,15 @@ function attachRestaurantOrders(exportsObj, deps) {
         throw fail('failed-precondition', 'ORDER_NOT_PICKED', { from, to });
       }
       const customerUid = canonicalUid(String(od.userPhone || ''));
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer yetkazishni YAKUNLAY OLMAYDI. 'failed' ochiq qoladi.
+      if (gate && to === RS.delivered && customerConfirm && await customerConfirm.isGated('restaurant', customerUid)) {
+        const rq = customerConfirm.requestInTx(t, orderRef, od, { step: 'received', courierId });
+        if (rq.created) {
+          addEvent(t, orderRef, { from, to: from, actor: 'courier', actorId: courierId, reason: 'customer_confirm_requested', meta: { step: 'received' } });
+        }
+        return { done: true, result: customerConfirm.awaitingResponse('received'), requested: { od, created: rq.created } };
+      }
+      const clearMarker = customerConfirm ? customerConfirm.clearPatch(od) : {};
       const fee = Number(od.deliveryFee) || 0;
       let walletPrep = null;
       let refundPrep = null;
@@ -1589,6 +1597,8 @@ function attachRestaurantOrders(exportsObj, deps) {
           deliveredAt: ts(), completedAt: ts(), courierId, deliveryPaymentMethod, deliveryFeeFallback,
           deliveryFeeWalletPaid: walletPaid, cashCollected, cashPaid: cashCollected,
           ...(buyout || od.paymentStatus === 'paid' ? { paymentStatus: 'paid' } : {}),
+          ...clearMarker,
+          ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
         }));
         t.set(db.collection(CUSTOMER_STATS).doc(customerUid), { completedCount: inc(1), updatedAt: ts() }, { merge: true });
       } else {
@@ -1597,6 +1607,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         t.update(orderRef, statusPatch(RS.deliveryFailed, {
           failedAt: ts(), courierId, failReason, 'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null,
           rejectReason: `delivery_failed:${failReason}`,
+          ...clearMarker,
         }));
         if (strike) {
           // Mijoz eshikda olmadi — strike; ikkinchisidan faqat oldindan
@@ -1611,9 +1622,35 @@ function attachRestaurantOrders(exportsObj, deps) {
       }
       const result = { ok: true, orderId, outcome, deliveryFee: fee, walletPaid, cashCollected, refundAmount: refund.amount, deliveryPaymentMethod };
       t.set(idemRef, { type: 'courierCompleteRestaurantDelivery', result, createdAt: ts() });
-      addEvent(t, orderRef, { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
+      addEvent(t, orderRef, confirmStep
+        ? { from, to, actor: 'customer', actorId: customerUid, reason: 'customer_confirmed', meta: { walletPaid, cashCollected, refundAmount: refund.amount, step: confirmStep, courierId } }
+        : { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
       return { done: false, result, customerUid, restaurantId: od.restaurantId };
-    });
+  }
+
+  /**
+   * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
+   * yoki `delivery_failed` (2 % restoranga qaytadi, mijozga strike).
+   * Idempotent: `wallet_idempotency/rest_complete_{orderId}`.
+   * Mijoz tasdig'i yoqilgan bo'lsa 'delivered' kuryer chaqiruvida yakunlanmaydi:
+   * `{ ok, awaitingCustomer: true, step: 'received' }` qaytadi (yadro: `completeInTx`).
+   */
+  exportsObj.courierCompleteRestaurantDelivery = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const outcome = (data && data.outcome) === 'failed' ? 'failed' : 'delivered';
+    const failReason = FAIL_REASONS.includes(data && data.failReason) ? data.failReason : 'other';
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
+    const out = await db.runTransaction((t) => completeInTx(t, {
+      orderRef, idemRef, orderId, courierId, outcome, failReason, gate: true,
+    }));
+    if (out.requested) {
+      await customerConfirm.afterRequest('restaurant', orderId, 'received', out.requested.od, {}, out.requested.created);
+    }
     if (out.done) return out.result;
     log('complete', { orderId, restaurantId: out.restaurantId, userId: courierId, result: outcome, walletPaid: out.result.walletPaid, durationMs: Date.now() - t0 });
     if (outcome === 'delivered') {
@@ -1623,6 +1660,32 @@ function attachRestaurantOrders(exportsObj, deps) {
     }
     return out.result;
   });
+
+  // Mijoz tasdig'i yadrosi (D2/D7): `customerConfirmHandover({module:'restaurant', step:'received'})`
+  // kuryer chaqiruvi bilan AYNAN bir xil `completeInTx` ni ishlatadi (saqlangan courierId bilan).
+  if (customerConfirm) {
+    customerConfirm.registerHandler('restaurant', {
+      collection: ORDERS,
+      phoneField: 'userPhone',
+      customerPhoneOf: (od) => od.userPhone,
+      statusOf: (od) => String(od.restaurantStatus || ''),
+      describe: (od, marker) => (marker.step === 'received' && [RS.picked, RS.arrived].includes(od.restaurantStatus)
+        ? { key: 'confirm_restaurant_received', params: {} } : null),
+      confirm: async (t, { ref, id, od, marker }) => {
+        const orderId = id;
+        const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+        const out = await completeInTx(t, {
+          orderRef: ref, idemRef, orderId, courierId: canonicalUid(String(marker.courierId || '')),
+          outcome: 'delivered', failReason: 'other', gate: false, confirmStep: 'received',
+        });
+        if (out.done) {
+          // Pul allaqachon yopilgan (idempotentlik hujjati bor), belgi esa qolib ketgan: tozalaymiz.
+          t.update(ref, { ...customerConfirm.clearPatch(od), ...customerConfirm.confirmedPatch('received', marker.courierId) });
+        }
+        return { status: RS.delivered };
+      },
+    });
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   // JADVAL: qabul qilinmagan buyurtmalar (taymaut) — har daqiqa

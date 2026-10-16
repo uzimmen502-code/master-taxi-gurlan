@@ -8,9 +8,10 @@
  * Qulflanadi:
  *   - admin sozlamasi: faqat admin/superadmin; modul/bps tekshiruvi; versiya + tarix + audit;
  *     bir xil qiymat qayta -> yangi versiya yo'q; null = "sozlanmagan"
- *   - yakunda `courierPayout` (butun, floor), `courierPayoutBps`, `courierPayoutVersion`,
- *     `courierPayoutBase`, `courierPayoutCourierId` vazifa hujjatiga yoziladi
- *   - foiz sozlanmagan -> courierPayout null (not_configured); narx noma'lum -> null (price_unknown)
+ *   - yakunda haq (butun, floor), bps, versiya, baza, kuryer SERVERGA XOS
+ *     `courier_task_payouts/{modul}_{vazifaId}` ga yoziladi; vazifa hujjatiga (mijoz o'qiydi,
+ *     yig'ib olishda kuryer ham) HECH QANDAY `courierPayout*` maydoni yozilmaydi (maxfiylik, 14-qoida)
+ *   - foiz sozlanmagan -> payout null (not_configured); narx noma'lum -> null (price_unknown)
  *   - agro: narx yakunda (admin 'completed') ma'lum bo'lsa o'sha qadamda hisoblanadi
  *   - mijoz narxi (finalPrice/finalValue) O'ZGARMAYDI; ledger/hamyonga YOZUV YO'Q
  *   - callable javoblari AVVALGI shaklda (eski ilova buzilmaydi)
@@ -82,8 +83,19 @@ const agro = (id, over = {}) => db.collection('agro_pickup_orders').doc(id).set(
   customerId: CUSTOMER, customerPhone: CUSTOMER, productType: 'milk', literCount: 20, priceMode: 'admin', finalPrice: 0,
   status: 'pickup_in_delivery', pickupCourierId: A, arrivedAt: at(5000), createdAt: at(1000), ...over,
 });
-const PAYOUT_KEYS = ['courierPayout', 'courierPayoutBps', 'courierPayoutVersion', 'courierPayoutBase', 'courierPayoutCourierId', 'courierPayoutReason'];
-const payoutOf = (d) => Object.fromEntries(PAYOUT_KEYS.map((k) => [k, d[k]]));
+// D5 (maxfiylik): kuryer haqi ichki xarajat - vazifa hujjatiga (mijoz o'qiydi) YOZILMAYDI,
+// faqat serverga xos `courier_task_payouts/{modul}_{vazifaId}` ga.
+const OLD_TASK_KEYS = ['courierPayout', 'courierPayoutBps', 'courierPayoutVersion', 'courierPayoutBase',
+  'courierPayoutCourierId', 'courierPayoutReason', 'courierPayoutAt'];
+const noPayoutOnTask = (d, label) => {
+  for (const k of OLD_TASK_KEYS) assert.ok(!(k in d), `${label}: ${k} vazifa hujjatida bo'lmasligi kerak`);
+};
+const payoutDoc = (module, id) => get(`courier_task_payouts/${module}_${id}`);
+const payoutOf = async (module, id) => {
+  const d = await payoutDoc(module, id);
+  assert.ok(d, `courier_task_payouts/${module}_${id} yo'q`);
+  return { payout: d.payout, bps: d.bps, version: d.version, base: d.base, courierId: d.courierId, reason: d.reason };
+};
 const journalSize = async () => (await db.collection(ledger.COL_JOURNAL).get()).size;
 
 async function main() {
@@ -129,32 +141,36 @@ async function main() {
     assert.deepStrictEqual(r, { ok: true, orderId: 'c1', status: 'completed' });
     const d = await get('carpet_wash_orders/c1');
     assert.strictEqual(d.status, 'completed');
-    assert.deepStrictEqual(payoutOf(d), {
-      courierPayout: 6000, courierPayoutBps: 1500, courierPayoutVersion: 3, courierPayoutBase: 40000,
-      courierPayoutCourierId: A, courierPayoutReason: null,
+    noPayoutOnTask(d, 'c1');
+    assert.deepStrictEqual(await payoutOf('carpet', 'c1'), {
+      payout: 6000, bps: 1500, version: 3, base: 40000,
+      courierId: A, reason: null,
     });
-    assert.ok(d.courierPayoutAt, 'courierPayoutAt');
+    const pd1 = await payoutDoc('carpet', 'c1');
+    assert.ok(pd1.computedAt, 'computedAt');
+    assert.deepStrictEqual([pd1.module, pd1.taskId], ['carpet', 'c1']);
     assert.strictEqual(d.finalPrice, 40000, 'mijoz narxi tegilmadi');
     assert.strictEqual(await journalSize(), j0, 'ledger yozuvi YO\'Q');
     assert.strictEqual((await get(`users/${A}`)).bonusBalance, 0, 'kuryer hamyoni o\'zgarmadi');
   });
   await check('C2 takror yakun rad (status completed) - haq qayta hisoblanmaydi', async () => {
     await assert.rejects(call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c1' }, A), (e) => e.code === 'failed-precondition');
-    assert.strictEqual((await get('carpet_wash_orders/c1')).courierPayout, 6000);
+    assert.strictEqual((await payoutDoc('carpet', 'c1')).payout, 6000);
   });
   await check('C3 floor: 33 333 x 15 % = 4 999', async () => {
     await carpet('c3', { finalPrice: 33333 });
     await call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c3' }, A);
-    assert.strictEqual((await get('carpet_wash_orders/c3')).courierPayout, 4999);
+    assert.strictEqual((await payoutDoc('carpet', 'c3')).payout, 4999);
   });
   await check('C4 narx noma\'lum (finalPrice 0): yakun o\'tadi, courierPayout null, sabab price_unknown, foiz saqlanadi', async () => {
     await carpet('c4', { finalPrice: 0 });
     const r = await call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c4' }, A);
     assert.strictEqual(r.status, 'completed');
     const d = await get('carpet_wash_orders/c4');
-    assert.deepStrictEqual(payoutOf(d), {
-      courierPayout: null, courierPayoutBps: 1500, courierPayoutVersion: 3, courierPayoutBase: null,
-      courierPayoutCourierId: A, courierPayoutReason: 'price_unknown',
+    noPayoutOnTask(d, 'c4');
+    assert.deepStrictEqual(await payoutOf('carpet', 'c4'), {
+      payout: null, bps: 1500, version: 3, base: null,
+      courierId: A, reason: 'price_unknown',
     });
   });
   await check('C5 foiz sozlanmagan (null): yakun o\'tadi, courierPayout null, sabab not_configured, versiya = hujjat versiyasi', async () => {
@@ -163,18 +179,18 @@ async function main() {
     assert.strictEqual((await call('adminGetCourierTaskPayoutSettings', {}, ADMIN)).modules.carpet, null);
     await carpet('c5');
     await call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c5' }, A);
-    assert.deepStrictEqual(payoutOf(await get('carpet_wash_orders/c5')), {
-      courierPayout: null, courierPayoutBps: null, courierPayoutVersion: 4, courierPayoutBase: 40000,
-      courierPayoutCourierId: A, courierPayoutReason: 'not_configured',
+    assert.deepStrictEqual(await payoutOf('carpet', 'c5'), {
+      payout: null, bps: null, version: 4, base: 40000,
+      courierId: A, reason: 'not_configured',
     });
     await set('carpet', 2000); // v5 - keyingi testlar uchun
     await carpet('c6');
     await call('courierMarkCarpetDelivered', { courierPhone: A, orderId: 'c6' }, A);
-    assert.deepStrictEqual(payoutOf(await get('carpet_wash_orders/c6')), {
-      courierPayout: 8000, courierPayoutBps: 2000, courierPayoutVersion: 5, courierPayoutBase: 40000,
-      courierPayoutCourierId: A, courierPayoutReason: null,
+    assert.deepStrictEqual(await payoutOf('carpet', 'c6'), {
+      payout: 8000, bps: 2000, version: 5, base: 40000,
+      courierId: A, reason: null,
     });
-    assert.strictEqual((await get('carpet_wash_orders/c1')).courierPayoutVersion, 3, 'eski vazifa o\'z versiyasida qoladi');
+    assert.strictEqual((await payoutDoc('carpet', 'c1')).version, 3, 'eski vazifa o\'z versiyasida qoladi');
   });
 
   // ── 3. Agro ──────────────────────────────────────────────────────────
@@ -182,24 +198,27 @@ async function main() {
     await agro('g1', { finalPrice: 30000 });
     const r = await call('courierMarkAgroPickedUp', { courierPhone: A, orderId: 'g1' }, A);
     assert.deepStrictEqual(r, { ok: true, orderId: 'g1', status: 'picked_up' });
-    assert.deepStrictEqual(payoutOf(await get('agro_pickup_orders/g1')), {
-      courierPayout: 3000, courierPayoutBps: 1000, courierPayoutVersion: 5, courierPayoutBase: 30000,
-      courierPayoutCourierId: A, courierPayoutReason: null,
+    assert.deepStrictEqual(await payoutOf('agro', 'g1'), {
+      payout: 3000, bps: 1000, version: 5, base: 30000,
+      courierId: A, reason: null,
     });
   });
   await check('G2 agro: narx noma\'lum -> price_unknown; admin yakunda narx qo\'yadi (20 000) -> o\'sha qadamda 2 000', async () => {
     await agro('g2');
     await call('courierMarkAgroPickedUp', { courierPhone: A, orderId: 'g2' }, A);
     let d = await get('agro_pickup_orders/g2');
-    assert.strictEqual(d.courierPayout, null);
-    assert.strictEqual(d.courierPayoutReason, 'price_unknown');
+    noPayoutOnTask(d, 'g2');
+    const pdG2 = await payoutDoc('agro', 'g2');
+    assert.strictEqual(pdG2.payout, null);
+    assert.strictEqual(pdG2.reason, 'price_unknown');
     const r = await call('adminSetAgroPickupStatus', { adminPhone: ADMIN, orderId: 'g2', status: 'completed', finalPrice: 20000 }, ADMIN);
     assert.deepStrictEqual(r, { ok: true, orderId: 'g2', status: 'completed' });
     d = await get('agro_pickup_orders/g2');
     assert.strictEqual(d.finalPrice, 20000);
-    assert.deepStrictEqual(payoutOf(d), {
-      courierPayout: 2000, courierPayoutBps: 1000, courierPayoutVersion: 5, courierPayoutBase: 20000,
-      courierPayoutCourierId: A, courierPayoutReason: null,
+    noPayoutOnTask(d, 'g2 yakun');
+    assert.deepStrictEqual(await payoutOf('agro', 'g2'), {
+      payout: 2000, bps: 1000, version: 5, base: 20000,
+      courierId: A, reason: null,
     });
   });
   await check('G3 agro: olib ketishda hisoblangan, admin yakunda narxni O\'ZGARTIRSA - baza o\'zgarganda qayta hisoblanadi (3 000 -> 4 000); o\'zgarmasa tegilmaydi', async () => {
@@ -207,13 +226,16 @@ async function main() {
     await call('courierMarkAgroPickedUp', { courierPhone: A, orderId: 'g3' }, A);
     await call('adminSetAgroPickupStatus', { adminPhone: ADMIN, orderId: 'g3', status: 'completed', finalPrice: 40000 }, ADMIN);
     let d = await get('agro_pickup_orders/g3');
-    assert.deepStrictEqual([d.courierPayout, d.courierPayoutBase], [4000, 40000]);
+    noPayoutOnTask(d, 'g3');
+    let pd = await payoutDoc('agro', 'g3');
+    assert.deepStrictEqual([pd.payout, pd.base], [4000, 40000]);
+    assert.deepStrictEqual([pd.previous.payout, pd.previous.base], [3000, 30000], 'avvalgi hisob izi saqlanadi (16-qoida)');
     await agro('g3b', { finalPrice: 30000 });
     await call('courierMarkAgroPickedUp', { courierPhone: A, orderId: 'g3b' }, A);
     await set('agro', 2500); // v6 - g3b allaqachon v5 da hisoblangan
     await call('adminSetAgroPickupStatus', { adminPhone: ADMIN, orderId: 'g3b', status: 'completed' }, ADMIN);
-    d = await get('agro_pickup_orders/g3b');
-    assert.deepStrictEqual([d.courierPayout, d.courierPayoutVersion], [3000, 5], 'baza o\'zgarmadi - hisob tegilmadi');
+    pd = await payoutDoc('agro', 'g3b');
+    assert.deepStrictEqual([pd.payout, pd.version], [3000, 5], 'baza o\'zgarmadi - hisob tegilmadi');
     await set('agro', 1000); // v7
   });
   await check('G4 agro: kuryersiz (admin qo\'lda yig\'di) - kuryer haqi maydonlari YOZILMAYDI', async () => {
@@ -221,7 +243,8 @@ async function main() {
     await call('adminSetAgroPickupStatus', { adminPhone: ADMIN, orderId: 'g4', status: 'picked_up' }, ADMIN);
     await call('adminSetAgroPickupStatus', { adminPhone: ADMIN, orderId: 'g4', status: 'completed' }, ADMIN);
     const d = await get('agro_pickup_orders/g4');
-    for (const k of PAYOUT_KEYS) assert.ok(!(k in d), `${k} yozilmasligi kerak`);
+    noPayoutOnTask(d, 'g4');
+    assert.strictEqual(await payoutDoc('agro', 'g4'), undefined, 'kuryersiz - haq hujjati ham yo\'q');
   });
 
   // ── 4. Yig'ib olish ──────────────────────────────────────────────────
@@ -234,15 +257,16 @@ async function main() {
     const r = await call('courierFinalizeCollection', { courierPhone: A, taskId: t.taskId, cashGiven: 0, items: [{ code: 'milk', qty: 10 }] }, A);
     assert.deepStrictEqual({ V: r.V, wc: r.walletCredit }, { V: 50000, wc: 50000 });
     const d = await get(`collection_tasks/${t.taskId}`);
-    assert.deepStrictEqual(payoutOf(d), {
-      courierPayout: 2500, courierPayoutBps: 500, courierPayoutVersion: 7, courierPayoutBase: 50000,
-      courierPayoutCourierId: A, courierPayoutReason: null,
+    noPayoutOnTask(d, 'y1');
+    assert.deepStrictEqual(await payoutOf('collection', t.taskId), {
+      payout: 2500, bps: 500, version: 7, base: 50000,
+      courierId: A, reason: null,
     });
     assert.strictEqual(d.finalValue, 50000);
     assert.strictEqual((await get(`users/${CUSTOMER}`)).bonusBalance, 50000, 'mijoz hamyoni avvalgidek');
     const again = await call('courierFinalizeCollection', { courierPhone: A, taskId: t.taskId, cashGiven: 0, items: [{ code: 'milk', qty: 10 }] }, A);
     assert.strictEqual(again.alreadyCompleted, true);
-    assert.strictEqual((await get(`collection_tasks/${t.taskId}`)).courierPayout, 2500, 'takrorda o\'zgarmadi');
+    assert.strictEqual((await payoutDoc('collection', t.taskId)).payout, 2500, 'takrorda o\'zgarmadi');
   });
   await check('Y2 yig\'ib olish: foiz sozlanmagan -> yakun o\'tadi (pul oqimi o\'zgarmaydi), courierPayout null', async () => {
     await set('collection', null);
@@ -254,7 +278,9 @@ async function main() {
     const r = await call('courierFinalizeCollection', { courierPhone: A, taskId: t.taskId, cashGiven: 0, items: [{ code: 'milk', qty: 2 }] }, A);
     assert.strictEqual(r.walletCredit, 10000);
     const d = await get(`collection_tasks/${t.taskId}`);
-    assert.deepStrictEqual([d.courierPayout, d.courierPayoutReason, d.courierPayoutBps], [null, 'not_configured', null]);
+    noPayoutOnTask(d, 'y2');
+    const pd2 = await payoutDoc('collection', t.taskId);
+    assert.deepStrictEqual([pd2.payout, pd2.reason, pd2.bps], [null, 'not_configured', null]);
   });
 
   await check('S1 sverka: Σdr == Σcr (kuryer haqi uchun ledger yozuvi yaratilmagan)', async () => {

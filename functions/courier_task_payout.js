@@ -3,7 +3,7 @@
  *
  * Qaror: kuryerning bu vazifalar uchun haqi - vazifa narxidan FOIZ (butun bps),
  * admin panelda tahrirlanadi. Standart foiz YO'Q (CLAUDE.md 1, 9): foiz
- * sozlanmagan bo'lsa haq HISOBLANMAYDI (`courierPayout: null`, sabab yoziladi).
+ * sozlanmagan bo'lsa haq HISOBLANMAYDI (`payout: null`, sabab yoziladi).
  *
  * Sozlama hujjati `settings/courier_task_payout`:
  *   { version, modules: { carpet: {bps}, agro: {bps}, collection: {bps} },
@@ -11,7 +11,7 @@
  * Har haqiqiy o'zgarish yangi `version` + o'zgarmas tarix
  * `courier_task_payout_history/v{n}` (previous bilan) + `admin_audit`
  * (`courier_task_payout_pct`) - bitta tranzaksiyada (9, 16, 41-qoida).
- * Vazifaga yoziladigan `courierPayoutVersion` = hisoblash paytidagi hujjat versiyasi.
+ * Haq hujjatidagi `version` = hisoblash paytidagi sozlama hujjati versiyasi.
  *
  * Hisob: `courierPayout = floor(base * bps / 10000)`, butun so'm (8-qoida).
  * floor: ijrochi haqi platformaga zarar qilmaydi (`tariff.splitInternal` bilan bir xil:
@@ -23,14 +23,22 @@
  *                 mijozga TO'LAYDI - "mijoz to'laydigan narx" ma'nosi yo'q, qiymat
  *                 asos qilib olindi: UNKNOWN/NEEDS CONFIRMATION)
  *
+ * MAXFIYLIK (CLAUDE.md 14, 40): kuryer haqi - ICHKI xarajat. Vazifa hujjatlarini
+ * (carpet_wash_orders / agro_pickup_orders / collection_tasks) mijoz (yig'ib olishda
+ * kuryer ham) to'liq o'qiydi - shuning uchun haq vazifa hujjatiga YOZILMAYDI. U
+ * serverga xos courier_task_payouts/{modul}_{vazifaId} hujjatiga yoziladi: bu
+ * kolleksiyaga firestore.rules'da match YO'Q = klient uchun o'qish ham, yozish ham
+ * taqiqlangan (default-deny; faqat Admin SDK). Test: courier_task_payout_rules.test.js.
+ *
  * PUL HARAKATI YO'Q: bu modul ledger/hamyonga HECH NIMA yozmaydi - faqat hisoblangan
- * qiymatni vazifa hujjatiga muhrlaydi (buxgalteriya hisobi - ochiq savol).
+ * qiymatni alohida hujjatga muhrlaydi (buxgalteriya hisobi - ochiq savol).
  */
 'use strict';
 
 const MODULE_KEYS = Object.freeze(['carpet', 'agro', 'collection']);
 const SETTINGS_DOC = Object.freeze(['settings', 'courier_task_payout']);
 const HISTORY_COLLECTION = 'courier_task_payout_history';
+const PAYOUT_COLLECTION = 'courier_task_payouts';
 const ADMIN_AUDIT = 'admin_audit';
 const BPS_MIN = 0;
 const BPS_MAX = 10000;
@@ -63,11 +71,20 @@ function resolveRate(settingsDoc, moduleKey) {
   return { bps: entry.bps, version: isInt(d.version) && d.version >= 0 ? d.version : 0 };
 }
 
+/** `courier_task_payouts` hujjat id: `{modul}_{vazifaId}` (bir vazifa - bitta hujjat). */
+function payoutDocId(moduleKey, taskId) {
+  if (!MODULE_KEYS.includes(moduleKey)) throw codeError('MODULE_INVALID', 'invalid-argument', { allowed: [...MODULE_KEYS] });
+  const id = typeof taskId === 'string' ? taskId : '';
+  if (!id || id.includes('/')) throw codeError('TASK_ID_INVALID', 'invalid-argument');
+  return `${moduleKey}_${id}`;
+}
+
 /**
- * Vazifa hujjatiga yoziladigan maydonlar (serverTimestamp chaqiruvchida qo'shiladi).
+ * `courier_task_payouts/{modul}_{vazifaId}` hujjat maydonlari (computedAt chaqiruvchida qo'shiladi).
  * Sabab: narx noma'lum -> `price_unknown`; foiz yo'q -> `not_configured`.
+ * VAZIFA hujjatiga yozilmaydi (maxfiylik, yuqoriga qarang).
  */
-function buildFields(moduleKey, base, settingsDoc, courierId) {
+function buildPayout(moduleKey, taskId, base, settingsDoc, courierId) {
   const rate = resolveRate(settingsDoc, moduleKey);
   const baseOk = isInt(base) && base > 0;
   const docVersion = settingsDoc && isInt(settingsDoc.version) && settingsDoc.version >= 0 ? settingsDoc.version : 0;
@@ -75,15 +92,31 @@ function buildFields(moduleKey, base, settingsDoc, courierId) {
   if (!baseOk) reason = 'price_unknown';
   else if (!rate) reason = 'not_configured';
   return {
-    courierPayout: reason ? null : computePayout(base, rate.bps),
-    courierPayoutBps: rate ? rate.bps : null,
-    courierPayoutVersion: rate ? rate.version : docVersion,
-    courierPayoutBase: baseOk ? base : null,
-    courierPayoutCourierId: String(courierId || ''),
-    courierPayoutReason: reason,
+    module: moduleKey,
+    taskId: String(taskId || ''),
+    courierId: String(courierId || ''),
+    payout: reason ? null : computePayout(base, rate.bps),
+    bps: rate ? rate.bps : null,
+    version: rate ? rate.version : docVersion,
+    base: baseOk ? base : null,
+    reason,
   };
 }
 
+/** Tranzaksiyada haq hujjati havolasi (o'qish ham, yozish ham shu orqali). */
+function payoutRef(db, moduleKey, taskId) {
+  return db.collection(PAYOUT_COLLECTION).doc(payoutDocId(moduleKey, taskId));
+}
+
+/**
+ * Haq hujjatini YOZISH (tranzaksiyaning yozuv fazasida). `previous` - qayta hisoblashda
+ * avvalgi qiymat izi (16-qoida: eski hisob yo'qolmasin), birinchi yozuvda berilmaydi.
+ */
+function writePayoutInTx(t, db, moduleKey, taskId, payout, computedAt, previous) {
+  const doc = { ...payout, computedAt };
+  if (previous) doc.previous = previous;
+  t.set(payoutRef(db, moduleKey, taskId), doc);
+}
 /** Admin kirishi: modul + bps (null = sozlamani olib tashlash). */
 function validatePctInput(data) {
   const d = data && typeof data === 'object' ? data : {};
@@ -107,13 +140,13 @@ async function readSettingsInTx(t, db) {
 function logPayout(moduleKey, taskId, fields, extra) {
   const base = {
     action: 'courierTaskPayout', module: moduleKey, taskId: String(taskId || ''),
-    base: fields.courierPayoutBase, bps: fields.courierPayoutBps,
-    settingsVersion: fields.courierPayoutVersion, payout: fields.courierPayout, ...(extra || {}),
+    base: fields.base, bps: fields.bps,
+    settingsVersion: fields.version, payout: fields.payout, ...(extra || {}),
   };
-  if (fields.courierPayoutReason) {
+  if (fields.reason) {
     console.warn(JSON.stringify({
       ...base, result: 'skipped',
-      errorCode: fields.courierPayoutReason === 'price_unknown'
+      errorCode: fields.reason === 'price_unknown'
         ? 'COURIER_PAYOUT_PRICE_UNKNOWN' : 'COURIER_PAYOUT_NOT_CONFIGURED',
     }));
   } else {
@@ -213,11 +246,15 @@ module.exports = {
   MODULE_KEYS,
   SETTINGS_DOC,
   HISTORY_COLLECTION,
+  PAYOUT_COLLECTION,
   BPS_MIN,
   BPS_MAX,
   computePayout,
   resolveRate,
-  buildFields,
+  buildPayout,
+  payoutDocId,
+  payoutRef,
+  writePayoutInTx,
   validatePctInput,
   readSettingsInTx,
   logPayout,

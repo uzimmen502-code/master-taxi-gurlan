@@ -143,6 +143,11 @@ async function collectModule(db, spec, nowMs, cutoffMs) {
         updatedAtMs: ms,
         courierId: spec.courier(d),
         ageHours: ms === null ? null : Math.floor(Math.max(0, nowMs - ms) / (HOUR_MS / 10)) / 10,
+        // Mijoz tasdig'i kutilmoqda (D2/D7): kuryer qadamini bajargan, mijoz hali "Oldim/Berdim" demagan.
+        // Maydon FAQAT belgi bor hujjatda qo'shiladi (eski javob shakli o'zgarmaydi). Belgi yozilganda
+        // `updatedAt` o'zgarmaydi - yosh holat o'zgarishidan boshlab sanaladi.
+        ...(d.awaitingCustomerConfirm && typeof d.awaitingCustomerConfirm.step === 'string'
+          ? { awaitingCustomerStep: d.awaitingCustomerConfirm.step } : {}),
       });
     });
   }

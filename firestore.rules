@@ -1864,8 +1864,11 @@ service cloud.firestore {
       // ким ўқий, ҳар қандай админ роли (dispatcher ҳам) тўғридан-тўғри
       // ёзиб депозитни бошқа картага йўналтира оларди. Илова бу ҳужжатни
       // умуман ўқимайди. Тест: functions/test/admin_panel_audit_rules.test.js
+      // courier_task_payout (курьер вазифа ҳақи фоизлари — ИЧКИ харажат, 14-банд)
+      // — клиентга на ўқиш, на ёзиш: фақат CF `adminGet/SetCourierTaskPayoutSettings`.
       allow read: if docId != 'courier' && docId != 'tv_social'
-          && docId != 'wallet_bot';
+          && docId != 'wallet_bot'
+          && docId != 'courier_task_payout';
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
       // `prices` ичидаги маҳаллий такси тарифи — фақат CF
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
@@ -1879,6 +1882,7 @@ service cloud.firestore {
           && docId != 'wallet_bot'
           && docId != 'restaurant_delivery'
           && docId != 'all_orders_stuck'
+          && docId != 'courier_task_payout'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'

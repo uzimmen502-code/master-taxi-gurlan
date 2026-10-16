@@ -46,6 +46,7 @@ import 'carpet_wash_admin_screen.dart';
 import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_tasks_admin_screen.dart';
+import 'customer_confirm_admin_screen.dart';
 import 'courier_management_screen.dart';
 import 'taxi_verification_screen.dart';
 import 'driver_applications_screen.dart';
@@ -180,6 +181,15 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Курьер вазифалари',
       icon: Icons.assignment_late_outlined,
       description: 'Қотиб қолган вазифалар, курьер ҳақи фоизи',
+      access: _SectionAccess.users,
+    ),
+    // Сервер: `adminGetCustomerConfirmation` / `adminSetCustomerConfirmation` —
+    // босқич (OFF/INTERNAL/PUBLIC) ва синовчилар; `users` (admin/superadmin).
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'Мижоз тасдиғи',
+      icon: Icons.verified_outlined,
+      description: 'Мижоз тасдиғи: модуллар босқичи ва синовчилар',
       access: _SectionAccess.users,
     ),
     _AdminSection(
@@ -604,6 +614,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Курьер вазифалари') {
       return const CourierTasksAdminScreen();
+    }
+    if (section.label == 'Мижоз тасдиғи') {
+      return const CustomerConfirmAdminScreen();
     }
     if (section.label == 'Кафе-ресторанлар') {
       return const RestaurantsAdminScreen();

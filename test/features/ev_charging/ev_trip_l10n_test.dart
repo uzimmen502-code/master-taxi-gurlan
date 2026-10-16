@@ -64,6 +64,15 @@ void main() {
     'ev_replan_done',
     'ev_replan_nav_hint',
     'ev_replace_failed',
+    // Phase 2: yo'l rejimi (mavjud kalitlar: ev_mark_busy, ev_occupancy_saved)
+    'ev_drive_next',
+    'ev_drive_arrival_soc',
+    'ev_drive_arrived',
+    'ev_drive_charging_started',
+    'ev_drive_mode',
+    'ev_drive_busy_failed',
+    'ev_mark_busy',
+    'ev_occupancy_saved',
   ];
 
   final dict = <String, Map<String, dynamic>>{};
@@ -134,6 +143,25 @@ void main() {
       expect(dict[l]!['ev_alt_stops'], contains('{n}'), reason: l);
       expect(dict[l]!['ev_alt_stops'], contains('{d}'), reason: l);
       expect(dict[l]!['ev_alt_time_delta'], contains('{d}'), reason: l);
+      expect(dict[l]!['ev_drive_next'], contains('{d}'), reason: l);
+      expect(dict[l]!['ev_drive_arrival_soc'], contains('{p}'), reason: l);
+    }
+  });
+
+  test('yo\'l rejimi matnlari uch tilda to\'g\'ri; tugma/chip matnlari qisqa', () {
+    expect(dict['uz_Cyrl']!['ev_drive_next'], 'Кейинги зарядлаш: {d}');
+    expect(dict['uz_Latn']!['ev_drive_next'], 'Keyingi zaryadlash: {d}');
+    expect(dict['uz_Cyrl']!['ev_drive_arrival_soc'], 'Келишда ~{p}%');
+    expect(dict['uz_Cyrl']!['ev_drive_arrived'], 'Етиб келдингиз');
+    expect(dict['uz_Cyrl']!['ev_drive_charging_started'], 'Зарядлаш бошланди');
+    expect(dict['uz_Cyrl']!['ev_drive_mode'], 'Йўл режими');
+    expect(dict['uz_Latn']!['ev_drive_mode'], "Yo'l rejimi");
+    expect(dict['uz_Cyrl']!['ev_mark_busy'], 'Банд');
+    for (final l in langs) {
+      for (final k in const ['ev_drive_mode', 'ev_mark_busy']) {
+        expect((dict[l]![k] as String).length, lessThanOrEqualTo(16),
+            reason: '$l/$k');
+      }
     }
   });
 

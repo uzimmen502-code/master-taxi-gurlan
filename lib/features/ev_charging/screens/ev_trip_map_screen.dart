@@ -1,12 +1,17 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/map_launcher.dart';
+import '../../../models/ev_charging_station.dart';
+import '../../../repositories/ev_station_repository.dart';
 import '../controllers/ev_car_tracker.dart';
+import '../controllers/ev_drive_mode.dart';
 import '../controllers/ev_trip_alternatives.dart';
 import '../controllers/ev_trip_controller.dart';
 import '../controllers/ev_trip_nav_relay.dart';
@@ -14,6 +19,7 @@ import '../controllers/ev_route_progress.dart';
 import '../controllers/ev_trip_planner.dart';
 import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
+import '../widgets/ev_drive_card.dart';
 import '../widgets/ev_map_top_overlay.dart';
 import '../widgets/ev_next_stops_card.dart';
 import '../widgets/ev_trip_alternatives_sheet.dart';
@@ -71,6 +77,11 @@ typedef EvTripMapBuilder = Widget Function(
   EvTripMapRenderData data,
 );
 
+/// «Банд» хабари: станция бандлигини жамоага юбориш. Ишлаб чиқаришда —
+/// [EvStationRepository.setOccupancy] (харита экранидаги станция
+/// карточкасидаги ЯГОНА чақирув); тестда сохта.
+typedef EvBusyReporter = Future<void> Function(String stationId);
+
 /// Ташқи навигация иловасини очувчи — ишлаб чиқаришда
 /// [openMapsEvTripRoute]; тестда сохта функция.
 typedef EvRouteLauncher = Future<bool> Function({
@@ -112,7 +123,16 @@ class EvTripMapScreen extends StatefulWidget {
     this.routeMinutes = 0,
     this.car,
     this.controller,
+    this.reportBusy,
+    this.driveClock,
   });
+
+  /// Yo'l rejimidagi "Банд" tugmasi chaqiradi. Berilmasa -
+  /// `EvStationRepository.setOccupancy(id, busy: true)` (Provider orqali).
+  final EvBusyReporter? reportBusy;
+
+  /// Test uchun: yo'l rejimi (tezlik gisterezisi) soati. Berilmasa - `DateTime.now`.
+  final DateTime Function()? driveClock;
 
   /// Reja holati (qayta hisob, "Almashtirish", "Qaytarish"). Berilmasa -
   /// ekran ichida [plan]/[corridorStations] dan tarmoqsiz kontroller quriladi.
@@ -216,6 +236,33 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   /// haydovchiga Google Maps'da yo'lni yangilash eslatiladi.
   bool _navSent = false;
 
+  // ---- Yo'l rejimi ----
+
+  /// Tezlik gisterezisi (sof mantiq: `ev_drive_mode.dart`).
+  late final EvDriveModeMachine _drive;
+
+  /// GPS yangi nuqta bermasa (10 m filtr, mashina to'xtadi) "to'xtadi"
+  /// holatini aniqlash uchun davriy tekshiruv.
+  static const Duration _driveTick = Duration(seconds: 2);
+  Timer? _driveTimer;
+
+  /// Tezlik uchun bir nuqta ikki marta hisoblanmasin (ilova fondan qaytganda
+  /// `_onCar` o'sha nuqta bilan qayta chaqiriladi).
+  EvCarFix? _lastSpeedFix;
+
+  /// Haydovchi "Зарядлаш бошланди" bosgan to'xtashlar: bu to'xtash uchun
+  /// yo'l rejimi karточкаси qayta chiqmaydi.
+  final Set<String> _ackedStops = <String>{};
+  bool _reportingBusy = false;
+
+  /// Yig'iq varaqa nisbati (build'da yangilanadi) - yo'l rejimi boshlanganda
+  /// varaqa shunga tushiriladi va yashiriladi.
+  double _peekFraction = 0.2;
+
+  /// Yo'l rejimida pastki karточка uchun xarita paddingi (Google logotipi
+  /// karточка tagida qolmasin).
+  static const double _driveMapPaddingPx = 300;
+
   EvRouteProgress? _progress;
   int _segmentHint = 0;
   bool _follow = false;
@@ -256,6 +303,10 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       _trip.corridorStations,
       maxWaypoints: widget.maxWaypoints ?? mapsMaxWaypoints(),
     )..addListener(_onSelection);
+    _drive = EvDriveModeMachine(clock: widget.driveClock);
+    _driveTimer = Timer.periodic(_driveTick, (_) {
+      if (mounted && _drive.tick()) setState(() {});
+    });
     _car = EvCarTracker(
       source: widget.locationSource ?? const GeolocatorCarLocationSource(),
     )..addListener(_onCar);
@@ -265,6 +316,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
 
   @override
   void dispose() {
+    _driveTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _car
       ..removeListener(_onCar)
@@ -311,7 +363,58 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
         _segmentHint = progress.location.segmentIndex;
       }
     }
+    final wasDriving = _drive.driving;
+    if (fix == null) {
+      // GPS yo'q (ruxsat/o'chiq): yo'l rejimi ko'rsatilmaydi.
+      if (_car.unavailable) _drive.reset();
+    } else if (!identical(fix, _lastSpeedFix)) {
+      _lastSpeedFix = fix;
+      _drive.onFix(fix.speedMps);
+    }
+    if (!wasDriving && _drive.driving) _collapseSheet();
     setState(() => _progress = progress);
+  }
+
+  /// Yo'l rejimi boshlanganda og'ir reja varaqasi yig'iladi (keyin yashiriladi;
+  /// to'xtaganda shu holatda qaytadi).
+  void _collapseSheet() {
+    if (_sheetCtrl.isAttached) {
+      _sheetCtrl.jumpTo(_peekFraction);
+    }
+    _extent = _peekFraction;
+  }
+
+  void _toggleDriveMode() {
+    final was = _drive.driving;
+    _drive.toggleManual();
+    if (!was && _drive.driving) _collapseSheet();
+    setState(() {});
+  }
+
+  /// "Банд": станция бандлигини жамоага хабар қилиш (30 дақиқа амал қилади).
+  /// Интернет йўқ/хато — дўстона хабар, илова қотмайди.
+  Future<void> _reportBusy(EvChargingStation station) async {
+    if (_reportingBusy) return;
+    setState(() => _reportingBusy = true);
+    try {
+      final report = widget.reportBusy ??
+          (String id) =>
+              context.read<EvStationRepository>().setOccupancy(id, busy: true);
+      await report(station.id);
+      if (!mounted) return;
+      _toast(context.tr('ev_occupancy_saved'));
+    } catch (_) {
+      if (!mounted) return;
+      _toast(context.tr('ev_drive_busy_failed'));
+    } finally {
+      if (mounted) setState(() => _reportingBusy = false);
+    }
+  }
+
+  /// "Зарядлаш бошланди": шу тўхташ учун карточка яширилади (бетараф тасдиқ,
+  /// ҳеч нарса сақланмайди).
+  void _confirmCharging(EvTripStop stop) {
+    setState(() => _ackedStops.add(stop.station.id));
   }
 
   void _onSelection() {
@@ -644,6 +747,25 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
             showTime: showsPeekTime(plan, widget.routeMinutes)) +
         mq.padding.bottom;
 
+    // Yo'l rejimi: GPS bor va mashina marshrutda. Rejim tezlikdan (yoki qo'lda
+    // chip bilan) yoqiladi; stansiyaga yetganda to'xtab qolsa ham "Yetib
+    // keldingiz" holati ko'rinib turadi.
+    final carAlong = _carAlongKm;
+    EvDriveTarget? driveTarget;
+    if (fix != null && carAlong != null) {
+      driveTarget = EvDriveNext.next(
+        plan: plan,
+        carAlongKm: carAlong,
+        carLat: fix.lat,
+        carLng: fix.lng,
+        acknowledgedIds: _ackedStops,
+      );
+    }
+    final driveAvailable = fix != null && carAlong != null;
+    final driveMode =
+        driveAvailable && (_drive.driving || (driveTarget?.arrived ?? false));
+    final showDriveCard = driveMode && driveTarget != null;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -668,11 +790,27 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
             padding: EdgeInsets.only(left: 12),
             child: Center(child: EvMapBackButton()),
           ),
+          // «Йўл режими» чипи — фақат GPS бор ва машина маршрутда бўлса
+          // (бошқа вақтда юқори соҳада фақат орқага тугмаси).
+          actions: driveAvailable
+              ? [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Center(
+                      child: _DriveModeChip(
+                        active: _drive.driving,
+                        onTap: _toggleDriveMode,
+                      ),
+                    ),
+                  ),
+                ]
+              : null,
         ),
         body: LayoutBuilder(
           builder: (context, c) {
             final height = c.maxHeight;
             final peekFraction = (peekPx / height).clamp(0.08, 0.5).toDouble();
+            _peekFraction = peekFraction;
             final data = EvTripMapRenderData(
               route: widget.route,
               corridorStations: _trip.corridorStations,
@@ -691,7 +829,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                 top: mq.padding.top + kToolbarHeight,
                 // Варақа + «Навигация» тугмаси: Google логотипи ва маршрут
                 // тугма остида қолмасин.
-                bottom: peekPx + _navGap + _navHeight + 8,
+                bottom: driveMode
+                    ? _driveMapPaddingPx + mq.padding.bottom
+                    : peekPx + _navGap + _navHeight + 8,
               ),
               onUserGesture: _onUserGesture,
             );
@@ -714,57 +854,110 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
               fit: StackFit.expand,
               children: [
                 _buildMap(context, data),
-                NotificationListener<DraggableScrollableNotification>(
-                  onNotification: (n) {
-                    if ((n.extent - _extent).abs() > 0.01) {
-                      setState(() => _extent = n.extent);
-                    }
-                    return false;
-                  },
-                  child: DraggableScrollableSheet(
-                    controller: _sheetCtrl,
-                    initialChildSize: peekFraction,
-                    minChildSize: peekFraction,
-                    maxChildSize: _maxSheetFraction,
-                    snap: true,
-                    snapSizes: [
-                      0.6.clamp(peekFraction, _maxSheetFraction).toDouble()
-                    ],
-                    builder: (context, scroll) => _PlanSheet(
-                      plan: plan,
-                      onReplaceStop: _canReplace ? _openAlternatives : null,
-                      scrollController: scroll,
-                      onHeaderTap: () => _toggleSheet(peekFraction),
-                      expanded: _extent > peekFraction + 0.05,
-                      bottomInset: mq.padding.bottom,
-                      onOpenNavigator: widget.onOpenNavigator,
-                      routeMinutes: widget.routeMinutes,
-                      car: widget.car,
+                // Йўл режимида оғир режа варақаси яширилади (ҳолати сақланади,
+                // тўхтаганда қайтади).
+                Offstage(
+                  offstage: driveMode,
+                  child: NotificationListener<DraggableScrollableNotification>(
+                    onNotification: (n) {
+                      if ((n.extent - _extent).abs() > 0.01) {
+                        setState(() => _extent = n.extent);
+                      }
+                      return false;
+                    },
+                    child: DraggableScrollableSheet(
+                      controller: _sheetCtrl,
+                      initialChildSize: peekFraction,
+                      minChildSize: peekFraction,
+                      maxChildSize: _maxSheetFraction,
+                      snap: true,
+                      snapSizes: [
+                        0.6.clamp(peekFraction, _maxSheetFraction).toDouble()
+                      ],
+                      builder: (context, scroll) => _PlanSheet(
+                        plan: plan,
+                        onReplaceStop: _canReplace ? _openAlternatives : null,
+                        scrollController: scroll,
+                        onHeaderTap: () => _toggleSheet(peekFraction),
+                        expanded: _extent > peekFraction + 0.05,
+                        bottomInset: mq.padding.bottom,
+                        onOpenNavigator: widget.onOpenNavigator,
+                        routeMinutes: widget.routeMinutes,
+                        car: widget.car,
+                      ),
                     ),
                   ),
                 ),
-                // Катта «Навигация» тугмаси варақанинг УСТИДА (Stack'да
-                // охирида) — ҳар доим кўринади ва босилади.
-                if (showRecenter)
+                if (driveMode)
+                  // Йўл режими: пастда [қайтиш тугмаси] + карточка + катта
+                  // «Навигация» (тугма ўз жойида қолади).
                   Positioned(
-                    right: 12,
-                    bottom: navBottom + _navHeight + _navGap,
-                    child: _RecenterButton(
-                      active: _follow,
-                      onTap: _recenter,
+                    left: 16,
+                    right: 16,
+                    bottom: mq.padding.bottom + _navGap,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showRecenter)
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: _RecenterButton(
+                              active: _follow,
+                              onTap: _recenter,
+                            ),
+                          ),
+                        if (showRecenter) const SizedBox(height: 8),
+                        if (showDriveCard)
+                          EvDriveCard(
+                            target: driveTarget!,
+                            busyInFlight: _reportingBusy,
+                            onBusy: () => _reportBusy(driveTarget!.stop.station),
+                            onAlternatives: _canReplace
+                                ? () => _openAlternatives(
+                                      driveTarget!.stopIndex,
+                                      large: true,
+                                    )
+                                : null,
+                            onConfirmCharging: () =>
+                                _confirmCharging(driveTarget!.stop),
+                          ),
+                        if (showDriveCard) const SizedBox(height: _navGap),
+                        SizedBox(
+                          height: _navHeight,
+                          child: _NavigateButton(
+                            enabled: _canNavigate,
+                            count: _selection.count,
+                            onTap: _navigate,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  // Катта «Навигация» тугмаси варақанинг УСТИДА (Stack'да
+                  // охирида) — ҳар доим кўринади ва босилади.
+                  if (showRecenter)
+                    Positioned(
+                      right: 12,
+                      bottom: navBottom + _navHeight + _navGap,
+                      child: _RecenterButton(
+                        active: _follow,
+                        onTap: _recenter,
+                      ),
+                    ),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: navBottom,
+                    height: _navHeight,
+                    child: _NavigateButton(
+                      enabled: _canNavigate,
+                      count: _selection.count,
+                      onTap: _navigate,
                     ),
                   ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: navBottom,
-                  height: _navHeight,
-                  child: _NavigateButton(
-                    enabled: _canNavigate,
-                    count: _selection.count,
-                    onTap: _navigate,
-                  ),
-                ),
+                ],
                 if (pending.isNotEmpty || showUndo)
                   Positioned(
                     top: mq.padding.top + kToolbarHeight + 4,
@@ -908,6 +1101,61 @@ class _NavigateButton extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Йўл режими» чипи (юқори ўнг): тезликдан автоматик ёқилади, лекин
+/// ҳайдовчи қўлда ёқиши/ўчириши ҳам мумкин. Ёқиқ — бренд рангида.
+class _DriveModeChip extends StatelessWidget {
+  const _DriveModeChip({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? AppColors.onPrimary : AppColors.primaryText;
+    return Semantics(
+      button: true,
+      selected: active,
+      child: Material(
+        key: const ValueKey('ev_trip_drive_chip'),
+        color: active ? AppColors.primary : Colors.white.withValues(alpha: 0.95),
+        elevation: 4,
+        shape: const StadiumBorder(
+          side: BorderSide(color: AppColors.primaryDark, width: 1.4),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.directions_car_rounded, size: 20, color: fg),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      context.tr('ev_drive_mode'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: fg,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

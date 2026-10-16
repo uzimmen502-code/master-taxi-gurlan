@@ -35,7 +35,7 @@ const ROUTE = [
 async function twoLegFunded(db, d) {
   const r = await api.makeCreateLogisticsOrder(d)(orderPayload({
     destination: { regionId: 'toshkent_shahri', districtId: 'chilonzor', lat: 41.28, lng: 69.2, addressText: 'Chilonzor 9' },
-    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40 }],
+    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40, declaredValue: 150000 }],
   }), ctx(OWNER));
   const shipmentId = r.shipmentIds[0];
   await fund(db, shipmentId);

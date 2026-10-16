@@ -62,6 +62,7 @@
     "point_coords",
     "parcel_invalid",
     "parcels_count",
+    "declared_value_required",
     "recipient_name",
     "recipient_phone",
     "tariff_not_active",

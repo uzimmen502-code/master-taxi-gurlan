@@ -402,7 +402,7 @@ ok('L10: oldingi LEG ijrochisi (topshirdi) — keyingi ijrochi olgach contactUnl
   const d = deps(db);
   const r = await api.makeCreateLogisticsOrder(d)(orderPayload({
     destination: { regionId: 'toshkent_shahri', districtId: 'chilonzor', lat: 41.28, lng: 69.2, addressText: 'Chilonzor 9' },
-    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40 }],
+    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40, declaredValue: 150000 }],
   }), ctx(OWNER));
   const shipmentId = r.shipmentIds[0];
   await fund(db, shipmentId);
@@ -468,7 +468,7 @@ ok('2 LEG (Gurlan → Urganch → Chilonzor): replan, zanjir, payout bo\'linishi
   const d = deps(db);
   const r = await api.makeCreateLogisticsOrder(d)(orderPayload({
     destination: { regionId: 'toshkent_shahri', districtId: 'chilonzor', lat: 41.28, lng: 69.2, addressText: 'Chilonzor 9' },
-    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40 }],
+    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40, declaredValue: 150000 }],
   }), ctx(OWNER));
   assert.strictEqual(r.total, 240000);
   const shipmentId = r.shipmentIds[0];
@@ -592,7 +592,7 @@ ok('LEG-2 muddati tugadi (kuryer topilmadi) → shipment.legProblem; admin qayta
   const maint = require('../api/maintenance');
   const r = await api.makeCreateLogisticsOrder(d)(orderPayload({
     destination: { regionId: 'toshkent_shahri', districtId: 'chilonzor', lat: 41.28, lng: 69.2, addressText: 'Chilonzor 9' },
-    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40 }],
+    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40, declaredValue: 150000 }],
   }), ctx(OWNER));
   const shipmentId = r.shipmentIds[0];
   await fund(db, shipmentId);

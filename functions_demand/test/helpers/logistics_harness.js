@@ -70,7 +70,10 @@ function seed(extra = {}) {
     'geo_districts/urganch_shahri': { regionId: 'xorazm' },
     'geo_districts/chilonzor': { regionId: 'toshkent_shahri' },
     'module_tariffs/logistics': { activeVersion: 7 },
-    'module_tariffs/logistics_v7': fixture.tariff,
+    // declaredValue endi MAJBURIY (2026-10-16): barcha oqim testlari musbat qiymat
+    // yuboradi. Narx testlari (kutilgan summalar) o'zgarmasin deb bu tarifda qiymat
+    // haqi 0 — haqning O'ZI `tariff.test.js` va `logistics_loss.test.js` (asl fixture) da.
+    'module_tariffs/logistics_v7': { ...fixture.tariff, declaredValue: { ...fixture.tariff.declaredValue, feeBps: 0 } },
     [`users/${OWNER}`]: { regionId: 'xorazm', districtId: 'gurlan' },
     [`users/${ADMIN}`]: { role: 'admin' },
     // Ijrochi -> accountId (acceptLeg capability'ni qayta tekshiradi, audit L6).
@@ -90,12 +93,15 @@ function seed(extra = {}) {
   };
 }
 
+/** Posilka qiymati (so'm) — majburiy (2026-10-16); yo'qolish testlarida G shu. */
+const DECLARED_VALUE = 150000;
+
 function orderPayload(over = {}) {
   return {
     clientRequestId: 'req-logistics-0001',
     origin: { regionId: 'xorazm', districtId: 'gurlan', lat: 41.84, lng: 60.39, addressText: 'Gurlan, Markaz 1' },
     destination: { regionId: 'xorazm', districtId: 'gurlan', lat: 41.85, lng: 60.40, addressText: 'Gurlan, Bog\'cha 5' },
-    parcels: [{ actualWeightG: 800, lengthCm: 20, widthCm: 15, heightCm: 10, description: 'Kitoblar' }],
+    parcels: [{ actualWeightG: 800, lengthCm: 20, widthCm: 15, heightCm: 10, declaredValue: DECLARED_VALUE, description: 'Kitoblar' }],
     recipient: { name: 'Olim aka', phone: '+998905556677' },
     termsAcceptedAt: '2026-10-06T21:00:00Z',
     ...over,
@@ -129,6 +135,6 @@ const PHOTO = photoFor(K1);
 const legOf = (db, shipmentId) => db.dump('shipments')[shipmentId].legIds;
 
 module.exports = {
-  fixture, keywordIndex, OWNER, K1, K2, F1, ADMIN, NOW, ctx,
+  fixture, keywordIndex, OWNER, K1, K2, F1, ADMIN, NOW, ctx, DECLARED_VALUE,
   makeDb, capDoc, seed, orderPayload, deps, fund, PHOTO, photoFor, BUCKET, legOf,
 };

@@ -114,6 +114,15 @@ async function validatePoint(db, raw, name) {
   };
 }
 
+/**
+ * E'lon qilingan qiymat (declaredValue) MAJBURIY (ega qarori 2026-10-16, D1):
+ * posilka yo'qolsa mijozga aynan shu summa (G) qaytariladi — qiymatsiz
+ * jo'natma qabul qilinmaydi. Yo'q / null / 0 / manfiy -> `declared_value_required`;
+ * butun son bo'lmasa -> avvalgidek `parcel_invalid`. Haq hisobi (declaredValueFee)
+ * va tarif chegarasi (`over_declared_value`) `core/tariff.js`da O'ZGARMAGAN.
+ * Yangi qoida FAQAT shu yerda (quote ham, create ham shu validatsiyadan o'tadi);
+ * `quoteParcel` toza hisob funksiyasi bo'lib qoladi (paritet fixturasi 0 ni ishlatadi).
+ */
 function validateParcel(raw, i) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = {
@@ -121,15 +130,21 @@ function validateParcel(raw, i) {
     lengthCm: p.lengthCm,
     widthCm: p.widthCm,
     heightCm: p.heightCm,
-    declaredValue: p.declaredValue == null ? 0 : p.declaredValue,
+    declaredValue: p.declaredValue,
     description: String(p.description || '').slice(0, 200),
     fragile: p.fragile === true,
   };
   for (const k of ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
     if (!isPosInt(out[k])) throw fail('invalid-argument', `parcels[${i}].${k} musbat butun son bo'lishi kerak`, 'parcel_invalid');
   }
-  if (!isInt(out.declaredValue) || out.declaredValue < 0) {
+  if (out.declaredValue === undefined || out.declaredValue === null || out.declaredValue === '') {
+    throw fail('invalid-argument', `parcels[${i}].declaredValue majburiy (posilka qiymati, so'm)`, 'declared_value_required');
+  }
+  if (!isInt(out.declaredValue)) {
     throw fail('invalid-argument', `parcels[${i}].declaredValue butun so'm`, 'parcel_invalid');
+  }
+  if (out.declaredValue <= 0) {
+    throw fail('invalid-argument', `parcels[${i}].declaredValue musbat bo'lishi kerak`, 'declared_value_required');
   }
   return out;
 }

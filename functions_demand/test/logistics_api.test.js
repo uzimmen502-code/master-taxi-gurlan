@@ -20,7 +20,7 @@ const tariffCore = require('../core/tariff');
 const config = require('../core/config');
 // Seed, payload va oqim yordamchilari — paritet testi bilan BITTA manba.
 const {
-  fixture, OWNER, K1, K2, F1, ADMIN, NOW, ctx, makeDb, seed, orderPayload, deps, fund, PHOTO, legOf,
+  fixture, OWNER, K1, K2, F1, ADMIN, NOW, ctx, makeDb, seed, orderPayload, deps, fund, PHOTO, photoFor, BUCKET, legOf,
 } = require('./helpers/logistics_harness');
 
 let passed = 0;
@@ -156,7 +156,7 @@ ok('TO\'LIQ OQIM (1 LEG): eskrou → LEG active+matching → acceptLeg → scanH
   await assert.rejects(() => scan({ legId, code: sec.handoverCode }, ctx(K1)), (e) => e.details.reason === 'photo_required');
   await assert.rejects(() => scan({ legId, code: '000000', photoUrls: PHOTO }, ctx(K1)),
     (e) => e.code === 'permission-denied' && e.details.reason === 'bad_proof');
-  await assert.rejects(() => scan({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(F1)), (e) => e.details.reason === 'not_assigned');
+  await assert.rejects(() => scan({ legId, code: sec.handoverCode, photoUrls: photoFor(F1) }, ctx(F1)), (e) => e.details.reason === 'not_assigned');
   assert.strictEqual(Object.keys(db.dump('custody_events')).length, 0, 'rad etilganda hodisa YO\'Q');
 
   const s1 = await scan({ legId, qrPayload: sec.qrPayload, photoUrls: PHOTO, conditionFlags: ['intact'], location: { lat: 41.84, lng: 60.39, accuracy: 12 } }, ctx(K1));
@@ -219,6 +219,59 @@ ok('confirmDelivery: posilka olinmagan LEG\'da yetkazib bo\'lmaydi', async () =>
   const sec = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(OWNER));
   await assert.rejects(() => api.makeConfirmDelivery(d)({ legId, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(K1)),
     (e) => e.details.reason === 'leg_not_in_progress');
+});
+
+// Audit S5/L13 (2026-10-16): dalil rasmi — faqat chaqiruvchining o'z Storage yo'li.
+ok('S5: scanHandover/confirmDelivery rasmi — begona host, boshqa foydalanuvchi yo\'li, begona bucket RAD; o\'ziniki qabul', async () => {
+  const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload(), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0]; const legId = legOf(db, shipmentId)[0];
+  await fund(db, shipmentId);
+  await api.makeAcceptLeg(d)({ legId }, ctx(K1));
+  const sec = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(OWNER));
+  const scan = api.makeScanHandover(d);
+  const badUrls = [
+    ['https://r2.example/handover1.jpg'], // begona host
+    photoFor(F1), // boshqa foydalanuvchining papkasi
+    photoFor(K1, 'x.jpg', 'boshqa-bucket.firebasestorage.app'), // begona bucket
+    ['http://firebasestorage.googleapis.com/v0/b/' + BUCKET + '/o/logistics%2F' + K1 + '%2Fx.jpg'], // http
+    [...PHOTO, 'https://evil.example/a.jpg'], // bittasi begona bo'lsa ham rad
+  ];
+  for (const photoUrls of badUrls) {
+    await assert.rejects(() => scan({ legId, code: sec.handoverCode, photoUrls }, ctx(K1)),
+      (e) => e.code === 'invalid-argument' && e.details.reason === 'photo_url_invalid', JSON.stringify(photoUrls));
+  }
+  assert.strictEqual(Object.keys(db.dump('custody_events')).length, 0, 'rad etilganda custody YO\'Q');
+  // To'g'ri (o'ziniki) — qabul.
+  const s = await scan({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(s.idempotent, false);
+  assert.deepStrictEqual(db.dump('custody_events')[s.eventId].proof.photoUrls, PHOTO);
+  // confirmDelivery ham xuddi shunday.
+  const confirm = api.makeConfirmDelivery(d);
+  for (const photoUrls of badUrls) {
+    await assert.rejects(() => confirm({ legId, deliveryCode: sec.deliveryCode, photoUrls }, ctx(K1)),
+      (e) => e.code === 'invalid-argument' && e.details.reason === 'photo_url_invalid', JSON.stringify(photoUrls));
+  }
+  const c = await confirm({ legId, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(c.shipmentStatus, 'delivered');
+});
+
+ok('S5: rasm ixtiyoriy bo\'lsa (requireHandoverPhoto=false) rasmsiz o\'tadi; rasm berilsa baribir tekshiriladi', async () => {
+  const db = makeDb(seed({ 'module_config/logistics_all': {
+    enabled: true, matchingEnabled: true, pushEnabled: false, logistics: { stage: 'public', requireHandoverPhoto: false },
+  } })); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload(), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0]; const legId = legOf(db, shipmentId)[0];
+  await fund(db, shipmentId);
+  await api.makeAcceptLeg(d)({ legId }, ctx(K1));
+  const sec = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(OWNER));
+  const scan = api.makeScanHandover(d);
+  await assert.rejects(() => scan({ legId, code: sec.handoverCode, photoUrls: ['https://evil.example/a.jpg'] }, ctx(K1)),
+    (e) => e.details.reason === 'photo_url_invalid');
+  const s = await scan({ legId, code: sec.handoverCode }, ctx(K1));
+  assert.strictEqual(s.idempotent, false);
 });
 
 ok('bekor qilish: eskrou tushgan bo\'lsa refund_pending; LEG va match yopiladi; keyin yana bekor — idempotent', async () => {
@@ -320,7 +373,7 @@ ok('2 LEG (Gurlan → Urganch → Chilonzor): replan, zanjir, payout bo\'linishi
 
   // F1 K1'dan oladi: custody provider → provider, LEG-1 completed + payout hodisada.
   const secF = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(K1)); // custodian QR ko'rsatadi
-  const s1 = await scan({ legId: leg1, qrPayload: secF.qrPayload, photoUrls: PHOTO, conditionFlags: ['package_damaged'] }, ctx(F1));
+  const s1 = await scan({ legId: leg1, qrPayload: secF.qrPayload, photoUrls: photoFor(F1), conditionFlags: ['package_damaged'] }, ctx(F1));
   const ev1 = db.dump('custody_events')[s1.eventId];
   assert.deepStrictEqual(ev1.from, { kind: 'provider', id: K1 });
   assert.deepStrictEqual(ev1.to, { kind: 'provider', id: F1 });
@@ -338,7 +391,7 @@ ok('2 LEG (Gurlan → Urganch → Chilonzor): replan, zanjir, payout bo\'linishi
   // K1 (oxirgi LEG emas) yetkaza olmaydi; F1 yetkazadi.
   await assert.rejects(() => api.makeConfirmDelivery(d)({ legId: leg0, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(K1)),
     (e) => e.details.reason === 'not_last_leg');
-  const c = await api.makeConfirmDelivery(d)({ legId: leg1, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(F1));
+  const c = await api.makeConfirmDelivery(d)({ legId: leg1, deliveryCode: sec.deliveryCode, photoUrls: photoFor(F1) }, ctx(F1));
   assert.strictEqual(c.shipmentStatus, 'delivered');
   assert.strictEqual(db.dump('custody_events')[c.eventId].completedLegPayout, 96000);
   assert.strictEqual(db.dump('logistics_orders')[r.orderId].status, 'delivered');
@@ -420,7 +473,7 @@ ok('LEG-2 muddati tugadi (kuryer topilmadi) → shipment.legProblem; admin qayta
   // Zanjir davom etadi: F1 oladi, K1 dan posilkani oladi.
   await api.makeAcceptLeg({ ...d, now: () => later })({ legId: leg1 }, ctx(F1));
   const secK = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(K1));
-  const s1 = await api.makeScanHandover({ ...d, now: () => later })({ legId: leg1, code: secK.handoverCode, photoUrls: PHOTO }, ctx(F1));
+  const s1 = await api.makeScanHandover({ ...d, now: () => later })({ legId: leg1, code: secK.handoverCode, photoUrls: photoFor(F1) }, ctx(F1));
   assert.strictEqual(s1.idempotent, false);
   assert.strictEqual(db.dump('demands')[leg0].status, 'completed');
   assert.strictEqual(db.dump('demands')[leg1].status, 'in_progress');

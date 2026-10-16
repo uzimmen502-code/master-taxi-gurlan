@@ -935,13 +935,51 @@ async function closeOtherMatches(db, legId, winnerId, status, now) {
 // CUSTODY: OLISH (7.4) — bitta callable, bitta tranzaksiya
 // ═══════════════════════════════════════════════════════════════════════
 
-function validateProofInput(data, config) {
+/**
+ * Ilovaning O'Z Storage bucket'lari (audit S5/L13). Manba tartibi:
+ *   1) `deps.storageBucket` (qo'lda berilgan; string yoki massiv);
+ *   2) `FIREBASE_CONFIG.storageBucket` — Functions runtime o'zi qo'yadi;
+ *   3) `GCLOUD_PROJECT` -> Firebase standart nomlari (`<loyiha>.firebasestorage.app`,
+ *      `<loyiha>.appspot.com`) — XULOSA (INFERRED), repo'da bucket nomi faqat
+ *      `lib/firebase_options.dart`da;
+ *   4) hech biri yo'q -> [] : bucket PIN QILINMAYDI (faqat host + `logistics/{id}/`).
+ */
+function storageBucketsFor(deps) {
+  const d = (deps || {}).storageBucket;
+  if (d) return (Array.isArray(d) ? d : [d]).map(String).filter(Boolean);
+  try {
+    const cfg = JSON.parse(process.env.FIREBASE_CONFIG || '{}');
+    if (cfg && cfg.storageBucket) return [String(cfg.storageBucket)];
+  } catch (_) { /* FIREBASE_CONFIG yaroqsiz — keyingi manba */ }
+  const p = process.env.GCLOUD_PROJECT;
+  if (p) return [`${p}.firebasestorage.app`, `${p}.appspot.com`];
+  return [];
+}
+
+/**
+ * Dalil rasmlari: faqat chaqiruvchining O'Z yuklagan fayli
+ * (`logistics/{callerId}/...`). Bo'sh qatorlar avvalgidek tushiriladi; boshqa
+ * har qanday URL (begona host, boshqa foydalanuvchi yo'li) — aniq rad.
+ */
+function normalizeProofPhotos(raw, callerId, buckets) {
+  const out = [];
+  for (const u of (Array.isArray(raw) ? raw : []).slice(0, 4)) {
+    const s = String(u || '').trim();
+    if (!s) continue;
+    if (s.length > 500 || !L.isOwnProofPhotoUrl(s, callerId, buckets)) {
+      throw fail('invalid-argument', 'Rasm manzili noto\'g\'ri', 'photo_url_invalid');
+    }
+    out.push(s);
+  }
+  return out;
+}
+
+function validateProofInput(data, config, photoCtx) {
   const d = data || {};
   const code = d.code == null ? '' : String(d.code).trim();
   const qrPayload = d.qrPayload == null ? '' : String(d.qrPayload).trim();
   if (!code && !qrPayload) throw fail('invalid-argument', 'Kod yoki QR kerak', 'proof_required');
-  const photos = (Array.isArray(d.photoUrls) ? d.photoUrls : [])
-    .map((u) => String(u || '').trim()).filter((u) => /^https?:\/\//.test(u) && u.length <= 500).slice(0, 4);
+  const photos = normalizeProofPhotos(d.photoUrls, (photoCtx || {}).callerId, (photoCtx || {}).buckets);
   const requirePhoto = ((config || {}).logistics || {}).requireHandoverPhoto !== false;
   if (requirePhoto && photos.length === 0) throw fail('invalid-argument', 'Rasm majburiy', 'photo_required');
   const loc = d.location && typeof d.location === 'object' ? d.location : null;
@@ -970,7 +1008,7 @@ function makeScanHandover(deps) {
     if (!pre.exists) throw fail('not-found', 'LEG topilmadi');
     const preLeg = pre.data() || {};
     const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
-    const proof = validateProofInput(data, config);
+    const proof = validateProofInput(data, config, { callerId: providerId, buckets: storageBucketsFor(deps) });
 
     const a = preLeg.attributes || {};
     const shipmentId = String(a.shipmentId || '');
@@ -1155,8 +1193,7 @@ function makeConfirmDelivery(deps) {
     if (!pre.exists) throw fail('not-found', 'LEG topilmadi');
     const preLeg = pre.data() || {};
     const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
-    const photos = (Array.isArray((data || {}).photoUrls) ? data.photoUrls : [])
-      .map((u) => String(u || '').trim()).filter((u) => /^https?:\/\//.test(u) && u.length <= 500).slice(0, 4);
+    const photos = normalizeProofPhotos((data || {}).photoUrls, providerId, storageBucketsFor(deps));
     if (((config.logistics || {}).requireHandoverPhoto !== false) && photos.length === 0) {
       throw fail('invalid-argument', 'Rasm majburiy', 'photo_required');
     }

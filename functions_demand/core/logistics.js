@@ -239,6 +239,95 @@ function verifyDeliveryCode(shipmentId, qrSecret, code) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// KOD URINISHLARI CHEKLOVI (audit S4/L7, 2026-10-16)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Standart (module_config `logistics.*` ustiga yozadi): pul/tarif QIYMATI EMAS. */
+const CODE_ATTEMPT_DEFAULTS = { maxFailed: 5, lockMinutes: 15 };
+
+function msOf(v) {
+  if (v == null) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function posIntOr(v, d) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : d;
+}
+
+/** Konfigdan `{maxFailed, lockMs}`; noto'g'ri/yo'q qiymat — standart (qattiq tomon). */
+function codeAttemptLimits(config) {
+  const c = ((config || {}).logistics) || {};
+  return {
+    maxFailed: posIntOr(c.codeMaxFailedAttempts, CODE_ATTEMPT_DEFAULTS.maxFailed),
+    lockMs: posIntOr(c.codeLockMinutes, CODE_ATTEMPT_DEFAULTS.lockMinutes) * 60 * 1000,
+  };
+}
+
+/** Qulf qolgan millisekund (0 — qulf yo'q yoki muddati o'tgan). */
+function codeLockRemainingMs(doc, now) {
+  const until = msOf((doc || {}).lockedUntil);
+  const left = until - now.getTime();
+  return left > 0 ? left : 0;
+}
+
+/**
+ * Xato urinishdan KEYINGI hujjat maydonlari. Qulf muddati o'tgan bo'lsa
+ * hisob noldan boshlanadi. `fails` limitga yetsa — `lockedUntil` qo'yiladi.
+ */
+function registerFailedCodeAttempt(doc, now, limits) {
+  const prev = doc || {};
+  const expired = msOf(prev.lockedUntil) > 0 && codeLockRemainingMs(prev, now) === 0;
+  const base = expired ? 0 : (Number(prev.fails) || 0);
+  const fails = base + 1;
+  const locked = fails >= limits.maxFailed;
+  return {
+    fails,
+    lastFailAt: now,
+    lockedUntil: locked ? new Date(now.getTime() + limits.lockMs) : null,
+  };
+}
+
+/**
+ * Dalil rasmi URL'i FAQAT shu loyihaning Firebase Storage'idagi
+ * `logistics/{callerId}/{fayl}` bo'lishi mumkin (Flutter `LogisticsPhotoStorage`
+ * shu yo'lga yuklaydi; `storage.rules` — yuklash faqat o'z papkasiga).
+ * `buckets` bo'sh bo'lsa bucket PIN QILINMAYDI (faqat host + yo'l tekshiriladi).
+ */
+function isOwnProofPhotoUrl(url, callerId, buckets) {
+  const id = String(callerId || '');
+  if (!id || !/^\d+$/.test(id)) return false;
+  let u;
+  try { u = new URL(String(url || '')); } catch (_) { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+  let bucket;
+  let object;
+  try {
+    if (u.hostname === 'firebasestorage.googleapis.com') {
+      const m = /^\/v0\/b\/([^/]+)\/o\/([^/]+)$/.exec(u.pathname);
+      if (!m) return false;
+      bucket = m[1];
+      object = decodeURIComponent(m[2]);
+    } else if (u.hostname === 'storage.googleapis.com') {
+      const m = /^\/([^/]+)\/(.+)$/.exec(u.pathname);
+      if (!m) return false;
+      bucket = m[1];
+      object = decodeURIComponent(m[2]);
+    } else {
+      return false;
+    }
+  } catch (_) { return false; }
+  if (Array.isArray(buckets) && buckets.length && !buckets.includes(bucket)) return false;
+  const prefix = `logistics/${id}/`;
+  if (!object.startsWith(prefix)) return false;
+  const name = object.slice(prefix.length);
+  return name.length > 0 && !name.includes('/') && !name.includes('..');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // LEG yordamchilari
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -325,6 +414,11 @@ module.exports = {
   parseQrPayload,
   verifyHandoverProof,
   verifyDeliveryCode,
+  CODE_ATTEMPT_DEFAULTS,
+  codeAttemptLimits,
+  codeLockRemainingMs,
+  registerFailedCodeAttempt,
+  isOwnProofPhotoUrl,
   custodyIdempotencyKey,
   handoverKindsFor,
   normalizeConditionFlags,

@@ -17,7 +17,7 @@ const api = require('../api/logistics');
 const tariffCore = require('../core/tariff');
 const config = require('../core/config');
 const {
-  fixture, OWNER, K1, F1, ADMIN, NOW, ctx, makeDb, seed, orderPayload, deps, fund, PHOTO, legOf,
+  fixture, OWNER, K1, F1, ADMIN, NOW, ctx, makeDb, seed, orderPayload, deps, fund, PHOTO, photoFor, legOf,
 } = require('./helpers/logistics_harness');
 
 let passed = 0;
@@ -91,7 +91,7 @@ ok('L3a: scanHandover takrori — birinchi chaqiruvda ochilmagan keyingi LEG QAY
   assert.strictEqual(db.dump('demands')[leg1].status, 'draft', 'LEG-2 ochilmay qoldi (xato yutildi)');
 
   // Boshqa ijrochi takrorlasa LEG ochilmaydi (hodisani u yozmagan).
-  const other = await api.makeScanHandover(d)(scanArgs, ctx(F1));
+  const other = await api.makeScanHandover(d)({ ...scanArgs, photoUrls: photoFor(F1) }, ctx(F1));
   assert.strictEqual(other.idempotent, true);
   assert.strictEqual(db.dump('demands')[leg1].status, 'draft');
 

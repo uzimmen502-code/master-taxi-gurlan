@@ -75,6 +75,7 @@
     "shipment_not_ready",
     "proof_required",
     "photo_required",
+    "photo_url_invalid",
     "not_assigned",
     "leg_not_accepted",
     "not_funded",

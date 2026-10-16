@@ -102,8 +102,11 @@ function orderPayload(over = {}) {
   };
 }
 
+/** Dalil rasmi bucket'i (audit S5): `deps.storageBucket` orqali PIN qilinadi. */
+const BUCKET = 'demo-proof.firebasestorage.app';
+
 function deps(db, now = NOW) {
-  return { db, keywordIndex, notify: null, now: () => now };
+  return { db, keywordIndex, notify: null, now: () => now, storageBucket: BUCKET };
 }
 
 /** Eskrouni default codebase yozadi — testda shu yozuv simulyatsiya qilinadi. */
@@ -115,10 +118,17 @@ async function fund(db, shipmentId) {
   return api.makeOnShipmentFunded(deps(db))(before, after, shipmentId);
 }
 
-const PHOTO = ['https://r2.example/handover1.jpg'];
+/**
+ * Haqiqiy `getDownloadURL` shakli: `logistics/{uploaderId}/{fayl}` (Flutter
+ * `LogisticsPhotoStorage`). Server faqat CHAQIRUVCHINING o'z yo'lini qabul qiladi.
+ */
+const photoFor = (uploaderId, name = 'handover1.jpg', bucket = BUCKET) => [
+  `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(`logistics/${uploaderId}/${name}`)}?alt=media&token=t0k3n`,
+];
+const PHOTO = photoFor(K1);
 const legOf = (db, shipmentId) => db.dump('shipments')[shipmentId].legIds;
 
 module.exports = {
   fixture, keywordIndex, OWNER, K1, K2, F1, ADMIN, NOW, ctx,
-  makeDb, capDoc, seed, orderPayload, deps, fund, PHOTO, legOf,
+  makeDb, capDoc, seed, orderPayload, deps, fund, PHOTO, photoFor, BUCKET, legOf,
 };

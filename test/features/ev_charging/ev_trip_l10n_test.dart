@@ -16,6 +16,14 @@ void main() {
     // to'liq ekranli xarita
     'ev_trip_show_map',
     'ev_trip_recenter',
+    // xaritadagi katta tugma va uni ochib bo'lmasa snackbar (mavjud kalit)
+    'ev_trip_navigate',
+    'ev_trip_nav_backups_title',
+    'ev_trip_nav_backups_hint',
+    'ev_trip_nav_backups_limit',
+    'ev_trip_nav_continue',
+    'ev_trip_nav_primary_only',
+    'maps_open_failed',
     'ev_trip_charge_stops',
     'ev_trip_no_charging',
     'ev_trip_gap_title',
@@ -38,6 +46,12 @@ void main() {
         expect((v as String).trim(), isNotEmpty, reason: '$l/$k bo\'sh');
       }
     }
+  });
+
+  test('"Navigatsiya" tugmasi matni uch tilda to\'g\'ri', () {
+    expect(dict['uz_Cyrl']!['ev_trip_navigate'], 'Навигация');
+    expect(dict['uz_Latn']!['ev_trip_navigate'], 'Navigatsiya');
+    expect(dict['ru']!['ev_trip_navigate'], 'Навигация');
   });
 
   test('qidiruv maydoni matni tumanni ham eslatadi (faqat shahar emas)', () {

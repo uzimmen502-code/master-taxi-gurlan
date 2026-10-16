@@ -100,6 +100,8 @@ Future<_Harness> _pump(
                     EvCorridorStation(
                         station: _station('s1'), alongKm: 40, offRouteKm: 0),
                   ],
+                  originLat: _lat(0),
+                  originLng: 60.0,
                   destinationLat: _lat(100),
                   destinationLng: 60.0,
                   onOpenNavigator: () => h.navigatorTaps++,

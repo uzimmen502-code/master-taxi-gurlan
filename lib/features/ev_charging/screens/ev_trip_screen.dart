@@ -149,6 +149,8 @@ class _EvTripScreenState extends State<EvTripScreen> {
         plan: plan,
         route: _controller.routePoints,
         corridorStations: _controller.corridorStations,
+        originLat: widget.originLat,
+        originLng: widget.originLng,
         destinationLat: destLat,
         destinationLng: destLng,
         onOpenNavigator: _openNavigator,

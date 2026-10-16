@@ -37,6 +37,7 @@
     "test:courier-push": "node test/courier_push.test.js",
     "test:self-approval": "node test/self_approval_rules.test.js",
     "test:driver-work-rules": "node test/driver_work_patch_rules.test.js",
+    "test:leave-driver-type-cf": "firebase emulators:exec --only firestore --project demo-leave-type \"node test/driver_leave_type_cf.test.js\"",
     "test:marshrut-dispatch-cf": "firebase emulators:exec --only firestore --project demo-marshrut-dispatch \"node test/marshrut_passenger_dispatch_cf.test.js\"",
     "test:caps-rules": "node test/provider_capabilities_rules.test.js",
     "test:taxi-billing": "node test/taxi_billing_pure.test.js",

@@ -9926,6 +9926,151 @@ exports.leaveDriverRole = functions.https.onCall(async (data, context) => {
   return { success: true, message: 'Driver mode left successfully' };
 });
 
+/**
+ * Фойдаланувчи: БИТТА такси турини ўзи бекор қилади (ҳайдовчи панели →
+ * «Чиқиш», эга қарори 2026-10-16). `leaveDriverRole` дан фарқи: у «режимдан
+ * чиқиш» (ҳуқуқ турларда қолади), бу — шу тур `taxi.taxiTypes` дан олинади,
+ * панелда ҳам «Бўлиш» ҳолатига қайтади.
+ *
+ * Хавфсизлик: фақат ЎЗ ҳисоби (токен телефони); тур фаол/онлайн бўлса ёки
+ * қабул қилинган сафар бўлса РАД (`failed-precondition`) — сафар жимгина
+ * бекор қилинмайди. Статус (`starter`/`verified`) ТЕГИЛМАЙДИ: у фақат сервер/
+ * админники, 4 ойлик бепул давр қайта бошланмайди (D-TAXI-2). Идемпотент:
+ * тур аллақачон йўқ бўлса `alreadyLeft`.
+ */
+exports.leaveDriverType = functions.https.onCall(async (data, context) => {
+  const started = Date.now();
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+  }
+  const uid = canonicalUid(digits(String((data || {}).userPhone || '')));
+  if (uid.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'userPhone');
+  }
+  const tokenUid = canonicalUid(callerPhone(context));
+  if (!tokenUid || tokenUid.length < 12 || tokenUid !== uid) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your account');
+  }
+  const taxiType = String((data || {}).taxiType || '').trim();
+  if (!['intercity', 'local', 'marshrut'].includes(taxiType)) {
+    throw new functions.https.HttpsError('invalid-argument', 'taxiType');
+  }
+  // `local` ≡ `alone` (эски номи): декларацияда ҳар иккиси учраши мумкин.
+  const synonyms = taxiType === 'local' ? ['local', 'alone'] : [taxiType];
+  const log = (result, extra = {}) => console.log(JSON.stringify({
+    module: 'driver_type', action: 'leaveDriverType', result, taxiType,
+    userId: uid, durationMs: Date.now() - started, ...extra,
+  }));
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.data() || {};
+  const accountId = String(userData.accountId || '');
+  const capRef = accountId
+    ? db.collection('provider_capabilities').doc(accountId) : null;
+  const capSnap = capRef ? await capRef.get() : null;
+  const declaredRaw = capSnap && capSnap.exists
+    ? ((capSnap.data().taxi || {}).taxiTypes || []).map(String) : [];
+  if (!declaredRaw.some((t) => synonyms.includes(t))) {
+    log('already_left');
+    return {
+      ok: true,
+      alreadyLeft: true,
+      remainingTypes: [...new Set(declaredRaw.map(normalizeDriverTaxiType))],
+    };
+  }
+  const remainingTypes = [...new Set(
+    declaredRaw.filter((t) => !synonyms.includes(t)).map(normalizeDriverTaxiType),
+  )];
+
+  // ── Фаол ишни ТЕКШИРИШ (жимгина бекор қилмаймиз) ───────────────────
+  const drvRef = db.collection('drivers').doc(uid);
+  const drvSnap = await drvRef.get();
+  const drv = drvSnap.data() || {};
+  let busy = false;
+  if (taxiType === 'intercity') {
+    const ic = await db.collection('intercity_drivers').doc(uid).get();
+    busy = !!ic.exists && ic.data().isActive === true;
+  } else {
+    const t = String(drv.taxiType || '');
+    const sameKind = taxiType === 'marshrut'
+      ? t === 'marshrut' : (t === 'local' || t === 'alone');
+    busy = drv.isOnline === true && sameKind;
+    if (!busy) {
+      for (const tt of synonyms) {
+        const accepted = await db.collection('trips')
+          .where('acceptedDriverId', '==', uid)
+          .where('status', '==', 'accepted')
+          .where('taxiType', '==', tt)
+          .limit(1)
+          .get();
+        if (!accepted.empty) { busy = true; break; }
+      }
+    }
+  }
+  if (busy) {
+    log('blocked_active');
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'DRIVER_TYPE_ACTIVE');
+  }
+
+  // ── Бир batch: декларация + профил + тур тозалови ──────────────────
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const batch = db.batch();
+  batch.set(capRef, {
+    taxi: {
+      taxiTypes: admin.firestore.FieldValue.arrayRemove(...synonyms),
+      updatedAt: now,
+    },
+    updatedAt: now,
+  }, { merge: true });
+
+  if (drvSnap.exists) {
+    const upd = {
+      taxiTypes: admin.firestore.FieldValue.arrayRemove(...synonyms),
+      updatedAt: now,
+    };
+    if (remainingTypes.length > 0) upd.taxiType = remainingTypes[0];
+    batch.set(drvRef, upd, { merge: true });
+  }
+
+  if (taxiType === 'intercity') {
+    batch.set(
+      db.collection('intercity_drivers').doc(uid),
+      { isActive: false, isOnPanel: false, updatedAt: now },
+      { merge: true },
+    );
+  } else if (taxiType === 'marshrut') {
+    await removeDriverFromMarshrutRoute(uid, batch, now, 'driver_left_type');
+  } else {
+    batch.set(
+      db.collection('queue').doc(uid),
+      { isActive: false, updatedAt: now },
+      { merge: true },
+    );
+    for (const tt of synonyms) {
+      const sched = await db.collection('schedules')
+        .where('driverId', '==', uid)
+        .where('taxiType', '==', tt)
+        .where('isActive', '==', true)
+        .get();
+      for (const doc of sched.docs) {
+        batch.update(doc.ref, { isActive: false, updatedAt: now });
+      }
+    }
+  }
+
+  // Эски `role: 'driver'` белгиси — охирги тур кетса, `user` га (revoke/
+  // leaveDriverRole билан бир хил); админ/диспетчер роли тегилмайди.
+  if (remainingTypes.length === 0 && String(userData.role || '') === 'driver') {
+    batch.set(userRef, { role: 'user', updatedAt: now }, { merge: true });
+  }
+
+  await batch.commit();
+  log('ok', { remaining: remainingTypes.length });
+  return { ok: true, alreadyLeft: false, remainingTypes };
+});
+
 async function batchDeleteDocs(docs, stats, key) {
   if (!docs.length) return;
   let batch = db.batch();

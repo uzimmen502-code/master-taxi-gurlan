@@ -133,6 +133,16 @@ function validateTariff(t, { forActivation = false } = {}) {
   const dv = t.declaredValue || {};
   if (dv.feeBps != null && !isBps(dv.feeBps)) errors.push('declaredValue.feeBps 0..10000');
   if (dv.maxValue != null && !isPosInt(dv.maxValue)) errors.push('declaredValue.maxValue musbat butun so\'m');
+  // Audit L15: haq `ceil(v × bps / 10000)`; `maxValue` yo'q bo'lsa v cheksiz va
+  // v × bps xavfsiz butun sondan oshib, narx jimgina buzilardi. Faol qilishda
+  // haq sozlangan bo'lsa (feeBps > 0) chegara SHART va ko'paytma sig'ishi kerak.
+  if (forActivation && isBps(dv.feeBps) && dv.feeBps > 0) {
+    if (!isPosInt(dv.maxValue)) {
+      errors.push('faol qilish uchun declaredValue.maxValue kerak (e\'lon qiymati haqi sozlangan — musbat butun so\'m)');
+    } else if (!Number.isSafeInteger(dv.maxValue * dv.feeBps)) {
+      errors.push('declaredValue.maxValue × feeBps xavfsiz butun sondan oshadi — maxValue kamaytirilsin');
+    }
+  }
 
   const lim = t.limits || {};
   for (const k of ['maxWeightG', 'maxDimCm', 'maxSumDimCm']) {
@@ -271,7 +281,14 @@ function declaredValueFee(t, declaredValue) {
   if (v <= 0) return 0;
   const bps = Number(((t && t.declaredValue) || {}).feeBps) || 0;
   if (bps <= 0) return 0;
-  return ceilDiv(v * bps, 10000);
+  // Audit L15: v × bps xavfsiz butun sondan oshsa ceilDiv jim noto'g'ri son
+  // berardi. `maxValue` bo'lmagan eski hujjatda ham shu yerda to'xtaydi.
+  if (!Number.isSafeInteger(v * bps)) {
+    throw typedError('failed-precondition', 'E\'lon qilingan qiymat chegaradan oshdi', 'over_declared_value');
+  }
+  const x = v * bps;
+  // `ceilDiv` (a + b - 1) chegarada o'zi toshib ketardi — shuning uchun qoldiq bilan.
+  return Math.floor(x / 10000) + (x % 10000 === 0 ? 0 : 1);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

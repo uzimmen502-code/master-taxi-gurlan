@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../shared/widgets/intercity_billing_flow.dart';
@@ -162,8 +163,9 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
 
   void _showError(String msg) {
     if (!mounted) return;
+    // Kontroller l10n kaliti beradi; kalit bo'lmasa matn o'zi ko'rsatiladi.
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
+      content: Text(context.tr(msg)),
       backgroundColor: Colors.red,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

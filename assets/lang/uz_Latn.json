@@ -3264,5 +3264,22 @@
   "taxi_reason_seats_invalid": "O'rindiqlar soni noto'g'ri. Sonni tekshirib, qayta urinib ko'ring.",
   "taxi_reason_schedule_invalid": "Sana yoki vaqt noto'g'ri. Qayta tanlang.",
   "taxi_reason_not_published": "Bu reys endi faol emas.",
-  "taxi_reason_trip_changed": "Reys holati o'zgardi. Qayta urinib ko'ring."
+  "taxi_reason_trip_changed": "Reys holati o'zgardi. Qayta urinib ko'ring.",
+  "ic_sheet_title": "Shaharlararo — ishga chiqish",
+  "ic_from_hint": "Qaerdan (shahar)",
+  "ic_to_hint": "Qaerga (shahar)",
+  "ic_today": "Bugun",
+  "ic_tomorrow": "Ertaga",
+  "ic_depart_at": "Jo'nash: {time}",
+  "ic_price_hint": "Narx (so'm)",
+  "ic_seats_label": "O'rindiqlar",
+  "ic_saving": "Saqlanmoqda...",
+  "ic_confirm": "Tasdiqlash",
+  "ic_err_from_required": "Qaerdan — shaharni kiriting",
+  "ic_err_to_required": "Qaerga — shaharni kiriting",
+  "ic_err_price_required": "Narxni kiriting",
+  "ic_err_phone_missing": "Telefon raqami topilmadi. Profilni tekshiring.",
+  "ic_err_time_past": "Jo'nash vaqti o'tib ketgan. Keyingi vaqtni yoki «Ertaga»ni tanlang.",
+  "ic_err_no_permission": "Ruxsat yo'q. Admin tasdig'ini va internetni tekshiring.",
+  "ic_err_index_pending": "Tizim tayyorlanmoqda. Bir necha daqiqadan keyin qayta urinib ko'ring."
 }

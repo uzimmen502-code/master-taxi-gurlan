@@ -30,6 +30,8 @@ const Map<String, String> kTaxiReasonKeys = {
   'trip_changed': 'taxi_reason_trip_changed',
 };
 
-/// l10n kaliti (`context.tr(...)` ga beriladi).
-String taxiReasonKey(String? reason) =>
-    kTaxiReasonKeys[(reason ?? '').trim()] ?? kTaxiGenericFailureKey;
+/// l10n kaliti (`context.tr(...)` ga beriladi). Noma'lum sabab uchun
+/// [fallback] (masalan, qayta rejalashtirishda o'ziga xos matn).
+String taxiReasonKey(String? reason,
+        {String fallback = kTaxiGenericFailureKey}) =>
+    kTaxiReasonKeys[(reason ?? '').trim()] ?? fallback;

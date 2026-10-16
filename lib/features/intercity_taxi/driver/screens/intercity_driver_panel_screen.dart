@@ -4,9 +4,12 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../core/utils/map_launcher.dart';
+import '../../../../core/utils/taxi_billing_reason.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
+import '../../../../repositories/taxi_billing_repository.dart'
+    show TaxiBillingException;
 import '../../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../../entertainment/driver/widgets/driver_entertainment_picker.dart';
 import '../../../driver_home/widgets/fare_calculator_dialog.dart';
@@ -15,6 +18,7 @@ import '../intercity_route_stops.dart';
 import '../widgets/intercity_booking_request_dialog.dart';
 import '../widgets/intercity_pickup_route_card.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../utils/intercity_departure.dart';
 import '../../../../utils/intercity_places.dart';
 
 class IntercityDriverPanelScreen extends StatelessWidget {
@@ -451,9 +455,19 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     if (date == null || !context.mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay(hour: 8, minute: 0),
+      // Bugun tanlansa 08:00 emas, hozirdan keyingi yarim soat.
+      initialTime: IntercityDeparture.initialRescheduleTime(
+          now: now, pickedDay: date),
     );
     if (time == null || !context.mounted) return;
+    // O'tib ketgan vaqtga surib bo'lmaydi (serverda ham `departure_in_past`).
+    if (IntercityDeparture.isRescheduleInPast(
+        now: DateTime.now(), pickedDay: date, time: time)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('ic_err_time_past'))),
+      );
+      return;
+    }
     final departureAt =
         DateTime(date.year, date.month, date.day, time.hour, time.minute);
     final dateStr =
@@ -470,10 +484,16 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('reschedule_trip_done'))),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('rescheduleTrip failed: $e');
       if (!context.mounted) return;
+      // Server sababi (departure_in_past, schedule_invalid, not_published...)
+      // bo'lsa aniq matn, aks holda umumiy "surib bo'lmadi".
+      final key = e is TaxiBillingException
+          ? taxiReasonKey(e.reason, fallback: 'reschedule_trip_failed')
+          : 'reschedule_trip_failed';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('reschedule_trip_failed'))),
+        SnackBar(content: Text(context.tr(key))),
       );
     }
   }

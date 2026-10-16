@@ -8,6 +8,7 @@ import '../../../core/utils/route_points_validator.dart';
 import '../../../models/marshrut_driver_profile.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
+import '../../../utils/intercity_departure.dart';
 
 typedef IntercityPublisher = Future<String?> Function({
   required int farePerSeat,
@@ -41,8 +42,10 @@ class DriverScheduleController extends ChangeNotifier {
     List<String>? initialRouteStops,
     this.initialRouteReversed = false,
     int? initialSeats,
+    DateTime Function()? clock,
   })  : _schedulesRepo = schedulesRepo,
         _marshrutDriverRepo = marshrutDriverRepo,
+        _clock = clock ?? DateTime.now,
         initialRouteStops = initialRouteStops == null
             ? null
             : List<String>.unmodifiable(initialRouteStops) {
@@ -69,6 +72,9 @@ class DriverScheduleController extends ChangeNotifier {
 
   final SchedulesRepository _schedulesRepo;
   final MarshrutDriverRepository _marshrutDriverRepo;
+
+  /// Soat in'ektsiyasi (test) — standart [DateTime.now].
+  final DateTime Function() _clock;
 
   /// Шаҳарлараро рейсни тўлов оқими орқали эълон қилади (экран беради:
   /// диалоглар контекст талаб қилади). Бўш бўлса шаҳарлараро сақлаш рад этилади.
@@ -120,7 +126,7 @@ class DriverScheduleController extends ChangeNotifier {
 
   /// Intercity: бүгун ёки эртага; бошқа турлар — ҳамеша бүгун.
   DateTime get scheduleDay {
-    final now = DateTime.now();
+    final now = _clock();
     if (isIntercity && departureIsTomorrow) {
       return DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
     }
@@ -169,7 +175,10 @@ class DriverScheduleController extends ChangeNotifier {
       midStops = midRaw.split('|').where((s) => s.trim().isNotEmpty).toList();
     }
     if (isIntercity) await _loadIntercityPrefs();
-    if (fromAddr.isNotEmpty || toAddr.isNotEmpty || midStops.isNotEmpty) {
+    if (isIntercity ||
+        fromAddr.isNotEmpty ||
+        toAddr.isNotEmpty ||
+        midStops.isNotEmpty) {
       notifyListeners();
     }
   }
@@ -189,6 +198,21 @@ class DriverScheduleController extends ChangeNotifier {
     if (savedPrice != null && savedPrice.trim().isNotEmpty) {
       priceText = savedPrice;
     }
+    applySmartDeparture();
+  }
+
+  /// Standart (08:00) yoki saqlangan jo'nash vaqti o'tib ketgan bo'lsa
+  /// (masalan, soat 15:02 da "bugun 08:00") — keyingi yarim soatlik slot
+  /// yoki ertaga. Faqat shaharlararo.
+  void applySmartDeparture() {
+    if (!isIntercity) return;
+    final r = IntercityDeparture.smartDefault(
+      now: _clock(),
+      preferred: departureTime,
+      preferredTomorrow: departureIsTomorrow,
+    );
+    departureTime = r.time;
+    departureIsTomorrow = r.tomorrow;
   }
 
   Future<String> _loadUid() async {
@@ -388,11 +412,18 @@ class DriverScheduleController extends ChangeNotifier {
       );
     } else if (!isAlone) {
       // Маҳаллий такси (alone) йўналиш белгиламайди — манзил талаб қилинмайди.
-      if (fromAddr.trim().isEmpty) return 'Қаердан манзилини киритинг';
-      if (toAddr.trim().isEmpty) return 'Қаерга манзилини киритинг';
+      if (fromAddr.trim().isEmpty) return 'ic_err_from_required';
+      if (toAddr.trim().isEmpty) return 'ic_err_to_required';
     }
     if (isIntercity && priceText.trim().isEmpty) {
-      return 'Нархни киритинг';
+      return 'ic_err_price_required';
+    }
+    if (isIntercity &&
+        IntercityDeparture.isInPast(
+            now: _clock(),
+            tomorrow: departureIsTomorrow,
+            time: departureTime)) {
+      return 'ic_err_time_past';
     }
     if (isAlone) {
       final startMin = startTime.hour * 60 + startTime.minute;
@@ -424,6 +455,9 @@ class DriverScheduleController extends ChangeNotifier {
 
   /// Saqlash flow. Муваффақиятли бўлса `true` — экранни pop қилиш мумкин.
   Future<bool> confirm() async {
+    // Ikki marta bosish: bayroq BIRINCHI await dan oldin ko'tariladi,
+    // aks holda ikkinchi bosish _loadUid kutayotganda ham o'tib ketardi.
+    if (isSaving) return false;
     final err = _validate();
     if (err != null) {
       errorMessage = err;
@@ -431,15 +465,17 @@ class DriverScheduleController extends ChangeNotifier {
       return false;
     }
 
+    isSaving = true;
+    notifyListeners();
+
     final uid = await _loadUid();
     if (uid.isEmpty) {
-      errorMessage = 'Телефон рақами топилмади';
+      isSaving = false;
+      errorMessage = 'ic_err_phone_missing';
       notifyListeners();
       return false;
     }
 
-    isSaving = true;
-    notifyListeners();
     try {
       final day = scheduleDay;
       final midnight = DateTime(day.year, day.month, day.day, 23, 59, 59);
@@ -503,7 +539,7 @@ class DriverScheduleController extends ChangeNotifier {
           final publish = intercityPublisher;
           if (publish == null) {
             isSaving = false;
-            errorMessage = 'Рейсни эълон қилиб бўлмади. Қайта уриниб кўринг.';
+            errorMessage = 'taxi_publish_failed';
             notifyListeners();
             return false;
           }
@@ -555,20 +591,21 @@ class DriverScheduleController extends ChangeNotifier {
       return true;
     } on DriverScheduleApprovalException catch (e) {
       isSaving = false;
-      errorMessage = e.message;
+      debugPrint('DriverScheduleController approval: ${e.message}');
+      errorMessage = 'taxi_not_allowed';
       notifyListeners();
       return false;
     } catch (e) {
+      // Ichki sabab faqat logda; foydalanuvchiga l10n kaliti (25-qoida).
+      debugPrint('DriverScheduleController.confirm failed: $e');
       isSaving = false;
       final msg = e.toString();
       if (msg.contains('permission-denied')) {
-        errorMessage =
-            'Firestore рухсати йўқ. Admin тасдиғини ва интернетни текширинг.';
+        errorMessage = 'ic_err_no_permission';
       } else if (msg.contains('failed-precondition')) {
-        errorMessage =
-            'Индекс кутилмоқда. Бир неча дақиқа сабр қилинг ёки админга мурожаат қилинг.';
+        errorMessage = 'ic_err_index_pending';
       } else {
-        errorMessage = 'Хатолик: $e';
+        errorMessage = 'taxi_publish_failed';
       }
       notifyListeners();
       return false;

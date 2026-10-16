@@ -1,6 +1,6 @@
 // Mijoz tasdig'i: xarajat nazorati — `module_config/customer_confirm` gate'i.
-// Hujjat yoq / enabled=false / oqib bolmadi => getCustomerPendingConfirmations
-// UMUMAN chaqirilmaydi; faqat enabled=true => chaqiriladi.
+// Hujjat yoq / enabled=false => getCustomerPendingConfirmations chaqirilmaydi;
+// enabled=true YOKI oqib bolmadi (tarmoq xatosi, ochiq holat) => chaqiriladi.
 //
 //   flutter test test/features/customer_confirm/customer_confirm_gate_test.dart
 
@@ -76,7 +76,8 @@ void main() {
         (<String, dynamic>{'enabled': true}, true),
         (<String, dynamic>{'enabled': false}, false),
         (null, false),
-        (Exception('permission-denied'), false),
+        // O'qish xatosi: ochiq holat — mijoz yashirinmaydi (server o'zi hal qiladi).
+        (Exception('permission-denied'), true),
       ]) {
         final doc = _Doc(value);
         expect(await CustomerConfirmGate(reader: doc.read).isEnabled(), expected,
@@ -110,8 +111,31 @@ void main() {
     test('oqish xatosi keshlanmaydi: keyingi urinishda qayta oqiladi', () async {
       final doc = _Doc(Exception('offline'));
       final gate = CustomerConfirmGate(reader: doc.read);
+      expect(await gate.isEnabled(), isTrue); // xato -> ochiq
+      doc.value = <String, dynamic>{'enabled': false};
+      expect(await gate.isEnabled(), isFalse); // xato keshlanmadi: qayta oqildi
+      expect(doc.reads, 2);
+    });
+
+    test('false natija QISQA keshlanadi (falseTtl), true esa uzoq', () async {
+      var now = DateTime(2026, 10, 16, 12);
+      final doc = _Doc(<String, dynamic>{'enabled': false});
+      final gate = CustomerConfirmGate(
+        reader: doc.read,
+        ttl: const Duration(minutes: 10),
+        falseTtl: const Duration(minutes: 1),
+        now: () => now,
+      );
       expect(await gate.isEnabled(), isFalse);
       doc.value = <String, dynamic>{'enabled': true};
+      now = now.add(const Duration(seconds: 30));
+      expect(await gate.isEnabled(), isFalse); // hali kesh
+      expect(doc.reads, 1);
+      now = now.add(const Duration(seconds: 40)); // 70 s > falseTtl
+      expect(await gate.isEnabled(), isTrue); // admin yoqdi — pushsiz ham korinadi
+      expect(doc.reads, 2);
+      now = now.add(const Duration(minutes: 5)); // true: uzoq kesh
+      doc.value = <String, dynamic>{'enabled': false};
       expect(await gate.isEnabled(), isTrue);
       expect(doc.reads, 2);
     });
@@ -130,7 +154,8 @@ void main() {
       ('enabled=true', <String, dynamic>{'enabled': true}, 1),
       ('enabled=false', <String, dynamic>{'enabled': false}, 0),
       ('hujjat yoq', null, 0),
-      ('oqish xatosi', Exception('unavailable'), 0),
+      // O'qish xatosi: ochiq holat — callable chaqiriladi (mijoz yashirinmaydi).
+      ('oqish xatosi', Exception('unavailable'), 1),
     ]) {
       test('$name — callable $calls marta', () async {
         final svc = _CountingService([_item]);
@@ -186,7 +211,6 @@ void main() {
     for (final (name, value) in <(String, Object?)>[
       ('enabled=false', <String, dynamic>{'enabled': false}),
       ('hujjat yoq', null),
-      ('oqish xatosi', Exception('unavailable')),
     ]) {
       testWidgets('$name — callable chaqirilmaydi, blok korinmaydi', (tester) async {
         final svc = _CountingService([_item]);
@@ -199,6 +223,18 @@ void main() {
         expect(find.text('customer_confirm_title'), findsNothing);
       });
     }
+
+    testWidgets('oqish xatosi — mijoz YASHIRINMAYDI: callable chaqiriladi, blok korinadi',
+        (tester) async {
+      final svc = _CountingService([_item]);
+      await tester.pumpWidget(_app(CustomerConfirmBanner(
+        service: svc,
+        gate: CustomerConfirmGate(reader: _Doc(Exception('unavailable')).read),
+      )));
+      await tester.pumpAndSettle();
+      expect(svc.listCalls, 1);
+      expect(find.text('customer_confirm_title'), findsOneWidget);
+    });
 
     testWidgets('push signali gate keshini chetlab otadi: ochilgan xususiyat korinadi',
         (tester) async {

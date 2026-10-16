@@ -178,6 +178,65 @@ async function main() {
     assert.strictEqual(await bal(relay.escrowAccount(S5)), 240000);
   });
 
+  // R2/R3 (L2, L1-natija): trigger yiqilsa ham pul qotib qolmasin — reconcile tiklaydi.
+  const S6 = 'shpTEST0006';
+  await seedShipment(S6);
+  await check('RECONCILE: refund_pending qotib qolgan (trigger yiqilgan) → refunded', async () => {
+    await api.fund({ shipmentId: S6 }, ctx);
+    await db.collection('shipments').doc(S6).update({ status: 'cancelled', paymentStatus: 'refund_pending' });
+    const r = await api.reconcile();
+    assert.strictEqual(r.refunded, 1);
+    assert.strictEqual(await wallet(), 300000);
+    assert.strictEqual((await ship(S6)).paymentStatus, 'refunded');
+  });
+  const S7 = 'shpTEST0007';
+  await seedShipment(S7);
+  await check('RECONCILE: bekor qilingan, lekin escrow_funded qolgan (cancel/fund poygasi) → refund', async () => {
+    await api.fund({ shipmentId: S7 }, ctx);
+    await db.collection('shipments').doc(S7).update({ status: 'cancelled' });
+    const r = await api.reconcile();
+    assert.strictEqual(r.refunded, 1);
+    assert.strictEqual(await wallet(), 300000);
+    assert.strictEqual(await bal(relay.escrowAccount(S7)), 0);
+    assert.strictEqual((await ship(S7)).paymentStatus, 'refunded');
+    const again = await api.reconcile();
+    assert.strictEqual(again.refunded, 0, 'takror reconcile pul qaytarmaydi');
+    assert.strictEqual(await wallet(), 300000);
+  });
+  const S8 = 'shpTEST0008';
+  await seedShipment(S8);
+  await check('RECONCILE: delivered, lekin RELEASE/EARNED yozilmagan → settled, ijrochilarga payable, takror ikkilamaydi', async () => {
+    await api.fund({ shipmentId: S8 }, ctx);
+    await db.collection('shipments').doc(S8).update({ status: 'delivered' });
+    await db.collection('custody_events').doc('e1').set({
+      shipmentId: S8, legId: 'leg1', completesLegId: 'leg0', completedLegProviderId: K1,
+      completedLegPayout: 96000, deliversShipment: false,
+    });
+    await db.collection('custody_events').doc('e2').set({
+      shipmentId: S8, legId: 'leg1', completesLegId: 'leg1', completedLegProviderId: F1,
+      completedLegPayout: 96000, deliversShipment: true,
+    });
+    const r = await api.reconcile();
+    assert.strictEqual(r.released, 1);
+    assert.strictEqual((await ship(S8)).paymentStatus, 'settled');
+    assert.strictEqual(await bal(relay.escrowAccount(S8)), 0);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 96000);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(F1)), 96000);
+    assert.strictEqual(await bal(relay.PLATFORM_FEE_ACCOUNT), 48000);
+    await api.reconcile();
+    assert.strictEqual(await bal(relay.PLATFORM_FEE_ACCOUNT), 48000);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 96000);
+  });
+  await check('RECONCILE: escrow_frozen (nizo) ga tegilmaydi', async () => {
+    const S9 = 'shpTEST0009';
+    await seedShipment(S9);
+    await api.fund({ shipmentId: S9 }, ctx);
+    await db.collection('shipments').doc(S9).update({ status: 'delivered', paymentStatus: 'escrow_frozen' });
+    await api.reconcile();
+    assert.strictEqual(await bal(relay.escrowAccount(S9)), 240000);
+    assert.strictEqual((await ship(S9)).paymentStatus, 'escrow_frozen');
+  });
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} relay escrow CF checks passed.`);
   if (failed.length) process.exitCode = 1;

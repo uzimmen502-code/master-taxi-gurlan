@@ -267,7 +267,10 @@ function attachRelayEscrow(exports, deps) {
     try {
       out.earned = await postEarned(event);
     } catch (e) {
-      console.error(`relay EARNED xato (${event.shipmentId}/${event.completesLegId}): ${e.message}`);
+      console.error(JSON.stringify({
+        action: 'relayEarned', shipmentId: event.shipmentId, legId: event.completesLegId,
+        result: 'failed', errorCode: 'RELAY_EARNED_FAILED', message: String(e.message).slice(0, 200),
+      }));
     }
     if (event.deliversShipment === true) {
       try {
@@ -305,6 +308,74 @@ function attachRelayEscrow(exports, deps) {
     return { skipped: ap === 'refund_pending' ? 'no_change' : `payment_${ap || 'none'}` };
   }
 
+  // ── RECONCILE — trigger yiqilsa ham pul qotib qolmasin (audit R2/R3) ──
+  // Triggerlar xatoni yutadi va qayta urinmaydi; poyga (bekor ↔ to'lov)
+  // `cancelled + escrow_funded` qoldirishi mumkin. Har yozuv idempotent
+  // (`relayRefund/relayRelease/relayEarned` kalitlari + precheck), shuning
+  // uchun trigger bilan bir vaqtda ishlash xavfsiz. `escrow_frozen` (nizo) ga
+  // tegilmaydi.
+  const logFail = (action, shipmentId, e) => console.error(JSON.stringify({
+    action, shipmentId, result: 'failed', errorCode: 'RELAY_ESCROW_RECONCILE_FAILED',
+    message: String((e && e.message) || e).slice(0, 200),
+  }));
+
+  async function reconcile({ limit = 50 } = {}) {
+    const out = { refunded: 0, released: 0, flagged: 0, failed: 0 };
+    // A) refund_pending qolib ketgan.
+    const pend = await db.collection(SHIPMENTS).where('paymentStatus', '==', 'refund_pending').limit(limit).get();
+    for (const d of pend.docs) {
+      try {
+        const r = await refundEscrow(d.id);
+        if (r && r.refunded) out.refunded += 1;
+      } catch (e) {
+        if (!(e && e.reason === 'not_pending')) { out.failed += 1; logFail('relayReconcileRefund', d.id, e); }
+      }
+    }
+    // B) bekor qilingan, lekin eskrou yechilmagan (cancel/fund poygasi) → refund_pending → refund.
+    const canc = await db.collection(SHIPMENTS)
+      .where('paymentStatus', '==', 'escrow_funded').where('status', '==', 'cancelled').limit(limit).get();
+    for (const d of canc.docs) {
+      try {
+        const flagged = await db.runTransaction(async (tx) => {
+          const s = await tx.get(d.ref);
+          const cur = s.exists ? (s.data() || {}) : {};
+          if (cur.status !== 'cancelled' || cur.paymentStatus !== 'escrow_funded') return false;
+          tx.update(d.ref, { paymentStatus: 'refund_pending', updatedAt: now() });
+          return true;
+        });
+        if (flagged) {
+          out.flagged += 1;
+          const r = await refundEscrow(d.id);
+          if (r && r.refunded) out.refunded += 1;
+        }
+      } catch (e) {
+        if (!(e && e.reason === 'not_pending')) { out.failed += 1; logFail('relayReconcileCancelled', d.id, e); }
+      }
+    }
+    // C) yetkazilgan, lekin EARNED/RELEASE yozilmagan.
+    const del = await db.collection(SHIPMENTS)
+      .where('paymentStatus', '==', 'escrow_funded').where('status', '==', 'delivered').limit(limit).get();
+    for (const d of del.docs) {
+      try {
+        const evs = await db.collection(CUSTODY).where('shipmentId', '==', d.id).get();
+        for (const ev of evs.docs) {
+          const e = ev.data() || {};
+          if (e.completesLegId) await postEarned({ ...e, shipmentId: d.id });
+        }
+        const r = await releaseEscrow(d.id);
+        if (r && r.released) out.released += 1;
+      } catch (e) {
+        if (!(e && e.reason === 'not_funded')) { out.failed += 1; logFail('relayReconcileDelivered', d.id, e); }
+      }
+    }
+    console.log(JSON.stringify({ action: 'relayEscrowReconcile', ...out }));
+    return out;
+  }
+
+  exports.relayEscrowReconcile = functions.pubsub
+    .schedule('every 10 minutes')
+    .onRun(async () => { await reconcile(); return null; });
+
   exports.fundShipmentEscrow = functions.https.onCall(fund);
   exports.onLogisticsCustodyEvent = functions.firestore
     .document(`${CUSTODY}/{eventId}`)
@@ -317,7 +388,7 @@ function attachRelayEscrow(exports, deps) {
     });
 
   return {
-    fund, postEarned, releaseEscrow, refundEscrow, onCustodyEvent, onShipmentUpdate, resolveCaller,
+    fund, postEarned, releaseEscrow, refundEscrow, onCustodyEvent, onShipmentUpdate, resolveCaller, reconcile,
   };
 }
 

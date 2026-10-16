@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/service_config_holder.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/l10n/language_picker_sheet.dart';
 import '../../../../core/l10n/locale_notifier.dart';
@@ -18,6 +19,7 @@ import '../controllers/intercity_taxi_controller.dart';
 import '../controllers/me_and_passengers_controller.dart';
 import '../intercity_colors.dart';
 import '../services/intercity_place_history.dart';
+import '../widgets/intercity_no_rides_view.dart';
 import '../widgets/intercity_place_field.dart';
 import '../widgets/intercity_ride_card.dart';
 import '../widgets/intercity_pickup_sheet.dart';
@@ -131,6 +133,9 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
         await _loadLastSearch();
         await _loadPlaceHistory();
         if (!mounted) return;
+        // Oxirgi qidiruv bo'lmasa "Qaerdan?" ni foydalanuvchining uy hududi
+        // bilan to'ldiramiz (telefonda allaqachon saqlangan; yangi ruxsat yo'q).
+        if (widget.autoFrom == null) _prefillFromHomeRegion();
       }
       if (widget.autoFrom != null && widget.autoTo != null) {
         await _autoSearch(
@@ -208,6 +213,19 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       _toCtrl.text = IntercityPlaces.displayForLocale(to, _currentLocale);
       context.read<IntercityTaxiController>().selectTo(to);
     }
+  }
+
+  /// "Qaerdan?" bo'sh bo'lsa va uy hududi (viloyat/tuman) ma'lum bo'lsa —
+  /// shu hududga mos aniq joy bilan to'ldiradi. Aniq moslik bo'lmasa hech narsa.
+  void _prefillFromHomeRegion() {
+    if (!mounted || _fromCtrl.text.trim().isNotEmpty) return;
+    final canonical = IntercityPlaces.canonicalFromRegionDistrict(
+      regionLabel: ServiceConfigHolder.regionLabel,
+      districtLabel: ServiceConfigHolder.districtLabel,
+    );
+    if (canonical.isEmpty) return;
+    _fromCtrl.text = IntercityPlaces.displayForLocale(canonical, _currentLocale);
+    context.read<IntercityTaxiController>().selectFrom(canonical);
   }
 
   Future<void> _loadPlaceHistory() async {
@@ -401,30 +419,22 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
 
   void _handleError() {
     if (!mounted) return;
+    // Faqat haqiqiy xatolar snackbar bilan. "Reys topilmadi" xato emas —
+    // u natijalar sahifasidagi bo'sh holatda (takror xabar yo'q).
     final err = _controllerRef!.errorMessage;
     if (err == null) return;
-    final isNoDriver =
-        err == 'no_driver_today' ||
-        err == 'no_driver_tomorrow' ||
-        err == 'no_driver_on_date';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Row(children: [
-        Icon(
-          isNoDriver ? Icons.info_outline : Icons.warning_amber,
-          color: isNoDriver ? AppColors.primaryText : IntercityColors.onPrimary,
-        ),
+        const Icon(Icons.warning_amber, color: IntercityColors.onPrimary),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             context.trMsg(err),
-            style: TextStyle(
-              color: isNoDriver ? IntercityColors.text : IntercityColors.onPrimary,
-            ),
+            style: const TextStyle(color: IntercityColors.onPrimary),
           ),
         ),
       ]),
-      backgroundColor:
-          isNoDriver ? IntercityColors.surfaceSoft : IntercityColors.danger,
+      backgroundColor: IntercityColors.danger,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
@@ -584,22 +594,24 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Ikki qator: "Хоразм • Гурлан → Тошкент..." kesilib ikkala
+                    // uchi o'qilmay qolmasin; UI tilida ko'rsatiladi.
                     Text(
-                      '${c.selectedFromLocation ?? ''}'
+                      '${IntercityPlaces.displayForLocale(c.selectedFromLocation ?? '', _currentLocale)}'
                       ' → '
-                      '${c.selectedToLocation ?? ''}',
+                      '${IntercityPlaces.displayForLocale(c.selectedToLocation ?? '', _currentLocale)}',
                       style: const TextStyle(
                         color: IntercityColors.onPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       c.isSearching
-                          ? 'Қидирилмоқда...'
-                          : '${c.rides.length} та рейс топилди',
+                          ? context.tr('searching')
+                          : '${c.rides.length} ${context.tr('rides_found')}',
                       style: TextStyle(
                         color: IntercityColors.onPrimary.withValues(alpha: 0.72),
                         fontSize: 13,
@@ -619,31 +631,16 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                   ),
                 )
               : c.rides.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.directions_bus_outlined,
-                            size: 64,
-                            color: IntercityColors.textFaint,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Рейс топилмади',
-                            style: TextStyle(
-                              color: IntercityColors.textMuted,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: c.resetSearch,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Қайта қидириш'),
-                          ),
-                        ],
-                      ),
+                  ? IntercityNoRidesView(
+                      reasonKey: c.emptyStateKey,
+                      isToday: c.isToday,
+                      canSearchNextDay:
+                          c.dayOffset < IntercityTaxiController.maxDayOffset,
+                      onSearchNextDay: () {
+                        c.setDayOffset(c.dayOffset + 1);
+                        c.search();
+                      },
+                      onSearchAgain: c.search,
                     )
                   : ListView.builder(
                       padding: EdgeInsets.fromLTRB(

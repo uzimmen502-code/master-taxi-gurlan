@@ -3281,5 +3281,10 @@
   "ic_err_phone_missing": "Telefon raqami topilmadi. Profilni tekshiring.",
   "ic_err_time_past": "Jo'nash vaqti o'tib ketgan. Keyingi vaqtni yoki «Ertaga»ni tanlang.",
   "ic_err_no_permission": "Ruxsat yo'q. Admin tasdig'ini va internetni tekshiring.",
-  "ic_err_index_pending": "Tizim tayyorlanmoqda. Bir necha daqiqadan keyin qayta urinib ko'ring."
+  "ic_err_index_pending": "Tizim tayyorlanmoqda. Bir necha daqiqadan keyin qayta urinib ko'ring.",
+  "intercity_no_rides": "Reys topilmadi",
+  "intercity_search_again": "Qayta qidirish",
+  "intercity_search_tomorrow": "Ertaga qidirish",
+  "intercity_search_next_day": "Keyingi kunni qidirish",
+  "intercity_ride_departed": "Bu reys allaqachon yo'lga chiqqan. Ro'yxatni yangilang."
 }

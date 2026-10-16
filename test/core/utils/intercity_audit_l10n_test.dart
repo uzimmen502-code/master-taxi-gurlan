@@ -26,6 +26,12 @@ void main() {
     'ic_err_time_past',
     'ic_err_no_permission',
     'ic_err_index_pending',
+    // yo'lovchi: natijalar sahifasi
+    'intercity_no_rides',
+    'intercity_search_again',
+    'intercity_search_tomorrow',
+    'intercity_search_next_day',
+    'intercity_ride_departed',
   ];
 
   final dict = <String, Map<String, dynamic>>{};

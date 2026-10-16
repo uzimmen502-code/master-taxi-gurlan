@@ -82,16 +82,16 @@ void main() {
     final want = DateTime(now.year, now.month, now.day + 5);
     final base = rides.lastBase!;
     expect(DateTime(base.year, base.month, base.day), want);
-    expect(c.errorMessage, 'no_driver_on_date');
+    expect(c.emptyStateKey, 'no_driver_on_date');
   });
 
   test('бўш натижа хабари: бугун / эртага', () async {
     await c.search();
     await pumpEventQueue();
-    expect(c.errorMessage, 'no_driver_today');
+    expect(c.emptyStateKey, 'no_driver_today');
     c.setIsToday(false);
     await c.search();
     await pumpEventQueue();
-    expect(c.errorMessage, 'no_driver_tomorrow');
+    expect(c.emptyStateKey, 'no_driver_tomorrow');
   });
 }

@@ -148,6 +148,54 @@ class IntercityPlaces {
     return normalizeLocation(canonical) == 'Тошкент';
   }
 
+  /// Foydalanuvchining uy hududi (viloyat/tuman nomi, telefonda saqlangan)
+  /// bo'yicha `allLocations` ichidagi KANONIK joy. Qat'iy moslik (taxminiy
+  /// `normalizeLocation` emas: u "Қува" ni "Қувасой" deb olib qo'yishi mumkin).
+  /// Aniq bitta moslik bo'lmasa — bo'sh qator (oldindan to'ldirilmaydi).
+  static String canonicalFromRegionDistrict({
+    required String regionLabel,
+    required String districtLabel,
+  }) {
+    String n(String s) => s.trim().toLowerCase();
+    final d = n(districtLabel);
+    final r = n(regionLabel);
+    if (d.isEmpty) return '';
+
+    final byDistrict = <int>[];
+    final byCity = <int>[];
+    for (var i = 0; i < allLocations.length; i++) {
+      final cy = allLocations[i];
+      final la = _allLatn[i];
+      if (cy.contains('•')) {
+        final dc = n(cy.split('•').last);
+        final dl = n(la.split('•').last);
+        if (d == dc || d == dl) byDistrict.add(i);
+      } else if (d == n(cy) || d == n(la)) {
+        byCity.add(i);
+      }
+    }
+
+    if (byDistrict.length == 1) return allLocations[byDistrict.first];
+    if (byDistrict.length > 1 && r.isNotEmpty) {
+      // Bir nomdagi tumanlar: viloyat nomi bilan ajratamiz.
+      final narrowed = byDistrict.where((i) {
+        for (final s in [allLocations[i], _allLatn[i]]) {
+          final region = n(s.split('•').first.replaceAll(' ш.', ''));
+          if (region.isNotEmpty && (r == region || r.startsWith(region))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
+      if (narrowed.length == 1) return allLocations[narrowed.first];
+      return '';
+    }
+    if (byDistrict.isEmpty && byCity.length == 1) {
+      return allLocations[byCity.first];
+    }
+    return '';
+  }
+
   /// Tuman tanlovidan каноник: `Тошкент ш. • Чилонзор`.
   static String districtCanonicalFromPicker(String districtLabel, Locale locale) {
     final districts = tashkentDistrictsFor(locale);

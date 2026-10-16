@@ -21,11 +21,16 @@ class IntercityTaxiController extends ChangeNotifier {
   IntercityTaxiController({
     required IntercityRidesRepository ridesRepo,
     required IntercityBookingsRepository bookingsRepo,
+    DateTime Function()? clock,
   })  : _ridesRepo = ridesRepo,
-        _bookingsRepo = bookingsRepo;
+        _bookingsRepo = bookingsRepo,
+        _clock = clock ?? DateTime.now;
 
   final IntercityRidesRepository _ridesRepo;
   final IntercityBookingsRepository _bookingsRepo;
+
+  /// Soat in'ektsiyasi (test) — standart [DateTime.now].
+  final DateTime Function() _clock;
 
   String? selectedFromLocation;
   String? selectedToLocation;
@@ -227,6 +232,7 @@ class IntercityTaxiController extends ChangeNotifier {
     hasSearched = true;
     rides = const [];
     _allRides = const [];
+    _emptyStateKey = null;
     notifyListeners();
 
     try {
@@ -258,6 +264,7 @@ class IntercityTaxiController extends ChangeNotifier {
               ? 'search_permission_denied'
               : 'search_error_internet';
           rides = const [];
+          _emptyStateKey = null;
           notifyListeners();
         },
       );
@@ -274,28 +281,46 @@ class IntercityTaxiController extends ChangeNotifier {
     _refilterRides();
   }
 
+  /// Jo'nash vaqti o'tib ketgan reys ro'yxatda ham, bronda ham bo'lmaydi.
+  /// (Repozitoriy faqat kun bo'yicha filtrlaydi — bugungi soat o'tgan reyslar
+  /// shu yerda tushib qoladi.)
+  bool _hasDeparted(IntercityRide r) => r.departureTime.isBefore(_clock());
+
   void _refilterRides() {
-    final filtered =
-        _allRides.where((r) => r.availableSeats >= passengers).toList();
+    final filtered = _allRides
+        .where((r) => r.availableSeats >= passengers && !_hasDeparted(r))
+        .toList();
     filtered.sort((a, b) => b.rating.compareTo(a.rating));
     rides = filtered;
 
-    if (filtered.isEmpty && _allRides.isNotEmpty) {
-      errorMessage = 'no_seats_for_passenger_count';
-    } else if (filtered.isEmpty) {
-      errorMessage = isToday
-          ? 'no_driver_today'
-          : isTomorrow
-              ? 'no_driver_tomorrow'
-              : 'no_driver_on_date';
+    // Bo'sh natija xato EMAS: sababi alohida (`emptyStateKey`) — UI uni
+    // bo'sh holat ichida ko'rsatadi, qo'shimcha snackbar chiqarmaydi.
+    if (filtered.isEmpty) {
+      final anyUpcoming = _allRides.any((r) => !_hasDeparted(r));
+      _emptyStateKey = anyUpcoming
+          ? 'no_seats_for_passenger_count'
+          : isToday
+              ? 'no_driver_today'
+              : isTomorrow
+                  ? 'no_driver_tomorrow'
+                  : 'no_driver_on_date';
     } else {
-      errorMessage = null;
+      _emptyStateKey = null;
     }
+    errorMessage = null;
 
     isLoading = false;
     _isSearching = false;
     notifyListeners();
   }
+
+  String? _emptyStateKey;
+
+  /// Qidiruv tugagan va reys yo'q bo'lsa — sababning l10n kaliti
+  /// (`no_driver_today` / `no_driver_tomorrow` / `no_driver_on_date` /
+  /// `no_seats_for_passenger_count`). Aks holda `null`.
+  String? get emptyStateKey =>
+      (hasSearched && !_isSearching && rides.isEmpty) ? _emptyStateKey : null;
 
   /// Firestore snapshot kelguncha ro'yxatdagi o'rin/jins ko'rsatkichlarini sync qilish.
   void applyLocalBookingStats({
@@ -357,6 +382,10 @@ class IntercityTaxiController extends ChangeNotifier {
     required String defaultPassengerName,
   }) async {
     if (isBooking) return (null, null);
+
+    // Ro'yxat eskirgan bo'lishi mumkin: jo'nash vaqti o'tgan reysga bron
+    // qilinmaydi (qat'iy qoida serverda; bu yerda oldindan sodda xabar).
+    if (_hasDeparted(ride)) return (null, 'intercity_ride_departed');
 
     // Эга қарори (2026-09-24): рейсларни КЎРИШ очиқ, лекин ҳар қандай амал
     // (брон) — фақат рўйхатдан ўтгандан кейин. Аноним (меҳмон) сессия

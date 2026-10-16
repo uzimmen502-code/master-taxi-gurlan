@@ -240,6 +240,31 @@ async function newOrder() {
     assert.strictEqual(t.status, 'active', `ko'rsatkich faol, lekin hujjat status=${t.status}`);
   });
 
+  await check('S4/L7: parallel noto\'g\'ri taxminlar HAMMASI sanaladi (hisob tranzaksiyada, read-then-write poygasi yo\'q)', async () => {
+    await reset();
+    const { shipmentId } = await newOrder();
+    const [legId] = (await ship(shipmentId)).legIds;
+    await fund(db, shipmentId);
+    await api.makeAcceptLeg(deps(db))({ legId }, ctx(K1));
+    const scan = api.makeScanHandover(deps(db));
+    const N = 4; // standart chegara 5 dan past: hammasi `bad_proof`, qulfsiz
+    const out = await Promise.all(Array.from({ length: N }, () => scan(
+      { legId, code: '000000', photoUrls: PHOTO }, ctx(K1),
+    ).then(() => ({ ok: true }), (e) => ({ ok: false, e }))));
+    const reasons = out.map((r) => (r.ok ? 'OK' : (r.e.details && r.e.details.reason) || r.e.message));
+    assert.deepStrictEqual(reasons, Array(N).fill('bad_proof'), `javoblar: ${reasons}`);
+    const att = (await db.doc(`shipments/${shipmentId}/private/codeAttempts_handover_${legId}_${K1}`).get()).data();
+    assert.strictEqual(att.fails, N, `${N} parallel xato sanalishi kerak edi, hisob=${att.fails}`);
+    assert.strictEqual((await col('custody_events')).length, 0);
+    // Beshinchi taxmin qulflaydi, oltinchi (to'g'ri kod bilan ham) o'tmaydi.
+    await assert.rejects(() => scan({ legId, code: '000000', photoUrls: PHOTO }, ctx(K1)),
+      (e) => e.details && e.details.reason === 'CODE_ATTEMPTS_LOCKED');
+    const sec = await api.makeGetShipmentSecrets(deps(db))({ shipmentId }, ctx(OWNER));
+    await assert.rejects(() => scan({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1)),
+      (e) => e.details && e.details.reason === 'CODE_ATTEMPTS_LOCKED');
+    assert.strictEqual((await col('custody_events')).length, 0);
+  });
+
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\n${results.length - failed}/${results.length} o'tdi.`);
   process.exit(failed ? 1 : 0);

@@ -974,6 +974,51 @@ function normalizeProofPhotos(raw, callerId, buckets) {
   return out;
 }
 
+// ─── Kod urinishlari cheklovi (audit S4/L7, 2026-10-16) ────────────────
+// 6 xonali kod HMAC'dan, jo'natma uchun doimiy; ijrochi uni 10^6 ta urinib
+// topishi mumkin edi. Har (jo'natma, LEG, chaqiruvchi, tur) uchun xato
+// urinishlar `shipments/{id}/private/codeAttempts_*` hujjatida SANALADI
+// (`private/{docId}` qoidasi: klient o'qimaydi ham, yozmaydi ham). Hisob
+// kod tekshiruvi bilan BIR tranzaksiyada: ikki parallel xato taxmin ham
+// sanaladi. Xato urinishdan keyin chaqiruv tranzaksiyadan SO'NG xato
+// tashlaydi (aks holda tranzaksiya yozuvni bekor qilardi).
+
+function codeLockedError(retryAfterSec) {
+  return fail('resource-exhausted',
+    'Juda ko\'p noto\'g\'ri urinish bo\'ldi. Biroz kutib, qayta urinib ko\'ring.',
+    'CODE_ATTEMPTS_LOCKED', { retryAfterSec });
+}
+
+function codeAttemptsRef(shipmentRef, kind, legId, callerId) {
+  return shipmentRef.collection('private').doc(`codeAttempts_${kind}_${legId}_${callerId}`);
+}
+
+/**
+ * Tranzaksiya ICHIDA, o'qishlardan keyin. `verify()` — kod to'g'rimi.
+ * Qaytaradi: `null` (to'g'ri — davom eting; hisoblagich o'chirildi) yoki
+ * `{ blocked: 'locked'|'bad', retryAfterSec }`.
+ */
+function applyCodeAttempt(tx, ref, snap, now, limits, verify, meta) {
+  const att = snap && snap.exists ? (snap.data() || {}) : null;
+  const leftMs = L.codeLockRemainingMs(att, now);
+  if (leftMs > 0) return { blocked: 'locked', retryAfterSec: Math.ceil(leftMs / 1000) };
+  if (verify()) {
+    if (att) tx.delete(ref);
+    return null;
+  }
+  const next = L.registerFailedCodeAttempt(att, now, limits);
+  tx.set(ref, { ...meta, ...next, updatedAt: now });
+  if (next.lockedUntil) return { blocked: 'locked', retryAfterSec: Math.ceil(limits.lockMs / 1000) };
+  return { blocked: 'bad' };
+}
+
+/** Qulf bo'lsa — qulf xatosi (+ log); aks holda chaqiruvchi o'zi «noto'g'ri kod» tashlaydi. */
+function throwIfCodeLocked(blocked, log) {
+  if (blocked.blocked !== 'locked') return;
+  console.error(JSON.stringify({ result: 'denied', errorCode: 'CODE_ATTEMPTS_LOCKED', ...log }));
+  throw codeLockedError(blocked.retryAfterSec);
+}
+
 function validateProofInput(data, config, photoCtx) {
   const d = data || {};
   const code = d.code == null ? '' : String(d.code).trim();
@@ -1021,11 +1066,12 @@ function makeScanHandover(deps) {
     const eventRef = db.collection(L.CUSTODY).doc(eventId);
     const idx = Number(a.legIndex) || 0;
     const count = Number(a.legCount) || 1;
+    const attemptsRef = codeAttemptsRef(shipmentRef, 'handover', legId, providerId);
 
     const result = await db.runTransaction(async (tx) => {
-      const reads = [tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef), tx.get(orderRef)];
+      const reads = [tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef), tx.get(orderRef), tx.get(attemptsRef)];
       if (prevLegRef) reads.push(tx.get(prevLegRef));
-      const [legSnap, shipSnap, secSnap, evSnap, orderSnap, prevSnap] = await Promise.all(reads);
+      const [legSnap, shipSnap, secSnap, evSnap, orderSnap, attSnap, prevSnap] = await Promise.all(reads);
 
       if (evSnap.exists) {
         return { idempotent: true, event: evSnap.data() };
@@ -1049,9 +1095,12 @@ function makeScanHandover(deps) {
         // D-TAXI-13 analogi: to'lovsiz custody yo'q.
         throw fail('failed-precondition', 'To\'lov tasdiqlanmagan', 'not_funded');
       }
-      if (!L.verifyHandoverProof(shipmentId, qrSecret, { code: proof.code, qrPayload: proof.qrPayload })) {
-        throw fail('permission-denied', 'Kod noto\'g\'ri', 'bad_proof');
-      }
+      const blocked = applyCodeAttempt(
+        tx, attemptsRef, attSnap, now, L.codeAttemptLimits(config),
+        () => L.verifyHandoverProof(shipmentId, qrSecret, { code: proof.code, qrPayload: proof.qrPayload }),
+        { kind: 'handover', shipmentId, legId, callerId: providerId },
+      );
+      if (blocked) return { blocked };
 
       // Kimdan olinadi — JORIY custodian (D-7: faqat jismoniy qabulda o'zgaradi).
       const cur = ship.currentCustodian || {};
@@ -1147,6 +1196,11 @@ function makeScanHandover(deps) {
       return { idempotent: false, event, nextLegId: a.nextLegId || null, orderId: a.orderId || null };
     });
 
+    if (result.blocked) {
+      throwIfCodeLocked(result.blocked, { action: 'scanHandover', shipmentId, legId });
+      throw fail('permission-denied', 'Kod noto\'g\'ri', 'bad_proof');
+    }
+
     // Zanjir (6.1): posilka yo'lda — keyingi LEG ochiladi.
     const openOn = ((config.logistics || {}).openNextLegOn) || 'in_progress';
     const openNextLeg = async (nextLegId) => {
@@ -1210,10 +1264,11 @@ function makeConfirmDelivery(deps) {
     const eventRef = db.collection(L.CUSTODY).doc(eventId);
     const idx = Number(a.legIndex) || 0;
     const count = Number(a.legCount) || 1;
+    const attemptsRef = codeAttemptsRef(shipmentRef, 'delivery', legId, providerId);
 
     const result = await db.runTransaction(async (tx) => {
-      const [legSnap, shipSnap, secSnap, evSnap] = await Promise.all([
-        tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef),
+      const [legSnap, shipSnap, secSnap, evSnap, attSnap] = await Promise.all([
+        tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef), tx.get(attemptsRef),
       ]);
       if (evSnap.exists) return { idempotent: true };
       if (!legSnap.exists || !shipSnap.exists || !secSnap.exists) {
@@ -1232,9 +1287,12 @@ function makeConfirmDelivery(deps) {
       if (cur.kind !== L.CUSTODIAN_KIND.PROVIDER || cur.id !== providerId) {
         throw fail('failed-precondition', 'Custody zanjiri mos emas', 'custody_mismatch');
       }
-      if (!L.verifyDeliveryCode(shipmentId, (secSnap.data() || {}).qrSecret, deliveryCode)) {
-        throw fail('permission-denied', 'Yetkazish kodi noto\'g\'ri', 'bad_delivery_code');
-      }
+      const blocked = applyCodeAttempt(
+        tx, attemptsRef, attSnap, now, L.codeAttemptLimits(config),
+        () => L.verifyDeliveryCode(shipmentId, (secSnap.data() || {}).qrSecret, deliveryCode),
+        { kind: 'delivery', shipmentId, legId, callerId: providerId },
+      );
+      if (blocked) return { blocked };
 
       const event = {
         shipmentId,
@@ -1274,6 +1332,10 @@ function makeConfirmDelivery(deps) {
       return { idempotent: false, orderId: a.orderId || null };
     });
 
+    if (result.blocked) {
+      throwIfCodeLocked(result.blocked, { action: 'confirmDelivery', shipmentId, legId });
+      throw fail('permission-denied', 'Yetkazish kodi noto\'g\'ri', 'bad_delivery_code');
+    }
     if (!result.idempotent) await recomputeOrderStatus(db, result.orderId, now);
     return { ok: true, idempotent: result.idempotent, eventId, shipmentStatus: L.SHIPMENT_STATUS.DELIVERED };
   };

@@ -186,6 +186,13 @@ const DEFAULTS = {
     stage: 'internal',
     /** Kanonik telefon ID'lari (ids.toCanonicalId) — jo'natuvchi VA ijrochi. */
     testerIds: [],
+    /**
+     * Topshirish/yetkazish kodini terib topishdan himoya (audit S4/L7): bitta
+     * (jo'natma, LEG, ijrochi) uchun shuncha XATO urinishdan keyin ...
+     */
+    codeMaxFailedAttempts: 5,
+    /** ... shuncha daqiqa qulf. Bu NARX EMAS — xavfsizlik sozlamasi. */
+    codeLockMinutes: 15,
   },
 
   // ─── Javobgarlik shifti (Т-10, Қ-2) ─────────────────────────────────

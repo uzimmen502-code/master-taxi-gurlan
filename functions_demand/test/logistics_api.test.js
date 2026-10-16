@@ -274,6 +274,115 @@ ok('S5: rasm ixtiyoriy bo\'lsa (requireHandoverPhoto=false) rasmsiz o\'tadi; ras
   assert.strictEqual(s.idempotent, false);
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// Audit S4/L7 (2026-10-16): 6 xonali kodni terib topib bo'lmasin.
+// Hisoblagich: shipments/{id}/private/codeAttempts_{kind}_{legId}_{callerId}
+// (storage `private/{docId}` qoidasi: klient o'qimaydi ham, yozmaydi ham).
+const attemptsKey = (shipmentId, kind, legId, callerId) => `shipments/${shipmentId}/private/codeAttempts_${kind}_${legId}_${callerId}`;
+const WRONG = '000000';
+
+async function oneLegAccepted(over = {}) {
+  const db = makeDb(seed(over)); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload(), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0]; const legId = legOf(db, shipmentId)[0];
+  await fund(db, shipmentId);
+  await api.makeAcceptLeg(d)({ legId }, ctx(K1));
+  const sec = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(OWNER));
+  return { db, d, shipmentId, legId, sec };
+}
+const reasonOf = (e) => e.details && e.details.reason;
+const isLocked = (e) => e.code === 'resource-exhausted' && reasonOf(e) === 'CODE_ATTEMPTS_LOCKED';
+
+ok('S4: scanHandover — 5 ta noto\'g\'ri urinishdan keyin qulf; to\'g\'ri kod ham qulf paytida o\'tmaydi', async () => {
+  const { db, d, shipmentId, legId, sec } = await oneLegAccepted();
+  const scan = api.makeScanHandover(d);
+  for (let i = 1; i <= 4; i += 1) {
+    await assert.rejects(() => scan({ legId, code: WRONG, photoUrls: PHOTO }, ctx(K1)), (e) => reasonOf(e) === 'bad_proof', `${i}-urinish`);
+  }
+  await assert.rejects(() => scan({ legId, code: WRONG, photoUrls: PHOTO }, ctx(K1)), isLocked, '5-urinish qulflaydi');
+  const att = db.docs.get(attemptsKey(shipmentId, 'handover', legId, K1));
+  assert.strictEqual(att.fails, 5);
+  assert.ok(att.lockedUntil.getTime() === NOW.getTime() + 15 * 60 * 1000, 'standart 15 daqiqa');
+  // Qulf paytida TO'G'RI kod ham, QR ham o'tmaydi (aks holda qulf aylanib o'tiladi).
+  await assert.rejects(() => scan({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1)),
+    (e) => isLocked(e) && e.details.retryAfterSec === 900);
+  await assert.rejects(() => scan({ legId, qrPayload: sec.qrPayload, photoUrls: PHOTO }, ctx(K1)), isLocked);
+  assert.strictEqual(Object.keys(db.dump('custody_events')).length, 0, 'custody YO\'Q');
+  assert.strictEqual(db.dump('shipments')[shipmentId].status, 'ready', 'jo\'natma holati o\'zgarmadi');
+});
+
+ok('S4: qulf muddati tugaydi — to\'g\'ri kod o\'tadi; muddatdan keyingi xato hisobni 1 dan boshlaydi', async () => {
+  const { db, d, shipmentId, legId, sec } = await oneLegAccepted();
+  const scan = api.makeScanHandover(d);
+  for (let i = 0; i < 5; i += 1) await assert.rejects(() => scan({ legId, code: WRONG, photoUrls: PHOTO }, ctx(K1)));
+  const at = (min) => api.makeScanHandover({ ...d, now: () => new Date(NOW.getTime() + min * 60 * 1000) });
+  await assert.rejects(() => at(14)({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1)), isLocked, '14 daq — hali qulf');
+  // 16 daq: qulf tugagan; xato urinish yana bad_proof (darrov qayta qulflanmaydi), hisob = 1.
+  await assert.rejects(() => at(16)({ legId, code: WRONG, photoUrls: PHOTO }, ctx(K1)), (e) => reasonOf(e) === 'bad_proof');
+  assert.strictEqual(db.docs.get(attemptsKey(shipmentId, 'handover', legId, K1)).fails, 1);
+  const s = await at(16)({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(s.idempotent, false);
+});
+
+ok('S4: to\'g\'ri kod qulfdan oldin ishlaydi va hisobni NOLGA tushiradi (hujjat o\'chadi)', async () => {
+  const { db, d, shipmentId, legId, sec } = await oneLegAccepted();
+  const scan = api.makeScanHandover(d);
+  for (let i = 0; i < 4; i += 1) await assert.rejects(() => scan({ legId, code: WRONG, photoUrls: PHOTO }, ctx(K1)), (e) => reasonOf(e) === 'bad_proof');
+  assert.strictEqual(db.docs.get(attemptsKey(shipmentId, 'handover', legId, K1)).fails, 4);
+  const s = await scan({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(s.idempotent, false);
+  assert.strictEqual(db.docs.has(attemptsKey(shipmentId, 'handover', legId, K1)), false, 'muvaffaqiyatdan keyin hisoblagich tozalanadi');
+  assert.strictEqual(db.dump('custody_events')[s.eventId].to.id, K1);
+});
+
+ok('S4: hisoblagich (LEG, chaqiruvchi) bo\'yicha alohida — begona chaqiruvchi/LEG qulfi K1\'ga tegmaydi; begona chaqiruvchi hisobni oshirmaydi', async () => {
+  const { db, d, shipmentId, legId, sec } = await oneLegAccepted();
+  const future = new Date(NOW.getTime() + 10 * 60 * 1000);
+  const locked = { fails: 5, lockedUntil: future, kind: 'handover' };
+  // F1'ning shu LEG'dagi va K1'ning BOSHQA LEG'dagi qulfi (qo'lda yozilgan) — K1 ishiga ta'sir qilmaydi.
+  db.docs.set(attemptsKey(shipmentId, 'handover', legId, F1), { ...locked, legId, callerId: F1 });
+  db.docs.set(attemptsKey(shipmentId, 'handover', 'BOSHQA_LEG', K1), { ...locked, legId: 'BOSHQA_LEG', callerId: K1 });
+  const scan = api.makeScanHandover(d);
+  // Begona chaqiruvchi (F1 tayinlanmagan): not_assigned; uning hisobi ham oshmaydi.
+  await assert.rejects(() => scan({ legId, code: WRONG, photoUrls: photoFor(F1) }, ctx(F1)), (e) => reasonOf(e) === 'not_assigned');
+  assert.strictEqual(db.docs.get(attemptsKey(shipmentId, 'handover', legId, F1)).fails, 5, 'begona chaqiruvchi hisobi o\'zgarmadi');
+  // K1: o'z LEG'i, o'z hisobi toza — 1-xato; keyin to'g'ri kod o'tadi.
+  await assert.rejects(() => scan({ legId, code: WRONG, photoUrls: PHOTO }, ctx(K1)), (e) => reasonOf(e) === 'bad_proof');
+  assert.strictEqual(db.docs.get(attemptsKey(shipmentId, 'handover', legId, K1)).fails, 1);
+  const s = await scan({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(s.idempotent, false);
+});
+ok('S4: confirmDelivery — yetkazish kodi ham xuddi shunday qulflanadi; chegara konfigdan (codeMaxFailedAttempts=2, 1 daq)', async () => {
+  const { db, d, shipmentId, legId, sec } = await oneLegAccepted({
+    'module_config/logistics_all': {
+      enabled: true, matchingEnabled: true, pushEnabled: false,
+      logistics: { stage: 'public', codeMaxFailedAttempts: 2, codeLockMinutes: 1 },
+    },
+  });
+  await api.makeScanHandover(d)({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  const confirm = api.makeConfirmDelivery(d);
+  await assert.rejects(() => confirm({ legId, deliveryCode: WRONG, photoUrls: PHOTO }, ctx(K1)), (e) => reasonOf(e) === 'bad_delivery_code');
+  await assert.rejects(() => confirm({ legId, deliveryCode: WRONG, photoUrls: PHOTO }, ctx(K1)), isLocked);
+  await assert.rejects(() => confirm({ legId, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(K1)),
+    (e) => isLocked(e) && e.details.retryAfterSec === 60);
+  assert.strictEqual(db.dump('shipments')[shipmentId].status, 'in_transit');
+  // handover va delivery hisoblagichlari alohida hujjat.
+  assert.strictEqual(db.docs.get(attemptsKey(shipmentId, 'delivery', legId, K1)).fails, 2);
+  const later = new Date(NOW.getTime() + 61 * 1000);
+  const c = await api.makeConfirmDelivery({ ...d, now: () => later })({ legId, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(c.shipmentStatus, 'delivered');
+  assert.strictEqual(db.docs.has(attemptsKey(shipmentId, 'delivery', legId, K1)), false, 'hisoblagich tozalandi');
+});
+
+ok('S4: yaroqsiz konfig qiymati (0, manfiy, matn) qattiq standartga qaytadi', async () => {
+  const lim = require('../core/logistics').codeAttemptLimits;
+  assert.deepStrictEqual(lim({}), { maxFailed: 5, lockMs: 15 * 60 * 1000 });
+  assert.deepStrictEqual(lim({ logistics: { codeMaxFailedAttempts: 0, codeLockMinutes: -3 } }), { maxFailed: 5, lockMs: 15 * 60 * 1000 });
+  assert.deepStrictEqual(lim({ logistics: { codeMaxFailedAttempts: 'x', codeLockMinutes: 2.5 } }), { maxFailed: 5, lockMs: 15 * 60 * 1000 });
+  assert.deepStrictEqual(lim({ logistics: { codeMaxFailedAttempts: 3, codeLockMinutes: 30 } }), { maxFailed: 3, lockMs: 30 * 60 * 1000 });
+});
+
 ok('bekor qilish: eskrou tushgan bo\'lsa refund_pending; LEG va match yopiladi; keyin yana bekor — idempotent', async () => {
   const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
   const d = deps(db);

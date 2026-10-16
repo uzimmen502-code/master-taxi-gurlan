@@ -30,7 +30,10 @@ const sm = require('../core/state_machine');
 const tariffCore = require('../core/tariff');
 const L = require('../core/logistics');
 const { getAdapter } = require('../core/registry');
-const { runMatching } = require('../matching/orchestrator');
+const { runMatching, hardFilterReason, attachStats } = require('../matching/orchestrator');
+const capabilitiesSource = require('../sources/capabilities');
+const { SERVICES_BY_LEG_KIND } = require('../sources/logistics_candidates');
+const caps = require('../core/capabilities');
 const geoHash = require('../geo/geo_hash');
 const { assertAnalyticsAdmin } = require('../analytics/access');
 
@@ -153,13 +156,17 @@ async function requireActiveTariff(db) {
   return t;
 }
 
-async function requireEnabled(db, callerId) {
-  const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+function assertModuleEnabled(flags) {
   if (!flags.enabled) {
     throw fail('unavailable', flags.killReason
       ? 'Xizmat vaqtincha to\'xtatilgan'
       : 'Jo\'natma xizmati sizning hududingizda hali ishga tushmagan', 'module_disabled');
   }
+}
+
+async function requireEnabled(db, callerId) {
+  const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+  assertModuleEnabled(flags);
   // INTERNAL bosqich (42-band): sinov ro'yxatida bo'lmagan — xizmat «hali
   // ishga tushmagan». Mavjudligini boshqacha oshkor qilmaymiz.
   if (!L.isStageAllowed(flags.config, callerId)) {
@@ -442,10 +449,27 @@ function makeCreateLogisticsOrder(deps) {
       createdAt: now,
       updatedAt: now,
     });
-    batch.set(idemRef, {
+    // Idempotentlik hujjati AYNI atomik yozuvda va `create()` bilan (audit L5):
+    // yuqoridagi `get` tekshiruvi tranzaksiyasiz — ikki parallel chaqiruv ikkalasi
+    // ham «yo'q» deb ko'rib ikkita ORDER yaratardi. `create()` hujjat bor bo'lsa
+    // butun batch'ni rad etadi (ALREADY_EXISTS) → hech narsa yozilmaydi,
+    // g'olibning natijasi qaytariladi. (Yutqazgan chaqiruv tracking raqamini
+    // band qilgan bo'lishi mumkin — raqamda tirqish, ORDER yo'q.)
+    batch.create(idemRef, {
       ownerId, kind: 'logistics_order', orderId: orderRef.id, shipmentIds, createdAt: now,
     });
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e && (e.code === 6 || e.code === 'already-exists')) {
+        const won = await idemRef.get();
+        if (won.exists) {
+          const d = won.data() || {};
+          return { orderId: d.orderId, shipmentIds: d.shipmentIds || [], duplicate: true };
+        }
+      }
+      throw e;
+    }
 
     return {
       orderId: orderRef.id,
@@ -586,6 +610,88 @@ function makeOnShipmentFunded(deps) {
   };
 }
 
+/**
+ * SWEEPER: zanjir qotib qolmasin (audit L3c). LEG ochilishi uch joyda
+ * «bir martalik» edi va xatosi faqat logga tushardi:
+ *   - eskrou triggeri (`onShipmentFunded`) -> LEG-1;
+ *   - `scanHandover` -> keyingi LEG;
+ *   - `adminPlanShipmentRoute` -> yangi LEG-1.
+ * Biri yiqilsa LEG `draft`da qoladi, kuryerga ko'rinmaydi, pul eskrouda.
+ *
+ * Bu sweeper TO'LANGAN (`escrow_funded`) jo'natmalarning ochilishi KERAK
+ * bo'lgan BITTA LEG'ini tekshiradi va `draft` bo'lsa mavjud `activateLeg`ni
+ * chaqiradi (u tranzaksion va idempotent: boshqa chaqiruv ochgan / bekor
+ * qilingan / joriy marshrutda yo'q LEG'ni `skipped` qiladi):
+ *   - `ready` jo'natma (hali olinmagan) -> LEG-1 (`legIds[0]`);
+ *   - `in_transit` jo'natma -> `currentLegId`dan keyingi LEG (faqat
+ *     `openNextLegOn: 'in_progress'` bo'lganda — scanHandover bilan bir xil).
+ * Jo'natma uchun faqat 1 ta LEG hujjati o'qiladi (N+1 emas).
+ *
+ * Chegara: holat bo'yicha tenglik filtri + hujjat ID tartibi (yangi indeks
+ * kerak emas), sahifa `batchSize`, bir aylanishda eng ko'pi `maxPages` sahifa.
+ * Soni chegaradan oshsa `truncated: true` logga tushadi (jim yo'qolmaydi).
+ * Yo'lda/tayyor jo'natmalar yetkazilgach shu holatlardan chiqadi.
+ */
+function makeLegChainSweeper(deps) {
+  const { db, batchSize = 100, maxPages = 10 } = deps;
+
+  return async function legChainSweeper() {
+    const startedAt = Date.now();
+    const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+    if (!flags.enabled) {
+      console.log(JSON.stringify({ action: 'legChainSweeper', result: 'skipped', reason: 'disabled' }));
+      return { scanned: 0, opened: 0, failed: 0, truncated: false, skipped: 'disabled' };
+    }
+    const openNext = (((flags.config || {}).logistics || {}).openNextLegOn || 'in_progress') === 'in_progress';
+    const out = { scanned: 0, opened: 0, failed: 0, truncated: false };
+
+    const handle = async (shipmentId, ship, status) => {
+      if (ship.paymentStatus !== L.PAYMENT_STATUS.ESCROW_FUNDED) return;
+      const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
+      let idx = 0;
+      if (status === L.SHIPMENT_STATUS.IN_TRANSIT) {
+        const cur = legIds.indexOf(ship.currentLegId);
+        if (cur < 0 || !openNext) return;
+        idx = cur + 1;
+      }
+      if (idx >= legIds.length) return;
+      const legId = legIds[idx];
+      try {
+        const ls = await db.collection(DEMANDS).doc(legId).get();
+        if (!ls.exists || (ls.data() || {}).status !== sm.STATUS.DRAFT) return;
+        const r = await activateLeg(deps, legId);
+        if (r && r.activated) out.opened += 1;
+        console.log(JSON.stringify({
+          action: 'legChainSweeper.activate', shipmentId, legId, legIndex: idx, result: r,
+        }));
+      } catch (e) {
+        out.failed += 1;
+        console.error(JSON.stringify({
+          action: 'legChainSweeper.activate', result: 'error', errorCode: 'LEG_ACTIVATE_FAILED',
+          shipmentId, legId, message: e.message,
+        }));
+      }
+    };
+
+    for (const status of [L.SHIPMENT_STATUS.READY, L.SHIPMENT_STATUS.IN_TRANSIT]) {
+      let last = null;
+      for (let page = 0; page < maxPages; page += 1) {
+        let q = db.collection(L.SHIPMENTS).where('status', '==', status).orderBy('__name__').limit(batchSize);
+        if (last) q = q.startAfter(last);
+        const snap = await q.get();
+        for (const sd of snap.docs) {
+          out.scanned += 1;
+          await handle(sd.id, sd.data() || {}, status);
+        }
+        if (snap.size < batchSize) break;
+        last = snap.docs[snap.docs.length - 1];
+        if (page === maxPages - 1) out.truncated = true;
+      }
+    }
+    console.log(JSON.stringify({ action: 'legChainSweeper', result: 'ok', ...out, durationMs: Date.now() - startedAt }));
+    return out;
+  };
+}
 // ═══════════════════════════════════════════════════════════════════════
 // ORDER holati (derived) — har o'zgarishdan keyin
 // ═══════════════════════════════════════════════════════════════════════
@@ -606,6 +712,60 @@ async function recomputeOrderStatus(db, orderId, now) {
 // IJROCHI: LEG'ni OLISH (birinchi qabul g'olib)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Ijrochi hali ham shu LEG'ni olishga haqlimi (audit L6). Match hujjati
+ * matching paytidagi holat: undan keyin capability bekor qilinishi, qarz
+ * bloki, trust/moderator bloki yoki sinov ro'yxatidan chiqarish mumkin.
+ * Qoidalar QAYTA YOZILMAYDI — matcher bilan bir xil hardFilterReason
+ * (trust, blok, qarz, adapter.isEligible: hudud + INTERNAL bosqich).
+ *
+ * Ijrochi ma'lumoti tranzaksiyadan OLDIN yuklanadi (users -> accountId ->
+ * capability + provider_stats); LEG o'zi tranzaksiya ichida o'qiladi.
+ */
+async function loadAcceptCandidates(db, providerId) {
+  const doc = await capabilitiesSource.fetchForProvider(db, providerId);
+  const out = [];
+  if (!doc) return out;
+  const services = new Set();
+  for (const list of Object.values(SERVICES_BY_LEG_KIND)) for (const s of list) services.add(s);
+  for (const service of services) {
+    if (!caps.isEligible(doc, service)) continue;
+    const svc = doc[service] || {};
+    // Manba qoidasi bilan bir xil: kuryer faqat posilka oladiganlar.
+    if (service === 'courier' && svc.acceptsParcels !== true) continue;
+    out.push({
+      providerId,
+      accountId: doc.id,
+      source: 'capabilities',
+      viaService: service,
+      regionIds: svc.regionIds || [],
+      districtIds: svc.districtIds || [],
+      acceptsParcels: svc.acceptsParcels === true,
+      capabilityStatus: caps.statusOf(doc, service),
+    });
+  }
+  await attachStats(db, out);
+  return out;
+}
+
+function assertStillEligible(legId, leg, candidates, config) {
+  const adapter = getAdapter(L.MODULE);
+  if (!adapter) throw fail('unimplemented', 'logistics adapteri ulanmagan');
+  const kind = ((leg.attributes || {}).legKind) || 'direct';
+  const services = SERVICES_BY_LEG_KIND[kind] || SERVICES_BY_LEG_KIND.direct;
+  const demand = { id: legId, ...leg };
+  let why = 'capability_not_eligible';
+  for (const c of candidates) {
+    if (!services.includes(c.viaService)) continue;
+    const r = hardFilterReason(demand, c, config, adapter);
+    if (!r) return;
+    why = r;
+  }
+  // Foydalanuvchi matni match yo'qligi bilan bir xil (sababni oshkor qilmaymiz).
+  // `not_matched` — mavjud kod (ilova matni bor, parity fixture'da); sabab `why`da (ichki).
+  throw fail('permission-denied', 'Bu jo\'natma sizga mos emas', 'not_matched', { why });
+}
+
 function makeAcceptLeg(deps) {
   const { db, now: nowFn } = deps;
 
@@ -615,6 +775,14 @@ function makeAcceptLeg(deps) {
     if (!providerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
     const legId = String((data || {}).legId || '');
     if (!legId) throw fail('invalid-argument', 'legId majburiy');
+
+    // Match tuzilgandan keyin holat o'zgargan bo'lishi mumkin (audit L6): kill
+    // switch, INTERNAL bosqich, capability va qarz bloki shu yerda QAYTA
+    // tekshiriladi (matcher bilan bir xil qoidalar). Ma'lumot tranzaksiyadan
+    // oldin yuklanadi, tekshiruv — LEG/match o'qilgach (match yo'q ijrochiga
+    // modul holati oshkor qilinmaydi: avvalgidek `not_matched`).
+    const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+    const acceptCandidates = await loadAcceptCandidates(db, providerId);
 
     const legRef = db.collection(DEMANDS).doc(legId);
     const matchRef = db.collection(MATCHES).doc(`${legId}_${providerId}`);
@@ -632,6 +800,8 @@ function makeAcceptLeg(deps) {
       if (sm.isPastExpiry((leg.timeWindow || {}).expiresAt, now)) {
         throw fail('failed-precondition', 'LEG muddati tugagan', 'expired');
       }
+      assertModuleEnabled(flags);
+      assertStillEligible(legId, leg, acceptCandidates, flags.config);
 
       const a = leg.attributes || {};
       const shipmentRef = db.collection(L.SHIPMENTS).doc(String(a.shipmentId || ''));
@@ -939,16 +1109,26 @@ function makeScanHandover(deps) {
       return { idempotent: false, event, nextLegId: a.nextLegId || null, orderId: a.orderId || null };
     });
 
-    if (result.idempotent) {
-      return { ok: true, idempotent: true, eventId, legStatus: 'in_progress' };
-    }
     // Zanjir (6.1): posilka yo'lda — keyingi LEG ochiladi.
     const openOn = ((config.logistics || {}).openNextLegOn) || 'in_progress';
-    if (result.nextLegId && openOn === 'in_progress') {
-      try { await activateLeg(deps, result.nextLegId); } catch (e) {
-        console.error(`keyingi LEG ochilmadi (${result.nextLegId}): ${e.message}`);
+    const openNextLeg = async (nextLegId) => {
+      if (!nextLegId || openOn !== 'in_progress') return;
+      try { await activateLeg(deps, nextLegId); } catch (e) {
+        console.error(JSON.stringify({
+          action: 'scanHandover.openNextLeg', result: 'error', errorCode: 'NEXT_LEG_OPEN_FAILED',
+          shipmentId, legId, nextLegId, message: e.message,
+        }));
       }
+    };
+    if (result.idempotent) {
+      // Takroriy chaqiruv (audit L3a): birinchi chaqiruvda keyingi LEG ochilmay
+      // qolgan bo'lishi mumkin (xato faqat logga tushadi) — shu yerda QAYTA
+      // uriniladi. `activateLeg` tranzaksion va idempotent: LEG allaqachon
+      // ochilgan bo'lsa `skipped` qaytaradi. Faqat hodisani yozgan ijrochi uchun.
+      if (((result.event || {}).createdBy) === providerId) await openNextLeg(a.nextLegId || null);
+      return { ok: true, idempotent: true, eventId, legStatus: 'in_progress' };
     }
+    await openNextLeg(result.nextLegId);
     await recomputeOrderStatus(db, result.orderId, now);
     return { ok: true, idempotent: false, eventId, legStatus: 'in_progress', shipmentId };
   };
@@ -1077,53 +1257,68 @@ function makeCancelLogisticsOrder(deps) {
     if (!orderId) throw fail('invalid-argument', 'orderId majburiy');
 
     const orderRef = db.collection(L.ORDERS).doc(orderId);
-    const orderSnap = await orderRef.get();
-    if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
-    const order = orderSnap.data() || {};
-    if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
 
-    const shipSnap = await db.collection(L.SHIPMENTS).where('orderId', '==', orderId).get();
-    const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
-    for (const s of ships) {
-      if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
-      if (!L.isShipmentCancellable(s.data.status)) {
-        throw fail('failed-precondition', 'Posilka allaqachon yo\'lda — bekor qilib bo\'lmaydi', 'in_transit', { shipmentId: s.id });
-      }
-    }
+    // O'qish + tekshiruv + yozuv BITTA tranzaksiyada (audit L1, 2026-10-16).
+    // Avval jo'natmalar tranzaksiyasiz o'qilib, keyin batch yozilardi:
+    //   - oradagi eskrou tushishi: jo'natma `cancelled` + `escrow_funded`
+    //     qolardi (refund_pending yozilmasdi — pul qaytmasdi);
+    //   - oradagi `scanHandover`: yo'lga chiqqan (`in_transit`) jo'natma
+    //     bekor qilinardi (custody boshlangan, ijrochi qo'lida).
+    // Endi `scanHandover`/eskrou bilan to'qnashsa commit qayta uriniladi va
+    // holat/`paymentStatus`/`custodyCount` yangidan tekshiriladi.
+    const out = await db.runTransaction(async (tx) => {
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
+      const order = orderSnap.data() || {};
+      if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
 
-    let refundPending = 0;
-    const legIdsAll = [];
-    const batch = db.batch();
-    for (const s of ships) {
-      if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
-      const patch = {
-        status: L.assertShipmentTransition(s.data.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelLogisticsOrder'),
-        cancelledAt: now,
-        cancelledBy: 'owner',
-        updatedAt: now,
-      };
-      // Eskrou tushgan bo'lsa — refund (pulni default codebase qaytaradi).
-      if (s.data.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) {
-        patch.paymentStatus = L.assertPaymentTransition(s.data.paymentStatus, L.PAYMENT_STATUS.REFUND_PENDING, 'cancel');
-        refundPending += 1;
+      const shipSnap = await tx.get(db.collection(L.SHIPMENTS).where('orderId', '==', orderId));
+      const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
+      for (const s of ships) {
+        if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
+        // Custody boshlangan bo'lsa (status ham, `custodyCount` ham) — bekor yo'q.
+        if (!L.isShipmentCancellable(s.data.status) || (Number(s.data.custodyCount) || 0) > 0) {
+          throw fail('failed-precondition', 'Posilka allaqachon yo\'lda — bekor qilib bo\'lmaydi', 'in_transit', { shipmentId: s.id });
+        }
       }
-      batch.update(s.ref, patch);
-      for (const legId of (s.data.legIds || [])) legIdsAll.push(legId);
-    }
-    for (const legId of legIdsAll) {
-      const ref = db.collection(DEMANDS).doc(legId);
-      const snap = await ref.get();
-      if (!snap.exists) continue;
-      const st = (snap.data() || {}).status;
-      if (sm.canTransition(st, sm.STATUS.CANCELLED)) {
-        batch.update(ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'owner', cancelledAt: now, updatedAt: now });
-      }
-    }
-    batch.update(orderRef, { status: 'cancelled', cancelledAt: now, updatedAt: now });
-    await batch.commit();
 
-    for (const legId of legIdsAll) await closeOtherMatches(db, legId, null, 'cancelled', now);
-    return { ok: true, cancelled: ships.length, refundPending };
+      const legIdsAll = [];
+      for (const s of ships) {
+        if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
+        for (const legId of (s.data.legIds || [])) legIdsAll.push(legId);
+      }
+      const legSnaps = await Promise.all(legIdsAll.map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+
+      // Barcha o'qishlar tugadi — endi faqat yozuv.
+      let refundPending = 0;
+      for (const s of ships) {
+        if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
+        const patch = {
+          status: L.assertShipmentTransition(s.data.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelLogisticsOrder'),
+          cancelledAt: now,
+          cancelledBy: 'owner',
+          updatedAt: now,
+        };
+        // Eskrou tushgan bo'lsa — refund (pulni default codebase qaytaradi).
+        if (s.data.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) {
+          patch.paymentStatus = L.assertPaymentTransition(s.data.paymentStatus, L.PAYMENT_STATUS.REFUND_PENDING, 'cancel');
+          refundPending += 1;
+        }
+        tx.update(s.ref, patch);
+      }
+      for (const snap of legSnaps) {
+        if (!snap.exists) continue;
+        const st = (snap.data() || {}).status;
+        if (sm.canTransition(st, sm.STATUS.CANCELLED)) {
+          tx.update(snap.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'owner', cancelledAt: now, updatedAt: now });
+        }
+      }
+      tx.update(orderRef, { status: 'cancelled', cancelledAt: now, updatedAt: now });
+      return { cancelled: ships.length, refundPending, legIdsAll };
+    });
+
+    for (const legId of out.legIdsAll) await closeOtherMatches(db, legId, null, 'cancelled', now);
+    return { ok: true, cancelled: out.cancelled, refundPending: out.refundPending };
   };
 }
 
@@ -1182,13 +1377,20 @@ function makeAdminUpsertLogisticsTariff(deps) {
     if (errors.length) throw fail('invalid-argument', errors[0], 'tariff_invalid', { errors });
 
     const ref = db.collection(tariffCore.COLLECTION).doc(tariffCore.versionDocId(doc.version));
-    const prev = await ref.get();
-    if (prev.exists && (prev.data() || {}).status !== tariffCore.STATUS.DRAFT) {
-      // Faol/eski versiya O'ZGARMAS (9-band): yangi versiya ochiladi.
-      throw fail('failed-precondition', 'Faol yoki eski versiyani tahrirlab bo\'lmaydi — yangi versiya oching', 'tariff_immutable');
-    }
-    await ref.set({ ...doc, updatedAt: now, updatedBy: adminId, createdAt: prev.exists ? (prev.data() || {}).createdAt || now : now });
-    await db.collection(TARIFF_AUDIT).add({ kind: 'tariff_upsert', version: doc.version, by: adminId, at: now });
+    // O'qish + holat tekshiruvi + yozuv BITTA tranzaksiyada (audit L12): avval
+    // `get` → `set` tranzaksiyasiz edi — oradagi `adminActivateLogisticsTariff`
+    // faol tarifni `draft`ga qaytarib yuborardi (ko'rsatkich esa hamon shu
+    // versiyani faol deb turardi). Endi to'qnashuvda qayta uriniladi va
+    // `active`/`retired` hujjat ustiga HECH QACHON yozilmaydi (9-band).
+    await db.runTransaction(async (tx) => {
+      const prev = await tx.get(ref);
+      if (prev.exists && (prev.data() || {}).status !== tariffCore.STATUS.DRAFT) {
+        // Faol/eski versiya O'ZGARMAS (9-band): yangi versiya ochiladi.
+        throw fail('failed-precondition', 'Faol yoki eski versiyani tahrirlab bo\'lmaydi — yangi versiya oching', 'tariff_immutable');
+      }
+      tx.set(ref, { ...doc, updatedAt: now, updatedBy: adminId, createdAt: prev.exists ? (prev.data() || {}).createdAt || now : now });
+      tx.set(db.collection(TARIFF_AUDIT).doc(), { kind: 'tariff_upsert', version: doc.version, by: adminId, at: now });
+    });
     return { version: doc.version, status: tariffCore.STATUS.DRAFT, activationErrors: tariffCore.validateTariff(doc, { forActivation: true }) };
   };
 }
@@ -1286,7 +1488,7 @@ function makeAdminPlanShipmentRoute(deps) {
     // tranzaksiyasiz o'qilib, keyin batch yozilardi — oradagi `acceptLeg`
     // qabulini rejalash jimgina o'chirib yuborardi (emulatorda isbotlangan).
     // `acceptLeg` ham LEG + jo'natmani tranzaksiyada o'qiydi → bitta g'olib.
-    const oldLegs = await db.runTransaction(async (tx) => {
+    const { old: oldLegs, paymentStatus: paidStatus } = await db.runTransaction(async (tx) => {
       const curSnap = await tx.get(shipRef);
       const cur = curSnap.data() || {};
       if (![L.SHIPMENT_STATUS.AWAITING_PAYMENT, L.SHIPMENT_STATUS.READY].includes(cur.status)) {
@@ -1348,13 +1550,16 @@ function makeAdminPlanShipmentRoute(deps) {
         legPayouts: route.split.legPayouts,
         updatedAt: now,
       }, { merge: true });
-      return old;
+      // To'lov holati AYNI tranzaksiyadan (audit L3b): tashqarida o'qilgan
+      // `ship.paymentStatus` eskirishi mumkin — rejalash paytida eskrou tushsa
+      // yangi LEG-1 `draft`da qolardi (trigger eski `legIds[0]`ni ochardi).
+      return { old, paymentStatus: cur.paymentStatus };
     });
     for (const o of oldLegs) await closeOtherMatches(db, o.id, null, 'cancelled', now);
 
     // To'langan bo'lsa birinchi LEG darhol ochiladi.
     let first = null;
-    if (ship.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) first = await activateLeg(deps, legIds[0]);
+    if (paidStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) first = await activateLeg(deps, legIds[0]);
     return { version, legIds, legCount: legIds.length, firstLeg: first };
   };
 }
@@ -1439,6 +1644,7 @@ module.exports = {
   makeGetLogisticsAccess,
   makeCreateLogisticsOrder,
   makeOnShipmentFunded,
+  makeLegChainSweeper,
   makeAcceptLeg,
   prepareLegCancelInTx,
   makeScanHandover,

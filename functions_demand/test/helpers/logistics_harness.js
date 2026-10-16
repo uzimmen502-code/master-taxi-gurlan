@@ -73,6 +73,10 @@ function seed(extra = {}) {
     'module_tariffs/logistics_v7': fixture.tariff,
     [`users/${OWNER}`]: { regionId: 'xorazm', districtId: 'gurlan' },
     [`users/${ADMIN}`]: { role: 'admin' },
+    // Ijrochi -> accountId (acceptLeg capability'ni qayta tekshiradi, audit L6).
+    [`users/${K1}`]: { accountId: `acc${K1}` },
+    [`users/${K2}`]: { accountId: `acc${K2}` },
+    [`users/${F1}`]: { accountId: `acc${F1}` },
     [`provider_capabilities/acc${K1}`]: capDoc(K1, 'courier', {
       active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
     }, 'approved'),

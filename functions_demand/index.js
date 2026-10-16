@@ -293,6 +293,19 @@ exports.expireDemandsSweeper = fn.pubsub
     return run();
   });
 
+/**
+ * Relay zanjiri qotib qolmasin (audit L3c): to'langan jo'natmaning draft
+ * LEG'ini (eskrou triggeri / scanHandover / qayta rejalash ochmay qolgan)
+ * mavjud idempotent activateLeg bilan ochadi. Har 10 daqiqada; chegarali.
+ */
+exports.legChainSweeper = fn.pubsub
+  .schedule('every 10 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const run = logisticsApi.makeLegChainSweeper(logisticsDeps);
+    return run();
+  });
+
 /** Т-19.1 — qabul qilindi, lekin ish boshlanmadi. */
 exports.reopenStaleAssignments = fn.pubsub
   .schedule('every 10 minutes')

@@ -8954,8 +8954,405 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
   }
 });
 
+// ── Йиғиб олиш: якун ядроси — курьер ҳам, мижоз тасдиғи ҳам шуни ишлатади (D2/D7, 7-қоида) ─────────
+// Мижоз тасдиғи ёқилган бўлса (`server_config/customer_confirm`) курьер ЯКУНЛАМАЙДИ: киритган
+// сон/нақд вазифага «кутиш белгиси» сифатида ёзилади, мижоз «ҳа» деганидан КЕЙИН шу ядро
+// (католог/режа билан қайта текширилиб) ишга тушади. Пул калитлари ўзгармаган
+// (`bonus:collection_{taskId}`), шунинг учун қайта уриниш икки марта тўламайди.
+const COLLECTION_ACTIVE_STATUSES = ['assigned', 'collecting'];
+
+/**
+ * Курьер чақируви текширувлари (тартиб ЎЗГАРМАГАН). `alreadyCompleted` — идемпотент жавоб.
+ * Аввалги коддаги `courierFinalizeCollection` текширувлари билан айнан бир хил.
+ */
+function collectionValidate(task, { courierId, taskId, itemsIn }) {
+  // F9 (audit 2026-10-16): egalik AVVAL — begona kuryer yakunlangan vazifaning
+  // pul natijasini (idempotent javob) ko'rmasin.
+  if (String(task.courierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your task');
+  }
+  // Idempotency: якунланган бўлса — сақланган натижани қайтарамиз.
+  if (task.status === 'completed') {
+    return {
+      alreadyCompleted: {
+        ok: true,
+        alreadyCompleted: true,
+        V: parseInt(String(task.finalValue ?? 0), 10) || 0,
+        cashGiven: parseInt(String(task.cashGiven ?? 0), 10) || 0,
+        walletDelta: parseInt(String(task.walletDelta ?? 0), 10) || 0,
+        walletCredit: parseInt(String(task.walletCredited ?? 0), 10) || 0,
+        withdrawnFromBalance:
+          parseInt(String(task.withdrawnFromBalance ?? 0), 10) || 0,
+        newBalance: null,
+      },
+    };
+  }
+  // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan vazifani yakunlamaydi —
+  // yakun mijoz hamyoniga pul yozadi (qiymat kuryer kiritgan qatorlardan).
+  if (courierAuth.isOwnOrder({ userPhone: task.customerPhone || task.customerUid }, courierId)) {
+    console.warn(JSON.stringify({
+      action: 'courierFinalizeCollection', taskId, result: 'denied', errorCode: 'COURIER_OWN_ORDER',
+    }));
+    throw new functions.https.HttpsError('permission-denied', 'Own order', { reason: 'COURIER_OWN_ORDER' });
+  }
+  if (!COLLECTION_ACTIVE_STATUSES.includes(String(task.status || ''))) {
+    throw new functions.https.HttpsError('failed-precondition', 'task not active');
+  }
+  if (!task.arrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+
+  // K-5 (ega qarori 2026-10-08): narx VAZIFA YARATILGANDA qotgan —
+  // `task.items` (server yozgan, `adminCreateCollectionTask` katalogdan).
+  // Kuryer faqat kod va miqdorni beradi; vazifada yo'q mahsulot — rad.
+  const snapshotByCode = new Map();
+  for (const it of (Array.isArray(task.items) ? task.items : [])) {
+    const code = String((it || {}).code || '').trim();
+    if (code && !snapshotByCode.has(code)) snapshotByCode.set(code, it);
+  }
+  const normalizedItems = [];
+  let totalValue = 0;
+  for (let i = 0; i < itemsIn.length; i += 1) {
+    const row = itemsIn[i] || {};
+    const code = String(row.code || '').trim();
+    const qty = Number(row.qty);
+    if (!code) {
+      throw new functions.https.HttpsError('invalid-argument', `items[${i}]: code required`);
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        `items[${i}]: qty must be positive`,
+      );
+    }
+    const snap = snapshotByCode.get(code);
+    if (!snap) {
+      throw new functions.https.HttpsError('failed-precondition', `Vazifada yo'q mahsulot: ${code}`,
+        { reason: 'ITEM_NOT_IN_TASK', code });
+    }
+    const unitPrice = parseInt(String(snap.unitPrice ?? 0), 10);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new functions.https.HttpsError('failed-precondition', `Vazifa narxi noto'g'ri: ${code}`,
+        { reason: 'TASK_PRICE_INVALID', code });
+    }
+    procurementCatalog.logMismatch('courierFinalizeCollection', taskId, code, row.unitPrice, unitPrice);
+    const label = String(snap.label || code);
+    const unit = String(snap.unit || '');
+    const lineTotal = Math.round(qty * unitPrice);
+    totalValue += lineTotal;
+    normalizedItems.push({ code, label, unit, qty, unitPrice, lineTotal });
+  }
+  return { normalizedItems, totalValue };
+}
+
+/** Mijoz `users` hujjati ref'i (12 xonali, bo'lmasa 9 xonali) — avvalgi mantiq. */
+async function resolveCollectionCustomerRef(task) {
+  const customerPhone = String(task.customerPhone || task.customerUid || '');
+  const uid9 = userUid(customerPhone);
+  const uid12 = canonicalUid(customerPhone);
+  let customerRef = db.collection('users').doc(uid12);
+  let customerSnap = await customerRef.get();
+  if (!customerSnap.exists && uid9 !== uid12) {
+    customerRef = db.collection('users').doc(uid9);
+    customerSnap = await customerRef.get();
+  }
+  if (!customerSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'customer user not found');
+  }
+  return customerRef;
+}
+
+/** `cashGiven > V + balans` — avvalgi xabar matni o'zgarmagan. */
+function assertCollectionCash(cashGiven, totalValue, prevBalance) {
+  const maxCash = totalValue + prevBalance;
+  if (cashGiven > maxCash) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `cash_exceeds_balance: cashGiven ${cashGiven} > max ${maxCash} ` +
+        `(V ${totalValue} + balance ${prevBalance})`,
+    );
+  }
+}
+
+/**
+ * Бир атом транзакция: status guard (идемпотентлик) + баланс текшируви
+ * + барча ёзувлар. M (нақд) V дан ошса — фарқ мижоз кошелёгидан олинади.
+ * `confirmStep` бўш — курьер йўли; тўлдирилган — мижоз тасдиғи (белги ўчади, из қолади).
+ */
+async function collectionCommitInTx(t, {
+  taskRef, taskId, courierId, customerRef, task, normalizedItems, totalValue, cashGiven, confirmStep,
+}) {
+  const walletDelta = totalValue - cashGiven; // ишорали: + кредит, - ечиш
+  const withdrawnFromBalance = Math.max(0, cashGiven - totalValue);
+  const walletCredit = Math.max(0, totalValue - cashGiven);
+
+  const fresh = await t.get(taskRef);
+  const freshData = fresh.data() || {};
+  if (!fresh.exists || !COLLECTION_ACTIVE_STATUSES.includes(String(freshData.status || ''))) {
+    throw new functions.https.HttpsError('failed-precondition', 'task not active');
+  }
+
+  const customerInTxn = await t.get(customerRef);
+  const prevBalance =
+    parseInt(String(customerInTxn.data()?.bonusBalance ?? 0), 10) || 0;
+
+  assertCollectionCash(cashGiven, totalValue, prevBalance);
+  const newBalance = prevBalance + walletDelta;
+
+  // Ledger ko'zgusi (READ fazasi) — kredit→admin_clearing, naqd echish→admin_cash.
+  const bonusFunding = walletDelta >= 0 ? 'admin_clearing' : 'admin_cash';
+  const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, customerRef.id, {
+    idempotencyKey: `collection_${taskId}`,
+    fundingAccount: bonusFunding,
+  });
+  // D5: kuryer haqi = finalValue'dan foiz (o'qish fazasida); ledger'ga YOZILMAYDI.
+  const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
+  const fields = courierTaskPayout.buildPayout('collection', taskId, totalValue, payoutSettings, courierId);
+
+  t.update(customerRef, {
+    bonusBalance: admin.firestore.FieldValue.increment(walletDelta),
+    balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  if (totalValue > 0) {
+    t.set(customerRef.collection('wallet_ledger').doc(), {
+      type: 'supplier_credit',
+      amount: totalValue,
+      module: 'collection',
+      refType: 'collection',
+      refId: taskId,
+      meta: { totalValue, cashGiven },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: 'courier_collection',
+    });
+  }
+  if (cashGiven > 0) {
+    t.set(customerRef.collection('wallet_ledger').doc(), {
+      type: 'collection_cashout',
+      amount: -cashGiven,
+      module: 'collection',
+      refType: 'collection',
+      refId: taskId,
+      meta: { totalValue, withdrawnFromBalance },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: 'courier_collection',
+    });
+  }
+
+  // Ledger ko'zgusi (WRITE fazasi) — net walletDelta (signed).
+  if (walletDelta !== 0) {
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta: walletDelta,
+      kind: 'collection',
+      refType: 'collection',
+      refId: taskId,
+      meta: { module: 'collection', totalValue, cashGiven },
+      postedBy: 'courier_collection',
+      postedRole: 'courier',
+    });
+  }
+
+  for (let i = 0; i < normalizedItems.length; i += 1) {
+    const item = normalizedItems[i];
+    t.set(
+      db.collection('warehouse_stock').doc(item.code),
+      {
+        code: item.code,
+        label: item.label,
+        unit: item.unit,
+        quantity: admin.firestore.FieldValue.increment(item.qty),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+
+  t.update(taskRef, {
+    status: 'completed',
+    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    cashGiven,
+    walletDelta,
+    walletCredited: walletCredit,
+    withdrawnFromBalance,
+    finalItems: normalizedItems,
+    finalValue: totalValue,
+    ...customerConfirm.clearPatch(freshData),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+  // D5: kuryer haqi - SERVERGA XOS hujjatga (vazifa hujjatini mijoz/kuryer o'qiydi).
+  courierTaskPayout.writePayoutInTx(
+    t, db, 'collection', taskId, fields, admin.firestore.FieldValue.serverTimestamp());
+
+  const submissionId = String(task.submissionId || '');
+  if (submissionId) {
+    t.set(
+      db.collection('sell_submissions').doc(submissionId),
+      {
+        status: 'reviewed',
+        collectionCompleted: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+  return { fields, newBalance, walletDelta, walletCredit, withdrawnFromBalance };
+}
+
+/** Tranzaksiyadan KEYIN: kuryer haqi jurnali + mijozga dalolatnoma push'i (xato oqimni to'xtatmaydi). */
+async function collectionAfterCommit({
+  taskId, customerRef, normalizedItems, totalValue, cashGiven, commit,
+}) {
+  courierTaskPayout.logPayout('collection', taskId, commit.fields);
+
+  const receiptLines = [];
+  receiptLines.push(`Маҳсулотлар қабул қилинди: ${totalValue} сўм.`);
+  for (let i = 0; i < normalizedItems.length; i += 1) {
+    const it = normalizedItems[i];
+    receiptLines.push(
+      `• ${it.label}: ${it.qty}${it.unit ? ` ${it.unit}` : ''} × ${it.unitPrice} = ${it.lineTotal} сўм`,
+    );
+  }
+  if (cashGiven > 0) {
+    receiptLines.push(`💵 Нақд берилди: ${cashGiven} сўм.`);
+  }
+  if (commit.walletCredit > 0) {
+    receiptLines.push(`💼 Кошелёкка қўшилди: ${commit.walletCredit} сўм.`);
+  }
+  if (commit.withdrawnFromBalance > 0) {
+    receiptLines.push(
+      `💼 Кошелёкдан нақд олинди: ${commit.withdrawnFromBalance} сўм.`,
+    );
+  }
+  receiptLines.push(`💼 Янги баланс: ${commit.newBalance} сўм`);
+
+  try {
+    await notifyUserInApp({
+      userId: customerRef.id,
+      title: '✅ Маҳсулот қабул қилинди',
+      body: receiptLines.join('\n'),
+      category: 'order',
+      source: 'collection_receipt',
+      dataType: 'order_payment',
+      screen: 'profile',
+      extraData: { taskId },
+    });
+  } catch (e) {
+    console.error('courierFinalizeCollection receipt push:', e.message || e);
+  }
+}
+
+/**
+ * Мижоз тасдиғи сўрови: ЯГОНА транзакцияда авваламбор барча текширувлар (худди якундагидек),
+ * кейин кутиш белгиси ёзилади (пул/ҳолат ўзгармайди). Белги бор ва киритилган сон/нақд
+ * БИР ХИЛ бўлса — ўша жавоб; ФАРҚ қилса — рад (мижоз кўрган рақамлар тасдиқдан олдин
+ * жимгина алмашиб қолмасин, 14-қоида); тузатиш — админ ёки белгини бекор қилиш (очиқ савол).
+ */
+async function collectionRequestConfirm({ taskRef, taskId, courierId, itemsIn, cashGiven, customerRef }) {
+  return db.runTransaction(async (t) => {
+    const fresh = await t.get(taskRef);
+    if (!fresh.exists) {
+      throw new functions.https.HttpsError('not-found', 'task not found');
+    }
+    const task = fresh.data() || {};
+    const v = collectionValidate(task, { courierId, taskId, itemsIn });
+    if (v.alreadyCompleted) return { completed: v.alreadyCompleted };
+    const customerInTxn = await t.get(customerRef);
+    const prevBalance = parseInt(String(customerInTxn.data()?.bonusBalance ?? 0), 10) || 0;
+    assertCollectionCash(cashGiven, v.totalValue, prevBalance);
+    const entered = itemsIn.map((row) => ({ code: String((row || {}).code || '').trim(), qty: Number((row || {}).qty) }));
+    const cur = task.awaitingCustomerConfirm;
+    if (cur && cur.step === 'finalize') {
+      const key = (rows) => JSON.stringify([...rows].sort((a, b) => String(a.code).localeCompare(String(b.code)) || a.qty - b.qty)
+        .map((r) => [r.code, r.qty]));
+      const same = key(Array.isArray(cur.items) ? cur.items : []) === key(entered)
+        && (parseInt(String(cur.cashGiven ?? 0), 10) || 0) === cashGiven;
+      if (!same) {
+        throw new functions.https.HttpsError('failed-precondition', 'AWAITING_OTHER_INPUT',
+          { reason: 'AWAITING_OTHER_INPUT', code: 'AWAITING_OTHER_INPUT' });
+      }
+      return { awaiting: true, created: false, task };
+    }
+    const rq = customerConfirm.requestInTx(t, taskRef, task, {
+      step: 'finalize',
+      courierId,
+      extra: {
+        items: entered,
+        cashGiven,
+        // Faqat KO'RSATISH uchun (server hisoblagan); pul tasdiqda ushbu qatordan EMAS, qayta hisoblanadi.
+        display: { totalValue: v.totalValue, lines: v.normalizedItems.map((l) => ({
+          code: l.code, label: l.label, unit: l.unit, qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal,
+        })) },
+      },
+    });
+    return {
+      awaiting: true,
+      created: rq.created,
+      task,
+      markerLike: { cashGiven, display: { totalValue: v.totalValue, lines: v.normalizedItems } },
+    };
+  });
+}
+
+const groupThousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+customerConfirm.registerHandler('collection', {
+  collection: 'collection_tasks',
+  phoneField: 'customerPhone',
+  customerPhoneOf: (td) => td.customerPhone || td.customerUid || '',
+  statusOf: (td) => String(td.status || ''),
+  describe: (td, marker) => {
+    if (marker.step !== 'finalize' || !COLLECTION_ACTIVE_STATUSES.includes(String(td.status || ''))) return null;
+    const d = marker.display;
+    const lines = d && Array.isArray(d.lines) ? d.lines : [];
+    if (lines.length === 0) return null;
+    const units = new Set(lines.map((l) => l.unit));
+    const qtySum = Math.round(lines.reduce((a, l) => a + Number(l.qty), 0) * 1000) / 1000;
+    return {
+      key: 'confirm_collection_finalize',
+      params: {
+        summary: lines.map((l) => `${l.label}: ${l.qty}${l.unit ? ` ${l.unit}` : ''}`).join(', '),
+        amount: groupThousands(d.totalValue),
+      },
+      details: {
+        // Bitta qator — o'sha qator; bir nechta qator va bir xil birlik — yig'indi; aralash birlik — null.
+        qty: lines.length === 1 ? lines[0].qty : (units.size === 1 ? qtySum : null),
+        unit: units.size === 1 ? String(lines[0].unit || '') : '',
+        amount: d.totalValue,
+        productLabel: lines.map((l) => l.label).join(', '),
+        cashGiven: parseInt(String(marker.cashGiven ?? 0), 10) || 0,
+        lines: lines.map((l) => ({ productLabel: l.label, qty: l.qty, unit: l.unit, amount: l.lineTotal })),
+      },
+    };
+  },
+  confirm: async (t, { ref, id, od, marker, step }) => {
+    const courierId = canonicalUid(String(marker.courierId || ''));
+    const itemsIn = Array.isArray(marker.items) ? marker.items : [];
+    const cashGiven = parseInt(String(marker.cashGiven ?? 0), 10);
+    if (!Number.isFinite(cashGiven) || cashGiven < 0 || itemsIn.length < 1) {
+      throw new functions.https.HttpsError('failed-precondition', 'task not active');
+    }
+    // Pul harakatidan OLDIN hamma narsa qayta tekshiriladi: vazifa holati, egalik,
+    // vazifa narxlari (qotgan katalog) va mijoz balansi.
+    const v = collectionValidate(od, { courierId, taskId: id, itemsIn });
+    if (v.alreadyCompleted) {
+      throw new functions.https.HttpsError('failed-precondition', 'task not active');
+    }
+    const customerRef = await resolveCollectionCustomerRef(od);
+    const commit = await collectionCommitInTx(t, {
+      taskRef: ref, taskId: id, courierId, customerRef, task: od,
+      normalizedItems: v.normalizedItems, totalValue: v.totalValue, cashGiven, confirmStep: step,
+    });
+    return {
+      status: 'completed',
+      after: () => collectionAfterCommit({
+        taskId: id, customerRef, normalizedItems: v.normalizedItems, totalValue: v.totalValue, cashGiven, commit,
+      }),
+    };
+  },
+});
+
 /** Курьер: йиғиб олишни якунлаш — кошелёк кредити + омбор + далолатнома.
  *  Тескари иқтисод: платформа мижозга маҳсулот учун ТЎЛАЙДИ.
+ *  Мижоз тасдиғи ёқилган бўлса — `{ ok, awaitingCustomer: true, step: 'finalize' }` (юқоридаги ядро).
  */
 exports.courierFinalizeCollection = functions.https.onCall(async (data, context) => {
   try {
@@ -8989,263 +9386,33 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     }
     const task = taskSnap.data() || {};
 
-    // F9 (audit 2026-10-16): egalik AVVAL — begona kuryer yakunlangan vazifaning
-    // pul natijasini (idempotent javob) ko'rmasin.
-    if (String(task.courierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your task');
-    }
-    // Idempotency: якунланган бўлса — сақланган натижани қайтарамиз.
-    if (task.status === 'completed') {
-      return {
-        ok: true,
-        alreadyCompleted: true,
-        V: parseInt(String(task.finalValue ?? 0), 10) || 0,
-        cashGiven: parseInt(String(task.cashGiven ?? 0), 10) || 0,
-        walletDelta: parseInt(String(task.walletDelta ?? 0), 10) || 0,
-        walletCredit: parseInt(String(task.walletCredited ?? 0), 10) || 0,
-        withdrawnFromBalance:
-          parseInt(String(task.withdrawnFromBalance ?? 0), 10) || 0,
-        newBalance: null,
-      };
-    }
-    // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan vazifani yakunlamaydi —
-    // yakun mijoz hamyoniga pul yozadi (qiymat kuryer kiritgan qatorlardan).
-    if (courierAuth.isOwnOrder({ userPhone: task.customerPhone || task.customerUid }, courierId)) {
-      console.warn(JSON.stringify({
-        action: 'courierFinalizeCollection', taskId, result: 'denied', errorCode: 'COURIER_OWN_ORDER',
-      }));
-      throw new functions.https.HttpsError('permission-denied', 'Own order', { reason: 'COURIER_OWN_ORDER' });
-    }
-    if (!['assigned', 'collecting'].includes(String(task.status || ''))) {
-      throw new functions.https.HttpsError('failed-precondition', 'task not active');
-    }
-    if (!task.arrivedAt) {
-      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+    const v = collectionValidate(task, { courierId, taskId, itemsIn });
+    if (v.alreadyCompleted) return v.alreadyCompleted;
+    const { normalizedItems, totalValue } = v;
+
+    const customerRef = await resolveCollectionCustomerRef(task);
+
+    // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer pulni o'zi harakatlantira olmaydi.
+    if (await customerConfirm.isGated('collection', task.customerPhone || task.customerUid || '')) {
+      const g = await collectionRequestConfirm({ taskRef, taskId, courierId, itemsIn, cashGiven, customerRef });
+      if (g.completed) return g.completed;
+      await customerConfirm.afterRequest('collection', taskId, 'finalize', g.task, g.markerLike, g.created);
+      return customerConfirm.awaitingResponse('finalize');
     }
 
-    // K-5 (ega qarori 2026-10-08): narx VAZIFA YARATILGANDA qotgan —
-    // `task.items` (server yozgan, `adminCreateCollectionTask` katalogdan).
-    // Kuryer faqat kod va miqdorni beradi; vazifada yo'q mahsulot — rad.
-    const snapshotByCode = new Map();
-    for (const it of (Array.isArray(task.items) ? task.items : [])) {
-      const code = String((it || {}).code || '').trim();
-      if (code && !snapshotByCode.has(code)) snapshotByCode.set(code, it);
-    }
-    const normalizedItems = [];
-    let totalValue = 0;
-    for (let i = 0; i < itemsIn.length; i += 1) {
-      const row = itemsIn[i] || {};
-      const code = String(row.code || '').trim();
-      const qty = Number(row.qty);
-      if (!code) {
-        throw new functions.https.HttpsError('invalid-argument', `items[${i}]: code required`);
-      }
-      if (!Number.isFinite(qty) || qty <= 0) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          `items[${i}]: qty must be positive`,
-        );
-      }
-      const snap = snapshotByCode.get(code);
-      if (!snap) {
-        throw new functions.https.HttpsError('failed-precondition', `Vazifada yo'q mahsulot: ${code}`,
-          { reason: 'ITEM_NOT_IN_TASK', code });
-      }
-      const unitPrice = parseInt(String(snap.unitPrice ?? 0), 10);
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        throw new functions.https.HttpsError('failed-precondition', `Vazifa narxi noto'g'ri: ${code}`,
-          { reason: 'TASK_PRICE_INVALID', code });
-      }
-      procurementCatalog.logMismatch('courierFinalizeCollection', taskId, code, row.unitPrice, unitPrice);
-      const label = String(snap.label || code);
-      const unit = String(snap.unit || '');
-      const lineTotal = Math.round(qty * unitPrice);
-      totalValue += lineTotal;
-      normalizedItems.push({ code, label, unit, qty, unitPrice, lineTotal });
-    }
-
-    const customerPhone = String(task.customerPhone || task.customerUid || '');
-    const uid9 = userUid(customerPhone);
-    const uid12 = canonicalUid(customerPhone);
-    let customerRef = db.collection('users').doc(uid12);
-    let customerSnap = await customerRef.get();
-    if (!customerSnap.exists && uid9 !== uid12) {
-      customerRef = db.collection('users').doc(uid9);
-      customerSnap = await customerRef.get();
-    }
-    if (!customerSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'customer user not found');
-    }
-
-    // Бир атом транзакция: status guard (идемпотентлик) + баланс текшируви
-    // + барча ёзувлар. M (нақд) V дан ошса — фарқ мижоз кошелёгидан олинади.
-    const walletDelta = totalValue - cashGiven; // ишорали: + кредит, - ечиш
-    const withdrawnFromBalance = Math.max(0, cashGiven - totalValue);
-    const walletCredit = Math.max(0, totalValue - cashGiven);
-    let newBalance = 0;
-
-    const payoutFields = await db.runTransaction(async (t) => {
-      const fresh = await t.get(taskRef);
-      const freshData = fresh.data() || {};
-      if (!fresh.exists || !['assigned', 'collecting'].includes(String(freshData.status || ''))) {
-        throw new functions.https.HttpsError('failed-precondition', 'task not active');
-      }
-
-      const customerInTxn = await t.get(customerRef);
-      const prevBalance =
-        parseInt(String(customerInTxn.data()?.bonusBalance ?? 0), 10) || 0;
-
-      const maxCash = totalValue + prevBalance;
-      if (cashGiven > maxCash) {
-        throw new functions.https.HttpsError(
-          'failed-precondition',
-          `cash_exceeds_balance: cashGiven ${cashGiven} > max ${maxCash} ` +
-            `(V ${totalValue} + balance ${prevBalance})`,
-        );
-      }
-      newBalance = prevBalance + walletDelta;
-
-      // Ledger ko'zgusi (READ fazasi) — kredit→admin_clearing, naqd echish→admin_cash.
-      const bonusFunding = walletDelta >= 0 ? 'admin_clearing' : 'admin_cash';
-      const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, customerRef.id, {
-        idempotencyKey: `collection_${taskId}`,
-        fundingAccount: bonusFunding,
-      });
-      // D5: kuryer haqi = finalValue'dan foiz (o'qish fazasida); ledger'ga YOZILMAYDI.
-      const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildPayout('collection', taskId, totalValue, payoutSettings, courierId);
-
-      t.update(customerRef, {
-        bonusBalance: admin.firestore.FieldValue.increment(walletDelta),
-        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      if (totalValue > 0) {
-        t.set(customerRef.collection('wallet_ledger').doc(), {
-          type: 'supplier_credit',
-          amount: totalValue,
-          module: 'collection',
-          refType: 'collection',
-          refId: taskId,
-          meta: { totalValue, cashGiven },
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          createdBy: 'courier_collection',
-        });
-      }
-      if (cashGiven > 0) {
-        t.set(customerRef.collection('wallet_ledger').doc(), {
-          type: 'collection_cashout',
-          amount: -cashGiven,
-          module: 'collection',
-          refType: 'collection',
-          refId: taskId,
-          meta: { totalValue, withdrawnFromBalance },
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          createdBy: 'courier_collection',
-        });
-      }
-
-      // Ledger ko'zgusi (WRITE fazasi) — net walletDelta (signed).
-      if (walletDelta !== 0) {
-        settlementLedger.commitBonusInTx(t, bonusCtx, {
-          delta: walletDelta,
-          kind: 'collection',
-          refType: 'collection',
-          refId: taskId,
-          meta: { module: 'collection', totalValue, cashGiven },
-          postedBy: 'courier_collection',
-          postedRole: 'courier',
-        });
-      }
-
-      for (let i = 0; i < normalizedItems.length; i += 1) {
-        const item = normalizedItems[i];
-        t.set(
-          db.collection('warehouse_stock').doc(item.code),
-          {
-            code: item.code,
-            label: item.label,
-            unit: item.unit,
-            quantity: admin.firestore.FieldValue.increment(item.qty),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
-
-      t.update(taskRef, {
-        status: 'completed',
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        cashGiven,
-        walletDelta,
-        walletCredited: walletCredit,
-        withdrawnFromBalance,
-        finalItems: normalizedItems,
-        finalValue: totalValue,
-      });
-      // D5: kuryer haqi - SERVERGA XOS hujjatga (vazifa hujjatini mijoz/kuryer o'qiydi).
-      courierTaskPayout.writePayoutInTx(
-        t, db, 'collection', taskId, fields, admin.firestore.FieldValue.serverTimestamp());
-
-      const submissionId = String(task.submissionId || '');
-      if (submissionId) {
-        t.set(
-          db.collection('sell_submissions').doc(submissionId),
-          {
-            status: 'reviewed',
-            collectionCompleted: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
-      return fields;
-    });
-    courierTaskPayout.logPayout('collection', taskId, payoutFields);
-
-    const receiptLines = [];
-    receiptLines.push(`Маҳсулотлар қабул қилинди: ${totalValue} сўм.`);
-    for (let i = 0; i < normalizedItems.length; i += 1) {
-      const it = normalizedItems[i];
-      receiptLines.push(
-        `• ${it.label}: ${it.qty}${it.unit ? ` ${it.unit}` : ''} × ${it.unitPrice} = ${it.lineTotal} сўм`,
-      );
-    }
-    if (cashGiven > 0) {
-      receiptLines.push(`💵 Нақд берилди: ${cashGiven} сўм.`);
-    }
-    if (walletCredit > 0) {
-      receiptLines.push(`💼 Кошелёкка қўшилди: ${walletCredit} сўм.`);
-    }
-    if (withdrawnFromBalance > 0) {
-      receiptLines.push(
-        `💼 Кошелёкдан нақд олинди: ${withdrawnFromBalance} сўм.`,
-      );
-    }
-    receiptLines.push(`💼 Янги баланс: ${newBalance} сўм`);
-
-    try {
-      await notifyUserInApp({
-        userId: customerRef.id,
-        title: '✅ Маҳсулот қабул қилинди',
-        body: receiptLines.join('\n'),
-        category: 'order',
-        source: 'collection_receipt',
-        dataType: 'order_payment',
-        screen: 'profile',
-        extraData: { taskId },
-      });
-    } catch (e) {
-      console.error('courierFinalizeCollection receipt push:', e.message || e);
-    }
+    const commit = await db.runTransaction((t) => collectionCommitInTx(t, {
+      taskRef, taskId, courierId, customerRef, task, normalizedItems, totalValue, cashGiven, confirmStep: '',
+    }));
+    await collectionAfterCommit({ taskId, customerRef, normalizedItems, totalValue, cashGiven, commit });
 
     return {
       ok: true,
       V: totalValue,
       cashGiven,
-      walletDelta,
-      walletCredit,
-      withdrawnFromBalance,
-      newBalance,
+      walletDelta: commit.walletDelta,
+      walletCredit: commit.walletCredit,
+      withdrawnFromBalance: commit.withdrawnFromBalance,
+      newBalance: commit.newBalance,
     };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

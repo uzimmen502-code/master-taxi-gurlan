@@ -8,8 +8,10 @@
 //  * Бошида тавсия этилган (асосий) тўхташлар танланган, лекин ҳайдовчи
 //    улардан исталганини олиб ташлай олади.
 //  * Google Maps'да ҳар оралиқ нуқта МАЖБУРИЙ тўхташ ва сони чекланган
-//    (мобил веб 3, бошқа 9 — `mapsMaxWaypoints()`, ЯГОНА манба). Чекловдан
-//    ошса, илова ўзбошимчалик билан қирқмайди: ҳайдовчи ўзи камайтиради.
+//    (мобил веб 3, бошқа 9 — `mapsMaxWaypoints()`, ЯГОНА манба). Танланганлар
+//    чекловдан кўп бўлса, навигация БЛОКЛАНМАЙДИ: улар кетма-кет бўлаклаб
+//    юборилади (`ev_trip_nav_relay.dart`: дастлабки `limit` та, қолгани
+//    ҳайдовчи ўтиб бўлгач таклиф қилинади).
 //  * Танланганлар йўл бошидан масофа бўйича тартибланади; рақамлар шу
 //    тартибда (1, 2, 3...).
 
@@ -57,8 +59,13 @@ class EvTripCandidate {
 }
 
 /// ~0.1 м аниқликда бир хил координата калити.
-String _coordKey(EvChargingStation s) =>
+String evStationCoordKey(EvChargingStation s) =>
     '${s.latitude.toStringAsFixed(6)},${s.longitude.toStringAsFixed(6)}';
+
+/// Номзодлар → оралиқ нуқталар (ўша тартибда).
+List<EvWaypoint> evWaypointsOf(Iterable<EvTripCandidate> list) => [
+      for (final c in list) (lat: c.station.latitude, lng: c.station.longitude),
+    ];
 
 /// Станция ID → тури (асосий заҳирани босиб кетади).
 Map<String, EvTripMarkerKind> evTripMarkerKinds(EvTripPlan plan) {
@@ -151,7 +158,7 @@ class EvTripSelection extends ChangeNotifier {
       final seenCoords = <String>{};
       // Режа тартибида (йўл бўйича ўсиш).
       for (final s in plan.stops) {
-        if (seenCoords.add(_coordKey(s.station))) ids.add(s.station.id);
+        if (seenCoords.add(evStationCoordKey(s.station))) ids.add(s.station.id);
       }
     }
     return EvTripSelection(
@@ -175,10 +182,6 @@ class EvTripSelection extends ChangeNotifier {
 
   /// Чекловга етдик — яна қўшиб бўлмайди.
   bool get isFull => count >= maxWaypoints;
-
-  /// Танланганлар чекловдан кўп (бошланғич тавсия мобил веб'да 3 дан
-  /// кўп бўлиши мумкин) — навигацияни очишдан олдин камайтириш керак.
-  bool get isOverLimit => count > maxWaypoints;
 
   bool canAdd(String id) => isSelected(id) || !isFull;
 
@@ -219,16 +222,16 @@ class EvTripSelection extends ChangeNotifier {
     return true;
   }
 
-  /// Навигация учун оралиқ нуқталар: танланганлар йўл бўйича; бир хил
-  /// координата битта марта. Бўш танлов — бўш рўйхат (фақат манзилга).
-  List<EvWaypoint> get waypoints {
+  /// Навигация учун номзодлар: танланганлар йўл бўйича; бир хил координата
+  /// битта марта. Бўш танлов — бўш рўйхат (фақат манзилга).
+  List<EvTripCandidate> get navigable {
     final seen = <String>{};
-    final out = <EvWaypoint>[];
-    for (final c in selected) {
-      if (seen.add(_coordKey(c.station))) {
-        out.add((lat: c.station.latitude, lng: c.station.longitude));
-      }
-    }
-    return out;
+    return [
+      for (final c in selected)
+        if (seen.add(evStationCoordKey(c.station))) c,
+    ];
   }
+
+  /// [navigable]нинг координаталари (`openMapsEvTripRoute` оралиқ нуқталари).
+  List<EvWaypoint> get waypoints => evWaypointsOf(navigable);
 }

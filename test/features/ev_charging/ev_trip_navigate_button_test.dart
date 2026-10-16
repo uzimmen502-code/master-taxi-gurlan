@@ -402,8 +402,9 @@ void main() {
           findsNothing);
     });
 
-    testWidgets('tavsiyalar chegaradan ko\'p (mobil veb 3, 4 asosiy): xabar, '
-        'launcher chaqirilmaydi; kamaytirilgach ochiladi', (tester) async {
+    testWidgets('tavsiyalar chegaradan ko\'p (mobil veb 3, 4 asosiy): '
+        'bloklanmaydi - birinchi 3 ta yuboriladi, qolgani keyin',
+        (tester) async {
       final plan = EvTripPlan(
         status: EvTripPlanStatus.ok,
         stops: [
@@ -416,30 +417,23 @@ void main() {
         arrivalSocPercent: 25,
       );
       final h = await _pump(tester, plan: plan, maxWaypoints: 3);
+      // Tanlov kesilmaydi: tugmada 4.
       expect(tester.widget<Text>(find.byKey(_label)).data,
           'ev_trip_navigate · 4');
 
       await tester.tap(find.byKey(_btn));
-      await tester.pump();
-      expect(h.calls, isEmpty, reason: 'launcher chaqirilmadi');
+      await tester.pumpAndSettle();
+      // Eski "chegaradan oshdi" bloklovchi xabari yo'q, launcher chaqirildi.
       expect(find.byKey(const ValueKey('ev_trip_over_limit_message')),
-          findsOneWidget);
-      // Xabar chegara va tanlangan sonni ko'rsatadi (kalit o'rniga matn
-      // ulanmagan, o'rinbosarlar almashtirilgan bo'lishi mumkin emas).
-      expect(find.text('ev_trip_sel_over_limit'), findsOneWidget);
-
-      // Haydovchi bittasini olib tashlaydi - endi ruxsat.
-      h.last!.onStationTap('b');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('ev_station_sheet_toggle')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(_btn));
-      await tester.pumpAndSettle();
+          findsNothing);
       expect(h.calls, hasLength(1));
       expect(h.calls.single.stops.map((s) => s.lat).toList(),
-          [_lat(100), _lat(300), _lat(400)]);
+          [_lat(100), _lat(200), _lat(300)]);
+      expect(h.calls.single.destLat, closeTo(_lat(640), 1e-12));
+      // Do'stona xabar (kalit - tarjima ulanmagan) va "Keyingi to'xtashlar".
+      expect(find.text('ev_trip_nav_sent_first'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ev_trip_next_chip')), findsOneWidget);
     });
-
     testWidgets('asosiylar chegarani to\'ldirsa (max 2, 2 asosiy): xabarsiz, '
         'ochiladi', (tester) async {
       final h =

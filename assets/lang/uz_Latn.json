@@ -2562,7 +2562,6 @@
   "ev_trip_from_start": "Yo'l boshidan",
   "ev_trip_on_route": "Yo'l ustida",
   "ev_trip_sel_full": "Yana qo'shib bo'lmaydi: Google Maps ko'pi bilan {n} ta to'xtashni qabul qiladi. Avval birortasini olib tashlang.",
-  "ev_trip_sel_over_limit": "Google Maps ko'pi bilan {n} ta to'xtashni qabul qiladi. Hozir {c} ta tanlangan — ortiqchasini olib tashlang.",
   "ev_trip_unit_h": "s",
   "ev_trip_unit_min": "daq",
   "ev_trip_drive_time": "Yo'l vaqti",

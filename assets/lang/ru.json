@@ -2562,7 +2562,6 @@
   "ev_trip_from_start": "От начала пути",
   "ev_trip_on_route": "На трассе",
   "ev_trip_sel_full": "Больше добавить нельзя: Google Maps принимает не более {n} остановок. Сначала уберите одну из выбранных.",
-  "ev_trip_sel_over_limit": "Google Maps принимает не более {n} остановок. Сейчас выбрано {c} — уберите лишние.",
   "ev_trip_unit_h": "ч",
   "ev_trip_unit_min": "мин",
   "ev_trip_drive_time": "Время в пути",

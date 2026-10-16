@@ -1,4 +1,5 @@
 import 'package:ava_gurlan/core/utils/map_launcher.dart';
+import 'package:ava_gurlan/features/ev_charging/controllers/ev_trip_nav_relay.dart';
 import 'package:ava_gurlan/features/ev_charging/controllers/ev_trip_selection.dart';
 import 'package:ava_gurlan/features/ev_charging/models/ev_trip_plan.dart';
 import 'package:ava_gurlan/models/ev_charging_station.dart';
@@ -284,6 +285,17 @@ void main() {
       );
       expect(s.count, 2);
       expect(s.waypoints, hasLength(1));
+      expect(s.navigable, hasLength(1));
+      expect(s.navigable.single.id, 'a');
+    });
+
+    test('navigable: yo\'l tartibida, waypoints bilan bir xil koordinatalar',
+        () {
+      final s = make();
+      s.toggle('x2');
+      s.toggle('x0');
+      expect([for (final c in s.navigable) c.id], ['x0', 'p1', 'p2', 'x2']);
+      expect(_lats(s.waypoints), _lats(evWaypointsOf(s.navigable)));
     });
   });
 
@@ -343,8 +355,8 @@ void main() {
     });
 
     test(
-        'tavsiyalar chegaradan ko\'p (mobil veb 3, 4 asosiy): kesilmaydi, '
-        'isOverLimit - haydovchi kamaytiradi', () {
+        'tavsiyalar chegaradan ko\'p (mobil veb 3, 4 asosiy): tanlov '
+        'kesilmaydi - ular bo\'laklab yuboriladi', () {
       final plan = _plan([
         _stop('p1', 100),
         _stop('p2', 200),
@@ -353,24 +365,28 @@ void main() {
       ]);
       final s = EvTripSelection.recommended(plan, const [], maxWaypoints: 3);
       expect(s.count, 4, reason: 'avtomatik kesilmaydi');
-      expect(s.isOverLimit, isTrue);
       expect(s.isFull, isTrue);
       expect(s.canAdd('p1'), isTrue); // olib tashlash mumkin
+      // Navigatsiya bloklanmaydi: birinchi 3 ta yuboriladi, 1 ta qoladi.
+      final chunk = evNavigationChunk(s.navigable, s.maxWaypoints);
+      expect([for (final c in chunk.sent) c.id], ['p1', 'p2', 'p3']);
+      expect([for (final c in chunk.remaining) c.id], ['p4']);
 
       expect(s.toggle('p2'), isTrue);
       expect(s.count, 3);
-      expect(s.isOverLimit, isFalse, reason: 'aniq chegarada - ruxsat');
       expect(s.isFull, isTrue);
+      expect(evNavigationChunk(s.navigable, s.maxWaypoints).remaining, isEmpty,
+          reason: 'aniq chegarada - hammasi birdan');
       expect(_lats(s.waypoints), [_lat(100), _lat(300), _lat(400)]);
     });
 
-    test('aniq chegarada (3/3) isOverLimit emas', () {
+    test('aniq chegarada (3/3): to\'ldi, lekin ortiqcha emas', () {
       final s = EvTripSelection(
           candidates: many(5),
           initialIds: const ['s0', 's1', 's2'],
           maxWaypoints: 3);
-      expect(s.isOverLimit, isFalse);
       expect(s.isFull, isTrue);
+      expect(evNavigationChunk(s.navigable, s.maxWaypoints).remaining, isEmpty);
     });
 
     test('boshlang\'ich id lar orasida noma\'lumlari tashlab yuboriladi', () {

@@ -2562,7 +2562,6 @@
   "ev_trip_from_start": "Йўл бошидан",
   "ev_trip_on_route": "Йўл устида",
   "ev_trip_sel_full": "Яна қўшиб бўлмайди: Google Maps кўпи билан {n} та тўхташни қабул қилади. Аввал бирортасини олиб ташланг.",
-  "ev_trip_sel_over_limit": "Google Maps кўпи билан {n} та тўхташни қабул қилади. Ҳозир {c} та танланган — ортиқчасини олиб ташланг.",
   "ev_trip_unit_h": "с",
   "ev_trip_unit_min": "дақ",
   "ev_trip_drive_time": "Йўл вақти",

@@ -1,22 +1,16 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:ava_gurlan/core/theme/app_theme.dart' show AvaFont;
 import 'package:ava_gurlan/features/ev_charging/controllers/ev_car_tracker.dart';
 import 'package:ava_gurlan/features/ev_charging/controllers/ev_trip_planner.dart';
 import 'package:ava_gurlan/features/ev_charging/models/ev_trip_plan.dart';
 import 'package:ava_gurlan/features/ev_charging/screens/ev_trip_map_screen.dart';
 import 'package:ava_gurlan/features/ev_charging/widgets/ev_trip_plan_view.dart';
-import 'package:ava_gurlan/l10n/app_localizations.dart';
 import 'package:ava_gurlan/models/ev_charging_station.dart';
-import 'package:flutter/foundation.dart' show SynchronousFuture;
-import 'package:flutter/services.dart' show ByteData, FontLoader;
-import 'package:flutter/cupertino.dart'
-    show CupertinoLocalizations, DefaultCupertinoLocalizations;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'ev_test_support.dart';
 
 // Reja xulosasi va to'xtash kartochkalarida yo'l vaqti, qo'shiladigan energiya
 // va HALOL "kamida" zaryadlash vaqti. A: kalitlar (tarjimasiz), B: haqiqiy
@@ -94,20 +88,6 @@ class _Source implements EvCarLocationSource {
   Future<Stream<EvCarFix>?> open() async => const Stream<EvCarFix>.empty();
 }
 
-class _AnyLocale<T> extends LocalizationsDelegate<T> {
-  const _AnyLocale(this.value);
-  final T value;
-
-  @override
-  bool isSupported(Locale locale) => true;
-
-  @override
-  Future<T> load(Locale locale) => SynchronousFuture<T>(value);
-
-  @override
-  bool shouldReload(covariant LocalizationsDelegate<T> old) => false;
-}
-
 /// Haqiqiy matnlar (til fayli) bilan, 1.3 shrift, tor ekran (360 dp).
 Future<void> _pumpReal(
   WidgetTester tester,
@@ -119,70 +99,14 @@ Future<void> _pumpReal(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(
-    locale: locale,
-    // Ilovaning haqiqiy shrifti (Inter); testning standart Ahem shrifti har bir
-    // harfni kvadrat qiladi va matnni ~2 baravar keng ko'rsatadi.
-    theme: ThemeData(fontFamily: AvaFont.family),
-    supportedLocales: [locale],
-    // Matnlar haqiqiy (assets/lang/*.json), lekin SINXRON o'qiladi: asosiy
-    // AppLocalizations.delegate rootBundle orqali async va testlar orasida
-    // ishonchsiz. Material/Widgets - har qanday til uchun sinxron standart.
-    localizationsDelegates: [
-      _FileL10nDelegate(),
-      _AnyLocale<MaterialLocalizations>(const DefaultMaterialLocalizations()),
-      _AnyLocale<WidgetsLocalizations>(const DefaultWidgetsLocalizations()),
-      _AnyLocale<CupertinoLocalizations>(const DefaultCupertinoLocalizations()),
-    ],
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context)
-          .copyWith(textScaler: TextScaler.linear(scale)),
-      child: child!,
-    ),
-    home: home(),
-  ));
+  await tester.pumpWidget(
+      evL10nApp(home: home(), locale: locale, textScale: scale));
   await tester.pumpAndSettle();
 }
 
-/// `AppLocalizations` (kalit -> matn) ning sinxron, fayldan o'qiydigan nusxasi.
-class _FileL10n extends AppLocalizations {
-  _FileL10n(super.locale) : _strings = _load(locale);
-
-  final Map<String, String> _strings;
-
-  static Map<String, String> _load(Locale locale) {
-    final code = switch (locale.languageCode) {
-      'ru' => 'ru',
-      'uz' => locale.scriptCode == 'Latn' ? 'uz_Latn' : 'uz_Cyrl',
-      _ => 'uz_Cyrl',
-    };
-    final raw = json.decode(File('assets/lang/$code.json').readAsStringSync())
-        as Map<String, dynamic>;
-    return raw.map((k, v) => MapEntry(k, v.toString()));
-  }
-
-  @override
-  String translate(String key) => _strings[key] ?? key;
-}
-
-class _FileL10nDelegate extends LocalizationsDelegate<AppLocalizations> {
-  @override
-  bool isSupported(Locale locale) => true;
-
-  @override
-  Future<AppLocalizations> load(Locale locale) =>
-      SynchronousFuture<AppLocalizations>(_FileL10n(locale));
-
-  @override
-  bool shouldReload(covariant LocalizationsDelegate<AppLocalizations> old) =>
-      false;
-}
-
-// Locale('uz') - skriptsiz: AppLocalizations uni uz_Cyrl deb oladi.
-const _uzCyrl = Locale('uz');
-const _uzLatn = Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn');
-const _ru = Locale('ru');
-
+const _uzCyrl = evUzCyrl;
+const _uzLatn = evUzLatn;
+const _ru = evRu;
 Widget _viewHome(EvTripPlan plan, int minutes, EvCarSpec? car) => Scaffold(
       body: SingleChildScrollView(
         child: EvTripPlanView(
@@ -195,20 +119,7 @@ Widget _viewHome(EvTripPlan plan, int minutes, EvCarSpec? car) => Scaffold(
     );
 
 void main() {
-  setUpAll(() async {
-    final loader = FontLoader(AvaFont.family);
-    for (final f in const [
-      'Regular',
-      'Medium',
-      'SemiBold',
-      'Bold',
-      'ExtraBold',
-    ]) {
-      final bytes = File('assets/fonts/Inter-$f.ttf').readAsBytesSync();
-      loader.addFont(Future.value(ByteData.sublistView(bytes)));
-    }
-    await loader.load();
-  });
+  setUpAll(loadInterFont);
 
   group('A. reja xulosasi (kalitlar)', () {
     testWidgets('yo\'l vaqti: "13 s 10 daq" shaklida, birliklar kalitdan',

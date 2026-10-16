@@ -29,7 +29,6 @@ void main() {
     'ev_trip_station',
     'ev_trip_unverified',
     'ev_trip_sel_full',
-    'ev_trip_sel_over_limit',
     'maps_open_failed',
     'ev_trip_charge_stops',
     'ev_trip_no_charging',
@@ -108,8 +107,6 @@ void main() {
   test('o\'rinbosarlar ({n}, {t}) uch tilda bor', () {
     for (final l in langs) {
       expect(dict[l]!['ev_trip_sel_full'], contains('{n}'), reason: l);
-      expect(dict[l]!['ev_trip_sel_over_limit'], contains('{n}'), reason: l);
-      expect(dict[l]!['ev_trip_sel_over_limit'], contains('{c}'), reason: l);
       for (final k in const [
         'ev_trip_next_stops',
         'ev_trip_nav_sent_first',
@@ -159,6 +156,8 @@ void main() {
         'ev_trip_nav_backups_limit',
         'ev_trip_nav_continue',
         'ev_trip_nav_primary_only',
+        // Chegaradan oshganda bloklash o'rniga bo'laklab yuborish
+        'ev_trip_sel_over_limit',
       ]) {
         expect(dict[l]!.containsKey(k), isFalse, reason: '$l/$k');
       }

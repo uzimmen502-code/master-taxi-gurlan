@@ -7,11 +7,13 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../controllers/ev_car_tracker.dart';
+import '../controllers/ev_trip_nav_relay.dart';
 import '../controllers/ev_route_progress.dart';
 import '../controllers/ev_trip_planner.dart';
 import '../controllers/ev_trip_selection.dart';
 import '../models/ev_trip_plan.dart';
 import '../widgets/ev_map_top_overlay.dart';
+import '../widgets/ev_next_stops_card.dart';
 import '../widgets/ev_trip_map_view.dart';
 import '../widgets/ev_trip_dot_icon.dart';
 import '../widgets/ev_trip_plan_view.dart';
@@ -198,6 +200,17 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   double _extent = 0;
   bool _launching = false;
 
+  /// Бўлаклаб юбориш ҳолати (Google Maps чекловидан кўп тўхташ бўлса).
+  final _relay = EvNavigationRelay();
+
+  /// Режа/станциялар масштабидаги км ≈ маршрут чизиғи км × шу коэффициент
+  /// (коридор масофалари Google йўл масофасига масштабланган).
+  double _kmScale = 1;
+
+  /// «Кейинги тўхташлар» карточкаси: ҳайдовчи чипни босиб очди / ёпди.
+  bool _cardOpen = false;
+  bool _cardDismissed = false;
+
   @override
   void initState() {
     super.initState();
@@ -215,6 +228,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       source: widget.locationSource ?? const GeolocatorCarLocationSource(),
     )..addListener(_onCar);
     _car.start();
+    _kmScale = _routeKmScale(widget.plan.totalKm, widget.route);
   }
 
   @override
@@ -239,7 +253,12 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
         state == AppLifecycleState.detached) {
       _car.pause();
     } else if (state == AppLifecycleState.resumed) {
-      _car.resume();
+      // Ҳайдовчи Google Maps'да юрган бўлиши мумкин: қайтганда ҳолат
+      // (машина охирги юборилган тўхташдан ўтдими) қайта баҳоланади.
+      _car.resume().then((_) {
+        if (mounted) _onCar();
+      });
+      if (mounted) setState(() {});
     }
   }
 
@@ -289,47 +308,135 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       widget.originLng.isFinite &&
       (widget.plan.isOk || widget.route.isNotEmpty);
 
-  /// «Навигация»: Google Maps'да бошидан охиригача йўл, оралиқ нуқталар =
-  /// ҲАЙДОВЧИ ТАНЛАГАН станциялар (йўл бўйича тартибда). Ҳеч нарса
-  /// танланмаган бўлса — фақат манзилга. Google Maps'да ҳар оралиқ нуқта
-  /// мажбурий тўхташ ва сони чекланган: танланганлар чекловдан кўп бўлса,
-  /// илова ўзбошимчалик билан қирқмайди — дўстона хабар чиқади ва
-  /// ҳайдовчи камайтиргунча ҳеч нарса очилмайди.
-  Future<void> _navigate() async {
-    if (_launching || !_canNavigate) return;
-    if (_selection.isOverLimit) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          key: const ValueKey('ev_trip_over_limit_message'),
-          duration: const Duration(seconds: 6),
-          content: Text(context
-              .tr('ev_trip_sel_over_limit')
-              .replaceAll('{n}', '${_selection.maxWaypoints}')
-              .replaceAll('{c}', '${_selection.count}')),
-        ));
-      return;
+  /// Йўл бошидан машинанинг масофаси (км, режа масштабида); GPS йўқ ёки
+  /// машина йўлда эмас — `null`.
+  double? get _carAlongKm {
+    final p = _progress;
+    if (p == null || !p.isOnRoute) return null;
+    return p.alongKm * _kmScale;
+  }
+
+  /// Машина ортида қолган станцияларни (шунча км дан кўпроқ) навигацияга
+  /// қўшмаймиз: улар аллақачон ўтилган.
+  static const double _behindToleranceKm = 0.5;
+
+  List<EvTripCandidate> _ahead(List<EvTripCandidate> list) {
+    final along = _carAlongKm;
+    if (along == null) return list;
+    return [
+      for (final c in list)
+        if (c.alongKm >= along - _behindToleranceKm) c,
+    ];
+  }
+
+  /// Бошланғич нуқта: ҳозирги GPS, йўқ бўлса режа ҳисобланган нуқта.
+  ({double lat, double lng}) get _origin {
+    final fix = _car.fix;
+    if (fix != null && fix.lat.isFinite && fix.lng.isFinite) {
+      return (lat: fix.lat, lng: fix.lng);
     }
+    return (lat: widget.originLat, lng: widget.originLng);
+  }
+
+  /// Ҳали Google Maps'га юборилмаган тўхташлар (йўл бўйича).
+  List<EvTripCandidate> get _pending => _relay.active
+      ? _ahead(_relay.pending(_selection.navigable))
+      : const <EvTripCandidate>[];
+
+  Future<bool> _open(List<EvTripCandidate> stops) async {
+    final o = _origin;
     _launching = true;
-    var opened = false;
     try {
-      opened = await widget.routeLauncher(
-        originLat: widget.originLat,
-        originLng: widget.originLng,
+      return await widget.routeLauncher(
+        originLat: o.lat,
+        originLng: o.lng,
         destinationLat: widget.destinationLat,
         destinationLng: widget.destinationLng,
-        stops: _selection.waypoints,
+        stops: evWaypointsOf(stops),
       );
     } catch (_) {
-      opened = false;
+      return false;
     } finally {
       _launching = false;
     }
-    if (!mounted || opened) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(context.tr('maps_open_failed'))));
   }
 
+  void _openFailedNotice() {
+    // Аввалги хабар (мас. «N та тўхташ юборилди») навбатда ушлаб қолмасин.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(context.tr('maps_open_failed'))));
+  }
+
+  /// Блокламайдиган хабар: Google Maps'га нечта тўхташ юборилди.
+  void _sentNotice(String key, int n) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        key: const ValueKey('ev_trip_nav_notice'),
+        duration: const Duration(seconds: 8),
+        content: Text(context.tr(key).replaceAll('{n}', '$n')),
+      ));
+  }
+
+  /// «Навигация»: Google Maps БУТУН маршрут учун бир марта очилади — манзил
+  /// ҲАМИША охирги манзил, оралиқ нуқталар = ҲАЙДОВЧИ ТАНЛАГАН станциялар
+  /// (йўл бўйича тартибда). Ҳеч нарса танланмаган бўлса — фақат манзилга.
+  ///
+  /// Google Maps'да оралиқ нуқталар сони чекланган (`mapsMaxWaypoints()`):
+  /// танланганлар чекловдан кўп бўлса навигация БЛОКЛАНМАЙДИ — биринчи
+  /// `limit` та (йўл бўйича энг яқинлари) юборилади, қолгани «кейинги
+  /// тўхташлар» бўлиб сақланади ва машина охирги юборилганидан ўтгач
+  /// «Давом этиш» таклиф қилинади ([_continueNavigation]).
+  Future<void> _navigate() async {
+    if (_launching || !_canNavigate) return;
+    final chunk =
+        evNavigationChunk(_ahead(_selection.navigable), _selection.maxWaypoints);
+    final opened = await _open(chunk.sent);
+    if (!mounted) return;
+    if (!opened) {
+      _openFailedNotice();
+      return;
+    }
+    // Янги навигация — бўлаклаш қайтадан бошланади.
+    _relay.reset();
+    _cardOpen = false;
+    _cardDismissed = false;
+    if (chunk.remaining.isNotEmpty) {
+      _relay.markSent(chunk.sent);
+      _sentNotice('ev_trip_nav_sent_first', chunk.sent.length);
+    }
+    setState(() {});
+  }
+
+  /// «Давом этиш»: ҳозирги GPS (йўқ бўлса — дастлабки нуқта) дан охирги
+  /// манзилгача, навбатдаги `limit` та тўхташ билан Google Maps қайта
+  /// очилади. Қолгани қолмагунча такрорланади.
+  Future<void> _continueNavigation() async {
+    if (_launching || !_canNavigate) return;
+    final pending = _pending;
+    if (pending.isEmpty) {
+      setState(() {});
+      return;
+    }
+    final chunk = evNavigationChunk(pending, _selection.maxWaypoints);
+    final opened = await _open(chunk.sent);
+    if (!mounted) return;
+    if (!opened) {
+      _openFailedNotice();
+      return;
+    }
+    _relay.markSent(chunk.sent);
+    _cardOpen = false;
+    _cardDismissed = false;
+    if (chunk.remaining.isEmpty) {
+      _relay.reset();
+      _sentNotice('ev_trip_nav_sent_last', chunk.sent.length);
+    } else {
+      _sentNotice('ev_trip_nav_sent_next', chunk.sent.length);
+    }
+    setState(() {});
+  }
   Future<void> _toggleSheet(double peekFraction) async {
     if (!_sheetCtrl.isAttached) return;
     final expanded = _sheetCtrl.size > peekFraction + 0.05;
@@ -420,6 +527,12 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
               onUserGesture: _onUserGesture,
             );
             final showRecenter = fix != null && _extent < peekFraction + 0.15;
+            // «Кейинги тўхташлар»: чип ҳар доим; катта карточка — машина
+            // юборилган охирги тўхташдан ўтгач ёки ҳайдовчи чипни босса.
+            final pending = _pending;
+            final showCard = pending.isNotEmpty &&
+                (_cardOpen ||
+                    (!_cardDismissed && _relay.hasPassedLastSent(_carAlongKm)));
             final navBottom = navButtonBottom(
               screenHeight: height,
               sheetFraction: math.max(_extent, peekFraction),
@@ -481,6 +594,32 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                     onTap: _navigate,
                   ),
                 ),
+                if (pending.isNotEmpty)
+                  Positioned(
+                    top: mq.padding.top + kToolbarHeight + 4,
+                    left: 12,
+                    right: 12,
+                    child: showCard
+                        ? EvNextStopsCard(
+                            count: pending.length,
+                            busy: _launching,
+                            onContinue: _continueNavigation,
+                            onClose: () => setState(() {
+                              _cardOpen = false;
+                              _cardDismissed = true;
+                            }),
+                          )
+                        : Align(
+                            alignment: Alignment.centerRight,
+                            child: EvNextStopsChip(
+                              count: pending.length,
+                              onTap: () => setState(() {
+                                _cardOpen = true;
+                                _cardDismissed = false;
+                              }),
+                            ),
+                          ),
+                  ),
               ],
             );
           },
@@ -488,6 +627,20 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       ),
     );
   }
+}
+
+/// Режа/станциялар км (Google йўл масофаси) ва маршрут чизиғининг геометрик
+/// км нисбати. Иккаласи ҳам маълум ва мантиқий бўлмаса — 1.
+@visibleForTesting
+double evRouteKmScale(double planTotalKm, List<EvRoutePoint> route) =>
+    _routeKmScale(planTotalKm, route);
+
+double _routeKmScale(double planTotalKm, List<EvRoutePoint> route) {
+  if (!(planTotalKm > 0) || route.length < 2) return 1;
+  final geometry = EvTripPlanner.routeLengthKm(route);
+  if (!(geometry > 0)) return 1;
+  final scale = planTotalKm / geometry;
+  return (scale >= 0.5 && scale <= 2) ? scale : 1;
 }
 
 /// «Навигация» тугмасининг экран тагидан масофаси (пикселда).

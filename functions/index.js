@@ -82,6 +82,9 @@ attachRestaurantOrders(exports, {
 // 2026-10-16): admin sozlamasi (versiya, tarix, audit) va hisob yordamchilari.
 const courierTaskPayout = require('./courier_task_payout');
 courierTaskPayout.attachCourierTaskPayout(exports, { functions, db, admin, requireCallerRoles });
+// Admin «qotib qolgan vazifalar» ro'yxati (D6, ega qarori 2026-10-16) - faqat o'qish.
+const { attachAdminStaleTasks } = require('./admin_stale_tasks');
+attachAdminStaleTasks(exports, { functions, db, requireCallerRoles });
 // «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');

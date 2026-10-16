@@ -8933,6 +8933,11 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     }
     const task = taskSnap.data() || {};
 
+    // F9 (audit 2026-10-16): egalik AVVAL — begona kuryer yakunlangan vazifaning
+    // pul natijasini (idempotent javob) ko'rmasin.
+    if (String(task.courierId || '') !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your task');
+    }
     // Idempotency: якунланган бўлса — сақланган натижани қайтарамиз.
     if (task.status === 'completed') {
       return {
@@ -8946,9 +8951,6 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
           parseInt(String(task.withdrawnFromBalance ?? 0), 10) || 0,
         newBalance: null,
       };
-    }
-    if (String(task.courierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your task');
     }
     // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan vazifani yakunlamaydi —
     // yakun mijoz hamyoniga pul yozadi (qiymat kuryer kiritgan qatorlardan).

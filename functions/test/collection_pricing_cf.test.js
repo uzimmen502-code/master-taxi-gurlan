@@ -119,6 +119,24 @@ async function main() {
     assert.strictEqual(t.finalItems[0].unitPrice, 5000);
     assert.strictEqual(t.finalItems[0].label, 'Sut');
   });
+  // F9 (audit 2026-10-16): idempotent qaytish egalik tekshiruvidan OLDIN edi —
+  // taskId'ni bilgan istalgan kuryer yakunlangan vazifaning pul natijasini ko'rardi.
+  await check('F9: yakunlangan vazifa — BEGONA kuryer pul natijasini ko\'rmaydi, egasi idempotent natija oladi', async () => {
+    const B = '998902220002';
+    const ACC_B = 'accCOURIER0000000000B';
+    await db.collection('users').doc(B).set({ role: 'user', accountId: ACC_B, bonusBalance: 0 });
+    await db.collection('provider_capabilities').doc(ACC_B).set({
+      identity: { accountId: ACC_B, primaryUid: B }, courier: { active: true }, status: { courier: 'approved' },
+    });
+    assert.strictEqual((await task(taskId)).status, 'completed');
+    const items = [{ code: 'milk', qty: 10 }];
+    await expectFail(call('courierFinalizeCollection', { courierPhone: B, taskId, cashGiven: 0, items }, B),
+      'permission-denied');
+    const own = await call('courierFinalizeCollection', { courierPhone: A, taskId, cashGiven: 0, items }, A);
+    assert.strictEqual(own.alreadyCompleted, true);
+    assert.strictEqual(own.walletCredit, 50000);
+    assert.strictEqual(await bonus(), 50000, 'takror chaqiruv pul qo\'shmaydi');
+  });
   await check('vazifada YO\'Q mahsulot — rad (ITEM_NOT_IN_TASK), pul yo\'q', async () => {
     await submission('s3');
     const r = await createTask('s3', [{ code: 'milk', qty: 1 }]);

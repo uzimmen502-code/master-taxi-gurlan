@@ -35,6 +35,39 @@ const MESSAGES = {
     uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Jo\'nash vaqti kech bo\'lgani uchun reys bugun yana surilmaydi. Yangi kunga ko\'chiring yoki tugating.' },
     ru: { title: '⏱ Рейс больше не переносится автоматически', body: 'Время отправления слишком позднее, поэтому рейс сегодня больше не переносится. Перенесите на другой день или завершите.' },
   },
+
+  // ── Йўқолган посилка (AVA Logistics, D1, 2026-10-16). Матнлар PROPOSED — эга тасдиқлайди
+  // (рус тили ҳам ҳали эга кўриб чиқмаган). `{amount}` — посилка қиймати G, `{left}` — қолган қарз.
+  lost_customer_full: {
+    uz_Cyrl: { title: 'Жўнатма йўқолди — пул қайтарилди', body: '{tracking} жўнатмаси йўқолган деб топилди. Посилка қиймати {amount} сўм ҳисобингизга қайтарилди. Етказиб бериш хизмати ҳақи қайтарилмайди.' },
+    uz_Latn: { title: 'Jo\'natma yo\'qoldi — pul qaytarildi', body: '{tracking} jo\'natmasi yo\'qolgan deb topildi. Posilka qiymati {amount} so\'m hisobingizga qaytarildi. Yetkazib berish xizmati haqi qaytarilmaydi.' },
+    ru: { title: 'Посылка утеряна — деньги возвращены', body: 'Посылка {tracking} признана утерянной. Стоимость посылки {amount} сум возвращена на ваш счёт. Плата за доставку не возвращается.' },
+  },
+  lost_customer_partial: {
+    uz_Cyrl: { title: 'Жўнатма йўқолди — пул қисман қайтарилди', body: '{tracking} жўнатмаси йўқолган деб топилди. Посилка қийматидан {amount} сўм ҳисобингизга қайтарилди. Қолган {left} сўм курьер тўлаганидан кейин қўшилади. Етказиб бериш хизмати ҳақи қайтарилмайди.' },
+    uz_Latn: { title: 'Jo\'natma yo\'qoldi — pul qisman qaytarildi', body: '{tracking} jo\'natmasi yo\'qolgan deb topildi. Posilka qiymatidan {amount} so\'m hisobingizga qaytarildi. Qolgan {left} so\'m kuryer to\'laganidan keyin qo\'shiladi. Yetkazib berish xizmati haqi qaytarilmaydi.' },
+    ru: { title: 'Посылка утеряна — деньги возвращены частично', body: 'Посылка {tracking} признана утерянной. Из стоимости посылки {amount} сум возвращено на ваш счёт. Оставшиеся {left} сум будут добавлены после оплаты курьером. Плата за доставку не возвращается.' },
+  },
+  lost_customer_none: {
+    uz_Cyrl: { title: 'Жўнатма йўқолди', body: '{tracking} жўнатмаси йўқолган деб топилди. Посилка қиймати ({amount} сўм) курьер тўлаганидан кейин ҳисобингизга қайтарилади. Етказиб бериш хизмати ҳақи қайтарилмайди.' },
+    uz_Latn: { title: 'Jo\'natma yo\'qoldi', body: '{tracking} jo\'natmasi yo\'qolgan deb topildi. Posilka qiymati ({amount} so\'m) kuryer to\'laganidan keyin hisobingizga qaytariladi. Yetkazib berish xizmati haqi qaytarilmaydi.' },
+    ru: { title: 'Посылка утеряна', body: 'Посылка {tracking} признана утерянной. Стоимость посылки ({amount} сум) будет возвращена на ваш счёт после оплаты курьером. Плата за доставку не возвращается.' },
+  },
+  lost_customer_payment: {
+    uz_Cyrl: { title: 'Ҳисобингизга пул қўшилди', body: '{tracking} жўнатмаси бўйича {amount} сўм ҳисобингизга қайтарилди. Қолган: {left} сўм.' },
+    uz_Latn: { title: 'Hisobingizga pul qo\'shildi', body: '{tracking} jo\'natmasi bo\'yicha {amount} so\'m hisobingizga qaytarildi. Qolgan: {left} so\'m.' },
+    ru: { title: 'На ваш счёт поступили деньги', body: 'По посылке {tracking} на ваш счёт возвращено {amount} сум. Осталось: {left} сум.' },
+  },
+  lost_customer_done: {
+    uz_Cyrl: { title: 'Посилка қиймати тўлиқ қайтарилди', body: '{tracking} жўнатмаси бўйича посилка қиймати тўлиқ қайтарилди (жами {total} сўм).' },
+    uz_Latn: { title: 'Posilka qiymati to\'liq qaytarildi', body: '{tracking} jo\'natmasi bo\'yicha posilka qiymati to\'liq qaytarildi (jami {total} so\'m).' },
+    ru: { title: 'Стоимость посылки возвращена полностью', body: 'По посылке {tracking} стоимость возвращена полностью (всего {total} сум).' },
+  },
+  lost_courier: {
+    uz_Cyrl: { title: 'Жўнатма йўқолган деб белгиланди', body: '{tracking} жўнатмаси сизда йўқолган деб белгиланди. Ҳисобингиздан {taken} сўм ечилди. Қолган қарз: {left} сўм.' },
+    uz_Latn: { title: 'Jo\'natma yo\'qolgan deb belgilandi', body: '{tracking} jo\'natmasi sizda yo\'qolgan deb belgilandi. Hisobingizdan {taken} so\'m yechildi. Qolgan qarz: {left} so\'m.' },
+    ru: { title: 'Посылка отмечена как утерянная', body: 'Посылка {tracking} отмечена как утерянная у вас. С вашего счёта списано {taken} сум. Остаток долга: {left} сум.' },
+  },
 };
 
 /** Номаълум/бўш → `uz_Cyrl`. */

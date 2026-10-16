@@ -56,6 +56,11 @@ async function main() {
     await db.collection('module_tariffs').doc('taxi').set({ formula: 'x' });
     await db.collection('logistics_audit').doc('a1').set({ kind: 'tariff_activate' });
     await db.collection('logistics_counters').doc('261007').set({ seq: 3 });
+    // Yo'qolgan posilka hodisasi (D1): qoida YO'Q => default-deny, hamma uchun (admin ham) — faqat server.
+    await db.collection('logistics_incidents').doc('s1').set({
+      type: 'lost', goodsValue: 150000, courier: { uid: K1, accountId: 'accK1' }, customer: { uid: OWNER },
+    });
+    await db.collection('logistics_incidents').doc('s1').collection('events').doc('declared').set({ type: 'declared' });
   });
   const ctxFor = (p) => testEnv.authenticatedContext(`uid_${p}`, { phone_number: '+' + p });
   const owner = ctxFor(OWNER).firestore();
@@ -163,6 +168,16 @@ async function main() {
     await assertSucceeds(adminDb.collection('logistics_audit').doc('a1').get());
     await assertFails(adminDb.collection('logistics_counters').doc('261007').get());
     await assertFails(adminDb.collection('logistics_counters').doc('261007').update({ seq: 0 }));
+  });
+
+  await check('INCIDENT (yo\'qolgan posilka): egasi, kuryer, begona, admin, kirmagan — o\'qiy ham, yoza ham OLMAYDI (faqat server)', async () => {
+    for (const d of [owner, k1, stranger, adminDb, unauth]) {
+      await assertFails(d.collection('logistics_incidents').doc('s1').get());
+      await assertFails(d.collection('logistics_incidents').doc('s1').collection('events').doc('declared').get());
+      await assertFails(d.collection('logistics_incidents').doc('s1').update({ outstanding: 0 }));
+      await assertFails(d.collection('logistics_incidents').doc('s2').set({ type: 'lost', goodsValue: 1 }));
+      await assertFails(d.collection('logistics_incidents').limit(10).get());
+    }
   });
 
   await testEnv.cleanup();

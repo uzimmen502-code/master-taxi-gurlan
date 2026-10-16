@@ -63,7 +63,7 @@ attachModuleConfig(exports, { functions, db, admin, callerPhone, canonicalUid })
 // ORDER/SHIPMENT/LEG/custody `functions_demand` da (relay hujjati 7.6).
 const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
-  functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
 });
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va

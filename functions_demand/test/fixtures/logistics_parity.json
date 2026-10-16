@@ -127,7 +127,15 @@
     "not_owner",
     "not_payable",
     "insufficient",
-    "not_pending"
+    "not_pending",
+    "bad_amount",
+    "bad_op_id",
+    "exceeds_outstanding",
+    "incident_invalid",
+    "incident_missing",
+    "loss_not_settled",
+    "nothing_outstanding",
+    "op_id_reused"
   ],
   "docs": {
     "createResult": {

@@ -42,6 +42,12 @@ class AdminRestaurantsService {
   Future<int> setDeliveryPrices(Map<String, dynamic> payload) async =>
       ((await _call('adminSetRestaurantDeliveryPrices', payload))['version'] as num?)?.toInt() ?? 0;
 
+  /// AVA ҳақи (bps; `null` — стандартга қайтариш) ва/ёки тун коэффициенти.
+  /// [changes] да фақат ЎЗГАРГАН калитлар (`avaFeeBps` га ошкора `null` берилса —
+  /// қайтариш). Жавоб: `{ok, version, unchanged, avaFeeBps, nightCoef}`.
+  Future<Map<String, dynamic>> setFeeSettings(Map<String, dynamic> changes, {required String reason}) =>
+      _call('adminSetRestaurantFeeSettings', {...changes, 'reason': reason});
+
   Future<void> setAutoApprove(bool enabled) => _call('adminSetRestaurantAutoApprove', {'enabled': enabled});
 
   Future<List<String>> setStage({required String stage, required List<String> testerIds}) async {

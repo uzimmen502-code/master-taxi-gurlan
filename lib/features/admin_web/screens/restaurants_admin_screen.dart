@@ -21,6 +21,7 @@ import '../../../models/order_model.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../services/admin_restaurants_service.dart';
 import '../utils/restaurant_tariff_draft.dart';
+import '../widgets/restaurant_fee_card.dart';
 
 final _dateFmt = DateFormat('dd.MM HH:mm');
 
@@ -853,6 +854,10 @@ class _SettingsTabState extends State<_SettingsTab> {
           },
         ),
         const SizedBox(height: 18),
+        const Text('AVA ҳақи ва тун коэффициенти', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        RestaurantFeeCard(svc: widget.svc),
+        const SizedBox(height: 18),
         const Text('Ресторан аризаси', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -874,12 +879,12 @@ class _SettingsTabState extends State<_SettingsTab> {
           },
         ),
         const SizedBox(height: 18),
-        const Text('Сервер қоидалари (кодда, ўзгартириш — деплой)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        const Text('Сервер қоидалари (кодда, ўзгартириш — деплой; AVA ҳақи — юқорида)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         const _InfoBar(
           icon: Icons.info_outline,
           color: AppColors.primaryText,
-          text: 'AVA ҳақи — таом суммасининг 2 % (эга қарори, D-REST-2), ресторан эгаси ҳамёнидан қабулда ечилади, етказилмаса қайтади. '
+          text: 'AVA ҳақи — таом суммасининг фоизи (стандарт 2 %, эга қарори D-REST-2; юқоридаги «AVA ҳақи» карточкасида ўзгартирилади), ресторан эгаси ҳамёнидан қабулда ечилади, етказилмаса қайтади. '
               'Ресторан жавоб муддати 5 дақ (ўтса — рад, 3 та кетма-кет → 30 дақ пауза). '
               'Олиб кетиш коди — 4 рақам, 5 уриниш. Мижоз 2 марта эшикда олмаса — 30 кун фақат олдиндан тўлов.',
         ),

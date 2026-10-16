@@ -849,6 +849,29 @@ function attachTaxiBilling(exports, deps) {
   }
 
   /**
+   * Audit H3: shu reys davomida AVA orqali tasdiqlangan (`confirmed`/`completed`) bron
+   * bormi - `intercity_bookings`dan (driverId = haydovchi telefoni, 12 yoki 9 xonali;
+   * reys yaratilgandan KEYIN ochilgan bronlar). `pending`/`cancelled`/`expired` sanalmaydi.
+   * O'qish xatosi - `false` (fraud tomoniga xavfsiz: noaniq holatda pul qaytarib olinmaydi);
+   * refund siyosatiga ta'sir qilmaydi.
+   */
+  async function serverHadAvaBooking(me, trip) {
+    const sinceMs = tsMillis(trip.createdAt);
+    const ids = [...new Set([me.phone, me.phone.length === 12 ? me.phone.slice(3) : me.phone])];
+    try {
+      const snaps = await Promise.all(ids.map((id) => db.collection('intercity_bookings')
+        .where('driverId', '==', id).where('status', 'in', ['confirmed', 'completed']).get()));
+      return snaps.some((s) => s.docs.some((d) => tsMillis((d.data() || {}).createdAt) >= sinceMs));
+    } catch (e) {
+      console.error(JSON.stringify({
+        action: 'cancelTaxiTrip', result: 'error', errorCode: 'HAD_BOOKING_LOOKUP_FAILED',
+        userId: me.phone, message: e && e.message,
+      }));
+      return false;
+    }
+  }
+
+  /**
    * D-TAXI-15: bekor → komissiya wallet'ga `refund`.
    *
    * D-TAXI-CANCEL-9 (2026-10-06): jo'nash vaqtidan KEYIN ham bekor qilish
@@ -869,9 +892,18 @@ function attachTaxiBilling(exports, deps) {
     }
     const when = now();
     const amount = Number(trip.feeAmount) || 0;
+    // Audit H3: `hadAvaBooking` klientdan KELMAYDI (18-qoida) - server `intercity_bookings`dan
+    // hisoblaydi. Klient qiymati fraud/refund qaroriga ta'sir qilmaydi, faqat log'da solishtiriladi.
+    const hadAvaBooking = (await serverHadAvaBooking(me, trip)) || trip.hadAvaBooking === true;
+    if ((data.hadAvaBooking === true) !== hadAvaBooking) {
+      console.log(JSON.stringify({
+        action: 'cancelTaxiTrip', result: 'had_booking_client_mismatch', tripId: tripRef.id,
+        userId: me.phone, client: data.hadAvaBooking === true, server: hadAvaBooking,
+      }));
+    }
     const cancelPatch = (refunded) => ({
       status: 'cancelled', cancelledAt: when, refunded, fraudReviewed: false,
-      hadAvaBooking: data.hadAvaBooking === true || trip.hadAvaBooking === true,
+      hadAvaBooking,
       'location.cancelLat': numOrNull(data.driverLat), 'location.cancelLng': numOrNull(data.driverLng),
       updatedAt: when,
     });
@@ -1000,6 +1032,14 @@ function rescheduleWrites({
       updatedAt: when,
     },
   };
+}
+
+function tsMillis(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function numOrNull(v) {

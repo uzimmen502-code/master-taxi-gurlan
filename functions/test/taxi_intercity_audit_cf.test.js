@@ -237,6 +237,77 @@ async function main() {
     assert.strictEqual(b.tripId, a.tripId);
   });
 
+  // ══ H3: hadAvaBooking SERVER hisoblaydi ══════════════════════════════
+  const seedBooking = (id, over = {}) => db.collection('intercity_bookings').doc(id).set({
+    driverId: DRIVER, userPhone: '998905550001', status: 'confirmed', passengers: 1,
+    createdAt: ts(NOW0.getTime() + 60000), departureTime: ts(NOW0.getTime() + 3600000), ...over,
+  });
+  const hadOf = async (tripId) => (await trip(tripId)).hadAvaBooking;
+  await reset();
+  await check('H3: bron YO\'Q, klient hadAvaBooking:true yuboradi -> server false yozadi (klient e\'tiborsiz)', async () => {
+    const r = await pub();
+    const c = await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    assert.strictEqual(c.status, 'cancelled');
+    assert.strictEqual(await hadOf(r.tripId), false);
+  });
+  await check('H3: tasdiqlangan bron BOR, klient false yuboradi -> true', async () => {
+    const r = await pub(); await seedBooking('b1');
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: false }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), true);
+  });
+  await check('H3: completed bron ham sanaladi; 9 xonali driverId shakli ham', async () => {
+    const r = await pub(); await seedBooking('b2', { status: 'completed', driverId: DRIVER.slice(3) });
+    await api.cancel({ tripId: r.tripId }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), true);
+  });
+  await check('H3: faqat pending / cancelled / expired bronlar sanalmaydi', async () => {
+    await reset();
+    const r = await pub();
+    await seedBooking('p1', { status: 'pending' }); await seedBooking('p2', { status: 'cancelled' });
+    await seedBooking('p3', { status: 'expired' });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), false);
+  });
+  await check('H3: reysdan OLDINGI (boshqa reysning) va BOSHQA haydovchining broni sanalmaydi', async () => {
+    await reset();
+    const r = await pub();
+    await seedBooking('old1', { createdAt: ts(NOW0.getTime() - 3600000), status: 'completed' });
+    await seedBooking('oth1', { driverId: OTHER });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    assert.strictEqual(await hadOf(r.tripId), false);
+  });
+  await check('H3: pul siyosati O\'ZGARMAGAN - bron bor bo\'lsa ham bekorda komissiya to\'liq qaytadi (CANCEL-9)', async () => {
+    await reset();
+    const before = await balance();
+    const r = await pub(); await seedBooking('c1', { status: 'completed' });
+    assert.strictEqual(before - await balance(), 28000);
+    const c = await api.cancel({ tripId: r.tripId }, ctx);
+    assert.strictEqual(c.refunded, true); assert.strictEqual(await balance(), before);
+  });
+  await check('H3: fraud baholash SERVER qiymatidan: bron yo\'q + klient true -> had_ava_booking signali YO\'Q (normal)', async () => {
+    await reset();
+    const r = await pub({ departureAt: '2026-10-07T03:00:00Z' });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true, driverLat: 41.55, driverLng: 60.63 }, ctx);
+    await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
+    clock = new Date('2026-10-07T15:00:00Z');
+    await pub({ from: 'Toshkent', to: 'Urganch', farePerSeat: 100000, driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' });
+    const t = await trip(r.tripId);
+    assert.strictEqual(t.fraudReviewed, true); assert.strictEqual(t.fraudVerdict, 'normal');
+    assert.ok(!(t.fraudSignals || []).includes('had_ava_booking'));
+  });
+  await check('H3: fraud baholash SERVER qiymatidan: tasdiqlangan bron bor -> had_ava_booking signali BOR', async () => {
+    await reset();
+    const r = await pub({ departureAt: '2026-10-07T03:00:00Z' });
+    await seedBooking('f1');
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: false, driverLat: 41.55, driverLng: 60.63 }, ctx);
+    await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
+    clock = new Date('2026-10-07T15:00:00Z');
+    await pub({ from: 'Toshkent', to: 'Urganch', farePerSeat: 100000, driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' });
+    const t = await trip(r.tripId);
+    assert.ok((t.fraudSignals || []).includes('had_ava_booking'));
+    assert.strictEqual(t.fraudVerdict, 'confirmed');
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} taxi intercity audit CF checks passed.`);
   if (failed) process.exitCode = 1;

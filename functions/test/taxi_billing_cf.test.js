@@ -59,7 +59,7 @@ async function reset({ status = 'verified', graceUntil = null, agreement = true,
   clock = NOW0;
   notified.length = 0;
   await Promise.all(['users', 'provider_capabilities', 'service_agreements', 'module_config',
-    'taxi_trips', 'taxi_price_changes', 'taxi_fraud_cases', settlementLedger.COL_JOURNAL,
+    'taxi_trips', 'taxi_price_changes', 'taxi_fraud_cases', 'intercity_bookings', settlementLedger.COL_JOURNAL,
     settlementLedger.COL_ACCOUNTS].map(wipe));
   await db.collection('users').doc(DRIVER).set({ role: 'user', accountId: ACC, bonusBalance: 0 });
   await db.collection('provider_capabilities').doc(ACC).set({
@@ -81,6 +81,13 @@ async function reset({ status = 'verified', graceUntil = null, agreement = true,
 const balance = async () => (await db.collection(settlementLedger.COL_ACCOUNTS).doc(settlementLedger.passengerCreditAccount(DRIVER)).get()).data()?.balance || 0;
 const earnings = async () => (await db.collection(settlementLedger.COL_ACCOUNTS).doc(EARNINGS_ACCOUNT).get()).data()?.balance || 0;
 const trip = async (id) => (await db.collection('taxi_trips').doc(id).get()).data();
+// Audit H3: `hadAvaBooking` endi klientdan emas - server `intercity_bookings`dan hisoblaydi.
+// Reys ochilgandan keyin tasdiqlangan bron (klient `hadAvaBooking: true` yuborishi e'tiborsiz).
+let bookingSeq = 0;
+const seedAvaBooking = (status = 'confirmed') => db.collection('intercity_bookings').doc(`ava_b${bookingSeq += 1}`).set({
+  driverId: DRIVER, userPhone: '998905550001', status, passengers: 1,
+  createdAt: new Date(clock.getTime() + 60000), departureTime: new Date(clock.getTime() + 3600000),
+});
 const pub = (over = {}) => api.publish({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent', scheduleDate: '2026-10-07', startTime: '08:00',
   departureAt: '2026-10-07T03:00:00Z', originLat: 41.55, originLng: 60.63, driverLat: 41.55, driverLng: 60.63, ...over }, ctx);
 
@@ -138,6 +145,7 @@ async function main() {
   });
   await check('cancel → komissiya wallet\'ga refund (D-TAXI-15)', async () => {
     const r = await pub({ farePerSeat: 250000 }); // 20 000 → 4 000
+    await seedAvaBooking();
     const c = await api.cancel({ tripId: r.tripId, hadAvaBooking: true, driverLat: 41.55, driverLng: 60.63 }, ctx);
     assert.strictEqual(c.status, 'cancelled'); assert.strictEqual(c.refunded, true);
     assert.strictEqual(await balance(), 24000);
@@ -209,6 +217,7 @@ async function main() {
   await reset({ wallet: 30000 });
   await check('reclaim wallet yetmasa → bor qismi olinadi, qolgani QARZ (CANCEL-6)', async () => {
     const r = await pub({ farePerSeat: 350000 }); // 30 000 → 2 000
+    await seedAvaBooking();
     await api.cancel({ tripId: r.tripId, hadAvaBooking: true, driverLat: 41.55, driverLng: 60.63 }, ctx); // +28 000 → 30 000
     // Haydovchi pulni boshqa yerga sarfladi (wallet 3 000 qoldi).
     await settlementLedger.postEntry(db, {
@@ -313,6 +322,7 @@ async function main() {
   await check('FRAUD (starter): fee\'siz bekor ham BAHOLANADI — verdict yoziladi, pul harakatlanmaydi', async () => {
     clock = new Date('2026-10-06T06:00:00Z');
     const r = await pub({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent', departureAt: '2026-10-07T03:00:00Z' });
+    await seedAvaBooking();
     await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
     await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
     clock = new Date('2026-10-07T15:00:00Z');

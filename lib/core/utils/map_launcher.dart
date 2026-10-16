@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/intercity_pickup_route.dart';
@@ -27,6 +28,26 @@ Future<bool> openMapsNavigation({
   return false;
 }
 
+/// Google Maps `api=1` URL'ида оралиқ нуқталарнинг энг кўп сони — НАТИВ
+/// иловада/десктопда (расмий ҳужжат: 9). Ҳақиқий қурилмада Android Maps
+/// иловаси 9 тани ҳақиқатан қабул қилишини ҲАЛИ текширилмаган (UNVERIFIED).
+const int kMapsMaxWaypoints = 9;
+
+/// Мобил БРАУЗЕРда очиладиган ҳаволада Google Maps кўпи билан 3 та оралиқ
+/// нуқтани қабул қилади (расмий "Maps URLs" ҳужжати).
+const int kMapsMobileWebMaxWaypoints = 3;
+
+/// Оралиқ нуқталарнинг амалдаги энг кўп сони — ЯГОНА манба:
+/// `openMapsEvTripRoute` ҳам, EV навигация рўйхати (`evNavigationWaypoints`)
+/// ҳам шундан фойдаланади. Мобил веб (браузер Android/iOS'да) — 3, қолган
+/// ҳамма жойда — [kMapsMaxWaypoints]. Параметрлар тест учун.
+int mapsMaxWaypoints({bool? isWeb, TargetPlatform? platform}) {
+  final web = isWeb ?? kIsWeb;
+  final p = platform ?? defaultTargetPlatform;
+  final mobile = p == TargetPlatform.android || p == TargetPlatform.iOS;
+  return web && mobile ? kMapsMobileWebMaxWaypoints : kMapsMaxWaypoints;
+}
+
 /// ⚡ EV сафар занжири — йўл бўйидаги зарядлаш тўхташлари билан битта
 /// навигация чақируви.
 ///
@@ -44,10 +65,11 @@ Future<bool> openMapsEvTripRoute({
   required double destinationLng,
   List<({double lat, double lng})> stops = const [],
 }) async {
-  // Google `api=1` схемаси кўпи билан 9 оралиқ нуқтани қабул қилади;
-  // Яндексда чеклов ҳужжатда кўрсатилмаган, лекин бир хил рўйхат
-  // юборилиши учун шу ерда қисқартирилади.
-  const maxWaypoints = 9;
+  // Google `api=1` схемаси платформага қараб кўпи билан [mapsMaxWaypoints]
+  // (мобил веб — 3, бошқа — 9) оралиқ нуқтани қабул қилади; Яндексда
+  // чеклов ҳужжатда кўрсатилмаган, лекин бир хил рўйхат юборилиши учун шу
+  // ерда қисқартирилади (маршрут тартиби сақланади).
+  final maxWaypoints = mapsMaxWaypoints();
   final limited =
       stops.length > maxWaypoints ? stops.sublist(0, maxWaypoints) : stops;
 

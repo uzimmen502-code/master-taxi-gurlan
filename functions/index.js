@@ -26,7 +26,8 @@ attachAssistant(exports, {
 // Kuryerga push — token va «kim onlayn» manbalari (13.6.4).
 // `canonicalUid` — hoisted function declaration (pastda).
 const { createCourierPush } = require('./courier_push');
-const courierPush = createCourierPush({ db, canonicalUid });
+// `courierAuth` pastroqda e'lon qilinadi — closure chaqiruv paytida hal bo'ladi.
+const courierPush = createCourierPush({ db, canonicalUid, isWorking: (id) => courierAuth.isWorking(id) });
 // Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
 // paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
 const capabilitiesModel = require('./capabilities_model');

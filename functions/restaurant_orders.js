@@ -1435,6 +1435,13 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (idemSnap.exists) return { done: true, result: { ...(idemSnap.data().result || { ok: true }), idempotent: true } };
       const to = outcome === 'delivered' ? RS.delivered : RS.deliveryFailed;
       const from = assertTransition(od, to, orderId);
+      // `ready → delivered` jadvalda restoranning O'Z kuryeri uchun (restaurantMarkDelivered).
+      // AVA kuryeri esa olmasdan (kod, `picked`, `arrived` siz) yakunlay olmaydi:
+      // buyurtma `accepted`da marshrutga olinadi, `ready` bo'lgach kod aylanib o'tilardi.
+      if (from !== RS.picked && from !== RS.arrived) {
+        log('complete', { orderId, result: 'denied', errorCode: 'ORDER_NOT_PICKED', from, to });
+        throw fail('failed-precondition', 'ORDER_NOT_PICKED', { from, to });
+      }
       const customerUid = canonicalUid(String(od.userPhone || ''));
       const fee = Number(od.deliveryFee) || 0;
       let walletPrep = null;

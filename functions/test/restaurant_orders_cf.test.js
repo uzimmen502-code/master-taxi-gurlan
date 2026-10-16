@@ -366,7 +366,9 @@ async function main() {
       updatedAt: admin.firestore.Timestamp.now(),
     });
     const NEAR_NO_LIMIT = '998913000003';
-    await db.collection('users').doc(NEAR_NO_LIMIT).set({ role: 'user', bonusBalance: 0 });
+    // C-5: onlayn ro'yxat capability bilan tekshiriladi — bu haqiqiy (approved) kuryer.
+    ACC[NEAR_NO_LIMIT] = 'accCOURIER0000000000N';
+    await seedCourier(NEAR_NO_LIMIT, 'approved');
     await presence(COURIER_A, { lat: R_LOC.lat + 0.001, lng: R_LOC.lng }); // ~110 m
     await presence(COURIER_B, { lat: 41.3, lng: 69.2 }); // Toshkent — radiusdan tashqarida
     await presence(NEAR_NO_LIMIT, { lat: R_LOC.lat, lng: R_LOC.lng + 0.002 }); // yaqin, vykup limiti yo'q
@@ -448,6 +450,18 @@ async function main() {
     assert.ok(!ready.orders.find((x) => x.id === r.orderId), 'courierListReadyOrders da yo\'q');
     await expectCode(call('courierCreateRoute', { courierPhone: COURIER_B, orderedOrderIds: [r.orderId] }, COURIER_B), 'no_ready_orders');
     assert.strictEqual((await order(r.orderId)).restaurantStatus, 'ready', 'holat buzilmadi');
+    await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'test' }, OWNER);
+  });
+  await check('K3b R/F1: kuryer olmasdan (ready) «yetkazildi» qila olmaydi — kod, olish va pul yo\'q', async () => {
+    const r = await place(rid, CUSTOMER2, { deliveryPaymentMethod: 'cash' });
+    await call('restaurantAcceptOrder', { orderId: r.orderId }, OWNER);
+    await call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_B);
+    await call('restaurantMarkReady', { orderId: r.orderId }, OWNER);
+    const k0 = await pcBal(COURIER_B);
+    await expectCode(call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'delivered' }, COURIER_B), 'ORDER_NOT_PICKED');
+    await expectCode(call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'failed' }, COURIER_B), 'ORDER_INVALID_TRANSITION');
+    assert.strictEqual((await order(r.orderId)).restaurantStatus, 'ready', 'holat buzilmadi');
+    assert.strictEqual(await pcBal(COURIER_B), k0, 'kuryerga pul tushmadi');
     await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'test' }, OWNER);
   });
   await check('K4 olib ketish: ready bo\'lmasdan yo\'q; kod noto\'g\'ri → MISMATCH (urinish sanaladi); to\'g\'ri → picked', async () => {

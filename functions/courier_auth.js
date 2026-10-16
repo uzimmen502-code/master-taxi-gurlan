@@ -153,9 +153,22 @@ function makeCourierAuth(deps) {
       errorCode === 'COURIER_OWN_ORDER' ? 'Own order' : 'Not your order', { reason: errorCode });
   }
 
+  /**
+   * Kuryer YANGI ish olishi mumkinmi ('new' rejim) — mantiqiy qiymat, xato otmaydi.
+   * `provider_presence` ni har kim yoza oladi: push ro'yxati capability bilan
+   * tekshirilmasa, kuryer bo'lmagan odam restoran push'ini oladi (audit C-5).
+   */
+  async function isWorking(phone) {
+    try {
+      return caps.isWorking('courier', await capabilityStatus(phone)) === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   return {
     capabilityStatus, resolve, activeRoutes, assertOrderOnActiveRoute, assertCustomerOnActiveRoute,
-    isOwnOrder, assertOrderActionable,
+    isOwnOrder, assertOrderActionable, isWorking,
   };
 }
 

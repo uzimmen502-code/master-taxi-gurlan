@@ -3983,7 +3983,9 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.providerId)
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['status', 'seenAt'])
-                    && request.resource.data.status in ['new', 'seen', 'skipped'];
+                    && request.resource.data.status in ['new', 'seen', 'skipped']
+                    // S2/L9: accepted/in_progress/... matchni pasaytirib bo'lmaydi.
+                    && resource.data.get('status', '') in ['new', 'seen', 'skipped'];
     }
 
     // ══════════════════════════════════════

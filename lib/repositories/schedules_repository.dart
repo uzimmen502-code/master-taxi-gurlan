@@ -145,11 +145,12 @@ class SchedulesRepository {
   }
 
   /// Иш кунини якунлаш — бугунги барча aktiv reys'ларни ёпиш.
-  Future<void> endTodayWork({
+  /// Muvaffaqiyatli bo'lsa true; xato bo'lsa false (chaqiruvchi ko'rsata oladi).
+  Future<bool> endTodayWork({
     required String driverId,
     required String date,
   }) async {
-    if (driverId.isEmpty) return;
+    if (driverId.isEmpty) return true;
     final canonId = canonicalPhoneId(driverId);
     try {
       final snap = await _col
@@ -172,7 +173,10 @@ class SchedulesRepository {
         });
       }
       await batch.commit();
-    } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Бугунги aktiv reys'дa `seatsLeft` ни 1 ўзгартириш (қўшимча йўловчи).

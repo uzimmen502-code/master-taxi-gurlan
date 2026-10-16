@@ -68,6 +68,16 @@ void main() {
     expect(taxiReasonKey('  departure_in_past '), 'taxi_reason_departure_in_past');
   });
 
+  test('fallback: noma\'lum sabab o\'ziga xos umumiy matnga tushadi', () {
+    expect(taxiReasonKey('zzz', fallback: 'reschedule_trip_failed'),
+        'reschedule_trip_failed');
+    expect(taxiReasonKey('departure_in_past', fallback: 'reschedule_trip_failed'),
+        'taxi_reason_departure_in_past');
+    for (final l in langs) {
+      expect((dict[l]!['reschedule_trip_failed'] as String).trim(), isNotEmpty);
+    }
+  });
+
   test('foydalanuvchi matnida ichki sabab kodi yoki xom xato yo\'q', () {
     final raw = RegExp(r'[a-z]+_[a-z_]+|Exception|FirebaseFunctions');
     for (final l in langs) {

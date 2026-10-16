@@ -1,3 +1,5 @@
+// ignore_for_file: subtype_of_sealed_class
+// (Firestore tiplari @sealed; testda faqat kerakli metodlari soxtalashtiriladi.)
 import 'dart:async';
 
 import 'package:ava_gurlan/features/intercity_taxi/passenger/controllers/me_and_passengers_controller.dart';

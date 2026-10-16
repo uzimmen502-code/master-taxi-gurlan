@@ -404,29 +404,15 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
               label: Text(context.tr('reschedule_trip_btn')),
             ),
           ),
+        ],
+        // E'lon yopiq bo'lsa ham: oldingi urinish to'liq tugamagan yoki
+        // bekor qilinmagan bronlar qolgan bo'lsa tugma qayta urinish uchun turadi.
+        if (c.canEndTrip) ...[
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text(ctx.tr('end_trip_title')),
-                    content: Text(ctx.tr('end_trip_body')),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: Text(ctx.tr('no'))),
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text(ctx.tr('yes_end_trip'),
-                              style: const TextStyle(color: Colors.red))),
-                    ],
-                  ),
-                );
-                if (ok == true) await c.endTripListing();
-              },
+              onPressed: () => _confirmEndTrip(context, c),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red.shade700,
                 side: BorderSide(color: Colors.red.shade200),
@@ -436,6 +422,36 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           ),
         ],
       ]),
+    );
+  }
+
+  Future<void> _confirmEndTrip(
+    BuildContext context,
+    IntercityDriverPanelController c,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('end_trip_title')),
+        content: Text(ctx.tr('end_trip_body')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(ctx.tr('no'))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(ctx.tr('yes_end_trip'),
+                  style: const TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final result = await c.endTripListing();
+    if (!context.mounted) return;
+    final key = intercityEndTripNoticeKey(result);
+    if (key == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr(key)), backgroundColor: Colors.orange.shade800),
     );
   }
 
@@ -671,7 +687,8 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         const SizedBox(height: 8),
         Row(children: [
           IconButton(
-            visualDensity: VisualDensity.compact,
+            // Bosish maydoni kamida 44dp (avval compact zichlik kichraytirardi).
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: () => callPhone(b.userPhone),
             icon: const Icon(Icons.call, color: AppColors.primaryText),
           ),
@@ -752,11 +769,14 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
       ),
     );
     if (ok != true || !context.mounted) return;
-    await context.read<IntercityDriverPanelController>().startTrip();
+    final started =
+        await context.read<IntercityDriverPanelController>().startTrip();
     if (!context.mounted) return;
+    // Haqiqiy natija: muvaffaqiyat xabari faqat safar rostdan boshlansa.
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('trip_started_success')),
-      backgroundColor: AvaLight.ok,
+      content: Text(context.tr(
+          started ? 'trip_started_success' : 'ic_start_trip_failed')),
+      backgroundColor: started ? AvaLight.ok : Colors.orange.shade800,
     ));
   }
 

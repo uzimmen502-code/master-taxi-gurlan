@@ -485,30 +485,48 @@ class IntercityBookingsRepository {
   // ─── Бронни бекор қилиш ──────────────────────────────────────────────
 
   /// Ҳайдовчи рейсни ёпганда ёки янги рейс очганда — барча pending/confirmed бронлар.
+  /// Xatolarni yutadi (yangi reys ochishda to'siq bo'lmasin) — natija: bekor
+  /// qilinganlar soni. Xatoni ko'rsatish kerak bo'lsa
+  /// [cancelActiveBookingsForDriverDetailed].
   Future<int> cancelActiveBookingsForDriver(
     String driverId, {
     String reason = 'Ҳайдовчи рейсни бекор қилди',
   }) async {
-    if (driverId.isEmpty) return 0;
     try {
-      final snap = await _bookings
-          .where('driverId', isEqualTo: driverId)
-          .where('status', whereIn: [
-            IntercityBookingStatus.pending,
-            IntercityBookingStatus.confirmed,
-          ])
-          .get();
-      var count = 0;
-      for (final doc in snap.docs) {
-        try {
-          await cancelBooking(bookingId: doc.id, reason: reason);
-          count++;
-        } catch (_) {}
-      }
-      return count;
+      return (await cancelActiveBookingsForDriverDetailed(driverId,
+              reason: reason))
+          .cancelled;
     } catch (_) {
       return 0;
     }
+  }
+
+  /// Yuqoridagining aniq natijali varianti: nechtasi bekor qilindi va nechtasi
+  /// bekor qilinmadi. Ro'yxatni o'qish xatosi ISTISNO sifatida chiqadi
+  /// (chaqiruvchi "hech narsa bekor qilinmadi" deb bilishi kerak).
+  Future<({int cancelled, int failed})> cancelActiveBookingsForDriverDetailed(
+    String driverId, {
+    String reason = 'Ҳайдовчи рейсни бекор қилди',
+  }) async {
+    if (driverId.isEmpty) return (cancelled: 0, failed: 0);
+    final snap = await _bookings
+        .where('driverId', isEqualTo: driverId)
+        .where('status', whereIn: [
+          IntercityBookingStatus.pending,
+          IntercityBookingStatus.confirmed,
+        ])
+        .get();
+    var cancelled = 0;
+    var failed = 0;
+    for (final doc in snap.docs) {
+      try {
+        await cancelBooking(bookingId: doc.id, reason: reason);
+        cancelled++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    return (cancelled: cancelled, failed: failed);
   }
 
   /// Мижоз ёки ҳайдовчи бекор қилади.

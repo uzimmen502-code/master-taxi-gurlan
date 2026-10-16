@@ -3286,5 +3286,9 @@
   "intercity_search_again": "Qayta qidirish",
   "intercity_search_tomorrow": "Ertaga qidirish",
   "intercity_search_next_day": "Keyingi kunni qidirish",
-  "intercity_ride_departed": "Bu reys allaqachon yo'lga chiqqan. Ro'yxatni yangilang."
+  "intercity_ride_departed": "Bu reys allaqachon yo'lga chiqqan. Ro'yxatni yangilang.",
+  "ic_end_failed": "Reysni yopib bo'lmadi. Internetni tekshirib, qayta urinib ko'ring.",
+  "ic_end_bookings_failed": "Reys yopildi, lekin ayrim bronlar bekor qilinmadi. Qayta urinib ko'ring yoki yo'lovchilar bilan bog'laning.",
+  "ic_end_refund_failed": "Reys yopildi, lekin AVA haqini qaytarish hozir bajarilmadi. Qayta urinib ko'ring.",
+  "ic_start_trip_failed": "Safarni boshlab bo'lmadi. Internetni tekshirib, qayta urinib ko'ring."
 }

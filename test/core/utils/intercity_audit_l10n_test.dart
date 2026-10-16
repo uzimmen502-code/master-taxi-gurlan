@@ -32,6 +32,11 @@ void main() {
     'intercity_search_tomorrow',
     'intercity_search_next_day',
     'intercity_ride_departed',
+    // haydovchi paneli: tugatish / boshlash natijalari
+    'ic_end_failed',
+    'ic_end_bookings_failed',
+    'ic_end_refund_failed',
+    'ic_start_trip_failed',
   ];
 
   final dict = <String, Map<String, dynamic>>{};

@@ -17,6 +17,38 @@ import '../../intercity_driver_alert_text.dart';
 import '../../../../services/notification_delivery.dart';
 import '../../../../utils/intercity_places.dart';
 
+/// "Reysni tugatish" natijasi (UI aniq xabar ko'rsatishi uchun).
+class EndListingResult {
+  const EndListingResult({
+    required this.listingClosed,
+    this.refundFailed = false,
+    this.bookingsCancelled = 0,
+    this.bookingsFailed = 0,
+  });
+
+  /// E'lon yopildi (`intercity_drivers.isActive=false`) — yangi bron kela olmaydi.
+  final bool listingClosed;
+
+  /// Komissiyani qaytarish (serverga bekor so'rovi) muvaffaqiyatsiz.
+  final bool refundFailed;
+  final int bookingsCancelled;
+
+  /// Bekor qilinmay qolgan bronlar (ro'yxatni o'qib bo'lmasa kamida 1).
+  final int bookingsFailed;
+
+  bool get ok => listingClosed && !refundFailed && bookingsFailed == 0;
+}
+
+/// [EndListingResult] → foydalanuvchiga ko'rsatiladigan l10n kaliti
+/// (`null` — hammasi joyida, xabar kerak emas). Eng muhim muammo birinchi:
+/// e'lon yopilmadi > bronlar qoldi > komissiya qaytmadi.
+String? intercityEndTripNoticeKey(EndListingResult r) {
+  if (!r.listingClosed) return 'ic_end_failed';
+  if (r.bookingsFailed > 0) return 'ic_end_bookings_failed';
+  if (r.refundFailed) return 'ic_end_refund_failed';
+  return null;
+}
+
 class IntercityDriverPanelController extends ChangeNotifier {
   IntercityDriverPanelController({
     required this.driverId,
@@ -28,10 +60,16 @@ class IntercityDriverPanelController extends ChangeNotifier {
     required SchedulesRepository schedulesRepo,
     IntercityPickupRouteService? pickupRouteService,
     IntercityRidesRepository? ridesRepo,
+    FirebaseFirestore? db,
+    TaxiBillingRepository? billingRepo,
+    Future<Position?> Function()? lastKnownPosition,
   })  : _bookingsRepo = bookingsRepo,
         _schedulesRepo = schedulesRepo,
         _pickupRouteService = pickupRouteService ?? IntercityPickupRouteService(),
-        _ridesRepo = ridesRepo ?? IntercityRidesRepository();
+        _ridesRepoOverride = ridesRepo,
+        _dbOverride = db,
+        _billingOverride = billingRepo,
+        _lastKnownPosition = lastKnownPosition ?? _defaultLastKnownPosition;
 
   final String driverId;
   final String driverName;
@@ -42,8 +80,27 @@ class IntercityDriverPanelController extends ChangeNotifier {
   final IntercityBookingsRepository _bookingsRepo;
   final SchedulesRepository _schedulesRepo;
   final IntercityPickupRouteService _pickupRouteService;
-  final IntercityRidesRepository _ridesRepo;
-  final _db = FirebaseFirestore.instance;
+
+  // Firebase'ga bog'liq obyektlar dangasa yaratiladi: test fake bersa
+  // Firebase.initializeApp talab qilinmaydi.
+  final IntercityRidesRepository? _ridesRepoOverride;
+  final FirebaseFirestore? _dbOverride;
+  final TaxiBillingRepository? _billingOverride;
+  final Future<Position?> Function() _lastKnownPosition;
+
+  late final IntercityRidesRepository _ridesRepo =
+      _ridesRepoOverride ?? IntercityRidesRepository();
+  FirebaseFirestore get _db => _dbOverride ?? FirebaseFirestore.instance;
+  late final TaxiBillingRepository _billing =
+      _billingOverride ?? TaxiBillingRepository();
+
+  static Future<Position?> _defaultLastKnownPosition() async {
+    try {
+      return await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      return null;
+    }
+  }
 
   Map<String, dynamic>? tripData;
   List<IntercityBooking> bookings = const [];
@@ -167,51 +224,113 @@ class IntercityDriverPanelController extends ChangeNotifier {
     );
   }
 
-  /// Рейсни тўлиқ тугатиш — актив бронлар бекор, қидирувдан чиқади.
-  Future<void> endTripListing() async {
-    // D-TAXI-15/16, D-TAXI-CANCEL-9: billing рейси бор бўлса серверга
-    // айтилади — `cancelled` + refund, жўнашдан КЕЙИН ҳам (йўловчи ўз
-    // вақтида топилмаслиги мумкин). Ёлғон отмена фақат далил билан,
-    // кейинги рейс эълонида қайта баҳоланади. Хато бўлса ҳам рўйхатни
-    // ёпиш давом этади — пул масаласи сервер томонида idempotent.
+  /// Oxirgi "reysni tugatish" urinishi to'liq bajarilmagan (komissiya
+  /// qaytarilmadi yoki bronlar bekor qilinmay qoldi) — UI qayta urinishni
+  /// taklif qiladi.
+  bool endIncomplete = false;
+
+  /// Hali bekor qilinmagan (kutilayotgan/tasdiqlangan) bronlar bormi.
+  bool get hasOpenBookings => bookings.any((b) => b.isActive);
+
+  /// "Reysni tugatish" tugmasi ko'rinadimi: e'lon ochiq, yoki oldingi urinish
+  /// to'liq tugamagan, yoki bekor qilinmagan bronlar qolgan.
+  bool get canEndTrip => isListed || endIncomplete || hasOpenBookings;
+
+  /// Рейсни тўлиқ тугатиш — қидирувдан чиқади, актив бронлар бекор.
+  ///
+  /// TARTIB muhim (data integrity): AVVAL e'lon yopiladi (yangi bron kira
+  /// olmaydi — server `driver_inactive` qaytaradi), KEYIN komissiya
+  /// qaytariladi, ENG OXIRIDA bronlar bekor qilinadi. Avval bronlar bekor
+  /// qilinardi, e'lon esa ochiq qolardi: shu oraliqda yangi bron "o'tib"
+  /// ketishi mumkin edi. Har bir bosqich xatosi [EndListingResult] da.
+  ///
+  /// D-TAXI-15/16, D-TAXI-CANCEL-9: billing рейси бор бўлса серверга
+  /// айтилади — `cancelled` + refund, жўнашдан КЕЙИН ҳам. Ёлғон отмена фақат
+  /// далил билан (кейинги рейс эълонида қайта баҳоланади). Сервер томони
+  /// idempotent — qayta urinish xavfsiz.
+  Future<EndListingResult> endTripListing() async {
+    // Bronlar bekor bo'lishidan OLDIN hisoblanadi (fraud signali).
     final billingTripId = (tripData?['billingTripId'] as String?)?.trim();
+    final hadBooking = confirmedBookings.isNotEmpty;
+
+    // 1) E'lonni yopish.
+    try {
+      await _db.collection('intercity_drivers').doc(driverId).set(
+        {
+          'isActive': false,
+          'isOnPanel': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      // E'lon yopilmadi — hech narsa bekor qilinmaydi (holat izchil qoladi).
+      debugPrint('endTripListing: listing close failed: $e');
+      endIncomplete = true;
+      _safeNotify();
+      return const EndListingResult(listingClosed: false);
+    }
+
+    // 2) Jadval (schedules/queue) yopiladi — e'lon allaqachon yopiq, shuning
+    // uchun xato bo'lsa ham davom etamiz (faqat logda).
+    final scheduleDate = (tripData?['scheduleDate'] as String?)?.trim();
+    final dateStr = (scheduleDate != null && scheduleDate.isNotEmpty)
+        ? scheduleDate
+        : _todayStr();
+    final scheduleClosed =
+        await _schedulesRepo.endTodayWork(driverId: driverId, date: dateStr);
+    if (!scheduleClosed) {
+      debugPrint('endTripListing: schedules close failed ($driverId/$dateStr)');
+    }
+
+    // 3) Komissiyani qaytarish (serverga bekor).
+    var refundFailed = false;
     if (billingTripId != null && billingTripId.isNotEmpty) {
-      final hadBooking = confirmedBookings.isNotEmpty;
       Position? pos;
       try {
-        pos = await Geolocator.getLastKnownPosition();
+        pos = await _lastKnownPosition();
       } catch (_) {}
       try {
-        await TaxiBillingRepository().cancel(
+        await _billing.cancel(
           tripId: billingTripId,
           hadAvaBooking: hadBooking,
           driverLat: pos?.latitude,
           driverLng: pos?.longitude,
         );
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('endTripListing: billing cancel failed: $e');
+        refundFailed = true;
+      }
     }
 
-    await _bookingsRepo.cancelActiveBookingsForDriver(
-      driverId,
-      reason: 'Ҳайдовчи рейсни бекор қилди',
-    );
-    final scheduleDate = (tripData?['scheduleDate'] as String?)?.trim();
-    if (scheduleDate != null && scheduleDate.isNotEmpty) {
-      await _schedulesRepo.endTodayWork(driverId: driverId, date: scheduleDate);
-    } else {
-      final today = DateTime.now();
-      final dateStr =
-          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      await _schedulesRepo.endTodayWork(driverId: driverId, date: dateStr);
+    // 4) Bronlarni bekor qilish (yo'lovchilarga server xabar beradi).
+    var cancelled = 0;
+    var failed = 0;
+    try {
+      final r = await _bookingsRepo.cancelActiveBookingsForDriverDetailed(
+        driverId,
+        reason: 'Ҳайдовчи рейсни бекор қилди',
+      );
+      cancelled = r.cancelled;
+      failed = r.failed;
+    } catch (e) {
+      debugPrint('endTripListing: bookings lookup failed: $e');
+      failed = 1; // ro'yxat o'qilmadi — bronlar holati noma'lum
     }
-    await _db.collection('intercity_drivers').doc(driverId).set(
-      {
-        'isActive': false,
-        'isOnPanel': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
+
+    endIncomplete = refundFailed || failed > 0;
+    _safeNotify();
+    return EndListingResult(
+      listingClosed: true,
+      refundFailed: refundFailed,
+      bookingsCancelled: cancelled,
+      bookingsFailed: failed,
     );
+  }
+
+  String _todayStr() {
+    final today = DateTime.now();
+    return '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
   }
 
   /// D-TAXI-CANCEL-3 — рейсни КЕЙИНГА СУРИШ: бекор ЭМАС. `tripId` ва
@@ -226,7 +345,10 @@ class IntercityDriverPanelController extends ChangeNotifier {
   }) async {
     final billingTripId = (tripData?['billingTripId'] as String?)?.trim();
     if (billingTripId != null && billingTripId.isNotEmpty) {
-      await TaxiBillingRepository().reschedule(
+      // Yo'lovchilar bronlari va xabarlar SERVERda (`rescheduleTaxiTrip`):
+      // haydovchi ilovasi boshqa odamlarning hujjatiga yozmaydi. Quyida
+      // faqat haydovchining O'Z e'loni (`intercity_drivers/{driverId}`) yangilanadi.
+      await _billing.reschedule(
         tripId: billingTripId,
         departureAt: departureAt,
         scheduleDate: scheduleDate,
@@ -321,11 +443,15 @@ class IntercityDriverPanelController extends ChangeNotifier {
     }
   }
 
-  Future<void> startTrip() async {
+  /// Safarni boshlash. Muvaffaqiyatli bo'lsa `true`; xato bo'lsa `false`
+  /// (UI haqiqiy natijani ko'rsatadi — avval xato yutilib doim "boshlandi" edi).
+  Future<bool> startTrip() async {
     try {
       await _ridesRepo.startTrip(driverId);
+      return true;
     } catch (e) {
       debugPrint('startTrip error: $e');
+      return false;
     }
   }
 

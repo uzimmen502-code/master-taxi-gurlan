@@ -103,6 +103,8 @@ class EvTripMapScreen extends StatefulWidget {
     this.mapBuilder,
     this.routeLauncher = openMapsEvTripRoute,
     this.maxWaypoints,
+    this.routeMinutes = 0,
+    this.car,
   });
 
   final EvTripPlan plan;
@@ -115,6 +117,12 @@ class EvTripMapScreen extends StatefulWidget {
   final double destinationLat;
   final double destinationLng;
   final VoidCallback onOpenNavigator;
+
+  /// Google маршрутидаги жами йўл вақти (дақиқа); 0 — номаълум.
+  final int routeMinutes;
+
+  /// Режа тузилган автомобил (энергия ва «камида» зарядлаш вақти учун).
+  final EvCarSpec? car;
 
   /// Харитадаги катта «Навигация» тугмаси чақирадиган очувчи. Бўлмаса —
   /// [openMapsEvTripRoute] (Google Maps → Яндекс → `geo:`).
@@ -131,6 +139,8 @@ class EvTripMapScreen extends StatefulWidget {
   final EvTripMapBuilder? mapBuilder;
 
   /// Йиғиқ варақадаги бир қатор хулоса: «N марта зарядлаш керак · X км».
+  /// Йўл вақти ([routeMinutes]) алоҳида қаторда чиқади — катта шрифтда (1.3)
+  /// бир қаторга қўшилса икки қаторга сиғмай қолар эди.
   static String peekText(BuildContext context, EvTripPlan plan) {
     final km = '${plan.totalKm.round()} ${context.tr('ev_trip_km')}';
     switch (plan.status) {
@@ -152,6 +162,18 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   /// Варақанинг йиғиқ (peek) баландлиги: тутқич + хулоса (катта шрифтда
   /// икки қатор).
   static const double _peekContentPx = 100;
+
+  /// Йўл вақти қатори қўшилганда йиғиқ варақа шунча баландроқ (катта
+  /// шрифтда хулоса 2 қатор + вақт сиғиши учун).
+  static const double _peekTimeExtraPx = 16;
+
+  /// Йиғиқ варақа мазмуни баландлиги: вақт қатори бор-йўқлигига қараб.
+  static double peekContentHeight({required bool showTime}) =>
+      _peekContentPx + (showTime ? _peekTimeExtraPx : 0);
+
+  /// Йўл вақти қатори кўрсатиладими (узилишда йўқ).
+  static bool showsPeekTime(EvTripPlan plan, int routeMinutes) =>
+      routeMinutes > 0 && plan.status != EvTripPlanStatus.gapTooLarge;
   static const double _maxSheetFraction = 0.88;
 
   /// Катта «Навигация» тугмаси: баландлиги ва варақа/экран четидан бўшлиқ.
@@ -342,7 +364,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final fix = _car.fix;
-    final peekPx = _peekContentPx + mq.padding.bottom;
+    final peekPx = peekContentHeight(
+            showTime: showsPeekTime(widget.plan, widget.routeMinutes)) +
+        mq.padding.bottom;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -430,6 +454,8 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                       expanded: _extent > peekFraction + 0.05,
                       bottomInset: mq.padding.bottom,
                       onOpenNavigator: widget.onOpenNavigator,
+                      routeMinutes: widget.routeMinutes,
+                      car: widget.car,
                     ),
                   ),
                 ),
@@ -595,6 +621,8 @@ class _PlanSheet extends StatelessWidget {
     required this.expanded,
     required this.bottomInset,
     required this.onOpenNavigator,
+    required this.routeMinutes,
+    required this.car,
   });
 
   final EvTripPlan plan;
@@ -603,10 +631,13 @@ class _PlanSheet extends StatelessWidget {
   final bool expanded;
   final double bottomInset;
   final VoidCallback onOpenNavigator;
+  final int routeMinutes;
+  final EvCarSpec? car;
 
   @override
   Widget build(BuildContext context) {
     final gap = plan.status == EvTripPlanStatus.gapTooLarge;
+    final showTime = _EvTripMapScreenState.showsPeekTime(plan, routeMinutes);
     return Material(
       color: AppColors.scaffold,
       elevation: 10,
@@ -628,7 +659,9 @@ class _PlanSheet extends StatelessWidget {
               child: SizedBox(
                 // Pastki tizim paneli (inset) ham peek'ga kiradi - varaqaning
                 // yopiq holatida legend/reja ko'rinib qolmasin.
-                height: _EvTripMapScreenState._peekContentPx + bottomInset,
+                height: _EvTripMapScreenState.peekContentHeight(
+                        showTime: showTime) +
+                    bottomInset,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
@@ -641,7 +674,9 @@ class _PlanSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    // Йўл вақти қатори қўшилса — икки қатор хулоса + вақт
+                    // сиғиши учун бўшлиқ камроқ.
+                    SizedBox(height: showTime ? 8 : 14),
                     Row(
                       children: [
                         Icon(
@@ -655,17 +690,35 @@ class _PlanSheet extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: Text(
-                            EvTripMapScreen.peekText(context, plan),
-                            key: const ValueKey('ev_trip_sheet_peek'),
-                            // Катта шрифтда (1.3) қирқилмайди: икки қаторга
-                            // ўтади, йиғиқ варақа шунга етарли баланд.
-                            maxLines: 2,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onPrimary,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                EvTripMapScreen.peekText(context, plan),
+                                key: const ValueKey('ev_trip_sheet_peek'),
+                                // Катта шрифтда (1.3) қирқилмайди: икки
+                                // қаторга ўтади, йиғиқ варақа шунга етарли
+                                // баланд.
+                                maxLines: 2,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.onPrimary,
+                                ),
+                              ),
+                              if (showTime)
+                                Text(
+                                  '${context.tr('ev_trip_drive_time')}: '
+                                  '${evTripDurationText(context, routeMinutes)}',
+                                  key: const ValueKey('ev_trip_sheet_peek_time'),
+                                  maxLines: 2,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primaryText,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         Icon(
@@ -682,7 +735,12 @@ class _PlanSheet extends StatelessWidget {
             ),
             const _MapLegend(),
             const SizedBox(height: 14),
-            EvTripPlanView(plan: plan, onOpenNavigator: onOpenNavigator),
+            EvTripPlanView(
+              plan: plan,
+              onOpenNavigator: onOpenNavigator,
+              routeMinutes: routeMinutes,
+              car: car,
+            ),
           ],
         ),
       ),
@@ -718,8 +776,12 @@ class _MapLegend extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 5),
-        Text(label,
-            style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        // Катта шрифтда (1.3) узун изоҳ қаторга сиғмаса — кейинги қаторга
+        // ўтади, ўнгга чиқиб кетмайди.
+        Flexible(
+          child: Text(label,
+              style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        ),
       ],
     );
   }

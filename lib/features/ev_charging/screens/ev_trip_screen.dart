@@ -10,6 +10,7 @@ import '../controllers/ev_trip_controller.dart';
 import '../data/ev_trip_geo_catalog.dart';
 import '../data/ev_trip_place_search.dart';
 import '../widgets/ev_car_sheet.dart';
+import '../models/ev_trip_plan.dart' show EvCarSpec;
 import '../widgets/ev_trip_plan_view.dart';
 import 'ev_trip_map_screen.dart';
 
@@ -45,6 +46,10 @@ class _EvTripScreenState extends State<EvTripScreen> {
   final _searchCtrl = TextEditingController();
 
   OilVehicle? _car;
+
+  /// Режа ҲИСОБЛАНГАН пайтдаги автомобил: кейин ҳайдовчи машинани таҳрирласа
+  /// ҳам, кўрсатилган энергия/вақт шу режага тегишли бўлиб қолади.
+  EvCarSpec? _planCar;
   bool _carLoading = true;
   EvTripPlace? _destination;
   double _soc = 80;
@@ -118,6 +123,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
     final car = _car?.evSpec;
     final dest = _destination;
     if (car == null || dest == null) return;
+    _planCar = car;
 
     await _controller.planTrip(
       originLat: widget.originLat,
@@ -154,6 +160,8 @@ class _EvTripScreenState extends State<EvTripScreen> {
         destinationLat: destLat,
         destinationLng: destLng,
         onOpenNavigator: _openNavigator,
+        routeMinutes: _controller.routeMinutes,
+        car: _planCar,
       ),
     ));
   }
@@ -198,7 +206,12 @@ class _EvTripScreenState extends State<EvTripScreen> {
             const SizedBox(height: 20),
             _showMapButton(),
             const SizedBox(height: 16),
-            EvTripPlanView(plan: plan, onOpenNavigator: _openNavigator),
+            EvTripPlanView(
+              plan: plan,
+              onOpenNavigator: _openNavigator,
+              routeMinutes: _controller.routeMinutes,
+              car: _planCar,
+            ),
           ],
         ],
       ),

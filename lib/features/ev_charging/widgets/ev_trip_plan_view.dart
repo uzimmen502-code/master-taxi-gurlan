@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/ev_charging_station.dart';
+import '../controllers/ev_trip_summary.dart';
 import '../models/ev_trip_plan.dart';
 import 'ev_occupancy_badge.dart';
 
@@ -19,10 +20,19 @@ class EvTripPlanView extends StatelessWidget {
     super.key,
     required this.plan,
     required this.onOpenNavigator,
+    this.routeMinutes = 0,
+    this.car,
   });
 
   final EvTripPlan plan;
   final VoidCallback onOpenNavigator;
+
+  /// Google маршрутидаги жами йўл вақти (дақиқа); 0 — номаълум (кўрсатилмайди).
+  final int routeMinutes;
+
+  /// Режа тузилган автомобил: тўхташда қўшиладиган энергия ва «камида»
+  /// зарядлаш вақти шундан ҳисобланади. Йўқ бўлса — бу қаторлар йўқ.
+  final EvCarSpec? car;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +44,7 @@ class EvTripPlanView extends StatelessWidget {
         if (plan.warnings.isNotEmpty) _warnings(context),
         const SizedBox(height: 8),
         for (var i = 0; i < plan.stops.length; i++)
-          _StopCard(stop: plan.stops[i], index: i + 1),
+          _StopCard(stop: plan.stops[i], index: i + 1, car: car),
         if (plan.isOk && plan.stops.isNotEmpty) ...[
           const SizedBox(height: 12),
           SizedBox(
@@ -96,14 +106,43 @@ class EvTripPlanView extends StatelessWidget {
             '${plan.totalKm.round()} ${context.tr('ev_trip_km')}',
             style: const TextStyle(fontSize: 13),
           ),
+          if (routeMinutes > 0)
+            Text(
+              '${context.tr('ev_trip_drive_time')}: '
+              '${evTripDurationText(context, routeMinutes)}',
+              key: const ValueKey('ev_trip_summary_drive_time'),
+              style: const TextStyle(fontSize: 13),
+            ),
           if (plan.isOk)
             Text(
               '${context.tr('ev_trip_arrival')}: ${plan.arrivalSocPercent}%',
               style: const TextStyle(fontSize: 13),
             ),
+          ..._chargeTime(context),
         ],
       ),
     );
+  }
+
+  /// «Зарядлаш вақти: камида ~X» + изоҳ. Фақат қуввати маълум тўхташлар
+  /// йиғиндиси (қуйи чегара); ҳеч бирида қувват маълум бўлмаса — қатор йўқ.
+  List<Widget> _chargeTime(BuildContext context) {
+    final total = evPlanMinChargeMinutes(plan, car);
+    if (total.knownStops == 0) return const [];
+    return [
+      Text(
+        '${context.tr('ev_trip_charge_time')}: '
+        '${evTripAtLeastText(context, total.minutes)}',
+        key: const ValueKey('ev_trip_summary_charge_time'),
+        style: const TextStyle(fontSize: 13),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        context.tr('ev_trip_charge_time_note'),
+        key: const ValueKey('ev_trip_summary_charge_note'),
+        style: const TextStyle(fontSize: 12, color: Colors.black54),
+      ),
+    ];
   }
 
   Widget _gapBanner(BuildContext context) {
@@ -186,10 +225,24 @@ class EvTripPlanView extends StatelessWidget {
   }
 }
 
+/// «13 с 10 дақ» — бирликлар жорий тилдан (`ev_trip_unit_h`/`_min`).
+String evTripDurationText(BuildContext context, int minutes) =>
+    evFormatDuration(
+      minutes,
+      hourUnit: context.tr('ev_trip_unit_h'),
+      minuteUnit: context.tr('ev_trip_unit_min'),
+    );
+
+/// «камида ~11 дақ» — зарядлаш вақтининг қуйи чегараси.
+String evTripAtLeastText(BuildContext context, int minutes) =>
+    context
+        .tr('ev_trip_at_least')
+        .replaceAll('{t}', evTripDurationText(context, minutes));
+
 /// Станциянинг қисқа тавсифи: зарядлаш турлари · қувват · разъёмлар
 /// (режадаги тўхташ карточкаси ва харитадаги станция варағида бир хил).
 String evTripStationSpecLine(EvChargingStation s) {
-  final power = s.powerKw ?? s.sitePowerKw;
+  final power = evStationPowerKw(s);
   final types = s.chargingTypes.join('+');
   return [
     if (types.isNotEmpty) types,
@@ -199,16 +252,18 @@ String evTripStationSpecLine(EvChargingStation s) {
 }
 
 class _StopCard extends StatelessWidget {
-  const _StopCard({required this.stop, required this.index});
+  const _StopCard({required this.stop, required this.index, this.car});
 
   final EvTripStop stop;
   final int index;
+  final EvCarSpec? car;
 
   @override
   Widget build(BuildContext context) {
     final km = context.tr('ev_trip_km');
     final s = stop.station;
     final title = s.hasName ? s.name!.trim() : context.tr('ev_trip_station');
+    final charge = evStopCharge(stop, car);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -261,6 +316,28 @@ class _StopCard extends StatelessWidget {
             '${stop.offRouteKm >= 1 ? '  ·  ${context.tr('ev_trip_off_route')} ${stop.offRouteKm.round()} $km' : ''}',
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
+          if (charge != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.bolt_rounded,
+                    size: 16, color: AppColors.primaryText),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    // «+24 kWh · камида ~11 дақ»; қувват номаълум бўлса —
+                    // фақат энергия (вақт ўйлаб топилмайди).
+                    '+${evFormatKwh(charge.energyKwh)} kWh'
+                    '${charge.minMinutes == null ? '' : ' · ${evTripAtLeastText(context, charge.minMinutes!)}'}',
+                    key: const ValueKey('ev_trip_stop_charge'),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (stop.isUnverifiedImport || s.occupancyFresh) ...[
             const SizedBox(height: 6),
             Wrap(

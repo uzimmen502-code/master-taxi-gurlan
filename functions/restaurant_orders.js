@@ -371,9 +371,14 @@ function attachRestaurantOrders(exportsObj, deps) {
   }
 
   // ── Yetkazish narxi (D-REST-4) ─────────────────────────────────────────
-  async function quoteDelivery(r, { toLat, toLng }) {
+  async function readTariffDoc() {
     const tariffSnap = await db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]).get();
-    const tariffData = tariffSnap.exists ? (tariffSnap.data() || {}) : {};
+    return tariffSnap.exists ? (tariffSnap.data() || {}) : {};
+  }
+
+  /** `preloaded` — chaqiruvchi hujjatni allaqachon o'qigan bo'lsa (ortiqcha o'qish yo'q). */
+  async function quoteDelivery(r, { toLat, toLng }, preloaded) {
+    const tariffData = preloaded || await readTariffDoc();
     const fromLat = Number(r.lat);
     const fromLng = Number(r.lng);
     if (!validLatLng(fromLat, fromLng)) throw fail('failed-precondition', 'RESTAURANT_LOCATION_MISSING');
@@ -708,6 +713,8 @@ function attachRestaurantOrders(exportsObj, deps) {
           : (cur.roadFactor != null ? cur.roadFactor : tariff.DEFAULT_ROAD_FACTOR),
         maxKm: global.maxKm != null ? global.maxKm : intOr(cur.maxKm, tariff.DEFAULT_MAX_KM, 1, 100),
         regions,
+        // D9: AVA ulushi (`adminSetRestaurantFeeSettings`) narx tarifini saqlashda YO'QOLMAYDI.
+        ...(cur.avaFeeBps != null ? { avaFeeBps: cur.avaFeeBps } : {}),
         version: next,
         reason,
         updatedAt: ts(),
@@ -725,6 +732,7 @@ function attachRestaurantOrders(exportsObj, deps) {
           nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
           roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
           maxKm: cur.maxKm == null ? null : cur.maxKm,
+          avaFeeBps: cur.avaFeeBps == null ? null : cur.avaFeeBps,
           regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
         },
         changedBy: actor,
@@ -738,6 +746,86 @@ function attachRestaurantOrders(exportsObj, deps) {
     });
     log('admin_tariff', { userId: actor, version, result: 'ok' });
     return { ok: true, version };
+  });
+
+  /**
+   * Admin — AVA ulushi (bps) va tungi koeffitsient (D9, ega qarori 2026-10-16).
+   * `adminSetRestaurantDeliveryPrices` bilan BITTA hujjat (`settings/restaurant_delivery`)
+   * va BITTA versiya zanjiri (`restaurant_delivery_tariffs/v{n}`): har haqiqiy
+   * o'zgarish yangi `version` + o'zgarmas tarix + audit. Narxlar (base, perKm,
+   * regions, ...) TEGILMAYDI. Mavjud buyurtmalar o'z `avaFee`/`deliveryTariffSnapshot`
+   * muhri bilan qoladi (9-qoida). Sozlama yo'q → standart 200 bps / ×1.5.
+   * data: { avaFeeBps?: butun 0..10000 | null (null = standartga qaytish),
+   *         nightCoef?: 1..3, reason }
+   * Bir xil qiymat qayta yuborilsa — versiya OCHILMAYDI (`unchanged: true`).
+   */
+  exportsObj.adminSetRestaurantFeeSettings = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const d = data || {};
+    const wantFee = Object.prototype.hasOwnProperty.call(d, 'avaFeeBps') && d.avaFeeBps !== undefined;
+    let feeBps = null; // null = standartga qaytarish
+    if (wantFee && d.avaFeeBps !== null) {
+      const v = d.avaFeeBps;
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < tariff.AVA_FEE_BPS_MIN || v > tariff.AVA_FEE_BPS_MAX) {
+        throw fail('invalid-argument', 'AVA_FEE_BPS_INVALID', { min: tariff.AVA_FEE_BPS_MIN, max: tariff.AVA_FEE_BPS_MAX });
+      }
+      feeBps = v;
+    }
+    let nightCoef = null;
+    if (d.nightCoef != null && d.nightCoef !== '') {
+      const c = Number(d.nightCoef);
+      if (!Number.isFinite(c) || c < tariff.NIGHT_COEF_MIN || c > tariff.NIGHT_COEF_MAX) {
+        throw fail('invalid-argument', 'NIGHT_COEF_INVALID', { min: tariff.NIGHT_COEF_MIN, max: tariff.NIGHT_COEF_MAX });
+      }
+      nightCoef = Math.round(c * 1000) / 1000;
+    }
+    if (!wantFee && nightCoef == null) throw fail('invalid-argument', 'NOTHING_TO_CHANGE');
+    const reason = str(d.reason, 300);
+    const ref = db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const cur = snap.exists ? (snap.data() || {}) : {};
+      const prevVersion = Number.isInteger(cur.version) ? cur.version : 0;
+      const curFee = cur.avaFeeBps == null ? null : cur.avaFeeBps;
+      const curNight = cur.nightCoef == null ? null : cur.nightCoef;
+      const nextFee = wantFee ? feeBps : curFee;
+      const nextNight = nightCoef != null ? nightCoef : curNight;
+      if (nextFee === curFee && nextNight === curNight) {
+        return { version: prevVersion, unchanged: true, avaFeeBps: curFee, nightCoef: curNight };
+      }
+      const next = prevVersion + 1;
+      const tariffDoc = { ...cur, version: next, reason, updatedAt: ts(), updatedBy: actor };
+      if (nextFee == null) delete tariffDoc.avaFeeBps; else tariffDoc.avaFeeBps = nextFee;
+      if (nextNight != null) tariffDoc.nightCoef = nextNight;
+      t.set(ref, tariffDoc);
+      t.create(db.collection(TARIFF_HISTORY).doc(`v${next}`), {
+        ...tariffDoc,
+        previous: {
+          version: prevVersion,
+          base: cur.base == null ? null : cur.base,
+          perKm: cur.perKm == null ? null : cur.perKm,
+          nightCoef: curNight,
+          nightStart: cur.nightStart == null ? null : cur.nightStart,
+          nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
+          roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
+          maxKm: cur.maxKm == null ? null : cur.maxKm,
+          avaFeeBps: curFee,
+          regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
+        },
+        changeKind: 'fee_settings',
+        changedBy: actor,
+        changedAt: ts(),
+      });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'restaurant_fee_settings', actor, target: TARIFF_DOC.join('/'),
+        from: String(prevVersion), to: String(next), reason,
+        detail: { avaFeeBps: nextFee, prevAvaFeeBps: curFee, nightCoef: nextNight, prevNightCoef: curNight },
+        at: ts(),
+      });
+      return { version: next, unchanged: false, avaFeeBps: nextFee, nightCoef: nextNight };
+    });
+    log('admin_fee_settings', { userId: actor, version: out.version, unchanged: out.unchanged, result: 'ok' });
+    return { ok: true, ...out };
   });
 
   /** Admin — `settings/app.restaurantAutoApprove` (D-REST-7: tasdiq admin yoki avto). */
@@ -958,12 +1046,15 @@ function attachRestaurantOrders(exportsObj, deps) {
       const minOrder = intOr(r.minOrderAmount, 0, 0, 1000000000);
       if (itemsTotal < minOrder) throw fail('failed-precondition', 'MIN_ORDER_NOT_MET', { minOrderAmount: minOrder, itemsTotal });
 
+      // Tarif hujjati BIR marta: yetkazish narxi VA AVA ulushi (D9) shundan.
+      const tariffData = await readTariffDoc();
+
       // Yetkazish narxi.
       let deliveryFee = 0;
       let deliveryFeeSource = 'none';
       let deliveryQuote = {};
       if (deliveryMode === 'ava_courier') {
-        const q = await quoteDelivery(r, { toLat, toLng });
+        const q = await quoteDelivery(r, { toLat, toLng }, tariffData);
         deliveryFee = q.deliveryFee;
         deliveryFeeSource = q.deliveryFeeSource;
         deliveryQuote = {
@@ -991,7 +1082,12 @@ function attachRestaurantOrders(exportsObj, deps) {
         }
       }
 
-      const avaFee = { ...tariff.computeAvaFee(itemsTotal), charged: false };
+      // D9: ulush foizi admin sozlamasidan (yo'q bo'lsa 2 %); buyurtmaga muhrlanadi —
+      // keyin sozlama o'zgarsa ham shu buyurtmaning ulushi o'zgarmaydi.
+      const avaFee = {
+        ...tariff.computeAvaFee(itemsTotal, tariff.resolveAvaFeeSettings(tariffData)),
+        charged: false,
+      };
       const code = pickupCode();
       const deadline = new Date(at.getTime() + ACCEPT_TIMEOUT_MIN * 60 * 1000);
       const orderRef = db.collection(ORDERS).doc();

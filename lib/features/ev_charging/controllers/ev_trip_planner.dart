@@ -198,12 +198,26 @@ class EvTripPlanner {
   /// [startSocPercent] — ҳозирги заряд (%). Заряд кутилгандан тез тушса,
   /// шу метод янги [startSocPercent] ва [fromAlongKm] билан ҚАЙТА
   /// чақирилади — заҳира ўз-ўзидан асосийга айланади.
+  ///
+  /// [forcedStopIds] — ҳайдовчи ҚАТЪИЙ танлаган станциялар (ҳозирча
+  /// «Алмаштириш»). Улар йўл бўйича тартибда ИСТАЛГАН ҲОЛДА тўхташ бўлади:
+  /// навбатдаги мажбурий станция машина етадиган масофада бўлса — ўша
+  /// ерда тўхталади, акс ҳолда [EvTripPlanStatus.gapTooLarge] қайтади
+  /// (бошқа станция «ўйлаб топилмайди»). Мажбурий станциялар тугагач —
+  /// одатдаги танлов. Йўлда қолган (`fromAlongKm` орқасидаги) ёки яроқсиз
+  /// (ишламайди/разъём мос эмас) станция ID'лари ҳисобга олинмайди.
+  ///
+  /// [excludedStationIds] — ҳайдовчи рад этган станциялар: улар АСОСИЙ
+  /// қилиб танланмайди (заҳира сифатида кўрсатилиши мумкин, мажбурий
+  /// рўйхатдагилар бундан мустасно).
   static EvTripPlan plan({
     required List<EvCorridorStation> corridorStations,
     required double totalKm,
     required EvCarSpec car,
     required int startSocPercent,
     double fromAlongKm = 0,
+    List<String> forcedStopIds = const [],
+    Set<String> excludedStationIds = const {},
   }) {
     if (totalKm <= 0) {
       return EvTripPlan.empty;
@@ -214,6 +228,8 @@ class EvTripPlanner {
         stops: const [],
         totalKm: totalKm,
         arrivalSocPercent: 0,
+        startSocPercent: startSocPercent,
+        fromAlongKm: fromAlongKm,
       );
     }
 
@@ -231,17 +247,60 @@ class EvTripPlanner {
         .where((c) => _connectorOk(c.station, car))
         .toList();
 
+    // Ҳайдовчи мажбурий қилган станциялар (йўл бўйича тартибда).
+    final forced = <EvCorridorStation>[];
+    if (forcedStopIds.isNotEmpty) {
+      final byId = {for (final c in usable) c.station.id: c};
+      final seen = <String>{};
+      for (final id in forcedStopIds) {
+        final c = byId[id];
+        if (c != null && seen.add(id)) forced.add(c);
+      }
+      forced.sort((a, b) => a.alongKm.compareTo(b.alongKm));
+    }
+
     final stops = <EvTripStop>[];
     var position = fromAlongKm;
     var soc = startSocPercent.toDouble();
 
-    while (stops.length < maxStops) {
-      final reachKm = car.usableRangeKmAt(soc);
+    EvTripPlan gap(double limit) {
+      // Узилиш — ўйлаб топмаймиз, очиқ айтамиз.
+      final next = forced.isNotEmpty
+          ? forced.first
+          : usable.firstWhere(
+              (c) => c.alongKm > limit,
+              orElse: () => const EvCorridorStation(
+                station: _noStation,
+                alongKm: -1,
+                offRouteKm: 0,
+              ),
+            );
+      return EvTripPlan(
+        status: EvTripPlanStatus.gapTooLarge,
+        stops: stops,
+        totalKm: totalKm,
+        arrivalSocPercent: 0,
+        warnings: _finalWarnings(warnings, stops),
+        gapFromKm: position,
+        gapReachKm: limit,
+        gapNextStationKm: next.alongKm < 0 ? null : next.alongKm,
+        startSocPercent: startSocPercent,
+        fromAlongKm: fromAlongKm,
+      );
+    }
 
-      // Манзилга етадими?
-      if (position + reachKm >= totalKm) {
+    while (stops.length < maxStops) {
+      // Мажбурий станциялардан орқада қолганлари (аллақачон ўтилган).
+      while (forced.isNotEmpty && forced.first.alongKm <= position) {
+        forced.removeAt(0);
+      }
+      final reachKm = car.usableRangeKmAt(soc);
+      final limit = position + reachKm;
+
+      // Манзилга етадими? (мажбурий тўхташ қолмаган бўлса)
+      if (forced.isEmpty && position + reachKm >= totalKm) {
         final remainingKm = totalKm - position;
-        final arrival = soc - _socForKm(remainingKm, car);
+        final arrival = soc - socForKm(remainingKm, car);
         return EvTripPlan(
           status: stops.isEmpty
               ? EvTripPlanStatus.noChargingNeeded
@@ -250,38 +309,29 @@ class EvTripPlanner {
           totalKm: totalKm,
           arrivalSocPercent: arrival.round().clamp(0, 100),
           warnings: _finalWarnings(warnings, stops),
+          startSocPercent: startSocPercent,
+          fromAlongKm: fromAlongKm,
         );
       }
 
-      final limit = position + reachKm;
       final candidates =
           usable.where((c) => c.alongKm > position && c.alongKm <= limit).toList();
 
-      if (candidates.isEmpty) {
-        // Узилиш — ўйлаб топмаймиз, очиқ айтамиз.
-        final next = usable.firstWhere(
-          (c) => c.alongKm > limit,
-          orElse: () => const EvCorridorStation(
-            station: _noStation,
-            alongKm: -1,
-            offRouteKm: 0,
-          ),
-        );
-        return EvTripPlan(
-          status: EvTripPlanStatus.gapTooLarge,
-          stops: stops,
-          totalKm: totalKm,
-          arrivalSocPercent: 0,
-          warnings: _finalWarnings(warnings, stops),
-          gapFromKm: position,
-          gapReachKm: limit,
-          gapNextStationKm: next.alongKm < 0 ? null : next.alongKm,
-        );
+      final EvCorridorStation primary;
+      if (forced.isNotEmpty) {
+        // Ҳайдовчи танлаган станция: етса — шу ерда тўхтаймиз, етмаса —
+        // очиқ узилиш (бошқасини ўзбошимчалик билан қўймаймиз).
+        if (forced.first.alongKm > limit) return gap(limit);
+        primary = forced.removeAt(0);
+      } else {
+        final pool = candidates
+            .where((c) => !excludedStationIds.contains(c.station.id))
+            .toList();
+        if (pool.isEmpty) return gap(limit);
+        primary = _pickPrimary(pool, position, reachKm);
       }
-
-      final primary = _pickPrimary(candidates, position, reachKm);
       final legKm = primary.alongKm - position;
-      final arriveSoc = soc - _socForKm(legKm, car);
+      final arriveSoc = soc - socForKm(legKm, car);
       final departSoc = math.max(car.chargeToPercent.toDouble(), arriveSoc);
 
       stops.add(EvTripStop(
@@ -307,6 +357,77 @@ class EvTripPlanner {
       warnings: _finalWarnings(warnings, stops),
       gapFromKm: position,
       gapReachKm: position + car.usableRangeKmAt(soc),
+      startSocPercent: startSocPercent,
+      fromAlongKm: fromAlongKm,
+    );
+  }
+
+  /// Режадаги [stopIndex]-тўхташни [replacement] станцияга алмаштириб,
+  /// режани ҚАЙТА ҳисоблайди (тоза функция; ҳайдовчи қарори — иловa фақат
+  /// ҳисоблайди).
+  ///
+  /// * [stopIndex]дан ОЛДИНГИ тўхташлар ўзгармайди (мажбурий қилиб
+  ///   қайта ҳисобланади — шунда улар ҳам, заряд ҳам аввалгидек қолади);
+  /// * алмаштирилган станция ўрнига [replacement] қўйилади; ундан кейинги
+  ///   қисм шу нуқтадан қайта режалаштирилади;
+  /// * эски станция қолган қисмда АСОСИЙ қилиб танланмайди (ҳайдовчи уни
+  ///   рад этди), [pinnedStationIds]даги (илгари ҳайдовчи танлаган) станциялар
+  ///   эса сақланади;
+  /// * [replacement]га етиб бўлмаса — натижа `gapTooLarge` (узилиш), бошқа
+  ///   станция ўйлаб топилмайди.
+  ///
+  /// Режа бошланғич шартлари ([EvTripPlan.startSocPercent]) номаълум ёки
+  /// индекс нотўғри бўлса — `null`.
+  static EvTripPlan? replaceStop({
+    required EvTripPlan current,
+    required int stopIndex,
+    required String replacementId,
+    required List<EvCorridorStation> corridorStations,
+    required EvCarSpec car,
+    Set<String> excludedStationIds = const {},
+    Set<String> pinnedStationIds = const {},
+  }) {
+    final startSoc = current.startSocPercent;
+    if (startSoc == null) return null;
+    if (stopIndex < 0 || stopIndex >= current.stops.length) return null;
+    final oldId = current.stops[stopIndex].station.id;
+    if (oldId == replacementId) return current;
+
+    // Almashtirilgan stansiya koridorda bo'lishi shart.
+    double? replacementAlong;
+    for (final c in corridorStations) {
+      if (c.station.id == replacementId) replacementAlong = c.alongKm;
+    }
+    if (replacementAlong == null) return null;
+    // Oldingi to'xtashdan orqada turgan stansiya "o'rniga" bo'la olmaydi
+    // (tartib buziladi).
+    if (stopIndex > 0 &&
+        replacementAlong <= current.stops[stopIndex - 1].alongKm) {
+      return null;
+    }
+
+    // Oldin haydovchi tanlagan, ALMASHTIRILGAN stansiyadan keyingi stansiyalar
+    // saqlanadi (oldingilari prefiksda yoki o'tib ketgan).
+    final pinnedAhead = [
+      for (final c in corridorStations)
+        if (pinnedStationIds.contains(c.station.id) &&
+            c.alongKm > replacementAlong)
+          c.station.id,
+    ];
+
+    return plan(
+      corridorStations: corridorStations,
+      totalKm: current.totalKm,
+      car: car,
+      startSocPercent: startSoc,
+      fromAlongKm: current.fromAlongKm,
+      forcedStopIds: [
+        for (var i = 0; i < stopIndex; i++) current.stops[i].station.id,
+        replacementId,
+        ...pinnedAhead,
+      ],
+      excludedStationIds: {...excludedStationIds, oldId}
+        ..removeAll(pinnedAhead),
     );
   }
 
@@ -398,6 +519,12 @@ class EvTripPlanner {
     return score;
   }
 
+  /// Станция режага ярайдими: ишламайдиганлар ва машина разъёмига мос
+  /// келмайдиганлар олинмайди ([plan]даги қоида билан БИР ХИЛ; «Алмаштириш»
+  /// рўйхати ҳам шундан фойдаланади).
+  static bool isStationUsable(EvChargingStation s, EvCarSpec car) =>
+      s.status != 'not_working' && _connectorOk(s, car);
+
   static bool _connectorOk(EvChargingStation s, EvCarSpec car) {
     if (car.connectors.isEmpty) return true;
     // Станцияда разъём ёзилмаган — рад этмаймиз (маълумот тўлиқ эмас),
@@ -427,7 +554,7 @@ class EvTripPlanner {
   }
 
   /// Берилган масофа учун сарфланадиган заряд (%).
-  static double _socForKm(double km, EvCarSpec car) {
+  static double socForKm(double km, EvCarSpec car) {
     if (km <= 0) return 0;
     final kwh = km / 100 * car.consumptionKwhPer100Km;
     return kwh / car.usableBatteryKwh * 100;

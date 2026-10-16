@@ -219,7 +219,19 @@ class EvTripPlan {
     this.gapFromKm,
     this.gapReachKm,
     this.gapNextStationKm,
+    this.startSocPercent,
+    this.fromAlongKm = 0,
   });
+
+  /// Режа ҚАНДАЙ бошланғич шартлар билан ҳисобланган: заряд (%) ва йўлнинг
+  /// қайси жойидан (км). Станцияни алмаштириш ва «Зарядни янгилаш» режани
+  /// ШУ шартлардан қайта ҳисоблайди. Номаълум (`null`) — режа ташқарида
+  /// қўлда қурилган, алмаштириш мумкин эмас.
+  final int? startSocPercent;
+  final double fromAlongKm;
+
+  /// Станцияни алмаштириш/қайта ҳисоблаш учун бошланғич шартлар маълум.
+  bool get canReplan => startSocPercent != null;
 
   final EvTripPlanStatus status;
   final List<EvTripStop> stops;

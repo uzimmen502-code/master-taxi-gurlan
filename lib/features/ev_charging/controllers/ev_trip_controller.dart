@@ -21,6 +21,34 @@ extension OilVehicleEvSpec on OilVehicle {
       : null;
 }
 
+/// [EvTripController.replaceStop] natijasi.
+enum EvReplaceResult {
+  /// Almashtirildi, reja tayyor.
+  replaced,
+
+  /// Almashtirildi, lekin yangi stansiyaga yetib bo'lmaydi (uzilish) -
+  /// reja `gapTooLarge`; "Қайтариш" bilan qaytarish mumkin.
+  infeasible,
+
+  /// Almashtirib bo'lmadi (reja yo'q, noto'g'ri indeks, stansiya koridorda
+  /// emas yoki oldingi to'xtashdan orqada) - hech narsa o'zgarmadi.
+  unavailable,
+}
+
+class _EvTripSnapshot {
+  const _EvTripSnapshot({
+    required this.plan,
+    required this.corridor,
+    required this.pinned,
+    required this.excluded,
+  });
+
+  final EvTripPlan plan;
+  final List<EvCorridorStation> corridor;
+  final Set<String> pinned;
+  final Set<String> excluded;
+}
+
 /// ⚡ EV сафар ёрдамчиси — «Қаерга борамиз?» оқимининг ҳолати.
 ///
 /// Вазифаси фақат ЁПИШТИРИШ: маршрут геометрияси (мавжуд
@@ -38,8 +66,40 @@ class EvTripController extends ChangeNotifier {
   })  : _directions = directions ?? GoogleDirectionsService(),
         _decoder = decoder;
 
+  /// Tayyor reja bilan (tarmoq so'rovisiz): xarita ekrani o'z ichida
+  /// stansiyani almashtirish va zaryadni yangilash uchun shu kontrollerdan
+  /// foydalanadi. Marshrut/koridor qayta so'ralmaydi.
+  EvTripController.seeded({
+    required EvTripPlan plan,
+    required List<EvRoutePoint> route,
+    required List<EvCorridorStation> corridor,
+    int routeMinutes = 0,
+    double? destinationLat,
+    double? destinationLng,
+  })  : _directions = GoogleDirectionsService(),
+        _decoder = const PolylineDecoder() {
+    _plan = plan;
+    _routePoints = route;
+    _corridor = corridor;
+    _routeKm = plan.totalKm;
+    _routeMinutes = routeMinutes;
+    _destinationLat = destinationLat;
+    _destinationLng = destinationLng;
+  }
+
   final GoogleDirectionsService _directions;
   final PolylineDecoder _decoder;
+
+  /// Haydovchi o'zi tanlagan (almashtirgan) stansiyalar: keyingi qayta
+  /// hisoblarda ham majburiy to'xtash bo'lib qoladi.
+  final Set<String> _pinned = <String>{};
+
+  /// Haydovchi rad etgan (almashtirilgan) stansiyalar: qayta hisobda asosiy
+  /// qilib tanlanmaydi (koridordan o'chirilmaydi - xaritada ko'rinishda qoladi).
+  final Set<String> _excluded = <String>{};
+
+  /// Oxirgi o'zgarishdan oldingi holat ("Қайтариш"). Bir bosqichli.
+  _EvTripSnapshot? _undo;
 
   bool _loading = false;
   String? _error;
@@ -92,6 +152,9 @@ class EvTripController extends ChangeNotifier {
     _loading = true;
     _error = null;
     _plan = null;
+    _pinned.clear();
+    _excluded.clear();
+    _undo = null;
     _destinationLat = null;
     _destinationLng = null;
     notifyListeners();
@@ -186,23 +249,31 @@ class EvTripController extends ChangeNotifier {
   ///
   /// Шу ерда заҳира ўз-ўзидан асосийга айланади: янги [socPercent] билан
   /// етиб бориш мумкин бўлган энг яхши нуқта қайта танланади.
+  ///
+  /// Haydovchi avval almashtirgan (tanlagan) stansiyalar, hali oldinda
+  /// bo'lsa, majburiy to'xtash bo'lib qoladi. Oldingi holat "Қайтариш"
+  /// uchun saqlanadi ([undo]).
   void replan({
     required EvCarSpec car,
     required int socPercent,
     required double passedKm,
   }) {
     if (_corridor.isEmpty && _routeKm <= 0) return;
+    _rememberForUndo();
+    final from = passedKm.clamp(0, _routeKm).toDouble();
     _plan = EvTripPlanner.plan(
       corridorStations: _corridor,
       totalKm: _routeKm,
       car: car,
       startSocPercent: socPercent,
-      fromAlongKm: passedKm.clamp(0, _routeKm),
+      fromAlongKm: from,
+      forcedStopIds: _pinned.toList(),
+      excludedStationIds: _excluded,
     );
     notifyListeners();
   }
 
-  /// Асосий станция рад этилди («бу ерга бормайман») — ўша нуқта
+  /// Asosiy stansiya rad etildi («бу ерга бормайман») — ўша нуқта
   /// коридордан чиқарилади ва режа қайта тузилади.
   void rejectStation({
     required String stationId,
@@ -210,14 +281,113 @@ class EvTripController extends ChangeNotifier {
     required int socPercent,
     double passedKm = 0,
   }) {
+    _rememberForUndo();
     _corridor = _corridor
         .where((c) => c.station.id != stationId)
         .toList(growable: false);
-    replan(car: car, socPercent: socPercent, passedKm: passedKm);
+    _inChange = true;
+    try {
+      replan(car: car, socPercent: socPercent, passedKm: passedKm);
+    } finally {
+      _inChange = false;
+    }
+  }
+
+  /// Rejadagi [stopIndex]-to'xtashni [newStationId] stansiyasiga almashtirish
+  /// (haydovchi qarori): oldingi to'xtashlar o'zgarmaydi, qolgan qism yangi
+  /// to'xtashdan qayta hisoblanadi. Eski stansiya keyingi hisoblarda asosiy
+  /// qilib tanlanmaydi.
+  ///
+  /// Yangi stansiyaga yetib bo'lmasa reja `gapTooLarge` bo'ladi (xuddi shu
+  /// uzilish ogohlantirishi ko'rsatiladi), boshqa stansiya o'ylab topilmaydi;
+  /// avvalgi reja [undo] bilan qaytariladi.
+  EvReplaceResult replaceStop({
+    required int stopIndex,
+    required String newStationId,
+    required EvCarSpec car,
+  }) {
+    final current = _plan;
+    if (current == null ||
+        stopIndex < 0 ||
+        stopIndex >= current.stops.length) {
+      return EvReplaceResult.unavailable;
+    }
+    final oldId = current.stops[stopIndex].station.id;
+    final next = EvTripPlanner.replaceStop(
+      current: current,
+      stopIndex: stopIndex,
+      replacementId: newStationId,
+      corridorStations: _corridor,
+      car: car,
+      excludedStationIds: _excluded,
+      pinnedStationIds: _pinned,
+    );
+    if (next == null) return EvReplaceResult.unavailable;
+
+    _rememberForUndo();
+    _pinned
+      ..remove(oldId)
+      ..add(newStationId);
+    _excluded.add(oldId);
+    _excluded.remove(newStationId);
+    _plan = next;
+    notifyListeners();
+    return next.status == EvTripPlanStatus.gapTooLarge
+        ? EvReplaceResult.infeasible
+        : EvReplaceResult.replaced;
+  }
+
+  /// Oxirgi o'zgarish ([replaceStop], [replan], [rejectStation]) qaytarilishi
+  /// mumkinmi.
+  bool get canUndo => _undo != null;
+
+  /// Oxirgi o'zgarishni qaytarish: reja, koridor va haydovchi tanlovlari
+  /// o'zgarishdan oldingi holatga qaytadi.
+  bool undo() {
+    final snap = _undo;
+    if (snap == null) return false;
+    _undo = null;
+    _plan = snap.plan;
+    _corridor = snap.corridor;
+    _pinned
+      ..clear()
+      ..addAll(snap.pinned);
+    _excluded
+      ..clear()
+      ..addAll(snap.excluded);
+    notifyListeners();
+    return true;
+  }
+
+  /// "Қайтариш" imkoniyatini yopish (masalan, haydovchi yangi reja bilan
+  /// qoldi).
+  void discardUndo() {
+    if (_undo == null) return;
+    _undo = null;
+    notifyListeners();
+  }
+
+  /// Faqat BIRINCHI o'zgarishda holat saqlanadi: [rejectStation] ichida
+  /// [replan] ikkinchi marta chaqirilsa, oldingi (ichki) holat ustiga
+  /// yozilmasin.
+  bool _inChange = false;
+  void _rememberForUndo() {
+    if (_inChange) return;
+    final plan = _plan;
+    if (plan == null) return;
+    _undo = _EvTripSnapshot(
+      plan: plan,
+      corridor: _corridor,
+      pinned: {..._pinned},
+      excluded: {..._excluded},
+    );
   }
 
   void clear() {
     _plan = null;
+    _pinned.clear();
+    _excluded.clear();
+    _undo = null;
     _corridor = const [];
     _routePoints = const [];
     _routeKm = 0;

@@ -168,6 +168,64 @@ class EvTripSelection extends ChangeNotifier {
     );
   }
 
+  /// Reja o'zgargandan (stansiya almashtirildi / zaryad yangilandi) keyin
+  /// haydovchi tanlovi YANGI rejaga ergashadi:
+  ///  * haydovchi qo'lda qo'shgan qo'shimcha to'xtashlar (eski rejaning
+  ///    asosiy to'xtashlari bo'lmaganlar) qoladi;
+  ///  * eski rejaning haydovchi olib tashlagan asosiy to'xtashi yangi rejada
+  ///    ham bo'lsa, olib tashlangan holda qoladi;
+  ///  * yangi rejaning qolgan asosiy to'xtashlari tanlanadi;
+  ///  * [replacedNewId] (haydovchi almashtirgan stansiya) har doim tanlanadi,
+  ///    [replacedOldId] esa tanlovdan chiqadi;
+  ///  * yangi reja tayyor emas (uzilish) bo'lsa - tanlov faqat almashtirilgan
+  ///    stansiya bilan yangilanadi, boshqa hech narsa o'zgarmaydi;
+  ///  * yangi rejaning boshlanish nuqtasidan ([EvTripPlan.fromAlongKm])
+  ///    orqada qolgan eski asosiy to'xtashlar o'z holicha qoladi
+  ///    (raqamlash o'zgarmasin).
+  factory EvTripSelection.followPlan({
+    required EvTripSelection previous,
+    required EvTripPlan previousPlan,
+    required EvTripPlan nextPlan,
+    required List<EvCorridorStation> corridor,
+    String? replacedOldId,
+    String? replacedNewId,
+    int? maxWaypoints,
+  }) {
+    final candidates = evTripCandidates(nextPlan, corridor);
+    final oldIds = {for (final c in previous.selected) c.id};
+    final oldPrimary = {for (final s in previousPlan.stops) s.station.id};
+    final ids = <String>{...oldIds};
+
+    if (replacedOldId != null) ids.remove(replacedOldId);
+
+    if (nextPlan.isOk) {
+      // Qo'lda qo'shilgan qo'shimcha to'xtashlar va o'tib ketgan eski
+      // asosiylar saqlanadi; qolgan eski asosiylar yangilanadi.
+      final passedPrimary = {
+        for (final s in previousPlan.stops)
+          if (s.alongKm <= nextPlan.fromAlongKm + 0.5) s.station.id,
+      };
+      ids.removeWhere(
+          (id) => oldPrimary.contains(id) && !passedPrimary.contains(id));
+      final seenCoords = <String>{};
+      for (final s in nextPlan.stops) {
+        final id = s.station.id;
+        final wasDeselected = oldPrimary.contains(id) &&
+            !oldIds.contains(id) &&
+            id != replacedNewId;
+        if (wasDeselected) continue;
+        if (seenCoords.add(evStationCoordKey(s.station))) ids.add(id);
+      }
+    }
+    if (replacedNewId != null) ids.add(replacedNewId);
+
+    return EvTripSelection(
+      candidates: candidates,
+      initialIds: ids,
+      maxWaypoints: maxWaypoints ?? previous.maxWaypoints,
+    );
+  }
+
   /// Йўл бўйидаги барча станциялар, йўл бошидан масофа бўйича.
   final List<EvTripCandidate> candidates;
 

@@ -53,17 +53,18 @@ const _allKeys = [
   'home_create_shop_online',
   'home_create_driver',
   'home_create_courier',
+  'home_create_cargo',
   'home_create_home_cook',
   'restaurants_m_open_cafe',
-  'home_create_cargo',
   'book_menu_title',
   'home_module_chatgpt',
 ];
 
 void main() {
-  testWidgets('сарлавҳа «Менинг бизнесим» ва 11 банд ЭГА БЕРГАН ТАРТИБДА', (tester) async {
+  testWidgets('сарлавҳа «Менинг бизнесим» ва 11 банд гуруҳлар бўйича тартибда', (tester) async {
     await _open(tester);
     expect(find.text('home_create_title'), findsOneWidget);
+    expect(find.text('home_create_subtitle'), findsOneWidget);
     var prevTop = -1.0;
     for (final key in _allKeys) {
       expect(find.text(key), findsOneWidget, reason: key);
@@ -71,6 +72,46 @@ void main() {
       expect(top, greaterThan(prevTop), reason: '$key тартиб бузилди');
       prevTop = top;
     }
+  });
+
+  testWidgets('5 гуруҳ сарлавҳаси ўз тартибида; бўш гуруҳ кўрсатилмайди', (tester) async {
+    await _open(tester);
+    var prev = -1.0;
+    for (final k in const [
+      'home_create_group_quick',
+      'home_create_group_sell',
+      'home_create_group_work',
+      'home_create_group_food',
+      'home_create_group_help',
+    ]) {
+      expect(find.text(k), findsOneWidget, reason: k);
+      final top = tester.getTopLeft(find.text(k)).dy;
+      expect(top, greaterThan(prev), reason: k);
+      prev = top;
+    }
+  });
+
+  testWidgets('овқат модули яширин — «Овқат» гуруҳи ЎЗИ ҳам йўқ (бўш сарлавҳа қолмайди)', (tester) async {
+    await _open(tester, hidden: {AvaCreateAction.homeCook, AvaCreateAction.cafe});
+    expect(find.text('home_create_group_food'), findsNothing);
+    expect(find.text('home_create_group_work'), findsOneWidget);
+    expect(find.text('home_create_group_help'), findsOneWidget);
+  });
+
+  testWidgets('учта «тез» банд ҲАМ қатор кўринишида: ном, изоҳ ва ўқ (плитка эмас)', (tester) async {
+    await _open(tester);
+    for (final k in const ['home_create_video', 'home_create_ad', 'home_create_service']) {
+      final label = tester.getTopLeft(find.text(k));
+      final sub = tester.getTopLeft(find.text('${k}_sub'));
+      expect(sub.dy, greaterThan(label.dy), reason: '$k изоҳи номи тагида');
+      expect((sub.dx - label.dx).abs(), lessThan(1), reason: '$k изоҳи ном билан бир чизиқда');
+    }
+    // Учови ҳам бир устунда (горизонтал қатор): чап чегара бир хил.
+    final xs = [
+      for (final k in const ['home_create_video', 'home_create_ad', 'home_create_service'])
+        tester.getTopLeft(find.text(k)).dx,
+    ];
+    expect(xs.toSet().length, 1);
   });
 
   testWidgets('«Онлайн Дўкон очиш» изоҳи бор; «Дўкон очиш» (AVAGram) банди ЙЎҚ (эга, 2026-10-17)', (tester) async {
@@ -127,7 +168,7 @@ void main() {
     expect(find.text('home_create_driver_open'), findsOneWidget);
     expect(find.text('home_create_courier'), findsOneWidget);
     expect(find.text('home_create_courier_open'), findsNothing);
-    expect(find.byType(DecoratedBox).evaluate().where(_isGreenDot).length, 1);
+    expect(find.text('driver_chip_active'), findsOneWidget); // «Фаол» белгиси фақат фаол қаторда
   });
 
   testWidgets('курьер панели бор, ҳайдовчи эмас: фақат курьер қатори ўзгаради', (tester) async {
@@ -138,7 +179,7 @@ void main() {
     expect(find.text('home_create_courier_open'), findsOneWidget);
     expect(find.text('home_create_driver'), findsOneWidget);
     expect(find.text('home_create_driver_open'), findsNothing);
-    expect(find.byType(DecoratedBox).evaluate().where(_isGreenDot).length, 1);
+    expect(find.text('driver_chip_active'), findsOneWidget); // «Фаол» белгиси фақат фаол қаторда
   });
 
   testWidgets('ариза ҳолатидаги курьер ҳали «Курьер бўлиш» (панел йўқ)', (tester) async {
@@ -219,12 +260,4 @@ void main() {
       expect(result, e.value, reason: e.key);
     }
   });
-}
-
-/// Яшил нуқта: 8×8 доирали `DecoratedBox`.
-bool _isGreenDot(Element e) {
-  final w = e.widget;
-  if (w is! DecoratedBox) return false;
-  final d = w.decoration;
-  return d is BoxDecoration && d.shape == BoxShape.circle && d.color == Colors.green.shade600;
 }

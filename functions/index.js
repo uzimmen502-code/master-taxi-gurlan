@@ -18952,6 +18952,44 @@ async function loadCarpetWashOrderOrThrow(orderId) {
   return { ref: snap.ref, data: snap.data() || {}, id };
 }
 
+/**
+ * F5 (audit 2026-10-16): buyurtma hujjati va idempotentlik hujjati BITTA
+ * tranzaksiyada. Avval idem.get → order.set → idem.set alohida edi: parallel
+ * bir xil kalit bir nechta buyurtma yaratardi. `idemDocId` bo'sh bo'lsa —
+ * kalitsiz, oddiy yaratish (cheklov yo'q).
+ */
+async function createOrderIdempotent(orderRef, payload, idemDocId) {
+  if (!idemDocId) {
+    await orderRef.set(payload);
+    return { ok: true, orderId: orderRef.id };
+  }
+  const idemRef = db.collection('wallet_idempotency').doc(idemDocId);
+  return db.runTransaction(async (t) => {
+    const idemSnap = await t.get(idemRef);
+    if (idemSnap.exists) {
+      const prev = idemSnap.data() || {};
+      return { ok: true, orderId: String(prev.orderId || ''), idempotent: true };
+    }
+    t.set(orderRef, payload);
+    t.set(idemRef, {
+      orderId: orderRef.id,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true, orderId: orderRef.id };
+  });
+}
+
+/** Ixtiyoriy koordinata: berilsa chekli va diapazonda bo'lishi shart (aks holda invalid-argument). */
+function parseOptionalGeoPoint(data) {
+  const lat = data.pickupLat != null ? Number(data.pickupLat) : null;
+  const lng = data.pickupLng != null ? Number(data.pickupLng) : null;
+  if ((lat !== null && (!Number.isFinite(lat) || Math.abs(lat) > 90))
+    || (lng !== null && (!Number.isFinite(lng) || Math.abs(lng) > 180))) {
+    throw new functions.https.HttpsError('invalid-argument', 'pickupLat/pickupLng out of range');
+  }
+  return { pickupLat: lat, pickupLng: lng };
+}
+
 /** Mijoz: gilam yuvish buyurtmasi yaratish. */
 exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
   try {
@@ -19024,19 +19062,7 @@ exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
     if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
     Object.assign(payload, geoReportStamp(userData));
 
-    await orderRef.set(payload);
-    if (idempotencyKey) {
-      const idemRef = db.collection('wallet_idempotency').doc('carpet_' + idempotencyKey);
-      await db.runTransaction(async (t) => {
-        const idemSnap = await t.get(idemRef);
-        if (idemSnap.exists) return;
-        t.set(idemRef, {
-          orderId: orderRef.id,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      });
-    }
-    return { ok: true, orderId: orderRef.id };
+    return await createOrderIdempotent(orderRef, payload, idempotencyKey ? 'carpet_' + idempotencyKey : '');
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
     console.error('placeCarpetWashOrder:', e);
@@ -19199,38 +19225,44 @@ exports.courierMarkCarpetArrived = functions.https.onCall(async (data, context) 
       throw new functions.https.HttpsError('invalid-argument', 'leg must be pickup or return');
     }
 
-    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
-    const status = String(od.status || '');
-
-    if (leg === 'pickup') {
-      if (status !== 'pickup_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+    // F4 (audit 2026-10-16): o'qish → tekshiruv → yozuv BITTA tranzaksiyada —
+    // parallel ikki chaqiruv yoki oradagi bekor qilish natijani buzmaydi.
+    // Xabar faqat o'tish HAQIQATAN shu chaqiruvda bo'lganda ketadi.
+    const ref = db.collection('carpet_wash_orders').doc(orderId);
+    const arrivedField = leg === 'pickup' ? 'pickupArrivedAt' : 'returnArrivedAt';
+    const outcome = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
       }
-      if (String(od.pickupCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+      const cur = snap.data() || {};
+      const status = String(cur.status || '');
+      if (leg === 'pickup') {
+        if (status !== 'pickup_in_delivery') {
+          throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+        }
+        if (String(cur.pickupCourierId || '') !== courierId) {
+          throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+        }
+      } else {
+        if (status !== 'return_in_delivery') {
+          throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+        }
+        if (String(cur.returnCourierId || '') !== courierId) {
+          throw new functions.https.HttpsError('permission-denied', 'Not your return task');
+        }
       }
-      if (od.pickupArrivedAt) {
-        return { ok: true, idempotent: true, orderId, leg };
-      }
-      await ref.update({
-        pickupArrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      if (cur[arrivedField]) return { idempotent: true, od: cur };
+      t.update(ref, {
+        [arrivedField]: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-    } else {
-      if (status !== 'return_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
-      }
-      if (String(od.returnCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your return task');
-      }
-      if (od.returnArrivedAt) {
-        return { ok: true, idempotent: true, orderId, leg };
-      }
-      await ref.update({
-        returnArrivedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      return { idempotent: false, od: cur };
+    });
+    if (outcome.idempotent) {
+      return { ok: true, idempotent: true, orderId, leg };
     }
+    const od = outcome.od;
 
     try {
       await notifyCourierArrivedToCustomer(String(od.customerPhone || ''), {
@@ -19264,20 +19296,26 @@ exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context)
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
 
-    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
-    if (String(od.status || '') !== 'pickup_in_delivery') {
-      throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
-    }
-    if (String(od.pickupCourierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-    }
-    if (!od.pickupArrivedAt) {
-      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-    }
-
-    await ref.update({
-      status: 'picked_up',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const ref = db.collection('carpet_wash_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const od = snap.data() || {};
+      if (String(od.status || '') !== 'pickup_in_delivery') {
+        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      }
+      if (String(od.pickupCourierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+      }
+      if (!od.pickupArrivedAt) {
+        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+      }
+      t.update(ref, {
+        status: 'picked_up',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
     return { ok: true, orderId };
   } catch (e) {
@@ -19349,20 +19387,26 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
 
-    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
-    if (String(od.status || '') !== 'return_in_delivery') {
-      throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
-    }
-    if (String(od.returnCourierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your return task');
-    }
-    if (!od.returnArrivedAt) {
-      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-    }
-
-    await ref.update({
-      status: 'completed',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const ref = db.collection('carpet_wash_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const od = snap.data() || {};
+      if (String(od.status || '') !== 'return_in_delivery') {
+        throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+      }
+      if (String(od.returnCourierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your return task');
+      }
+      if (!od.returnArrivedAt) {
+        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+      }
+      t.update(ref, {
+        status: 'completed',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
     return { ok: true, orderId, status: 'completed' };
   } catch (e) {
@@ -19521,8 +19565,7 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
     const literCount = Number(data.literCount);
     const pickupAddress = String(data.pickupAddress || '').trim();
     const note = String(data.note || '').trim();
-    const pickupLat = data.pickupLat != null ? Number(data.pickupLat) : null;
-    const pickupLng = data.pickupLng != null ? Number(data.pickupLng) : null;
+    const { pickupLat, pickupLng } = parseOptionalGeoPoint(data);
 
     if (!AGRO_PICKUP_PRODUCT_TYPES.has(productType)) {
       throw new functions.https.HttpsError('invalid-argument', 'Invalid productType');
@@ -19575,19 +19618,7 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
     if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
     Object.assign(payload, geoReportStamp(userData));
 
-    await orderRef.set(payload);
-    if (idempotencyKey) {
-      const idemRef = db.collection('wallet_idempotency').doc('agro_' + idempotencyKey);
-      await db.runTransaction(async (t) => {
-        const idemSnap = await t.get(idemRef);
-        if (idemSnap.exists) return;
-        t.set(idemRef, {
-          orderId: orderRef.id,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      });
-    }
-    return { ok: true, orderId: orderRef.id };
+    return await createOrderIdempotent(orderRef, payload, idempotencyKey ? 'agro_' + idempotencyKey : '');
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
     console.error('placeAgroPickupOrder:', e);
@@ -19726,21 +19757,31 @@ exports.courierMarkAgroPickupArrived = functions.https.onCall(async (data, conte
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
 
-    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
-    if (String(od.status || '') !== 'pickup_in_delivery') {
-      throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
-    }
-    if (String(od.pickupCourierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-    }
-    if (od.arrivedAt) {
+    // F4 (audit 2026-10-16): tranzaksiya + xabar faqat haqiqiy o'tishda.
+    const ref = db.collection('agro_pickup_orders').doc(orderId);
+    const outcome = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const cur = snap.data() || {};
+      if (String(cur.status || '') !== 'pickup_in_delivery') {
+        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      }
+      if (String(cur.pickupCourierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+      }
+      if (cur.arrivedAt) return { idempotent: true, od: cur };
+      t.update(ref, {
+        arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { idempotent: false, od: cur };
+    });
+    if (outcome.idempotent) {
       return { ok: true, idempotent: true, orderId };
     }
-
-    await ref.update({
-      arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const od = outcome.od;
 
     try {
       await notifyCourierArrivedToCustomer(String(od.customerPhone || ''), {
@@ -19774,20 +19815,26 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
 
-    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
-    if (String(od.status || '') !== 'pickup_in_delivery') {
-      throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
-    }
-    if (String(od.pickupCourierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-    }
-    if (!od.arrivedAt) {
-      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-    }
-
-    await ref.update({
-      status: 'picked_up',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const ref = db.collection('agro_pickup_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const od = snap.data() || {};
+      if (String(od.status || '') !== 'pickup_in_delivery') {
+        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      }
+      if (String(od.pickupCourierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+      }
+      if (!od.arrivedAt) {
+        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+      }
+      t.update(ref, {
+        status: 'picked_up',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
     return { ok: true, orderId, status: 'picked_up' };
   } catch (e) {

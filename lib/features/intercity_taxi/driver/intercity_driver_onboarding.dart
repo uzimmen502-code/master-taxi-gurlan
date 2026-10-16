@@ -124,7 +124,6 @@ class IntercityDriverOnboarding {
     if (!context.mounted) return;
 
     if (submitResult.autoApproved) {
-      await prefs.setString('user_role', 'driver');
       await UserAudience.saveTaxiDriver(true);
       if (!context.mounted) return;
       _snack(context, context.tr('intercity_driver_mode_activated'),

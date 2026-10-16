@@ -9425,16 +9425,10 @@ async function applyDriverRequestApproval(requestId, req, approvedBy) {
     );
   }
 
-  if (userSnap.exists) {
-    const currentRole = String(userData.role || 'user');
-    if (currentRole === 'user' || currentRole === '') {
-      batch.set(
-        userRef,
-        { role: 'driver', updatedAt: now },
-        { merge: true },
-      );
-    }
-  }
+  // `users.role = 'driver'` ЭНДИ ёзилмайди (эга қарори 2026-10-17, «ҳайдовчи
+  // роли» 2-босқич): ҳайдовчилик — ҲУҚУҚ (`provider_capabilities`), аудитория
+  // ҳам ундан аниқланади (`driver_audience.js`). Эски белги қолдиғини тозалаш —
+  // `functions/tools/cleanup_legacy_driver_role.js`.
 
   if (phoneRaw.length >= 9 || userPhone.length >= 9) {
     const targetPhone = userPhone;

@@ -164,36 +164,9 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                                 ),
                         ),
                       ],
-                      if (c.rosterBookings.isNotEmpty) ...[
-                        const _Divider(),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                          child: Text(
-                            '${context.tr('co_passengers')} '
-                            '(${c.rosterBookings.length})',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: IntercityColors.textMuted,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        ...c.rosterBookings
-                            .map((b) => _PassengerTile(booking: b)),
-                      ] else if (!c.isLoading) ...[
-                        const _Divider(),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                          child: Text(
-                            context.tr('no_co_passengers'),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: IntercityColors.textMuted,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                      ],
+                      // Boshqa yo'lovchilar (ism/yosh/telefon) ko'rsatilmaydi:
+                      // ularning bronlarini o'qish yo'lovchiga ruxsat etilmagan
+                      // (PII — faqat haydovchi o'z yo'lovchilarini ko'radi).
                     ],
                     if (c.isLoading)
                       const Padding(
@@ -940,77 +913,6 @@ class _InfoTile extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PassengerTile extends StatelessWidget {
-  const _PassengerTile({required this.booking});
-
-  final IntercityBooking booking;
-
-  String? _subtitle(BuildContext context) {
-    final age = ageFromBirthDate(booking.userBirthDate);
-    final parts = <String>[];
-    if (age != null && age > 0) {
-      parts.add('$age ${context.tr('age_years')}');
-    }
-    if (booking.district.isNotEmpty) {
-      parts.add(booking.district);
-    }
-    if (booking.passengers > 1) {
-      parts.add('${booking.passengers} ${context.tr('passengers')}');
-    }
-    if (parts.isEmpty) return null;
-    return parts.join('  •  ');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final female = booking.userGender == 'female';
-    final subtitle = _subtitle(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: Row(
-        children: [
-          Text(female ? '👩' : '👨', style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  booking.userName,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 11, color: IntercityColors.textFaint),
-                  ),
-              ],
-            ),
-          ),
-          if (booking.userPhone.isNotEmpty)
-            IconButton(
-              onPressed: () => callPhone(booking.userPhone),
-              icon: Icon(
-                Icons.phone,
-                color: AppColors.primaryText,
-                size: 20,
-              ),
-              style: IconButton.styleFrom(
-                backgroundColor: IntercityColors.successSoft,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

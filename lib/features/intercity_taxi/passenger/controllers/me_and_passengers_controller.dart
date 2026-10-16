@@ -30,9 +30,8 @@ class MeAndPassengersController extends ChangeNotifier {
   String? _userPhone;
   String? _driverId;
   String? _myBookingId;
-  List<IntercityBooking> _driverBookings = [];
   IntercityBooking? _myBooking;
-  StreamSubscription<List<IntercityBooking>>? _sub;
+  StreamSubscription<IntercityBooking?>? _sub;
   Timer? _bookingResolveTimer;
   bool _isLoading = false;
   PanelMode _mode = PanelMode.hidden;
@@ -99,15 +98,6 @@ class MeAndPassengersController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<IntercityBooking> get rosterBookings => _driverBookings
-      .where(
-        (b) =>
-            b.id != _myBookingId &&
-            (b.status == IntercityBookingStatus.confirmed ||
-                b.status == IntercityBookingStatus.pending),
-      )
-      .toList();
-
   Future<void> loadIfActive() async {
     if (_userPhone == null || _userPhone!.isEmpty) {
       try {
@@ -140,7 +130,7 @@ class MeAndPassengersController extends ChangeNotifier {
     _mode = PanelMode.active;
     _isLoading = true;
     notifyListeners();
-    _startWatch(driverId);
+    _startWatch(bookingId);
     if (_myBooking == null) {
       _scheduleBookingResolveTimeout();
     }
@@ -201,7 +191,7 @@ class MeAndPassengersController extends ChangeNotifier {
     _isLoading = false;
     _sheetExtent = sheetMin;
     notifyListeners();
-    _startWatch(driverId);
+    _startWatch(booking.id);
     _animateSheet(sheetMin, jump: true);
   }
 
@@ -269,21 +259,23 @@ class MeAndPassengersController extends ChangeNotifier {
     });
   }
 
-  void _startWatch(String driverId) {
+  /// Faqat yo'lovchining O'Z broni kuzatiladi (bitta hujjat). Avval
+  /// where driverId == X ro'yxat so'rovi edi: rules faqat ishtirokchiga
+  /// ruxsat beradi, shuning uchun u rad etilib panel yo'qolardi; ruxsat
+  /// kengroq bo'lganda esa boshqa yo'lovchilarning ismi/yoshi/telefoni
+  /// oqib chiqardi.
+  void _startWatch(String bookingId) {
     _sub?.cancel();
     _bookingResolveTimer?.cancel();
-    _sub = _repo.watchByDriver(driverId).listen(
-      (list) {
-        _driverBookings = list;
-        final found = list.firstWhereOrNull((b) => b.id == _myBookingId);
+    _sub = _repo.watchMyBooking(bookingId).listen(
+      (found) {
+        if (_myBookingId != bookingId) return;
         if (found != null) {
           _myBooking = found;
           _isLoading = false;
           _bookingResolveTimer?.cancel();
-        } else if (_myBookingId != null) {
-          if (_myBooking == null) {
-            _scheduleBookingResolveTimeout();
-          }
+        } else if (_myBooking == null) {
+          _scheduleBookingResolveTimeout();
         } else {
           _isLoading = false;
         }
@@ -295,9 +287,12 @@ class MeAndPassengersController extends ChangeNotifier {
           detach();
         }
       },
-      onError: (e) {
+      onError: (Object e) {
+        // Vaqtinchalik xato bilan faol bron paneli yo'qolmasin: oxirgi
+        // ma'lum holat qoladi (ichki sabab faqat logda).
         debugPrint('_startWatch error: $e');
-        detach();
+        _isLoading = false;
+        notifyListeners();
       },
     );
   }
@@ -348,7 +343,6 @@ class MeAndPassengersController extends ChangeNotifier {
     _myBooking = null;
     _previewRide = null;
     _mode = PanelMode.hidden;
-    _driverBookings = [];
     _isLoading = false;
     notifyListeners();
   }
@@ -365,14 +359,5 @@ class MeAndPassengersController extends ChangeNotifier {
     draggableController.dispose();
     _sub?.cancel();
     super.dispose();
-  }
-}
-
-extension _ListExt<T> on List<T> {
-  T? firstWhereOrNull(bool Function(T) test) {
-    for (final e in this) {
-      if (test(e)) return e;
-    }
-    return null;
   }
 }

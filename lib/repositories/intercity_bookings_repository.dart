@@ -117,6 +117,18 @@ class IntercityBookingsRepository {
     });
   }
 
+  /// Yo'lovchining O'Z broni (bitta hujjat), real vaqt. Boshqa yo'lovchilar
+  /// bronlariga tegmaydi: `intercity_bookings` ni faqat ishtirokchi (yo'lovchi
+  /// yoki haydovchi) o'qiy oladi, `where driverId == X` ro'yxat so'rovi esa
+  /// yo'lovchi uchun rad etiladi. Hujjat yo'q bo'lsa `null`.
+  Stream<IntercityBooking?> watchMyBooking(String bookingId) {
+    if (bookingId.isEmpty) return Stream.value(null);
+    return _bookings
+        .doc(bookingId)
+        .snapshots()
+        .map((s) => s.exists ? IntercityBooking.fromDoc(s) : null);
+  }
+
   Future<IntercityBooking?> findActiveBookingForUser(
     String userPhone,
   ) async {

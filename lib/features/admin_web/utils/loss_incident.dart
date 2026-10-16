@@ -3,18 +3,23 @@
 // сўм киритишни текшириш. ҲИСОБ-КИТОБ СЕРВЕРДА (`refundedNow`, `outstanding`
 // тайёр келади); бу ерда фақат кўрсатиш (44-банд).
 
+import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
+
 class LossIncident {
   const LossIncident({
     required this.id,
     required this.shipmentId,
     required this.status,
-    required this.goodsValue,
-    required this.refundedNow,
-    required this.outstanding,
+    this.goodsValue,
+    this.refundedNow,
+    this.outstanding,
+    this.paidTotal,
     this.declaredAtMs,
-    this.courier = '',
+    this.courierPhoneMasked = '',
+    this.courierAccountId = '',
     this.reason = '',
     this.trackingNumber = '',
+    this.legId = '',
   });
 
   final String id;
@@ -23,50 +28,63 @@ class LossIncident {
   /// `declared` | `settled` | `repaid` (номаълум қиймат — шундай кўрсатилади).
   final String status;
 
-  /// Бутун сўм.
-  final int goodsValue;
-  final int refundedNow;
-  final int outstanding;
+  /// Бутун сўм. `null` — сервер ҳали ҳисобламаган / бермаган (экран «-» кўрсатади,
+  /// 0 деб ўйлаб топилмайди).
+  final int? goodsValue;
+  final int? refundedNow;
+  final int? outstanding;
+
+  /// Курьер аллақачон тўлаган жами (сервер `paidTotal`; бўлмаса `null`).
+  final int? paidTotal;
   final int? declaredAtMs;
 
-  /// Сервер маскалаган курьер белгиси.
-  final String courier;
+  /// Сервер маскалаган курьер телефони (`***1234`), `courierPhoneMasked`.
+  final String courierPhoneMasked;
+  final String courierAccountId;
   final String reason;
   final String trackingNumber;
+  final String legId;
 
   /// Қарз қолган бўлса — «Тўлов ёзиш» таклиф қилинади (қоида — серверда).
-  bool get canRecordPayment => outstanding > 0;
+  /// `outstanding == null` (ҳали ҳисобланмаган) — таклиф қилинмайди.
+  bool get canRecordPayment => (outstanding ?? 0) > 0;
 
   DateTime? get declaredAt =>
       declaredAtMs == null ? null : DateTime.fromMillisecondsSinceEpoch(declaredAtMs!);
 
-  static LossIncident fromMap(Map<String, dynamic> m) {
-    int num0(Object? v) => v is num ? v.toInt() : 0;
-    final shipmentId = (m['shipmentId'] ?? '').toString();
+  /// `courierPhoneMasked` (янги сервер); йўқ бўлса эски шакл `courier`
+  /// (матн ёки `{masked|phone|name|id}`) — орқага мослик.
+  static String _courierText(Map<String, dynamic> m) {
+    final masked = m['courierPhoneMasked'];
+    if (masked is String && masked.isNotEmpty) return masked;
     final courier = m['courier'];
-    var courierText = '';
-    if (courier is String) {
-      courierText = courier;
-    } else if (courier is Map) {
+    if (courier is String) return courier;
+    if (courier is Map) {
       for (final k in const ['masked', 'phone', 'name', 'id']) {
         final v = courier[k];
-        if (v is String && v.isNotEmpty) {
-          courierText = v;
-          break;
-        }
+        if (v is String && v.isNotEmpty) return v;
       }
     }
+    return '';
+  }
+
+  static LossIncident fromMap(Map<String, dynamic> m) {
+    int? numOrNull(Object? v) => v is num ? v.toInt() : null;
+    final shipmentId = (m['shipmentId'] ?? '').toString();
     return LossIncident(
       id: (m['id'] ?? shipmentId).toString(),
       shipmentId: shipmentId,
       status: (m['status'] ?? '').toString(),
-      goodsValue: num0(m['goodsValue']),
-      refundedNow: num0(m['refundedNow']),
-      outstanding: num0(m['outstanding']),
-      declaredAtMs: m['declaredAtMs'] is num ? (m['declaredAtMs'] as num).toInt() : null,
-      courier: courierText,
+      goodsValue: numOrNull(m['goodsValue']),
+      refundedNow: numOrNull(m['refundedNow']),
+      outstanding: numOrNull(m['outstanding']),
+      paidTotal: numOrNull(m['paidTotal']),
+      declaredAtMs: numOrNull(m['declaredAtMs']),
+      courierPhoneMasked: _courierText(m),
+      courierAccountId: (m['courierAccountId'] ?? '').toString(),
       reason: (m['reason'] ?? '').toString(),
       trackingNumber: (m['trackingNumber'] ?? '').toString(),
+      legId: (m['legId'] ?? '').toString(),
     );
   }
 
@@ -80,6 +98,8 @@ class LossIncident {
   }
 }
 
+/// Сўм кўрсатиш: `null` (ҳали ҳисобланмаган) → «-».
+String lossMoneyText(int? v) => v == null ? '-' : logisticsMoney(v);
 /// Ҳолат → админ матни.
 String lossStatusLabel(String status) => switch (status) {
       'declared' => 'Эълон қилинган',

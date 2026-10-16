@@ -10,6 +10,7 @@ import 'package:ava_gurlan/features/admin_web/services/admin_callable.dart';
 import 'package:ava_gurlan/features/admin_web/services/admin_logistics_service.dart';
 import 'package:ava_gurlan/features/admin_web/utils/loss_incident.dart';
 import 'package:ava_gurlan/features/admin_web/widgets/logistics_loss_dialogs.dart';
+import 'package:ava_gurlan/features/admin_web/widgets/logistics_loss_list.dart';
 
 class _Fake implements AdminCallable {
   _Fake(this.handler);
@@ -119,6 +120,34 @@ void main() {
     expect(main.calls[0].$2['amount'], isA<int>());
     expect(main.calls[0].$2['opId'], isA<String>());
     expect(main.calls[0].$2.containsKey('note'), isFalse, reason: 'bo\'sh izoh yuborilmaydi');
+  });
+
+  testWidgets('Ro\'yxat: courierPhoneMasked/paidTotal ko\'rinadi; null summalar "-" (0 emas), to\'lov tugmasi faqat qarzda',
+      (tester) async {
+    final main = _Fake((name, p) async => {
+          'ok': true,
+          'items': [
+            {
+              'id': 'S1', 'shipmentId': 'S1', 'trackingNumber': 'AVA-1', 'status': 'settled',
+              'goodsValue': 100000, 'refundedNow': 60000, 'outstanding': 40000, 'paidTotal': 5000,
+              'declaredAtMs': 1760000000000, 'courierPhoneMasked': '***4567', 'courierAccountId': 'acc',
+              'reason': 'yoqoldi', 'legId': 'L1',
+            },
+            {
+              'id': 'S2', 'shipmentId': 'S2', 'trackingNumber': 'AVA-2', 'status': 'declared',
+              'goodsValue': 70000, 'refundedNow': null, 'outstanding': null, 'paidTotal': null,
+              'declaredAtMs': 1760000000000, 'courierPhoneMasked': '', 'courierAccountId': '', 'reason': '', 'legId': '',
+            },
+          ],
+        });
+    final svc = AdminLogisticsService(demand: _Fake((n, p) async => {}), main: main);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: LogisticsLossList(service: svc))));
+    await tester.pumpAndSettle();
+    expect(main.calls.single.$1, 'adminListLossIncidents');
+    expect(find.textContaining('курьер: ***4567'), findsOneWidget);
+    expect(find.textContaining('курьер тўлаган: 5 000'), findsOneWidget);
+    expect(find.textContaining('қайтарилган: - · қолган қарз: -'), findsOneWidget);
+    expect(find.text('Тўлов ёзиш'), findsOneWidget, reason: 'faqat outstanding > 0 qatorda');
   });
 
   testWidgets('Stage: faqat berilgan maydonlar yuboriladi', (tester) async {

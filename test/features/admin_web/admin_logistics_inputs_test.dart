@@ -36,8 +36,48 @@ void main() {
       expect(list.single.goodsValue, 100000);
       expect(list.single.outstanding, 40000);
       expect(list.single.canRecordPayment, isTrue);
-      expect(list.single.courier, '99890***4567');
+      expect(list.single.courierPhoneMasked, '99890***4567', reason: 'eski "courier" kaliti ham o\'qiladi');
       expect(list.single.declaredAt, isNotNull);
+    });
+
+    test('server javobi (adminListLossIncidents) — hamma maydon', () {
+      final i = LossIncident.fromMap({
+        'id': 'S9', 'shipmentId': 'S9', 'trackingNumber': 'AVA-26-1007-000009', 'status': 'repaid',
+        'goodsValue': 100000, 'refundedNow': 60000, 'outstanding': 0, 'paidTotal': 40000,
+        'declaredAtMs': 1760000000000, 'courierPhoneMasked': '***4567', 'courierAccountId': 'acc_1',
+        'reason': 'yo\'qoldi', 'legId': 'L2',
+      });
+      expect(i.courierPhoneMasked, '***4567');
+      expect(i.courierAccountId, 'acc_1');
+      expect(i.paidTotal, 40000);
+      expect(i.legId, 'L2');
+      expect(i.trackingNumber, 'AVA-26-1007-000009');
+      expect(i.declaredAtMs, 1760000000000);
+      expect(i.outstanding, 0);
+      expect(i.canRecordPayment, isFalse);
+    });
+
+    test('refundedNow/outstanding/paidTotal null = hisoblanmagan: 0 emas, "-" ko\'rsatiladi', () {
+      final i = LossIncident.fromMap({
+        'id': 'S8', 'shipmentId': 'S8', 'status': 'declared', 'goodsValue': 50000,
+        'refundedNow': null, 'outstanding': null, 'paidTotal': null,
+        'courierPhoneMasked': '', 'courierAccountId': '', 'legId': '',
+      });
+      expect(i.refundedNow, isNull);
+      expect(i.outstanding, isNull);
+      expect(i.paidTotal, isNull);
+      expect(i.canRecordPayment, isFalse, reason: 'qarz hisoblanmaguncha to\'lov taklif qilinmaydi');
+      expect(lossMoneyText(i.refundedNow), '-');
+      expect(lossMoneyText(i.outstanding), '-');
+      expect(lossMoneyText(i.goodsValue), '50 000');
+      expect(lossMoneyText(0), '0');
+    });
+
+    test('courierPhoneMasked eski "courier" kalitidan ustun', () {
+      final i = LossIncident.fromMap({
+        'shipmentId': 'S7', 'courierPhoneMasked': '***1111', 'courier': '***2222',
+      });
+      expect(i.courierPhoneMasked, '***1111');
     });
 
     test('maydonlar yo\'q / noto\'g\'ri tur — yiqilmaydi', () {
@@ -49,10 +89,10 @@ void main() {
       ]);
       expect(list.length, 2);
       expect(list[0].id, 'S2');
-      expect(list[0].outstanding, 0);
+      expect(list[0].outstanding, isNull);
       expect(list[0].canRecordPayment, isFalse);
-      expect(list[1].goodsValue, 0);
-      expect(list[1].courier, '***1');
+      expect(list[1].goodsValue, isNull, reason: 'noto\'g\'ri tur — null, 0 emas');
+      expect(list[1].courierPhoneMasked, '***1');
       expect(LossIncident.parseList(null), isEmpty);
       expect(LossIncident.parseList({'a': 1}), isEmpty);
     });

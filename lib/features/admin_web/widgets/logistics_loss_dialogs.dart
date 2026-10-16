@@ -8,7 +8,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
 import '../services/admin_callable.dart';
 import '../services/admin_logistics_service.dart';
 import '../utils/loss_incident.dart';
@@ -214,9 +213,9 @@ class _RecordLostPaymentDialogState extends State<RecordLostPaymentDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Товар қиймати: ${logisticsMoney(inc.goodsValue)} сўм · '
-              'қайтарилган: ${logisticsMoney(inc.refundedNow)} · '
-              'қолган қарз: ${logisticsMoney(inc.outstanding)} сўм',
+              'Товар қиймати: ${lossMoneyText(inc.goodsValue)} сўм · '
+              'қайтарилган: ${lossMoneyText(inc.refundedNow)} · '
+              'қолган қарз: ${lossMoneyText(inc.outstanding)} сўм',
               style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
@@ -228,11 +227,11 @@ class _RecordLostPaymentDialogState extends State<RecordLostPaymentDialog> {
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(labelText: 'Тўланган сумма, сўм', border: OutlineInputBorder()),
             ),
-            if (amount != null && amount > inc.outstanding)
+            if (amount != null && inc.outstanding != null && amount > inc.outstanding!)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  'Эътибор: сумма қолган қарздан катта (${logisticsMoney(inc.outstanding)}). '
+                  'Эътибор: сумма қолган қарздан катта (${lossMoneyText(inc.outstanding)}). '
                   'Қабул қилиш-қилмасликни сервер ҳал қилади.',
                   style: TextStyle(fontSize: 11.5, color: Colors.orange.shade900),
                 ),

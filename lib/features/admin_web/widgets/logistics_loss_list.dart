@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 
-import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
 import '../services/admin_callable.dart';
 import '../services/admin_logistics_service.dart';
 import '../utils/loss_incident.dart';
@@ -132,10 +131,11 @@ class _LogisticsLossListState extends State<LogisticsLossList> {
           ],
         ),
         subtitle: Text(
-          'товар қиймати: ${logisticsMoney(inc.goodsValue)} сўм · '
-          'қайтарилган: ${logisticsMoney(inc.refundedNow)} · '
-          'қолган қарз: ${logisticsMoney(inc.outstanding)}\n'
-          '${inc.courier.isEmpty ? '' : 'курьер: ${inc.courier} · '}'
+          'товар қиймати: ${lossMoneyText(inc.goodsValue)} сўм · '
+          'қайтарилган: ${lossMoneyText(inc.refundedNow)} · '
+          'қолган қарз: ${lossMoneyText(inc.outstanding)}'
+          '${inc.paidTotal == null ? '' : ' · курьер тўлаган: ${lossMoneyText(inc.paidTotal)}'}\n'
+          '${inc.courierPhoneMasked.isEmpty ? '' : 'курьер: ${inc.courierPhoneMasked} · '}'
           '${_date(inc.declaredAt)}'
           '${inc.reason.isEmpty ? '' : ' · сабаб: ${inc.reason}'}',
         ),

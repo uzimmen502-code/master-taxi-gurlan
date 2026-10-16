@@ -383,6 +383,58 @@ ok('S4: yaroqsiz konfig qiymati (0, manfiy, matn) qattiq standartga qaytadi', as
   assert.deepStrictEqual(lim({ logistics: { codeMaxFailedAttempts: 3, codeLockMinutes: 30 } }), { maxFailed: 3, lockMs: 30 * 60 * 1000 });
 });
 
+// Audit L10 (2026-10-16): LEG tugagach ijrochida qabul qiluvchi ismi/telefoni/manzili QOLMASIN.
+ok('L10: yetkazishdan keyin ijrochi match\'ida contactUnlocked = null; hodisa/LEG/status o\'zgarmaydi', async () => {
+  const { db, d, shipmentId, legId, sec } = await oneLegAccepted();
+  await api.makeScanHandover(d)({ legId, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  const mid = db.dump('demand_matches')[`${legId}_${K1}`];
+  assert.strictEqual(mid.contactUnlocked.recipientPhone, '998905556677', 'yo\'lda ijrochi qabul qiluvchini ko\'radi');
+  await api.makeConfirmDelivery(d)({ legId, deliveryCode: sec.deliveryCode, photoUrls: PHOTO }, ctx(K1));
+  const m = db.dump('demand_matches')[`${legId}_${K1}`];
+  assert.strictEqual(m.status, 'completed');
+  assert.strictEqual(m.contactUnlocked, null, 'PII yetkazishdan keyin tozalanadi');
+  assert.strictEqual(db.dump('demands')[legId].status, 'completed');
+  assert.strictEqual(db.dump('shipments')[shipmentId].status, 'delivered');
+});
+
+ok('L10: oldingi LEG ijrochisi (topshirdi) — keyingi ijrochi olgach contactUnlocked = null; keyingisi hali ko\'radi', async () => {
+  const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload({
+    destination: { regionId: 'toshkent_shahri', districtId: 'chilonzor', lat: 41.28, lng: 69.2, addressText: 'Chilonzor 9' },
+    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40 }],
+  }), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0];
+  await fund(db, shipmentId);
+  const p = await api.makeAdminPlanShipmentRoute(d)({ shipmentId, reason: 'Urganch orqali', legs: [
+    { to: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
+    { from: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
+  ] }, ctx(ADMIN));
+  const [leg0, leg1] = p.legIds;
+  await api.makeAcceptLeg(d)({ legId: leg0 }, ctx(K1));
+  const sec = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(OWNER));
+  await api.makeScanHandover(d)({ legId: leg0, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  await api.makeAcceptLeg(d)({ legId: leg1 }, ctx(F1));
+  assert.ok(db.dump('demand_matches')[`${leg0}_${K1}`].contactUnlocked, 'topshirishdan oldin K1 kontakti bor');
+  const secK = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(K1));
+  await api.makeScanHandover(d)({ legId: leg1, code: secK.handoverCode, photoUrls: photoFor(F1) }, ctx(F1));
+  const mK1 = db.dump('demand_matches')[`${leg0}_${K1}`];
+  assert.strictEqual(mK1.status, 'completed');
+  assert.strictEqual(mK1.contactUnlocked, null, 'topshirgan ijrochida PII qolmaydi');
+  assert.ok(db.dump('demand_matches')[`${leg1}_${F1}`].contactUnlocked.recipientPhone, 'keyingi ijrochi hali ko\'radi');
+  // Oxirgi LEG yetkazilgach u ham tozalanadi.
+  await api.makeConfirmDelivery(d)({ legId: leg1, deliveryCode: sec.deliveryCode, photoUrls: photoFor(F1) }, ctx(F1));
+  assert.strictEqual(db.dump('demand_matches')[`${leg1}_${F1}`].contactUnlocked, null);
+});
+
+ok('L10: egasi bekor qilsa (LEG qabul qilingan) — ijrochi match\'ida contactUnlocked = null', async () => {
+  const { db, d, legId } = await oneLegAccepted();
+  assert.ok(db.dump('demand_matches')[`${legId}_${K1}`].contactUnlocked, 'qabuldan keyin 1-pog\'ona kontakt bor');
+  const orderId = Object.keys(db.dump('logistics_orders'))[0];
+  await api.makeCancelLogisticsOrder(d)({ orderId }, ctx(OWNER));
+  assert.strictEqual(db.dump('demand_matches')[`${legId}_${K1}`].contactUnlocked, null);
+});
+
 ok('bekor qilish: eskrou tushgan bo\'lsa refund_pending; LEG va match yopiladi; keyin yana bekor — idempotent', async () => {
   const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
   const d = deps(db);

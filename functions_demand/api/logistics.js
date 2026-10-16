@@ -1187,8 +1187,9 @@ function makeScanHandover(deps) {
         tx.update(prevLegRef, { status: sm.STATUS.COMPLETED, completedAt: now, handedOverAt: now, updatedAt: now });
         const prevProvider = (prevLeg.assignment || {}).providerId;
         if (prevProvider) {
+          // Topshirgan ijrochida PII qolmasin (audit L10): kontakt shu tranzaksiyada yopiladi.
           tx.set(db.collection(MATCHES).doc(`${prevLegId}_${prevProvider}`), {
-            status: 'completed', closedAt: now,
+            status: 'completed', closedAt: now, contactUnlocked: null,
           }, { merge: true });
         }
       }
@@ -1326,8 +1327,9 @@ function makeConfirmDelivery(deps) {
       });
       sm.assertTransition(leg.status, sm.STATUS.COMPLETED, 'confirmDelivery');
       tx.update(legRef, { status: sm.STATUS.COMPLETED, completedAt: now, updatedAt: now });
+      // Yetkazilgach qabul qiluvchi ismi/telefoni/manzili ijrochida qolmasin (audit L10).
       tx.set(db.collection(MATCHES).doc(`${legId}_${providerId}`), {
-        status: 'completed', closedAt: now,
+        status: 'completed', closedAt: now, contactUnlocked: null,
       }, { merge: true });
       return { idempotent: false, orderId: a.orderId || null };
     });

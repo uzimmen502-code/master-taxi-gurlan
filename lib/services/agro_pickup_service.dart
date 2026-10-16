@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/agro_pickup_order.dart';
+import '../models/customer_confirm.dart';
 
 /// Agro qabul (sut va h.k.) Cloud Functions wrapper.
 class AgroPickupService {
@@ -128,13 +129,17 @@ class AgroPickupService {
     });
   }
 
-  Future<void> courierMarkPickedUp({
+  /// «Олиб кетилди». Мижоз тасдиғи ёқилган бўлса сервер
+  /// `awaitingCustomer: true` қайтаради — мижоз «Курьерга бердим»ни босмагунча
+  /// вазифа ўтмайди (D2/D7). Эски сервер → [CourierActionResult.completed].
+  Future<CourierActionResult> courierMarkPickedUp({
     required String courierPhone,
     required String orderId,
   }) async {
-    await _functions.httpsCallable('courierMarkAgroPickedUp').call({
+    final result = await _functions.httpsCallable('courierMarkAgroPickedUp').call({
       'courierPhone': courierPhone,
       'orderId': orderId,
     });
+    return CourierActionResult.fromResponse(result.data);
   }
 }

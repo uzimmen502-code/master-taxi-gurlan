@@ -1,5 +1,6 @@
 import 'package:ava_gurlan/features/agro_pickup/screens/agro_pickup_courier_screen.dart';
 import 'package:ava_gurlan/models/agro_pickup_order.dart';
+import 'package:ava_gurlan/models/customer_confirm.dart';
 import 'package:ava_gurlan/services/agro_pickup_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,12 +49,17 @@ class _FakeAgroService implements AgroPickupService {
   }) async =>
       calls.add('arrived:$courierPhone:$orderId');
 
+  /// courierMarkPickedUp жавоби: waitingCustomer синови учун алмаштирилади.
+  CourierActionResult pickedUpResult = CourierActionResult.completed;
+
   @override
-  Future<void> courierMarkPickedUp({
+  Future<CourierActionResult> courierMarkPickedUp({
     required String courierPhone,
     required String orderId,
-  }) async =>
-      calls.add('pickedUp:$courierPhone:$orderId');
+  }) async {
+    calls.add('pickedUp:$courierPhone:$orderId');
+    return pickedUpResult;
+  }
 
   @override
   Future<String> placeMilkOrder({
@@ -206,5 +212,88 @@ void main() {
 
     expect(service.listCalls[AgroPickupService.courierListPickup], 2);
     expect(find.text('20 milk_liter_label'), findsOneWidget);
+  });
+
+  // ── Mijoz tasdig'i (D2/D7) ────────────────────────────────────────────
+
+  testWidgets('awaitingCustomer: kutish holati, tugma o\'chadi, qayta bosib bo\'lmaydi',
+      (tester) async {
+    final service = _FakeAgroService({
+      AgroPickupService.courierListActive: [
+        [_active('m1', arrivedAtMs: 2000)],
+      ],
+    })
+      ..pickedUpResult =
+          const CourierActionResult(awaitingCustomer: true, step: 'handover_pickup');
+    await _pump(tester, service);
+    await tester.tap(find.text('carpet_active_tab'));
+    await tester.pumpAndSettle();
+
+    // Hali kutish yo'q: oddiy tugma.
+    expect(find.text('customer_confirm_waiting_hint'), findsNothing);
+    await tester.tap(find.text('agro_courier_mark_picked_up'));
+    await tester.pumpAndSettle();
+    expect(service.calls.last, 'pickedUp:$_courier:m1');
+
+    // Kutish: ogohlantirish bloki + tugma o'rnida «kutilmoqda» (o'chirilgan).
+    expect(find.text('customer_confirm_waiting_hint'), findsOneWidget);
+    expect(find.text('customer_confirm_waiting'), findsNWidgets(2)); // blok + tugma
+    expect(find.text('agro_courier_mark_picked_up'), findsNothing);
+    final callsBefore = service.calls.length;
+    await tester.tap(find.text('customer_confirm_waiting').last);
+    await tester.pumpAndSettle();
+    expect(service.calls.length, callsBefore, reason: 'qayta chaqirilmaydi');
+
+    // Muvaffaqiyat ham, xato ham emas: xato matni yo'q.
+    expect(find.textContaining('courier_error_generic'), findsNothing);
+
+    // Dispose'da avto-yangilash taymeri to'xtashi kerak (test oxirida kutilayotgan taymer yo'q).
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('kutish davomida ro\'yxat o\'zi yangilanadi; mijoz tasdiqlagach (vazifa ketdi) kutish yo\'qoladi',
+      (tester) async {
+    final service = _FakeAgroService({
+      AgroPickupService.courierListActive: [
+        [_active('m1', arrivedAtMs: 2000)], // birinchi yuklash
+        [_active('m1', arrivedAtMs: 2000)], // amaldan keyingi yangilash
+        <AgroPickupOrder>[], // avto-yangilash: vazifa ketdi
+      ],
+    })
+      ..pickedUpResult = const CourierActionResult(awaitingCustomer: true);
+    await _pump(tester, service);
+    await tester.tap(find.text('carpet_active_tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('agro_courier_mark_picked_up'));
+    await tester.pumpAndSettle();
+    expect(find.text('customer_confirm_waiting_hint'), findsOneWidget);
+    expect(service.listCalls[AgroPickupService.courierListActive], 2);
+
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pumpAndSettle();
+    expect(service.listCalls[AgroPickupService.courierListActive], 3);
+    expect(find.text('customer_confirm_waiting_hint'), findsNothing);
+    expect(find.text('carpet_no_active_tasks'), findsOneWidget);
+
+    // Kutish tugadi — taymer to'xtagan: yana 9 s o'tsa ham yangi so'rov yo'q.
+    await tester.pump(const Duration(seconds: 9));
+    expect(service.listCalls[AgroPickupService.courierListActive], 3);
+  });
+
+  testWidgets('eski server (awaitingCustomer yo\'q): avvalgidek — kutish bloki ko\'rinmaydi',
+      (tester) async {
+    final service = _FakeAgroService({
+      AgroPickupService.courierListActive: [
+        [_active('m1', arrivedAtMs: 2000)],
+        [_active('m1', arrivedAtMs: 2000)],
+      ],
+    }); // pickedUpResult = completed
+    await _pump(tester, service);
+    await tester.tap(find.text('carpet_active_tab'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('agro_courier_mark_picked_up'));
+    await tester.pumpAndSettle();
+    expect(find.text('customer_confirm_waiting'), findsNothing);
+    expect(find.text('agro_courier_mark_picked_up'), findsOneWidget);
   });
 }

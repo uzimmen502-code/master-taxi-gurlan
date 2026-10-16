@@ -5,9 +5,11 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/carpet_wash_order.dart';
+import '../../../models/customer_confirm.dart';
 import '../../../services/carpet_wash_service.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../courier/widgets/courier_task_list.dart';
+import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
 
 const _brown = Color(0xFF6D4C41);
 
@@ -119,12 +121,9 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
               ),
             ),
             _ActiveCourierTab(
-              load: () =>
-                  _service.listCourierTasks(CarpetWashService.courierListActive),
-              onNext: (order, reload) => _act(
-                () => _nextStep(order),
-                reload,
-              ),
+              load: _loadActive,
+              awaiting: _awaiting,
+              onNext: _advance,
               onCall: callPhone,
             ),
           ],
@@ -133,18 +132,61 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
     );
   }
 
+  /// Мижоз тасдиғи кутилаётган вазифалар: `id → ўша пайтдаги status` (D2/D7).
+  /// Сервер `awaitingCustomer: true` қайтарганда тўлади; рўйхатда вазифа
+  /// ўзгарса (мижоз тасдиқлади) ёки йўқолса — [_loadActive] тозалайди.
+  /// Илова қайта очилса бўш бўлади: тугма қайта босилса сервер (идемпотент)
+  /// яна `awaitingCustomer` қайтаради.
+  final Map<String, String> _awaiting = {};
+
+  Future<List<CarpetWashOrder>> _loadActive() async {
+    final list =
+        await _service.listCourierTasks(CarpetWashService.courierListActive);
+    if (_awaiting.isNotEmpty) {
+      final stale = [
+        for (final e in _awaiting.entries)
+          if (!list.any((o) => o.id == e.key && o.status == e.value)) e.key,
+      ];
+      if (stale.isNotEmpty && mounted) {
+        setState(() => stale.forEach(_awaiting.remove));
+      }
+    }
+    return list;
+  }
+
+  /// «Фаол» вазифанинг навбатдаги қадами, кейин рўйхатни янгилаш.
+  Future<void> _advance(
+    CarpetWashOrder order,
+    Future<void> Function() reload,
+  ) async {
+    try {
+      final r = await _nextStep(order);
+      if (r.awaitingCustomer && mounted) {
+        setState(() => _awaiting[order.id] = order.status);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    }
+    await reload();
+  }
+
   /// Фаол вазифанинг навбатдаги қадами: аввал «етиб келдим», кейин
   /// «олиб кетилди» / «етказилди».
-  Future<void> _nextStep(CarpetWashOrder order) {
+  Future<CourierActionResult> _nextStep(CarpetWashOrder order) async {
     final isPickup = order.status == CarpetWashOrder.statusPickupInDelivery;
     final hasArrived =
         isPickup ? order.pickupArrivedAt != null : order.returnArrivedAt != null;
     if (!hasArrived) {
-      return _service.courierMarkArrived(
+      await _service.courierMarkArrived(
         courierPhone: _phone,
         orderId: order.id,
         leg: isPickup ? 'pickup' : 'return',
       );
+      return CourierActionResult.completed;
     }
     return isPickup
         ? _service.courierMarkPickedUp(courierPhone: _phone, orderId: order.id)
@@ -222,11 +264,15 @@ class _ClaimableTab extends StatelessWidget {
 class _ActiveCourierTab extends StatelessWidget {
   const _ActiveCourierTab({
     required this.load,
+    required this.awaiting,
     required this.onNext,
     required this.onCall,
   });
 
   final Future<List<CarpetWashOrder>> Function() load;
+
+  /// Мижоз тасдиғи кутилаётган вазифалар (`id → status`).
+  final Map<String, String> awaiting;
   final _TaskAction onNext;
   final Future<bool> Function(String phone) onCall;
 
@@ -235,12 +281,15 @@ class _ActiveCourierTab extends StatelessWidget {
     return CourierTaskList<CarpetWashOrder>(
       load: load,
       emptyText: context.tr('carpet_no_active_tasks'),
+      // Кутиш давомида рўйхат ўзи янгиланади: мижоз тасдиқласа вазифа ўтади.
+      autoRefresh: awaiting.isNotEmpty,
       itemBuilder: (context, order, reload) {
         final isPickup =
             order.status == CarpetWashOrder.statusPickupInDelivery;
         final hasArrived = isPickup
             ? order.pickupArrivedAt != null
             : order.returnArrivedAt != null;
+        final waiting = awaiting[order.id] == order.status;
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -261,6 +310,10 @@ class _ActiveCourierTab extends StatelessWidget {
               Text(order.pickupAddress),
               Text('${order.customerName} · ${order.customerPhone}'),
               const SizedBox(height: 10),
+              if (waiting) ...[
+                const CourierAwaitingNotice(),
+                const SizedBox(height: 10),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -272,18 +325,23 @@ class _ActiveCourierTab extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
+                    // Кутишда тугма ўчирилади: бир хил амални қайта босиш
+                    // хато каби кўринмасин.
                     child: ElevatedButton(
-                      onPressed: () => onNext(order, reload),
+                      onPressed: waiting ? null : () => onNext(order, reload),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _brown,
                         foregroundColor: Colors.white,
                       ),
                       child: Text(
-                        !hasArrived
-                            ? context.tr('courier_arrived_btn')
-                            : isPickup
-                                ? context.tr('carpet_mark_picked_up')
-                                : context.tr('carpet_mark_delivered'),
+                        waiting
+                            ? context.tr('customer_confirm_waiting')
+                            : !hasArrived
+                                ? context.tr('courier_arrived_btn')
+                                : isPickup
+                                    ? context.tr('carpet_mark_picked_up')
+                                    : context.tr('carpet_mark_delivered'),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),

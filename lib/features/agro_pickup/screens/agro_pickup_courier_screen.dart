@@ -8,6 +8,7 @@ import '../../../models/agro_pickup_order.dart';
 import '../../../services/agro_pickup_service.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../courier/widgets/courier_task_list.dart';
+import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
 
 const _green = AvaLight.ok;
 
@@ -104,26 +105,67 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
               ),
             ),
             _ActiveTab(
-              load: () =>
-                  _service.listCourierTasks(AgroPickupService.courierListActive),
-              onNext: (order, reload) => _act(
-                () => order.arrivedAt != null
-                    ? _service.courierMarkPickedUp(
-                        courierPhone: _phone,
-                        orderId: order.id,
-                      )
-                    : _service.courierMarkArrived(
-                        courierPhone: _phone,
-                        orderId: order.id,
-                      ),
-                reload,
-              ),
+              load: _loadActive,
+              awaiting: _awaiting,
+              onNext: _advance,
               onCall: callPhone,
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Мижоз тасдиғи кутилаётган вазифалар: `id → ўша пайтдаги status` (D2/D7).
+  /// Сервер `awaitingCustomer: true` қайтарганда тўлади; вазифа ўзгарса
+  /// (мижоз тасдиқлади) ёки рўйхатдан чиқса — [_loadActive] тозалайди.
+  /// Илова қайта очилса бўш: тугма қайта босилса сервер (идемпотент) яна
+  /// `awaitingCustomer` қайтаради.
+  final Map<String, String> _awaiting = {};
+
+  Future<List<AgroPickupOrder>> _loadActive() async {
+    final list =
+        await _service.listCourierTasks(AgroPickupService.courierListActive);
+    if (_awaiting.isNotEmpty) {
+      final stale = [
+        for (final e in _awaiting.entries)
+          if (!list.any((o) => o.id == e.key && o.status == e.value)) e.key,
+      ];
+      if (stale.isNotEmpty && mounted) {
+        setState(() => stale.forEach(_awaiting.remove));
+      }
+    }
+    return list;
+  }
+
+  /// «Етиб келдим» → «Олиб кетилди», кейин рўйхатни янгилаш.
+  Future<void> _advance(
+    AgroPickupOrder order,
+    Future<void> Function() reload,
+  ) async {
+    try {
+      if (order.arrivedAt != null) {
+        final r = await _service.courierMarkPickedUp(
+          courierPhone: _phone,
+          orderId: order.id,
+        );
+        if (r.awaitingCustomer && mounted) {
+          setState(() => _awaiting[order.id] = order.status);
+        }
+      } else {
+        await _service.courierMarkArrived(
+          courierPhone: _phone,
+          orderId: order.id,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    }
+    await reload();
   }
 }
 
@@ -167,11 +209,15 @@ class _ReadyTab extends StatelessWidget {
 class _ActiveTab extends StatelessWidget {
   const _ActiveTab({
     required this.load,
+    required this.awaiting,
     required this.onNext,
     required this.onCall,
   });
 
   final Future<List<AgroPickupOrder>> Function() load;
+
+  /// Мижоз тасдиғи кутилаётган вазифалар (`id → status`).
+  final Map<String, String> awaiting;
   final _TaskAction onNext;
   final Future<bool> Function(String phone) onCall;
 
@@ -180,15 +226,23 @@ class _ActiveTab extends StatelessWidget {
     return CourierTaskList<AgroPickupOrder>(
       load: load,
       emptyText: context.tr('carpet_no_active_tasks'),
+      // Кутиш давомида рўйхат ўзи янгиланади: мижоз тасдиқласа вазифа ўтади.
+      autoRefresh: awaiting.isNotEmpty,
       itemBuilder: (context, order, reload) {
         final hasArrived = order.arrivedAt != null;
+        final waiting = awaiting[order.id] == order.status;
         return _OrderCard(
           order: order,
           subtitle: context.tr('agro_courier_pickup_in_progress'),
-          primaryLabel: hasArrived
-              ? context.tr('agro_courier_mark_picked_up')
-              : context.tr('courier_arrived_btn'),
-          onPrimary: () => onNext(order, reload),
+          primaryLabel: waiting
+              ? context.tr('customer_confirm_waiting')
+              : hasArrived
+                  ? context.tr('agro_courier_mark_picked_up')
+                  : context.tr('courier_arrived_btn'),
+          // Кутишда тугма ўчирилади: бир хил амални қайта босиш хато каби
+          // кўринмасин.
+          onPrimary: waiting ? null : () => onNext(order, reload),
+          waiting: waiting,
           onCall: () => onCall(order.customerPhone),
         );
       },
@@ -203,11 +257,17 @@ class _OrderCard extends StatelessWidget {
     required this.onPrimary,
     this.onCall,
     this.subtitle,
+    this.waiting = false,
   });
 
   final AgroPickupOrder order;
   final String primaryLabel;
-  final VoidCallback onPrimary;
+
+  /// `null` — тугма ўчирилган (мижоз тасдиғи кутилмоқда).
+  final VoidCallback? onPrimary;
+
+  /// Мижоз тасдиғи кутилмоқда — огоҳлантириш блоки кўрсатилади.
+  final bool waiting;
 
   /// `null` — вазифа ҳали олинмаган: мижоз маълумоти йўқ, қўнғироқ ҳам йўқ.
   final VoidCallback? onCall;
@@ -256,6 +316,10 @@ class _OrderCard extends StatelessWidget {
               style: TextStyle(color: Colors.grey.shade600),
             ),
           const SizedBox(height: 10),
+          if (waiting) ...[
+            const CourierAwaitingNotice(),
+            const SizedBox(height: 10),
+          ],
           if (claimed)
             Row(
               children: [

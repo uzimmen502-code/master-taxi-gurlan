@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/carpet_wash_order.dart';
+import '../models/customer_confirm.dart';
 
 /// Gilam yuvish Cloud Functions wrapper.
 class CarpetWashService {
@@ -117,14 +118,18 @@ class CarpetWashService {
     });
   }
 
-  Future<void> courierMarkPickedUp({
+  /// «Олиб кетилди». Мижоз тасдиғи ёқилган бўлса сервер
+  /// `awaitingCustomer: true` қайтаради — мижоз «Курьерга бердим»ни босмагунча
+  /// вазифа ўтмайди (D2/D7). Эски сервер → [CourierActionResult.completed].
+  Future<CourierActionResult> courierMarkPickedUp({
     required String courierPhone,
     required String orderId,
   }) async {
-    await _functions.httpsCallable('courierMarkCarpetPickedUp').call({
+    final result = await _functions.httpsCallable('courierMarkCarpetPickedUp').call({
       'courierPhone': courierPhone,
       'orderId': orderId,
     });
+    return CourierActionResult.fromResponse(result.data);
   }
 
   Future<void> courierMarkArrived({
@@ -149,13 +154,16 @@ class CarpetWashService {
     });
   }
 
-  Future<void> courierMarkDelivered({
+  /// «Етказилди» (қайтариш). Мижоз тасдиғи: [courierMarkPickedUp] га қаранг
+  /// (мижоз «Олдим»ни босади).
+  Future<CourierActionResult> courierMarkDelivered({
     required String courierPhone,
     required String orderId,
   }) async {
-    await _functions.httpsCallable('courierMarkCarpetDelivered').call({
+    final result = await _functions.httpsCallable('courierMarkCarpetDelivered').call({
       'courierPhone': courierPhone,
       'orderId': orderId,
     });
+    return CourierActionResult.fromResponse(result.data);
   }
 }

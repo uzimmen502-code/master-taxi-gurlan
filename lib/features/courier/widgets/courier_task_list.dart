@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -17,10 +19,17 @@ class CourierTaskList<T> extends StatefulWidget {
     required this.load,
     required this.emptyText,
     required this.itemBuilder,
+    this.autoRefresh = false,
+    this.autoRefreshInterval = const Duration(seconds: 8),
   });
 
   final Future<List<T>> Function() load;
   final String emptyText;
+
+  /// `true` — [autoRefreshInterval] да рўйхат ўзи янгиланади. Фақат мижоз
+  /// тасдиғи кутилаётганда ёқилади (D2/D7): тасдиқ келгач вазифа ўзи ўтсин.
+  final bool autoRefresh;
+  final Duration autoRefreshInterval;
 
   /// [reload] — амалдан кейин (муваффақият ёки рад) рўйхатни янгилаш:
   /// вазифани бошқа курьер олиб улгурган ёки админ бекор қилган бўлиши мумкин.
@@ -36,6 +45,43 @@ class CourierTaskList<T> extends StatefulWidget {
 
 class _CourierTaskListState<T> extends State<CourierTaskList<T>> {
   late Future<List<T>> _items = widget.load();
+  Timer? _timer;
+  bool _reloading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant CourierTaskList<T> old) {
+    super.didUpdateWidget(old);
+    _syncTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _syncTimer() {
+    if (!widget.autoRefresh) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+    _timer ??= Timer.periodic(widget.autoRefreshInterval, (_) async {
+      if (!mounted || _reloading) return;
+      _reloading = true;
+      try {
+        await _reload();
+      } finally {
+        _reloading = false;
+      }
+    });
+  }
 
   Future<void> _reload() async {
     final next = widget.load();

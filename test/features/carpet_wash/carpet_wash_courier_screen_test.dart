@@ -1,5 +1,6 @@
 import 'package:ava_gurlan/features/carpet_wash/screens/carpet_wash_courier_screen.dart';
 import 'package:ava_gurlan/models/carpet_wash_order.dart';
+import 'package:ava_gurlan/models/customer_confirm.dart';
 import 'package:ava_gurlan/services/carpet_wash_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,19 +63,26 @@ class _FakeCarpetService implements CarpetWashService {
   }) =>
       _record('arrived:$courierPhone:$orderId:$leg');
 
-  @override
-  Future<void> courierMarkPickedUp({
-    required String courierPhone,
-    required String orderId,
-  }) =>
-      _record('pickedUp:$courierPhone:$orderId');
+  /// Курьер амали жавоби: waitingCustomer синови учун алмаштирилади.
+  CourierActionResult actionResult = CourierActionResult.completed;
 
   @override
-  Future<void> courierMarkDelivered({
+  Future<CourierActionResult> courierMarkPickedUp({
     required String courierPhone,
     required String orderId,
-  }) =>
-      _record('delivered:$courierPhone:$orderId');
+  }) async {
+    await _record('pickedUp:$courierPhone:$orderId');
+    return actionResult;
+  }
+
+  @override
+  Future<CourierActionResult> courierMarkDelivered({
+    required String courierPhone,
+    required String orderId,
+  }) async {
+    await _record('delivered:$courierPhone:$orderId');
+    return actionResult;
+  }
 
   @override
   Future<String> placeOrder({
@@ -294,5 +302,88 @@ void main() {
 
     expect(service.listCalls[CarpetWashService.courierListPickup], 2);
     expect(find.text('3 carpet_count_suffix'), findsOneWidget);
+  });
+
+  // ── Mijoz tasdig'i (D2/D7) ────────────────────────────────────────────
+
+  testWidgets('olib ketildi → awaitingCustomer: kutish bloki, tugma o\'chadi, qayta chaqirilmaydi',
+      (tester) async {
+    final service = _FakeCarpetService({
+      CarpetWashService.courierListActive: [
+        [_active('a1', pickupArrivedAtMs: 2000)],
+      ],
+    })
+      ..actionResult =
+          const CourierActionResult(awaitingCustomer: true, step: 'handover_pickup');
+    await _pump(tester, service);
+    await _openTab(tester, 'carpet_active_tab');
+
+    expect(find.text('customer_confirm_waiting_hint'), findsNothing);
+    await tester.tap(find.text('carpet_mark_picked_up'));
+    await tester.pumpAndSettle();
+    expect(service.calls.last, 'pickedUp:$_courier:a1');
+
+    expect(find.text('customer_confirm_waiting_hint'), findsOneWidget);
+    expect(find.text('customer_confirm_waiting'), findsNWidgets(2)); // blok + tugma
+    expect(find.text('carpet_mark_picked_up'), findsNothing);
+    final before = service.calls.length;
+    await tester.tap(find.text('customer_confirm_waiting').last);
+    await tester.pumpAndSettle();
+    expect(service.calls.length, before);
+    expect(find.textContaining('courier_error_generic'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox()); // taymer to'xtasin
+  });
+
+  testWidgets('yetkazildi (qaytarish) → awaitingCustomer; holat o\'zgargach (mijoz tasdiqladi) kutish yo\'qoladi',
+      (tester) async {
+    final service = _FakeCarpetService({
+      CarpetWashService.courierListActive: [
+        [
+          _active('b1',
+              status: CarpetWashOrder.statusReturnInDelivery,
+              returnArrivedAtMs: 3000),
+        ],
+        [
+          _active('b1',
+              status: CarpetWashOrder.statusReturnInDelivery,
+              returnArrivedAtMs: 3000),
+        ],
+        <CarpetWashOrder>[], // avto-yangilash: vazifa yakunlandi
+      ],
+    })
+      ..actionResult = const CourierActionResult(awaitingCustomer: true);
+    await _pump(tester, service);
+    await _openTab(tester, 'carpet_active_tab');
+
+    await tester.tap(find.text('carpet_mark_delivered'));
+    await tester.pumpAndSettle();
+    expect(service.calls.last, 'delivered:$_courier:b1');
+    expect(find.text('customer_confirm_waiting_hint'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pumpAndSettle();
+    expect(service.listCalls[CarpetWashService.courierListActive], 3);
+    expect(find.text('customer_confirm_waiting_hint'), findsNothing);
+    expect(find.text('carpet_no_active_tasks'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 9));
+    expect(service.listCalls[CarpetWashService.courierListActive], 3,
+        reason: 'kutish tugadi — avto-yangilash to\'xtaydi');
+  });
+
+  testWidgets('eski server (awaitingCustomer yo\'q): avvalgidek — kutish bloki ko\'rinmaydi',
+      (tester) async {
+    final service = _FakeCarpetService({
+      CarpetWashService.courierListActive: [
+        [_active('a1', pickupArrivedAtMs: 2000)],
+      ],
+    }); // actionResult = completed
+    await _pump(tester, service);
+    await _openTab(tester, 'carpet_active_tab');
+    await tester.tap(find.text('carpet_mark_picked_up'));
+    await tester.pumpAndSettle();
+    expect(find.text('customer_confirm_waiting'), findsNothing);
+    expect(find.text('carpet_mark_picked_up'), findsOneWidget);
   });
 }

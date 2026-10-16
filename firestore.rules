@@ -2144,11 +2144,47 @@ service cloud.firestore {
     // INTERCITY / LOCAL TAXI / JOB
     // ══════════════════════════════════════
     // E'lon yoqilayotgan bo'lsa (`isActive: true`) `billingTripId` shart.
+    //
+    // AUDIT H1 (2026-10): avval faqat `billingTripId` BO'SH EMASLIGI tekshirilardi.
+    // `endTripListing` (komissiya to'liq qaytgan, reys `cancelled`) dan keyin haydovchi
+    // eski `billingTripId` bilan `isActive: true` qilib komissiyasiz e'lon qila olardi.
+    // Endi e'lon YOQILISHI (nofaoldan faolga) yoki faol e'londa `billingTripId`NI
+    // O'ZGARTIRISH uchun ko'rsatilgan reys HAQIQATAN to'langan bo'lishi shart:
+    // `taxi_trips/{id}` mavjud, `status == 'published'` va `driverUid` = chaqiruvchi.
+    // Ilovaning boshqa yozuvlari (o'rin, narx, ko'chirish, tripStatus, isOnPanel,
+    // autoAccept, isActive:false) cheklanmaydi. Tekshiruv faqat yoqish/reys almashtirishda
+    // bitta `get` sarflaydi.
+    // Tarixiy teshik (QOLDI, 1 kunlik e'lon): faol e'lon, reys keyin bekor qilinsa ham
+    // tahrirlanaveradi - qoida faqat YANGIDAN yoqishni yopadi.
+    function intercityBillingTripOk(tripId) {
+      return tripId is string
+          && tripId != ''
+          && tripId.matches('^[A-Za-z0-9_-]+$')
+          && exists(/databases/$(database)/documents/taxi_trips/$(tripId))
+          && get(/databases/$(database)/documents/taxi_trips/$(tripId)).data.get('status', '') == 'published'
+          && isOwner(get(/databases/$(database)/documents/taxi_trips/$(tripId)).data.get('driverUid', ''));
+    }
+
+    // Hujjat YARATILAYOTGANDA.
     function intercityPublishGateOk() {
+      return request.resource.data.get('isActive', false) != true
+          || intercityBillingTripOk(request.resource.data.get('billingTripId', ''));
+    }
+
+    // Hujjat YANGILANAYOTGANDA (`resource` = hozirgi, `request.resource` = natija).
+    function intercityPublishGateUpdateOk() {
       return request.resource.data.get('isActive', false) != true
           || (
             request.resource.data.get('billingTripId', '') is string
             && request.resource.data.get('billingTripId', '') != ''
+            && (
+              (
+                resource.data.get('isActive', false) == true
+                && request.resource.data.get('billingTripId', '')
+                    == resource.data.get('billingTripId', '')
+              )
+              || intercityBillingTripOk(request.resource.data.get('billingTripId', ''))
+            )
           );
     }
 
@@ -2185,7 +2221,7 @@ service cloud.firestore {
       allow create: if isAdmin()
           || (isOwner(id) && intercityPublishGateOk());
       allow update: if isAdmin()
-          || (isOwner(id) && intercityPublishGateOk())
+          || (isOwner(id) && intercityPublishGateUpdateOk())
           || intercityDriverEntertainmentPatch();
       allow delete: if false;
 

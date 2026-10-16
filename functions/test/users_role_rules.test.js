@@ -95,9 +95,27 @@ async function main() {
         .update({ name: 'Ali', updatedAt: now }));
   });
   await seed();
-  await check('R5 haydovchi o\'zi yo\'lovchiga qaytadi (driver → user) — ruxsat', async () => {
-    await assertSucceeds(phoneCtx(DRIVER).doc(`users/${DRIVER}`)
+  // 2026-10-17: `usersLeaveDriverDemotion` olib tashlandi (role:'driver' tizimdan
+  // chiqarildi, prod'da 0 ta). Role endi rules orqali HECH KIM tomonidan
+  // o'zgarmaydi — "yo'lovchiga qaytish" serverda (CF) yoki tur bo'yicha chiqish.
+  await check('R5 haydovchi hujjatida role driver → user rules orqali — RAD (qoida olib tashlandi)', async () => {
+    await assertFails(phoneCtx(DRIVER).doc(`users/${DRIVER}`)
         .update({ role: 'user', updatedAt: now }));
+  });
+  await seed();
+  await check('R5b BEGONA odam haydovchi hujjatidagi role ni user ga tushira olmaydi (eski teshik yopildi)', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${DRIVER}`)
+        .update({ role: 'user', updatedAt: now }));
+  });
+  await seed();
+  await check('R5c anonim sessiya haydovchi role ini user ga tushira olmaydi', async () => {
+    await assertFails(anonCtx().doc(`users/${DRIVER}`)
+        .update({ role: 'user', updatedAt: now }));
+  });
+  await seed();
+  await check('R5d haydovchi hujjatida role dan boshqa maydon (ism) — ruxsat (regressiya)', async () => {
+    await assertSucceeds(phoneCtx(DRIVER).doc(`users/${DRIVER}`)
+        .update({ name: 'Vali', updatedAt: now }));
   });
   await seed();
   await check('R6 admin ham rules orqali role yoza olmaydi — faqat CF (52115b3)', async () => {

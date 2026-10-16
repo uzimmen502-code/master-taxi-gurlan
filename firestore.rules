@@ -172,13 +172,9 @@ service cloud.firestore {
     // Клиент бу ёзувни 2026-06-14 (`a6a0ac3`) дан бери ишлатмайди —
     // ҳайдовчи ролини сервер (Admin SDK) тасдиқда беради.
 
-  // Haydovchi o'zi yo'lovchi rejimiga qaytishi (admin tasdiqlashsiz).
-    function usersLeaveDriverDemotion() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['role', 'updatedAt'])
-          && request.resource.data.role == 'user'
-          && resource.data.role == 'driver';
-    }
+    // `usersLeaveDriverDemotion` ОЛИБ ТАШЛАНДИ (эга, 2026-10-17): `role: 'driver'`
+    // белгиси тизимдан чиқарилди (прод'да 0 та ҳужжат, сервер ёзмайди). Қоида
+    // `isOwner` текширувисиз эди — бегона ҳужжатдаги `driver` ни `user` га тушира оларди.
 
     // Profil PIN — foydalanuvchi ↔ kuryer (faqat o'z hujjati).
     // `usersCourierRolePromotion` / `usersLeaveCourierDemotion` O'CHIRILDI
@@ -742,12 +738,11 @@ service cloud.firestore {
       allow update: if (
           walletFieldsUntouched()
           && (
-            usersLeaveDriverDemotion()
             // `usersCourierRolePromotion`/`usersLeaveCourierDemotion` ОЛИБ
             // ТАШЛАНДИ (D-SERVICE-4, D-CLEAN-1): курьерлик — `role` эмас,
             // `provider_capabilities.courier`. Ўзига `role: 'courier'`
             // ёзиш 14 та callable'ни очарди (self_approval_rules.test.js).
-            || (isOwner(userId) && usersCarInfoPatch())
+            (isOwner(userId) && usersCarInfoPatch())
             // `role` клиентдан ўзгармайди — ҳатто админдан ҳам. Аввал
             // `(notChanged('role') || isAdmin())` эди: admin/dispatcher
             // тўғридан-тўғри ёзиб ҳар қандай ролни (шу жумладан ўзига

@@ -390,6 +390,26 @@ void main() {
       expect(h.busyCalls, hasLength(2));
     });
 
+    testWidgets('internet yo\'q (javob kelmaydi): 8 soniyadan keyin do\'stona xabar, '
+        'tugma yana ishlaydi', (tester) async {
+      final h = await _pump(tester);
+      h.busyHold = Completer<void>(); // hech qachon tugamaydi
+      await _startDriving(tester, h);
+      await tester.tap(find.byKey(_busy));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 7));
+      expect(find.text(_tr('ev_drive_busy_failed')), findsNothing,
+          reason: '8 soniya o\'tmadi');
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(find.text(_tr('ev_drive_busy_failed')), findsOneWidget);
+
+      h.busyHold = null;
+      await tester.tap(find.byKey(_busy));
+      await tester.pumpAndSettle();
+      expect(h.busyCalls, hasLength(2));
+    });
+
     testWidgets('"Almashtirish": ro\'yxat ochiladi, tanlansa karta yangi stansiyani '
         'ko\'rsatadi', (tester) async {
       final h = await _pump(tester);

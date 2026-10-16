@@ -73,6 +73,11 @@ void main() {
     'ev_drive_busy_failed',
     'ev_mark_busy',
     'ev_occupancy_saved',
+    // Phase 2: zaryadni yangilash (mavjud: ev_trip_charge_now)
+    'ev_soc_update',
+    'ev_soc_update_hint',
+    'ev_soc_update_apply',
+    'ev_trip_charge_now',
   ];
 
   final dict = <String, Map<String, dynamic>>{};
@@ -145,6 +150,17 @@ void main() {
       expect(dict[l]!['ev_alt_time_delta'], contains('{d}'), reason: l);
       expect(dict[l]!['ev_drive_next'], contains('{d}'), reason: l);
       expect(dict[l]!['ev_drive_arrival_soc'], contains('{p}'), reason: l);
+    }
+  });
+
+  test('"Zaryadni yangilash" matnlari uch tilda to\'g\'ri', () {
+    expect(dict['uz_Cyrl']!['ev_soc_update'], 'Зарядни янгилаш');
+    expect(dict['uz_Latn']!['ev_soc_update'], 'Zaryadni yangilash');
+    expect(dict['ru']!['ev_soc_update'], 'Обновить заряд');
+    expect(dict['uz_Cyrl']!['ev_soc_update_apply'], 'Қайта ҳисоблаш');
+    for (final l in langs) {
+      expect((dict[l]!['ev_soc_update'] as String).length, lessThanOrEqualTo(20),
+          reason: l);
     }
   });
 

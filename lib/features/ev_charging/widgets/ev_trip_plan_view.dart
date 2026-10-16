@@ -23,10 +23,15 @@ class EvTripPlanView extends StatelessWidget {
     this.routeMinutes = 0,
     this.car,
     this.onReplaceStop,
+    this.onUpdateSoc,
   });
 
   final EvTripPlan plan;
   final VoidCallback onOpenNavigator;
+
+  /// «Зарядни янгилаш» — ҳақиқий зарядни киритиб, қолган йўлни қайта
+  /// ҳисоблаш. `null` — тугма йўқ.
+  final VoidCallback? onUpdateSoc;
 
   /// Тўхташ карточкасидаги «Алмаштириш» (режадаги тўхташ индекси, 0'дан).
   /// `null` — тугма йўқ (алмаштириш мумкин эмас).
@@ -45,6 +50,31 @@ class EvTripPlanView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _summary(context),
+        if (onUpdateSoc != null) ...[
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: OutlinedButton.icon(
+              key: const ValueKey('ev_plan_update_soc'),
+              onPressed: onUpdateSoc,
+              icon: const Icon(Icons.battery_charging_full_rounded, size: 20),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryText,
+                side: const BorderSide(color: AppColors.primaryText, width: 1.4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              label: Text(
+                context.tr('ev_soc_update'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
         if (plan.status == EvTripPlanStatus.gapTooLarge) _gapBanner(context),
         if (plan.warnings.isNotEmpty) _warnings(context),
         const SizedBox(height: 8),

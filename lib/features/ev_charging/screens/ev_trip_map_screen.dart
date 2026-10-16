@@ -22,6 +22,7 @@ import '../models/ev_trip_plan.dart';
 import '../widgets/ev_drive_card.dart';
 import '../widgets/ev_map_top_overlay.dart';
 import '../widgets/ev_next_stops_card.dart';
+import '../widgets/ev_soc_slider.dart';
 import '../widgets/ev_trip_alternatives_sheet.dart';
 import '../widgets/ev_trip_map_view.dart';
 import '../widgets/ev_trip_dot_icon.dart';
@@ -255,6 +256,10 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
   final Set<String> _ackedStops = <String>{};
   bool _reportingBusy = false;
 
+  /// "Банд" хабарига жавоб кутиш чегараси: интернет йўқда Firestore ёзувни
+  /// навбатга қўйиб кутади — шу вақтдан кейин дўстона хато кўрсатилади.
+  static const Duration _busyTimeout = Duration(seconds: 8);
+
   /// Yig'iq varaqa nisbati (build'da yangilanadi) - yo'l rejimi boshlanganda
   /// varaqa shunga tushiriladi va yashiriladi.
   double _peekFraction = 0.2;
@@ -400,7 +405,9 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       final report = widget.reportBusy ??
           (String id) =>
               context.read<EvStationRepository>().setOccupancy(id, busy: true);
-      await report(station.id);
+      // Firestore oflaynda yozuvni navbatga qo'yadi va kutadi (xato bermaydi):
+      // haydovchiga tezda javob berish uchun cheklangan kutish.
+      await report(station.id).timeout(_busyTimeout);
       if (!mounted) return;
       _toast(context.tr('ev_occupancy_saved'));
     } catch (_) {
@@ -494,6 +501,37 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
       replacedOldId: oldId,
       replacedNewId: newStationId,
     );
+  }
+
+  /// "Zaryadni yangilash": varaq haydovchining haqiqiy zaryadini so'raydi
+  /// (boshlang'ich qiymat - rejadagi KUTILGAN zaryad mashinaning hozirgi
+  /// joyida; GPS/marshrut yo'q bo'lsa - rejaning boshlang'ich zaryadi).
+  Future<void> _updateSoc() async {
+    final car = widget.car;
+    final plan = _plan;
+    if (car == null || !plan.canReplan) return;
+    final along = _carAlongKm;
+    final predicted =
+        along == null ? null : evPredictedSocAt(plan, car, along);
+    final initial = EvSocSliderCard.snap(
+        predicted ?? plan.startSocPercent ?? EvSocSliderCard.max);
+    final picked = await EvSocUpdateSheet.show(context, initial: initial);
+    if (picked == null || !mounted) return;
+    _replanFromCar(picked);
+  }
+
+  /// Qolgan yo'l haqiqiy zaryad [soc] va mashinaning hozirgi joyidan qayta
+  /// hisoblanadi ([EvTripController.replan]); joy noma'lum bo'lsa - rejaning
+  /// avvalgi boshlang'ich joyidan. Natijadagi barcha raqamlar (keyingi
+  /// zaryadlash, "Kelishda %") yangi rejadan olinadi.
+  void _replanFromCar(int soc) {
+    final car = widget.car;
+    if (car == null) return;
+    final oldPlan = _plan;
+    final oldSelection = _selection;
+    final passed = _carAlongKm ?? oldPlan.fromAlongKm;
+    _trip.replan(car: car, socPercent: soc, passedKm: passed);
+    _planChanged(previousPlan: oldPlan, previousSelection: oldSelection);
   }
 
   /// Reja o'zgardi (almashtirish yoki qayta hisob): tanlov yangi rejaga
@@ -877,6 +915,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                       builder: (context, scroll) => _PlanSheet(
                         plan: plan,
                         onReplaceStop: _canReplace ? _openAlternatives : null,
+                        onUpdateSoc: _canReplace ? _updateSoc : null,
                         scrollController: scroll,
                         onHeaderTap: () => _toggleSheet(peekFraction),
                         expanded: _extent > peekFraction + 0.05,
@@ -921,6 +960,7 @@ class _EvTripMapScreenState extends State<EvTripMapScreen>
                                 : null,
                             onConfirmCharging: () =>
                                 _confirmCharging(driveTarget!.stop),
+                            onUpdateSoc: _canReplace ? _updateSoc : null,
                           ),
                         if (showDriveCard) const SizedBox(height: _navGap),
                         SizedBox(
@@ -1213,12 +1253,16 @@ class _PlanSheet extends StatelessWidget {
     required this.routeMinutes,
     required this.car,
     this.onReplaceStop,
+    this.onUpdateSoc,
   });
 
   final EvTripPlan plan;
 
   /// To'xtash kartochkasidagi "Almashtirish" (null - tugma yo'q).
   final ValueChanged<int>? onReplaceStop;
+
+  /// "Zaryadni yangilash" (null - tugma yo'q).
+  final VoidCallback? onUpdateSoc;
   final ScrollController scrollController;
   final VoidCallback onHeaderTap;
   final bool expanded;
@@ -1334,6 +1378,7 @@ class _PlanSheet extends StatelessWidget {
               routeMinutes: routeMinutes,
               car: car,
               onReplaceStop: onReplaceStop,
+              onUpdateSoc: onUpdateSoc,
             ),
           ],
         ),

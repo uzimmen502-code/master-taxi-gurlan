@@ -10,6 +10,7 @@ import '../controllers/ev_trip_controller.dart';
 import '../data/ev_trip_geo_catalog.dart';
 import '../data/ev_trip_place_search.dart';
 import '../widgets/ev_car_sheet.dart';
+import '../widgets/ev_soc_slider.dart';
 import '../models/ev_trip_plan.dart' show EvCarSpec;
 import '../widgets/ev_trip_plan_view.dart';
 import 'ev_trip_map_screen.dart';
@@ -394,44 +395,12 @@ class _EvTripScreenState extends State<EvTripScreen> {
 
   // ---- Заряд ----
 
+  /// "Hozirgi zaryad" slayderi - xarita ekranidagi "Zaryadni yangilash"
+  /// varag'i bilan BIR XIL vidjet.
   Widget _socBlock() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE3E7EE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.battery_charging_full_rounded,
-                  color: AppColors.primaryText, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  context.tr('ev_trip_charge_now'),
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-              ),
-              Text('${_soc.round()}%',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w800)),
-            ],
-          ),
-          Slider(
-            value: _soc,
-            min: 5,
-            max: 100,
-            divisions: 19,
-            label: '${_soc.round()}%',
-            onChanged: (v) => setState(() => _soc = v),
-          ),
-        ],
-      ),
+    return EvSocSliderCard(
+      value: _soc,
+      onChanged: (v) => setState(() => _soc = v),
     );
   }
 

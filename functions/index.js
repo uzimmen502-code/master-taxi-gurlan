@@ -19234,6 +19234,8 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
           userId: adminUid,
         }));
       }
+      // Mijoz tasdig'i kutilayotgan bo'lsa (D2/D7) holat o'zgargach belgi ma'nosiz: tozalanadi.
+      Object.assign(patch, customerConfirm.clearPatch(od));
       t.update(ref, patch);
     });
     return { ok: true, orderId, status };
@@ -19382,6 +19384,85 @@ exports.courierMarkCarpetArrived = functions.https.onCall(async (data, context) 
   }
 });
 
+// ── Gilam: kuryer qadami va mijoz tasdig'i BIR XIL yadroni ishlatadi (D2/D7, 7-qoida) ──────────
+// Tekshiruvlar kuryer chaqiruvidagi bilan aynan bir xil; xato kodlari o'zgarmagan.
+function assertCarpetPickupReady(od, courierId) {
+  if (String(od.status || '') !== 'pickup_in_delivery') {
+    throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+  }
+  if (String(od.pickupCourierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+  }
+  if (!od.pickupArrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+}
+
+function assertCarpetReturnReady(od, courierId) {
+  if (String(od.status || '') !== 'return_in_delivery') {
+    throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+  }
+  if (String(od.returnCourierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your return task');
+  }
+  if (!od.returnArrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+}
+
+/** `confirmStep` bo'sh — kuryer yo'li (eski yozuv); to'ldirilgan — mijoz tasdig'i (belgi o'chadi, iz qoladi). */
+function carpetPickedUpWrite(t, ref, od, courierId, confirmStep) {
+  t.update(ref, {
+    status: 'picked_up',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...customerConfirm.clearPatch(od),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+}
+
+async function carpetDeliveredCore(t, ref, od, orderId, courierId, confirmStep) {
+  // D5: kuryer haqi = finalPrice'dan foiz (sozlama o'qish fazasida). Yakunlovchi
+  // kuryer - qaytaruvchi (`returnCourierId`); olib ketgan kuryer haqi - ochiq savol.
+  const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
+  const fields = courierTaskPayout.buildPayout('carpet', orderId, od.finalPrice, payoutSettings, courierId);
+  t.update(ref, {
+    status: 'completed',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...customerConfirm.clearPatch(od),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+  courierTaskPayout.writePayoutInTx(
+    t, db, 'carpet', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
+  return fields;
+}
+
+customerConfirm.registerHandler('carpet', {
+  collection: 'carpet_wash_orders',
+  phoneField: 'customerPhone',
+  customerPhoneOf: (od) => od.customerPhone,
+  statusOf: (od) => String(od.status || ''),
+  describe: (od, marker) => {
+    if (marker.step === 'handover_pickup' && od.status === 'pickup_in_delivery') {
+      return { key: 'confirm_carpet_pickup', params: {} };
+    }
+    if (marker.step === 'handover_return' && od.status === 'return_in_delivery') {
+      return { key: 'confirm_carpet_return', params: {} };
+    }
+    return null;
+  },
+  confirm: async (t, { ref, id, od, marker, step }) => {
+    const courierId = canonicalUid(String(marker.courierId || ''));
+    if (step === 'handover_pickup') {
+      assertCarpetPickupReady(od, courierId);
+      carpetPickedUpWrite(t, ref, od, courierId, step);
+      return { status: 'picked_up' };
+    }
+    assertCarpetReturnReady(od, courierId);
+    const fields = await carpetDeliveredCore(t, ref, od, id, courierId, step);
+    return { status: 'completed', after: () => courierTaskPayout.logPayout('carpet', id, fields) };
+  },
+});
+
 /** Kuryer: gilam olib ketildi (pickup_in_delivery → picked_up). */
 exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context) => {
   try {
@@ -19396,26 +19477,25 @@ exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context)
     }
 
     const ref = db.collection('carpet_wash_orders').doc(orderId);
-    await db.runTransaction(async (t) => {
+    const gated = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) {
         throw new functions.https.HttpsError('not-found', 'order not found');
       }
       const od = snap.data() || {};
-      if (String(od.status || '') !== 'pickup_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      assertCarpetPickupReady(od, courierId);
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer o'zi yakunlay olmaydi.
+      if (await customerConfirm.isGated('carpet', od.customerPhone)) {
+        const rq = customerConfirm.requestInTx(t, ref, od, { step: 'handover_pickup', courierId });
+        return { od, created: rq.created };
       }
-      if (String(od.pickupCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-      }
-      if (!od.pickupArrivedAt) {
-        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-      }
-      t.update(ref, {
-        status: 'picked_up',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      carpetPickedUpWrite(t, ref, od, courierId, '');
+      return null;
     });
+    if (gated) {
+      await customerConfirm.afterRequest('carpet', orderId, 'handover_pickup', gated.od, {}, gated.created);
+      return customerConfirm.awaitingResponse('handover_pickup');
+    }
     return { ok: true, orderId };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -19487,34 +19567,25 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
     }
 
     const ref = db.collection('carpet_wash_orders').doc(orderId);
-    const payoutFields = await db.runTransaction(async (t) => {
+    const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) {
         throw new functions.https.HttpsError('not-found', 'order not found');
       }
       const od = snap.data() || {};
-      if (String(od.status || '') !== 'return_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+      assertCarpetReturnReady(od, courierId);
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer o'zi yakunlay olmaydi.
+      if (await customerConfirm.isGated('carpet', od.customerPhone)) {
+        const rq = customerConfirm.requestInTx(t, ref, od, { step: 'handover_return', courierId });
+        return { gated: true, od, created: rq.created };
       }
-      if (String(od.returnCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your return task');
-      }
-      if (!od.returnArrivedAt) {
-        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-      }
-      // D5: kuryer haqi = finalPrice'dan foiz (sozlama o'qish fazasida). Yakunlovchi
-      // kuryer - qaytaruvchi (`returnCourierId`); olib ketgan kuryer haqi - ochiq savol.
-      const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildPayout('carpet', orderId, od.finalPrice, payoutSettings, courierId);
-      t.update(ref, {
-        status: 'completed',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      courierTaskPayout.writePayoutInTx(
-        t, db, 'carpet', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
-      return fields;
+      return { gated: false, fields: await carpetDeliveredCore(t, ref, od, orderId, courierId, '') };
     });
-    courierTaskPayout.logPayout('carpet', orderId, payoutFields);
+    if (out.gated) {
+      await customerConfirm.afterRequest('carpet', orderId, 'handover_return', out.od, {}, out.created);
+      return customerConfirm.awaitingResponse('handover_return');
+    }
+    courierTaskPayout.logPayout('carpet', orderId, out.fields);
     return { ok: true, orderId, status: 'completed' };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -19809,6 +19880,8 @@ exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) 
           userId: adminUid,
         }));
       }
+      // Mijoz tasdig'i kutilayotgan bo'lsa (D2/D7) holat o'zgargach belgi ma'nosiz: tozalanadi.
+      Object.assign(patch, customerConfirm.clearPatch(od));
       // D5: yakunda narx ma'lum bo'ladi - kuryer olib ketgan bo'lsa, haq shu
       // qadamda (qayta) hisoblanadi: faqat baza o'zgargan yoki haq hali yo'q bo'lsa.
       // Haq alohida serverga xos hujjatda (vazifa hujjatida EMAS) - avval o'qiladi (o'qish
@@ -19959,6 +20032,54 @@ exports.courierMarkAgroPickupArrived = functions.https.onCall(async (data, conte
   }
 });
 
+// ── Agro: kuryer qadami va mijoz tasdig'i BIR XIL yadroni ishlatadi (D2/D7, 7-qoida) ──────────
+function assertAgroPickupReady(od, courierId) {
+  if (String(od.status || '') !== 'pickup_in_delivery') {
+    throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+  }
+  if (String(od.pickupCourierId || '') !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+  }
+  if (!od.arrivedAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+  }
+}
+
+async function agroPickedUpCore(t, ref, od, orderId, courierId, confirmStep) {
+  // D5: kuryerning oxirgi qadami. Narx (finalPrice) odatda admin yakunida
+  // qo'yiladi - noma'lum bo'lsa `price_unknown`, `adminSetAgroPickupStatus`
+  // 'completed' qadamida qayta hisoblanadi.
+  const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
+  const fields = courierTaskPayout.buildPayout('agro', orderId, od.finalPrice, payoutSettings, courierId);
+  t.update(ref, {
+    status: 'picked_up',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...customerConfirm.clearPatch(od),
+    ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
+  });
+  courierTaskPayout.writePayoutInTx(
+    t, db, 'agro', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
+  return fields;
+}
+
+customerConfirm.registerHandler('agro', {
+  collection: 'agro_pickup_orders',
+  phoneField: 'customerPhone',
+  customerPhoneOf: (od) => od.customerPhone,
+  statusOf: (od) => String(od.status || ''),
+  describe: (od, marker) => (marker.step === 'handover_pickup' && od.status === 'pickup_in_delivery'
+    ? { key: 'confirm_agro_pickup', params: {} } : null),
+  confirm: async (t, { ref, id, od, marker, step }) => {
+    const courierId = canonicalUid(String(marker.courierId || ''));
+    assertAgroPickupReady(od, courierId);
+    const fields = await agroPickedUpCore(t, ref, od, id, courierId, step);
+    return {
+      status: 'picked_up',
+      after: () => courierTaskPayout.logPayout('agro', id, fields, { step: 'customer_confirmed' }),
+    };
+  },
+});
+
 /** Kuryer: sut olib ketildi (pickup_in_delivery → picked_up). */
 exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) => {
   try {
@@ -19973,35 +20094,25 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
     }
 
     const ref = db.collection('agro_pickup_orders').doc(orderId);
-    const payoutFields = await db.runTransaction(async (t) => {
+    const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) {
         throw new functions.https.HttpsError('not-found', 'order not found');
       }
       const od = snap.data() || {};
-      if (String(od.status || '') !== 'pickup_in_delivery') {
-        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      assertAgroPickupReady(od, courierId);
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer o'zi yakunlay olmaydi.
+      if (await customerConfirm.isGated('agro', od.customerPhone)) {
+        const rq = customerConfirm.requestInTx(t, ref, od, { step: 'handover_pickup', courierId });
+        return { gated: true, od, created: rq.created };
       }
-      if (String(od.pickupCourierId || '') !== courierId) {
-        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
-      }
-      if (!od.arrivedAt) {
-        throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-      }
-      // D5: kuryerning oxirgi qadami. Narx (finalPrice) odatda admin yakunida
-      // qo'yiladi - noma'lum bo'lsa `price_unknown`, `adminSetAgroPickupStatus`
-      // 'completed' qadamida qayta hisoblanadi.
-      const payoutSettings = await courierTaskPayout.readSettingsInTx(t, db);
-      const fields = courierTaskPayout.buildPayout('agro', orderId, od.finalPrice, payoutSettings, courierId);
-      t.update(ref, {
-        status: 'picked_up',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      courierTaskPayout.writePayoutInTx(
-        t, db, 'agro', orderId, fields, admin.firestore.FieldValue.serverTimestamp());
-      return fields;
+      return { gated: false, fields: await agroPickedUpCore(t, ref, od, orderId, courierId, '') };
     });
-    courierTaskPayout.logPayout('agro', orderId, payoutFields, { step: 'courier_picked_up' });
+    if (out.gated) {
+      await customerConfirm.afterRequest('agro', orderId, 'handover_pickup', out.od, {}, out.created);
+      return customerConfirm.awaitingResponse('handover_pickup');
+    }
+    courierTaskPayout.logPayout('agro', orderId, out.fields, { step: 'courier_picked_up' });
     return { ok: true, orderId, status: 'picked_up' };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

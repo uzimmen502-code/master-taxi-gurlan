@@ -30,14 +30,17 @@ class IntercityDeparture {
     return DateTime(day.year, day.month, day.day, time.hour, time.minute);
   }
 
+  /// Aniq sana-vaqt o'tib ketganmi ([pastGrace] hisobga olingan).
+  static bool isAtInPast(DateTime at, DateTime now) =>
+      at.isBefore(now.subtract(pastGrace));
+
   /// Tanlangan kun+vaqt o'tib ketganmi ([pastGrace] hisobga olingan).
   static bool isInPast({
     required DateTime now,
     required bool tomorrow,
     required TimeOfDay time,
   }) {
-    final at = departureAt(now: now, tomorrow: tomorrow, time: time);
-    return at.isBefore(now.subtract(pastGrace));
+    return isAtInPast(departureAt(now: now, tomorrow: tomorrow, time: time), now);
   }
 
   /// Bugun uchun yaqinroq keyingi yarim soatlik slot (`:00` yoki `:30`),
@@ -96,6 +99,6 @@ class IntercityDeparture {
   }) {
     final at = DateTime(
         pickedDay.year, pickedDay.month, pickedDay.day, time.hour, time.minute);
-    return at.isBefore(now.subtract(pastGrace));
+    return isAtInPast(at, now);
   }
 }

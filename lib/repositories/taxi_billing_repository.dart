@@ -139,8 +139,13 @@ class TaxiBillingRepository {
     double? driverLat,
     double? driverLng,
     double? locationAccuracy,
+    String? requestId,
   }) async {
     final data = await _call(_billing, 'publishTaxiTrip', {
+      // Idempotentlik (server auditi): bir xil `requestId` bilan qayta chaqiruv
+      // o'sha reysni qaytaradi, komissiya ikkinchi marta yechilmaydi. Maydon
+      // ixtiyoriy: eski server uni e'tiborsiz qoldiradi.
+      if (requestId != null && requestId.isNotEmpty) 'requestId': requestId,
       'farePerSeat': farePerSeat,
       'from': from,
       'to': to,

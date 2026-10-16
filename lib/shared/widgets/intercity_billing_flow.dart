@@ -1,18 +1,79 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../core/l10n/l10n_extension.dart';
+import '../../core/utils/taxi_billing_reason.dart';
 import '../../repositories/taxi_billing_repository.dart';
+import '../../utils/intercity_departure.dart';
 import 'taxi_agreement_sheet.dart';
 
 /// Шаҳарлараро рейс эълонининг ягона тўлов оқими (D-TAXI-13): ҳақ →
 /// келишув → тасдиқ → тўлов. Рейс очишнинг барча йўллари (тез бошлаш
 /// ойнаси, «қайтиш рейси») шу оқимдан ўтади — тўловсиз эълон йўли қолмайди.
 class IntercityBillingFlow {
-  IntercityBillingFlow({TaxiBillingRepository? repository})
-      : _billing = repository ?? TaxiBillingRepository();
+  IntercityBillingFlow({
+    TaxiBillingRepository? repository,
+    String Function()? requestIdFactory,
+    DateTime Function()? clock,
+  })  : _billing = repository ?? TaxiBillingRepository(),
+        _newRequestId = requestIdFactory ?? generateRequestId,
+        _now = clock ?? DateTime.now;
 
   final TaxiBillingRepository _billing;
+  final String Function() _newRequestId;
+  final DateTime Function() _now;
+
+  /// `publishTaxiTrip.requestId` — server kontrakti: 8..64 belgi, `[A-Za-z0-9_-]`.
+  static String generateRequestId() {
+    final r = Random.secure();
+    final b = StringBuffer('pub_');
+    for (var i = 0; i < 24; i++) {
+      b.write(r.nextInt(36).toRadixString(36));
+    }
+    return b.toString();
+  }
+
+  // Idempotentlik: bitta "e'lon qilish harakati" (bir xil ma'lumot) uchun
+  // bitta `requestId`. Javob ANIQ kelsa (muvaffaqiyat yoki server rad etdi)
+  // harakat tugagan — keyingi bosish YANGI id oladi. Javob noaniq bo'lsa
+  // (tarmoq uzildi, timeout, server xatosi) so'rov serverda bajarilgan
+  // bo'lishi mumkin — qayta urinishda AYNI id yuboriladi, shunda server
+  // komissiyani ikkinchi marta yechmaydi. Ma'lumot (narx/vaqt/yo'nalish...)
+  // o'zgarsa — bu yangi harakat, id yangilanadi.
+  String? _requestId;
+  String? _requestFingerprint;
+
+  /// Shu harakat uchun id (ma'lumot o'zgargan bo'lsa yangisi).
+  String _requestIdFor(String fingerprint) {
+    if (_requestId == null || _requestFingerprint != fingerprint) {
+      _requestId = _newRequestId();
+      _requestFingerprint = fingerprint;
+    }
+    return _requestId!;
+  }
+
+  void _finishAttempt() {
+    _requestId = null;
+    _requestFingerprint = null;
+  }
+
+  /// Javob noaniqmi (so'rov serverda bajarilgan bo'lishi mumkin)?
+  static bool _isAmbiguousFailure(Object e) {
+    if (e is TaxiBillingException) {
+      const ambiguous = {
+        'unavailable',
+        'deadline-exceeded',
+        'internal',
+        'unknown',
+        'cancelled',
+        'aborted',
+      };
+      return ambiguous.contains(e.code);
+    }
+    return true; // Firebase bo'lmagan xato (tarmoq/parse) — noaniq.
+  }
 
   /// `published` бўлса `taxi_trips` id, акс ҳолда `null` (хабар кўрсатилган).
   Future<String?> publish(
@@ -26,6 +87,12 @@ class IntercityBillingFlow {
     required int seats,
     required DateTime departureAt,
   }) async {
+    // O'tib ketgan vaqt bilan to'lov oqimiga kirmaymiz (serverda ham
+    // `departure_in_past` tekshiruvi bor; bu — oldindan sodda xabar).
+    if (IntercityDeparture.isAtInPast(departureAt, _now())) {
+      _snack(context, context.tr('taxi_reason_departure_in_past'));
+      return null;
+    }
     TaxiFeeQuote quote;
     try {
       quote = await _billing.quote(farePerSeat: farePerSeat);
@@ -76,6 +143,8 @@ class IntercityBillingFlow {
     }
 
     final pos = await _lastKnownPosition();
+    final requestId = _requestIdFor(
+        '$farePerSeat|$from|$to|$scheduleDate|$startTime|$seats|${departureAt.toUtc().toIso8601String()}');
     try {
       final res = await _billing.publish(
         farePerSeat: farePerSeat,
@@ -88,15 +157,20 @@ class IntercityBillingFlow {
         driverLat: pos?.latitude,
         driverLng: pos?.longitude,
         locationAccuracy: pos?.accuracy,
+        requestId: requestId,
       );
+      // Server aniq javob berdi — harakat tugadi (keyingi bosish yangi id).
+      _finishAttempt();
       if (res.published) return res.tripId;
       // D-TAXI-23: ҳамён етмади — эълон чиқмайди.
       if (context.mounted) _snack(context, context.tr('taxi_fee_insufficient'));
       return null;
     } on TaxiBillingException catch (e) {
+      if (!_isAmbiguousFailure(e)) _finishAttempt();
       if (context.mounted) _snack(context, _message(context, e.reason));
       return null;
     } catch (_) {
+      // Noaniq: id saqlanadi — qayta urinish komissiyani ikkilantirmaydi.
       if (context.mounted) _snack(context, context.tr('taxi_publish_failed'));
       return null;
     }
@@ -119,20 +193,10 @@ class IntercityBillingFlow {
     }
   }
 
-  String _message(BuildContext context, String reason) {
-    switch (reason) {
-      case 'taxi_verification_required':
-        return context.tr('taxi_verification_required');
-      case 'taxi_not_allowed':
-      case 'no_capability':
-      case 'no_user':
-        return context.tr('taxi_not_allowed');
-      case 'agreement_required':
-        return context.tr('taxi_agreement_title');
-      default:
-        return context.tr('taxi_publish_failed');
-    }
-  }
+  /// Server `details.reason` → foydalanuvchi matni (barcha ma'lum sabablar
+  /// `taxiReasonKey` xaritasida, noma'lum → umumiy matn).
+  String _message(BuildContext context, String reason) =>
+      context.tr(taxiReasonKey(reason));
 
   void _snack(BuildContext context, String msg) {
     if (!context.mounted) return;

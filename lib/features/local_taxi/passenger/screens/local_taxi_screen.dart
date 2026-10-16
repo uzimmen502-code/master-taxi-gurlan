@@ -528,7 +528,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     );
     if (!mounted) return;
 
-    if ((prefs.getString('user_role') ?? '') != 'driver') {
+    if (!UserAudience.taxiDriverFrom(prefs)) {
       final name = prefs.getString('user_name') ?? '';
       final car = '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
       try {
@@ -551,7 +551,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           );
           if (!mounted) return;
           if (submitResult.autoApproved) {
-            await prefs.setString('user_role', 'driver');
             await UserAudience.saveTaxiDriver(true);
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -574,7 +573,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           return;
         }
 
-        await prefs.setString('user_role', 'driver');
         await UserAudience.saveTaxiDriver(true);
         await driverRepo.approveDriverAutomatically(
           uid: uid,

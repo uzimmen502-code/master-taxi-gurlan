@@ -753,7 +753,6 @@ class _HomeViewState extends State<_HomeView> {
     ];
     final uid = phoneDigits(context.read<HomeController>().phone);
     final driverRepo = context.read<DriverRepository>();
-    final ridesRepo = context.read<RidesRepository>();
     await _push(DriverHubScreen(
       choices: choices,
       loadRoles: () => driverRepo.driverRoles(uid),
@@ -768,7 +767,6 @@ class _HomeViewState extends State<_HomeView> {
         uid: canonicalPhoneId(uid),
         driverRepo: driverRepo,
       ),
-      onLeaveDriver: () => leaveDriverModeWithConfirm(context, ridesRepo: ridesRepo),
       onLeaveType: (choice) async {
         await leaveDriverTypeWithConfirm(
           context,

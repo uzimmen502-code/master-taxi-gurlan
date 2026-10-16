@@ -5,8 +5,6 @@ import '../../core/l10n/l10n_extension.dart';
 import '../../core/theme/ava_tokens.dart';
 import '../../repositories/driver_repository.dart';
 import '../../repositories/marshrut_driver_repository.dart';
-import '../../repositories/rides_repository.dart';
-import '../../services/driver_force_leave_service.dart';
 import 'driver_type_leave.dart';
 
 /// Ҳайдовчи панелидаги «Сменани тугатиш» ва «Ҳайдовчиликдан чиқиш».
@@ -131,40 +129,4 @@ Future<DriverTypeLeaveResult> leaveDriverTypeWithConfirm(
     backgroundColor: good ? AvaLight.ok : Colors.red,
   ));
   return res;
-}
-
-/// «Ҳайдовчиликдан чиқиш»: сафарлар бекор, эълонлар ўчади, офлайн, роль
-/// йўловчига қайтади (тасдиқ сақланади). Аввалги Кабинет оқими билан бир хил.
-Future<void> leaveDriverModeWithConfirm(
-  BuildContext context, {
-  required RidesRepository ridesRepo,
-}) async {
-  if (!await _confirm(
-    context,
-    titleKey: 'leave_driver_permanent_title',
-    bodyKey: 'leave_driver_permanent_body',
-    okKey: 'confirm',
-    danger: true,
-  )) {
-    return;
-  }
-  if (!context.mounted) return;
-  final messenger = ScaffoldMessenger.of(context);
-  final okText = context.tr('leave_driver_force_success');
-  final errText = context.tr('error_generic');
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final phone = prefs.getString('user_phone') ?? '';
-    await DriverForceLeaveService(ridesRepo: ridesRepo)
-        .forceLeaveMarshrutDriver(userPhone: phone);
-    messenger.showSnackBar(SnackBar(
-      content: Text(okText),
-      backgroundColor: AvaLight.ok,
-    ));
-  } catch (_) {
-    messenger.showSnackBar(SnackBar(
-      content: Text(errText),
-      backgroundColor: Colors.red,
-    ));
-  }
 }

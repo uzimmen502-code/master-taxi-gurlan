@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Ҳайдовчи панелидаги янги тугмалар (эга, 2026-10-16): автомобилни ўчириш,
-/// сменани тугатиш, ҳайдовчиликдан чиқиш. Улар Кабинетдан кўчирилди.
+/// сменани тугатиш. Улар Кабинетдан кўчирилди. Умумий «Ҳайдовчиликдан чиқиш»
+/// олиб ташланди (эга, 2026-10-17) — ўрнига тур бўйича чиқиш (driver_type_leave_test).
 Widget _host({
   required DriverRoles roles,
   Map<String, String>? car,
   Future<bool> Function()? onDeleteCar,
   Future<void> Function()? onEndShift,
-  Future<void> Function()? onLeaveDriver,
 }) =>
     MaterialApp(
       theme: AppTheme.light,
@@ -26,7 +26,6 @@ Widget _host({
         onEditCar: () async {},
         onDeleteCar: onDeleteCar,
         onEndShift: onEndShift,
-        onLeaveDriver: onLeaveDriver,
         onSubmitVerification: () async => HubSubmitResult.sent,
         onOpenWallet: () async {},
       ),
@@ -139,28 +138,10 @@ void main() {
     });
   });
 
-  group('«Ҳайдовчиликдан чиқиш»', () {
-    testWidgets('ҳайдовчи (тури бор) — кўринади ва callback чақирилади', (t) async {
-      _tall(t);
-      var calls = 0;
-      await t.pumpWidget(_host(
-        roles: const DriverRoles(types: ['intercity']),
-        onLeaveDriver: () async => calls++,
-      ));
-      await t.pumpAndSettle();
-      await t.tap(find.text('leave_driver_permanent'));
-      await t.pumpAndSettle();
-      expect(calls, 1);
-    });
-
-    testWidgets('ҳайдовчи эмас — кўринмайди', (t) async {
-      _tall(t);
-      await t.pumpWidget(_host(
-        roles: DriverRoles.none,
-        onLeaveDriver: () async {},
-      ));
-      await t.pumpAndSettle();
-      expect(find.text('leave_driver_permanent'), findsNothing);
-    });
+  testWidgets('умумий «Ҳайдовчиликдан чиқиш» тугмаси ЙЎҚ (тур бўйича чиқиш бор)', (t) async {
+    _tall(t);
+    await t.pumpWidget(_host(roles: const DriverRoles(types: ['intercity', 'local'])));
+    await t.pumpAndSettle();
+    expect(find.text('leave_driver_permanent'), findsNothing);
   });
 }

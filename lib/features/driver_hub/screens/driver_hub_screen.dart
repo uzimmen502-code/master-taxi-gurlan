@@ -27,7 +27,6 @@ class DriverHubScreen extends StatefulWidget {
     required this.onOpenWallet,
     this.onDeleteCar,
     this.onEndShift,
-    this.onLeaveDriver,
     this.onLeaveType,
     this.clock = DateTime.now,
     this.showVerification = hubShowVerification,
@@ -40,9 +39,6 @@ class DriverHubScreen extends StatefulWidget {
   /// Сменани тугатиш (онлайн ҳайдовчи → офлайн). Тугма фақат маҳаллий ёки
   /// маршрут тури онлайн бўлганда кўринади. `null` — тугма йўқ.
   final Future<void> Function()? onEndShift;
-
-  /// «Ҳайдовчиликдан чиқиш» (тасдиқни ўзи сўрайди). `null` — тугма йўқ.
-  final Future<void> Function()? onLeaveDriver;
 
   /// Битта турдан чиқиш (тасдиқни ўзи сўрайди). Тугма фақат қўшилган ва
   /// ҳозир ФАОЛ бўлмаган тур картасида кўринади. `null` — тугма йўқ.
@@ -101,8 +97,6 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
   bool get _canEndShift =>
       widget.onEndShift != null &&
       (_roles.isActive('local') || _roles.isActive('marshrut'));
-
-  bool get _canLeave => widget.onLeaveDriver != null && _roles.isDriver;
 
   /// Бир вақтда битта амал; тугагач ҳолат янгиланади.
   Future<void> _run(Future<void> Function() action) async {
@@ -165,15 +159,6 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
                       onPressed: _busy ? null : () => _run(widget.onEndShift!),
                       icon: const Icon(Icons.stop_circle_outlined),
                       label: Text(context.tr('end_shift')),
-                    ),
-                  ],
-                  if (_canLeave) ...[
-                    const SizedBox(height: 12),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: c.danger),
-                      onPressed: _busy ? null : () => _run(widget.onLeaveDriver!),
-                      icon: const Icon(Icons.exit_to_app),
-                      label: Text(context.tr('leave_driver_permanent')),
                     ),
                   ],
                 ],

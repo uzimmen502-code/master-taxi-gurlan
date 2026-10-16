@@ -6,21 +6,6 @@ class DriverRoleService {
 
   static final FirebaseFunctions _fn = FirebaseFunctions.instance;
 
-  /// Yo'lovchi rejimiga qaytish (tasdiq saqlanadi, faqat role/offline).
-  ///
-  /// [clientHandledCleanup] — client trip/schedule bekor qilgan bo'lsa, CF faqat
-  /// rol/offline/queue (dublikat cancel yo'q).
-  static Future<void> leaveDriverMode({
-    required String userPhone,
-    bool clientHandledCleanup = false,
-  }) async {
-    final callable = _fn.httpsCallable('leaveDriverRole');
-    await callable.call(<String, dynamic>{
-      'userPhone': userPhone,
-      if (clientHandledCleanup) 'clientHandledCleanup': true,
-    });
-  }
-
   /// Admin: barcha taksi haydovchilar bazasini tozalash.
   static Future<Map<String, dynamic>> adminResetTaxiDriversRegistry({
     required String adminPhone,

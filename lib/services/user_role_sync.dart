@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/formatters.dart';
+import 'user_audience.dart';
 
 /// Foydalanuvchi roli: **admin/superadmin/dispatcher** faqat Firestore орқали.
 ///
@@ -18,23 +19,9 @@ class UserRoleSync {
   static bool isPrivileged(String role) =>
       privilegedRoles.contains(role.trim().toLowerCase());
 
-  /// Ҳайдовчи тасдиқланганidan keyin prefs'ni darhol `driver` qilish.
-  static Future<void> forceSyncDriver() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_role', 'driver');
-    try {
-      final phone = prefs.getString('user_phone') ?? '';
-      if (phone.isEmpty) return;
-      final sync = UserRoleSync();
-      final fsRole = await sync.fetchFirestoreRole(phone);
-      final role = (fsRole != null && fsRole.trim().isNotEmpty)
-          ? fsRole.trim().toLowerCase()
-          : 'driver';
-      await prefs.setString('user_role', role);
-    } catch (_) {
-      // Firestore ishlamasa — local `driver` saqlanadi.
-    }
-  }
+  /// Ҳайдовчи ҳуқуқи олингач аудитория белгисини дарҳол ёқиш. Эски
+  /// `user_role = driver` ЭНДИ ёзилмайди (ҳайдовчилик — ҳуқуқ, `UserAudience`).
+  static Future<void> forceSyncDriver() => UserAudience.saveTaxiDriver(true);
 
   /// Firestore ustuvor (faqat privileged); aks holda server yoki local.
   static String reconcile({
@@ -103,6 +90,6 @@ class UserRoleSync {
 
 /// Client `updateProfile` / `quickSaveRole` учун рухсат etilgan rollar.
 bool isClientAssignableRole(String role) {
-  const allowed = {'user', 'driver', 'courier'};
+  const allowed = {'user', 'courier'};
   return allowed.contains(role.trim().toLowerCase());
 }

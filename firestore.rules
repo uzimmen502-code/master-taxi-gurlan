@@ -3283,6 +3283,23 @@ service cloud.firestore {
                // Курьер рейсни ўзгача бировга ўтказа олмайди.
                && request.resource.data.get('courierId', '')
                   == resource.data.get('courierId', '')
+               // C5/F11: status faqat ilova yozadigan o'tishlar bilan:
+               //   o'zgarmaydi | ready -> active (startRoute) |
+               //   completed — FAQAT reys tugaganda (currentIndex >=
+               //   orders.size(); ilova avval advanceIndex, keyin
+               //   completeRoute yozadi). cancelled/ready/active'ga
+               //   qaytarish kuryerga yo'q: yetkazilmagan buyurtmali reys
+               //   completed bo'lsa assertOrderOnActiveRoute buyurtmani
+               //   rad etadi va custody uziladi.
+               && (
+                    request.resource.data.get('status', '')
+                      == resource.data.get('status', '')
+                    || (resource.data.get('status', '') == 'ready'
+                        && request.resource.data.get('status', '') == 'active')
+                    || (request.resource.data.get('status', '') == 'completed'
+                        && request.resource.data.currentIndex
+                           >= request.resource.data.orders.size())
+                  )
              );
       allow delete: if false;
     }

@@ -66,7 +66,10 @@
     "test:task-release": "firebase emulators:exec --only firestore --project demo-task-release \"node test/courier_task_release_cf.test.js\"",
     "test:courier-payout-pure": "node test/courier_task_payout_pure.test.js",
     "test:courier-payout-rules": "firebase emulators:exec --only firestore --project demo-courier-payout-rules \"node test/courier_task_payout_rules.test.js\"",
-    "test:courier-payout": "firebase emulators:exec --only firestore --project demo-courier-payout \"node test/courier_task_payout_cf.test.js\""
+    "test:courier-payout": "firebase emulators:exec --only firestore --project demo-courier-payout \"node test/courier_task_payout_cf.test.js\"",
+    "test:customer-confirm-pure": "node test/customer_confirm_pure.test.js",
+    "test:customer-confirm-rules": "firebase emulators:exec --only firestore --project demo-customer-confirm-rules \"node test/customer_confirm_rules.test.js\"",
+    "test:customer-confirm": "firebase emulators:exec --only firestore --project demo-customer-confirm \"node test/customer_confirm_cf.test.js\""
   },
   "engines": {
     "node": "20"

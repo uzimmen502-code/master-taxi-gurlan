@@ -20,7 +20,12 @@ class RestaurantFormFields extends StatefulWidget {
     required this.onChanged,
     this.showLegalType = true,
     this.showPaymentDetails = true,
+    this.legalTypeOptions = RestaurantFormData.legalTypes,
   });
+
+  /// Танлаш мумкин бўлган юридик шакллар (кафе: `yatt`/`llc`; уй ошпази
+  /// танловсиз — `showLegalType: false`).
+  final List<String> legalTypeOptions;
 
   final RestaurantFormData data;
   final VoidCallback onChanged;
@@ -153,7 +158,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
           Wrap(
             spacing: 6,
             children: [
-              for (final t in RestaurantFormData.legalTypes)
+              for (final t in widget.legalTypeOptions)
                 ChoiceChip(
                   label: Text(context.tr('restaurants_m_legal_$t')),
                   selected: d.legalType == t,

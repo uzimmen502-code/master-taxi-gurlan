@@ -57,7 +57,14 @@ import '../courier/screens/courier_screen.dart';
 import '../../repositories/courier_capability_repository.dart';
 import '../courier/widgets/courier_apply_flow.dart';
 import 'widgets/work_roles_sheet.dart';
+import '../driver_hub/driver_hub_actions.dart';
 import '../driver_hub/screens/driver_hub_screen.dart';
+import '../../shared/car/car_edit_dialog.dart';
+import '../assistant/assistant_entry.dart';
+import '../book/screens/ava_book_screen.dart';
+import '../restaurants/merchant/restaurant_entry_flow.dart';
+import '../tv_market/repositories/tv_shop_repository.dart';
+import '../tv_market/screens/tv_my_shop_screen.dart';
 import '../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
@@ -636,7 +643,8 @@ class _HomeViewState extends State<_HomeView> {
     });
   }
 
-  /// «＋» — видео / эълон / маҳсулот / хизмат / сотувчи / ҳайдовчи.
+  /// «＋» — «Менинг бизнесим»: видео · эълон · хизмат · онлайн дўкон · дўкон ·
+  /// ҳайдовчи · курьер · уй ошпази · кафе · юк ташувчи · китоб · AVA AI.
   Future<void> _openCreateSheet() async {
     // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — ҳолат ҳали юкланмаган
     // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз.
@@ -647,11 +655,36 @@ class _HomeViewState extends State<_HomeView> {
     } else {
       unawaited(_refreshDriverRoles());
     }
-    final action = await showAvaCreateSheet(context, driverRoles: _driverRoles);
+    final action = await showAvaCreateSheet(
+      context,
+      driverRoles: _driverRoles,
+      // Кафе-ресторан модули яширин бўлса — «Уй ошпази» ва «Кафе» ҳам йўқ.
+      hidden: {
+        if (!ServiceConfigHolder.isVisible('restaurants')) ...{
+          AvaCreateAction.homeCook,
+          AvaCreateAction.cafe,
+        },
+        if (!ServiceConfigHolder.isVisible('yuk_local')) AvaCreateAction.cargo,
+      },
+    );
     if (action == null || !mounted) return;
 
+    // Китоб ва AVA AI телефонсиз ҳам очилади (AI ўзи рўйхатдан ўтишни таклиф қилади).
+    if (action == AvaCreateAction.book) {
+      await _push(const AvaBookScreen());
+      return;
+    }
+    if (action == AvaCreateAction.assistant) {
+      await openAssistantEntry(
+        context,
+        phone: context.read<HomeController>().phone,
+        push: _push,
+      );
+      return;
+    }
+
     final phone = canonicalPhoneId(context.read<HomeController>().phone);
-    // Барча қўшиш йўллари эгалик телефонига боғланган.
+    // Қолган барча йўллар эгалик телефонига боғланган.
     if (phoneDigits(phone).length < 9) {
       needPhoneForAction(context);
       return;
@@ -671,36 +704,67 @@ class _HomeViewState extends State<_HomeView> {
             openAddSheet: true,
           ),
         );
-      case AvaCreateAction.product:
-        await _push(const CreateAdScreen());
-      case AvaCreateAction.seller:
+      case AvaCreateAction.shopOnline:
+        final target = await showAvaShopTargetSheet(context);
+        if (target == null || !mounted) return;
+        switch (target) {
+          case AvaShopTarget.retail:
+            await _push(const CreateAdScreen());
+          case AvaShopTarget.wholesale:
+            await _push(
+              WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
+            );
+        }
+      case AvaCreateAction.shop:
+        // Дўкон бор — «Менинг дўконим», йўқ — очиш оқими (Кабинетдаги каби).
+        final hasShop = await TvShopRepository().hasShop(phone);
+        if (!mounted) return;
         await _push(
-          WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
+          hasShop ? TvMyShopScreen(ownerPhone: phone) : const TvPublishScreen(),
         );
-      case AvaCreateAction.work:
+      case AvaCreateAction.driver:
         await _openWork();
+      case AvaCreateAction.courier:
+        await _openCourierWork();
+      case AvaCreateAction.homeCook:
+        await openRestaurantBusiness(context, ownerUid: phone, homeCook: true);
+      case AvaCreateAction.cafe:
+        await openRestaurantBusiness(context, ownerUid: phone, homeCook: false);
+      case AvaCreateAction.cargo:
+        await _openYukModule('yuk_local', const YukLocalScreen());
+      case AvaCreateAction.book:
+      case AvaCreateAction.assistant:
+        break; // юқорида ҳал қилинган
     }
   }
 
-  /// «＋» → «Ҳайдовчи / Курьер»: ягона «Иш панели» (автомобиль, турлар, текширув,
-  /// ҳамён). Амаллар мавжуд оқимларни чақиради — [_runWorkChoice] ва ҳ.к.
+  /// «＋» → «Ҳайдовчи бўлиш»: «Иш панели» (автомобиль, учта йўналиш, текширув,
+  /// ҳамён). Курьер алоҳида банд (эга, 2026-10-16) — бу ерда йўқ. Амаллар мавжуд
+  /// оқимларни чақиради — [_runWorkChoice] ва ҳ.к.
   Future<void> _openWork() async {
     final choices = <WorkChoice>[
       if (HomeModuleGate.canOpen('intercity')) WorkChoice.intercity,
       if (HomeModuleGate.canOpen('local_taxi')) WorkChoice.local,
       if (HomeModuleGate.canOpen('marshrut')) WorkChoice.marshrut,
-      WorkChoice.courier,
     ];
     final uid = phoneDigits(context.read<HomeController>().phone);
     final driverRepo = context.read<DriverRepository>();
+    final ridesRepo = context.read<RidesRepository>();
     await _push(DriverHubScreen(
       choices: choices,
       loadRoles: () => driverRepo.driverRoles(uid),
       loadCar: () => UserRepository().getCarInfo(canonicalPhoneId(uid)),
       onAction: _runWorkChoice,
-      onEditCar: () => _push(
-        const ProfileScreen(autoOpenCarEdit: true, returnAfterSave: true),
+      onEditCar: () async {
+        await showCarEditDialog(context, uid: uid);
+      },
+      onDeleteCar: () => confirmAndDeleteCar(context, uid: canonicalPhoneId(uid)),
+      onEndShift: () => endDriverShiftWithConfirm(
+        context,
+        uid: canonicalPhoneId(uid),
+        driverRepo: driverRepo,
       ),
+      onLeaveDriver: () => leaveDriverModeWithConfirm(context, ridesRepo: ridesRepo),
       onSubmitVerification: _submitTaxiVerification,
       onOpenWallet: () => openWalletScreen(context),
     ));

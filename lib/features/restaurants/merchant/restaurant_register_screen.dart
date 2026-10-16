@@ -13,9 +13,13 @@ import 'restaurant_panel_screen.dart';
 import 'restaurant_register_form.dart';
 
 class RestaurantRegisterScreen extends StatefulWidget {
-  const RestaurantRegisterScreen({super.key, this.repository});
+  const RestaurantRegisterScreen({super.key, this.repository, this.homeCook = false});
 
   final RestaurantsRepository? repository;
+
+  /// `true` — «Уй ошпази бўлиш»: `legalType` `individual` га қотирилади,
+  /// танлов кўрсатилмайди. `false` — кафе-ресторан: фақат `yatt`/`llc`.
+  final bool homeCook;
 
   @override
   State<RestaurantRegisterScreen> createState() => _RestaurantRegisterScreenState();
@@ -23,7 +27,9 @@ class RestaurantRegisterScreen extends StatefulWidget {
 
 class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   late final RestaurantsRepository _repo = widget.repository ?? RestaurantsRepository();
-  final _data = RestaurantFormData();
+  late final _data = RestaurantFormData(
+    legalType: widget.homeCook ? RestaurantFormData.homeCookLegalType : RestaurantFormData.cafeLegalTypes.first,
+  );
   bool _sending = false;
   bool _phoneLoaded = false;
 
@@ -81,7 +87,7 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
         backgroundColor: c.surface,
         surfaceTintColor: c.surface,
         elevation: 0,
-        title: Text(context.tr('restaurants_m_register_title'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
+        title: Text(context.tr(widget.homeCook ? 'home_create_home_cook' : 'restaurants_m_register_title'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
       ),
       body: !_phoneLoaded
           ? const Center(child: CircularProgressIndicator())
@@ -89,7 +95,12 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
-                  RestaurantFormFields(data: _data, onChanged: () => setState(() {})),
+                  RestaurantFormFields(
+                    data: _data,
+                    onChanged: () => setState(() {}),
+                    showLegalType: !widget.homeCook,
+                    legalTypeOptions: RestaurantFormData.cafeLegalTypes,
+                  ),
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _sending ? null : _submit,

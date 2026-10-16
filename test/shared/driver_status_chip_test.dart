@@ -83,7 +83,8 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('work_entry_open'), findsOneWidget);
-    expect(find.text('work_entry_join'), findsNothing);
+    // Курьер алоҳида банд бўлди (2026-10-16): ҳайдовчи қатори мустақил.
+    expect(find.text('home_create_driver_open'), findsOneWidget);
+    expect(find.text('home_create_driver'), findsNothing);
   });
 }

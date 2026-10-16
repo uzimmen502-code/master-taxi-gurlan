@@ -2,40 +2,24 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/app_share.dart';
 import '../../../core/geo/geo_names.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/driver_status_chip.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/driver_repository.dart';
-import '../../../repositories/rides_repository.dart';
-import '../../../services/driver_force_leave_service.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../repositories/trips_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
-import '../../courier/screens/courier_screen.dart';
-import '../../courier/widgets/courier_profile_entry.dart';
-import '../../restaurants/merchant/restaurant_profile_entry.dart';
 import '../../seller/screens/seller_pos_screen.dart';
-import '../../tv_market/repositories/tv_shop_repository.dart';
-import '../../tv_market/screens/tv_my_shop_screen.dart';
-import '../../tv_market/screens/tv_publish_screen.dart';
-import '../../marshrut/driver/screens/driver_panel_marshrut_screen.dart';
-import '../../marshrut/driver/screens/driver_register_marshrut_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../../realty/screens/my_realty_listings_screen.dart';
-import '../../../core/utils/driver_car_prefill.dart';
-import '../../book/screens/ava_book_screen.dart';
 import '../controllers/profile_controller.dart';
 import 'address_edit_screen.dart';
 import 'user_info_screen.dart';
@@ -51,14 +35,7 @@ import '../../demand_offer/presentation/activity/demand_activity_entry.dart';
 /// Маълумот сақланиб қолади, лекин шу йерда кўрсатилмайди (профил —
 /// "сервислар маркази", тарихни ўз модулдан кўрилади).
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({
-    super.key,
-    this.autoOpenCarEdit = false,
-    this.returnAfterSave = false,
-  });
-
-  final bool autoOpenCarEdit;
-  final bool returnAfterSave;
+  const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -77,10 +54,7 @@ class ProfileScreen extends StatelessWidget {
         userRepo: ctx.read<UserRepository>(),
         locationService: ctx.read<LocationService>(),
       )..load(),
-      child: _ProfileView(
-        autoOpenCarEdit: autoOpenCarEdit,
-        returnAfterSave: returnAfterSave,
-      ),
+      child: const _ProfileView(),
     );
   }
 }
@@ -145,13 +119,7 @@ class _AnonymousProfileView extends StatelessWidget {
 }
 
 class _ProfileView extends StatefulWidget {
-  const _ProfileView({
-    this.autoOpenCarEdit = false,
-    this.returnAfterSave = false,
-  });
-
-  final bool autoOpenCarEdit;
-  final bool returnAfterSave;
+  const _ProfileView();
 
   @override
   State<_ProfileView> createState() => _ProfileViewState();
@@ -161,32 +129,8 @@ class _ProfileViewState extends State<_ProfileView> {
   static const _green = AppColors.primaryText;
   static const String _rolePin = '2024';
 
-  bool _autoOpenHandled = false;
   int _roleTapCount = 0;
   DateTime? _lastRoleTap;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.autoOpenCarEdit) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoOpenCarEdit());
-    }
-  }
-
-  Future<void> _maybeAutoOpenCarEdit() async {
-    if (_autoOpenHandled || !mounted) return;
-    _autoOpenHandled = true;
-    await Future<void>.delayed(Duration.zero);
-    if (!mounted) return;
-    final ctrl = context.read<ProfileController>();
-    final saved = await _CarInfoSection.showEditDialog(
-      context,
-      ctrl,
-      driverFlow: widget.returnAfterSave,
-    );
-    if (!mounted || !widget.returnAfterSave) return;
-    Navigator.of(context).pop(saved == true);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -281,29 +225,9 @@ class _ProfileViewState extends State<_ProfileView> {
                 ),
               ),
             ),
-          // КУРЬЕРЛИК (D-15.5): ҳуқуқ — `provider_capabilities`, роль эмас.
-          // Ариза тугмаси ва панел шу виджетда; телефонсиз меҳмонга йўқ.
-          if (canonicalUserId(c.phone).isNotEmpty)
-            CourierProfileEntry(
-              userId: canonicalUserId(c.phone),
-              legacyCourierRole: c.role == 'courier',
-              panelButton: _rolePanelButton,
-            )
-          else if (c.role == 'courier')
-            _rolePanelButton(
-              label: loc.translate('profile_courier_panel'),
-              icon: Icons.delivery_dining,
-              color: AppColors.primary,
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const CourierScreen())),
-            ),
-          // КАФЕ-РЕСТОРАН (D-REST-6/7, 2026-10-08): ўз ресторанини очиш ёки
-          // панел — `restaurants.ownerUid`; модул яширин бўлса кўринмайди.
-          if (canonicalUserId(c.phone).isNotEmpty)
-            RestaurantProfileEntry(
-              userId: canonicalUserId(c.phone),
-              panelButton: _rolePanelButton,
-            ),
+          // Курьерлик, кафе-ресторан / уй ошпази, ҳайдовчи (автомобиль, смена,
+          // чиқиш) ва дўкон «＋ → Менинг бизнесим» га кўчди (эга, 2026-10-16):
+          // Кабинет — бошқариш жойи, бошлаш эмас.
           if (c.role == 'seller' ||
               c.role == 'admin' ||
               c.role == 'superadmin')
@@ -316,52 +240,12 @@ class _ProfileViewState extends State<_ProfileView> {
                 MaterialPageRoute(builder: (_) => const SellerPosScreen()),
               ),
             ),
-          if (c.role == 'driver' || c.hasCarInfo || widget.autoOpenCarEdit) ...[
-            const SizedBox(height: 12),
-            _CarInfoSection(ctrl: c),
-            const SizedBox(height: 8),
-          ],
-          if (c.role == 'driver') ...[
-            _ShiftButton(
-              isOnline: c.isDriverOnline,
-              onStart: () => _startShift(c, loc),
-              onEnd: () => _endShift(c, loc),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade700,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  icon: const Icon(Icons.exit_to_app),
-                  label: Text(context.tr('leave_driver_permanent')),
-                  onPressed: () => _confirmLeaveDriverMode(context),
-                ),
-              ),
-            ),
-          ],
           const SizedBox(height: 24),
         ]),
       ),
     );
 
-    if (!widget.returnAfterSave) return scaffold;
-
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        Navigator.of(context).pop(false);
-      },
-      child: scaffold,
-    );
+    return scaffold;
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -520,40 +404,9 @@ class _ProfileViewState extends State<_ProfileView> {
             },
           ),
           const SizedBox(height: 10),
-          FutureBuilder<bool>(
-            future: TvShopRepository()
-                .hasShop(canonicalPhoneId(c.phone)),
-            builder: (context, snap) {
-              final hasShop = snap.data == true;
-              return _cardTile(
-                icon: Icons.storefront_rounded,
-                color: _green,
-                title: context.tr(
-                  hasShop ? 'tv_shop_mine' : 'tv_shop_open_cta',
-                ),
-                subtitle: context.tr(
-                  hasShop ? 'tv_shop_open_hint' : 'tv_shop_open_hint',
-                ),
-                onTap: () async {
-                  final phone = canonicalPhoneId(c.phone);
-                  if (phone.isEmpty) return;
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => hasShop
-                          ? TvMyShopScreen(ownerPhone: phone)
-                          : const TvPublishScreen(),
-                    ),
-                  );
-                  if (mounted) setState(() {});
-                },
-              );
-            },
-          ),
-          const SizedBox(height: 10),
           // Кўчмас мулк объектлари — фойдаланувчининг ўз контенти,
-          // шунинг учун дўкон ва китоб каби профилда туради (бўлим
-          // экранида эмас).
+          // шунинг учун профилда туради (бўлим экранида эмас).
+          // Дўкон ва китоб «＋ → Менинг бизнесим» га кўчди (2026-10-16).
           _cardTile(
             icon: Icons.apartment_rounded,
             color: _green,
@@ -565,19 +418,6 @@ class _ProfileViewState extends State<_ProfileView> {
                 MaterialPageRoute(
                   builder: (_) => const MyRealtyListingsScreen(),
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 10),
-          _cardTile(
-            icon: Icons.menu_book_rounded,
-            color: _green,
-            title: context.tr('book_menu_title'),
-            subtitle: context.tr('book_menu_subtitle'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AvaBookScreen()),
               );
             },
           ),
@@ -761,132 +601,6 @@ class _ProfileViewState extends State<_ProfileView> {
     );
   }
 
-  Future<void> _startShift(ProfileController c, AppLocalizations loc) async {
-    await _openMarshrutPanel(context, c);
-    if (!mounted) return;
-    await c.load();
-  }
-
-  Future<void> _endShift(ProfileController c, AppLocalizations loc) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(context.tr('end_shift_confirm_title')),
-        content: Text(context.tr('end_shift_confirm_body')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(loc.translate('cancel')),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.tr('end_shift')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    await c.endShift();
-    if (!mounted) return;
-    final err = c.consumeError();
-    if (err != null) {
-      _snack(context.tr(err), isError: true);
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('shift_ended_success')),
-      backgroundColor: Colors.grey.shade700,
-    ));
-  }
-
-  Future<void> _confirmLeaveDriverMode(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: Text(context.tr('leave_driver_permanent_title')),
-        content: Text(context.tr('leave_driver_permanent_body')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(context.tr('cancel')),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.tr('confirm')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    try {
-      final ridesRepo = context.read<RidesRepository>();
-      final prefs = await SharedPreferences.getInstance();
-      final phone = prefs.getString('user_phone') ?? '';
-      await DriverForceLeaveService(ridesRepo: ridesRepo)
-          .forceLeaveMarshrutDriver(userPhone: phone);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(context.tr('leave_driver_force_success')),
-        backgroundColor: AvaLight.ok,
-      ));
-      await context.read<ProfileController>().load();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(context.tr('error_generic')),
-        backgroundColor: Colors.red,
-      ));
-    }
-  }
-
-  Future<void> _openMarshrutPanel(
-    BuildContext context,
-    ProfileController c,
-  ) async {
-    final uid = phoneDigits(c.phone);
-    if (uid.length < 9) {
-      _snack(context.tr('leave_driver_error_phone'), isError: true);
-      return;
-    }
-
-    final profile = await MarshrutDriverRepository().getProfile(uid);
-    if (!context.mounted) return;
-
-    if (profile != null) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DriverPanelMarshrutScreen(
-            carModel: profile.carModel,
-            plate: profile.plate,
-            seats: profile.seats,
-            stops: profile.stops,
-            driverName: profile.driverName.isNotEmpty
-                ? profile.driverName
-                : c.name,
-            driverPhone: profile.driverPhone.isNotEmpty
-                ? profile.driverPhone
-                : c.phone,
-            driverId: profile.uid,
-          ),
-        ),
-      );
-    } else {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const DriverRegisterMarshrutScreen(),
-        ),
-      );
-    }
-  }
-
   void _showLogoutDialog(ProfileController c, AppLocalizations loc) {
     showDialog(
       context: context,
@@ -1012,329 +726,5 @@ class _ProfileViewState extends State<_ProfileView> {
       default:
         return loc.translate('user_role');
     }
-  }
-}
-
-class _ShiftButton extends StatelessWidget {
-  const _ShiftButton({
-    required this.isOnline,
-    required this.onStart,
-    required this.onEnd,
-  });
-
-  final bool isOnline;
-  final VoidCallback onStart;
-  final VoidCallback onEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isOnline) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-        child: SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton.icon(
-            onPressed: onEnd,
-            icon: const Icon(Icons.stop_circle_outlined),
-            label: Text(
-              context.tr('end_shift'),
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey.shade700,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: onStart,
-          icon: const Icon(Icons.play_circle_outline),
-          label: Text(
-            context.tr('start_shift'),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AvaLight.ok,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CarInfoSection extends StatelessWidget {
-  const _CarInfoSection({required this.ctrl});
-
-  final ProfileController ctrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              context.tr('car_info_title'),
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                if (ctrl.hasCarInfo)
-                  TextButton.icon(
-                    onPressed: () => _confirmDeleteCar(context, ctrl),
-                    icon: const Icon(Icons.delete_outline,
-                        color: Colors.red, size: 16),
-                    label: Text(
-                      context.tr('delete'),
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
-                TextButton.icon(
-                  onPressed: () => showEditDialog(context, ctrl),
-                  icon: const Icon(Icons.edit, size: 16),
-                  label: Text(context.tr('edit')),
-                ),
-              ],
-            ),
-            if (ctrl.hasCarInfo) ...[
-              const SizedBox(height: 4),
-              _labeledRow(context.tr('car_model'), ctrl.carModel),
-              _labeledRow(context.tr('car_color'), ctrl.carColor),
-              _labeledRow(context.tr('car_plate'), ctrl.carPlate),
-              _labeledRow(context.tr('car_seats_label'), '${ctrl.carSeats}'),
-            ] else
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  context.tr('car_info_not_set'),
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _labeledRow(String label, String value) {
-    if (value.trim().isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 118,
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Future<bool?> showEditDialog(
-    BuildContext context,
-    ProfileController ctrl, {
-    bool driverFlow = false,
-  }) async {
-    final modelCtrl = TextEditingController(text: ctrl.carModel);
-    final colorCtrl = TextEditingController(text: ctrl.carColor);
-    final plateCtrl = TextEditingController(text: ctrl.carPlate);
-    final initialSeats = ctrl.carSeats > 0 ? ctrl.carSeats : 4;
-    final seatsCtrl = TextEditingController(text: '$initialSeats');
-
-    InputDecoration fieldDecoration(
-      BuildContext ctx, {
-      required String labelKey,
-      String? hint,
-    }) =>
-        InputDecoration(
-          labelText: ctx.tr(labelKey),
-          hintText: hint,
-          isDense: driverFlow,
-          contentPadding: driverFlow
-              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-              : null,
-        );
-
-    void clampSeatsToModel(String model) {
-      final max = DriverCarPrefill.maxSeatsForModel(model);
-      final parsed = int.tryParse(seatsCtrl.text.trim());
-      if (parsed == null || parsed < 1) return;
-      if (parsed > max) {
-        seatsCtrl.text = '$max';
-        seatsCtrl.selection = TextSelection.collapsed(
-          offset: seatsCtrl.text.length,
-        );
-      }
-    }
-
-    final saved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: !driverFlow,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          final maxSeats =
-              DriverCarPrefill.maxSeatsForModel(modelCtrl.text.trim());
-          return AlertDialog(
-            insetPadding: driverFlow
-                ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24)
-                : null,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            title: Text(ctx.tr('car_info_edit')),
-            contentPadding: driverFlow
-                ? const EdgeInsets.fromLTRB(20, 12, 20, 0)
-                : null,
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: modelCtrl,
-                    decoration: fieldDecoration(ctx, labelKey: 'car_model'),
-                    onChanged: (_) => setLocal(() {
-                      clampSeatsToModel(modelCtrl.text.trim());
-                    }),
-                  ),
-                  SizedBox(height: driverFlow ? 6 : 8),
-                  TextField(
-                    controller: colorCtrl,
-                    decoration: fieldDecoration(ctx, labelKey: 'car_color'),
-                  ),
-                  SizedBox(height: driverFlow ? 6 : 8),
-                  TextField(
-                    controller: plateCtrl,
-                    decoration: fieldDecoration(ctx, labelKey: 'car_plate'),
-                    textCapitalization: TextCapitalization.characters,
-                  ),
-                  SizedBox(height: driverFlow ? 6 : 8),
-                  TextField(
-                    controller: seatsCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(1),
-                    ],
-                    decoration: fieldDecoration(
-                      ctx,
-                      labelKey: 'car_seats_label',
-                      hint: '1–$maxSeats',
-                    ),
-                    onChanged: (_) => setLocal(() {
-                      clampSeatsToModel(modelCtrl.text.trim());
-                    }),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(ctx.tr('cancel')),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final model = modelCtrl.text.trim();
-                  final color = colorCtrl.text.trim();
-                  final plate = plateCtrl.text.trim();
-                  final max =
-                      DriverCarPrefill.maxSeatsForModel(model);
-                  final parsed = int.tryParse(seatsCtrl.text.trim()) ?? 0;
-                  final chosenSeats = parsed.clamp(1, max);
-                  if (model.isEmpty ||
-                      color.isEmpty ||
-                      plate.isEmpty ||
-                      parsed <= 0) {
-                    return;
-                  }
-                  final ok = await ctrl.saveCarInfo(
-                    model: model,
-                    color: color,
-                    plate: plate,
-                    seats: chosenSeats,
-                  );
-                  if (ctx.mounted) Navigator.pop(ctx, ok);
-                },
-                child: Text(ctx.tr('save')),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    modelCtrl.dispose();
-    colorCtrl.dispose();
-    plateCtrl.dispose();
-    seatsCtrl.dispose();
-    return saved;
-  }
-
-  Future<void> _confirmDeleteCar(
-    BuildContext context,
-    ProfileController ctrl,
-  ) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(context.tr('car_delete_confirm_title')),
-        content: Text(context.tr('car_delete_confirm_body')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(context.tr('cancel')),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.tr('delete')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    await ctrl.clearCarInfo();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('car_deleted_success')),
-      backgroundColor: AvaLight.ok,
-    ));
   }
 }

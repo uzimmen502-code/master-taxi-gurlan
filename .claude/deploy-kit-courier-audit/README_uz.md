@@ -50,6 +50,17 @@ Yangi indeks kerak emas (faqat tenglik filtrlari). `delivery_routes.orders` — 
   Yangi 3 sweeper (`courierCashPendingSweep`, `relayEscrowReconcile`, `legChainSweeper`) — `firebase functions:delete <nom>`.
 - Ma'lumot migratsiyasi yo'q: `courier_cash_pending` va `shipments/{id}/private/codeAttempts_*` yangi hujjatlar, eski ma'lumotga tegilmaydi.
 
+## 2-bosqich: D1 «Posilka yo'qoldi» (commitlar 422e546…76a9ec3)
+Skript: `deploy_d1_lost_parcel.ps1` (faqat functions; default 5 ta → demand 12 ta, shu tartibda). Rules/indeks/migratsiya yo'q.
+- `declaredValue` endi MAJBURIY (quote/create `declared_value_required`). Ilova hali yangilanmagan: bo'sh qoldirsa umumiy xato.
+  Logistika yopiq (faqat testerlar, WEB), shu sabab xavfsiz; APK/WEB yangilanishi rejalashtirilsin.
+- Yangi: `adminMarkShipmentLost` (demand), `adminRecordLostParcelPayment` (default). Ikkalasi faqat admin/superadmin.
+- Pul: mijozga G (declaredValue) kuryer AVA hamyonidan darhol (mavjudicha, manfiy bo'lmaydi); yetmagani `debt.logistics`;
+  kuryer tolagach admin yozadi → mijozga o'tadi. Kalitlar: `relayRelease:`, `relayLostUnearned:`, `relayLostRefund:`, `relayLostPayment:{id}:{opId}`.
+- Tekshirish: test yuk (qiymatli) → in_transit → `adminMarkShipmentLost` → `shipments.paymentStatus` = `loss_settled`,
+  `logistics_incidents/{id}` yaratilgan, mijoz/kuryer hamyoni o'zgargan, `platform_accrual` = 0.
+- Rollback: o'sha nomlarni `cecf2ae`/oldingi deploy worktree'idan qayta deploy; yangi 2 callable → `firebase functions:delete`.
+
 ## Ochiq (egasi qarori)
 - `legChainSweeper`/`relayEscrowReconcile`/`courierCashPendingSweep` birinchi ishga tushganda loglarni kuzating.
 - `acceptLeg` endi `users.accountId → provider_capabilities` yo'lini ishlatadi (logistika hozir `internal`, hech kimga ochiq emas).

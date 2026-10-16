@@ -222,6 +222,66 @@ void main() {
     expect(calls.finalizes, 1);
   });
 
+  testWidgets('mijoz tasdig\'i: awaitingCustomer → kutish bloki, tugma o\'chadi, marshrut oldinga SURILMAYDI; mijoz tasdiqlagach «keyingi buyurtma»', (tester) async {
+    final repo = _FakeRepo();
+    final calls = await _pump(tester, _o(rs: 'arrived', food: 'cash_buyout', pay: 'cash'), repo: repo);
+    calls.completeResult = const {'ok': true, 'awaitingCustomer': true, 'step': 'received'};
+
+    await tester.tap(find.widgetWithText(FilledButton, 'restaurants_courier_deliver_btn'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'restaurants_courier_deliver_btn').last);
+    await tester.pumpAndSettle();
+
+    expect(calls.completes, [(delivered: true, failReason: 'other')]);
+    // Muvaffaqiyat dialogi YO'Q, xato ham YO'Q; kutish bloki bor.
+    expect(find.text('restaurants_courier_delivered_ok'), findsNothing);
+    expect(find.text('customer_confirm_waiting_hint'), findsOneWidget);
+    expect(find.text('customer_confirm_waiting'), findsNWidgets(2)); // blok + tugma
+    expect(find.text('restaurants_courier_deliver_btn'), findsNothing);
+    expect(calls.finalizes, 0, reason: 'buyurtma hali yakunlanmagan');
+
+    // Tugma o'chiq: qayta bosish chaqiruv yubormaydi.
+    await tester.tap(find.text('customer_confirm_waiting').last);
+    await tester.pumpAndSettle();
+    expect(calls.completes, hasLength(1));
+
+    // Mijoz «Oldim» bosdi → jonli oqim `delivered` → «keyingi buyurtma».
+    repo.live.add(_o(rs: 'delivered', food: 'cash_buyout', pay: 'cash'));
+    await tester.pumpAndSettle();
+    expect(find.text('customer_confirm_waiting_hint'), findsNothing);
+    await tester.tap(find.text('courier_next_order'));
+    await tester.pumpAndSettle();
+    expect(calls.finalizes, 1);
+  });
+
+  testWidgets('mijoz tasdig\'i: «yetkazib bo\'lmadi» ham awaitingCustomer qaytarsa — kutish, «bekor qilindi» xabari YO\'Q', (tester) async {
+    final repo = _FakeRepo();
+    final calls = await _pump(tester, _o(rs: 'picked'), repo: repo);
+    calls.completeResult = const {'ok': true, 'awaitingCustomer': true};
+
+    await tester.tap(find.text('restaurants_courier_fail_btn'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('restaurants_courier_fail_customer_absent'));
+    await tester.pumpAndSettle();
+    expect(calls.completes, [(delivered: false, failReason: 'customer_absent')]);
+    expect(find.text('restaurants_courier_failed_ok'), findsNothing);
+    expect(calls.finalizes, 0);
+  });
+
+  testWidgets('eski server (awaitingCustomer yo\'q): kutish bloki hech qachon ko\'rinmaydi', (tester) async {
+    final repo = _FakeRepo();
+    final calls = await _pump(tester, _o(rs: 'arrived', food: 'cash_buyout', pay: 'cash'), repo: repo);
+    await tester.tap(find.widgetWithText(FilledButton, 'restaurants_courier_deliver_btn'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'restaurants_courier_deliver_btn').last);
+    await tester.pumpAndSettle();
+    expect(find.text('customer_confirm_waiting'), findsNothing);
+    expect(find.text('restaurants_courier_delivered_ok'), findsOneWidget);
+    await tester.tap(find.text('ok'));
+    await tester.pumpAndSettle();
+    expect(calls.finalizes, 1);
+  });
+
   testWidgets('navbatdagi (joriy emas) buyurtma — tugmalarsiz', (tester) async {
     final repo = _FakeRepo();
     await _pump(tester, _o(rs: 'ready'), repo: repo, isCurrent: false);

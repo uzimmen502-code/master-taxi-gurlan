@@ -7,6 +7,7 @@
 // Пул: таом пули AVA'ники ЭМАС (D-REST-1) — курьер фақат нақд выкуп ва
 // нақд етказиш ҳақини мижоздан олади; ҳамён ечими серверда.
 
+import '../../../models/customer_confirm.dart';
 import '../../../models/order_model.dart';
 import '../domain/restaurant_models.dart';
 
@@ -65,6 +66,18 @@ int courierBuyoutAmount(OrderModel o) =>
 int courierCashToCollect(OrderModel o) =>
     courierBuyoutAmount(o) + (o.deliveryPaymentMethod == 'cash' ? o.deliveryFee : 0);
 
+/// Мижоз тасдиғи кутилаётган буюртма: курьер амали `awaitingCustomer`
+/// қайтарган пайтдаги ҳолат ([awaitingStatus]) ҳалигача ўша бўлса — кутиш
+/// давом этмоқда. Ҳолат ўзгарса (мижоз тасдиқлади ёки бекор бўлди) — йўқолади.
+bool courierIsAwaitingCustomer(OrderModel o, String? awaitingStatus) =>
+    awaitingStatus != null && awaitingStatus == o.restaurantStatus;
+
+/// Кутиш бошланган, кейин буюртма якунланди (мижоз «Олдим» босди) →
+/// курьерга «Кейинги буюртма» тугмаси чиқади: етказиш натижаси диалоги
+/// кутиш пайтида кўрсатилмаганди.
+bool courierAwaitingFinished(OrderModel o, String? awaitingStatus) =>
+    awaitingStatus != null && isRestaurantOrderFinalized(o);
+
 /// «Етказиб бўлмади» фақат қўлдаги буюртмада (`picked`/`arrived`).
 bool courierCanFail(OrderModel o) =>
     o.restaurantStatus == RestaurantOrderStatus.picked ||
@@ -100,7 +113,15 @@ class CourierCompletionSummary {
     required this.walletPaid,
     required this.deliveryFee,
     required this.walletFallback,
+    this.awaitingCustomer = false,
+    this.awaitingStep = '',
   });
+
+  /// Мижоз тасдиғи (D2/D7): сервер `awaitingCustomer: true` қайтарса, буюртма
+  /// ҳали ЕТКАЗИЛМАГАН — мижоз «Олдим»ни босмагунча ўтмайди. Бу ҳолда
+  /// [delivered] ва пул майдонлари маъносиз (муваффақият ҳам, хато ҳам эмас).
+  final bool awaitingCustomer;
+  final String awaitingStep;
 
   final bool delivered;
 
@@ -119,7 +140,10 @@ class CourierCompletionSummary {
     final delivered = outcome == 'delivered';
     final method = (m['deliveryPaymentMethod'] ?? '') as String;
     final walletPaid = (m['walletPaid'] as num?)?.toInt() ?? 0;
+    final wait = CourierActionResult.fromResponse(m);
     return CourierCompletionSummary(
+      awaitingCustomer: wait.awaitingCustomer,
+      awaitingStep: wait.step,
       delivered: delivered,
       cashCollected: (m['cashCollected'] as num?)?.toInt() ?? 0,
       walletPaid: walletPaid,

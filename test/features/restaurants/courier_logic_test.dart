@@ -116,6 +116,32 @@ void main() {
       expect(s.walletPaid, 8000);
       expect(s.cashCollected, 0);
     });
+    test('mijoz tasdig\'i: awaitingCustomer true → kutish; maydon yo\'q (eski server) → kutish yo\'q', () {
+      final wait = CourierCompletionSummary.fromMap(
+        {'ok': true, 'awaitingCustomer': true, 'step': 'received'},
+        order: _o(rs: 'arrived', pay: 'wallet'),
+      );
+      expect(wait.awaitingCustomer, isTrue);
+      expect(wait.awaitingStep, 'received');
+      expect(wait.delivered, isFalse, reason: 'hali yetkazilmagan');
+      expect(wait.walletFallback, isFalse);
+
+      final old = CourierCompletionSummary.fromMap(
+        {'outcome': 'delivered', 'deliveryFee': 8000, 'walletPaid': 8000, 'cashCollected': 0, 'deliveryPaymentMethod': 'wallet'},
+        order: _o(rs: 'arrived', pay: 'wallet'),
+      );
+      expect(old.awaitingCustomer, isFalse);
+      expect(old.delivered, isTrue);
+    });
+    test('courierIsAwaitingCustomer: holat o\'zgarsa kutish yo\'qoladi; courierAwaitingFinished faqat kutishdan keyin', () {
+      expect(courierIsAwaitingCustomer(_o(rs: 'arrived'), 'arrived'), isTrue);
+      expect(courierIsAwaitingCustomer(_o(rs: 'delivered'), 'arrived'), isFalse);
+      expect(courierIsAwaitingCustomer(_o(rs: 'arrived'), null), isFalse);
+      expect(courierAwaitingFinished(_o(rs: 'delivered'), 'arrived'), isTrue);
+      expect(courierAwaitingFinished(_o(rs: 'delivered'), null), isFalse,
+          reason: 'kutish bo\'lmagan buyurtmada eski xatti-harakat');
+      expect(courierAwaitingFinished(_o(rs: 'arrived'), 'arrived'), isFalse);
+    });
     test('naqd buyurtma: fallback yo\'q; failed → delivered=false; deliveryFee bo\'lmasa buyurtmadan', () {
       final cash = CourierCompletionSummary.fromMap(
         {'outcome': 'delivered', 'walletPaid': 0, 'cashCollected': 69000, 'deliveryPaymentMethod': 'cash'},

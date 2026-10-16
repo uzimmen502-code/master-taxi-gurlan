@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/order_model.dart';
+import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
 import '../../home/widgets/ava_chip.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
@@ -61,6 +62,12 @@ class RestaurantCourierOrderCard extends StatefulWidget {
 class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard> {
   late Stream<OrderModel?> _stream = widget.repository.watchOrder(widget.order.id);
   bool _busy = false;
+
+  /// Мижоз тасдиғи (D2/D7): сервер `awaitingCustomer: true` қайтарган пайтдаги
+  /// `restaurantStatus`. Ҳолат ўша бўлиб турса — кутиш кўрсатилади ва тугма
+  /// ўчиқ; ҳолат ўзгарса ([courierIsAwaitingCustomer]) ўзи йўқолади. Буюртма
+  /// ҳолати `watchOrder` оқимидан жонли келади — қўшимча сўров керак эмас.
+  String? _awaitingStatus;
 
   @override
   void didUpdateWidget(covariant RestaurantCourierOrderCard old) {
@@ -152,6 +159,12 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
     });
     final r = res;
     if (!ok || r == null || !mounted) return;
+    if (r.awaitingCustomer) {
+      // Етказилмади, хато ҳам эмас: мижоз ўз қурилмасида «Олдим»ни босади.
+      // Маршрутни олдинга СУРМАЙМИЗ — буюртма ҳали якунланмаган.
+      setState(() => _awaitingStatus = o.restaurantStatus);
+      return;
+    }
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -208,8 +221,15 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
       ),
     );
     if (reason == null || !mounted) return;
-    final ok = await _run(() => widget.onComplete(delivered: false, failReason: reason));
+    CourierCompletionSummary? res;
+    final ok = await _run(() async {
+      res = await widget.onComplete(delivered: false, failReason: reason);
+    });
     if (!ok || !mounted) return;
+    if (res?.awaitingCustomer == true) {
+      setState(() => _awaitingStatus = o.restaurantStatus);
+      return;
+    }
     _snack(context.tr('restaurants_courier_failed_ok'));
     await widget.onFinalizeRoute();
   }
@@ -232,6 +252,11 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
     final subtitle = toRestaurant ? o.restaurantAddress : o.address;
     final buyout = courierBuyoutAmount(o);
     final feeKey = o.deliveryPaymentMethod == 'wallet' ? 'restaurants_courier_fee_wallet' : 'restaurants_courier_fee_cash';
+    // Мижоз тасдиғи (D2/D7): кутиш давомида «Топширдим» ўчиқ; мижоз тасдиқлаб
+    // буюртма якунланса — «Кейинги буюртма».
+    final waiting = courierIsAwaitingCustomer(o, _awaitingStatus);
+    final showNext = widget.needsFinalize ||
+        (widget.isCurrent && courierAwaitingFinished(o, _awaitingStatus));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -310,7 +335,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
               const SizedBox(height: 8),
               _Notice(icon: Icons.block, text: context.tr('restaurants_courier_cancelled_note'), color: c.danger, bg: c.dangerSoft),
             ],
-            if (widget.needsFinalize) ...[
+            if (showNext) ...[
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
@@ -326,14 +351,20 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
                 ),
               ),
             ] else if (widget.isCurrent)
-              ..._stageActions(context, o, stage, buyout),
+              ..._stageActions(context, o, stage, buyout, waiting),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _stageActions(BuildContext context, OrderModel o, CourierRestaurantStage stage, int buyout) {
+  List<Widget> _stageActions(
+    BuildContext context,
+    OrderModel o,
+    CourierRestaurantStage stage,
+    int buyout,
+    bool waiting,
+  ) {
     final c = context.ava;
     final toRestaurant = stage == CourierRestaurantStage.preparing || stage == CourierRestaurantStage.pickup;
     final contactRow = Row(children: [
@@ -396,9 +427,18 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
           const SizedBox(height: 8),
           _CollectSummary(order: o),
           const SizedBox(height: 8),
+          if (waiting) ...[
+            const CourierAwaitingNotice(),
+            const SizedBox(height: 8),
+          ],
           contactRow,
           const SizedBox(height: 8),
-          _BigBtn(label: context.tr('restaurants_courier_deliver_btn'), busy: _busy, onTap: () => _deliver(o)),
+          // Кутишда тугма ўчиқ: бир хил амални қайта босиш хато каби кўринмасин.
+          _BigBtn(
+            label: context.tr(waiting ? 'customer_confirm_waiting' : 'restaurants_courier_deliver_btn'),
+            busy: _busy,
+            onTap: waiting ? null : () => _deliver(o),
+          ),
           _failLink(context, o),
         ];
       case CourierRestaurantStage.done:
@@ -636,7 +676,9 @@ class _BigBtn extends StatelessWidget {
 
   final String label;
   final bool busy;
-  final VoidCallback onTap;
+
+  /// `null` — тугма ўчиқ.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/l10n/user_lang_sync.dart';
 import '../core/utils/formatters.dart';
+import '../features/customer_confirm/customer_confirm_controller.dart';
 import '../firebase_options.dart';
 import '../utils/locale_utils.dart';
 import 'arrival_ringer.dart';
@@ -172,6 +173,10 @@ class FCMService {
     if (type == 'courier_arrived') {
       // 7с/10с×3 ритмда қўнғироқ (foreground).
       ArrivalRinger.instance.start();
+    }
+    if (type == 'customer_confirm') {
+      // Очиқ банер/экран рўйхатни серверданоқ қайта олади.
+      CustomerConfirmSignal.bump();
     }
     if (n != null) {
       await NotificationDelivery.show(

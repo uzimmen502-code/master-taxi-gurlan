@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/utils/formatters.dart';
 import '../features/chat/screens/chat_screen.dart';
 import '../features/courier/screens/courier_screen.dart';
+import '../features/customer_confirm/customer_confirm_controller.dart';
+import '../features/customer_confirm/screens/customer_confirm_screen.dart';
 import '../features/restaurants/courier/restaurant_nearby_orders_screen.dart';
 import '../features/restaurants/merchant/restaurant_panel_screen.dart';
 import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
@@ -98,6 +100,17 @@ class PushNavigation {
             newDeviceLabel: (data['newDeviceLabel'] ?? '').trim(),
           ),
         ),
+      );
+      return;
+    }
+
+    // Мижоз тасдиғи (D2/D7): сервер push'и `type: customer_confirm` +
+    // `module`/`id`/`step`. Push'даги қиймат ишонилмайди — экран рўйхатни
+    // серверданоқ (`getCustomerPendingConfirmations`) олади.
+    if (type == 'customer_confirm') {
+      CustomerConfirmSignal.bump();
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const CustomerConfirmScreen()),
       );
       return;
     }

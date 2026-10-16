@@ -24,6 +24,7 @@ import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
+import '../customer_confirm/widgets/customer_confirm_banner.dart';
 import 'widgets/home_info_ticker.dart';
 import '../../core/widgets/zone_gate.dart';
 import '../ads/models/ad_model.dart';
@@ -987,6 +988,10 @@ class _HomeViewState extends State<_HomeView> {
                                 onYes: _acceptLocationSuggestion,
                                 onNo: _declineLocationSuggestion,
                               ),
+                            // Мижоз тасдиғи (D2/D7): курьер «олдим/етказдим»
+                            // деганидан кейин мижоз ўз қурилмасида тасдиқлайди.
+                            // Бўш бўлса ёки сервер жавобермаса — жой эгалламайди.
+                            const CustomerConfirmBanner(),
                             _ActiveOrderSlot(onOpen: _openActiveOrder),
                             SizedBox(height: _sectionGap(context, base: 10)),
                             // Ҳамён карточкаси интерфейсдан олиб

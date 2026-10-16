@@ -1586,6 +1586,17 @@ exports.onDeviceChangeRequestUpdate = functions.firestore
     return null;
   });
 
+/** C-10 (audit 2026-10-16): route push xatosi jim yutilmaydi — bitta qatorli JSON log. */
+function logCourierPushFailed(action, routeId, e) {
+  console.error(JSON.stringify({
+    action,
+    routeId,
+    result: 'push_failed',
+    errorCode: 'COURIER_PUSH_FAILED',
+    message: String((e && e.message) || e).slice(0, 200),
+  }));
+}
+
 // ─── Yangi yetkazib berish reysi → kuryer(ga) push ───────────────────────────
 exports.onDeliveryRouteCreate = functions.firestore
   .document('delivery_routes/{routeId}')
@@ -1611,7 +1622,9 @@ exports.onDeliveryRouteCreate = functions.firestore
       }));
       try {
         await admin.messaging().sendEach(messages);
-      } catch (_) {}
+      } catch (e) {
+        logCourierPushFailed('onDeliveryRouteCreate', snap.id, e);
+      }
       return null;
     }
 
@@ -1631,7 +1644,9 @@ exports.onDeliveryRouteCreate = functions.firestore
         data: { type: 'assigned_route', routeId: snap.id },
         android: { priority: 'high' },
       });
-    } catch (_) {}
+    } catch (e) {
+      logCourierPushFailed('onDeliveryRouteCreate', snap.id, e);
+    }
     return null;
   });
 
@@ -1662,7 +1677,9 @@ exports.onDeliveryRouteAssign = functions.firestore
         data: { type: 'assigned_route', routeId: change.after.id },
         android: { priority: 'high' },
       });
-    } catch (_) {}
+    } catch (e) {
+      logCourierPushFailed('onDeliveryRouteAssign', change.after.id, e);
+    }
     return null;
   });
 
@@ -4297,8 +4314,9 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
   }
   const orderId = String(data.orderId || '');
-  const courierId = assertCourierPhone(data.courierPhone);
-  if (callerPhone(context) !== courierId) {
+  // C-8 (audit 2026-10-16): 9 va 12 xonali shakl bir xil kuryer — kanon ID bilan solishtiriladi.
+  const courierId = canonicalUid(assertCourierPhone(data.courierPhone));
+  if (canonicalUid(callerPhone(context)) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
   // 1) huquq ('finish' — to'xtatilgan kuryer ham qo'lidagini tugatadi);
@@ -4323,6 +4341,11 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
     const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
     if (fs === 'cancelled' || fs === 'completed') {
       throw new functions.https.HttpsError('failed-precondition', 'order closed');
+    }
+    // C-9 (audit 2026-10-16): takror / kechikkan «olindi» holatni ORQAGA
+    // qaytarmaydi (arrived → courier_picked) va audit yozuvini ko'paytirmaydi.
+    if (fs === 'courier_picked' || fs === 'arrived' || fs === 'payment_pending_confirm') {
+      return;
     }
     t.update(ref, {
       fulfillmentStatus: 'courier_picked',
@@ -4563,45 +4586,62 @@ exports.courierRecoverOrphanRoute = functions.https.onCall(async (data, context)
     }
 
     // Етим буюртмалар: in_delivery & тўланмаган & шу курьерники.
+    // C-3/C-4 (audit 2026-10-16): ҲАММА in_delivery ўқилмайди — фақат шу
+    // курьернинг ID шакллари (12 ва 9 хонали) бўйича; ресторан буюртмаси
+    // (`type == 'restaurant'`) маршрутга тушмайди (унинг ўз йўли бор).
+    const idForms = /^998\d{9}$/.test(courierId) ? [courierId, courierId.slice(3)] : [courierId];
+    const isOrphan = (od) => String((od && od.status) || '') === 'in_delivery'
+      && canonicalUid(String((od && od.courierId) || '')) === courierId
+      && od.paymentStatus !== 'paid'
+      && String(od.type || '') !== 'restaurant'
+      && !courierAuth.isOwnOrder(od, courierId);
     const odSnap = await db.collection('orders')
+      .where('courierId', 'in', idForms)
       .where('status', '==', 'in_delivery')
       .get();
-    const orphanIds = [];
+    const candidateIds = [];
     odSnap.forEach((doc) => {
-      const od = doc.data() || {};
-      const cid = canonicalUid(String(od.courierId || od.courierPhone || ''));
-      if (cid !== canonicalUid(courierId)) return;
-      if (od.paymentStatus === 'paid') return;
-      if (courierAuth.isOwnOrder(od, courierId)) return;
-      orphanIds.push(doc.id);
+      if (isOrphan(doc.data())) candidateIds.push(doc.id);
     });
 
-    if (orphanIds.length === 0) {
+    if (candidateIds.length === 0) {
       return { revived: false, count: 0 };
     }
 
+    // Маршрут + буюртмалар БИТТА транзакцияда: параллел икки чақирув битта
+    // фаол маршрут беради, буюртма бошқа курьерга ўтган бўлса қўшилмайди.
     const routeRef = db.collection('delivery_routes').doc();
-    await routeRef.set({
-      orders: orphanIds,
-      courierId,
-      status: 'active',
-      currentIndex: 0,
-      routeSource: 'auto_recover',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const outcome = await db.runTransaction(async (t) => {
+      const activeNow = await Promise.all(idForms.map((id) => t.get(db.collection('delivery_routes')
+        .where('courierId', '==', id)
+        .where('status', '==', 'active')
+        .limit(1))));
+      const held = activeNow.find((s) => !s.empty);
+      if (held) return { revived: false, routeId: held.docs[0].id, reason: 'has_active' };
 
-    const batch = db.batch();
-    for (const id of orphanIds) {
-      batch.update(db.collection('orders').doc(id), {
+      const snaps = await Promise.all(candidateIds.map((id) => t.get(db.collection('orders').doc(id))));
+      const orphanIds = snaps.filter((s) => s.exists && isOrphan(s.data())).map((s) => s.id);
+      if (orphanIds.length === 0) return { revived: false, count: 0 };
+
+      t.set(routeRef, {
+        orders: orphanIds,
         courierId,
-        deliveryRouteId: routeRef.id,
-        statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'active',
+        currentIndex: 0,
+        routeSource: 'auto_recover',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-    }
-    await batch.commit();
-
-    return { revived: true, routeId: routeRef.id, count: orphanIds.length };
+      for (const id of orphanIds) {
+        t.update(db.collection('orders').doc(id), {
+          courierId,
+          deliveryRouteId: routeRef.id,
+          statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      return { revived: true, routeId: routeRef.id, count: orphanIds.length };
+    });
+    return outcome;
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
     console.error('courierRecoverOrphanRoute:', e.message || e);
@@ -4614,8 +4654,8 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
   }
   const orderId = String(data.orderId || '');
-  const courierId = assertCourierPhone(data.courierPhone);
-  if (callerPhone(context) !== courierId) {
+  const courierId = canonicalUid(assertCourierPhone(data.courierPhone)); // C-8
+  if (canonicalUid(callerPhone(context)) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
   await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
@@ -5244,8 +5284,8 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
   }
   const orderId = String(data.orderId || '');
-  const courierId = assertCourierPhone(data.courierPhone);
-  if (callerPhone(context) !== courierId) {
+  const courierId = canonicalUid(assertCourierPhone(data.courierPhone)); // C-8
+  if (canonicalUid(callerPhone(context)) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
   // Huquq + egalik: avval tekshiruvsiz har kim ortiqcha «naqd»ni qaytim

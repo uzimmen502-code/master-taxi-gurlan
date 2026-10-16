@@ -4,8 +4,7 @@
 // серверда; бу ерда фақат жавобни ўқиш (ҳимояли: майдон йўқ/нотўғри бўлса
 // ҳам экран йиқилмайди) ва кўрсатиш.
 
-import 'logistics_stage.dart' show normalizeTesterPhone;
-
+// Телефон нормализацияси логистика экранидаги билан бир хил (битта манба).
 export 'logistics_stage.dart' show normalizeTesterPhone;
 
 /// Сервер қабул қиладиган босқичлар (`off` | `internal` | `public`).

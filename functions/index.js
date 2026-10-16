@@ -19137,11 +19137,27 @@ const CARPET_ADMIN_TRANSITIONS = {
   new: ['accepted', 'cancelled'],
   accepted: ['pickup_ready', 'cancelled'],
   pickup_ready: ['cancelled'],
-  pickup_in_delivery: ['cancelled'],
+  // B1 (ega qarori 2026-10-16): kuryer yo'qolsa/javob bermasa admin vazifani
+  // kuryerdan olib qo'yadi (release) - kuryer maydonlari tozalanadi, audit.
+  pickup_in_delivery: ['cancelled', 'pickup_ready'],
+  return_in_delivery: ['return_ready'],
   picked_up: ['washing'],
   washing: ['drying'],
   drying: ['ready'],
   ready: ['return_ready'],
+};
+
+/**
+ * B1: release qirralari (`from -> to`) va tozalanadigan kuryer maydonlari.
+ * Faqat admin callable'i ishlatadi; kuryer callable'lari o'zgarmagan.
+ */
+const CARPET_RELEASE_EDGES = {
+  pickup_in_delivery: {
+    to: 'pickup_ready', courierField: 'pickupCourierId', arrivedField: 'pickupArrivedAt',
+  },
+  return_in_delivery: {
+    to: 'return_ready', courierField: 'returnCourierId', arrivedField: 'returnArrivedAt',
+  },
 };
 
 /** Admin: gilam yuvish statusini o'zgartirish. */
@@ -19187,6 +19203,23 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
         if (Number.isFinite(finalPrice) && finalPrice >= 0) {
           patch.finalPrice = finalPrice;
         }
+      }
+      // B1: release - kuryer maydonlari shu tranzaksiyada tozalanadi + audit.
+      const rel = CARPET_RELEASE_EDGES[cur];
+      if (rel && rel.to === status) {
+        const releasedCourierId = String(od[rel.courierField] || '');
+        patch[rel.courierField] = '';
+        patch[rel.arrivedField] = admin.firestore.FieldValue.delete();
+        t.set(db.collection('admin_audit').doc(), {
+          kind: 'carpet_task_release', actor: adminUid, target: orderId,
+          from: cur, to: status, reason: String(data.reason || '').trim().slice(0, 300),
+          detail: { releasedCourierId },
+          at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(JSON.stringify({
+          action: 'adminSetCarpetWashStatus', result: 'released', orderId, from: cur, to: status,
+          userId: adminUid,
+        }));
       }
       t.update(ref, patch);
     });
@@ -19699,7 +19732,9 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
 const AGRO_ADMIN_TRANSITIONS = {
   new: ['accepted', 'cancelled'],
   accepted: ['picked_up', 'cancelled'],
-  pickup_in_delivery: ['cancelled'],
+  // B1 (ega qarori 2026-10-16): kuryer yo'qolsa admin vazifani qaytarib oladi
+  // (`accepted` - kuryerlar ro'yxatiga qaytadi); kuryer maydonlari tozalanadi, audit.
+  pickup_in_delivery: ['cancelled', 'accepted'],
   picked_up: ['completed'],
 };
 
@@ -19745,6 +19780,21 @@ exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) 
         if (Number.isFinite(finalPrice) && finalPrice >= 0) {
           patch.finalPrice = finalPrice;
         }
+      }
+      // B1: release (pickup_in_delivery -> accepted) - kuryer maydonlari tozalanadi + audit.
+      if (cur === 'pickup_in_delivery' && status === 'accepted') {
+        patch.pickupCourierId = '';
+        patch.arrivedAt = admin.firestore.FieldValue.delete();
+        t.set(db.collection('admin_audit').doc(), {
+          kind: 'agro_task_release', actor: adminUid, target: orderId,
+          from: cur, to: status, reason: String(data.reason || '').trim().slice(0, 300),
+          detail: { releasedCourierId: String(od.pickupCourierId || '') },
+          at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(JSON.stringify({
+          action: 'adminSetAgroPickupStatus', result: 'released', orderId, from: cur, to: status,
+          userId: adminUid,
+        }));
       }
       // D5: yakunda narx ma'lum bo'ladi - kuryer olib ketgan bo'lsa, haq shu
       // qadamda (qayta) hisoblanadi: faqat baza o'zgargan yoki haq hali yo'q bo'lsa.

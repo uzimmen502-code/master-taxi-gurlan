@@ -62,6 +62,7 @@
     "test:order-news": "firebase emulators:exec --only firestore --project demo-order-news \"node test/order_news_flow_cf.test.js\"",
     "test:carpet-agro-courier-rules": "node test/carpet_agro_courier_rules.test.js",
     "test:carpet-agro-tasks": "firebase emulators:exec --only firestore --project demo-carpet-agro-tasks \"node test/carpet_agro_courier_tasks_cf.test.js\"",
+    "test:task-release": "firebase emulators:exec --only firestore --project demo-task-release \"node test/courier_task_release_cf.test.js\"",
     "test:courier-payout-pure": "node test/courier_task_payout_pure.test.js",
     "test:courier-payout": "firebase emulators:exec --only firestore --project demo-courier-payout \"node test/courier_task_payout_cf.test.js\""
   },

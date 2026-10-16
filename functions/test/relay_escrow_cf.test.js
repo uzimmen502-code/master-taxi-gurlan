@@ -519,6 +519,116 @@ async function lossTests() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ADMIN: yo'qolish hodisalari ro'yxati (`adminListLossIncidents`) - faqat o'qish, PII maskalanadi
+// ═══════════════════════════════════════════════════════════════════
+async function listTests() {
+  const ts = (ms) => admin.firestore.Timestamp.fromMillis(ms);
+  const seedInc = (id, ms, over = {}) => INC(id).set({
+    type: 'lost', status: 'declared', shipmentId: id, trackingNumber: `AVA-${id}`, legId: 'leg1', legIndex: 1,
+    courier: { uid: F1, accountId: ACC_F1 }, customer: { uid: OWNER }, goodsValue: 150000,
+    customerPrice: 240000, tariffVersion: 7, refundedNow: null, outstanding: null, paidTotal: 0,
+    declaredBy: ADMIN_U, reason: 'yo\'lda yo\'qoldi', note: 'MIJOZ-IZOHI-MAXFIY Gurlan, 5-uy', opId: `lost-op-${id}`,
+    declaredAt: ts(ms), updatedAt: ts(ms), ...over,
+  });
+  const list = (data, who = ADMIN_U) => api.listLossIncidents(data, asAdmin(who));
+
+  await check('RO\'YXAT authz: oddiy foydalanuvchi, kuryer, dispatcher, finance, kirmagan - rad; admin va superadmin - ruxsat', async () => {
+    await resetAll();
+    for (const [uid, role] of [[ADMIN_U, 'admin'], [SUPER_U, 'superadmin'], [DISP_U, 'dispatcher'], [FIN_U, 'finance']]) {
+      await db.collection('users').doc(uid).set({ role });
+    }
+    await db.collection('users').doc(OWNER).set({ role: 'user' });
+    await db.collection('users').doc(F1).set({ role: 'user' });
+    await seedInc('incA', 1000);
+    for (const who of [OWNER, F1, DISP_U, FIN_U]) {
+      await assert.rejects(() => list({}, who), (e) => e.code === 'permission-denied', who);
+    }
+    await assert.rejects(() => api.listLossIncidents({}, {}), (e) => e.code === 'unauthenticated');
+    assert.strictEqual((await list({}, ADMIN_U)).ok, true);
+    assert.strictEqual((await list({}, SUPER_U)).ok, true);
+  });
+
+  await check('RO\'YXAT shakli: id/shipmentId, status, goodsValue, refundedNow, outstanding, paidTotal, declaredAtMs, kuryer (maskalangan), sabab, tracking; mijoz/izoh YO\'Q', async () => {
+    await resetAll();
+    await db.collection('users').doc(ADMIN_U).set({ role: 'admin' });
+    await seedInc('incS', 5000, {
+      status: 'settled', refundedNow: 100000, outstanding: 50000, paidTotal: 20000,
+    });
+    const r = await list({});
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.items.length, 1);
+    const it = r.items[0];
+    assert.deepStrictEqual(it, {
+      id: 'incS', shipmentId: 'incS', trackingNumber: 'AVA-incS', status: 'settled', goodsValue: 150000,
+      refundedNow: 100000, outstanding: 50000, paidTotal: 20000, declaredAtMs: 5000,
+      courierPhoneMasked: '***0004', courierAccountId: ACC_F1, reason: 'yo\'lda yo\'qoldi', legId: 'leg1',
+    });
+    const dump = JSON.stringify(r);
+    assert.ok(!dump.includes(F1), 'kuryer telefoni to\'liq chiqmaydi');
+    assert.ok(!dump.includes(OWNER), 'mijoz telefoni chiqmaydi');
+    assert.ok(!dump.includes('MAXFIY'), 'izoh (note) chiqmaydi');
+    assert.ok(!/customerPrice|tariffVersion|declaredBy|opId|note|customer/.test(dump), 'ichki/mijoz maydonlari yo\'q');
+  });
+
+  await check('RO\'YXAT hisoblanmagan (declared): refundedNow/outstanding null qaytadi; status declared', async () => {
+    const r = await list({});
+    await seedInc('incD', 9000);
+    const r2 = await list({});
+    const it = r2.items.find((x) => x.id === 'incD');
+    assert.strictEqual(it.status, 'declared');
+    assert.strictEqual(it.refundedNow, null);
+    assert.strictEqual(it.outstanding, null);
+    assert.strictEqual(r.items.length, 1);
+  });
+
+  await check('RO\'YXAT tartibi: eng yangisi birinchi (declaredAt kamayish); limit=2 faqat 2 ta', async () => {
+    await resetAll();
+    await db.collection('users').doc(ADMIN_U).set({ role: 'admin' });
+    await seedInc('o1', 1000); await seedInc('o3', 3000); await seedInc('o2', 2000); await seedInc('o4', 4000);
+    const all = await list({});
+    assert.deepStrictEqual(all.items.map((x) => x.id), ['o4', 'o3', 'o2', 'o1']);
+    const two = await list({ limit: 2 });
+    assert.deepStrictEqual(two.items.map((x) => x.id), ['o4', 'o3']);
+  });
+
+  await check('RO\'YXAT limit: standart 50, eng ko\'pi 100 (katta qiymat qisqartiriladi); noto\'g\'ri limit - invalid-argument', async () => {
+    await resetAll();
+    await db.collection('users').doc(ADMIN_U).set({ role: 'admin' });
+    for (let start = 0; start < 120; start += 40) {
+      const b = db.batch();
+      for (let i = start; i < start + 40; i += 1) {
+        b.set(INC(`bulk${String(i).padStart(3, '0')}`), {
+          type: 'lost', status: 'declared', shipmentId: `bulk${i}`, goodsValue: 1000, courier: { uid: F1 },
+          declaredAt: ts(10000 + i),
+        });
+      }
+      await b.commit();
+    }
+    assert.strictEqual((await list({})).items.length, 50, 'standart 50');
+    assert.strictEqual((await list(undefined)).items.length, 50, 'data yo\'q - standart');
+    assert.strictEqual((await list({ limit: 100 })).items.length, 100);
+    assert.strictEqual((await list({ limit: 5000 })).items.length, 100, 'eng ko\'pi 100');
+    assert.strictEqual((await list({ limit: 1 })).items.length, 1);
+    for (const bad of [0, -3, 1.5, '10', NaN, null, true]) {
+      await assert.rejects(() => list({ limit: bad }), (e) => e.code === 'invalid-argument', String(bad));
+    }
+    const top = (await list({ limit: 3 })).items.map((x) => x.id);
+    assert.deepStrictEqual(top, ['bulk119', 'bulk118', 'bulk117']);
+  });
+
+  await check('RO\'YXAT faqat o\'qish: hech narsa yozilmaydi (incident o\'zgarmaydi, journal/audit yo\'q)', async () => {
+    await resetAll();
+    await db.collection('users').doc(ADMIN_U).set({ role: 'admin' });
+    await seedInc('ro1', 1000);
+    const before = JSON.stringify(await incOf('ro1'));
+    await list({});
+    assert.strictEqual(JSON.stringify(await incOf('ro1')), before);
+    assert.strictEqual((await db.collection(settlementLedger.COL_JOURNAL).get()).size, 0);
+    assert.strictEqual((await db.collection('logistics_audit').get()).size, 0);
+  });
+}
+
 async function main() {
   const S = 'shpTEST0001';
   await seedShipment(S);
@@ -684,6 +794,7 @@ async function main() {
   });
 
   await lossTests();
+  await listTests();
 
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} relay escrow CF checks passed.`);

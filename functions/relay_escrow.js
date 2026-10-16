@@ -676,6 +676,62 @@ function attachRelayEscrow(exports, deps) {
     }
   }
 
+  // ── 7. ADMIN: yo'qolish hodisalari ro'yxati (faqat o'qish) ───────────
+  const LIST_LIMIT_DEFAULT = 50;
+  const LIST_LIMIT_MAX = 100;
+  /** Telefon -> faqat oxirgi 4 raqam (40-band: admin ro'yxatida to'liq raqam kerak emas). */
+  const maskPhone = (v) => {
+    const d = String(v || '').replace(/\D/g, '');
+    return d.length >= 4 ? `***${d.slice(-4)}` : '';
+  };
+  const msOf = (v) => {
+    if (v && typeof v.toMillis === 'function') return v.toMillis();
+    if (v instanceof Date) return v.getTime();
+    return null;
+  };
+  const numOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  /**
+   * `adminListLossIncidents({ limit? })` — faqat admin/superadmin (`adminRecordLostParcelPayment`
+   * bilan bir xil tekshiruv). Eng yangi `logistics_incidents` (declaredAt kamayish, bitta maydon
+   * bo'yicha - qo'shimcha indeks YO'Q). limit: standart 50, eng ko'pi 100. Mijoz telefoni/ismi/
+   * manzili va izoh (note) QAYTARILMAYDI; kuryer telefoni oxirgi 4 raqamgacha maskalanadi.
+   */
+  async function listLossIncidents(data, context) {
+    const adminUid = await requireCallerRoles(context, ['admin', 'superadmin'], 'Faqat admin yoki superadmin');
+    const raw = (data || {}).limit;
+    let limit = LIST_LIMIT_DEFAULT;
+    if (raw !== undefined) {
+      if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1) {
+        throw err('invalid-argument', 'limit musbat butun son bo\'lishi kerak', { reason: 'bad_limit' });
+      }
+      limit = Math.min(raw, LIST_LIMIT_MAX);
+    }
+    const snap = await db.collection(INCIDENTS).orderBy('declaredAt', 'desc').limit(limit).get();
+    const items = snap.docs.map((doc) => {
+      const i = doc.data() || {};
+      return {
+        id: doc.id,
+        shipmentId: String(i.shipmentId || doc.id),
+        trackingNumber: String(i.trackingNumber || ''),
+        status: String(i.status || ''),
+        goodsValue: numOrNull(i.goodsValue),
+        refundedNow: numOrNull(i.refundedNow),
+        outstanding: numOrNull(i.outstanding),
+        paidTotal: numOrNull(i.paidTotal),
+        declaredAtMs: msOf(i.declaredAt),
+        courierPhoneMasked: maskPhone((i.courier || {}).uid),
+        courierAccountId: String((i.courier || {}).accountId || ''),
+        reason: String(i.reason || '').slice(0, 300),
+        legId: String(i.legId || ''),
+      };
+    });
+    console.log(JSON.stringify({
+      action: 'adminListLossIncidents', result: 'ok', userId: adminUid, limit, count: items.length,
+    }));
+    return { ok: true, items };
+  }
+
   // ── Triggerlar ───────────────────────────────────────────────────────
   /** custody_events onCreate: LEG tugadi → EARNED; yetkazildi → RELEASE. */
   async function onCustodyEvent(event) {
@@ -815,6 +871,8 @@ function attachRelayEscrow(exports, deps) {
   exports.fundShipmentEscrow = functions.https.onCall(fund);
   /** ADMIN — kuryer to'lagan qarzni yozish (yo'qolgan posilka, D1). Faqat admin/superadmin. */
   exports.adminRecordLostParcelPayment = functions.https.onCall(recordLostPayment);
+  /** ADMIN — yo'qolish hodisalari ro'yxati (D1, faqat o'qish). Faqat admin/superadmin. */
+  exports.adminListLossIncidents = functions.https.onCall(listLossIncidents);
   exports.onLogisticsCustodyEvent = functions.firestore
     .document(`${CUSTODY}/{eventId}`)
     .onCreate(async (snap) => { await onCustodyEvent(snap.data() || {}); return null; });
@@ -827,7 +885,7 @@ function attachRelayEscrow(exports, deps) {
 
   return {
     fund, postEarned, releaseEscrow, refundEscrow, onCustodyEvent, onShipmentUpdate, resolveCaller, reconcile,
-    settleLoss, recordLostPayment,
+    settleLoss, recordLostPayment, listLossIncidents,
   };
 }
 

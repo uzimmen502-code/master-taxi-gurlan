@@ -1767,6 +1767,29 @@ function makeAdminReactivateLeg(deps) {
  * Idempotent: incident bor bo'lsa hech narsa yozilmaydi, birinchi natija qaytadi.
  * Parallel ikki chaqiruv: tranzaksiya qayta uriniladi va ikkinchisi incident'ni ko'radi.
  */
+/**
+ * `db.runTransaction` + CHEKLANGAN qayta urinish FAQAT xom (HttpsError bo'lmagan) xatolarda.
+ * Biznes rad (`fail(...)` = HttpsError) qayta urinilmaydi. Tranzaksiya funksiyasi idempotent
+ * bo'lishi shart (holatni har urinishda qayta o'qiydi).
+ */
+async function runTxRetryRaw(db, fn, attempts = 3) {
+  let last = null;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await db.runTransaction(fn);
+    } catch (e) {
+      if (e && typeof e.code === 'string' && e.httpErrorCode) throw e; // HttpsError - biznes rad
+      last = e;
+      console.warn(JSON.stringify({
+        action: 'runTxRetryRaw', result: 'retry', attempt: i, errorCode: 'TX_RAW_ERROR',
+        message: String((e && e.message) || e).slice(0, 120),
+      }));
+      await new Promise((r) => setTimeout(r, 40 * i + Math.floor(Math.random() * 60)));
+    }
+  }
+  throw last;
+}
+
 function makeAdminMarkShipmentLost(deps) {
   const { db, now: nowFn } = deps;
 
@@ -1783,7 +1806,12 @@ function makeAdminMarkShipmentLost(deps) {
     const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
     const incRef = db.collection(L.INCIDENTS).doc(shipmentId);
 
-    const out = await db.runTransaction(async (tx) => {
+    // Parallel `confirmDelivery` bilan poygada yutqazgan tomon Firestore'dan XOM xato olardi
+    // ("Transaction is invalid or closed", kod 3 - Admin SDK qayta urinishda eski get'larni
+    // yopilgan tranzaksiyaga o'tkazadi; courierSubmitPayment'da ham shunday topilgan).
+    // Biznes rad (HttpsError) darhol; xom xatoda tranzaksiya qayta ishga tushiriladi - ikkinchi
+    // urinish holatni qayta o'qib toza `shipment_not_lossable` beradi (qarang runTxRetryRaw).
+    const out = await runTxRetryRaw(db, async (tx) => {
       const [shipSnap, incSnap] = await Promise.all([tx.get(shipRef), tx.get(incRef)]);
       if (!shipSnap.exists) throw fail('not-found', 'Jo\'natma topilmadi');
       const ship = shipSnap.data() || {};

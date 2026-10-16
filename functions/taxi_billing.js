@@ -51,6 +51,8 @@ const RESCHEDULES = 'taxi_reschedules';
 const FRAUD_CASES = 'taxi_fraud_cases';
 const AGREEMENTS = 'service_agreements';
 const CAPS = 'provider_capabilities';
+/** Audit M1: publish idempotentligi - server-only `{driverUid}_{requestId}` hujjatlari. */
+const PUBLISH_REQUESTS = 'taxi_publish_requests';
 const EARNINGS_ACCOUNT = 'earnings:ava_taxi_fee';
 
 const SEAT_BASIS = 4;
@@ -113,6 +115,10 @@ function starterNoticeOf(cap, status, nowDate) {
 
 /** Jo'nash vaqti shu davrdan ko'p o'tgan bo'lsa rad etiladi (soat farqi / sekin tarmoq uchun zaxira). */
 const DEPARTURE_PAST_TOLERANCE_MS = 5 * 60 * 1000;
+/** Audit M1: parallel nusxa birinchi urinish tugashini shuncha kutadi / `processing` shundan eski bo'lsa kutilmaydi. */
+const PUBLISH_REPLAY_WAIT_MS = 10000;
+const PUBLISH_REPLAY_POLL_MS = 200;
+const PUBLISH_PROCESSING_MAX_AGE_MS = 30000;
 const SEATS_MIN = 1;
 const SEATS_MAX = 8;
 const SCHEDULE_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -152,6 +158,12 @@ function parseSchedule(scheduleDate, startTime) {
   }
   if (time && !SCHEDULE_TIME_RE.test(time)) return { ok: false };
   return { ok: true, scheduleDate: date, startTime: time };
+}
+
+/** `requestId` (ixtiyoriy): yo'q -> '' (eski ilova); yaroqli -> o'zi; yaroqsiz -> null. */
+function parseRequestId(raw) {
+  if (raw === undefined || raw === null || raw === '') return '';
+  return typeof raw === 'string' && REQUEST_ID_RE.test(raw) ? raw : null;
 }
 
 /** `seats`: yo'q -> 4 (eski ilova); aks holda butun son SEATS_MIN..SEATS_MAX (raqamli satr ham). */
@@ -352,6 +364,37 @@ function attachTaxiBilling(exports, deps) {
     };
   }
 
+  /**
+   * Audit M1: shu `requestId` bilan boshlangan e'lonning joriy natijasi (yoki null).
+   * Birinchi urinish hali ishlayotgan bo'lsa (`processing`, 30 soniyadan yosh) qisqa
+   * kutiladi - parallel nusxa "to'lov kerak" deb noto'g'ri javob olmasin. Yangi reys
+   * ochilmaydi, pul harakati YO'Q.
+   */
+  async function existingPublishResult(reqRef, me) {
+    let req = await reqRef.get();
+    if (!req.exists) return null;
+    const startedAt = Date.now();
+    while (req.exists && (req.data() || {}).status === 'processing'
+      && Date.now() - Number((req.data() || {}).startedAtMs || 0) < PUBLISH_PROCESSING_MAX_AGE_MS
+      && Date.now() - startedAt < PUBLISH_REPLAY_WAIT_MS) {
+      await new Promise((resolve) => setTimeout(resolve, PUBLISH_REPLAY_POLL_MS));
+      req = await reqRef.get();
+    }
+    if (!req.exists) return null;
+    const tripSnap = await db.collection(TRIPS).doc(String((req.data() || {}).tripId || '_')).get();
+    if (!tripSnap.exists) return null;
+    const t = tripSnap.data() || {};
+    const out = {
+      tripId: tripSnap.id, status: t.status, feeAmount: Number(t.feeAmount) || 0, idempotent: true,
+    };
+    if (t.status === 'payment_required') out.walletBalance = await walletBalance(me.usersDocId);
+    else out.billable = t.billable === true;
+    console.log(JSON.stringify({
+      action: 'publishTaxiTrip', result: 'replayed', tripId: tripSnap.id, userId: me.phone, status: t.status,
+    }));
+    return out;
+  }
+
   const inputError = (reason, message, detail) => err('failed-precondition', message,
     detail ? { reason, detail } : { reason });
 
@@ -361,6 +404,11 @@ function attachTaxiBilling(exports, deps) {
    * 25-qoida); pul harakati bundan KEYIN.
    */
   function validatePublishInput(data, nowMs) {
+    const requestId = parseRequestId(data.requestId);
+    if (requestId === null) {
+      throw err('invalid-argument', 'requestId 8..64 belgi bo\'lishi kerak ([A-Za-z0-9_-])',
+        { reason: 'request_id_invalid' });
+    }
     const dep = parseDeparture(data.departureAt);
     if (dep.present) {
       const problem = departureProblem(dep.date, nowMs);
@@ -374,7 +422,7 @@ function attachTaxiBilling(exports, deps) {
     const sched = parseSchedule(data.scheduleDate, data.startTime);
     if (!sched.ok) throw inputError('schedule_invalid', 'Sana (YYYY-MM-DD) yoki vaqt (HH:MM) formati noto\'g\'ri');
     return {
-      departureAt: dep.date, from, to, seats: seats.seats,
+      requestId, departureAt: dep.date, from, to, seats: seats.seats,
       scheduleDate: sched.scheduleDate, startTime: sched.startTime,
     };
   }
@@ -388,6 +436,14 @@ function attachTaxiBilling(exports, deps) {
     data = data || {};
     // Audit M2/H5: kirish tekshiruvi - qarz yopish va komissiyadan OLDIN.
     const input = validatePublishInput(data, now().getTime());
+    // Audit M1: shu `requestId` bilan avval boshlangan e'lon bo'lsa - o'sha natija
+    // (yangi reys ham, qayta yechim ham, qarz yopish ham YO'Q).
+    const reqRef = input.requestId
+      ? db.collection(PUBLISH_REQUESTS).doc(`${me.phone}_${input.requestId}`) : null;
+    if (reqRef) {
+      const replay = await existingPublishResult(reqRef, me);
+      if (replay) return replay;
+    }
     // D-TAXI-CANCEL-6: avval qarz, keyin yangi komissiya.
     const debt = await settleOutstanding(me);
     if (debt.outstanding > 0) {
@@ -437,20 +493,65 @@ function attachTaxiBilling(exports, deps) {
       updatedAt: when,
     };
 
-    if (q.feeAmount > 0) {
-      await tripRef.set(snapshot);
-      const c = await charge({
-        usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id,
-        amount: q.feeAmount, version: BILLING_VERSION, kind: 'taxi_fee',
-        meta: { farePerSeat: q.farePerSeat, grossBasis: q.grossBasis },
+    // Reys hujjati va (bo'lsa) `requestId` hujjati BITTA tranzaksiyada: ikkala parallel
+    // chaqiruvdan faqat bittasi yaratadi, ikkinchisi birinchisining natijasini oladi.
+    const createTrip = async (tripDoc, requestStatus) => {
+      const created = await db.runTransaction(async (tx) => {
+        if (reqRef) {
+          const r = await tx.get(reqRef);
+          if (r.exists) return false;
+        }
+        tx.set(tripRef, tripDoc);
+        if (reqRef) {
+          tx.set(reqRef, {
+            driverUid: me.phone, requestId: input.requestId, tripId: tripRef.id, status: requestStatus,
+            startedAtMs: Date.now(), createdAt: when, updatedAt: when,
+          });
+        }
+        return true;
       });
+      if (created) return null;
+      const replay = await existingPublishResult(reqRef, me);
+      if (replay) return replay;
+      throw err('aborted', 'E\'lon holati o\'zgardi - qayta urinib ko\'ring', { reason: 'publish_in_progress' });
+    };
+    const setRequestStatus = (status) => (reqRef
+      ? reqRef.update({ status, updatedAt: now() }).catch((e) => {
+        console.error(`taxi_publish_requests status (${reqRef.id}): ${e.message}`);
+      })
+      : Promise.resolve());
+
+    if (q.feeAmount > 0) {
+      const replay = await createTrip(snapshot, 'processing');
+      if (replay) return replay;
+      let c;
+      try {
+        c = await charge({
+          usersDocId: me.usersDocId, phone: me.phone, tripId: tripRef.id,
+          amount: q.feeAmount, version: BILLING_VERSION, kind: 'taxi_fee',
+          meta: { farePerSeat: q.farePerSeat, grossBasis: q.grossBasis },
+        });
+      } catch (e) {
+        await setRequestStatus('error');
+        throw e;
+      }
       if (!c.ok) {
         // D-TAXI-23: `payment_required` da qoladi, e'lon chiqmaydi.
+        await setRequestStatus('payment_required');
         return { tripId: tripRef.id, status: 'payment_required', feeAmount: q.feeAmount, walletBalance: q.walletBalance };
       }
-      await tripRef.update({ status: 'published', chargedAt: now(), ledgerEntryId: c.entryId, updatedAt: now() });
+      const publishedPatch = { status: 'published', chargedAt: now(), ledgerEntryId: c.entryId, updatedAt: now() };
+      if (reqRef) {
+        const batch = db.batch();
+        batch.update(tripRef, publishedPatch);
+        batch.update(reqRef, { status: 'published', updatedAt: now() });
+        await batch.commit();
+      } else {
+        await tripRef.update(publishedPatch);
+      }
     } else {
-      await tripRef.set({ ...snapshot, status: 'published', chargedAt: null });
+      const replay = await createTrip({ ...snapshot, status: 'published', chargedAt: null }, 'published');
+      if (replay) return replay;
     }
 
     // D-TAXI-14: mismatch — signal, hukm emas.
@@ -908,7 +1009,7 @@ function numOrNull(v) {
 }
 
 module.exports = {
-  TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT,
+  TRIPS, PRICE_CHANGES, RESCHEDULES, FRAUD_CASES, AGREEMENTS, EARNINGS_ACCOUNT, PUBLISH_REQUESTS,
   rescheduleWrites,
   SEAT_BASIS, RATE_BPS, BILLING_VERSION, MAX_DOWNWARD_REFUNDS, STARTER_NOTICE_DAYS,
   calculateTaxiFee, starterNoticeOf, attachTaxiBilling,

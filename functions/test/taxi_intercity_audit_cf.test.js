@@ -166,6 +166,77 @@ async function main() {
     await assert.rejects(() => api.reschedule({ tripId: r.tripId }, ctx), (e) => e.code === 'invalid-argument');
   });
 
+  // ══ M1: publish idempotentligi ═══════════════════════════════════════
+  await reset();
+  await check('requestId formati: qisqa / belgi / 65 uzun -> request_id_invalid; hujjat yaratilmaydi', async () => {
+    for (const rid of ['short', 'has space!!!', 'x'.repeat(65), 'bad/slash/1234']) {
+      await expectReason(pub({ requestId: rid }), 'request_id_invalid', 'invalid-argument');
+    }
+    assert.strictEqual((await db.collection('taxi_publish_requests').get()).size, 0);
+    assert.strictEqual(await tripCount(), 0);
+  });
+  await check('requestId: ketma-ket qayta chaqiruv -> BIR reys, BIR yechim, bir xil tripId', async () => {
+    const a = await pub({ requestId: 'req-AAAA-0001' });
+    const bal = await balance(); const j = await journalCount();
+    const b = await pub({ requestId: 'req-AAAA-0001' });
+    assert.strictEqual(b.tripId, a.tripId); assert.strictEqual(b.status, 'published');
+    assert.strictEqual(b.idempotent, true); assert.strictEqual(b.feeAmount, a.feeAmount);
+    assert.strictEqual(await tripCount(), 1); assert.strictEqual(await balance(), bal);
+    assert.strictEqual(await journalCount(), j);
+    const rq = await db.collection('taxi_publish_requests').doc(`${DRIVER}_req-AAAA-0001`).get();
+    assert.ok(rq.exists); assert.strictEqual(rq.data().tripId, a.tripId);
+  });
+  await check('requestId: PARALLEL 2 ta chaqiruv -> BIR reys, komissiya BIR marta', async () => {
+    const before = await balance();
+    const [a, b] = await Promise.all([pub({ requestId: 'req-BBBB-0002' }), pub({ requestId: 'req-BBBB-0002' })]);
+    assert.strictEqual(a.tripId, b.tripId);
+    assert.strictEqual((await db.collection('taxi_trips').where('driverUid', '==', DRIVER).get()).docs
+      .filter((d) => d.id === a.tripId).length, 1);
+    assert.strictEqual(await tripCount(), 2, 'req-AAAA + req-BBBB = 2 reys');
+    assert.strictEqual(before - await balance(), 28000, 'komissiya bir marta');
+  });
+  await check('requestId: boshqa requestId -> yangi reys (alohida harakat)', async () => {
+    const a = await pub({ requestId: 'req-CCCC-0003' }); const b = await pub({ requestId: 'req-DDDD-0004' });
+    assert.notStrictEqual(a.tripId, b.tripId);
+  });
+  await check('requestId YO\'Q -> eski xulq: ikki chaqiruv = ikki reys', async () => {
+    const n = await tripCount();
+    await pub(); await pub();
+    assert.strictEqual(await tripCount(), n + 2);
+  });
+  await check('requestId: payment_required natijasi ham qayta chaqiruvda O\'SHA reys, yangi reys/yechim YO\'Q', async () => {
+    await reset({ wallet: 10000 }); // fee 28 000 > 10 000
+    const a = await pub({ requestId: 'req-EEEE-0005' });
+    assert.strictEqual(a.status, 'payment_required');
+    await topUp(100000, 'later');
+    const bal = await balance(); const j = await journalCount();
+    const b = await pub({ requestId: 'req-EEEE-0005' });
+    assert.strictEqual(b.tripId, a.tripId); assert.strictEqual(b.status, 'payment_required');
+    assert.strictEqual(await tripCount(), 1); assert.strictEqual(await balance(), bal);
+    assert.strictEqual(await journalCount(), j, 'qayta chaqiruv pul harakatini yaratmaydi');
+  });
+  await check('requestId: kirish xatosida hujjat qolmaydi (keyin to\'g\'ri chaqiruv ishlaydi)', async () => {
+    await reset();
+    await expectReason(pub({ requestId: 'req-FFFF-0006', seats: 99 }), 'seats_invalid');
+    assert.strictEqual((await db.collection('taxi_publish_requests').get()).size, 0);
+    const ok = await pub({ requestId: 'req-FFFF-0006' });
+    assert.strictEqual(ok.status, 'published');
+  });
+  await check('requestId: fee 0 (starter) yo\'li ham idempotent', async () => {
+    await reset();
+    await db.collection('provider_capabilities').doc(ACC).set({ status: { taxi: 'starter' } }, { merge: true });
+    const a = await pub({ requestId: 'req-GGGG-0007' }); const b = await pub({ requestId: 'req-GGGG-0007' });
+    assert.strictEqual(a.tripId, b.tripId); assert.strictEqual(await tripCount(), 1);
+    assert.strictEqual(b.status, 'published'); assert.strictEqual(b.feeAmount, 0);
+  });
+  await check('requestId: boshqa haydovchining kaliti to\'qnashmaydi (kalit = driverUid_requestId)', async () => {
+    await reset();
+    const a = await pub({ requestId: 'req-HHHH-0008' });
+    await db.collection('taxi_publish_requests').doc(`${OTHER}_req-HHHH-0008`).set({ tripId: 'foreign', status: 'published' });
+    const b = await pub({ requestId: 'req-HHHH-0008' });
+    assert.strictEqual(b.tripId, a.tripId);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} taxi intercity audit CF checks passed.`);
   if (failed) process.exitCode = 1;

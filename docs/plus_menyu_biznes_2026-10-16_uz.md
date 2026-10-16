@@ -25,7 +25,10 @@
 | 4 | Ихтиёрий видео: эълон, хизмат, Аҳоли бозори, уй ошпази/кафе (клипга `linkKind/linkId`) | commit `2e54101` |
 | 5 | «Ҳайдовчи роли» 2-босқич: сервер `users.role=driver` ЁЗМАЙДИ (`applyDriverRequestApproval`), клиент `user_role=driver` ёзмайди; умумий «Ҳайдовчиликдан чиқиш» олиб ташланди (тур бўйича чиқиш қолди) | 2026-10-17 |
 | 6 | 3-босқич: тозалаш асбоби `functions/tools/cleanup_legacy_driver_role.js` (dry-run/backup/rollback). Прод dry-run: `role=driver` — 3 та, ҲАММАСИ ҳуқуқсиз (capability йўқ) → стандарт режимда **0 та** тозаланади, ҳеч нарса ёзилмади | 2026-10-17 |
-| Push / deploy / APK | **йўқ** — эга «тугади» демагунча; APK фақат рухсат билан | — |
+| **Deploy (эга: «ҳа», 2026-10-17)** | **Functions** (ном бўйича, пинланган worktree `deploy-plus-fns` = `6a124f5`): `leaveDriverType` (янги), `onAdminNewsCreate`, `onAdminNewsUpdate`, `sendDailyOnboardingPromo`, `autoApproveDriverApplication`, `approveDriverRequest` — 2026-10-16 19:39 UTC, gcloud ACTIVE; `leaveDriverType` токенсиз чақирув → 401. **Hosting**: release `2026-10-16T20:01:45Z`, бандл хэши қурилганга тенг, `/downloads` APK 200. | БАЖАРИЛДИ |
+| Hosting асоси | Жонли веб `f770a41` (`fix/courier-audit-flutter`, 17:21Z) дан қурилган эди — у `feat/ev-trip-planner` аждоди ЭМАС (223 файл фарқ). Шунинг учун менинг клиент commit'ларим шу устига кўчирилди: ветка `deploy/hosting-plus-menu` `28b2a44` (worktree `.claude/worktrees/deploy-plus-hosting`). **Кейинги hosting deploy шу SHA устига қурилсин**; `feat` HEAD'дан қуриш бугунги EV/курьер ишларини веб'дан ўчириб юборади | — |
+| APK | **йўқ** — фақат эганинг рухсати билан | — |
+| Rules / индекс / маълумот | ўзгармади; прод `users` ёзилмади (фақат dry-run ўқиш) | — |
 
 Орқага мослик: эски клип/ресторан/эълонларда янги майдонлар йўқ — кўрсатишда `''` деб ўқилади; мавжуд оқимлар ўзгармайди.
 Улгуржи эски `wholesaleProductId` йўлида қолди (ишлаб турибди).

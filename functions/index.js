@@ -65,13 +65,22 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
 });
+// Mijoz tasdig'i — «Oldim» / «Berdim» (D2/D7, ega qarori 2026-10-16): AVA kuryeri
+// oqimlarida kuryer qadamini mijoz O'Z qurilmasida tasdiqlaydi. Sozlama faqat server:
+// `server_config/customer_confirm` (standart OFF). Modul yadrolari `registerHandler`
+// bilan shu yerga ulanadi (restoran: restaurant_orders.js; gilam/agro/yig'ib olish: pastda).
+const { createCustomerConfirm } = require('./customer_confirm');
+const customerConfirm = createCustomerConfirm({
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
+});
+customerConfirm.attach(exports);
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
 // `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.
 const { attachRestaurantOrders } = require('./restaurant_orders');
 attachRestaurantOrders(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, axios,
-  requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES,
+  requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES, customerConfirm,
   // Yaqin onlayn kuryerlarga «buyurtma bor» push'i (presence + token manbasi).
   courierPush,
   // `courierAuth` pastda `const` — attach paytida TDZ; modul uni chaqiruvda oladi.

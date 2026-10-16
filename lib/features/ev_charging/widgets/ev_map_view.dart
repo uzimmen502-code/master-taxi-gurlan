@@ -19,6 +19,7 @@ class EvMapView extends StatefulWidget {
     required this.stations,
     required this.onStationTap,
     this.initialZoom = 14,
+    this.padding = EdgeInsets.zero,
   });
 
   final double centerLat;
@@ -26,6 +27,10 @@ class EvMapView extends StatefulWidget {
   final List<EvChargingStation> stations;
   final ValueChanged<EvChargingStation> onStationTap;
   final double initialZoom;
+
+  /// Хаританинг ўз тугмалари (жойлашув тугмаси, логотип) устидан сузиб
+  /// юрувчи панел тагидан чиқиши учун ички чекиниш.
+  final EdgeInsets padding;
 
   @override
   State<EvMapView> createState() => _EvMapViewState();
@@ -139,6 +144,7 @@ class _EvMapViewState extends State<EvMapView> {
         zoom: widget.initialZoom,
       ),
       markers: _buildMarkers(),
+      padding: widget.padding,
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
       onMapCreated: (c) {

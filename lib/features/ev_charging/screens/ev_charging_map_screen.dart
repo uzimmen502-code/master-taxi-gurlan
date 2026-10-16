@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +16,7 @@ import '../../onboarding/screens/onboarding_screen.dart';
 import '../controllers/ev_charging_map_controller.dart';
 import '../controllers/ev_navigation_session_controller.dart';
 import '../widgets/ev_arrival_flow.dart';
+import '../widgets/ev_map_top_overlay.dart';
 import '../widgets/ev_map_view.dart';
 import '../widgets/ev_station_card.dart';
 import '../widgets/ev_station_tariff_sheet.dart';
@@ -104,6 +106,8 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
   @override
   void initState() {
     super.initState();
+    // Харита статус бар ва пастки соҳа остигача (эга қарори, 2026-10-16).
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     EvChargingRulesHolder.load();
     _nav = EvNavigationSessionController()
       ..onArrived = (station) {
@@ -117,8 +121,26 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
 
   @override
   void dispose() {
+    // Бошқа экранлар учун одатдаги тизим панелларига қайтарилади.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
     _nav.dispose();
     super.dispose();
+  }
+
+  /// Харита экрани тўлиқ экранли (edge-to-edge); устига очиладиган оддий
+  /// экранлар (сафар ёрдамчиси, станция қўшиш) одатдаги тизим панели билан
+  /// чизилади, қайтганда харита режими тикланади.
+  Future<void> _withNormalChrome(Future<Object?> Function() push) async {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
+    try {
+      await push();
+    } finally {
+      if (mounted) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    }
   }
 
   void _onStationTap(EvChargingStation station) {
@@ -158,37 +180,28 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<EvChargingMapController>();
-    return Scaffold(
-      backgroundColor: AppColors.scaffold,
-      appBar: AppBar(
-        title: const Text('⚡ Зарядлаш нуқталари'),
+    final hasError = controller.error != null;
+    // Хаританинг ўз тугмалари сузиб юрувчи панел тагидан чиқсин.
+    final topInset = MediaQuery.paddingOf(context).top +
+        EvChargingMapLayout.overlayHeight(hasError: hasError);
+    // Харита бутун экранда: AppBar ва AC/DC филтр чиплари йўқ (эга қарори,
+    // 2026-10-16). Филтр мантиқи контроллерда қолган, лекин UI йўқ —
+    // харита доим барча станцияларни кўрсатади.
+    return EvChargingMapLayout(
+      loading: controller.loading,
+      errorText: controller.error,
+      onAddStation: () => _openPaidAddFlow(context, controller),
+      onTripPlanner: () => _openTripPlanner(controller),
+      map: EvMapView(
+        centerLat: controller.centerLat,
+        centerLng: controller.centerLng,
+        initialZoom: controller.hasLocation
+            ? 14
+            : EvChargingMapController.fallbackZoom,
+        stations: controller.stations,
+        onStationTap: _onStationTap,
+        padding: EdgeInsets.only(top: topInset),
       ),
-      body: controller.loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-                  children: [
-                    // GPS йўқ — станциялар барибир кўринади, огоҳлантириш
-                    // юқорида (аввал фақат хато матни эди).
-                    if (controller.error != null)
-                      MaterialBanner(
-                        content: Text(controller.error!),
-                        leading: const Icon(Icons.location_off_outlined),
-                        actions: const [SizedBox.shrink()],
-                      ),
-                    _buildAddStationAndFilters(controller),
-                    Expanded(
-                      child: EvMapView(
-                        centerLat: controller.centerLat,
-                        centerLng: controller.centerLng,
-                        initialZoom: controller.hasLocation
-                            ? 14
-                            : EvChargingMapController.fallbackZoom,
-                        stations: controller.stations,
-                        onStationTap: _onStationTap,
-                      ),
-                    ),
-                  ],
-                ),
     );
   }
 
@@ -205,7 +218,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
         canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
     if (phone.length < 9) return;
 
-    await Navigator.push(
+    await _withNormalChrome(() => Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => EvTripScreen(
@@ -217,7 +230,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
           stations: controller.allStations,
         ),
       ),
-    );
+    ));
   }
 
   /// ⚡ Станция қўшиш — ПУЛЛИК (эга қарори, 2026-09-22): аввал тариф+қадамлар
@@ -237,7 +250,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
     );
     if (tariff == null || !context.mounted) return;
 
-    await Navigator.push(
+    await _withNormalChrome(() => Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => AddEvStationScreen(
@@ -247,161 +260,6 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
           phone: phone,
         ),
       ),
-    );
-  }
-
-  Widget _buildAddStationAndFilters(EvChargingMapController controller) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          // ⚡ «Қаерга борамиз?» — EV модули оддий станциялар харитаси
-          // бўлиб қолмаслиги учун сафар ёрдамчиси энг устда.
-          _TripPlannerBar(onTap: () => _openTripPlanner(controller)),
-          const SizedBox(height: 8),
-          _PaidAddStationBar(
-            onTap: () => _openPaidAddFlow(context, controller),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 36,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _filterChip('Ҳаммаси', null, controller),
-                _filterChip('AC', 'AC', controller),
-                _filterChip('DC', 'DC', controller),
-                _filterChip('AC+DC', 'AC+DC', controller),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _filterChip(String label, String? value, EvChargingMapController controller) {
-    final isSelected = controller.chargingTypeFilter == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) => controller.setChargingTypeFilter(value),
-      ),
-    );
-  }
-}
-
-/// ⚡ «Қаерга борамиз?» — сафар ёрдамчисига кириш. `_PaidAddStationBar`
-/// билан бир хил шаклда, лекин тўлдирилган эмас — иккита тўлиқ яшил
-/// панель бир-бири билан рақобатлашиб кетмаслиги учун.
-class _TripPlannerBar extends StatelessWidget {
-  const _TripPlannerBar({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      elevation: 1,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primaryText, width: 1.4),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.route_rounded,
-                  color: AppColors.primaryText, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                context.tr('ev_trip_entry'),
-                style: const TextStyle(
-                  color: AppColors.primaryText,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// «Станция қўшиш (пуллик)» — қидирув майдони ўрнига жойлашган тўлиқ энли
-/// панель (2026-09-22, дизайн тузатиш #2: қидирув майдони олиб ташланди,
-/// тугма унинг ўрнига кўчирилди ва ранги харита панели/AppBar рангига
-/// (яшил, [AppColors.primaryDark]) уйғунлаштирилди — энди алоҳида сузиб
-/// юрган элемент эмас, юқори панелнинг табиий давоми). "Пуллик" сигнали
-/// йўқолиб кетмаслиги учун кичик олтин белги сақлаб қолинди.
-class _PaidAddStationBar extends StatelessWidget {
-  const _PaidAddStationBar({required this.onTap});
-
-  final VoidCallback onTap;
-
-  static const _badgeGold = Color(0xFFF9A825);
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.primaryDark,
-      elevation: 1,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.add_rounded, color: AppColors.onPrimary, size: 20),
-              const SizedBox(width: 6),
-              const Text(
-                'Станция қўшиш',
-                style: TextStyle(
-                  color: AppColors.onPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _badgeGold,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  'пуллик',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    height: 1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    ));
   }
 }

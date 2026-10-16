@@ -69,7 +69,13 @@
     "test:courier-payout": "firebase emulators:exec --only firestore --project demo-courier-payout \"node test/courier_task_payout_cf.test.js\"",
     "test:customer-confirm-pure": "node test/customer_confirm_pure.test.js",
     "test:customer-confirm-rules": "firebase emulators:exec --only firestore --project demo-customer-confirm-rules \"node test/customer_confirm_rules.test.js\"",
-    "test:customer-confirm": "firebase emulators:exec --only firestore --project demo-customer-confirm \"node test/customer_confirm_cf.test.js\""
+    "test:customer-confirm": "firebase emulators:exec --only firestore --project demo-customer-confirm \"node test/customer_confirm_cf.test.js\"",
+    "test:taxi-billing-cf": "firebase emulators:exec --only firestore --project demo-taxi-billing \"node test/taxi_billing_cf.test.js\"",
+    "test:taxi-billing-refund": "firebase emulators:exec --only firestore --project demo-taxi-billing \"node test/taxi_billing_refund_cf.test.js\"",
+    "test:taxi-audit": "firebase emulators:exec --only firestore --project demo-taxi-audit \"node test/taxi_intercity_audit_cf.test.js\"",
+    "test:intercity-audit": "firebase emulators:exec --only firestore --project demo-intercity-audit \"node test/intercity_audit_cf.test.js\"",
+    "test:intercity-auto-shift": "firebase emulators:exec --only firestore --project demo-auto-shift \"node test/intercity_auto_shift.test.js\"",
+    "test:intercity-gate-rules": "firebase emulators:exec --only firestore --project demo-ic-gate \"node test/intercity_billing_gate_rules.test.js\""
   },
   "engines": {
     "node": "20"

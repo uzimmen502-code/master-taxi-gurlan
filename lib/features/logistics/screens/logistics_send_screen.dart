@@ -99,7 +99,8 @@ class _LogisticsSendScreenState extends State<LogisticsSendScreen> {
   String? _localValidation() {
     if (!_origin.isSet || !_destination.isSet) return context.tr('logistics_err_point_region_required');
     for (final p in _parcels) {
-      if (!p.toSpec().isValid) return context.tr('logistics_err_parcel_invalid');
+      final reason = p.toSpec().localErrorReason;
+      if (reason != null) return context.tr('logistics_err_$reason');
     }
     return null;
   }

@@ -8,12 +8,25 @@ import '../data/logistics_repository.dart';
 /// Сервер `details.reason` → фойдаланувчи матни (25-банд: ички код
 /// кўрсатилмайди). Матни йўқ код — умумий матн.
 String logisticsErrorText(BuildContext context, Object error) {
-  if (error is LogisticsException) {
-    final key = error.l10nKey;
+  final key = logisticsErrorKey(error);
+  if (key != null) {
     final text = context.tr(key);
     if (text != key) return text;
   }
   return context.tr('logistics_err_generic');
+}
+
+/// Хато → матн калити (соф функция, тестланади). Сервер `CODE_ATTEMPTS_LOCKED`
+/// (resource-exhausted: нотўғри код уринишлари чегараси) катта ҳарфда келади —
+/// унинг калити `logistics_err_<reason>` қолипидан ташқарида
+/// (`logistics_code_locked`): паритет фикстураси `callableReasons`да йўқ.
+String? logisticsErrorKey(Object error) {
+  if (error is! LogisticsException) return null;
+  if (error.reason == 'CODE_ATTEMPTS_LOCKED' ||
+      (error.code == 'resource-exhausted' && error.reason == error.code)) {
+    return 'logistics_code_locked';
+  }
+  return error.l10nKey;
 }
 
 /// `toshkent_shahri` → «Toshkent shahri». Проекцияда фақат ID келади

@@ -59,10 +59,18 @@ enum PaymentStatus {
   settled,
   escrowFrozen,
   refundPending,
-  refunded;
+  refunded,
+
+  /// Посилка йўқолган деб эълон қилинган (D1) — товар қиймати қайтарилади.
+  lossPending,
+  lossSettled;
 
   String get wire {
     switch (this) {
+      case PaymentStatus.lossPending:
+        return 'loss_pending';
+      case PaymentStatus.lossSettled:
+        return 'loss_settled';
       case PaymentStatus.escrowFunded:
         return 'escrow_funded';
       case PaymentStatus.releaseApproved:
@@ -186,8 +194,23 @@ class ParcelSpec {
   final String description;
   final bool fragile;
 
-  bool get isValid =>
-      actualWeightG > 0 && lengthCm > 0 && widthCm > 0 && heightCm > 0 && declaredValue >= 0;
+  /// Вазн ва ўлчамлар мусбат бутун сон.
+  bool get hasValidMeasures =>
+      actualWeightG > 0 && lengthCm > 0 && widthCm > 0 && heightCm > 0;
+
+  /// Эълон қилинган қиймат (сўм) МАЖБУРИЙ: > 0 (сервер `declared_value_required`
+  /// билан рад этади, D1 — йўқолган посилка товар қиймати шунга асосланади).
+  bool get hasDeclaredValue => declaredValue > 0;
+
+  bool get isValid => hasValidMeasures && hasDeclaredValue;
+
+  /// Маҳаллий текширув натижаси: `parcel_invalid` | `declared_value_required`
+  /// | null. Калит: `logistics_err_<reason>`.
+  String? get localErrorReason {
+    if (!hasValidMeasures) return 'parcel_invalid';
+    if (!hasDeclaredValue) return 'declared_value_required';
+    return null;
+  }
 
   Map<String, dynamic> toInput() => <String, dynamic>{
         'actualWeightG': actualWeightG,

@@ -211,7 +211,7 @@ class LogisticsStatusChip extends StatelessWidget {
       'awaiting_payment' || 'pending' => (c.warnSoft, c.warn),
       'ready' || 'in_transit' => (c.brandSoft, c.brand),
       'delivered' || 'closed' => (c.okSoft, c.ok),
-      'disputed' || 'lost' || 'problem' => (c.dangerSoft, c.danger),
+      'disputed' || 'lost' || 'problem' || 'loss_pending' || 'loss_settled' => (c.dangerSoft, c.danger),
       _ => (c.chip, c.ink3),
     };
     return Container(

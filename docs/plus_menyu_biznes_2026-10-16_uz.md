@@ -62,8 +62,9 @@
 
 | Масала | Ҳолат | Ким / кейинги қадам |
 |---|---|---|
-| Прод: `role = driver` бўлган **3 та** эски ҳайдовчи — `drivers.approved=true`, 2 тасида шаҳарлараро эълон фаол, лекин **capability йўқ** (`accountId` йўқ). Тозалаш асбоби уларга стандарт режимда ТЕГМАЙДИ | CONFIRMED (прод ўқилди) | эга: уларга ҳуқуқ бериш (админ орқали) ёки `--include-no-capability` билан `user` га тушириш. Улар тегилгунча `usersLeaveDriverDemotion` қоидаси ва аудитория UNION қисми ЎЧИРИЛМАЙДИ |
-| `usersLeaveDriverDemotion` қоидасини олиб ташлаш ва аудиториядаги `role == driver` қисмини ўчириш | PROPOSED | юқоридаги 3 та ҳал бўлгандан кейин (қоида алоҳида deploy) |
+| **БАЖАРИЛДИ (эга: «user га тушириб, янгилик аудиториясидан чиқарамиз», 2026-10-17):** продда `role=driver` бўлган 3 та ҳуқуқсиз эски ҳайдовчи → `user`. Batch `VT6o2gWiHdHDlbAZv1YI` (backup: Firestore `users_role_cleanup` + маҳаллий `functions/tools/backup/…json`). Текширув: қайта dry-run `role=driver` = 0. Faqat `users.role` ўзгарди; `drivers`/`intercity_drivers` (эълонлар) тегилмади | CONFIRMED | Rollback: `node functions/tools/cleanup_legacy_driver_role.js --rollback VT6o2gWiHdHDlbAZv1YI` |
+| Аудиториядаги `role == driver` қисми (union) ўчирилди — «ҳайдовчи» фақат ҳуқуқдан | CONFIRMED | `onAdminNewsCreate/Update` қайта deploy |
+| `usersLeaveDriverDemotion` қоидаси ҳали файлда (зарари йўқ: `role=driver` ҳужжат қолмаган). Олиб ташлаш — алоҳида rules deploy (жонли ruleset билан солиштириб) | PROPOSED | зарурат туғилса |
 | Умумий «Ҳайдовчиликдан чиқиш» олиб ташланди; `leaveDriverRole` CF эски APK'лар учун серверда қолди | CONFIRMED | эски APK'лар йўқолгач CF'ни ҳам олиб ташлаш |
 | Автомобиль ўчирилганда «Мойни алмаштириш» модули ҳам шу маълумотни йўқотади | CONFIRMED | матн огоҳлантиради |
 | Видео: `fetchLinkedMap` бир турдаги энг кўпи 200 клипни қайтаради (индекссиз тенглик фильтри); кўпайса индекс + `createdAt` тартиби керак | PROPOSED | трафикка қараб |

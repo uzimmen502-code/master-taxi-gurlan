@@ -7,7 +7,7 @@
  *     "node functions/test/driver_audience_cf.test.js"
  *
  *   A  янги оқим ҳайдовчиси (role: user + capability) «ҳайдовчи» аудиториясида
- *   B  эски белги (role: driver, capability йўқ) ҳам қолади (union — ҳеч ким тушиб қолмайди)
+ *   B  эски белги (role: driver) ЭНДИ ҳисобга олинмайди — фақат ҳуқуқ (union ўчирилган, 2026-10-17)
  *   C  «фойдаланувчи» аудиториясида ҳайдовчи ЙЎҚ (эски қоида: ҳайдовчи — user эмас)
  *   D  ишламайдиган ҳолат (suspended / not_registered) ёки турсиз — ҳайдовчи эмас
  *   E  tokenсиз / қисқа token ўтказиб юборилади; такрорий token бир марта
@@ -69,12 +69,12 @@ const sorted = (a) => [...a].sort();
     assert.deepStrictEqual(sorted(await aud.collectFcmTokensForAudience(db, 'driver')), sorted([tok('v'), tok('vr')]));
   });
 
-  await check('B эски role: driver (capability йўқ) ҳам «driver» да, такрор йўқ', async () => {
+  await check('B эски role: driver ҳуқуқсиз — «driver» аудиториясида ЙЎҚ; ҳуқуқли бўлса бор (такрор йўқ)', async () => {
     await wipe();
     await person('998901110005', { role: 'driver', token: tok('old') });
     await person('998901110006', { role: 'driver', token: tok('both'), status: 'starter', types: ['local'] });
     const t = await aud.collectFcmTokensForAudience(db, 'driver');
-    assert.deepStrictEqual(sorted(t), sorted([tok('old'), tok('both')]));
+    assert.deepStrictEqual(t, [tok('both')]);
   });
 
   await check('C «user» аудиториясида capability ҳайдовчи ЙЎҚ, оддий фойдаланувчи бор', async () => {

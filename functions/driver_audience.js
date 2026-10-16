@@ -6,9 +6,9 @@
  * ўзи ёқади, `starter`) белги ЁЗИЛМАЙДИ — яъни янги ҳайдовчилар «ҳайдовчиларга»
  * хабарни олмас, «фойдаланувчиларга» хабарни эса олар эди (`role == 'user'`).
  * Ҳуқуқ манбаи — `provider_capabilities` (`status.taxi` ишлайдиган ҳолат ва
- * `taxi.taxiTypes` бўш эмас), эски белги эса ЎТИШ даврида қўшилади (union),
- * шунда ҳеч ким тушиб қолмайди. Белги олиб ташлангач (3-босқич) union қисми
- * ўчади.
+ * `taxi.taxiTypes` бўш эмас). Ўтиш даврида эски белги ҳам қўшилар эди (union);
+ * 2026-10-17 да прод'даги охирги 3 та `role: driver` тозаланди
+ * (`tools/cleanup_legacy_driver_role.js`, backup + rollback), union ўчирилди.
  */
 'use strict';
 const admin = require('firebase-admin');
@@ -66,7 +66,10 @@ async function collectFcmTokensForAudience(db, audience) {
   const tokens = new Set();
   let query = db.collection('users');
   if (aud === 'driver') {
-    query = query.where('role', '==', 'driver');
+    // Эски `role == 'driver'` ЭНДИ ҳисобга олинмайди (прод'да тозаланган,
+    // 2026-10-17): «ҳайдовчи» фақат ҲУҚУҚДАН. Қуйида tokenlar ҳуқуқли
+    // ҳайдовчилар рўйхатидан йиғилади; `users` саҳифалаш керак эмас.
+    query = null;
   } else if (aud === 'courier') {
     query = query.where('role', '==', 'courier');
   } else if (aud === 'user') {
@@ -78,7 +81,7 @@ async function collectFcmTokensForAudience(db, audience) {
 
   let lastDoc = null;
   const pageSize = 400;
-  for (;;) {
+  for (; query;) {
     let q = query.orderBy(admin.firestore.FieldPath.documentId()).limit(pageSize);
     if (lastDoc) q = q.startAfter(lastDoc);
     const snap = await q.get();

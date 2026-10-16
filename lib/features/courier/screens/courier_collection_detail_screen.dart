@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,14 +10,39 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/collection_task.dart';
+import '../../../models/customer_confirm.dart';
+import '../../../repositories/collection_tasks_repository.dart';
 import '../../../services/collection_service.dart';
 import '../../../services/order_payment_service.dart';
+import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
+
+typedef CollectionFinalizeFn = Future<Map<String, dynamic>> Function({
+  required String courierPhone,
+  required String taskId,
+  required List<Map<String, dynamic>> items,
+  required int cashGiven,
+});
 
 /// Курьер — битта қабул вазифаси: маҳсулотларни текшириш ва миқдорни аниқлаш.
 class CourierCollectionDetailScreen extends StatefulWidget {
-  const CourierCollectionDetailScreen({super.key, required this.task});
+  const CourierCollectionDetailScreen({
+    super.key,
+    required this.task,
+    this.repository,
+    this.pollInterval = const Duration(seconds: 8),
+    this.finalize,
+  });
 
   final CollectionTask task;
+
+  /// Якунлаш callable'и — синовда алмаштирилади; одатда
+  /// [CollectionService.finalizeCollection].
+  final CollectionFinalizeFn? finalize;
+
+  /// Мижоз тасдиғи кутилганда вазифа ҳолатини текшириш учун. Берилмаса —
+  /// Provider'даги [CollectionTasksRepository]; у ҳам йўқ бўлса — текширув ўчиқ.
+  final CollectionTasksRepository? repository;
+  final Duration pollInterval;
 
   @override
   State<CourierCollectionDetailScreen> createState() =>
@@ -26,6 +54,13 @@ class _CourierCollectionDetailScreenState
   late final List<TextEditingController> _qtyCtrls;
   bool _hasArrived = false;
   bool _markingArrived = false;
+
+  /// Мижоз тасдиғи (D2/D7): `courierFinalizeCollection` `awaitingCustomer: true`
+  /// қайтарди — мижоз курьер киритган миқдор/суммани тасдиқламагунча пул
+  /// ўтмайди. Миқдорлар қулфланади, тугма ўчади, вазифа ҳолати текшириб турилади.
+  bool _awaitingCustomer = false;
+  Timer? _pollTimer;
+  bool _polling = false;
 
   @override
   void initState() {
@@ -39,10 +74,49 @@ class _CourierCollectionDetailScreenState
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     for (final c in _qtyCtrls) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  CollectionTasksRepository? _repo() {
+    if (widget.repository != null) return widget.repository;
+    try {
+      return context.read<CollectionTasksRepository>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _onAwaitingCustomer() {
+    if (!mounted || _awaitingCustomer) return;
+    setState(() => _awaitingCustomer = true);
+    _pollTimer ??= Timer.periodic(widget.pollInterval, (_) => _checkTask());
+  }
+
+  /// Вазифа фаол рўйхатдан чиқди (мижоз тасдиқлади → `completed`, ёки бекор) →
+  /// кутиш тугади, рўйхатга қайтамиз. Хато бўлса индамай кейинги уринишни кутамиз.
+  Future<void> _checkTask() async {
+    if (_polling || !mounted) return;
+    final repo = _repo();
+    if (repo == null) return;
+    _polling = true;
+    try {
+      final t = await repo.getById(widget.task.id);
+      if (!mounted) return;
+      if (t != null && t.isActive) return;
+      // Ҳисоб-китоб варағи ҳали очиқ бўлса, `pop` уни ёпарди — кейинги уринишда.
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      Navigator.of(context).pop();
+    } catch (_) {
+      // Тармоқ узилди — тугма «Янгилаш» орқали қўлда ҳам текширилади.
+    } finally {
+      _polling = false;
+    }
   }
 
   static String _qtyText(num qty) {
@@ -134,12 +208,18 @@ class _CourierCollectionDetailScreenState
         customerPhone: widget.task.customerPhone,
         totalValue: _grandTotal,
         items: adjustedItems,
+        onAwaitingCustomer: _onAwaitingCustomer,
+        finalize: widget.finalize,
       ),
     );
     if (done == true && mounted) {
       // Вазифа якунланди — рўйхатга қайтамиз (фаол рўйхатдан чиқади).
       Navigator.of(context).pop();
+      return;
     }
+    // Мижоз тасдиғи кутилмоқда: варақ ёпилди, вазифа ҳали фаол — ҳолатни бир
+    // марта текширамиз (мижоз улгурган бўлиши мумкин); кейин — таймер.
+    if (_awaitingCustomer) _checkTask();
   }
 
   @override
@@ -296,6 +376,8 @@ class _CourierCollectionDetailScreenState
               Expanded(
                 child: TextField(
                   controller: _qtyCtrls[index],
+                  // Мижоз кўриб чиқаётганда рақамлар ўзгармайди.
+                  enabled: !_awaitingCustomer,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [
@@ -365,7 +447,28 @@ class _CourierCollectionDetailScreenState
               ],
             ),
             const SizedBox(height: 10),
-            if (!_hasArrived)
+            if (_awaitingCustomer) ...[
+              const CourierAwaitingNotice(),
+              const SizedBox(height: 8),
+              // Кутишда амал ўчиқ; қўлда текшириш мумкин (тармоқ узилган бўлса).
+              FilledButton(
+                onPressed: null,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  context.tr('customer_confirm_waiting'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              TextButton(
+                onPressed: _checkTask,
+                child: Text(context.tr('customer_confirm_refresh')),
+              ),
+            ] else if (!_hasArrived)
               FilledButton(
                 onPressed: _markingArrived ? null : _markArrived,
                 style: FilledButton.styleFrom(
@@ -422,12 +525,20 @@ class _SettlementSheet extends StatefulWidget {
     required this.customerPhone,
     required this.totalValue,
     required this.items,
+    required this.onAwaitingCustomer,
+    this.finalize,
   });
+
+  final CollectionFinalizeFn? finalize;
 
   final String taskId;
   final String customerPhone;
   final int totalValue;
   final List<Map<String, dynamic>> items;
+
+  /// Сервер `awaitingCustomer: true` қайтарганда чақирилади (варақ ёпилишидан
+  /// мустақил — фойдаланувчи варақни суриб ёпиб қўйса ҳам ҳолат йўқолмасин).
+  final VoidCallback onAwaitingCustomer;
 
   @override
   State<_SettlementSheet> createState() => _SettlementSheetState();
@@ -437,6 +548,10 @@ class _SettlementSheetState extends State<_SettlementSheet> {
   final _cashCtrl = TextEditingController(text: '0');
   bool _busy = false;
   Map<String, dynamic>? _result;
+
+  /// Жавобда `awaitingCustomer: true` — пул ҳали ўтмаган, «қабул қилинди»
+  /// кўрсатилмайди (мижоз тасдиқлайди).
+  bool _awaiting = false;
 
   int _customerBalance = 0;
   bool _balanceLoading = true;
@@ -550,15 +665,19 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       if (courierPhone.isEmpty) {
         throw Exception('Курьер телефони топилмади — қайта киринг');
       }
-      final result = await CollectionService.finalizeCollection(
+      final result = await (widget.finalize ?? CollectionService.finalizeCollection)(
         courierPhone: courierPhone,
         taskId: widget.taskId,
         items: widget.items,
         cashGiven: _cashGiven,
       );
+      // Эски сервер `awaitingCustomer` бермайди → аввалги якунлаш кўриниши.
+      final awaiting = CourierActionResult.fromResponse(result).awaitingCustomer;
+      if (awaiting) widget.onAwaitingCustomer();
       if (!mounted) return;
       setState(() {
         _result = result;
+        _awaiting = awaiting;
         _busy = false;
       });
     } catch (e) {
@@ -580,7 +699,11 @@ class _SettlementSheetState extends State<_SettlementSheet> {
         top: 12,
       ),
       child: SingleChildScrollView(
-        child: _result != null ? _confirmationView() : _formView(),
+        child: _result == null
+            ? _formView()
+            : _awaiting
+                ? _awaitingView()
+                : _confirmationView(),
       ),
     );
   }
@@ -737,6 +860,41 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  /// Мижоз тасдиғи кутилмоқда: муваффақият ҳам, хато ҳам эмас. Курьер киритган
+  /// сумма кўрсатилади; пул ва омбор ҳаракати мижоз тасдиқлагач серверда.
+  Widget _awaitingView() {
+    final r = _result!;
+    final v = (r['V'] as num?)?.toInt() ?? widget.totalValue;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const CourierAwaitingNotice(),
+        const SizedBox(height: 12),
+        Text(
+          context
+              .tr('customer_confirm_details_amount')
+              .replaceAll('{amount}', formatPrice(v)),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, false),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primaryDark,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          child: Text(
+            context.tr('ok'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
         ),
         const SizedBox(height: 12),
       ],

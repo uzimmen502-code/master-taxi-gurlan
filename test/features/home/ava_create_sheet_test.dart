@@ -74,6 +74,18 @@ void main() {
     }
   });
 
+  testWidgets('ўхшаш икки дўкон банди изоҳ билан ажратилган, бошқаларида изоҳ йўқ', (tester) async {
+    await _open(tester);
+    expect(find.text('home_create_shop_online_hint'), findsOneWidget);
+    expect(find.text('tv_shop_open_hint'), findsOneWidget);
+    // Изоҳ ўз банди тагида туради (бошқа банд қаторига тушиб қолмайди).
+    final shop = tester.getTopLeft(find.text('tv_shop_open_cta')).dy;
+    final hint = tester.getTopLeft(find.text('tv_shop_open_hint')).dy;
+    final next = tester.getTopLeft(find.text('home_create_driver')).dy;
+    expect(hint, greaterThan(shop));
+    expect(hint, lessThan(next));
+  });
+
   testWidgets('эски «Маҳсулот қўшиш», «Сотувчи бўлиш» ва «Ҳайдовчи ёки курьер» йўқ', (tester) async {
     await _open(tester);
     for (final gone in const [
@@ -173,6 +185,8 @@ void main() {
       120,
       scrollable: find.byType(Scrollable).last,
     );
+    await tester.ensureVisible(find.text('home_module_chatgpt'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('home_module_chatgpt'));
     await tester.pumpAndSettle();
     expect(result, AvaCreateAction.assistant);

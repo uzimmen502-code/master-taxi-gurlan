@@ -317,6 +317,13 @@ Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
   );
 }
 
+/// Бир-бирига ўхшаш икки банд ("Онлайн Дўкон очиш" ва "Дўкон очиш") фарқи
+/// қисқа изоҳда кўринсин (эга, 2026-10-16).
+const _subtitleKeys = <AvaCreateAction, String>{
+  AvaCreateAction.shopOnline: 'home_create_shop_online_hint',
+  AvaCreateAction.shop: 'tv_shop_open_hint',
+};
+
 class _CreateSheet extends StatelessWidget {
   const _CreateSheet({
     this.driverRoles = DriverRoles.none,
@@ -417,6 +424,9 @@ class _CreateSheet extends StatelessWidget {
                       _CreateRow(
                         icon: icon,
                         label: context.tr(key),
+                        subtitle: _subtitleKeys[action] == null
+                            ? null
+                            : context.tr(_subtitleKeys[action]!),
                         active: active,
                         onTap: () => Navigator.of(context).pop(action),
                       ),
@@ -438,10 +448,12 @@ class _CreateRow extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.active = false,
+    this.subtitle,
   });
 
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
   final bool active;
 
@@ -468,9 +480,22 @@ class _CreateRow extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  label,
-                  style: AvaText.body.copyWith(color: c.ink),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: AvaText.body.copyWith(color: c.ink),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: AvaText.body.copyWith(
+                          color: c.ink3,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               if (active) ...[

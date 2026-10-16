@@ -684,6 +684,7 @@
   "home_create_home_cook": "Открыть домашнюю кухню",
   "home_create_cargo": "Стать грузоперевозчиком",
   "home_create_shop_where": "Куда добавим товар?",
+  "home_create_shop_online_hint": "Продавайте товары на Рынке населения или в Оптовом рынке",
   "home_section_see_all": "Все",
   "home_section_empty": "Пока предложений нет",
   "home_section_error": "Не удалось загрузить",

@@ -11,17 +11,53 @@ import '../../../models/platform_product.dart';
 import '../../../models/price_tier.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../../services/order_payment_service.dart';
+import '../services/platform_cart_store.dart';
 
 /// Платформа дўкони: каталог + сават + буюртма/тўлов.
 class PlatformStoreController extends ChangeNotifier {
-  PlatformStoreController({PlatformProductsRepository? repo})
-      : _repo = repo ?? PlatformProductsRepository();
+  PlatformStoreController({
+    PlatformProductsRepository? repo,
+    PlatformCartStore? cartStore,
+  })  : _repoOverride = repo,
+        _cartStore = cartStore ?? PlatformCartStore();
 
-  final PlatformProductsRepository _repo;
+  final PlatformProductsRepository? _repoOverride;
+
+  /// Кечикиб яратилади — сават тестлари Firebase'сиз ишлайди.
+  late final PlatformProductsRepository _repo =
+      _repoOverride ?? PlatformProductsRepository();
+  final PlatformCartStore _cartStore;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _settingsSub;
 
   List<PlatformProduct> _products = const [];
   final Map<String, int> _cart = {};
+
+  /// Сават қурилмага ёзилиши навбати — ёзувлар кетма-кет, тартибда бажарилади.
+  Future<void> _saving = Future<void>.value();
+  bool _cartRestored = false;
+
+  /// Охирги сават ўзгариши қурилмага ёзилгунча (тест ва «орқага» учун).
+  Future<void> get cartSaved => _saving;
+
+  void _persistCart() {
+    final snapshot = Map<String, int>.of(_cart);
+    _saving = _saving.then((_) => _cartStore.save(snapshot));
+  }
+
+  /// Қурилмада сақланган саватни тиклайди. Контроллер маршрут билан
+  /// яратилади ва «орқага»да ўлади — сават шунга қарамай сақланиб қолади.
+  /// Фақат биринчи марта ишлайди (ундан кейин хотира — ҳақиқат манбаи).
+  Future<void> restoreCart() async {
+    if (_cartRestored) return;
+    _cartRestored = true;
+    final saved = await _cartStore.load();
+    // Тикланиш давомида фойдаланувчи аллақачон нимадир қўшган бўлса,
+    // унинг танловини босиб юбормаймиз.
+    for (final e in saved.entries) {
+      _cart.putIfAbsent(e.key, () => e.value);
+    }
+    notifyListeners();
+  }
   bool loading = true;
   String? errorMessage;
   int walletBalance = 0;
@@ -177,6 +213,7 @@ class PlatformStoreController extends ChangeNotifier {
     notifyListeners();
     _bindSettings();
     try {
+      await restoreCart();
       _products = await _repo.fetchCatalog();
       _pruneMissing();
       await _loadWallet();
@@ -211,6 +248,10 @@ class PlatformStoreController extends ChangeNotifier {
   }
 
   void _pruneMissing() {
+    // Каталог бўш келса (узилиш/хато) — сақланган саватни ўчирмаймиз:
+    // у энди қурилмада сақланади ва бўш жавоб уни йўқотиб юбормасин.
+    if (_products.isEmpty) return;
+    final before = Map<String, int>.of(_cart);
     final ids = _products.map((e) => e.id).toSet();
     _cart.removeWhere((id, _) => !ids.contains(id));
     for (final id in _cart.keys.toList()) {
@@ -224,6 +265,7 @@ class PlatformStoreController extends ChangeNotifier {
         _cart[id] = p.remaining;
       }
     }
+    if (!mapEquals(before, _cart)) _persistCart();
   }
 
   void addToCart(PlatformProduct p) {
@@ -233,6 +275,7 @@ class PlatformStoreController extends ChangeNotifier {
     final next = (qtyOf(p.id) + p.step).clamp(p.minQty, 999999);
     if (_wouldExceed(p, next)) return;
     _cart[p.id] = next;
+    _persistCart();
     notifyListeners();
   }
 
@@ -242,6 +285,7 @@ class PlatformStoreController extends ChangeNotifier {
     final next = qtyOf(id) + p.step;
     if (_wouldExceed(p, next)) return;
     _cart[id] = next;
+    _persistCart();
     notifyListeners();
   }
 
@@ -254,12 +298,14 @@ class PlatformStoreController extends ChangeNotifier {
     } else {
       _cart[id] = next;
     }
+    _persistCart();
     notifyListeners();
   }
 
   void clearCart() {
     _cart.clear();
     useWallet = false;
+    _persistCart();
     notifyListeners();
   }
 

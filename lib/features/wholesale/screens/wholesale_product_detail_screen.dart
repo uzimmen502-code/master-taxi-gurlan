@@ -59,42 +59,48 @@ class _WholesaleProductDetailScreenState
         catalog: widget.catalog,
       );
     }
-    return Stack(
-      children: [
-        EdgeSwipePager(
-          itemCount: list.length,
-          initialIndex: _index,
-          onPageChanged: (i) => setState(() => _index = i),
-          itemBuilder: (_, i) => WholesaleProductDetailView(
-            // Калит бўлмаса саҳифа ҳолати (миқдор) қайта ишлатилиб кетади.
-            key: ValueKey(list[i].id),
-            product: list[i],
-            catalog: widget.catalog,
-            showNextHint: i < list.length - 1,
+    // Фон қора мавзу рангида: судраганда саҳифа сал сурилади, орқада
+    // бошқа ранг кўринмасин.
+    return ColoredBox(
+      color: PdDark.bg,
+      child: Stack(
+        children: [
+          EdgeSwipePager(
+            itemCount: list.length,
+            initialIndex: _index,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (_, i) => WholesaleProductDetailView(
+              // Калит бўлмаса саҳифа ҳолати (миқдор) қайта ишлатилиб кетади.
+              key: ValueKey(list[i].id),
+              product: list[i],
+              catalog: widget.catalog,
+              showNextHint: i < list.length - 1,
+            ),
           ),
-        ),
-        Positioned(
-          top: MediaQuery.paddingOf(context).top + kToolbarHeight + 6,
-          right: 12,
-          child: IgnorePointer(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${_index + 1} / ${list.length}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 6,
+            right: 12,
+            child: IgnorePointer(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${_index + 1} / ${list.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -217,8 +223,7 @@ class _WholesaleProductDetailViewState
                     p.sellerCompanyName.isEmpty
                         ? context.tr('wholesale_seller_label')
                         : p.sellerCompanyName,
-                    style:
-                        const TextStyle(fontSize: 13, color: PdDark.muted),
+                    style: const TextStyle(fontSize: 13, color: PdDark.muted),
                   ),
                   const SizedBox(height: 8),
                   // Танланган миқдордаги ҳақиқий бир дона нархи: поғона
@@ -239,8 +244,7 @@ class _WholesaleProductDetailViewState
                       context
                           .tr('wholesale_delivery_days')
                           .replaceAll('{days}', '${p.deliveryDays}'),
-                      style:
-                          const TextStyle(fontSize: 13, color: PdDark.muted),
+                      style: const TextStyle(fontSize: 13, color: PdDark.muted),
                     ),
                   ],
                   // Етказиш маълумоти (У1): вазн/ўлчам бўлса — кўрсатилади,
@@ -256,8 +260,7 @@ class _WholesaleProductDetailViewState
                               .tr('wholesale_dims_line')
                               .replaceAll('{dims}', p.unitDims!.label),
                       ].join(' · '),
-                      style:
-                          const TextStyle(fontSize: 13, color: PdDark.muted),
+                      style: const TextStyle(fontSize: 13, color: PdDark.muted),
                     )
                   else
                     Text(

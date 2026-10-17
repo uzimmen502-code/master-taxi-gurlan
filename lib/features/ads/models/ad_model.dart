@@ -29,6 +29,11 @@ class AdModel implements AdSearchable {
 
   static const String typeKey = 'cheap_product';
 
+  /// Эълондаги расмлар сони 1..[maxImages] (эга қарори, 2026-10-17; аввал 5).
+  /// Сервер билан бир хил: `firestore.rules` (`cheapProductOwnerUpdateOk`) ва
+  /// `functions/market_images.js` (`submitMarketAd`).
+  static const int maxImages = 7;
+
   final String id;
   final String ownerId;
   final String title;

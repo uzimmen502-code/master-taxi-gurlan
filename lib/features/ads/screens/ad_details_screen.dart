@@ -5,12 +5,27 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/geo/geo_names.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_image_slider.dart';
+import 'cheap_products_screen.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
+
+/// Ном ичидаги биринчи маъноли сўз (≥3 ҳарф, кичик ҳарфда) — «Ўхшаш
+/// маҳсулотлар → Барчаси» Аҳоли бозорини шу сўз билан қидириб очади.
+/// Маъноли сўз йўқ бўлса — бўш қатор.
+String adSimilarQuery(String title) {
+  for (final w
+      in title.toLowerCase().split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))) {
+    if (w.length >= 3) return w;
+  }
+  return '';
+}
 
 /// Single ad detail with call action.
 class AdDetailsScreen extends StatefulWidget {
@@ -117,8 +132,8 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     if (phoneDigits(_callPhone).length < 9) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Телефон рақами нотўғри'),
+        SnackBar(
+          content: Text(context.tr('ad_details_phone_invalid')),
           backgroundColor: Colors.red,
         ),
       );
@@ -128,20 +143,34 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     if (!await launchUrl(uri)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Қўнғироқ қилиб бўлмади'),
+        SnackBar(
+          content: Text(context.tr('ad_details_call_failed')),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
+  void _openAllSimilar() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CheapProductsScreen(
+          initialQuery: adSimilarQuery(widget.ad.title),
+        ),
+      ),
+    );
+  }
+
   Future<void> _reportAd() async {
-    const reasons = <String>[
-      'Алдамчи эълон',
-      'Телефон нотўғри',
-      'Спам / Такрорий',
-      'Ҳақоратли матн',
+    // (серверга юбориладиган ҚИЙМАТ, экрандаги матн калити). Қиймат аввалгидек
+    // ўзбекча қолади — админ ва эски шикоятлар билан мос (CLAUDE.md 26);
+    // фойдаланувчи эса ўз тилида кўради.
+    const reasons = <(String, String)>[
+      ('Алдамчи эълон', 'ad_report_reason_fraud'),
+      ('Телефон нотўғри', 'ad_report_reason_phone'),
+      ('Спам / Такрорий', 'ad_report_reason_spam'),
+      ('Ҳақоратли матн', 'ad_report_reason_abuse'),
     ];
     final reason = await showModalBottomSheet<String>(
       context: context,
@@ -149,17 +178,18 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
-                'Шикоят',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ctx.tr('ad_report_title'),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
             ...reasons.map(
               (r) => ListTile(
-                title: Text(r),
-                onTap: () => Navigator.pop(ctx, r),
+                title: Text(ctx.tr(r.$2)),
+                onTap: () => Navigator.pop(ctx, r.$1),
               ),
             ),
           ],
@@ -174,20 +204,23 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Шикоят юборилди')),
+        SnackBar(content: Text(context.tr('ad_report_sent'))),
       );
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       final msg = e.code == 'resource-exhausted'
-          ? 'Кунига шикоят лимити тугади'
-          : (e.message ?? 'Хатолик');
+          ? context.tr('ad_report_limit')
+          : (e.message ?? context.trMsg('error_generic|${e.code}'));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: Colors.red),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(context.trMsg('error_generic|$e')),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -205,7 +238,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
           child: ElevatedButton.icon(
             onPressed: canCall ? _callSeller : null,
             icon: const Text('📞'),
-            label: const Text('Қўнғироқ қилиш'),
+            label: Text(context.tr('wholesale_call')),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.onPrimary,
@@ -218,6 +251,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         ),
       ),
       body: CustomScrollView(
+        // Контент қисқа бўлса ҳам чегарадан ўтиб суриш сезилсин: свайп
+        // ([AdSwipeScreen] → EdgeSwipePager) фақат маълумот тугагандан кейин.
+        physics: kEdgeSwipePhysics,
         slivers: [
           SliverAppBar(
             expandedHeight: 300,
@@ -226,7 +262,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             foregroundColor: AppColors.onPrimary,
             actions: [
               IconButton(
-                tooltip: 'Шикоят',
+                tooltip: context.tr('ad_report_title'),
                 icon: const Icon(Icons.flag_outlined),
                 onPressed: _reportAd,
               ),
@@ -285,7 +321,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        '👁 ${ad.views} кўрилди',
+                        '👁 ${context.tr('ad_details_views').replaceAll('{count}', '${ad.views}')}',
                         style: TextStyle(
                           fontSize: AppText.labelSmall,
                           color: Colors.grey.shade600,
@@ -308,20 +344,32 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   LinkedVideoButton(linkId: ad.id, ownerPhone: ad.ownerId),
                   const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
-                    const Text(
-                      'Ўхшаш маҳсулотлар',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: AppText.bodyLarge,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.tr('platform_store_similar'),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: AppText.bodyLarge,
+                            ),
+                          ),
+                        ),
+                        // Ўхшашларнинг тўлиқ рўйхати: Аҳоли бозори, қидирув
+                        // сатрида шу эълон номининг асосий сўзи билан.
+                        TextButton(
+                          onPressed: _openAllSimilar,
+                          child: Text('${context.tr('home_section_see_all')} →'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     FutureBuilder<List<AdModel>>(
                       future: _similarAdsFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const SizedBox(
-                            height: 190,
+                            height: 206,
                             child: Center(child: CircularProgressIndicator()),
                           );
                         }
@@ -333,7 +381,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             _logSimilarMetrics('error');
                           }
                           return Text(
-                            'Ўхшаш маҳсулотларни юклаб бўлмади',
+                            context.tr('ad_details_similar_error'),
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontSize: AppText.bodySmall,
@@ -349,7 +397,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             _logSimilarMetrics('empty');
                           }
                           return Text(
-                            'Ҳозирча ўхшаш маҳсулотлар йўқ',
+                            context.tr('ad_details_similar_empty'),
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontSize: AppText.bodySmall,
@@ -363,7 +411,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                           _logSimilarMetrics('impression', shownCount: items.length);
                         }
                         return SizedBox(
-                          height: 190,
+                          height: 206,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: items.length,
@@ -409,6 +457,9 @@ class _SimilarAdTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = ad.imageUrls.isNotEmpty ? ad.imageUrls.first : null;
+    final district = ad.districtId.isEmpty
+        ? ''
+        : GeoNames.district(ad.districtId, context.contentLang);
 
     return SizedBox(
       width: 150,
@@ -471,6 +522,20 @@ class _SimilarAdTile extends StatelessWidget {
                           fontSize: AppText.bodySmall,
                         ),
                       ),
+                      // Сотувчи қайси ҳудудда — яқин маҳсулот муҳим. Эски
+                      // эълонларда `districtId` бўш: сатр умуман кўринмайди.
+                      if (district.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          district,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: AppText.labelSmall,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -71,7 +71,8 @@ class HomeWholesaleSection extends StatefulWidget {
   final String titleKey;
 
   final VoidCallback onOpenAll;
-  final void Function(WholesaleProduct product) onOpenProduct;
+  final void Function(WholesaleProduct product, List<WholesaleProduct> shelf)
+      onOpenProduct;
 
   /// Берилса — бўлимда AVA товарлари ҳам чиқади (фақат Улгуржида; эга
   /// қарори 2026-10-07: «AVA дўкони энди Улгуржи бозор, бош саҳифада
@@ -280,7 +281,8 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
                     ? formatDelivery(context, p)
                     : p.sellerCompanyName)
                 : p.sellerCompanyName,
-            onTap: () => widget.onOpenProduct(p),
+            // Бош саҳифа қатори — «ўхшашлар» шу юкланган рўйхатдан олинади.
+            onTap: () => widget.onOpenProduct(p, _items),
             image: cover.startsWith('http')
                 ? CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover)
                 : null,

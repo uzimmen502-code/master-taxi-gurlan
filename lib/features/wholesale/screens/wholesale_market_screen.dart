@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async';
 import '../../ads/widgets/market_grid.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -226,7 +226,10 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => WholesaleProductDetailScreen(product: p),
+                      builder: (_) => WholesaleProductDetailScreen(
+                        product: p,
+                        catalog: items,
+                      ),
                     ),
                   ),
                 );

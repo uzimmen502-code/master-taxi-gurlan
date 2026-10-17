@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async';
 import '../widgets/market_grid.dart';
 
 import 'package:flutter/foundation.dart';
@@ -27,7 +27,11 @@ import 'my_ads_screen.dart';
 
 /// Аҳоли бозори: қидирув + лента.
 class CheapProductsScreen extends StatefulWidget {
-  const CheapProductsScreen({super.key});
+  const CheapProductsScreen({super.key, this.initialQuery = ''});
+
+  /// Қидирув сатри олдиндан тўлдирилган очилиш (мас. эълон тафсилотидаги
+  /// «Ўхшаш маҳсулотлар → Барчаси»).
+  final String initialQuery;
 
   @override
   State<CheapProductsScreen> createState() => _CheapProductsScreenState();
@@ -36,10 +40,10 @@ class CheapProductsScreen extends StatefulWidget {
 class _CheapProductsScreenState extends State<CheapProductsScreen> {
   static const _addRed = Color(0xFFF44336);
 
-  final _searchCtrl = TextEditingController();
+  late final _searchCtrl = TextEditingController(text: widget.initialQuery);
   final _platformRepo = PlatformProductsRepository();
   final _shopRepo = TvShopRepository();
-  String _query = '';
+  late String _query = widget.initialQuery;
   List<PlatformProduct> _platform = const [];
   List<TvShopItem> _shopItems = const [];
   bool _platformLoaded = false;

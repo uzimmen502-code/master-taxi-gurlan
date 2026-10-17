@@ -35,6 +35,43 @@ List<PriceTier> sortPriceTiers(List<PriceTier> tiers) {
   return clean;
 }
 
+/// [qty] га тўғри келадиган поғона индекси: `qty >= minQty` бўлган ОХИРГИси
+/// ([tiers] `minQty` бўйича саралаган). [qty] биринчи поғонадан кичик
+/// бўлса — 0 (энг паст поғона). Поғона йўқ бўлса — -1.
+///
+/// Нарх қоидасининг ЯГОНА нусхаси (CLAUDE.md 7): AVA товари
+/// (`PlatformProduct.priceForQty`), сотувчи товари ва сервер
+/// (`functions/platform_pricing.js`) шу қоида билан бир хил.
+int activeTierIndex(List<PriceTier> tiers, int qty) {
+  if (tiers.isEmpty) return -1;
+  final i = tiers.lastIndexWhere((t) => qty >= t.minQty);
+  return i < 0 ? 0 : i;
+}
+
+/// [qty] даги бир дона нархи; поғона йўқ бўлса `null`.
+int? tierPriceForQty(List<PriceTier> tiers, int qty) {
+  final i = activeTierIndex(tiers, qty);
+  return i < 0 ? null : tiers[i].price;
+}
+
+/// [qty] дан кейинги (арзонроқ) поғона; охирги поғонада — `null`.
+PriceTier? nextTierAfter(List<PriceTier> tiers, int qty) {
+  final i = activeTierIndex(tiers, qty);
+  if (i < 0 || i + 1 >= tiers.length) return null;
+  return tiers[i + 1];
+}
+
+/// Поғона оралиғи матни: «1–9», «10–49», охиргиси «50+». Оралиқ кейинги
+/// поғона бошланишидан келиб чиқади (`priceForQty` қоидаси: `qty >= minQty`
+/// кейинги поғонага ўтади, шунинг учун чегара `minQty − 1`).
+String tierRangeText(List<PriceTier> tiers, int i) {
+  if (i < 0 || i >= tiers.length) return '';
+  final from = tiers[i].minQty;
+  if (i + 1 >= tiers.length) return '$from+';
+  final to = tiers[i + 1].minQty - 1;
+  return to > from ? '$from–$to' : '$from';
+}
+
 /// AVA дўкони — нарх қоидаси версияси (`orderBase.pricingVersion`).
 ///
 /// 2 — улгуржи поғоналари (1.0.33+). Сервер версиясиз буюртмага (эски

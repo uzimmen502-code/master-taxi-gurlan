@@ -928,13 +928,16 @@ class _HomeViewState extends State<_HomeView> {
   }
 
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
-  Future<void> _openWholesaleProduct(WholesaleProduct product) async {
+  Future<void> _openWholesaleProduct(
+    WholesaleProduct product,
+    List<WholesaleProduct> shelf,
+  ) async {
     if (!ServiceConfigHolder.isOpenable(
         WholesaleProduct.moduleIdFor(product.market))) {
       _showTezKundaSnack();
       return;
     }
-    await _push(WholesaleProductDetailScreen(product: product));
+    await _push(WholesaleProductDetailScreen(product: product, catalog: shelf));
   }
 
   /// AVA товари — Улгуржи бозорнинг бир қисми, шунинг учун Улгуржи

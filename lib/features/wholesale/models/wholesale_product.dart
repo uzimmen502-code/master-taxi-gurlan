@@ -51,7 +51,14 @@ class WholesaleProduct implements AdSearchable {
     this.deliveryDays,
     this.unitWeightG,
     this.unitDims,
+    this.districtId = '',
   });
+
+  /// Товар (сотувчи жўнатиш манзили) ҳудуди — ФАҚАТ сервер ёзади
+  /// (`functions/wholesale_geo.js`, D-GEO-14), клиент ёзмайди ва эски
+  /// ҳужжатларда бўлмаслиги мумкин (бўш). Ўхшаш карточкаларда «яқин
+  /// сотувчи» кўрсатиш учун.
+  final String districtId;
 
   /// Улгуржи бозор (ички сотувчилар) — нархи сўмда.
   static const marketWholesale = 'wholesale';
@@ -61,7 +68,9 @@ class WholesaleProduct implements AdSearchable {
   /// ўша қоидалар, фақат `market` майдони билан ажралади.
   static const marketChina = 'china';
 
-  static const maxImages = 5;
+  /// 1..7 (эга қарори, 2026-10-17; аввал 5) — `firestore.rules`даги
+  /// `wholesaleProductCreateOk` / `wholesaleProductOwnerUpdateOk` билан бир хил.
+  static const maxImages = 7;
   static const maxVideoClips = 5;
   static const maxPriceTiers = 5;
   static const statusPending = 'pending';
@@ -158,6 +167,10 @@ class WholesaleProduct implements AdSearchable {
   /// Бошланғич нарх ("дан ... сўм") — энг паст поғона нархи.
   int get basePrice => priceTiers.isEmpty ? 0 : priceTiers.first.price;
 
+  /// [qty] даги бир дона нархи (поғона қоидаси — `price_tier.dart`).
+  /// Фақат кўрсатиш учун: ҳақиқий нархни буюртмада сервер ҳисоблайди.
+  int priceForQty(int qty) => tierPriceForQty(priceTiers, qty) ?? 0;
+
   static DateTime? _parseDate(dynamic v) {
     if (v is Timestamp) return v.toDate();
     if (v is String && v.isNotEmpty) return DateTime.tryParse(v);
@@ -169,8 +182,13 @@ class WholesaleProduct implements AdSearchable {
 
   factory WholesaleProduct.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    final d = doc.data() ?? const <String, dynamic>{};
+  ) =>
+      WholesaleProduct.fromMap(
+        doc.id,
+        doc.data() ?? const <String, dynamic>{},
+      );
+
+  factory WholesaleProduct.fromMap(String id, Map<String, dynamic> d) {
     final title = (d['title'] as String?)?.trim() ?? '';
     final description = (d['description'] as String?)?.trim() ?? '';
     final rawTokens = d['searchTokens'];
@@ -178,7 +196,7 @@ class WholesaleProduct implements AdSearchable {
         ? rawTokens.map((e) => e.toString()).where((t) => t.isNotEmpty).toList()
         : AdSearchText.buildTokens(title, description);
     return WholesaleProduct(
-      id: doc.id,
+      id: id,
       sellerId: (d['sellerId'] as String?) ?? '',
       sellerCompanyName: (d['sellerCompanyName'] as String?)?.trim() ?? '',
       title: title,
@@ -206,6 +224,9 @@ class WholesaleProduct implements AdSearchable {
       deliveryDays: (d['deliveryDays'] as num?)?.toInt(),
       unitWeightG: _positiveInt(d['unitWeightG']),
       unitDims: ShippingDims.fromMap(d['unitDims']),
+      districtId: d['districtId'] is String
+          ? (d['districtId'] as String).trim()
+          : '',
     );
   }
 

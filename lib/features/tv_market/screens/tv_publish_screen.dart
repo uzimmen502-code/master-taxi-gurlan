@@ -41,7 +41,14 @@ class TvPublishScreen extends StatefulWidget {
     this.linkKind = '',
     this.linkId = '',
     this.organicOnly = false,
+    this.onClipCreated,
   });
+
+  /// Клип яратилгач ЯНГИ клипнинг ID'сини қайтаради (оддий видео — `tv_clips.add`,
+  /// пуллик реклама — CF `publishTvAd` жавоби). Чақирувчи боғлашни шу ID билан
+  /// аниқ қилади: аввал «энг сўнгги клип» деб тахмин қилинарди (бир вақтда
+  /// икки клип бўлса адашиши мумкин эди).
+  final ValueChanged<String>? onClipCreated;
 
   /// Видео ЭГАСИНИНГ ўз эълонига/ресторанига қўшилаётган бўлса: клип яратилганда
   /// `linkKind`/`linkId` шу заҳоти ёзилади (алоҳида иккинчи ёзув ва "энг сўнгги
@@ -87,6 +94,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   XFile? _videoFile;
   VideoPlayerController? _previewCtrl;
   String _category = 'product';
+
   /// `true` — эга Товар/Хизмат/Эълон/Янгилик сегментидан бирини ўзи
   /// босган (🟡8). Шунгача сарлавҳа/тавсифда янгилик калит сўзи топилса
   /// `_category` авто «Янгилик»га (ёки йўқолса «Товар»га) ўтиб туради —
@@ -204,7 +212,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     if (phone.isEmpty) return;
     try {
       final exists = await _shopRepo.hasShop(phone);
-      final items = exists ? await _shopRepo.fetchByOwner(phone) : const <TvShopItem>[];
+      final items =
+          exists ? await _shopRepo.fetchByOwner(phone) : const <TvShopItem>[];
       final geo = await TvClipGeo.resolveForPublisher(ownerPhone: phone);
       if (!mounted) return;
       setState(() {
@@ -365,7 +374,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     return _adSelectedPrice > 0 && _walletBalance < _adSelectedPrice;
   }
 
-  Future<({String videoUrl, String posterUrl, String localPath})> _uploadPickedVideo(
+  Future<({String videoUrl, String posterUrl, String localPath})>
+      _uploadPickedVideo(
     String phone,
   ) async {
     setState(() {
@@ -412,7 +422,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         bytes: thumbBytes,
       );
     }
-    return (videoUrl: videoUrl, posterUrl: posterUrl, localPath: compressed.path);
+    return (
+      videoUrl: videoUrl,
+      posterUrl: posterUrl,
+      localPath: compressed.path
+    );
   }
 
   /// Юкловчи ўз видеосини серверда трансkodlash тугамасдан туриб ҳам
@@ -466,8 +480,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(sheetContext),
-                      child:
-                          Text(sheetContext.tr('tv_publish_local_preview_close')),
+                      child: Text(
+                          sheetContext.tr('tv_publish_local_preview_close')),
                     ),
                   ),
                 ),
@@ -715,6 +729,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           ),
         );
         completed = true;
+        final adClipId = (result['clipId'] ?? '').toString().trim();
+        if (adClipId.isNotEmpty) widget.onClipCreated?.call(adClipId);
         if (!mounted) return;
         final paid = (result['price'] as num?)?.toInt() ?? 0;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -748,7 +764,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       if (!mounted) return;
 
       if (shopMode) {
-        setState(() => _publishStage = context.tr('tv_publish_photo_uploading'));
+        setState(
+            () => _publishStage = context.tr('tv_publish_photo_uploading'));
         await _shopRepo.ensureShop(
           ownerPhone: phone,
           name: ownerDisplay,
@@ -795,7 +812,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         ownerPhone: phone,
         ownerName: ownerDisplay,
         category: _category,
-        expiresAt: isNews ? DateTime.now().add(const Duration(hours: 48)) : null,
+        expiresAt:
+            isNews ? DateTime.now().add(const Duration(hours: 48)) : null,
         description: description,
         status: autoApprove ? 'active' : 'pending',
         showPhone: _showPhone,
@@ -817,6 +835,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           .collection('tv_clips')
           .add(clip.toMap());
       completed = true;
+      widget.onClipCreated?.call(clipRef.id);
       if (shopItemId.isNotEmpty) {
         await _shopRepo.addClipToItem(
           itemId: shopItemId,
@@ -843,10 +862,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       if (!mounted) return;
       Navigator.pop(context, true);
     } on FirebaseFunctionsException catch (e) {
-      final msg = e.code == 'failed-precondition' &&
-              e.message == 'insufficient_balance'
-          ? (mounted ? context.tr('tv_ad_insufficient_balance') : '')
-          : 'Хатолик: ${e.message ?? e.code}';
+      final msg =
+          e.code == 'failed-precondition' && e.message == 'insufficient_balance'
+              ? (mounted ? context.tr('tv_ad_insufficient_balance') : '')
+              : 'Хатолик: ${e.message ?? e.code}';
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
@@ -940,7 +959,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 _SocialPicker(
                   selected: _socialNetworks,
                   onToggle: (id, on) => setState(
-                    () => on ? _socialNetworks.add(id) : _socialNetworks.remove(id),
+                    () => on
+                        ? _socialNetworks.add(id)
+                        : _socialNetworks.remove(id),
                   ),
                 ),
               ],
@@ -991,7 +1012,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           maxLength: 12,
           decoration: InputDecoration(
             labelText: context.tr(
-              _category == 'ad' ? 'tv_publish_price_product' : 'tv_publish_price',
+              _category == 'ad'
+                  ? 'tv_publish_price_product'
+                  : 'tv_publish_price',
             ),
             suffixText: 'сўм',
             counterText: '',
@@ -1038,7 +1061,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         showSelectedIcon: false,
         style: SegmentedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+          textStyle:
+              const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
         ),
         segments: [
           ButtonSegment(
@@ -1099,7 +1123,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           const SizedBox(height: 8),
           InputDecorator(
             decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
@@ -1116,8 +1141,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                       child: Text(it.title, overflow: TextOverflow.ellipsis),
                     ),
                 ],
-                onChanged:
-                    widget.attachItemId.isNotEmpty ? null : _onExistingItemPicked,
+                onChanged: widget.attachItemId.isNotEmpty
+                    ? null
+                    : _onExistingItemPicked,
               ),
             ),
           ),
@@ -1210,8 +1236,8 @@ class _VideoPreviewCard extends StatelessWidget {
                         color: Colors.black54,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.edit,
-                          color: Colors.white, size: 18),
+                      child:
+                          const Icon(Icons.edit, color: Colors.white, size: 18),
                     ),
                   ),
                 ],
@@ -1545,4 +1571,3 @@ class _SubmitButton extends StatelessWidget {
     );
   }
 }
-

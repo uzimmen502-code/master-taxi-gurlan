@@ -152,8 +152,9 @@ class TvClip {
   final String wholesaleProductId;
 
   /// Умумий боғлаш (эгаси ЎЗ эълонига қўшган видео): `linkKind` — `ad` |
-  /// `service` | `market_ad` | `restaurant`, `linkId` — шу ҳужжат ID'си.
-  /// Улгуржи эски `wholesaleProductId` орқали қолади. Бўш = боғланмаган.
+  /// `service` | `market_ad` | `restaurant` | `wholesale_product`, `linkId` — шу
+  /// ҳужжат ID'си. Улгуржида `wholesaleProductId` ҳам ёзилади (AVAGram
+  /// лентасидаги «Улгуржи» тугмаси шуни ўқийди). Бўш = боғланмаган.
   /// Қоида: клип эгаси ўз клипида ёза олади, эълон ҳужжатига тегилмайди;
   /// кўрсатишда клип эгаси = эълон эгаси текширилади (бегона боғлаш йўқ).
   final String linkKind;

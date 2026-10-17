@@ -270,6 +270,22 @@ async function main() {
     await assertFails(col(seller).doc(EXISTING).update({ districtId: 'chilonzor', updatedAt: serverTimestamp() }));
   });
 
+  // ── F. Расмлар сони: 1..7 (эга қарори, 2026-10-17; аввал 1..5) ────────────
+  await seed();
+  const imgs = (n) => Array.from({ length: n }, (_, i) => `https://example.test/${i}.jpg`);
+  await check('F1 yaratish: 5 ta rasm (eski ilova) — o\'tadi (orqaga moslik)', () =>
+    assertSucceeds(col(seller).add(appCreatePayload({ imageUrls: imgs(5) }))));
+  await check('F2 yaratish: 7 ta rasm (chegara) — o\'tadi', () =>
+    assertSucceeds(col(seller).add(appCreatePayload({ imageUrls: imgs(7) }))));
+  await check('F3 yaratish: 8 ta rasm — rad', () =>
+    assertFails(col(seller).add(appCreatePayload({ imageUrls: imgs(8) }))));
+  await check('F4 yaratish: 0 ta rasm — rad', () =>
+    assertFails(col(seller).add(appCreatePayload({ imageUrls: [] }))));
+  await check('F5 tahrir: 7 taga oshirish — o\'tadi, 8 taga — rad', async () => {
+    await assertSucceeds(col(seller).doc(EXISTING).update({ imageUrls: imgs(7), status: 'pending', updatedAt: serverTimestamp() }));
+    await assertFails(col(seller).doc(EXISTING).update({ imageUrls: imgs(8), status: 'pending', updatedAt: serverTimestamp() }));
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
   await testEnv.cleanup();

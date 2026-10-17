@@ -14,6 +14,7 @@ import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../onboarding/screens/phone_reverify_screen.dart';
+import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
 import '../widgets/ad_district_field.dart';
@@ -127,7 +128,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   }
 
   Future<void> _pickImages() async {
-    if (_newImages.length >= 5) {
+    if (_newImages.length >= AdModel.maxImages) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('create_ad_images_max'))),
       );
@@ -135,13 +136,13 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     }
     final picked = await ImagePicker().pickMultiImage(
       imageQuality: 85,
-      limit: 5 - _newImages.length,
+      limit: AdModel.maxImages - _newImages.length,
     );
     if (picked.isEmpty) return;
     setState(() {
       _newImages.addAll(picked);
-      if (_newImages.length > 5) {
-        _newImages.removeRange(5, _newImages.length);
+      if (_newImages.length > AdModel.maxImages) {
+        _newImages.removeRange(AdModel.maxImages, _newImages.length);
       }
     });
   }
@@ -751,7 +752,7 @@ class _PhotoPickerRow extends StatelessWidget {
               ),
             );
           }),
-          if (images.length < 5)
+          if (images.length < AdModel.maxImages)
             Material(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),

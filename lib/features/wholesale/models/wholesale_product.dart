@@ -61,7 +61,9 @@ class WholesaleProduct implements AdSearchable {
   /// ўша қоидалар, фақат `market` майдони билан ажралади.
   static const marketChina = 'china';
 
-  static const maxImages = 5;
+  /// 1..7 (эга қарори, 2026-10-17; аввал 5) — `firestore.rules`даги
+  /// `wholesaleProductCreateOk` / `wholesaleProductOwnerUpdateOk` билан бир хил.
+  static const maxImages = 7;
   static const maxVideoClips = 5;
   static const maxPriceTiers = 5;
   static const statusPending = 'pending';

@@ -369,7 +369,7 @@
   "create_ad_err_permission": "Нет доступа — проверьте телефон в профиле",
   "create_ad_err_phone": "Сначала подтвердите телефон",
   "create_ad_err_session": "Сессия истекла. Подтвердите телефон снова",
-  "create_ad_images_max": "Не больше 5 фото",
+  "create_ad_images_max": "Не больше 7 фото",
   "create_ad_images_required": "Добавьте хотя бы 1 фото",
   "create_ad_intro_body": "Фото, цена и короткое описание — покупатель найдёт вас быстрее.",
   "create_ad_intro_title": "Объявление на онлайн-рынке",

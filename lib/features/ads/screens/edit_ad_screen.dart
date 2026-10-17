@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
@@ -54,20 +55,21 @@ class _EditAdScreenState extends State<EditAdScreen> {
   int get _totalImages => _keptUrls.length + _newImages.length;
 
   Future<void> _pickImages() async {
-    if (_totalImages >= 5) {
+    if (_totalImages >= AdModel.maxImages) {
+      // Аввал матн қотирилган эди («5 та») — учала тилдаги калитга ўтказилди.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Энг кўпи 5 та расм')),
+        SnackBar(content: Text(context.tr('create_ad_images_max'))),
       );
       return;
     }
     final picked = await ImagePicker().pickMultiImage(
       imageQuality: 85,
-      limit: 5 - _totalImages,
+      limit: AdModel.maxImages - _totalImages,
     );
     if (picked.isEmpty) return;
     setState(() {
       _newImages.addAll(picked);
-      while (_totalImages > 5) {
+      while (_totalImages > AdModel.maxImages) {
         _newImages.removeLast();
       }
     });

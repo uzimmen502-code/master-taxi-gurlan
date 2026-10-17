@@ -2645,7 +2645,8 @@ service cloud.firestore {
           && request.resource.data.description.size() <= 2000
           && request.resource.data.imageUrls is list
           && request.resource.data.imageUrls.size() >= 1
-          && request.resource.data.imageUrls.size() <= 5
+          // 1..7 (эга қарори, 2026-10-17; аввал 1..5). Эски илова ≤5 юборади — мос.
+          && request.resource.data.imageUrls.size() <= 7
           // `districtId`/`regionId` — эга МАҲСУЛОТ ҳудудини тузата олиши
           // учун (аудит, 2026-09-27). Мавжудлиги `geo_districts` бўйича
           // текширилади: ёлғон id ёзилса эълон ҳеч кимнинг лентасида
@@ -2907,7 +2908,7 @@ service cloud.firestore {
           && request.resource.data.priceTiers.size() <= 5
           && request.resource.data.imageUrls is list
           && request.resource.data.imageUrls.size() >= 1
-          && request.resource.data.imageUrls.size() <= 5
+          && request.resource.data.imageUrls.size() <= 7
           && request.resource.data.get('views', 0) == 0
           && request.resource.data.get('videoClipIds', []).size() == 0
           // `market` — қайси бозор: 'wholesale' (улгуржи) ёки 'china'
@@ -2960,7 +2961,7 @@ service cloud.firestore {
           && request.resource.data.description.size() >= 3
           && request.resource.data.description.size() <= 2000
           && request.resource.data.imageUrls.size() >= 1
-          && request.resource.data.imageUrls.size() <= 5
+          && request.resource.data.imageUrls.size() <= 7
           && (!changed.hasAny(['status'])
               || (
                 (request.resource.data.status == 'inactive'

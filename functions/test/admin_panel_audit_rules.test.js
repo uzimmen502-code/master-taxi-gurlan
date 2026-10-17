@@ -309,6 +309,21 @@ async function main() {
   await check('bozor: egasi faol e\'lonni yashiradi (regressiya yo\'q)',
       () => assertSucceeds(ad(as(OWNER), 'mk3').update({status: 'inactive', updatedAt: new Date()})));
 
+  // Rasmlar soni 1..7 (ega qarori, 2026-10-17; avval 1..5). Yaratish CF orqali
+  // (`marketImageUrlsOk`), egasining tahriri esa shu qoida orqali.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection('ads').doc('mk4').set(marketAd({}));
+  });
+  const adImgs = (n) => Array.from({length: n}, (_, i) => `https://x/${i}.jpg`);
+  await check('bozor rasm: egasi tahrirda 5 ta rasm (eski ilova) — o\'tadi',
+      () => assertSucceeds(ad(as(OWNER), 'mk4').update({imageUrls: adImgs(5), status: 'pending', updatedAt: new Date()})));
+  await check('bozor rasm: egasi tahrirda 7 ta rasm (chegara) — o\'tadi',
+      () => assertSucceeds(ad(as(OWNER), 'mk4').update({imageUrls: adImgs(7), updatedAt: new Date()})));
+  await check('bozor rasm: egasi tahrirda 8 ta rasm — rad',
+      () => assertFails(ad(as(OWNER), 'mk4').update({imageUrls: adImgs(8), updatedAt: new Date()})));
+  await check('bozor rasm: egasi barcha rasmni o\'chira olmaydi (0 ta) — rad',
+      () => assertFails(ad(as(OWNER), 'mk4').update({imageUrls: [], updatedAt: new Date()})));
+
   // ── admin_credentials / admin_audit (faqat Admin SDK) ───────────────
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await ctx.firestore().collection('admin_credentials').doc(ADMIN).set({pin: {hash: 'x'}});

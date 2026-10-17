@@ -37,6 +37,7 @@ const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth')
 const { makeProcurementCatalog } = require('./procurement_catalog');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
+const marketImages = require('./market_images');
 // Admin «Аҳоли бозори» рўйхати — саҳифалар ва «Яна юклаш» (2026-10-08).
 const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
@@ -8241,18 +8242,13 @@ function marketPhoneVariants(uid) {
   ].filter((p) => p.length >= 9))];
 }
 
+/** Қоида (1..7 расм, эгасининг `ads/{phone}/` йўли) — `market_images.js`да. */
 function marketImageUrlsOk(urls, uid) {
-  if (!Array.isArray(urls) || urls.length < 1 || urls.length > 5) return false;
   const markers = marketPhoneVariants(uid).flatMap((p) => [
     `ads/${p}/`,
     `ads%2F${p}%2F`,
   ]);
-  return urls.every((raw) => {
-    const u = String(raw || '');
-    if (u.length < 20 || u.length > 2000) return false;
-    if (!u.startsWith('https://')) return false;
-    return markers.some((m) => u.includes(m));
-  });
+  return marketImages.marketImageUrlsOk(urls, markers);
 }
 
 /** Mijoz: Onlayn BOZOR эълон (CF-only, auth + canonical phone + лимитлар). */
@@ -8282,7 +8278,8 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   const imageUrls = Array.isArray(data && data.imageUrls) ? data.imageUrls : [];
   if (!marketImageUrlsOk(imageUrls, uid)) {
     throw new functions.https.HttpsError(
-      'invalid-argument', 'imageUrls 1..5 under ads/{uid}/');
+      'invalid-argument',
+      `imageUrls ${marketImages.MARKET_MIN_IMAGES}..${marketImages.MARKET_MAX_IMAGES} under ads/{uid}/`);
   }
 
   const phoneVariants = marketPhoneVariants(uid);

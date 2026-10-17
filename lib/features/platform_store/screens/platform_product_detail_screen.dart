@@ -638,12 +638,32 @@ class _BottomActionBar extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                              child: Text(
-                                context.tr('platform_store_go_cart'),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 15,
-                                ),
+                              // Миқдор ўзгарса сумма шу ернинг ўзида ўзгаради:
+                              // поғона нархи × миқдор (кўрсатиш учун; ҳақиқий
+                              // нархни буюртмада сервер ҳисоблайди).
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    context.tr('platform_store_go_cart'),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  Text(
+                                    context.tr('price_sum_short').replaceAll(
+                                          '{price}',
+                                          formatPrice(
+                                            product.priceForQty(qty) * qty,
+                                          ),
+                                        ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -962,7 +982,13 @@ class _PriceTiers extends StatelessWidget {
     // ҳисобланган (2026-10-06).
     final tiers = product.effectiveTiers;
     if (tiers.isEmpty) return const SizedBox.shrink();
-    final activePrice = product.priceForQty(qty <= 0 ? product.minQty : qty);
+    // Амалдаги поғона — ИНДЕКС бўйича (`priceForQty` қоидаси: qty >= minQty
+    // бўлган охирги поғона). Нарх бўйича солиштирилса, икки поғона нархи
+    // бир хил бўлганда иккаласи ҳам «танланган» кўринар эди.
+    final effectiveQty = qty <= 0 ? product.minQty : qty;
+    var activeIndex = tiers.lastIndexWhere((t) => effectiveQty >= t.minQty);
+    if (activeIndex < 0) activeIndex = 0;
+    final c = context.read<PlatformStoreController>();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -982,36 +1008,54 @@ class _PriceTiers extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           for (final (i, t) in tiers.indexed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                children: [
-                  Icon(
-                    t.price == activePrice
-                        ? Icons.check_circle
-                        : Icons.circle_outlined,
-                    size: 14,
-                    color: t.price == activePrice
-                        ? AppColors.primaryText
-                        : AppColors.primaryText.withValues(alpha: 0.35),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '${product.tierRangeLabel(i)} ${product.unit}: '
-                      '${formatPrice(t.price)} $kCurrencySum',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: t.price == activePrice
-                            ? FontWeight.w800
-                            : FontWeight.w500,
-                        color: AppColors.primaryText,
-                      ),
+            // Босилса — миқдор шу поғона бошланишига ўтади. Қолдиқ етмаган
+            // поғона хира ва босилмайди.
+            Builder(builder: (context) {
+              final active = i == activeIndex;
+              final reachable =
+                  PlatformStoreController.qtyForTier(product, t.minQty) != null;
+              return InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: reachable
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        c.selectTier(product, t.minQty);
+                      }
+                    : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Opacity(
+                    opacity: reachable ? 1 : 0.4,
+                    child: Row(
+                      children: [
+                        Icon(
+                          active
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          size: 16,
+                          color: active
+                              ? AppColors.primaryText
+                              : AppColors.primaryText.withValues(alpha: 0.35),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${product.tierRangeLabel(i)} ${product.unit}: '
+                            '${formatPrice(t.price)} $kCurrencySum',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight:
+                                  active ? FontWeight.w800 : FontWeight.w500,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            }),
         ],
       ),
     );

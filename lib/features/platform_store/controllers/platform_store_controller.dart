@@ -279,6 +279,29 @@ class PlatformStoreController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Поғонани танлашда саватга қўйиладиган миқдор: поғона бошланиши, `step`
+  /// га мослаб юқорига юмалатилган. Қолдиқ етмаса `null` (поғонага
+  /// чиқиб бўлмайди). Фақат ҳисоб — UI шуни кўрсатади, нархни сервер ҳисоблайди.
+  static int? qtyForTier(PlatformProduct p, int tierMinQty) {
+    if (!p.inStock) return null;
+    final step = p.step < 1 ? 1 : p.step;
+    final base = tierMinQty < p.minQty ? p.minQty : tierMinQty;
+    final aligned = base + ((step - (base - p.minQty) % step) % step);
+    if (!p.isUnlimitedStock && aligned > p.remaining) return null;
+    return aligned;
+  }
+
+  /// Харидор поғонани танлади — миқдор шу поғона бошланишига ўтади
+  /// (саватда бўлмаса, қўшилади). Миқдорни кўпайтирилса ҳам, камайтирилса ҳам.
+  bool selectTier(PlatformProduct p, int tierMinQty) {
+    final q = qtyForTier(p, tierMinQty);
+    if (q == null || p.priceForQty(q) <= 0) return false;
+    _cart[p.id] = q;
+    _persistCart();
+    notifyListeners();
+    return true;
+  }
+
   void increase(String id) {
     final p = _byId(id);
     if (p == null) return;

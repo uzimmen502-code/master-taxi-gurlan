@@ -5,12 +5,26 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/geo/geo_names.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_image_slider.dart';
+import 'cheap_products_screen.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
+
+/// Ном ичидаги биринчи маъноли сўз (≥3 ҳарф, кичик ҳарфда) — «Ўхшаш
+/// маҳсулотлар → Барчаси» Аҳоли бозорини шу сўз билан қидириб очади.
+/// Маъноли сўз йўқ бўлса — бўш қатор.
+String adSimilarQuery(String title) {
+  for (final w
+      in title.toLowerCase().split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))) {
+    if (w.length >= 3) return w;
+  }
+  return '';
+}
 
 /// Single ad detail with call action.
 class AdDetailsScreen extends StatefulWidget {
@@ -134,6 +148,17 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         ),
       );
     }
+  }
+
+  void _openAllSimilar() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CheapProductsScreen(
+          initialQuery: adSimilarQuery(widget.ad.title),
+        ),
+      ),
+    );
   }
 
   Future<void> _reportAd() async {
@@ -308,20 +333,32 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   LinkedVideoButton(linkId: ad.id, ownerPhone: ad.ownerId),
                   const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
-                    const Text(
-                      'Ўхшаш маҳсулотлар',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: AppText.bodyLarge,
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Ўхшаш маҳсулотлар',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: AppText.bodyLarge,
+                            ),
+                          ),
+                        ),
+                        // Ўхшашларнинг тўлиқ рўйхати: Аҳоли бозори, қидирув
+                        // сатрида шу эълон номининг асосий сўзи билан.
+                        TextButton(
+                          onPressed: _openAllSimilar,
+                          child: Text('${context.tr('home_section_see_all')} →'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     FutureBuilder<List<AdModel>>(
                       future: _similarAdsFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const SizedBox(
-                            height: 190,
+                            height: 206,
                             child: Center(child: CircularProgressIndicator()),
                           );
                         }
@@ -363,7 +400,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                           _logSimilarMetrics('impression', shownCount: items.length);
                         }
                         return SizedBox(
-                          height: 190,
+                          height: 206,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: items.length,
@@ -409,6 +446,9 @@ class _SimilarAdTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = ad.imageUrls.isNotEmpty ? ad.imageUrls.first : null;
+    final district = ad.districtId.isEmpty
+        ? ''
+        : GeoNames.district(ad.districtId, context.contentLang);
 
     return SizedBox(
       width: 150,
@@ -471,6 +511,20 @@ class _SimilarAdTile extends StatelessWidget {
                           fontSize: AppText.bodySmall,
                         ),
                       ),
+                      // Сотувчи қайси ҳудудда — яқин маҳсулот муҳим. Эски
+                      // эълонларда `districtId` бўш: сатр умуман кўринмайди.
+                      if (district.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          district,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: AppText.labelSmall,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

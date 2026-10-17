@@ -132,8 +132,8 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     if (phoneDigits(_callPhone).length < 9) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Телефон рақами нотўғри'),
+        SnackBar(
+          content: Text(context.tr('ad_details_phone_invalid')),
           backgroundColor: Colors.red,
         ),
       );
@@ -143,8 +143,8 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     if (!await launchUrl(uri)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Қўнғироқ қилиб бўлмади'),
+        SnackBar(
+          content: Text(context.tr('ad_details_call_failed')),
           backgroundColor: Colors.red,
         ),
       );
@@ -163,11 +163,14 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   }
 
   Future<void> _reportAd() async {
-    const reasons = <String>[
-      'Алдамчи эълон',
-      'Телефон нотўғри',
-      'Спам / Такрорий',
-      'Ҳақоратли матн',
+    // (серверга юбориладиган ҚИЙМАТ, экрандаги матн калити). Қиймат аввалгидек
+    // ўзбекча қолади — админ ва эски шикоятлар билан мос (CLAUDE.md 26);
+    // фойдаланувчи эса ўз тилида кўради.
+    const reasons = <(String, String)>[
+      ('Алдамчи эълон', 'ad_report_reason_fraud'),
+      ('Телефон нотўғри', 'ad_report_reason_phone'),
+      ('Спам / Такрорий', 'ad_report_reason_spam'),
+      ('Ҳақоратли матн', 'ad_report_reason_abuse'),
     ];
     final reason = await showModalBottomSheet<String>(
       context: context,
@@ -175,17 +178,18 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
-                'Шикоят',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ctx.tr('ad_report_title'),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
             ...reasons.map(
               (r) => ListTile(
-                title: Text(r),
-                onTap: () => Navigator.pop(ctx, r),
+                title: Text(ctx.tr(r.$2)),
+                onTap: () => Navigator.pop(ctx, r.$1),
               ),
             ),
           ],
@@ -200,20 +204,23 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Шикоят юборилди')),
+        SnackBar(content: Text(context.tr('ad_report_sent'))),
       );
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       final msg = e.code == 'resource-exhausted'
-          ? 'Кунига шикоят лимити тугади'
-          : (e.message ?? 'Хатолик');
+          ? context.tr('ad_report_limit')
+          : (e.message ?? context.trMsg('error_generic|${e.code}'));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: Colors.red),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(context.trMsg('error_generic|$e')),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -231,7 +238,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
           child: ElevatedButton.icon(
             onPressed: canCall ? _callSeller : null,
             icon: const Text('📞'),
-            label: const Text('Қўнғироқ қилиш'),
+            label: Text(context.tr('wholesale_call')),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.onPrimary,
@@ -255,7 +262,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             foregroundColor: AppColors.onPrimary,
             actions: [
               IconButton(
-                tooltip: 'Шикоят',
+                tooltip: context.tr('ad_report_title'),
                 icon: const Icon(Icons.flag_outlined),
                 onPressed: _reportAd,
               ),
@@ -314,7 +321,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        '👁 ${ad.views} кўрилди',
+                        '👁 ${context.tr('ad_details_views').replaceAll('{count}', '${ad.views}')}',
                         style: TextStyle(
                           fontSize: AppText.labelSmall,
                           color: Colors.grey.shade600,
@@ -339,10 +346,10 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   if (_enableSimilarAds) ...[
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Ўхшаш маҳсулотлар',
-                            style: TextStyle(
+                            context.tr('platform_store_similar'),
+                            style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: AppText.bodyLarge,
                             ),
@@ -374,7 +381,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             _logSimilarMetrics('error');
                           }
                           return Text(
-                            'Ўхшаш маҳсулотларни юклаб бўлмади',
+                            context.tr('ad_details_similar_error'),
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontSize: AppText.bodySmall,
@@ -390,7 +397,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             _logSimilarMetrics('empty');
                           }
                           return Text(
-                            'Ҳозирча ўхшаш маҳсулотлар йўқ',
+                            context.tr('ad_details_similar_empty'),
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontSize: AppText.bodySmall,

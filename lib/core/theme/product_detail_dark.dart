@@ -55,7 +55,15 @@ class ProductDetailDark extends StatelessWidget {
 
   final Widget child;
 
+  /// Тизим шрифти катта (×1.3–1.5) бўлган қурилмада матн шу экранда ×1.15
+  /// дан ошмайди: аввал нарх, поғоналар ва «ўхшашлар» экранга сиғмас эди
+  /// (эга қурилмасида кўрилган, 2026-10-17; «Менинг бизнесим» варағидаги
+  /// қоида билан бир хил).
+  static const double maxTextScale = 1.15;
+
   @override
-  Widget build(BuildContext context) =>
-      Theme(data: PdDark.theme(Theme.of(context)), child: child);
+  Widget build(BuildContext context) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: maxTextScale,
+        child: Theme(data: PdDark.theme(Theme.of(context)), child: child),
+      );
 }

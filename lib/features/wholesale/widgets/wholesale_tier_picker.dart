@@ -241,21 +241,9 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
     );
   }
 
-  /// «1–9 кг», «10–49 кг», «50+ кг»: оралиқ қўшни поғонадан келиб чиқади,
-  /// охиргиси — «N+». Ҳисобланган ёрлиқлар `kStandardTierBrackets` да
-  /// фақат AVA товарида; сотувчи поғоналари эркин, шу сабабли ҳисоблаймиз.
-  static String _tierLabel(WholesaleProduct p, int i) {
-    final tiers = p.priceTiers;
-    final from = tiers[i].minQty;
-    final String range;
-    if (i + 1 < tiers.length) {
-      final to = tiers[i + 1].minQty - 1;
-      range = to > from ? '$from–$to' : '$from';
-    } else {
-      range = '$from+';
-    }
-    return '$range ${p.unit}';
-  }
+  /// «1–9 кг», «10–49 кг», «50+ кг» (`tierRangeText`).
+  static String _tierLabel(WholesaleProduct p, int i) =>
+      '${tierRangeText(p.priceTiers, i)} ${p.unit}';
 }
 
 class _TierChip extends StatelessWidget {

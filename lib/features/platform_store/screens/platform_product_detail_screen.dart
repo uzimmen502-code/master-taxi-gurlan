@@ -10,6 +10,7 @@ import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../models/platform_product.dart';
+import '../../../models/price_tier.dart';
 import '../controllers/platform_store_controller.dart';
 import '../widgets/platform_cart_sheet.dart';
 import '../widgets/platform_image_gallery.dart';
@@ -63,9 +64,8 @@ class _PlatformProductDetailScreenState
   @override
   void initState() {
     super.initState();
-    _catalog = widget.catalog.isNotEmpty
-        ? List.of(widget.catalog)
-        : [widget.product];
+    _catalog =
+        widget.catalog.isNotEmpty ? List.of(widget.catalog) : [widget.product];
     _index = _catalog.indexWhere((p) => p.id == widget.product.id);
     if (_index < 0) {
       _catalog = [
@@ -284,7 +284,7 @@ class _ProductPageState extends State<_ProductPage>
     final qty = c.qtyOf(product.id);
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          formatPrice(product.displayPrice),
+          formatPrice(product.priceForQty(qty > 0 ? qty : product.minQty)),
         );
     final similar = _similar();
     final hasNext = widget.pageIndex < widget.pageCount - 1;
@@ -298,60 +298,66 @@ class _ProductPageState extends State<_ProductPage>
       );
     }
 
+    // Саҳифа БИТТА экранга сиғади (қурилмада шрифт ×1.3 да ҳам, эга талаби
+    // 2026-10-17): расм кичикроқ, матнлар ихчам, «ўхшашлар» шу ернинг ўзида.
+    // Жуда кичик экран учун захира — скролл ва чегарада свайп.
+    final textScale =
+        MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.6);
     final body = Column(
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: (h * 0.34).clamp(200.0, 280.0),
-                child: ColoredBox(
-                  color: _S.soft,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      PlatformImageStack(
-                        urls: product.displayImages,
-                        memCacheWidth: 900,
-                        borderRadius: 14,
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                        onTap: openGallery,
-                        onDoubleTap: openGallery,
-                      ),
-                      if (out)
-                        IgnorePointer(
-                          child: ColoredBox(
-                            color: Colors.black.withValues(alpha: 0.38),
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.75),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  context.tr('platform_store_out_of_stock'),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14,
+          child: SingleChildScrollView(
+            physics: kEdgeSwipePhysics,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: (h * 0.28).clamp(150.0, 240.0),
+                  child: ColoredBox(
+                    color: _S.soft,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        PlatformImageStack(
+                          urls: product.displayImages,
+                          memCacheWidth: 900,
+                          borderRadius: 14,
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                          onTap: openGallery,
+                          onDoubleTap: openGallery,
+                        ),
+                        if (out)
+                          IgnorePointer(
+                            child: ColoredBox(
+                              color: Colors.black.withValues(alpha: 0.38),
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.75),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    context.tr('platform_store_out_of_stock'),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -367,8 +373,7 @@ class _ProductPageState extends State<_ProductPage>
                             );
                             return DecoratedBox(
                               decoration: BoxDecoration(
-                                color: _S.brand
-                                    .withValues(alpha: 0.12 * t),
+                                color: _S.brand.withValues(alpha: 0.12 * t),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: child,
@@ -376,119 +381,119 @@ class _ProductPageState extends State<_ProductPage>
                           },
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
+                              horizontal: 2,
+                              vertical: 1,
                             ),
                             child: Text(
                               product.name,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 21,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
                                 color: _S.ink,
-                                height: 1.18,
-                                letterSpacing: -0.2,
+                                height: 1.2,
                               ),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        priceText,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: _S.accent,
-                          height: 1,
-                        ),
+                      const SizedBox(height: 4),
+                      // Нарх ТАНЛАНГАН миқдор/поғонага мос ўзгаради (аввал
+                      // доим энг кам миқдордаги нарх кўринарди).
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            priceText,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              color: _S.accent,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '/ ${product.unit}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _S.muted,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (!out && !product.isUnlimitedStock)
+                            Text(
+                              '${context.tr('platform_store_stock_left')}: '
+                              '${product.remaining}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _S.muted,
+                              ),
+                            ),
+                        ],
                       ),
-                      // Улгуржи поғоналари (2026-09-29) — жорий миқдорга
-                      // мос поғона ажратиб кўрсатилади.
+                      // Улгуржи поғоналари — босиб танланади.
                       if (product.effectiveTiers.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         _PriceTiers(product: product, qty: qty),
                       ],
-                      if (!out && !product.isUnlimitedStock) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          '${context.tr('platform_store_stock_left')}: '
-                          '${product.remaining}',
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: _S.muted,
-                          ),
-                        ),
-                      ],
                       if (product.description.trim().isNotEmpty) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         Text(
                           product.description.trim(),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            height: 1.35,
-                            color: PdDark.ink,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.3,
+                            color: _S.ink.withValues(alpha: 0.8),
                           ),
                         ),
                       ],
                       if (similar.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Expanded(
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 104 + 26 * textScale,
                           child: _SimilarStrip(
-                            // Key — маҳсулот алмашganda қатор бошга қайтади.
+                            // Key — маҳсулот алмашганда қатор бошга қайтади.
                             key: ValueKey('similar_${product.id}'),
                             items: similar,
                             onTap: widget.onOpenSimilar,
                           ),
                         ),
-                      ] else
-                        const Spacer(),
+                      ],
                       if (hasNext)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 8, top: 4),
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.keyboard_double_arrow_up_rounded,
+                                color: _S.muted,
+                                size: 14,
                               ),
-                              decoration: BoxDecoration(
-                                color: _S.soft,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.keyboard_double_arrow_up_rounded,
-                                    color: _S.accent
-                                        .withValues(alpha: 0.8),
-                                    size: 18,
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  context.tr('product_swipe_next_up'),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _S.muted,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    context.tr('product_swipe_next_up'),
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: _S.accent
-                                          .withValues(alpha: 0.9),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         _BottomActionBar(
@@ -516,20 +521,14 @@ class _ProductPageState extends State<_ProductPage>
       },
       child: KeyedSubtree(
         key: ValueKey(product.id),
-        // Саҳифа скролл қилинмайди, лекин юқорига/пастга суриш ([EdgeSwipePager])
-        // сезилиши учун скролл ичида ва кўринма баландликда.
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            physics: kEdgeSwipePhysics,
-            child: SizedBox(height: constraints.maxHeight, child: body),
-          ),
-        ),
+        child: body,
       ),
     );
   }
 }
 
-/// Пастки CTA: Саватга | миқдор ± | Саватга ўтиш.
+/// Пастки панел (ихчам): сават бўшда — нарх + «Саватга»; сават тўлганда —
+/// миқдор ± ва «Саватга ўтиш» (жами сумма билан).
 class _BottomActionBar extends StatelessWidget {
   const _BottomActionBar({
     required this.product,
@@ -543,150 +542,173 @@ class _BottomActionBar extends StatelessWidget {
   final int qty;
   final VoidCallback onOpenCart;
 
+  static const double _h = 42;
+
+  ButtonStyle get _btn => FilledButton.styleFrom(
+        backgroundColor: _S.brand,
+        foregroundColor: _S.onBrand,
+        minimumSize: const Size(0, _h),
+        // Материал 48 пиксел босиш майдонини қўшмасин — тугма аниқ 42.
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      );
+
   @override
   Widget build(BuildContext context) {
     final c = context.read<PlatformStoreController>();
+    final unitPrice = product.priceForQty(qty > 0 ? qty : product.minQty);
+    String sum(int v) =>
+        context.tr('price_sum_short').replaceAll('{price}', formatPrice(v));
+
+    Widget content;
+    if (out) {
+      content = SizedBox(
+        width: double.infinity,
+        height: _h,
+        child: FilledButton(
+          onPressed: null,
+          style: FilledButton.styleFrom(
+            disabledBackgroundColor: PdDark.surface2,
+            disabledForegroundColor: _S.muted,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text(
+            context.tr('platform_store_out_of_stock'),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+        ),
+      );
+    } else if (qty == 0) {
+      content = Row(
+        children: [
+          // Бир қаторда («11 025 сўм / дона») — катта шрифтда ҳам тошмайди.
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: sum(unitPrice),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: _S.ink,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' / ${product.unit}',
+                    style: const TextStyle(fontSize: 11, color: _S.muted),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              c.addToCart(product);
+            },
+            style: _btn,
+            icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+            label: Text(
+              context.tr('platform_store_add'),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+        ],
+      );
+    } else {
+      content = Row(
+        children: [
+          Container(
+            height: _h,
+            decoration: BoxDecoration(
+              color: _S.soft,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _S.accent, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                _QtyBtn(
+                  icon: Icons.remove_rounded,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    c.decrease(product.id);
+                  },
+                ),
+                SizedBox(
+                  width: 40,
+                  child: Text(
+                    '$qty',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: _S.ink,
+                    ),
+                  ),
+                ),
+                _QtyBtn(
+                  icon: Icons.add_rounded,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    c.increase(product.id);
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              onPressed: onOpenCart,
+              style: _btn.copyWith(
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+              // Миқдор ўзгарса сумма шу ернинг ўзида ўзгаради: поғона нархи ×
+              // миқдор (кўрсатиш учун; ҳақиқий нархни буюртмада сервер ҳисоблайди).
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    context.tr('platform_store_go_cart'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    sum(unitPrice * qty),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Material(
       color: _S.surface,
-      elevation: 12,
-      shadowColor: _S.deep.withValues(alpha: 0.18),
+      elevation: 8,
+      shadowColor: Colors.black,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: out
-              ? SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: null,
-                    style: FilledButton.styleFrom(
-                      disabledBackgroundColor: PdDark.surface2,
-                      disabledForegroundColor: _S.muted,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      context.tr('platform_store_out_of_stock'),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                )
-              : qty == 0
-                  ? SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          c.addToCart(product);
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _S.brand,
-                          foregroundColor: _S.onBrand,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        icon: const Icon(Icons.add_shopping_cart_rounded),
-                        label: Text(
-                          context.tr('platform_store_add'),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    )
-                  : Row(
-                      children: [
-                        Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: _S.soft,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: _S.accent,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              _QtyBtn(
-                                icon: Icons.remove_rounded,
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  c.decrease(product.id);
-                                },
-                              ),
-                              SizedBox(
-                                width: 52,
-                                child: Text(
-                                  '$qty',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 18,
-                                    color: _S.ink,
-                                  ),
-                                ),
-                              ),
-                              _QtyBtn(
-                                icon: Icons.add_rounded,
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  c.increase(product.id);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: SizedBox(
-                            height: 52,
-                            child: FilledButton(
-                              onPressed: onOpenCart,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _S.brand,
-                                foregroundColor: _S.onBrand,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              // Миқдор ўзгарса сумма шу ернинг ўзида ўзгаради:
-                              // поғона нархи × миқдор (кўрсатиш учун; ҳақиқий
-                              // нархни буюртмада сервер ҳисоблайди).
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    context.tr('platform_store_go_cart'),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  Text(
-                                    context.tr('price_sum_short').replaceAll(
-                                          '{price}',
-                                          formatPrice(
-                                            product.priceForQty(qty) * qty,
-                                          ),
-                                        ),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: content,
         ),
       ),
     );
@@ -701,17 +723,13 @@ class _QtyBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: _S.brand,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 48,
-          height: 52,
-          child: Icon(icon, color: _S.onBrand, size: 24),
-        ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 38,
+        height: _BottomActionBar._h,
+        child: Icon(icon, color: _S.accent, size: 20),
       ),
     );
   }
@@ -755,65 +773,29 @@ class _SimilarStripState extends State<_SimilarStrip> {
     super.dispose();
   }
 
-  void _nudgeRight() {
-    if (!_scroll.hasClients) return;
-    final next = (_scroll.offset + 148).clamp(
-      0.0,
-      _scroll.position.maxScrollExtent,
-    );
-    _scroll.animateTo(
-      next,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                context.tr('platform_store_similar'),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: _S.ink,
-                ),
-              ),
-            ),
-            if (_canScrollMore)
-              Material(
-                color: _S.brand,
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  onTap: _nudgeRight,
-                  borderRadius: BorderRadius.circular(10),
-                  child: const Padding(
-                    padding: EdgeInsets.all(7),
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 18,
-                      color: _S.onBrand,
-                    ),
-                  ),
-                ),
-              ),
-          ],
+        Text(
+          context.tr('platform_store_similar'),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: _S.ink,
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Expanded(
           child: Stack(
             children: [
               ListView.separated(
                 controller: _scroll,
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(right: 28, bottom: 2),
+                padding: const EdgeInsets.only(right: 24),
                 itemCount: widget.items.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (context, i) {
                   final p = widget.items[i];
                   return _SimilarCard(
@@ -826,10 +808,10 @@ class _SimilarStripState extends State<_SimilarStrip> {
                 Positioned(
                   right: 0,
                   top: 0,
-                  bottom: 2,
+                  bottom: 0,
                   child: IgnorePointer(
                     child: Container(
-                      width: 28,
+                      width: 24,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.centerLeft,
@@ -842,6 +824,7 @@ class _SimilarStripState extends State<_SimilarStrip> {
                       ),
                       child: Icon(
                         Icons.chevron_right_rounded,
+                        size: 20,
                         color: _S.accent.withValues(alpha: 0.85),
                       ),
                     ),
@@ -872,14 +855,14 @@ class _SimilarCard extends StatelessWidget {
         );
     return Material(
       color: _S.surface,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Ink(
-          width: 112,
+          width: 96,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _S.border),
           ),
           child: Column(
@@ -890,7 +873,7 @@ class _SimilarCard extends StatelessWidget {
                 child: ColoredBox(
                   color: _S.soft,
                   child: Padding(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(5),
                     child: _Thumb(url: product.coverImageUrl),
                   ),
                 ),
@@ -898,7 +881,7 @@ class _SimilarCard extends StatelessWidget {
               Expanded(
                 flex: 4,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 5, 8, 6),
+                  padding: const EdgeInsets.fromLTRB(7, 4, 7, 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -908,8 +891,8 @@ class _SimilarCard extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
                             height: 1.15,
                             color: _S.ink,
                           ),
@@ -920,7 +903,7 @@ class _SimilarCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w800,
                           color: _S.accent,
                         ),
@@ -982,9 +965,9 @@ class _Thumb extends StatelessWidget {
   }
 }
 
-
-/// Улгуржи нарх поғоналари — харидор қанчадан бошлаб арзонлашишини
-/// кўриб турсин (эга қарори, 2026-09-29).
+/// Улгуржи нарх поғоналари — ихчам «чип»лар: босилса миқдор шу поғона
+/// бошланишига ўтади, нарх ва сумма шу ернинг ўзида мос ўзгаради. Қолдиқ
+/// етмаган поғона хира ва босилмайди.
 class _PriceTiers extends StatelessWidget {
   const _PriceTiers({required this.product, required this.qty});
 
@@ -1002,78 +985,117 @@ class _PriceTiers extends StatelessWidget {
     // Амалдаги поғона — ИНДЕКС бўйича (`priceForQty` қоидаси: qty >= minQty
     // бўлган охирги поғона). Нарх бўйича солиштирилса, икки поғона нархи
     // бир хил бўлганда иккаласи ҳам «танланган» кўринар эди.
-    final effectiveQty = qty <= 0 ? product.minQty : qty;
-    var activeIndex = tiers.lastIndexWhere((t) => effectiveQty >= t.minQty);
-    if (activeIndex < 0) activeIndex = 0;
+    final activeIndex = activeTierIndex(tiers, qty <= 0 ? product.minQty : qty);
     final c = context.read<PlatformStoreController>();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: _S.soft,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.tr('wholesale_price_tiers'),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: _S.accent.withValues(alpha: 0.9),
-            ),
+    const gap = 6.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.tr('wholesale_price_tiers'),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: _S.muted,
           ),
-          const SizedBox(height: 6),
-          for (final (i, t) in tiers.indexed)
-            // Босилса — миқдор шу поғона бошланишига ўтади. Қолдиқ етмаган
-            // поғона хира ва босилмайди.
-            Builder(builder: (context) {
-              final active = i == activeIndex;
-              final reachable =
-                  PlatformStoreController.qtyForTier(product, t.minQty) != null;
-              return InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: reachable
-                    ? () {
+        ),
+        const SizedBox(height: 5),
+        LayoutBuilder(
+          builder: (context, cons) {
+            final n = tiers.length;
+            final w = ((cons.maxWidth - gap * (n - 1)) / n)
+                .clamp(84.0, cons.maxWidth);
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final (i, t) in tiers.indexed)
+                  SizedBox(
+                    width: w,
+                    child: _TierChip(
+                      label: '${tierRangeText(tiers, i)} ${product.unit}',
+                      price: '${formatPrice(t.price)} $kCurrencySum',
+                      active: i == activeIndex,
+                      reachable: PlatformStoreController.qtyForTier(
+                              product, t.minQty) !=
+                          null,
+                      onTap: () {
                         HapticFeedback.selectionClick();
                         c.selectTier(product, t.minQty);
-                      }
-                    : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Opacity(
-                    opacity: reachable ? 1 : 0.4,
-                    child: Row(
-                      children: [
-                        Icon(
-                          active
-                              ? Icons.check_circle
-                              : Icons.circle_outlined,
-                          size: 16,
-                          color: active
-                              ? _S.accent
-                              : _S.accent.withValues(alpha: 0.35),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${product.tierRangeLabel(i)} ${product.unit}: '
-                            '${formatPrice(t.price)} $kCurrencySum',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight:
-                                  active ? FontWeight.w800 : FontWeight.w500,
-                              color: _S.accent,
-                            ),
-                          ),
-                        ),
-                      ],
+                      },
                     ),
                   ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _TierChip extends StatelessWidget {
+  const _TierChip({
+    required this.label,
+    required this.price,
+    required this.active,
+    required this.reachable,
+    required this.onTap,
+  });
+
+  final String label;
+  final String price;
+  final bool active;
+  final bool reachable;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: reachable ? 1 : 0.4,
+      child: Material(
+        color: active ? PdDark.brandSoft : _S.surface,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: reachable ? onTap : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: active ? _S.accent : _S.border,
+                width: active ? 1.4 : 1,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                    color: _S.ink.withValues(alpha: active ? 1 : 0.75),
+                  ),
                 ),
-              );
-            }),
-        ],
+                const SizedBox(height: 1),
+                Text(
+                  price,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: active ? _S.accent : _S.ink,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -69,6 +69,27 @@ void main() {
     });
   });
 
+  group('tierRangeText', () {
+    const tiers = [
+      PriceTier(minQty: 1, price: 14000),
+      PriceTier(minQty: 10, price: 12000),
+      PriceTier(minQty: 50, price: 10500),
+    ];
+    test('1–9, 10–49, 50+', () {
+      expect(tierRangeText(tiers, 0), '1–9');
+      expect(tierRangeText(tiers, 1), '10–49');
+      expect(tierRangeText(tiers, 2), '50+');
+    });
+    test('қўшни поғона бир сонга фарқ қилса — битта сон', () {
+      const t = [PriceTier(minQty: 5, price: 1), PriceTier(minQty: 6, price: 1)];
+      expect(tierRangeText(t, 0), '5');
+    });
+    test('индекс чегарадан ташқарида — бўш', () {
+      expect(tierRangeText(tiers, -1), '');
+      expect(tierRangeText(tiers, 3), '');
+    });
+  });
+
   group('clampWholesaleQty', () {
     test('минимал буюртмадан кам — минимумга', () => expect(clampWholesaleQty(2, 5), 5));
     test('нол ва манфий — минимумга', () {

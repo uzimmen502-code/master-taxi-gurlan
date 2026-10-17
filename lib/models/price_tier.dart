@@ -61,6 +61,17 @@ PriceTier? nextTierAfter(List<PriceTier> tiers, int qty) {
   return tiers[i + 1];
 }
 
+/// Поғона оралиғи матни: «1–9», «10–49», охиргиси «50+». Оралиқ кейинги
+/// поғона бошланишидан келиб чиқади (`priceForQty` қоидаси: `qty >= minQty`
+/// кейинги поғонага ўтади, шунинг учун чегара `minQty − 1`).
+String tierRangeText(List<PriceTier> tiers, int i) {
+  if (i < 0 || i >= tiers.length) return '';
+  final from = tiers[i].minQty;
+  if (i + 1 >= tiers.length) return '$from+';
+  final to = tiers[i + 1].minQty - 1;
+  return to > from ? '$from–$to' : '$from';
+}
+
 /// AVA дўкони — нарх қоидаси версияси (`orderBase.pricingVersion`).
 ///
 /// 2 — улгуржи поғоналари (1.0.33+). Сервер версиясиз буюртмага (эски

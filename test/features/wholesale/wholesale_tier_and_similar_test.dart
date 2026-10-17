@@ -69,6 +69,31 @@ void main() {
     });
   });
 
+  group('WholesaleProduct.fromMap — districtId (ўхшашларда ҳудуд)', () {
+    final base = {
+      'sellerId': 's',
+      'title': 'Помидор',
+      'priceTiers': [
+        {'minQty': 1, 'price': 1000},
+      ],
+    };
+    test('сервер ёзган districtId ўқилади ва тозаланади', () {
+      final p = WholesaleProduct.fromMap('x', {...base, 'districtId': ' gurlan '});
+      expect(p.districtId, 'gurlan');
+    });
+    test('эски ҳужжат (districtId йўқ) — бўш, йиқилмайди', () {
+      expect(WholesaleProduct.fromMap('x', base).districtId, '');
+    });
+    test('districtId нотўғри турда (сон) — бўш', () {
+      // ignore: inference_failure_on_collection_literal
+      expect(WholesaleProduct.fromMap('x', {...base, 'districtId': 5}).districtId, '');
+    });
+    test('клиент districtId ёзмайди (create/update map’да йўқ)', () {
+      final p = WholesaleProduct.fromMap('x', {...base, 'districtId': 'gurlan'});
+      expect(p.toFirestoreOwnerUpdate().containsKey('districtId'), isFalse);
+    });
+  });
+
   group('tierRangeText', () {
     const tiers = [
       PriceTier(minQty: 1, price: 14000),

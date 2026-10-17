@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
@@ -243,6 +244,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         ),
       ),
       body: CustomScrollView(
+        // Контент қисқа бўлса ҳам чегарадан ўтиб суриш сезилсин: свайп
+        // ([AdSwipeScreen] → EdgeSwipePager) фақат маълумот тугагандан кейин.
+        physics: kEdgeSwipePhysics,
         slivers: [
           SliverAppBar(
             expandedHeight: 300,

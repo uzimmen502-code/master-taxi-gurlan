@@ -1807,6 +1807,7 @@
   "wholesale_pick_tier": "Выберите ценовой уровень",
   "wholesale_savings": "Экономия",
   "wholesale_total": "Итого",
+  "product_swipe_next_up": "Потяните вверх — следующий товар",
   "wholesale_next_tier_hint": "Добавьте {need} {unit} — цена снизится до {price}.",
   "wholesale_set_qty": "Сделать {qty} {unit}",
   "wholesale_seller_others": "Другие товары продавца",

@@ -2,7 +2,6 @@ import 'package:ava_gurlan/core/theme/product_detail_dark.dart';
 import 'package:ava_gurlan/core/utils/formatters.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
 import 'package:ava_gurlan/features/wholesale/widgets/wholesale_tier_picker.dart';
-import 'package:ava_gurlan/models/price_tier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

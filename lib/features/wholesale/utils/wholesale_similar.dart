@@ -45,6 +45,29 @@ List<WholesaleProduct> similarWholesale(
   return scored.take(limit).map((e) => e.$1).toList(growable: false);
 }
 
+/// Свайп кетма-кетлиги: лентадаги тартиб (кейинги/олдинги маҳсулот), фақат
+/// шу бозордаги ФАОЛ товарлар. Жорий товар доим рўйхатда: лентада бўлмаса
+/// (мас. қидирувдан ёки видеодан очилган) — бошида туради.
+List<WholesaleProduct> wholesaleSwipeList(
+  WholesaleProduct current,
+  Iterable<WholesaleProduct> pool,
+) {
+  final out = <WholesaleProduct>[];
+  var found = false;
+  for (final p in pool) {
+    if (p.id == current.id) {
+      if (!found) {
+        out.add(current);
+        found = true;
+      }
+      continue;
+    }
+    if (p.isActive && p.belongsToMarket(current.market)) out.add(p);
+  }
+  if (!found) out.insert(0, current);
+  return out;
+}
+
 /// Шу сотувчининг бошқа фаол маҳсулотлари (янгиси биринчи).
 List<WholesaleProduct> sellerOthers(
   WholesaleProduct current,

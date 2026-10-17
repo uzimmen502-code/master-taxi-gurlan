@@ -132,6 +132,38 @@ void main() {
     });
   });
 
+  group('wholesaleSwipeList', () {
+    test('лента тартиби сақланади, фаол бўлмаган ва бошқа бозор тушмайди', () {
+      final cur = _p('b');
+      final pool = [
+        _p('a', seller: 's2'),
+        cur,
+        _p('off', status: WholesaleProduct.statusInactive),
+        _p('cn', market: WholesaleProduct.marketChina),
+        _p('c', seller: 's3'),
+      ];
+      expect(wholesaleSwipeList(cur, pool).map((e) => e.id), ['a', 'b', 'c']);
+    });
+
+    test('жорий товар лентада йўқ — бошида туради', () {
+      final cur = _p('x');
+      expect(
+        wholesaleSwipeList(cur, [_p('a'), _p('b')]).map((e) => e.id),
+        ['x', 'a', 'b'],
+      );
+    });
+
+    test('лента бўш — фақат жорий (свайп йўқ)', () {
+      final cur = _p('x');
+      expect(wholesaleSwipeList(cur, const []).map((e) => e.id), ['x']);
+    });
+
+    test('жорий товар фаол бўлмаса ҳам рўйхатда қолади', () {
+      final cur = _p('x', status: WholesaleProduct.statusPending);
+      expect(wholesaleSwipeList(cur, [cur, _p('a')]).map((e) => e.id), ['x', 'a']);
+    });
+  });
+
   group('sellerOthers', () {
     test('шу сотувчининг бошқа фаол товарлари, янгиси биринчи', () {
       final cur = _p('cur');

@@ -1807,6 +1807,7 @@
   "wholesale_pick_tier": "Нарх поғонасини танланг",
   "wholesale_savings": "Тежамкорлик",
   "wholesale_total": "Жами",
+  "product_swipe_next_up": "Кейинги маҳсулот учун юқорига суринг",
   "wholesale_next_tier_hint": "{need} {unit} қўшсангиз нарх {price} га тушади.",
   "wholesale_set_qty": "{qty} {unit} қилиш",
   "wholesale_seller_others": "Сотувчининг бошқа маҳсулотлари",

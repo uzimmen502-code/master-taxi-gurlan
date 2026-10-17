@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../ads/widgets/ad_image_slider.dart';
 import '../models/wholesale_product.dart';
 import '../repositories/wholesale_products_repository.dart';
@@ -18,6 +19,9 @@ import '../widgets/wholesale_tier_picker.dart';
 /// Қора дизайн (эга қарори, 2026-10-17) ФАҚАТ шу тафсилот экранида.
 /// Нарх поғонаси босиб танланади, миқдорга қараб сумма жонли ҳисобланади
 /// (кўрсатиш учун; савват ва буюртма — D-ULG-1…9 дан кейин).
+///
+/// [catalog] бор бўлса, маълумот ТУГАГАНДАН кейин юқорига суриб кейинги,
+/// тепада пастга суриб олдинги маҳсулотга ўтилади ([EdgeSwipePager]).
 class WholesaleProductDetailScreen extends StatefulWidget {
   const WholesaleProductDetailScreen({
     super.key,
@@ -27,8 +31,9 @@ class WholesaleProductDetailScreen extends StatefulWidget {
 
   final WholesaleProduct product;
 
-  /// Лентада юкланган товарлар — «ўхшаш» ва «сотувчининг бошқалари»
-  /// шундан олинади (қўшимча сўров йўқ). Бўш бўлса бу бўлимлар кўринмайди.
+  /// Лентада юкланган товарлар — «ўхшаш», «сотувчининг бошқалари» ва
+  /// свайп шундан олинади (қўшимча сўров йўқ). Бўш бўлса бу бўлимлар
+  /// кўринмайди ва свайп йўқ.
   final List<WholesaleProduct> catalog;
 
   @override
@@ -38,6 +43,88 @@ class WholesaleProductDetailScreen extends StatefulWidget {
 
 class _WholesaleProductDetailScreenState
     extends State<WholesaleProductDetailScreen> {
+  late final List<WholesaleProduct> _swipeList = wholesaleSwipeList(
+    widget.product,
+    widget.catalog,
+  );
+  late int _index = _swipeList.indexWhere((p) => p.id == widget.product.id);
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _swipeList;
+    // Битта маҳсулот бўлса суришнинг маъноси йўқ.
+    if (list.length <= 1) {
+      return WholesaleProductDetailView(
+        product: widget.product,
+        catalog: widget.catalog,
+      );
+    }
+    return Stack(
+      children: [
+        EdgeSwipePager(
+          itemCount: list.length,
+          initialIndex: _index,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (_, i) => WholesaleProductDetailView(
+            // Калит бўлмаса саҳифа ҳолати (миқдор) қайта ишлатилиб кетади.
+            key: ValueKey(list[i].id),
+            product: list[i],
+            catalog: widget.catalog,
+            showNextHint: i < list.length - 1,
+          ),
+        ),
+        Positioned(
+          top: MediaQuery.paddingOf(context).top + kToolbarHeight + 6,
+          right: 12,
+          child: IgnorePointer(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_index + 1} / ${list.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Битта маҳсулотнинг тафсилот саҳифаси (ўз `Scaffold`и билан).
+class WholesaleProductDetailView extends StatefulWidget {
+  const WholesaleProductDetailView({
+    super.key,
+    required this.product,
+    this.catalog = const [],
+    this.showNextHint = false,
+  });
+
+  final WholesaleProduct product;
+  final List<WholesaleProduct> catalog;
+
+  /// Охирида «кейинги маҳсулот учун юқорига суринг» кўрсатилсинми.
+  final bool showNextHint;
+
+  @override
+  State<WholesaleProductDetailView> createState() =>
+      _WholesaleProductDetailViewState();
+}
+
+class _WholesaleProductDetailViewState
+    extends State<WholesaleProductDetailView> {
+  /// Шу сеансда ҳисобланган товарлар — свайп билан қайтиб келганда ҳисоб
+  /// қайта ошмасин.
+  static final Set<String> _countedThisSession = <String>{};
+
   late int _qty = widget.product.moq;
   late final List<WholesaleProduct> _similar =
       similarWholesale(widget.product, widget.catalog);
@@ -47,7 +134,9 @@ class _WholesaleProductDetailScreenState
   @override
   void initState() {
     super.initState();
-    WholesaleProductsRepository().incrementViews(widget.product.id);
+    if (_countedThisSession.add(widget.product.id)) {
+      WholesaleProductsRepository().incrementViews(widget.product.id);
+    }
   }
 
   Future<void> _call() async {
@@ -93,7 +182,8 @@ class _WholesaleProductDetailScreenState
       child: Scaffold(
         appBar: AppBar(title: Text(p.title, maxLines: 1)),
         body: ListView(
-          physics: const ClampingScrollPhysics(),
+          // Контент қисқа бўлса ҳам охиридан ўтиб суриш сезилсин (свайп учун).
+          physics: kEdgeSwipePhysics,
           children: [
             Stack(
               children: [
@@ -232,6 +322,11 @@ class _WholesaleProductDetailScreenState
                       onTap: _openProduct,
                     ),
                   ],
+                  // Маълумот тугади — энди суриш кейинги маҳсулотга ўтади.
+                  if (widget.showNextHint) ...[
+                    const SizedBox(height: 24),
+                    const _NextHint(),
+                  ],
                 ],
               ),
             ),
@@ -294,6 +389,38 @@ class _WholesaleProductDetailScreenState
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _NextHint extends StatelessWidget {
+  const _NextHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PdDark.line),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.keyboard_double_arrow_up_rounded,
+              color: PdDark.brand, size: 22),
+          const SizedBox(height: 2),
+          Text(
+            context.tr('product_swipe_next_up'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: PdDark.ink,
+            ),
+          ),
+        ],
       ),
     );
   }

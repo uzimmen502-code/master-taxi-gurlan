@@ -5,16 +5,37 @@ import 'package:provider/provider.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../models/platform_product.dart';
-import '../ava_store_colors.dart';
 import '../controllers/platform_store_controller.dart';
 import '../widgets/platform_cart_sheet.dart';
 import '../widgets/platform_image_gallery.dart';
 import '../widgets/platform_image_stack.dart';
 
-/// AVA дўкони маҳсулот детал: вертикал свайп = кейинги, пастда ўхшаш қатор.
+/// Шу экраннинг қора ранглари (эга қарори, 2026-10-17: қора мавзу ФАҚАТ
+/// маҳсулот тафсилотида). Номлар аввалги `AvaStoreColors` билан бир хил —
+/// фақат қиймати қора палитрадан ([PdDark]). Саватча варағи (ёруғ) ва
+/// бошқа виджетлар `AvaStoreColors`да қолади.
+abstract final class _S {
+  static const brand = PdDark.brand;
+  static const onBrand = PdDark.brandInk;
+  static const soft = PdDark.surface;
+  static const deep = PdDark.brand;
+  static const scaffold = PdDark.bg;
+  static const ink = PdDark.ink;
+  static const muted = PdDark.muted;
+  static const surface = PdDark.surface;
+  static const border = PdDark.line;
+
+  /// Акцент матн/белги (аввал `AppColors.primaryText` — ёруғ фондаги қўнғир).
+  static const accent = PdDark.brand;
+}
+
+/// AVA маҳсулоти тафсилоти (Улгуржи бозор): қора дизайн; маълумот
+/// ТУГАГАНДАН кейин юқорига суринг = кейинги, тепада пастга = олдинги.
 class PlatformProductDetailScreen extends StatefulWidget {
   const PlatformProductDetailScreen({
     super.key,
@@ -32,7 +53,6 @@ class PlatformProductDetailScreen extends StatefulWidget {
 
 class _PlatformProductDetailScreenState
     extends State<PlatformProductDetailScreen> {
-  late final PageController _pageCtrl;
   late List<PlatformProduct> _catalog;
   late int _index;
 
@@ -54,13 +74,6 @@ class _PlatformProductDetailScreenState
       ];
       _index = 0;
     }
-    _pageCtrl = PageController(initialPage: _index);
-  }
-
-  @override
-  void dispose() {
-    _pageCtrl.dispose();
-    super.dispose();
   }
 
   /// Ўхшаш танланса — оралиқ саҳифаларсиз жорий ўринда алмаштириш (crossfade).
@@ -87,7 +100,7 @@ class _PlatformProductDetailScreenState
             style: const TextStyle(color: AppColors.onPrimary),
           ),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: AvaStoreColors.deep,
+          backgroundColor: _S.deep,
         ),
       );
       return;
@@ -107,67 +120,64 @@ class _PlatformProductDetailScreenState
   Widget build(BuildContext context) {
     final c = context.watch<PlatformStoreController>();
 
-    return Scaffold(
-      backgroundColor: AvaStoreColors.scaffold,
-      appBar: AppBar(
-        // «AVA дўкони» эмас — AVA товари Улгуржи бозорнинг бир қисми
-        // (эга қарори 2026-10-07).
-        title: Text(
-          context.tr('wholesale_title'),
-          style: const TextStyle(
-            color: AvaStoreColors.onBrand,
-            fontWeight: FontWeight.w900,
-            fontSize: 17,
-            letterSpacing: 0.15,
-          ),
-        ),
-        backgroundColor: AvaStoreColors.brand,
-        foregroundColor: AvaStoreColors.onBrand,
-        elevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: IconButton(
-              onPressed: _openCart,
-              icon: Badge(
-                isLabelVisible: c.cartItemCount > 0,
-                backgroundColor: AvaStoreColors.onBrand,
-                label: Text(
-                  '${c.cartItemCount}',
-                  style: const TextStyle(
-                    color: AvaStoreColors.brand,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 10,
-                  ),
-                ),
-                child: const Icon(Icons.shopping_cart_rounded, size: 26),
-              ),
+    return ProductDetailDark(
+      child: Scaffold(
+        backgroundColor: _S.scaffold,
+        appBar: AppBar(
+          // «AVA дўкони» эмас — AVA товари Улгуржи бозорнинг бир қисми
+          // (эга қарори 2026-10-07).
+          title: Text(
+            context.tr('wholesale_title'),
+            style: const TextStyle(
+              color: _S.ink,
+              fontWeight: FontWeight.w900,
+              fontSize: 17,
+              letterSpacing: 0.15,
             ),
           ),
-        ],
-      ),
-      body: PageView.builder(
-        controller: _pageCtrl,
-        scrollDirection: Axis.vertical,
-        reverse: true,
-        itemCount: _catalog.length,
-        onPageChanged: (i) {
-          HapticFeedback.lightImpact();
-          setState(() => _index = i);
-        },
-        itemBuilder: (context, i) {
-          final raw = _catalog[i];
-          final live = c.productOf(raw.id) ?? raw;
-          return _ProductPage(
-            product: live,
-            catalog: _catalog,
-            pageIndex: i,
-            pageCount: _catalog.length,
-            pulseEpoch: live.id == _pulseProductId ? _pulseEpoch : 0,
-            onOpenSimilar: _goToProduct,
-            onOpenCart: _openCart,
-          );
-        },
+          backgroundColor: _S.scaffold,
+          foregroundColor: _S.ink,
+          elevation: 0,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: IconButton(
+                onPressed: _openCart,
+                icon: Badge(
+                  isLabelVisible: c.cartItemCount > 0,
+                  backgroundColor: _S.brand,
+                  label: Text(
+                    '${c.cartItemCount}',
+                    style: const TextStyle(
+                      color: _S.onBrand,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                    ),
+                  ),
+                  child: const Icon(Icons.shopping_cart_rounded, size: 26),
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: EdgeSwipePager(
+          itemCount: _catalog.length,
+          initialIndex: _index,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) {
+            final raw = _catalog[i];
+            final live = c.productOf(raw.id) ?? raw;
+            return _ProductPage(
+              product: live,
+              catalog: _catalog,
+              pageIndex: i,
+              pageCount: _catalog.length,
+              pulseEpoch: live.id == _pulseProductId ? _pulseEpoch : 0,
+              onOpenSimilar: _goToProduct,
+              onOpenCart: _openCart,
+            );
+          },
+        ),
       ),
     );
   }
@@ -297,7 +307,7 @@ class _ProductPageState extends State<_ProductPage>
               SizedBox(
                 height: (h * 0.34).clamp(200.0, 280.0),
                 child: ColoredBox(
-                  color: AvaStoreColors.soft,
+                  color: _S.soft,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -357,7 +367,7 @@ class _ProductPageState extends State<_ProductPage>
                             );
                             return DecoratedBox(
                               decoration: BoxDecoration(
-                                color: AvaStoreColors.brand
+                                color: _S.brand
                                     .withValues(alpha: 0.12 * t),
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -376,7 +386,7 @@ class _ProductPageState extends State<_ProductPage>
                               style: const TextStyle(
                                 fontSize: 21,
                                 fontWeight: FontWeight.w800,
-                                color: AvaStoreColors.ink,
+                                color: _S.ink,
                                 height: 1.18,
                                 letterSpacing: -0.2,
                               ),
@@ -390,7 +400,7 @@ class _ProductPageState extends State<_ProductPage>
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.primaryText,
+                          color: _S.accent,
                           height: 1,
                         ),
                       ),
@@ -408,7 +418,7 @@ class _ProductPageState extends State<_ProductPage>
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: AvaStoreColors.muted,
+                            color: _S.muted,
                           ),
                         ),
                       ],
@@ -421,7 +431,7 @@ class _ProductPageState extends State<_ProductPage>
                           style: const TextStyle(
                             fontSize: 13.5,
                             height: 1.35,
-                            color: Color(0xFF3A4A4A),
+                            color: PdDark.ink,
                           ),
                         ),
                       ],
@@ -447,25 +457,25 @@ class _ProductPageState extends State<_ProductPage>
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: AvaStoreColors.soft,
+                                color: _S.soft,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    Icons.keyboard_double_arrow_down_rounded,
-                                    color: AppColors.primaryText
+                                    Icons.keyboard_double_arrow_up_rounded,
+                                    color: _S.accent
                                         .withValues(alpha: 0.8),
                                     size: 18,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    context.tr('platform_store_swipe_next'),
+                                    context.tr('product_swipe_next_up'),
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.primaryText
+                                      color: _S.accent
                                           .withValues(alpha: 0.9),
                                     ),
                                   ),
@@ -506,7 +516,14 @@ class _ProductPageState extends State<_ProductPage>
       },
       child: KeyedSubtree(
         key: ValueKey(product.id),
-        child: body,
+        // Саҳифа скролл қилинмайди, лекин юқорига/пастга суриш ([EdgeSwipePager])
+        // сезилиши учун скролл ичида ва кўринма баландликда.
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: kEdgeSwipePhysics,
+            child: SizedBox(height: constraints.maxHeight, child: body),
+          ),
+        ),
       ),
     );
   }
@@ -530,9 +547,9 @@ class _BottomActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.read<PlatformStoreController>();
     return Material(
-      color: AvaStoreColors.surface,
+      color: _S.surface,
       elevation: 12,
-      shadowColor: AvaStoreColors.deep.withValues(alpha: 0.18),
+      shadowColor: _S.deep.withValues(alpha: 0.18),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -544,8 +561,8 @@ class _BottomActionBar extends StatelessWidget {
                   child: FilledButton(
                     onPressed: null,
                     style: FilledButton.styleFrom(
-                      disabledBackgroundColor: const Color(0xFFE0E0E0),
-                      disabledForegroundColor: AvaStoreColors.muted,
+                      disabledBackgroundColor: PdDark.surface2,
+                      disabledForegroundColor: _S.muted,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -566,8 +583,8 @@ class _BottomActionBar extends StatelessWidget {
                           c.addToCart(product);
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: AvaStoreColors.brand,
-                          foregroundColor: AvaStoreColors.onBrand,
+                          backgroundColor: _S.brand,
+                          foregroundColor: _S.onBrand,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -587,10 +604,10 @@ class _BottomActionBar extends StatelessWidget {
                         Container(
                           height: 52,
                           decoration: BoxDecoration(
-                            color: AvaStoreColors.soft,
+                            color: _S.soft,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: AppColors.primaryText,
+                              color: _S.accent,
                               width: 1.5,
                             ),
                           ),
@@ -611,7 +628,7 @@ class _BottomActionBar extends StatelessWidget {
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 18,
-                                    color: AvaStoreColors.ink,
+                                    color: _S.ink,
                                   ),
                                 ),
                               ),
@@ -632,8 +649,8 @@ class _BottomActionBar extends StatelessWidget {
                             child: FilledButton(
                               onPressed: onOpenCart,
                               style: FilledButton.styleFrom(
-                                backgroundColor: AvaStoreColors.brand,
-                                foregroundColor: AvaStoreColors.onBrand,
+                                backgroundColor: _S.brand,
+                                foregroundColor: _S.onBrand,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -685,7 +702,7 @@ class _QtyBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AvaStoreColors.brand,
+      color: _S.brand,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -693,7 +710,7 @@ class _QtyBtn extends StatelessWidget {
         child: SizedBox(
           width: 48,
           height: 52,
-          child: Icon(icon, color: AvaStoreColors.onBrand, size: 24),
+          child: Icon(icon, color: _S.onBrand, size: 24),
         ),
       ),
     );
@@ -764,13 +781,13 @@ class _SimilarStripState extends State<_SimilarStrip> {
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  color: AvaStoreColors.ink,
+                  color: _S.ink,
                 ),
               ),
             ),
             if (_canScrollMore)
               Material(
-                color: AvaStoreColors.brand,
+                color: _S.brand,
                 borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   onTap: _nudgeRight,
@@ -780,7 +797,7 @@ class _SimilarStripState extends State<_SimilarStrip> {
                     child: Icon(
                       Icons.arrow_forward_rounded,
                       size: 18,
-                      color: AvaStoreColors.onBrand,
+                      color: _S.onBrand,
                     ),
                   ),
                 ),
@@ -818,14 +835,14 @@ class _SimilarStripState extends State<_SimilarStrip> {
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                           colors: [
-                            AvaStoreColors.scaffold.withValues(alpha: 0),
-                            AvaStoreColors.scaffold,
+                            _S.scaffold.withValues(alpha: 0),
+                            _S.scaffold,
                           ],
                         ),
                       ),
                       child: Icon(
                         Icons.chevron_right_rounded,
-                        color: AppColors.primaryText.withValues(alpha: 0.85),
+                        color: _S.accent.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
@@ -854,7 +871,7 @@ class _SimilarCard extends StatelessWidget {
           formatPrice(product.displayPrice),
         );
     return Material(
-      color: AvaStoreColors.surface,
+      color: _S.surface,
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -863,7 +880,7 @@ class _SimilarCard extends StatelessWidget {
           width: 112,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AvaStoreColors.border),
+            border: Border.all(color: _S.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -871,7 +888,7 @@ class _SimilarCard extends StatelessWidget {
               Expanded(
                 flex: 6,
                 child: ColoredBox(
-                  color: AvaStoreColors.soft,
+                  color: _S.soft,
                   child: Padding(
                     padding: const EdgeInsets.all(6),
                     child: _Thumb(url: product.coverImageUrl),
@@ -894,7 +911,7 @@ class _SimilarCard extends StatelessWidget {
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             height: 1.15,
-                            color: AvaStoreColors.ink,
+                            color: _S.ink,
                           ),
                         ),
                       ),
@@ -905,7 +922,7 @@ class _SimilarCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.primaryText,
+                          color: _S.accent,
                         ),
                       ),
                     ],
@@ -942,14 +959,14 @@ class _Thumb extends StatelessWidget {
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppColors.primaryText,
+              color: _S.accent,
             ),
           ),
         ),
         errorWidget: (_, __, ___) => const Icon(
           Icons.shopping_bag_outlined,
           size: 22,
-          color: AvaStoreColors.muted,
+          color: _S.muted,
         ),
       );
     }
@@ -960,7 +977,7 @@ class _Thumb extends StatelessWidget {
     return const Icon(
       Icons.shopping_bag_outlined,
       size: 22,
-      color: AvaStoreColors.muted,
+      color: _S.muted,
     );
   }
 }
@@ -992,7 +1009,7 @@ class _PriceTiers extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AvaStoreColors.soft,
+        color: _S.soft,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1003,7 +1020,7 @@ class _PriceTiers extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AppColors.primaryText.withValues(alpha: 0.9),
+              color: _S.accent.withValues(alpha: 0.9),
             ),
           ),
           const SizedBox(height: 6),
@@ -1034,8 +1051,8 @@ class _PriceTiers extends StatelessWidget {
                               : Icons.circle_outlined,
                           size: 16,
                           color: active
-                              ? AppColors.primaryText
-                              : AppColors.primaryText.withValues(alpha: 0.35),
+                              ? _S.accent
+                              : _S.accent.withValues(alpha: 0.35),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -1046,7 +1063,7 @@ class _PriceTiers extends StatelessWidget {
                               fontSize: 12.5,
                               fontWeight:
                                   active ? FontWeight.w800 : FontWeight.w500,
-                              color: AppColors.primaryText,
+                              color: _S.accent,
                             ),
                           ),
                         ),

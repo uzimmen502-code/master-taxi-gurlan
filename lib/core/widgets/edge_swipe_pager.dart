@@ -46,9 +46,20 @@ class EdgeSwipePager extends StatefulWidget {
   State<EdgeSwipePager> createState() => _EdgeSwipePagerState();
 }
 
-class _EdgeSwipePagerState extends State<EdgeSwipePager> {
+class _EdgeSwipePagerState extends State<EdgeSwipePager>
+    with SingleTickerProviderStateMixin {
+  /// Судраш пайтида саҳифа бармоқ орқасидан шунча (px) гача сурилади.
+  /// Android 12+ нинг «чўзилиш» эффекти ўрнига: чўзилмайди, фақат сал
+  /// сурилади ва қўйиб юборилса юмшоқ қайтади.
+  static const double _maxPull = 40;
+
   late final PageController _ctrl;
   late int _index;
+
+  /// Саҳифанинг вертикал сурилиши (манфий = юқорига).
+  final ValueNotifier<double> _pull = ValueNotifier<double>(0);
+  late final AnimationController _back;
+  double _backFrom = 0;
 
   double _accum = 0;
   bool _handled = false;
@@ -60,18 +71,42 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager> {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.itemCount - 1);
     _ctrl = PageController(initialPage: _index);
+    // `initState`да яратилади: `late` лазй бўлса, dispose'да биринчи марта
+    // яратилиб, «ўчирилган виджет аждоди» хатосини берарди.
+    _back = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+    )..addListener(() {
+        _pull.value = _backFrom * (1 - Curves.easeOut.transform(_back.value));
+      });
   }
 
   @override
   void dispose() {
+    _back.dispose();
+    _pull.dispose();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _setPull() {
+    _back.stop();
+    _pull.value = (-_accum * 0.5).clamp(-_maxPull, _maxPull);
+  }
+
+  void _releasePull() {
+    if (_pull.value == 0) return;
+    _backFrom = _pull.value;
+    _back.forward(from: 0);
   }
 
   void _go(int delta) {
     final target = _index + delta;
     if (target < 0 || target >= widget.itemCount) return;
     _handled = true;
+    // Саҳифа алмашади — сурилиш шу заҳоти йўқолади (янги саҳифа жойидан).
+    _back.stop();
+    _pull.value = 0;
     HapticFeedback.lightImpact();
     _ctrl.animateToPage(
       target,
@@ -103,10 +138,22 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager> {
         _go(1);
       } else if (_accum <= -widget.threshold) {
         _go(-1);
+      } else {
+        _setPull();
+      }
+    } else if (n is ScrollUpdateNotification && _accum != 0 && !_handled) {
+      // Бармоқ чегарадан ичкарига қайтди — тўпланган масофа камаяди.
+      final back = (n.scrollDelta ?? 0).abs();
+      if (back > 0) {
+        final sign = _accum > 0 ? 1 : -1;
+        final next = _accum.abs() - back;
+        _accum = next <= 0 ? 0 : sign * next;
+        _setPull();
       }
     } else if (n is ScrollEndNotification) {
       _accum = 0;
       _handled = false;
+      _releasePull();
     }
     return false;
   }
@@ -126,7 +173,17 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager> {
       },
       itemBuilder: (context, i) => NotificationListener<ScrollNotification>(
         onNotification: _onScroll,
-        child: widget.itemBuilder(context, i),
+        // Material 3 нинг «чўзилиш» (stretch) эффекти ўчирилади: саҳифа
+        // чўзилиб, кейин сакраб ўтарди. Ўрнига — сал сурилиш ([_pull]).
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+          child: ValueListenableBuilder<double>(
+            valueListenable: _pull,
+            child: widget.itemBuilder(context, i),
+            builder: (context, dy, page) =>
+                Transform.translate(offset: Offset(0, dy), child: page),
+          ),
+        ),
       ),
     );
   }

@@ -39,6 +39,66 @@ Future<void> _dragSlow(WidgetTester t, Offset by) async {
 }
 
 void main() {
+  // Нуқсон (эга сўради, 2026-10-17): Android 12+ да Material 3 контент охирида
+  // судралганда саҳифани «чўзади» (StretchingOverscrollIndicator), кейин
+  // саҳифа сакраб ўтади. Чўзилиш бўлмасин — ўрнига бармоқ орқасидан
+  // сал сурилиш (юмшоқ) ва қўйиб юборилса қайтиш.
+  testWidgets('саҳифа ЧЎЗИЛМАЙДИ: overscroll индикатори (stretch/glow) йўқ',
+      (t) async {
+    await t.pumpWidget(_app(count: 3));
+    // Саҳифа ичидаги скролл (ListView) — тегишли. Пейджернинг ўз
+    // скроллида (NeverScrollable) overscroll бўлмайди, у ҳисобга кирмайди.
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(StretchingOverscrollIndicator),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(GlowingOverscrollIndicator),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+      'судраш пайтида саҳифа бармоқ орқасидан сал сурилади, қўйиб юборилса қайтади',
+      (t) async {
+    await t.pumpWidget(_app(count: 3));
+    final before = t.getTopLeft(find.text('page 0')).dy;
+    final g = await t.startGesture(t.getCenter(find.byType(Scaffold)));
+    // Чегарадан (56) кам: ўтиш юз бермайди, лекин сурилиш сезилади.
+    for (var i = 0; i < 6; i++) {
+      await g.moveBy(const Offset(0, -8));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    final during = t.getTopLeft(find.text('page 0')).dy;
+    expect(during, lessThan(before), reason: 'саҳифа бармоқ орқасидан юқорига');
+    expect(before - during, lessThan(60), reason: 'ҳад: чўзилиб кетмайди');
+    expect(find.text('page 0'), findsOneWidget);
+    await g.up();
+    await t.pumpAndSettle();
+    expect(t.getTopLeft(find.text('page 0')).dy, closeTo(before, 0.5));
+    expect(find.text('page 1'), findsNothing);
+  });
+
+  testWidgets('тепада пастга судраш — саҳифа пастга сал сурилади', (t) async {
+    await t.pumpWidget(_app(count: 3, initial: 1));
+    final before = t.getTopLeft(find.text('page 1')).dy;
+    final g = await t.startGesture(t.getCenter(find.byType(Scaffold)));
+    for (var i = 0; i < 6; i++) {
+      await g.moveBy(const Offset(0, 8));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    expect(t.getTopLeft(find.text('page 1')).dy, greaterThan(before));
+    await g.up();
+    await t.pumpAndSettle();
+    expect(t.getTopLeft(find.text('page 1')).dy, closeTo(before, 0.5));
+  });
+
   testWidgets('қисқа контент: юқорига суриш → кейинги саҳифа', (t) async {
     final seen = <int>[];
     await t.pumpWidget(_app(count: 3, onChanged: seen.add));

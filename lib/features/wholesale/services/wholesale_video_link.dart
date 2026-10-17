@@ -5,6 +5,7 @@ import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/screens/tv_market_feed_screen.dart';
 import '../../tv_market/screens/tv_publish_screen.dart';
+import '../../tv_market/services/tv_clip_link.dart';
 import '../repositories/wholesale_products_repository.dart';
 
 /// Улгуржи маҳсулот ↔ AVAGram клипи боғланиши.
@@ -16,39 +17,43 @@ import '../repositories/wholesale_products_repository.dart';
 class WholesaleVideoLink {
   WholesaleVideoLink._();
 
-  /// Нашр экранини очади; муваффақиятли бўлса энг сўнгги (бошқа маҳсулотга
-  /// боғланмаган) клипни [productId]га боғлайди. `true` — боғланди.
+  /// Нашр экранини очади; муваффақиятли бўлса ЯНГИ яратилган клипни (унинг ID'си
+  /// нашр экранидан келади) [productId]га боғлайди. `true` — боғланди.
+  ///
+  /// Аввал «энг сўнгги, бошқа маҳсулотга боғланмаган клип» деб тахмин
+  /// қилинарди — бир вақтда бошқа клип чиқса ёки ҳисоб кечикса адашиши
+  /// мумкин эди. Энди боғлаш аниқ ID бўйича (оддий видеода клипнинг ўзига
+  /// `linkKind`/`linkId` яратилганда ёзилади, Аҳоли бозоридаги каби).
   static Future<bool> publishAndLink(
     BuildContext context, {
     required String sellerPhone,
     required String productId,
   }) async {
+    String? clipId;
     final published = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => const TvPublishScreen(hideShopOption: true),
+        builder: (_) => TvPublishScreen(
+          hideShopOption: true,
+          linkKind: TvClipLink.kindWholesale,
+          linkId: productId,
+          onClipCreated: (id) => clipId = id,
+        ),
       ),
     );
-    if (published != true) return false;
+    final id = clipId;
+    if (published != true || id == null || id.isEmpty) return false;
 
-    final clips = await TvClipsRepository().fetchByOwner(sellerPhone, limit: 5);
-    TvClip? fresh;
-    for (final c in clips) {
-      final other = c.wholesaleProductId;
-      if (other.isEmpty || other == productId) {
-        fresh = c;
-        break;
-      }
-    }
-    if (fresh == null) return false;
-
-    await WholesaleProductsRepository().addVideoClip(productId, fresh.id);
+    await WholesaleProductsRepository().addVideoClip(productId, id);
     // Rules: эга ўз клипида blacklist'дан ташқари майдонни янгилай олади.
+    // Пуллик реклама клипини CF яратади (`linkKind` у ерда ёзилмайди) —
+    // шунинг учун иккала турда ҳам боғлаш майдонлари ID бўйича тасдиқланади.
     try {
-      await FirebaseFirestore.instance
-          .collection('tv_clips')
-          .doc(fresh.id)
-          .update({'wholesaleProductId': productId});
+      await FirebaseFirestore.instance.collection('tv_clips').doc(id).update({
+        'wholesaleProductId': productId,
+        'linkKind': TvClipLink.kindWholesale,
+        'linkId': productId,
+      });
     } catch (_) {
       // Best-effort — асосий боғланиш (videoClipIds) аллақачон ёзилди.
     }

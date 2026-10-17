@@ -18,6 +18,10 @@ abstract final class TvClipLink {
   static const kindMarket = 'market_ad';
   static const kindRestaurant = 'restaurant';
 
+  /// Улгуржи бозор маҳсулоти (2026-10-17, эга қабул қилган таклиф): аввал
+  /// «энг сўнгги клип»ни тахмин қилиб боғланарди, энди клип ID'си билан.
+  static const kindWholesale = 'wholesale_product';
+
   /// Видео боғланганда кўтарилади — рўйхатлар (`JobsScreen`) харитани қайта
   /// юклайди.
   static final ValueNotifier<int> changes = ValueNotifier<int>(0);

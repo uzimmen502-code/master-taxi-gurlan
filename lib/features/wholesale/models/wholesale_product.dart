@@ -158,6 +158,10 @@ class WholesaleProduct implements AdSearchable {
   /// Бошланғич нарх ("дан ... сўм") — энг паст поғона нархи.
   int get basePrice => priceTiers.isEmpty ? 0 : priceTiers.first.price;
 
+  /// [qty] даги бир дона нархи (поғона қоидаси — `price_tier.dart`).
+  /// Фақат кўрсатиш учун: ҳақиқий нархни буюртмада сервер ҳисоблайди.
+  int priceForQty(int qty) => tierPriceForQty(priceTiers, qty) ?? 0;
+
   static DateTime? _parseDate(dynamic v) {
     if (v is Timestamp) return v.toDate();
     if (v is String && v.isNotEmpty) return DateTime.tryParse(v);

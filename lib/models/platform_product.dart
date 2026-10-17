@@ -113,19 +113,7 @@ class PlatformProduct {
 
   /// Берилган миқдорга тўғри келадиган нарх: [qty] дан кичик ёки тенг
   /// энг юқори поғона. Поғона бўлмаса — одатдаги [price].
-  int priceForQty(int qty) {
-    final tiers = effectiveTiers;
-    if (tiers.isEmpty) return price;
-    var result = tiers.first.price;
-    for (final t in tiers) {
-      if (qty >= t.minQty) {
-        result = t.price;
-      } else {
-        break;
-      }
-    }
-    return result;
-  }
+  int priceForQty(int qty) => tierPriceForQty(effectiveTiers, qty) ?? price;
 
   /// Жойлаштириш вақти (тартиб учун).
   final DateTime? createdAt;

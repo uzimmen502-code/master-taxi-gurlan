@@ -97,7 +97,9 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: MediaQuery.of(context).padding.bottom + 16,
+            // «Қўнғироқ қилиш» панелидан ЮҚОРИДА (панел ≈ 68 px) — аввал
+            // тугма устига чиқиб қоларди (қурилмада кўрилган, 2026-10-17).
+            bottom: MediaQuery.of(context).padding.bottom + 80,
             child: IgnorePointer(
               child: Center(
                 child: Container(

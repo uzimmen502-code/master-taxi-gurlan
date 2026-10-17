@@ -301,8 +301,6 @@ class _ProductPageState extends State<_ProductPage>
     // Саҳифа БИТТА экранга сиғади (қурилмада шрифт ×1.3 да ҳам, эга талаби
     // 2026-10-17): расм кичикроқ, матнлар ихчам, «ўхшашлар» шу ернинг ўзида.
     // Жуда кичик экран учун захира — скролл ва чегарада свайп.
-    final textScale =
-        MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.6);
     final body = Column(
       children: [
         Expanded(
@@ -389,7 +387,7 @@ class _ProductPageState extends State<_ProductPage>
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 17,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
                                 color: _S.ink,
                                 height: 1.2,
@@ -407,8 +405,9 @@ class _ProductPageState extends State<_ProductPage>
                         children: [
                           Text(
                             priceText,
+                            key: const ValueKey('pd_headline_price'),
                             style: const TextStyle(
-                              fontSize: 19,
+                              fontSize: 17,
                               fontWeight: FontWeight.w800,
                               color: _S.accent,
                             ),
@@ -446,7 +445,7 @@ class _ProductPageState extends State<_ProductPage>
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11.5,
                             height: 1.3,
                             color: _S.ink.withValues(alpha: 0.8),
                           ),
@@ -455,7 +454,9 @@ class _ProductPageState extends State<_ProductPage>
                       if (similar.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         SizedBox(
-                          height: 104 + 26 * textScale,
+                          // Шрифт ×1.0 га чекланган ([ProductDetailDark]) —
+                          // баландлик қотирилган: расм катта, матн 46 px.
+                          height: 178,
                           child: _SimilarStrip(
                             // Key — маҳсулот алмашганда қатор бошга қайтади.
                             key: ValueKey('similar_${product.id}'),
@@ -591,7 +592,7 @@ class _BottomActionBar extends StatelessWidget {
                   TextSpan(
                     text: sum(unitPrice),
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w800,
                       color: _S.ink,
                     ),
@@ -781,7 +782,7 @@ class _SimilarStripState extends State<_SimilarStrip> {
         Text(
           context.tr('platform_store_similar'),
           style: const TextStyle(
-            fontSize: 13,
+            fontSize: 12.5,
             fontWeight: FontWeight.w700,
             color: _S.ink,
           ),
@@ -860,7 +861,7 @@ class _SimilarCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Ink(
-          width: 96,
+          width: 118,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _S.border),
@@ -868,18 +869,18 @@ class _SimilarCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Расм — қолган ҳамма жой (каттароқ); матн блоки қотирилган.
               Expanded(
-                flex: 6,
                 child: ColoredBox(
                   color: _S.soft,
                   child: Padding(
-                    padding: const EdgeInsets.all(5),
+                    padding: const EdgeInsets.all(4),
                     child: _Thumb(url: product.coverImageUrl),
                   ),
                 ),
               ),
-              Expanded(
-                flex: 4,
+              SizedBox(
+                height: 46,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(7, 4, 7, 4),
                   child: Column(
@@ -1076,7 +1077,7 @@ class _TierChip extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 9.5,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                     color: _S.ink.withValues(alpha: active ? 1 : 0.75),
                   ),
@@ -1087,7 +1088,7 @@ class _TierChip extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                     color: active ? _S.accent : _S.ink,
                   ),

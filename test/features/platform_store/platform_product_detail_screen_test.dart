@@ -102,9 +102,10 @@ Future<PlatformStoreController> _pump(
   return ctrl;
 }
 
-/// Сарлавҳадаги нарх (19 пт) — поғона чипи ва пастки панелдаги нархдан фарқли.
+/// Сарлавҳадаги нарх (калит бўйича) — поғона чипи ва пастки панелдаги нархдан фарқли.
 Finder _headlinePrice(String text) => find.byWidgetPredicate(
-      (w) => w is Text && w.data == text && w.style?.fontSize == 19,
+      (w) =>
+          w is Text && w.data == text && w.key == const ValueKey('pd_headline_price'),
     );
 
 void main() {

@@ -3452,5 +3452,6 @@
   "cab_sec_app": "Ilova",
   "cab_seller_panel": "Sotuv paneli",
   "home_nav_unread": "{n} ta o'qilmagan",
-  "intent_need_address": "Ustani chaqirish uchun avval Kabinetda yashash manzilingizni kiriting"
+  "intent_need_address": "Ustani chaqirish uchun avval Kabinetda yashash manzilingizni kiriting",
+  "profile_photo": "Profil rasmini o'zgartirish"
 }

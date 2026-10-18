@@ -78,6 +78,68 @@ void main() {
     });
   });
 
+  group('pickLinkedClip — мижозга қайси видео кўрсатилади', () {
+    TvClip c(String id, {String owner = '998901234567', String kind = 'restaurant', DateTime? at}) => TvClip(
+          id: id,
+          videoUrl: 'https://x/$id.mp4',
+          posterUrl: '',
+          title: id,
+          price: 0,
+          districtId: 'gurlan',
+          districtLabel: 'Гурлан',
+          ownerPhone: owner,
+          ownerName: 'Али',
+          category: 'product',
+          linkKind: kind,
+          linkId: 'r1',
+          createdAt: at,
+        );
+
+    test('эгалик текширилади (trustLink йўқ): бегона клип кўринмайди', () {
+      final out = pickLinkedClip([c('x', owner: '998905554433')], ownerPhone: '998901234567');
+      expect(out, isNull);
+    });
+
+    test('REGRESSION: ресторан (trustLink) — ходим юклаган видео ҳам кўринади', () {
+      final out = pickLinkedClip(
+        [c('staff', owner: '998905554433')],
+        ownerPhone: '998901234567',
+        trustLink: true,
+        linkKind: 'restaurant',
+      );
+      expect(out?.id, 'staff');
+    });
+
+    test('ишончли режимда ҳам тур мос бўлиши шарт (бошқа турдаги клип ресторанга "ёпишмайди")', () {
+      final out = pickLinkedClip(
+        [c('ad', owner: '998905554433', kind: 'ad')],
+        ownerPhone: '998901234567',
+        trustLink: true,
+        linkKind: 'restaurant',
+      );
+      expect(out, isNull);
+    });
+
+    test('trustLink берилса-ю тур берилмаса — ишонч ҳисобга олинмайди (эгалик талаб қилинади)', () {
+      final out = pickLinkedClip([c('x', owner: '998905554433')], ownerPhone: '998901234567', trustLink: true);
+      expect(out, isNull);
+    });
+
+    test('бир нечта бўлса энг янгиси', () {
+      final out = pickLinkedClip(
+        [c('old', at: DateTime(2026, 10, 1)), c('new', owner: '998905554433', at: DateTime(2026, 10, 9))],
+        ownerPhone: '998901234567',
+        trustLink: true,
+        linkKind: 'restaurant',
+      );
+      expect(out?.id, 'new');
+    });
+
+    test('бўш рўйхат → null', () {
+      expect(pickLinkedClip(const [], ownerPhone: '998901234567'), isNull);
+    });
+  });
+
   group('tvClipsNewestFirst — бир linkId да бир нечта клип', () {
     test('янгиси биринчи, createdAt йўқлари охирида', () {
       final out = tvClipsNewestFirst([

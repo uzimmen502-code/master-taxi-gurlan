@@ -437,9 +437,15 @@ class TvClipsRepository {
   /// [ownerPhone] (эълон эгаси) билан бир хил бўлмаса — кўрсатилмайди:
   /// бегона одам ўз клипини чужой эълонга "боғлаб" қўя олмасин.
   /// Фақат тенглик фильтрлари — индекс керак эмас.
+  ///
+  /// [trustLink] + [linkKind] — боғлашнинг ўзи ишончли бўлган турлар (ресторан:
+  /// қоида фақат а'золарга рухсат беради): эгалик солиштирилмайди (ходим
+  /// юклаган видео ҳам кўринади), лекин тур албатта мос бўлиши шарт.
   Future<TvClip?> fetchLinked({
     required String linkId,
     required String ownerPhone,
+    bool trustLink = false,
+    String linkKind = '',
   }) async {
     if (linkId.isEmpty) return null;
     final snap = await _col
@@ -447,25 +453,28 @@ class TvClipsRepository {
         .where('status', isEqualTo: 'active')
         .limit(10)
         .get();
-    for (final c in tvClipsNewestFirst(_playable(snap.docs))) {
-      if (phonesMatch(c.ownerPhone, ownerPhone)) return c;
-    }
-    return null;
+    return pickLinkedClip(
+      _playable(snap.docs),
+      ownerPhone: ownerPhone,
+      trustLink: trustLink,
+      linkKind: linkKind,
+    );
   }
 
-  /// Эга панели учун: шу `linkId`га боғланган ЭГАНИНГ клиплари — ҳар қандай
-  /// ҳолатда (текширувда ва рад этилган ҳам), янгиси биринчи. Битта сўров,
-  /// фақат `linkId` бўйича (қўшимча индекс керак эмас), эгалик клиентда.
-  Future<List<TvClip>> fetchOwnLinked({
+  /// Эга панели учун: шу `linkId`га боғланган, [ownerPhones] (эга ва
+  /// ходимлар) юклаган клиплар — ҳар қандай ҳолатда (текширувда ва рад
+  /// этилган ҳам), янгиси биринчи. Битта сўров, фақат `linkId` бўйича
+  /// (қўшимча индекс керак эмас); таркиб клиентда сузилади.
+  Future<List<TvClip>> fetchLinkedByPhones({
     required String linkId,
-    required String ownerPhone,
+    required Iterable<String> ownerPhones,
   }) async {
     if (linkId.isEmpty) return const [];
     final snap = await _col.where('linkId', isEqualTo: linkId).limit(20).get();
     return tvClipsNewestFirst(
       snap.docs
           .map(TvClip.fromFirestore)
-          .where((c) => phonesMatch(c.ownerPhone, ownerPhone)),
+          .where((c) => ownerPhones.any((p) => phonesMatch(c.ownerPhone, p))),
     );
   }
 

@@ -24,6 +24,7 @@ import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_cart_sheet.dart';
 import '../widgets/restaurant_checkout_sheet.dart';
 import '../widgets/restaurant_row.dart';
+import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 class RestaurantScreen extends StatefulWidget {
@@ -119,7 +120,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     for (final c in _categories) {
       final items = byCat.remove(c.id);
       if (items == null || items.isEmpty) continue;
-      out.add(_Section(id: c.id, name: c.name, items: items));
+      out.add(_Section(id: c.id, name: c.displayName(context.contentLang), items: items));
     }
     // Категориясиз (ёки ўчирилган категория) таомлар — «Бошқалар».
     final rest = byCat.values.expand((e) => e).toList();
@@ -462,6 +463,8 @@ class _Header extends StatelessWidget {
                       LinkedVideoButton(
                         linkId: r.id,
                         ownerPhone: r.ownerUid,
+                        // Ходим юклаган видео ҳам: ваколатни қоида кафолатлайди.
+                        trustLinkKind: TvClipLink.kindRestaurant,
                       ),
                     ],
                   ),

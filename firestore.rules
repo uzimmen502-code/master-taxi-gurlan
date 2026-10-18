@@ -3561,6 +3561,32 @@ service cloud.firestore {
           && request.resource.data.everPublished == true;
     }
 
+    // Ресторан видеоси (`linkKind == 'restaurant'`, `linkId` = ресторан id)
+    // фақат ШУ рестораннинг а'золари (эга ёки ходим — `members`) томонидан
+    // боғланади. Аввал боғлаш клип ҳужжатида эркин эди ва ҳимоя фақат
+    // кўрсатишда `ownerPhone == эга` деб текширилар эди — шу туфайли ходим
+    // юклаган видео кўринмасди. Энди ваколат ЯРАТИШ/ЎЗГАРТИРИШда қоида
+    // билан кафолатланади, мижоз томонида эгалик талаб қилинмайди.
+    // Бошқа `linkKind`лар (ad, service, market_ad, wholesale_product) —
+    // ўзгармайди.
+    function tvClipRestaurantLinkOk(d) {
+      return d.get('linkKind', '') != 'restaurant'
+          || (d.get('linkId', '') is string
+              && d.get('linkId', '') != ''
+              && isRestaurantMember(d.get('linkId', '')));
+    }
+
+    // Ўзгартириш: боғлаш ўзгармаса (ёки ресторанга боғланмаса) — хавфсиз;
+    // янги/бошқа ресторанга кўчириш — фақат шу рестораннинг а'зоси.
+    function tvClipRestaurantLinkUpdateOk() {
+      let a = request.resource.data;
+      let b = resource.data;
+      return a.get('linkKind', '') != 'restaurant'
+          || (b.get('linkKind', '') == 'restaurant'
+              && b.get('linkId', '') == a.get('linkId', ''))
+          || tvClipRestaurantLinkOk(a);
+    }
+
     // TV Market клиплари — ўқиш ҳаммага; ёзиш authed.
     match /tv_clips/{clipId} {
       allow read: if true;
@@ -3587,13 +3613,15 @@ service cloud.firestore {
                           && tvAutoApproveOn()))
                   && !request.resource.data.keys().hasAny([
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
-                      'socialVideoUrl'])));
+                      'socialVideoUrl'])
+                  && tvClipRestaurantLinkOk(request.resource.data)));
       // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
       // joylardi — AVA sahifalariga takroriy post. Endi faqat admin/CF.
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
               && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
+              && tvClipRestaurantLinkUpdateOk()
               && !request.resource.data.diff(resource.data).affectedKeys()
                   .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',

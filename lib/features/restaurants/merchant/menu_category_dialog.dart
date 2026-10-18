@@ -29,7 +29,7 @@ Future<String?> promptMenuCategoryName(
       ? const <String>[]
       : MenuCategorySuggestions.missingNames(
           keys: MenuCategorySuggestions.keysFor(homeCook: homeCook),
-          name: (k) => context.tr(MenuCategorySuggestions.textKey(k)),
+          lang: context.contentLang,
           existing: categories,
         );
   final name = await showDialog<String>(

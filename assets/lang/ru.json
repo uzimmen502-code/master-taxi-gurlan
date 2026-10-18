@@ -3281,15 +3281,6 @@
   "restaurants_m_category_examples": "Примеры — нажмите, и название подставится:",
   "restaurants_m_cat_empty_hint": "Если разделить блюда по разделам, клиенту удобнее. Блюд мало — не обязательно, можно оставить в «Прочее».",
   "restaurants_m_cat_starter": "Добавить готовые разделы",
-  "restaurants_cat_hot": "Горячие блюда",
-  "restaurants_cat_sweets": "Десерты",
-  "restaurants_cat_drinks": "Напитки",
-  "restaurants_cat_bread": "Хлеб и выпечка",
-  "restaurants_cat_first": "Первые блюда",
-  "restaurants_cat_second": "Вторые блюда",
-  "restaurants_cat_salads": "Салаты",
-  "restaurants_cat_shashlik": "Шашлык",
-  "restaurants_cat_fastfood": "Фастфуд",
   "restaurants_m_video_title": "Видеообзор блюд",
   "restaurants_m_video_hint": "Клиент увидит кнопку «Смотреть видео» на странице ресторана.",
   "restaurants_m_video_after_approval": "Станет видно клиентам после одобрения ресторана администратором.",
@@ -3303,5 +3294,6 @@
   "restaurants_m_video_st_other": "Неактивно",
   "restaurants_m_video_delete_confirm": "Удалить видео? Восстановить его будет нельзя.",
   "restaurants_m_video_load_failed": "Не удалось загрузить видео",
-  "restaurants_m_video_retry": "Повторить"
+  "restaurants_m_video_retry": "Повторить",
+  "restaurants_m_video_by_colleague": "Загрузил другой сотрудник"
 }

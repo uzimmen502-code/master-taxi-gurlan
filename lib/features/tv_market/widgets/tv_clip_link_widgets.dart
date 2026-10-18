@@ -39,11 +39,17 @@ class LinkedVideoButton extends StatefulWidget {
     super.key,
     required this.linkId,
     required this.ownerPhone,
+    this.trustLinkKind = '',
     this.loader,
   });
 
   final String linkId;
   final String ownerPhone;
+
+  /// Боғлашнинг ўзи ишончли тур (масалан `restaurant`): шу турда эгалик
+  /// солиштирилмайди (ходим юклаган видео ҳам кўринади), тур мос бўлиши
+  /// шарт. Бўш — аввалгидек эгалик текширилади.
+  final String trustLinkKind;
 
   /// Тест учун алмаштириладиган юклагич.
   final Future<TvClip?> Function()? loader;
@@ -60,13 +66,20 @@ class _LinkedVideoButtonState extends State<LinkedVideoButton> {
   Future<TvClip?> _load() => widget.loader != null
       ? widget.loader!()
       : TvClipsRepository()
-          .fetchLinked(linkId: widget.linkId, ownerPhone: widget.ownerPhone)
+          .fetchLinked(
+            linkId: widget.linkId,
+            ownerPhone: widget.ownerPhone,
+            trustLink: widget.trustLinkKind.isNotEmpty,
+            linkKind: widget.trustLinkKind,
+          )
           .catchError((Object _) => null);
 
   @override
   void didUpdateWidget(LinkedVideoButton old) {
     super.didUpdateWidget(old);
-    if (old.linkId != widget.linkId || old.ownerPhone != widget.ownerPhone) {
+    if (old.linkId != widget.linkId ||
+        old.ownerPhone != widget.ownerPhone ||
+        old.trustLinkKind != widget.trustLinkKind) {
       _future = _load();
     }
   }

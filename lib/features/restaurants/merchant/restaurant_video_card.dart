@@ -9,10 +9,13 @@
 // Икки алоҳида тасдиқ борлиги эгага очиқ айтилади: ресторан (админ) ва
 // видео (модерация) — мижозга иккаласи ҳам тасдиқлангандан кейин кўринади.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/formatters.dart' show canonicalPhoneId, phonesMatch;
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/services/tv_clip_link.dart';
@@ -23,6 +26,7 @@ class RestaurantVideoCard extends StatefulWidget {
     required this.restaurantId,
     required this.ownerPhone,
     required this.restaurantApproved,
+    this.currentPhone,
     this.loader,
     this.publisher,
     this.deleter,
@@ -34,6 +38,10 @@ class RestaurantVideoCard extends StatefulWidget {
 
   /// Ресторан `approved` бўлмаса эгага «тасдиқдан кейин кўринади» дейилади.
   final bool restaurantApproved;
+
+  /// Жорий фойдаланувчи телефони (ким юклаганини ажратиш учун). Берилмаса
+  /// кириш ҳисобидан олинади.
+  final String? currentPhone;
 
   /// Тест учун алмаштириладиган боғловчилар (ҳақиқийси — умумий қатлам).
   final Future<List<TvClip>> Function()? loader;
@@ -50,6 +58,21 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
   bool _loading = true;
   bool _failed = false;
   bool _busy = false;
+  late final String _me = _resolveMe();
+
+  String _resolveMe() {
+    final given = widget.currentPhone;
+    if (given != null) return canonicalPhoneId(given);
+    try {
+      return canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Клипни ЎЗИМ юкладимми: ўчириш/алмаштириш фақат ўзиникига (қоида ҳам
+  /// шуни талаб қилади — бошқа ходим юклаганини ўчириб бўлмайди).
+  bool _mine(TvClip c) => _me.isNotEmpty && phonesMatch(c.ownerPhone, _me);
 
   @override
   void initState() {
@@ -57,12 +80,24 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
     _load();
   }
 
-  Future<List<TvClip>> _fetch() => widget.loader != null
-      ? widget.loader!()
-      : TvClipsRepository().fetchOwnLinked(
-          linkId: widget.restaurantId,
-          ownerPhone: widget.ownerPhone,
-        );
+  /// Эга ва БАРЧА ходимлар (`members`) юклаган видеолар. `members`ни фақат
+  /// а'золар ўқий олади — бу панел шундайларга очилади; ўқилмаса фақат эга.
+  Future<List<TvClip>> _fetch() async {
+    if (widget.loader != null) return widget.loader!();
+    final phones = <String>{widget.ownerPhone};
+    try {
+      final m = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .doc(widget.restaurantId)
+          .collection('members')
+          .get();
+      phones.addAll(m.docs.map((d) => d.id));
+    } catch (_) {}
+    return TvClipsRepository().fetchLinkedByPhones(
+      linkId: widget.restaurantId,
+      ownerPhones: phones,
+    );
+  }
 
   Future<void> _remove(TvClip c) =>
       widget.deleter != null ? widget.deleter!(c) : TvClipsRepository().deleteOwnClip(c);
@@ -77,7 +112,7 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
       // Янги видео жонли бўлгач эскилари ортиқча (бир ресторанда битта
       // видео) — шу ерда тозаланади. Ўчириш йиқилса рўйхатда қолади.
       final gone = <String>{};
-      for (final stale in TvClipLink.supersededClips(clips)) {
+      for (final stale in TvClipLink.supersededClips(clips).where(_mine)) {
         try {
           await _remove(stale);
           gone.add(stale.id);
@@ -179,7 +214,8 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
               TextButton(key: const ValueKey('video-retry'), onPressed: _load, child: Text(context.tr('restaurants_m_video_retry'))),
             ])
           else ...[
-            for (final clip in _clips) _ClipRow(clip: clip, busy: _busy, onOpen: () => _open(clip), onDelete: () => _delete(clip)),
+            for (final clip in _clips)
+              _ClipRow(clip: clip, mine: _mine(clip), busy: _busy, onOpen: () => _open(clip), onDelete: () => _delete(clip)),
             if (_clips.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(context.tr('restaurants_m_video_replace_hint'), style: TextStyle(fontSize: 11, color: c.ink3)),
@@ -199,9 +235,10 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
 }
 
 class _ClipRow extends StatelessWidget {
-  const _ClipRow({required this.clip, required this.busy, required this.onOpen, required this.onDelete});
+  const _ClipRow({required this.clip, required this.mine, required this.busy, required this.onOpen, required this.onDelete});
 
   final TvClip clip;
+  final bool mine;
   final bool busy;
   final VoidCallback onOpen;
   final VoidCallback onDelete;
@@ -238,6 +275,12 @@ class _ClipRow extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(reason, style: TextStyle(fontSize: 11, color: c.ink3)),
                   ),
+                if (!mine)
+                  Padding(
+                    key: ValueKey('video-by-colleague-${clip.id}'),
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(context.tr('restaurants_m_video_by_colleague'), style: TextStyle(fontSize: 11, color: c.ink3)),
+                  ),
               ],
             ),
           ),
@@ -247,12 +290,13 @@ class _ClipRow extends StatelessWidget {
               onPressed: busy ? null : onOpen,
               icon: const Icon(Icons.play_circle_outline_rounded),
             ),
-          IconButton(
-            key: ValueKey('video-delete-${clip.id}'),
-            tooltip: context.tr('restaurants_m_delete'),
-            onPressed: busy ? null : onDelete,
-            icon: Icon(Icons.delete_outline, color: c.danger),
-          ),
+          if (mine)
+            IconButton(
+              key: ValueKey('video-delete-${clip.id}'),
+              tooltip: context.tr('restaurants_m_delete'),
+              onPressed: busy ? null : onDelete,
+              icon: Icon(Icons.delete_outline, color: c.danger),
+            ),
         ],
       ),
     );

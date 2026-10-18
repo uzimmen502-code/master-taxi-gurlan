@@ -3281,15 +3281,6 @@
   "restaurants_m_category_examples": "Мисол — босинг, майдонга ёзилади:",
   "restaurants_m_cat_empty_hint": "Таомларни бўлимларга ажратсангиз, мижозга қулай. Таом оз бўлса — шарт эмас, «Бошқалар»да ҳам яхши.",
   "restaurants_m_cat_starter": "Тайёр бўлимларни қўшиш",
-  "restaurants_cat_hot": "Иссиқ таомлар",
-  "restaurants_cat_sweets": "Ширинликлар",
-  "restaurants_cat_drinks": "Ичимликлар",
-  "restaurants_cat_bread": "Нон ва ҳамир таомлари",
-  "restaurants_cat_first": "Биринчи таомлар",
-  "restaurants_cat_second": "Иккинчи таомлар",
-  "restaurants_cat_salads": "Салатлар",
-  "restaurants_cat_shashlik": "Шашлик",
-  "restaurants_cat_fastfood": "Фастфуд",
   "restaurants_m_video_title": "Таомлар обзори видеоси",
   "restaurants_m_video_hint": "Мижоз ресторан саҳифасида «Видеони кўриш» тугмасини кўради.",
   "restaurants_m_video_after_approval": "Ресторан админ томонидан тасдиқлангандан кейин мижозларга кўринади.",
@@ -3303,5 +3294,6 @@
   "restaurants_m_video_st_other": "Фаол эмас",
   "restaurants_m_video_delete_confirm": "Видео ўчирилсинми? Уни қайта тиклаб бўлмайди.",
   "restaurants_m_video_load_failed": "Видеони юклаб бўлмади",
-  "restaurants_m_video_retry": "Қайта уриниш"
+  "restaurants_m_video_retry": "Қайта уриниш",
+  "restaurants_m_video_by_colleague": "Бошқа ходим юклаган"
 }

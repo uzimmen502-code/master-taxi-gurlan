@@ -98,6 +98,59 @@ async function main() {
       type: 'cheap_product', ownerId: OWNER, status: 'active', title: 'x', videoClipId: 'c1',
     })));
 
+  // ─── Ресторан видеоси (2026-10-18): ваколат ЯРАТИШ/ЎЗГАРТИРИШда ───
+  //   G  эга (а'зо) ва ходим (а'зо) ўз рестораниникига боғлаб яратади
+  //   H  а'зо БЎЛМАГАН одам ресторанга боғлаб яратолмайди (ёлғон боғлаш ёпиқ)
+  //   I  а'зо бўлмаган одам ўз клипини ресторанга КЎЧИРА олмайди; а'зо кўчира олади
+  //   J  боғлаш ўзгармаса — оддий таҳрир (сарлавҳа) ишлайди; бошқа linkKind'лар таъсирланмайди
+  const STAFF = '998905554433';
+  const staff = () => testEnv.authenticatedContext('uStaff', { phone_number: `+${STAFF}` }).firestore();
+  async function resetRestaurant() {
+    await reset();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const r = ctx.firestore().collection('restaurants').doc('r1');
+      await r.set({ name: 'Ош', status: 'approved', ownerUid: OWNER });
+      await r.collection('members').doc(OWNER).set({ role: 'owner' });
+      await r.collection('members').doc(STAFF).set({ role: 'staff' });
+      await ctx.firestore().collection('tv_clips').doc('own').set({
+        ownerPhone: OTHER, status: 'active', category: 'product', title: 'x', viewCount: 0, likeCount: 0,
+      });
+      await ctx.firestore().collection('tv_clips').doc('rc1').set({
+        ownerPhone: STAFF, status: 'active', category: 'product', title: 'x',
+        linkKind: 'restaurant', linkId: 'r1', viewCount: 0, likeCount: 0,
+      });
+    });
+  }
+  const restClip = (ownerPhone, extra = {}) => newClip({
+    ownerPhone, linkKind: 'restaurant', linkId: 'r1', ...extra,
+  });
+
+  await resetRestaurant();
+  await check('G эга ресторанга боғлаб клип яратади', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('g1').set(restClip(OWNER))));
+  await check('G2 ходим (а\'зо) ресторанга боғлаб клип яратади', () =>
+    assertSucceeds(staff().collection('tv_clips').doc('g2').set(restClip(STAFF))));
+  await check('H бегона (а\'зо эмас) ресторанга боғлаб яратолмайди', () =>
+    assertFails(other().collection('tv_clips').doc('h1').set(restClip(OTHER))));
+  await check('H2 мавжуд бўлмаган ресторан id — яратолмайди', () =>
+    assertFails(owner().collection('tv_clips').doc('h2').set(
+      newClip({ linkKind: 'restaurant', linkId: 'nope' }))));
+  await check('H3 linkId бўш бўлса — яратолмайди', () =>
+    assertFails(owner().collection('tv_clips').doc('h3').set(
+      newClip({ linkKind: 'restaurant', linkId: '' }))));
+
+  await check('I бегона ўз клипини ресторанга кўчира олмайди', () =>
+    assertFails(other().collection('tv_clips').doc('own').update({ linkKind: 'restaurant', linkId: 'r1' })));
+  await check('I2 а\'зо (эга) ўз клипини ресторанга боғлайди', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('c1').update({ linkKind: 'restaurant', linkId: 'r1' })));
+  await check('J ходим ўз боғланган клипини таҳрирлайди (боғлаш ўзгармайди)', () =>
+    assertSucceeds(staff().collection('tv_clips').doc('rc1').update({ title: 'Янги' })));
+  await check('J2 ходим бошқа ресторанга кўчира олмайди (а\'зоси эмас)', () =>
+    assertFails(staff().collection('tv_clips').doc('rc1').update({ linkId: 'r2' })));
+  await check('J3 бошқа linkKind (ad) аввалгидек — а\'золик талаб қилинмайди', () =>
+    assertSucceeds(other().collection('tv_clips').doc('n9').set(
+      newClip({ ownerPhone: OTHER, linkKind: 'ad', linkId: 'A1' }))));
+
   await testEnv.cleanup();
   const failed = results.filter((x) => !x).length;
   console.log(`\n${results.length - failed}/${results.length} o'tdi`);

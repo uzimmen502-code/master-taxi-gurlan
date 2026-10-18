@@ -62,6 +62,33 @@ abstract final class TvClipLink {
     return phonesMatch(clip.ownerPhone, ownerPhone) ? clip : null;
   }
 
+  /// Янги клип ЖОНЛИ бўлгач (`active` ва ўйнатилади) эскилари ортиқча —
+  /// бир ресторанда битта видео. Янгиси ҳали текширувда/хато бўлса ҳеч нарса
+  /// ўчирилмайди: мижозга эскиси кўрсатилиб туради (`fetchLinked`). Рўйхат —
+  /// `TvClipsRepository.fetchOwnLinked` натижаси (янгиси биринчи).
+  static List<TvClip> supersededClips(List<TvClip> ownedNewestFirst) {
+    if (ownedNewestFirst.length < 2) return const [];
+    final live = ownedNewestFirst.first;
+    if (!live.isActive || !live.isPlayable) return const [];
+    return ownedNewestFirst.sublist(1);
+  }
+
+  /// Эга панелидаги ҳолат ёрлиғи калити: `active` | `pending` | `blocked` |
+  /// `error` (transcode йиқилган) | `other` (`expired` ва ҳ.к.).
+  static String statusKey(TvClip c) {
+    if (!c.isPlayable) return 'error';
+    switch (c.status) {
+      case 'active':
+        return 'active';
+      case 'pending':
+        return 'pending';
+      case 'blocked':
+        return 'blocked';
+      default:
+        return 'other';
+    }
+  }
+
   /// Боғланган видеони AVAGram лентасида очади.
   static Future<void> open(BuildContext context, TvClip clip) {
     return Navigator.push(

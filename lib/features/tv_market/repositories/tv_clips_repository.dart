@@ -453,6 +453,22 @@ class TvClipsRepository {
     return null;
   }
 
+  /// Эга панели учун: шу `linkId`га боғланган ЭГАНИНГ клиплари — ҳар қандай
+  /// ҳолатда (текширувда ва рад этилган ҳам), янгиси биринчи. Битта сўров,
+  /// фақат `linkId` бўйича (қўшимча индекс керак эмас), эгалик клиентда.
+  Future<List<TvClip>> fetchOwnLinked({
+    required String linkId,
+    required String ownerPhone,
+  }) async {
+    if (linkId.isEmpty) return const [];
+    final snap = await _col.where('linkId', isEqualTo: linkId).limit(20).get();
+    return tvClipsNewestFirst(
+      snap.docs
+          .map(TvClip.fromFirestore)
+          .where((c) => phonesMatch(c.ownerPhone, ownerPhone)),
+    );
+  }
+
   /// Рўйхат учун: шу тур (`linkKind`) бўйича фаол боғланган клиплар,
   /// `linkId → клип` — БИР сўров (ҳар карта учун алоҳида сўров эмас, 36-қоида).
   /// Эгалик текшируви карта томонида (`phonesMatch`). Чегара — [limit].

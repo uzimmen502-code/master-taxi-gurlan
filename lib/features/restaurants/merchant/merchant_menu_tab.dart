@@ -10,6 +10,7 @@ import '../../../core/utils/formatters.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/menu_category_choice.dart';
+import '../domain/menu_category_suggestions.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'menu_category_dialog.dart';
@@ -46,7 +47,12 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
   }
 
   Future<void> _editCategory({MenuCategory? existing, required List<MenuCategory> cats}) async {
-    final name = await promptMenuCategoryName(context, existing: existing);
+    final name = await promptMenuCategoryName(
+      context,
+      existing: existing,
+      categories: cats,
+      homeCook: widget.restaurant.isHomeCook,
+    );
     if (name == null || !mounted) return;
     // Янги категория бир хил номда иккинчи марта яратилмайди — мавжудини
     // танлаймиз (қайта номлашда эганинг ўз танлови тегилмайди).
@@ -56,6 +62,30 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
       return;
     }
     await _guard(() => widget.repository.upsertCategory(_rid, id: existing?.id, name: name, sort: existing?.sort ?? cats.length));
+  }
+
+  bool _starterBusy = false;
+
+  /// «Тайёр бўлимларни қўшиш»: 3 та бошланғич бўлим (эга тугмани босгандагина;
+  /// қўшилгач номини ўзгартириш/ўчириш мумкин). Қўш босишдан ҳимоя — `_starterBusy`.
+  Future<void> _addStarter(List<MenuCategory> cats) async {
+    if (_starterBusy) return;
+    setState(() => _starterBusy = true);
+    final names = MenuCategorySuggestions.missingNames(
+      keys: MenuCategorySuggestions.starterKeysFor(homeCook: widget.restaurant.isHomeCook),
+      name: (k) => context.tr(MenuCategorySuggestions.textKey(k)),
+      existing: cats,
+    );
+    try {
+      await _guard(() async {
+        var sort = cats.length;
+        for (final n in names) {
+          await widget.repository.upsertCategory(_rid, name: n, sort: sort++);
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _starterBusy = false);
+    }
   }
 
   Future<void> _deleteCategory(MenuCategory cat) async {
@@ -88,6 +118,7 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
           categories: cats,
           existing: existing,
           initialCategoryId: _selectedCategory,
+          homeCook: widget.restaurant.isHomeCook,
           repository: widget.repository,
         ),
       ),
@@ -169,6 +200,27 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                     ],
                   ),
                 ),
+                if (cats.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                    child: Container(
+                      key: const ValueKey('category-empty-hint'),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(context.tr('restaurants_m_cat_empty_hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
+                          const SizedBox(height: 8),
+                          FilledButton.tonal(
+                            key: const ValueKey('category-starter'),
+                            onPressed: _starterBusy ? null : () => _addStarter(cats),
+                            child: Text(context.tr('restaurants_m_cat_starter')),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: items.isEmpty
                       ? Padding(

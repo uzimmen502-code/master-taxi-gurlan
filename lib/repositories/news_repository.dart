@@ -210,6 +210,12 @@ class NewsRepository {
     return null;
   }
 
+  /// `users/{id}` (канон + мерос алиаслар)га ёзиш — қаранг: [writeToUserDocIds].
+  Future<void> _mergeToUserDocs(String userId, Map<String, dynamic> patch) =>
+      writeToUserDocIds(
+        _userDocIdsForNews(userId),
+        (id) => _db.collection('users').doc(id).set(patch, SetOptions(merge: true)),
+      );
   List<String> _userDocIdsForNews(String userId) {
     final canon = canonicalPhoneId(userId);
     final raw = phoneDigits(userId);
@@ -299,15 +305,10 @@ class NewsRepository {
     } catch (_) {}
 
     final total = dialog + orders + support;
-    for (final id in _userDocIdsForNews(uid)) {
-      await _db.collection('users').doc(id).set(
-        {
-          'homeBadgePersonal': total,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-    }
+    await _mergeToUserDocs(uid, {
+      'homeBadgePersonal': total,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
     return total;
   }
 
@@ -529,26 +530,20 @@ class NewsRepository {
       'lastNewsReadAt': FieldValue.serverTimestamp(),
       'lastSeenBroadcastSeq': seq,
     };
-    for (final id in _userDocIdsForNews(userId)) {
-      await _db.collection('users').doc(id).set(patch, SetOptions(merge: true));
-    }
+    await _mergeToUserDocs(userId, patch);
   }
 
   Future<void> markOrderNewsRead(String userId) async {
     if (userId.isEmpty) return;
     final patch = {'lastOrderNewsReadAt': FieldValue.serverTimestamp()};
-    for (final id in _userDocIdsForNews(userId)) {
-      await _db.collection('users').doc(id).set(patch, SetOptions(merge: true));
-    }
+    await _mergeToUserDocs(userId, patch);
     await recomputeHomeBadgePersonal(userId);
   }
 
   Future<void> markMessagesRead(String userId) async {
     if (userId.isEmpty) return;
     final patch = {'lastMessagesReadAt': FieldValue.serverTimestamp()};
-    for (final id in _userDocIdsForNews(userId)) {
-      await _db.collection('users').doc(id).set(patch, SetOptions(merge: true));
-    }
+    await _mergeToUserDocs(userId, patch);
     // Support chat "lastFromAdmin" client markUserRead орқали тўғриланади;
     // badge қайта ҳисобланади.
     await recomputeHomeBadgePersonal(userId);
@@ -713,5 +708,30 @@ class NewsRepository {
       {'pushResendAt': FieldValue.serverTimestamp()},
       SetOptions(merge: true),
     );
+  }
+}
+
+/// Фойдаланувчи ҳужжат ID'ларига ёзиш: БИРИНЧИСИ (канон `998…`) мажбурий,
+/// қолганлари (9 хонали мерос алиаслар) — «қўлдан келганича».
+///
+/// Нега: `firestore.rules` да `users/{id}` ни фақат КАНОН id билан яратиш
+/// мумкин; мавжуд бўлмаган алиас ҳужжатга `set(merge)` — бу create, ва у
+/// `permission-denied` беради. Аввал цикл шу жойда тўхтаб, ундан кейинги
+/// `recomputeHomeBadgePersonal` ҲЕЧ ҚАЧОН бажарилмасди — «Хабарлар»ни очиб
+/// ўқилса ҳам пастки белги (25) камаймасди (қурилмада топилди, 2026-10-19;
+/// логда `Write failed at users/912778777: PERMISSION_DENIED`).
+@visibleForTesting
+Future<void> writeToUserDocIds(
+  List<String> ids,
+  Future<void> Function(String id) write,
+) async {
+  for (var i = 0; i < ids.length; i++) {
+    try {
+      await write(ids[i]);
+    } on FirebaseException catch (e) {
+      // Алиас рад этилса — давом этамиз; канон хатоси эса юқорига чиқади.
+      if (i > 0 && e.code == 'permission-denied') continue;
+      rethrow;
+    }
   }
 }

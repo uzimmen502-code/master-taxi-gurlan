@@ -502,3 +502,13 @@ class TvClip {
         if (rejectReason.isNotEmpty) 'rejectReason': rejectReason,
       };
 }
+
+/// Янгиси биринчи (`createdAt` йўқлари — охирида). Бир `linkId`га бир нечта
+/// фаол клип боғланиб қолса, кўрсатиладигани аниқ бўлсин: Firestore ҳужжат
+/// тартиби кафолатланмайди, шунинг учун аввал "биринчиси" тасодифий эди.
+List<TvClip> tvClipsNewestFirst(Iterable<TvClip> clips) {
+  final out = clips.toList();
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+  out.sort((a, b) => (b.createdAt ?? epoch).compareTo(a.createdAt ?? epoch));
+  return out;
+}

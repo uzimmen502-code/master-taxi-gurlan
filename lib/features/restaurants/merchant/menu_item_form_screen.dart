@@ -9,9 +9,11 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
+import 'menu_category_dialog.dart';
 
 class MenuItemFormScreen extends StatefulWidget {
   const MenuItemFormScreen({
@@ -41,7 +43,18 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   late final _price = TextEditingController(text: widget.existing == null ? '' : '${widget.existing!.price}');
   late final _desc = TextEditingController(text: widget.existing?.description ?? '');
   late final _pack = TextEditingController(text: (widget.existing?.packagingFee ?? 0) == 0 ? '' : '${widget.existing!.packagingFee}');
-  late String _categoryId = widget.existing?.categoryId ?? widget.initialCategoryId ?? (widget.categories.isEmpty ? '' : widget.categories.first.id);
+  // Форма ичида яратилган категория ҳам рўйхатга тушсин (экран очилгандаги
+  // `widget.categories` — қотган нусха).
+  late final List<MenuCategory> _cats = List.of(widget.categories);
+  late String _categoryId = MenuCategoryChoice.initial(
+    isEdit: widget.existing != null,
+    existingCategoryId: widget.existing?.categoryId,
+    filterCategoryId: widget.initialCategoryId,
+    categories: widget.categories,
+  );
+  // «＋ Категория қўшиш» танланиб бекор қилинса, майдон аввалги қийматга
+  // қайтиши учун (калит ўзгариб, майдон қайта қурилади).
+  int _catFieldGen = 0;
   late bool _available = widget.existing?.available ?? true;
   XFile? _picked;
   bool _saving = false;
@@ -72,6 +85,41 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     if (f != null && mounted) setState(() => _picked = f);
   }
 
+  /// Форманинг ўзидан янги категория яратиш: янги ошпазда ҳали бирорта
+  /// категория йўқ — аввал «Меню» табига қайтиб яратиш шарт эмас.
+  Future<void> _createCategory() async {
+    final name = await promptMenuCategoryName(context);
+    if (!mounted) return;
+    if (name == null) {
+      setState(() => _catFieldGen++);
+      return;
+    }
+    final same = MenuCategoryChoice.findByName(_cats, name);
+    if (same != null) {
+      setState(() {
+        _categoryId = same.id;
+        _catFieldGen++;
+      });
+      return;
+    }
+    try {
+      final sort = _cats.length;
+      final id = await widget.repository.upsertCategory(widget.restaurantId, name: name, sort: sort);
+      if (!mounted) return;
+      setState(() {
+        _cats.add(MenuCategory(id: id, name: name, sort: sort));
+        _categoryId = id;
+        _catFieldGen++;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _catFieldGen++);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(restaurantsErrorText(context, e)), backgroundColor: Colors.red.shade700),
+      );
+    }
+  }
+
   Future<void> _save() async {
     final name = _name.text.trim();
     final price = int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0;
@@ -95,7 +143,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
         description: _desc.text.trim(),
         photoUrl: photoUrl,
         packagingFee: int.tryParse(_pack.text.replaceAll(RegExp(r'\D'), '')) ?? 0,
-        categoryId: _categoryId,
+        categoryId: MenuCategoryChoice.known(_categoryId, _cats),
         sort: widget.existing?.sort ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
         available: _available,
         stopUntil: _available ? widget.existing?.stopUntil : null,
@@ -180,13 +228,36 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              initialValue: widget.categories.any((x) => x.id == _categoryId) ? _categoryId : (widget.categories.isEmpty ? '' : widget.categories.first.id),
-              decoration: InputDecoration(labelText: context.tr('restaurants_m_item_category'), border: const OutlineInputBorder(), isDense: true),
+              key: ValueKey('cat-${_cats.length}-$_categoryId-$_catFieldGen'),
+              initialValue: MenuCategoryChoice.known(_categoryId, _cats),
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: context.tr('restaurants_m_item_category'),
+                helperText: context.tr('restaurants_m_item_category_hint'),
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
               items: [
-                if (widget.categories.isEmpty) DropdownMenuItem(value: '', child: Text(context.tr('restaurants_menu_other'))),
-                for (final cat in widget.categories) DropdownMenuItem(value: cat.id, child: Text(cat.name)),
+                for (final cat in _cats) DropdownMenuItem(value: cat.id, child: Text(cat.name, overflow: TextOverflow.ellipsis)),
+                // Категориясиз — доим танлаш мумкин (мижозда «Бошқалар»).
+                DropdownMenuItem(value: MenuCategoryChoice.none, child: Text(context.tr('restaurants_menu_other'))),
+                DropdownMenuItem(
+                  value: MenuCategoryChoice.createNew,
+                  child: Row(children: [
+                    Icon(Icons.add_rounded, size: 18, color: c.brand),
+                    const SizedBox(width: 6),
+                    Text(context.tr('restaurants_m_add_category')),
+                  ]),
+                ),
               ],
-              onChanged: (v) => setState(() => _categoryId = v ?? ''),
+              onChanged: (v) {
+                if (v == MenuCategoryChoice.createNew) {
+                  _createCategory();
+                } else {
+                  setState(() => _categoryId = v ?? MenuCategoryChoice.none);
+                }
+              },
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

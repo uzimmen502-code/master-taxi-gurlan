@@ -3274,5 +3274,7 @@
   "geo_show_nation": "Весь Узбекистан",
   "geo_region_label": "Регион",
   "geo_district_label": "Район",
-  "geo_area_label": "Махалля / зона обслуживания"
+  "geo_area_label": "Махалля / зона обслуживания",
+  "restaurants_m_item_category_hint": "Клиент видит блюдо в меню по этому разделу. Если не выбрано — «Прочее»",
+  "restaurants_m_delete_category_confirm": "Удалить категорию? Блюда в ней не удалятся — они перейдут в «Прочее»"
 }

@@ -3274,5 +3274,7 @@
   "geo_show_nation": "Butun O‘zbekiston",
   "geo_region_label": "Viloyat",
   "geo_district_label": "Tuman",
-  "geo_area_label": "Mahalla / xizmat zonasi"
+  "geo_area_label": "Mahalla / xizmat zonasi",
+  "restaurants_m_item_category_hint": "Mijoz menyuda taomni shu bo'lim bo'yicha ko'radi. Tanlanmasa — «Boshqalar»",
+  "restaurants_m_delete_category_confirm": "Kategoriya o'chirilsinmi? Undagi taomlar o'chmaydi — «Boshqalar»ga o'tadi"
 }

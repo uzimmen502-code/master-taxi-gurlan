@@ -13559,6 +13559,7 @@ async function packageTvClipHls(clipId, output, mp4ByQuality, runId) {
 // ёзилиши ва қаердан ўчирилиши — `tv_clip_output.js` да (Firebase
 // Storage ёки Cloudflare R2). Иккаласи ҳам Storage'сиз тестланади.
 const {tvClipRunId} = require('./tv_clip_runs');
+const {tvClipBecameApproved} = require('./tv_clip_moderation');
 const {
   FirebaseStorageOutput,
   R2Output,
@@ -14211,6 +14212,34 @@ exports.onTvClipRejected = functions.firestore
         });
       } catch (e) {
         console.error('[onTvClipRejected] notify', change.after.id, e);
+      }
+      return null;
+    });
+
+// Модератор клипни ТАСДИҚЛАГАНДА (`pending → active`) — эгасига хабар.
+// Эга «текширувдан кейин чиқади» деган хабарни олган эди; тасдиқ хабарисиз
+// видео ресторан/эълон саҳифасида тасодифан пайдо бўларди. Қоида соф
+// функцияда (`tv_clip_moderation.js`) — реклама ва авто-тасдиқ (клип
+// дарҳол `active` яратилади, ўтиш йўқ) хабар олмайди.
+exports.onTvClipApproved = functions.firestore
+    .document('tv_clips/{clipId}')
+    .onUpdate(async (change) => {
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (!tvClipBecameApproved(before, after)) return null;
+      try {
+        await notifyUserInApp({
+          userId: after.ownerPhone,
+          title: 'Видео тасдиқланди',
+          body: `«${after.title || ''}» видеонгиз AVAGram'да чиқди.`,
+          category: 'tv_market',
+          source: 'tv_clip_moderation',
+          dataType: 'tv_clip_approved',
+          screen: 'tv_market',
+          extraData: {clipId: change.after.id},
+        });
+      } catch (e) {
+        console.error('[onTvClipApproved] notify', change.after.id, e);
       }
       return null;
     });

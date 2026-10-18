@@ -9,8 +9,10 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
+import 'menu_category_dialog.dart';
 import 'menu_item_form_screen.dart';
 
 class MerchantMenuTab extends StatefulWidget {
@@ -43,25 +45,22 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
     }
   }
 
-  Future<void> _editCategory({MenuCategory? existing, required int nextSort}) async {
-    final ctrl = TextEditingController(text: existing?.name ?? '');
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr(existing == null ? 'restaurants_m_add_category' : 'restaurants_m_rename')),
-        content: TextField(controller: ctrl, maxLength: 60, autofocus: true, decoration: InputDecoration(hintText: ctx.tr('restaurants_m_category_name'))),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(ctx.tr('restaurants_m_save'))),
-        ],
-      ),
-    );
-    if (name == null || name.isEmpty) return;
-    await _guard(() => widget.repository.upsertCategory(_rid, id: existing?.id, name: name, sort: existing?.sort ?? nextSort));
+  Future<void> _editCategory({MenuCategory? existing, required List<MenuCategory> cats}) async {
+    final name = await promptMenuCategoryName(context, existing: existing);
+    if (name == null || !mounted) return;
+    // Янги категория бир хил номда иккинчи марта яратилмайди — мавжудини
+    // танлаймиз (қайта номлашда эганинг ўз танлови тегилмайди).
+    final same = existing == null ? MenuCategoryChoice.findByName(cats, name) : null;
+    if (same != null) {
+      setState(() => _selectedCategory = same.id);
+      return;
+    }
+    await _guard(() => widget.repository.upsertCategory(_rid, id: existing?.id, name: name, sort: existing?.sort ?? cats.length));
   }
 
   Future<void> _deleteCategory(MenuCategory cat) async {
-    final ok = await _confirm(context.tr('restaurants_m_delete_confirm'));
+    // Категориядаги таомлар ўчмайди — «Бошқалар»га ўтади (репозиторий).
+    final ok = await _confirm(context.tr('restaurants_m_delete_category_confirm'));
     if (!ok) return;
     await _guard(() => widget.repository.deleteCategory(_rid, cat.id));
     if (_selectedCategory == cat.id) setState(() => _selectedCategory = null);
@@ -139,7 +138,7 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                                     title: Text(ctx.tr('restaurants_m_rename')),
                                     onTap: () {
                                       Navigator.pop(ctx);
-                                      _editCategory(existing: cat, nextSort: cats.length);
+                                      _editCategory(existing: cat, cats: cats);
                                     },
                                   ),
                                   ListTile(
@@ -165,7 +164,7 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                       ActionChip(
                         avatar: const Icon(Icons.add_rounded, size: 16),
                         label: Text(context.tr('restaurants_m_add_category')),
-                        onPressed: () => _editCategory(nextSort: cats.length),
+                        onPressed: () => _editCategory(cats: cats),
                       ),
                     ],
                   ),

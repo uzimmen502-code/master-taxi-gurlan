@@ -447,7 +447,7 @@ class TvClipsRepository {
         .where('status', isEqualTo: 'active')
         .limit(10)
         .get();
-    for (final c in _playable(snap.docs)) {
+    for (final c in tvClipsNewestFirst(_playable(snap.docs))) {
       if (phonesMatch(c.ownerPhone, ownerPhone)) return c;
     }
     return null;
@@ -465,7 +465,12 @@ class TvClipsRepository {
         .where('status', isEqualTo: 'active')
         .limit(limit)
         .get();
-    return {for (final c in _playable(snap.docs)) c.linkId: c};
+    // Бир `linkId`да бир нечта клип бўлса — ЯНГИСИ (аввал охиргиси тасодифий).
+    final out = <String, TvClip>{};
+    for (final c in tvClipsNewestFirst(_playable(snap.docs))) {
+      out.putIfAbsent(c.linkId, () => c);
+    }
+    return out;
   }
 
   /// Эгаси ўз клипини ўчиради — аввал Firestore, сўнг файллар.

@@ -3274,5 +3274,7 @@
   "geo_show_nation": "Бутун Ўзбекистон",
   "geo_region_label": "Вилоят",
   "geo_district_label": "Туман",
-  "geo_area_label": "Маҳалла / хизмат зонаси"
+  "geo_area_label": "Маҳалла / хизмат зонаси",
+  "restaurants_m_item_category_hint": "Мижоз менюда таомни шу бўлим бўйича кўради. Танланмаса — «Бошқалар»",
+  "restaurants_m_delete_category_confirm": "Категория ўчирилсинми? Ундаги таомлар ўчмайди — «Бошқалар»га ўтади"
 }

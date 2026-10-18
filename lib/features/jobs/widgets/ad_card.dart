@@ -57,10 +57,13 @@ class _AdCardState extends State<AdCard> {
 
   Color get _kindColor => JobsColors.accentFor(ad.kind);
 
+  /// Оқ фондаги матн/иконка (бренд фони устида ўқилмайди).
+  Color get _kindInk => JobsColors.accentTextFor(ad.kind);
+
   Future<void> _call(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     void note(String text) => messenger.showSnackBar(SnackBar(
-          content: Text(text),
+          content: Text(text, style: const TextStyle(color: JobsColors.onBar)),
           backgroundColor: _kindColor,
           behavior: SnackBarBehavior.floating,
           shape:
@@ -92,9 +95,15 @@ class _AdCardState extends State<AdCard> {
     final result = await c.submitComplaint(adId: ad.id, reason: reason);
     if (!context.mounted) return;
     messenger.showSnackBar(SnackBar(
-      content: Text(result.success
-          ? context.tr('ad_report_sent')
-          : context.trMsg(result.error ?? 'jobs_err_generic')),
+      content: Text(
+        result.success
+            ? context.tr('ad_report_sent')
+            : context.trMsg(result.error ?? 'jobs_err_generic'),
+        // Бренд фонида — тўқ матн; хатода (қизил фон) — оқ.
+        style: result.success
+            ? const TextStyle(color: JobsColors.onBar)
+            : null,
+      ),
       backgroundColor:
           result.success ? JobsColors.bar : JobsColors.urgent,
       behavior: SnackBarBehavior.floating,
@@ -162,7 +171,7 @@ class _AdCardState extends State<AdCard> {
                     style: TextStyle(
                         fontSize: AppText.labelTiny,
                         fontWeight: FontWeight.w700,
-                        color: color)),
+                        color: _kindInk)),
               ),
               const SizedBox(width: 6),
             ],
@@ -242,7 +251,7 @@ class _AdCardState extends State<AdCard> {
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.w700,
-                          color: color),
+                          color: _kindInk),
                     ),
                   ),
               ],
@@ -282,7 +291,7 @@ class _AdCardState extends State<AdCard> {
                     child: Padding(
                       padding: const EdgeInsets.all(8),
                       child: Icon(Icons.play_circle_outline_rounded,
-                          size: 18, color: color),
+                          size: 18, color: _kindInk),
                     ),
                   ),
                 ),

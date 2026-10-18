@@ -137,7 +137,7 @@ class _AddAdViewState extends State<_AddAdView> {
     final viewLabel = context.tr('jobs_view_my');
     navigator.pop();
     messenger.showSnackBar(SnackBar(
-      content: Text(message),
+      content: Text(message, style: const TextStyle(color: JobsColors.onBar)),
       backgroundColor: _color,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -244,7 +244,7 @@ class _AddAdViewState extends State<_AddAdView> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: AppText.bodyLarge,
-                                color: _color,
+                                color: JobsColors.accentTextFor(_kind),
                               ),
                             ),
                           ],

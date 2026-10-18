@@ -119,6 +119,9 @@ class _JobsViewState extends State<_JobsView> {
   /// фарқ қилсин).
   Color get _color => JobsColors.accentFor(widget.kind);
 
+  /// Оқ/крем фондаги матн ва иконка (бренд тўқ сариғи у ерда ўқилмайди).
+  Color get _ink => JobsColors.accentTextFor(widget.kind);
+
   @override
   void initState() {
     super.initState();
@@ -190,7 +193,7 @@ class _JobsViewState extends State<_JobsView> {
                   // Оқ фон + бўлим рангидаги матн; контур — дизайнга мос қизил.
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: color,
+                    foregroundColor: _ink,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: Size.zero,
@@ -231,7 +234,7 @@ class _JobsViewState extends State<_JobsView> {
                     color: JobsColors.hint, fontSize: AppText.bodyMedium),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: color,
+                  color: _ink,
                   size: 20,
                 ),
                 suffixIcon: c.searchQuery.isNotEmpty
@@ -274,7 +277,7 @@ class _JobsViewState extends State<_JobsView> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: JobsColors.border),
                     ),
-                    child: Icon(Icons.assignment_ind_outlined, color: color),
+                    child: Icon(Icons.assignment_ind_outlined, color: _ink),
                   ),
                 ),
               ),

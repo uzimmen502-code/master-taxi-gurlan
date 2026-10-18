@@ -42,16 +42,16 @@ abstract final class JobsColors {
   /// Қидирув fill.
   static const fieldFill = AvaLight.surface2;
 
-  /// «Эълонлар» бўлими ранги — яшил оила (бош саҳифадаги плитка
-  /// `olxTintFor('jobs')` ҳам яшил). Оқ матн учун етарли тўқ.
+  /// «Эълонлар» бўлими ранги — бренд (#FFA500).
   ///
-  /// Эга қарори (2026-10-06): «Эълонлар» ва «Хизматлар» бўлимлари
-  /// рангда фарқ қилсин, иккаласи бир хил бўлмасин.
-  static const kindAd = Color(0xFF2E7D32);
+  /// Эга қарори (2026-10-18): аввалги қарор (2026-10-06, «Эълонлар» яшил,
+  /// «Хизматлар» жигарранг) бекор — иккала бўлим ҳам бренд рангида. Сабаб:
+  /// AppBar'да тўқ матн (`onBar`) тўқ яшил/жигарранг фонда ўқилмасди
+  /// (контраст ~3.5:1 ва ~2.4:1). Бўлимлар сарлавҳа ва иконка билан ажралади.
+  static const kindAd = AvaLight.brand;
 
-  /// «Хизматлар» бўлими ранги — жигарранг оила (уста, асбоб; плитка
-  /// `olxTintFor('jobs_services')`). Оқ матн учун етарли тўқ.
-  static const kindService = Color(0xFF6D4C41);
+  /// «Хизматлар» бўлими ранги — бренд (юқоридаги изоҳга қаранг).
+  static const kindService = AvaLight.brand;
 
   /// Legacy «Иш» (work) — бренддан ажралиб турсин, огоҳлантириш туси.
   static const kindWork = AvaLight.warn;
@@ -64,6 +64,7 @@ abstract final class JobsColors {
   static const priceBg = AvaLight.brandSoft;
   static const priceText = accentBlue;
 
+  /// Бўлим ФОНИ (AppBar, тугма, чегара, чип) — устига [onBar] матн қўйилади.
   static Color accentFor(AdKind kind) {
     switch (kind) {
       case AdKind.work:
@@ -72,6 +73,19 @@ abstract final class JobsColors {
         return kindService;
       case AdKind.ad:
         return kindAd;
+    }
+  }
+
+  /// Бўлим рангидаги МАТН/ИКОНКА оқ-крем фонда (карточка, қидирув, варақ).
+  /// Бренд тўқ сариғи (#FFA500) оқ фонда ~2:1 — ўқилмайди, шунинг учун
+  /// тўқроқ `brandText`. Фон учун [accentFor] ишлатилади.
+  static Color accentTextFor(AdKind kind) {
+    switch (kind) {
+      case AdKind.work:
+        return kindWork;
+      case AdKind.service:
+      case AdKind.ad:
+        return AvaLight.brandText;
     }
   }
 }

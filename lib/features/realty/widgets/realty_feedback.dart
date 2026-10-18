@@ -25,6 +25,8 @@ String realtyErrorText(BuildContext context, RealtyException e) {
       return context.tr('realty_error_location');
     case 'address_required':
       return context.tr('realty_error_address');
+    case 'image_invalid':
+      return context.tr('realty_error_image');
     case 'tier_not_available':
       return context.tr('realty_error_tier_soon');
     case 'insufficient_balance':
@@ -57,11 +59,22 @@ String realtyErrorText(BuildContext context, RealtyException e) {
 /// хабар кўпинча `await` дан кейин кўрсатилади, у пайтда эса контекст
 /// ишончсиз (экран ёпилган бўлиши мумкин). Чақирувчи messenger'ни
 /// `await` дан ОЛДИН олиб қўяди.
-void showRealtyError(ScaffoldMessengerState messenger, String text) {
+///
+/// [actionLabel] + [onAction] берилса — хабарда тугма чиқади (масалан,
+/// баланс етмаганда «Ҳамённи тўлдириш»).
+void showRealtyError(
+  ScaffoldMessengerState messenger,
+  String text, {
+  String? actionLabel,
+  VoidCallback? onAction,
+}) {
   messenger.showSnackBar(SnackBar(
     content: Text(text),
     backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
     behavior: SnackBarBehavior.floating,
+    action: actionLabel != null && onAction != null
+        ? SnackBarAction(label: actionLabel, textColor: Colors.white, onPressed: onAction)
+        : null,
   ));
 }
 
@@ -101,6 +114,8 @@ class RealtyQuotaBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Маълумот йўқ (юкланмади/хато) — «0 / 0» ва қизил «тўлди» кўрсатилмайди.
+    if (!quota.isKnown) return const SizedBox.shrink();
     final c = context.ava;
     final full = quota.isFull;
     final accent = full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.ink3;

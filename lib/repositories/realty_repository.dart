@@ -273,10 +273,14 @@ class RealtyRepository {
   }
 
   /// Ахборот пакети сотиб олиш (5 ёки 10 объект).
-  Future<int> purchasePackage(int size) async {
+  ///
+  /// [idempotencyKey] — чақирувчи бир «ният» учун БИР калитни сақлайди
+  /// (`IdempotencyKeys`): жавоб йўқолиб қайта уринилса, сервер пулни
+  /// иккинчи марта ечмайди. Берилмаса — ҳар чақирувга янги (эски хатти-ҳаракат).
+  Future<int> purchasePackage(int size, {String? idempotencyKey}) async {
     final data = await _call(
       'purchaseRealtyPackage',
-      {'idempotencyKey': _uuid.v4(), 'size': size},
+      {'idempotencyKey': idempotencyKey ?? _uuid.v4(), 'size': size},
       timeout: _payTimeout,
     );
     return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
@@ -351,7 +355,12 @@ class RealtyRepository {
   /// Янги объект. Координата мажбурий — чақирувчи уни харитадан олади.
   ///
   /// Хатолар [RealtyException] сифатида қайтади: `free_limit_reached`,
-  /// `location_required`, `daily_limit`, `tier_not_available`.
+  /// `location_required`, `address_required`, `image_invalid`,
+  /// `tier_not_available`. (Суткалик чегара йўқ — спамга қарши қоида ҳали
+  /// белгиланмаган.)
+  ///
+  /// [idempotencyKey]: бир форма сеанси учун БИР калит — таймаутдан кейин
+  /// қайта уринилса, сервер иккинчи эълон яратмайди ва ўрин емайди.
   Future<RealtySubmitResult> submitListing({
     required RealtyDeal deal,
     required RealtyTier tier,
@@ -370,6 +379,7 @@ class RealtyRepository {
     List<String> imageUrls = const [],
     String ownerName = '',
     String districtId = '',
+    String? idempotencyKey,
   }) async {
     final data = await _call(
       'submitRealtyListing',
@@ -392,7 +402,7 @@ class RealtyRepository {
           areaM2: areaM2,
           imageUrls: imageUrls,
         ),
-        'idempotencyKey': _uuid.v4(),
+        'idempotencyKey': idempotencyKey ?? _uuid.v4(),
         'tier': tier.key,
         if (ownerName.trim().isNotEmpty) 'ownerName': ownerName.trim(),
       },
@@ -507,11 +517,12 @@ class RealtyRepository {
     required String listingId,
     required RealtyTier tier,
     required int durationDays,
+    String? idempotencyKey,
   }) async {
     final data = await _call(
       'purchaseRealtyTier',
       {
-        'idempotencyKey': _uuid.v4(),
+        'idempotencyKey': idempotencyKey ?? _uuid.v4(),
         'listingId': listingId,
         'tier': tier.key,
         'durationDays': durationDays,
@@ -592,9 +603,10 @@ class RealtyRepository {
         .toList();
   }
 
-  Future<void> purchaseProPackage(String planId) => _call(
+  /// [idempotencyKey]: қаранг — `purchasePackage`.
+  Future<void> purchaseProPackage(String planId, {String? idempotencyKey}) => _call(
         'purchaseRealtyProPackage',
-        {'idempotencyKey': _uuid.v4(), 'planId': planId},
+        {'idempotencyKey': idempotencyKey ?? _uuid.v4(), 'planId': planId},
         timeout: _payTimeout,
       );
 
@@ -832,8 +844,14 @@ class RealtyQuota {
   final bool isPro;
   final DateTime? proExpiresAt;
 
+  /// `limit == 0` — маълумот ЙЎҚ (юкланмади/хато): сервер ҳар доим камида
+  /// бепул лимитни (2) қайтаради. Аввал бундай ҳолат `isFull == true`
+  /// бўларди ва тармоқ узилганда «бепул ўринлар тугади» деб ЁЛҒОН
+  /// кўрсатиларди.
+  bool get isKnown => limit > 0;
+
   int get left => (limit - used).clamp(0, limit);
-  bool get isFull => used >= limit;
+  bool get isFull => isKnown && used >= limit;
 
   int? get proDaysLeft {
     final until = proExpiresAt;

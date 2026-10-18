@@ -2527,10 +2527,10 @@
   "realty_video_paid": "Video-reklama",
   "realty_photo_order_hint": "Rasmni bosib turib suring — birinchisi muqova bo'ladi.",
   "realty_photo_cover": "MUQOVA",
-  "realty_free_limit_hint": "Har bir foydalanuvchiga 2 tagacha bepul obyekt.",
+  "realty_free_limit_hint": "Har bir foydalanuvchiga cheklangan miqdorda bepul obyekt o'rni beriladi.",
   "realty_submit_live": "E'lon joylandi",
   "realty_submit_pending": "E'lon tekshiruvga yuborildi",
-  "realty_error_free_limit": "Bepul limit tugadi: 2 tagacha obyekt.",
+  "realty_error_free_limit": "Bepul obyekt o'rinlari tugadi.",
   "realty_error_address": "Manzilni kiriting — kamida 5 ta belgi (ko'cha, uy, mo'ljal).",
   "realty_field_address_hint": "Majburiy: ko'cha, uy raqami yoki mo'ljal. Aniq manzil faqat paket olgan xaridorga ko'rinadi.",
   "realty_limit_dialog_title": "Bepul o'rin tugadi",
@@ -3469,5 +3469,9 @@
   "wlt_amt_continue": "Davom etish",
   "wlt_amt_continue_amount": "Davom etish · {amount}",
   "wlt_profile_title": "Hamyon",
-  "wlt_profile_sub": "Balans va to'ldirish"
+  "wlt_profile_sub": "Balans va to'ldirish",
+  "realty_error_image": "Rasm qabul qilinmadi. Rasmni qayta tanlang.",
+  "realty_pricing_retry": "Qayta yuklash",
+  "realty_pro_plans_failed": "Paketlar yuklanmadi.",
+  "realty_wallet_short_tile": "Hamyonda mablag' yetmaydi"
 }

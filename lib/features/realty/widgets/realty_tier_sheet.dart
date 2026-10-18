@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import 'realty_controls.dart';
 import 'realty_feedback.dart';
+import 'realty_wallet.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 
 /// РЕКЛАМА / СРОЧНО сотиб олиш ва узайтириш варағи.
 ///
@@ -25,12 +28,21 @@ Future<RealtyTierChoice?> showRealtyTierSheet(
   BuildContext context, {
   required RealtyListing listing,
   int bulkCount = 1,
+  RealtyRepository? repository,
+  Stream<int>? balance,
+  VoidCallback? openWallet,
 }) {
   return showModalBottomSheet<RealtyTierChoice>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _TierSheet(listing: listing, bulkCount: bulkCount),
+    builder: (_) => _TierSheet(
+      listing: listing,
+      bulkCount: bulkCount,
+      repository: repository,
+      balance: balance,
+      openWallet: openWallet,
+    ),
   );
 }
 
@@ -43,21 +55,38 @@ class RealtyTierChoice {
 }
 
 class _TierSheet extends StatefulWidget {
-  const _TierSheet({required this.listing, this.bulkCount = 1});
+  const _TierSheet({
+    required this.listing,
+    this.bulkCount = 1,
+    this.repository,
+    this.balance,
+    this.openWallet,
+  });
 
   final RealtyListing listing;
   final int bulkCount;
+  final RealtyRepository? repository;
+  final Stream<int>? balance;
+  final VoidCallback? openWallet;
 
   @override
   State<_TierSheet> createState() => _TierSheetState();
 }
 
 class _TierSheetState extends State<_TierSheet> {
-  final _repo = RealtyRepository();
+  late final RealtyRepository _repo = widget.repository ?? RealtyRepository();
+  final _keys = IdempotencyKeys();
+
+  /// Эганинг баланси — етмаслигини сотиб олишдан ОЛДИН кўрсатиш учун.
+  late final Stream<int> _balance = widget.balance ?? walletBalanceStream();
 
   Map<RealtyTier, Map<int, int>> _pricing = const {};
   bool _loading = true;
   bool _busy = false;
+
+  /// Харид хатоси — варақнинг ИЧИДА (snackbar варақ ортида қолади).
+  String? _error;
+  bool _errorTopUp = false;
 
   late RealtyTier _tier = widget.listing.tier.isPaid
       ? widget.listing.tier
@@ -90,15 +119,23 @@ class _TierSheetState extends State<_TierSheet> {
   Future<void> _buy() async {
     final days = _days;
     if (days == null || _busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    // Ният: шу эълон + даража + муддат. Калит шу ният тугагунча ўзгармайди:
+    // жавоб йўқолса қайта уриниш пулни иккинчи марта ЕЧМАЙДИ.
+    final scope = 'tier:${widget.listing.id}:${_tier.key}:$days';
     try {
       final res = await _repo.purchaseTier(
         listingId: widget.listing.id,
         tier: _tier,
         durationDays: days,
+        idempotencyKey: _keys.keyFor(scope),
       );
+      _keys.settled(scope);
       if (!mounted) return;
       navigator.pop(RealtyTierChoice(tier: _tier, durationDays: days));
       showRealtyInfo(
@@ -108,11 +145,29 @@ class _TierSheetState extends State<_TierSheet> {
         background: RealtyTabs.colorFor(_tier),
       );
     } on RealtyException catch (e) {
+      // Сервер АНИҚ рад этди — пул ечилмаган.
+      _keys.settled(scope);
       if (!mounted) return;
-      setState(() => _busy = false);
-      showRealtyError(messenger, realtyErrorText(context, e));
+      // Хато варақнинг ИЧИДА: snackbar варақ очиқ турганда унинг ортида қолади.
+      setState(() {
+        _busy = false;
+        _error = realtyErrorText(context, e);
+        _errorTopUp = realtyNeedsTopUp(e);
+      });
+    } catch (_) {
+      // Натижа НОМАЪЛУМ (тармоқ узилди): калит сақланади, тугма қотиб қолмайди.
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = context.tr('realty_error_generic');
+        _errorTopUp = false;
+      });
     }
   }
+
+  /// [amount] — етишмаётган сумма (ҳамён экранида таклиф бўлади).
+  void _openWallet([int? amount]) => (widget.openWallet ??
+      () => openWalletTopUp(Navigator.of(context), suggestedAmount: amount))();
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +239,7 @@ class _TierSheetState extends State<_TierSheet> {
                             : () => setState(() {
                                   _tier = tier;
                                   _days = tier.durationOptions.first;
+                                  _error = null;
                                 }),
                       ),
                     ),
@@ -220,7 +276,12 @@ class _TierSheetState extends State<_TierSheet> {
                               : formatPrice(_pricing[_tier]![d]!),
                           selected: _days == d,
                           color: RealtyTabs.colorFor(_tier),
-                          onTap: _busy ? null : () => setState(() => _days = d),
+                          onTap: _busy
+                              ? null
+                              : () => setState(() {
+                                    _days = d;
+                                    _error = null;
+                                  }),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -228,6 +289,16 @@ class _TierSheetState extends State<_TierSheet> {
                   ],
                 ),
               const SizedBox(height: 16),
+
+              // Баланс етмаса — сотиб олишдан олдин огоҳлантириш ва «Ҳамённи тўлдириш».
+              WalletBalanceNotice(
+                balance: _balance,
+                price: price,
+                onTopUp: _openWallet,
+                onTopUpAmount: _openWallet,
+              ),
+              if (_error != null)
+                WalletInlineError(text: _error!, onTopUp: _errorTopUp ? _openWallet : null),
 
               ElevatedButton(
                 onPressed: (_busy || _loading || price == null) ? null : _buy,

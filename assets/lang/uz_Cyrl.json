@@ -2527,10 +2527,10 @@
   "realty_video_paid": "Видео-реклама",
   "realty_photo_order_hint": "Расмни босиб туриб суринг — биринчиси муқова бўлади.",
   "realty_photo_cover": "МУҚОВА",
-  "realty_free_limit_hint": "Ҳар бир фойдаланувчига 2 тагача бепул объект.",
+  "realty_free_limit_hint": "Ҳар бир фойдаланувчига чекланган миқдорда бепул объект ўрни берилади.",
   "realty_submit_live": "Эълон жойланди",
   "realty_submit_pending": "Эълон текширувга юборилди",
-  "realty_error_free_limit": "Бепул лимит тугади: 2 тагача объект.",
+  "realty_error_free_limit": "Бепул объект ўринлари тугади.",
   "realty_error_address": "Манзилни киритинг — камида 5 та белги (кўча, уй, мўлжал).",
   "realty_field_address_hint": "Мажбурий: кўча, уй рақами ёки мўлжал. Аниқ манзил фақат пакет олган харидорга кўринади.",
   "realty_limit_dialog_title": "Бепул ўрин тугади",
@@ -3469,5 +3469,9 @@
   "wlt_amt_continue": "Давом этиш",
   "wlt_amt_continue_amount": "Давом этиш · {amount}",
   "wlt_profile_title": "Ҳамён",
-  "wlt_profile_sub": "Баланс ва тўлдириш"
+  "wlt_profile_sub": "Баланс ва тўлдириш",
+  "realty_error_image": "Расм қабул қилинмади. Расмни қайта танланг.",
+  "realty_pricing_retry": "Қайта юклаш",
+  "realty_pro_plans_failed": "Пакетлар юкланмади.",
+  "realty_wallet_short_tile": "Ҳамёнда маблағ етмайди"
 }

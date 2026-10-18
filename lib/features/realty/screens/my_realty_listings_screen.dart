@@ -8,6 +8,8 @@ import '../realty_tabs.dart';
 import '../widgets/realty_feedback.dart';
 import '../widgets/realty_tier_sheet.dart';
 import '../widgets/realty_video_sheet.dart';
+import '../widgets/realty_wallet.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
 import 'realty_pro_screen.dart';
@@ -116,6 +118,7 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
 
     setState(() => _bulkBusy = true);
     var failed = 0;
+    var noBalance = false;
     for (final id in _selected.toList()) {
       if (id == first.id) continue; // варақнинг ўзи буни сотиб олди
       try {
@@ -124,6 +127,9 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
           tier: result.tier,
           durationDays: result.durationDays,
         );
+      } on RealtyException catch (e) {
+        failed += 1;
+        if (realtyNeedsTopUp(e)) noBalance = true;
       } catch (_) {
         failed += 1;
       }
@@ -134,9 +140,16 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
       _bulkBusy = false;
     });
     if (failed > 0) {
+      final navigator = Navigator.of(context);
+      // Баланс етмагани сабаб бўлса — «Ҳамённи тўлдириш» тугмаси билан
+      // (аввал фақат «нечтаси ўтмади» дейиларди, сабаби номаълум қоларди).
       showRealtyError(
         ScaffoldMessenger.of(context),
-        '${context.tr('realty_bulk_failed')}: $failed',
+        noBalance
+            ? '${context.tr('realty_bulk_failed')}: $failed — ${context.tr('realty_error_balance')}'
+            : '${context.tr('realty_bulk_failed')}: $failed',
+        actionLabel: noBalance ? context.tr('wlt_topup_btn') : null,
+        onAction: noBalance ? () => openWalletTopUp(navigator) : null,
       );
     }
   }
@@ -177,7 +190,9 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
               onPressed: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const RealtyProScreen(),
+                    builder: (_) => RealtyProScreen(
+            initialQuota: _quota.isKnown ? _quota : null,
+          ),
                   ),
                 );
                 await _loadQuota();

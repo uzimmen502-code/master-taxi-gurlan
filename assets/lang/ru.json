@@ -2527,10 +2527,10 @@
   "realty_video_paid": "Видеореклама",
   "realty_photo_order_hint": "Зажмите фото и перетащите — первое станет обложкой.",
   "realty_photo_cover": "ОБЛОЖКА",
-  "realty_free_limit_hint": "Каждому пользователю до 2 объектов бесплатно.",
+  "realty_free_limit_hint": "Каждому пользователю доступно ограниченное число бесплатных объектов.",
   "realty_submit_live": "Объявление размещено",
   "realty_submit_pending": "Объявление отправлено на проверку",
-  "realty_error_free_limit": "Бесплатный лимит исчерпан: до 2 объектов.",
+  "realty_error_free_limit": "Бесплатные места для объектов закончились.",
   "realty_error_address": "Укажите адрес — минимум 5 символов (улица, дом, ориентир).",
   "realty_field_address_hint": "Обязательно: улица, номер дома или ориентир. Точный адрес виден только покупателю с пакетом.",
   "realty_limit_dialog_title": "Бесплатные места закончились",
@@ -3358,5 +3358,9 @@
   "wlt_amt_continue": "Продолжить",
   "wlt_amt_continue_amount": "Продолжить · {amount}",
   "wlt_profile_title": "Кошелёк",
-  "wlt_profile_sub": "Баланс и пополнение"
+  "wlt_profile_sub": "Баланс и пополнение",
+  "realty_error_image": "Фото не принято. Выберите фото заново.",
+  "realty_pricing_retry": "Загрузить снова",
+  "realty_pro_plans_failed": "Пакеты не загрузились.",
+  "realty_wallet_short_tile": "Не хватает средств в кошельке"
 }

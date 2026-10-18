@@ -97,13 +97,28 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
   void initState() {
     super.initState();
     unawaited(_repo.fetchActiveCached());
-    // Луғат фонда юкланади (~35 КБ). Юкланмаса Intent Router жим
-    // туради ва қидирув эски ҳолида ишлайди.
-    if (widget.onIntent != null) {
-      unawaited(IntentRouter.instance().then((r) {
-        if (mounted) setState(() => _intentRouter = r);
-      }));
+    _loadIntentRouter();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeGlobalSearchBar old) {
+    super.didUpdateWidget(old);
+    // Дарвоза (`demand_intent`) конфиг юкланганидан КЕЙИН очилиши мумкин:
+    // `initState`да `onIntent` ҳали `null` эди — луғат шунда юкланади.
+    if (old.onIntent == null && widget.onIntent != null) _loadIntentRouter();
+    // Дарвоза ёпилса — карточка ва унинг натижаси дарҳол йўқолади.
+    if (old.onIntent != null && widget.onIntent == null && _intent != null) {
+      setState(() => _intent = null);
     }
+  }
+
+  /// Луғат фонда юкланади (~35 КБ). Юкланмаса Intent Router жим
+  /// туради ва қидирув эски ҳолида ишлайди.
+  void _loadIntentRouter() {
+    if (widget.onIntent == null || _intentRouter != null) return;
+    unawaited(IntentRouter.instance().then((r) {
+      if (mounted) setState(() => _intentRouter = r);
+    }));
   }
 
   @override
@@ -138,7 +153,8 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
     // P0.3 — INTENT АНИҚЛАШ: қурилмада, тармоқсиз, дарҳол.
     //
     // Натижалар кутилмайди: карточка ва натижалар мустақил чиқади.
-    final intent = _intentRouter?.detect(q);
+    // `onIntent` йўқ (дарвоза ёпиқ) бўлса — карточка умуман чиқмайди.
+    final intent = widget.onIntent == null ? null : _intentRouter?.detect(q);
 
     setState(() {
       _query = q;
@@ -185,11 +201,12 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
     });
   }
 
-  /// Категория номи — луғатдан, фойдаланувчи тилида эмас (луғат учта
-  /// тилни сақлайди, бу ерда кирилл олинади; тўлиқ локализация
-  /// `taxonomy` коллекцияси уланганда қўшилади — 13.6.1).
+  /// Категория номи — луғатдан, ФОЙДАЛАНУВЧИ ТИЛИДА (`uz_Cyrl` / `uz_Latn` /
+  /// `ru`). Аввал доим кирилл олинарди (уч тил қоидасини бузарди); луғатда
+  /// тил йўқ бўлса `IntentRouter.categoryName` кириллга қайтади.
   String _categoryName(String categoryId) =>
-      _intentRouter?.categoryName(categoryId, 'uz_Cyrl') ?? categoryId;
+      _intentRouter?.categoryName(categoryId, context.contentLang) ??
+      categoryId;
 
   Future<void> _openIntent(IntentResult intent) async {
     final cb = widget.onIntent;

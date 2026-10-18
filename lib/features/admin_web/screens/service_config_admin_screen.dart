@@ -62,6 +62,7 @@ const Map<String, String> _moduleLabels = {
   'china_market': 'Хитой бозори',
   'realty': 'Кўчмас мулк кластери',
   'logistics': 'AVA Logistics (жўнатма)',
+  'demand_intent': 'Уста чақириш (қидирувдан сўров)',
 };
 
 String _labelFor(String id) => _moduleLabels[id] ?? id;

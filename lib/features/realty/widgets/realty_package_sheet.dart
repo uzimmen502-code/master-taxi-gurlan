@@ -8,6 +8,7 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import 'realty_feedback.dart';
+import 'realty_wallet.dart';
 
 /// Ахборот пакети сотиб олиш варағи (концепция, 4-бўлим).
 ///
@@ -18,24 +19,28 @@ import 'realty_feedback.dart';
 ///
 /// `true` қайтарса — пакет олинди, чақирувчи амални давом эттириши мумкин.
 ///
-/// [repository] — тест учун алмаштириладиган репозиторий.
+/// [repository], [balance], [openWallet] — тест учун алмаштириладиганлар.
 Future<bool> showRealtyPackageSheet(
   BuildContext context, {
   RealtyRepository? repository,
+  Stream<int>? balance,
+  VoidCallback? openWallet,
 }) async {
   final bought = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _PackageSheet(repository: repository),
+    builder: (_) => _PackageSheet(repository: repository, balance: balance, openWallet: openWallet),
   );
   return bought == true;
 }
 
 class _PackageSheet extends StatefulWidget {
-  const _PackageSheet({this.repository});
+  const _PackageSheet({this.repository, this.balance, this.openWallet});
 
   final RealtyRepository? repository;
+  final Stream<int>? balance;
+  final VoidCallback? openWallet;
 
   @override
   State<_PackageSheet> createState() => _PackageSheetState();
@@ -43,6 +48,9 @@ class _PackageSheet extends StatefulWidget {
 
 class _PackageSheetState extends State<_PackageSheet> {
   late final RealtyRepository _repo = widget.repository ?? RealtyRepository();
+
+  /// Эганинг баланси — етмаслигини сотиб олишдан ОЛДИН кўрсатиш учун.
+  late final Stream<int> _balance = widget.balance ?? realtyBalanceStream();
 
   /// Ҳар ўлчам — ўз ИДЕМПОТЕНТЛИК калити: жавоб йўқолиб (таймаут) қайта
   /// босилса, сервер пулни иккинчи марта ЕЧМАЙДИ. Аввал калит ҳар
@@ -53,6 +61,10 @@ class _PackageSheetState extends State<_PackageSheet> {
   bool _loading = true;
   bool _busy = false;
   int? _size;
+
+  /// Харид хатоси — варақнинг ИЧИДА (snackbar варақ ортида қолади).
+  String? _error;
+  bool _errorTopUp = false;
 
   @override
   void initState() {
@@ -76,7 +88,10 @@ class _PackageSheetState extends State<_PackageSheet> {
   Future<void> _buy() async {
     final size = _size;
     if (size == null || _busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     final scope = 'pkg:$size';
@@ -95,17 +110,28 @@ class _PackageSheetState extends State<_PackageSheet> {
       // Сервер АНИҚ рад этди (масалан, баланс етмайди) — пул ечилмаган.
       _keys.settled(scope);
       if (!mounted) return;
-      setState(() => _busy = false);
-      showRealtyError(messenger, realtyErrorText(context, e));
+      // Хато варақнинг ИЧИДА: snackbar варақ очиқ турганда унинг ортида
+      // қолади (кўринмайди ва босилмайди).
+      setState(() {
+        _busy = false;
+        _error = realtyErrorText(context, e);
+        _errorTopUp = RealtyInlineError.needsTopUp(e);
+      });
     } catch (_) {
       // Тармоқ узилиши ва бошқа кутилмаган хато — НАТИЖА НОМАЪЛУМ: калит
       // сақланади (қайта уриниш пулни яна емайди). Аввал бу шохда
       // `_busy` ўчмасди — тугма абадий айланиб қолар эди.
       if (!mounted) return;
-      setState(() => _busy = false);
-      showRealtyError(messenger, context.tr('realty_error_generic'));
+      setState(() {
+        _busy = false;
+        _error = context.tr('realty_error_generic');
+        _errorTopUp = false;
+      });
     }
   }
+
+  void _openWallet() =>
+      (widget.openWallet ?? () => openRealtyWallet(Navigator.of(context)))();
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +187,10 @@ class _PackageSheetState extends State<_PackageSheet> {
                     for (final s in sizes) ...[
                       Expanded(
                         child: GestureDetector(
-                          onTap: _busy ? null : () => setState(() => _size = s),
+                          onTap: _busy ? null : () => setState(() {
+                                _size = s;
+                                _error = null;
+                              }),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(
@@ -217,6 +246,16 @@ class _PackageSheetState extends State<_PackageSheet> {
                   ),
                 ),
               const SizedBox(height: 16),
+
+              // Баланс: етмаса — огоҳлантириш ва «Ҳамённи тўлдириш» (тугма
+              // ўчирилмайди: баланс эскирган бўлиши мумкин, ҳал қилувчи — сервер).
+              RealtyBalanceNotice(
+                balance: _balance,
+                price: price,
+                onTopUp: _openWallet,
+              ),
+              if (_error != null)
+                RealtyInlineError(text: _error!, onTopUp: _errorTopUp ? _openWallet : null),
 
               ElevatedButton(
                 onPressed: (_busy || _loading || price == null) ? null : _buy,

@@ -59,11 +59,22 @@ String realtyErrorText(BuildContext context, RealtyException e) {
 /// хабар кўпинча `await` дан кейин кўрсатилади, у пайтда эса контекст
 /// ишончсиз (экран ёпилган бўлиши мумкин). Чақирувчи messenger'ни
 /// `await` дан ОЛДИН олиб қўяди.
-void showRealtyError(ScaffoldMessengerState messenger, String text) {
+///
+/// [actionLabel] + [onAction] берилса — хабарда тугма чиқади (масалан,
+/// баланс етмаганда «Ҳамённи тўлдириш»).
+void showRealtyError(
+  ScaffoldMessengerState messenger,
+  String text, {
+  String? actionLabel,
+  VoidCallback? onAction,
+}) {
   messenger.showSnackBar(SnackBar(
     content: Text(text),
     backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
     behavior: SnackBarBehavior.floating,
+    action: actionLabel != null && onAction != null
+        ? SnackBarAction(label: actionLabel, textColor: Colors.white, onPressed: onAction)
+        : null,
   ));
 }
 

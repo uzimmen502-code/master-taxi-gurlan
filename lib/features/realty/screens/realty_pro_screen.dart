@@ -8,6 +8,7 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_feedback.dart';
+import '../widgets/realty_wallet.dart';
 
 /// 🏢 Риэлторлик компанияси учун (концепция, 5-бўлим).
 ///
@@ -28,7 +29,13 @@ class RealtyProScreen extends StatefulWidget {
     this.initialQuota,
     this.plansFuture,
     this.repository,
+    this.balance,
+    this.openWallet,
   });
+
+  /// Тест учун: баланс оқими ва «ҳамённи тўлдириш» ҳаракати.
+  final Stream<int>? balance;
+  final VoidCallback? openWallet;
 
   /// Чақирувчи аллақачон ўқиган квота (маълум бўлса дарҳол кўрсатилади,
   /// орқа фонда янгиланади).
@@ -51,6 +58,11 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
 
   /// Ҳар режа — ўз ИДЕМПОТЕНТЛИК калити (қайта уриниш пулни яна емайди).
   final _keys = IdempotencyKeys();
+
+  /// Эганинг баланси — етмайдиган режалар сотиб олишдан ОЛДИН кўринсин.
+  late final Stream<int> _balance = widget.balance ?? realtyBalanceStream();
+
+  void _topUp() => (widget.openWallet ?? () => openRealtyWallet(Navigator.of(context)))();
 
   List<RealtyProPlan> _plans = const [];
   bool _plansLoading = true;
@@ -122,6 +134,7 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
   Future<void> _buy(RealtyProPlan plan) async {
     setState(() => _busyPlanId = plan.id);
     final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     final scope = 'pro:${plan.id}';
     try {
       await _repo.purchaseProPackage(plan.id, idempotencyKey: _keys.keyFor(scope));
@@ -139,7 +152,13 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
       _keys.settled(scope);
       if (!mounted) return;
       setState(() => _busyPlanId = null);
-      showRealtyError(messenger, realtyErrorText(context, e));
+      showRealtyPurchaseError(
+        context: context,
+        messenger: messenger,
+        navigator: navigator,
+        error: e,
+        openWallet: widget.openWallet,
+      );
     } catch (_) {
       // Натижа НОМАЪЛУМ (тармоқ узилди): калит сақланади — қайта уриниш
       // пулни яна емайди; тугма қотиб қолмайди.
@@ -221,14 +240,31 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
               ],
             )
           else
-            for (final plan in _plans) ...[
-              _PlanTile(
-                plan: plan,
-                busy: _busyPlanId == plan.id,
-                onBuy: _busyPlanId == null ? () => _buy(plan) : null,
-              ),
-              const SizedBox(height: 8),
-            ],
+            // Битта оқим: баланс қатори ҳам, ҳар режанинг «етмайди» белгиси ҳам.
+            StreamBuilder<int>(
+              stream: _balance,
+              builder: (context, snap) {
+                final bal = snap.data;
+                final cheapest = _plans.map((p) => p.price).reduce((a, b) => a < b ? a : b);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Энг арзон режага ҳам етмаса — огоҳлантириш ва «тўлдириш»;
+                    // етса — кичик «Ҳамёнда: X».
+                    RealtyBalanceBar(balance: bal, price: cheapest, onTopUp: _topUp),
+                    for (final plan in _plans) ...[
+                      _PlanTile(
+                        plan: plan,
+                        busy: _busyPlanId == plan.id,
+                        short: bal != null && bal < plan.price,
+                        onBuy: _busyPlanId == null ? () => _buy(plan) : null,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                );
+              },
+            ),
           const SizedBox(height: 20),
 
           _sectionTitle(context, 'realty_template_title'),
@@ -337,11 +373,15 @@ class _PlanTile extends StatelessWidget {
     required this.plan,
     required this.busy,
     required this.onBuy,
+    this.short = false,
   });
 
   final RealtyProPlan plan;
   final bool busy;
   final VoidCallback? onBuy;
+
+  /// Баланс шу режага етмайди (тугма ўчирилмайди — ҳал қилувчи сервер).
+  final bool short;
 
   @override
   Widget build(BuildContext context) {
@@ -373,9 +413,16 @@ class _PlanTile extends StatelessWidget {
                   formatMoney(plan.price),
                   style: TextStyle(
                     fontSize: AppText.bodySmall,
-                    color: c.ink2,
+                    color: short ? c.warn : c.ink2,
+                    fontWeight: short ? FontWeight.w700 : FontWeight.w400,
                   ),
                 ),
+                if (short)
+                  Text(
+                    context.tr('realty_wallet_short_tile'),
+                    key: ValueKey('pro-short-${plan.id}'),
+                    style: TextStyle(fontSize: AppText.labelTiny, color: c.warn),
+                  ),
               ],
             ),
           ),

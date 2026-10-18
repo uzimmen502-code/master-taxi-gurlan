@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/theme/app_theme.dart';
@@ -17,13 +18,32 @@ import '../../repositories/user_repository.dart';
 
 /// Эганинг баланси оқими. Телефон/Firebase йўқ бўлса — бўш оқим (баланс
 /// «номаълум»: ёлғон огоҳлантириш кўрсатилмайди).
-Stream<int> walletBalanceStream() {
+Stream<int> walletBalanceStream() async* {
+  final uid = await walletPhoneId();
+  if (uid.isEmpty) return;
+  yield* UserRepository().watchBonusBalance(uid);
+}
+
+/// Эганинг ҳамён ID'си (`users/{uid}`): аввал Firebase'даги телефон, бўлмаса
+/// илованинг ўз сақланган телефони (`user_phone`, `ProfileController` ва
+/// `HomeController` шундан ўқийди).
+///
+/// Нега: совуқ ишга туширилганда `FirebaseAuth.currentUser.phoneNumber` бир
+/// муддат бўш бўлиши мумкин; аввал баланс оқими шунда бўш бўлиб қолар ва
+/// Кабинетдаги «Ҳамён» қаторида баланс чиқмас эди (қурилмада кўрилди,
+/// 2026-10-18). Телефон йўқ — бўш қатор (ёлғон «0» эмас).
+Future<String> walletPhoneId() async {
   try {
-    final uid = canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
-    if (uid.isEmpty) return const Stream<int>.empty();
-    return UserRepository().watchBonusBalance(uid);
+    final auth = canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
+    if (auth.isNotEmpty) return auth;
   } catch (_) {
-    return const Stream<int>.empty();
+    // Firebase тайёр эмас — сақланган телефонга ўтамиз.
+  }
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return canonicalPhoneId(prefs.getString('user_phone') ?? '');
+  } catch (_) {
+    return '';
   }
 }
 
@@ -31,9 +51,10 @@ Stream<int> walletBalanceStream() {
 ///
 /// [suggestedAmount] — етишмаётган сумма: «қанча тўлдирасиз» қадамида биринчи
 /// таклиф бўлиб чиқади (фойдаланувчи ўзгартира олади).
-Future<void> openWalletTopUp(NavigatorState navigator, {int? suggestedAmount}) {
-  final phone = canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
-  return navigator.push(
+Future<void> openWalletTopUp(NavigatorState navigator, {int? suggestedAmount}) async {
+  final phone = await walletPhoneId();
+  if (!navigator.mounted) return;
+  await navigator.push(
     MaterialPageRoute<void>(
       builder: (_) => WalletScreen(phone: phone, suggestedAmount: suggestedAmount),
     ),

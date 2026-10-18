@@ -571,10 +571,8 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 8),
             ],
             Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: SectionTitleText(
+                title: title,
                 style: AvaText.sectionTitle.copyWith(color: c.ink),
               ),
             ),
@@ -589,6 +587,63 @@ class _Header extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Бўлим сарлавҳаси: сиғмаса аввал озгина кичраяди, кўп кичрайиши керак
+/// бўлса — 2 қаторга ўтади. Аввал фақат «…» билан қирқиларди: қурилмада
+/// «Яқиндаги эълон…», «Яқиндаги хизма…», «Кўчмас мулк кла…» (эга, 2026-10-18).
+enum SectionTitleFit { asIs, shrink, wrap }
+
+class SectionTitleText extends StatelessWidget {
+  const SectionTitleText({super.key, required this.title, required this.style});
+
+  final String title;
+  final TextStyle style;
+
+  /// Шундан кўпга кичрайтирилмайди (16px → ~13px) — ундан кейин 2 қатор.
+  static const minScale = 0.8;
+
+  /// Сарлавҳа ([natural] кенглик) [maxWidth] га қандай жойлашади.
+  @visibleForTesting
+  static SectionTitleFit fitFor(double natural, double maxWidth) {
+    if (!maxWidth.isFinite || natural <= maxWidth) return SectionTitleFit.asIs;
+    return maxWidth / natural >= minScale
+        ? SectionTitleFit.shrink
+        : SectionTitleFit.wrap;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final maxWidth = constraints.maxWidth;
+      final painter = TextPainter(
+        text: TextSpan(
+          text: title,
+          style: DefaultTextStyle.of(context).style.merge(style),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final natural = painter.width;
+      painter.dispose();
+
+      switch (fitFor(natural, maxWidth)) {
+        case SectionTitleFit.asIs:
+          return Text(title,
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
+        case SectionTitleFit.shrink:
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(title, maxLines: 1, softWrap: false, style: style),
+          );
+        case SectionTitleFit.wrap:
+          return Text(title,
+              maxLines: 2, overflow: TextOverflow.ellipsis, style: style);
+      }
+    });
   }
 }
 

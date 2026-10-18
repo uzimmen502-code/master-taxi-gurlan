@@ -167,9 +167,18 @@ class _JobsViewState extends State<_JobsView> {
     return Scaffold(
       backgroundColor: JobsColors.scaffold,
       appBar: AppBar(
-        title: Text(
-          context.tr(JobsSections.titleKeyFor(widget.kind)),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        // «＋ Хизмат қўшиш» тугмаси жой олгани учун катта шрифтда сарлавҳа
+        // «Хизмат…» бўлиб қирқиларди (қурилмада, эга 2026-10-18) — сиғмаса
+        // озгина кичраяди.
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            context.tr(JobsSections.titleKeyFor(widget.kind)),
+            maxLines: 1,
+            softWrap: false,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
         backgroundColor: color,
         foregroundColor: JobsColors.onBar,

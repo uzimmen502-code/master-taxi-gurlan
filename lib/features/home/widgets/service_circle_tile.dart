@@ -398,13 +398,12 @@ Color olxTintFor(String moduleId) {
     case 'milk':
       return const Color(0xFFBFD8F0);
     // ── Бозор ва эълон ──────────────────────────────────────────
-    // «Эълонлар» — яшил; «Хизматлар» — жигарранг (уста, асбоб). Битта
-    // `jobs` модули, лекин иккита плитка — эга қарори 2026-10-06:
-    // иккаласи бир хил рангда бўлмасин.
+    // «Эълонлар» ва «Хизматлар» — бренд (#FFA500). Эга қарори 2026-10-18:
+    // экранлар билан бир хил (аввал 2026-10-06: яшил / жигарранг). Иккита
+    // плитка бир хил рангда, фарқ — расм ва сарлавҳа.
     case 'jobs':
-      return const Color(0xFF6FBF3B);
     case 'jobs_services':
-      return const Color(0xFFB07A4A);
+      return AvaLight.brand;
     case 'cheap_products_home':
       return const Color(0xFF8E7BF0);
     case 'wholesale_market':

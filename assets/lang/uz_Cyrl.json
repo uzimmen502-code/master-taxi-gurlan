@@ -3445,5 +3445,10 @@
   "wlt_amt_continue": "Давом этиш",
   "wlt_amt_continue_amount": "Давом этиш · {amount}",
   "wlt_profile_title": "Ҳамён",
-  "wlt_profile_sub": "Баланс ва тўлдириш"
+  "wlt_profile_sub": "Баланс ва тўлдириш",
+  "cab_topup": "Тўлдириш",
+  "cab_sec_account": "Ҳисоб",
+  "cab_sec_activity": "Фаолият",
+  "cab_sec_app": "Илова",
+  "cab_seller_panel": "Сотув панели"
 }

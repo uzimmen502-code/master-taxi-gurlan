@@ -3445,5 +3445,10 @@
   "wlt_amt_continue": "Продолжить",
   "wlt_amt_continue_amount": "Продолжить · {amount}",
   "wlt_profile_title": "Кошелёк",
-  "wlt_profile_sub": "Баланс и пополнение"
+  "wlt_profile_sub": "Баланс и пополнение",
+  "cab_topup": "Пополнить",
+  "cab_sec_account": "Аккаунт",
+  "cab_sec_activity": "Активность",
+  "cab_sec_app": "Приложение",
+  "cab_seller_panel": "Панель продавца"
 }

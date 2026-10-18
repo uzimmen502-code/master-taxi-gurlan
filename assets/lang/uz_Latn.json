@@ -3445,5 +3445,10 @@
   "wlt_amt_continue": "Davom etish",
   "wlt_amt_continue_amount": "Davom etish · {amount}",
   "wlt_profile_title": "Hamyon",
-  "wlt_profile_sub": "Balans va to'ldirish"
+  "wlt_profile_sub": "Balans va to'ldirish",
+  "cab_topup": "To'ldirish",
+  "cab_sec_account": "Hisob",
+  "cab_sec_activity": "Faoliyat",
+  "cab_sec_app": "Ilova",
+  "cab_seller_panel": "Sotuv paneli"
 }

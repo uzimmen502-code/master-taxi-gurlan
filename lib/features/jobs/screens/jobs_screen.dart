@@ -172,13 +172,6 @@ class _JobsViewState extends State<_JobsView> {
         foregroundColor: JobsColors.onBar,
         elevation: 0,
         actions: [
-          // «Менинг эълонларим» — текширувдаги/рад этилган эълонларни ҳам кўради
-          // (умумий лента фақат фаолларини кўрсатади).
-          IconButton(
-            tooltip: context.tr('jobs_my_ads'),
-            icon: const Icon(Icons.assignment_ind_outlined),
-            onPressed: () => openJobsMyAds(context, c),
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: Center(
@@ -220,46 +213,73 @@ class _JobsViewState extends State<_JobsView> {
         Container(
           color: JobsColors.surface,
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: TextField(
-            controller: _searchCtrl,
-            onChanged: _onSearchChanged,
-            style: const TextStyle(
-              color: JobsColors.ink,
-              fontWeight: FontWeight.w600,
-            ),
-            decoration: InputDecoration(
-              hintText: context.tr('jobs_search_hint'),
-              hintStyle: const TextStyle(
-                  color: JobsColors.hint, fontSize: AppText.bodyMedium),
-              prefixIcon: Icon(
-                Icons.search,
-                color: color,
-                size: 20,
+          // «Менинг эълонларим» қидирув қаторида: AppBar'да катта шрифтда
+          // сарлавҳани «Эъл…» га қисиб қўйган эди (қурилмада, 130% шрифт).
+          // Текширувдаги/рад этилган эълонларни ҳам кўради (лента фақат фаол).
+          child: Row(children: [
+            Expanded(
+                child: TextField(
+              controller: _searchCtrl,
+              onChanged: _onSearchChanged,
+              style: const TextStyle(
+                color: JobsColors.ink,
+                fontWeight: FontWeight.w600,
               ),
-              suffixIcon: c.searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: JobsColors.muted, size: 18),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        c.clearSearch();
-                      })
-                  : null,
-              filled: true,
-              fillColor: JobsColors.fieldFill,
-              border: OutlineInputBorder(
+              decoration: InputDecoration(
+                hintText: context.tr('jobs_search_hint'),
+                hintStyle: const TextStyle(
+                    color: JobsColors.hint, fontSize: AppText.bodyMedium),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: color,
+                  size: 20,
+                ),
+                suffixIcon: c.searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear,
+                            color: JobsColors.muted, size: 18),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          c.clearSearch();
+                        })
+                    : null,
+                filled: true,
+                fillColor: JobsColors.fieldFill,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: JobsColors.border)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: JobsColors.border)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: color, width: 1.5)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+            )),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: context.tr('jobs_my_ads'),
+              child: Material(
+                color: JobsColors.fieldFill,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: JobsColors.border)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: JobsColors.border)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: color, width: 1.5)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  onTap: () => openJobsMyAds(context, c),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: JobsColors.border),
+                    ),
+                    child: Icon(Icons.assignment_ind_outlined, color: color),
+                  ),
+                ),
+              ),
             ),
-          ),
+          ]),
         ),
         GeoTierBar(moduleId: 'jobs', scope: c.scope, onChanged: c.setScope),
         Expanded(
@@ -297,8 +317,7 @@ class _Feed extends StatelessWidget {
     return StreamBuilder<List<JobAd>>(
       stream: c.watchAll(),
       builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting &&
-            !snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return Center(child: CircularProgressIndicator(color: color));
         }
         if (snap.hasError) {
@@ -422,38 +441,31 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emoji = kind?.emoji ?? '📰';
-    final label =
-        context.tr(JobsSections.kindLabelKey(kind ?? AdKind.ad));
+    final label = context.tr(JobsSections.kindLabelKey(kind ?? AdKind.ad));
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
-        child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 56)),
-              const SizedBox(height: 14),
-              Text(
-                context.tr(isSearching
-                    ? 'jobs_empty_search_title'
-                    : 'jobs_empty_title'),
-                style: const TextStyle(
-                    fontSize: AppText.bodyLarge,
-                    fontWeight: FontWeight.w600,
-                    color: JobsColors.ink),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                isSearching
-                    ? context.tr('jobs_empty_search_hint')
-                    : context
-                        .tr('jobs_empty_first')
-                        .replaceAll('{label}', label),
-                style: const TextStyle(
-                    fontSize: AppText.bodySmall,
-                    color: JobsColors.muted),
-                textAlign: TextAlign.center,
-              ),
-            ]),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(emoji, style: const TextStyle(fontSize: 56)),
+          const SizedBox(height: 14),
+          Text(
+            context.tr(
+                isSearching ? 'jobs_empty_search_title' : 'jobs_empty_title'),
+            style: const TextStyle(
+                fontSize: AppText.bodyLarge,
+                fontWeight: FontWeight.w600,
+                color: JobsColors.ink),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isSearching
+                ? context.tr('jobs_empty_search_hint')
+                : context.tr('jobs_empty_first').replaceAll('{label}', label),
+            style: const TextStyle(
+                fontSize: AppText.bodySmall, color: JobsColors.muted),
+            textAlign: TextAlign.center,
+          ),
+        ]),
       ),
     );
   }

@@ -3424,5 +3424,13 @@
   "realty_error_image": "Фото не принято. Выберите фото заново.",
   "realty_pricing_retry": "Загрузить снова",
   "realty_pro_plans_failed": "Пакеты не загрузились.",
-  "realty_wallet_short_tile": "Не хватает средств в кошельке"
+  "realty_wallet_short_tile": "Не хватает средств в кошельке",
+  "cab_topup": "Пополнить",
+  "cab_sec_account": "Аккаунт",
+  "cab_sec_activity": "Активность",
+  "cab_sec_app": "Приложение",
+  "cab_seller_panel": "Панель продавца",
+  "home_nav_unread": "непрочитанных: {n}",
+  "intent_need_address": "Чтобы вызвать мастера, сначала укажите адрес проживания в Кабинете",
+  "profile_photo": "Изменить фото профиля"
 }

@@ -3424,5 +3424,13 @@
   "realty_error_image": "Rasm qabul qilinmadi. Rasmni qayta tanlang.",
   "realty_pricing_retry": "Qayta yuklash",
   "realty_pro_plans_failed": "Paketlar yuklanmadi.",
-  "realty_wallet_short_tile": "Hamyonda mablag' yetmaydi"
+  "realty_wallet_short_tile": "Hamyonda mablag' yetmaydi",
+  "cab_topup": "To'ldirish",
+  "cab_sec_account": "Hisob",
+  "cab_sec_activity": "Faoliyat",
+  "cab_sec_app": "Ilova",
+  "cab_seller_panel": "Sotuv paneli",
+  "home_nav_unread": "{n} ta o'qilmagan",
+  "intent_need_address": "Ustani chaqirish uchun avval Kabinetda yashash manzilingizni kiriting",
+  "profile_photo": "Profil rasmini o'zgartirish"
 }

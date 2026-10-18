@@ -34,6 +34,7 @@ import '../ads/screens/create_ad_screen.dart';
 import '../profile/screens/news_hub_screen.dart';
 import '../tv_market/screens/tv_publish_screen.dart';
 import 'widgets/ava_bottom_nav.dart';
+import 'widgets/ava_tab_shell.dart';
 import 'widgets/ava_top_bar.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
@@ -62,6 +63,12 @@ import '../driver_hub/driver_hub_actions.dart';
 import '../driver_hub/screens/driver_hub_screen.dart';
 import '../../shared/car/car_edit_dialog.dart';
 import '../assistant/assistant_entry.dart';
+import '../demand_offer/data/demand_repository.dart';
+import '../demand_offer/presentation/activity/demand_activity_entry.dart'
+    show kDemandUiAdapters;
+import '../demand_offer/presentation/demand_composer/demand_composer_screen.dart';
+import '../demand_offer/ui_adapters/demand_ui_adapter.dart' show IntentResult;
+import 'home_intent_router.dart';
 import '../book/screens/ava_book_screen.dart';
 import '../restaurants/merchant/restaurant_entry_flow.dart';
 import '../../shared/widgets/taxi_agreement_sheet.dart';
@@ -355,6 +362,7 @@ class _HomeViewState extends State<_HomeView> {
     _deferredBootstrapTimer?.cancel();
     _promoSub?.cancel();
     _unread.dispose();
+    _homeScroll.dispose();
     if (_configListener != null) {
       ServiceConfigHolder.revision.removeListener(_configListener!);
       GeoContext.revision.removeListener(_configListener!);
@@ -512,6 +520,72 @@ class _HomeViewState extends State<_HomeView> {
     await _push(screen);
   }
 
+  /// Охирги ўқилган фойдаланувчи ҳужжати (манзил координатаси — сўров
+  /// формасининг бошланғич жойлашуви учун). `build`даги оқимдан ёзилади.
+  UserModel? _user;
+
+  /// Қидирувдаги intent карточкаси босилганда (аудит №4).
+  ///
+  /// Фақат `demand_intent` дарвозаси очиқ бўлганда чақирилади (қаранг:
+  /// `HomeGlobalSearchBar(onIntent: …)`). «Уста чақириш» — сўров формаси;
+  /// ядрога уланмаган йўналишлар — иловада аллақачон ишлайдиган экран.
+  Future<void> _openIntent(IntentResult intent) async {
+    switch (intentTargetFor(intent)) {
+      case IntentTarget.composer:
+        await _openDemandComposer(intent);
+      case IntentTarget.courier:
+        if (!ServiceConfigHolder.isOpenable('courier')) {
+          _showTezKundaSnack();
+          return;
+        }
+        if (phoneDigits(context.read<HomeController>().phone).length < 9) {
+          needPhoneForAction(context);
+          return;
+        }
+        await _push(const CourierServicesHubScreen());
+      case IntentTarget.intercityTaxi:
+        await _openModule(HomeModulesCatalog.byId('intercity'));
+      case IntentTarget.realty:
+        if (!ServiceConfigHolder.isOpenable('realty')) {
+          _showTezKundaSnack();
+          return;
+        }
+        await _push(const RealtyScreen());
+      case IntentTarget.market:
+        await _openModule(HomeModulesCatalog.byId('cheap_products_home'));
+      case IntentTarget.freightLocal:
+        await _openYukModule('yuk_local', const YukLocalScreen());
+      case IntentTarget.none:
+        break;
+    }
+  }
+
+  /// «Уста чақириш» сўров формаси. Телефон ва манзил координатаси шарт:
+  /// форма жойлашув танлагични кўрсатмайди, координатасиз юбориб бўлмайди.
+  Future<void> _openDemandComposer(IntentResult intent) async {
+    final phone = phoneDigits(context.read<HomeController>().phone);
+    if (phone.length < 9) {
+      needPhoneForAction(context);
+      return;
+    }
+    final adapter = kDemandUiAdapters[intent.module];
+    if (adapter == null) return;
+    final point = demandPointFromAddress(_user?.address);
+    if (point == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('intent_need_address'))),
+      );
+      _selectTab(AvaNavTab.cabinet);
+      return;
+    }
+    await _push(DemandComposerScreen(
+      adapter: adapter,
+      repository: DemandRepository(),
+      intent: intent,
+      initialLocation: point,
+    ));
+  }
+
   Future<void> _openSearchEntry(SearchIndexEntry e) async {
     final module = e.moduleId.trim();
     if (module.isEmpty) return;
@@ -651,27 +725,56 @@ class _HomeViewState extends State<_HomeView> {
 
   /// Пастки менюнинг табларини қайта ишлаш.
   Future<void> _onNavTap(AvaNavTab tab) async {
-    switch (tab) {
-      case AvaNavTab.home:
-        return;
-      case AvaNavTab.avagram:
-        await _push(const TvMarketFeedScreen());
-      case AvaNavTab.create:
-        await _openCreateSheet();
-      case AvaNavTab.messages:
-        await _push(const NewsHubScreen());
-      case AvaNavTab.cabinet:
-        // «Буюртмалар» энди алоҳида таб эмас — Кабинет (профил) ичида.
-        await _openProfileTab();
+    if (tab == AvaNavTab.create) {
+      await _openCreateSheet();
+      return;
+    }
+    _selectTab(tab);
+  }
+
+  /// Танланган таб (аудит №13: ҳақиқий таб навигация). «Бош» ҳамиша тирик,
+  /// қолган таблар унинг ўрнида кўрсатилади — қаранг: [AvaTabShell].
+  AvaNavTab _tab = AvaNavTab.home;
+
+  /// «Бош» скролли: «Бош» табини қайта босиш — тепага.
+  final ScrollController _homeScroll = ScrollController();
+
+  void _selectTab(AvaNavTab tab) {
+    if (tab == AvaNavTab.create) return;
+    if (tab == _tab) {
+      if (tab == AvaNavTab.home &&
+          _homeScroll.hasClients &&
+          _homeScroll.offset > 0) {
+        unawaited(_homeScroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        ));
+      }
+      return;
+    }
+    final leaving = _tab;
+    setState(() => _tab = tab);
+    if (tab == AvaNavTab.home) {
+      // Кабинетда исм/расм ўзгарган бўлиши мумкин.
+      if (leaving == AvaNavTab.cabinet) {
+        unawaited(context.read<HomeController>().refreshUser());
+      }
+      _onHomeResurface();
     }
   }
 
-  Future<void> _openProfileTab() async {
-    await openProfileScreen(context);
-    if (!mounted) return;
-    await context.read<HomeController>().refreshUser();
-    if (mounted) _onHomeResurface();
-  }
+  /// «Бош»дан бошқа таб мазмуни. Ҳар бири танланганда яратилади, чиқилганда
+  /// ўчирилади (аввалги route очиш/ёпиш билан бир хил).
+  Widget _buildTab(BuildContext context, AvaNavTab tab) => switch (tab) {
+        AvaNavTab.avagram => const TvMarketFeedScreen(),
+        AvaNavTab.messages => const NewsHubScreen(),
+        AvaNavTab.cabinet => const ProfileScreen(),
+        _ => const SizedBox.shrink(),
+      };
+
+  /// «Буюртмалар» энди алоҳида таб эмас — Кабинет (профил) ичида.
+  void _openProfileTab() => _selectTab(AvaNavTab.cabinet);
 
   /// «＋» менюси учун ҳайдовчи ҳолати (кэш): индикатор ва «Ҳайдовчи панели».
   DriverRoles _driverRoles = DriverRoles.none;
@@ -1056,15 +1159,22 @@ class _HomeViewState extends State<_HomeView> {
     return Scaffold(
       backgroundColor: _bg,
       // Белги ўзгарганда фақат меню қайта чизилади, бутун саҳифа эмас.
-      bottomNavigationBar: ListenableBuilder(
-        listenable: _unread,
-        builder: (context, _) => AvaBottomNav(
-          current: AvaNavTab.home,
-          onTap: _onNavTap,
-          messagesBadge: _unread.total,
-        ),
-      ),
-      body: Stack(
+      // Клавиатура очиқ вақтида меню яширилади (чат/қидирувда жой егани учун).
+      bottomNavigationBar: avaNavHiddenByKeyboard(context)
+          ? null
+          : ListenableBuilder(
+              listenable: _unread,
+              builder: (context, _) => AvaBottomNav(
+                current: _tab,
+                onTap: _onNavTap,
+                messagesBadge: _unread.total,
+              ),
+            ),
+      body: AvaTabShell(
+        current: _tab,
+        onBackToHome: () => _selectTab(AvaNavTab.home),
+        tabBuilder: _buildTab,
+        home: Stack(
         fit: StackFit.expand,
         children: [
           const HomeAliveBackground(),
@@ -1080,6 +1190,7 @@ class _HomeViewState extends State<_HomeView> {
                         : Stream<UserModel?>.value(null),
                     builder: (context, userSnap) {
                       final user = userSnap.data;
+                      _user = user;
                       _maybeApplyUserGeo(user);
                       // Oxirgi tranzaksiya Wallet ekranida; Home faqat balans
                       // (users.bonusBalance) — wallet_ledger stream yo'q.
@@ -1087,6 +1198,7 @@ class _HomeViewState extends State<_HomeView> {
                         color: context.ava.brandText,
                         onRefresh: _refreshHome,
                         child: CustomScrollView(
+                    controller: _homeScroll,
                     // Бўлим кам бўлса ҳам тортиб янгилаш ишлайверсин.
                     physics: const AlwaysScrollableScrollPhysics(),
                     cacheExtent: 320,
@@ -1165,6 +1277,12 @@ class _HomeViewState extends State<_HomeView> {
                             // Қидирув майдончаси юқоридаги бўлимга 2 px яқин (эга, 2026-10-15).
                             const SizedBox(height: 2),
                             HomeGlobalSearchBar(
+                              // «Уста чақириш» (аудит №4): дарвоза ёпиқ бўлса
+                              // `null` — карточка умуман чиқмайди.
+                              onIntent: ServiceConfigHolder.isOpenable(
+                                      'demand_intent')
+                                  ? _openIntent
+                                  : null,
                               onOpenEntry: _openSearchEntry,
                               onOpenClip: (clip) => _push(
                                 TvMarketFeedScreen(initialClip: clip),
@@ -1381,6 +1499,7 @@ class _HomeViewState extends State<_HomeView> {
             child: const _HomeShareButton(),
           ),
         ],
+      ),
       ),
     );
   }

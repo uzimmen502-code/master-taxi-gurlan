@@ -340,6 +340,8 @@ const _kServiceIcons = <String, IconData>{
   'china_market': Icons.local_shipping_outlined,
   'realty': Icons.apartment_rounded,
   'logistics': Icons.local_post_office_rounded,
+  // Плитка йўқ — фақат админ рўйхати ва тест жадвали учун.
+  'demand_intent': Icons.support_agent_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -426,6 +428,9 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFFF2789F);
     case 'chatgpt':
       return const Color(0xFF6E5BE0);
+    // «Уста чақириш» — плиткаси йўқ, лекин админ рўйхатида доира ранги керак.
+    case 'demand_intent':
+      return const Color(0xFF8D6E63);
     // ── Автохизмат ──────────────────────────────────────────────
     case 'oil_change':
       return const Color(0xFF6E7B8B);

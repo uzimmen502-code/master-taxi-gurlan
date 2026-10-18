@@ -7488,35 +7488,124 @@ async function getJobsBoardAdOrThrow(adId) {
 const JOBS_DAILY_AD_LIMIT = 10;
 const JOBS_DAILY_COMPLAINT_LIMIT = 20;
 
-/** Mijoz: Иш топ эълон (CF-only, auth + телефон + кунлик лимит). */
+const TASHKENT_UTC_OFFSET_MS = 5 * 60 * 60 * 1000; // Toshkent: UTC+5, DST yo'q
+
+/**
+ * Toshkent kunining boshi (UTC `Date`). Kunlik limit "kuni" mijoz va serverning
+ * vaqt zonasiga bog'liq bo'lmasin (Functions UTC'da ishlaydi: avval limit
+ * Toshkent vaqti bilan 05:00 da yangilanardi).
+ */
+function tashkentDayStart(now = new Date()) {
+  const shifted = now.getTime() + TASHKENT_UTC_OFFSET_MS;
+  return new Date(shifted - (shifted % 86400000) - TASHKENT_UTC_OFFSET_MS);
+}
+
+const JOB_AD_REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+/** Bir xil (uid, requestId) → har doim bir xil hujjat id (qayta yuborish idempotent). */
+function jobAdIdFor(uid, requestId) {
+  const h = crypto.createHash('sha256').update(`${uid}:${requestId}`).digest('hex');
+  return `jad_${h.slice(0, 28)}`;
+}
+
+/**
+ * Egasining PROFILIDAN olingan jamoat ma'lumoti: ism va ommaviy hudud yorlig'i
+ * ("Гурлан тумани, Хоразм вилояти"). Mijoz yuborgan `authorName`/`address`ga
+ * ishonilmaydi (CLAUDE.md 18) va uy manzili ommaviy e'longa tushmaydi (40).
+ */
+async function ownerPublicStamp(uid, geo) {
+  const d = digits(uid);
+  const ids = new Set([d]);
+  if (d.length === 12 && d.startsWith('998')) ids.add(d.slice(3));
+  if (d.length === 9) ids.add(`998${d}`);
+  let name = '';
+  for (const id of ids) {
+    try {
+      const snap = await db.collection('users').doc(id).get();
+      if (!snap.exists) continue;
+      const u = snap.data() || {};
+      name = String(u.name || u.fullName || u.displayName || '').trim().slice(0, 80);
+      if (name) break;
+    } catch (e) {
+      console.error('ownerPublicStamp', e.message || e);
+    }
+  }
+  let area = '';
+  try {
+    const pick = (s) => {
+      const v = s && s.exists ? (s.data() || {}) : {};
+      // `nameUz` — кирилл, `name` — лотин (geo_* ҳужжатлари; `geoNameFor`).
+      // Эски иловалар учун ёрлиқ кирилл бўлади.
+      return String(v.nameUz || v.name || '').trim();
+    };
+    const [dSnap, rSnap] = await Promise.all([
+      geo && geo.districtId
+        ? db.collection('geo_districts').doc(geo.districtId).get() : null,
+      geo && geo.regionId
+        ? db.collection('geo_regions').doc(geo.regionId).get() : null,
+    ]);
+    area = [pick(dSnap), pick(rSnap)].filter(Boolean).join(', ');
+  } catch (e) {
+    console.error('ownerPublicStamp area', e.message || e);
+  }
+  return { name, area };
+}
+
+/** Mijoz: Иш топ эълон (CF-only, auth + телефон + кунлик лимит + idempotency). */
 exports.submitJobAd = functions.https.onCall(async (data, context) => {
+  const started = Date.now();
+  const clientRequestId = String((data && data.requestId) || '').trim();
+  const idempotent = JOB_AD_REQUEST_ID_RE.test(clientRequestId);
+  const requestId = idempotent ? clientRequestId : crypto.randomUUID();
+  let logUser = '';
+  const log = (result, extra = {}) => console.log(JSON.stringify({
+    module: 'jobs', action: 'submitJobAd', result, requestId,
+    userId: logUser, durationMs: Date.now() - started, ...extra,
+  }));
+  const fail = (code, message, errorCode, extra = {}) => {
+    log('error', { errorCode, ...extra });
+    return new functions.https.HttpsError(code, message, { code: errorCode });
+  };
+
   if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    throw fail('unauthenticated', 'Authentication required', 'UNAUTHENTICATED');
   }
   const uid = canonicalUid(callerPhone(context));
   if (!uid || uid.length < 9) {
-    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+    throw fail('permission-denied', 'Phone mismatch', 'PHONE_MISMATCH');
   }
+  // Telefon logga CHIQMAYDI — qisqa hash.
+  logUser = crypto.createHash('sha256').update(uid).digest('hex').slice(0, 12);
 
   const type = String((data && data.type) || '').trim();
   if (!['work', 'service', 'ad'].includes(type)) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid type');
+    throw fail('invalid-argument', 'Invalid type', 'JOB_AD_INVALID_TYPE');
   }
   const text = String((data && data.text) || '').trim();
   if (text.length < 3 || text.length > 2000) {
-    throw new functions.https.HttpsError('invalid-argument', 'text 3..2000');
+    throw fail('invalid-argument', 'text 3..2000', 'JOB_AD_TEXT_LENGTH', { type });
   }
   const title = String((data && data.title) || '').trim().slice(0, 120);
   if (title.length < 3 || title.length > 120) {
-    throw new functions.https.HttpsError('invalid-argument', 'title 3..120');
+    throw fail('invalid-argument', 'title 3..120', 'JOB_AD_TITLE_LENGTH', { type });
   }
   const priceText = String((data && data.priceText) || '').trim().slice(0, 80);
-  const authorName = String((data && data.authorName) || '').trim().slice(0, 80);
-  const address = String((data && data.address) || '').trim().slice(0, 300);
   const isUrgent = urgentForJobAdType(type, data && data.isUrgent === true);
 
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
+  // Idempotency: shu `requestId` bilan e'lon allaqachon yaratilgan bo'lsa —
+  // YANGISI yaratilmaydi va limitga ham hisoblanmaydi (tarmoq qayta urinishi).
+  const adRef = idempotent
+    ? db.collection('ads').doc(jobAdIdFor(uid, clientRequestId)) : null;
+  if (adRef) {
+    const existing = await adRef.get();
+    if (existing.exists) {
+      const ex = existing.data() || {};
+      log('duplicate', { adId: adRef.id, type });
+      return { ok: true, adId: adRef.id, status: String(ex.status || 'pending'), duplicate: true };
+    }
+  }
+
+  const dayStart = tashkentDayStart();
   // Янги ёзувлар canonical; эски 9-рақамли ҳам санаш.
   const phoneVariants = [...new Set([
     uid,
@@ -7539,8 +7628,8 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     if (todayCount >= JOBS_DAILY_AD_LIMIT) break;
   }
   if (todayCount >= JOBS_DAILY_AD_LIMIT) {
-    throw new functions.https.HttpsError(
-      'resource-exhausted', 'Daily ad limit reached');
+    throw fail('resource-exhausted', 'Daily ad limit reached',
+      'JOB_AD_DAILY_LIMIT', { type, todayCount });
   }
 
   const days = jobAdExpiryDays(type, isUrgent);
@@ -7551,15 +7640,18 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
   const autoApprove = await isJobsAutoApproveEnabled();
   const status = autoApprove ? 'active' : 'pending';
   const geo = await ownerGeoStamp(uid);
+  const pub = await ownerPublicStamp(uid, geo);
 
-  const ref = await db.collection('ads').add({
+  const doc = {
     type,
     text,
     title,
     ...(priceText ? { priceText } : {}),
-    authorName: authorName || 'Фойдаланувчи',
+    authorName: pub.name || 'Фойдаланувчи',
     authorPhone: uid,
-    address,
+    // Faqat ommaviy hudud yorlig'i (uy manzili emas): eski ilova versiyalari
+    // `address`ni ko'rsatadi, yangisi `districtId`dan tilli nom oladi.
+    address: pub.area,
     // Hudud serverda aniqlanadi (qarang: ownerGeoStamp).
     ...geo,
     isUrgent,
@@ -7574,8 +7666,27 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
           autoApproved: true,
         }
       : {}),
-  });
-  return { ok: true, adId: ref.id, status };
+  };
+
+  let adId;
+  if (adRef) {
+    try {
+      await adRef.create(doc);
+      adId = adRef.id;
+    } catch (e) {
+      // Ikki parallel chaqiruv: bittasi yaratdi, ikkinchisi shuni qaytaradi.
+      if (e && (e.code === 6 || /ALREADY_EXISTS/i.test(String(e.message || '')))) {
+        const ex = (await adRef.get()).data() || {};
+        log('duplicate', { adId: adRef.id, type, race: true });
+        return { ok: true, adId: adRef.id, status: String(ex.status || status), duplicate: true };
+      }
+      throw e;
+    }
+  } else {
+    adId = (await db.collection('ads').add(doc)).id;
+  }
+  log('ok', { adId, type, status, idempotent });
+  return { ok: true, adId, status };
 });
 
 /** Mijoz: Иш топ шикоят (CF-only, auth). */
@@ -7604,8 +7715,7 @@ exports.submitJobComplaint = functions.https.onCall(async (data, context) => {
       'failed-precondition', 'Cannot report own ad');
   }
 
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
+  const dayStart = tashkentDayStart();
   const todaySnap = await db.collection('complaints')
     .where('reporterPhone', '==', uid)
     .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))

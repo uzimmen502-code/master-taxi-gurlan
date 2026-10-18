@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Эълонга шикоят сабабини танлаш bottom sheet'и.
+/// Шикоят сабаби: серверга ВА модераторга ҳар доим бир хил (кирилл) матн
+/// кетади, экранда эса фойдаланувчи тилидаги ёрлиқ кўринади.
+typedef _Reason = ({String payload, String labelKey});
+
+const List<_Reason> _reasons = [
+  (payload: '🚫 Алдамчи эълон', labelKey: 'ad_report_reason_fraud'),
+  (payload: '📞 Телефон нотўғри', labelKey: 'ad_report_reason_phone'),
+  (payload: '🗑️ Спам / Такрорий', labelKey: 'ad_report_reason_spam'),
+  (payload: '⚠️ Ҳақоратли матн', labelKey: 'ad_report_reason_abuse'),
+];
+
+/// Эълонга шикоят сабабини танлаш bottom sheet'и. Қайтиш: сервер учун матн.
 Future<String?> showComplaintSheet(BuildContext context) {
-  const reasons = <String>[
-    '🚫 Алдамчи эълон',
-    '📞 Телефон нотўғри',
-    '🗑️ Спам / Такрорий',
-    '⚠️ Ҳақоратли матн',
-  ];
   return showModalBottomSheet<String>(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (_) => Container(
+    builder: (sheetCtx) => Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -23,17 +29,18 @@ Future<String?> showComplaintSheet(BuildContext context) {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Шикоят',
-            style: TextStyle(
+          Text(
+            sheetCtx.tr('ad_report_title'),
+            style: const TextStyle(
                 fontSize: AppText.titleMedium, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          ...reasons.map((r) => ListTile(
+          ..._reasons.map((r) => ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(r,
+                title: Text(
+                    '${r.payload.split(' ').first} ${sheetCtx.tr(r.labelKey)}',
                     style: const TextStyle(fontSize: AppText.bodyLarge)),
-                onTap: () => Navigator.of(context).pop(r),
+                onTap: () => Navigator.of(sheetCtx).pop(r.payload),
               )),
         ],
       ),

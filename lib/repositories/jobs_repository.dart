@@ -9,10 +9,13 @@ import '../services/job_ad_service.dart';
 
 /// `ads` ва `complaints` — Иш топ doskasi.
 class JobsRepository {
-  JobsRepository({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+  JobsRepository({FirebaseFirestore? db}) : _dbOverride = db;
 
-  final FirebaseFirestore _db;
+  final FirebaseFirestore? _dbOverride;
+
+  /// Кечиктирилган: репозиторийни Firebase'сиз яратиш мумкин (виджет
+  /// тестларида контроллер ишлатилганда); биринчи сўровда олинади.
+  FirebaseFirestore get _db => _dbOverride ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _ads => _db.collection('ads');
   CollectionReference<Map<String, dynamic>> get _complaints =>
@@ -180,8 +183,9 @@ class JobsRepository {
         .take(10)
         .toList(growable: false);
     if (aliases.isEmpty) return 0;
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
+    // Сервер лимитни ТОШКЕНТ куни бўйича ҳисоблайди — клиент ҳам шундай
+    // (қурилма вақт зонасига боғлиқ эмас).
+    final startOfDay = tashkentDayStartUtc(DateTime.now());
     try {
       var total = 0;
       for (final phone in aliases) {
@@ -206,39 +210,32 @@ class JobsRepository {
   Future<String> addAd({
     required String type,
     required String text,
-    required String authorName,
-    required String authorPhone,
-    required String address,
     required bool isUrgent,
-    required DateTime expiresAt,
     String title = '',
     String priceText = '',
+    String requestId = '',
   }) async =>
       (await addAdWithId(
         type: type,
         text: text,
-        authorName: authorName,
-        authorPhone: authorPhone,
-        address: address,
         isUrgent: isUrgent,
-        expiresAt: expiresAt,
         title: title,
         priceText: priceText,
+        requestId: requestId,
       ))
           .status;
 
   /// [addAd] билан бир хил, лекин яратилган эълон `id`си ҳам қайтади — унга
   /// ихтиёрий видео боғлаш учун ([TvClipLink]).
+  ///
+  /// Эга номи, телефон, ҳудуд ва муддат СЕРВЕРДА белгиланади (аудит B6).
   Future<({String adId, String status})> addAdWithId({
     required String type,
     required String text,
-    required String authorName,
-    required String authorPhone,
-    required String address,
     required bool isUrgent,
-    required DateTime expiresAt,
     String title = '',
     String priceText = '',
+    String requestId = '',
   }) async {
     if (!JobAd.isJobsBoardType(type)) {
       throw StateError('Номаълум эълон тури');
@@ -246,11 +243,10 @@ class JobsRepository {
     return JobAdService.submitAd(
       type: type,
       text: text,
-      authorName: authorName,
       title: title,
       priceText: priceText,
-      address: address,
       isUrgent: isUrgent,
+      requestId: requestId,
     );
   }
 

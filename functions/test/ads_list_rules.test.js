@@ -277,10 +277,17 @@ async function main() {
   }
   await ok('A-eski (<=1.0.5) admin nishoni filtrsiz (admin)',
       () => ads(as(ADMIN)).get());
-  // Ilovada bunday so'rov yo'q — `type != cheap_product` shoxining
-  // `get` bilan tengligi: Ish top e'lonlari (har statusda) ochiq qoladi.
-  await okIds('L1 begona: type == service, statussiz (Ish top — joriy semantika)',
-      () => ads(as(STRANGER)).where('type', '==', 'service').get(),
+  // 2026-10-18 (audit A5): Ish top e'lonlari ham status bo'yicha cheklanadi.
+  // Avval `type != cheap_product` shoxi ularni HAR statusda (pending / blocked /
+  // completed — `authorPhone` bilan) kirmagan klientga ham ochib qo'ygan edi.
+  await no('L1 begona: type == service, statussiz (pending Ish top e\'loni oqib chiqardi)',
+      () => ads(as(STRANGER)).where('type', '==', 'service').get());
+  await okIds('L1b begona: type == work && status == active (lenta)',
+      () => ads(as(STRANGER)).where('type', '==', 'work').where('status', '==', 'active').get(),
+      'job_active,job_stranger');
+  await okIds('L2 egasi: type == service, authorPhone bo\'yicha — o\'z pending e\'loni',
+      () => ads(as(OWNER)).where('authorPhone', 'in', ownerAliases)
+          .where('type', '==', 'service').get(),
       'job_pending');
 
   // ════ B. Teshik — rad etilishi SHART ══════════════════════════════════
@@ -327,6 +334,19 @@ async function main() {
       () => cheap(emptyPhone()).where('ownerId', '==', '').get());
   await no('B23 bo\'sh phone claim: egasiz pending e\'lon get (\'\' == \'\')',
       () => ads(emptyPhone()).doc('mk_noowner').get());
+  // Audit A5 — Ish top e'lonlari.
+  await no('B24 kirmagan: type == work, statussiz',
+      () => ads(unauth()).where('type', '==', 'work').get());
+  await no('B25 begona: type in [work, service, ad], statussiz',
+      () => ads(as(STRANGER)).where('type', 'in', ['work', 'service', 'ad']).get());
+  await no('B26 begona: type == ad && status == pending',
+      () => ads(as(STRANGER)).where('type', '==', 'ad').where('status', '==', 'pending').get());
+  await no('B27 begona: Ish top, boshqaning authorPhone bo\'yicha',
+      () => ads(as(STRANGER)).where('authorPhone', '==', OWNER)
+          .where('type', '==', 'service').get());
+  await no('B28 bo\'sh phone claim: authorPhone == \'\' (Ish top, \'\' == \'\')',
+      () => ads(emptyPhone()).where('authorPhone', '==', '')
+          .where('type', '==', 'work').get());
 
   // ════ C. Bitta hujjat `get` — semantika o'zgarmagan ═══════════════════
   await ok('C1 kirmagan: faol bozor e\'loni', () => ads(unauth()).doc('mk_active').get());
@@ -339,9 +359,22 @@ async function main() {
       () => ads(as(OWNER)).doc('mk_legacy9').get());
   await ok('C8 egasi: admin rad etgan o\'z e\'loni', () => ads(as(OWNER)).doc('mk_rejected').get());
   await ok('C9 admin: boshqaning pending e\'loni', () => ads(as(ADMIN)).doc('mk_stranger').get());
-  await ok('C10 kirmagan: Ish top e\'loni (pending ham — joriy semantika)',
+  await no('C10 kirmagan: pending Ish top e\'loni (audit A5: avval ochiq edi)',
       () => ads(unauth()).doc('job_pending').get());
-  await ok('C11 begona: turisiz eski Ish top e\'loni', () => ads(as(STRANGER)).doc('job_notype').get());
+  await ok('C10b kirmagan: faol Ish top e\'loni', () => ads(unauth()).doc('job_active').get());
+  await no('C10c begona: pending Ish top e\'loni', () => ads(as(STRANGER)).doc('job_pending').get());
+  await no('C10d anonim: pending Ish top e\'loni', () => ads(anon()).doc('job_pending').get());
+  await no('C10e begona: 9 xonali authorPhone bilan eski pending e\'lon',
+      () => ads(as(STRANGER)).doc('job_legacy9').get());
+  await ok('C10f egasi: o\'z pending Ish top e\'loni', () => ads(as(OWNER)).doc('job_pending').get());
+  await ok('C10g egasi: 9 xonali authorPhone bilan eski pending e\'loni',
+      () => ads(as(OWNER)).doc('job_legacy9').get());
+  await no('C10h bo\'sh phone claim: pending Ish top e\'loni (\'\' == \'\' tuzog\'i)',
+      () => ads(emptyPhone()).doc('job_pending').get());
+  await ok('C10i admin: begonaning pending Ish top e\'loni',
+      () => ads(as(ADMIN)).doc('job_pending').get());
+  await ok('C11 begona: turisiz, lekin FAOL eski Ish top e\'loni (status == active)',
+      () => ads(as(STRANGER)).doc('job_notype').get());
 
   await testEnv.cleanup();
   const failed = results.filter((r) => !r.pass);

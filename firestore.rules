@@ -2726,16 +2726,21 @@ service cloud.firestore {
       // `list` да фақат тўғридан-тўғри майдон (`resource.data.X`):
       // сўров фильтри уни исботлай олмаса шох хато → false.
       // `.get(field, default)` фақат `get` да (битта ҳужжат).
+      //
+      // 2026-10-18 (аудит A5): Иш топ эълонлари ҳам ЭНДИ статус бўйича
+      // чекланади — `pending` / `blocked` / `completed` фақат эгасига ва
+      // админга. Аввал `!isCheapProductAdData` (ёки `type != cheap_product`)
+      // шохи ҳар қандай статусдаги Иш топ эълонини, `authorPhone` билан,
+      // КИРМАГАН клиентга ҳам очиб қўйган эди.
       allow get: if isAdmin()
-          || !isCheapProductAdData(resource.data)
-          || resource.data.status == 'active'
-          || adReaderIsPhone(resource.data.get('ownerId', ''));
+          || resource.data.get('status', '') == 'active'
+          || adReaderIsPhone(resource.data.get('ownerId', ''))
+          || adReaderIsPhone(resource.data.get('authorPhone', ''));
       // Ҳар шох иловадаги сўровга мос (functions/test/ads_list_rules.test.js):
       // тур фильтри (Иш топ лентаси) · `status == active` (лента, қидирув) ·
       // `ownerId` (бозор «Менинг эълонларим», лимит) · `authorPhone`
       // (Иш топ «Менинг эълонларим», кунлик лимит — тур фильтри йўқ).
       allow list: if isAdmin()
-          || resource.data.type != 'cheap_product'
           || resource.data.status == 'active'
           || adReaderIsPhone(resource.data.ownerId)
           || adReaderIsPhone(resource.data.authorPhone);

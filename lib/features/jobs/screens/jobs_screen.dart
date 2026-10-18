@@ -16,6 +16,7 @@ import '../jobs_sections.dart';
 import '../controllers/jobs_controller.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/add_ad_sheet.dart';
+import 'jobs_my_ads_screen.dart';
 
 /// `jobs` модулининг БИТТА бўлими — «Эълонлар» ёки «Хизматлар».
 ///
@@ -171,6 +172,13 @@ class _JobsViewState extends State<_JobsView> {
         foregroundColor: JobsColors.onBar,
         elevation: 0,
         actions: [
+          // «Менинг эълонларим» — текширувдаги/рад этилган эълонларни ҳам кўради
+          // (умумий лента фақат фаолларини кўрсатади).
+          IconButton(
+            tooltip: context.tr('jobs_my_ads'),
+            icon: const Icon(Icons.assignment_ind_outlined),
+            onPressed: () => openJobsMyAds(context, c),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: Center(
@@ -220,7 +228,7 @@ class _JobsViewState extends State<_JobsView> {
               fontWeight: FontWeight.w600,
             ),
             decoration: InputDecoration(
-              hintText: 'Қидириш... (масалан: ҳайдовчи, тозалаш)',
+              hintText: context.tr('jobs_search_hint'),
               hintStyle: const TextStyle(
                   color: JobsColors.hint, fontSize: AppText.bodyMedium),
               prefixIcon: Icon(
@@ -294,11 +302,21 @@ class _Feed extends StatelessWidget {
           return Center(child: CircularProgressIndicator(color: color));
         }
         if (snap.hasError) {
+          // Ички хато матни фойдаланувчига кўрсатилмайди (CLAUDE.md 25).
+          debugPrint('[Jobs feed] ${snap.error}');
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Text('Хатолик: ${snap.error}',
-                  style: const TextStyle(color: JobsColors.muted)),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(ctx.tr('jobs_load_error'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: JobsColors.muted)),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: c.reload,
+                  child: Text(ctx.tr('home_section_retry')),
+                ),
+              ]),
             ),
           );
         }
@@ -315,6 +333,13 @@ class _Feed extends StatelessWidget {
           scope: c.scope,
           onChanged: c.setScope,
         );
+        // Саҳифалаш (B7): қидирув юкланган эълонлар ичида; яна бор бўлса — тугма.
+        final loadMore = c.canLoadMore
+            ? _LoadMore(
+                searching: c.searchQuery.isNotEmpty,
+                onTap: c.loadMore,
+              )
+            : null;
         if (list.isEmpty) {
           return ListView(
             children: [
@@ -322,24 +347,65 @@ class _Feed extends StatelessWidget {
                 kind: kindFilter,
                 isSearching: c.searchQuery.isNotEmpty,
               ),
+              if (loadMore != null) loadMore,
               wider,
             ],
           );
         }
         // Ҳудудда кам — пастда кенгроқ ҳудуд таклифи (2-такомиллаштириш).
         final showWider = list.length < 5;
+        final tail = (loadMore != null ? 1 : 0) + (showWider ? 1 : 0);
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 90),
-          itemCount: list.length + (showWider ? 1 : 0),
-          itemBuilder: (_, i) => i == list.length
-              ? wider
-              : AdCard(
-                  ad: list[i],
-                  highlighted: highlight.isNotEmpty && list[i].id == highlight,
-                  linkedClip: clipFor(list[i]),
-                ),
+          itemCount: list.length + tail,
+          itemBuilder: (_, i) {
+            if (i < list.length) {
+              return AdCard(
+                ad: list[i],
+                highlighted: highlight.isNotEmpty && list[i].id == highlight,
+                linkedClip: clipFor(list[i]),
+              );
+            }
+            final extra = i - list.length;
+            if (loadMore != null && extra == 0) return loadMore;
+            return wider;
+          },
         );
       },
+    );
+  }
+}
+
+/// «Яна юклаш» — рўйхат саҳифалаб юкланади (аввал ҳар очилишда 500 та
+/// ҳужжат real-time тингланарди). Қидирув юкланган эълонлар ичида эканини
+/// айтамиз, акс ҳолда одам "топилмади" деб ўйлайди.
+class _LoadMore extends StatelessWidget {
+  const _LoadMore({required this.searching, required this.onTap});
+
+  final bool searching;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      child: Column(children: [
+        if (searching)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              context.tr('jobs_load_more_search'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: AppText.labelSmall, color: JobsColors.muted),
+            ),
+          ),
+        OutlinedButton.icon(
+          onPressed: onTap,
+          icon: const Icon(Icons.expand_more),
+          label: Text(context.tr('jobs_load_more')),
+        ),
+      ]),
     );
   }
 }
@@ -356,7 +422,8 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emoji = kind?.emoji ?? '📰';
-    final label = kind?.label ?? 'Эълон';
+    final label =
+        context.tr(JobsSections.kindLabelKey(kind ?? AdKind.ad));
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -366,7 +433,9 @@ class _EmptyState extends StatelessWidget {
               Text(emoji, style: const TextStyle(fontSize: 56)),
               const SizedBox(height: 14),
               Text(
-                isSearching ? 'Натижа топилмади' : 'Ҳозирча эълон йўқ',
+                context.tr(isSearching
+                    ? 'jobs_empty_search_title'
+                    : 'jobs_empty_title'),
                 style: const TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.w600,
@@ -375,8 +444,10 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 isSearching
-                    ? 'Қидирув матнини ўзгартиринг'
-                    : 'Биринчи бўлиб «$label» қўшинг!',
+                    ? context.tr('jobs_empty_search_hint')
+                    : context
+                        .tr('jobs_empty_first')
+                        .replaceAll('{label}', label),
                 style: const TextStyle(
                     fontSize: AppText.bodySmall,
                     color: JobsColors.muted),

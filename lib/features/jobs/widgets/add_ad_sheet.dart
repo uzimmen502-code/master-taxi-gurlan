@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
 import '../jobs_colors.dart';
+import '../jobs_sections.dart';
+import '../screens/jobs_my_ads_screen.dart';
 import 'urgent_toggle.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
@@ -50,6 +53,10 @@ class _AddAdViewState extends State<_AddAdView> {
   bool _isUrgent = false;
   bool _submitting = false;
 
+  /// Шу варақа учун бир марта: тармоқ узилиб тугма қайта босилганда эълон
+  /// такрорланмасин (сервер `requestId` бўйича дубликатни аниқлайди).
+  final String _requestSeed = JobsController.newRequestSeed();
+
   /// Эълондан кейин видео жойлаш (ихтиёрий, [TvClipLink]).
   bool _withVideo = false;
 
@@ -58,22 +65,22 @@ class _AddAdViewState extends State<_AddAdView> {
   String get _titleHint {
     switch (_kind) {
       case AdKind.work:
-        return 'Масалан: Шоли экишга ишчилар';
+        return context.tr('jobs_form_title_hint_work');
       case AdKind.service:
-        return 'Масалан: Электрик хизмати';
+        return context.tr('jobs_form_title_hint_service');
       case AdKind.ad:
-        return 'Масалан: Ҳайдовчи керак';
+        return context.tr('jobs_form_title_hint_ad');
     }
   }
 
   String get _hint {
     switch (_kind) {
       case AdKind.work:
-        return 'Масалан: Шоли экишга 5-6 одам керак';
+        return context.tr('jobs_form_text_hint_work');
       case AdKind.service:
-        return 'Масалан: Электрикман, бригадам бор';
+        return context.tr('jobs_form_text_hint_service');
       case AdKind.ad:
-        return 'Масалан: Ҳайдовчи керак — Гурлан–Урганч';
+        return context.tr('jobs_form_text_hint_ad');
     }
   }
 
@@ -105,13 +112,16 @@ class _AddAdViewState extends State<_AddAdView> {
       text: _textCtrl.text,
       priceText: _priceCtrl.text,
       isUrgent: _isUrgent && _kind.userCanMarkUrgent,
+      requestSeed: _requestSeed,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!result.success) {
+      final key = result.error ?? 'jobs_err_post';
       messenger.showSnackBar(SnackBar(
-        content: Text(result.error ?? 'Хатолик'),
-        backgroundColor: result.error?.startsWith('⚠️') == true
+        content: Text(context.trMsg(key)),
+        // Кунлик лимит — огоҳлантириш (олдинги "⚠️" матн текширувининг ўрнига).
+        backgroundColor: key.startsWith('jobs_err_daily_limit')
             ? Colors.orange.shade800
             : JobsColors.urgent,
         behavior: SnackBarBehavior.floating,
@@ -120,15 +130,25 @@ class _AddAdViewState extends State<_AddAdView> {
       ));
       return;
     }
-    navigator.pop();
     final live = result.status == 'active';
+    // Матнлар варақа ёпилишидан ОЛДИН (ёпилгандан кейин context яроқсиз).
+    final message =
+        context.tr(JobsSections.postedKeyFor(kind, live: live));
+    final viewLabel = context.tr('jobs_view_my');
+    navigator.pop();
     messenger.showSnackBar(SnackBar(
-      content: Text(
-        live ? 'Эълон жойланди' : 'Эълон текширувга юборилди',
-      ),
+      content: Text(message),
       backgroundColor: _color,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      // Текширувга кетган эълон умумий рўйхатда кўринмайди — шахсий рўйхатга ўтиш.
+      action: live
+          ? null
+          : SnackBarAction(
+              label: viewLabel,
+              textColor: Colors.white,
+              onPressed: () => pushJobsMyAds(navigator, c),
+            ),
     ));
     // Ихтиёрий видео: эълон ЯРАТИЛДИ; видео бекор қилинса/йиқилса таъсир йўқ.
     final adId = result.adId ?? '';
@@ -205,10 +225,10 @@ class _AddAdViewState extends State<_AddAdView> {
                       ),
                       const SizedBox(height: 14),
                       if (widget.presetKind == null)
-                        const Align(
+                        Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('Тур:',
-                              style: TextStyle(
+                          child: Text(context.tr('jobs_form_type'),
+                              style: const TextStyle(
                                   fontSize: AppText.labelSmall,
                                   fontWeight: FontWeight.w600,
                                   color: JobsColors.ink)),
@@ -220,7 +240,7 @@ class _AddAdViewState extends State<_AddAdView> {
                                 style: const TextStyle(fontSize: 22)),
                             const SizedBox(width: 8),
                             Text(
-                              _kind.label,
+                              context.tr(JobsSections.kindLabelKey(_kind)),
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: AppText.bodyLarge,
@@ -277,7 +297,9 @@ class _AddAdViewState extends State<_AddAdView> {
                                               style: const TextStyle(
                                                   fontSize: 18)),
                                           const SizedBox(width: 6),
-                                          Text(k.label,
+                                          Text(
+                                              context.tr(
+                                                  JobsSections.kindLabelKey(k)),
                                               style: TextStyle(
                                                 fontSize: AppText.labelTiny,
                                                 fontWeight: FontWeight.bold,
@@ -304,7 +326,7 @@ class _AddAdViewState extends State<_AddAdView> {
                             fontWeight: FontWeight.w700,
                           ),
                           decoration: _fieldDecoration(
-                            label: 'Сарлавҳа *',
+                            label: context.tr('jobs_form_title_label'),
                             hint: _titleHint,
                           ),
                         ),
@@ -315,7 +337,7 @@ class _AddAdViewState extends State<_AddAdView> {
                           maxLength: 300,
                           style: const TextStyle(color: JobsColors.ink),
                           decoration: _fieldDecoration(
-                            label: 'Матн *',
+                            label: context.tr('jobs_form_text_label'),
                             hint: _hint,
                           ),
                         ),
@@ -325,12 +347,12 @@ class _AddAdViewState extends State<_AddAdView> {
                           maxLength: 40,
                           style: const TextStyle(color: JobsColors.ink),
                           decoration: _fieldDecoration(
-                            label: _kind == AdKind.ad
-                                ? 'Нарх (ихтиёрий)'
-                                : 'Нарх / шартнома (ихтиёрий)',
-                            hint: _kind == AdKind.ad
-                                ? 'Масалан: 200 000 сўм'
-                                : 'Масалан: келишув асосида',
+                            label: context.tr(_kind == AdKind.ad
+                                ? 'jobs_form_price_ad'
+                                : 'jobs_form_price_service'),
+                            hint: context.tr(_kind == AdKind.ad
+                                ? 'jobs_form_price_hint_ad'
+                                : 'jobs_form_price_hint_service'),
                             showCounter: false,
                           ).copyWith(
                             isDense: true,
@@ -372,7 +394,9 @@ class _AddAdViewState extends State<_AddAdView> {
                                     color: JobsColors.onBar))
                             : const Icon(Icons.send, size: 18),
                         label: Text(
-                          _submitting ? 'Юборилмоқда...' : 'ЭЪЛОН ҚЎШИШ',
+                          context.tr(_submitting
+                              ? 'jobs_submitting'
+                              : JobsSections.submitKeyFor(_kind)),
                           style: const TextStyle(
                               fontSize: AppText.bodyLarge,
                               fontWeight: FontWeight.bold),
@@ -388,7 +412,11 @@ class _AddAdViewState extends State<_AddAdView> {
                       const SizedBox(height: 6),
                       Center(
                         child: Text(
-                          '$_visibleDays кун давомида кўринади • Кунига ${JobsController.dailyAdLimit} та эълон',
+                          context
+                              .tr('jobs_visible_days')
+                              .replaceAll('{days}', '$_visibleDays')
+                              .replaceAll('{limit}',
+                                  '${JobsController.dailyAdLimit}'),
                           style: const TextStyle(
                               fontSize: AppText.labelTiny,
                               color: JobsColors.muted),

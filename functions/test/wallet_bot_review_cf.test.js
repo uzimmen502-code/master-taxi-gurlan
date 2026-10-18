@@ -285,6 +285,9 @@ const linkMsg = (tgId, code) => ({ message: { chat: { id: tgId }, from: { id: tg
     assert.strictEqual(open[0].amount, 150000);
     assert.strictEqual(open[0].uid, USER);
     assert.ok(said().includes('8600 0000 0000 0007'), 'karta ko\'rsatilmadi');
+    // Qaysi kartaga to'lash aytilgani (karta almashsa moliya chekni solishtiradi) — faqat oxirgi 4 raqam.
+    assert.strictEqual(open[0].depositCardLast4, '0007');
+    assert.ok(!JSON.stringify(open[0]).includes('8600000000000007'), 'to\'liq karta so\'rovga yozilmasligi kerak');
   });
 
   await check('D2 takror bosish — ikkinchi so\'rov ochilmaydi, shu so\'rov qayta ko\'rsatiladi', async () => {

@@ -5,7 +5,7 @@
  */
 'use strict';
 const assert = require('assert');
-const {cardIsValid, topUpReadiness, makeFinanceNotifier, parseDepositPayload, sanitizePendingAmount} = require('../wallet_topup_support');
+const {cardIsValid, topUpReadiness, makeFinanceNotifier, parseDepositPayload, sanitizePendingAmount, cardLast4, makeCardChangeNotifier} = require('../wallet_topup_support');
 
 const results = [];
 function check(name, pass) {
@@ -33,6 +33,10 @@ check('кутилаётган сумма: бутун, 1..max; чегарада �
     sanitizePendingAmount(-1, 500000) === 0 && sanitizePendingAmount(1.5, 500000) === 0 &&
     sanitizePendingAmount('150000', 500000) === 150000 && sanitizePendingAmount('abc', 500000) === 0 &&
     sanitizePendingAmount(undefined, 500000) === 0 && sanitizePendingAmount(null, 500000) === 0);
+// ── карта ўзгариши ──
+check('cardLast4: охирги 4 рақам; қисқа/бўш/нотўғри — бўш',
+    cardLast4('4111 1111 1111 4821') === '4821' && cardLast4('8600000000000007') === '0007' &&
+    cardLast4('12') === '' && cardLast4('') === '' && cardLast4(null) === '' && cardLast4(undefined) === '');
 // ── тайёрлик ──
 const OK = '4111111111111111';
 check('тайёр: бот ёқиқ ва карта тўғри', JSON.stringify(topUpReadiness({enabled: true, depositCardNumber: OK})) === JSON.stringify({ready: true, reason: 'ok'}));

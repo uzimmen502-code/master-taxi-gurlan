@@ -62,12 +62,38 @@ const money = (n) => Number(n || 0).toLocaleString('uz-UZ');
  * қилувчига алоҳида `try/catch`: биттасининг хатоси қолганларга ва асосий
  * оқимга (чек қабул қилиш) таъсир қилмайди.
  */
+/** Молия ходимларининг ҳаммасига: иловада + push + (боғланган бўлса) Telegram. */
+async function broadcastToFinance({ db, notifyUserInApp, sendTelegram, title, body, tgText, extraData }) {
+  const snap = await db.collection('users')
+    .where('role', 'in', FINANCE_ROLES)
+    .limit(MAX_RECIPIENTS)
+    .get();
+  let notified = 0;
+  await Promise.all(snap.docs.map(async (doc) => {
+    const d = doc.data() || {};
+    try {
+      await notifyUserInApp({
+        userId: doc.id,
+        title,
+        body,
+        category: 'wallet_finance',
+        source: 'wallet_finance_queue',
+        dataType: 'wallet_finance_queue',
+        screen: 'news',
+        extraData,
+      });
+      notified += 1;
+    } catch (_) { /* best-effort */ }
+    const tg = String(d.telegramId || '').trim();
+    if (tg && sendTelegram) {
+      try { await sendTelegram(tg, tgText); } catch (_) { /* best-effort */ }
+    }
+  }));
+  return { notified, recipients: snap.size };
+}
+
 function makeFinanceNotifier({ db, notifyUserInApp, sendTelegram }) {
   return async function notifyFinanceQueue({ kind, requestId, amount }) {
-    const snap = await db.collection('users')
-      .where('role', 'in', FINANCE_ROLES)
-      .limit(MAX_RECIPIENTS)
-      .get();
     const isTopUp = kind === 'topup';
     const title = isTopUp ? 'Тўлдириш чеки текширув кутмоқда' : 'Янги ечиш аризаси';
     const body = `${money(amount)} сўм · ${String(requestId).slice(0, 8)}`;
@@ -76,29 +102,40 @@ function makeFinanceNotifier({ db, notifyUserInApp, sendTelegram }) {
         + 'Админ → Молия → Telegram ҳамён → «Тўлдириш» навбати.'
       : `📤 <b>Ечиш аризаси</b> — ${money(amount)} сўм\nID: <code>${requestId}</code>\n`
         + 'Админ → Молия → Telegram ҳамён → «Ечиш» навбати.';
+    return broadcastToFinance({
+      db, notifyUserInApp, sendTelegram, title, body, tgText,
+      extraData: { requestId: String(requestId), kind: String(kind) },
+    });
+  };
+}
 
-    let notified = 0;
-    await Promise.all(snap.docs.map(async (doc) => {
-      const d = doc.data() || {};
-      try {
-        await notifyUserInApp({
-          userId: doc.id,
-          title,
-          body,
-          category: 'wallet_finance',
-          source: 'wallet_finance_queue',
-          dataType: 'wallet_finance_queue',
-          screen: 'news',
-          extraData: { requestId: String(requestId), kind: String(kind) },
-        });
-        notified += 1;
-      } catch (_) { /* best-effort */ }
-      const tg = String(d.telegramId || '').trim();
-      if (tg && sendTelegram) {
-        try { await sendTelegram(tg, tgText); } catch (_) { /* best-effort */ }
-      }
-    }));
-    return { notified, recipients: snap.size };
+/** «…4821» — картанинг охирги 4 рақами (тўлиқ рақам ҳеч қаерда кўрсатилмайди). */
+function cardLast4(raw) {
+  const s = String(raw == null ? '' : raw).replace(/\D/g, '');
+  return s.length >= 4 ? s.slice(-4) : '';
+}
+
+/**
+ * Депозит картаси ўзгарганда молия ходимларига огоҳлантириш: картани
+ * тасодифан ёки ёвуз ниятда алмаштирса, бошқа ходимлар дарҳол билади.
+ * Хабарда ТЎЛИҚ рақам йўқ — фақат охирги 4 рақам (push ва Telegram'га ўтади).
+ * `actor` — ўзгартирувчининг кўринадиган номи (исм ва роль).
+ */
+function makeCardChangeNotifier({ db, notifyUserInApp, sendTelegram }) {
+  return async function notifyCardChanged({ oldCard, newCard, actor }) {
+    const from = cardLast4(oldCard);
+    const to = cardLast4(newCard);
+    const fromTxt = from ? `…${from}` : 'йўқ';
+    const toTxt = to ? `…${to}` : 'олиб ташланди';
+    const who = String(actor || 'номаълум');
+    const title = 'Депозит картаси ўзгартирилди';
+    const body = `${fromTxt} → ${toTxt} · ${who}`;
+    const tgText = `💳 <b>Депозит картаси ўзгартирилди</b>\nЭски: ${fromTxt} → Янги: ${toTxt}\n`
+      + `Ким: ${who}\nАгар бу сиз эмасдингиз, дарҳол супер-админга хабар беринг.`;
+    return broadcastToFinance({
+      db, notifyUserInApp, sendTelegram, title, body, tgText,
+      extraData: { kind: 'card_changed' },
+    });
   };
 }
 
@@ -198,6 +235,8 @@ module.exports = {
   cardIsValid,
   topUpReadiness,
   makeFinanceNotifier,
+  makeCardChangeNotifier,
+  cardLast4,
   sweepExpiredTopUps,
   parseDepositPayload,
   sanitizePendingAmount,

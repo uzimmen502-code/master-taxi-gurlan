@@ -127,6 +127,54 @@ const setSettings = (data) => fns.adminSetWalletBotSettings.run(data, ctxOf(FINA
     assert.ok(!all.includes(USER), 'foydalanuvchi telefoni xabarda bo\'lmasligi kerak');
   });
 
+  // ── Karta o'zgarganda moliyaga ogohlantirish ─────────────────────────
+  const cardNews = async () => (await db.collection('admin_news').get()).docs.map((d) => d.data())
+      .filter((n) => n.source === 'wallet_finance_queue' && n.title === 'Депозит картаси ўзгартирилди');
+  const cardTg = () => tgSent.filter((m) => /sendMessage/.test(m.url) && m.body && /Депозит картаси/.test(String(m.body.text)));
+
+  await reset({ depositCardNumber: '4111111111111111' });
+  await db.collection('users').doc(FINANCE).update({ name: 'Али' });
+  await check('C5 karta almashtirilsa: moliya + superadminga (ilova + Telegram), dispetcherga YO\'Q; faqat oxirgi 4 raqam', async () => {
+    await setSettings({ depositCardNumber: '5555 5555 5555 4444' });
+    const news = await cardNews();
+    assert.deepStrictEqual(news.map((n) => n.targetUserId).sort(), [FINANCE, SUPER].sort());
+    const tg = cardTg();
+    assert.deepStrictEqual(tg.map((m) => String(m.body.chat_id)), ['777001']);
+    const all = JSON.stringify([news, tg]);
+    assert.ok(all.includes('…1111') && all.includes('…4444'), 'eski va yangi oxirgi 4 raqam');
+    assert.ok(!all.includes('4111111111111111') && !all.includes('5555555555554444'), 'to\'liq raqam chiqmasligi kerak');
+    assert.ok(all.includes('Али'), 'kim o\'zgartirgani ko\'rinsin');
+  });
+
+  await reset({ depositCardNumber: '4111111111111111' });
+  await check('C6 karta o\'zgarmasa (xuddi shu / faqat ism / limit) — ogohlantirish YO\'Q', async () => {
+    await setSettings({ depositCardNumber: CARD_OK });
+    await setSettings({ depositCardFirstName: 'Ali', depositCardLastName: 'Valiyev' });
+    await setSettings({ maxTopUp: 300000 });
+    assert.strictEqual((await cardNews()).length, 0);
+  });
+
+  await reset();
+  await check('C7 karta birinchi marta kiritilsa / olib tashlansa — ogohlantirish bor; xato asosiy saqlashni BUZMAYDI', async () => {
+    await setSettings({ depositCardNumber: CARD_OK });
+    assert.strictEqual((await cardNews()).length, 2);
+    const body = JSON.stringify(await cardNews());
+    assert.ok(body.includes('йўқ') && body.includes('…1111'));
+    await wipe('admin_news');
+    await setSettings({ depositCardNumber: '' });
+    assert.ok(JSON.stringify(await cardNews()).includes('олиб ташланди'));
+  });
+
+  await reset({ depositCardNumber: '4111111111111111' });
+  await check('C8 notifyUserInApp yiqilsa ham karta o\'zgarishi SAQLANADI (best-effort)', async () => {
+    const realFetch = global.fetch;
+    global.fetch = async () => { throw new Error('telegram down'); };
+    try {
+      const r = await setSettings({ depositCardNumber: '5555555555554444' });
+      assert.strictEqual(r.settings.depositCardNumber, '5555555555554444');
+    } finally { global.fetch = realFetch; }
+  });
+
   const failed = results.filter((x) => !x).length;
   console.log(`\n${results.length - failed}/${results.length} o'tdi`);
   process.exit(failed ? 1 : 0);

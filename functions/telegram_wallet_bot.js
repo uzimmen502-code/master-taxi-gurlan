@@ -9,7 +9,7 @@
 const crypto = require('crypto');
 const {
   cardIsValid, topUpReadiness, makeFinanceNotifier, sweepExpiredTopUps,
-  parseDepositPayload, sanitizePendingAmount,
+  parseDepositPayload, sanitizePendingAmount, makeCardChangeNotifier, cardLast4,
 } = require('./wallet_topup_support');
 
 const TOPUP_COL = 'wallet_topup_requests';
@@ -201,6 +201,10 @@ function attachTelegramWalletBot(exports, deps) {
   const notifyFinanceQueueRaw = makeFinanceNotifier({
     db, notifyUserInApp, sendTelegram: tgSend,
   });
+  const notifyCardChangedRaw = makeCardChangeNotifier({
+    db, notifyUserInApp, sendTelegram: tgSend,
+  });
+
   /** Хато асосий оқимни (чек қабул қилиш, ариза яратиш) ҲЕЧ ҚАЧОН бузмайди. */
   async function notifyFinanceQueue(args) {
     try {
@@ -743,6 +747,23 @@ function attachTelegramWalletBot(exports, deps) {
       });
     }
     await batch.commit();
+
+    // Карта ўзгарди — молия ходимларига дарҳол огоҳлантириш (тасодифий ёки
+    // ёвуз алмаштиришни бошқа ходимлар кўрсин). Хато созламани БУЗМАЙДИ.
+    if (changed.depositCardNumber) {
+      try {
+        const actorDoc = await db.collection('users').doc(caller).get();
+        const a = actorDoc.exists ? (actorDoc.data() || {}) : {};
+        const actor = [String(a.name || '').trim(), a.role ? `(${a.role})` : ''].filter(Boolean).join(' ');
+        await notifyCardChangedRaw({
+          oldCard: prev.depositCardNumber,
+          newCard: patch.depositCardNumber,
+          actor: actor || `…${String(caller).slice(-4)}`,
+        });
+      } catch (e) {
+        console.error('notifyCardChanged', e.message || e);
+      }
+    }
     return { ok: true, settings: await loadBotSettings() };
   });
 
@@ -1262,6 +1283,9 @@ function attachTelegramWalletBot(exports, deps) {
       amount,
       currency: 'UZS',
       channel: 'telegram_card_manual',
+      // Қайси картага тўлаш айтилгани (охирги 4 рақам): карта алмашса молия
+      // чекни тўғри картага солиштира олади.
+      depositCardLast4: cardLast4(settings.depositCardNumber),
       status: 'awaiting_transfer',
       source: 'telegram',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),

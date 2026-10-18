@@ -8,7 +8,7 @@
 
 const crypto = require('crypto');
 const {
-  cardIsValid, topUpReadiness, makeFinanceNotifier,
+  cardIsValid, topUpReadiness, makeFinanceNotifier, sweepExpiredTopUps,
 } = require('./wallet_topup_support');
 
 const TOPUP_COL = 'wallet_topup_requests';
@@ -1283,7 +1283,11 @@ function attachTelegramWalletBot(exports, deps) {
       return;
     }
     const req = snap.data() || {};
-    if (req.status !== 'awaiting_transfer') {
+    // `expired` ҲАМ қабул қилинади: sweeper 24 соатдан кейин сўровни ёпади,
+    // лекин фойдаланувчи пулни ўз вақтида ўтказиб, чекни кечроқ юбориши мумкин.
+    // Рад этсак — пул ўтган, ҳамёнга тушмаган бўлади. Чек молия текширувига
+    // тушади (банк кўчирмаси билан солиштирилади), яъни хавф йўқ.
+    if (req.status !== 'awaiting_transfer' && req.status !== 'expired') {
       await tgSend(chatId, `Сўров ҳолати: ${req.status}`);
       return;
     }
@@ -1542,6 +1546,32 @@ function attachTelegramWalletBot(exports, deps) {
       await handleTextMessage(chatId, tgUser, msg.text);
     }
   }
+
+  /**
+   * Чек келмаган тўлдириш сўровларини ёпади (ҳар соат). Мантиқ ва хавфсизлик
+   * изоҳи: `sweepExpiredTopUps` (wallet_topup_support.js).
+   */
+  exports.walletTopUpExpirySweep = functions
+      .runWith({ timeoutSeconds: 300 })
+      .pubsub.schedule('17 * * * *')
+      .timeZone('Asia/Tashkent')
+      .onRun(async () => {
+        const started = Date.now();
+        try {
+          const res = await sweepExpiredTopUps({ db, admin, ttlMs: REQUEST_TTL_MS });
+          console.log(JSON.stringify({
+            action: 'walletTopUpExpirySweep', result: 'ok', ...res, duration: Date.now() - started,
+          }));
+        } catch (e) {
+          console.error(JSON.stringify({
+            action: 'walletTopUpExpirySweep', result: 'error',
+            errorCode: 'TOPUP_SWEEP_FAILED', message: String((e && e.message) || e),
+            duration: Date.now() - started,
+          }));
+          throw e;
+        }
+        return null;
+      });
 
   // ─── HTTP webhook ────────────────────────────────────────────────
   exports.telegramWalletBotWebhook = functions

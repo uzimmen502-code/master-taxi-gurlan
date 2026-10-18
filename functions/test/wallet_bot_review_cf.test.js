@@ -229,6 +229,37 @@ const linkMsg = (tgId, code) => ({ message: { chat: { id: tgId }, from: { id: tg
     assert.strictEqual(Number(a) + Number(b), 1, `bog'langan: 444=${a} 555=${b}`);
   });
 
+  // ─── Sweeper'dan keyingi kech kelgan chek ───────────────────────────
+  // Sweeper 24 soatdan keyin so'rovni `expired` qiladi; pulni o'z vaqtida
+  // o'tkazgan foydalanuvchining kechroq yuborgan cheki RAD ETILMASLIGI kerak.
+  // Storage emulyatori yo'q: fetch stub'i `file_path` qaytarmaydi, shuning
+  // uchun holat tekshiruvidan O'TGAN so'rov «Чекни юклаб бўлмади» deydi,
+  // o'tmaganlari esa «Сўров ҳолати: …».
+  const receiptMsg = (tgId) => ({
+    message: { chat: { id: tgId }, from: { id: tgId, username: `u${tgId}` }, photo: [{ file_id: 'f1' }] },
+  });
+  async function receiptReply(status) {
+    await reset();
+    await db.collection('telegram_links').doc('900').set({ uid: USER, status: 'active' });
+    await topup('R1', USER, 30000, { status });
+    await db.collection('telegram_bot_sessions').doc('900').set({ expect: 'deposit_receipt', topupRequestId: 'R1' });
+    sent.length = 0;
+    await hook({ secretEnv: SECRET, header: SECRET, body: receiptMsg(900) });
+    return sent.map((x) => String(x.body || '')).join('\n');
+  }
+  await check('E1 muddati o\'tgan (expired) so\'rovga kech kelgan chek holat tekshiruvidan o\'tadi', async () => {
+    const out = await receiptReply('expired');
+    assert.ok(!out.includes('Сўров ҳолати'), `rad etildi: ${out}`);
+  });
+  await check('E2 awaiting_transfer so\'rovga chek ham o\'tadi (o\'zgarmagan yo\'l)', async () => {
+    const out = await receiptReply('awaiting_transfer');
+    assert.ok(!out.includes('Сўров ҳолати'), `rad etildi: ${out}`);
+  });
+  await check('E3 allaqachon credited so\'rovga chek RAD etiladi', async () => {
+    const out = await receiptReply('credited');
+    assert.ok(out.includes('Сўров ҳолати'), `rad etilmadi: ${out}`);
+  });
+
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;
   console.log(`\n${passed} passed, ${failed} failed`);

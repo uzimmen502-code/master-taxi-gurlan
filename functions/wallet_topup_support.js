@@ -102,9 +102,74 @@ function makeFinanceNotifier({ db, notifyUserInApp, sendTelegram }) {
   };
 }
 
+const TOPUP_COL = 'wallet_topup_requests';
+
+/**
+ * Чек юборилмаган эски сўровларни `expired` қилади (sweeper).
+ *
+ * Нега: бот `awaiting_transfer` сўровга `expiresAt` (24 соат) ёзади, лекин уни
+ * ҳеч ким ўзгартирмасди — иловада «муддати тугади» ҳисоблаб кўрсатилар
+ * (`effectiveStatus`), омборда эса сўров абадий «кутилмоқда» қолар эди.
+ *
+ * Хавфсизлик:
+ *  - пул ЎЗГАРМАЙДИ: фақат `awaiting_transfer` (чек ҳали келмаган, ҳамёнга
+ *    ҳеч нарса тушмаган) → `expired`;
+ *  - ҳар ҳужжат ТРАНЗАКЦИЯДА қайта текширилади: шу пайт чек келиб
+ *    `awaiting_review` бўлган бўлса тегилмайди (рейс ҳолати);
+ *  - идемпотент: қайта ишга тушса `expired` ҳужжатни қайта сўрамайди
+ *    (сўров `status == awaiting_transfer` бўйича);
+ *  - мавжуд индекс (`status`, `createdAt`) ишлатилади — янги индекс керак эмас.
+ *
+ * `createdAt` ўсиш тартибида ўтади: TTL ҳаммада бир хил, шунинг учун биринчи
+ * муддати ўтмаган ҳужжатда тўхтаса бўлади.
+ */
+async function sweepExpiredTopUps({
+  db, admin, nowMs = Date.now(), ttlMs, batchSize = 200, maxRounds = 10,
+}) {
+  let expired = 0;
+  let skipped = 0;
+  let scanned = 0;
+  for (let round = 0; round < maxRounds; round += 1) {
+    const snap = await db.collection(TOPUP_COL)
+      .where('status', '==', 'awaiting_transfer')
+      .orderBy('createdAt', 'asc')
+      .limit(batchSize)
+      .get();
+    if (snap.empty) break;
+    scanned += snap.size;
+
+    const dueOf = (data) => {
+      const exp = data.expiresAt && data.expiresAt.toMillis ? data.expiresAt.toMillis() : 0;
+      if (exp) return exp <= nowMs;
+      const created = data.createdAt && data.createdAt.toMillis ? data.createdAt.toMillis() : 0;
+      return created > 0 && ttlMs > 0 && created + ttlMs <= nowMs;
+    };
+
+    const due = snap.docs.filter((d) => dueOf(d.data() || {}));
+    if (due.length === 0) break;
+    for (const doc of due) {
+      const done = await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(doc.ref);
+        const data = fresh.exists ? (fresh.data() || {}) : null;
+        if (!data || data.status !== 'awaiting_transfer' || !dueOf(data)) return false;
+        tx.update(doc.ref, {
+          status: 'expired',
+          expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return true;
+      });
+      if (done) expired += 1; else skipped += 1;
+    }
+    if (snap.size < batchSize) break;
+  }
+  return { expired, skipped, scanned };
+}
+
 module.exports = {
   cardIsValid,
   topUpReadiness,
   makeFinanceNotifier,
+  sweepExpiredTopUps,
   FINANCE_ROLES,
 };

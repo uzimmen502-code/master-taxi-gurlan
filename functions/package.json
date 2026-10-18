@@ -65,6 +65,7 @@
     "test:realty": "node test/realty_expiry.test.js",
     "test:wallet-topup-support": "node test/wallet_topup_support.test.js",
     "test:wallet-topup-cf": "firebase emulators:exec --only firestore --project demo-wallet-topup \"node test/wallet_topup_cf.test.js\"",
+    "test:wallet-topup-sweep": "firebase emulators:exec --only firestore --project demo-wallet-topup-sweep \"node test/wallet_topup_sweep_cf.test.js\"",
     "test:realty-guards": "node test/realty_guards.test.js",
     "test:realty-settings": "node test/realty_settings.test.js",
     "test:realty-submit-cf": "firebase emulators:exec --only firestore --project demo-realty-submit \"node test/realty_submit_cf.test.js\"",

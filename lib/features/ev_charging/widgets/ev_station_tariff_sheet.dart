@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/ev_station_repository.dart';
-import '../../../repositories/user_repository.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 
 /// ⚡ Зарядлаш станциясини қўшиш — ПУЛЛИК (эга қарори, 2026-09-22): харита
 /// экранидаги FAB босилганда очиладиган тариф + қадамлар варақаси.
@@ -21,7 +21,10 @@ class EvStationTariffSheet extends StatefulWidget {
 
 class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
   Map<String, EvStationTariff>? _tariffs;
-  int? _balance;
+
+  /// Эганинг ЖОНЛИ баланси: ҳамённи тўлдириб қайтгач варақ ўзи янгиланади
+  /// (аввал баланс бир марта `.first` билан ўқилар эди — қайтгач эскириб қоларди).
+  late final Stream<int> _balanceStream = walletBalanceStream();
   String? _selectedId;
   bool _loading = true;
   String? _error;
@@ -34,15 +37,10 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
 
   Future<void> _load() async {
     try {
-      final results = await Future.wait([
-        context.read<EvStationRepository>().fetchStationTariffs(),
-        context.read<UserRepository>().watchBonusBalance(widget.uid).first,
-      ]);
+      final tariffs = await context.read<EvStationRepository>().fetchStationTariffs();
       if (!mounted) return;
-      final tariffs = results[0] as Map<String, EvStationTariff>;
       setState(() {
         _tariffs = tariffs;
-        _balance = results[1] as int;
         // Кўпроқ муддатли (одатда энг фойдали) тарифни олдиндан танлаймиз.
         _selectedId = tariffs.values
             .fold<EvStationTariff?>(null, (best, t) =>
@@ -89,8 +87,6 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
     final tariffs = _tariffs!.values.toList()
       ..sort((a, b) => a.months.compareTo(b.months));
     final selected = _selectedId != null ? _tariffs![_selectedId] : null;
-    final balance = _balance ?? 0;
-    final insufficient = selected != null && balance < selected.price;
 
     return SingleChildScrollView(
       child: Column(
@@ -136,28 +132,13 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
                 onTap: () => setState(() => _selectedId = t.id),
               ),
             ),
-          if (insufficient)
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF3E0),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline, size: 16, color: Color(0xFF8D6E00)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Ҳамёнда ${formatMoney(balance)} бор — тарифни тўлаш учун '
-                      'етарли эмас, аввал ҳамённи тўлдиринг.',
-                      style: const TextStyle(fontSize: 12.5, color: Color(0xFF8D6E00)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          // Баланс етмаса — қанча етишмаслиги ва «Ҳамённи тўлдириш» тугмаси
+          // (аввал фақат матн эди, тугма йўқ). Варақ ичида — snackbar эмас.
+          WalletBalanceNotice(
+            balance: _balanceStream,
+            price: selected?.price,
+            onTopUp: () => openWalletTopUp(Navigator.of(context)),
+          ),
           const Divider(height: 24),
           const Text(
             'Тўловни амалга ошириш қадамлари',

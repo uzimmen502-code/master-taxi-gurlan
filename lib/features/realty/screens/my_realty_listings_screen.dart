@@ -9,6 +9,7 @@ import '../widgets/realty_feedback.dart';
 import '../widgets/realty_tier_sheet.dart';
 import '../widgets/realty_video_sheet.dart';
 import '../widgets/realty_wallet.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
 import 'realty_pro_screen.dart';
@@ -128,7 +129,7 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
         );
       } on RealtyException catch (e) {
         failed += 1;
-        if (RealtyInlineError.needsTopUp(e)) noBalance = true;
+        if (realtyNeedsTopUp(e)) noBalance = true;
       } catch (_) {
         failed += 1;
       }
@@ -147,8 +148,8 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
         noBalance
             ? '${context.tr('realty_bulk_failed')}: $failed — ${context.tr('realty_error_balance')}'
             : '${context.tr('realty_bulk_failed')}: $failed',
-        actionLabel: noBalance ? context.tr('realty_wallet_topup') : null,
-        onAction: noBalance ? () => openRealtyWallet(navigator) : null,
+        actionLabel: noBalance ? context.tr('wlt_topup_btn') : null,
+        onAction: noBalance ? () => openWalletTopUp(navigator) : null,
       );
     }
   }

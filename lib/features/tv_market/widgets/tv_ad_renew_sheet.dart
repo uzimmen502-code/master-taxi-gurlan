@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_ad_service.dart';
 import 'tv_ad_tier_picker.dart';
@@ -191,6 +192,7 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
                 onDaysChanged: (d) => setState(() => _days = d),
                 selectedScope: _scope,
                 scopeMultiplier: _scopeMultiplier,
+                onTopUp: () => openWalletTopUp(Navigator.of(context)),
               ),
               if (_error.isNotEmpty) ...[
                 const SizedBox(height: 6),

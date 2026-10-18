@@ -9,6 +9,7 @@ import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import 'realty_feedback.dart';
 import 'realty_wallet.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 
 /// Ахборот пакети сотиб олиш варағи (концепция, 4-бўлим).
 ///
@@ -50,7 +51,7 @@ class _PackageSheetState extends State<_PackageSheet> {
   late final RealtyRepository _repo = widget.repository ?? RealtyRepository();
 
   /// Эганинг баланси — етмаслигини сотиб олишдан ОЛДИН кўрсатиш учун.
-  late final Stream<int> _balance = widget.balance ?? realtyBalanceStream();
+  late final Stream<int> _balance = widget.balance ?? walletBalanceStream();
 
   /// Ҳар ўлчам — ўз ИДЕМПОТЕНТЛИК калити: жавоб йўқолиб (таймаут) қайта
   /// босилса, сервер пулни иккинчи марта ЕЧМАЙДИ. Аввал калит ҳар
@@ -115,7 +116,7 @@ class _PackageSheetState extends State<_PackageSheet> {
       setState(() {
         _busy = false;
         _error = realtyErrorText(context, e);
-        _errorTopUp = RealtyInlineError.needsTopUp(e);
+        _errorTopUp = realtyNeedsTopUp(e);
       });
     } catch (_) {
       // Тармоқ узилиши ва бошқа кутилмаган хато — НАТИЖА НОМАЪЛУМ: калит
@@ -131,7 +132,7 @@ class _PackageSheetState extends State<_PackageSheet> {
   }
 
   void _openWallet() =>
-      (widget.openWallet ?? () => openRealtyWallet(Navigator.of(context)))();
+      (widget.openWallet ?? () => openWalletTopUp(Navigator.of(context)))();
 
   @override
   Widget build(BuildContext context) {
@@ -249,13 +250,13 @@ class _PackageSheetState extends State<_PackageSheet> {
 
               // Баланс: етмаса — огоҳлантириш ва «Ҳамённи тўлдириш» (тугма
               // ўчирилмайди: баланс эскирган бўлиши мумкин, ҳал қилувчи — сервер).
-              RealtyBalanceNotice(
+              WalletBalanceNotice(
                 balance: _balance,
                 price: price,
                 onTopUp: _openWallet,
               ),
               if (_error != null)
-                RealtyInlineError(text: _error!, onTopUp: _errorTopUp ? _openWallet : null),
+                WalletInlineError(text: _error!, onTopUp: _errorTopUp ? _openWallet : null),
 
               ElevatedButton(
                 onPressed: (_busy || _loading || price == null) ? null : _buy,

@@ -2544,9 +2544,6 @@
   "realty_error_image": "Rasm qabul qilinmadi. Rasmni qayta tanlang.",
   "realty_pricing_retry": "Qayta yuklash",
   "realty_pro_plans_failed": "Paketlar yuklanmadi.",
-  "realty_wallet_topup": "Hamyonni to'ldirish",
-  "realty_wallet_balance": "Hamyonda: {amount}",
-  "realty_wallet_short": "Hamyonda mablag' yetarli emas: {amount} yetishmaydi",
   "realty_wallet_short_tile": "Hamyonda mablag' yetmaydi",
   "realty_edit_title": "Obyektni tahrirlash",
   "realty_saved": "Saqlandi",
@@ -3374,5 +3371,7 @@
   "wlt_tu_cancelled": "Bekor qilindi",
   "wlt_tu_unavailable": "To'ldirish hozircha mavjud emas — tez orada sozlanadi. Keyinroq urinib ko'ring.",
   "wlt_tu_bot_off": "To'ldirish vaqtincha to'xtatilgan. Keyinroq urinib ko'ring.",
-  "wlt_tu_limits": "Bir so'rov — {max} gacha, kuniga — {daily} gacha"
+  "wlt_tu_limits": "Bir so'rov — {max} gacha, kuniga — {daily} gacha",
+  "wlt_balance_info": "Hamyonda: {amount}",
+  "wlt_balance_short": "Hamyonda mablag' yetarli emas: {amount} yetishmaydi"
 }

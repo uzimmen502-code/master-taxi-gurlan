@@ -2544,9 +2544,6 @@
   "realty_error_image": "Фото не принято. Выберите фото заново.",
   "realty_pricing_retry": "Загрузить снова",
   "realty_pro_plans_failed": "Пакеты не загрузились.",
-  "realty_wallet_topup": "Пополнить кошелёк",
-  "realty_wallet_balance": "В кошельке: {amount}",
-  "realty_wallet_short": "Недостаточно средств: не хватает {amount}",
   "realty_wallet_short_tile": "Не хватает средств в кошельке",
   "realty_edit_title": "Редактировать объект",
   "realty_saved": "Сохранено",
@@ -3374,5 +3371,7 @@
   "wlt_tu_cancelled": "Отменено",
   "wlt_tu_unavailable": "Пополнение пока недоступно — скоро будет настроено. Попробуйте позже.",
   "wlt_tu_bot_off": "Пополнение временно приостановлено. Попробуйте позже.",
-  "wlt_tu_limits": "Одна заявка — до {max}, в сутки — до {daily}"
+  "wlt_tu_limits": "Одна заявка — до {max}, в сутки — до {daily}",
+  "wlt_balance_info": "В кошельке: {amount}",
+  "wlt_balance_short": "Недостаточно средств: не хватает {amount}"
 }

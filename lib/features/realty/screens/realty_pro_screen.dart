@@ -9,6 +9,7 @@ import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_feedback.dart';
 import '../widgets/realty_wallet.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 
 /// 🏢 Риэлторлик компанияси учун (концепция, 5-бўлим).
 ///
@@ -60,9 +61,9 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
   final _keys = IdempotencyKeys();
 
   /// Эганинг баланси — етмайдиган режалар сотиб олишдан ОЛДИН кўринсин.
-  late final Stream<int> _balance = widget.balance ?? realtyBalanceStream();
+  late final Stream<int> _balance = widget.balance ?? walletBalanceStream();
 
-  void _topUp() => (widget.openWallet ?? () => openRealtyWallet(Navigator.of(context)))();
+  void _topUp() => (widget.openWallet ?? () => openWalletTopUp(Navigator.of(context)))();
 
   List<RealtyProPlan> _plans = const [];
   bool _plansLoading = true;
@@ -251,7 +252,7 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
                   children: [
                     // Энг арзон режага ҳам етмаса — огоҳлантириш ва «тўлдириш»;
                     // етса — кичик «Ҳамёнда: X».
-                    RealtyBalanceBar(balance: bal, price: cheapest, onTopUp: _topUp),
+                    WalletBalanceBar(balance: bal, price: cheapest, onTopUp: _topUp),
                     for (final plan in _plans) ...[
                       _PlanTile(
                         plan: plan,

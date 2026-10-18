@@ -5,7 +5,7 @@
  */
 'use strict';
 const assert = require('assert');
-const {cardIsValid, topUpReadiness, makeFinanceNotifier} = require('../wallet_topup_support');
+const {cardIsValid, topUpReadiness, makeFinanceNotifier, parseDepositPayload, sanitizePendingAmount} = require('../wallet_topup_support');
 
 const results = [];
 function check(name, pass) {
@@ -22,6 +22,17 @@ check('Луна: бир рақами хато — рад', !cardIsValid('4111111
 check('16 рақам эмас (қисқа/узун/ҳарф) — рад', !cardIsValid('411111111111111') && !cardIsValid('41111111111111111') && !cardIsValid('41111111111111ab') && !cardIsValid(''));
 check('null/undefined/рақам — йиқилмайди', cardIsValid(null) === false && cardIsValid(undefined) === false && cardIsValid(4111111111111111) === true);
 
+// ── иловадан суммали ҳавола ──
+check('deposit_150000 → 150000; бошқа шакллар → 0',
+    parseDepositPayload('deposit_150000') === 150000 && parseDepositPayload(' deposit_5 ') === 5 &&
+    ['deposit_', 'deposit_abc', 'deposit_-5', 'deposit_1.5', 'link_123456', 'deposit_1234567890', '', null, undefined, 'xdeposit_5']
+        .every((p) => parseDepositPayload(p) === 0));
+check('кутилаётган сумма: бутун, 1..max; чегарада ўтади, ошса/нотўғри — 0',
+    sanitizePendingAmount(150000, 500000) === 150000 && sanitizePendingAmount(500000, 500000) === 500000 &&
+    sanitizePendingAmount(500001, 500000) === 0 && sanitizePendingAmount(0, 500000) === 0 &&
+    sanitizePendingAmount(-1, 500000) === 0 && sanitizePendingAmount(1.5, 500000) === 0 &&
+    sanitizePendingAmount('150000', 500000) === 150000 && sanitizePendingAmount('abc', 500000) === 0 &&
+    sanitizePendingAmount(undefined, 500000) === 0 && sanitizePendingAmount(null, 500000) === 0);
 // ── тайёрлик ──
 const OK = '4111111111111111';
 check('тайёр: бот ёқиқ ва карта тўғри', JSON.stringify(topUpReadiness({enabled: true, depositCardNumber: OK})) === JSON.stringify({ready: true, reason: 'ok'}));

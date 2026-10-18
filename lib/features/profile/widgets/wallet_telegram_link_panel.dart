@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import 'wallet_amount_sheet.dart';
 
 /// Telegram бот орқали ҳамён тўлдириш — бир тугмали боғлаш.
 ///
@@ -14,10 +15,27 @@ import '../../../core/utils/formatters.dart';
 /// `getWalletTopUpStatus`) тугмалар ўчиқ: фойдаланувчи ботга боришдан олдин
 /// сабабини билади.
 class WalletTelegramLinkPanel extends StatefulWidget {
-  const WalletTelegramLinkPanel({super.key, required this.phone, this.enabled = true});
+  const WalletTelegramLinkPanel({
+    super.key,
+    required this.phone,
+    this.enabled = true,
+    this.suggestedAmount,
+    this.maxAmount = 0,
+    this.pickAmount,
+    this.openUrl,
+  });
 
   final String phone;
   final bool enabled;
+
+  /// Етишмаётган сумма (харид экранидан келса) ва бир сўровнинг юқори чегараси
+  /// (`getWalletTopUpStatus`, 0 — номаълум).
+  final int? suggestedAmount;
+  final int maxAmount;
+
+  /// Тест учун алмаштириладиган: сумма танлаш ва ҳаволани очиш.
+  final Future<int?> Function(BuildContext context, int? suggested, int max)? pickAmount;
+  final Future<bool> Function(String url)? openUrl;
 
   @override
   State<WalletTelegramLinkPanel> createState() =>
@@ -40,20 +58,41 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
     return u.isNotEmpty ? u : _fallbackBotUsername;
   }
 
-  Future<Map<String, dynamic>?> _createLinkCode() async {
+  Future<Map<String, dynamic>?> _createLinkCode({int? amount}) async {
     final res = await FirebaseFunctions.instance
         .httpsCallable('createTelegramLinkCode')
-        .call({'phone': widget.phone});
+        .call({'phone': widget.phone, if (amount != null) 'amount': amount});
     return Map<String, dynamic>.from(res.data as Map? ?? {});
   }
 
-  Future<void> _linkAndOpen() async {
+  /// «Ҳамённи тўлдириш»: аввал сумма танланади, кейин бот шу сумма билан очилади.
+  Future<void> _topUp() async {
+    final amount = await (widget.pickAmount ?? _defaultPick)(
+        context, widget.suggestedAmount, widget.maxAmount);
+    // Варақ ёпилган (бекор қилинган) — бот очилмайди.
+    if (amount == null || !mounted) return;
+    if (_lastLinked) {
+      setState(() => _notOpened = false);
+      final opened = await _openUrl(walletBotDepositUrl(_resolvedBotUsername, amount));
+      if (mounted && !opened) setState(() => _notOpened = true);
+    } else {
+      await _linkAndOpen(amount: amount);
+    }
+  }
+
+  static Future<int?> _defaultPick(BuildContext context, int? suggested, int max) =>
+      showWalletAmountSheet(context, suggested: suggested, max: max);
+
+  /// Охирги кўрилган ҳолат: Telegram боғланганми (build'да ёзилади).
+  bool _lastLinked = false;
+
+  Future<void> _linkAndOpen({int? amount}) async {
     setState(() {
       _busy = true;
       _notOpened = false;
     });
     try {
-      final data = await _createLinkCode();
+      final data = await _createLinkCode(amount: amount);
       final code = data?['code'] as String?;
       final deepLink = data?['deepLink'] as String?;
       final botUsername = data?['botUsername'] as String?;
@@ -86,13 +125,10 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
 
   Future<bool> _openUrl(String? url) async {
     if (url == null || url.isEmpty) return false;
+    if (widget.openUrl != null) return widget.openUrl!(url);
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
     return launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-  Future<void> _openBot() async {
-    await _openUrl('https://t.me/$_resolvedBotUsername');
   }
 
   @override
@@ -112,6 +148,7 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
             final tgUser =
                 (data?['telegramUsername'] ?? '').toString().trim();
             final linked = telegramId.isNotEmpty;
+            _lastLinked = linked;
 
             if (linked) {
               return _linkedBody(context, tgUser);
@@ -159,13 +196,13 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
         const SizedBox(height: 12),
         FilledButton.icon(
           key: const ValueKey('wallet-open-bot'),
-          onPressed: canTap ? _openBot : null,
+          onPressed: canTap ? _topUp : null,
           icon: const Icon(Icons.telegram),
           label: Text(context.tr('wlt_topup_btn')),
           style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
         ),
         TextButton(
-          onPressed: canTap ? _linkAndOpen : null,
+          onPressed: canTap ? () => _linkAndOpen() : null,
           child: Text(context.tr('wlt_tg_relink')),
         ),
       ],
@@ -189,7 +226,7 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
         const SizedBox(height: 12),
         FilledButton.icon(
           key: const ValueKey('wallet-link-bot'),
-          onPressed: canTap ? _linkAndOpen : null,
+          onPressed: canTap ? _topUp : null,
           icon: _busy
               ? const SizedBox(
                   width: 16,

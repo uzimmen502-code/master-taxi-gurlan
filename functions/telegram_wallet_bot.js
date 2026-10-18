@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const {
   cardIsValid, topUpReadiness, makeFinanceNotifier, sweepExpiredTopUps,
+  parseDepositPayload, sanitizePendingAmount,
 } = require('./wallet_topup_support');
 
 const TOPUP_COL = 'wallet_topup_requests';
@@ -483,9 +484,15 @@ function attachTelegramWalletBot(exports, deps) {
       if (!exists.exists) break;
     }
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + LINK_TTL_MS);
+    // Иловада танланган тўлдириш суммаси: боғлангач бот шу суммага сўров
+    // очади (биринчи марта кирганда ҳам бир босишда). Нотўғри бўлса —
+    // эътиборсиз, боғлаш йўли бузилмайди.
+    const pendingAmount = sanitizePendingAmount(
+        data && data.amount, (await loadBotSettings()).maxTopUp);
     await db.collection(CODE_COL).doc(code).set({
       uid,
       used: false,
+      ...(pendingAmount ? { pendingTopUpAmount: pendingAmount } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       expiresAt,
     });
@@ -1010,6 +1017,19 @@ function attachTelegramWalletBot(exports, deps) {
       await cmdLink(chatId, tgUser, code);
       return;
     }
+    // Иловадан суммали ҳавола: `deposit_150000` — сумма бот томонидан барибир
+    // лимитлар бўйича текширилади (`createTopUpRequest`).
+    const depositAmount = parseDepositPayload(startPayload);
+    if (depositAmount) {
+      const depUid = await resolveUidByTelegram(tgUser.id);
+      if (!depUid) {
+        await tgSend(chatId,
+            'Аввал ҳамённи боғланг: иловада Ҳамён → «Ҳамённи тўлдириш» тугмасини босинг.');
+        return;
+      }
+      await startDeposit(chatId, tgUser, depUid, depositAmount, settings);
+      return;
+    }
     const uid = await resolveUidByTelegram(tgUser.id);
     if (!uid) {
       await tgSend(chatId,
@@ -1093,7 +1113,7 @@ function attachTelegramWalletBot(exports, deps) {
         usedAt: admin.firestore.FieldValue.serverTimestamp(),
         telegramUserId: tgId,
       }, { merge: true });
-      return { uid };
+      return { uid, pendingAmount: Number(d.pendingTopUpAmount) || 0 };
     });
     if (res.fail) {
       await recordLinkFail(tgId, res.fail);
@@ -1142,6 +1162,12 @@ function attachTelegramWalletBot(exports, deps) {
     }, { merge: true });
     await batch.commit();
 
+    // Иловада сумма танланган бўлса — боғлангач дарҳол шу суммага сўров.
+    if (res.pendingAmount > 0) {
+      await tgSend(chatId, `✅ Боғланди: <code>+${uid}</code>`);
+      await startDeposit(chatId, tgUser, uid, res.pendingAmount, await loadBotSettings());
+      return;
+    }
     await tgSend(chatId,
         `✅ Боғланди: <code>+${uid}</code>\nЭнди /deposit орқали тўлдиришингиз мумкин.`);
   }
@@ -1249,23 +1275,59 @@ function attachTelegramWalletBot(exports, deps) {
       amount,
     });
 
+    await tgSend(chatId, topUpInstructions(ref.id, amount, settings));
+  }
+
+  /** «Картага ўтказинг, чек юборинг» хабари (янги ва қайта кўрсатиш учун битта матн). */
+  function topUpInstructions(requestId, amount, settings) {
     const card = settings.depositCardNumber;
     const holderName = [settings.depositCardFirstName, settings.depositCardLastName]
         .filter(Boolean)
         .join(' ')
         || settings.depositCardHolder;
-    const holder = holderName
-        ? `\nОлувчи: <b>${holderName}</b>`
-        : '';
-    const hint = settings.depositInstructions
-        ? `\n\n${settings.depositInstructions}`
-        : '';
-    await tgSend(chatId,
-        `💳 <b>Тўлдириш сўрови</b>\n` +
+    const holder = holderName ? `\nОлувчи: <b>${holderName}</b>` : '';
+    const hint = settings.depositInstructions ? `\n\n${settings.depositInstructions}` : '';
+    return `💳 <b>Тўлдириш сўрови</b>\n` +
         `Сумма: <b>${amount.toLocaleString('uz-UZ')}</b> сўм\n` +
-        `ID: <code>${ref.id}</code>\n\n` +
+        `ID: <code>${requestId}</code>\n\n` +
         `Карта: <code>${card}</code>${holder}${hint}\n\n` +
-        `Пул ўтказгач, <b>чек расмини</b> шу чатга юборинг.`);
+        `Пул ўтказгач, <b>чек расмини</b> шу чатга юборинг.`;
+  }
+
+  /**
+   * Иловадан келган суммали тўлдириш (`start=deposit_N` ёки боғлаш билан бирга).
+   * `/deposit`дан фарқи: ҳолат/карта текширилади ва ТАКРОР босилса янги сўров
+   * очилмайди — шу суммали очиқ сўров қайта кўрсатилади (икки марта босиш
+   * иккита сўров яратмасин).
+   */
+  async function startDeposit(chatId, tgUser, uid, amount, settings) {
+    if (!settings.enabled) {
+      await tgSend(chatId, '⏸ Бот ўчиқ.');
+      return;
+    }
+    if (!settings.depositCardNumber) {
+      await tgSend(chatId, '⚠️ Карта ҳали созланмаган. Админга мурожаат қилинг.');
+      return;
+    }
+    const open = await db.collection(TOPUP_COL)
+        .where('uid', '==', uid)
+        .where('status', '==', 'awaiting_transfer')
+        .limit(5)
+        .get();
+    const now = Date.now();
+    const same = open.docs.find((d) => {
+      const x = d.data() || {};
+      const exp = x.expiresAt && x.expiresAt.toMillis ? x.expiresAt.toMillis() : 0;
+      return Math.trunc(Number(x.amount) || 0) === amount && exp > now;
+    });
+    if (same) {
+      await setSession(tgUser.id, {
+        expect: 'deposit_receipt', topupRequestId: same.id, amount,
+      });
+      await tgSend(chatId, topUpInstructions(same.id, amount, settings));
+      return;
+    }
+    await createTopUpRequest(chatId, tgUser, uid, amount, settings);
   }
 
   async function handleDepositReceipt(chatId, tgUser, photoSizes) {

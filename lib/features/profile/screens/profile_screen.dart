@@ -8,7 +8,9 @@ import 'package:provider/provider.dart';
 import '../../../core/brand_labels.dart';
 import '../../../core/app_share.dart';
 import '../../../core/geo/geo_names.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/driver_status_chip.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../l10n/app_localizations.dart';
@@ -131,6 +133,10 @@ class _ProfileViewState extends State<_ProfileView> {
 
   int _roleTapCount = 0;
   DateTime? _lastRoleTap;
+
+  /// Ҳамён қатори учун жонли баланс (бош экрандан ҳамён карточкаси олиб
+  /// ташланган, эга қарори 2026-10-18: ҳамёнга кириш — Кабинетнинг биринчи қатори).
+  late final Stream<int> _walletBalance = walletBalanceStream();
 
   @override
   Widget build(BuildContext context) {
@@ -379,6 +385,21 @@ class _ProfileViewState extends State<_ProfileView> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(children: [
+          StreamBuilder<int>(
+            stream: _walletBalance,
+            builder: (context, snap) => _cardTile(
+              key: const ValueKey('profile-wallet-tile'),
+              icon: Icons.account_balance_wallet_rounded,
+              color: _green,
+              title: context.tr('wlt_profile_title'),
+              // Баланс номаълум (юкланмаган/хато) — ёлғон «0» кўрсатилмайди.
+              subtitle: snap.hasData
+                  ? formatMoney(snap.data!)
+                  : context.tr('wlt_profile_sub'),
+              onTap: () => openWalletTopUp(Navigator.of(context)),
+            ),
+          ),
+          const SizedBox(height: 10),
           _cardTile(
             icon: Icons.person,
             color: _green,
@@ -442,6 +463,7 @@ class _ProfileViewState extends State<_ProfileView> {
   }
 
   Widget _cardTile({
+    Key? key,
     required IconData icon,
     required Color color,
     required String title,
@@ -450,6 +472,7 @@ class _ProfileViewState extends State<_ProfileView> {
     String? badge,
   }) {
     return Material(
+      key: key,
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(

@@ -193,6 +193,8 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
                 selectedScope: _scope,
                 scopeMultiplier: _scopeMultiplier,
                 onTopUp: () => openWalletTopUp(Navigator.of(context)),
+                onTopUpAmount: (a) =>
+                    openWalletTopUp(Navigator.of(context), suggestedAmount: a),
               ),
               if (_error.isNotEmpty) ...[
                 const SizedBox(height: 6),

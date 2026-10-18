@@ -3373,5 +3373,15 @@
   "wlt_tu_bot_off": "Тўлдириш вақтинча тўхтатилган. Кейинроқ уриниб кўринг.",
   "wlt_tu_limits": "Бир сўров — {max} гача, кунига — {daily} гача",
   "wlt_balance_info": "Ҳамёнда: {amount}",
-  "wlt_balance_short": "Ҳамёнда маблағ етарли эмас: {amount} етишмайди"
+  "wlt_balance_short": "Ҳамёнда маблағ етарли эмас: {amount} етишмайди",
+  "wlt_amt_title": "Қанча тўлдирасиз?",
+  "wlt_amt_suggested": "{amount} (етишмаётган)",
+  "wlt_amt_custom": "Бошқа сумма",
+  "wlt_amt_currency": "сўм",
+  "wlt_amt_invalid": "Суммани тўғри киритинг",
+  "wlt_amt_max": "Бир марта кўпи билан {max}",
+  "wlt_amt_continue": "Давом этиш",
+  "wlt_amt_continue_amount": "Давом этиш · {amount}",
+  "wlt_profile_title": "Ҳамён",
+  "wlt_profile_sub": "Баланс ва тўлдириш"
 }

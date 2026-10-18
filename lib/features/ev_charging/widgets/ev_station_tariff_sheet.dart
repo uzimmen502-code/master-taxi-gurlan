@@ -138,6 +138,7 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
             balance: _balanceStream,
             price: selected?.price,
             onTopUp: () => openWalletTopUp(Navigator.of(context)),
+            onTopUpAmount: (a) => openWalletTopUp(Navigator.of(context), suggestedAmount: a),
           ),
           const Divider(height: 24),
           const Text(

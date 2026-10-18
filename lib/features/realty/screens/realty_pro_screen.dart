@@ -63,7 +63,8 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
   /// Эганинг баланси — етмайдиган режалар сотиб олишдан ОЛДИН кўринсин.
   late final Stream<int> _balance = widget.balance ?? walletBalanceStream();
 
-  void _topUp() => (widget.openWallet ?? () => openWalletTopUp(Navigator.of(context)))();
+  void _topUp([int? amount]) => (widget.openWallet ??
+      () => openWalletTopUp(Navigator.of(context), suggestedAmount: amount))();
 
   List<RealtyProPlan> _plans = const [];
   bool _plansLoading = true;
@@ -252,7 +253,7 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
                   children: [
                     // Энг арзон режага ҳам етмаса — огоҳлантириш ва «тўлдириш»;
                     // етса — кичик «Ҳамёнда: X».
-                    WalletBalanceBar(balance: bal, price: cheapest, onTopUp: _topUp),
+                    WalletBalanceBar(balance: bal, price: cheapest, onTopUp: _topUp, onTopUpAmount: _topUp),
                     for (final plan in _plans) ...[
                       _PlanTile(
                         plan: plan,

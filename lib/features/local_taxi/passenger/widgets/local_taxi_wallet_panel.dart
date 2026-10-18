@@ -213,7 +213,10 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 key: const ValueKey('local-taxi-wallet-topup'),
-                onPressed: () => openWalletTopUp(Navigator.of(context)),
+                onPressed: () => openWalletTopUp(
+                  Navigator.of(context),
+                  suggestedAmount: fare - widget.walletBalance,
+                ),
                 icon: const Icon(Icons.add_card_outlined, size: 18),
                 label: Text(context.tr('wlt_topup_btn')),
               ),

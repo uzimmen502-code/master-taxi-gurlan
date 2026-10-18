@@ -15,9 +15,12 @@ import '../widgets/wallet_withdraw_panel.dart';
 /// бот ўчиқ ёки карта созланмаган бўлса фойдаланувчи ботга бормасдан сабабини
 /// кўради. Текшириш йиқилса — блокланмайди (ҳолат номаълум).
 class WalletScreen extends StatefulWidget {
-  const WalletScreen({super.key, required this.phone, this.statusLoader});
+  const WalletScreen({super.key, required this.phone, this.statusLoader, this.suggestedAmount});
 
   final String phone;
+
+  /// Харид учун етишмаётган сумма — «қанча тўлдирасиз» қадамида таклиф бўлади.
+  final int? suggestedAmount;
 
   /// Тест учун алмаштириладиган юкловчи.
   final Future<WalletTopUpStatus?> Function()? statusLoader;
@@ -60,7 +63,12 @@ class _WalletScreenState extends State<WalletScreen> {
               child: Column(
                 children: [
                   WalletTopUpNotice(status: _status),
-                  WalletTelegramLinkPanel(phone: widget.phone, enabled: enabled),
+                  WalletTelegramLinkPanel(
+                    phone: widget.phone,
+                    enabled: enabled,
+                    suggestedAmount: widget.suggestedAmount,
+                    maxAmount: _status?.maxTopUp ?? 0,
+                  ),
                   WalletTopUpRequests(uid: widget.phone),
                   WalletWithdrawPanel(phone: widget.phone),
                 ],

@@ -28,10 +28,15 @@ Stream<int> walletBalanceStream() {
 }
 
 /// Ҳамён экранини очади. Қайтгач баланс оқими ўзи янгиланади.
-Future<void> openWalletTopUp(NavigatorState navigator) {
+///
+/// [suggestedAmount] — етишмаётган сумма: «қанча тўлдирасиз» қадамида биринчи
+/// таклиф бўлиб чиқади (фойдаланувчи ўзгартира олади).
+Future<void> openWalletTopUp(NavigatorState navigator, {int? suggestedAmount}) {
   final phone = canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
   return navigator.push(
-    MaterialPageRoute<void>(builder: (_) => WalletScreen(phone: phone)),
+    MaterialPageRoute<void>(
+      builder: (_) => WalletScreen(phone: phone, suggestedAmount: suggestedAmount),
+    ),
   );
 }
 
@@ -88,6 +93,7 @@ class WalletBalanceNotice extends StatelessWidget {
     required this.balance,
     required this.price,
     required this.onTopUp,
+    this.onTopUpAmount,
   });
 
   final Stream<int> balance;
@@ -95,6 +101,9 @@ class WalletBalanceNotice extends StatelessWidget {
   /// Танланган харид нархи (`null` — ҳали танланмаган/юкланмаган).
   final int? price;
   final VoidCallback onTopUp;
+
+  /// Берилса — тугма босилганда [onTopUp] ўрнига етишмаётган сумма билан чақирилади.
+  final ValueChanged<int>? onTopUpAmount;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +113,7 @@ class WalletBalanceNotice extends StatelessWidget {
         balance: snap.data,
         price: price,
         onTopUp: onTopUp,
+        onTopUpAmount: onTopUpAmount,
       ),
     );
   }
@@ -117,11 +127,13 @@ class WalletBalanceBar extends StatelessWidget {
     required this.balance,
     required this.price,
     required this.onTopUp,
+    this.onTopUpAmount,
   });
 
   final int? balance;
   final int? price;
   final VoidCallback onTopUp;
+  final ValueChanged<int>? onTopUpAmount;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +172,7 @@ class WalletBalanceBar extends StatelessWidget {
           ),
           TextButton(
             key: const ValueKey('wallet-balance-topup'),
-            onPressed: onTopUp,
+            onPressed: onTopUpAmount == null ? onTopUp : () => onTopUpAmount!(price! - bal),
             child: Text(context.tr('wlt_topup_btn')),
           ),
         ],

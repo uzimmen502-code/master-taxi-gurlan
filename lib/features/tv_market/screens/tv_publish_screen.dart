@@ -960,6 +960,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   districtLabel: _districtShown(context),
                   onScopeChanged: (s) => setState(() => _adScope = s),
                   onTopUp: () => openWalletTopUp(Navigator.of(context)),
+                  onTopUpAmount: (a) =>
+                      openWalletTopUp(Navigator.of(context), suggestedAmount: a),
                 ),
                 const SizedBox(height: 16),
               ],

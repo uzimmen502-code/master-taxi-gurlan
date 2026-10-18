@@ -165,8 +165,9 @@ class _TierSheetState extends State<_TierSheet> {
     }
   }
 
-  void _openWallet() =>
-      (widget.openWallet ?? () => openWalletTopUp(Navigator.of(context)))();
+  /// [amount] — етишмаётган сумма (ҳамён экранида таклиф бўлади).
+  void _openWallet([int? amount]) => (widget.openWallet ??
+      () => openWalletTopUp(Navigator.of(context), suggestedAmount: amount))();
 
   @override
   Widget build(BuildContext context) {
@@ -294,6 +295,7 @@ class _TierSheetState extends State<_TierSheet> {
                 balance: _balance,
                 price: price,
                 onTopUp: _openWallet,
+                onTopUpAmount: _openWallet,
               ),
               if (_error != null)
                 WalletInlineError(text: _error!, onTopUp: _errorTopUp ? _openWallet : null),

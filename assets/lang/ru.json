@@ -3373,5 +3373,15 @@
   "wlt_tu_bot_off": "Пополнение временно приостановлено. Попробуйте позже.",
   "wlt_tu_limits": "Одна заявка — до {max}, в сутки — до {daily}",
   "wlt_balance_info": "В кошельке: {amount}",
-  "wlt_balance_short": "Недостаточно средств: не хватает {amount}"
+  "wlt_balance_short": "Недостаточно средств: не хватает {amount}",
+  "wlt_amt_title": "Сколько пополнить?",
+  "wlt_amt_suggested": "{amount} (не хватает)",
+  "wlt_amt_custom": "Другая сумма",
+  "wlt_amt_currency": "сум",
+  "wlt_amt_invalid": "Введите корректную сумму",
+  "wlt_amt_max": "За один раз не более {max}",
+  "wlt_amt_continue": "Продолжить",
+  "wlt_amt_continue_amount": "Продолжить · {amount}",
+  "wlt_profile_title": "Кошелёк",
+  "wlt_profile_sub": "Баланс и пополнение"
 }

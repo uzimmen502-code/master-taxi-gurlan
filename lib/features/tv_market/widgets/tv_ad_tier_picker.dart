@@ -27,6 +27,7 @@ class TvAdTierPicker extends StatelessWidget {
     this.regionLabel = '',
     this.enabled = true,
     this.onTopUp,
+    this.onTopUpAmount,
   });
 
   final String selectedTier;
@@ -49,6 +50,9 @@ class TvAdTierPicker extends StatelessWidget {
 
   /// Баланс етмаганда «Ҳамённи тўлдириш» тугмаси (`null` — тугмасиз).
   final VoidCallback? onTopUp;
+
+  /// Берилса — тугма етишмаётган сумма билан чақирилади (ҳамён экранида таклиф).
+  final ValueChanged<int>? onTopUpAmount;
 
   int basePriceFor(String tier, int days) =>
       pricing[tier]?[days] ?? tvAdTierPricingDefault[tier]?[days] ?? 0;
@@ -162,7 +166,9 @@ class TvAdTierPicker extends StatelessWidget {
                 if (onTopUp != null)
                   TextButton(
                     key: const ValueKey('tv-ad-topup'),
-                    onPressed: onTopUp,
+                    onPressed: onTopUpAmount == null
+                        ? onTopUp
+                        : () => onTopUpAmount!(selectedPrice - walletBalance),
                     child: Text(context.tr('wlt_topup_btn')),
                   ),
               ],

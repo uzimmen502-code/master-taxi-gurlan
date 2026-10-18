@@ -260,6 +260,91 @@ const linkMsg = (tgId, code) => ({ message: { chat: { id: tgId }, from: { id: tg
     assert.ok(out.includes('Сўров ҳолати'), `rad etilmadi: ${out}`);
   });
 
+  // ─── Ilovadan summali havola: /start deposit_N ──────────────────────
+  // Ilova botni `?start=deposit_150000` bilan ochadi; bot lagit/limitni o'zi
+  // tekshiradi, takror bosishda ikkinchi so'rov OCHMAYDI.
+  const CARD = '8600 0000 0000 0007';
+  const startMsg = (tgId, payload) => ({
+    message: { chat: { id: tgId }, from: { id: tgId, username: `u${tgId}` }, text: `/start ${payload}` },
+  });
+  const openTopUps = async () => (await db.collection('wallet_topup_requests')
+      .where('status', '==', 'awaiting_transfer').get()).docs.map((d) => d.data());
+  async function depositSetup(settings = {}) {
+    await reset();
+    await db.doc('settings/wallet_bot').set({ enabled: true, depositCardNumber: CARD, maxTopUp: 500000, ...settings });
+    await db.collection('telegram_links').doc('910').set({ uid: USER, status: 'active' });
+    sent.length = 0;
+  }
+  const said = () => sent.map((x) => String(x.body || '')).join('\n');
+
+  await check('D1 start=deposit_150000 — so\'rov shu summaga ochiladi, karta ko\'rsatiladi', async () => {
+    await depositSetup();
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_150000') });
+    const open = await openTopUps();
+    assert.strictEqual(open.length, 1);
+    assert.strictEqual(open[0].amount, 150000);
+    assert.strictEqual(open[0].uid, USER);
+    assert.ok(said().includes('8600 0000 0000 0007'), 'karta ko\'rsatilmadi');
+  });
+
+  await check('D2 takror bosish — ikkinchi so\'rov ochilmaydi, shu so\'rov qayta ko\'rsatiladi', async () => {
+    await depositSetup();
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_150000') });
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_150000') });
+    assert.strictEqual((await openTopUps()).length, 1);
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_200000') });
+    assert.strictEqual((await openTopUps()).length, 2, 'boshqa summa — yangi so\'rov');
+  });
+
+  await check('D3 summa maxTopUp\'dan katta — so\'rov OCHILMAYDI (server lagitni o\'zi tekshiradi)', async () => {
+    await depositSetup({ maxTopUp: 200000 });
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_999999') });
+    assert.strictEqual((await openTopUps()).length, 0);
+  });
+
+  await check('D4 hamyoni bog\'lanmagan Telegram — so\'rov OCHILMAYDI', async () => {
+    await depositSetup();
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(911, 'deposit_150000') });
+    assert.strictEqual((await openTopUps()).length, 0);
+  });
+
+  await check('D5 notog\'ri payload (deposit_abc, deposit_-5) — so\'rov OCHILMAYDI', async () => {
+    await depositSetup();
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_abc') });
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_-5') });
+    assert.strictEqual((await openTopUps()).length, 0);
+  });
+
+  await check('D6 karta sozlanmagan — so\'rov OCHILMAYDI', async () => {
+    await depositSetup({ depositCardNumber: '' });
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(910, 'deposit_150000') });
+    assert.strictEqual((await openTopUps()).length, 0);
+  });
+
+  await check('D7 birinchi marta: kod bilan birga summa — bog\'langach so\'rov shu summaga ochiladi', async () => {
+    await depositSetup();
+    await db.collection('telegram_links').doc('910').delete();
+    await db.collection('telegram_link_codes').doc('135790').set({
+      uid: USER, used: false, pendingTopUpAmount: 120000,
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 600000),
+    });
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(920, 'link_135790') });
+    assert.strictEqual((await db.collection('telegram_links').doc('920').get()).exists, true);
+    const open = await openTopUps();
+    assert.strictEqual(open.length, 1);
+    assert.strictEqual(open[0].amount, 120000);
+  });
+
+  await check('D8 kodsiz bog\'lash (summa yo\'q) — so\'rov OCHILMAYDI, eski xatti-harakat', async () => {
+    await depositSetup();
+    await db.collection('telegram_links').doc('910').delete();
+    await db.collection('telegram_link_codes').doc('246810').set({
+      uid: USER, used: false, expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 600000),
+    });
+    await hook({ secretEnv: SECRET, header: SECRET, body: startMsg(921, 'link_246810') });
+    assert.strictEqual((await openTopUps()).length, 0);
+  });
+
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;
   console.log(`\n${passed} passed, ${failed} failed`);

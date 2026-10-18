@@ -105,6 +105,27 @@ function makeFinanceNotifier({ db, notifyUserInApp, sendTelegram }) {
 const TOPUP_COL = 'wallet_topup_requests';
 
 /**
+ * Ботга илова берган сумма: `t.me/<бот>?start=deposit_150000` → `/start
+ * deposit_150000`. Фақат ТАКЛИФ — лимитларни (`maxTopUp`, кунлик) бот барибир
+ * `createTopUpRequest`да текширади. Нотўғри/бўш → 0.
+ */
+function parseDepositPayload(payload) {
+  const m = /^deposit_(\d{1,9})$/.exec(String(payload == null ? '' : payload).trim());
+  return m ? Number(m[1]) : 0;
+}
+
+/**
+ * Иловадан келган кутилаётган сумма (боғлаш коди билан бирга сақланади).
+ * Бутун сон, 1..max; акс ҳолда 0 (сумма ЭЪТИБОРСИЗ қолдирилади, хато эмас:
+ * боғлаш йўли суммадаги нуқсон туфайли бузилмасин).
+ */
+function sanitizePendingAmount(v, max) {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) return 0;
+  return n <= Number(max) ? n : 0;
+}
+
+/**
  * Чек юборилмаган эски сўровларни `expired` қилади (sweeper).
  *
  * Нега: бот `awaiting_transfer` сўровга `expiresAt` (24 соат) ёзади, лекин уни
@@ -178,5 +199,7 @@ module.exports = {
   topUpReadiness,
   makeFinanceNotifier,
   sweepExpiredTopUps,
+  parseDepositPayload,
+  sanitizePendingAmount,
   FINANCE_ROLES,
 };

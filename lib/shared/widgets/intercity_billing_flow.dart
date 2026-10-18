@@ -64,7 +64,9 @@ class IntercityBillingFlow {
       return null;
     }
     if (quote.feeAmount > 0 && !quote.sufficient) {
-      _snack(context, context.tr('taxi_fee_insufficient'), topUp: true);
+      final have = quote.walletBalance;
+      _snack(context, context.tr('taxi_fee_insufficient'),
+          topUp: true, suggested: have == null ? null : quote.feeAmount - have);
       return null;
     }
 
@@ -137,7 +139,7 @@ class IntercityBillingFlow {
 
   /// [topUp] — ҳамён етмаганда «Ҳамённи тўлдириш» тугмаси (аввал фақат
   /// матн эди, ҳайдовчи тўлдириш йўлини топа олмасди).
-  void _snack(BuildContext context, String msg, {bool topUp = false}) {
+  void _snack(BuildContext context, String msg, {bool topUp = false, int? suggested}) {
     if (!context.mounted) return;
     final navigator = Navigator.of(context);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -149,7 +151,10 @@ class IntercityBillingFlow {
           ? SnackBarAction(
               label: context.tr('wlt_topup_btn'),
               textColor: Colors.white,
-              onPressed: () => openWalletTopUp(navigator),
+              onPressed: () => openWalletTopUp(
+                navigator,
+                suggestedAmount: (suggested != null && suggested > 0) ? suggested : null,
+              ),
             )
           : null,
     ));

@@ -40,6 +40,9 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
   String? _error;
   bool _errorTopUp = false;
 
+  /// Сервер қайтарган етишмаётган сумма (ҳамён экранида таклиф бўлади).
+  int? _shortfall;
+
   Future<void> _pay(Shipment s) => _withShipment(s, () async {
         await _repo.fundEscrow(s.id);
         _snack('logistics_pay_done');
@@ -74,6 +77,7 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
       final short = (e.details?['shortfall'] as num?)?.toInt();
       setState(() {
         _errorTopUp = true;
+        _shortfall = short != null && short > 0 ? short : null;
         _error = short != null && short > 0
             ? context.trMsg('logistics_err_insufficient', params: {'amount': formatMoney(short)})
             : context.tr('assistant_insufficient');
@@ -152,7 +156,9 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
                   if (_error != null) ...[
                     WalletInlineError(
                       text: _error!,
-                      onTopUp: _errorTopUp ? () => openWalletTopUp(Navigator.of(context)) : null,
+                      onTopUp: _errorTopUp
+                          ? () => openWalletTopUp(Navigator.of(context), suggestedAmount: _shortfall)
+                          : null,
                     ),
                     const SizedBox(height: 2),
                   ],

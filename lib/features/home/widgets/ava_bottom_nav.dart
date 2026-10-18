@@ -105,13 +105,22 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     final active = current == tab;
-    final color = active ? c.brand : c.ink3;
+    // Фаол бўлмаган таб: `ink3` (#9E9E9E) оқда ≈2.7:1 берарди, 11 px матн
+    // учун 4.5:1 керак — `ink2` (#6B6B6B) ≈5.3:1.
+    final color = active ? c.brand : c.ink2;
+    // Экран ўқувчи белгидаги сонни ёрлиқ билан бирга ўқийди («Хабарлар,
+    // 3 та ўқилмаган»), яланғоч рақамни эмас.
+    final semanticLabel = badge > 0
+        ? '$label, ${context.tr('home_nav_unread').replaceAll('{n}', badge > 99 ? '99+' : '$badge')}'
+        : label;
 
     return Expanded(
       child: Semantics(
         button: true,
         selected: active,
-        label: label,
+        label: semanticLabel,
+        // Кўринадиган ёрлиқ ва рақам иккинчи марта ўқилмасин.
+        excludeSemantics: true,
         child: InkWell(
           onTap: () => onTap(tab),
           child: ConstrainedBox(
@@ -129,7 +138,9 @@ class _NavItem extends StatelessWidget {
                     color: color,
                     badge: badge,
                     badgeColor: c.danger,
-                    badgeInk: c.brandInk,
+                    // Қизил (#C0332E) устида тўқ `brandInk` ≈3.2:1 эди, 9 px
+                    // матн учун кам; `surface` (оқ) ≈5.6:1.
+                    badgeInk: c.surface,
                   ),
                   const SizedBox(height: 2),
                   Text(

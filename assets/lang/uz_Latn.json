@@ -3450,5 +3450,6 @@
   "cab_sec_account": "Hisob",
   "cab_sec_activity": "Faoliyat",
   "cab_sec_app": "Ilova",
-  "cab_seller_panel": "Sotuv paneli"
+  "cab_seller_panel": "Sotuv paneli",
+  "home_nav_unread": "{n} ta o'qilmagan"
 }

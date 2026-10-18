@@ -5,7 +5,7 @@ import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../home_module_gate.dart';
 import 'service_circle_tile.dart';
-import 'services_spotlight_carousel.dart' show ServiceSpotlightItem;
+import 'service_spotlight_item.dart';
 
 /// Бош саҳифадаги хизматлар блоки — OLX'нинг «Разделы на сервисе OLX»
 /// жойлашуви: **2 қатор, ёнга скролл**.

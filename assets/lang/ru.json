@@ -3450,5 +3450,6 @@
   "cab_sec_account": "Аккаунт",
   "cab_sec_activity": "Активность",
   "cab_sec_app": "Приложение",
-  "cab_seller_panel": "Панель продавца"
+  "cab_seller_panel": "Панель продавца",
+  "home_nav_unread": "непрочитанных: {n}"
 }

@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../../../repositories/user_repository.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
@@ -948,6 +949,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   scopeMultiplier: _adScopeMultiplier,
                   districtLabel: _districtShown(context),
                   onScopeChanged: (s) => setState(() => _adScope = s),
+                  onTopUp: () => openWalletTopUp(Navigator.of(context)),
+                  onTopUpAmount: (a) =>
+                      openWalletTopUp(Navigator.of(context), suggestedAmount: a),
                 ),
                 const SizedBox(height: 16),
               ],

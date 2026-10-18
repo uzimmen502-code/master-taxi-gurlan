@@ -4,10 +4,12 @@ import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/wallet_ledger_labels.dart';
 import '../../../models/wallet_ledger_entry.dart';
 import '../../../repositories/user_repository.dart';
+import 'wallet_tr.dart';
 
 /// Koshelёk operatsiyalari ro‘yxati (real-time).
 class WalletLedgerList extends StatelessWidget {
@@ -16,14 +18,17 @@ class WalletLedgerList extends StatelessWidget {
     required this.uid,
     required this.since,
     this.title,
-    this.emptyMessage = 'Operatsiyalar yo‘q',
+    this.emptyMessage,
     this.maxHeight,
   });
 
   final String uid;
   final DateTime since;
   final String? title;
-  final String emptyMessage;
+
+  /// Бўш рўйхат матни (`null` — умумий «Операциялар йўқ»); чақирувчи ўз
+  /// тилидаги матнни беради.
+  final String? emptyMessage;
   final double? maxHeight;
 
   static const _green = AppColors.primaryText;
@@ -33,7 +38,7 @@ class WalletLedgerList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (uid.length < 9) {
       return Text(
-        'Telefon raqamini profilda kiriting',
+        context.tr('wlt_phone_needed'),
         style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
       );
     }
@@ -56,7 +61,7 @@ class WalletLedgerList extends StatelessWidget {
         }
         if (snap.hasError) {
           return Text(
-            'Tarix yuklanmadi',
+            context.tr('wlt_hist_failed'),
             style: TextStyle(fontSize: 13, color: Colors.red.shade700),
           );
         }
@@ -66,7 +71,7 @@ class WalletLedgerList extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              emptyMessage,
+              emptyMessage ?? context.tr('wlt_ledger_empty'),
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
           );
@@ -79,7 +84,7 @@ class WalletLedgerList extends StatelessWidget {
               : const ClampingScrollPhysics(),
           itemCount: items.length,
           separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
-          itemBuilder: (_, i) => _entryTile(items[i]),
+          itemBuilder: (_, i) => _entryTile(context, items[i]),
         );
 
         return Column(
@@ -105,11 +110,12 @@ class WalletLedgerList extends StatelessWidget {
     );
   }
 
-  Widget _entryTile(WalletLedgerEntry e) {
+  Widget _entryTile(BuildContext context, WalletLedgerEntry e) {
+    final tr = walletTr(context);
     final positive = e.isPositive;
     final amountColor = positive ? _green : _red;
     final sign = positive ? '+' : '−';
-    final subtitle = walletLedgerSubtitle(e);
+    final subtitle = walletLedgerSubtitle(e, tr);
     final when = e.createdAt;
 
     return Padding(
@@ -136,7 +142,7 @@ class WalletLedgerList extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  walletLedgerTitle(e),
+                  walletLedgerTitle(e, tr),
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

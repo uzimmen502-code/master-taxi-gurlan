@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../local_taxi_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../services/local_taxi_payment_service.dart';
+import '../../../../shared/widgets/wallet_topup_ui.dart';
 import '../../../../utils/wallet_payment.dart';
 
 /// Yo'lovchi — yo'lkirani hamyondan to'liq/qisman to'lash (intent).
@@ -205,6 +206,21 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               ],
             ),
           ],
+          // Нақд тўлаш мумкин, шунинг учун мажбурий эмас — лекин ҳамён
+          // етмаса тўлдиришнинг ўзи йўли бор (аввал ҳеч қаерда йўқ эди).
+          if (fare > 0 && widget.walletBalance < fare)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const ValueKey('local-taxi-wallet-topup'),
+                onPressed: () => openWalletTopUp(
+                  Navigator.of(context),
+                  suggestedAmount: fare - widget.walletBalance,
+                ),
+                icon: const Icon(Icons.add_card_outlined, size: 18),
+                label: Text(context.tr('wlt_topup_btn')),
+              ),
+            ),
           if (_error)
             Text(context.tr('local_wallet_save_failed'), style: TextStyle(color: LocalTaxiColors.danger, fontSize: 12)),
         ],

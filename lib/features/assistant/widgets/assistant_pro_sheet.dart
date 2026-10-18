@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../models/assistant_status.dart';
 import '../services/assistant_service.dart';
 
@@ -31,10 +32,23 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
   late int _balance = widget.status.balance;
   String? _buyingId;
 
+  /// Хато варақ ИЧИДА кўрсатилади: modal варақ очиқ турганда snackbar унинг
+  /// ортида қолади (кўринмайди, босилмайди). [_errorTopUp] — «Ҳамённи
+  /// тўлдириш» тугмаси керакми.
+  String? _error;
+  bool _errorTopUp = false;
+
+  void _setError(String key, {bool topUp = false}) {
+    setState(() {
+      _error = context.tr(key);
+      _errorTopUp = topUp;
+    });
+  }
+
   Future<void> _buy(AssistantPackage pkg) async {
     if (_buyingId != null) return;
     if (_balance < pkg.price) {
-      _showInsufficient();
+      _setError('assistant_insufficient', topUp: true);
       return;
     }
     final ok = await showDialog<bool>(
@@ -62,7 +76,10 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
     );
     if (ok != true || !mounted) return;
 
-    setState(() => _buyingId = pkg.id);
+    setState(() {
+      _buyingId = pkg.id;
+      _error = null;
+    });
     try {
       final result = await widget.service.buyPackage(pkg.id);
       if (!mounted) return;
@@ -73,34 +90,20 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
       if (e.isInsufficientBalance) {
         final bal = (e.details['balance'] as num?)?.toInt();
         if (bal != null) setState(() => _balance = bal);
-        _showInsufficient();
+        _setError('assistant_insufficient', topUp: true);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('assistant_err_unavailable'))),
-        );
+        _setError('assistant_err_unavailable');
       }
     } catch (_) {
       if (!mounted) return;
       setState(() => _buyingId = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('assistant_err_unavailable'))),
-      );
+      _setError('assistant_err_unavailable');
     }
   }
 
-  void _showInsufficient() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(context.tr('assistant_insufficient')),
-        action: SnackBarAction(
-          label: context.tr('assistant_topup'),
-          onPressed: () {
-            Navigator.pop(context);
-            widget.onTopUp();
-          },
-        ),
-      ),
-    );
+  void _topUp() {
+    Navigator.pop(context);
+    widget.onTopUp();
   }
 
   @override
@@ -196,6 +199,11 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
                   onTap: () => _buy(pkg),
                 ),
               ),
+            if (_error != null)
+              WalletInlineError(
+                text: _error!,
+                onTopUp: _errorTopUp ? _topUp : null,
+              ),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -210,10 +218,7 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    widget.onTopUp();
-                  },
+                  onPressed: _topUp,
                   child: Text(context.tr('assistant_topup')),
                 ),
               ],

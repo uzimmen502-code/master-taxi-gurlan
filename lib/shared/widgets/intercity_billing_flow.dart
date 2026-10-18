@@ -8,6 +8,7 @@ import '../../core/utils/taxi_billing_reason.dart';
 import '../../repositories/taxi_billing_repository.dart';
 import '../../utils/intercity_departure.dart';
 import 'taxi_agreement_sheet.dart';
+import 'wallet_topup_ui.dart';
 
 /// Шаҳарлараро рейс эълонининг ягона тўлов оқими (D-TAXI-13): ҳақ →
 /// келишув → тасдиқ → тўлов. Рейс очишнинг барча йўллари (тез бошлаш
@@ -130,7 +131,9 @@ class IntercityBillingFlow {
       return null;
     }
     if (quote.feeAmount > 0 && !quote.sufficient) {
-      _snack(context, context.tr('taxi_fee_insufficient'));
+      final have = quote.walletBalance;
+      _snack(context, context.tr('taxi_fee_insufficient'),
+          topUp: true, suggested: have == null ? null : quote.feeAmount - have);
       return null;
     }
 
@@ -163,7 +166,7 @@ class IntercityBillingFlow {
       _finishAttempt();
       if (res.published) return res.tripId;
       // D-TAXI-23: ҳамён етмади — эълон чиқмайди.
-      if (context.mounted) _snack(context, context.tr('taxi_fee_insufficient'));
+      if (context.mounted) _snack(context, context.tr('taxi_fee_insufficient'), topUp: true);
       return null;
     } on TaxiBillingException catch (e) {
       if (!_isAmbiguousFailure(e)) _finishAttempt();
@@ -198,13 +201,26 @@ class IntercityBillingFlow {
   String _message(BuildContext context, String reason) =>
       context.tr(taxiReasonKey(reason));
 
-  void _snack(BuildContext context, String msg) {
+  /// [topUp] — ҳамён етмаганда «Ҳамённи тўлдириш» тугмаси (аввал фақат
+  /// матн эди, ҳайдовчи тўлдириш йўлини топа олмасди).
+  void _snack(BuildContext context, String msg, {bool topUp = false, int? suggested}) {
     if (!context.mounted) return;
+    final navigator = Navigator.of(context);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       backgroundColor: Colors.orange.shade700,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       content: Text(msg),
+      action: topUp
+          ? SnackBarAction(
+              label: context.tr('wlt_topup_btn'),
+              textColor: Colors.white,
+              onPressed: () => openWalletTopUp(
+                navigator,
+                suggestedAmount: (suggested != null && suggested > 0) ? suggested : null,
+              ),
+            )
+          : null,
     ));
   }
 

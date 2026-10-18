@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../data/logistics_repository.dart';
 import '../domain/logistics_models.dart';
 import '../ui/logistics_text.dart';
@@ -36,6 +38,10 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
   String? _busyShipmentId;
   bool _cancelling = false;
   String? _error;
+  bool _errorTopUp = false;
+
+  /// Сервер қайтарган етишмаётган сумма (ҳамён экранида таклиф бўлади).
+  int? _shortfall;
 
   Future<void> _pay(Shipment s) => _withShipment(s, () async {
         await _repo.fundEscrow(s.id);
@@ -57,10 +63,31 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
     try {
       await body();
     } catch (e) {
-      if (mounted) setState(() => _error = logisticsErrorText(context, e));
+      if (mounted) _showError(e);
     } finally {
       if (mounted) setState(() => _busyShipmentId = null);
     }
+  }
+
+  /// Эскроуда ҳамён етмаса сервер `reason: insufficient` + `shortfall`
+  /// қайтаради: аввал умумий хато чиқарди, энди етишмаган сумма ва
+  /// «Ҳамённи тўлдириш» тугмаси кўрсатилади.
+  void _showError(Object e) {
+    if (e is LogisticsException && e.reason == 'insufficient') {
+      final short = (e.details?['shortfall'] as num?)?.toInt();
+      setState(() {
+        _errorTopUp = true;
+        _shortfall = short != null && short > 0 ? short : null;
+        _error = short != null && short > 0
+            ? context.trMsg('logistics_err_insufficient', params: {'amount': formatMoney(short)})
+            : context.tr('assistant_insufficient');
+      });
+      return;
+    }
+    setState(() {
+      _errorTopUp = false;
+      _error = logisticsErrorText(context, e);
+    });
   }
 
   Future<void> _cancel() async {
@@ -84,7 +111,7 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
       await _repo.cancelOrder(widget.orderId);
       _snack('logistics_cancelled_done');
     } catch (e) {
-      if (mounted) setState(() => _error = logisticsErrorText(context, e));
+      if (mounted) _showError(e);
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
@@ -127,12 +154,13 @@ class _LogisticsOrderScreenState extends State<LogisticsOrderScreen> {
                   _orderHeader(context, order),
                   const SizedBox(height: 12),
                   if (_error != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: c.dangerSoft, borderRadius: BorderRadius.circular(10)),
-                      child: Text(_error!, style: TextStyle(fontSize: 12, color: c.danger)),
+                    WalletInlineError(
+                      text: _error!,
+                      onTopUp: _errorTopUp
+                          ? () => openWalletTopUp(Navigator.of(context), suggestedAmount: _shortfall)
+                          : null,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 2),
                   ],
                   for (final s in shipments) ...[
                     _ShipmentCard(

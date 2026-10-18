@@ -5,11 +5,13 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/screens/tv_market_feed_screen.dart';
 import '../realty_tabs.dart';
 import 'realty_feedback.dart';
+import 'realty_wallet.dart';
 
 /// Объектга боғланган видеони очиш.
 ///
@@ -47,23 +49,26 @@ Future<bool> showRealtyVideoSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _VideoSheet(listing: listing),
+    builder: (_) => RealtyVideoSheet(listing: listing),
   );
   return changed == true;
 }
 
-class _VideoSheet extends StatefulWidget {
-  const _VideoSheet({required this.listing});
+class RealtyVideoSheet extends StatefulWidget {
+  const RealtyVideoSheet({super.key, required this.listing, this.repository, this.loadClips});
 
   final RealtyListing listing;
 
+  /// Тест учун алмаштирилади; одатда `null` (ҳақиқий репозиторий).
+  final RealtyRepository? repository;
+  final Future<List<TvClip>> Function(String ownerPhone)? loadClips;
+
   @override
-  State<_VideoSheet> createState() => _VideoSheetState();
+  State<RealtyVideoSheet> createState() => _VideoSheetState();
 }
 
-class _VideoSheetState extends State<_VideoSheet> {
-  final _repo = RealtyRepository();
-  final _clips = TvClipsRepository();
+class _VideoSheetState extends State<RealtyVideoSheet> {
+  late final RealtyRepository _repo = widget.repository ?? RealtyRepository();
 
   List<TvClip> _items = const [];
   bool _loading = true;
@@ -81,7 +86,7 @@ class _VideoSheetState extends State<_VideoSheet> {
     final phone = _repo.myOwnerPhone;
     final clips = phone.isEmpty
         ? const <TvClip>[]
-        : await _clips.fetchByOwner(phone);
+        : await (widget.loadClips ?? TvClipsRepository().fetchByOwner)(phone);
     if (!mounted) return;
     setState(() {
       _items = clips.where((c) => c.status == 'active').toList();
@@ -89,8 +94,30 @@ class _VideoSheetState extends State<_VideoSheet> {
     });
   }
 
+  /// Хато варақ ИЧИДА: modal варақ очиқ турганда snackbar унинг ортида
+  /// қолади (кўринмайди). Аввал боғлаш хатоси шундай йўқолар, ажратиш
+  /// хатоси эса умуман кўрсатилмасди.
+  String? _error;
+  bool _errorTopUp = false;
+
+  void _fail(Object e) {
+    setState(() {
+      _busy = false;
+      if (e is RealtyException) {
+        _error = realtyErrorText(context, e);
+        _errorTopUp = realtyNeedsTopUp(e);
+      } else {
+        _error = context.tr('realty_error_generic');
+        _errorTopUp = false;
+      }
+    });
+  }
+
   Future<void> _link(TvClip clip) async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
@@ -100,26 +127,28 @@ class _VideoSheetState extends State<_VideoSheet> {
       );
       if (!mounted) return;
       navigator.pop(true);
+      // Варақ ёпилди — энди snackbar саҳифада кўринади.
       showRealtyInfo(
         messenger,
         context.tr('realty_video_linked'),
         background: RealtyTabs.colorFor(RealtyTier.plain),
       );
-    } on RealtyException catch (e) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      showRealtyError(messenger, realtyErrorText(context, e));
+    } catch (e) {
+      if (mounted) _fail(e);
     }
   }
 
   Future<void> _unlink() async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     final navigator = Navigator.of(context);
     try {
       await _repo.unlinkVideo(widget.listing.id);
       if (mounted) navigator.pop(true);
-    } on RealtyException {
-      if (mounted) setState(() => _busy = false);
+    } catch (e) {
+      if (mounted) _fail(e);
     }
   }
 
@@ -175,6 +204,16 @@ class _VideoSheetState extends State<_VideoSheet> {
                   ],
                 ),
               ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: WalletInlineError(
+                    text: _error!,
+                    onTopUp: _errorTopUp
+                        ? () => openWalletTopUp(Navigator.of(context))
+                        : null,
+                  ),
+                ),
               if (widget.listing.hasVideo)
                 TextButton.icon(
                   onPressed: _busy ? null : _unlink,

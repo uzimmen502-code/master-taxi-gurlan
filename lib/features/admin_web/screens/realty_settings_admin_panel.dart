@@ -1,10 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../services/admin_auth_service.dart';
+import '../services/admin_realty_service.dart';
+import '../widgets/realty_counts_editor.dart';
 
 /// Admin — 🏠 Кўчмас мулк нархлари ва созламалари.
 ///
@@ -41,12 +45,12 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         for (final d in tier.durationOptions) d: TextEditingController(),
       },
   };
-  /// Ахборот пакети ўлчамлари — сервердаги `PACKAGE_SIZES` билан мос.
-  static const _packageSizes = [5, 10];
-
-  final Map<int, TextEditingController> _pkgCtrls = {
-    for (final s in _packageSizes) s: TextEditingController(),
-  };
+  /// Объект сонлари (бепул лимит, пакет ўлчамлари, профессионал режалар) —
+  /// алоҳида таҳрирловчи: сервер орқали сақланади ва журналга ёзилади.
+  final _svc = AdminRealtyService();
+  int? _freeLimit;
+  List<(int, int)> _packages = const [];
+  List<(String, int, int, int)> _plans = const [];
   final _agentPhoneCtrl = TextEditingController();
 
   bool _autoApprove = true;
@@ -68,9 +72,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         c.dispose();
       }
     }
-    for (final c in _pkgCtrls.values) {
-      c.dispose();
-    }
     _agentPhoneCtrl.dispose();
     super.dispose();
   }
@@ -87,10 +88,13 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
           _ctrls[tier]![d]!.text = '${pricing[tier]?[d] ?? 0}';
         }
       }
+      // Амалдаги (сервер ҳисобга оладиган) қийматлар — бошланғичлар ҳам.
       final pkgPricing = await _repo.loadPackagePricing();
-      for (final s in _packageSizes) {
-        _pkgCtrls[s]!.text = '${pkgPricing[s] ?? 0}';
-      }
+      _packages = [
+        for (final e in pkgPricing.entries) (e.key, e.value),
+      ]..sort((a, b) => a.$1.compareTo(b.$1));
+      final plans = await _repo.loadProPlans();
+      _plans = [for (final p in plans) (p.id, p.objects, p.days, p.price)];
       final doc = await FirebaseFirestore.instance
           .collection('settings')
           .doc('app')
@@ -98,11 +102,29 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
       final data = doc.data() ?? const <String, dynamic>{};
       _agentPhoneCtrl.text = '${data['realtyAgentPhone'] ?? ''}';
       _autoApprove = data['realtyAutoApprove'] != false;
+      final fl = data['realtyFreeLimit'];
+      _freeLimit = fl is num ? fl.toInt() : null;
+      _loadGen++;
     } catch (e) {
       _error = 'Юклашда хатолик: $e';
     }
     if (mounted) setState(() => _loading = false);
   }
+
+  /// Қайта юклаш сонги: таҳрирловчини янги бошланғич қийматлар билан қайта қуриш.
+  int _loadGen = 0;
+
+  Future<void> _saveCounts({
+    required int? freeLimit,
+    required List<Map<String, int>> packages,
+    required List<Map<String, Object>> proPlans,
+  }) =>
+      _svc.saveCounts(
+        adminPhone: context.read<AdminAuthService>().phoneDigits ?? '',
+        freeLimit: freeLimit,
+        packages: packages,
+        proPlans: proPlans,
+      );
 
   Future<void> _save() async {
     setState(() {
@@ -138,24 +160,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         }
       }
 
-      final packagePricing = <String, dynamic>{};
-      for (final s in _packageSizes) {
-        final v = int.tryParse(_pkgCtrls[s]!.text.trim());
-        if (v == null || v < 0) {
-          throw FormatException('Ахборот пакети — $s объект нархи нотўғри');
-        }
-        packagePricing['$s'] = v;
-      }
-      // Катта пакет объект ҳисобида арзонроқ бўлиши керак, акс ҳолда
-      // уни ҳеч ким олмайди.
-      final per5 = (packagePricing['5'] as int) / 5;
-      final per10 = (packagePricing['10'] as int) / 10;
-      if (per10 > per5) {
-        throw const FormatException(
-          '10 объектли пакет битта объект ҳисобида қимматроқ чиқяпти',
-        );
-      }
-
       final phone = _agentPhoneCtrl.text.replaceAll(RegExp(r'\D'), '');
       if (phone.isNotEmpty && phone.length < 9) {
         throw const FormatException('Риэлтор рақами нотўғри');
@@ -164,7 +168,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
       await FirebaseFirestore.instance.collection('settings').doc('app').set(
         {
           'realtyPricing': pricing,
-          'realtyPackagePricing': packagePricing,
           'realtyAgentPhone': phone,
           'realtyAutoApprove': _autoApprove,
           'realtyPricingUpdatedAt': FieldValue.serverTimestamp(),
@@ -204,11 +207,27 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
               ]),
               const SizedBox(height: 6),
               const Text(
-                'Нарх сўмда. ОДДИЙ эълон бепул (ҳар бир фойдаланувчига '
-                '2 тагача) — бу ерда созланмайди.',
+                'Нарх сўмда. ОДДИЙ эълон бепул — неча объектгача, пакет ўлчамлари ва '
+                'профессионал режалар пастдаги «Объект сонлари» бўлимида.',
                 style: TextStyle(fontSize: AppText.bodySmall),
               ),
               const SizedBox(height: 20),
+              RealtyCountsEditor(
+                // Қайта юкланганда (`_load`) янги қийматлар билан қайта қурилади.
+                key: ValueKey(
+                  'counts-$_freeLimit-${_packages.length}-${_plans.length}-$_loadGen',
+                ),
+                initialFreeLimit: _freeLimit,
+                initialPackages: _packages,
+                initialPlans: _plans,
+                onSave: _saveCounts,
+              ),
+              const Divider(height: 40),
+              const Text(
+                'Нархлар ва бошқа созламалар',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
 
               for (final tier in _paidTiers) ...[
                 Text(
@@ -239,40 +258,6 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
                 ),
                 const SizedBox(height: 18),
               ],
-
-              const Divider(height: 32),
-              const Text(
-                'Ахборот пакети (харидор тўлайди)',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Уй сотилгани учун комиссия эмас — объект маълумотини '
-                'очиш ҳақи. Битта объект очилса, у доим очиқ қолади.',
-                style: TextStyle(fontSize: AppText.bodySmall),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  for (final s in _packageSizes) ...[
-                    Expanded(
-                      child: TextField(
-                        controller: _pkgCtrls[s],
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: InputDecoration(
-                          labelText: '$s объект',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                ],
-              ),
 
               const Divider(height: 32),
               TextField(

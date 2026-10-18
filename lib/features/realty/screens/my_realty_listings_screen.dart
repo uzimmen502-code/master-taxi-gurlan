@@ -177,7 +177,9 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
               onPressed: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const RealtyProScreen(),
+                    builder: (_) => RealtyProScreen(
+            initialQuota: _quota.isKnown ? _quota : null,
+          ),
                   ),
                 );
                 await _loadQuota();

@@ -25,6 +25,8 @@ String realtyErrorText(BuildContext context, RealtyException e) {
       return context.tr('realty_error_location');
     case 'address_required':
       return context.tr('realty_error_address');
+    case 'image_invalid':
+      return context.tr('realty_error_image');
     case 'tier_not_available':
       return context.tr('realty_error_tier_soon');
     case 'insufficient_balance':
@@ -101,6 +103,8 @@ class RealtyQuotaBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Маълумот йўқ (юкланмади/хато) — «0 / 0» ва қизил «тўлди» кўрсатилмайди.
+    if (!quota.isKnown) return const SizedBox.shrink();
     final c = context.ava;
     final full = quota.isFull;
     final accent = full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.ink3;

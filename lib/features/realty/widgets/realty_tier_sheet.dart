@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
@@ -54,6 +55,7 @@ class _TierSheet extends StatefulWidget {
 
 class _TierSheetState extends State<_TierSheet> {
   final _repo = RealtyRepository();
+  final _keys = IdempotencyKeys();
 
   Map<RealtyTier, Map<int, int>> _pricing = const {};
   bool _loading = true;
@@ -93,12 +95,17 @@ class _TierSheetState extends State<_TierSheet> {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    // Ният: шу эълон + даража + муддат. Калит шу ният тугагунча ўзгармайди:
+    // жавоб йўқолса қайта уриниш пулни иккинчи марта ЕЧМАЙДИ.
+    final scope = 'tier:${widget.listing.id}:${_tier.key}:$days';
     try {
       final res = await _repo.purchaseTier(
         listingId: widget.listing.id,
         tier: _tier,
         durationDays: days,
+        idempotencyKey: _keys.keyFor(scope),
       );
+      _keys.settled(scope);
       if (!mounted) return;
       navigator.pop(RealtyTierChoice(tier: _tier, durationDays: days));
       showRealtyInfo(
@@ -108,9 +115,16 @@ class _TierSheetState extends State<_TierSheet> {
         background: RealtyTabs.colorFor(_tier),
       );
     } on RealtyException catch (e) {
+      // Сервер АНИҚ рад этди — пул ечилмаган.
+      _keys.settled(scope);
       if (!mounted) return;
       setState(() => _busy = false);
       showRealtyError(messenger, realtyErrorText(context, e));
+    } catch (_) {
+      // Натижа НОМАЪЛУМ (тармоқ узилди): калит сақланади, тугма қотиб қолмайди.
+      if (!mounted) return;
+      setState(() => _busy = false);
+      showRealtyError(messenger, context.tr('realty_error_generic'));
     }
   }
 

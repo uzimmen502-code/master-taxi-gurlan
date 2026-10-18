@@ -3,13 +3,21 @@
 const crypto = require('crypto');
 
 const { encode: geohashEncode } = require('./geo_hash');
+const {
+  isValidIdemKey, idemDocId, idemMatches, storageBucketsFor,
+  checkImageUrls, countActiveFromDocs,
+} = require('./realty_guards');
+// Объект сонлари — `settings/app` (админ панел); код фақат бошланғич ва чегара.
+const {
+  freeLimitFrom, packageSizesFrom, parseCounts, CountsError,
+} = require('./realty_settings');
 
 /**
  * «Кўчмас мулк Кластери» — сервер томони (1-босқич).
  *
  * Нега callable: эълон матнини клиент ёзиши мумкин эди, лекин учта нарса
  * серверда ҳал бўлиши шарт —
- *   1) бепул ОДДИЙ лимити (эгасига 2 тагача объект) — клиент саноғига
+ *   1) бепул ОДДИЙ лимити (`settings/app.realtyFreeLimit`, бошланғич 2) — клиент саноғига
  *      ишониб бўлмайди;
  *   2) ҳудуд тамғаси — 2026-10-11 дан (эга, D-GEO-11) УЙНИНГ ЎЗ тумани:
  *      илова пиндан аниқлаб таклиф қилади, эга тасдиқлайди/ўзгартиради;
@@ -46,9 +54,6 @@ function attachRealty(exports, deps) {
     if (ctx.jExists) throw fail('aborted', 'ledger_key_conflict');
     return ctx;
   }
-
-  /** Бепул ОДДИЙ объект лимити — концепциянинг 2-бўлими. */
-  const FREE_PLAIN_LIMIT = 2;
 
   /** Бепул ОДДИЙ эълон қанча кун кўринади. */
   const PLAIN_EXPIRY_DAYS = 30;
@@ -199,15 +204,18 @@ function attachRealty(exports, deps) {
       : '';
     if (known) return known;
 
+    // Калит ТРАНЗАКЦИЯДА яратилади (2026-10-18): аввал «ўқи → ёз» эди —
+    // эганинг БИРИНЧИ иккита параллел чақируви ҳар бири ўз калитини ёзиб,
+    // бири иккинчисини босиб кетарди ва объект саноқдан/эгасидан узилиб қоларди.
     const userRef = db.collection('users').doc(uid);
-    if (!user) {
-      const snap = await userRef.get();
+    const key = crypto.randomBytes(12).toString('hex');
+    return db.runTransaction(async (t) => {
+      const snap = await t.get(userRef);
       const existing = String((snap.data() || {}).realtyOwnerKey || '').trim();
       if (existing) return existing;
-    }
-    const key = crypto.randomBytes(12).toString('hex');
-    await userRef.set({ realtyOwnerKey: key }, { merge: true });
-    return key;
+      t.set(userRef, { realtyOwnerKey: key }, { merge: true });
+      return key;
+    });
   }
 
   /**
@@ -249,21 +257,44 @@ function attachRealty(exports, deps) {
    * кўринмайди, демак ўринни ҳам эгалламайди.
    */
   async function countActiveListings(ownerKey) {
-    const snap = await db.collection('realty_listings')
+    const snap = await activeListingsQuery(ownerKey).get();
+    return countActiveFromDocs(snap.docs, Date.now());
+  }
+
+  /** Эганинг объектлари сўрови — `countActiveListings` ва транзакция учун битта. */
+  function activeListingsQuery(ownerKey) {
+    return db.collection('realty_listings')
       .where('ownerKey', '==', ownerKey)
-      .limit(MAX_PRO_OBJECTS + 1)
-      .get();
-    const now = Date.now();
-    let count = 0;
-    for (const doc of snap.docs) {
-      const d = doc.data() || {};
-      if (d.status === 'blocked') continue;
-      const exp = d.expiresAt && d.expiresAt.toMillis
-        ? d.expiresAt.toMillis() : 0;
-      if (exp && exp < now) continue;
-      count += 1;
+      .limit(MAX_PRO_OBJECTS + 1);
+  }
+
+  /**
+   * Идемпотентлик ёзуви (`wallet_idempotency`): калит фойдаланувчига
+   * боғланади. Калит яроқсиз бўлса — хато (аввал бўш бўлмаса бўлди эди).
+   */
+  function idemRefFor(scope, uid, key) {
+    if (!isValidIdemKey(key)) throw fail('invalid-argument', 'idem_required');
+    return db.collection('wallet_idempotency').doc(idemDocId(scope, uid, key));
+  }
+
+  /**
+   * Ёзув аллақачон бор: ўша фойдаланувчи ва ШУ ЎЗ сўрови бўлса — сақланган
+   * натижа (такрорий чақирув пулни/ўринни яна еймайди); акс ҳолда калит
+   * тўқнашуви.
+   */
+  function replayIdem(stored, uid, fingerprint) {
+    if (!idemMatches(stored, uid, fingerprint)) {
+      throw fail('failed-precondition', 'idem_conflict');
     }
-    return count;
+    return (stored || {}).result || { ok: true, duplicate: true };
+  }
+
+  /** Расм URL'лари учун рухсат этилган bucket'лар. */
+  function imageBuckets() {
+    let configured = '';
+    try { configured = (admin.app().options || {}).storageBucket || ''; } catch (_) {}
+    return storageBucketsFor(
+      process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || '', configured);
   }
 
   /**
@@ -275,7 +306,7 @@ function attachRealty(exports, deps) {
    * мумкин эди. Фарқ қиладиган нарсалар — даража, статус, муддат ва
    * нуқта силкитиши — чақирувчиларнинг ўзида қолади.
    */
-  function parseListingInput(d, { addressFallback = '' } = {}) {
+  function parseListingInput(d, { addressFallback = '', uid = '', allowedImages = [] } = {}) {
     const title = String(d.title || '').trim().slice(0, 120);
     if (title.length < 3) throw fail('invalid-argument', 'title_required');
     const text = String(d.text || '').trim().slice(0, 2000);
@@ -320,6 +351,16 @@ function attachRealty(exports, deps) {
       priceAmount = n;
     }
 
+    // Расмлар — фақат ўз Storage'имиздаги `ads/{эга}/…` (2026-10-18). Таҳрирда
+    // эълонда аллақачон турган URL'лар ўз ҳолича қолади (эски ёзувлар).
+    const images = checkImageUrls(d.imageUrls, {
+      uid,
+      canon: canonicalUid,
+      buckets: imageBuckets(),
+      allowed: allowedImages,
+    });
+    if (images.invalid) throw fail('invalid-argument', 'image_invalid');
+
     return {
       deal: d.deal === 'rent' ? 'rent' : 'sale',
       title,
@@ -336,11 +377,7 @@ function attachRealty(exports, deps) {
       // қолиб кетарди. Энди ёзувда фақат ТАНЛОВ сақланади, рақамнинг
       // ўзи кўрсатиш пайтида созламадан ўқилади.
       contactMode: d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner',
-      imageUrls: Array.isArray(d.imageUrls)
-        ? d.imageUrls
-          .filter((u) => typeof u === 'string' && u.startsWith('http'))
-          .slice(0, 5)
-        : [],
+      imageUrls: images.urls,
       rooms: optionalInt(d.rooms, 1, 99),
       floor: optionalInt(d.floor, -5, 200),
       totalFloors: optionalInt(d.totalFloors, 1, 200),
@@ -410,7 +447,19 @@ function attachRealty(exports, deps) {
       throw fail('failed-precondition', 'tier_not_available');
     }
 
-    const f = parseListingInput(d);
+    const f = parseListingInput(d, { uid });
+
+    // ИДЕМПОТЕНТЛИК (2026-10-18): клиент калитни юборарди, лекин сервер уни
+    // ишлатмасди — тармоқ узилганда қайта босилса иккинчи эълон яратиларди
+    // ва бепул лимит (2) ўз дубликати билан тўларди. Энди такрорий чақирув
+    // аввал яратилган эълоннинг натижасини қайтаради. Калит бўлмаса
+    // (жуда эски илова) — аввалгидек, идемпотентликсиз.
+    const idemKey = String(d.idempotencyKey || '').trim();
+    const idemRef = idemKey ? idemRefFor('realty_submit', uid, idemKey) : null;
+    if (idemRef) {
+      const seen = await idemRef.get();
+      if (seen.exists) return replayIdem(seen.data(), uid, 'submit');
+    }
 
     // `users/{uid}` БИР МАРТА ўқилади: калит, профессионал пакет ва
     // эга исми — учаласи шу ҳужжатда. Аввал ҳар бири ўз сўровини
@@ -418,22 +467,16 @@ function attachRealty(exports, deps) {
     const user = (await db.collection('users').doc(uid).get()).data() || {};
     const ownerKey = await ensureOwnerKey(uid, user);
     const pro = activeProPlan(user);
-    // Саноқ даражадан қатъи назар — кўтарилган эълон ҳам ўринни
-    // эгаллайди (қаранг: `countActiveListings`).
-    const used = await countActiveListings(ownerKey);
-    // Профессионал пакет бор бўлса лимит ўша пакетники, бепул 2 та эмас
-    // (концепция, 5-бўлим: риэлтор кўп объект жойлайди).
-    const limit = pro ? pro.objects : FREE_PLAIN_LIMIT;
-    if (used >= limit) {
-      throw fail('resource-exhausted', 'free_limit_reached', {
-        limit, pro: pro !== null,
-      });
-    }
+    const app = await appDoc();
+    // Профессионал пакет бор бўлса лимит ўша пакетники, бепул лимит эмас
+    // (концепция, 5-бўлим: риэлтор кўп объект жойлайди). Бепул лимит —
+    // `settings/app.realtyFreeLimit` (админ панел; бошланғич 2). Саноқ ва
+    // ёзув — БИР транзакцияда (қаранг пастда).
+    const limit = pro ? pro.objects : freeLimitFrom(app);
 
     const ownerName = (String(d.ownerName || '').trim()
       || String(user.name || '').trim()).slice(0, 80);
 
-    const app = await appDoc();
     const autoApprove = appSetting(app, 'realtyAutoApprove', true) !== false;
     // Уйнинг ўз тумани (D-GEO-11); юборилмаса/номаълум — эганинг тумани.
     const geo = await propertyGeoStamp(uid, d);
@@ -445,10 +488,9 @@ function attachRealty(exports, deps) {
     const cell = jitteredPoint(f.lat, f.lng);
 
     const ref = db.collection('realty_listings').doc();
-    const batch = db.batch();
 
     // ─── ОЧИҚ ҳужжат: тавсиф, тахминий ҳудуд ───
-    batch.set(ref, {
+    const listingDoc = {
       ownerKey,
       ownerName: ownerName || 'Фойдаланувчи',
       deal: f.deal,
@@ -488,25 +530,47 @@ function attachRealty(exports, deps) {
       ...(autoApprove
         ? { moderatedAt: ts(), moderatedBy: 'auto', autoApproved: true }
         : {}),
-    });
+    };
 
     // ─── ЁПИҚ ҳужжат: айнан шу иккови пуллик ахборот ───
-    batch.set(
-      ref.collection('private').doc('detail'),
-      detailDoc(uid, f.lat, f.lng, {
-        agentPhone: agentPhoneFrom(app, f.contactMode),
-        addressText: f.addressText,
-      }),
-    );
+    const detailPayload = detailDoc(uid, f.lat, f.lng, {
+      agentPhone: agentPhoneFrom(app, f.contactMode),
+      addressText: f.addressText,
+    });
 
-    await batch.commit();
-
-    return {
-      ok: true,
-      listingId: ref.id,
-      status: autoApprove ? 'active' : 'pending',
-      freeLeft: Math.max(0, limit - used - 1),
-    };
+    // ЛИМИТ ПОЙГАСИ (2026-10-18): аввал саноқ транзакциядан ТАШҚАРИДА эди
+    // («ўқи → текшир → ёз»), икки параллел юборишда иккови ҳам лимитдан
+    // ўтиб кетарди. Энди саноқ ва ёзув битта транзакцияда: фақат биттаси
+    // ютади. Саноқ даражадан қатъи назар — кўтарилган эълон ҳам ўринни
+    // эгаллайди (қаранг: `countActiveListings`).
+    return db.runTransaction(async (t) => {
+      if (idemRef) {
+        const seen = await t.get(idemRef);
+        if (seen.exists) return replayIdem(seen.data(), uid, 'submit');
+      }
+      const snap = await t.get(activeListingsQuery(ownerKey));
+      const used = countActiveFromDocs(snap.docs, Date.now());
+      if (used >= limit) {
+        throw fail('resource-exhausted', 'free_limit_reached', {
+          limit, pro: pro !== null,
+        });
+      }
+      const res = {
+        ok: true,
+        listingId: ref.id,
+        status: autoApprove ? 'active' : 'pending',
+        freeLeft: Math.max(0, limit - used - 1),
+      };
+      t.set(ref, listingDoc);
+      t.set(ref.collection('private').doc('detail'), detailPayload);
+      if (idemRef) {
+        t.set(idemRef, {
+          type: 'submitRealtyListing', uid, fp: 'submit', result: res,
+          createdAt: ts(),
+        });
+      }
+      return res;
+    });
   });
 
   /**
@@ -542,6 +606,8 @@ function attachRealty(exports, deps) {
     // аввалги манзил сақланади (эски илова версиялари учун).
     const f = parseListingInput(d, {
       addressFallback: String(prev.addressText || current.addressText || ''),
+      uid,
+      allowedImages: Array.isArray(current.imageUrls) ? current.imageUrls : [],
     });
 
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
@@ -689,15 +755,6 @@ function attachRealty(exports, deps) {
       const uid = requireUid(context);
       const d = data || {};
 
-      const idempotencyKey = String(d.idempotencyKey || '').trim();
-      if (!idempotencyKey) throw fail('invalid-argument', 'idem_required');
-      const idemRef = db.collection('wallet_idempotency')
-        .doc('realty_tier_' + idempotencyKey);
-      const existingIdem = await idemRef.get();
-      if (existingIdem.exists) {
-        return (existingIdem.data() || {}).result || { ok: true, duplicate: true };
-      }
-
       const listingId = String(d.listingId || '').trim();
       if (!listingId) throw fail('invalid-argument', 'listing_required');
 
@@ -709,6 +766,11 @@ function attachRealty(exports, deps) {
       if (!PAID_DURATIONS[tier].includes(days)) {
         throw fail('invalid-argument', 'bad_duration');
       }
+      // Калит фойдаланувчига ВА сўровга боғланади (қаранг: `purchaseRealtyPackage`).
+      const fp = `tier:${listingId}:${tier}:${days}`;
+      const idemRef = idemRefFor('realty_tier', uid, String(d.idempotencyKey || '').trim());
+      const existingIdem = await idemRef.get();
+      if (existingIdem.exists) return replayIdem(existingIdem.data(), uid, fp);
 
       // Эгалик транзакциядан ТАШҚАРИДА текширилади: телефон ёпиқ
       // ҳужжатда, уни транзакция ичида ўқиш керак эмас.
@@ -723,9 +785,7 @@ function attachRealty(exports, deps) {
       try {
         return await db.runTransaction(async (t) => {
           const idemSnap = await t.get(idemRef);
-          if (idemSnap.exists) {
-            return (idemSnap.data() || {}).result || { ok: true, duplicate: true };
-          }
+          if (idemSnap.exists) return replayIdem(idemSnap.data(), uid, fp);
 
           const snap = await t.get(listingRef);
           if (!snap.exists) throw fail('not-found', 'listing_not_found');
@@ -806,6 +866,8 @@ function attachRealty(exports, deps) {
           };
           t.set(idemRef, {
             type: 'purchaseRealtyTier',
+            uid,
+            fp,
             result: res,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -842,8 +904,8 @@ function attachRealty(exports, deps) {
   // объектлар ҳақидаги АХБОРОТ хизмати учун ҳақ олади. Пакет — шунча
   // объектнинг аниқ маълумотини очиш ҳуқуқи.
 
-  /** Пакет ўлчамлари — концепцияда «масалан, 5 объект ёки 10 объект». */
-  const PACKAGE_SIZES = [5, 10];
+  // Пакет ўлчамлари — `settings/app.realtyPackagePricing` калитлари
+  // (админ панел; бошланғич «5 объект ёки 10 объект» — `packageSizesFrom`).
 
   const PACKAGE_PRICING_DEFAULT = { 5: 30000, 10: 50000 };
 
@@ -864,29 +926,26 @@ function attachRealty(exports, deps) {
       const uid = requireUid(context);
       const d = data || {};
 
-      const idempotencyKey = String(d.idempotencyKey || '').trim();
-      if (!idempotencyKey) throw fail('invalid-argument', 'idem_required');
-      const idemRef = db.collection('wallet_idempotency')
-        .doc('realty_pkg_' + idempotencyKey);
-      const existingIdem = await idemRef.get();
-      if (existingIdem.exists) {
-        return (existingIdem.data() || {}).result || { ok: true, duplicate: true };
-      }
-
+      const app = await appDoc();
       const size = parseInt(String(d.size || 0), 10);
-      if (!PACKAGE_SIZES.includes(size)) {
+      if (!packageSizesFrom(app).includes(size)) {
         throw fail('invalid-argument', 'bad_package_size');
       }
-      const price = packagePriceFor(await appDoc(), size);
+      // Калит фойдаланувчига ВА ўлчамга боғланади (2026-10-18): бошқа
+      // фойдаланувчи ёки бошқа ўлчам билан бир хил калит натижани
+      // қайтармайди, тўқнашув деб рад этилади.
+      const fp = `size:${size}`;
+      const idemRef = idemRefFor('realty_pkg', uid, String(d.idempotencyKey || '').trim());
+      const existingIdem = await idemRef.get();
+      if (existingIdem.exists) return replayIdem(existingIdem.data(), uid, fp);
+      const price = packagePriceFor(app, size);
       const userRef = db.collection('users').doc(uid);
       const ledgerOpId = db.collection('realty_listings').doc().id;
 
       try {
         return await db.runTransaction(async (t) => {
           const idemSnap = await t.get(idemRef);
-          if (idemSnap.exists) {
-            return (idemSnap.data() || {}).result || { ok: true, duplicate: true };
-          }
+          if (idemSnap.exists) return replayIdem(idemSnap.data(), uid, fp);
           const userSnap = await t.get(userRef);
           if (!userSnap.exists) throw fail('not-found', 'user_not_found');
           const u = userSnap.data() || {};
@@ -934,6 +993,8 @@ function attachRealty(exports, deps) {
           const res = { ok: true, size, price, unlocksLeft: left };
           t.set(idemRef, {
             type: 'purchaseRealtyPackage',
+            uid,
+            fp,
             result: res,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -1027,7 +1088,7 @@ function attachRealty(exports, deps) {
   exports.getRealtyPackagePricing = functions.https.onCall(async () => {
     const app = await appDoc();
     const out = {};
-    for (const size of PACKAGE_SIZES) {
+    for (const size of packageSizesFrom(app)) {
       out[String(size)] = packagePriceFor(app, size);
     }
     return { pricing: out };
@@ -1114,27 +1175,21 @@ function attachRealty(exports, deps) {
       const uid = requireUid(context);
       const d = data || {};
 
-      const idempotencyKey = String(d.idempotencyKey || '').trim();
-      if (!idempotencyKey) throw fail('invalid-argument', 'idem_required');
-      const idemRef = db.collection('wallet_idempotency')
-        .doc('realty_pro_' + idempotencyKey);
-      const existingIdem = await idemRef.get();
-      if (existingIdem.exists) {
-        return (existingIdem.data() || {}).result || { ok: true, duplicate: true };
-      }
-
       const planId = String(d.planId || '').trim();
       const plan = proPlans(await appDoc()).find((p) => p.id === planId);
       if (!plan) throw fail('invalid-argument', 'bad_plan');
+      // Калит фойдаланувчига ВА режага боғланади (қаранг: `purchaseRealtyPackage`).
+      const fp = `plan:${plan.id}`;
+      const idemRef = idemRefFor('realty_pro', uid, String(d.idempotencyKey || '').trim());
+      const existingIdem = await idemRef.get();
+      if (existingIdem.exists) return replayIdem(existingIdem.data(), uid, fp);
 
       const userRef = db.collection('users').doc(uid);
       const ledgerOpId = db.collection('realty_listings').doc().id;
       try {
         return await db.runTransaction(async (t) => {
           const idemSnap = await t.get(idemRef);
-          if (idemSnap.exists) {
-            return (idemSnap.data() || {}).result || { ok: true, duplicate: true };
-          }
+          if (idemSnap.exists) return replayIdem(idemSnap.data(), uid, fp);
           const userSnap = await t.get(userRef);
           if (!userSnap.exists) throw fail('not-found', 'user_not_found');
           const u = userSnap.data() || {};
@@ -1201,6 +1256,8 @@ function attachRealty(exports, deps) {
           };
           t.set(idemRef, {
             type: 'purchaseRealtyProPackage',
+            uid,
+            fp,
             result: res,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -1220,10 +1277,10 @@ function attachRealty(exports, deps) {
     const user = (await db.collection('users').doc(uid).get()).data() || {};
     const ownerKey = await ensureOwnerKey(uid, user);
     const pro = activeProPlan(user);
-    const used = await countActiveListings(ownerKey);
+    const [used, app] = await Promise.all([countActiveListings(ownerKey), appDoc()]);
     return {
       used,
-      limit: pro ? pro.objects : FREE_PLAIN_LIMIT,
+      limit: pro ? pro.objects : freeLimitFrom(app),
       isPro: pro !== null,
       proExpiresAt: pro ? pro.expiresAt : 0,
     };
@@ -1376,6 +1433,80 @@ function attachRealty(exports, deps) {
         updatedAt: ts(),
       });
       return { ok: true, status };
+    });
+
+  /**
+   * Admin: объект сонлари — бепул лимит, ахборот пакети ўлчамлари/нархлари,
+   * профессионал режалар (2026-10-18). Аввал бу сонлар кодда қотирилган эди.
+   *
+   * Нега callable (клиент тўғридан-тўғри `settings/app`га ёзмайди): қиймат
+   * СЕРВЕРДА текширилади (чегара, такрор, «катта пакет қиммат эмас») ва ҳар
+   * ўзгариш `admin_audit`га (ким, қачон, нима эди → нима бўлди) ёзилади —
+   * тариф ўзгартириш ҳассос амал (41-қоида). Кучга киради: келаси чақирувдан
+   * (кеш йўқ — қаранг: `appDoc`). Мавжуд эълон ва аввал сотиб олинган
+   * пакетлар ўзгармайди.
+   */
+  exports.adminSetRealtyCounts = functions.https.onCall(
+    async (data, context) => {
+      const d = data || {};
+      const adminPhone = await assertAdmin(d.adminPhone, context);
+      // `assertAdmin` диспетчерни ҳам ўтказади; тариф/лимит — фақат админ
+      // ва супер-админ (Firestore қоидасидаги `isAdmin()` билан бир хил даража).
+      const roleSnap = await db.collection('users').doc(String(adminPhone)).get();
+      const role = String((roleSnap.data() || {}).role || '');
+      if (role !== 'admin' && role !== 'superadmin') {
+        throw fail('permission-denied', 'admin_only');
+      }
+
+      let parsed;
+      try {
+        parsed = parseCounts(d, { maxProObjects: MAX_PRO_OBJECTS });
+      } catch (e) {
+        if (e instanceof CountsError) {
+          throw fail('invalid-argument', e.reason, e.details);
+        }
+        throw e;
+      }
+
+      const ref = db.collection('settings').doc('app');
+      const del = admin.firestore.FieldValue.delete();
+      await db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        const before = snap.exists ? (snap.data() || {}) : {};
+        t.set(ref, {
+          realtyFreeLimit: parsed.freeLimit === null ? del : parsed.freeLimit,
+          realtyPackagePricing: parsed.packagePricing,
+          realtyProPlans: parsed.proPlans,
+          realtyCountsUpdatedAt: ts(),
+        }, {
+          mergeFields: [
+            'realtyFreeLimit', 'realtyPackagePricing', 'realtyProPlans',
+            'realtyCountsUpdatedAt',
+          ],
+        });
+        t.set(db.collection('admin_audit').doc(), {
+          kind: 'realty_counts_changed',
+          actor: String(adminPhone || '').slice(0, 20),
+          before: {
+            freeLimit: before.realtyFreeLimit === undefined ? null : before.realtyFreeLimit,
+            packagePricing: before.realtyPackagePricing || null,
+            proPlans: before.realtyProPlans || null,
+          },
+          after: {
+            freeLimit: parsed.freeLimit,
+            packagePricing: parsed.packagePricing,
+            proPlans: parsed.proPlans,
+          },
+          at: ts(),
+        });
+      });
+
+      return {
+        ok: true,
+        freeLimit: parsed.freeLimit,
+        packagePricing: parsed.packagePricing,
+        proPlans: parsed.proPlans,
+      };
     });
 
   /** Admin: эълонни бутунлай ўчириш. */

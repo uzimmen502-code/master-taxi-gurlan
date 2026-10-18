@@ -17,6 +17,7 @@ import '../../ads/widgets/ad_district_field.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../../../models/map_picker_result.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
@@ -25,6 +26,7 @@ import '../../map_picker/screens/map_picker_screen.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_controls.dart';
 import '../widgets/realty_feedback.dart';
+import '../widgets/realty_quota_strip.dart';
 import 'realty_pro_screen.dart';
 
 /// Кўчмас мулк объекти — янгисини қўшиш ва мавжудини таҳрирлаш.
@@ -209,21 +211,67 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     _loadPoint(source.id);
   }
 
+  /// Пакет режалари — ўрин тугаган бўлса олдиндан юкланади (пакет экрани
+  /// режаларни кутиб турмасин).
+  Future<List<RealtyProPlan>>? _plansFuture;
+
   Future<void> _loadQuota() async {
     try {
       final q = await _repo.fetchQuota();
       if (!mounted) return;
+      // `fetchQuota` хатода «бўш» квота қайтаради (`limit == 0`) — уни
+      // «юкланди» деб қабул қилмаймиз: аввал бу «лимит тугади» деб ЁЛҒОН
+      // кўрсатарди. Лимитни сервер юборишда барибир текширади.
+      if (!q.isKnown) return;
       setState(() {
         _quota = q;
         _quotaLoaded = true;
       });
+      if (q.isFull) _plansFuture ??= _repo.loadProPlans();
     } catch (e) {
       // Квота ўқилмаса форма барибир ишлайди — лимитни сервер айтади.
       debugPrint('[AddRealty] loadQuota $e');
     }
   }
 
-  /// Бепул ўрин тугаганда пакет таклифи.
+  /// Пакет экранини БЕВОСИТА очади («Пакетни кўриш» тугмаси). Қайтгач ўрин
+  /// қайта ўқилади — пакет олинган бўлиши мумкин.
+  Future<void> _openProPackage() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RealtyProScreen(
+          initialQuota: _quotaLoaded ? _quota : null,
+          plansFuture: _plansFuture,
+        ),
+      ),
+    );
+    if (mounted) await _loadQuota();
+  }
+
+  /// Бир форма сеанси учун идемпотентлик калити (янги эълон). Узилишдан
+  /// кейинги қайта уриниш ШУ калит билан кетади; эълон яратилгач ёки сервер
+  /// аниқ рад этгач янгиланади.
+  final IdempotencyKeys _keys = IdempotencyKeys();
+  static const _submitScope = 'submit';
+
+  /// Юкланган расмлар: локал файл йўли → URL. Узилган уринишдан кейин
+  /// расмлар қайта юкланмайди ва «яратилган бўлиши мумкин» эълон учун
+  /// ўчирилмайди.
+  final Map<String, String> _uploadedByPath = {};
+
+  /// Сервер эълонни АНИҚ рад этди — юкланган расмларни ўчиради.
+  Future<void> _discardUploads(String ownerId) async {
+    final urls = _uploadedByPath.values.toList();
+    _uploadedByPath.clear();
+    if (urls.isNotEmpty) {
+      await _storage.deleteAdImages(ownerId: ownerId, imageUrls: urls);
+    }
+  }
+
+  /// Бепул ўрин тугаганда пакет таклифи — ФАҚАТ юборишда сервер лимитни
+  /// рад этганда (ўрин ҳолати эскирган бўлса). Йўлакчадаги «Пакетни кўриш»
+  /// тугмаси бу диалогсиз бевосита очади: у ердаги матн шу огоҳлантиришнинг
+  /// ўзи, иккинчи марта кўрсатиш ортиқча қадам эди.
   ///
   /// Аввал фақат «Бепул лимит тугади» деган SnackBar чиқар эди —
   /// фойдаланувчига НИМА ҚИЛИШ кераклиги айтилмас, риэлтор пакети
@@ -248,11 +296,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       ),
     );
     if (bought != true || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const RealtyProScreen()),
-    );
-    // Пакет олинган бўлиши мумкин — ўринни қайта ўқиймиз.
-    if (mounted) await _loadQuota();
+    await _openProPackage();
   }
 
   /// Қораламани тиклаш. Расмлар сақланмайди — локал файл йўллари
@@ -477,21 +521,27 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       FirebaseAuth.instance.currentUser?.phoneNumber ?? '',
     );
 
-    var uploaded = const <String>[];
     try {
-      final newFiles = _photos.where((p) => p.file != null).toList();
-      if (newFiles.isNotEmpty) {
-        uploaded = await _storage.uploadImages(
+      // Аввалги (узилиб қолган) уриниш юклаб улгурган расмлар ҚАЙТА
+      // юкланмайди: тармоқ узилишидан кейинги «қайта уриниш» айнан шу
+      // URL'лар ва ШУ калит билан кетади.
+      final toUpload = _photos
+          .where((p) => p.file != null && !_uploadedByPath.containsKey(p.file!.path))
+          .toList();
+      if (toUpload.isNotEmpty) {
+        final urls = await _storage.uploadImages(
           ownerId: ownerId,
-          images: newFiles.map((p) => p.file!).toList(),
+          images: toUpload.map((p) => p.file!).toList(),
         );
+        for (var i = 0; i < toUpload.length; i++) {
+          _uploadedByPath[toUpload[i].file!.path] = urls[i];
+        }
       }
       // Экрандаги ТАРТИБ сақланади: янги юкланган URL'лар ўз ўрнига
       // қўйилади, шунда фойдаланувчи сурган тартиб базага ҳам тушади.
-      var nextUpload = 0;
       final images = [
         for (final p in _photos)
-          if (p.url != null) p.url! else uploaded[nextUpload++],
+          if (p.url != null) p.url! else _uploadedByPath[p.file!.path]!,
       ];
       final keptUrls = _photos
           .where((p) => p.url != null)
@@ -516,6 +566,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               areaM2: num.tryParse(_areaCtrl.text.trim().replaceAll(',', '.')),
               imageUrls: images,
               districtId: _district.districtId,
+              // Бир форма сеанси — бир калит: жавоб йўқолиб қайта
+              // уринилса сервер иккинчи эълон яратмайди ва ўрин емайди.
+              idempotencyKey: _keys.keyFor(_submitScope),
             )
           : await _repo.updateListing(
               listingId: existing.id,
@@ -542,6 +595,14 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       if (removed.isNotEmpty) {
         await _storage.deleteAdImages(ownerId: ownerId, imageUrls: removed);
       }
+      // Эълон яратилди: калит тугади. Қайта уринишдан кейин фойдаланувчи
+      // олиб ташлаган (эълонга КИРМАГАН) юкланган расмлар тозаланади.
+      _keys.settled(_submitScope);
+      final unused = _uploadedByPath.values.where((u) => !images.contains(u)).toList();
+      _uploadedByPath.clear();
+      if (unused.isNotEmpty) {
+        await _storage.deleteAdImages(ownerId: ownerId, imageUrls: unused);
+      }
       if (!mounted) return;
       // Матн қораламани тозалашдан ОЛДИН олинади: `await` дан кейин
       // `context` ишлатиш хавфли (экран ёпилган бўлиши мумкин).
@@ -554,10 +615,10 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       navigator.pop();
       showRealtyInfo(messenger, message, background: _tierColor);
     } on RealtyException catch (e) {
-      // Эълон яратилмади — юкланган расмлар Storage'да эгасиз қолмасин.
-      if (uploaded.isNotEmpty) {
-        await _storage.deleteAdImages(ownerId: ownerId, imageUrls: uploaded);
-      }
+      // Сервер АНИҚ рад этди — эълон яратилмаган: юкланган расмлар
+      // Storage'да эгасиз қолмасин ва калит янгиланади.
+      await _discardUploads(ownerId);
+      _keys.settled(_submitScope);
       if (!mounted) return;
       setState(() => _submitting = false);
       // Лимит тугаган бўлса — хабар эмас, ЧИҚИШ ЙЎЛИ кўрсатилади.
@@ -568,14 +629,12 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       }
       showRealtyError(messenger, realtyErrorText(context, e));
     } catch (e) {
-      // Тармоқ узилиши, таймаут ва бошқа кутилмаган хато — бу шохда
-      // ҳам расмлар эгасиз қолмаслиги керак. Аввал тозалаш фақат
-      // `RealtyException` да бор эди, шунинг учун айнан тармоқ
-      // узилганда (яъни энг эҳтимолли ҳолатда) Storage'да файл
-      // қолиб кетарди.
-      if (uploaded.isNotEmpty) {
-        await _storage.deleteAdImages(ownerId: ownerId, imageUrls: uploaded);
-      }
+      // Тармоқ узилиши, таймаут ва бошқа кутилмаган хато — НАТИЖА НОМАЪЛУМ:
+      // сервер эълонни яратиб улгурган бўлиши мумкин. Расмларни бу ерда
+      // ЎЧИРМАЙМИЗ (аввал ўчирилар эди ва яратилган эълон синган расм
+      // билан қолар эди). Расмлар ва калит сақланади — «қайта уриниш» айнан
+      // шулар билан кетади: эълон яратилган бўлса сервер ўшанинг ўзини
+      // қайтаради, яратилмаган бўлса яратилади.
       if (!mounted) return;
       setState(() => _submitting = false);
       showRealtyError(messenger, context.tr('realty_error_generic'));
@@ -809,7 +868,13 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             const SizedBox(height: 8),
             // Бепул лимит фақат янги объектга тегишли — таҳрирлашда
             // ўрин сони ўзгармайди.
-            if (!_isEdit) _quotaStrip(context),
+            if (!_isEdit)
+                RealtyQuotaStrip(
+                  loaded: _quotaLoaded,
+                  quota: _quota,
+                  busy: _submitting,
+                  onOpenPackage: _openProPackage,
+                ),
           ],
         ),
       ),
@@ -887,49 +952,6 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     );
   }
 
-  /// Банд ўрин йўлакчаси — статик «2 тагача бепул» ёзуви ўрнига.
-  ///
-  /// Ўрин тугаган бўлса шу ернинг ўзида «Пакет олиш» тугмаси чиқади:
-  /// фойдаланувчи формани тўлдиришдан ОЛДИН билиб олсин.
-  Widget _quotaStrip(BuildContext context) {
-    final c = context.ava;
-    if (!_quotaLoaded) {
-      return Center(
-        child: Text(
-          context.tr('realty_free_limit_hint'),
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
-        ),
-      );
-    }
-    final full = _quota.isFull;
-    return Column(
-      children: [
-        RealtyQuotaBar(quota: _quota, compact: true),
-        if (full) ...[
-          const SizedBox(height: 6),
-          Text(
-            context.tr('realty_limit_dialog_body'),
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
-          ),
-          const SizedBox(height: 6),
-          OutlinedButton.icon(
-            onPressed: _submitting ? null : _offerProPackage,
-            icon: const Icon(Icons.workspace_premium_outlined, size: 18),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: c.brand,
-              side: BorderSide(color: c.brand),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            label: Text(context.tr('realty_limit_dialog_cta')),
-          ),
-        ],
-      ],
-    );
-  }
 }
 
 /// Харитадаги нуқта майдони — танланмагунча қизил контур билан туради.

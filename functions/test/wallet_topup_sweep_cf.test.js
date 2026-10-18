@@ -137,10 +137,12 @@ const sweep = (o = {}) => sweepExpiredTopUps({ db, admin, nowMs: NOW, ttlMs: TTL
   await check('S7 batchSize\'дан кўп сўров бир ўтишда ёпилади', async () => {
     await wipe(COL);
     for (let i = 0; i < 7; i += 1) await put(`m${i}`, 'awaiting_transfer', 30 + i);
-    await put('keep', 'awaiting_transfer', 1);
+    // Биринчи саҳифа (янгилар) бутунлай муддати ўтмаганлардан иборат — sweeper
+    // шу ерда тўхтаб қолмай, курсор билан эскиларига ўтиши керак.
+    for (let i = 0; i < 4; i += 1) await put(`keep${i}`, 'awaiting_transfer', 1 + i * 0.1);
     const r = await sweep({ batchSize: 3 });
     assert.strictEqual(r.expired, 7);
-    assert.strictEqual(await st('keep'), 'awaiting_transfer');
+    for (let i = 0; i < 4; i += 1) assert.strictEqual(await st(`keep${i}`), 'awaiting_transfer');
   });
 
   await check('S8 пул ўзгармайди', async () => {

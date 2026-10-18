@@ -118,10 +118,15 @@ const TOPUP_COL = 'wallet_topup_requests';
  *    `awaiting_review` бўлган бўлса тегилмайди (рейс ҳолати);
  *  - идемпотент: қайта ишга тушса `expired` ҳужжатни қайта сўрамайди
  *    (сўров `status == awaiting_transfer` бўйича);
- *  - мавжуд индекс (`status`, `createdAt`) ишлатилади — янги индекс керак эмас.
+ *  - мавжуд индекс (`status` ASC, `createdAt` DESC) ишлатилади — янги индекс
+ *    керак эмас. ⚠️ Йўналиш аниқ шу бўлиши шарт: композит индекс тескари
+ *    йўналишда ишламайди (production'да `createdAt ASC` сўрови
+ *    FAILED_PRECONDITION берди; Firestore эмулятори индексни текширмайди,
+ *    шунинг учун тест буни ушлай олмайди).
  *
- * `createdAt` ўсиш тартибида ўтади: TTL ҳаммада бир хил, шунинг учун биринчи
- * муддати ўтмаган ҳужжатда тўхтаса бўлади.
+ * `createdAt` камайиш тартибида (янгилари биринчи) саҳифалаб ўтилади:
+ * `awaiting_transfer` ҳужжатлар оз (тозаланиб туради), шунинг учун ҳаммасини
+ * `startAfter` курсори билан кўриб чиқиш арзон.
  */
 async function sweepExpiredTopUps({
   db, admin, nowMs = Date.now(), ttlMs, batchSize = 200, maxRounds = 10,
@@ -129,14 +134,17 @@ async function sweepExpiredTopUps({
   let expired = 0;
   let skipped = 0;
   let scanned = 0;
+  let cursor = null;
   for (let round = 0; round < maxRounds; round += 1) {
-    const snap = await db.collection(TOPUP_COL)
+    let q = db.collection(TOPUP_COL)
       .where('status', '==', 'awaiting_transfer')
-      .orderBy('createdAt', 'asc')
-      .limit(batchSize)
-      .get();
+      .orderBy('createdAt', 'desc')
+      .limit(batchSize);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
     if (snap.empty) break;
     scanned += snap.size;
+    cursor = snap.docs[snap.docs.length - 1];
 
     const dueOf = (data) => {
       const exp = data.expiresAt && data.expiresAt.toMillis ? data.expiresAt.toMillis() : 0;
@@ -146,7 +154,6 @@ async function sweepExpiredTopUps({
     };
 
     const due = snap.docs.filter((d) => dueOf(d.data() || {}));
-    if (due.length === 0) break;
     for (const doc of due) {
       const done = await db.runTransaction(async (tx) => {
         const fresh = await tx.get(doc.ref);

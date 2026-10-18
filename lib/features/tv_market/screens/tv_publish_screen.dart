@@ -24,6 +24,7 @@ import '../services/tv_ad_service.dart';
 import '../services/tv_clip_compress.dart';
 import '../services/tv_clip_geo.dart';
 import '../services/tv_owner_name.dart';
+import '../services/tv_publish_rules.dart';
 import '../services/tv_social.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
@@ -135,7 +136,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     WidgetsBinding.instance.addObserver(this);
     _attachItemId = widget.attachItemId;
     if (widget.organicOnly) {
-      _category = widget.linkKind == 'service' ? 'service' : 'product';
+      _category = TvPublishRules.organicCategory(widget.linkKind);
       _categoryTouched = true; // автотаклиф «Янгилик»ка ўтказмасин
     }
     final edit = widget.editClip;
@@ -212,7 +213,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         _districtPreview = geo.districtLabel;
         _districtPreviewId = geo.districtId;
         _myItems = items.where((i) => i.isActive).toList();
-        if (exists) _openShop = true;
+        // Дўкон блоки яширин бўлса (боғланган видео) режим ҳам ёқилмайди.
+        if (exists && !widget.hideShopOption) _openShop = true;
         if (_attachItemId.isNotEmpty) _openShop = true;
         if (_attachItemId.isNotEmpty) {
           for (final it in _myItems) {
@@ -639,8 +641,13 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     final description = _descCtrl.text.trim();
 
     final wantsShopItem = _attachItemId.isNotEmpty || _productPhotos.isNotEmpty;
-    final shopMode =
-        !isAd && !isNews && (_openShop || _attachItemId.isNotEmpty);
+    final shopMode = TvPublishRules.shopMode(
+      isAd: isAd,
+      isNews: isNews,
+      openShop: _openShop,
+      attachItemId: _attachItemId,
+      hideShopOption: widget.hideShopOption,
+    );
     if (shopMode && !wantsShopItem) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_shop_photo_required'))),
@@ -913,7 +920,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               // дўкон/ижтимоий тармоқлар) энг охирида — «Тасдиқлаш»дан
               // тўғридан-тўғри олдин: эга умумий маълумотни (ном/нарх/
               // тавсиф/жойлашув) аввал тўлдиради, кейин турни танлайди.
-              if (!_categoryLocked) ...[
+              if (TvPublishRules.showCategorySelector(
+                categoryLocked: _categoryLocked,
+                organicOnly: widget.organicOnly,
+              )) ...[
                 _categorySelector(context),
                 const SizedBox(height: 16),
               ],

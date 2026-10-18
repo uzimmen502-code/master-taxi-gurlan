@@ -4,6 +4,7 @@ import 'package:ava_gurlan/features/home/widgets/ava_chip.dart';
 import 'package:ava_gurlan/features/home/widgets/ava_list_row.dart';
 import 'package:ava_gurlan/features/home/widgets/ava_section.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Виджетни берилган кенглик ва шрифт масштабида чизади.
@@ -228,6 +229,68 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // Эга (2026-10-18): қурилмада «Яқиндаги эълон…», «Яқиндаги хизма…»,
+    // «Кўчмас мулк кла…» бўлиб қирқилган эди. Тест шрифти (Ahem) ҳар ҳарфни
+    // 1em кенгликда чизади — шунинг учун кенгликлар аниқ ҳисобланади.
+    test('SectionTitleText.fitFor — чегаралар', () {
+      expect(SectionTitleText.fitFor(100, 120), SectionTitleFit.asIs);
+      expect(SectionTitleText.fitFor(100, 100), SectionTitleFit.asIs);
+      expect(SectionTitleText.fitFor(100, 85), SectionTitleFit.shrink);
+      expect(SectionTitleText.fitFor(100, 80), SectionTitleFit.shrink);
+      expect(SectionTitleText.fitFor(100, 79), SectionTitleFit.wrap);
+      expect(SectionTitleText.fitFor(100, double.infinity), SectionTitleFit.asIs);
+    });
+
+    Future<void> pumpTitle(WidgetTester tester, String title, double width) =>
+        _pump(
+          tester,
+          SectionTitleText(
+              title: title, style: const TextStyle(fontSize: 16)),
+          width: width,
+        );
+
+    testWidgets('сиғади — ўз ҳажмида, кичрайтирилмайди', (tester) async {
+      await pumpTitle(tester, 'аааа', 100); // 4 × 16 = 64px
+      expect(find.byType(FittedBox), findsNothing);
+      final p = tester.renderObject<RenderParagraph>(find.text('аааа'));
+      expect(p.didExceedMaxLines, isFalse);
+    });
+
+    testWidgets('озгина катта — кичраяди, «…» йўқ', (tester) async {
+      await pumpTitle(tester, 'аааааааа', 140); // 8 × 16 = 128 ≤ 140 → сиғади
+      expect(find.byType(FittedBox), findsNothing);
+      await pumpTitle(tester, 'ааааааааа', 130); // 144px, 130/144 = 0.90
+      expect(find.byType(FittedBox), findsOneWidget);
+      final p = tester.renderObject<RenderParagraph>(find.text('ааааааааа'));
+      expect(p.didExceedMaxLines, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('жуда катта — 2 қатор, «…» йўқ', (tester) async {
+      await pumpTitle(tester, 'ааааа ааааа', 100); // 176px, 100/176 = 0.57
+      expect(find.byType(FittedBox), findsNothing);
+      final p = tester.renderObject<RenderParagraph>(find.text('ааааа ааааа'));
+      expect(p.didExceedMaxLines, isFalse);
+      expect(p.size.height, greaterThan(16 * 1.25 * 1.5),
+          reason: '2 қатор: баландлик бир қатордан катта');
+    });
+
+    testWidgets('AvaSection сарлавҳаси + «Барчаси» 360px × 1.3 — йиқилмайди',
+        (tester) async {
+      await _pump(
+        tester,
+        AvaSection(
+          title: 'Яқиндаги хизматлар:',
+          status: AvaSectionStatus.ready,
+          onSeeAll: () {},
+          child: const SizedBox.shrink(),
+        ),
+        width: 360,
+        scale: 1.3,
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Яқиндаги хизматлар:'), findsOneWidget);
+    });
     testWidgets('AvaTileCard — узун ном ва нарх, 148px', (tester) async {
       await _pump(
         tester,

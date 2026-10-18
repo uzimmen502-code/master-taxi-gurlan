@@ -106,8 +106,8 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
       random: _rnd,
     );
     return AvaSection(
-      // Сарлавҳа доираси бўлим рангида: «Эълонлар» — яшил, «Хизматлар» —
-      // жигарранг (эга қарори 2026-10-06).
+      // Сарлавҳа доираси — бренд рангида (эга қарори 2026-10-18; аввал
+      // «Эълонлар» яшил, «Хизматлар» жигарранг эди).
       moduleId: JobsSections.tileIdFor(AdKindX.parse(widget.adType)),
       title: context.tr(widget.titleKey),
       status: _status,

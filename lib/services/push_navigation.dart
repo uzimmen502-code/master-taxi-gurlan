@@ -26,6 +26,7 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
+import '../features/profile/screens/wallet_screen.dart';
 import '../features/realty/screens/my_realty_listings_screen.dart';
 import '../features/realty/screens/realty_alerts_screen.dart';
 import '../features/realty/screens/realty_detail_screen.dart';
@@ -76,6 +77,11 @@ class PushNavigation {
       (k, v) => MapEntry(k, v?.toString() ?? ''),
     );
   }
+
+  /// Фойдаланувчи ҳамёнига тегишли push (`screen: 'wallet'`). Молия ходимига
+  /// кетадиган навбат хабари (`screen: 'news'`) бунга кирмайди.
+  @visibleForTesting
+  static bool opensWallet(String screen) => screen == 'wallet';
 
   static Future<void> handlePayload(String? payload) async {
     await handleData(decodePayload(payload));
@@ -321,6 +327,23 @@ class PushNavigation {
         ),
       );
       return;
+    }
+
+    // ── Ҳамён (telegram_wallet_bot.js) ───────────────────────────────
+    // «Ҳамён тўлдирилди / тўлдириш рад этилди / ечиш аризаси …» push'лари
+    // `screen: 'wallet'` юборади, лекин аввал ҳеч қаерда ишлов берилмасди ва
+    // босилганда Янгиликлар ҳабига тушарди. Энди ҳамён экрани очилади (унда
+    // тўлдириш сўровларининг ҳолати ҳам кўринади). Телефон номаълум бўлса —
+    // аввалги умумий йўл (ҳаб).
+    if (opensWallet(screen)) {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (phone.length >= 12) {
+        await nav.push(
+          MaterialPageRoute(builder: (_) => WalletScreen(phone: phone)),
+        );
+        return;
+      }
     }
 
     // `screen == 'sell'` (эски CF payload'лари) энди алоҳида экранга

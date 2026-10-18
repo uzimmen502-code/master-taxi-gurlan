@@ -26,6 +26,8 @@ class TvAdTierPicker extends StatelessWidget {
     this.districtLabel = '',
     this.regionLabel = '',
     this.enabled = true,
+    this.onTopUp,
+    this.onTopUpAmount,
   });
 
   final String selectedTier;
@@ -45,6 +47,12 @@ class TvAdTierPicker extends StatelessWidget {
 
   /// `false` — юбориш жараёнида танловни қотириб қўяди.
   final bool enabled;
+
+  /// Баланс етмаганда «Ҳамённи тўлдириш» тугмаси (`null` — тугмасиз).
+  final VoidCallback? onTopUp;
+
+  /// Берилса — тугма етишмаётган сумма билан чақирилади (ҳамён экранида таклиф).
+  final ValueChanged<int>? onTopUpAmount;
 
   int basePriceFor(String tier, int days) =>
       pricing[tier]?[days] ?? tvAdTierPricingDefault[tier]?[days] ?? 0;
@@ -142,13 +150,28 @@ class TvAdTierPicker extends StatelessWidget {
           ),
           if (insufficient) ...[
             const SizedBox(height: 6),
-            Text(
-              context.tr('tv_ad_insufficient_balance'),
-              style: const TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.tr('tv_ad_insufficient_balance'),
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                // Матн ёлғиз эди — босадиган жой йўқ эди. Энди ҳамён экрани.
+                if (onTopUp != null)
+                  TextButton(
+                    key: const ValueKey('tv-ad-topup'),
+                    onPressed: onTopUpAmount == null
+                        ? onTopUp
+                        : () => onTopUpAmount!(selectedPrice - walletBalance),
+                    child: Text(context.tr('wlt_topup_btn')),
+                  ),
+              ],
             ),
           ],
         ],

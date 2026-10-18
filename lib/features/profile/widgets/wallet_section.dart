@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
@@ -42,9 +43,9 @@ class WalletSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (showTitle)
-                  const Text(
-                    '💳 Кошелёк',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  Text(
+                    '💳 ${context.tr('wlt_title')}',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 if (showTitle) const SizedBox(height: 6),
                 Text.rich(
@@ -59,15 +60,13 @@ class WalletSection extends StatelessWidget {
                         text: formatPrice(bal),
                         style: const TextStyle(fontSize: 30.8), // 28 × 1.1
                       ),
-                      const TextSpan(text: ' сўм'),
+                      TextSpan(text: ' ${context.tr('wlt_currency')}'),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Тўлов: нон ва тайёр овқат буюртмасида кошелёкдан '
-                  'миқдор автоматик ҳисобланади. '
-                  'Қайтим ва сут бўйича кредит ҳам шу балансда кўринади.',
+                  context.tr('wlt_intro'),
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.4,
@@ -80,8 +79,8 @@ class WalletSection extends StatelessWidget {
                 WalletLedgerList(
                   uid: uid,
                   since: DateTime.now().subtract(const Duration(days: 5)),
-                  title: 'Oxirgi 5 kun — operatsiyalar',
-                  emptyMessage: 'Oxirgi 5 kunda operatsiya yo‘q',
+                  title: context.tr('wlt_hist5_title'),
+                  emptyMessage: context.tr('wlt_hist5_empty'),
                 ),
               ],
             ),

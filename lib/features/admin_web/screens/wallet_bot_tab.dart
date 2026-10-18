@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../utils/wallet_bot_card_state.dart';
 
 /// Finance Center — Telegram ҳамён (топ-up / ечиш навбати + карта созламаси).
 class WalletBotTab extends StatefulWidget {
@@ -380,6 +381,47 @@ class _WalletBotTabState extends State<WalletBotTab>
     );
   }
 
+  /// Тўлдиришга тайёрлик: карта йўқ/нотўғри бўлса дарҳол кўринади.
+  Widget _cardBanner() {
+    final state = evaluateWalletBotCard(enabled: _enabled, card: _cardCtrl.text);
+    final (Color bg, Color fg, IconData icon, String text) = switch (state) {
+      WalletBotCardState.ok => (
+          Colors.green.shade50, Colors.green.shade800, Icons.check_circle_outline,
+          'Тўлдиришга тайёр: бот ёқиқ, карта киритилган.'
+        ),
+      WalletBotCardState.botOff => (
+          Colors.grey.shade200, Colors.grey.shade800, Icons.pause_circle_outline,
+          'Бот ўчиқ — фойдаланувчилар ҳамённи тўлдира олмайди.'
+        ),
+      WalletBotCardState.missing => (
+          Colors.red.shade50, Colors.red.shade800, Icons.error_outline,
+          'Депозит картаси КИРИТИЛМАГАН. Фойдаланувчилар ботга боргач '
+              '«Карта ҳали созланмаган» жавобини олади — тўлдириш ишламайди. '
+              'Картани киритиб сақланг.'
+        ),
+      WalletBotCardState.invalid => (
+          Colors.orange.shade50, Colors.orange.shade900, Icons.warning_amber_rounded,
+          'Карта рақами тўғри эмас (16 рақам, Луна текшируви). Хато карта '
+              'фойдаланувчилар пулини нотўғри жойга йўналтиради — текширинг. '
+              'Янги қиймат сервер томонидан ҳам рад этилади.'
+        ),
+    };
+    return Container(
+      key: ValueKey('wallet-card-banner-${state.name}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: fg, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: TextStyle(color: fg, fontSize: 13, height: 1.35))),
+        ],
+      ),
+    );
+  }
+
   Widget _settingsPane() {
     if (_loadingSettings) {
       return const Center(child: CircularProgressIndicator());
@@ -391,6 +433,7 @@ class _WalletBotTabState extends State<WalletBotTab>
           Text('Бот: @$_botUsername',
               style: const TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
+        _cardBanner(),
         SwitchListTile(
           title: const Text('Бот ёқилган'),
           value: _enabled,
@@ -415,9 +458,12 @@ class _WalletBotTabState extends State<WalletBotTab>
           controller: _cardCtrl,
           decoration: const InputDecoration(
             labelText: 'Депозит карта рақами',
+            helperText: '16 рақам. Фойдаланувчилар пулни ШУ картага ўтказади — '
+                'сақлашдан олдин яхшилаб текширинг.',
             border: OutlineInputBorder(),
           ),
           keyboardType: TextInputType.number,
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         Row(

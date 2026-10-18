@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:ava_gurlan/features/jobs/controllers/jobs_controller.dart';
 import 'package:ava_gurlan/features/jobs/jobs_colors.dart';
 import 'package:ava_gurlan/features/jobs/jobs_sections.dart';
@@ -84,11 +86,52 @@ void main() {
       expect(JobsSections.tileIdFor(AdKind.work), 'jobs');
     });
 
-    test('бўлимлар РАНГДА фарқ қилади: экран ва плитка (эга қарори)', () {
-      expect(JobsColors.accentFor(AdKind.ad),
-          isNot(JobsColors.accentFor(AdKind.service)));
+    test('бош саҳифа плиткалари РАНГДА фарқ қилади', () {
       expect(olxTintFor(JobsSections.adsTileId),
           isNot(olxTintFor(JobsSections.servicesTileId)));
+    });
+
+    // Эга қарори (2026-10-18): экранларда иккала бўлим бренд рангида (аввал
+    // яшил/жигарранг: AppBar'даги тўқ матн ~3.5:1 ва ~2.4:1 контраст берарди).
+    double lum(Color c) {
+      double ch(double v) => v <= 0.03928
+          ? v / 12.92
+          : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+      return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b);
+    }
+
+    double contrast(Color a, Color b) {
+      final la = lum(a), lb = lum(b);
+      final hi = math.max(la, lb), lo = math.min(la, lb);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    test('«Эълонлар» ва «Хизматлар» AppBar фони — бренд (#FFA500)', () {
+      expect(JobsColors.accentFor(AdKind.ad), const Color(0xFFFFA500));
+      expect(JobsColors.accentFor(AdKind.service), const Color(0xFFFFA500));
+    });
+
+    test('AppBar/тугма: onBar матни бўлим фонида ўқилади (>= 4.5:1)', () {
+      for (final k in [AdKind.ad, AdKind.service]) {
+        expect(contrast(JobsColors.onBar, JobsColors.accentFor(k)),
+            greaterThanOrEqualTo(4.5),
+            reason: '$k AppBar/тугма контрасти');
+      }
+    });
+
+    test('оқ ва крем фонда бўлим матни ўқилади (>= 4.5:1)', () {
+      for (final k in [AdKind.ad, AdKind.service]) {
+        final ink = JobsColors.accentTextFor(k);
+        for (final bg in [
+          Colors.white,
+          JobsColors.surface,
+          JobsColors.scaffold,
+          JobsColors.fieldFill,
+        ]) {
+          expect(contrast(ink, bg), greaterThanOrEqualTo(4.5),
+              reason: '$k матн ранги $bg фонда');
+        }
+      }
     });
 
     test('«Хизматлар» плиткасининг ранги ва иконкаси бор (кулранг эмас)', () {

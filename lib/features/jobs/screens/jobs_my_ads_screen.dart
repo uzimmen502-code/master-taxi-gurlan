@@ -119,6 +119,8 @@ class _MyAdTile extends StatelessWidget {
     final color = live
         ? JobsColors.accentFor(ad.kind)
         : (blocked ? JobsColors.urgent : JobsColors.muted);
+    // Матн — оқ фонда ўқилиши учун бўлимнинг тўқ матн ранги (фон — `color`).
+    final inkColor = live ? JobsColors.accentTextFor(ad.kind) : color;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -136,7 +138,7 @@ class _MyAdTile extends StatelessWidget {
                 style: TextStyle(
                     fontSize: AppText.labelSmall,
                     fontWeight: FontWeight.w700,
-                    color: color),
+                    color: inkColor),
               ),
             ),
             if (pending) ...[

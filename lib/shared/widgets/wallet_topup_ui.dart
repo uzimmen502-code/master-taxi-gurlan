@@ -26,16 +26,32 @@ import '../../repositories/user_repository.dart';
 /// тингланади ва иккинчисида «Stream has already been listened to» берарди —
 /// Кабинет қурилмада йиқилди (2026-10-18). Тингловчи қолмаса манба ёпилади,
 /// янгиси келса қайта очилади.
-Stream<int> walletBalanceStream() {
-  StreamSubscription<int>? sub;
-  late final StreamController<int> controller;
-  controller = StreamController<int>.broadcast(
+Stream<int> walletBalanceStream() => restartableBroadcast<int>(_walletBalanceSource);
+
+/// [source] ни КЎП МАРТА тингланадиган оқимга ўрайди: биринчи тингловчи
+/// келганда манба очилади, охиргиси кетганда ёпилади, янгиси келса қайта
+/// очилади. Тест учун алоҳида (манбани алмаштириш мумкин).
+///
+/// ⚠️ Охирги қиймат ЯНГИ тингловчига ҳам берилади (replay). Усиз: қатор қайта
+/// қурилганда янги `StreamBuilder` оқимга КЕЧ уланади, одатдаги broadcast оқим
+/// эса қийматни такрорламайди — қатор абадий «кутилмоқда»да қолар эди
+/// (қурилмада лог билан кўрилди, 2026-10-18).
+Stream<T> restartableBroadcast<T>(Stream<T> Function() source) {
+  StreamSubscription<T>? sub;
+  T? last;
+  var hasLast = false;
+  late final StreamController<T> controller;
+  controller = StreamController<T>.broadcast(
     onListen: () {
-      sub = _walletBalanceSource().listen(
-        controller.add,
+      sub = source().listen(
+        (v) {
+          last = v;
+          hasLast = true;
+          controller.add(v);
+        },
         onError: controller.addError,
         onDone: () {
-          // Телефон йўқ — манба тугади; тингловчилар «маълумот йўқ» деб қолади.
+          // Манба тугади (масалан телефон йўқ) — тингловчилар «маълумот йўқ» деб қолади.
           if (!controller.isClosed) controller.close();
         },
       );
@@ -45,7 +61,11 @@ Stream<int> walletBalanceStream() {
       sub = null;
     },
   );
-  return controller.stream;
+  return Stream<T>.multi((out) {
+    if (hasLast) out.add(last as T);
+    final s = controller.stream.listen(out.add, onError: out.addError, onDone: out.close);
+    out.onCancel = s.cancel;
+  }, isBroadcast: true);
 }
 
 Stream<int> _walletBalanceSource() async* {

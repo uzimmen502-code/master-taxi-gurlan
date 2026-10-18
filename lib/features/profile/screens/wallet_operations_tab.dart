@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../widgets/wallet_ledger_list.dart';
 
@@ -32,11 +33,11 @@ class _WalletOperationsTabState extends State<WalletOperationsTab> {
     final since = DateTime.now().subtract(const Duration(days: 30));
 
     if (_uid.length < 9) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
-            'Profilda telefon raqamini kiriting',
+            context.tr('wlt_phone_needed'),
             textAlign: TextAlign.center,
           ),
         ),
@@ -56,8 +57,7 @@ class _WalletOperationsTabState extends State<WalletOperationsTab> {
               border: Border.all(color: Colors.blue.shade100),
             ),
             child: Text(
-              'Oxirgi 30 kun ichidagi koshilyok operatsiyalari. '
-              'Har bir yozuv buyurtma, to‘lov yoki qaytim bilan bog‘langan.',
+              context.tr('wlt_ops_intro'),
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey.shade700,
@@ -69,7 +69,7 @@ class _WalletOperationsTabState extends State<WalletOperationsTab> {
           WalletLedgerList(
             uid: _uid,
             since: since,
-            emptyMessage: 'Oxirgi oyda operatsiya yo‘q',
+            emptyMessage: context.tr('wlt_ops_empty_month'),
           ),
         ],
       ),

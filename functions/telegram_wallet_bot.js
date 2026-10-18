@@ -7,6 +7,9 @@
 'use strict';
 
 const crypto = require('crypto');
+const {
+  cardIsValid, topUpReadiness, makeFinanceNotifier,
+} = require('./wallet_topup_support');
 
 const TOPUP_COL = 'wallet_topup_requests';
 const WITHDRAW_COL = 'wallet_withdraw_requests';
@@ -189,6 +192,20 @@ function attachTelegramWalletBot(exports, deps) {
       });
     } catch (e) {
       console.error('tgSend:', e.message || e);
+    }
+  }
+
+  // Молия навбатига сигнал (2026-10-18): чек/ечиш аризаси келганда молия ва
+  // супер-админга хабар. Аввал сигнал йўқ эди — навбатни ўзи очиб кузатиш керак.
+  const notifyFinanceQueueRaw = makeFinanceNotifier({
+    db, notifyUserInApp, sendTelegram: tgSend,
+  });
+  /** Хато асосий оқимни (чек қабул қилиш, ариза яратиш) ҲЕЧ ҚАЧОН бузмайди. */
+  async function notifyFinanceQueue(args) {
+    try {
+      await notifyFinanceQueueRaw(args);
+    } catch (e) {
+      console.error('notifyFinanceQueue', e.message || e);
     }
   }
 
@@ -592,8 +609,30 @@ function attachTelegramWalletBot(exports, deps) {
         extraData: { requestId: ref.id },
       });
     } catch (_) { /* ignore */ }
+    await notifyFinanceQueue({ kind: 'withdraw', requestId: ref.id, amount });
 
     return { ok: true, requestId: ref.id, amount, status: 'pending' };
+  });
+
+  /**
+   * Фойдаланувчи ботга боришдан ОЛДИН: тўлдириш ишлайдими. Бот ўчиқ ёки
+   * депозит картаси йўқ/нотўғри бўлса — иловада тушунарли хабар (аввал бот
+   * «Карта ҳали созланмаган» дерди — фойдаланувчи кўп вақт сарфлаб келарди).
+   * Карта рақами ЧИҚАРИЛМАЙДИ — фақат ҳолат ва лимитлар.
+   */
+  exports.getWalletTopUpStatus = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+    }
+    const settings = await loadBotSettings();
+    const r = topUpReadiness(settings);
+    return {
+      ok: true,
+      ready: r.ready,
+      reason: r.reason,
+      maxTopUp: settings.maxTopUp,
+      dailyTopUpLimit: settings.dailyTopUpLimit,
+    };
   });
 
   // ─── Callable: bot settings ──────────────────────────────────────
@@ -612,6 +651,15 @@ function attachTelegramWalletBot(exports, deps) {
     if (data && typeof data.enabled === 'boolean') patch.enabled = data.enabled;
     if (data && data.depositCardNumber != null) {
       patch.depositCardNumber = String(data.depositCardNumber).replace(/\s+/g, '');
+      // Бўш — карта олиб ташланади (тўлдириш «созланмаган» бўлади); бўш эмас —
+      // 16 рақам ва Луна текшируви: хато рақам фойдаланувчи пулини нотўғри
+      // картага йўналтирарди.
+      if (patch.depositCardNumber && !cardIsValid(patch.depositCardNumber)) {
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Karta raqami noto\'g\'ri (16 raqam)',
+            { errorCode: 'CARD_INVALID' });
+      }
     }
     if (data && data.depositCardFirstName != null) {
       patch.depositCardFirstName =
@@ -1282,6 +1330,7 @@ function attachTelegramWalletBot(exports, deps) {
     await tgSend(chatId,
         '📎 Чек қабул қилинди. Админ текширгач ҳамёнга тушади.\n' +
         `/status — ҳолатни кўриш`);
+    await notifyFinanceQueue({ kind: 'topup', requestId, amount: req.amount });
   }
 
   async function cmdWithdraw(chatId, tgUser, amountRaw) {
@@ -1342,6 +1391,7 @@ function attachTelegramWalletBot(exports, deps) {
         `Сумма: <b>${amount}</b> сўм\n` +
         `ID: <code>${ref.id}</code>\n` +
         `Админ тасдиғидан кейин тўланади.` + autoHint);
+    await notifyFinanceQueue({ kind: 'withdraw', requestId: ref.id, amount });
   }
 
   async function cmdStatus(chatId, tgUser) {

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/device_binding_repository.dart';
@@ -36,7 +37,7 @@ class WalletWithdrawPanel extends StatelessWidget {
                 border: Border.all(color: Colors.orange.shade200),
               ),
               child: Text(
-                'Yangi qurilma: pul yechish 24 soatga vaqtincha cheklangan.',
+                context.tr('wlt_wd_new_device'),
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.orange.shade900,
@@ -49,12 +50,12 @@ class WalletWithdrawPanel extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: () => _showWithdrawDialog(context),
           icon: const Icon(Icons.account_balance_wallet_outlined),
-          label: const Text('Ҳамёндан пул ечиш'),
+          label: Text(context.tr('wlt_wd_btn')),
         ),
         const SizedBox(height: 12),
-        const Text(
-          'Ечиш аризалари',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        Text(
+          context.tr('wlt_wd_requests'),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
         ),
         const SizedBox(height: 6),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -66,15 +67,16 @@ class WalletWithdrawPanel extends StatelessWidget {
               .snapshots(),
           builder: (context, snap) {
             if (snap.hasError) {
+              // Хато матни (`snap.error`) фойдаланувчига кўрсатилмайди.
               return Text(
-                '${snap.error}',
+                context.tr('wlt_hist_failed'),
                 style: const TextStyle(color: Colors.red, fontSize: 12),
               );
             }
             final docs = snap.data?.docs ?? [];
             if (docs.isEmpty) {
               return Text(
-                'Ариза йўқ',
+                context.tr('wlt_wd_none'),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               );
             }
@@ -88,10 +90,10 @@ class WalletWithdrawPanel extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     dense: true,
-                    title: Text('${formatMoney(amount)}'),
+                    title: Text(formatMoney(amount)),
                     subtitle: Text(
                       [
-                        _statusLabel(status),
+                        _statusLabel(context, status),
                         if (card.length >= 4)
                           '****${card.substring(card.length - 4)}',
                       ].join(' · '),
@@ -106,16 +108,16 @@ class WalletWithdrawPanel extends StatelessWidget {
     );
   }
 
-  static String _statusLabel(String status) {
+  static String _statusLabel(BuildContext context, String status) {
     switch (status) {
       case 'pending':
-        return 'Кутилмоқда';
+        return context.tr('wlt_st_pending');
       case 'approved':
-        return 'Тасдиқланди';
+        return context.tr('wlt_st_approved');
       case 'paid':
-        return 'Тўланди';
+        return context.tr('wlt_st_paid');
       case 'rejected':
-        return 'Рад этилди';
+        return context.tr('wlt_st_rejected');
       default:
         return status.isEmpty ? '—' : status;
     }
@@ -131,42 +133,40 @@ class WalletWithdrawPanel extends StatelessWidget {
         var busy = false;
         return StatefulBuilder(
           builder: (ctx, setLocal) => AlertDialog(
-            title: const Text('Ҳамёндан пул ечиш'),
+            title: Text(ctx.tr('wlt_wd_btn')),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'Ўз ҳамёнингиздан пул ечиш аризаси. '
-                    'Админ тасдиқлагач картангизга ўтказилади '
-                    'ва баланс камаяди.',
-                    style: TextStyle(fontSize: 12),
+                  Text(
+                    ctx.tr('wlt_wd_intro'),
+                    style: const TextStyle(fontSize: 12),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: amountCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Сумма (сўм)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: ctx.tr('wlt_wd_amount'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: cardCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Карта рақами',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: ctx.tr('wlt_wd_card'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: nameCtrl,
                     textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Карта эгаси (ФИО)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: ctx.tr('wlt_wd_holder'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -175,7 +175,7 @@ class WalletWithdrawPanel extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: busy ? null : () => Navigator.pop(ctx),
-                child: const Text('Бекор'),
+                child: Text(ctx.tr('cancel')),
               ),
               FilledButton(
                 onPressed: busy
@@ -189,10 +189,8 @@ class WalletWithdrawPanel extends StatelessWidget {
                         final holder = nameCtrl.text.trim();
                         if (amount <= 0 || card.length < 16 || holder.isEmpty) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Сумма, карта (16 рақам) ва ФИОни киритинг',
-                              ),
+                            SnackBar(
+                              content: Text(ctx.tr('wlt_wd_fill_all')),
                               backgroundColor: Colors.red,
                             ),
                           );
@@ -211,10 +209,10 @@ class WalletWithdrawPanel extends StatelessWidget {
                           if (!ctx.mounted) return;
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                'Ечиш аризаси юборилди',
-                                style: TextStyle(color: AppColors.onPrimary),
+                                context.tr('wlt_wd_sent'),
+                                style: const TextStyle(color: AppColors.onPrimary),
                               ),
                               backgroundColor: AppColors.primary,
                             ),
@@ -234,7 +232,7 @@ class WalletWithdrawPanel extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Юбориш'),
+                    : Text(ctx.tr('wlt_wd_send')),
               ),
             ],
           ),

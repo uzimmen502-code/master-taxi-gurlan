@@ -102,7 +102,8 @@ const bal = async (uid) => (await db.collection('users').doc(uid).get()).data().
   await check('W4 o\'zgarish admin_audit\'ga — kim, nima; karta raqami yozilmaydi', async () => {
     await fns.adminSetWalletBotSettings.run({
       enabled: false, topUpApproveMode: 'manual', withdrawApproveMode: 'manual',
-      depositCardNumber: '8600 0000 0000 0002',
+      // Луна текширувидан ўтадиган намуна (2026-10-18: хато карта сақланмайди).
+      depositCardNumber: '8600 0000 0000 0007',
     }, ctxOf(FINANCE));
     const s = (await db.doc('settings/wallet_bot').get()).data();
     assert.strictEqual(s.enabled, false);
@@ -116,7 +117,7 @@ const bal = async (uid) => (await db.collection('users').doc(uid).get()).data().
     assert.strictEqual(a.actor, FINANCE);
     assert.deepStrictEqual(a.changed.enabled, { from: true, to: false });
     assert.deepStrictEqual(a.changed.depositCardNumber, { changed: true });
-    assert.ok(!JSON.stringify(a).includes('8600000000000002'), 'karta raqami auditda bo\'lmasin');
+    assert.ok(!JSON.stringify(a).includes('8600000000000007'), 'karta raqami auditda bo\'lmasin');
   });
 
   await reset();

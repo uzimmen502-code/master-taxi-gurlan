@@ -232,15 +232,22 @@ class CabinetWalletCard extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              known ? balanceText! : hint,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: known ? 26 : 15,
-                                height: 1.15,
-                                fontWeight: known ? FontWeight.w800 : FontWeight.w600,
-                                color: c.surface,
+                            // Сумма ҲЕЧ ҚАЧОН «…» билан қирқилмайди: жой етмаса
+                            // (катта тизим шрифти, тор экран) кичраяди.
+                            // Қурилмада топилди: «19 562 …» (2026-10-19).
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                known ? balanceText! : hint,
+                                maxLines: 1,
+                                softWrap: false,
+                                style: TextStyle(
+                                  fontSize: known ? 26 : 15,
+                                  height: 1.15,
+                                  fontWeight: known ? FontWeight.w800 : FontWeight.w600,
+                                  color: c.surface,
+                                ),
                               ),
                             ),
                           ],

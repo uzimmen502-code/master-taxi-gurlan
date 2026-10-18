@@ -47,6 +47,34 @@ void main() {
       expect(find.textContaining('0'), findsNothing);
     });
 
+    // REGRESSION (қурилмада, 2026-10-19): катта шрифтда баланс «19 562 …»
+    // бўлиб қирқилган эди. Энди сумма тўлиқ ва карточка ичида қолади.
+    for (final scale in [1.0, 1.5, 2.0]) {
+      testWidgets('баланс тўлиқ кўринади (320 px, шрифт ×$scale): қирқилмайди, чиқиб кетмайди',
+          (tester) async {
+        await tester.pumpWidget(_host(
+          CabinetWalletCard(
+            title: 'Кошелёк',
+            balanceText: '19 562 000 сўм',
+            hint: 'x',
+            actionLabel: 'Пополнить',
+            onTap: () {},
+          ),
+          width: 320,
+          textScale: scale,
+        ));
+        expect(tester.takeException(), isNull);
+        final text = find.text('19 562 000 сўм');
+        expect(text, findsOneWidget);
+        // «…» ишлатилмайди: Text'да ellipsis йўқ.
+        expect(tester.widget<Text>(text).overflow, isNot(TextOverflow.ellipsis));
+        // FittedBox ичида ва ўнг чегарадан ошмайди (масштаб ҳисобга олинган).
+        expect(find.ancestor(of: text, matching: find.byType(FittedBox)), findsOneWidget);
+        final card = tester.getRect(find.byType(CabinetWalletCard));
+        expect(tester.getRect(text).right, lessThanOrEqualTo(card.right));
+      });
+    }
+
     testWidgets('семантика: битта тугма, баланс ёрлиқда', (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(_host(CabinetWalletCard(

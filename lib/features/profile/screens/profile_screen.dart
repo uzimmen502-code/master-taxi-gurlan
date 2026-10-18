@@ -23,6 +23,7 @@ import '../../seller/screens/seller_pos_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../../realty/screens/my_realty_listings_screen.dart';
 import '../controllers/profile_controller.dart';
+import '../widgets/cabinet_ui.dart';
 import 'address_edit_screen.dart';
 import 'user_info_screen.dart';
 import '../../../core/theme/app_theme.dart';
@@ -157,8 +158,11 @@ class _ProfileViewState extends State<_ProfileView> {
       if (ok != null && mounted) _snack(ok);
     });
 
-    final scaffold = Scaffold(
-      backgroundColor: AppColors.scaffold,
+    final c0 = context.ava;
+    final demandUid = canonicalUserId(c.phone);
+
+    return Scaffold(
+      backgroundColor: c0.bg,
       appBar: AppBar(
         title: ListenableBuilder(
           listenable: Listenable.merge([ServiceConfigHolder.revision, GeoNames.revision]),
@@ -167,7 +171,7 @@ class _ProfileViewState extends State<_ProfileView> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(loc.translate('profile')),
+                Text(loc.translate('home_nav_cabinet')),
                 if (district.isNotEmpty)
                   Text(
                     '${BrandLabels.brand} · $district',
@@ -184,148 +188,170 @@ class _ProfileViewState extends State<_ProfileView> {
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppColors.onPrimary),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            onSelected: (val) {
-              if (val == 'logout') _showLogoutDialog(c, loc);
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'logout',
-                child: Row(children: [
-                  const Icon(Icons.logout, size: 18, color: Colors.red),
-                  const SizedBox(width: 10),
-                  Text(loc.translate('logout'),
-                      style: const TextStyle(color: Colors.red)),
-                ]),
-              ),
-            ],
-          ),
-        ],
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
-      body: SingleChildScrollView(
-        child: Column(children: [
-          _header(c, loc),
-          if (!c.hasUsableAddress) _addressWarning(loc),
-          _cards(c, loc),
-          // ТАЛАБ ВА ТАКЛИФЛАР (эга қарори, 2026-10-03).
-          //
-          // Пастки навигацияга ЯНГИ ТАБ ҚЎШИЛМАЙДИ — бўлим Профиль
-          // ичида туради. Ҳар бир фойдаланувчига кўринади: сўров
-          // юбориш ҳар кимга тегишли, таклифчи бўлиш эса ихтиёрий
-          // (иккинчи бўлим фақат имконият ёққанларга чиқади).
-          if (canonicalUserId(c.phone).isNotEmpty)
-            _rolePanelButton(
-              label: loc.translate('profile_demand_offer_section'),
-              icon: Icons.swap_horiz_rounded,
-              color: AppColors.primaryMid,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DemandActivityEntry(
-                    userId: canonicalUserId(c.phone),
+      // Pull-to-refresh: ism/манзил/расм сервердан қайта ўқилади.
+      body: RefreshIndicator(
+        color: c0.brandText,
+        onRefresh: c.load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(children: [
+            CabinetHeader(
+              avatar: _headerAvatar(c),
+              title: '${_honorific(c, loc)} ${c.name.isEmpty ? '—' : c.name}',
+              phone: c.phone,
+              roleLabel: _roleLabel(context, c.role, loc),
+              changePhotoLabel: loc.translate('profile_photo'),
+              onAvatarTap: () => _showImagePicker(c, loc),
+              onRoleTap: _onRoleLabelTap,
+              // Ҳайдовчи индикатори — ҳедер ичида (фақат ҳайдовчида кўринади).
+              footer: demandUid.isEmpty
+                  ? null
+                  : DriverStatusChip(
+                      key: ValueKey(demandUid),
+                      userId: demandUid,
+                      alignment: Alignment.center,
+                    ),
+            ),
+            // Ҳамён — Кабинетнинг биринчи қатори (эга қарори, 2026-10-18).
+            StreamBuilder<int>(
+              stream: _walletBalance,
+              builder: (context, snap) => KeyedSubtree(
+                key: const ValueKey('profile-wallet-tile'),
+                child: CabinetWalletCard(
+                  title: context.tr('wlt_profile_title'),
+                  // Баланс номаълум (юкланмаган/хато) — ёлғон «0» кўрсатилмайди.
+                  balanceText: snap.hasData ? formatMoney(snap.data!) : null,
+                  hint: context.tr('wlt_profile_sub'),
+                  actionLabel: context.tr('cab_topup'),
+                  onTap: () => openWalletTopUp(Navigator.of(context)),
+                ),
+              ),
+            ),
+            if (!c.hasUsableAddress)
+              CabinetNotice(
+                text: loc.translate('profile_address_incomplete_banner'),
+                actionLabel: loc.translate('profile_fill_address'),
+                onAction: _openAddress,
+              ),
+            CabinetSection(
+              title: context.tr('cab_sec_account'),
+              children: [
+                CabinetRow(
+                  icon: Icons.person_rounded,
+                  title: loc.translate('profile_user_info_title'),
+                  subtitle: c.addressDisplay.isEmpty
+                      ? loc.translate('profile_address_not_entered')
+                      : c.addressDisplay,
+                  onTap: () async {
+                    // Yangi route — alohida widget tree, shu sababli mavjud
+                    // `ProfileController` instance'ni qo'lda forward qilamiz, aks holda
+                    // UserInfoScreen `context.read<ProfileController>()` topa olmaydi.
+                    final controller = context.read<ProfileController>();
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChangeNotifierProvider<ProfileController>.value(
+                          value: controller,
+                          child: const UserInfoScreen(),
+                        ),
+                      ),
+                    );
+                    if (mounted) controller.load();
+                  },
+                ),
+              ],
+            ),
+            // Курьерлик, кафе-ресторан / уй ошпази, ҳайдовчи (автомобиль, смена,
+            // чиқиш) ва дўкон «＋ → Менинг бизнесим» га кўчди (эга, 2026-10-16):
+            // Кабинет — бошқариш жойи, бошлаш эмас.
+            CabinetSection(
+              title: context.tr('cab_sec_activity'),
+              children: [
+                // ТАЛАБ ВА ТАКЛИФЛАР (эга қарори, 2026-10-03): пастки
+                // навигацияга янги таб қўшилмайди — бўлим шу ерда туради.
+                if (demandUid.isNotEmpty)
+                  CabinetRow(
+                    icon: Icons.swap_horiz_rounded,
+                    title: loc.translate('profile_demand_offer_section'),
+                    subtitle: context.tr('profile_demand_offer_hint'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DemandActivityEntry(userId: demandUid),
+                      ),
+                    ),
+                  ),
+                // Кўчмас мулк объектлари — фойдаланувчининг ўз контенти,
+                // шунинг учун профилда туради (бўлим экранида эмас).
+                CabinetRow(
+                  icon: Icons.apartment_rounded,
+                  title: context.tr('realty_my_title'),
+                  subtitle: context.tr('realty_my_subtitle'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MyRealtyListingsScreen()),
                   ),
                 ),
-              ),
+                if (c.role == 'seller' || c.role == 'admin' || c.role == 'superadmin')
+                  CabinetRow(
+                    icon: Icons.point_of_sale_rounded,
+                    title: context.tr('cab_seller_panel'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SellerPosScreen()),
+                    ),
+                  ),
+              ],
             ),
-          // Курьерлик, кафе-ресторан / уй ошпази, ҳайдовчи (автомобиль, смена,
-          // чиқиш) ва дўкон «＋ → Менинг бизнесим» га кўчди (эга, 2026-10-16):
-          // Кабинет — бошқариш жойи, бошлаш эмас.
-          if (c.role == 'seller' ||
-              c.role == 'admin' ||
-              c.role == 'superadmin')
-            _rolePanelButton(
-              label: 'Sotuv paneli',
-              icon: Icons.point_of_sale,
-              color: AppColors.primaryDark,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SellerPosScreen()),
-              ),
-            ),
-          const SizedBox(height: 24),
-        ]),
-      ),
-    );
-
-    return scaffold;
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  // HEADER
-  // ────────────────────────────────────────────────────────────────────
-  Widget _header(ProfileController c, AppLocalizations loc) {
-    return Container(
-      color: AppColors.primaryDark,
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
-      child: Center(
-        child: Column(children: [
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: () => _showImagePicker(c, loc),
-            child: Stack(children: [
-              Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                  border: Border.all(color: Colors.white, width: 3),
+            CabinetSection(
+              title: context.tr('cab_sec_app'),
+              children: [
+                CabinetRow(
+                  icon: Icons.ios_share_rounded,
+                  title: context.tr('app_share_title'),
+                  subtitle: context.tr('app_share_subtitle'),
+                  onTap: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final failedText = context.tr('app_share_failed');
+                    final ok = await shareAvaApp(context);
+                    if (!ok && mounted) {
+                      messenger.showSnackBar(SnackBar(content: Text(failedText)));
+                    }
+                  },
                 ),
-                child: ClipOval(
-                  child: _headerAvatar(c),
+                // Чиқиш аввал фақат ⋮ менюсида яширин эди; энди кўринади
+                // (тасдиқ диалоги ўзгармаган).
+                CabinetRow(
+                  key: const ValueKey('profile-logout'),
+                  icon: Icons.logout_rounded,
+                  title: loc.translate('logout'),
+                  danger: true,
+                  showChevron: false,
+                  onTap: () => _showLogoutDialog(c, loc),
                 ),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: const BoxDecoration(
-                      color: Colors.white, shape: BoxShape.circle),
-                  child:
-                      const Icon(Icons.camera_alt, size: 15, color: _green),
-                ),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 10),
-          Text('${_honorific(c, loc)} ${c.name.isEmpty ? '—' : c.name}',
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onPrimary)),
-          const SizedBox(height: 4),
-          GestureDetector(
-            onTap: _onRoleLabelTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(_roleLabel(context, c.role, loc),
-                  style: const TextStyle(fontSize: 12, color: AppColors.onPrimary)),
+              ],
             ),
-          ),
-          // Ҳайдовчи индикатори — ҳедерда: карталар 20 px юқорига сурилгани
-          // учун ҳедердан пастдаги чип уларнинг остида қолар эди.
-          if (canonicalUserId(c.phone).isNotEmpty)
-            DriverStatusChip(
-              key: ValueKey(canonicalUserId(c.phone)),
-              userId: canonicalUserId(c.phone),
-              alignment: Alignment.center,
-            ),
-        ]),
+            const SizedBox(height: 32),
+          ]),
+        ),
       ),
     );
   }
 
+  // ────────────────────────────────────────────────────────────────────
+  // HEADER YORDAMCHILARI
+  // ────────────────────────────────────────────────────────────────────
   Widget _headerAvatar(ProfileController c) {
+    final initial = Center(
+      child: Text(
+        c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
+        style: const TextStyle(
+            fontSize: 38, fontWeight: FontWeight.bold, color: _green),
+      ),
+    );
     if (c.imagePath != null) {
       final f = File(c.imagePath!);
       if (f.existsSync()) {
@@ -333,240 +359,18 @@ class _ProfileViewState extends State<_ProfileView> {
       }
     }
     if (c.photoUrl.isNotEmpty) {
-      return Image.network(c.photoUrl, fit: BoxFit.cover);
+      // Тармоқ расми юкланмаса — синиқ белги эмас, бош ҳарф.
+      return Image.network(
+        c.photoUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => initial,
+      );
     }
-    return Center(
-      child: Text(
-        c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
-        style: const TextStyle(
-            fontSize: 36, fontWeight: FontWeight.bold, color: _green),
-      ),
-    );
-  }
-
-  Widget _addressWarning(AppLocalizations loc) {
-    return Transform.translate(
-      offset: const Offset(0, -10),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.orange.shade300),
-        ),
-        child: Row(children: [
-          const Icon(Icons.warning_amber, color: Colors.orange),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              loc.translate('profile_address_incomplete_banner'),
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-          TextButton(
-            onPressed: _openAddress,
-            child: Text(loc.translate('profile_fill_address')),
-          ),
-        ]),
-      ),
-    );
+    return initial;
   }
 
   Future<void> _openAddress() =>
       AddressGate.edit(context, context.read<ProfileController>());
-
-  // ────────────────────────────────────────────────────────────────────
-  // 4 КАРТА
-  // ────────────────────────────────────────────────────────────────────
-  Widget _cards(ProfileController c, AppLocalizations loc) {
-    return Transform.translate(
-      offset: const Offset(0, -20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(children: [
-          StreamBuilder<int>(
-            stream: _walletBalance,
-            builder: (context, snap) => _cardTile(
-              key: const ValueKey('profile-wallet-tile'),
-              icon: Icons.account_balance_wallet_rounded,
-              color: _green,
-              title: context.tr('wlt_profile_title'),
-              // Баланс номаълум (юкланмаган/хато) — ёлғон «0» кўрсатилмайди.
-              subtitle: snap.hasData
-                  ? formatMoney(snap.data!)
-                  : context.tr('wlt_profile_sub'),
-              onTap: () => openWalletTopUp(Navigator.of(context)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          _cardTile(
-            icon: Icons.person,
-            color: _green,
-            title: loc.translate('profile_user_info_title'),
-            subtitle: c.addressDisplay.isEmpty
-                ? loc.translate('profile_address_not_entered')
-                : c.addressDisplay,
-            onTap: () async {
-              // Yangi route — alohida widget tree, shu sababli mavjud
-              // `ProfileController` instance'ni qo'lda forward qilamiz, aks holda
-              // UserInfoScreen `context.read<ProfileController>()` topa olmaydi.
-              final controller = context.read<ProfileController>();
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChangeNotifierProvider<ProfileController>.value(
-                    value: controller,
-                    child: const UserInfoScreen(),
-                  ),
-                ),
-              );
-              if (mounted) controller.load();
-            },
-          ),
-          const SizedBox(height: 10),
-          // Кўчмас мулк объектлари — фойдаланувчининг ўз контенти,
-          // шунинг учун профилда туради (бўлим экранида эмас).
-          // Дўкон ва китоб «＋ → Менинг бизнесим» га кўчди (2026-10-16).
-          _cardTile(
-            icon: Icons.apartment_rounded,
-            color: _green,
-            title: context.tr('realty_my_title'),
-            subtitle: context.tr('realty_my_subtitle'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const MyRealtyListingsScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 10),
-          _cardTile(
-            icon: Icons.share_rounded,
-            color: _green,
-            title: context.tr('app_share_title'),
-            subtitle: context.tr('app_share_subtitle'),
-            onTap: () async {
-              final ok = await shareAvaApp(context);
-              if (!ok && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.tr('app_share_failed'))),
-                );
-              }
-            },
-          ),
-        ]),
-      ),
-    );
-  }
-
-  Widget _cardTile({
-    Key? key,
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    String? badge,
-  }) {
-    return Material(
-      key: key,
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3)),
-            ],
-          ),
-          child: Row(children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 3),
-                  Text(subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600)),
-                ],
-              ),
-            ),
-            if (badge != null) ...[
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade600,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(badge,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 6),
-            ],
-            const Icon(Icons.chevron_right, color: Colors.grey),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _rolePanelButton({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: onTap,
-          icon: Icon(icon),
-          label: Text(label,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.bold)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color,
-            foregroundColor: AppColors.onPrimary,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
-      ),
-    );
-  }
 
   // ────────────────────────────────────────────────────────────────────
   // DIALOGS

@@ -40,4 +40,43 @@ abstract final class JobsSections {
   /// AppBar'даги «қўшиш» тугмаси.
   static String addKeyFor(AdKind kind) =>
       sectionOf(kind) == AdKind.service ? 'jobs_add_service' : 'jobs_add_ad';
+
+  /// Турнинг фойдаланувчи тилидаги номи (`AdKindX.label` — қотирилган кирилл,
+  /// фақат админ учун).
+  static String kindLabelKey(AdKind kind) {
+    switch (kind) {
+      case AdKind.service:
+        return 'jobs_kind_service';
+      case AdKind.work:
+        return 'jobs_kind_work';
+      case AdKind.ad:
+        return 'jobs_kind_ad';
+    }
+  }
+
+  /// Варақанинг юбориш тугмаси ёрлиғи ("ХИЗМАТ ҚЎШИШ" / "ЭЪЛОН ҚЎШИШ").
+  static String submitKeyFor(AdKind kind) =>
+      kind == AdKind.service ? 'jobs_submit_service' : 'jobs_submit_ad';
+
+  /// Юборилгандан кейинги хабар: `жойланди` (active) ёки `текширувга юборилди`.
+  static String postedKeyFor(AdKind kind, {required bool live}) {
+    final service = kind == AdKind.service;
+    if (live) return service ? 'jobs_posted_service' : 'jobs_posted_ad';
+    return service ? 'jobs_review_service' : 'jobs_review_ad';
+  }
+
+  /// Эълон ҳолати ёрлиғи (Менинг эълонларим). Муддати ўтган — алоҳида.
+  static String statusKeyFor(String status, {required bool expired}) {
+    if (status == 'active' && expired) return 'jobs_status_expired';
+    switch (status) {
+      case 'pending':
+        return 'jobs_status_pending';
+      case 'completed':
+        return 'jobs_status_completed';
+      case 'blocked':
+        return 'jobs_status_blocked';
+      default:
+        return 'jobs_status_active';
+    }
+  }
 }

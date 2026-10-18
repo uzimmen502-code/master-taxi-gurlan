@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/geo/geo_names.dart';
 import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -14,7 +15,12 @@ import 'complaint_sheet.dart';
 import 'edit_ad_sheet.dart';
 
 /// Эълонлар (mini-OLX) рўйхатидаги бир карта.
-class AdCard extends StatelessWidget {
+///
+/// Аудит (2026-10-18): эга учун иккита бир хил "Таҳрирлаш" (қалам + тугма)
+/// бор эди — қалам олиб ташланди; карточканинг матни босилса тўлиқ очилади
+/// (тафсилот саҳифаси йўқ); "Қўнғироқ" яроқсиз телефонда жимгина қайтмайди;
+/// манзил ўрнига фақат ҳудуд (туман) кўрсатилади — уй манзили эмас.
+class AdCard extends StatefulWidget {
   const AdCard({
     super.key,
     required this.ad,
@@ -32,25 +38,48 @@ class AdCard extends StatelessWidget {
   /// топиши учун контури қалин ва ранги ажралиб туради.
   final bool highlighted;
 
+  /// Матн узун бўлса "Тўлиқ кўриш" ҳаволаси чиқади (тахминий чегара).
+  @visibleForTesting
+  static bool isLong(JobAd ad) {
+    final headline = ad.title.trim().isNotEmpty ? ad.title : ad.text;
+    final subline = ad.title.trim().isEmpty ? '' : ad.text;
+    return headline.length > 70 || subline.length > 120;
+  }
+
+  @override
+  State<AdCard> createState() => _AdCardState();
+}
+
+class _AdCardState extends State<AdCard> {
+  bool _expanded = false;
+
+  JobAd get ad => widget.ad;
+
   Color get _kindColor => JobsColors.accentFor(ad.kind);
 
   Future<void> _call(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    void note(String text) => messenger.showSnackBar(SnackBar(
+          content: Text(text),
+          backgroundColor: _kindColor,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
     if (ad.authorPhone.isEmpty || phoneDigits(ad.authorPhone).length < 9) {
+      note(context.tr('ad_details_phone_invalid'));
       return;
     }
-    final url = Uri.parse('tel:${phoneForCall(ad.authorPhone)}');
-    final messenger = ScaffoldMessenger.of(context);
+    final failed = context.tr('ad_details_call_failed');
     try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+      final ok = await launchUrl(
+        Uri.parse('tel:${phoneForCall(ad.authorPhone)}'),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok && context.mounted) note('$failed: ${ad.authorPhone}');
     } catch (_) {
       if (!context.mounted) return;
-      messenger.showSnackBar(SnackBar(
-        content: Text('Телефон: ${ad.authorPhone}'),
-        backgroundColor: _kindColor,
-        behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+      note('$failed: ${ad.authorPhone}');
     }
   }
 
@@ -64,8 +93,8 @@ class AdCard extends StatelessWidget {
     if (!context.mounted) return;
     messenger.showSnackBar(SnackBar(
       content: Text(result.success
-          ? 'Шикоят юборилди'
-          : (result.error ?? 'Хатолик')),
+          ? context.tr('ad_report_sent')
+          : context.trMsg(result.error ?? 'jobs_err_generic')),
       backgroundColor:
           result.success ? JobsColors.bar : JobsColors.urgent,
       behavior: SnackBarBehavior.floating,
@@ -95,6 +124,9 @@ class AdCard extends StatelessWidget {
     final mine = c.isOwner(ad);
     final canEdit = mine || c.isAdmin;
     final color = _kindColor;
+    final highlighted = widget.highlighted;
+    final linkedClip = widget.linkedClip;
+    final long = AdCard.isLong(ad);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -126,7 +158,7 @@ class AdCard extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6)),
-                child: Text('Менинг эълоним',
+                child: Text(context.tr('jobs_card_mine'),
                     style: TextStyle(
                         fontSize: AppText.labelTiny,
                         fontWeight: FontWeight.w700,
@@ -141,8 +173,8 @@ class AdCard extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: JobsColors.urgentSoft,
                     borderRadius: BorderRadius.circular(6)),
-                child: const Text('Шошилинч',
-                    style: TextStyle(
+                child: Text(context.tr('home_jobs_badge_urgent'),
+                    style: const TextStyle(
                         fontSize: AppText.labelTiny,
                         fontWeight: FontWeight.w700,
                         color: JobsColors.urgent)),
@@ -158,49 +190,64 @@ class AdCard extends StatelessWidget {
                   color: JobsColors.muted,
                 ),
               ),
-            if (canEdit)
+            // Эга/админ учун таҳрирлаш — пастдаги тугмада (бир иш = бир тугма).
+            // Бошқаларга — шикоят; тегиш майдони 48dp.
+            if (!canEdit)
               IconButton(
-                visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                tooltip: 'Таҳрирлаш',
-                icon: Icon(Icons.edit_outlined, size: 18, color: color),
-                onPressed: () => _edit(context),
-              )
-            else
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                tooltip: 'Шикоят',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                tooltip: context.tr('ad_report_title'),
                 icon: const Icon(Icons.flag_outlined,
-                    size: 18, color: JobsColors.muted),
+                    size: 20, color: JobsColors.muted),
                 onPressed: () => _report(context),
               ),
           ]),
           const SizedBox(height: 6),
-          Text(
-            _headline,
-            style: const TextStyle(
-                fontSize: AppText.bodyLarge,
-                fontWeight: FontWeight.w700,
-                height: 1.3,
-                color: JobsColors.ink),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (_subline.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              _subline,
-              style: const TextStyle(
-                  fontSize: AppText.bodyMedium,
-                  height: 1.4,
-                  color: Color(0xFF4A5560)),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+          // Матн босилса тўлиқ очилади/йиғилади.
+          InkWell(
+            onTap: long ? () => setState(() => _expanded = !_expanded) : null,
+            borderRadius: BorderRadius.circular(6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _headline,
+                  style: const TextStyle(
+                      fontSize: AppText.bodyLarge,
+                      fontWeight: FontWeight.w700,
+                      height: 1.3,
+                      color: JobsColors.ink),
+                  maxLines: _expanded ? null : 2,
+                  overflow: _expanded ? null : TextOverflow.ellipsis,
+                ),
+                if (_subline.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _subline,
+                    style: const TextStyle(
+                        fontSize: AppText.bodyMedium,
+                        height: 1.4,
+                        color: Color(0xFF4A5560)),
+                    maxLines: _expanded ? null : 3,
+                    overflow: _expanded ? null : TextOverflow.ellipsis,
+                  ),
+                ],
+                if (long)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      context.tr(_expanded
+                          ? 'jobs_card_collapse'
+                          : 'jobs_card_expand'),
+                      style: TextStyle(
+                          fontSize: AppText.labelSmall,
+                          fontWeight: FontWeight.w700,
+                          color: color),
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
           if (ad.priceText.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
@@ -221,28 +268,7 @@ class AdCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(
-              child: Row(children: [
-                const Icon(Icons.location_on,
-                    size: 14, color: JobsColors.muted),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    ad.address.isEmpty ? 'Манзил кўрсатилмаган' : ad.address,
-                    style: TextStyle(
-                        fontSize: AppText.labelSmall,
-                        color: ad.address.isEmpty
-                            ? JobsColors.hint
-                            : JobsColors.muted,
-                        fontStyle: ad.address.isEmpty
-                            ? FontStyle.italic
-                            : FontStyle.normal),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ]),
-            ),
+            Expanded(child: _AreaLine(ad: ad)),
             const SizedBox(width: 8),
             if (linkedClip != null) ...[
               Tooltip(
@@ -251,7 +277,7 @@ class AdCard extends StatelessWidget {
                   color: JobsColors.fieldFill,
                   borderRadius: BorderRadius.circular(8),
                   child: InkWell(
-                    onTap: () => TvClipLink.open(context, linkedClip!),
+                    onTap: () => TvClipLink.open(context, linkedClip),
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.all(8),
@@ -281,7 +307,7 @@ class AdCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      canEdit ? 'Таҳрирлаш' : 'Қўнғироқ',
+                      context.tr(canEdit ? 'jobs_card_edit' : 'jobs_card_call'),
                       style: const TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,
@@ -294,6 +320,44 @@ class AdCard extends StatelessWidget {
           ]),
         ]),
       ),
+    );
+  }
+}
+
+/// Эълон ҳудуди (туман) фойдаланувчи тилида. Хом `address` кўрсатилмайди:
+/// эски эълонларда у эганинг профилидаги УЙ манзили эди (аудит B6, PII).
+class _AreaLine extends StatelessWidget {
+  const _AreaLine({required this.ad});
+
+  final JobAd ad;
+
+  @override
+  Widget build(BuildContext context) {
+    if (ad.districtId.isEmpty && ad.regionId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final lang = context.contentLang;
+    return ValueListenableBuilder<int>(
+      valueListenable: GeoNames.revision,
+      builder: (context, _, __) {
+        final name = ad.districtId.isNotEmpty
+            ? GeoNames.district(ad.districtId, lang)
+            : GeoNames.region(ad.regionId, lang);
+        if (name.trim().isEmpty) return const SizedBox.shrink();
+        return Row(children: [
+          const Icon(Icons.location_on, size: 14, color: JobsColors.muted),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              name,
+              style: const TextStyle(
+                  fontSize: AppText.labelSmall, color: JobsColors.muted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ]);
+      },
     );
   }
 }

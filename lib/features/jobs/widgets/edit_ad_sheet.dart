@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
@@ -80,14 +81,16 @@ class _EditAdViewState extends State<_EditAdView> {
     setState(() => _isSaving = false);
     if (!result.success) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.error ?? 'Хатолик'),
+        content: Text(context.trMsg(result.error ?? 'jobs_err_generic')),
         backgroundColor: Colors.red,
       ));
       return;
     }
+    final savedMsg = '✅ ${context.tr('jobs_edit_saved')}';
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('✅ Эълон янгиланди!'),
+    messenger.showSnackBar(SnackBar(
+      content: Text(savedMsg),
       backgroundColor: _green,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -98,16 +101,17 @@ class _EditAdViewState extends State<_EditAdView> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Эълонни ўчириш'),
-        content: const Text('Бу эълон ноқайд ўчирилади. Давом этасизми?'),
+        title: Text(ctx.tr('jobs_delete_title')),
+        content: Text(ctx.tr('jobs_delete_confirm')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
+            child: Text(ctx.tr('jobs_dialog_no')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+            child: Text(ctx.tr('delete'),
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -120,14 +124,16 @@ class _EditAdViewState extends State<_EditAdView> {
     setState(() => _isSaving = false);
     if (!result.success) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.error ?? 'Хатолик'),
+        content: Text(context.trMsg(result.error ?? 'jobs_err_generic')),
         backgroundColor: Colors.red,
       ));
       return;
     }
+    final deletedMsg = context.tr('jobs_deleted');
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Эълон ўчирилди'),
+    messenger.showSnackBar(SnackBar(
+      content: Text(deletedMsg),
       backgroundColor: Colors.orange,
     ));
   }
@@ -186,11 +192,12 @@ class _EditAdViewState extends State<_EditAdView> {
                                 borderRadius: BorderRadius.circular(2))),
                       ),
                       const SizedBox(height: 16),
-                      const Row(children: [
-                        Icon(Icons.edit, color: AppColors.primaryText, size: 24),
-                        SizedBox(width: 8),
-                        Text('Эълонни таҳрирлаш',
-                            style: TextStyle(
+                      Row(children: [
+                        const Icon(Icons.edit,
+                            color: AppColors.primaryText, size: 24),
+                        const SizedBox(width: 8),
+                        Text(context.tr('jobs_edit_title'),
+                            style: const TextStyle(
                                 fontSize: AppText.titleMedium,
                                 fontWeight: FontWeight.bold)),
                       ]),
@@ -207,7 +214,7 @@ class _EditAdViewState extends State<_EditAdView> {
                           controller: _titleCtrl,
                           maxLength: 80,
                           decoration: InputDecoration(
-                            labelText: 'Сарлавҳа',
+                            labelText: context.tr('jobs_form_title_label'),
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12)),
                           ),
@@ -218,7 +225,7 @@ class _EditAdViewState extends State<_EditAdView> {
                           maxLines: 4,
                           maxLength: 300,
                           decoration: InputDecoration(
-                            labelText: 'Матн',
+                            labelText: context.tr('jobs_form_text_label'),
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12)),
                           ),
@@ -228,8 +235,8 @@ class _EditAdViewState extends State<_EditAdView> {
                           controller: _priceCtrl,
                           maxLength: 40,
                           decoration: InputDecoration(
-                            labelText: 'Нарх (ихтиёрий)',
-                            hintText: '200 000 сўм',
+                            labelText: context.tr('jobs_form_price_ad'),
+                            hintText: context.tr('jobs_form_price_hint_ad'),
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12)),
                           ),
@@ -244,14 +251,19 @@ class _EditAdViewState extends State<_EditAdView> {
                           const SizedBox(height: 16),
                         ],
                         if (c.isAdmin) ...[
-                          const Text('Статус:',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(context.tr('jobs_admin_status'),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           Wrap(spacing: 8, runSpacing: 8, children: [
-                            _statusBtn('active', '✅ Фаол'),
-                            _statusBtn('pending', '⏳ Кутилмоқда'),
-                            _statusBtn('completed', '✔️ Ёпилган'),
-                            _statusBtn('blocked', '🚫 Блок'),
+                            _statusBtn('active',
+                                '✅ ${context.tr('jobs_status_active')}'),
+                            _statusBtn('pending',
+                                '⏳ ${context.tr('jobs_status_pending')}'),
+                            _statusBtn('completed',
+                                '✔️ ${context.tr('jobs_status_completed')}'),
+                            _statusBtn('blocked',
+                                '🚫 ${context.tr('jobs_status_blocked')}'),
                           ]),
                         ],
                       ],
@@ -266,14 +278,14 @@ class _EditAdViewState extends State<_EditAdView> {
                         onPressed: _isSaving ? null : _delete,
                         icon: const Icon(Icons.delete_outline,
                             color: Colors.red),
-                        tooltip: 'Ўчириш',
+                        tooltip: context.tr('delete'),
                       ),
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _isSaving
                             ? null
                             : () => Navigator.of(context).pop(),
-                        child: const Text('Бекор қилиш'),
+                        child: Text(context.tr('cancel')),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -287,7 +299,8 @@ class _EditAdViewState extends State<_EditAdView> {
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: AppColors.onPrimary))
                             : const Icon(Icons.save, size: 18),
-                        label: Text(_isSaving ? '...' : 'САҚЛАШ',
+                        label: Text(
+                            _isSaving ? '...' : context.tr('save').toUpperCase(),
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(

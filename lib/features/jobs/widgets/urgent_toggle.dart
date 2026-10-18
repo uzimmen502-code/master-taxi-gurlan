@@ -38,7 +38,7 @@ class UrgentToggle extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Шошилинч',
+            Text(context.tr('home_jobs_badge_urgent'),
                 style: TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.w600,

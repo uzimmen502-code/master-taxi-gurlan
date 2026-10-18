@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +26,53 @@ List<JobAd> jobsSectionFeed(List<JobAd> sorted, AdKind kind) {
   return [...ofKind.where(urgent), ...ofKind.where((a) => !urgent(a))];
 }
 
+/// Хатони фойдаланувчига кўрсатиладиган МАТН КАЛИТИГА айлантиради
+/// (`context.trMsg` форматида: `калит` ёки `калит|қиймат`).
+///
+/// Аудит A3 (2026-10-18). Symptom: экранда сервернинг инглизча матни
+/// («Phone mismatch», «title 3..120»), `Хатолик: $e` ва `Хатолик: ${e.code}`
+/// кўринарди. Root cause: `e.message`/`$e` тўғридан-тўғри фойдаланувчига
+/// узатиларди. Fix: ички код (`details.code`) → маҳаллий матн калити;
+/// номаълум хато → умумий матн. Тест: `test/features/jobs/jobs_error_key_test.dart`.
+String jobsErrorKey(
+  Object error, {
+  String fallback = 'jobs_err_post',
+  int dailyLimit = JobsController.dailyAdLimit,
+}) {
+  if (error is FirebaseFunctionsException) {
+    final details = error.details;
+    final code = details is Map ? details['code']?.toString() : null;
+    switch (code) {
+      case 'JOB_AD_DAILY_LIMIT':
+        return 'jobs_err_daily_limit|$dailyLimit';
+      case 'JOB_AD_TITLE_LENGTH':
+        return 'jobs_err_title_short';
+      case 'JOB_AD_TEXT_LENGTH':
+        return 'jobs_err_text_short';
+      case 'JOB_AD_INVALID_TYPE':
+        return 'jobs_err_unknown_type';
+      case 'UNAUTHENTICATED':
+        return 'jobs_err_login';
+      case 'PHONE_MISMATCH':
+        return 'jobs_err_permission';
+    }
+    switch (error.code) {
+      case 'unauthenticated':
+        return 'jobs_err_login';
+      case 'permission-denied':
+        return 'jobs_err_permission';
+      case 'resource-exhausted':
+        // Шикоят функцияси `details.code` бермайди — матн бўйича фарқлаймиз.
+        return error.message?.toLowerCase().contains('complaint') == true
+            ? 'ad_report_limit'
+            : 'jobs_err_daily_limit|$dailyLimit';
+      default:
+        return fallback;
+    }
+  }
+  return fallback;
+}
+
 /// «Эълонлар» / «Хизматлар» бўлимлари экранининг controller'и.
 class JobsController extends ChangeNotifier {
   JobsController({required JobsRepository repo}) : _repo = repo {
@@ -32,11 +81,15 @@ class JobsController extends ChangeNotifier {
 
   static const int dailyAdLimit = 10;
 
+  /// Рўйхат саҳифаси ва юқори чегара (аудит B7: аввал ҳар очилишда 500 та
+  /// ҳужжат real-time тингланарди).
+  static const int pageSize = 50;
+  static const int maxLimit = 500;
+
   final JobsRepository _repo;
 
   String userName = '';
   String userPhone = '';
-  String userAddress = '';
   bool isAdmin = false;
   String searchQuery = '';
 
@@ -48,9 +101,16 @@ class JobsController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     userName = prefs.getString('user_name') ?? '';
     userPhone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
-    userAddress = prefs.getString('user_address') ?? '';
-    final role = await UserRoleSync().syncToPreferences();
-    isAdmin = UserRoleSync.isPrivileged(role);
+    try {
+      final role = await UserRoleSync().syncToPreferences();
+      isAdmin = UserRoleSync.isPrivileged(role);
+    } catch (e) {
+      // Роль синхронланмади (оффлайн): оддий фойдаланувчи сифатида давом
+      // этамиз — аввал бу хато `ensureReady()` орқали эълон юборишни йиқитарди.
+      // Ҳақиқий рухсатни сервер/rules текширади.
+      debugPrint('[Jobs] role sync: $e');
+      isAdmin = false;
+    }
     notifyListeners();
   }
 
@@ -131,26 +191,27 @@ class JobsController extends ChangeNotifier {
     return jobsSectionFeed(sorted, kind);
   }
 
-  String _cfError(Object e) {
-    if (e is FirebaseFunctionsException) {
-      switch (e.code) {
-        case 'unauthenticated':
-          return 'Аввал тизимга киринг';
-        case 'resource-exhausted':
-          return e.message?.contains('complaint') == true
-              ? '⚠️ Кунига шикоят лимити тугади'
-              : '⚠️ Кунига максимум $dailyAdLimit та эълон!';
-        case 'invalid-argument':
-          return e.message ?? 'Маълумотлар нотўғри';
-        case 'failed-precondition':
-          return e.message ?? 'Амал бажарилмади';
-        case 'permission-denied':
-          return 'Рухсат йўқ — профилда телефонни текширинг';
-        default:
-          return e.message ?? 'Хатолик: ${e.code}';
-      }
-    }
-    return 'Хатолик: $e';
+  /// Янги эълон варағи очилганда бир марта — қайта юборишни аниқлаш учун
+  /// тасодифий уруғ. Тармоқ узилиб тугмани қайта босганда ЭЪЛОН ТАКРОРЛАНМАЙДИ.
+  static String newRequestSeed() {
+    final r = Random.secure();
+    return List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  /// `requestId` = уруғ + мазмун хеши: ЎША мазмун қайта юборилса — бир хил id
+  /// (сервер дубликатни қайтаради); матн таҳрирланса — янги id (таҳрир йўқолмайди).
+  @visibleForTesting
+  static String requestIdFor(
+    String seed, {
+    required String type,
+    required String title,
+    required String text,
+    required String priceText,
+    required bool isUrgent,
+  }) {
+    final h = Object.hash(type, title, text, priceText, isUrgent) & 0x7fffffff;
+    return '$seed-${h.toRadixString(36)}';
   }
 
   Future<({bool success, String? error, String? status, String? adId})> submitAd({
@@ -159,67 +220,41 @@ class JobsController extends ChangeNotifier {
     required bool isUrgent,
     String title = '',
     String priceText = '',
+    String requestSeed = '',
   }) async {
     await ensureReady();
     final t = title.trim();
     final body = text.trim();
-    if (t.length < 3) {
-      return (
-        success: false,
-        error: 'Сарлавҳани киритинг (камида 3 белги)',
-        status: null,
-        adId: null,
-      );
-    }
-    if (body.length < 3) {
-      return (
-        success: false,
-        error: 'Матнни киритинг (камида 3 белги)',
-        status: null,
-        adId: null,
-      );
-    }
-    if (!JobAd.isJobsBoardType(type)) {
-      return (
-        success: false,
-        error: 'Номаълум эълон тури',
-        status: null,
-        adId: null,
-      );
-    }
-    if (phoneDigits(userPhone).length < 9) {
-      return (
-        success: false,
-        error: 'Профилда телефон рақамини киритинг',
-        status: null,
-        adId: null,
-      );
-    }
+    ({bool success, String? error, String? status, String? adId}) fail(
+            String key) =>
+        (success: false, error: key, status: null, adId: null);
+    if (t.length < 3) return fail('jobs_err_title_short');
+    if (body.length < 3) return fail('jobs_err_text_short');
+    if (!JobAd.isJobsBoardType(type)) return fail('jobs_err_unknown_type');
+    if (phoneDigits(userPhone).length < 9) return fail('jobs_err_phone');
     try {
       // UI hint; сервер `submitJobAd` ҳам текширади.
       final dailyCount = await _repo.dailyCountByAuthor(userPhone);
       if (dailyCount >= dailyAdLimit) {
-        return (
-          success: false,
-          error: '⚠️ Кунига максимум $dailyAdLimit та эълон!',
-          status: null,
-          adId: null,
-        );
+        return fail('jobs_err_daily_limit|$dailyAdLimit');
       }
-      final days = isUrgent
-          ? AdKindX.urgentExpiryDays
-          : AdKindX.parse(type).expiresInDays;
-      final expiresAt = DateTime.now().add(Duration(days: days));
+      final price = priceText.trim();
       final created = await _repo.addAdWithId(
         type: type,
         text: body,
         title: t,
-        priceText: priceText.trim(),
-        authorName: userName,
-        authorPhone: userPhone,
-        address: userAddress,
+        priceText: price,
         isUrgent: isUrgent,
-        expiresAt: expiresAt,
+        requestId: requestSeed.isEmpty
+            ? ''
+            : requestIdFor(
+                requestSeed,
+                type: type,
+                title: t,
+                text: body,
+                priceText: price,
+                isUrgent: isUrgent,
+              ),
       );
       return (
         success: true,
@@ -228,7 +263,8 @@ class JobsController extends ChangeNotifier {
         adId: created.adId,
       );
     } catch (e) {
-      return (success: false, error: _cfError(e), status: null, adId: null);
+      debugPrint('[Jobs] submitAd: $e');
+      return fail(jobsErrorKey(e));
     }
   }
 
@@ -244,14 +280,11 @@ class JobsController extends ChangeNotifier {
     await ensureReady();
     final body = text.trim();
     if (body.length < 3) {
-      return (success: false, error: 'Матнни киритинг (камида 3 белги)');
+      return (success: false, error: 'jobs_err_text_short');
     }
     final t = (title ?? '').trim();
     if (t.isNotEmpty && t.length < 3) {
-      return (
-        success: false,
-        error: 'Сарлавҳани киритинг (камида 3 белги)',
-      );
+      return (success: false, error: 'jobs_err_title_short');
     }
     try {
       if (isAdmin) {
@@ -266,10 +299,7 @@ class JobsController extends ChangeNotifier {
         );
       } else {
         if (phoneDigits(userPhone).length < 9) {
-          return (
-            success: false,
-            error: 'Профилда телефон рақамини киритинг',
-          );
+          return (success: false, error: 'jobs_err_phone');
         }
         await _repo.updateAdByOwner(
           adId: adId,
@@ -283,7 +313,8 @@ class JobsController extends ChangeNotifier {
       }
       return (success: true, error: null);
     } catch (e) {
-      return (success: false, error: 'Хатолик: $e');
+      debugPrint('[Jobs] updateAd: $e');
+      return (success: false, error: 'jobs_err_generic');
     }
   }
 
@@ -294,16 +325,14 @@ class JobsController extends ChangeNotifier {
         await _repo.deleteAdAdmin(adId);
       } else {
         if (phoneDigits(userPhone).length < 9) {
-          return (
-            success: false,
-            error: 'Профилда телефон рақамини киритинг',
-          );
+          return (success: false, error: 'jobs_err_phone');
         }
         await _repo.deleteAdByOwner(adId: adId, callerPhone: userPhone);
       }
       return (success: true, error: null);
     } catch (e) {
-      return (success: false, error: 'Хатолик: $e');
+      debugPrint('[Jobs] deleteAd: $e');
+      return (success: false, error: 'jobs_err_generic');
     }
   }
 
@@ -312,13 +341,14 @@ class JobsController extends ChangeNotifier {
     required String reason,
   }) async {
     if (phoneDigits(userPhone).length < 9) {
-      return (success: false, error: 'Профилда телефон рақамини киритинг');
+      return (success: false, error: 'jobs_err_phone');
     }
     try {
       await _repo.addComplaint(adId: adId, reason: reason);
       return (success: true, error: null);
     } catch (e) {
-      return (success: false, error: _cfError(e));
+      debugPrint('[Jobs] submitComplaint: $e');
+      return (success: false, error: jobsErrorKey(e, fallback: 'jobs_err_generic'));
     }
   }
 
@@ -333,17 +363,74 @@ class JobsController extends ChangeNotifier {
   Stream<List<JobAd>>? _feed;
   String _feedKey = '';
 
+  /// Ҳозирги саҳифа чегараси (B7). [loadMore] уни [pageSize]га оширади.
+  int _limit = pageSize;
+  int _lastCount = 0;
+  int _countAtLoadMore = -1;
+  bool _exhausted = false;
+
+  /// Яна эълон юклаш мумкинми: охирги олинган сон чегарага яқин, чегара
+  /// [maxLimit]га етмаган ва охирги "яна юклаш" янги эълон келтирган.
+  bool get canLoadMore =>
+      !_exhausted && _limit < maxLimit && _lastCount >= _limit - 5;
+
+  void _onFeedEvent(int count) {
+    final wasExhausted = _exhausted;
+    if (_countAtLoadMore >= 0 && count <= _countAtLoadMore) _exhausted = true;
+    if (count != _lastCount || wasExhausted != _exhausted) {
+      _lastCount = count;
+      notifyListeners();
+    }
+  }
+
+  @visibleForTesting
+  int get debugLimit => _limit;
+
+  /// Оқимдан "count та эълон келди" ҳодисасини тақлид қилади (саҳифалаш тести).
+  @visibleForTesting
+  void debugFeedEvent(int count) => _onFeedEvent(count);
+
   Stream<List<JobAd>> watchAll() {
-    if (_feed == null || _feedKey != _scope.key) {
-      _feedKey = _scope.key;
-      _feed = _repo.watchScoped(_scope).asBroadcastStream();
+    final key = '${_scope.key}|$_limit';
+    if (_feed == null || _feedKey != key) {
+      _feedKey = key;
+      _feed = _repo
+          .watchScoped(_scope, limit: _limit)
+          .map((list) {
+            _onFeedEvent(list.length);
+            return list;
+          })
+          .asBroadcastStream();
     }
     return _feed!;
+  }
+
+  void _resetPaging() {
+    _limit = pageSize;
+    _lastCount = 0;
+    _countAtLoadMore = -1;
+    _exhausted = false;
   }
 
   void setScope(GeoScope s) {
     if (s == _scope) return;
     _scope = s;
+    _resetPaging();
+    notifyListeners();
+  }
+
+  /// Рўйхатнинг кейинги саҳифаси: чегара [pageSize]га ошади (янги оқим).
+  void loadMore() {
+    if (!canLoadMore) return;
+    _countAtLoadMore = _lastCount;
+    _limit = min(_limit + pageSize, maxLimit);
+    notifyListeners();
+  }
+
+  /// Юклаш хатосидан кейин қайта уриниш.
+  void reload() {
+    _feed = null;
+    _resetPaging();
     notifyListeners();
   }
 
@@ -351,8 +438,14 @@ class JobsController extends ChangeNotifier {
   /// мумкин; шунда шу сафарга Республика (сақланмайди).
   void showNationwideOnce() {
     _scope = _scope.copyWith(level: GeoLevel.nation);
+    _resetPaging();
     notifyListeners();
   }
 
-  Stream<List<JobAd>> watchMyAds() => _repo.watchAdsByAuthor(userPhone);
+  /// Менинг эълонларим (A2): ҳар қандай статус — `pending`/`blocked` ҳам.
+  /// Телефон [ensureReady]дан кейин маълум бўлади.
+  Stream<List<JobAd>> watchMyAds() async* {
+    await ensureReady();
+    yield* _repo.watchAdsByAuthor(userPhone);
+  }
 }

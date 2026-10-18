@@ -254,28 +254,36 @@ class CabinetWalletCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Container(
-                        constraints: const BoxConstraints(minHeight: AvaTap.minSize),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: c.brand,
-                          borderRadius: BorderRadius.circular(AvaRadius.chip),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.add_rounded, size: 18, color: c.brandInk),
-                            const SizedBox(width: 2),
-                            Text(
-                              actionLabel,
-                              style: TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w800,
-                                color: c.brandInk,
+                      // Ихчам «Тўлдириш»: баланс асосий, тугма — белги (эга
+                      // сўрови, 2026-10-19). Босиш майдони — БУТУН карточка,
+                      // шу сабабли тугма 44 дан кичик бўлиши мумкин. Матн
+                      // масштаби 1.0 билан чекланган: катта тизим шрифтида
+                      // тугма ўсиб, суммага жой қолдирмасин.
+                      MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.0,
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: c.brand,
+                            borderRadius: BorderRadius.circular(AvaRadius.chip),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add_rounded, size: 15, color: c.brandInk),
+                              const SizedBox(width: 2),
+                              Text(
+                                actionLabel,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: c.brandInk,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],

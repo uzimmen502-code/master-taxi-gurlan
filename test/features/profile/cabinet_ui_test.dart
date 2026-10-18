@@ -75,6 +75,31 @@ void main() {
       });
     }
 
+    testWidgets('«Тўлдириш» тугмаси ихчам, катта шрифтда ҳам ўсмайди; сумма кўп жой олади',
+        (tester) async {
+      Future<Size> pillSize(double scale) async {
+        await tester.pumpWidget(_host(
+          CabinetWalletCard(
+            title: 'Кошелёк',
+            balanceText: '19 562 000 сўм',
+            hint: 'x',
+            actionLabel: 'Пополнить',
+            onTap: () {},
+          ),
+          width: 360,
+          textScale: scale,
+        ));
+        return tester.getSize(find
+            .ancestor(of: find.text('Пополнить'), matching: find.byType(Container))
+            .first);
+      }
+
+      final normal = await pillSize(1.0);
+      final big = await pillSize(2.0);
+      expect(normal.height, lessThanOrEqualTo(36), reason: 'ихчам (аввал 44+)');
+      expect(big, normal, reason: 'шрифт ×2 да ҳам тугма ўсмайди');
+    });
+
     testWidgets('семантика: битта тугма, баланс ёрлиқда', (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(_host(CabinetWalletCard(

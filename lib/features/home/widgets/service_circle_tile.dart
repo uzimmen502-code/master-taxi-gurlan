@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/theme/ava_tokens.dart';
 import '../home_module_gate.dart';
-import 'services_spotlight_carousel.dart' show ServiceSpotlightItem;
+import 'service_spotlight_item.dart';
 
 /// OLX бош экранидаги «Разделы на сервисе OLX» катаги услуби.
 ///
@@ -17,9 +17,10 @@ import 'services_spotlight_carousel.dart' show ServiceSpotlightItem;
 /// хизмат расмлари шаффоф фонли, шунинг учун ранг [olxTintFor] дан олинади
 /// ва доира кодда чизилади — натижа бир хил кўринади.
 ///
-/// Эски [ServiceSpotlightTile] (3D «аркада тугмаси»: қизил-яшил рамка,
-/// градиент, тушувчи соя) ЎЧИРИЛМАДИ — бош саҳифадаги карусель ҳамон уни
-/// ишлатади. Бу катак фақат «Барча хизматлар» экрани учун.
+/// Эски 3D «аркада тугмаси» плиткаси ва уни ишлатган карусель бош
+/// саҳифадан олиб ташлангач ҳеч қаерда чақирилмагани учун ўчирилди
+/// (git тарихида `services_spotlight_carousel.dart`). Бу катак бош
+/// саҳифадаги қатор ва «Барча хизматлар» экрани учун.
 class ServiceCircleTile extends StatefulWidget {
   const ServiceCircleTile({super.key, required this.item});
 

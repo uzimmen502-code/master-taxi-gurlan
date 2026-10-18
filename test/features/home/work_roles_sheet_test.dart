@@ -1,3 +1,4 @@
+import 'package:ava_gurlan/core/theme/ava_tokens.dart';
 import 'package:ava_gurlan/features/home/widgets/work_roles_sheet.dart';
 import 'package:ava_gurlan/models/driver_roles.dart';
 import 'package:flutter/material.dart';
@@ -96,6 +97,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, WorkChoice.courier);
   });
+  // Аудит 2026-10-19: ҳолат ранглари `Colors.green/grey/orange/red` эди —
+  // токенларга ўтди; «қўшилиш» матни `brand` (1.97:1) эмас, `brandText`.
+  testWidgets('ҳолат ёрлиқлари токен рангларида', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: ElevatedButton(
+            onPressed: () => showWorkRolesSheet(
+              context,
+              roles: const DriverRoles(
+                  types: ['intercity', 'local'],
+                  active: {'intercity'},
+                  courierStatus: 'applied'),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    Color? colorOf(String key) =>
+        tester.widget<Text>(find.text(key)).style?.color;
+
+    expect(colorOf('driver_chip_active'), AvaLight.ok); // intercity
+    expect(colorOf('driver_chip_inactive'), AvaLight.ink2); // local
+    expect(colorOf('work_state_pending'), AvaLight.warn); // courier applied
+    expect(colorOf('work_state_join'), AvaLight.brandText); // marshrut
+  });
+
   group('confirmBecomeDriver', () {
     Future<bool?> run(WidgetTester tester, String tapKey) async {
       bool? result;

@@ -60,15 +60,16 @@ Future<WorkChoice?> showWorkRolesSheet(
       Color toneColor(WorkTone t) {
         switch (t) {
           case WorkTone.active:
-            return Colors.green.shade600;
+            return c.ok;
           case WorkTone.inactive:
-            return Colors.grey.shade600;
+            return c.ink2;
           case WorkTone.pending:
-            return Colors.orange.shade800;
+            return c.warn;
           case WorkTone.blocked:
-            return Colors.red.shade700;
+            return c.danger;
           case WorkTone.join:
-            return c.brand;
+            // Матн ранги: `brand` оқда 1.97:1 — `brandText` 5.6:1.
+            return c.brandText;
         }
       }
 

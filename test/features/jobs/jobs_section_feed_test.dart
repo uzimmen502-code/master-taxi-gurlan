@@ -86,9 +86,12 @@ void main() {
       expect(JobsSections.tileIdFor(AdKind.work), 'jobs');
     });
 
-    test('бош саҳифа плиткалари РАНГДА фарқ қилади', () {
+    test('бош саҳифа плиткалари: иккаласи ҳам бренд (экранлар билан бир хил)', () {
+      // Эга қарори 2026-10-18 (аввал 2026-10-06: яшил / жигарранг).
+      expect(olxTintFor(JobsSections.adsTileId), const Color(0xFFFFA500));
+      expect(olxTintFor(JobsSections.servicesTileId), const Color(0xFFFFA500));
       expect(olxTintFor(JobsSections.adsTileId),
-          isNot(olxTintFor(JobsSections.servicesTileId)));
+          JobsColors.accentFor(AdKind.ad));
     });
 
     // Эга қарори (2026-10-18): экранларда иккала бўлим бренд рангида (аввал

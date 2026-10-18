@@ -22,6 +22,7 @@ import '../../models/platform_product.dart';
 import '../../repositories/platform_products_repository.dart';
 import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
+import '../../repositories/news_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import '../customer_confirm/widgets/customer_confirm_banner.dart';
@@ -81,6 +82,7 @@ import '../profile/screens/wallet_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
 import 'controllers/active_orders_controller.dart';
 import 'controllers/home_controller.dart';
+import 'controllers/home_unread_badge.dart';
 import 'home_services_catalog.dart';
 import 'widgets/home_services_olx_row.dart';
 import 'widgets/active_order_card.dart';
@@ -171,9 +173,24 @@ class _HomeViewState extends State<_HomeView> {
   Timer? _deferredBootstrapTimer;
   DateTime? _lastDeferredBootstrapAt;
 
+  /// «Хабарлар» таби белгиси (ўқилмаган хабарлар). Телефон кечроқ тайёр
+  /// бўлади, шунинг учун оқим `build`да телефон пайдо бўлганда уланади.
+  late final HomeUnreadBadge _unread;
+  String _unreadPhone = '';
+
+  /// Тортиб янгилаш ҳисоблагичи: ошса, бўлимлар қайта яратилади ва ўз
+  /// маълумотини қайта сўрайди (қаранг: [_refreshHome]).
+  int _refreshEpoch = 0;
+
   @override
   void initState() {
     super.initState();
+    final news = context.read<NewsRepository>();
+    _unread = HomeUnreadBadge(
+      watch: ({required userId, required audiences}) =>
+          news.watchUnreadTotal(userId: userId, audiences: audiences),
+      audience: UserAudience.current,
+    );
     _configListener = () {
       if (mounted) setState(() {});
     };
@@ -202,6 +219,36 @@ class _HomeViewState extends State<_HomeView> {
     _scheduleDeferredConfigBootstrap();
     unawaited(_checkLocationSuggestion());
     unawaited(_refreshDriverRoles());
+    unawaited(_syncUnread());
+  }
+
+  /// Бўлим калити: тортиб янгилашда ўзгаради → бўлим қайта яратилади.
+  Key _sectionKey(String base) => ValueKey('${base}_$_refreshEpoch');
+
+  /// Хабарлар белгисини ҳозирги телефон/аудиторияга мослайди.
+  Future<void> _syncUnread() =>
+      _unread.sync(context.read<HomeController>().phone);
+
+  /// Тортиб янгилаш: конфиг, ҳудуд таклифи, ҳайдовчи ҳолати, белги қайта
+  /// ўқилади ва ҳар бўлим қайта яратилиб ўз маълумотини қайта сўрайди.
+  ///
+  /// Индикатор камида ярим сония кўринади — бўлимлар ўзи мустақил юклангани
+  /// учун ҳисоб-китоб кутилмайди, лекин «ҳеч нарса бўлмади» таассуроти
+  /// қолмасин.
+  Future<void> _refreshHome() async {
+    if (!mounted) return;
+    final home = context.read<HomeController>();
+    setState(() => _refreshEpoch++);
+    _lastLocationCheckAt = null;
+    _lastDeferredBootstrapAt = null;
+    await Future.wait<void>([
+      ServiceConfigHolder.bootstrap(),
+      home.refreshUser(),
+      _checkLocationSuggestion(),
+      _refreshDriverRoles(),
+      _syncUnread(),
+      Future<void>.delayed(const Duration(milliseconds: 500)),
+    ].map((f) => f.catchError((Object _) {})));
   }
 
   /// Pop анимациясидан кейин silent bootstrap; 45 с ичида такрорланмайди.
@@ -308,6 +355,7 @@ class _HomeViewState extends State<_HomeView> {
   void dispose() {
     _deferredBootstrapTimer?.cancel();
     _promoSub?.cancel();
+    _unread.dispose();
     if (_configListener != null) {
       ServiceConfigHolder.revision.removeListener(_configListener!);
       GeoContext.revision.removeListener(_configListener!);
@@ -637,12 +685,15 @@ class _HomeViewState extends State<_HomeView> {
     final roles = await context.read<DriverRepository>().driverRoles(uid);
     // Аудитория белгиси (янгиликлар, тасма, push) — ҳуқуқдан; фақат ҳолат
     // ҳақиқатан ўқилганда (узилишда "ҳайдовчи эмас" деб ёзиб юбормаймиз).
-    if (roles.known) unawaited(UserAudience.saveTaxiDriver(roles.isDriver));
+    // `await`: аудитория белгиси ёзилиб бўлгач Хабарлар белгиси уни ўқийди
+    // (ҳайдовчи ҳуқуқи келса аудитория `user` → `driver` бўлади).
+    if (roles.known) await UserAudience.saveTaxiDriver(roles.isDriver);
     if (!mounted) return;
     setState(() {
       _driverRoles = roles;
       _driverRolesLoaded = true;
     });
+    unawaited(_syncUnread());
   }
 
   /// «＋» — «Менинг бизнесим»: видео · эълон · хизмат · онлайн дўкон · дўкон ·
@@ -995,12 +1046,24 @@ class _HomeViewState extends State<_HomeView> {
         _refreshDriverRoles().whenComplete(() => _driverRolesLoading = false);
       });
     }
+    // Телефон тайёр бўлгач (ёки алмашгач) ўқилмаганлар оқимини улаш.
+    if (uid.length >= 9 && _unreadPhone != uid) {
+      _unreadPhone = uid;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_syncUnread());
+      });
+    }
 
     return Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: AvaBottomNav(
-        current: AvaNavTab.home,
-        onTap: _onNavTap,
+      // Белги ўзгарганда фақат меню қайта чизилади, бутун саҳифа эмас.
+      bottomNavigationBar: ListenableBuilder(
+        listenable: _unread,
+        builder: (context, _) => AvaBottomNav(
+          current: AvaNavTab.home,
+          onTap: _onNavTap,
+          messagesBadge: _unread.total,
+        ),
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -1021,7 +1084,12 @@ class _HomeViewState extends State<_HomeView> {
                       _maybeApplyUserGeo(user);
                       // Oxirgi tranzaksiya Wallet ekranida; Home faqat balans
                       // (users.bonusBalance) — wallet_ledger stream yo'q.
-                      return CustomScrollView(
+                      return RefreshIndicator(
+                        color: context.ava.brandText,
+                        onRefresh: _refreshHome,
+                        child: CustomScrollView(
+                    // Бўлим кам бўлса ҳам тортиб янгилаш ишлайверсин.
+                    physics: const AlwaysScrollableScrollPhysics(),
                     cacheExtent: 320,
                     slivers: [
                       SliverPadding(
@@ -1110,6 +1178,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('dating')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeDatingSection(
+                                key: _sectionKey('dating'),
                                 viewerUid: uid,
                                 viewerBirthDate: user?.birthDate ?? '',
                                 viewerGender:
@@ -1120,7 +1189,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('jobs')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
-                                key: ValueKey(
+                                key: _sectionKey(
                                     'ads_ad_${GeoContext.scopeFor('jobs').key}'),
                                 adType: 'ad',
                                 titleKey: 'home_section_ads',
@@ -1138,7 +1207,7 @@ class _HomeViewState extends State<_HomeView> {
                               ),
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
-                                key: ValueKey(
+                                key: _sectionKey(
                                     'ads_service_${GeoContext.scopeFor('jobs').key}'),
                                 adType: 'service',
                                 titleKey: 'home_section_services',
@@ -1158,6 +1227,7 @@ class _HomeViewState extends State<_HomeView> {
                             // Кўриниш дарвозаси виджетнинг ўзида
                             // (очиқ / синовчи / яширин).
                             HomeRestaurantsSection(
+                              key: _sectionKey('restaurants'),
                               userLat: user?.address.lat,
                               userLng: user?.address.lng,
                               onOpenAll: () => _openRestaurants(
@@ -1180,7 +1250,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('realty')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeRealtySection(
-                                key: ValueKey(
+                                key: _sectionKey(
                                     'realty_${GeoContext.scopeFor('realty').key}'),
                                 onOpenAll: () => _push(const RealtyScreen()),
                                 onOpenMap: () =>
@@ -1193,7 +1263,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('intercity')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeIntercitySection(
-                                key: ValueKey('intercity_$_geoKey'),
+                                key: _sectionKey('intercity_$_geoKey'),
                                 onOpenAll: () => _openModule(
                                   HomeModulesCatalog.byId('intercity'),
                                 ),
@@ -1208,7 +1278,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('yuk_local')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeYukLocalSection(
-                                key: ValueKey(
+                                key: _sectionKey(
                                     'yuk_local_${GeoContext.scopeFor('yuk_local').key}'),
                                 onOpenAll: () => _openYukModule(
                                   'yuk_local',
@@ -1226,7 +1296,7 @@ class _HomeViewState extends State<_HomeView> {
                                 'cheap_products_home')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeMarketSection(
-                                key: ValueKey(
+                                key: _sectionKey(
                                     'market_${GeoContext.scopeFor('cheap_products_home').key}'),
                                 onOpenAll: () => _openModule(
                                   HomeModulesCatalog.byId(
@@ -1241,6 +1311,7 @@ class _HomeViewState extends State<_HomeView> {
                                 'wholesale_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeWholesaleSection(
+                                key: _sectionKey('wholesale'),
                                 market: WholesaleProduct.marketWholesale,
                                 titleKey: 'home_module_wholesale',
                                 onOpenAll: () => _openWholesale(
@@ -1261,6 +1332,7 @@ class _HomeViewState extends State<_HomeView> {
                                 'china_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeWholesaleSection(
+                                key: _sectionKey('china'),
                                 market: WholesaleProduct.marketChina,
                                 titleKey: 'home_module_china',
                                 onOpenAll: () =>
@@ -1271,6 +1343,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('ev_charging')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeEvSection(
+                                key: _sectionKey('ev'),
                                 userLat: user?.address.lat,
                                 userLng: user?.address.lng,
                                 onOpenMap: () =>
@@ -1280,7 +1353,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('tv_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAvagramSection(
-                                key: ValueKey(
+                                key: _sectionKey(
                                     'avagram_${GeoContext.scopeFor('tv_market').key}'),
                                 onOpenAll: () =>
                                     _push(const TvMarketFeedScreen()),
@@ -1297,7 +1370,8 @@ class _HomeViewState extends State<_HomeView> {
                       ),
                       const SliverToBoxAdapter(child: SizedBox(height: 16)),
                     ],
-                  );
+                        ),
+                      );
                 },
               ),
             ),

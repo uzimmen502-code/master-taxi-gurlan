@@ -188,6 +188,48 @@ void main() {
       expect(find.text('3'), findsOneWidget);
     });
 
+    // Аудит 2026-10-19: фаол бўлмаган ёрлиқ `ink3` (≈2.7:1) эди; белги
+    // матни қизил устида тўқ (≈3.2:1) эди — иккови ҳам 4.5:1 дан паст.
+    testWidgets('контраст: фаол бўлмаган ёрлиқ ink2, белги матни оқ (surface)',
+        (tester) async {
+      await _pump(
+        tester,
+        AvaBottomNav(
+          current: AvaNavTab.home,
+          onTap: (_) {},
+          messagesBadge: 3,
+        ),
+      );
+      final inactive = tester.widget<Text>(find.text('home_nav_cabinet'));
+      expect(inactive.style!.color, AvaLight.ink2);
+      final active = tester.widget<Text>(find.text('home_nav_home'));
+      expect(active.style!.color, AvaLight.brand);
+      final badge = tester.widget<Text>(find.text('3'));
+      expect(badge.style!.color, AvaLight.surface);
+    });
+
+    testWidgets('семантика: белги сони ёрлиқ билан бирга, иккинчи марта эмас',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        AvaBottomNav(
+          current: AvaNavTab.home,
+          onTap: (_) {},
+          messagesBadge: 3,
+        ),
+      );
+      // Тестда локализация йўқ — калит ўзи чиқади; муҳими: ёрлиқ + сон-матн.
+      expect(find.bySemanticsLabel('home_nav_messages, home_nav_unread'),
+          findsOneWidget);
+      // Яланғоч «3» ва такрорий ёрлиқ ўқилмайди.
+      expect(find.bySemanticsLabel('3'), findsNothing);
+      expect(find.bySemanticsLabel('home_nav_messages'), findsNothing);
+      // Белгисиз таб — оддий ёрлиқ.
+      expect(find.bySemanticsLabel('home_nav_cabinet'), findsOneWidget);
+      handle.dispose();
+    });
+
     testWidgets('99 дан ошса «99+»', (tester) async {
       await _pump(
         tester,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/ava_tokens.dart';
 import '../../../models/driver_roles.dart';
 
 /// Бош экран тасмасидаги ёзув: фақат ФАОЛ хизматлар. Масалан
@@ -57,6 +58,7 @@ class _ActiveRolesStripState extends State<ActiveRolesStrip>
     final label = activeRolesLabel(widget.roles, context.tr);
     if (label == null) return const SizedBox.shrink();
 
+    final c = context.ava;
     final reduce = MediaQuery.of(context).disableAnimations;
     if (reduce) {
       _pulse.stop();
@@ -90,7 +92,7 @@ class _ActiveRolesStripState extends State<ActiveRolesStrip>
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: Colors.green.shade600,
+                      color: c.ok,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -102,7 +104,7 @@ class _ActiveRolesStripState extends State<ActiveRolesStrip>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.grey.shade800,
+                      color: c.ink,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       height: 1.2,

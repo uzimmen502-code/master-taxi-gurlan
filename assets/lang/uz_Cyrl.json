@@ -3535,5 +3535,11 @@
   "realty_error_image": "Расм қабул қилинмади. Расмни қайта танланг.",
   "realty_pricing_retry": "Қайта юклаш",
   "realty_pro_plans_failed": "Пакетлар юкланмади.",
-  "realty_wallet_short_tile": "Ҳамёнда маблағ етмайди"
+  "realty_wallet_short_tile": "Ҳамёнда маблағ етмайди",
+  "cab_topup": "Тўлдириш",
+  "cab_sec_account": "Ҳисоб",
+  "cab_sec_activity": "Фаолият",
+  "cab_sec_app": "Илова",
+  "cab_seller_panel": "Сотув панели",
+  "home_nav_unread": "{n} та ўқилмаган"
 }

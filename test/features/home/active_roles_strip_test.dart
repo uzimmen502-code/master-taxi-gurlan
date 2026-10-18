@@ -1,3 +1,4 @@
+import 'package:ava_gurlan/core/theme/ava_tokens.dart';
 import 'package:ava_gurlan/features/home/widgets/active_roles_strip.dart';
 import 'package:ava_gurlan/models/driver_roles.dart';
 import 'package:flutter/material.dart';
@@ -99,6 +100,27 @@ void main() {
       expect(find.text('role_strip_courier'), findsOneWidget);
       await tester.tap(find.text('role_strip_courier'));
       expect(taps, 1);
+    });
+
+    // Аудит 2026-10-19: `Colors.green/grey` ўрнига токенлар.
+    testWidgets('нуқта `ok`, матн `ink` токенида', (tester) async {
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+          body: ActiveRolesStrip(roles: DriverRoles(courierOnline: true)),
+        ),
+      ));
+      final text = tester.widget<Text>(find.text('role_strip_courier'));
+      expect(text.style!.color, AvaLight.ink);
+      final dot = tester
+          .widgetList<Container>(find.descendant(
+            of: find.byType(ActiveRolesStrip),
+            matching: find.byType(Container),
+          ))
+          .map((c) => c.decoration)
+          .whereType<BoxDecoration>()
+          .single;
+      expect(dot.color, AvaLight.ok);
+      expect(dot.shape, BoxShape.circle);
     });
 
     testWidgets('«анимацияни камайтириш» ёқилса нуқта қимирламайди',

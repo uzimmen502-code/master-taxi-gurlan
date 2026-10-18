@@ -29,7 +29,7 @@ import 'controllers/home_controller.dart';
 import 'home_modules_catalog.dart';
 import 'home_screen.dart' show needPhoneForAction;
 import 'screens/courier_services_hub_screen.dart';
-import 'widgets/services_spotlight_carousel.dart';
+import 'widgets/service_spotlight_item.dart';
 
 /// Хизмат катаклари бажарадиган амаллар.
 ///

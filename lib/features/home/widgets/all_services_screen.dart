@@ -4,7 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../home_module_gate.dart';
 import 'service_circle_tile.dart';
-import 'services_spotlight_carousel.dart';
+import 'service_spotlight_item.dart';
 
 /// Барча кўринадиган хизматлар — OLX бош экранидаги «Разделы на сервисе
 /// OLX» услубидаги грид.

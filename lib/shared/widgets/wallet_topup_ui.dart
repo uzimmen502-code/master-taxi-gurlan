@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +20,35 @@ import '../../repositories/user_repository.dart';
 
 /// Эганинг баланси оқими. Телефон/Firebase йўқ бўлса — бўш оқим (баланс
 /// «номаълум»: ёлғон огоҳлантириш кўрсатилмайди).
-Stream<int> walletBalanceStream() async* {
+///
+/// ⚠️ Оқим КЎП МАРТА тингланиши мумкин (broadcast): `StreamBuilder` элементи
+/// қайта яратилса ўша оқимни яна тинглайди. Одатдаги `async*` оқим бир марта
+/// тингланади ва иккинчисида «Stream has already been listened to» берарди —
+/// Кабинет қурилмада йиқилди (2026-10-18). Тингловчи қолмаса манба ёпилади,
+/// янгиси келса қайта очилади.
+Stream<int> walletBalanceStream() {
+  StreamSubscription<int>? sub;
+  late final StreamController<int> controller;
+  controller = StreamController<int>.broadcast(
+    onListen: () {
+      sub = _walletBalanceSource().listen(
+        controller.add,
+        onError: controller.addError,
+        onDone: () {
+          // Телефон йўқ — манба тугади; тингловчилар «маълумот йўқ» деб қолади.
+          if (!controller.isClosed) controller.close();
+        },
+      );
+    },
+    onCancel: () {
+      sub?.cancel();
+      sub = null;
+    },
+  );
+  return controller.stream;
+}
+
+Stream<int> _walletBalanceSource() async* {
   final uid = await walletPhoneId();
   if (uid.isEmpty) return;
   yield* UserRepository().watchBonusBalance(uid);

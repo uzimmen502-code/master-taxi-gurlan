@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ava_gurlan/shared/widgets/wallet_topup_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +43,91 @@ void main() {
     await t.pump();
     expect(t.takeException(), isNull);
     expect(find.text('false'), findsOneWidget);
+  });
+
+  // Қурилмада: манба қиймат берди (лог кўрсатди), лекин қатор «номаълум»да қолди.
+  group('restartableBroadcast + StreamBuilder', () {
+    Widget host(Stream<int> s) => MaterialApp(
+          home: StreamBuilder<int>(stream: s, builder: (_, snap) => Text(snap.hasData ? 'v${snap.data}' : 'none')),
+        );
+
+    testWidgets('асинхрон келган қиймат StreamBuilder\'да кўринади', (t) async {
+      final s = restartableBroadcast<int>(() async* {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        yield 19562;
+      });
+      await t.pumpWidget(host(s));
+      expect(find.text('none'), findsOneWidget);
+      await t.pump(const Duration(milliseconds: 50));
+      expect(find.text('v19562'), findsOneWidget);
+    });
+
+    testWidgets('қиймат тингловчи қўшилган заҳоти ЎЗИ келса ҳам йўқолмайди', (t) async {
+      final s = restartableBroadcast<int>(() => Stream<int>.value(7));
+      await t.pumpWidget(host(s));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 20));
+      expect(find.text('v7'), findsOneWidget);
+    });
+
+    // Қурилмада ушланган нуқсон: қиймат келди, кейин қатор қайта қурилиб ЯНГИ
+    // StreamBuilder кеч уланди — қиймат такрорланмагани учун «кутилмоқда»да қолди.
+    testWidgets('REGRESSION: қиймат келгач ЯНГИ StreamBuilder уланса ҳам охирги қийматни олади', (t) async {
+      final c = StreamController<int>();
+      final s = restartableBroadcast<int>(() => c.stream);
+      Widget hostK(Key k) => MaterialApp(
+            home: StreamBuilder<int>(key: k, stream: s, builder: (_, snap) => Text(snap.hasData ? 'v${snap.data}' : 'none')),
+          );
+      await t.pumpWidget(hostK(const ValueKey('a')));
+      c.add(19562);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 20));
+      expect(find.text('v19562'), findsOneWidget);
+      // Элемент қайта яратилди (янги StreamBuilder, янги тингловчи).
+      await t.pumpWidget(hostK(const ValueKey('b')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 20));
+      expect(find.text('v19562'), findsOneWidget, reason: 'янги тингловчи охирги қийматни олиши керак');
+      c.add(20000);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 20));
+      expect(find.text('v20000'), findsOneWidget);
+      await c.close();
+    });
+
+    testWidgets('ҳамма тингловчи кетгач манба ёпилади, янгиси келса қайта очилади', (t) async {
+      var opens = 0;
+      var closes = 0;
+      final s = restartableBroadcast<int>(() {
+        opens++;
+        final c = StreamController<int>(onCancel: () => closes++);
+        c.add(1);
+        return c.stream;
+      });
+      await t.pumpWidget(MaterialApp(home: StreamBuilder<int>(stream: s, builder: (_, __) => const SizedBox())));
+      await t.pump();
+      expect(opens, 1);
+      await t.pumpWidget(const MaterialApp(home: SizedBox()));
+      await t.pump();
+      expect(closes, 1);
+      await t.pumpWidget(MaterialApp(home: StreamBuilder<int>(stream: s, builder: (_, __) => const SizedBox())));
+      await t.pump();
+      expect(opens, 2);
+    });
+
+    testWidgets('Firestore каби: қиймат + давом этувчи оқим', (t) async {
+      final c = StreamController<int>();
+      final s = restartableBroadcast<int>(() => c.stream);
+      await t.pumpWidget(host(s));
+      c.add(5);
+      await t.pump();
+      expect(find.text('v5'), findsOneWidget);
+      c.add(6);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 20));
+      expect(find.text('v6'), findsOneWidget);
+      await c.close();
+    });
   });
 
   test('оқимни кетма-кет икки марта тинглаш мумкин', () async {

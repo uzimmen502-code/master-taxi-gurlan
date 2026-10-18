@@ -6,23 +6,27 @@ class JobAdService {
 
   static final FirebaseFunctions _fn = FirebaseFunctions.instance;
 
+  /// Эълон яратиш.
+  ///
+  /// Эга номи ва ҳудуд ёрлиғи СЕРВЕРДА профилдан олинади (мижозга ишонилмайди,
+  /// уй манзили ҳам ошкор бўлмайди) — шунинг учун `authorName`/`address`
+  /// юборилмайди. [requestId] — қайта юборишда эълон такрорланмаслиги учун
+  /// (сервер бир хил `requestId` га бир хил эълонни қайтаради).
   static Future<({String adId, String status})> submitAd({
     required String type,
     required String text,
-    required String authorName,
     String title = '',
     String priceText = '',
-    String address = '',
     bool isUrgent = false,
+    String requestId = '',
   }) async {
     final res = await _fn.httpsCallable('submitJobAd').call({
       'type': type,
       'text': text,
       'title': title,
-      'authorName': authorName,
       if (priceText.isNotEmpty) 'priceText': priceText,
-      if (address.isNotEmpty) 'address': address,
       'isUrgent': isUrgent,
+      if (requestId.isNotEmpty) 'requestId': requestId,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     return (

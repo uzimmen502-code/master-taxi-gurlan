@@ -7,6 +7,16 @@ library;
 /// "+998 (90) 123-45-67" -> "998901234567"
 String phoneDigits(String v) => v.replaceAll(RegExp(r'[^\d]'), '');
 
+/// Тошкент кунининг боши (UTC `DateTime`). Тошкент = UTC+5, ёзги вақт йўқ.
+///
+/// Эълонлар кунлик лимити сервер билан бир хил "кун" бўйича ҳисобланади
+/// (`functions/index.js` → `tashkentDayStart`); қурилма вақт зонасига боғлиқ эмас.
+DateTime tashkentDayStartUtc(DateTime now) {
+  const offset = Duration(hours: 5);
+  final local = now.toUtc().add(offset);
+  return DateTime.utc(local.year, local.month, local.day).subtract(offset);
+}
+
 /// `notifications.targetPhone` ва FCM listener учун каноник формат (фақат рақамлар).
 String notificationTargetPhone(String raw) {
   final d = phoneDigits(raw);

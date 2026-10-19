@@ -108,6 +108,10 @@ async function main() {
     await db.doc('restaurant_bookings/bk2').set({ restaurantId: R2, userPhone: STRANGER, guests: 2, status: 'requested', fee: { amount: 50000, charged: false } });
     await db.doc('settings/restaurant_bookings').set({ version: 1, stage: 'public', tiers: [{ upTo: 5, fee: 50000 }] });
     await db.doc('restaurant_bookings_history/v1').set({ version: 1 });
+    await db.doc('settings/restaurant_seasons').set({ version: 1, periods: [{ key: 'ramadan', from: '2027-02-09', to: '2027-03-09', confirmed: true }], opensDaysBefore: 10 });
+    await db.doc('settings/restaurant_ramadan').set({ version: 1, days: {}, offsets: { toshkent: 0 } });
+    await db.doc('restaurant_seasons_history/v1').set({ version: 1 });
+    await db.doc('restaurant_ramadan_history/v1').set({ version: 1 });
     await db.doc(`restaurants/${R2}`).update({ acceptsBookings: false, bookingsDisabledReason: 'cancel_limit', bookingCancels: [1, 2, 3] });
     await db.doc('settings/restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
     await db.doc('restaurant_delivery_tariffs/v1').set({ version: 1, base: 5000, perKm: 1500 });
@@ -239,6 +243,10 @@ async function main() {
   await check('teglar: kids/breakfast/night/light, ≤ 4; boshqa teg, 5 ta, satr — rad; begona taom yozolmaydi', async () => {
     await assertSucceeds(putDish(OWNER, 't_all4', { tags: ['kids', 'breakfast', 'night', 'light'] }));
     await assertFails(putDish(OWNER, 't_spicy', { tags: ['spicy'] }));
+    await assertSucceeds(putDish(OWNER, 't_season', { tags: ['ramadan', 'dastarxon'] }));
+    for (const tag of ['navruz', 'qurbon', 'newyear', 'wedding']) await assertSucceeds(putDish(OWNER, 't_season_' + tag, { tags: [tag] }));
+    await assertFails(putDish(OWNER, 't_season_bad', { tags: ['ramazon'] }));
+    await assertFails(putDish(OWNER, 't_five_new', { tags: ['kids', 'ramadan', 'dastarxon', 'navruz', 'night'] }), 'ko\'pi bilan 4 ta teg');
     await assertFails(putDish(OWNER, 't_five', { tags: ['kids', 'breakfast', 'night', 'light', 'kids'] }));
     await assertFails(putDish(OWNER, 't_str', { tags: 'kids' }));
     await assertFails(putDish(STRANGER, 't_stranger', { tags: ['kids'] }));
@@ -418,7 +426,22 @@ async function main() {
     await assertSucceeds(as(ADMIN).doc('restaurant_bookings_history/v1').get());
     await assertFails(as(CUSTOMER).doc('restaurant_bookings_history/v1').get());
     await assertFails(as(ADMIN).doc('restaurant_bookings_history/v2').set({ version: 2 }));
-  });  await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
+  });  await check('D-REST-22 settings/restaurant_seasons va restaurant_ramadan: hamma o\'qiydi; admin ham TO\'G\'RIDAN-TO\'G\'RI yozolmaydi (faqat CF); tarix faqat admin o\'qiydi', async () => {
+    for (const doc of ['settings/restaurant_seasons', 'settings/restaurant_ramadan']) {
+      await assertSucceeds(anon().doc(doc).get());
+      for (const who of [ADMIN, OWNER, CUSTOMER]) {
+        await assertFails(as(who).doc(doc).update({ version: 99 }), `${doc} update ${who}`);
+        await assertFails(as(who).doc(doc).set({ periods: [], days: {}, offsets: {} }), `${doc} set ${who}`);
+      }
+    }
+    for (const h of ['restaurant_seasons_history/v1', 'restaurant_ramadan_history/v1']) {
+      await assertSucceeds(as(ADMIN).doc(h).get());
+      await assertFails(as(CUSTOMER).doc(h).get());
+      await assertFails(anon().doc(h).get());
+      await assertFails(as(ADMIN).doc(h.replace('v1', 'v2')).set({ version: 2 }));
+    }
+  });
+  await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
     await assertSucceeds(anon().doc(`restaurant_dish_index/${R1}_osh`).get());
     await assertSucceeds(anon().collection('restaurant_dish_index').where('sections', 'array-contains', 'cheap').where('geo4', 'in', ['tzh1', 'tzh2']).limit(50).get());
     const ref = (who) => as(who).doc(`restaurant_dish_index/${R1}_osh`);

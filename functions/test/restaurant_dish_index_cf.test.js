@@ -111,6 +111,31 @@ async function main() {
     );
   });
 
+  await check('P2b Ofis / Dastarxon / Mavsumiy (D-REST-21/22): oldindan buyurtma + chegirma; teg + oldindan buyurtma; mavsum tegi (musbat + manfiy)', () => {
+    const pre = restaurant({ acceptsPreorder: true });
+    const tiers = [{ minQty: 10, price: 35000 }];
+    const s = (item, r) => idx.sectionsOf({ price: 40000, ...item }, r);
+    assert.deepStrictEqual(s({ qtyTiers: tiers }, pre), ['office']);
+    assert.deepStrictEqual(s({ qtyTiers: tiers }, restaurant()), [], 'oldindan buyurtma yo\'q — Ofis emas');
+    assert.deepStrictEqual(s({ qtyTiers: tiers }, restaurant({ acceptsPreorder: false })), []);
+    assert.deepStrictEqual(s({}, pre), [], 'chegirma yo\'q — Ofis emas');
+    assert.deepStrictEqual(s({ qtyTiers: [{ minQty: 10, price: 45000 }] }, pre), [], 'narxni ORTTIRADIGAN pog\'ona yaroqsiz — Ofis emas');
+    assert.deepStrictEqual(s({ qtyTiers: 'x' }, pre), []);
+    assert.deepStrictEqual(s({ tags: ['dastarxon'] }, pre), ['dastarxon']);
+    assert.deepStrictEqual(s({ tags: ['dastarxon'] }, restaurant()), [], 'oldindan buyurtma yo\'q — Dastarxon emas');
+    assert.deepStrictEqual(s({ tags: ['ramadan'] }, restaurant()), ['seasonal'], 'mavsum tegi oldindan buyurtmasiz ham');
+    assert.deepStrictEqual(s({ tags: ['wedding', 'navruz'] }, restaurant()), ['seasonal']);
+    assert.deepStrictEqual(s({ tags: ['mavsum-emas'] }, restaurant()), []);
+    assert.deepStrictEqual(
+      s({ servings: 2, qtyTiers: tiers, tags: ['dastarxon', 'qurbon'] }, pre).sort(),
+      ['cheap', 'dastarxon', 'office', 'seasonal'].sort(), 'bir taom bir nechta bo\'limda',
+    );
+    const d = idx.buildIndexDoc({ rid: RID, iid: 'osh', item: { price: 40000, tags: ['ramadan', 'kids', 'newyear'] }, restaurant: restaurant(), stats: null });
+    assert.deepStrictEqual(d.sections.sort(), ['kids', 'seasonal']);
+    assert.deepStrictEqual(d.seasons, ['ramadan', 'newyear'], 'indeksda mavsumlar (klient hozir ochiq mavsum bo\'yicha filtrlaydi)');
+    assert.deepStrictEqual(idx.buildIndexDoc({ rid: RID, iid: 'osh', item: { price: 40000, servings: 2 }, restaurant: restaurant(), stats: null }).seasons, []);
+    assert.strictEqual(idx.MAX_TAGS_PER_DISH, 4);
+  });
   await check('P3 indeksga kirmaydi: tasdiqlanmagan restoran, mavjud emas, noto\'g\'ri narx, noto\'g\'ri joy, bo\'limsiz', () => {
     const item = { price: 40000, servings: 4 };
     const b = (i, r, s) => idx.buildIndexDoc({ rid: RID, iid: 'osh', item: i, restaurant: r, stats: s || null });
@@ -239,6 +264,29 @@ async function main() {
     for (const id of ['osh', 'a', 'b']) assert.strictEqual((await ix(id)).exists, true, id);
   });
 
+  await check('T6b oldindan buyurtma belgisi o\'zgardi (restoran trigger\'i) → Ofis/Dastarxon bo\'limlari paydo bo\'ladi / yo\'qoladi; chegirma o\'chsa Ofis ketadi', async () => {
+    await itemRef('osh').set({ name: 'Osh', price: 40000, available: true, servings: 4 });
+    await itemRef('a').set({ name: 'A', price: 10000, available: true, qtyTiers: [{ minQty: 10, price: 9000 }] });
+    await itemRef('b').set({ name: 'B', price: 20000, available: true, tags: ['dastarxon', 'ramadan'] });
+    const off = restaurant({ acceptsPreorder: false });
+    const on = restaurant({ acceptsPreorder: true });
+    await rRef().set(off);
+    await run('onRestaurantIndexSourceWritten', { before: snap(null), after: snap(off) }, { params: { rid: RID } });
+    assert.strictEqual((await ix('a')).exists, false, 'chegirma bor, lekin oldindan buyurtma yo\'q — bo\'limsiz');
+    assert.deepStrictEqual((await ix('b')).data().sections, ['seasonal']);
+    await rRef().set(on);
+    await run('onRestaurantIndexSourceWritten', { before: snap(off), after: snap(on) }, { params: { rid: RID } });
+    assert.deepStrictEqual((await ix('a')).data().sections, ['office']);
+    assert.deepStrictEqual((await ix('b')).data().sections.sort(), ['dastarxon', 'seasonal']);
+    assert.deepStrictEqual((await ix('b')).data().seasons, ['ramadan']);
+    await itemRef('a').update({ qtyTiers: admin.firestore.FieldValue.delete() });
+    await run('onRestaurantMenuItemWritten', { before: snap({}), after: snap({}) }, ctx('a'));
+    assert.strictEqual((await ix('a')).exists, false, 'chegirma olib tashlandi — Ofis ketdi');
+    await rRef().set(off);
+    await run('onRestaurantIndexSourceWritten', { before: snap(on), after: snap(off) }, { params: { rid: RID } });
+    assert.deepStrictEqual((await ix('b')).data().sections, ['seasonal'], 'belgi o\'chdi — Dastarxon ketdi');
+    await rRef().set(restaurant());
+  });
   await check('T7 restoran o\'chirildi → barcha indeks hujjatlari o\'chadi', async () => {
     const cur = (await rRef().get()).data();
     await rRef().delete();

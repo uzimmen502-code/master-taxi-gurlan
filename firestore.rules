@@ -1921,6 +1921,8 @@ service cloud.firestore {
           && docId != 'restaurant_delivery'
           && docId != 'restaurant_sections'
           && docId != 'restaurant_bookings'
+          && docId != 'restaurant_seasons'
+          && docId != 'restaurant_ramadan'
           && docId != 'all_orders_stuck'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
@@ -1959,6 +1961,17 @@ service cloud.firestore {
     // Кафе-ресторан стол бронь созламаси (`settings/restaurant_bookings`) тарихи (`v{n}`) —
     // ўзгармас, фақат CF (`adminSetRestaurantBookings`, версия + audit, 9/41-банд).
     match /restaurant_bookings_history/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Мавсумий бўлимлар (`settings/restaurant_seasons`) ва Рамазон жадвали (`settings/restaurant_ramadan`) тарихи (`v{n}`) —
+    // ўзгармас, фақат CF (`adminSetRestaurantSeasons`, `adminSetRestaurantRamadan`, `ensureRestaurantSeasons`; версия + audit).
+    match /restaurant_seasons_history/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /restaurant_ramadan_history/{versionId} {
       allow read: if isAdmin();
       allow write: if false;
     }
@@ -3217,7 +3230,10 @@ service cloud.firestore {
           && dishCuisineOk(d)
           && (!('tags' in d)
               || (d.tags is list && d.tags.size() <= 4
-                  && d.tags.hasOnly(['kids', 'breakfast', 'night', 'light'])));
+                  && d.tags.hasOnly([
+                    'kids', 'breakfast', 'night', 'light', 'dastarxon',
+                    'ramadan', 'navruz', 'qurbon', 'newyear', 'wedding'
+                  ])));
     }
 
     function restaurantMenuCategoryOk() {

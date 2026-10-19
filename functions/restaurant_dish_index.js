@@ -19,7 +19,12 @@
  *   kids / breakfast / night — mos teg                                                  [D-REST-17]
  *   fast      — restoranning `cuisineTags` ida `fastfood` bor  (PROPOSED: «Fast-fud» belgisi
  *               taom darajasida yo'q; ega tasdiqlamaguncha shu qoida)
- * Office / Dastarxon / Mavsumiy bu bosqichda YO'Q (ular oldindan buyurtma va sana manbasiga bog'liq: S4, S5).
+ *   office    — restoran oldindan buyurtma oladi (`acceptsPreorder`) VA taomda miqdorga chegirma (`qtyTiers`) bor
+ *               [D-REST-21: Ofis = oldindan buyurtma + miqdorga chegirma; guruh buyurtma/hisob-faktura alohida emas]  (PROPOSED)
+ *   dastarxon — `dastarxon` tegi VA restoran oldindan buyurtma oladi [D-REST-21: Dastarxon oldindan buyurtmaga tayanadi]  (PROPOSED)
+ *   seasonal  — mavsum tegi (ramadan, navruz, qurbon, newyear, wedding); QAYSI mavsum hozir ochiq ekani sanaga bog'liq
+ *               (`settings/restaurant_seasons`, 10 kun oldin ochiladi) va KLIENTDA hal qilinadi — indeks sana o'tgani uchun
+ *               qayta yozilmaydi (22-qoida: vaqt o'tishi trigger emas); indeksda `seasons` massivi turadi    [D-REST-22]
  *
  * Indeksga TAOM kiradi, agar: restoran `approved`, koordinatasi to'g'ri, taom `available !== false`,
  * narx butun 1..50 000 000 va kamida bitta bo'limga kiradi. Aks holda hujjat O'CHIRILADI.
@@ -34,6 +39,7 @@
 'use strict';
 
 const geoHash = require('./geo_hash');
+const qtyTiers = require('./restaurant_qty_tiers');
 
 const INDEX = 'restaurant_dish_index';
 const RESTAURANTS = 'restaurants';
@@ -42,7 +48,7 @@ const STATS = 'menu_item_stats';
 const MODULE_ID = 'restaurants';
 
 /** Indeks tuzilishi/qoidasi versiyasi — qoida o'zgarsa oshiriladi va qayta hisoblash (backfill) kerak. */
-const INDEX_RULES_VERSION = 1;
+const INDEX_RULES_VERSION = 2;
 const MAX_PRICE = 50000000;
 /** Bitta restoran uchun qayta hisoblanadigan taomlarning eng ko'pi (himoya). */
 const MAX_DISHES_PER_RESTAURANT = 500;
@@ -53,9 +59,16 @@ const GEO_PRECISION = 4;
 const SECTION = Object.freeze({
   cheap: 'cheap', fast: 'fast', national: 'national', world: 'world',
   light: 'light', kids: 'kids', breakfast: 'breakfast', night: 'night',
+  office: 'office', dastarxon: 'dastarxon', seasonal: 'seasonal',
 });
 const SECTION_KEYS = Object.freeze(Object.values(SECTION));
 const FAST_FOOD_TAG = 'fastfood';
+/** Mavsum teglari = mavsum kalitlari (`settings/restaurant_seasons`); tartib klient/`rules` bilan bir xil. */
+const SEASON_KEYS = Object.freeze(['ramadan', 'navruz', 'qurbon', 'newyear', 'wedding']);
+const DASTARXON_TAG = 'dastarxon';
+/** Taomga qo'yiladigan teglar (firestore.rules `dishFactsOk` va klient `DishTag.all` bilan bir xil). */
+const DISH_TAGS = Object.freeze(['kids', 'breakfast', 'night', 'light', DASTARXON_TAG, ...SEASON_KEYS]);
+const MAX_TAGS_PER_DISH = 4;
 
 function str(v, max) {
   return String(v == null ? '' : v).trim().slice(0, max);
@@ -90,7 +103,7 @@ function factsOf(item) {
   const cuisineId = item.cuisineId;
   const cuisineOk = (group === 'national' || group === 'world') && typeof cuisineId === 'string' && cuisineId.length > 0;
   const tags = Array.isArray(item.tags)
-    ? [...new Set(item.tags.filter((t) => ['kids', 'breakfast', 'night', 'light'].includes(t)))].slice(0, 4)
+    ? [...new Set(item.tags.filter((t) => DISH_TAGS.includes(t)))].slice(0, MAX_TAGS_PER_DISH)
     : [];
   return {
     servings, weightG,
@@ -114,6 +127,10 @@ function sectionsOf(item, restaurant) {
   if (f.tags.includes('kids')) out.push(SECTION.kids);
   if (f.tags.includes('breakfast')) out.push(SECTION.breakfast);
   if (f.tags.includes('night')) out.push(SECTION.night);
+  const preorder = !!restaurant && restaurant.acceptsPreorder === true;
+  if (preorder && qtyTiers.sanitizeTiers(price, item && item.qtyTiers).length > 0) out.push(SECTION.office);
+  if (preorder && f.tags.includes(DASTARXON_TAG)) out.push(SECTION.dastarxon);
+  if (f.tags.some((t) => SEASON_KEYS.includes(t))) out.push(SECTION.seasonal);
   return out;
 }
 
@@ -148,6 +165,7 @@ function buildIndexDoc({ rid, iid, item, restaurant, stats }) {
     restaurantId: rid, itemId: iid,
     name: str(item.name, 80), photoUrl: str(item.photoUrl, 500),
     price, sections, tags: f.tags,
+    seasons: f.tags.filter((t) => SEASON_KEYS.includes(t)),
     restaurantName: str(restaurant.name, 80),
     restaurantLat: lat, restaurantLng: lng,
     geo4: geohash.slice(0, GEO_PRECISION),
@@ -185,6 +203,7 @@ function restaurantFingerprint(r) {
   return fingerprint({
     status: r.status, name: r.name, lat: r.lat, lng: r.lng, geohash: r.geohash,
     cuisineTags: r.cuisineTags, prepTimeMin: r.prepTimeMin, openingHours: r.openingHours,
+    acceptsPreorder: r.acceptsPreorder === true,
     pausedUntil: r.pausedUntil || null,
   });
 }
@@ -307,6 +326,10 @@ module.exports = {
   restaurantFingerprint,
   SECTION,
   SECTION_KEYS,
+  SEASON_KEYS,
+  DISH_TAGS,
+  MAX_TAGS_PER_DISH,
+  DASTARXON_TAG,
   INDEX,
   INDEX_RULES_VERSION,
   GEO_PRECISION,

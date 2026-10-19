@@ -94,6 +94,9 @@ const { attachRestaurantDishIndex } = require('./restaurant_dish_index');
 attachRestaurantDishIndex(exports, { functions, db });
 const { attachRestaurantSectionsConfig } = require('./restaurant_sections_config');
 attachRestaurantSectionsConfig(exports, { functions, db, admin, canonicalUid, requireCallerRoles });
+// Мавсумий бўлимлар ва Рамазон жадвали (D-REST-22/39): settings/restaurant_seasons, settings/restaurant_ramadan — версияли, фақат CF.
+const { attachRestaurantSeasons } = require('./restaurant_seasons');
+attachRestaurantSeasons(exports, { functions, db, admin, requireCallerRoles });
 // Стол бронь (S5, D-REST-23/38): AVA хизмат ҳақи ресторан ҳамёнидан бронни қабул қилишда ечилади; сўров/қабул/рад/бекор,
 // админ қайтариши ва `settings/restaurant_bookings` (версияланган, ҳужжат йўқ = OFF).
 const restaurantOrdersLib = require('./restaurant_orders');

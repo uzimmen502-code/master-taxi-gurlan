@@ -16,8 +16,10 @@ import '../../home/widgets/ava_chip.dart';
 import '../../home/widgets/ava_section.dart';
 import '../../profile/screens/wallet_screen.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/courier_tracking.dart';
 import '../domain/preorder.dart';
 import '../domain/restaurant_models.dart';
+import '../widgets/courier_info_card.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'merchant_order_actions.dart';
 import 'merchant_order_sounds.dart';
@@ -331,6 +333,11 @@ class _MerchantOrderCard extends StatelessWidget {
                   : context.tr('restaurants_m_deadline_passed'),
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: secs > 60 ? c.brandText : c.danger),
             ),
+          ],
+          // Курьер тайинланган — исми ва харитада жонли кузатиш (S6).
+          if (CourierTracking.canTrack(o)) ...[
+            const SizedBox(height: 8),
+            CourierInfoCard(order: o, repository: repository, compact: true),
           ],
           const SizedBox(height: 8),
           for (final it in o.items)

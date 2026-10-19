@@ -92,6 +92,9 @@ class OrderModel {
   /// Олдиндан буюртманинг бажарилиш вақти (S4b); оддий буюртмада `null`.
   final DateTime? scheduledFor;
 
+  /// Буюртмани олган курьернинг исми (S6): мижоз ва ресторан эгаси кимни кутишини билади. Йўқ бўлиши мумкин.
+  final String courierName;
+
   bool get isPreorder => scheduledFor != null;
 
   /// Ресторан буюртмаси етказилган вақт (`deliveredAt`, эскиларда `statusUpdatedAt`) — баҳолаш
@@ -151,6 +154,7 @@ class OrderModel {
     this.dishRatings = const {},
     this.deliveredAt,
     this.scheduledFor,
+    this.courierName = '',
   });
 
   bool get isRestaurant => type == 'restaurant';
@@ -347,6 +351,7 @@ class OrderModel {
       dishRatings: parseDishRatings(d['dishRatings']),
       deliveredAt: _parseDate(d['deliveredAt']) ?? _parseDate(d['statusUpdatedAt']),
       scheduledFor: _parseDate(d['scheduledFor']),
+      courierName: (d['courierName'] ?? '') as String,
     );
   }
 }

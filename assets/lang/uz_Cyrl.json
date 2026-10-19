@@ -3730,5 +3730,7 @@
   "restaurants_venue_restaurant": "Ресторан",
   "restaurants_venue_chaikhana": "Чойхона",
   "restaurants_m_venue_type": "Муассаса тури",
-  "restaurants_m_err_venue_type": "Кафе, ресторан ёки чойхонадан бирини танланг"
+  "restaurants_m_err_venue_type": "Кафе, ресторан ёки чойхонадан бирини танланг",
+  "home_section_cheap_products": "Аҳоли бозори",
+  "home_section_tv_market": "AVAGram"
 }

@@ -121,7 +121,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     final hasPrice = _items.any((a) => a.price > 0);
     return AvaSection(
       moduleId: 'cheap_products_home',
-      title: context.tr('home_module_cheap_products'),
+      title: context.tr('home_section_cheap_products'),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,

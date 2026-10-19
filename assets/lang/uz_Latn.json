@@ -3730,5 +3730,7 @@
   "restaurants_venue_restaurant": "Restoran",
   "restaurants_venue_chaikhana": "Choyxona",
   "restaurants_m_venue_type": "Muassasa turi",
-  "restaurants_m_err_venue_type": "Kafe, restoran yoki choyxonadan birini tanlang"
+  "restaurants_m_err_venue_type": "Kafe, restoran yoki choyxonadan birini tanlang",
+  "home_section_cheap_products": "Aholi bozori",
+  "home_section_tv_market": "AVAGram"
 }

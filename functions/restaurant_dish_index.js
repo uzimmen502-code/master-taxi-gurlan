@@ -12,6 +12,8 @@
  * `settings/restaurant_sections` da (admin o'zgartiradi, kodga qotirilmagan).
  *
  * Bo'limga kirish (PROPOSED qoidalar — ega faqat bo'lim ro'yxatini tasdiqlagan, 47-qoida):
+ *   all       — HAR BIR indeksga kiradigan taom (faktlar shart emas): «Barchasi» ekranidagi yaqin atrofdagi taomlar lentasi;
+ *               bo'lim bosqichi (`all`) shu lentaning feature flag'i (D-REST-40)
  *   cheap     — porsiya soni bor (bir kishilik narx hisoblanadi)                       [D-REST-20: porsiya majburiy]
  *   national  — kuxna guruhi `national` (kuxna ham bor)                                [D-REST-16]
  *   world     — kuxna guruhi `world`                                                    [D-REST-16]
@@ -48,7 +50,7 @@ const STATS = 'menu_item_stats';
 const MODULE_ID = 'restaurants';
 
 /** Indeks tuzilishi/qoidasi versiyasi — qoida o'zgarsa oshiriladi va qayta hisoblash (backfill) kerak. */
-const INDEX_RULES_VERSION = 2;
+const INDEX_RULES_VERSION = 3;
 const MAX_PRICE = 50000000;
 /** Bitta restoran uchun qayta hisoblanadigan taomlarning eng ko'pi (himoya). */
 const MAX_DISHES_PER_RESTAURANT = 500;
@@ -60,6 +62,7 @@ const SECTION = Object.freeze({
   cheap: 'cheap', fast: 'fast', national: 'national', world: 'world',
   light: 'light', kids: 'kids', breakfast: 'breakfast', night: 'night',
   office: 'office', dastarxon: 'dastarxon', seasonal: 'seasonal',
+  all: 'all',
 });
 const SECTION_KEYS = Object.freeze(Object.values(SECTION));
 const FAST_FOOD_TAG = 'fastfood';
@@ -116,7 +119,9 @@ function factsOf(item) {
 /** Taom qaysi bo'limlarga kiradi (bo'sh massiv — hech biriga). */
 function sectionsOf(item, restaurant) {
   const f = factsOf(item || {});
-  const out = [];
+  // `all` — HAR BIR sotuvdagi taom (ega, 2026-10-19: «odam och — yaqin atrofdagi OVQATNI ko'rsin»): «Barchasi» ekranining
+  // asosiy lentasi. Faktsiz taom ham kiradi; qolgan bo'limlar uni toraytiradi.
+  const out = [SECTION.all];
   const price = item && item.price;
   if (pricePerPerson(price, f.servings) != null) out.push(SECTION.cheap);
   const restTags = restaurant && Array.isArray(restaurant.cuisineTags) ? restaurant.cuisineTags : [];

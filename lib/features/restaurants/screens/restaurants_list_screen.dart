@@ -91,9 +91,16 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   List<ActiveSeason> _activeSeasons = const [];
   RamadanConfig _ramadan = RamadanConfig.none;
 
+  /// «Овқатлар» лентаси ёқилганми (D-REST-40): экран очилганда яқин атрофдаги ТАОМЛАР чиқади (ресторанлар рўйхати эмас).
+  bool get _dishesOn => _sections.isVisible(RestaurantSection.all, _uid);
+
+  /// Фойдаланувчи чипни ўзи босдими — шундан кейин лента ўзи алмаштирмайди.
+  bool _pickedByUser = false;
+
+  /// Чиплар: «Овқатлар» алоҳида (биринчи) чип, шунинг учун бу рўйхатга кирмайди.
   List<RestaurantSection> get _visible => [
         for (final s in _sections.visibleFor(_uid))
-          if (s != RestaurantSection.seasonal || _activeSeasons.isNotEmpty) s,
+          if (s != RestaurantSection.all && (s != RestaurantSection.seasonal || _activeSeasons.isNotEmpty)) s,
       ];
 
   @override
@@ -137,6 +144,8 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
       _ramadan = ramadan;
       // Танланган бўлим созламада ёпилган бўлса (кеш янгиланди) — умумий рўйхатга қайтамиз.
       if (_section != null && !cfg.isVisible(_section!, uid)) _setSection(null);
+      // «Овқатлар» ёқилган бўлса экран таомлар лентаси билан очилади (фойдаланувчи ўзи алмаштирмаган бўлса).
+      if (cfg.isVisible(RestaurantSection.all, uid) && !_pickedByUser && _section == null) _setSection(RestaurantSection.all);
     });
   }
 
@@ -352,7 +361,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                 ),
               ),
             ),
-            if (_visible.isNotEmpty)
+            if (_visible.isNotEmpty || _dishesOn)
               SizedBox(
                 height: 44,
                 child: ListView(
@@ -361,12 +370,30 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   children: [
+                    if (_dishesOn) ...[
+                      ChoiceChip(
+                        key: const ValueKey('section-feed'),
+                        avatar: Icon(sectionIcon(RestaurantSection.all), size: 16),
+                        label: Text(context.tr(RestaurantSection.all.l10nKey)),
+                        selected: _section == RestaurantSection.all,
+                        onSelected: (_) => setState(() {
+                          _pickedByUser = true;
+                          _setSection(RestaurantSection.all);
+                          _searchCtrl.clear();
+                          _query = '';
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     ChoiceChip(
                       key: const ValueKey('section-all'),
                       avatar: const Icon(Icons.storefront_outlined, size: 16),
                       label: Text(context.tr('restaurants_section_all')),
                       selected: _section == null,
-                      onSelected: (_) => setState(() => _setSection(null)),
+                      onSelected: (_) => setState(() {
+                        _pickedByUser = true;
+                        _setSection(null);
+                      }),
                     ),
                     for (final s in _visible) ...[
                       const SizedBox(width: 6),
@@ -376,6 +403,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                         label: Text(context.tr(s.l10nKey)),
                         selected: _section == s,
                         onSelected: (_) => setState(() {
+                          _pickedByUser = true;
                           _setSection(s);
                           // Бўлим таом бўйича; ресторан қидируви қолиб кетмасин.
                           _searchCtrl.clear();

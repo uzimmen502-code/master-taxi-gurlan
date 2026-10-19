@@ -68,6 +68,7 @@ const ix = async (id) => (await ixRef(id).get());
 const snap = (data) => ({ exists: data != null, data: () => data });
 const run = async (name, ...args) => fns[name].run(...args);
 const ctx = (iid) => ({ params: { rid: RID, iid } });
+const noAll = (a) => a.filter((x) => x !== 'all');
 const attach = () => idx.attachRestaurantDishIndex({}, { functions: require('firebase-functions'), db });
 
 async function main() {
@@ -87,7 +88,7 @@ async function main() {
 
   await check('P2 bo\'limga kirish: har bo\'lim alohida (musbat + manfiy)', () => {
     const base = { price: 40000 };
-    const s = (item, r) => idx.sectionsOf({ ...base, ...item }, r || restaurant());
+    const s = (item, r) => noAll(idx.sectionsOf({ ...base, ...item }, r || restaurant()));
     assert.deepStrictEqual(s({}), [], 'faktsiz taom — hech qaysi bo\'limda emas');
     assert.deepStrictEqual(s({ servings: 4 }), ['cheap']);
     assert.deepStrictEqual(s({ cuisineGroup: 'national', cuisineId: 'national_ozbek' }), ['national']);
@@ -114,7 +115,7 @@ async function main() {
   await check('P2b Ofis / Dastarxon / Mavsumiy (D-REST-21/22): oldindan buyurtma + chegirma; teg + oldindan buyurtma; mavsum tegi (musbat + manfiy)', () => {
     const pre = restaurant({ acceptsPreorder: true });
     const tiers = [{ minQty: 10, price: 35000 }];
-    const s = (item, r) => idx.sectionsOf({ price: 40000, ...item }, r);
+    const s = (item, r) => noAll(idx.sectionsOf({ price: 40000, ...item }, r));
     assert.deepStrictEqual(s({ qtyTiers: tiers }, pre), ['office']);
     assert.deepStrictEqual(s({ qtyTiers: tiers }, restaurant()), [], 'oldindan buyurtma yo\'q — Ofis emas');
     assert.deepStrictEqual(s({ qtyTiers: tiers }, restaurant({ acceptsPreorder: false })), []);
@@ -131,10 +132,23 @@ async function main() {
       ['cheap', 'dastarxon', 'office', 'seasonal'].sort(), 'bir taom bir nechta bo\'limda',
     );
     const d = idx.buildIndexDoc({ rid: RID, iid: 'osh', item: { price: 40000, tags: ['ramadan', 'kids', 'newyear'] }, restaurant: restaurant(), stats: null });
-    assert.deepStrictEqual(d.sections.sort(), ['kids', 'seasonal']);
+    assert.deepStrictEqual(noAll(d.sections).sort(), ['kids', 'seasonal']);
     assert.deepStrictEqual(d.seasons, ['ramadan', 'newyear'], 'indeksda mavsumlar (klient hozir ochiq mavsum bo\'yicha filtrlaydi)');
     assert.deepStrictEqual(idx.buildIndexDoc({ rid: RID, iid: 'osh', item: { price: 40000, servings: 2 }, restaurant: restaurant(), stats: null }).seasons, []);
     assert.strictEqual(idx.MAX_TAGS_PER_DISH, 4);
+  });
+  await check('P2c `all` (D-REST-40): har bir yaroqli taom «Barchasi» lentasiga kiradi (faktsiz ham); yaroqsiz (nomaqbul narx/restoran/to\'xtatilgan) kirmaydi; bo\'limlar `all` ustiga qo\'shiladi', () => {
+    const r = restaurant();
+    assert.deepStrictEqual(idx.sectionsOf({ price: 40000 }, r), ['all']);
+    assert.deepStrictEqual(idx.sectionsOf({ price: 40000, servings: 2 }, r), ['all', 'cheap']);
+    assert.strictEqual(idx.SECTION.all, 'all');
+    assert.ok(idx.SECTION_KEYS.includes('all'));
+    const doc = (item, rest) => idx.buildIndexDoc({ rid: RID, iid: 'x', item, restaurant: rest, stats: null });
+    assert.ok(doc({ price: 40000 }, r));
+    assert.strictEqual(doc({ price: 40000, available: false }, r), null);
+    assert.strictEqual(doc({ price: 0 }, r), null);
+    assert.strictEqual(doc({ price: 40000 }, restaurant({ status: 'applied' })), null);
+    assert.strictEqual(idx.INDEX_RULES_VERSION, 3);
   });
   await check('P3 indeksga kirmaydi: tasdiqlanmagan restoran, mavjud emas, noto\'g\'ri narx, noto\'g\'ri joy, bo\'limsiz', () => {
     const item = { price: 40000, servings: 4 };
@@ -151,7 +165,7 @@ async function main() {
     for (const loc of [{ lat: 0, lng: 0 }, { lat: 91, lng: 10 }, { lat: 10, lng: 181 }, { lat: 'x', lng: 1 }, { lat: undefined, lng: undefined }]) {
       assert.strictEqual(b(item, restaurant(loc)), null, JSON.stringify(loc));
     }
-    assert.strictEqual(b({ price: 40000 }, restaurant()), null, 'hech bir bo\'limga kirmaydi');
+    assert.deepStrictEqual(b({ price: 40000 }, restaurant()).sections, ['all'], 'faktsiz taom faqat `all` lentasida (D-REST-40)');
   });
 
   await check('P4 indeks hujjati: maydonlar, geo4 (4 belgi), geohash yo\'q bo\'lsa koordinatadan; baho yig\'indisi; stopUntil/listedAt/ish vaqti nusxasi', () => {
@@ -196,10 +210,10 @@ async function main() {
     await itemRef('osh').set({ name: 'Osh', price: 40000, available: true, servings: 4, categoryId: 'c1', createdAt: Timestamp.now() });
     await run('onRestaurantMenuItemWritten', { before: snap(null), after: snap({}) }, ctx('osh'));
     const d = (await ix('osh')).data();
-    assert.deepStrictEqual([d.sections, d.pricePerPerson, d.restaurantId, d.itemId, d.geo4], [['cheap'], 10000, RID, 'osh', GEO4]);
+    assert.deepStrictEqual([d.sections, d.pricePerPerson, d.restaurantId, d.itemId, d.geo4], [['all', 'cheap'], 10000, RID, 'osh', GEO4]);
     await itemRef('plain').set({ name: 'Oddiy', price: 10000, available: true });
     await run('onRestaurantMenuItemWritten', { before: snap(null), after: snap({}) }, ctx('plain'));
-    assert.strictEqual((await ix('plain')).exists, false);
+    assert.deepStrictEqual((await ix('plain')).data().sections, ['all'], 'faktsiz taom ham `all` lentasiga kiradi');
   });
 
   await check('T2 o\'zgarmagan taom — QAYTA YOZILMAYDI (updateTime o\'zgarmaydi); narx o\'zgarsa — yoziladi', async () => {
@@ -214,10 +228,10 @@ async function main() {
   await check('T3 teg/kuxna qo\'shildi → bo\'limlar kengayadi; olib tashlandi → qisqaradi (ega «ma\'lumot to\'liqligi»)', async () => {
     await itemRef('osh').update({ tags: ['kids', 'night'], cuisineGroup: 'national', cuisineId: 'national_ozbek' });
     await helpers.reindexDish(RID, 'osh');
-    assert.deepStrictEqual((await ix('osh')).data().sections.sort(), ['cheap', 'kids', 'national', 'night']);
+    assert.deepStrictEqual(noAll((await ix('osh')).data().sections).sort(), ['cheap', 'kids', 'national', 'night']);
     await itemRef('osh').update({ tags: ['kids'] });
     await helpers.reindexDish(RID, 'osh');
-    assert.deepStrictEqual((await ix('osh')).data().sections.sort(), ['cheap', 'kids', 'national']);
+    assert.deepStrictEqual(noAll((await ix('osh')).data().sections).sort(), ['cheap', 'kids', 'national']);
   });
 
   await check('T4 taom to\'xtatildi (available=false) yoki o\'chirildi → indeks hujjati o\'chadi; qaytarilsa — yana paydo', async () => {
@@ -272,19 +286,19 @@ async function main() {
     const on = restaurant({ acceptsPreorder: true });
     await rRef().set(off);
     await run('onRestaurantIndexSourceWritten', { before: snap(null), after: snap(off) }, { params: { rid: RID } });
-    assert.strictEqual((await ix('a')).exists, false, 'chegirma bor, lekin oldindan buyurtma yo\'q — bo\'limsiz');
-    assert.deepStrictEqual((await ix('b')).data().sections, ['seasonal']);
+    assert.deepStrictEqual((await ix('a')).data().sections, ['all'], 'chegirma bor, lekin oldindan buyurtma yo\'q — Ofis emas');
+    assert.deepStrictEqual(noAll((await ix('b')).data().sections), ['seasonal']);
     await rRef().set(on);
     await run('onRestaurantIndexSourceWritten', { before: snap(off), after: snap(on) }, { params: { rid: RID } });
-    assert.deepStrictEqual((await ix('a')).data().sections, ['office']);
-    assert.deepStrictEqual((await ix('b')).data().sections.sort(), ['dastarxon', 'seasonal']);
+    assert.deepStrictEqual(noAll((await ix('a')).data().sections), ['office']);
+    assert.deepStrictEqual(noAll((await ix('b')).data().sections).sort(), ['dastarxon', 'seasonal']);
     assert.deepStrictEqual((await ix('b')).data().seasons, ['ramadan']);
     await itemRef('a').update({ qtyTiers: admin.firestore.FieldValue.delete() });
     await run('onRestaurantMenuItemWritten', { before: snap({}), after: snap({}) }, ctx('a'));
-    assert.strictEqual((await ix('a')).exists, false, 'chegirma olib tashlandi — Ofis ketdi');
+    assert.deepStrictEqual((await ix('a')).data().sections, ['all'], 'chegirma olib tashlandi — Ofis ketdi, taom lentada qoldi');
     await rRef().set(off);
     await run('onRestaurantIndexSourceWritten', { before: snap(on), after: snap(off) }, { params: { rid: RID } });
-    assert.deepStrictEqual((await ix('b')).data().sections, ['seasonal'], 'belgi o\'chdi — Dastarxon ketdi');
+    assert.deepStrictEqual(noAll((await ix('b')).data().sections), ['seasonal'], 'belgi o\'chdi — Dastarxon ketdi');
     await rRef().set(restaurant());
   });
   await check('T7 restoran o\'chirildi → barcha indeks hujjatlari o\'chadi', async () => {
@@ -321,7 +335,7 @@ async function main() {
     assert.strictEqual((await ix('q')).data().price, 20000);
   });
 
-  await check('B1 backfill: dry-run hech narsa yozmaydi; --apply indekslaydi, yetimni va bo\'limsizni o\'chiradi; takror — hammasi o\'zgarmagan', async () => {
+  await check('B1 backfill: dry-run hech narsa yozmaydi; --apply indekslaydi, yetimni o\'chiradi (faktsiz taom `all` bilan qoladi); takror — hammasi o\'zgarmagan', async () => {
     const backfill = require('../tools/backfill_restaurant_dish_index');
     await clearEmulator();
     await rRef().set(restaurant());
@@ -335,16 +349,16 @@ async function main() {
     await rRef().collection('menu_item_stats').doc('a').set({ ratingSum: 9, ratingCount: 2 });
 
     const dry = await backfill.run(db, { apply: false });
-    assert.deepStrictEqual([dry.written, dry.deleted], [2, 2], JSON.stringify(dry));
+    assert.deepStrictEqual([dry.written, dry.deleted], [3, 1], JSON.stringify(dry));
     assert.strictEqual((await ix('a')).exists, false, 'dry-run yozmadi');
     assert.strictEqual((await ix('ghost')).exists, true, 'dry-run o\'chirmadi');
 
     const applied = await backfill.run(db, { apply: true });
-    assert.deepStrictEqual([applied.written, applied.deleted], [2, 2], JSON.stringify(applied));
-    assert.deepStrictEqual((await ix('a')).data().sections, ['cheap']);
+    assert.deepStrictEqual([applied.written, applied.deleted], [3, 1], JSON.stringify(applied));
+    assert.deepStrictEqual((await ix('a')).data().sections, ['all', 'cheap']);
     assert.deepStrictEqual([(await ix('a')).data().ratingSum, (await ix('a')).data().ratingCount], [9, 2]);
-    assert.deepStrictEqual((await ix('b')).data().sections, ['kids']);
-    assert.strictEqual((await ix('c')).exists, false);
+    assert.deepStrictEqual((await ix('b')).data().sections, ['all', 'kids']);
+    assert.deepStrictEqual((await ix('c')).data().sections, ['all'], 'faktsiz taom — faqat `all`');
     assert.strictEqual((await ix('ghost')).exists, false);
     assert.strictEqual((await db.collection('restaurant_dish_index').doc('rest2_z').get()).exists, false, 'tasdiqlanmagan restoran indeksga kirmaydi');
 

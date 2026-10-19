@@ -18,6 +18,7 @@ import 'restaurant_row.dart' show formatDistanceLabel;
 
 /// Бўлим белгиси (иконка — эмодзи эмас: қурилмага қараб ҳар хил чизилмасин).
 IconData sectionIcon(RestaurantSection s) => switch (s) {
+      RestaurantSection.all => Icons.restaurant_menu_rounded,
       RestaurantSection.cheap => Icons.savings_outlined,
       RestaurantSection.national => Icons.rice_bowl_outlined,
       RestaurantSection.world => Icons.public_rounded,

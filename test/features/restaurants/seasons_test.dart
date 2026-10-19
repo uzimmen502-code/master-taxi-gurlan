@@ -187,11 +187,11 @@ void main() {
       expect(rules.contains('d.tags.size() <= ${DishTag.maxPerDish}'), isTrue);
     });
 
-    test('bo\'lim kalitlari: enum = serverdagi SECTION (11 ta)', () {
+    test('bo\'lim kalitlari: enum = serverdagi SECTION (12 ta, all lentasi bilan)', () {
       final block = RegExp(r'const SECTION = Object\.freeze\(\{([^}]*)\}', dotAll: true).firstMatch(server)![1]!;
       final keys = RegExp(r"(\w+): '(\w+)'").allMatches(block).map((m) => m[2]!).toSet();
       expect(RestaurantSection.values.map((s) => s.key).toSet(), keys);
-      expect(keys.length, 11);
+      expect(keys.length, 12);
     });
 
     test('Ofis/Dastarxon — oldindan buyurtmaga tayanadi, Mavsumiy — mavsum filtri', () {

@@ -3696,5 +3696,6 @@
   "restaurants_season_wedding": "To'y mavsumi",
   "restaurants_ramadan_today": "Bugun: saharlik {sahar} · iftor {iftar}",
   "restaurants_dish_preorder": "Oldindan buyurtma",
-  "restaurants_dish_serves": "{n} kishi uchun"
+  "restaurants_dish_serves": "{n} kishi uchun",
+  "restaurants_section_dishes": "Ovqatlar"
 }

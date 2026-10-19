@@ -3696,5 +3696,6 @@
   "restaurants_season_wedding": "Свадебный сезон",
   "restaurants_ramadan_today": "Сегодня: сухур {sahar} · ифтар {iftar}",
   "restaurants_dish_preorder": "Предзаказ",
-  "restaurants_dish_serves": "На {n} чел."
+  "restaurants_dish_serves": "На {n} чел.",
+  "restaurants_section_dishes": "Еда"
 }

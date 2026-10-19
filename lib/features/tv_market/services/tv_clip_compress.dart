@@ -79,16 +79,19 @@ class TvClipCompress {
   /// ярмидан кўпи бекорга кетарди.)
   ///
   /// [durationMs] — `MediaInfo.duration`; баъзи қурилмалар сония беради.
-  static int? trimToSeconds(double? durationMs) {
+  ///
+  /// [maxSeconds] — клип турининг чегараси (`tvClipMaxSecondsFor`): таом видеоси 60, қолгани 600.
+  static int? trimToSeconds(double? durationMs, {int maxSeconds = tvClipMaxUploadSeconds}) {
     if (durationMs == null || durationMs <= 0) return null;
     final seconds = durationMs >= 1000 ? durationMs / 1000.0 : durationMs;
-    if (seconds <= tvClipMaxUploadSeconds) return null;
-    return tvClipMaxUploadSeconds;
+    if (seconds <= maxSeconds) return null;
+    return maxSeconds;
   }
 
   static Future<TvClipCompressResult> forUpload(
     String path, {
     void Function(double progress)? onProgress,
+    int maxSeconds = tvClipMaxUploadSeconds,
   }) async {
     if (kIsWeb || path.isEmpty) {
       return TvClipCompressResult(path: path, skipped: true);
@@ -101,7 +104,7 @@ class TvClipCompress {
         final f = File(path);
         if (f.existsSync()) bytesIn = f.lengthSync();
       }
-      final trimTo = trimToSeconds(info.duration);
+      final trimTo = trimToSeconds(info.duration, maxSeconds: maxSeconds);
       final height = info.height;
       final width = info.width;
       // Кесиш керак бўлса сиқишни ўтказиб юбориб бўлмайди — кесиш

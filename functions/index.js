@@ -83,6 +83,9 @@ attachRestaurantOrders(exports, {
 // дубликатсиз қўшади; админ яширади.
 const { attachRestaurantCuisines } = require('./restaurant_cuisines');
 attachRestaurantCuisines(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles });
+// Таом ўчирилса унинг АВАГрам видеоси ҳам ўчади (D-REST-30); медиани `onTvClipDeleted` тозалайди.
+const { attachRestaurantDishVideoCleanup } = require('./restaurant_dish_video');
+attachRestaurantDishVideoCleanup(exports, { functions, db });
 // «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');
@@ -13385,7 +13388,8 @@ async function renderShareCopyIfPossible(
 }
 
 async function fastTrack360pIfPossible(
-    clipId, clipRef, tmpIn, output, ffmpegPath, secsSince, runId) {
+    clipId, clipRef, tmpIn, output, ffmpegPath, secsSince, runId,
+    maxSeconds = TV_CLIP_MAX_SECONDS) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -13396,7 +13400,7 @@ async function fastTrack360pIfPossible(
     const spec = TV_CLIP_FAST_360P_SPEC;
     const res = spawnSync(ffmpegPath, [
       '-y',
-      '-t', String(TV_CLIP_MAX_SECONDS),
+      '-t', String(maxSeconds),
       '-i', tmpIn,
       '-vf', tvClipScaleExpr(spec.shortEdge),
       '-c:v', 'libx264',
@@ -13457,6 +13461,10 @@ async function fastTrack360pIfPossible(
 // (lib/features/tv_market/models/tv_clip.dart) — иккиси мос туриши
 // шарт, буни тест текширади.
 const TV_CLIP_MAX_SECONDS = 600;
+
+// Таом видеоси (`restaurant_item`) учун қисқароқ чегара — 60с (эга, 2026-10-19). Чегара клипнинг
+// ўз `linkKind`идан олинади (`tv_clip_limits.js`); клиент жуфти: `tvClipItemMaxUploadSeconds`.
+const {tvClipMaxSecondsFor} = require('./tv_clip_limits');
 
 // HLS сегментининг узунлиги. Лентада энг муҳими биринчи кадр тезлиги,
 // шунинг учун қисқа сегмент афзал — плеер камроқ маълумот юклаб
@@ -13934,8 +13942,10 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     // В-4 2-босқич: асосий pass'дан олдин тезкор 360p-only preliminary
     // pass — хато бўлса ҳам асосий pipeline'га таъсир қилмайди (қаранг:
     // [fastTrack360pIfPossible] ҳужжати).
+    const clipMaxSeconds = tvClipMaxSecondsFor(cur, TV_CLIP_MAX_SECONDS);
     await fastTrack360pIfPossible(
-        clipId, clipRef, tmpIn, output, ffmpegPath, secsSince, runId);
+        clipId, clipRef, tmpIn, output, ffmpegPath, secsSince, runId,
+        clipMaxSeconds);
 
     // Барча вариантлар БИТТА ffmpeg pass'да: манба бир марта
     // декодланади (`split`), кейин ҳар бир тармоқ алоҳида масштабланиб
@@ -13964,7 +13974,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     const buildArgs = (srcPath) => {
       const args = [
         '-y',
-        '-t', String(TV_CLIP_MAX_SECONDS),
+        '-t', String(clipMaxSeconds),
         '-i', srcPath,
         '-filter_complex',
         `[0:v]split=${TV_CLIP_VARIANT_SPECS.length}${splitLabels}; ${scaleChain}`,

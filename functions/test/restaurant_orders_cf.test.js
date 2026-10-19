@@ -866,6 +866,40 @@ async function main() {
     assert.strictEqual((await cuisines().get()).size, before, 'takror hujjat yaratilmadi');
   });
 
+  // ── 6c. Taom o'chirilsa video ham o'chadi (D-REST-30) ────────────────
+  await check('DV1 taom o\'chirilsa FAQAT shu taomning klip(lar)i o\'chadi (xodim yuklagani ham); boshqa taom/restoran videosi/boshqa restoran saqlanadi; takror — xato yo\'q', async () => {
+    const clips = db.collection('tv_clips');
+    const mk = (id, extra) => clips.doc(id).set({ ownerPhone: STAFF, status: 'active', category: 'product', ...extra });
+    await mk('dv_a1', { linkKind: 'restaurant_item', linkId: rid, linkItemId: 'osh' });
+    await mk('dv_a2', { linkKind: 'restaurant_item', linkId: rid, linkItemId: 'osh', status: 'pending', ownerPhone: OWNER });
+    await mk('dv_b1', { linkKind: 'restaurant_item', linkId: rid, linkItemId: 'somsa' });
+    await mk('dv_rest', { linkKind: 'restaurant', linkId: rid });
+    await mk('dv_other', { linkKind: 'restaurant_item', linkId: 'r9', linkItemId: 'osh' });
+    await mk('dv_plain', {});
+    const gone = await db.collection('restaurants').doc(rid).collection('menu_items').doc('osh').get();
+    await db.collection('restaurants').doc(rid).collection('menu_items').doc('osh').delete();
+    await fns.onRestaurantMenuItemDeleted.run(gone, { params: { rid, iid: 'osh' } });
+    const left = async () => (await clips.get()).docs.map((d) => d.id).filter((id) => id.startsWith('dv_')).sort();
+    assert.deepStrictEqual(await left(), ['dv_b1', 'dv_other', 'dv_plain', 'dv_rest']);
+    await fns.onRestaurantMenuItemDeleted.run(gone, { params: { rid, iid: 'osh' } }); // idempotent
+    assert.deepStrictEqual(await left(), ['dv_b1', 'dv_other', 'dv_plain', 'dv_rest']);
+  });
+  await check('DV2 videosi yo\'q taom — xato yo\'q; 130 ta bog\'langan klip (takror yuklash) ham to\'liq o\'chadi', async () => {
+    const snap = await db.collection('restaurants').doc(rid).collection('menu_items').doc('somsa').get();
+    await fns.onRestaurantMenuItemDeleted.run(snap, { params: { rid, iid: 'yo_q_taom' } });
+    const batchSize = 130;
+    for (let i = 0; i < batchSize; i += 100) {
+      const b = db.batch();
+      for (let j = i; j < Math.min(i + 100, batchSize); j += 1) {
+        b.set(db.collection('tv_clips').doc(`dv_many_${j}`), { ownerPhone: OWNER, status: 'active', linkKind: 'restaurant_item', linkId: rid, linkItemId: 'many' });
+      }
+      await b.commit();
+    }
+    await fns.onRestaurantMenuItemDeleted.run(snap, { params: { rid, iid: 'many' } });
+    const rest = (await db.collection('tv_clips').where('linkItemId', '==', 'many').get()).size;
+    assert.strictEqual(rest, 0);
+  });
+
   // ── 7. Sverka ───────────────────────────────────────────────────────
   await check('S1 ledger: Σdr == Σcr; passenger_credit == bonusBalance (owner, mijozlar, kuryerlar)', async () => {
     await journalBalanced();

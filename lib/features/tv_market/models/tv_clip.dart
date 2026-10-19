@@ -11,6 +11,15 @@ import '../services/tv_social.dart';
 /// билмаслиги учун. Икки қиймат мос туриши шарт.
 const tvClipMaxUploadSeconds = 600;
 
+/// ТАОМ видеосининг (`restaurant_item`) максимал давомийлиги — 60 сония (эга, 2026-10-19). Серверда
+/// жуфти: `TV_CLIP_ITEM_MAX_SECONDS` (functions/tv_clip_limits.js) — иккиси мос туриши шарт.
+const tvClipItemMaxUploadSeconds = 60;
+
+/// Шу боғлаш турига (`linkKind`) тегишли клипнинг максимал давомийлиги, сония. Таом видеоси — 60,
+/// қолгани — умумий [tvClipMaxUploadSeconds] (ресторан видеоси ҳам).
+int tvClipMaxSecondsFor(String linkKind) =>
+    linkKind == 'restaurant_item' ? tvClipItemMaxUploadSeconds : tvClipMaxUploadSeconds;
+
 /// Жойлаштирувчининг профил исми (тўлиқ). @nick / телефон / UI fallback — бўш.
 String tvOwnerDisplayName(String raw) {
   final s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');

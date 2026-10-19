@@ -182,6 +182,45 @@ void main() {
     }
   });
 
+  group('Таом видеоси — 60 сония (D-REST-30, эга 2026-10-19)', () {
+    test('tvClipMaxSecondsFor: таом — 60; ресторан видеоси ва бошқалар — умумий чегара', () {
+      expect(tvClipMaxSecondsFor('restaurant_item'), 60);
+      expect(tvClipItemMaxUploadSeconds, 60);
+      for (final k in ['restaurant', 'ad', 'service', 'market_ad', 'wholesale_product', '']) {
+        expect(tvClipMaxSecondsFor(k), tvClipMaxUploadSeconds, reason: k);
+      }
+      expect(tvClipItemMaxUploadSeconds, lessThan(tvClipMaxUploadSeconds));
+    });
+
+    test('trimToSeconds(maxSeconds: 60): 60 с ўзи кесилмайди, 61 с → 60 га; умумий чегара ўзгаришсиз', () {
+      expect(TvClipCompress.trimToSeconds(60 * 1000, maxSeconds: 60), isNull);
+      expect(TvClipCompress.trimToSeconds(61 * 1000, maxSeconds: 60), 60);
+      expect(TvClipCompress.trimToSeconds(45 * 1000, maxSeconds: 60), isNull);
+      expect(TvClipCompress.trimToSeconds(5 * 60 * 1000, maxSeconds: 60), 60, reason: '5 дақиқа таом видеоси 60 га кесилади');
+      // Параметрсиз чақирув (ресторан видеоси/бошқа клиплар) — эски 600 чегараси
+      expect(TvClipCompress.trimToSeconds(5 * 60 * 1000), isNull);
+      expect(TvClipCompress.trimToSeconds(601 * 1000), tvClipMaxUploadSeconds);
+    });
+
+    test('сервердаги таом чегараси (functions/tv_clip_limits.js) клиентнинг tvClipItemMaxUploadSeconds билан мос', () {
+      final js = File('functions/tv_clip_limits.js').readAsStringSync();
+      final m = RegExp(r'const TV_CLIP_ITEM_MAX_SECONDS = (\d+);').firstMatch(js);
+      expect(m, isNotNull, reason: 'functions/tv_clip_limits.js: TV_CLIP_ITEM_MAX_SECONDS йўқ');
+      expect(int.parse(m!.group(1)!), tvClipItemMaxUploadSeconds);
+      final kind = RegExp(r"const ITEM_LINK_KIND = '([a-z_]+)';").firstMatch(js);
+      expect(kind!.group(1), 'restaurant_item', reason: 'сервер ва клиент бир хил боғлаш турини кутади');
+    });
+
+    test('index.js transcode ШУ чегарани клипнинг linkKind\'идан олади (учала ffmpeg `-t` қиймати қотирилмаган)', () {
+      final js = File('functions/index.js').readAsStringSync();
+      expect(js, contains("require('./tv_clip_limits')"));
+      expect(js, contains('tvClipMaxSecondsFor(cur, TV_CLIP_MAX_SECONDS)'));
+      // `-t` ёнида умумий константа ҚОЛМАГАН: иккала ffmpeg чақируви ўзгарувчи чегарадан фойдаланади
+      final fixed = RegExp(r"'-t', String\(TV_CLIP_MAX_SECONDS\)").allMatches(js).length;
+      expect(fixed, 0, reason: "'-t' га бевосита TV_CLIP_MAX_SECONDS берилса таом чегараси ишламайди");
+    });
+  });
+
   test('клиент ва сервердаги давомийлик чегараси мос', () {
     // Мослик бузилса фойдаланувчи огоҳлантирилмай қолади: сервер
     // кесади, клиент эса бошқа рақамни кўрсатади.

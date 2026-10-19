@@ -268,10 +268,15 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     super.dispose();
   }
 
+  /// Шу жойлаш турининг максимал давомийлиги: таом видеоси 60 сония, қолгани — умумий чегара.
+  /// Авторитетли кесиш серверда (`tv_clip_limits.js`); бу ерда — фойдаланувчи олдиндан билиши ва
+  /// узун видеони бекорга юкламаслиги учун.
+  int get _maxSeconds => tvClipMaxSecondsFor(widget.linkKind);
+
   Future<void> _pickVideo(ImageSource source) async {
     final file = await _picker.pickVideo(
       source: source,
-      maxDuration: const Duration(seconds: tvClipMaxUploadSeconds),
+      maxDuration: Duration(seconds: _maxSeconds),
     );
     if (file == null) return;
 
@@ -295,13 +300,13 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     // ерга етиб келиши мумкин. Ҳақиқий кесиш серверда бўлади;
     // фойдаланувчи буни юклашдан ОЛДИН билиши керак, акс ҳолда узун
     // видеони мобил интернетда бекорга юклайди.
-    if (ctrl.value.duration.inSeconds > tvClipMaxUploadSeconds) {
+    if (ctrl.value.duration.inSeconds > _maxSeconds) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             context.tr('tv_publish_will_trim').replaceAll(
                   '{minutes}',
-                  '${tvClipMaxUploadSeconds ~/ 60}',
+                  '${_maxSeconds ~/ 60}',
                 ),
           ),
           duration: const Duration(seconds: 5),
@@ -392,6 +397,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     });
     final compressed = await TvClipCompress.forUpload(
       _videoFile!.path,
+      maxSeconds: _maxSeconds,
       onProgress: (p) {
         if (mounted) setState(() => _uploadProgress = p);
       },

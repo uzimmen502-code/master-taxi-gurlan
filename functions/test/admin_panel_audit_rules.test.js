@@ -198,6 +198,21 @@ async function main() {
           {pushResendAt: new Date()}, {merge: true})));
   await check('admin_news: admin ham noto\'g\'ri audience bilan yarata olmaydi',
       () => assertFails(as(ADMIN).collection('admin_news').add(news({audience: 'hack'}))));
+  // Admin klientdan faqat pushResendAt; qaytarib olish (retractedAt/audience), matn, sana — faqat callable (audit bilan).
+  await check('admin_news: admin klientdan retractedAt/audience yoza olmaydi (auditsiz yashirish yopiq)',
+      () => assertFails(as(ADMIN).collection('admin_news').doc('n1').set(
+          {retractedAt: new Date(), audience: 'retracted'}, {merge: true})));
+  await check('admin_news: admin klientdan sarlavha/matn/createdAt ni ham o\'zgartira olmaydi',
+      async () => {
+        await assertFails(as(ADMIN).collection('admin_news').doc('n1').set({title: 'x'}, {merge: true}));
+        await assertFails(as(ADMIN).collection('admin_news').doc('n1').set({body: 'x'}, {merge: true}));
+        await assertFails(as(ADMIN).collection('admin_news').doc('n1').set({createdAt: new Date()}, {merge: true}));
+      });
+  await check('admin_news: pushResendAt bilan birga boshqa maydon yozilsa — rad',
+      () => assertFails(as(ADMIN).collection('admin_news').doc('n1').set(
+          {pushResendAt: new Date(), retractedAt: new Date()}, {merge: true})));
+  await check('admin_news: o\'chirish hamon yopiq (admin ham)',
+      () => assertFails(as(ADMIN).collection('admin_news').doc('n1').delete()));
 
   // ── users.role ──────────────────────────────────────────────────────
   await check('users.role: dispatcher o\'ziga superadmin yoza olmaydi',

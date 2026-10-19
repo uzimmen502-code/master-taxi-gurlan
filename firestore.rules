@@ -1777,18 +1777,11 @@ service cloud.firestore {
           && request.resource.data.audience in
               ['all', 'user', 'driver', 'courier'];
 
-      // Янгилаш — фақат админ; `createdAt` ўзгармасин, title/body
-      // размeри чегаралaнсин.
+      // Янгилаш — клиентдан ФАҚАТ «Push qayta yuborish» (`pushResendAt`, `NewsRepository.requestPushResend`).
+      // Қолган ҳамма ўзгариш (қайтариб олиш `retractedAt`/`audience`, матн, сана) — фақат Admin SDK callable
+      // орқали, аудит билан (`adminRetractNews`): админ клиентдан аудитсиз хабарни яшира олмасин (эга, 2026-10-20).
       allow update: if isAdmin()
-          && notChanged('createdAt')
-          && (
-            !('title' in request.resource.data)
-            || request.resource.data.title.size() <= 120
-          )
-          && (
-            !('body' in request.resource.data)
-            || request.resource.data.body.size() <= 2000
-          );
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pushResendAt']);
 
       // Ўчириш — вақтинча тақиқланди. Phone Auth + isAdmin() бўлгач очилади.
       allow delete: if false;

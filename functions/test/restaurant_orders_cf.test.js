@@ -751,6 +751,120 @@ async function main() {
     await expectCode(call('adminCancelRestaurantOrder', { orderId: r2.orderId }, ADMIN), 'ORDER_ALREADY_FINAL');
   });
 
+  // ── 6b. Taom kuxnalari (D-REST-24) ──────────────────────────────────
+  const cz = require('../restaurant_cuisines');
+  const cuisines = () => db.collection('restaurant_cuisines');
+  const addCuisine = (who, name, group = 'national', restaurantId = rid) =>
+    call('restaurantAddCuisine', { restaurantId, name, group }, who);
+
+  await check('CU1 nom kaliti: kirill/lotin/apostrof variantlari bitta; harfsiz nom kalitida harf yo\'q; id ≤ 80 va oxirida "-" yo\'q', () => {
+    const k = cz.cuisineKey;
+    assert.strictEqual(k('Ўзбек'), 'ozbek');
+    for (const v of ["O'zbek", 'O‘zbek', 'Oʻzbek', 'o`zbek', '  O\'ZBEK  ']) assert.strictEqual(k(v), 'ozbek', v);
+    assert.strictEqual(k('Қашқадарё миллий таомлари'), k('Qashqadaryo  milliy   taomlari'));
+    assert.strictEqual(k('Самарқанд миллий таомлари'), 'samarqand milliy taomlari');
+    assert.ok(!/[a-z]/.test(k('123 !!')), 'harfsiz');
+    assert.strictEqual(k(null), '');
+    const long = cz.cleanName('Щ'.repeat(60));
+    assert.strictEqual(long.length, 40, 'nom 40 belgiga qisqartiriladi');
+    const id = cz.cuisineDocId('national', cz.cuisineKey(long));
+    assert.ok(id.length <= 80 && !id.endsWith('-'), id);
+    assert.strictEqual(cz.cuisineDocId('world', 'a b'), 'world_a-b');
+  });
+  await check('CU2 a\'zo o\'z nomini qo\'shadi → hujjat (group, nameKey, createdBy); boshqa yozuvda qayta — o\'sha id, takror yaratilmaydi', async () => {
+    const r = await addCuisine(OWNER, 'Қашқадарё миллий таомлари');
+    assert.strictEqual(r.existed, false);
+    assert.strictEqual(r.group, 'national');
+    assert.strictEqual(r.id, 'national_qashqadaryo-milliy-taomlari');
+    const doc = (await cuisines().doc(r.id).get()).data();
+    assert.strictEqual(doc.name, 'Қашқадарё миллий таомлари');
+    assert.strictEqual(doc.nameKey, 'qashqadaryo milliy taomlari');
+    assert.strictEqual(doc.createdBy, OWNER);
+    assert.strictEqual(doc.hidden, false);
+    const again = await addCuisine(STAFF, "Qashqadaryo milliy taomlari");
+    assert.strictEqual(again.existed, true);
+    assert.strictEqual(again.id, r.id);
+    assert.strictEqual(again.name, 'Қашқадарё миллий таомлари', 'birinchi yozilgan ko\'rinish saqlanadi');
+    assert.strictEqual((await cuisines().get()).size, 1);
+    // bir xil nom boshqa GURUHDA — alohida kuxna
+    const w = await addCuisine(OWNER, 'Qashqadaryo milliy taomlari', 'world');
+    assert.strictEqual(w.existed, false);
+    assert.strictEqual(w.id, 'world_qashqadaryo-milliy-taomlari');
+    await cuisines().doc(w.id).delete();
+  });
+  await check('CU3 rad: a\'zo emas, noto\'g\'ri guruh, bo\'sh/harfsiz/qisqa nom, restoran id yo\'q, kirish yo\'q', async () => {
+    await expectCode(addCuisine(STRANGER, 'Xorazm'), 'NOT_RESTAURANT_MEMBER', 'permission-denied');
+    await expectCode(addCuisine(OWNER2, 'Xorazm'), 'NOT_RESTAURANT_MEMBER', 'permission-denied');
+    await expectCode(addCuisine(OWNER, 'Xorazm', 'asia'), 'CUISINE_GROUP_INVALID');
+    for (const bad of ['', '   ', 'a', '123', '!!!', '——']) {
+      await expectCode(addCuisine(OWNER, bad), 'CUISINE_NAME_INVALID');
+    }
+    await expectCode(call('restaurantAddCuisine', { name: 'Xorazm', group: 'national' }, OWNER), 'RESTAURANT_ID_REQUIRED');
+    await expectCode(fns.restaurantAddCuisine.run({ restaurantId: rid, name: 'Xorazm', group: 'national' }, {}), 'AUTH_REQUIRED', 'unauthenticated');
+    assert.strictEqual((await cuisines().get()).size, 1, 'rad etilganlar hujjat yaratmaydi');
+  });
+  await check('CU4 parallel 6 ta bir xil nom → bitta hujjat, bitta "created"; kunlik hisob faqat yaratilganlarni sanaydi (22-qoida)', async () => {
+    const out = await Promise.all(Array.from({ length: 6 }, (_, i) => addCuisine(i % 2 ? OWNER : STAFF, i % 2 ? 'Xorazm taomlari' : 'Хоразм таомлари')));
+    assert.strictEqual(out.filter((x) => !x.existed).length, 1, 'bitta g\'olib');
+    assert.strictEqual(new Set(out.map((x) => x.id)).size, 1);
+    assert.strictEqual((await cuisines().where('nameKey', '==', 'xorazm taomlari').get()).size, 1);
+    // Kunlik hisob faqat YARATILGAN nomlarni sanaydi: CU2 da 2 ta (milliy + dunyo, dunyosi
+    // keyin o'chirilgan — hisob qoladi) + bu yerda 1 ta = 3; 5 ta takror sanalmaydi.
+    const total = (await db.collection('restaurant_cuisine_quota').get()).docs.reduce((a, s) => a + s.data().count, 0);
+    assert.strictEqual(total, 3);
+  });
+  await check('CU5 kunlik chegara: 5 yangi nom ok, 6-si CUISINE_RATE_LIMIT; BOR nom chegaradan keyin ham qaytadi; boshqa foydalanuvchi o\'z hisobida', async () => {
+    await db.collection('restaurant_cuisine_quota').get().then((s) => Promise.all(s.docs.map((d) => d.ref.delete())));
+    for (let i = 0; i < cz.DAILY_NEW_LIMIT; i += 1) {
+      const r = await addCuisine(OWNER, `Test kuxna ${String.fromCharCode(97 + i)}${String.fromCharCode(97 + i)}`);
+      assert.strictEqual(r.existed, false);
+    }
+    await expectCode(addCuisine(OWNER, 'Test kuxna zz'), 'CUISINE_RATE_LIMIT', 'resource-exhausted');
+    const old = await addCuisine(OWNER, 'Test kuxna aa');
+    assert.strictEqual(old.existed, true, 'bor nom — hisobga kirmaydi');
+    const other = await addCuisine(STAFF, 'Test kuxna zz');
+    assert.strictEqual(other.existed, false, 'STAFF o\'z hisobida');
+  });
+  await check('CU6 admin yashiradi: begona rad; audit; idempotent; yashirin nom qayta qo\'shilmaydi (CUISINE_BLOCKED); qaytarsa ishlaydi', async () => {
+    const id = 'national_qashqadaryo-milliy-taomlari';
+    await expectCode(call('adminSetRestaurantCuisineHidden', { cuisineId: id, hidden: true }, OWNER), 'Admin role required');
+    const r = await call('adminSetRestaurantCuisineHidden', { cuisineId: id, hidden: true, reason: 'test' }, ADMIN);
+    assert.deepStrictEqual({ hidden: r.hidden, changed: r.changed }, { hidden: true, changed: true });
+    assert.strictEqual((await cuisines().doc(id).get()).data().hidden, true);
+    const again = await call('adminSetRestaurantCuisineHidden', { cuisineId: id, hidden: true }, ADMIN);
+    assert.strictEqual(again.changed, false);
+    const audits = await db.collection('admin_audit').where('kind', '==', 'restaurant_cuisine_hidden').get();
+    assert.strictEqual(audits.size, 1, 'audit faqat o\'zgarganda');
+    await expectCode(addCuisine(OWNER, 'Qashqadaryo milliy taomlari'), 'CUISINE_BLOCKED', 'failed-precondition');
+    await expectCode(call('adminSetRestaurantCuisineHidden', { cuisineId: 'yoq_id', hidden: true }, ADMIN), 'CUISINE_NOT_FOUND');
+    await expectCode(call('adminSetRestaurantCuisineHidden', { cuisineId: id }, ADMIN), 'HIDDEN_REQUIRED');
+    await call('adminSetRestaurantCuisineHidden', { cuisineId: id, hidden: false }, ADMIN);
+    assert.strictEqual((await addCuisine(OWNER, 'Qashqadaryo milliy taomlari')).existed, true);
+  });
+
+  await check('CU7 tayyor kuxnalar (seed): 16 ta, id ≤ 80, 3 tilda; sotuvchi kirill/lotin yozsa tayyor hujjatga tushadi, takror yaratilmaydi', async () => {
+    const { buildDocs } = require('../tools/seed_restaurant_cuisines');
+    const docs = buildDocs();
+    assert.strictEqual(docs.length, 16);
+    assert.strictEqual(new Set(docs.map((d) => d.id)).size, 16);
+    for (const { id, data } of docs) {
+      assert.ok(id.length <= 80, id);
+      assert.ok(['national', 'world'].includes(data.group));
+      assert.ok(data.names.uz_Cyrl && data.names.uz_Latn && data.names.ru, id);
+      await cuisines().doc(id).create(data); // seed `--apply` bilan bir xil
+    }
+    const before = (await cuisines().get()).size;
+    const a = await addCuisine(OWNER, 'Ўзбек');
+    const b = await addCuisine(OWNER, "O‘zbek");
+    const c = await addCuisine(OWNER, 'Хитой', 'world');
+    const d = await addCuisine(OWNER, 'Farg`ona');
+    assert.deepStrictEqual([a.id, a.existed], ['national_ozbek', true]);
+    assert.deepStrictEqual([b.id, b.existed], ['national_ozbek', true]);
+    assert.deepStrictEqual([c.id, c.existed], ['world_xitoy', true]);
+    assert.deepStrictEqual([d.id, d.existed], ['national_fargona', true]);
+    assert.strictEqual((await cuisines().get()).size, before, 'takror hujjat yaratilmadi');
+  });
+
   // ── 7. Sverka ───────────────────────────────────────────────────────
   await check('S1 ledger: Σdr == Σcr; passenger_credit == bonusBalance (owner, mijozlar, kuryerlar)', async () => {
     await journalBalanced();

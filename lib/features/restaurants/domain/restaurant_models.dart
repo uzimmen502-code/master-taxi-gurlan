@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import 'dish_facts.dart';
 import 'menu_category_names.dart';
 
 /// `restaurantStatus` қийматлари — сервердаги жадвал билан бир хил.
@@ -362,12 +363,24 @@ class MenuItem {
     this.sort = 0,
     this.available = true,
     this.stopUntil,
+    this.facts = DishFacts.empty,
   });
 
   final String id;
   final String name;
   final String description;
   final String photoUrl;
+
+  /// Сотувчи киритган ихтиёрий фактлар (порция, КБЖУ, кухна, теглар).
+  final DishFacts facts;
+
+  /// Бир кишилик порция нархи, бутун сўм юқорига яхлитланади (`ceil`); порция
+  /// сони йўқ бўлса `null` — «Арзон» бўлимга кирмайди.
+  int? get pricePerPerson {
+    final s = facts.servings;
+    if (s == null || s <= 0 || price <= 0) return null;
+    return (price + s - 1) ~/ s;
+  }
 
   /// Бутун сўм. Буюртма нархи барибир серверда менюдан қайта ҳисобланади.
   final int price;
@@ -393,6 +406,7 @@ class MenuItem {
         sort: _int(d['sort']),
         available: d['available'] != false,
         stopUntil: _ts(d['stopUntil']),
+        facts: DishFacts.fromMap(d),
       );
 
   factory MenuItem.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>

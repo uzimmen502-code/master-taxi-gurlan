@@ -79,6 +79,10 @@ attachRestaurantOrders(exports, {
   get courierAuth() { return courierAuth; },
   notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),
 });
+// Таом кухналари умумий рўйхати (D-REST-24, 2026-10-19): сотувчи ўз кухна номини
+// дубликатсиз қўшади; админ яширади.
+const { attachRestaurantCuisines } = require('./restaurant_cuisines');
+attachRestaurantCuisines(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles });
 // «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');

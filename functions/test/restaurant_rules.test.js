@@ -89,6 +89,8 @@ async function main() {
     await db.doc(`orders/${O1}/private/secrets`).set({ pickupCode: '1234', pickupAttempts: 0 });
     await db.doc(`restaurant_customer_stats/${CUSTOMER}`).set({ strikes: 0, completedCount: 1 });
     await db.doc(`restaurant_courier_prefs/${COURIER}`).set({ buyoutEnabled: true, buyoutLimit: 100000 });
+    await db.doc('restaurant_cuisines/national_ozbek').set({ name: 'Ўзбек', group: 'national', hidden: false });
+    await db.doc('restaurant_cuisines/world_turk').set({ name: 'Турк', group: 'world', hidden: false });
     await db.doc('settings/restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
     await db.doc('restaurant_delivery_tariffs/v1').set({ version: 1, base: 5000, perKm: 1500 });
   });
@@ -155,6 +157,82 @@ async function main() {
     await assertFails(ref(STRANGER).update({ maxQtyPerItem: 100 }), 'begona');
     await assertFails(as(OWNER2).doc(`restaurants/${R1}`).update({ maxQtyPerItem: 100 }), 'boshqa restoran egasi');
     await assertSucceeds(ref(OWNER).update({ maxQtyPerItem: 50 })); // keyingi testlar uchun default
+  });
+  // ── Taom ma'lumotlari (D-REST-16/17/24): hammasi ixtiyoriy, bor bo'lsa qat'iy ──
+  const dish = (extra) => ({ name: 'Osh', price: 40000, available: true, ...extra });
+  const putDish = (who, id, extra) => as(who).doc(`restaurants/${R1}/menu_items/${id}`).set(dish(extra));
+  await check('taom ma\'lumotlari: to\'liq to\'plam (porsiya, gramm, KBJU, kuxna, teglar) yoziladi; faktsiz taom ham (ixtiyoriy)', async () => {
+    await assertSucceeds(putDish(OWNER, 'f_all', {
+      servings: 4, weightG: 450, kcal: 600, protein: 30, fat: 25, carbs: 60, // 4*30+4*60+9*25 = 585, farq 15
+      cuisineGroup: 'national', cuisineId: 'national_ozbek', tags: ['kids', 'light'],
+    }));
+    await assertSucceeds(putDish(STAFF, 'f_none', {}));
+    await assertSucceeds(putDish(OWNER, 'f_tags_empty', { tags: [] }));
+    await assertSucceeds(putDish(OWNER, 'f_world', { cuisineGroup: 'world', cuisineId: 'world_turk' }));
+    // mavjud taomga faqat narx o'zgarishi (faktlar saqlanadi) va faktlarni olib tashlash (merge emas — to'liq set)
+    await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/f_all`).update({ price: 42000 }));
+    await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/f_all`).set(dish({ price: 42000 })));
+  });
+  await check('porsiya va gramm: chegaralar (1…50, 10…5000); 0, 51, 9, 5001, satr, kasr, null — rad', async () => {
+    await assertSucceeds(putDish(OWNER, 'f_s1', { servings: 1, weightG: 10 }));
+    await assertSucceeds(putDish(OWNER, 'f_s50', { servings: 50, weightG: 5000 }));
+    for (const bad of [{ servings: 0 }, { servings: 51 }, { servings: '4' }, { servings: 2.5 }, { servings: null },
+      { weightG: 9 }, { weightG: 5001 }, { weightG: '450' }, { weightG: 450.5 }]) {
+      await assertFails(putDish(OWNER, 'f_bad', bad), JSON.stringify(bad));
+    }
+  });
+  await check('KBJU: to\'rttasi birga; kaloriya mosligi — 15 % yoki 20 kkal chegarasida (ikki tomon); qismi/diapazon/tip rad', async () => {
+    const kb = (kcal, protein, fat, carbs) => ({ kcal, protein, fat, carbs });
+    // calc = 400 (carbs 100): 15 % = 60 → 340…460 ok
+    await assertSucceeds(putDish(OWNER, 'k_hi', kb(460, 0, 0, 100)));
+    await assertSucceeds(putDish(OWNER, 'k_lo', kb(340, 0, 0, 100)));
+    await assertFails(putDish(OWNER, 'k_hi2', kb(461, 0, 0, 100)), '461');
+    await assertFails(putDish(OWNER, 'k_lo2', kb(339, 0, 0, 100)), '339');
+    // calc = 40: 15 % = 6, lekin mutlaq 20 ккал → 20…60 ok
+    await assertSucceeds(putDish(OWNER, 'k_abs_hi', kb(60, 0, 0, 10)));
+    await assertSucceeds(putDish(OWNER, 'k_abs_lo', kb(20, 0, 0, 10)));
+    await assertFails(putDish(OWNER, 'k_abs_hi2', kb(61, 0, 0, 10)), '61');
+    // suv: hammasi 0
+    await assertSucceeds(putDish(OWNER, 'k_zero', kb(0, 0, 0, 0)));
+    await assertSucceeds(putDish(OWNER, 'k_zero20', kb(20, 0, 0, 0)));
+    await assertFails(putDish(OWNER, 'k_zero21', kb(21, 0, 0, 0)));
+    // qismi
+    await assertFails(putDish(OWNER, 'k_part1', { kcal: 300 }));
+    await assertFails(putDish(OWNER, 'k_part3', { kcal: 300, protein: 10, fat: 10 }));
+    // diapazon / tip
+    await assertFails(putDish(OWNER, 'k_neg', kb(-1, 0, 0, 0)));
+    // diapazon chegarasi ALOHIDA tekshiriladi: kaloriya mosligi bajarilgan (calc = 4·500 + 4·500 + 9·111 = 4999)
+    await assertSucceeds(putDish(OWNER, 'k_max', kb(5000, 500, 111, 500)));
+    await assertFails(putDish(OWNER, 'k_big', kb(5001, 500, 111, 500)), 'kcal 5001');
+    await assertFails(putDish(OWNER, 'k_p501', kb(2200, 501, 0, 0)), 'protein 501 (calc 2004 — mos)');
+    await assertFails(putDish(OWNER, 'k_str', kb('600', 30, 25, 60)));
+    await assertFails(putDish(OWNER, 'k_float', kb(600, 30.5, 25, 60)));
+    await assertFails(putDish(OWNER, 'k_null', kb(600, null, 25, 60)));
+  });
+  await check('kuxna: ikkalasi birga va guruh mos; bo\'lmagan id, guruh nomos, faqat bittasi, noto\'g\'ri guruh — rad', async () => {
+    await assertFails(putDish(OWNER, 'c_nogroup', { cuisineId: 'national_ozbek' }));
+    await assertFails(putDish(OWNER, 'c_noid', { cuisineGroup: 'national' }));
+    await assertFails(putDish(OWNER, 'c_mismatch', { cuisineGroup: 'world', cuisineId: 'national_ozbek' }));
+    await assertFails(putDish(OWNER, 'c_missing', { cuisineGroup: 'national', cuisineId: 'national_yoq' }));
+    await assertFails(putDish(OWNER, 'c_badgroup', { cuisineGroup: 'asia', cuisineId: 'national_ozbek' }));
+    await assertFails(putDish(OWNER, 'c_empty', { cuisineGroup: 'national', cuisineId: '' }));
+    await assertFails(putDish(OWNER, 'c_num', { cuisineGroup: 'national', cuisineId: 5 }));
+  });
+  await check('teglar: kids/breakfast/night/light, ≤ 4; boshqa teg, 5 ta, satr — rad; begona taom yozolmaydi', async () => {
+    await assertSucceeds(putDish(OWNER, 't_all4', { tags: ['kids', 'breakfast', 'night', 'light'] }));
+    await assertFails(putDish(OWNER, 't_spicy', { tags: ['spicy'] }));
+    await assertFails(putDish(OWNER, 't_five', { tags: ['kids', 'breakfast', 'night', 'light', 'kids'] }));
+    await assertFails(putDish(OWNER, 't_str', { tags: 'kids' }));
+    await assertFails(putDish(STRANGER, 't_stranger', { tags: ['kids'] }));
+    await assertFails(putDish(OWNER2, 't_owner2', { servings: 2 }), 'boshqa restoran egasi');
+    await assertFails(putDish(OWNER, 't_unknown_key', { rating: 5 }), 'rating — server-only, hasOnly');
+  });
+  await check('restaurant_cuisines: hamma o\'qiydi (loginsiz ham); hech kim yozmaydi (admin ham)', async () => {
+    await assertSucceeds(anon().doc('restaurant_cuisines/national_ozbek').get());
+    await assertSucceeds(anon().collection('restaurant_cuisines').get());
+    await assertFails(as(OWNER).doc('restaurant_cuisines/national_mening').set({ name: 'X', group: 'national' }));
+    await assertFails(as(ADMIN).doc('restaurant_cuisines/national_ozbek').update({ hidden: true }));
+    await assertFails(as(STRANGER).doc('restaurant_cuisines/national_ozbek').delete());
   });
   await check('members: a\'zo o\'qiydi, begona yo\'q, hech kim yozmaydi', async () => {
     await assertSucceeds(as(STAFF).doc(`restaurants/${R1}/members/${OWNER}`).get());

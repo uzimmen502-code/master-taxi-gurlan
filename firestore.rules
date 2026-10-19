@@ -3068,6 +3068,8 @@ service cloud.firestore {
       return d.keys().hasOnly([
             'name', 'description', 'photoUrl', 'price', 'packagingFee',
             'categoryId', 'sort', 'available', 'stopUntil', 'saleHours',
+            'servings', 'weightG', 'kcal', 'protein', 'fat', 'carbs',
+            'cuisineGroup', 'cuisineId', 'tags',
             'createdAt', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
@@ -3078,7 +3080,54 @@ service cloud.firestore {
           && (!('description' in d)
               || (d.description is string && d.description.size() <= 500))
           && (!('photoUrl' in d) || (d.photoUrl is string && d.photoUrl.size() <= 500))
-          && (!('stopUntil' in d) || d.stopUntil == null || d.stopUntil is timestamp);
+          && (!('stopUntil' in d) || d.stopUntil == null || d.stopUntil is timestamp)
+          && dishFactsOk(d);
+    }
+
+    // Таом маълумотлари (D-REST-16/17/24; docs/kafe_restoran_taklifi_uz.md §10.1).
+    // ҲАММАСИ ИХТИЁРИЙ: майдон йўқ — рад этилмайди (таом бўлимга маълумоти
+    // тўлиқлиги билан киради). Мавжуд бўлса — тип ва чегара қатъий (null ҳам рад:
+    // клиент йўқ майдонни ўчиради). Чегаралар клиентдаги `DishFacts` билан бир хил.
+    function dishIntIn(d, f, lo, hi) {
+      return !(f in d) || (d[f] is int && d[f] >= lo && d[f] <= hi);
+    }
+
+    // КБЖУ: ё тўртталаси ҳам йўқ, ё тўртталаси ҳам бор ва калория мос.
+    function dishNutritionOk(d) {
+      return !d.keys().hasAny(['kcal', 'protein', 'fat', 'carbs'])
+          || (d.keys().hasAll(['kcal', 'protein', 'fat', 'carbs'])
+              && dishIntIn(d, 'kcal', 0, 5000)
+              && dishIntIn(d, 'protein', 0, 500)
+              && dishIntIn(d, 'fat', 0, 500)
+              && dishIntIn(d, 'carbs', 0, 500)
+              && dishKcalConsistent(d));
+    }
+
+    // Калория ≈ 4·оқсил + 4·углевод + 9·ёғ; фарқ ≤ 20 ккал ёки ≤ 15 % (PROPOSED).
+    function dishKcalConsistent(d) {
+      let calc = 4 * d.protein + 4 * d.carbs + 9 * d.fat;
+      let diff = d.kcal > calc ? d.kcal - calc : calc - d.kcal;
+      return diff <= 20 || diff * 100 <= calc * 15;
+    }
+
+    // Кухна: ё иккаласи ҳам йўқ, ё `restaurant_cuisines/{id}` мавжуд ва гуруҳи мос.
+    function dishCuisineOk(d) {
+      return (!('cuisineId' in d) && !('cuisineGroup' in d))
+          || ('cuisineId' in d && 'cuisineGroup' in d
+              && d.cuisineId is string && d.cuisineId.size() >= 1 && d.cuisineId.size() <= 80
+              && d.cuisineGroup in ['national', 'world']
+              && get(/databases/$(database)/documents/restaurant_cuisines/$(d.cuisineId))
+                   .data.group == d.cuisineGroup);
+    }
+
+    function dishFactsOk(d) {
+      return dishIntIn(d, 'servings', 1, 50)
+          && dishIntIn(d, 'weightG', 10, 5000)
+          && dishNutritionOk(d)
+          && dishCuisineOk(d)
+          && (!('tags' in d)
+              || (d.tags is list && d.tags.size() <= 4
+                  && d.tags.hasOnly(['kids', 'breakfast', 'night', 'light'])));
     }
 
     function restaurantMenuCategoryOk() {
@@ -3141,6 +3190,13 @@ service cloud.firestore {
             && restaurantMenuItemOk();
         allow delete: if isAuth() && isRestaurantMember(rid);
       }
+    }
+
+    // Кухналар рўйхати (D-REST-24): оммавий ўқилади (PII йўқ); ёзув фақат CF
+    // (`restaurantAddCuisine` — дубликатсиз, кунлик лимит билан; скрытие — админ CF).
+    match /restaurant_cuisines/{cid} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // Мижоз strike/буюртма сони ва курьер выкуп созламаси — фақат CF ёзади.

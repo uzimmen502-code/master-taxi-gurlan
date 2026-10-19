@@ -11,6 +11,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../../core/utils/merged_stream.dart';
 import '../../../models/order_model.dart';
 import '../../../utils/geo_hash.dart';
+import '../domain/cuisine.dart';
+import '../domain/dish_facts.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 
@@ -364,6 +366,7 @@ class RestaurantsRepository {
     int sort = 0,
     bool available = true,
     DateTime? stopUntil,
+    DishFacts? facts,
   }) async {
     final col = _restaurants.doc(restaurantId).collection('menu_items');
     final ref = id == null ? col.doc() : col.doc(id);
@@ -377,10 +380,45 @@ class RestaurantsRepository {
       'sort': sort,
       'available': available,
       'stopUntil': stopUntil == null ? null : Timestamp.fromDate(stopUntil),
+      // Фактлар: [facts] `null` — тегилмайди; берилса — киритилмагани ўчирилади.
+      ...DishFacts.patch(facts, FieldValue.delete()),
       if (id == null) 'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     return ref.id;
+  }
+
+  // ── Кухналар (D-REST-24) ───────────────────────────────────────────
+
+  static const _cuisineTtl = Duration(minutes: 10);
+  List<Cuisine>? _cuisinesCache;
+  DateTime? _cuisinesAt;
+
+  /// Танлаш мумкин кухналар (яширилмаган). Рўйхат кичик ва кам ўзгаради —
+  /// форма очилган сайин ўқимаслик учун [_cuisineTtl] кэш (36-қоида: ўқишлар/фойдаланувчи).
+  Future<List<Cuisine>> listCuisines({bool force = false}) async {
+    final at = _cuisinesAt;
+    final cached = _cuisinesCache;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _cuisineTtl) {
+      return cached;
+    }
+    final snap = await _db.collection('restaurant_cuisines').limit(500).get();
+    final list = snap.docs.map(Cuisine.fromDoc).where((c) => !c.hidden).toList();
+    _cuisinesCache = list;
+    _cuisinesAt = DateTime.now();
+    return list;
+  }
+
+  /// Сотувчи ўз кухна номини қўшади (ёки бор бўлса — ўшани олади). Сервер
+  /// дубликатни нормаллаштириб топади; кунлик лимит — `CUISINE_RATE_LIMIT`.
+  Future<Cuisine> addCuisine({required String restaurantId, required String name, required String group}) async {
+    final r = await _call('restaurantAddCuisine', {'restaurantId': restaurantId, 'name': name, 'group': group});
+    _cuisinesCache = null; // навбатдаги ўқишда янги рўйхат
+    return Cuisine(
+      id: (r['id'] ?? '') as String,
+      name: (r['name'] ?? name) as String,
+      group: (r['group'] ?? group) as String,
+    );
   }
 
   Future<void> setItemAvailability(String restaurantId, String id, {required bool available, DateTime? stopUntil}) =>

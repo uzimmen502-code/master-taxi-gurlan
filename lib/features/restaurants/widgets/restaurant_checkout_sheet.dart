@@ -389,6 +389,8 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
 
             // 7. Ҳисоб
             _Line(label: context.tr('restaurants_items_total'), value: formatPrice(cart.itemsTotal)),
+            if (cart.qtyDiscountTotal > 0)
+              _Line(label: context.tr('restaurants_qty_discount'), value: formatPrice(-cart.qtyDiscountTotal)),
             if (delivery)
               _Line(
                 label: context.tr('restaurants_delivery_fee'),

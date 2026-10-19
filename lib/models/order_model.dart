@@ -55,6 +55,9 @@ class OrderModel {
   /// Эски ҳужжатларнинг жами суммаси тўғри кўриниши учун ўқилади — тўғридан-тўғри эмас,
   /// [foodAmount] орқали.
   final int packagingTotal;
+
+  /// Миқдорга чегирма жами (D-REST-25): `itemsTotal` ШУ чегирмадан кейинги сумма; йўқ ҳужжатда — 0.
+  final int qtyDiscountTotal;
   final int deliveryFee;
 
   /// Таом пули (мижоз ресторанга тўлайдиган / курьер выкуп қиладиган сумма) = таом + эски
@@ -127,6 +130,7 @@ class OrderModel {
     this.restaurantLng,
     this.itemsTotal = 0,
     this.packagingTotal = 0,
+    this.qtyDiscountTotal = 0,
     this.deliveryFee = 0,
     this.deliveryMode = '',
     this.foodPaymentMethod = '',
@@ -319,6 +323,7 @@ class OrderModel {
       restaurantLng: (d['restaurantLng'] as num?)?.toDouble(),
       itemsTotal: (d['itemsTotal'] as num?)?.toInt() ?? 0,
       packagingTotal: (d['packagingTotal'] as num?)?.toInt() ?? 0,
+      qtyDiscountTotal: (d['qtyDiscountTotal'] as num?)?.toInt() ?? 0,
       deliveryFee: (d['deliveryFee'] as num?)?.toInt() ?? 0,
       deliveryMode: (d['deliveryMode'] ?? '') as String,
       foodPaymentMethod: (d['foodPaymentMethod'] ?? '') as String,

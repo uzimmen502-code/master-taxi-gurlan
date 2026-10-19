@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../models/news_read_state.dart';
 import '../../../repositories/news_repository.dart';
 import '../../../repositories/user_repository.dart';
 import 'general_news_tab.dart';
@@ -32,6 +33,9 @@ class _NewsHubScreenState extends State<NewsHubScreen>
   int _unreadOrders = 0;
   String _uid = '';
   String _role = 'user';
+  NewsReadState _newsRead = NewsReadState.unknown;
+  NewsReadState _messagesRead = NewsReadState.unknown;
+  NewsReadState _ordersRead = NewsReadState.unknown;
   StreamSubscription<int>? _broadcastUnreadSub;
   StreamSubscription<int>? _messagesUnreadSub;
   StreamSubscription<int>? _orderUnreadSub;
@@ -62,8 +66,26 @@ class _NewsHubScreenState extends State<NewsHubScreen>
   Future<void> _bootstrap() async {
     await _loadContext();
     if (!mounted) return;
+    await _captureReadState();
+    if (!mounted) return;
     _startUnreadWatchers();
     _markReadForTab(_tabs.index);
+  }
+
+  /// Белгилашдан ОЛДИН: қайси хабарлар «янги» эканини рўйхатда кўрсатиш учун.
+  Future<void> _captureReadState() async {
+    if (_uid.length < 9) return;
+    try {
+      final r = await context.read<NewsRepository>().fetchLastReadAt(_uid);
+      if (!mounted) return;
+      setState(() {
+        _newsRead = NewsReadState(known: true, readBefore: r.news);
+        _messagesRead = NewsReadState(known: true, readBefore: r.messages);
+        _ordersRead = NewsReadState(known: true, readBefore: r.orders);
+      });
+    } catch (_) {
+      // Ҳолат номаълум — ҳамма хабар ўқилгандек кўринади, экран ишлайверади.
+    }
   }
 
   void _onTabChanged() {
@@ -96,30 +118,30 @@ class _NewsHubScreenState extends State<NewsHubScreen>
 
     _broadcastUnreadSub = newsRepo
         .watchUnreadCount(
-          userId: _uid,
-          audiences: audiences,
-          feed: NewsFeedKind.broadcast,
-        )
+      userId: _uid,
+      audiences: audiences,
+      feed: NewsFeedKind.broadcast,
+    )
         .listen((n) {
       if (mounted) setState(() => _unreadBroadcast = n);
     }, onError: (_) {});
 
     _messagesUnreadSub = newsRepo
         .watchUnreadCount(
-          userId: _uid,
-          audiences: audiences,
-          feed: NewsFeedKind.dialog,
-        )
+      userId: _uid,
+      audiences: audiences,
+      feed: NewsFeedKind.dialog,
+    )
         .listen((n) {
       if (mounted) setState(() => _unreadMessages = n);
     }, onError: (_) {});
 
     _orderUnreadSub = newsRepo
         .watchUnreadCount(
-          userId: _uid,
-          audiences: audiences,
-          feed: NewsFeedKind.order,
-        )
+      userId: _uid,
+      audiences: audiences,
+      feed: NewsFeedKind.order,
+    )
         .listen((n) {
       if (mounted) setState(() => _unreadOrders = n);
     }, onError: (_) {});
@@ -182,9 +204,15 @@ class _NewsHubScreenState extends State<NewsHubScreen>
       body: TabBarView(
         controller: _tabs,
         children: [
-          const GeneralNewsTab(),
-          MessagesTab(onMarkedRead: () => _markReadForTab(1)),
-          OrderNewsTab(onMarkedRead: () => _markReadForTab(2)),
+          GeneralNewsTab(readState: _newsRead),
+          MessagesTab(
+            readState: _messagesRead,
+            onMarkedRead: () => _markReadForTab(1),
+          ),
+          OrderNewsTab(
+            readState: _ordersRead,
+            onMarkedRead: () => _markReadForTab(2),
+          ),
         ],
       ),
     );

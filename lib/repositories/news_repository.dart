@@ -321,6 +321,25 @@ class NewsRepository {
     }
   }
 
+  /// Бўлимлар бўйича охирги ўқиш вақти (`users/{id}`) — «Хабарлар» экрани
+  /// ўқилди деб белгилашдан ОЛДИН бир марта олади (янги/ўқилганни ажратиш).
+  Future<({DateTime? news, DateTime? messages, DateTime? orders})>
+      fetchLastReadAt(String userId) async {
+    UserModel? user;
+    for (final id in _userDocIdsForNews(userId)) {
+      final snap = await _db.collection('users').doc(id).get();
+      if (snap.exists) {
+        user = UserModel.fromDoc(snap);
+        break;
+      }
+    }
+    return (
+      news: user?.lastNewsReadAt,
+      messages: user?.lastMessagesReadAt,
+      orders: user?.lastOrderNewsReadAt,
+    );
+  }
+
   /// Битта бўлим учун жонли ўқилмаганлар (таб badge).
   Stream<int> watchUnreadCount({
     required String userId,

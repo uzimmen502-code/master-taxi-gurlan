@@ -6,6 +6,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/message_thread_group.dart';
 import '../../../models/news_item.dart';
+import '../../../models/news_read_state.dart';
+import '../../../services/hidden_news_store.dart';
+import '../widgets/news_delete_button.dart';
 import '../../../repositories/chat_repository.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/news_repository.dart';
@@ -14,88 +17,132 @@ import 'dialog_news_detail_screen.dart';
 
 /// Мурожаатлар: admin_news (диалог), support чат, ҳайдовчи аризаси.
 class MessagesTab extends StatefulWidget {
-  const MessagesTab({super.key, this.onMarkedRead});
+  const MessagesTab({
+    super.key,
+    this.onMarkedRead,
+    this.readState = NewsReadState.unknown,
+  });
 
   final VoidCallback? onMarkedRead;
+
+  /// Экранга кирилгандаги ўқилганлик ҳолати — «янги» карталарни ажратади.
+  final NewsReadState readState;
 
   @override
   State<MessagesTab> createState() => _MessagesTabState();
 }
 
-class _MessagesTabState extends State<MessagesTab> {
+class _MessagesTabState extends State<MessagesTab>
+    with AutomaticKeepAliveClientMixin {
   static const _green = AppColors.primaryDark;
 
-  Future<String> _uid() async {
+  // Оқимлар БИР марта очилади: аввал `build` ичида ҳар сафар янгилари очилар
+  // ва «Хабарлар» экрани badge сабабли қайта чизилганда рўйхат айлана
+  // (spinner) билан «милтиллар» эди (эга, 2026-10-19).
+  bool _ready = false;
+  String _uid = '';
+  Set<String> _hidden = <String>{};
+  Stream<List<NewsItem>>? _newsStream;
+  Stream<bool>? _chatStream;
+  Stream<Map<String, dynamic>?>? _driverStream;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
-    return canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    final hidden = await HiddenNewsStore.load(uid);
+    if (!mounted) return;
+    final newsRepo = context.read<NewsRepository>();
+    final chatRepo = context.read<ChatRepository>();
+    final driverRepo = context.read<DriverRepository>();
+    setState(() {
+      _uid = uid;
+      _hidden = hidden;
+      if (uid.length >= 9) {
+        _newsStream = newsRepo.watchDialogNews(userId: uid, limit: 80);
+        _chatStream = chatRepo.watchUnreadFromAdmin(uid);
+        _driverStream = driverRepo.watchMyDriverRequest(uid);
+      }
+      _ready = true;
+    });
+  }
+
+  Future<void> _deleteGroup(MessageThreadGroup g) async {
+    final hidden =
+        await HiddenNewsStore.hide(_uid, g.messages.map((m) => m.id));
+    if (!mounted) return;
+    setState(() => _hidden = hidden);
   }
 
   @override
   Widget build(BuildContext context) {
-    final newsRepo = context.read<NewsRepository>();
-    final chatRepo = context.read<ChatRepository>();
-    final driverRepo = context.read<DriverRepository>();
+    super.build(context);
+    if (!_ready) return const Center(child: CircularProgressIndicator());
+    final uid = _uid;
+    if (uid.length < 9) {
+      return const Center(child: Text('Телефон рақамини профилда киритинг'));
+    }
 
-    return FutureBuilder<String>(
-      future: _uid(),
-      builder: (ctx, uidSnap) {
-        final uid = uidSnap.data ?? '';
-        if (uid.length < 9) {
-          return const Center(child: Text('Телефон рақамини профилда киритинг'));
-        }
+    return StreamBuilder<List<NewsItem>>(
+      stream: _newsStream,
+      builder: (ctx, newsSnap) {
+        return StreamBuilder<bool>(
+          stream: _chatStream,
+          builder: (ctx, chatUnreadSnap) {
+            return StreamBuilder<Map<String, dynamic>?>(
+              stream: _driverStream,
+              builder: (ctx, driverSnap) {
+                if (newsSnap.connectionState == ConnectionState.waiting &&
+                    !newsSnap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (newsSnap.hasError && !newsSnap.hasData) {
+                  return Center(child: Text('Хатолик: ${newsSnap.error}'));
+                }
 
-        return StreamBuilder<List<NewsItem>>(
-          stream: newsRepo.watchDialogNews(userId: uid, limit: 80),
-          builder: (ctx, newsSnap) {
-            return StreamBuilder<bool>(
-              stream: chatRepo.watchUnreadFromAdmin(uid),
-              builder: (ctx, chatUnreadSnap) {
-                return StreamBuilder<Map<String, dynamic>?>(
-                  stream: driverRepo.watchMyDriverRequest(uid),
-                  builder: (ctx, driverSnap) {
-                    if (newsSnap.connectionState == ConnectionState.waiting &&
-                        !newsSnap.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (newsSnap.hasError) {
-                      return Center(child: Text('Хатолик: ${newsSnap.error}'));
-                    }
+                final chatUnread = chatUnreadSnap.data ?? false;
+                final shownNews = (newsSnap.data ?? const <NewsItem>[])
+                    .where((n) => !_hidden.contains(n.id))
+                    .toList();
+                final groups = MessageThreadGroup.fromDialogNews(shownNews);
+                final driverGroup = MessageThreadGroup.fromDriverRequest(
+                  driverSnap.data,
+                  uid,
+                );
 
-                    final chatUnread = chatUnreadSnap.data ?? false;
-                    final groups =
-                        MessageThreadGroup.fromDialogNews(newsSnap.data ?? []);
-                    final driverGroup = MessageThreadGroup.fromDriverRequest(
-                      driverSnap.data,
-                      uid,
-                    );
+                final rows = <_InboxRow>[];
+                rows.add(
+                  _InboxRow.supportChat(unread: chatUnread),
+                );
+                if (driverGroup != null) {
+                  rows.add(_InboxRow.driver(driverGroup));
+                }
+                for (final g in groups) {
+                  rows.add(_InboxRow.dialog(g));
+                }
 
-                    final rows = <_InboxRow>[];
-                    rows.add(
-                      _InboxRow.supportChat(unread: chatUnread),
-                    );
-                    if (driverGroup != null) {
-                      rows.add(_InboxRow.driver(driverGroup));
-                    }
-                    for (final g in groups) {
-                      rows.add(_InboxRow.dialog(g));
-                    }
+                if (rows.length == 1 &&
+                    !chatUnread &&
+                    shownNews.isEmpty &&
+                    driverSnap.data == null) {
+                  return _emptyState();
+                }
 
-                    if (rows.length == 1 &&
-                        !chatUnread &&
-                        (newsSnap.data ?? []).isEmpty &&
-                        driverSnap.data == null) {
-                      return _emptyState();
-                    }
+                rows.sort((a, b) => b.sortTime.compareTo(a.sortTime));
 
-                    rows.sort((a, b) => b.sortTime.compareTo(a.sortTime));
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: rows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _rowTile(context, uid, rows[i]),
-                    );
-                  },
+                return ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: rows.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) => _rowTile(context, uid, rows[i]),
                 );
               },
             );
@@ -167,7 +214,8 @@ class _MessagesTabState extends State<MessagesTab> {
                   color: _green.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.support_agent, color: AppColors.primaryText),
+                child: const Icon(Icons.support_agent,
+                    color: AppColors.primaryText),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -186,8 +234,10 @@ class _MessagesTabState extends State<MessagesTab> {
                       unread ? 'Янги жавоб бор' : 'Ёзишмалар тарихи',
                       style: TextStyle(
                         fontSize: 12,
-                        color: unread ? Colors.red.shade700 : Colors.grey.shade600,
-                        fontWeight: unread ? FontWeight.w600 : FontWeight.normal,
+                        color:
+                            unread ? Colors.red.shade700 : Colors.grey.shade600,
+                        fontWeight:
+                            unread ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -226,7 +276,8 @@ class _MessagesTabState extends State<MessagesTab> {
           ),
           child: const Icon(Icons.local_taxi, color: Colors.blue),
         ),
-        title: Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title:
+            Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(
           g.subtitle,
           maxLines: 2,
@@ -241,9 +292,14 @@ class _MessagesTabState extends State<MessagesTab> {
   }
 
   Widget _dialogCard(BuildContext context, MessageThreadGroup g) {
+    final unread =
+        g.messages.any((m) => widget.readState.isUnread(m.createdAt));
     return Material(
+      key: ValueKey('dialog-news-${g.id}'),
+      // Ўқилмаган — жирний (қалин) ёзув, ўқилган — оддий ёзув (эга, 2026-10-19).
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
           await Navigator.push(
@@ -255,8 +311,8 @@ class _MessagesTabState extends State<MessagesTab> {
           widget.onMarkedRead?.call();
         },
         borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 6, 14),
           child: Row(
             children: [
               Container(
@@ -276,9 +332,10 @@ class _MessagesTabState extends State<MessagesTab> {
                   children: [
                     Text(
                       g.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            unread ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -288,6 +345,8 @@ class _MessagesTabState extends State<MessagesTab> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
+                        fontWeight:
+                            unread ? FontWeight.bold : FontWeight.normal,
                         color: Colors.grey.shade600,
                       ),
                     ),
@@ -304,6 +363,7 @@ class _MessagesTabState extends State<MessagesTab> {
                   const Icon(Icons.chevron_right, color: Colors.grey),
                 ],
               ),
+              NewsDeleteButton(onDelete: () => _deleteGroup(g)),
             ],
           ),
         ),
@@ -332,7 +392,8 @@ class _InboxRow {
   factory _InboxRow.supportChat({required bool unread}) => _InboxRow._(
         kind: _InboxRowKind.supportChat,
         unread: unread,
-        sortTime: unread ? DateTime.now() : DateTime.fromMillisecondsSinceEpoch(0),
+        sortTime:
+            unread ? DateTime.now() : DateTime.fromMillisecondsSinceEpoch(0),
       );
 
   factory _InboxRow.driver(MessageThreadGroup g) => _InboxRow._(

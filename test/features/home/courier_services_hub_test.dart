@@ -36,13 +36,13 @@ void main() {
   }
 
   testWidgets(
-      'каталог: курьер уланган хизматлар — Нон, Кафе-Ресторан, Гилам, Сут (шу тартибда)',
+      'каталог: курьер уланган хизматлар — Нон, Кафе-Ресторан, Гилам, Сут, Улгуржи (шу тартибда)',
       (t) async {
     final all = {
       for (final id in kCourierConnectedModuleIds) id: ModuleStatus.enabled
     };
     expect(
-        await idsFor(t, all), ['bread', 'restaurants', 'carpet_wash', 'milk']);
+        await idsFor(t, all), ['bread', 'restaurants', 'carpet_wash', 'milk', 'wholesale_market']);
   });
 
   testWidgets('бош саҳифада ёпиқ (hidden) хизмат курьер рўйхатида ҳам чиқмайди',

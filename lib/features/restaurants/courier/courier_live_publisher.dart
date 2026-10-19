@@ -3,14 +3,16 @@
 // ёпилди) тўхтайди. Қоида (қачон ёзиш) — соф `CourierTracking.shouldPublish`; ёзиш — `order_courier_live`
 // (фақат тайинланган курьер, `firestore.rules`). Хато (рухсат йўқ, тармоқ) асосий ишни тўхтатмайди.
 //
-// Чегара (ҳозирча): жойлашув оқими иловада ОЧИҚ турган пайтдагина ишлайди (фон хизмати йўқ) — курьер
-// иловани ёпса нуқта янгиланмай «эскирган» бўлади ва кузатувчи шуни кўради.
+// Фон: Android иловада буюртма CourierLiveBackground орқали ишлаб турган GPS хизматига (foreground service)
+// топширилади — илова ёпилса ҳам нуқта ёзилаверади; хизмат тирик бўлса бу виджет қўш ёзмайди. Веб/тест/iOS
+// да (фон йўқ) ёзув фақат шу виджетдан, илова очиқ турганда.
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../services/courier_live_background.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/courier_tracking.dart';
 
@@ -78,6 +80,9 @@ class _CourierLivePublisherState extends State<CourierLivePublisher> {
 
   DateTime get _now => (widget.clock ?? DateTime.now)();
 
+  /// Фон хизмати фақат ҳақиқий жойлашув манбасида; тестда (positions берилган) илова ичидаги оқимгина.
+  bool get _useBackground => widget.positions == null;
+
   @override
   void initState() {
     super.initState();
@@ -88,23 +93,27 @@ class _CourierLivePublisherState extends State<CourierLivePublisher> {
   void didUpdateWidget(covariant CourierLivePublisher old) {
     super.didUpdateWidget(old);
     if (old.orderId != widget.orderId || old.courierId != widget.courierId) {
-      _stop();
+      _stop(old.orderId);
       _lastAt = _lastLat = _lastLng = null;
       _start();
     }
   }
 
   void _start() {
+    if (_useBackground) CourierLiveBackground.register(widget.orderId, widget.courierId);
     _sub = (widget.positions ?? defaultLivePositions)().listen(_onPosition, onError: (Object _) {});
   }
 
-  void _stop() {
+  void _stop([String? orderId]) {
     _sub?.cancel();
     _sub = null;
+    if (_useBackground) CourierLiveBackground.unregister(orderId ?? widget.orderId);
   }
 
   Future<void> _onPosition(LivePosition p) async {
     if (_writing) return;
+    // Фон хизмати ёзиб турса — қўш ёзув керак эмас (36-қоида); хизмат ўчиб қолса, ёзув шу ерда давом этади.
+    if (_useBackground && await CourierLiveBackground.serviceCovers(clock: widget.clock)) return;
     final now = _now;
     if (!CourierTracking.shouldPublish(now: now, lat: p.lat, lng: p.lng, lastAt: _lastAt, lastLat: _lastLat, lastLng: _lastLng)) return;
     _writing = true;

@@ -12,6 +12,7 @@ import '../../../models/order_model.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
+import '../widgets/dish_rating_card.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 
 class RestaurantOrderScreen extends StatefulWidget {
@@ -38,18 +39,21 @@ class _RestaurantOrderScreenState extends State<RestaurantOrderScreen> {
     return _restaurant!;
   }
 
-  Future<void> _run(Future<void> Function() fn, {String? okKey}) async {
+  /// `true` — амал бажарилди (хато бўлса снекбар кўрсатилади ва `false`).
+  Future<bool> _run(Future<void> Function() fn, {String? okKey}) async {
     setState(() => _busy = true);
     try {
       await fn();
       if (okKey != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(okKey))));
       }
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(restaurantsErrorText(context, e)), backgroundColor: Colors.red.shade700),
       );
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -103,6 +107,14 @@ class _RestaurantOrderScreenState extends State<RestaurantOrderScreen> {
               _PaymentCard(order: o, busy: _busy, onMarkPaid: () => _run(() => _repo.markPaid(o.id), okKey: 'restaurants_pay_declared_ok')),
               const SizedBox(height: 10),
               _ItemsCard(order: o),
+              if (o.canRateDishes) ...[
+                const SizedBox(height: 10),
+                DishRatingCard(
+                  order: o,
+                  busy: _busy,
+                  onSubmit: (stars) => _run(() => _repo.submitDishRatings(o.id, stars), okKey: 'restaurants_rate_done'),
+                ),
+              ],
               const SizedBox(height: 10),
               FutureBuilder<Restaurant?>(
                 future: _restaurantFor(o.restaurantId),

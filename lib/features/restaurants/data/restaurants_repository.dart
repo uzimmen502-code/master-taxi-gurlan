@@ -13,6 +13,7 @@ import '../../../models/order_model.dart';
 import '../../../utils/geo_hash.dart';
 import '../domain/cuisine.dart';
 import '../domain/dish_facts.dart';
+import '../domain/dish_stats.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 
@@ -499,6 +500,24 @@ class RestaurantsRepository {
 
   Future<void> cancel(String orderId, {String reason = ''}) =>
       _call('customerCancelRestaurantOrder', {'orderId': orderId, 'reason': reason});
+
+  /// Етказилган буюртмадаги таомларга баҳо (D-REST-18): `itemId → 1..5`. Сервер идемпотент:
+  /// баҳоси бор таом ўтказиб юборилади. Қайтади: янги сақланган таомлар идентификаторлари.
+  Future<List<String>> submitDishRatings(String orderId, Map<String, int> stars) async {
+    final r = await _call('submitDishRatings', {
+      'orderId': orderId,
+      'ratings': [for (final e in stars.entries) {'itemId': e.key, 'stars': e.value}],
+    });
+    final saved = r['saved'];
+    return saved is List ? saved.map((e) => e.toString()).toList() : const [];
+  }
+
+  /// Ресторан менюсидаги таомларнинг баҳо агрегатлари: `itemId → DishStats`. Меню очилганда БИР марта
+  /// ўқилади (ҳар таом учун алоҳида эмас — 37-қоида); хато бўлса меню баҳосиз кўрсатилади.
+  Future<Map<String, DishStats>> getDishStats(String restaurantId) async {
+    final snap = await _restaurants.doc(restaurantId).collection('menu_item_stats').limit(500).get();
+    return {for (final d in snap.docs) d.id: DishStats.fromMap(d.data())};
+  }
 
   // ── Ресторан (а'зо) ────────────────────────────────────────────────
 

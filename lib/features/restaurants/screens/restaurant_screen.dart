@@ -25,6 +25,7 @@ import '../widgets/menu_item_video_badge.dart';
 import '../widgets/restaurant_cart_sheet.dart';
 import '../widgets/restaurant_checkout_sheet.dart';
 import '../widgets/restaurant_row.dart';
+import '../domain/dish_stats.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/services/tv_clip_link.dart';
@@ -40,7 +41,15 @@ class RestaurantScreen extends StatefulWidget {
     this.cart,
     this.itemClipsLoader,
     this.itemClipOpener,
+    this.dishStatsLoader,
+    this.restaurantVideoLoader,
   });
+
+  /// Рестораннинг умумий обзор видеоси; бўш бўлса ҳақиқий репозиторий (тест учун алмаштирилади).
+  final Future<TvClip?> Function()? restaurantVideoLoader;
+
+  /// Таом баҳо агрегатлари (`itemId → DishStats`) — битта сўров; тест учун алмаштирилади.
+  final Future<Map<String, DishStats>> Function(String restaurantId)? dishStatsLoader;
 
   /// Таом видеолари (`itemId → клип`) — битта сўров; тест учун алмаштирилади.
   final Future<Map<String, TvClip>> Function(String restaurantId)? itemClipsLoader;
@@ -82,6 +91,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   /// Таом видеолари (`itemId → клип`): таом қаторида ▶ белгиси; видеоси бўлмаганда бўш.
   Map<String, TvClip> _itemClips = const {};
 
+  /// Таом баҳолари (`itemId → агрегат`): ★ фақат етарли баҳо йиғилганда кўрсатилади.
+  Map<String, DishStats> _dishStats = const {};
+
   int _active = 0;
   bool _lock = false;
 
@@ -93,6 +105,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     super.initState();
     _right.addListener(_onRightScroll);
     _loadItemClips();
+    _loadDishStats();
     _rSub = _repo.watchRestaurant(_r.id).listen((r) {
       if (r != null && mounted) setState(() => _r = r);
     });
@@ -120,6 +133,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       if (mounted && clips.isNotEmpty) setState(() => _itemClips = clips);
     } catch (e) {
       debugPrint('[RestaurantScreen] item clips $e');
+    }
+  }
+
+  /// Рестораннинг БАРЧА таом баҳо агрегатлари БИР сўровда. Баҳо ихтиёрий қўшимча: ўқилмаса меню
+  /// баҳосиз ишлайверади.
+  Future<void> _loadDishStats() async {
+    try {
+      final stats = await (widget.dishStatsLoader ?? _repo.getDishStats)(_r.id);
+      if (mounted && stats.isNotEmpty) setState(() => _dishStats = stats);
+    } catch (e) {
+      debugPrint('[RestaurantScreen] dish stats $e');
     }
   }
 
@@ -322,7 +346,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _Header(restaurant: _r, distanceKm: _r.distanceKmFrom(widget.userLat, widget.userLng)),
+            _Header(
+              restaurant: _r,
+              distanceKm: _r.distanceKmFrom(widget.userLat, widget.userLng),
+              videoLoader: widget.restaurantVideoLoader,
+            ),
             if (!open)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -387,6 +415,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                                               item: s.items[i],
                                               videoClip: _itemClips[s.items[i].id],
                                               onPlayVideo: _playItemClip,
+                                              stats: _dishStats[s.items[i].id],
                                               qty: _cart.restaurantId == _r.id ? _cart.qtyOf(s.items[i].id) : 0,
                                               // «+» ресторан белгилаган чегарада ўчади (D-REST-26).
                                               enabled: open && (_cart.restaurantId != _r.id || _cart.canAddMore(s.items[i].id, _r)),
@@ -421,10 +450,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.restaurant, this.distanceKm});
+  const _Header({required this.restaurant, this.distanceKm, this.videoLoader});
 
   final Restaurant restaurant;
   final double? distanceKm;
+  final Future<TvClip?> Function()? videoLoader;
 
   @override
   Widget build(BuildContext context) {
@@ -499,6 +529,7 @@ class _Header extends StatelessWidget {
                       LinkedVideoButton(
                         linkId: r.id,
                         ownerPhone: r.ownerUid,
+                        loader: videoLoader,
                         // Ходим юклаган видео ҳам: ваколатни қоида кафолатлайди.
                         trustLinkKind: TvClipLink.kindRestaurant,
                       ),
@@ -630,9 +661,13 @@ class _MenuItemRow extends StatelessWidget {
     required this.onRemove,
     this.videoClip,
     this.onPlayVideo,
+    this.stats,
   });
 
   final MenuItem item;
+
+  /// Баҳо агрегати (бўлса): етарли баҳо йиғилган бўлсагина нархнинг ёнида ★ кўрсатилади.
+  final DishStats? stats;
 
   /// Таомнинг ФАОЛ видеоси (бўлса) — расм устида ▶; босилса АВАГрам лентасида очилади.
   final TvClip? videoClip;
@@ -704,9 +739,33 @@ class _MenuItemRow extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 4),
-                  Text(
-                    '${formatPrice(item.price)} ${context.tr('sum')}',
-                    style: AvaText.price.copyWith(color: c.brandText),
+                  // Қатор баландлиги қотирилган (SliverFixedExtentList): баҳо ЯНГИ қатор эмас, нарх ёнида.
+                  // Матн устуни тор бўлиши мумкин (чапда категория панели, ўнгда «+»): сиғмаса бутун
+                  // қатор кичраяди — нарх ҳам, ★ ҳам йўқолмайди.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${formatPrice(item.price)} ${context.tr('sum')}',
+                          maxLines: 1,
+                          style: AvaText.price.copyWith(color: c.brandText),
+                        ),
+                        if (stats != null && stats!.showRating) ...[
+                          const SizedBox(width: 8),
+                          Icon(Icons.star_rounded, size: 14, color: c.brand),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${stats!.average.toStringAsFixed(1)} (${stats!.ratingCount})',
+                            key: Key('dish-rating-${item.id}'),
+                            maxLines: 1,
+                            style: AvaText.caption.copyWith(color: c.ink2),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
               ),

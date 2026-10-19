@@ -82,6 +82,10 @@ class OrderModel {
   final bool avaFeeCharged;
   final bool avaFeeRefunded;
 
+  /// Мижоз қўйган таом баҳолари: `itemId → 1..5`. Фақат сервер ёзади
+  /// (`submitDishRatings`); эски буюртмаларда йўқ — бўш харита.
+  final Map<String, int> dishRatings;
+
   const OrderModel({
     required this.id,
     required this.type,
@@ -131,9 +135,24 @@ class OrderModel {
     this.avaFeeAmount = 0,
     this.avaFeeCharged = false,
     this.avaFeeRefunded = false,
+    this.dishRatings = const {},
   });
 
   bool get isRestaurant => type == 'restaurant';
+
+  /// Таомларни баҳолаш мумкин: ресторан буюртмаси ва ЕТКАЗИЛГАН (сервер ҳам шуни талаб қилади).
+  bool get canRateDishes => isRestaurant && restaurantStatus == 'delivered';
+
+  /// Серверга юбориладиган хом харита → `itemId → 1..5` (нотўғри қийматлар ташланади).
+  static Map<String, int> parseDishRatings(dynamic raw) {
+    if (raw is! Map) return const {};
+    final out = <String, int>{};
+    raw.forEach((k, v) {
+      final n = v is num && v == v.toInt() ? v.toInt() : null;
+      if (k is String && n != null && n >= 1 && n <= 5) out[k] = n;
+    });
+    return out;
+  }
 
   /// Олиб ташланган «Овқат» модулининг буюртмаси (эга, 2026-10-11) — ҳеч
   /// бир рўйхатда кўрсатилмайди; прод ҳужжатлари алоҳида тозаланади.
@@ -309,11 +328,14 @@ class OrderModel {
       avaFeeAmount: ((d['avaFee'] is Map ? (d['avaFee'] as Map)['amount'] : null) as num?)?.toInt() ?? 0,
       avaFeeCharged: d['avaFee'] is Map && (d['avaFee'] as Map)['charged'] == true,
       avaFeeRefunded: d['avaFee'] is Map && (d['avaFee'] as Map)['refunded'] == true,
+      dishRatings: parseDishRatings(d['dishRatings']),
     );
   }
 }
 
 class OrderItem {
+  /// Фақат ресторан буюртмасида: меню таомининг идентификатори (баҳолаш учун).
+  final String itemId;
   final String name;
   final int count;
   final num? qty;
@@ -328,6 +350,7 @@ class OrderItem {
   final int itemTotal;
 
   const OrderItem({
+    this.itemId = '',
     required this.name,
     this.count = 1,
     this.qty,
@@ -354,6 +377,7 @@ class OrderItem {
     final line = (m['lineTotal'] as num?)?.toInt() ?? (base + fm);
     final foodTotal = (m['total'] as num?)?.toInt() ?? 0;
     return OrderItem(
+      itemId: (m['itemId'] ?? '') as String,
       name: m['name'] ?? '',
       count: count,
       qty: m['qty'] as num?,

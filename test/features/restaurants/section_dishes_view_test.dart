@@ -173,8 +173,11 @@ void main() {
         _d('o', rest: 'ro', sum: 25, count: 5),
       ]);
       await pumpView(t, repo, RestaurantSection.kids, onOpen: opened.add);
-      expect(find.text(tr('restaurants_closed')), findsOneWidget);
-      expect(t.getTopLeft(find.byKey(const ValueKey('dish-ro_o'))).dy, lessThan(t.getTopLeft(find.byKey(const ValueKey('dish-rc_c'))).dy));
+      expect(find.textContaining(tr('restaurants_closed')), findsOneWidget, reason: '«Ёпиқ» ёрлиғи ресторан сатрида');
+      // 2 устунли катакда: очиқ ресторан таоми олдин (қатор бир хил бўлса — чапда).
+      final o = t.getTopLeft(find.byKey(const ValueKey('dish-ro_o')));
+      final c = t.getTopLeft(find.byKey(const ValueKey('dish-rc_c')));
+      expect(o.dy < c.dy || (o.dy == c.dy && o.dx < c.dx), isTrue);
       await t.tap(find.byKey(const ValueKey('dish-rc_c')));
       expect(opened, ['rc']);
     });

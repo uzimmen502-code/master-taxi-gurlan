@@ -22,6 +22,7 @@ const _hubTexts = <String, ({String? title, String subtitle})>{
   ),
   'restaurants': (title: null, subtitle: 'courier_hub_restaurants_subtitle'),
   'milk': (title: null, subtitle: 'courier_hub_milk_subtitle'),
+  'wholesale_market': (title: null, subtitle: 'courier_hub_wholesale_subtitle'),
 };
 
 /// Kuryer xizmati — kuryer ulangan BARCHA xizmatlar (ega, 2026-10-19). Ro'yxatni
@@ -59,6 +60,8 @@ class CourierServicesHubScreen extends StatelessWidget {
             _ServiceCard(
               key: ValueKey('courier-hub-${item.moduleId}'),
               imagePath: item.imagePath,
+              icon: item.icon,
+              iconColor: item.iconColor,
               title: _hubTexts[item.moduleId]?.title != null
                   ? context.tr(_hubTexts[item.moduleId]!.title!)
                   : item.label,
@@ -79,12 +82,18 @@ class _ServiceCard extends StatelessWidget {
   const _ServiceCard({
     super.key,
     required this.imagePath,
+    this.icon,
+    this.iconColor,
     required this.title,
     required this.subtitle,
     required this.onTap,
   });
 
   final String? imagePath;
+
+  /// Расми йўқ хизматлар учун (мас. Улгуржи бозор): рангли катакда белги.
+  final IconData? icon;
+  final Color? iconColor;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -108,7 +117,12 @@ class _ServiceCard extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: imagePath == null
-                    ? const SizedBox(width: 56, height: 56)
+                    ? Container(
+                        width: 56,
+                        height: 56,
+                        color: (iconColor ?? _brandGreen).withValues(alpha: 0.14),
+                        child: Icon(icon ?? Icons.local_shipping_outlined, color: iconColor ?? _brandGreen, size: 30),
+                      )
                     : Image.asset(
                         imagePath!,
                         width: 56,

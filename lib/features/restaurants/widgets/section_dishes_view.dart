@@ -14,6 +14,7 @@ import '../data/restaurants_repository.dart';
 import '../domain/cuisine.dart';
 import '../domain/restaurant_sections.dart';
 import '../domain/seasons.dart';
+import '../domain/venue_type.dart';
 import 'restaurant_row.dart' show formatDistanceLabel;
 
 /// Бўлим белгиси (иконка — эмодзи эмас: қурилмага қараб ҳар хил чизилмасин).
@@ -427,6 +428,23 @@ class SectionDishCard extends StatelessWidget {
                       photo.startsWith('http')
                           ? CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover, errorWidget: (_, __, ___) => _Placeholder(c))
                           : _Placeholder(c),
+                      // Муассаса тури (D-REST-41): юқори ўнгда жуда ихчам ёрлиқ — Уй таоми / Кафе / Ресторан / Чойхона.
+                      // Эски ресторанда `venueType` йўқ — ёрлиқ кўрсатилмайди.
+                      if (d.venueType.isNotEmpty)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: Container(
+                            key: ValueKey('venue-${d.key}'),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(8)),
+                            child: Text(
+                              context.tr(VenueType.l10nKey(d.venueType)),
+                              maxLines: 1,
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white, height: 1.2),
+                            ),
+                          ),
+                        ),
                       if (ranked.isNew)
                         Positioned(
                           left: 6,

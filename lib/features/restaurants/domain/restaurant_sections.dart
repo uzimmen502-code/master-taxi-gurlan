@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'dish_facts.dart';
 import 'restaurant_models.dart';
+import 'venue_type.dart';
 
 /// Бўлимлар — тартиб мижозга кўрсатиладиган тартиб. `key` — сервердаги `SECTION` қийматлари билан бир
 /// хил (мослик тест билан қулфланган); матн калити `restaurants_section_<key>` (3 тилда).
@@ -175,6 +176,7 @@ class SectionDish {
     this.stopUntil,
     this.openingHours,
     this.pausedUntil,
+    this.venueType = '',
   });
 
   final String restaurantId;
@@ -198,6 +200,9 @@ class SectionDish {
   /// Таомнинг мавсум теглари (ramadan, …) — мавсумий бўлимда ҳозир очиқ мавсум бўйича фильтрланади.
   final List<String> seasons;
   final String restaurantName;
+
+  /// Муассаса тури (D-REST-41; индекс ҳужжатидан): картада ихчам ёрлиқ. Эски ресторанда йўқ — бўш.
+  final String venueType;
   final double? restaurantLat;
   final double? restaurantLng;
   final int prepTimeMin;
@@ -279,6 +284,7 @@ class SectionDish {
       sections: d['sections'] is List ? (d['sections'] as List).whereType<String>().toList() : const [],
       seasons: d['seasons'] is List ? (d['seasons'] as List).whereType<String>().toList() : const [],
       restaurantName: _str(d['restaurantName']),
+      venueType: VenueType.parse(d['venueType']),
       restaurantLat: d['restaurantLat'] is num ? (d['restaurantLat'] as num).toDouble() : null,
       restaurantLng: d['restaurantLng'] is num ? (d['restaurantLng'] as num).toDouble() : null,
       prepTimeMin: optInt('prepTimeMin', 5, 180) ?? 20,

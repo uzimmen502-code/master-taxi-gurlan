@@ -12,6 +12,7 @@ import '../../../models/map_picker_result.dart';
 import '../../../services/location_service.dart';
 import '../../map_picker/screens/map_picker_screen.dart';
 import '../domain/restaurant_models.dart' show Restaurant;
+import '../domain/venue_type.dart';
 import 'restaurant_register_form.dart';
 
 class RestaurantFormFields extends StatefulWidget {
@@ -20,6 +21,7 @@ class RestaurantFormFields extends StatefulWidget {
     required this.data,
     required this.onChanged,
     this.showLegalType = true,
+    this.showVenueType = false,
     this.showPaymentDetails = true,
     this.showMaxQty = false,
     this.bookingsDisabled = false,
@@ -35,6 +37,9 @@ class RestaurantFormFields extends StatefulWidget {
 
   /// Юридик шакл фақат рўйхатдан ўтишда (кейин ўзгармайди — server-only).
   final bool showLegalType;
+
+  /// «Муассаса тури» (Кафе / Ресторан / Чойхона) — фақат кафе-ресторан рўйхатдан ўтишида (D-REST-41).
+  final bool showVenueType;
 
   /// Карта рақами/эгаси — рўйхатдан ўтишда формада; «Дўкон»да алоҳида блок.
   final bool showPaymentDetails;
@@ -179,8 +184,22 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
             ],
           ),
         ],
-        _section(context.tr('restaurants_m_cuisine')),
-        Wrap(
+        if (widget.showVenueType) ...[
+          _section(context.tr('restaurants_m_venue_type')),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final t in VenueType.choices)
+                ChoiceChip(
+                  key: ValueKey('venue-choice-$t'),
+                  label: Text(context.tr(VenueType.l10nKey(t))),
+                  selected: d.venueType == t,
+                  onSelected: (_) => _set(() => d.venueType = t),
+                ),
+            ],
+          ),
+        ],
+        _section(context.tr('restaurants_m_cuisine')),        Wrap(
           spacing: 6,
           runSpacing: 4,
           children: [

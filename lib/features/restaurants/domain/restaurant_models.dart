@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import 'dish_facts.dart';
 import 'menu_category_names.dart';
 import 'qty_tiers.dart';
+import 'venue_type.dart';
 
 /// `restaurantStatus` қийматлари — сервердаги жадвал билан бир хил.
 abstract final class RestaurantOrderStatus {
@@ -228,6 +229,7 @@ class Restaurant {
     this.pausedUntil,
     this.status = 'applied',
     this.legalType = 'individual',
+    this.venueType = '',
     this.ownerUid = '',
     this.ratingAvg = 0,
     this.ratingCount = 0,
@@ -281,6 +283,9 @@ class Restaurant {
 
   /// `individual` (уй ошпази) · `yatt` · `llc`.
   final String legalType;
+
+  /// Муассаса тури (D-REST-41): `home` · `cafe` · `restaurant` · `chaikhana`; ЭСКИ ҳужжатда йўқ — бўш (ёрлиқ йўқ).
+  final String venueType;
   final String ownerUid;
   final double ratingAvg;
   final int ratingCount;
@@ -333,6 +338,7 @@ class Restaurant {
       pausedUntil: _ts(d['pausedUntil']),
       status: _str(d['status']),
       legalType: _str(d['legalType']).isEmpty ? 'individual' : _str(d['legalType']),
+      venueType: VenueType.parse(d['venueType']),
       ownerUid: _str(d['ownerUid']),
       ratingAvg: _dbl(d['ratingAvg']) ?? 0,
       ratingCount: _int(d['ratingCount']),

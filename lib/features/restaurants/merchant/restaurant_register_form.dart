@@ -3,11 +3,14 @@
 // текширувини барибир қилади (18-қоида).
 
 import '../domain/restaurant_models.dart';
+import '../domain/venue_type.dart';
 
 class RestaurantFormData {
   RestaurantFormData({
     this.name = '',
     this.legalType = 'individual',
+    this.venueType,
+    this.venueRequired = false,
     this.description = '',
     this.cuisineTags = const [],
     this.address = '',
@@ -40,6 +43,14 @@ class RestaurantFormData {
 
   String name;
   String legalType;
+
+  /// Муассаса тури (D-REST-41): кафе-ресторан эгаси Кафе / Ресторан / Чойхона дан бирини танлайди. Уй ошпази учун
+  /// юборилмайди (сервер `home` ни ўзи қўяди). Профилни ТАҲРИРЛАШДА юборилмайди — эски ресторанларга тегилмайди.
+  String? venueType;
+
+  /// `true` — фақат ЯНГИ рўйхатдан ўтишдаги кафе-ресторан: тур танлаш мажбурий. Таҳрир (`updateProfile`) формасида
+  /// `false`: туси йўқ эски ресторанлар сақлай олмай қолмасин.
+  final bool venueRequired;
   String description;
   List<String> cuisineTags;
   String address;
@@ -102,6 +113,7 @@ class RestaurantFormData {
     if (!hasLocation) errs.add('location');
     if (address.trim().isEmpty) errs.add('address');
     if (!legalTypes.contains(legalType)) errs.add('legal_type');
+    if (venueRequired && legalType != homeCookLegalType && !VenueType.choices.contains(venueType)) errs.add('venue_type');
     if (!deliveryModes.contains(deliveryMode)) errs.add('delivery_mode');
     if (!prepay && !cash) errs.add('payment_method');
     final card = cardNumber.replaceAll(RegExp(r'\D'), '');
@@ -134,6 +146,8 @@ class RestaurantFormData {
   Map<String, dynamic> toRegisterPayload() => {
         'name': name.trim(),
         'legalType': legalType,
+        // Уй ошпази: сервер home ни ўзи қўяди; кафе-ресторан: танланган тур (эски клиентда — йўқ).
+        if (legalType != homeCookLegalType && VenueType.choices.contains(venueType)) 'venueType': venueType,
         'description': description.trim(),
         'cuisineTags': cuisineTags.take(3).toList(),
         'address': address.trim(),

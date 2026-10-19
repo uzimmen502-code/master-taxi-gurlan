@@ -43,7 +43,7 @@ void main() {
           child: Text('МАЗМУН'),
         ),
       );
-      expect(find.text('Яқинингиздаги эълонлар'), findsOneWidget);
+      expect(find.text('Яқинингиздаги эълонлар:'), findsOneWidget, reason: 'бўлим сарлавҳасига «:» қўшилади (ягона услуб)');
       expect(find.text('МАЗМУН'), findsOneWidget);
     });
 
@@ -59,7 +59,7 @@ void main() {
         ),
       );
       // Тавсиф талаби: бўш бўлим йўқолиб кетмайди.
-      expect(find.text('Шаҳарлараро такси'), findsOneWidget);
+      expect(find.text('Шаҳарлараро такси:'), findsOneWidget);
       expect(find.text('Ҳозирча таклиф йўқ'), findsOneWidget);
       expect(find.text('МАЗМУН'), findsNothing);
     });
@@ -232,6 +232,13 @@ void main() {
     // Эга (2026-10-18): қурилмада «Яқиндаги эълон…», «Яқиндаги хизма…»,
     // «Кўчмас мулк кла…» бўлиб қирқилган эди. Тест шрифти (Ahem) ҳар ҳарфни
     // 1em кенгликда чизади — шунинг учун кенгликлар аниқ ҳисобланади.
+    test('sectionTitleWithColon: «:» қўшилади, аллақачон бўлса такрорланмайди, бўш — ўзгармайди', () {
+      expect(sectionTitleWithColon('Танишув'), 'Танишув:');
+      expect(sectionTitleWithColon('Кўчмас мулк кластери:'), 'Кўчмас мулк кластери:');
+      expect(sectionTitleWithColon('AVAGram '), 'AVAGram:');
+      expect(sectionTitleWithColon(''), '');
+    });
+
     test('SectionTitleText.fitFor — чегаралар', () {
       expect(SectionTitleText.fitFor(100, 120), SectionTitleFit.asIs);
       expect(SectionTitleText.fitFor(100, 100), SectionTitleFit.asIs);

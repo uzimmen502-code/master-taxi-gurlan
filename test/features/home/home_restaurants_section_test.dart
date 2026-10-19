@@ -75,7 +75,7 @@ void main() {
     )));
     await tester.pumpAndSettle();
 
-    expect(find.text('home_section_restaurants'), findsOneWidget);
+    expect(find.text('home_section_restaurants:'), findsOneWidget);
     final yaqin = tester.getTopLeft(find.text('yaqin'));
     final uzoq = tester.getTopLeft(find.text('uzoq'));
     final yopiq = tester.getTopLeft(find.text('yopiq'));
@@ -100,7 +100,7 @@ void main() {
       onOpenRestaurant: (_) {},
     )));
     await tester.pumpAndSettle();
-    expect(find.text('home_section_restaurants'), findsNothing);
+    expect(find.text('home_section_restaurants:'), findsNothing);
   });
 
   testWidgets('«Tez kunda» + sinovchi → ko\'rinadi; sinovchi emas → yo\'q', (tester) async {
@@ -135,7 +135,7 @@ void main() {
       onOpenRestaurant: (_) {},
     )));
     await tester.pumpAndSettle();
-    expect(find.text('home_section_restaurants'), findsOneWidget);
+    expect(find.text('home_section_restaurants:'), findsOneWidget);
     expect(find.text('restaurants_empty_nearby'), findsOneWidget);
   });
 

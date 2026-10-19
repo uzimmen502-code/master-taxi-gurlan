@@ -572,7 +572,7 @@ class _Header extends StatelessWidget {
             ],
             Expanded(
               child: SectionTitleText(
-                title: title,
+                title: sectionTitleWithColon(title),
                 style: AvaText.sectionTitle.copyWith(color: c.ink),
               ),
             ),
@@ -588,6 +588,13 @@ class _Header extends StatelessWidget {
       },
     );
   }
+}
+
+/// Бош саҳифа бўлим сарлавҳаси ҲАММАСИДА охирида «:» (эга, 2026-10-20: «ягона услуб», «Кўчмас мулк кластери:» каби).
+/// Матн калитлари плиткалар билан умумий бўлгани учун икки нуқта шу ерда қўшилади; аллақачон бўлса — такрорланмайди.
+String sectionTitleWithColon(String title) {
+  final t = title.trimRight();
+  return t.isEmpty || t.endsWith(':') ? title : '$t:';
 }
 
 /// Бўлим сарлавҳаси: сиғмаса аввал озгина кичраяди, кўп кичрайиши керак

@@ -3699,7 +3699,7 @@
   "restaurants_dish_serves": "{n} киши учун",
   "restaurants_section_dishes": "Барчаси",
   "news_delete_title": "Хабарни ўчирасизми?",
-  "news_delete_body": "Хабар фақат шу қурилмадаги рўйхатдан олиб ташланади.",
+  "news_delete_body": "Хабар рўйхатингиздан барча қурилмангизда олиб ташланади.",
   "news_delete_confirm": "Ўчириш",
   "news_delete_cancel": "Бекор қилиш",
   "news_delete_tooltip": "Хабарни ўчириш",

@@ -1034,6 +1034,19 @@ service cloud.firestore {
       allow write: if isOwner(userId) || isAdmin();
     }
 
+    // «Хабарлар»дан ЎЧИРИЛГАН хабарлар (эга, 2026-10-20: «бошқа қурилмада қайта кўриш нимага керак — ўчирди и всё»).
+    // Ҳужжат id = `admin_news` id; фойдаланувчи ўз рўйхатидан ҲАММА қурилмада олиб ташлайди. `admin_news` ҳужжатининг
+    // ўзи ўзгармайди (умумий хабар бошқаларга, буюртма хабари админ аудитига керак). Фақат эга: яратади (`at` ==
+    // сервер вақти, бошқа майдон йўқ) ва ўқийди; ўзгартириш йўқ. Тест: functions/test/news_dismissed_rules.test.js
+    match /users/{userId}/dismissed_news/{newsId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['at'])
+          && request.resource.data.at == request.time;
+      allow update: if false;
+      allow delete: if isOwner(userId);
+    }
+
     // Local taxi qidiruv bloki — фақат CF / admin
     match /users/{userId}/local_taxi_block/{doc} {
       allow read: if isOwner(userId) || isAdmin();

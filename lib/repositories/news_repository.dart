@@ -570,6 +570,32 @@ class NewsRepository {
 
   Future<void> markAllRead(String userId) async => markGeneralRead(userId);
 
+  /// «Хабарлар»дан ўчирилган хабарлар (`users/{id}/dismissed_news`, ҳужжат id = `admin_news` id). Эга ўчирган хабар
+  /// унинг БАРЧА қурилмасида кўринмайди; `admin_news` ҳужжатининг ўзи ўзгармайди (умумий хабар бошқаларга, буюртма
+  /// хабари админ аудитига керак). Эга: 2026-10-20.
+  CollectionReference<Map<String, dynamic>> _dismissedCol(String userId) =>
+      _db.collection('users').doc(canonicalPhoneId(userId)).collection('dismissed_news');
+
+  /// Ўчирилган хабар id'лари (жонли). Рухсат/тармоқ хатоси — бўш тўплам (рўйхат ишлайверади).
+  Stream<Set<String>> watchDismissedIds(String userId) {
+    if (canonicalPhoneId(userId).length < 9) return Stream.value(const <String>{});
+    return _dismissedCol(userId).snapshots().map((s) => {for (final d in s.docs) d.id}).handleError((Object _) {});
+  }
+
+  /// Хабарларни ўз рўйхатидан ўчириш (идемпотент: такрор — шу ҳужжат қайта ёзилади). 450 тадан пакетлаб.
+  Future<void> dismissNews(String userId, Iterable<String> newsIds) async {
+    final ids = newsIds.where((id) => id.isNotEmpty && !id.contains('/')).toSet().toList();
+    if (ids.isEmpty || canonicalPhoneId(userId).length < 9) return;
+    final col = _dismissedCol(userId);
+    for (var i = 0; i < ids.length; i += 450) {
+      final batch = _db.batch();
+      for (final id in ids.skip(i).take(450)) {
+        batch.set(col.doc(id), {'at': FieldValue.serverTimestamp()});
+      }
+      await batch.commit();
+    }
+  }
+
   /// Буюртма хабарлари — сервер фильтри. Барча ёзувчилар (`order_placed`,
   /// `order_status`, `notifyUserInApp(category: 'order')`) `category:
   /// 'order'` ёзади, шунинг учун [NewsItem.isOrderNews] билан тенг.

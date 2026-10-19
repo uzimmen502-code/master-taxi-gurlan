@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,7 +9,6 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/message_thread_group.dart';
 import '../../../models/news_item.dart';
 import '../../../models/news_read_state.dart';
-import '../../../services/hidden_news_store.dart';
 import '../widgets/news_delete_button.dart';
 import '../../../repositories/chat_repository.dart';
 import '../../../repositories/driver_repository.dart';
@@ -42,6 +43,7 @@ class _MessagesTabState extends State<MessagesTab>
   bool _ready = false;
   String _uid = '';
   Set<String> _hidden = <String>{};
+  StreamSubscription<Set<String>>? _dismissedSub;
   Stream<List<NewsItem>>? _newsStream;
   Stream<bool>? _chatStream;
   Stream<Map<String, dynamic>?>? _driverStream;
@@ -58,14 +60,18 @@ class _MessagesTabState extends State<MessagesTab>
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
-    final hidden = await HiddenNewsStore.load(uid);
     if (!mounted) return;
     final newsRepo = context.read<NewsRepository>();
     final chatRepo = context.read<ChatRepository>();
     final driverRepo = context.read<DriverRepository>();
+    // Ўчирилган хабарлар сервердан (барча қурилмада бир хил); янги ўчириш дарров, тўплам фақат ўсади.
+    if (uid.length >= 9) {
+      _dismissedSub = newsRepo.watchDismissedIds(uid).listen((ids) {
+        if (mounted) setState(() => _hidden = {..._hidden, ...ids});
+      });
+    }
     setState(() {
       _uid = uid;
-      _hidden = hidden;
       if (uid.length >= 9) {
         _newsStream = newsRepo.watchDialogNews(userId: uid, limit: 80);
         _chatStream = chatRepo.watchUnreadFromAdmin(uid);
@@ -75,11 +81,16 @@ class _MessagesTabState extends State<MessagesTab>
     });
   }
 
+  @override
+  void dispose() {
+    _dismissedSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _deleteGroup(MessageThreadGroup g) async {
-    final hidden =
-        await HiddenNewsStore.hide(_uid, g.messages.map((m) => m.id));
-    if (!mounted) return;
-    setState(() => _hidden = hidden);
+    final ids = g.messages.map((m) => m.id).toList();
+    setState(() => _hidden = {..._hidden, ...ids});
+    await context.read<NewsRepository>().dismissNews(_uid, ids);
   }
 
   @override

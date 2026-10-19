@@ -1,6 +1,6 @@
 // «Хабарлар» → «Буюртма» (эга, 2026-10-19): (1) экран «милтиллаб» қолмасин —
 // рўйхат қайта чизилганда оқим қайта очилмайди; (2) ўқилмаган карта жирний
-// (қалин), ўқилгани оддий шрифт билан ажралади (белги/фон йўқ, эга 2026-10-19); (3) хабарни ўчириш тугмаси (шу қурилмада яширади).
+// (қалин), ўқилгани оддий шрифт билан ажралади (белги/фон йўқ, эга 2026-10-19); (3) хабарни ЎЧИРИШ тугмаси: сервердаги users/{uid}/dismissed_news га ёзади — барча қурилмада йўқолади (эга 2026-10-20).
 // Матнлар `context.tr` орқали — тестда делегат йўқ, шунинг учун калит кўринади.
 
 import 'dart:async';
@@ -10,7 +10,6 @@ import 'package:ava_gurlan/features/profile/screens/order_news_tab.dart';
 import 'package:ava_gurlan/models/news_item.dart';
 import 'package:ava_gurlan/models/news_read_state.dart';
 import 'package:ava_gurlan/repositories/news_repository.dart';
-import 'package:ava_gurlan/services/hidden_news_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +22,24 @@ class _Repo implements NewsRepository {
   int orderOpens = 0;
   int broadcastOpens = 0;
   final _orderCtrl = StreamController<List<NewsItem>>.broadcast();
+
+  /// Сервердаги dismissed_news (барча қурилма учун умумий).
+  final Set<String> dismissed = {};
+  final _dismissedCtrl = StreamController<Set<String>>.broadcast();
+  int dismissCalls = 0;
+
+  @override
+  Stream<Set<String>> watchDismissedIds(String userId) async* {
+    yield {...dismissed};
+    yield* _dismissedCtrl.stream;
+  }
+
+  @override
+  Future<void> dismissNews(String userId, Iterable<String> newsIds) async {
+    dismissCalls++;
+    dismissed.addAll(newsIds);
+    _dismissedCtrl.add({...dismissed});
+  }
 
   void push(List<NewsItem> next) {
     items = next;
@@ -195,12 +212,28 @@ void main() {
     await t.tap(find.byKey(const ValueKey('news-delete-confirm')));
     await t.pumpAndSettle();
     expect(find.byKey(const ValueKey('news-delete')), findsOneWidget);
-    expect(await HiddenNewsStore.load('998901234567'), {'m3'});
+    expect(repo.dismissed, {'m3'}, reason: 'энг янги буюртма (o2) хабари сервер рўйхатига ёзилди; o1 қолди');
+    expect(repo.dismissCalls, 1);
 
     // Сервердан шу хабар яна келса ҳам кўринмайди.
     repo.push(repo.items);
     await t.pump();
     expect(find.byKey(const ValueKey('news-delete')), findsOneWidget);
+  });
+
+  testWidgets('БОШҚА қурилма: сервердаги ўчирилганлар янги қурилмада ҳам кўринмайди (юклаш пайтидан)', (t) async {
+    final repo = _Repo([]);
+    repo.dismissed.addAll({'m1', 'm2'}); // бошқа қурилмада ўчирилган
+    await pumpOrders(t, repo, read: NewsReadState(known: true, readBefore: t0));
+    repo.push([
+      _order('m1', 'o1', t0.add(const Duration(minutes: 1))),
+      _order('m2', 'o1', t0.add(const Duration(minutes: 2))),
+      _order('m3', 'o2', t0.add(const Duration(minutes: 3))),
+    ]);
+    await t.pump();
+    await t.pump();
+    expect(find.byKey(const ValueKey('order-news-o1')), findsNothing);
+    expect(find.byKey(const ValueKey('order-news-o2')), findsOneWidget);
   });
 
   testWidgets('умумий янгилик: жирний/оддий ва ўчириш', (t) async {
@@ -241,18 +274,6 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Янгилик 1'), findsNothing);
     expect(find.text('Эски янгилик'), findsOneWidget);
-    expect(await HiddenNewsStore.load('998901234567'), {'g1'});
-  });
-
-  test(
-      'HiddenNewsStore: чегара ${HiddenNewsStore.maxIds} та, энг эскилари тушади',
-      () async {
-    for (var i = 0; i < HiddenNewsStore.maxIds + 5; i++) {
-      await HiddenNewsStore.hide('u', ['id$i']);
-    }
-    final s = await HiddenNewsStore.load('u');
-    expect(s.length, HiddenNewsStore.maxIds);
-    expect(s.contains('id0'), isFalse);
-    expect(s.contains('id${HiddenNewsStore.maxIds + 4}'), isTrue);
+    expect(repo.dismissed, {'g1'});
   });
 }

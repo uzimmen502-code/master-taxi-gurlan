@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -8,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
 import '../../../models/news_read_state.dart';
-import '../../../services/hidden_news_store.dart';
 import '../widgets/news_delete_button.dart';
 import '../../../repositories/news_repository.dart';
 import '../../../services/user_audience.dart';
@@ -33,6 +34,7 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
   Stream<List<NewsItem>>? _stream;
   String _uid = '';
   Set<String> _hidden = <String>{};
+  StreamSubscription<Set<String>>? _dismissedSub;
 
   @override
   bool get wantKeepAlive => true;
@@ -47,22 +49,29 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
     final prefs = await SharedPreferences.getInstance();
     final role = UserAudience.fromPrefs(prefs);
     final uid = phoneDigits(prefs.getString('user_phone') ?? '');
-    final hidden = await HiddenNewsStore.load(uid);
     if (!mounted) return;
-    final stream = context
-        .read<NewsRepository>()
-        .watchBroadcastNews(audiences: ['all', role], userId: uid, limit: 50);
+    final repo = context.read<NewsRepository>();
+    final stream =
+        repo.watchBroadcastNews(audiences: ['all', role], userId: uid, limit: 50);
+    // Ўчирилган хабарлар сервердан (барча қурилмада бир хил); янги ўчириш дарров, тўплам фақат ўсади.
+    _dismissedSub = repo.watchDismissedIds(canonicalPhoneId(uid)).listen((ids) {
+      if (mounted) setState(() => _hidden = {..._hidden, ...ids});
+    });
     setState(() {
       _uid = uid;
-      _hidden = hidden;
       _stream = stream;
     });
   }
 
+  @override
+  void dispose() {
+    _dismissedSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _delete(NewsItem n) async {
-    final hidden = await HiddenNewsStore.hide(_uid, [n.id]);
-    if (!mounted) return;
-    setState(() => _hidden = hidden);
+    setState(() => _hidden = {..._hidden, n.id});
+    await context.read<NewsRepository>().dismissNews(canonicalPhoneId(_uid), [n.id]);
   }
 
   @override

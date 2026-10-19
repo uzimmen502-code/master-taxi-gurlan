@@ -3699,7 +3699,7 @@
   "restaurants_dish_serves": "{n} kishi uchun",
   "restaurants_section_dishes": "Barchasi",
   "news_delete_title": "Xabarni o'chirasizmi?",
-  "news_delete_body": "Xabar faqat shu qurilmadagi ro'yxatdan olib tashlanadi.",
+  "news_delete_body": "Xabar ro'yxatingizdan barcha qurilmangizda olib tashlanadi.",
   "news_delete_confirm": "O'chirish",
   "news_delete_cancel": "Bekor qilish",
   "news_delete_tooltip": "Xabarni o'chirish",

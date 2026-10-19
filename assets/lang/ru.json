@@ -3697,5 +3697,11 @@
   "restaurants_ramadan_today": "Сегодня: сухур {sahar} · ифтар {iftar}",
   "restaurants_dish_preorder": "Предзаказ",
   "restaurants_dish_serves": "На {n} чел.",
-  "restaurants_section_dishes": "Все"
+  "restaurants_section_dishes": "Все",
+  "news_delete_title": "Удалить сообщение?",
+  "news_delete_body": "Сообщение будет убрано только из списка на этом устройстве.",
+  "news_delete_confirm": "Удалить",
+  "news_delete_cancel": "Отмена",
+  "news_delete_tooltip": "Удалить сообщение",
+  "news_deleted_snack": "Сообщение удалено"
 }

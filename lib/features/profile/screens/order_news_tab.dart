@@ -6,26 +6,69 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
+import '../../../models/news_read_state.dart';
 import '../../../models/order_news_group.dart';
 import '../../../repositories/news_repository.dart';
+import '../../../services/hidden_news_store.dart';
+import '../widgets/news_delete_button.dart';
 import 'order_news_detail_screen.dart';
 
 /// Буюртма хабарлари — ҳар буюртма алоҳида карта.
 class OrderNewsTab extends StatefulWidget {
-  const OrderNewsTab({super.key, this.onMarkedRead});
+  const OrderNewsTab({
+    super.key,
+    this.onMarkedRead,
+    this.readState = NewsReadState.unknown,
+  });
 
   final VoidCallback? onMarkedRead;
+
+  /// Экранга кирилгандаги ўқилганлик ҳолати — «янги» карталарни ажратади.
+  final NewsReadState readState;
 
   @override
   State<OrderNewsTab> createState() => _OrderNewsTabState();
 }
 
-class _OrderNewsTabState extends State<OrderNewsTab> {
+class _OrderNewsTabState extends State<OrderNewsTab>
+    with AutomaticKeepAliveClientMixin {
   static const _orange = AppColors.primary;
 
-  Future<String> _uid() async {
+  // Оқим БИР марта очилади: аввал `build` ичида ҳар сафар янгиси очилар ва
+  // «Хабарлар» экрани badge сабабли қайта чизилганда рўйхат айлана (spinner)
+  // билан «милтиллар» эди (эга, 2026-10-19).
+  Stream<List<NewsItem>>? _stream;
+  String _uid = '';
+  Set<String> _hidden = <String>{};
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
-    return canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    final hidden = await HiddenNewsStore.load(uid);
+    if (!mounted) return;
+    final stream =
+        context.read<NewsRepository>().watchOrderNews(userId: uid, limit: 50);
+    setState(() {
+      _uid = uid;
+      _hidden = hidden;
+      _stream = stream;
+    });
+  }
+
+  Future<void> _deleteGroup(OrderNewsGroup g) async {
+    final hidden =
+        await HiddenNewsStore.hide(_uid, g.messages.map((m) => m.id));
+    if (!mounted) return;
+    setState(() => _hidden = hidden);
   }
 
   String _statusLabel(String s) {
@@ -53,29 +96,29 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final repo = context.read<NewsRepository>();
-    return FutureBuilder<String>(
-      future: _uid(),
-      builder: (ctx, uidSnap) {
-        final uid = uidSnap.data ?? '';
-        return StreamBuilder<List<NewsItem>>(
-          stream: repo.watchOrderNews(userId: uid, limit: 50),
-          builder: (ctx, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              return Center(child: Text('Хатолик: ${snap.error}'));
-            }
-            final groups = OrderNewsGroup.fromItems(snap.data ?? const []);
-            if (groups.isEmpty) return _emptyState();
-            return ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: groups.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _groupCard(context, groups[i]),
-            );
-          },
+    super.build(context);
+    final stream = _stream;
+    if (stream == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return StreamBuilder<List<NewsItem>>(
+      stream: stream,
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError && !snap.hasData) {
+          return Center(child: Text('Хатолик: ${snap.error}'));
+        }
+        final visible = (snap.data ?? const <NewsItem>[])
+            .where((n) => !_hidden.contains(n.id));
+        final groups = OrderNewsGroup.fromItems(visible.toList());
+        if (groups.isEmpty) return _emptyState();
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: groups.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) => _groupCard(context, groups[i]),
         );
       },
     );
@@ -105,10 +148,16 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
     final latest = g.latestMessage;
     final status = _statusLabel(latest.orderStatus);
     final date = _shortDate(g.lastUpdate);
+    final unreadCount =
+        g.messages.where((m) => widget.readState.isUnread(m.createdAt)).length;
+    final unread = unreadCount > 0;
 
     return Material(
+      key: ValueKey('order-news-${g.orderId.isEmpty ? latest.id : g.orderId}'),
+      // Ўқилмаган — жирний (қалин) ёзув, ўқилган — оддий ёзув (эга, 2026-10-19).
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () async {
           await Navigator.push(
@@ -120,8 +169,8 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
           widget.onMarkedRead?.call();
         },
         borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 6, 14),
           child: Row(
             children: [
               Container(
@@ -145,9 +194,10 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
                   children: [
                     Text(
                       g.moduleLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            unread ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -155,6 +205,8 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
                       '${g.messages.length} хабар · сўнгги: $status',
                       style: TextStyle(
                         fontSize: 12,
+                        fontWeight:
+                            unread ? FontWeight.bold : FontWeight.normal,
                         color: Colors.grey.shade600,
                       ),
                     ),
@@ -164,6 +216,8 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
+                        fontWeight:
+                            unread ? FontWeight.bold : FontWeight.normal,
                         color: Colors.grey.shade700,
                       ),
                     ),
@@ -174,11 +228,12 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(date,
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade500)),
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                   const Icon(Icons.chevron_right, color: Colors.grey),
                 ],
               ),
+              NewsDeleteButton(onDelete: () => _deleteGroup(g)),
             ],
           ),
         ),

@@ -3,6 +3,7 @@
 // буюртмадан баҳоларни ўқиш, баҳолаш карточкаси ва менюдаги ★.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/dish_stats.dart';
@@ -20,6 +21,7 @@ OrderModel _order({
   String restaurantStatus = 'delivered',
   Map<String, int> rated = const {},
   List<OrderItem>? items,
+  DateTime? deliveredAt,
 }) =>
     OrderModel(
       id: 'o1',
@@ -28,6 +30,8 @@ OrderModel _order({
       status: 'delivered',
       restaurantStatus: restaurantStatus,
       dishRatings: rated,
+      // Standart: 1 daqiqa oldin yetkazilgan — baholash muddati ochiq.
+      deliveredAt: deliveredAt ?? DateTime.now().subtract(const Duration(minutes: 1)),
       items: items ??
           const [
             OrderItem(itemId: 'osh', name: 'Osh', count: 1),
@@ -68,6 +72,81 @@ void main() {
       expect(neg.ratingCount, 0);
       final ok = DishStats.fromMap(const {'ratingSum': 12.0, 'ratingCount': 3});
       expect([ok.ratingSum, ok.ratingCount], [12, 3]);
+    });
+  });
+
+  group('Baholash muddati — 30 daqiqa (ega, 2026-10-19)', () {
+    final t0 = DateTime(2026, 10, 19, 12);
+
+    test('dishRatingTimeLeft: 0 → 30:00, 29 → 1:00, 30:00 aniq → 0 qoldi emas (chegara ochiq), 30:01 → yopiq', () {
+      expect(dishRatingTimeLeft(t0, t0), const Duration(minutes: 30));
+      expect(dishRatingTimeLeft(t0, t0.add(const Duration(minutes: 29))), const Duration(minutes: 1));
+      expect(dishRatingTimeLeft(t0, t0.add(const Duration(minutes: 30))), Duration.zero, reason: '30:00 da qolgan vaqt 0');
+      expect(dishRatingTimeLeft(t0, t0.add(const Duration(minutes: 30, seconds: 1))), Duration.zero);
+      expect(dishRatingTimeLeft(t0, t0.add(const Duration(hours: 5))), Duration.zero);
+    });
+
+    test('noma\'lum yetkazilgan vaqt yoki kelajak (soat farqi) — YOPIQ (serverdagi kabi xavfsiz tomon)', () {
+      expect(dishRatingTimeLeft(null, t0), Duration.zero);
+      expect(dishRatingTimeLeft(t0.add(const Duration(minutes: 1)), t0), Duration.zero);
+    });
+
+    test('klient muddati serverdagi RATING_WINDOW_MIN bilan bir xil', () {
+      final js = File('functions/restaurant_dish_ratings.js').readAsStringSync();
+      final m = RegExp(r'const RATING_WINDOW_MIN = (\d+);').firstMatch(js);
+      expect(m, isNotNull, reason: 'functions/restaurant_dish_ratings.js: RATING_WINDOW_MIN yo\'q');
+      expect(int.parse(m!.group(1)!), dishRatingWindow.inMinutes);
+    });
+
+    Future<void> pump(WidgetTester t, OrderModel o, {required DateTime Function() clock, Future<bool> Function(Map<String, int>)? onSubmit}) async {
+      t.view.physicalSize = const Size(390 * 3, 1600 * 3);
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(l10nApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DishRatingCard(order: o, onSubmit: onSubmit ?? (_) async => true, clock: clock),
+          ),
+        ),
+      ));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('qolgan vaqt ko\'rsatiladi; 5 daqiqa va kam — ogohlantirish rangi; ochiq muddatda tugma bor', (t) async {
+      final o = _order(deliveredAt: t0);
+      await pump(t, o, clock: () => t0.add(const Duration(minutes: 10)));
+      expect(find.text(tr('restaurants_rate_left').replaceAll('{min}', '20')), findsOneWidget);
+      await pump(t, o, clock: () => t0.add(const Duration(minutes: 27, seconds: 30)));
+      expect(find.text(tr('restaurants_rate_left').replaceAll('{min}', '3')), findsOneWidget, reason: '2:30 → yuqoriga yaxlitlanadi');
+      expect(find.byKey(const ValueKey('dish-rating-submit')), findsOneWidget);
+    });
+
+    testWidgets('muddat tugagan va hech narsa baholanmagan — karta butunlay yo\'q', (t) async {
+      await pump(t, _order(deliveredAt: t0), clock: () => t0.add(const Duration(minutes: 31)));
+      expect(find.byKey(const ValueKey('dish-rating-card')), findsNothing);
+    });
+
+    testWidgets('muddat tugagan, bittasi baholangan — faqat o\'sha (qulflangan), tugma va ko\'rsatma yo\'q', (t) async {
+      await pump(t, _order(deliveredAt: t0, rated: const {'osh': 4}), clock: () => t0.add(const Duration(minutes: 45)));
+      expect(find.byKey(const ValueKey('dish-rating-card')), findsOneWidget);
+      expect(find.text('Osh'), findsOneWidget);
+      expect(find.text('Somsa'), findsNothing, reason: 'baholanmagan taom muddatdan keyin ko\'rsatilmaydi');
+      expect(find.byKey(const ValueKey('dish-rating-submit')), findsNothing);
+      expect(find.byKey(const ValueKey('dish-rating-left')), findsNothing);
+      expect(find.text(tr('restaurants_rate_saved')), findsOneWidget);
+    });
+
+    testWidgets('ekran ochiq turganda muddat tugasa karta o\'zi yopiladi (taymer)', (t) async {
+      var now = t0.add(const Duration(minutes: 29));
+      await pump(t, _order(deliveredAt: t0), clock: () => now);
+      expect(find.byKey(const ValueKey('dish-rating-submit')), findsOneWidget);
+      now = t0.add(const Duration(minutes: 31));
+      await t.pump(const Duration(seconds: 21));
+      expect(find.byKey(const ValueKey('dish-rating-card')), findsNothing);
+    });
+
+    test('OrderModel: deliveredAt yo\'q (eski hujjat) → null → karta ko\'rsatilmaydi', () {
+      expect(const OrderModel(id: 'x', type: 'restaurant', total: 1, status: 'delivered', items: []).deliveredAt, isNull);
     });
   });
 

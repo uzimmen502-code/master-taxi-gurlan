@@ -8,6 +8,20 @@
 /// Бу рақам фақат баҳолар сонига тааллуқли; «30 кундан ошмаган» шарти S3 лента қатламида.
 const int dishNewRatingCount = 5;
 
+/// Баҳолаш муддати: етказилгандан кейин 30 дақиқа (эга, 2026-10-19). ҲАҚИҚИЙ текширув серверда
+/// (`functions/restaurant_dish_ratings.js` `RATING_WINDOW_MIN`; мослик тест билан қулфланган) —
+/// клиент муддати ўтган карточкани фақат яширади.
+const Duration dishRatingWindow = Duration(minutes: 30);
+
+/// Баҳолаш учун қолган вақт. Етказилган вақт номаълум ёки келажакда бўлса — `Duration.zero`
+/// (сервер ҳам шундай: ёпиқ томонга).
+Duration dishRatingTimeLeft(DateTime? deliveredAt, DateTime now) {
+  if (deliveredAt == null) return Duration.zero;
+  final age = now.difference(deliveredAt);
+  if (age.isNegative || age > dishRatingWindow) return Duration.zero;
+  return dishRatingWindow - age;
+}
+
 class DishStats {
   const DishStats({this.ratingSum = 0, this.ratingCount = 0});
 

@@ -358,11 +358,11 @@ void main() {
     await h.pump(t);
     await t.tap(_text('Belgilar'));
     await t.pumpAndSettle();
-    await t.tap(find.widgetWithText(FilterChip, 'Parhezli ovqatlar'));
+    await t.tap(find.widgetWithText(FilterChip, 'Parhezli taomlar'));
     await t.tap(find.widgetWithText(FilterChip, 'Bolalar uchun'));
     await t.pumpAndSettle();
     expect(h.last!.tags, ['kids', 'light'], reason: 'босилиш тартибидан мустақил');
-    expect(_text('Bolalar uchun · Parhezli ovqatlar'), findsOneWidget);
+    expect(_text('Bolalar uchun · Parhezli taomlar'), findsOneWidget);
     await t.tap(find.widgetWithText(FilterChip, 'Bolalar uchun'));
     await t.pumpAndSettle();
     expect(h.last!.tags, ['light']);

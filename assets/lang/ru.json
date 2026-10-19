@@ -3115,9 +3115,9 @@
   "restaurants_rate_left": "На оценку осталось {min} мин",
   "restaurants_err_RATING_WINDOW_CLOSED": "Время для оценки истекло (30 минут после доставки).",
   "restaurants_section_all": "Рестораны",
-  "restaurants_section_cheap": "Недорого",
-  "restaurants_section_national": "Национальная",
-  "restaurants_section_world": "Мировая",
+  "restaurants_section_cheap": "Недорого и сытно",
+  "restaurants_section_national": "Национальные блюда",
+  "restaurants_section_world": "Блюда мира",
   "restaurants_section_fast": "Фастфуд",
   "restaurants_section_light": "Диетические блюда",
   "restaurants_section_kids": "Детям",
@@ -3680,8 +3680,8 @@
   "restaurants_m_bk_not_enabled": "Включите «Принимаю брони столов» в разделе «Магазин».",
   "restaurants_m_bk_call": "Позвонить клиенту",
   "restaurants_m_bk_deadline": "Ответить до: {time}",
-  "restaurants_section_office": "Офис",
-  "restaurants_section_dastarxon": "Дастархан",
+  "restaurants_section_office": "Заказ в офис",
+  "restaurants_section_dastarxon": "Заказ дастархана",
   "restaurants_section_seasonal": "Сезонное",
   "restaurants_m_dish_tag_dastarxon": "Для дастархана",
   "restaurants_m_dish_tag_ramadan": "Рамадан",
@@ -3697,5 +3697,5 @@
   "restaurants_ramadan_today": "Сегодня: сухур {sahar} · ифтар {iftar}",
   "restaurants_dish_preorder": "Предзаказ",
   "restaurants_dish_serves": "На {n} чел.",
-  "restaurants_section_dishes": "Еда"
+  "restaurants_section_dishes": "Все"
 }

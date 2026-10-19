@@ -15,7 +15,9 @@ import '../../../repositories/orders_repository.dart';
 import '../../../services/order_payment_service.dart';
 import '../../profile/widgets/order_card.dart';
 import '../../restaurants/data/restaurants_repository.dart';
+import '../../restaurants/domain/courier_tracking.dart';
 import '../../restaurants/screens/restaurant_order_screen.dart';
+import '../../restaurants/widgets/courier_info_card.dart';
 import '../customer_orders_hub.dart';
 
 /// Buyurtmalar ekrani — non/taom + gilam + sut bitta ro'yxatda.
@@ -255,7 +257,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
       showDragHandle: true,
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: _entryBody(ctx, entry),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _entryBody(ctx, entry),
+            // Нон/бозор буюртмаси етказиш йўлида: курьер маълумоти ва жонли харита (ресторан буюртмасидаги каби).
+            if (food != null && CourierTracking.canTrack(food))
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: CourierInfoCard(order: food, repository: RestaurantsRepository()),
+              ),
+          ],
+        ),
       ),
     );
   }

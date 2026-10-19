@@ -22,6 +22,7 @@ class RestaurantFormFields extends StatefulWidget {
     this.showLegalType = true,
     this.showPaymentDetails = true,
     this.showMaxQty = false,
+    this.bookingsDisabled = false,
     this.legalTypeOptions = RestaurantFormData.legalTypes,
   });
 
@@ -41,6 +42,9 @@ class RestaurantFormFields extends StatefulWidget {
   /// «Бир таомдан энг кўпи» (D-REST-26) — фақат «Дўкон»да; рўйхатдан ўтишда default.
   final bool showMaxQty;
 
+  /// Сервер бекор қилиш лимитидан бронни ўчирган — эга ўзи қайта ёқа олмайди (S5).
+  final bool bookingsDisabled;
+
   @override
   State<RestaurantFormFields> createState() => _RestaurantFormFieldsState();
 }
@@ -54,6 +58,8 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
   late final _holder = TextEditingController(text: widget.data.cardHolder);
   late final _minOrder = TextEditingController(text: widget.data.minOrderAmount == 0 ? '' : '${widget.data.minOrderAmount}');
   late final _maxQty = TextEditingController(text: '${widget.data.maxQtyPerItem}');
+  late final _bookingSeats = TextEditingController(text: widget.data.bookingSeats == 0 ? '' : '${widget.data.bookingSeats}');
+  late final _bookingNote = TextEditingController(text: widget.data.bookingNote);
   late final _ownFixed = TextEditingController(text: widget.data.ownFeeFixed == 0 ? '' : '${widget.data.ownFeeFixed}');
   late final _ownBase = TextEditingController(text: widget.data.ownFeeBase == 0 ? '' : '${widget.data.ownFeeBase}');
   late final _ownPerKm = TextEditingController(text: widget.data.ownFeePerKm == 0 ? '' : '${widget.data.ownFeePerKm}');
@@ -65,7 +71,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
 
   @override
   void dispose() {
-    for (final c in [_name, _desc, _address, _phone, _card, _holder, _minOrder, _maxQty, _ownFixed, _ownBase, _ownPerKm, _ownFree, _ownMaxKm]) {
+    for (final c in [_name, _desc, _address, _phone, _card, _holder, _minOrder, _maxQty, _bookingSeats, _bookingNote, _ownFixed, _ownBase, _ownPerKm, _ownFree, _ownMaxKm]) {
       c.dispose();
     }
     super.dispose();
@@ -415,6 +421,46 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
             value: d.acceptsPreorder,
             onChanged: (v) => _set(() => d.acceptsPreorder = v),
           ),
+          // Стол бронь (S5): ўринлар сони ва закалат матни; сервер лимитдан ўчирган бўлса ёқиб бўлмайди.
+          SwitchListTile(
+            key: const ValueKey('accepts-bookings'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(context.tr('restaurants_m_booking_enable'), style: TextStyle(fontSize: 13, color: c.ink)),
+            subtitle: Text(
+              context.tr(widget.bookingsDisabled ? 'restaurants_m_booking_disabled' : 'restaurants_m_booking_hint'),
+              style: TextStyle(fontSize: 12, color: widget.bookingsDisabled ? c.danger : c.ink2),
+            ),
+            value: d.acceptsBookings,
+            onChanged: widget.bookingsDisabled && !d.acceptsBookings ? null : (v) => _set(() => d.acceptsBookings = v),
+          ),
+          if (d.acceptsBookings) ...[
+            const SizedBox(height: 6),
+            TextField(
+              key: const ValueKey('booking-seats-field'),
+              controller: _bookingSeats,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+              decoration: _dec(context.tr('restaurants_m_booking_seats')).copyWith(
+                helperText: context.tr('restaurants_m_booking_seats_hint'),
+                helperMaxLines: 2,
+              ),
+              onChanged: (v) => _set(() => d.bookingSeats = _int(v)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('booking-note-field'),
+              controller: _bookingNote,
+              maxLength: 300,
+              maxLines: 3,
+              minLines: 1,
+              decoration: _dec(context.tr('restaurants_m_booking_note')).copyWith(
+                helperText: context.tr('restaurants_m_booking_note_hint'),
+                helperMaxLines: 3,
+              ),
+              onChanged: (v) => _set(() => d.bookingNote = v),
+            ),
+          ],
         ],
         _section(context.tr('restaurants_m_hours')),
         SwitchListTile(

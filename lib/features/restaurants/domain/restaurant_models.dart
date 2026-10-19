@@ -233,10 +233,22 @@ class Restaurant {
     this.ratingCount = 0,
     this.maxQtyPerItem = defaultMaxQtyPerItem,
     this.acceptsPreorder = false,
+    this.acceptsBookings = false,
+    this.bookingSeats = 0,
+    this.bookingNote = '',
+    this.bookingsDisabled = false,
   });
 
   /// Олдиндан буюртма оладими (S4b). Эга белгилайди; вақт чегаралари серверда.
   final bool acceptsPreorder;
+
+  /// Стол бронь оладими (S5, D-REST-23): эга белгилайди; бир слотдаги ўринлар сони [bookingSeats] (стол харитаси
+  /// йўқ), закалат матни [bookingNote] (эркин). [bookingsDisabled] — бекор қилиш лимитидан сервер ўчирган
+  /// (`bookingsDisabledReason == cancel_limit`): эга ўзи қайта ёқа олмайди, админ тиклайди.
+  final bool acceptsBookings;
+  final int bookingSeats;
+  final String bookingNote;
+  final bool bookingsDisabled;
 
   /// Бир таомдан энг кўп миқдор (D-REST-26). Майдон йўқ эски ресторанлар учун
   /// — `functions/restaurant_orders.js` даги `DEFAULT_MAX_QTY` нусхаси;
@@ -326,7 +338,18 @@ class Restaurant {
       ratingCount: _int(d['ratingCount']),
       maxQtyPerItem: _qtyLimit(d['maxQtyPerItem']),
       acceptsPreorder: d['acceptsPreorder'] == true,
+      acceptsBookings: d['acceptsBookings'] == true,
+      bookingSeats: _bookingSeats(d['bookingSeats']),
+      bookingNote: _str(d['bookingNote']),
+      bookingsDisabled: d['bookingsDisabledReason'] == 'cancel_limit',
     );
+  }
+
+  /// Ўринлар сони: бутун 1…500, акс ҳолда 0 (созланмаган — бронь қабул қилинмайди).
+  static int _bookingSeats(Object? v) {
+    if (v is! num || v != v.truncate()) return 0;
+    final n = v.toInt();
+    return n >= 1 && n <= 500 ? n : 0;
   }
 
   /// Бузилган/чегарадан ташқари қиймат → default (сервер `intOr` билан бир хил).

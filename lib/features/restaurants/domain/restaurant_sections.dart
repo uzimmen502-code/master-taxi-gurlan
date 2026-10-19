@@ -15,13 +15,16 @@ import 'restaurant_models.dart';
 /// хил (мослик тест билан қулфланган); матн калити `restaurants_section_<key>` (3 тилда).
 enum RestaurantSection {
   cheap('cheap'),
+  office('office'),
   national('national'),
   world('world'),
   fast('fast'),
   light('light'),
+  dastarxon('dastarxon'),
   kids('kids'),
   breakfast('breakfast'),
-  night('night');
+  night('night'),
+  seasonal('seasonal');
 
   const RestaurantSection(this.key);
 
@@ -31,6 +34,12 @@ enum RestaurantSection {
 
   /// Ичида кухна фильтри бор бўлимлар (D-REST-16: «Миллий» ва «Дунё» алоҳида, ҳар бирида фильтр).
   bool get hasCuisineFilter => this == national || this == world;
+
+  /// Ичида мавсум фильтри бор бўлим (S7): ҳозир очиқ мавсумлар чиплар сифатида.
+  bool get hasSeasonFilter => this == seasonal;
+
+  /// Олдиндан буюртмага таянган бўлимлар (Офис, Дастурхон — D-REST-21): картада «Олдиндан буюртма» белгиси.
+  bool get isPreorderBased => this == office || this == dastarxon;
 
   static RestaurantSection? fromKey(String? key) {
     for (final s in values) {
@@ -150,6 +159,7 @@ class SectionDish {
     this.cuisineId,
     this.tags = const [],
     this.sections = const [],
+    this.seasons = const [],
     this.restaurantLat,
     this.restaurantLng,
     this.prepTimeMin = 20,
@@ -178,6 +188,9 @@ class SectionDish {
   final String? cuisineId;
   final List<String> tags;
   final List<String> sections;
+
+  /// Таомнинг мавсум теглари (ramadan, …) — мавсумий бўлимда ҳозир очиқ мавсум бўйича фильтрланади.
+  final List<String> seasons;
   final String restaurantName;
   final double? restaurantLat;
   final double? restaurantLng;
@@ -258,6 +271,7 @@ class SectionDish {
       cuisineId: cuisineOk ? cid : null,
       tags: d['tags'] is List ? (d['tags'] as List).whereType<String>().toList() : const [],
       sections: d['sections'] is List ? (d['sections'] as List).whereType<String>().toList() : const [],
+      seasons: d['seasons'] is List ? (d['seasons'] as List).whereType<String>().toList() : const [],
       restaurantName: _str(d['restaurantName']),
       restaurantLat: d['restaurantLat'] is num ? (d['restaurantLat'] as num).toDouble() : null,
       restaurantLng: d['restaurantLng'] is num ? (d['restaurantLng'] as num).toDouble() : null,

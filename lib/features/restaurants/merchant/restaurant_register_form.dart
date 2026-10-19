@@ -30,6 +30,9 @@ class RestaurantFormData {
     this.minOrderAmount = 0,
     this.maxQtyPerItem = Restaurant.defaultMaxQtyPerItem,
     this.acceptsPreorder = false,
+    this.acceptsBookings = false,
+    this.bookingSeats = 0,
+    this.bookingNote = '',
     this.alwaysOpen = true,
     this.openTime = '09:00',
     this.closeTime = '22:00',
@@ -66,6 +69,11 @@ class RestaurantFormData {
 
   /// «Олдиндан буюртма оламан» (S4b): фақат «Дўкон»да таҳрирланади, рўйхатдан ўтишда ўчиқ.
   bool acceptsPreorder;
+
+  /// Стол бронь (S5, D-REST-23): фақат «Дўкон»да; ўринлар сони 1…500 (0 — созланмаган).
+  bool acceptsBookings;
+  int bookingSeats;
+  String bookingNote;
   bool alwaysOpen;
   String openTime;
   String closeTime;
@@ -101,6 +109,7 @@ class RestaurantFormData {
     if (prepTimeMin < 5 || prepTimeMin > 180) errs.add('prep_time');
     if (minOrderAmount < 0) errs.add('min_order');
     if (maxQtyPerItem < 1 || maxQtyPerItem > Restaurant.maxQtyPerItemCeiling) errs.add('max_qty');
+    if (acceptsBookings && (bookingSeats < 1 || bookingSeats > 500)) errs.add('booking_seats');
     if (deliveryMode == 'own_courier' && ownFeeType == 'distance' && ownFeePerKm < 0) errs.add('own_fee');
     if (!alwaysOpen && (!_hhmm(openTime) || !_hhmm(closeTime))) errs.add('hours');
     return errs;
@@ -157,6 +166,10 @@ class RestaurantFormData {
         'minOrderAmount': minOrderAmount,
         'maxQtyPerItem': maxQtyPerItem,
         'acceptsPreorder': acceptsPreorder,
+        // Бронь: ўринлар сони созланмаган бўлса юборилмайди (қоида: бутун 1…500); закалат матни ≤ 300.
+        'acceptsBookings': acceptsBookings,
+        if (bookingSeats >= 1) 'bookingSeats': bookingSeats,
+        'bookingNote': bookingNote.trim(),
         'delivery': _delivery(),
         'payment': {'prepay': prepay, 'cash': cash},
       };

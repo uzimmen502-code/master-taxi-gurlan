@@ -65,6 +65,32 @@ void main() {
       expect(CourierTracking.canTrack(const OrderModel(id: 'b', type: 'bread', total: 1, status: 'new', items: [], restaurantStatus: 'picked', deliveryMode: 'ava_courier', courierId: '1')), isFalse);
     });
 
+    test('canTrack: нон/бозор буюртмаси — курьер олган (courier_picked) ва етган (arrived); тайёр/якунланган/курьерсиз/бошқа тур — йўқ', () {
+      OrderModel b(String type, String fs, {String? courier = '998913000001'}) =>
+          OrderModel(id: 'b', type: type, total: 1, status: 'in_delivery', items: const [], fulfillmentStatus: fs, courierId: courier);
+      for (final type in ['bread', 'platform']) {
+        for (final fs in CourierTracking.deliveryFulfillment) {
+          expect(CourierTracking.canTrack(b(type, fs)), isTrue, reason: '$type/$fs');
+        }
+        for (final fs in ['pending', 'ready', 'completed', 'cancelled', '']) {
+          expect(CourierTracking.canTrack(b(type, fs)), isFalse, reason: '$type/$fs');
+        }
+        expect(CourierTracking.canTrack(b(type, 'courier_picked', courier: null)), isFalse, reason: 'курьер йўқ');
+        expect(CourierTracking.canTrack(b(type, 'courier_picked', courier: ' ')), isFalse);
+      }
+      expect(CourierTracking.canTrack(b('carpet', 'courier_picked')), isFalse, reason: 'бошқа тур');
+      expect(CourierTracking.isBreadOrMarket(b('bread', '')), isTrue);
+      expect(CourierTracking.isBreadOrMarket(b('restaurant', '')), isFalse);
+    });
+
+    test('нон/бозор ҳолатлари firestore.rules liveOrderActive билан бир хил', () {
+      final rules = File('firestore.rules').readAsStringSync();
+      final fn = RegExp(r'function liveOrderActive[\s\S]*?\n    \}').firstMatch(rules)!.group(0)!;
+      final lists = RegExp(r"in \[([^\]]*)\]").allMatches(fn).map((m) => RegExp(r"'(\w+)'").allMatches(m.group(1)!).map((x) => x.group(1)!).toList()).toList();
+      expect(lists.length, 3, reason: 'ресторан ҳолатлари, тур рўйхати, нон/бозор ҳолатлари');
+      expect(lists[1].toSet(), {'bread', 'platform'});
+      expect(lists[2].toSet(), CourierTracking.deliveryFulfillment.toSet());
+    });
     test('фаол ҳолатлар firestore.rules `liveOrderActive` билан бир хил тўплам', () {
       final rules = File('firestore.rules').readAsStringSync();
       final m = RegExp(r"function liveOrderActive[\s\S]*?in \[([^\]]*)\]").firstMatch(rules)!.group(1)!;

@@ -7,10 +7,12 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/merged_stream.dart';
 import '../../../models/order_model.dart';
 import '../../../utils/geo_hash.dart';
+import '../domain/bookings.dart';
 import '../domain/courier_tracking.dart';
 import '../domain/cuisine.dart';
 import '../domain/dish_facts.dart';
@@ -19,6 +21,7 @@ import '../domain/qty_tiers.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 import '../domain/restaurant_sections.dart';
+import '../domain/seasons.dart';
 
 class RestaurantsException implements Exception {
   const RestaurantsException(this.code, this.reason, this.message, {this.details});
@@ -438,6 +441,134 @@ class RestaurantsRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+  // ── Мавсумлар ва Рамазон жадвали (D-REST-22/39) ────────────────────
+
+  static const _seasonsTtl = Duration(minutes: 30);
+  RestaurantSeasonsConfig? _seasons;
+  DateTime? _seasonsAt;
+  RamadanConfig? _ramadan;
+  DateTime? _ramadanAt;
+
+  /// `settings/restaurant_seasons`. Ҳужжат йўқ/ўқилмаса — давр йўқ (мавсумий бўлим кўринмайди; хато кешланмайди).
+  Future<RestaurantSeasonsConfig> getSeasonsConfig({bool force = false}) async {
+    final at = _seasonsAt;
+    final cached = _seasons;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _seasonsTtl) return cached;
+    try {
+      final snap = await _db.collection('settings').doc('restaurant_seasons').get();
+      final cfg = snap.exists ? RestaurantSeasonsConfig.fromMap(snap.data()) : RestaurantSeasonsConfig.none;
+      _seasons = cfg;
+      _seasonsAt = DateTime.now();
+      return cfg;
+    } catch (_) {
+      return cached ?? RestaurantSeasonsConfig.none;
+    }
+  }
+
+  /// `settings/restaurant_ramadan` (саҳарлик/ифтор). Ўқилмаса — вақт кўрсатилмайди (тахмин қилинмайди).
+  Future<RamadanConfig> getRamadanConfig({bool force = false}) async {
+    final at = _ramadanAt;
+    final cached = _ramadan;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _seasonsTtl) return cached;
+    try {
+      final snap = await _db.collection('settings').doc('restaurant_ramadan').get();
+      final cfg = snap.exists ? RamadanConfig.fromMap(snap.data()) : RamadanConfig.none;
+      _ramadan = cfg;
+      _ramadanAt = DateTime.now();
+      return cfg;
+    } catch (_) {
+      return cached ?? RamadanConfig.none;
+    }
+  }
+  // ── Стол бронь (S5, D-REST-23/38) ──────────────────────────────────
+
+  static const _bookingsConfigTtl = Duration(minutes: 5);
+  BookingConfig? _bookingsConfig;
+  DateTime? _bookingsConfigAt;
+
+  /// `settings/restaurant_bookings`. Ҳужжат йўқ/ўқилмаса — бронь ЎЧИҚ (хавфсиз томон, хато кешланмайди).
+  Future<BookingConfig> getBookingsConfig({bool force = false}) async {
+    final at = _bookingsConfigAt;
+    final cached = _bookingsConfig;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _bookingsConfigTtl) return cached;
+    try {
+      final snap = await _db.collection('settings').doc('restaurant_bookings').get();
+      final cfg = snap.exists ? BookingConfig.fromMap(snap.data()) : BookingConfig.off;
+      _bookingsConfig = cfg;
+      _bookingsConfigAt = DateTime.now();
+      return cfg;
+    } catch (_) {
+      return cached ?? BookingConfig.off;
+    }
+  }
+
+  /// Жорий фойдаланувчи (12 рақамли телефон; `internal` босқич синовчиси ва «менинг бронларим» калити).
+  /// Тест/кириш йўқ бўлса `null`.
+  static Future<String?> currentUid() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final d = (prefs.getString('user_phone') ?? '').replaceAll(RegExp(r'\D'), '');
+      if (d.length == 9) return '998$d';
+      return d.length >= 12 ? d : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Мижознинг бронлари (қоида: `where userPhone == мен`), энг янгиси биринчи. Индекс: (userPhone, startAt).
+  Stream<List<RestaurantBooking>> watchMyBookings(String uid, {int limit = 50}) => _db
+      .collection('restaurant_bookings')
+      .where('userPhone', isEqualTo: uid)
+      .orderBy('startAt', descending: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => s.docs.map(RestaurantBooking.fromDoc).toList(growable: false));
+
+  /// Ресторан а'зоси учун — ўз рестораннинг бронлари. Индекс: (restaurantId, startAt).
+  Stream<List<RestaurantBooking>> watchRestaurantBookings(String restaurantId, {int limit = 100}) => _db
+      .collection('restaurant_bookings')
+      .where('restaurantId', isEqualTo: restaurantId)
+      .orderBy('startAt', descending: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => s.docs.map(RestaurantBooking.fromDoc).toList(growable: false));
+
+  /// Бронь сўрови. Идемпотент калит ҳар ЯНГИ сўров учун бир марта яратилади ([idempotencyKey]) ва тармоқ
+  /// узилиб қайта юборилганда ўзгармайди. Пул ечилмайди (ҳақ ресторан қабул қилганда).
+  Future<({String bookingId, int feeAmount, bool duplicate})> placeBooking({
+    required String idempotencyKey,
+    required String restaurantId,
+    required int guests,
+    required DateTime startAt,
+    String note = '',
+  }) async {
+    final r = await _call('placeRestaurantBooking', {
+      'idempotencyKey': idempotencyKey,
+      'restaurantId': restaurantId,
+      'guests': guests,
+      'startAtMs': startAt.millisecondsSinceEpoch,
+      'note': note,
+    });
+    return (
+      bookingId: (r['bookingId'] ?? '').toString(),
+      feeAmount: (r['feeAmount'] as num?)?.toInt() ?? 0,
+      duplicate: r['duplicate'] == true,
+    );
+  }
+
+  Future<void> guestCancelBooking(String bookingId) => _call('cancelRestaurantBooking', {'bookingId': bookingId});
+
+  /// Ресторан қабул қилади — ҳақ ресторан ҳамёнидан ечилади (етмаса `RESTAURANT_WALLET_INSUFFICIENT`).
+  Future<void> acceptBooking(String bookingId) => _call('restaurantAcceptBooking', {'bookingId': bookingId});
+
+  Future<void> rejectBooking(String bookingId, {String reason = ''}) =>
+      _call('restaurantRejectBooking', {'bookingId': bookingId, 'reason': reason});
+
+  /// Қабулдан кейин ресторан бекор қилади — ҳақ ҚАЙТМАЙДИ, бекор қилиш ресторан ҳисобида белгиланади.
+  Future<bool> restaurantCancelBooking(String bookingId, {String reason = ''}) async {
+    final r = await _call('restaurantCancelBooking', {'bookingId': bookingId, 'reason': reason});
+    return r['bookingsDisabled'] == true;
+  }
   // ── Бўлимлар (S3, D-REST-33) ───────────────────────────────────────
 
   /// Бир бўлим учун ўқиладиган таомлар чегараси (клиентда тартибланади). Ошса — рўйхат тўлиқ эмас

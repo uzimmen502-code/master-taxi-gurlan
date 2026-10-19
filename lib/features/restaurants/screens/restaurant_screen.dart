@@ -19,13 +19,16 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../home/widgets/ava_chip.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/bookings.dart';
 import '../domain/menu_scroll_sync.dart';
 import '../domain/restaurant_models.dart';
+import '../widgets/booking_sheet.dart';
 import '../widgets/menu_item_video_badge.dart';
 import '../widgets/restaurant_cart_sheet.dart';
 import '../widgets/restaurant_checkout_sheet.dart';
 import '../widgets/restaurant_row.dart';
 import '../domain/dish_stats.dart';
+import 'my_bookings_screen.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/services/tv_clip_link.dart';
@@ -94,6 +97,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   /// Таом баҳолари (`itemId → агрегат`): ★ фақат етарли баҳо йиғилганда кўрсатилади.
   Map<String, DishStats> _dishStats = const {};
 
+  /// Стол бронь (S5): созлама ёпиқ/ўқилмаса тугма кўринмайди.
+  BookingConfig _bookingCfg = BookingConfig.off;
+  String? _bookingUid;
+
   int _active = 0;
   bool _lock = false;
 
@@ -106,6 +113,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     _right.addListener(_onRightScroll);
     _loadItemClips();
     _loadDishStats();
+    _loadBookingConfig();
     _rSub = _repo.watchRestaurant(_r.id).listen((r) {
       if (r != null && mounted) setState(() => _r = r);
     });
@@ -123,6 +131,34 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       debugPrint('[RestaurantScreen] menu $e');
       if (mounted) setState(() => _menuLoaded = true);
     });
+  }
+
+  Future<void> _loadBookingConfig() async {
+    try {
+      final cfg = await _repo.getBookingsConfig();
+      final uid = await RestaurantsRepository.currentUid();
+      if (!mounted) return;
+      setState(() {
+        _bookingCfg = cfg;
+        _bookingUid = uid;
+      });
+    } catch (e) {
+      debugPrint('[RestaurantScreen] bookings config $e');
+    }
+  }
+
+  bool get _canBook => _r.acceptsBookings && !_r.bookingsDisabled && _r.bookingSeats > 0 && _bookingCfg.visibleFor(_bookingUid);
+
+  Future<void> _openBooking() async {
+    final uid = _bookingUid;
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('restaurants_booking_login_needed'))));
+      return;
+    }
+    final sent = await showBookingSheet(context, restaurant: _r, config: _bookingCfg, repository: _repo);
+    if (sent != true || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('restaurants_booking_sent'))));
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MyBookingsScreen(uid: uid, repository: _repo)));
   }
 
   /// Рестораннинг БАРЧА таом видеолари БИР сўровда (ҳар таом учун алоҳида эмас, 36-қоида). Видео
@@ -338,6 +374,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         elevation: 0,
         title: Text(_r.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
         actions: [
+          if (_canBook)
+            IconButton(
+              key: const ValueKey('book-table'),
+              tooltip: context.tr('restaurants_booking_action'),
+              icon: const Icon(Icons.event_seat_rounded),
+              onPressed: _openBooking,
+            ),
           IconButton(
             tooltip: context.tr('restaurants_info'),
             icon: const Icon(Icons.info_outline_rounded),

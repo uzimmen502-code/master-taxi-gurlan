@@ -1920,6 +1920,7 @@ service cloud.firestore {
           && docId != 'wallet_bot'
           && docId != 'restaurant_delivery'
           && docId != 'restaurant_sections'
+          && docId != 'restaurant_bookings'
           && docId != 'all_orders_stuck'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
@@ -1951,6 +1952,13 @@ service cloud.firestore {
     // Кафе-ресторан бўлимлари созламаси (`settings/restaurant_sections`) тарихи (`v{n}`) —
     // ўзгармас, фақат CF (`adminSetRestaurantSections`, версия + audit, 9/41-банд).
     match /restaurant_sections_history/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Кафе-ресторан стол бронь созламаси (`settings/restaurant_bookings`) тарихи (`v{n}`) —
+    // ўзгармас, фақат CF (`adminSetRestaurantBookings`, версия + audit, 9/41-банд).
+    match /restaurant_bookings_history/{versionId} {
       allow read: if isAdmin();
       allow write: if false;
     }
@@ -3103,6 +3111,7 @@ service cloud.firestore {
             'name', 'description', 'cuisineTags', 'address', 'contactPhone',
             'lat', 'lng', 'geohash', 'logoUrl', 'coverUrl', 'announcement',
             'openingHours', 'prepTimeMin', 'minOrderAmount', 'maxQtyPerItem', 'acceptsPreorder', 'delivery',
+            'acceptsBookings', 'bookingSeats', 'bookingNote',
             'payment', 'pausedUntil', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
@@ -3114,6 +3123,14 @@ service cloud.firestore {
               || (d.maxQtyPerItem is int && d.maxQtyPerItem >= 1 && d.maxQtyPerItem <= 500))
           // S4b: «олдиндан буюртма оламан» белгиси; вақт чегаралари (60 дақиқа…7 кун) — серверда.
           && (!('acceptsPreorder' in d) || d.acceptsPreorder is bool)
+          // S5 (D-REST-23): стол бронь белгиси, бир слотдаги ўринлар сони ва закалат матни. Бекор қилиш лимитидан
+          // (`bookingCancels`, `bookingsDisabledReason` — фақат CF) автомат ўчирилган бўлса, а'зо ўзи қайта ёқа олмайди.
+          && (!('acceptsBookings' in d) || d.acceptsBookings is bool)
+          && (!('bookingSeats' in d) || (d.bookingSeats is int && d.bookingSeats >= 1 && d.bookingSeats <= 500))
+          && (!('bookingNote' in d) || (d.bookingNote is string && d.bookingNote.size() <= 300))
+          && (!changed.hasAny(['acceptsBookings'])
+              || d.get('acceptsBookings', false) == false
+              || resource.data.get('bookingsDisabledReason', '') == '')
           && d.delivery is map
           && d.delivery.get('mode', 'none') in ['ava_courier', 'own_courier', 'none']
           && d.payment is map;
@@ -3283,6 +3300,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Стол бронь (S5, D-REST-23/38; functions/restaurant_bookings.js): ҳужжат ва ҳодисалар ФАҚАТ CF ёзади
+    // (ҳолат ўтишлари, ҳақ ечиш, сиғим — клиентга ишонилмайди, 18-қоида). Ўқийди: мижоз (ўз броннинг),
+    // шу ресторан а'золари ва админ. `list` — тўғридан-тўғри майдонлар (`.get()` default тузоғи йўқ).
+    match /restaurant_bookings/{bid} {
+      allow get: if isAuth() && (
+          isAdmin()
+          || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+          || isRestaurantMember(resource.data.restaurantId)
+      );
+      allow list: if isAuth() && (
+          isAdmin()
+          || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+          || isRestaurantMember(resource.data.restaurantId)
+      );
+      allow write: if false;
+
+      match /events/{eid} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
     // Алоҳида баҳолар (кимнинг баҳоси — PII): фақат админ ўқийди, ёзув — фақат CF.
     match /restaurant_dish_ratings/{ratingId} {
       allow read: if isAdmin();

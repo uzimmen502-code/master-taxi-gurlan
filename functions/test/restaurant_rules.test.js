@@ -103,6 +103,12 @@ async function main() {
     await db.doc('restaurant_sections_history/v1').set({ version: 1 });
     await db.doc('restaurant_cuisines/national_ozbek').set({ name: 'Ўзбек', group: 'national', hidden: false });
     await db.doc('restaurant_cuisines/world_turk').set({ name: 'Турк', group: 'world', hidden: false });
+    await db.doc('restaurant_bookings/bk1').set({ restaurantId: R1, userPhone: CUSTOMER, guests: 4, status: 'requested', fee: { amount: 50000, charged: false } });
+    await db.doc('restaurant_bookings/bk1/events/e1').set({ to: 'requested', actor: 'customer' });
+    await db.doc('restaurant_bookings/bk2').set({ restaurantId: R2, userPhone: STRANGER, guests: 2, status: 'requested', fee: { amount: 50000, charged: false } });
+    await db.doc('settings/restaurant_bookings').set({ version: 1, stage: 'public', tiers: [{ upTo: 5, fee: 50000 }] });
+    await db.doc('restaurant_bookings_history/v1').set({ version: 1 });
+    await db.doc(`restaurants/${R2}`).update({ acceptsBookings: false, bookingsDisabledReason: 'cancel_limit', bookingCancels: [1, 2, 3] });
     await db.doc('settings/restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
     await db.doc('restaurant_delivery_tariffs/v1').set({ version: 1, base: 5000, perKm: 1500 });
   });
@@ -357,7 +363,62 @@ async function main() {
     await assertFails(ref(CUSTOMER).update({ acceptsPreorder: true }));
     await assertFails(as(OWNER).doc(`orders/${O1}`).update({ scheduledFor: new Date(), isPreorder: true }), 'buyurtmaga oldindan vaqt yozib bo\'lmaydi');
   });
-  await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
+  await check('S5 acceptsBookings/bookingSeats/bookingNote: a\'zo yozadi (tur/chegara qat\'iy); begona yozolmaydi; bookingCancels va sabab belgisi — a\'zo yozolmaydi', async () => {
+    const ref = (who) => as(who).doc(`restaurants/${R1}`);
+    await assertSucceeds(ref(OWNER).update({ acceptsBookings: true, bookingSeats: 20, bookingNote: 'Zakalat 100 000' }));
+    await assertSucceeds(ref(STAFF).update({ bookingSeats: 500 }));
+    for (const v of ['true', 1, null]) await assertFails(ref(OWNER).update({ acceptsBookings: v }), `acceptsBookings ${v}`);
+    for (const v of [0, -1, 501, 2.5, '20', null]) await assertFails(ref(OWNER).update({ bookingSeats: v }), `bookingSeats ${v}`);
+    await assertFails(ref(OWNER).update({ bookingNote: 'x'.repeat(301) }));
+    await assertFails(ref(OWNER).update({ bookingNote: 5 }));
+    await assertFails(ref(STRANGER).update({ acceptsBookings: true }));
+    await assertFails(ref(CUSTOMER).update({ bookingSeats: 5 }));
+    await assertFails(ref(OWNER).update({ bookingCancels: [] }), 'bekor qilish tarixi faqat CF');
+    await assertFails(ref(OWNER).update({ bookingsDisabledReason: '' }), 'sabab belgisi faqat CF');
+  });
+  await check('S5 limitdan avtomat o\'chirilgan restoran: a\'zo o\'zi qayta yoqolmaydi (false yozish mumkin)', async () => {
+    const ref = (who) => as(who).doc(`restaurants/${R2}`);
+    await assertFails(ref(OWNER2).update({ acceptsBookings: true }), 'cancel_limit — qayta yoqib bo\'lmaydi');
+    await assertSucceeds(ref(OWNER2).update({ acceptsBookings: false }));
+    await assertSucceeds(ref(OWNER2).update({ bookingSeats: 12 }), 'boshqa maydonlar ochiq');
+  });
+  await check('S5 restaurant_bookings: mijoz o\'zinikini, restoran a\'zosi o\'z restoraninikini, admin hammasini o\'qiydi; begona va anonim — yo\'q; HECH KIM yozmaydi', async () => {
+    const col = (who) => as(who).collection('restaurant_bookings');
+    await assertSucceeds(as(CUSTOMER).doc('restaurant_bookings/bk1').get());
+    await assertSucceeds(as(OWNER).doc('restaurant_bookings/bk1').get());
+    await assertSucceeds(as(STAFF).doc('restaurant_bookings/bk1').get());
+    await assertSucceeds(as(ADMIN).doc('restaurant_bookings/bk1').get());
+    await assertFails(as(STRANGER).doc('restaurant_bookings/bk1').get(), 'begona mijoz');
+    await assertFails(as(OWNER2).doc('restaurant_bookings/bk1').get(), 'boshqa restoran egasi');
+    await assertFails(anon().doc('restaurant_bookings/bk1').get());
+    await assertSucceeds(col(CUSTOMER).where('userPhone', '==', CUSTOMER).get());
+    await assertSucceeds(col(OWNER).where('restaurantId', '==', R1).get());
+    await assertSucceeds(col(ADMIN).get());
+    await assertFails(col(STRANGER).where('userPhone', '==', CUSTOMER).get(), 'boshqa odam so\'rovi');
+    await assertFails(col(CUSTOMER).get(), 'filtrsiz ro\'yxat');
+    await assertFails(col(OWNER2).where('restaurantId', '==', R1).get());
+    await assertFails(anon().collection('restaurant_bookings').where('restaurantId', '==', R1).get());
+    for (const who of [CUSTOMER, OWNER, STAFF, ADMIN, STRANGER]) {
+      await assertFails(as(who).doc('restaurant_bookings/bk1').update({ status: 'confirmed' }), `update ${who}`);
+      await assertFails(as(who).doc('restaurant_bookings/bk1').update({ 'fee.amount': 0 }), `fee ${who}`);
+      await assertFails(as(who).doc('restaurant_bookings/bk1').delete(), `delete ${who}`);
+      await assertFails(as(who).doc(`restaurant_bookings/new_${who}`).set({ restaurantId: R1, userPhone: who, guests: 1, status: 'confirmed' }), `create ${who}`);
+    }
+  });
+  await check('S5 bron hodisalari faqat admin; settings/restaurant_bookings hamma o\'qiydi, admin ham TO\'G\'RIDAN-TO\'G\'RI yozolmaydi; tarix faqat admin', async () => {
+    await assertSucceeds(as(ADMIN).doc('restaurant_bookings/bk1/events/e1').get());
+    await assertFails(as(CUSTOMER).doc('restaurant_bookings/bk1/events/e1').get());
+    await assertFails(as(OWNER).doc('restaurant_bookings/bk1/events/e1').get());
+    await assertFails(as(ADMIN).doc('restaurant_bookings/bk1/events/e2').set({ to: 'x' }));
+    await assertSucceeds(anon().doc('settings/restaurant_bookings').get());
+    for (const who of [ADMIN, OWNER, CUSTOMER]) {
+      await assertFails(as(who).doc('settings/restaurant_bookings').update({ stage: 'public' }), `update ${who}`);
+      await assertFails(as(who).doc('settings/restaurant_bookings').set({ stage: 'public', tiers: [{ upTo: 100, fee: 0 }] }), `set ${who}`);
+    }
+    await assertSucceeds(as(ADMIN).doc('restaurant_bookings_history/v1').get());
+    await assertFails(as(CUSTOMER).doc('restaurant_bookings_history/v1').get());
+    await assertFails(as(ADMIN).doc('restaurant_bookings_history/v2').set({ version: 2 }));
+  });  await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
     await assertSucceeds(anon().doc(`restaurant_dish_index/${R1}_osh`).get());
     await assertSucceeds(anon().collection('restaurant_dish_index').where('sections', 'array-contains', 'cheap').where('geo4', 'in', ['tzh1', 'tzh2']).limit(50).get());
     const ref = (who) => as(who).doc(`restaurant_dish_index/${R1}_osh`);

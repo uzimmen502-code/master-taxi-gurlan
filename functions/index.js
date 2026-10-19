@@ -94,6 +94,15 @@ const { attachRestaurantDishIndex } = require('./restaurant_dish_index');
 attachRestaurantDishIndex(exports, { functions, db });
 const { attachRestaurantSectionsConfig } = require('./restaurant_sections_config');
 attachRestaurantSectionsConfig(exports, { functions, db, admin, canonicalUid, requireCallerRoles });
+// Стол бронь (S5, D-REST-23/38): AVA хизмат ҳақи ресторан ҳамёнидан бронни қабул қилишда ечилади; сўров/қабул/рад/бекор,
+// админ қайтариши ва `settings/restaurant_bookings` (версияланган, ҳужжат йўқ = OFF).
+const restaurantOrdersLib = require('./restaurant_orders');
+const { attachRestaurantBookings } = require('./restaurant_bookings');
+attachRestaurantBookings(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles, notifyUserInApp,
+  isOpenAt: restaurantOrdersLib.isOpenAt, tashkentLabel: restaurantOrdersLib.tashkentLabel,
+  EARNINGS_ACCOUNT: restaurantOrdersLib.EARNINGS_ACCOUNT,
+});
 // «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');

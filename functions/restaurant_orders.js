@@ -1707,7 +1707,7 @@ function attachRestaurantOrders(exportsObj, deps) {
 
 module.exports = {
   attachRestaurantOrders,
-  RS, TRANSITIONS, LEGACY, canTransition, isOpenAt, hhmmToMin,
+  RS, TRANSITIONS, LEGACY, canTransition, isOpenAt, hhmmToMin, tashkentLabel,
   ACCEPT_TIMEOUT_MIN, AUTO_PAUSE_AFTER_TIMEOUTS, AUTO_PAUSE_MIN,
   STRIKES_FOR_PREPAY_ONLY, PREPAY_ONLY_DAYS, PICKUP_CODE_ATTEMPTS,
   EARNINGS_ACCOUNT, MODULE_ID,

@@ -256,7 +256,8 @@ void main() {
 
   group('«Барчаси» экрани: бўлим чиплари', () {
     Future<_Repo> pumpList(WidgetTester t, _Repo repo, {String? uid = '998901234567'}) async {
-      t.view.physicalSize = const Size(390 * 3, 1800 * 3);
+      // Кенг экран: горизонтал чиплар рўйхати ленивый — ҳамма чип қурилсин.
+      t.view.physicalSize = const Size(2400 * 3, 1800 * 3);
       t.view.devicePixelRatio = 3;
       addTearDown(t.view.reset);
       await t.pumpWidget(l10nApp(

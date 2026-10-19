@@ -97,11 +97,69 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   /// Фойдаланувчи чипни ўзи босдими — шундан кейин лента ўзи алмаштирмайди.
   bool _pickedByUser = false;
 
-  /// Чиплар: «Овқатлар» алоҳида (биринчи) чип, шунинг учун бу рўйхатга кирмайди.
+  /// Чиплар: «Барчаси» (`all`) ва «Ресторанлар» тартибга алоҳида киради; «Болалар» чипи олиб ташланган (эга, 2026-10-19).
   List<RestaurantSection> get _visible => [
         for (final s in _sections.visibleFor(_uid))
-          if (s != RestaurantSection.all && (s != RestaurantSection.seasonal || _activeSeasons.isNotEmpty)) s,
+          if (s != RestaurantSection.all && s != RestaurantSection.kids && (s != RestaurantSection.seasonal || _activeSeasons.isNotEmpty)) s,
       ];
+
+  /// Чиплар тартиби (эга, 2026-10-19): Барчаси · Арзон ва тўйимли · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари ·
+  /// Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар (· Мавсумий). `null` — «Ресторанлар» чипи.
+  static const _chipOrder = <RestaurantSection?>[
+    RestaurantSection.all,
+    RestaurantSection.cheap,
+    RestaurantSection.office,
+    RestaurantSection.fast,
+    RestaurantSection.national,
+    RestaurantSection.world,
+    null,
+    RestaurantSection.breakfast,
+    RestaurantSection.night,
+    RestaurantSection.dastarxon,
+    RestaurantSection.light,
+    RestaurantSection.seasonal,
+  ];
+
+  /// Кўринадиган чиплар шу тартибда. «Барчаси» ўчиқ бўлса (лента ёқилмаган) — «Ресторанлар» биринчи (экран аввалгидек).
+  List<RestaurantSection?> get _chips {
+    final shown = <RestaurantSection?>[
+      for (final s in _chipOrder)
+        if (s == null || (s == RestaurantSection.all ? _dishesOn : _visible.contains(s))) s,
+    ];
+    if (!_dishesOn) {
+      shown.remove(null);
+      shown.insert(0, null);
+    }
+    return shown;
+  }
+
+  Widget _chip(BuildContext context, RestaurantSection? s) {
+    if (s == null) {
+      return ChoiceChip(
+        key: const ValueKey('section-all'),
+        avatar: const Icon(Icons.storefront_outlined, size: 16),
+        label: Text(context.tr('restaurants_section_all')),
+        selected: _section == null,
+        onSelected: (_) => setState(() {
+          _pickedByUser = true;
+          _setSection(null);
+        }),
+      );
+    }
+    return ChoiceChip(
+      key: ValueKey(s == RestaurantSection.all ? 'section-feed' : 'section-${s.key}'),
+      avatar: Icon(sectionIcon(s), size: 16),
+      label: Text(context.tr(s.l10nKey)),
+      selected: _section == s,
+      onSelected: (_) => setState(() {
+        _pickedByUser = true;
+        _setSection(s);
+        // Бўлим таом бўйича; ресторан қидируви қолиб кетмасин.
+        _searchCtrl.clear();
+        _query = '';
+      }),
+    );
+  }
 
   @override
   void initState() {
@@ -361,7 +419,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                 ),
               ),
             ),
-            if (_visible.isNotEmpty || _dishesOn)
+            if (_chips.length > 1)
               SizedBox(
                 height: 44,
                 child: ListView(
@@ -370,48 +428,10 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   children: [
-                    if (_dishesOn) ...[
-                      ChoiceChip(
-                        key: const ValueKey('section-feed'),
-                        avatar: Icon(sectionIcon(RestaurantSection.all), size: 16),
-                        label: Text(context.tr(RestaurantSection.all.l10nKey)),
-                        selected: _section == RestaurantSection.all,
-                        onSelected: (_) => setState(() {
-                          _pickedByUser = true;
-                          _setSection(RestaurantSection.all);
-                          _searchCtrl.clear();
-                          _query = '';
-                        }),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    ChoiceChip(
-                      key: const ValueKey('section-all'),
-                      avatar: const Icon(Icons.storefront_outlined, size: 16),
-                      label: Text(context.tr('restaurants_section_all')),
-                      selected: _section == null,
-                      onSelected: (_) => setState(() {
-                        _pickedByUser = true;
-                        _setSection(null);
-                      }),
-                    ),
-                    for (final s in _visible) ...[
-                      const SizedBox(width: 6),
-                      ChoiceChip(
-                        key: ValueKey('section-${s.key}'),
-                        avatar: Icon(sectionIcon(s), size: 16),
-                        label: Text(context.tr(s.l10nKey)),
-                        selected: _section == s,
-                        onSelected: (_) => setState(() {
-                          _pickedByUser = true;
-                          _setSection(s);
-                          // Бўлим таом бўйича; ресторан қидируви қолиб кетмасин.
-                          _searchCtrl.clear();
-                          _query = '';
-                        }),
-                      ),
-                    ],
-                  ],
+                    for (var i = 0; i < _chips.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      _chip(context, _chips[i]),
+                    ],                  ],
                 ),
               ),
             if (_section == null)

@@ -122,6 +122,27 @@ void main() {
       expect(find.byKey(const ValueKey('section-all')), findsOneWidget, reason: 'ресторанлар — алоҳида чип');
     });
 
+    testWidgets('чиплар тартиби (эга, 2026-10-19): Барчаси · Арзон ва тўйимли · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари · Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар; «Болалар» йўқ', (t) async {
+      const all = RestaurantSectionsConfig(stages: {
+        'all': 'public', 'cheap': 'public', 'office': 'public', 'fast': 'public', 'national': 'public', 'world': 'public',
+        'breakfast': 'public', 'night': 'public', 'dastarxon': 'public', 'light': 'public', 'kids': 'public', 'seasonal': 'public',
+      });
+      await pump(t, _Repo(sections: all, dishes: [_d('osh', lat: 41.85)]));
+      const keys = ['section-feed', 'section-cheap', 'section-office', 'section-fast', 'section-national', 'section-world', 'section-all', 'section-breakfast', 'section-night', 'section-dastarxon', 'section-light'];
+      final xs = [for (final k in keys) t.getTopLeft(find.byKey(ValueKey(k))).dx];
+      for (var i = 1; i < xs.length; i++) {
+        expect(xs[i], greaterThan(xs[i - 1]), reason: '${keys[i]} ${keys[i - 1]} дан кейин');
+      }
+      expect(find.byKey(const ValueKey('section-kids')), findsNothing, reason: '«Болалар» чипи олиб ташланган');
+      expect(find.byKey(const ValueKey('section-seasonal')), findsNothing, reason: 'ҳозир очиқ мавсум йўқ');
+      expect(find.text(tr('restaurants_section_dishes')), findsOneWidget);
+    });
+
+    testWidgets('лента ёқилмаган бўлса «Ресторанлар» чипи БИРИНЧИ (экран аввалгидек)', (t) async {
+      await pump(t, _Repo(sections: const RestaurantSectionsConfig(stages: {'cheap': 'public', 'fast': 'public'})));
+      expect(t.getTopLeft(find.byKey(const ValueKey('section-all'))).dx, lessThan(t.getTopLeft(find.byKey(const ValueKey('section-cheap'))).dx));
+      expect(find.byKey(const ValueKey('section-feed')), findsNothing);
+    });
     testWidgets('«Ресторанлар» чипи рўйхатга ўтказади; «Овқатлар» қайтаради; фойдаланувчи танлови сақланади', (t) async {
       final repo = _Repo(sections: feedOn, dishes: [_d('osh', lat: 41.85)]);
       await pump(t, repo);

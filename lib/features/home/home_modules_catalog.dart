@@ -28,8 +28,8 @@ class HomeModulesCatalog {
       label: 'home_module_bread',
     ),
     // `food` («Овқат», AVA'нинг ягона менюси) ОЛИБ ТАШЛАНДИ (эга, 2026-10-11):
-    // ўрнига кафе-ресторанлар. Конфиг калити (`kKnownModuleIds`) эски илова
-    // версиялари учун қолди; эски `type:'food'` буюртмалар тарихда кўринади.
+    // ўрнига кафе-ресторанлар. Конфиг калити ҳам ўчирилди (2026-10-20); эски
+    // `type:'food'` буюртмалар тарихда кўринади.
     HomeModule(
       id: 'restaurants',
       label: 'home_module_restaurants',
@@ -55,8 +55,8 @@ class HomeModulesCatalog {
       label: 'home_module_jobs',
     ),
     // `platform_store` («AVA ДЎКОНИ») ОЛИБ ТАШЛАНДИ (2026-10-07): алоҳида
-    // дўкон экрани йўқ, AVA товарлари — Улгуржи бозорда. Конфиг калити
-    // (`kKnownModuleIds`) эса эски илова версиялари учун қолди.
+    // дўкон экрани йўқ, AVA товарлари — Улгуржи бозорда. Конфиг калити ҳам
+    // ўчирилди (2026-10-20).
     HomeModule(
       id: 'tv_market',
       label: 'home_module_tv_market',

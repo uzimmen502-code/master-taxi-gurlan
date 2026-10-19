@@ -9,10 +9,9 @@ const List<String> kKnownModuleIds = [
   'yuk_local',
   'yuk_intercity',
   'courier',
-  // «Овқат» модули олиб ташланди (2026-10-11), калит ЭСКИ илова
-  // версиялари учун қолади: админ уни `hidden` қилса, ўрнатилган эски
-  // APK'ларда ҳам плитка йўқолади.
-  'food',
+  // «Овқат» (`food`) ва эски «AVA дўкони» (`platform_store`) калитлари ЎЧИРИЛДИ (эга, 2026-10-20): модуллар
+  // олиб ташланган. Ўрнатилган эски APK'лар бу калитни серверда ўқиса — рўйхатда йўқ калит «яширин» ҳисобланади
+  // (`ServiceConfigHolder.statusOf`: enforce=true да fallback hidden, enforce=false да созланмаган = hidden).
   'jobs',
   'cheap_products_home',
   'bread',
@@ -23,7 +22,6 @@ const List<String> kKnownModuleIds = [
   'tire',
   'car_wash',
   'oil_change',
-  'platform_store',
   'tv_market',
   'chatgpt',
   'ev_charging',

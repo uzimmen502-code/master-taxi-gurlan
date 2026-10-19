@@ -3703,5 +3703,7 @@
   "news_delete_confirm": "Удалить",
   "news_delete_cancel": "Отмена",
   "news_delete_tooltip": "Удалить сообщение",
-  "news_deleted_snack": "Сообщение удалено"
+  "news_deleted_snack": "Сообщение удалено",
+  "courier_hub_restaurants_subtitle": "Блюда доставляет курьер до вашего дома",
+  "courier_hub_milk_subtitle": "Курьер забирает молоко по вашему адресу"
 }

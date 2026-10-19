@@ -221,6 +221,43 @@ void main() {
     });
   });
 
+  group('Кўчмас мулк эълони видеоси — 60 сония (эга 2026-10-19)', () {
+    test('tvClipMaxSecondsFor: realty_listing — 60; таом — 60; қолгани — умумий чегара', () {
+      expect(tvClipMaxSecondsFor('realty_listing'), 60);
+      expect(tvClipRealtyMaxUploadSeconds, 60);
+      expect(tvClipRealtyMaxUploadSeconds, lessThan(tvClipMaxUploadSeconds));
+      expect(tvClipMaxSecondsFor('restaurant_item'), 60);
+      for (final k in ['restaurant', 'ad', 'service', 'market_ad', 'wholesale_product', '']) {
+        expect(tvClipMaxSecondsFor(k), tvClipMaxUploadSeconds, reason: k);
+      }
+    });
+
+    test('trimToSeconds(maxSeconds: 60): 60 с ўзи кесилмайди, 61 с → 60 га; 5 дақиқа → 60', () {
+      expect(TvClipCompress.trimToSeconds(60 * 1000, maxSeconds: tvClipRealtyMaxUploadSeconds), isNull);
+      expect(TvClipCompress.trimToSeconds(61 * 1000, maxSeconds: tvClipRealtyMaxUploadSeconds), 60);
+      expect(TvClipCompress.trimToSeconds(5 * 60 * 1000, maxSeconds: tvClipRealtyMaxUploadSeconds), 60);
+    });
+
+    test('сервердаги чегара (functions/tv_clip_limits.js) клиентнинг tvClipRealtyMaxUploadSeconds билан мос', () {
+      final js = File('functions/tv_clip_limits.js').readAsStringSync();
+      final m = RegExp(r'const TV_CLIP_REALTY_MAX_SECONDS = (\d+);').firstMatch(js);
+      expect(m, isNotNull, reason: 'functions/tv_clip_limits.js: TV_CLIP_REALTY_MAX_SECONDS йўқ');
+      expect(int.parse(m!.group(1)!), tvClipRealtyMaxUploadSeconds);
+      final kind = RegExp(r"const REALTY_LINK_KIND = '([a-z_]+)';").firstMatch(js);
+      expect(kind!.group(1), 'realty_listing');
+      // Клиент тури ва қоидадаги тур ҳам бир хил (тур номи уч жойда — бири адашса жимгина йиқилади).
+      final rules = File('firestore.rules').readAsStringSync();
+      expect(rules, contains("d.get('linkKind', '') != 'realty_listing'"));
+      final cleanup = File('functions/realty_video.js').readAsStringSync();
+      expect(cleanup, contains("const REALTY_LINK_KIND = 'realty_listing';"));
+    });
+
+    test('экран ва транскодер чегарани клипнинг linkKind\'идан олади (клиентда `maxDuration` ҳам шундан)', () {
+      final screen = File('lib/features/tv_market/screens/tv_publish_screen.dart').readAsStringSync();
+      expect(screen, contains('tvClipMaxSecondsFor(widget.linkKind)'));
+    });
+  });
+
   test('клиент ва сервердаги давомийлик чегараси мос', () {
     // Мослик бузилса фойдаланувчи огоҳлантирилмай қолади: сервер
     // кесади, клиент эса бошқа рақамни кўрсатади.

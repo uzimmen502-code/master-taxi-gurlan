@@ -98,6 +98,8 @@ class _Repo implements RestaurantsRepository {
 }
 
 void main() {
+  // «Охирги маълум созлама» (экран очилишини тезлатади) тестлар орасида эскирмасин.
+  setUp(RestaurantsListScreen.resetLastKnownConfig);
   final l10n = JsonL10nDelegate();
   String tr(String key) => l10n.tr(key);
 

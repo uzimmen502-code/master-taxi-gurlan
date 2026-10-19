@@ -3679,5 +3679,22 @@
   "restaurants_m_bk_disabled_now": "Приём броней отключён из-за частых отмен.",
   "restaurants_m_bk_not_enabled": "Включите «Принимаю брони столов» в разделе «Магазин».",
   "restaurants_m_bk_call": "Позвонить клиенту",
-  "restaurants_m_bk_deadline": "Ответить до: {time}"
+  "restaurants_m_bk_deadline": "Ответить до: {time}",
+  "restaurants_section_office": "Офис",
+  "restaurants_section_dastarxon": "Дастархан",
+  "restaurants_section_seasonal": "Сезонное",
+  "restaurants_m_dish_tag_dastarxon": "Для дастархана",
+  "restaurants_m_dish_tag_ramadan": "Рамадан",
+  "restaurants_m_dish_tag_navruz": "Навруз",
+  "restaurants_m_dish_tag_qurbon": "Курбан-байрам",
+  "restaurants_m_dish_tag_newyear": "Новый год",
+  "restaurants_m_dish_tag_wedding": "Свадебный сезон",
+  "restaurants_season_ramadan": "Рамадан",
+  "restaurants_season_navruz": "Навруз",
+  "restaurants_season_qurbon": "Курбан-байрам",
+  "restaurants_season_newyear": "Новый год",
+  "restaurants_season_wedding": "Свадебный сезон",
+  "restaurants_ramadan_today": "Сегодня: сухур {sahar} · ифтар {iftar}",
+  "restaurants_dish_preorder": "Предзаказ",
+  "restaurants_dish_serves": "На {n} чел."
 }

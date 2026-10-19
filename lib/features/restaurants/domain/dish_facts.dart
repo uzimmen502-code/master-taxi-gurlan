@@ -10,15 +10,25 @@
 // бўлишининг сабаби: rules кодни импорт қила олмайди; мослик икки томонда ҳам
 // чегара тестлари билан қулфланган (`dish_facts_test.dart`, `restaurant_rules.test.js`).
 
-/// Таомга қўйиладиган теглар (D-REST-17). Мавсумий теглар 2-қадамда
-/// (мавсумлар рўйхати билан бирга) қўшилади.
+/// Таомга қўйиладиган теглар (D-REST-17, D-REST-21/22). `dastarxon` — «Дастурхон» бўлими (ресторан олдиндан буюртма
+/// олса); мавсум теглари — мавсумий бўлим (қайси мавсум ҳозир очиқ — `settings/restaurant_seasons`). Рўйхат сервердаги
+/// `DISH_TAGS` ва `firestore.rules` билан бир хил (мослик тест билан қулфланган).
 abstract final class DishTag {
   static const kids = 'kids';
   static const breakfast = 'breakfast';
   static const night = 'night';
   static const light = 'light';
+  static const dastarxon = 'dastarxon';
+  static const ramadan = 'ramadan';
+  static const navruz = 'navruz';
+  static const qurbon = 'qurbon';
+  static const newyear = 'newyear';
+  static const wedding = 'wedding';
 
-  static const all = [kids, breakfast, night, light];
+  /// Мавсум теглари = мавсум калитлари (`SeasonKey`).
+  static const seasons = [ramadan, navruz, qurbon, newyear, wedding];
+
+  static const all = [kids, breakfast, night, light, dastarxon, ...seasons];
   static const maxPerDish = 4;
 }
 

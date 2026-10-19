@@ -114,7 +114,9 @@ Future<void> _fillBasics(WidgetTester t, {String name = 'Osh', String price = '3
 }
 
 Future<void> _tapSave(WidgetTester t) async {
-  await t.ensureVisible(_save());
+  // Форма узайгач «Сақлаш» ListView'да ҳали қурилмаган бўлиши мумкин (ленивый) — аввал пастга суриб топамиз.
+  await t.dragUntilVisible(_save(), find.byType(ListView).first, const Offset(0, -400));
+  await t.pumpAndSettle();
   await t.tap(_save());
   await t.pumpAndSettle();
 }
@@ -144,6 +146,8 @@ void main() {
     await t.tap(find.text(_tr('restaurants_m_dish_tags')));
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilterChip, _tr('restaurants_m_dish_tag_kids')));
+    await t.ensureVisible(find.text(_tr('restaurants_m_dish_cuisine')));
+    await t.pumpAndSettle();
     await t.tap(find.text(_tr('restaurants_m_dish_cuisine')));
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(SegmentedButton<String>), matching: find.text(_tr('restaurants_m_dish_group_national'))));
@@ -160,6 +164,23 @@ void main() {
     expect(f.validate(), isEmpty);
   });
 
+  testWidgets('теглар: Дастурхон ва 5 та мавсум теги формада бор; 5 тадан ортиқ танланса сақланмайди (≤ 4)', (t) async {
+    final repo = _FakeRepo();
+    await _open(t, repo);
+    await _fillBasics(t);
+    await t.tap(find.text(_tr('restaurants_m_dish_tags')));
+    await t.pumpAndSettle();
+    for (final tag in [DishTag.dastarxon, ...DishTag.seasons]) {
+      expect(find.widgetWithText(FilterChip, _tr('restaurants_m_dish_tag_$tag')), findsOneWidget, reason: tag);
+    }
+    for (final tag in [DishTag.kids, DishTag.light, DishTag.dastarxon, DishTag.ramadan, DishTag.navruz]) {
+      await t.tap(find.widgetWithText(FilterChip, _tr('restaurants_m_dish_tag_$tag')));
+      await t.pump();
+    }
+    await _tapSave(t);
+    expect(repo.saved, isEmpty, reason: '5 та тег — сақланмайди');
+    expect(find.text(_tr('restaurants_m_dish_err_tags')), findsWidgets);
+  });
   testWidgets('ХАТОЛИ факт (калория мос эмас) сақланмайди: репозиторий чақирилмайди, хабар ва хатоли карточка очилади', (t) async {
     final repo = _FakeRepo();
     await _open(t, repo);

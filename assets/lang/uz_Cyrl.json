@@ -3679,5 +3679,22 @@
   "restaurants_m_bk_disabled_now": "Бекор қилишлар кўплиги сабабли бронь қабул қилиш ўчирилди.",
   "restaurants_m_bk_not_enabled": "«Дўкон» бўлимида «Стол бронь оламан»ни ёқинг.",
   "restaurants_m_bk_call": "Мижозга қўнғироқ",
-  "restaurants_m_bk_deadline": "Жавоб муддати: {time}"
+  "restaurants_m_bk_deadline": "Жавоб муддати: {time}",
+  "restaurants_section_office": "Офис",
+  "restaurants_section_dastarxon": "Дастурхон",
+  "restaurants_section_seasonal": "Мавсумий",
+  "restaurants_m_dish_tag_dastarxon": "Дастурхон учун",
+  "restaurants_m_dish_tag_ramadan": "Рамазон",
+  "restaurants_m_dish_tag_navruz": "Наврўз",
+  "restaurants_m_dish_tag_qurbon": "Қурбон ҳайит",
+  "restaurants_m_dish_tag_newyear": "Янги йил",
+  "restaurants_m_dish_tag_wedding": "Тўй мавсуми",
+  "restaurants_season_ramadan": "Рамазон",
+  "restaurants_season_navruz": "Наврўз",
+  "restaurants_season_qurbon": "Қурбон ҳайит",
+  "restaurants_season_newyear": "Янги йил",
+  "restaurants_season_wedding": "Тўй мавсуми",
+  "restaurants_ramadan_today": "Бугун: саҳарлик {sahar} · ифтор {iftar}",
+  "restaurants_dish_preorder": "Олдиндан буюртма",
+  "restaurants_dish_serves": "{n} киши учун"
 }

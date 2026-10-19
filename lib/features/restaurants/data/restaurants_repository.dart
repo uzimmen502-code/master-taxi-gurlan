@@ -21,6 +21,7 @@ import '../domain/qty_tiers.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 import '../domain/restaurant_sections.dart';
+import '../domain/seasons.dart';
 
 class RestaurantsException implements Exception {
   const RestaurantsException(this.code, this.reason, this.message, {this.details});
@@ -440,6 +441,45 @@ class RestaurantsRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+  // ── Мавсумлар ва Рамазон жадвали (D-REST-22/39) ────────────────────
+
+  static const _seasonsTtl = Duration(minutes: 30);
+  RestaurantSeasonsConfig? _seasons;
+  DateTime? _seasonsAt;
+  RamadanConfig? _ramadan;
+  DateTime? _ramadanAt;
+
+  /// `settings/restaurant_seasons`. Ҳужжат йўқ/ўқилмаса — давр йўқ (мавсумий бўлим кўринмайди; хато кешланмайди).
+  Future<RestaurantSeasonsConfig> getSeasonsConfig({bool force = false}) async {
+    final at = _seasonsAt;
+    final cached = _seasons;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _seasonsTtl) return cached;
+    try {
+      final snap = await _db.collection('settings').doc('restaurant_seasons').get();
+      final cfg = snap.exists ? RestaurantSeasonsConfig.fromMap(snap.data()) : RestaurantSeasonsConfig.none;
+      _seasons = cfg;
+      _seasonsAt = DateTime.now();
+      return cfg;
+    } catch (_) {
+      return cached ?? RestaurantSeasonsConfig.none;
+    }
+  }
+
+  /// `settings/restaurant_ramadan` (саҳарлик/ифтор). Ўқилмаса — вақт кўрсатилмайди (тахмин қилинмайди).
+  Future<RamadanConfig> getRamadanConfig({bool force = false}) async {
+    final at = _ramadanAt;
+    final cached = _ramadan;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _seasonsTtl) return cached;
+    try {
+      final snap = await _db.collection('settings').doc('restaurant_ramadan').get();
+      final cfg = snap.exists ? RamadanConfig.fromMap(snap.data()) : RamadanConfig.none;
+      _ramadan = cfg;
+      _ramadanAt = DateTime.now();
+      return cfg;
+    } catch (_) {
+      return cached ?? RamadanConfig.none;
+    }
+  }
   // ── Стол бронь (S5, D-REST-23/38) ──────────────────────────────────
 
   static const _bookingsConfigTtl = Duration(minutes: 5);

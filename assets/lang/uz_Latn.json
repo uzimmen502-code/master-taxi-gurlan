@@ -3679,5 +3679,22 @@
   "restaurants_m_bk_disabled_now": "Bekor qilishlar ko'pligi sababli bron qabul qilish o'chirildi.",
   "restaurants_m_bk_not_enabled": "«Do'kon» bo'limida «Stol bron olaman»ni yoqing.",
   "restaurants_m_bk_call": "Mijozga qo'ng'iroq",
-  "restaurants_m_bk_deadline": "Javob muddati: {time}"
+  "restaurants_m_bk_deadline": "Javob muddati: {time}",
+  "restaurants_section_office": "Ofis",
+  "restaurants_section_dastarxon": "Dasturxon",
+  "restaurants_section_seasonal": "Mavsumiy",
+  "restaurants_m_dish_tag_dastarxon": "Dasturxon uchun",
+  "restaurants_m_dish_tag_ramadan": "Ramazon",
+  "restaurants_m_dish_tag_navruz": "Navro'z",
+  "restaurants_m_dish_tag_qurbon": "Qurbon hayit",
+  "restaurants_m_dish_tag_newyear": "Yangi yil",
+  "restaurants_m_dish_tag_wedding": "To'y mavsumi",
+  "restaurants_season_ramadan": "Ramazon",
+  "restaurants_season_navruz": "Navro'z",
+  "restaurants_season_qurbon": "Qurbon hayit",
+  "restaurants_season_newyear": "Yangi yil",
+  "restaurants_season_wedding": "To'y mavsumi",
+  "restaurants_ramadan_today": "Bugun: saharlik {sahar} · iftor {iftar}",
+  "restaurants_dish_preorder": "Oldindan buyurtma",
+  "restaurants_dish_serves": "{n} kishi uchun"
 }

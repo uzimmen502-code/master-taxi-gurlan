@@ -13,6 +13,7 @@ import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/cuisine.dart';
 import '../domain/restaurant_sections.dart';
+import '../domain/seasons.dart';
 import 'restaurant_row.dart' show formatDistanceLabel;
 
 /// Бўлим белгиси (иконка — эмодзи эмас: қурилмага қараб ҳар хил чизилмасин).
@@ -25,6 +26,9 @@ IconData sectionIcon(RestaurantSection s) => switch (s) {
       RestaurantSection.kids => Icons.child_care_rounded,
       RestaurantSection.breakfast => Icons.free_breakfast_outlined,
       RestaurantSection.night => Icons.nightlight_outlined,
+      RestaurantSection.office => Icons.business_center_outlined,
+      RestaurantSection.dastarxon => Icons.table_restaurant_outlined,
+      RestaurantSection.seasonal => Icons.celebration_outlined,
     };
 
 class SectionDishesView extends StatefulWidget {
@@ -37,6 +41,9 @@ class SectionDishesView extends StatefulWidget {
     required this.lng,
     required this.onOpenRestaurant,
     this.now,
+    this.seasons = const [],
+    this.ramadan = RamadanConfig.none,
+    this.regionId,
   });
 
   final RestaurantSection section;
@@ -53,6 +60,12 @@ class SectionDishesView extends StatefulWidget {
   /// Тест учун соат.
   final DateTime Function()? now;
 
+  /// «Мавсумий» бўлим: ҳозир очиқ мавсумлар (бўш бўлса бўлим бўш), Рамазон жадвали ва фойдаланувчи ҳудуди
+  /// (geo_regions id; ифтор/саҳарлик вақти шу ҳудуд жадвалда бўлсагина кўрсатилади).
+  final List<ActiveSeason> seasons;
+  final RamadanConfig ramadan;
+  final String? regionId;
+
   @override
   State<SectionDishesView> createState() => _SectionDishesViewState();
 }
@@ -62,6 +75,7 @@ class _SectionDishesViewState extends State<SectionDishesView> {
   Object? _error;
   bool _loading = false;
   String? _cuisineId;
+  String? _seasonKey;
   Map<String, Cuisine> _cuisines = const {};
 
   DateTime get _now => (widget.now ?? DateTime.now)();
@@ -78,6 +92,7 @@ class _SectionDishesViewState extends State<SectionDishesView> {
     final moved = old.lat != widget.lat || old.lng != widget.lng;
     if (old.section != widget.section || (moved && _result == null)) {
       _cuisineId = null;
+      _seasonKey = null;
       _load();
     }
   }
@@ -137,9 +152,16 @@ class _SectionDishesViewState extends State<SectionDishesView> {
       if (_error != null) return _errorView(context);
       return const Center(child: CircularProgressIndicator());
     }
-    final filtered = _cuisineId == null
-        ? res.dishes
-        : res.dishes.where((d) => d.cuisineId == _cuisineId).toList();
+    final activeKeys = {for (final s in widget.seasons) s.key};
+    // Мавсумий бўлим: фақат ҳозир ОЧИҚ мавсум тегли таомлар (бошқа мавсум таоми кўринмайди); танланган мавсум чипи бўйича.
+    final base = widget.section.hasSeasonFilter
+        ? res.dishes.where((d) => d.seasons.any(activeKeys.contains)).toList()
+        : res.dishes;
+    final filtered = widget.section.hasSeasonFilter
+        ? (_seasonKey == null ? base : base.where((d) => d.seasons.contains(_seasonKey)).toList())
+        : _cuisineId == null
+            ? base
+            : base.where((d) => d.cuisineId == _cuisineId).toList();
     final ranked = rankSectionDishes(
       filtered,
       section: widget.section,
@@ -164,6 +186,7 @@ class _SectionDishesViewState extends State<SectionDishesView> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
         children: [
+          if (widget.section.hasSeasonFilter) ..._seasonHeader(context, base),
           if (cuisineChips.length > 1)
             SizedBox(
               height: 40,
@@ -222,6 +245,65 @@ class _SectionDishesViewState extends State<SectionDishesView> {
         ],
       ),
     );
+  }
+
+  /// Мавсумий бўлим боши: Рамазонда бугунги саҳарлик/ифтор (ҳудуд жадвалда бўлсагина — тахмин қилинмайди) ва
+  /// бир нечта мавсум очиқ бўлса мавсум чиплари (камида битта таоми борлар).
+  List<Widget> _seasonHeader(BuildContext context, List<SectionDish> base) {
+    final c = context.ava;
+    final out = <Widget>[];
+    final ramadanOpen = widget.seasons.any((s) => s.key == SeasonKey.ramadan);
+    final times = ramadanOpen ? widget.ramadan.timesFor(tashkentDay(_now), widget.regionId) : null;
+    if (times != null) {
+      out.add(Container(
+        key: const ValueKey('ramadan-times'),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: c.brandSoft, borderRadius: BorderRadius.circular(AvaRadius.card)),
+        child: Row(
+          children: [
+            Icon(Icons.nightlight_round, color: c.brandText, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.tr('restaurants_ramadan_today').replaceAll('{sahar}', times.sahar).replaceAll('{iftar}', times.iftar),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+    final counts = <String, int>{
+      for (final s in widget.seasons) s.key: base.where((d) => d.seasons.contains(s.key)).length,
+    };
+    final chips = [for (final s in widget.seasons) if ((counts[s.key] ?? 0) > 0) s];
+    if (chips.length > 1) {
+      out.add(SizedBox(
+        height: 40,
+        child: ListView(
+          key: const ValueKey('season-chips'),
+          scrollDirection: Axis.horizontal,
+          children: [
+            ChoiceChip(
+              label: Text(context.tr('restaurants_cuisine_all')),
+              selected: _seasonKey == null,
+              onSelected: (_) => setState(() => _seasonKey = null),
+            ),
+            for (final s in chips) ...[
+              const SizedBox(width: 6),
+              ChoiceChip(
+                key: ValueKey('season-${s.key}'),
+                label: Text('${context.tr('restaurants_season_${s.key}')} · ${counts[s.key]}'),
+                selected: _seasonKey == s.key,
+                onSelected: (v) => setState(() => _seasonKey = v ? s.key : null),
+              ),
+            ],
+          ],
+        ),
+      ));
+    }
+    return out;
   }
 
   Widget _errorView(BuildContext context) {
@@ -415,6 +497,18 @@ class SectionDishCard extends StatelessWidget {
                                   .tr('restaurants_dish_kcal')
                                   .replaceAll('{kcal}', '${d.kcal}'),
                               key: ValueKey('kcal-${d.key}'),
+                              style: AvaText.caption.copyWith(color: c.ink2),
+                            ),
+                          if (section.isPreorderBased)
+                            Text(
+                              context.tr('restaurants_dish_preorder'),
+                              key: ValueKey('pre-${d.key}'),
+                              style: AvaText.caption.copyWith(color: c.brandText),
+                            ),
+                          if (section == RestaurantSection.dastarxon && d.servings != null)
+                            Text(
+                              context.tr('restaurants_dish_serves').replaceAll('{n}', '${d.servings}'),
+                              key: ValueKey('serves-${d.key}'),
                               style: AvaText.caption.copyWith(color: c.ink2),
                             ),
                           if (section == RestaurantSection.fast)

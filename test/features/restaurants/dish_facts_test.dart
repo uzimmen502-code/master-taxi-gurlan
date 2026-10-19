@@ -87,7 +87,11 @@ void main() {
 
     test('теглар: рухсат этилганлар ≤ 4, такрорсиз; бошқа тег ёки 5 та — хато', () {
       expect(const DishFacts(tags: [DishTag.kids, DishTag.light]).validate(), isEmpty);
-      expect(const DishFacts(tags: DishTag.all).validate(), isEmpty);
+      for (final tag in DishTag.all) {
+        expect(DishFacts(tags: [tag]).validate(), isEmpty, reason: tag);
+      }
+      expect(const DishFacts(tags: [DishTag.kids, DishTag.light, DishTag.dastarxon, DishTag.ramadan]).validate(), isEmpty, reason: '4 та — рухсат');
+      expect(const DishFacts(tags: DishTag.all).validate(), [DishFactsError.tags], reason: 'ҳаммаси бирданига (10 та) — ≤ 4 чегарасидан ошади');
       expect(const DishFacts(tags: ['spicy']).validate(), [DishFactsError.tags]);
       expect(const DishFacts(tags: ['kids', 'kids']).validate(), [DishFactsError.tags], reason: 'такрор');
       expect(const DishFacts(tags: ['kids', 'breakfast', 'night', 'light', 'x']).validate(), [DishFactsError.tags]);

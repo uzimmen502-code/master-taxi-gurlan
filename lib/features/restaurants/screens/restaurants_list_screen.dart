@@ -460,6 +460,11 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                       seasons: _activeSeasons,
                       ramadan: _ramadan,
                       regionId: GeoContext.active.regionId,
+                      onShowNation: () => setState(() {
+                        _pickedByUser = true;
+                        _showAll = true;
+                        _setSection(null);
+                      }),
                     )
                   : StreamBuilder<List<Restaurant>>(
                       stream: _listStream(),

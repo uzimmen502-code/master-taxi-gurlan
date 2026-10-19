@@ -855,6 +855,20 @@
       ]
     },
     {
+      "collectionGroup": "restaurant_dish_index",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sections",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "geo4",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "clients",
       "queryScope": "COLLECTION",
       "fields": [

@@ -92,6 +92,9 @@ async function main() {
     await db.doc(`restaurants/${R1}/menu_item_stats/osh`).set({ ratingSum: 9, ratingCount: 2 });
     await db.doc(`restaurants/${R2}/menu_item_stats/somsa`).set({ ratingSum: 5, ratingCount: 1 });
     await db.doc(`restaurant_dish_ratings/${O1}_osh`).set({ orderId: O1, itemId: 'osh', restaurantId: R1, userId: CUSTOMER, stars: 5 });
+    await db.doc(`restaurant_dish_index/${R1}_osh`).set({ restaurantId: R1, itemId: 'osh', sections: ['cheap'], geo4: 'tzh1', price: 40000 });
+    await db.doc('settings/restaurant_sections').set({ version: 1, sections: { cheap: 'public' }, cheapRatingThreshold: 5 });
+    await db.doc('restaurant_sections_history/v1').set({ version: 1 });
     await db.doc('restaurant_cuisines/national_ozbek').set({ name: 'Ўзбек', group: 'national', hidden: false });
     await db.doc('restaurant_cuisines/world_turk').set({ name: 'Турк', group: 'world', hidden: false });
     await db.doc('settings/restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
@@ -256,6 +259,27 @@ async function main() {
       await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_osh`).update({ stars: 1 }), `update ${who}`);
       await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_osh`).delete(), `delete ${who}`);
     }
+  });
+  await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
+    await assertSucceeds(anon().doc(`restaurant_dish_index/${R1}_osh`).get());
+    await assertSucceeds(anon().collection('restaurant_dish_index').where('sections', 'array-contains', 'cheap').where('geo4', 'in', ['tzh1', 'tzh2']).limit(50).get());
+    const ref = (who) => as(who).doc(`restaurant_dish_index/${R1}_osh`);
+    for (const who of [OWNER, STAFF, ADMIN, CUSTOMER, STRANGER]) {
+      await assertFails(ref(who).update({ price: 1, sections: ['cheap', 'kids'] }), `update ${who}`);
+      await assertFails(ref(who).delete(), `delete ${who}`);
+      await assertFails(as(who).doc(`restaurant_dish_index/${R1}_yangi`).set({ restaurantId: R1, itemId: 'yangi', sections: ['cheap'] }), `create ${who}`);
+    }
+  });
+  await check('D-REST-33 settings/restaurant_sections: hamma o\'qiydi; admin ham TO\'G\'RIDAN-TO\'G\'RI yozolmaydi (faqat CF, versiya+audit); tarix faqat admin o\'qiydi', async () => {
+    await assertSucceeds(anon().doc('settings/restaurant_sections').get());
+    for (const who of [ADMIN, OWNER, CUSTOMER]) {
+      await assertFails(as(who).doc('settings/restaurant_sections').update({ cheapRatingThreshold: 1 }), `update ${who}`);
+      await assertFails(as(who).doc('settings/restaurant_sections').set({ sections: { cheap: 'public' } }), `set ${who}`);
+    }
+    await assertSucceeds(as(ADMIN).doc('restaurant_sections_history/v1').get());
+    await assertFails(as(CUSTOMER).doc('restaurant_sections_history/v1').get());
+    await assertFails(anon().doc('restaurant_sections_history/v1').get());
+    await assertFails(as(ADMIN).doc('restaurant_sections_history/v2').set({ version: 2 }));
   });
   await check('D-REST-18 mijoz buyurtmasiga `dishRatings` yozolmaydi (faqat CF)', async () => {
     await assertFails(as(CUSTOMER).doc(`orders/${O1}`).update({ dishRatings: { osh: 5 } }));

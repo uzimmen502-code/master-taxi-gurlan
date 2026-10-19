@@ -1873,6 +1873,7 @@ service cloud.firestore {
       allow create, update: if isAdmin() && docId != 'tv_social'
           && docId != 'wallet_bot'
           && docId != 'restaurant_delivery'
+          && docId != 'restaurant_sections'
           && docId != 'all_orders_stuck'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
@@ -1897,6 +1898,13 @@ service cloud.firestore {
     // Кафе-ресторан етказиш тарифи тарихи (`v{n}`) — ўзгармас, фақат CF
     // (`adminSetRestaurantDeliveryPrices`). Тест: restaurant_rules.test.js
     match /restaurant_delivery_tariffs/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Кафе-ресторан бўлимлари созламаси (`settings/restaurant_sections`) тарихи (`v{n}`) —
+    // ўзгармас, фақат CF (`adminSetRestaurantSections`, версия + audit, 9/41-банд).
+    match /restaurant_sections_history/{versionId} {
       allow read: if isAdmin();
       allow write: if false;
     }
@@ -3199,6 +3207,15 @@ service cloud.firestore {
             || (isAuth() && isRestaurantMember(rid));
         allow write: if false;
       }
+    }
+
+    // Бўлимлар индекси (S3, D-REST-33): таомнинг тайёр кўриниши (`functions/restaurant_dish_index.js`).
+    // Ҳужжат фақат ТАСДИҚЛАНГАН ресторан таомлари учун мавжуд (бошқасида ўчирилади), PII йўқ — ҳамма
+    // ўқийди (меню ва ресторан рўйхати каби). Ёзув — фақат CF: клиент ўз таомини «Арзон»га ёки
+    // рейтингини ўзгартириб қўя олмасин (20-қоида).
+    match /restaurant_dish_index/{ixId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // Алоҳида баҳолар (кимнинг баҳоси — PII): фақат админ ўқийди, ёзув — фақат CF.

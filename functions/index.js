@@ -89,6 +89,11 @@ attachRestaurantDishVideoCleanup(exports, { functions, db });
 // Таом баҳоси (D-REST-18, 2026-10-19): фақат етказилган буюртма бўйича, 1–5; агрегат — алоҳида ҳужжатда.
 const { attachRestaurantDishRatings } = require('./restaurant_dish_ratings');
 attachRestaurantDishRatings(exports, { functions, db, admin, callerPhone, canonicalUid });
+// Бўлимлар индекси (S3, D-REST-33): таом ёзилса/ресторан ўзгарса/баҳо тушса `restaurant_dish_index` қайта ҳисобланади.
+const { attachRestaurantDishIndex } = require('./restaurant_dish_index');
+attachRestaurantDishIndex(exports, { functions, db });
+const { attachRestaurantSectionsConfig } = require('./restaurant_sections_config');
+attachRestaurantSectionsConfig(exports, { functions, db, admin, canonicalUid, requireCallerRoles });
 // «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');

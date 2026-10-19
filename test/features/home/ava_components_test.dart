@@ -235,8 +235,10 @@ void main() {
     test('SectionTitleText.fitFor — чегаралар', () {
       expect(SectionTitleText.fitFor(100, 120), SectionTitleFit.asIs);
       expect(SectionTitleText.fitFor(100, 100), SectionTitleFit.asIs);
-      expect(SectionTitleText.fitFor(100, 85), SectionTitleFit.shrink);
-      expect(SectionTitleText.fitFor(100, 80), SectionTitleFit.shrink);
+      // Кичрайтириш йўқ (бир хил шрифт, эга 2026-10-19): сиғмаса — 2 қатор.
+      expect(SectionTitleText.fitFor(100, 99), SectionTitleFit.wrap);
+      expect(SectionTitleText.fitFor(100, 85), SectionTitleFit.wrap);
+      expect(SectionTitleText.fitFor(100, 80), SectionTitleFit.wrap);
       expect(SectionTitleText.fitFor(100, 79), SectionTitleFit.wrap);
       expect(SectionTitleText.fitFor(100, double.infinity), SectionTitleFit.asIs);
     });
@@ -256,11 +258,11 @@ void main() {
       expect(p.didExceedMaxLines, isFalse);
     });
 
-    testWidgets('озгина катта — кичраяди, «…» йўқ', (tester) async {
+    testWidgets('озгина катта — КИЧРАЙМАЙДИ (бир хил шрифт), 2 қаторга ўтади, «…» йўқ', (tester) async {
       await pumpTitle(tester, 'аааааааа', 140); // 8 × 16 = 128 ≤ 140 → сиғади
       expect(find.byType(FittedBox), findsNothing);
-      await pumpTitle(tester, 'ааааааааа', 130); // 144px, 130/144 = 0.90
-      expect(find.byType(FittedBox), findsOneWidget);
+      await pumpTitle(tester, 'ааааааааа', 130); // 144px > 130 — аввал кичрайтирилар эди
+      expect(find.byType(FittedBox), findsNothing, reason: 'шрифт кичрайтирилмайди');
       final p = tester.renderObject<RenderParagraph>(find.text('ааааааааа'));
       expect(p.didExceedMaxLines, isFalse);
       expect(tester.takeException(), isNull);

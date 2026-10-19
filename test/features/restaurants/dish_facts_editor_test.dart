@@ -2,48 +2,15 @@
 // ҳақиқий uz_Latn матнлари билан (калит қолиб кетса — хом калит чиқади ва тест йиқилади),
 // тор экран (320) ва катта шрифт (×2) да ҳам синмаслиги.
 
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:ava_gurlan/core/theme/ava_tokens.dart';
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/cuisine.dart';
 import 'package:ava_gurlan/features/restaurants/domain/dish_facts.dart';
 import 'package:ava_gurlan/features/restaurants/merchant/dish_facts_editor.dart';
-import 'package:ava_gurlan/l10n/app_localizations.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Ҳақиқий таржима файли, СИНХРОН ўқилади (тестлар тартибдан мустақил).
-class _JsonL10n extends AppLocalizations {
-  _JsonL10n(super.locale, this._s);
-
-  final Map<String, String> _s;
-
-  @override
-  String translate(String key) => _s[key] ?? key;
-}
-
-class _JsonDelegate extends LocalizationsDelegate<AppLocalizations> {
-  _JsonDelegate(String lang)
-      : _s = {
-          for (final e in (jsonDecode(File('assets/lang/$lang.json').readAsStringSync()) as Map<String, dynamic>).entries)
-            e.key: e.value.toString(),
-        };
-
-  final Map<String, String> _s;
-
-  @override
-  bool isSupported(Locale locale) => true;
-
-  @override
-  Future<AppLocalizations> load(Locale locale) => SynchronousFuture(_JsonL10n(locale, _s));
-
-  @override
-  bool shouldReload(covariant LocalizationsDelegate<AppLocalizations> old) => false;
-}
+import 'restaurants_l10n_harness.dart';
 
 const _ozbek = Cuisine(id: 'national_ozbek', name: 'Ўзбек', group: 'national', names: {'uz_Latn': "O'zbek", 'uz_Cyrl': 'Ўзбек', 'ru': 'Узбекская'});
 const _xorazm = Cuisine(id: 'national_xorazm', name: 'Хоразм', group: 'national', names: {'uz_Latn': 'Xorazm', 'uz_Cyrl': 'Хоразм', 'ru': 'Хорезмская'});
@@ -73,19 +40,8 @@ class _Harness {
     t.view.devicePixelRatio = 3;
     addTearDown(t.view.reset);
     await t.pumpWidget(
-      MaterialApp(
-        locale: const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn'),
-        supportedLocales: const [Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn')],
-        localizationsDelegates: [
-          _JsonDelegate('uz_Latn'),
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
-          child: child!,
-        ),
+      l10nApp(
+        textScale: textScale,
         home: Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -365,15 +321,7 @@ void main() {
     t.view.devicePixelRatio = 3;
     addTearDown(t.view.reset);
     await t.pumpWidget(
-      MaterialApp(
-        locale: const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn'),
-        supportedLocales: const [Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn')],
-        localizationsDelegates: [
-          _JsonDelegate('uz_Latn'),
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+      l10nApp(
         home: Scaffold(
           body: SingleChildScrollView(
             child: DishFactsEditor(

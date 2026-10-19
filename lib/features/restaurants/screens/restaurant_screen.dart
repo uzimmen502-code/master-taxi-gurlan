@@ -21,9 +21,12 @@ import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/menu_scroll_sync.dart';
 import '../domain/restaurant_models.dart';
+import '../widgets/menu_item_video_badge.dart';
 import '../widgets/restaurant_cart_sheet.dart';
 import '../widgets/restaurant_checkout_sheet.dart';
 import '../widgets/restaurant_row.dart';
+import '../../tv_market/models/tv_clip.dart';
+import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
@@ -35,7 +38,13 @@ class RestaurantScreen extends StatefulWidget {
     this.userLng,
     this.repository,
     this.cart,
+    this.itemClipsLoader,
+    this.itemClipOpener,
   });
+
+  /// Таом видеолари (`itemId → клип`) — битта сўров; тест учун алмаштирилади.
+  final Future<Map<String, TvClip>> Function(String restaurantId)? itemClipsLoader;
+  final void Function(BuildContext context, TvClip clip)? itemClipOpener;
 
   final Restaurant restaurant;
   final double? userLat;
@@ -70,6 +79,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   StreamSubscription<List<MenuCategory>>? _cSub;
   StreamSubscription<List<MenuItem>>? _mSub;
 
+  /// Таом видеолари (`itemId → клип`): таом қаторида ▶ белгиси; видеоси бўлмаганда бўш.
+  Map<String, TvClip> _itemClips = const {};
+
   int _active = 0;
   bool _lock = false;
 
@@ -80,6 +92,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   void initState() {
     super.initState();
     _right.addListener(_onRightScroll);
+    _loadItemClips();
     _rSub = _repo.watchRestaurant(_r.id).listen((r) {
       if (r != null && mounted) setState(() => _r = r);
     });
@@ -97,6 +110,26 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       debugPrint('[RestaurantScreen] menu $e');
       if (mounted) setState(() => _menuLoaded = true);
     });
+  }
+
+  /// Рестораннинг БАРЧА таом видеолари БИР сўровда (ҳар таом учун алоҳида эмас, 36-қоида). Видео
+  /// ихтиёрий қўшимча: юкланмаса меню ўзгаришсиз ишлайди.
+  Future<void> _loadItemClips() async {
+    try {
+      final clips = await (widget.itemClipsLoader ?? (id) => TvClipsRepository().fetchRestaurantItemClips(id))(_r.id);
+      if (mounted && clips.isNotEmpty) setState(() => _itemClips = clips);
+    } catch (e) {
+      debugPrint('[RestaurantScreen] item clips $e');
+    }
+  }
+
+  void _playItemClip(TvClip clip) {
+    final opener = widget.itemClipOpener;
+    if (opener != null) {
+      opener(context, clip);
+    } else {
+      TvClipLink.open(context, clip);
+    }
   }
 
   @override
@@ -352,6 +385,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                                           delegate: SliverChildBuilderDelegate(
                                             (context, i) => _MenuItemRow(
                                               item: s.items[i],
+                                              videoClip: _itemClips[s.items[i].id],
+                                              onPlayVideo: _playItemClip,
                                               qty: _cart.restaurantId == _r.id ? _cart.qtyOf(s.items[i].id) : 0,
                                               // «+» ресторан белгилаган чегарада ўчади (D-REST-26).
                                               enabled: open && (_cart.restaurantId != _r.id || _cart.canAddMore(s.items[i].id, _r)),
@@ -593,9 +628,15 @@ class _MenuItemRow extends StatelessWidget {
     required this.enabled,
     required this.onAdd,
     required this.onRemove,
+    this.videoClip,
+    this.onPlayVideo,
   });
 
   final MenuItem item;
+
+  /// Таомнинг ФАОЛ видеоси (бўлса) — расм устида ▶; босилса АВАГрам лентасида очилади.
+  final TvClip? videoClip;
+  final void Function(TvClip clip)? onPlayVideo;
   final int qty;
   final bool enabled;
   final VoidCallback onAdd;
@@ -614,17 +655,31 @@ class _MenuItemRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 72,
-                height: 72,
-                child: photo.startsWith('http')
-                    ? CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover)
-                    : ColoredBox(
-                        color: c.surface2,
-                        child: Icon(Icons.restaurant_rounded, color: c.ink3),
-                      ),
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: Stack(
+                // Белгининг босиш майдони (44) расм чегарасидан 4 px чиқади — кесилмасин.
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: photo.startsWith('http')
+                          ? CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover)
+                          : ColoredBox(
+                              color: c.surface2,
+                              child: Icon(Icons.restaurant_rounded, color: c.ink3),
+                            ),
+                    ),
+                  ),
+                  if (videoClip != null)
+                    Positioned(
+                      right: -4,
+                      bottom: -4,
+                      child: MenuItemVideoBadge(itemId: item.id, onTap: () => onPlayVideo?.call(videoClip!)),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 10),

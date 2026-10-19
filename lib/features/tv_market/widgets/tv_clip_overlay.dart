@@ -27,6 +27,7 @@ class TvClipOverlay extends StatelessWidget {
     this.onEdit,
     this.onOpenShop,
     this.onOpenWholesale,
+    this.onOpenRestaurant,
     this.filters,
     this.ownerName = '',
   });
@@ -52,6 +53,10 @@ class TvClipOverlay extends StatelessWidget {
   /// Клип улгуржи маҳсулотга боғланган бўлса (`clip.wholesaleProductId`) —
   /// маҳсулот тафсилотига ўтиш.
   final VoidCallback? onOpenWholesale;
+
+  /// Клип кафе-ресторанга ёки унинг таомига боғланган бўлса (`clip.isRestaurantLinked`) —
+  /// рестораннинг менюсига ўтиш (эга, 2026-10-19).
+  final VoidCallback? onOpenRestaurant;
 
   /// Пастки қаторнинг чап томонида, «Боғланиш» тугмасидан олдин
   /// турадиган ҳудуд фильтрлари (туман, вилоят). Экран даражасидаги
@@ -152,6 +157,7 @@ class TvClipOverlay extends StatelessWidget {
             onSave: onSave,
             onOpenShop: onOpenShop,
             onOpenWholesale: onOpenWholesale,
+            onOpenRestaurant: onOpenRestaurant,
           ),
         ),
       ],
@@ -265,6 +271,7 @@ class _ActionButtons extends StatelessWidget {
     this.ownerName = '',
     this.onOpenShop,
     this.onOpenWholesale,
+    this.onOpenRestaurant,
     this.showShop = false,
   });
 
@@ -278,6 +285,7 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback? onOpenShop;
   final VoidCallback? onOpenWholesale;
+  final VoidCallback? onOpenRestaurant;
   final bool showShop;
 
   @override
@@ -316,6 +324,15 @@ class _ActionButtons extends StatelessWidget {
             label: context.tr('tv_market_wholesale'),
             icon: Icons.warehouse_rounded,
             onTap: onOpenWholesale!,
+          ),
+        ],
+        if (onOpenRestaurant != null) ...[
+          const SizedBox(height: 12.8),
+          _ShopActionBtn(
+            key: const ValueKey('tv-open-restaurant'),
+            label: context.tr('tv_market_restaurant'),
+            icon: Icons.restaurant_rounded,
+            onTap: onOpenRestaurant!,
           ),
         ],
         const SizedBox(height: 12.8),
@@ -392,6 +409,7 @@ class _ActionBtn extends StatelessWidget {
 
 class _ShopActionBtn extends StatelessWidget {
   const _ShopActionBtn({
+    super.key,
     required this.label,
     required this.onTap,
     this.icon = Icons.storefront_rounded,

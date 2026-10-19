@@ -13,6 +13,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/geo_area.dart';
 import '../../../repositories/service_config_repository.dart';
+import '../../restaurants/data/restaurants_repository.dart';
+import '../../restaurants/domain/restaurant_models.dart';
+import '../../restaurants/screens/restaurant_screen.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../../wholesale/screens/wholesale_product_detail_screen.dart';
 import '../models/tv_clip.dart';
@@ -1123,6 +1126,34 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (mounted && tvCanPlay) tvOnPlaybackAllowed();
   }
 
+  /// Клип кафе-ресторанга (ёки унинг таомига) боғланган — рестораннинг менюсига ўтиш (эга,
+  /// 2026-10-19: «АВАГрамдаги видео босилса кафе-ресторандаги эгасига олиб келсин»). Ресторан
+  /// тасдиқланмаган/ёпилган бўлса ёки ўқиб бўлмаса — огоҳлантириш (қоида: тасдиқланмаган ресторанни
+  /// фақат а'золари ўқийди, шунинг учун рухсат хатоси ҳам «мавжуд эмас» деб қаралади).
+  Future<void> _onOpenRestaurant(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    Restaurant? restaurant;
+    try {
+      restaurant = await RestaurantsRepository().getRestaurant(clip.linkId);
+    } catch (_) {
+      restaurant = null;
+    }
+    if (!mounted) return;
+    if (restaurant == null || !restaurant.isApproved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_market_restaurant_unavailable'))),
+      );
+      if (tvCanPlay) tvOnPlaybackAllowed();
+      return;
+    }
+    final r = restaurant;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => RestaurantScreen(restaurant: r)),
+    );
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+  }
+
   Future<void> _pickDistrictFilter() async {
     final picked = await showModalBottomSheet<String>(
       context: context,
@@ -1450,6 +1481,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                               : null,
                           onOpenWholesale: clip.wholesaleProductId.isNotEmpty
                               ? () => _onOpenWholesale(clip)
+                              : null,
+                          onOpenRestaurant: clip.isRestaurantLinked
+                              ? () => _onOpenRestaurant(clip)
                               : null,
                         ),
                         if (isActive)

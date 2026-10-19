@@ -3634,11 +3634,21 @@ service cloud.firestore {
     // билан кафолатланади, мижоз томонида эгалик талаб қилинмайди.
     // Бошқа `linkKind`лар (ad, service, market_ad, wholesale_product) —
     // ўзгармайди.
+    //
+    // Таом видеоси (linkKind == 'restaurant_item', 2026-10-19): linkId — ресторан id (ваколат ШУ
+    // рестораннинг а'золигидан), linkItemId — таом id; таом ШУ ресторанда МАВЖУД бўлиши шарт (бошқа
+    // рестораннинг таомига ёки ўйлаб топилган id'га боғлаб бўлмайди).
     function tvClipRestaurantLinkOk(d) {
-      return d.get('linkKind', '') != 'restaurant'
+      let kind = d.get('linkKind', '');
+      return !(kind == 'restaurant' || kind == 'restaurant_item')
           || (d.get('linkId', '') is string
               && d.get('linkId', '') != ''
-              && isRestaurantMember(d.get('linkId', '')));
+              && isRestaurantMember(d.get('linkId', ''))
+              && (kind == 'restaurant'
+                  || (d.get('linkItemId', '') is string
+                      && d.get('linkItemId', '') != ''
+                      && d.get('linkItemId', '').size() <= 64
+                      && exists(/databases/$(database)/documents/restaurants/$(d.get('linkId', ''))/menu_items/$(d.get('linkItemId', ''))))));
     }
 
     // Ўзгартириш: боғлаш ўзгармаса (ёки ресторанга боғланмаса) — хавфсиз;
@@ -3646,9 +3656,10 @@ service cloud.firestore {
     function tvClipRestaurantLinkUpdateOk() {
       let a = request.resource.data;
       let b = resource.data;
-      return a.get('linkKind', '') != 'restaurant'
-          || (b.get('linkKind', '') == 'restaurant'
-              && b.get('linkId', '') == a.get('linkId', ''))
+      return !(a.get('linkKind', '') == 'restaurant' || a.get('linkKind', '') == 'restaurant_item')
+          || (b.get('linkKind', '') == a.get('linkKind', '')
+              && b.get('linkId', '') == a.get('linkId', '')
+              && b.get('linkItemId', '') == a.get('linkItemId', ''))
           || tvClipRestaurantLinkOk(a);
     }
 

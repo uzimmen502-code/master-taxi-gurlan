@@ -248,10 +248,11 @@ class _SectionDishesViewState extends State<SectionDishesView> {
               ),
             )
           else
-            // Катта расмли карточкалар: кенг экранда 2 устун, тор экранда (< 340) битта (D-REST-40, эга: «2-чисини қил»).
+            // Катта расмли карточкалар: 2 устун, жуда тор экранда (< 300) битта (D-REST-40, эга: «2-чисини қил»).
             LayoutBuilder(
               builder: (context, box) {
-                final cols = box.maxWidth >= 340 ? 2 : 1;
+                // 360 dp кенгликдаги телефонда (ён бўшлиқлардан кейин 336) ҳам 2 устун; фақат жуда тор экранда (< 300) битта.
+                final cols = box.maxWidth >= 300 ? 2 : 1;
                 Widget card(RankedDish r) => SectionDishCard(
                       key: ValueKey('dish-${r.dish.key}'),
                       ranked: r,

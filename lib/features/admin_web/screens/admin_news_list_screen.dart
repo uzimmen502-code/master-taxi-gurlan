@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
+import '../services/admin_delete_record_service.dart';
 import '../services/admin_news_read_service.dart';
 import '../../analytics/screens/admin_news_compose_screen.dart';
 
@@ -78,7 +79,8 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
     );
     if (confirm != true || !mounted) return;
     try {
-      await context.read<NewsRepository>().delete(item.id);
+      // Сервер (callable) ўчиради + audit; `admin_news` rules'да client delete = false.
+      await context.read<AdminDeleteRecordService>().deleteNews(item.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -908,16 +910,17 @@ class _NewsCard extends StatelessWidget {
                         color: Colors.amber.shade800,
                         fontWeight: FontWeight.bold)),
               ),
-            // TODO: delete — Phone Auth + isSuperAdmin() tayyor bo'lgach ochiladi
-            // InkWell(
-            //   onTap: onDelete,
-            //   borderRadius: BorderRadius.circular(4),
-            //   child: Padding(
-            //     padding: const EdgeInsets.all(4),
-            //     child: Icon(Icons.delete_outline,
-            //         size: 16, color: Colors.red.shade400),
-            //   ),
-            // ),
+            // Ўчириш: сервер callable (`adminDeleteRecord`) орқали, audit билан.
+            InkWell(
+              key: ValueKey('news-delete-${item.id}'),
+              onTap: onDelete,
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.delete_outline,
+                    size: 18, color: Colors.red.shade400),
+              ),
+            ),
           ]),
         ),
       ]),

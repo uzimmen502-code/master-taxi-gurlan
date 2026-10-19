@@ -26,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'features/admin_web/screens/admin_login_screen.dart';
 import 'features/admin_web/screens/admin_shell.dart';
 import 'features/admin_web/services/admin_auth_service.dart';
+import 'features/admin_web/services/admin_delete_record_service.dart';
 import 'features/admin_web/services/admin_ev_charging_service.dart';
 import 'features/admin_web/services/admin_jobs_service.dart';
 import 'features/admin_web/services/admin_market_service.dart';
@@ -131,6 +132,8 @@ class AdminWebApp extends StatelessWidget {
         Provider<DeliveryRoutesRepository>(
             create: (_) => DeliveryRoutesRepository()),
         Provider<ChatRepository>(create: (_) => ChatRepository()),
+        Provider<AdminDeleteRecordService>(
+            create: (_) => AdminDeleteRecordService()),
         Provider<AdminService>(create: (_) => AdminService()),
         Provider<SettingsRepository>(create: (_) => SettingsRepository()),
         Provider<ProcurementPricesService>(

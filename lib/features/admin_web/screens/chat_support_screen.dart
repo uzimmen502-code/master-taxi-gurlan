@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
 import '../../../repositories/chat_repository.dart';
 import '../services/admin_auth_service.dart';
+import '../services/admin_delete_record_service.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Чат-қўллaб-қуввaтлaш — Admin web.
@@ -50,11 +51,13 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
             Expanded(
               child: _selectedChatId == null
                   ? _emptyChatHint()
-                  : _ChatView(
+                  : SupportChatView(
                       chatId: _selectedChatId!,
                       onBack: !isWide
                           ? () => setState(() => _selectedChatId = null)
                           : null,
+                      onChatDeleted: () =>
+                          setState(() => _selectedChatId = null),
                     ),
             ),
         ]),
@@ -269,16 +272,23 @@ class _ChatTile extends StatelessWidget {
 // CHAT VIEW
 // ═════════════════════════════════════════════════════════════════════
 
-class _ChatView extends StatefulWidget {
-  const _ChatView({required this.chatId, this.onBack});
+/// Танланган чат (хабарлар + жавоб + ўчириш). Алоҳида синф — виджет тестида
+/// `ChatRepository` / `AdminDeleteRecordService` Provider'и билан ишга тушади.
+@visibleForTesting
+class SupportChatView extends StatefulWidget {
+  const SupportChatView(
+      {super.key, required this.chatId, this.onBack, this.onChatDeleted});
   final String chatId;
   final VoidCallback? onBack;
 
+  /// Чат сервер томонидан тўлиқ ўчирилгандан кейин (танловни тозалаш учун).
+  final VoidCallback? onChatDeleted;
+
   @override
-  State<_ChatView> createState() => _ChatViewState();
+  State<SupportChatView> createState() => _ChatViewState();
 }
 
-class _ChatViewState extends State<_ChatView> {
+class _ChatViewState extends State<SupportChatView> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _sending = false;
@@ -322,6 +332,85 @@ class _ChatViewState extends State<_ChatView> {
     }
   }
 
+  Future<bool> _confirm(String title, String body) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Бекор'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    return ok == true && mounted;
+  }
+
+  /// Битта хабарни ўчириш: сервер (callable) ўчиради, матнсиз нусха audit'да қолади.
+  Future<void> _deleteMessage(ChatMessage msg) async {
+    final ok = await _confirm(
+      'Хабар ўчирилсинми?',
+      'Хабар чатдан ТЎЛИҚ ўчади (мижоз ҳам кўрмайди), қайтариб бўлмайди. '
+          'Матни audit журналига ёзилмайди.',
+    );
+    if (!ok || !mounted) return;
+    final service = context.read<AdminDeleteRecordService>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await service.deleteSupportMessage(widget.chatId, msg.id);
+      messenger.showSnackBar(const SnackBar(
+        backgroundColor: AppColors.button,
+        content:
+            Text('Хабар ўчирилди', style: TextStyle(color: AppColors.onPrimary)),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+      );
+    }
+  }
+
+  /// Бутун чатни (барча хабарлар билан) ўчириш.
+  Future<void> _deleteChat() async {
+    final ok = await _confirm(
+      'Чат ўчирилсинми?',
+      '+${widget.chatId} билан бутун ёзишма ТЎЛИҚ ўчади — мижоз ўз '
+          'иловасида ҳам кўрмайди. Қайтариб бўлмайди; фақат санаш маълумоти '
+          '(матнсиз) audit журналида қолади.',
+    );
+    if (!ok || !mounted) return;
+    final service = context.read<AdminDeleteRecordService>();
+    final messenger = ScaffoldMessenger.of(context);
+    final onDeleted = widget.onChatDeleted;
+    try {
+      final res = await service.deleteSupportChat(widget.chatId);
+      if (res.partial) {
+        messenger.showSnackBar(const SnackBar(
+          backgroundColor: Colors.orange,
+          content: Text('Чат катта: қолган хабарларни ўчириш учун яна босинг'),
+        ));
+        return;
+      }
+      messenger.showSnackBar(const SnackBar(
+        backgroundColor: AppColors.button,
+        content:
+            Text('Чат ўчирилди', style: TextStyle(color: AppColors.onPrimary)),
+      ));
+      onDeleted?.call();
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = context.read<ChatRepository>();
@@ -358,6 +447,7 @@ class _ChatViewState extends State<_ChatView> {
                 itemBuilder: (_, i) => _MessageBubble(
                   msg: msgs[i],
                   staffDigits: staffDigits,
+                  onDelete: () => _deleteMessage(msgs[i]),
                 ),
               );
             },
@@ -403,6 +493,13 @@ class _ChatViewState extends State<_ChatView> {
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade600)),
             ]),
+        const Spacer(),
+        IconButton(
+          key: const ValueKey('chat-delete'),
+          tooltip: 'Чатни ўчириш',
+          onPressed: _deleteChat,
+          icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+        ),
       ]),
     );
   }
@@ -455,8 +552,12 @@ class _ChatViewState extends State<_ChatView> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.msg, required this.staffDigits});
+  const _MessageBubble(
+      {required this.msg, required this.staffDigits, this.onDelete});
   final ChatMessage msg;
+
+  /// Хабарни ўчириш (тасдиқ диалоги экран томонида).
+  final VoidCallback? onDelete;
   /// Жорий админ сессияси (рақамлар) — client хабарларида `fromAdmin` false.
   final String staffDigits;
 
@@ -518,6 +619,22 @@ class _MessageBubble extends StatelessWidget {
                                 : Icons.done,
                             size: 12,
                             color: AppColors.onPrimary.withValues(alpha: 0.7)),
+                      ],
+                      if (onDelete != null) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          key: ValueKey('msg-delete-${msg.id}'),
+                          onTap: onDelete,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(Icons.delete_outline,
+                                size: 15,
+                                color: isOutgoing
+                                    ? AppColors.onPrimary.withValues(alpha: 0.8)
+                                    : Colors.red.shade300),
+                          ),
+                        ),
                       ],
                     ]),
                   ]),

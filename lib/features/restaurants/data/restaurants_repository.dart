@@ -16,6 +16,7 @@ import '../domain/dish_facts.dart';
 import '../domain/dish_stats.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
+import '../domain/restaurant_sections.dart';
 
 class RestaurantsException implements Exception {
   const RestaurantsException(this.code, this.reason, this.message, {this.details});
@@ -32,6 +33,14 @@ class RestaurantsException implements Exception {
 
   @override
   String toString() => 'RestaurantsException($code/$reason): $message';
+}
+
+/// [RestaurantsRepository.fetchSectionDishes] натижаси: [truncated] — чегарага етилди, рўйхат тўлиқ эмас.
+class SectionDishesResult {
+  const SectionDishesResult(this.dishes, {this.truncated = false});
+
+  final List<SectionDish> dishes;
+  final bool truncated;
 }
 
 class DeliveryQuote {
@@ -384,6 +393,54 @@ class RestaurantsRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     return ref.id;
+  }
+
+  // ── Бўлимлар (S3, D-REST-33) ───────────────────────────────────────
+
+  /// Бир бўлим учун ўқиладиган таомлар чегараси (клиентда тартибланади). Ошса — рўйхат тўлиқ эмас
+  /// (`SectionDishesResult.truncated`); бунда серверда бўлим бўйича тартибланган индекс керак (PROPOSED).
+  static const sectionDishLimit = 200;
+
+  static const _sectionsConfigTtl = Duration(minutes: 5);
+  RestaurantSectionsConfig? _sectionsConfig;
+  DateTime? _sectionsConfigAt;
+
+  /// `settings/restaurant_sections`. Ҳужжат йўқ ёки ўқилмаса — ҳамма бўлим ЎЧИҚ (хавфсиз томон).
+  Future<RestaurantSectionsConfig> getSectionsConfig({bool force = false}) async {
+    final at = _sectionsConfigAt;
+    final cached = _sectionsConfig;
+    if (!force && cached != null && at != null && DateTime.now().difference(at) < _sectionsConfigTtl) {
+      return cached;
+    }
+    try {
+      final snap = await _db.collection('settings').doc('restaurant_sections').get();
+      final cfg = snap.exists ? RestaurantSectionsConfig.fromMap(snap.data()) : RestaurantSectionsConfig.off;
+      _sectionsConfig = cfg;
+      _sectionsConfigAt = DateTime.now();
+      return cfg;
+    } catch (_) {
+      return cached ?? RestaurantSectionsConfig.off;
+    }
+  }
+
+  /// Бўлимдаги таомлар — БИТТА сўров: `sections array-contains` + `geo4 in` (мижоз атрофидаги
+  /// 4 белгили geohash катаклари, ресторанлар рўйхати билан бир хил). Рўйхат бир марта ўқилади
+  /// (оқим эмас — арзонроқ, тортиб янгиланади). Индекс: (sections, geo4).
+  Future<SectionDishesResult> fetchSectionDishes(
+    RestaurantSection section, {
+    required double lat,
+    required double lng,
+    int limit = sectionDishLimit,
+  }) async {
+    final cells = GeoHash.neighborsForRadius(lat, lng, precision: 4);
+    final snap = await _db
+        .collection('restaurant_dish_index')
+        .where('sections', arrayContains: section.key)
+        .where('geo4', whereIn: cells)
+        .limit(limit)
+        .get();
+    final dishes = [for (final d in snap.docs) SectionDish.fromDoc(d)].where((d) => d.restaurantId.isNotEmpty && d.itemId.isNotEmpty).toList();
+    return SectionDishesResult(dishes, truncated: snap.size >= limit);
   }
 
   // ── Кухналар (D-REST-24) ───────────────────────────────────────────

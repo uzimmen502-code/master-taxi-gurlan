@@ -14,6 +14,8 @@
  * Bo'limga kirish (PROPOSED qoidalar — ega faqat bo'lim ro'yxatini tasdiqlagan, 47-qoida):
  *   all       — HAR BIR indeksga kiradigan taom (faktlar shart emas): «Barchasi» ekranidagi yaqin atrofdagi taomlar lentasi;
  *               bo'lim bosqichi (`all`) shu lentaning feature flag'i (D-REST-40)
+ *   home      — FAQAT uy oshpazi taomlari: restoran `venueType == home`; eski hujjatda `venueType` yo'q bo'lsa `legalType == individual`
+ *               (ega, 2026-10-19: «Uy taomlari» chipiga faqat uy oshpazi mahsulotlari); `legalType` ham yo'q bo'lsa — UNKNOWN, kirmaydi
  *   cheap     — porsiya soni bor (bir kishilik narx hisoblanadi)                       [D-REST-20: porsiya majburiy]
  *   national  — kuxna guruhi `national` (kuxna ham bor)                                [D-REST-16]
  *   world     — kuxna guruhi `world`                                                    [D-REST-16]
@@ -50,7 +52,7 @@ const STATS = 'menu_item_stats';
 const MODULE_ID = 'restaurants';
 
 /** Indeks tuzilishi/qoidasi versiyasi — qoida o'zgarsa oshiriladi va qayta hisoblash (backfill) kerak. */
-const INDEX_RULES_VERSION = 4;
+const INDEX_RULES_VERSION = 5;
 const MAX_PRICE = 50000000;
 /** Bitta restoran uchun qayta hisoblanadigan taomlarning eng ko'pi (himoya). */
 const MAX_DISHES_PER_RESTAURANT = 500;
@@ -63,6 +65,7 @@ const SECTION = Object.freeze({
   light: 'light', kids: 'kids', breakfast: 'breakfast', night: 'night',
   office: 'office', dastarxon: 'dastarxon', seasonal: 'seasonal',
   all: 'all',
+  home: 'home',
 });
 const SECTION_KEYS = Object.freeze(Object.values(SECTION));
 const FAST_FOOD_TAG = 'fastfood';
@@ -118,12 +121,23 @@ function factsOf(item) {
   };
 }
 
+/**
+ * Uy oshpazimi (D-REST-41 + «Uy taomlari» chipi): yangi hujjatda `venueType: 'home'`; eski hujjatda `venueType` yo'q —
+ * ro'yxatdan o'tishdagi `legalType: 'individual'` (u ham `home` ni majburlagan). Eski hujjatlarga TEGILMAYDI, faqat o'qiladi.
+ */
+function isHomeCook(restaurant) {
+  if (!restaurant) return false;
+  if (VENUE_TYPES.includes(restaurant.venueType)) return restaurant.venueType === 'home';
+  return restaurant.legalType === 'individual';
+}
+
 /** Taom qaysi bo'limlarga kiradi (bo'sh massiv — hech biriga). */
 function sectionsOf(item, restaurant) {
   const f = factsOf(item || {});
   // `all` — HAR BIR sotuvdagi taom (ega, 2026-10-19: «odam och — yaqin atrofdagi OVQATNI ko'rsin»): «Barchasi» ekranining
   // asosiy lentasi. Faktsiz taom ham kiradi; qolgan bo'limlar uni toraytiradi.
   const out = [SECTION.all];
+  if (isHomeCook(restaurant)) out.push(SECTION.home);
   const price = item && item.price;
   if (pricePerPerson(price, f.servings) != null) out.push(SECTION.cheap);
   const restTags = restaurant && Array.isArray(restaurant.cuisineTags) ? restaurant.cuisineTags : [];
@@ -209,7 +223,7 @@ function fingerprint(doc) {
 function restaurantFingerprint(r) {
   if (!r) return 'null';
   return fingerprint({
-    status: r.status, name: r.name, venueType: r.venueType || null, lat: r.lat, lng: r.lng, geohash: r.geohash,
+    status: r.status, name: r.name, venueType: r.venueType || null, legalType: r.legalType || null, lat: r.lat, lng: r.lng, geohash: r.geohash,
     cuisineTags: r.cuisineTags, prepTimeMin: r.prepTimeMin, openingHours: r.openingHours,
     acceptsPreorder: r.acceptsPreorder === true,
     pausedUntil: r.pausedUntil || null,

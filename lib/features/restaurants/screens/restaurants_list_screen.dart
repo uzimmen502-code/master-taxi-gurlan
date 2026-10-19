@@ -103,11 +103,11 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
           if (s != RestaurantSection.all && s != RestaurantSection.kids && (s != RestaurantSection.seasonal || _activeSeasons.isNotEmpty)) s,
       ];
 
-  /// Чиплар тартиби (эга, 2026-10-19): Барчаси · Уй таомлари · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари ·
+  /// Чиплар тартиби (эга, 2026-10-19): Барчаси · Уй таомлари (фақат уй ошпази) · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари ·
   /// Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар (· Мавсумий). `null` — «Ресторанлар» чипи.
   static const _chipOrder = <RestaurantSection?>[
     RestaurantSection.all,
-    RestaurantSection.cheap,
+    RestaurantSection.home,
     RestaurantSection.office,
     RestaurantSection.fast,
     RestaurantSection.national,

@@ -148,14 +148,31 @@ async function main() {
     assert.strictEqual(doc({ price: 40000, available: false }, r), null);
     assert.strictEqual(doc({ price: 0 }, r), null);
     assert.strictEqual(doc({ price: 40000 }, restaurant({ status: 'applied' })), null);
-    assert.strictEqual(idx.INDEX_RULES_VERSION, 4);
+    assert.strictEqual(idx.INDEX_RULES_VERSION, 5);
+  });
+  await check('P2e «Uy taomlari» (ega 2026-10-19): FAQAT uy oshpazi — venueType home; eski hujjatda legalType individual; kafe/restoran/noma\'lum kirmaydi', () => {
+    const s = (r) => idx.sectionsOf({ price: 40000 }, r);
+    assert.deepStrictEqual(s(restaurant({ venueType: 'home' })), ['all', 'home']);
+    assert.deepStrictEqual(s(restaurant({ venueType: 'cafe' })), ['all']);
+    assert.deepStrictEqual(s(restaurant({ venueType: 'restaurant' })), ['all']);
+    assert.deepStrictEqual(s(restaurant({ venueType: 'chaikhana' })), ['all']);
+    assert.deepStrictEqual(s(restaurant({ legalType: 'individual' })), ['all', 'home'], 'eski uy oshpazi (venueType yo\'q)');
+    assert.deepStrictEqual(s(restaurant({ legalType: 'yatt' })), ['all']);
+    assert.deepStrictEqual(s(restaurant({ legalType: 'llc' })), ['all']);
+    assert.deepStrictEqual(s(restaurant({})), ['all'], 'na venueType, na legalType — UNKNOWN, kirmaydi');
+    assert.deepStrictEqual(s(restaurant({ venueType: 'cafe', legalType: 'individual' })), ['all'], 'aniq venueType legalType dan ustun');
+    assert.deepStrictEqual(s(restaurant({ venueType: 'bar', legalType: 'individual' })), ['all', 'home'], 'noto\'g\'ri venueType e\'tiborga olinmaydi');
+    assert.deepStrictEqual(idx.sectionsOf({ price: 40000, servings: 2 }, restaurant({ venueType: 'home' })).sort(), ['all', 'cheap', 'home']);
+    assert.strictEqual(idx.SECTION.home, 'home');
+    assert.ok(idx.SECTION_KEYS.includes('home'));
+    assert.notStrictEqual(idx.restaurantFingerprint(restaurant()), idx.restaurantFingerprint(restaurant({ legalType: 'individual' })), 'legalType o\'zgarsa qayta hisoblanadi');
   });
   await check('P2d muassasa turi (D-REST-41): restoran hujjatidan indeksga nusxa; noto\'g\'ri/yo\'q — yozilmaydi; fingerprint tur o\'zgarsa o\'zgaradi', () => {
     const doc = (r) => idx.buildIndexDoc({ rid: RID, iid: 'x', item: { price: 40000 }, restaurant: r, stats: null });
     for (const v of ['home', 'cafe', 'restaurant', 'chaikhana']) assert.strictEqual(doc(restaurant({ venueType: v })).venueType, v);
     for (const v of [undefined, null, '', 'bar', 'HOME', 5]) assert.strictEqual('venueType' in doc(restaurant({ venueType: v })), false, String(v));
     assert.notStrictEqual(idx.restaurantFingerprint(restaurant()), idx.restaurantFingerprint(restaurant({ venueType: 'cafe' })));
-    assert.strictEqual(idx.INDEX_RULES_VERSION, 4);
+    assert.strictEqual(idx.INDEX_RULES_VERSION, 5);
   });
   await check('P3 indeksga kirmaydi: tasdiqlanmagan restoran, mavjud emas, noto\'g\'ri narx, noto\'g\'ri joy, bo\'limsiz', () => {
     const item = { price: 40000, servings: 4 };

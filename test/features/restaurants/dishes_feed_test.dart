@@ -93,6 +93,8 @@ void main() {
     test('матн калити — «Овқатлар» (ресторанлар чипи «restaurants_section_all» билан аралашмайди)', () {
       expect(RestaurantSection.all.l10nKey, 'restaurants_section_dishes');
       expect(RestaurantSection.cheap.l10nKey, 'restaurants_section_cheap');
+      expect(RestaurantSection.home.l10nKey, 'restaurants_section_home');
+      expect(RestaurantSection.home.key, 'home', reason: 'сервердаги SECTION.home билан бир хил');
       expect(tr('restaurants_section_dishes'), isNot(tr('restaurants_section_all')));
     });
   });
@@ -124,23 +126,25 @@ void main() {
 
     testWidgets('чиплар тартиби (эга, 2026-10-19): Барчаси · Уй таомлари · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари · Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар; «Болалар» йўқ', (t) async {
       const all = RestaurantSectionsConfig(stages: {
-        'all': 'public', 'cheap': 'public', 'office': 'public', 'fast': 'public', 'national': 'public', 'world': 'public',
+        'all': 'public', 'home': 'public', 'cheap': 'public', 'office': 'public', 'fast': 'public', 'national': 'public', 'world': 'public',
         'breakfast': 'public', 'night': 'public', 'dastarxon': 'public', 'light': 'public', 'kids': 'public', 'seasonal': 'public',
       });
       await pump(t, _Repo(sections: all, dishes: [_d('osh', lat: 41.85)]));
-      const keys = ['section-feed', 'section-cheap', 'section-office', 'section-fast', 'section-national', 'section-world', 'section-all', 'section-breakfast', 'section-night', 'section-dastarxon', 'section-light'];
+      const keys = ['section-feed', 'section-home', 'section-office', 'section-fast', 'section-national', 'section-world', 'section-all', 'section-breakfast', 'section-night', 'section-dastarxon', 'section-light'];
       final xs = [for (final k in keys) t.getTopLeft(find.byKey(ValueKey(k))).dx];
       for (var i = 1; i < xs.length; i++) {
         expect(xs[i], greaterThan(xs[i - 1]), reason: '${keys[i]} ${keys[i - 1]} дан кейин');
       }
       expect(find.byKey(const ValueKey('section-kids')), findsNothing, reason: '«Болалар» чипи олиб ташланган');
+      expect(find.byKey(const ValueKey('section-cheap')), findsNothing, reason: '«Арзон» чипи «Уй таомлари» га алмашган (эга, 2026-10-19)');
+      expect(find.text(tr('restaurants_section_home')), findsOneWidget);
       expect(find.byKey(const ValueKey('section-seasonal')), findsNothing, reason: 'ҳозир очиқ мавсум йўқ');
       expect(find.text(tr('restaurants_section_dishes')), findsOneWidget);
     });
 
     testWidgets('лента ёқилмаган бўлса «Ресторанлар» чипи БИРИНЧИ (экран аввалгидек)', (t) async {
-      await pump(t, _Repo(sections: const RestaurantSectionsConfig(stages: {'cheap': 'public', 'fast': 'public'})));
-      expect(t.getTopLeft(find.byKey(const ValueKey('section-all'))).dx, lessThan(t.getTopLeft(find.byKey(const ValueKey('section-cheap'))).dx));
+      await pump(t, _Repo(sections: const RestaurantSectionsConfig(stages: {'home': 'public', 'fast': 'public'})));
+      expect(t.getTopLeft(find.byKey(const ValueKey('section-all'))).dx, lessThan(t.getTopLeft(find.byKey(const ValueKey('section-home'))).dx));
       expect(find.byKey(const ValueKey('section-feed')), findsNothing);
     });
     testWidgets('«Ресторанлар» чипи рўйхатга ўтказади; «Овқатлар» қайтаради; фойдаланувчи танлови сақланади', (t) async {

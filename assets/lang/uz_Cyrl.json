@@ -3115,7 +3115,7 @@
   "restaurants_rate_left": "Баҳолаш учун {min} дақиқа қолди",
   "restaurants_err_RATING_WINDOW_CLOSED": "Баҳолаш муддати тугади (етказилгандан кейин 30 дақиқа).",
   "restaurants_section_all": "Ресторанлар",
-  "restaurants_section_cheap": "Уй таомлари",
+  "restaurants_section_cheap": "Арзон ва тўйимли",
   "restaurants_section_national": "Миллий таомлар",
   "restaurants_section_world": "Дунё таомлари",
   "restaurants_section_fast": "Фаст-фуд",
@@ -3705,5 +3705,6 @@
   "news_delete_tooltip": "Хабарни ўчириш",
   "news_deleted_snack": "Хабар ўчирилди",
   "courier_hub_restaurants_subtitle": "Таомлар курьер орқали уйингизгача етказилади",
-  "courier_hub_milk_subtitle": "Сутни курьер манзилингиздан олиб кетади"
+  "courier_hub_milk_subtitle": "Сутни курьер манзилингиздан олиб кетади",
+  "restaurants_section_home": "Уй таомлари"
 }

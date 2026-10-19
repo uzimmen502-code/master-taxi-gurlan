@@ -17,6 +17,7 @@ import '../domain/restaurant_models.dart';
 import '../domain/restaurant_sections.dart';
 import '../widgets/restaurant_row.dart';
 import '../widgets/section_dishes_view.dart';
+import 'my_bookings_screen.dart';
 import 'restaurant_screen.dart';
 
 class RestaurantsListScreen extends StatefulWidget {
@@ -81,6 +82,9 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   String? _uid;
   RestaurantSection? _section;
 
+  /// «Менинг бронларим» (S5): бронь ёқилган бўлса AppBar'да тугма.
+  bool _bookingsOn = false;
+
   @override
   void initState() {
     super.initState();
@@ -101,10 +105,15 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
       } catch (_) {}
     }
     final cfg = await _repo.getSectionsConfig();
+    var bookingsOn = false;
+    try {
+      bookingsOn = (await _repo.getBookingsConfig()).visibleFor(uid);
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _sections = cfg;
       _uid = uid;
+      _bookingsOn = bookingsOn;
       // Танланган бўлим созламада ёпилган бўлса (кеш янгиланди) — умумий рўйхатга қайтамиз.
       if (_section != null && !cfg.isVisible(_section!, uid)) _setSection(null);
     });
@@ -267,6 +276,17 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
           style: TextStyle(
               fontSize: 15, fontWeight: FontWeight.w700, color: c.ink),
         ),
+        actions: [
+          if (_bookingsOn && _uid != null)
+            IconButton(
+              key: const ValueKey('my-bookings'),
+              tooltip: context.tr('restaurants_booking_my'),
+              icon: const Icon(Icons.event_seat_outlined),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => MyBookingsScreen(uid: _uid!, repository: _repo),
+              )),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(

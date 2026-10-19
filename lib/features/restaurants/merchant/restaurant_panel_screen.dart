@@ -8,6 +8,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
+import 'merchant_bookings_tab.dart';
 import 'merchant_menu_tab.dart';
 import 'merchant_orders_tab.dart';
 import 'merchant_report_tab.dart';
@@ -42,6 +43,25 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
   /// Жорий ресторан оқими — state'да кешланади: ҳар `setState` (таб
   /// алмашуви) да янги Firestore listener очилмасин. Алмаштиришда тозаланади.
   Stream<Restaurant?>? _restaurantStream;
+
+  /// Стол бронь ёқилганми (S5): созлама ҳужжати йўқ/ўчиқ бўлса «Бронлар» таби умуман кўринмайди.
+  bool _bookingsOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookingsFlag();
+  }
+
+  Future<void> _loadBookingsFlag() async {
+    try {
+      final cfg = await _repo.getBookingsConfig();
+      final uid = await RestaurantsRepository.currentUid();
+      if (mounted) setState(() => _bookingsOn = cfg.visibleFor(uid));
+    } catch (_) {
+      // Созламани ўқиб бўлмади — «Бронлар» таби кўринмайди (хавфсиз томон).
+    }
+  }
 
   Stream<Restaurant?> get _restaurant => _restaurantStream ??= _repo.watchRestaurant(_restaurantId);
 
@@ -168,25 +188,27 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
                     Expanded(
                       child: IndexedStack(
                         key: ValueKey('tabs_$_restaurantId'),
-                        index: _tab,
+                        index: _tab < (_bookingsOn ? 5 : 4) ? _tab : 0,
                         children: [
                           MerchantOrdersTab(restaurant: r, repository: _repo),
                           MerchantMenuTab(restaurant: r, repository: _repo),
                           MerchantShopTab(restaurant: r, repository: _repo),
                           MerchantReportTab(restaurant: r, repository: _repo),
+                          if (_bookingsOn) MerchantBookingsTab(restaurant: r, repository: _repo),
                         ],
                       ),
                     ),
                   ],
                 ),
           bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab,
+            selectedIndex: _tab < (_bookingsOn ? 5 : 4) ? _tab : 0,
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: [
               NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), label: context.tr('restaurants_m_tab_orders')),
               NavigationDestination(icon: const Icon(Icons.restaurant_menu_rounded), label: context.tr('restaurants_m_tab_menu')),
               NavigationDestination(icon: const Icon(Icons.storefront_outlined), label: context.tr('restaurants_m_tab_shop')),
               NavigationDestination(icon: const Icon(Icons.bar_chart_rounded), label: context.tr('restaurants_m_tab_report')),
+              if (_bookingsOn) NavigationDestination(icon: const Icon(Icons.event_seat_outlined), label: context.tr('restaurants_m_tab_bookings')),
             ],
           ),
         );

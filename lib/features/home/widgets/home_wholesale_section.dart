@@ -9,6 +9,7 @@ import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/fair_mix.dart';
+import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../../models/platform_product.dart';
@@ -284,7 +285,14 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
             // Бош саҳифа қатори — «ўхшашлар» шу юкланган рўйхатдан олинади.
             onTap: () => widget.onOpenProduct(p, _items),
             image: cover.startsWith('http')
-                ? CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover)
+                ? ColoredBox(
+                    color: context.ava.surface2,
+                    child: CachedNetworkImage(
+                      imageUrl: cover,
+                      // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                      fit: BoxFit.contain,
+                    ),
+                  )
                 : null,
           );
         },
@@ -298,10 +306,18 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
     final cover = p.coverImageUrl.trim();
     Widget? image;
     if (isHttpImageUrl(cover)) {
-      image = CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover);
+      image = ColoredBox(
+        color: context.ava.surface2,
+        child: CachedNetworkImage(imageUrl: cover, fit: BoxFit.contain),
+      );
     } else if (isDataImageUrl(cover)) {
       final bytes = decodeDataUrlImageBytes(cover);
-      if (bytes != null) image = Image.memory(bytes, fit: BoxFit.cover);
+      if (bytes != null) {
+        image = ColoredBox(
+          color: context.ava.surface2,
+          child: Image.memory(bytes, fit: BoxFit.contain),
+        );
+      }
     }
     return AvaTileCard(
       titleMaxLines: 1,

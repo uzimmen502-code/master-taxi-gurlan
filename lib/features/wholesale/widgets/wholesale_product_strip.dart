@@ -94,14 +94,18 @@ class _Tile extends StatelessWidget {
                         child: Icon(Icons.inventory_2_outlined,
                             color: PdDark.muted),
                       )
-                    : CachedNetworkImage(
-                        imageUrl: product.imageUrls.first,
-                        fit: BoxFit.cover,
-                        memCacheWidth: 300,
-                        errorWidget: (_, __, ___) => const ColoredBox(
-                          color: PdDark.surface2,
-                          child: Icon(Icons.broken_image,
-                              color: PdDark.muted),
+                    : ColoredBox(
+                        color: PdDark.surface2,
+                        child: CachedNetworkImage(
+                          imageUrl: product.imageUrls.first,
+                          // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                          fit: BoxFit.contain,
+                          memCacheWidth: 300,
+                          errorWidget: (_, __, ___) => const ColoredBox(
+                            color: PdDark.surface2,
+                            child: Icon(Icons.broken_image,
+                                color: PdDark.muted),
+                          ),
                         ),
                       ),
               ),

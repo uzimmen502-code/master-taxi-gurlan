@@ -6,7 +6,10 @@ import 'yuk_local_nearby_panel.dart';
 /// «Туман ичида юк» модули — кириш экрани (moduleId `yuk_local`).
 /// GPS асосида яқин юк машиналари каталоги.
 class YukLocalScreen extends StatelessWidget {
-  const YukLocalScreen({super.key});
+  const YukLocalScreen({super.key, this.openPublish = false});
+
+  /// «＋» → «Юк ташувчи»: очилиши билан янги эълон варағини кўрсатади.
+  final bool openPublish;
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +19,7 @@ class YukLocalScreen extends StatelessWidget {
         ownerId: owner.id,
         ownerName: name,
         ownerPhone: owner.phone,
+        openPublishOnStart: openPublish,
       ),
     );
   }

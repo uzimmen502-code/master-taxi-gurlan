@@ -143,17 +143,20 @@ class _RiskEventCardState extends State<_RiskEventCard> {
             ),
           ),
           const SizedBox(width: 10),
-          ElevatedButton.icon(
-            onPressed: _busy ? null : _resolve,
-            icon: _busy
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.check, size: 16),
-            label: const Text('Resolved'),
-          ),
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            ElevatedButton.icon(
+              onPressed: _busy ? null : _resolve,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check, size: 16),
+              label: const Text('Resolved'),
+            ),
+            // Ўчириш йўқ (эга, 2026-10-20): ёпиш = «Resolved»; 365 кундан эски ёпилганларни фақат superadmin серверда ўчиради.
+          ]),
         ]),
       ),
     );

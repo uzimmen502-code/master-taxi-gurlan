@@ -557,18 +557,6 @@ class RealtyRepository {
     return out;
   }
 
-  // ─── Видео боғлаш (концепция, 3-бўлим) ───
-
-  /// Объектга видео боғлаш. Бепул AVAGram ёки пуллик реклама эканини
-  /// сервер клипнинг ўзидан аниқлайди — клиент айта олмайди.
-  Future<void> linkVideo({
-    required String listingId,
-    required String clipId,
-  }) =>
-      _call('linkRealtyVideo', {'listingId': listingId, 'clipId': clipId});
-
-  Future<void> unlinkVideo(String listingId) =>
-      _call('unlinkRealtyVideo', {'listingId': listingId});
 
   // ─── Риэлторлик компанияси воситалари (концепция, 5-бўлим) ───
 

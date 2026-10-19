@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -7,63 +9,105 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
+import '../../../models/news_read_state.dart';
+import '../widgets/news_delete_button.dart';
 import '../../../repositories/news_repository.dart';
 import '../../../services/user_audience.dart';
 
 /// Умумий админ янгиликлари (буюртма хабарларисиз).
 class GeneralNewsTab extends StatefulWidget {
-  const GeneralNewsTab({super.key});
+  const GeneralNewsTab({super.key, this.readState = NewsReadState.unknown});
+
+  /// Экранга кирилгандаги ўқилганлик ҳолати — «янги» карталарни ажратади.
+  final NewsReadState readState;
 
   @override
   State<GeneralNewsTab> createState() => _GeneralNewsTabState();
 }
 
-class _GeneralNewsTabState extends State<GeneralNewsTab> {
+class _GeneralNewsTabState extends State<GeneralNewsTab>
+    with AutomaticKeepAliveClientMixin {
   static const _green = AppColors.primaryText;
 
-  Future<({List<String> audiences, String userId})> _userContext() async {
+  // Оқим БИР марта очилади (қаранг: OrderNewsTab) — қайта чизилганда
+  // рўйхат spinner билан «милтилламасин».
+  Stream<List<NewsItem>>? _stream;
+  String _uid = '';
+  Set<String> _hidden = <String>{};
+  StreamSubscription<Set<String>>? _dismissedSub;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     final role = UserAudience.fromPrefs(prefs);
-    final phone = prefs.getString('user_phone') ?? '';
-    return (audiences: ['all', role], userId: phoneDigits(phone));
+    final uid = phoneDigits(prefs.getString('user_phone') ?? '');
+    if (!mounted) return;
+    final repo = context.read<NewsRepository>();
+    final stream =
+        repo.watchBroadcastNews(audiences: ['all', role], userId: uid, limit: 50);
+    // Ўчирилган хабарлар сервердан (барча қурилмада бир хил); янги ўчириш дарров, тўплам фақат ўсади.
+    _dismissedSub = repo.watchDismissedIds(canonicalPhoneId(uid)).listen((ids) {
+      if (mounted) setState(() => _hidden = {..._hidden, ...ids});
+    });
+    setState(() {
+      _uid = uid;
+      _stream = stream;
+    });
+  }
+
+  @override
+  void dispose() {
+    _dismissedSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _delete(NewsItem n) async {
+    setState(() => _hidden = {..._hidden, n.id});
+    await context.read<NewsRepository>().dismissNews(canonicalPhoneId(_uid), [n.id]);
   }
 
   @override
   Widget build(BuildContext context) {
-    final repo = context.read<NewsRepository>();
-    return FutureBuilder<({List<String> audiences, String userId})>(
-      future: _userContext(),
-      builder: (ctx, audSnap) {
-        final aud = audSnap.data?.audiences ?? const ['all', 'user'];
-        final uid = audSnap.data?.userId ?? '';
-        return StreamBuilder<List<NewsItem>>(
-          stream: repo.watchBroadcastNews(audiences: aud, userId: uid, limit: 50),
-          builder: (ctx, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+    super.build(context);
+    final stream = _stream;
+    if (stream == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return StreamBuilder<List<NewsItem>>(
+      stream: stream,
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError && !snap.hasData) {
+          return Center(
+            child: Text('Хатолик: ${snap.error}',
+                style: const TextStyle(color: Colors.red)),
+          );
+        }
+        final items = (snap.data ?? const <NewsItem>[])
+            .where((n) => !_hidden.contains(n.id))
+            .toList();
+        if (items.isEmpty) return _emptyState();
+        final sorted = [...items]..sort((a, b) {
+            if (a.priority != b.priority) {
+              return b.priority.compareTo(a.priority);
             }
-            if (snap.hasError) {
-              return Center(
-                child: Text('Хатолик: ${snap.error}',
-                    style: const TextStyle(color: Colors.red)),
-              );
-            }
-            final items = snap.data ?? const <NewsItem>[];
-            if (items.isEmpty) return _emptyState();
-            final sorted = [...items]
-              ..sort((a, b) {
-                if (a.priority != b.priority) {
-                  return b.priority.compareTo(a.priority);
-                }
-                return b.createdAt.compareTo(a.createdAt);
-              });
-            return ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: sorted.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _newsCard(sorted[i]),
-            );
-          },
+            return b.createdAt.compareTo(a.createdAt);
+          });
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: sorted.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) => _newsCard(sorted[i]),
         );
       },
     );
@@ -88,8 +132,11 @@ class _GeneralNewsTabState extends State<GeneralNewsTab> {
 
   Widget _newsCard(NewsItem n) {
     final accent = _accentFor(n.category);
+    final unread = widget.readState.isUnread(n.createdAt);
     return Container(
+      key: ValueKey('general-news-${n.id}'),
       padding: const EdgeInsets.all(14),
+      // Ўқилмаган — жирний (қалин) ёзув, ўқилган — оддий ёзув (эга, 2026-10-19).
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -114,13 +161,20 @@ class _GeneralNewsTabState extends State<GeneralNewsTab> {
             const Spacer(),
             Text(_ago(n.createdAt),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            NewsDeleteButton(onDelete: () => _delete(n)),
           ]),
-          const SizedBox(height: 10),
-          Text(n.title,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.bold, height: 1.3)),
           const SizedBox(height: 6),
-          Text(n.body, style: const TextStyle(fontSize: 13, height: 1.4)),
+          Text(n.title,
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+                  height: 1.3)),
+          const SizedBox(height: 6),
+          Text(n.body,
+              style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: unread ? FontWeight.bold : FontWeight.normal)),
           if (n.ctaLabel.isNotEmpty && n.ctaUrl.isNotEmpty) ...[
             const SizedBox(height: 10),
             OutlinedButton.icon(

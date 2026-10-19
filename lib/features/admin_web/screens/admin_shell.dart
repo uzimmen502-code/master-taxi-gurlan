@@ -16,6 +16,7 @@ import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../services/admin_all_orders_service.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_news_read_service.dart';
+import '../services/support_chat_archive.dart';
 import '../utils/count_stream_sum.dart';
 import '../utils/grouped_rows.dart';
 import '../widgets/change_pin_dialog.dart';
@@ -1312,18 +1313,21 @@ class _Sidebar extends StatelessWidget {
         // берилган чатлар ҳам саналарди. `awaitingAdmin`ни сервер ёзади
         // (сўнгги оддий хабар мижозданми); майдони йўқ эски чатлар —
         // аввалги қоида бўйича. Иккала тўплам кесишмайди (аудит O-5).
+        // Админ АРХИВГА олган чат (янги фаоллик бўлмаса) badge'га кирмайди — рўйхатда ҳам кўринмайди.
         return sumCountStreams([
           db
               .collection('support_chats')
               .where('awaitingAdmin', isEqualTo: true)
               .snapshots()
-              .map((s) => s.docs.length),
+              .map((s) =>
+                  s.docs.where((d) => !isSupportChatArchived(d.data())).length),
           db
               .collection('support_chats')
               .where('lastFromAdmin', isEqualTo: false)
               .snapshots()
               .map((s) => s.docs
                   .where((d) => !d.data().containsKey('awaitingAdmin'))
+                  .where((d) => !isSupportChatArchived(d.data()))
                   .length),
         ]);
       default:

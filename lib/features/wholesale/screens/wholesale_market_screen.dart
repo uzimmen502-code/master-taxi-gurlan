@@ -709,7 +709,8 @@ class _MyProductsView extends StatelessWidget {
                               imageUrl: p.imageUrls.first,
                               width: double.infinity,
                               height: double.infinity,
-                              fit: BoxFit.cover,
+                              // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                              fit: BoxFit.contain,
                               errorWidget: (_, __, ___) => const Icon(
                                   Icons.image_not_supported_outlined),
                             ),

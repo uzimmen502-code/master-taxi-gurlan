@@ -572,7 +572,7 @@ class _Header extends StatelessWidget {
             ],
             Expanded(
               child: SectionTitleText(
-                title: title,
+                title: sectionTitleWithColon(title),
                 style: AvaText.sectionTitle.copyWith(color: c.ink),
               ),
             ),
@@ -590,6 +590,13 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// Бош саҳифа бўлим сарлавҳаси ҲАММАСИДА охирида «:» (эга, 2026-10-20: «ягона услуб», «Кўчмас мулк кластери:» каби).
+/// Матн калитлари плиткалар билан умумий бўлгани учун икки нуқта шу ерда қўшилади; аллақачон бўлса — такрорланмайди.
+String sectionTitleWithColon(String title) {
+  final t = title.trimRight();
+  return t.isEmpty || t.endsWith(':') ? title : '$t:';
+}
+
 /// Бўлим сарлавҳаси: сиғмаса аввал озгина кичраяди, кўп кичрайиши керак
 /// бўлса — 2 қаторга ўтади. Аввал фақат «…» билан қирқиларди: қурилмада
 /// «Яқиндаги эълон…», «Яқиндаги хизма…», «Кўчмас мулк кла…» (эга, 2026-10-18).
@@ -601,8 +608,10 @@ class SectionTitleText extends StatelessWidget {
   final String title;
   final TextStyle style;
 
-  /// Шундан кўпга кичрайтирилмайди (16px → ~13px) — ундан кейин 2 қатор.
-  static const minScale = 0.8;
+  /// Кичрайтириш ЙЎҚ (1.0): ҳамма бўлим сарлавҳаси БИР ХИЛ шрифтда (16/600, «Кўчмас мулк кластери» каби) —
+  /// сиғмаса 2 қаторга ўтади (эга, 2026-10-19: «бўлим сарлавҳалари шрифтлари бир хил бўлсин»). Аввал 0.8 эди ва
+  /// узун сарлавҳалар («Яқиндаги Кафе-Ресторанлар:») бошқаларидан кичик чиқарди.
+  static const minScale = 1.0;
 
   /// Сарлавҳа ([natural] кенглик) [maxWidth] га қандай жойлашади.
   @visibleForTesting

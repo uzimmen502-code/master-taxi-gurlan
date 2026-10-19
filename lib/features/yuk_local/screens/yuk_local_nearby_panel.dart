@@ -28,7 +28,12 @@ class YukLocalNearbyPanel extends StatefulWidget {
     required this.ownerId,
     required this.ownerName,
     required this.ownerPhone,
+    this.openPublishOnStart = false,
   });
+
+  /// «＋» → «Юк ташувчи»: экран очилиши билан янги эълон варағи (эга, 2026-10-19 —
+  /// экрандаги алоҳида «Эълон бериш» тугмаси олиб ташланди, функцияси «＋» га кўчган).
+  final bool openPublishOnStart;
 
   final String ownerId;
   final String ownerName;
@@ -104,6 +109,11 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     // GPS рухсати диалоги рўйхат юкланишини блокламаслиги керак.
     unawaited(ensureGps());
     _subscribeCatalog();
+    if (widget.openPublishOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openPublish());
+      });
+    }
     if (widget.ownerId.isNotEmpty) {
       _mineSub = _repo.watchMine(widget.ownerId).listen((list) {
         if (!mounted) return;
@@ -688,7 +698,6 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     final visible = _filtered(context);
     return CustomScrollView(
       slivers: [
-        SliverToBoxAdapter(child: _publishHeader(context)),
         SliverToBoxAdapter(
           child: GeoTierBar(
             moduleId: _geoModule,
@@ -823,22 +832,6 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     );
   }
 
-  /// Эълон бериш тугмаси — рўйхат билан сурилади (ёпишмайди).
-  Widget _publishHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: SizedBox(
-        width: double.infinity,
-        child: _ActionBtn(
-          color: const Color(0xFF1E2A1E),
-          border: _green,
-          label: context.tr('yuk_local_publish_btn'),
-          onTap: _openPublish,
-        ),
-      ),
-    );
-  }
-
   /// Саноқ / ўз эълонлари — қидирувдан пастда (GPS хатоси тўлиқ экранда).
   Widget _headerBlock(BuildContext context, List<YukLocalDriverRanked> visible) {
     return Column(
@@ -918,49 +911,6 @@ class _StickySearchBar extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _StickySearchBar oldDelegate) =>
       child != oldDelegate.child;
-}
-
-class _ActionBtn extends StatelessWidget {
-  const _ActionBtn({
-    required this.color,
-    required this.border,
-    required this.label,
-    required this.onTap,
-  });
-
-  final Color color;
-  final Color border;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: border.withValues(alpha: 0.85)),
-            color: color,
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Ихчам қатор: 2 матн қатори + ўнгда битта амал. Тўлиқ маълумот (кузов,

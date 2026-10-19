@@ -501,6 +501,20 @@ class TvClipsRepository {
     return tvClipsNewestFirst(snap.docs.map(TvClip.fromFirestore));
   }
 
+  /// Эга панели: БИТТА эълонга (`linkKind` + `linkId`, масалан `realty_listing`) боғланган клиплар —
+  /// ҳар қандай ҳолатда (текширувда/рад этилган ҳам), янгиси биринчи. Телефон бўйича сузилмайди:
+  /// боғлаш ваколати `firestore.rules`да (жамоа ходими юклаган видео ҳам қонуний). Иккита тенглик —
+  /// қўшимча индекс керак эмас.
+  Future<List<TvClip>> fetchLinkedClips({required String linkKind, required String linkId}) async {
+    if (linkKind.isEmpty || linkId.isEmpty) return const [];
+    final snap = await _col
+        .where('linkKind', isEqualTo: linkKind)
+        .where('linkId', isEqualTo: linkId)
+        .limit(20)
+        .get();
+    return tvClipsNewestFirst(snap.docs.map(TvClip.fromFirestore));
+  }
+
   /// Мижоз: рестораннинг БАРЧА таом видеолари, `itemId → клип` — БИР сўров (ҳар таом учун алоҳида
   /// эмас, 36-қоида). Тенгликлар — индекс керак эмас; чегара [limit] (бир ресторан).
   Future<Map<String, TvClip>> fetchRestaurantItemClips(String restaurantId, {int limit = 200}) async {

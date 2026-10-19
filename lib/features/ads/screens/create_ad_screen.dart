@@ -693,14 +693,15 @@ class _PhotoPickerRow extends StatelessWidget {
                       width: 108,
                       height: 108,
                       color: AvaLight.brandSoft,
+                      // contain: расм четлари қирқилмайди (ега 2026-10-19).
                       child: kIsWeb
                           ? Image.network(
                               f.path,
-                              fit: BoxFit.cover,
+                              fit: BoxFit.contain,
                             )
                           : Image.file(
                               File(f.path),
-                              fit: BoxFit.cover,
+                              fit: BoxFit.contain,
                             ),
                     ),
                   ),

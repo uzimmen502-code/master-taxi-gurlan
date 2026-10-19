@@ -98,6 +98,8 @@ class _Repo implements RestaurantsRepository {
 }
 
 void main() {
+  // «Охирги маълум созлама» (экран очилишини тезлатади) тестлар орасида эскирмасин.
+  setUp(RestaurantsListScreen.resetLastKnownConfig);
   final l10n = JsonL10nDelegate();
   String tr(String key) => l10n.tr(key);
 
@@ -277,7 +279,7 @@ void main() {
     }
 
     final publicCfg = RestaurantSectionsConfig.fromMap({
-      'sections': {'cheap': 'public', 'national': 'internal', 'kids': 'off'},
+      'sections': {'home': 'public', 'national': 'internal', 'kids': 'off'},
       'testerIds': ['998901234567'],
     });
 
@@ -290,29 +292,29 @@ void main() {
 
     testWidgets('public ҳамма учун, internal — фақат синовчига; off — ҳеч кимга', (t) async {
       await pumpList(t, _Repo(config: publicCfg));
-      expect(find.byKey(const ValueKey('section-cheap')), findsOneWidget);
+      expect(find.byKey(const ValueKey('section-home')), findsOneWidget);
       expect(find.byKey(const ValueKey('section-national')), findsOneWidget, reason: 'синовчи');
       expect(find.byKey(const ValueKey('section-kids')), findsNothing);
       await pumpList(t, _Repo(config: publicCfg), uid: '998909999999');
-      expect(find.byKey(const ValueKey('section-cheap')), findsOneWidget);
+      expect(find.byKey(const ValueKey('section-home')), findsOneWidget);
       expect(find.byKey(const ValueKey('section-national')), findsNothing, reason: 'синовчи эмас');
     });
 
     testWidgets('бўлим босилса таомлар (ресторан рўйхати ўрнига); «Ресторанлар» қайтаради; таом босилса ресторан экрани учун ресторан олинади', (t) async {
       final repo = _Repo(config: publicCfg, dishes: [_d('a', pp: 5000, sum: 25, count: 5)]);
       await pumpList(t, repo);
-      await t.tap(find.byKey(const ValueKey('section-cheap')));
+      await t.tap(find.byKey(const ValueKey('section-home')));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('dish-r1_a')), findsOneWidget);
       expect(find.text(tr('restaurants_sort_distance')), findsNothing, reason: 'бўлимда саралаш чиплари йўқ');
-      expect(repo.fetched, [RestaurantSection.cheap]);
+      expect(repo.fetched, [RestaurantSection.home]);
 
       await t.tap(find.byKey(const ValueKey('section-all')));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('dish-r1_a')), findsNothing);
       expect(find.text(tr('restaurants_sort_distance')), findsOneWidget);
 
-      await t.tap(find.byKey(const ValueKey('section-cheap')));
+      await t.tap(find.byKey(const ValueKey('section-home')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('dish-r1_a')));
       await t.pumpAndSettle();
@@ -322,7 +324,7 @@ void main() {
     testWidgets('бўлимда қидирув ёзилса — умумий рўйхатга қайтади; ресторан топилмаса — хабар', (t) async {
       final repo = _Repo(config: publicCfg, dishes: [_d('a', rest: 'missing', pp: 5000)]);
       await pumpList(t, repo);
-      await t.tap(find.byKey(const ValueKey('section-cheap')));
+      await t.tap(find.byKey(const ValueKey('section-home')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('dish-missing_a')));
       await t.pumpAndSettle();

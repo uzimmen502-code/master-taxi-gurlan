@@ -6,11 +6,13 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../../tv_market/services/tv_clip_link.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_controls.dart';
 import '../widgets/realty_feedback.dart';
 import '../widgets/realty_package_sheet.dart';
-import '../widgets/realty_video_sheet.dart';
+import '../widgets/realty_video_open.dart';
 
 /// Битта объект карточкаси.
 ///
@@ -219,6 +221,14 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
             ),
             const SizedBox(height: 14),
           ],
+          // Эгаси эълон билан бирга жойлаган видео (≤ 60 с, `realty_listing`, 2026-10-19): клипда
+          // эълон id'си ёзилган, ваколатни `firestore.rules` кафолатлайди (`trustLinkKind`). Видео
+          // йўқ/текширувда бўлса тугма умуман кўринмайди. Бепул кўрилади (ахборот пакети — манзил учун).
+          LinkedVideoButton(
+            linkId: r.id,
+            ownerPhone: '',
+            trustLinkKind: TvClipLink.kindRealty,
+          ),
           const SizedBox(height: 4),
 
           // Кўча ва уй — ПУЛЛИК (эга қарори 2026-10-08): фақат очилгандан

@@ -14,11 +14,13 @@ import '../data/restaurants_repository.dart';
 import '../domain/cuisine.dart';
 import '../domain/restaurant_sections.dart';
 import '../domain/seasons.dart';
+import '../domain/venue_type.dart';
 import 'restaurant_row.dart' show formatDistanceLabel;
 
 /// Бўлим белгиси (иконка — эмодзи эмас: қурилмага қараб ҳар хил чизилмасин).
 IconData sectionIcon(RestaurantSection s) => switch (s) {
       RestaurantSection.all => Icons.restaurant_menu_rounded,
+      RestaurantSection.home => Icons.soup_kitchen_outlined,
       RestaurantSection.cheap => Icons.savings_outlined,
       RestaurantSection.national => Icons.rice_bowl_outlined,
       RestaurantSection.world => Icons.public_rounded,
@@ -248,10 +250,11 @@ class _SectionDishesViewState extends State<SectionDishesView> {
               ),
             )
           else
-            // Катта расмли карточкалар: кенг экранда 2 устун, тор экранда (< 340) битта (D-REST-40, эга: «2-чисини қил»).
+            // Катта расмли карточкалар: 2 устун, жуда тор экранда (< 300) битта (D-REST-40, эга: «2-чисини қил»).
             LayoutBuilder(
               builder: (context, box) {
-                final cols = box.maxWidth >= 340 ? 2 : 1;
+                // 360 dp кенгликдаги телефонда (ён бўшлиқлардан кейин 336) ҳам 2 устун; фақат жуда тор экранда (< 300) битта.
+                final cols = box.maxWidth >= 300 ? 2 : 1;
                 Widget card(RankedDish r) => SectionDishCard(
                       key: ValueKey('dish-${r.dish.key}'),
                       ranked: r,
@@ -425,6 +428,23 @@ class SectionDishCard extends StatelessWidget {
                       photo.startsWith('http')
                           ? CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover, errorWidget: (_, __, ___) => _Placeholder(c))
                           : _Placeholder(c),
+                      // Муассаса тури (D-REST-41): юқори ўнгда жуда ихчам ёрлиқ — Уй таоми / Кафе / Ресторан / Чойхона.
+                      // Эски ресторанда `venueType` йўқ — ёрлиқ кўрсатилмайди.
+                      if (d.venueType.isNotEmpty)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: Container(
+                            key: ValueKey('venue-${d.key}'),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(8)),
+                            child: Text(
+                              context.tr(VenueType.l10nKey(d.venueType)),
+                              maxLines: 1,
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white, height: 1.2),
+                            ),
+                          ),
+                        ),
                       if (ranked.isNew)
                         Positioned(
                           left: 6,

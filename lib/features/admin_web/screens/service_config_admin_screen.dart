@@ -22,7 +22,10 @@ import '../utils/module_config_changes.dart';
 ///   3. MFY (ixtiyoriy) — `service_area_modules`
 /// Runtime (APK): yangi modul hech qachon avtomatik ON.
 class ServiceConfigAdminScreen extends StatefulWidget {
-  const ServiceConfigAdminScreen({super.key});
+  const ServiceConfigAdminScreen({super.key, this.repository});
+
+  /// Тест учун алмаштирилади; бўш бўлса ҳақиқий репозиторий.
+  final ServiceConfigRepository? repository;
 
   @override
   State<ServiceConfigAdminScreen> createState() =>
@@ -36,7 +39,6 @@ const Map<String, String> _moduleLabels = {
   'yuk_local': 'Yuk: tuman ichida',
   'yuk_intercity': 'Yuk: shaharlararo',
   'courier': 'Kuryer',
-  'food': 'Ovqat (olib tashlangan — eski ilova uchun yashiring)',
   'jobs': 'Эълонлар ва хизматлар',
   'cheap_products_home': 'Aholi bozori',
   'bread': 'Non',
@@ -47,11 +49,6 @@ const Map<String, String> _moduleLabels = {
   'tire': 'Avto shina',
   'car_wash': 'Avto yuvish',
   'oil_change': 'Moy almashtirish',
-  // Эски алоҳида «AVA дўкони» экранининг дарвозаси. Янги иловада бу экран
-  // ЙЎҚ (2026-10-07): AVA товарлари Улгуржи бозорда, `wholesale_market` га
-  // бўйсунади. Калит фақат Play'даги ЭСКИ версиялар учун қолди — у ерда
-  // «AVA ДЎКОНИ» плиткаси шу калит «Ёпиқ» бўлгани учун кўринмайди.
-  'platform_store': 'AVA дўкони (эски версия — Ёпиқ қолсин)',
   'tv_market': 'AVAGram',
   'chatgpt': 'AVA ёрдамчиси',
   'ev_charging': 'EV zaryadlash',
@@ -93,7 +90,18 @@ class _MatrixColumn {
 }
 
 class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
-  final ServiceConfigRepository _repo = ServiceConfigRepository();
+  late final ServiceConfigRepository _repo = widget.repository ?? ServiceConfigRepository();
+
+  /// Матрица қаторлари тепа-пастга тортилади; сарлавҳа қатори тепада қолади (эга, 2026-10-19).
+  final ScrollController _matrixVScroll = ScrollController();
+  final ScrollController _matrixHScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _matrixVScroll.dispose();
+    _matrixHScroll.dispose();
+    super.dispose();
+  }
 
   bool _loading = true;
   bool _savingGlobal = false;
@@ -933,36 +941,27 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     List<_MatrixColumn> columns,
     BoxConstraints constraints,
   ) {
-    const labelW = 118.0;
-    const minCellW = 36.0;
-    const minCellH = 24.0;
+    // ЎҚИЛАДИГАН ўлчамлар (эга, 2026-10-19: «ёзувлар жуда майдалашиб кетган»): матн 13–14 px, катак баландлиги 44,
+    // экранга сиғдириш учун қисилмайди — қаторлар тепа-пастга тортилади, сарлавҳа қатори тепада туради.
+    const labelW = 210.0;
+    const minCellW = 88.0;
+    const cellH = 44.0;
     final collapsed = _isCollapsedView;
-    final districtHeaderH = collapsed ? 46.0 : 36.0;
-    final zoneHeaderH = collapsed ? 0.0 : 40.0;
-    final headerTotal = districtHeaderH + zoneHeaderH + 1;
+    final districtHeaderH = collapsed ? 68.0 : 52.0;
+    final zoneHeaderH = collapsed ? 0.0 : 60.0;
 
     final colCount = columns.length;
     final dataW = constraints.maxWidth - labelW;
-    final dataH = constraints.maxHeight - headerTotal;
 
     final fillWidth = colCount > 0 && colCount * minCellW <= dataW;
-    final fillHeight =
-        kKnownModuleIds.length * minCellH <= dataH && dataH > 0;
-
     final cellW = fillWidth && colCount > 0 ? dataW / colCount : minCellW;
-    final cellH = fillHeight && kKnownModuleIds.isNotEmpty
-        ? dataH / kKnownModuleIds.length
-        : minCellH;
-    final headerFont = (cellW * 0.22).clamp(8.0, 11.0);
-    final rowFont = (cellH * 0.36).clamp(9.0, 12.0);
+    const headerFont = 13.0;
+    const rowFont = 14.0;
     final matrixW = fillWidth ? constraints.maxWidth : labelW + colCount * cellW;
-    final matrixH = fillHeight
-        ? constraints.maxHeight
-        : headerTotal + kKnownModuleIds.length * cellH;
 
     final table = SizedBox(
       width: matrixW,
-      height: matrixH,
+      height: constraints.maxHeight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -996,53 +995,48 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
               ),
             ),
           Divider(height: 1, color: Colors.grey.shade300),
-          if (fillHeight)
-            Expanded(
-              child: Column(
-                children: [
-                  for (final moduleId in kKnownModuleIds)
-                    Expanded(
-                      child: _moduleRow(
+          Expanded(
+            child: Scrollbar(
+              controller: _matrixVScroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                key: const ValueKey('matrix-rows-scroll'),
+                controller: _matrixVScroll,
+                child: Column(
+                  children: [
+                    for (final moduleId in kKnownModuleIds)
+                      _moduleRow(
                         moduleId: moduleId,
                         columns: columns,
                         labelW: labelW,
                         cellW: cellW,
+                        cellH: cellH,
                         fontSize: rowFont,
                         fillWidth: fillWidth,
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            )
-          else
-            for (final moduleId in kKnownModuleIds)
-              _moduleRow(
-                moduleId: moduleId,
-                columns: columns,
-                labelW: labelW,
-                cellW: cellW,
-                cellH: cellH,
-                fontSize: rowFont,
-                fillWidth: fillWidth,
-              ),
+            ),
+          ),
         ],
       ),
     );
 
-    if (fillWidth && fillHeight) return table;
+    if (fillWidth) return table;
 
+    // Устунлар кўп бўлса — ён томонга ҳам тортилади (қаторлар тепа-пастга тортилгани ҳолда).
     return Scrollbar(
+      controller: _matrixHScroll,
       thumbVisibility: true,
+      notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
       child: SingleChildScrollView(
-        scrollDirection: Axis.vertical,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: table,
-        ),
+        controller: _matrixHScroll,
+        scrollDirection: Axis.horizontal,
+        child: table,
       ),
     );
   }
-
   /// Yig'ilgan ko'rinish: bitta qator — tuman + zona (qisqartirmasdan FittedBox).
   Widget _combinedHeaderRow({
     required List<_MatrixColumn> columns,
@@ -1140,7 +1134,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   }) {
     final child = Container(
       width: fillWidth ? null : cellW,
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bg,
@@ -1165,7 +1159,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             _fitText(
               subtitle,
               fontSize: fontSize - 1,
-              color: Colors.grey.shade600,
+              color: Colors.grey.shade700,
               maxLines: 1,
             ),
           ],
@@ -1529,7 +1523,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
     final child = Container(
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: decoration,
       child: _fitText(
         label,
@@ -1594,7 +1588,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: const EdgeInsets.only(left: 6, right: 2),
+              padding: const EdgeInsets.only(left: 12, right: 6),
               child: _fitText(
                 _labelFor(moduleId),
                 fontSize: fontSize,
@@ -1640,7 +1634,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           child: _fitText(
             _statusLabel(status),
             fontSize: fontSize,

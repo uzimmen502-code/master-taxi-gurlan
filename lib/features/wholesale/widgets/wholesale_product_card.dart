@@ -43,13 +43,17 @@ class WholesaleProductCard extends StatelessWidget {
                           child:
                               const Icon(Icons.inventory_2_outlined, size: 40),
                         )
-                      : Image.network(
-                          product.imageUrls.first,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: Colors.grey.shade200,
-                            child:
-                                const Icon(Icons.image_not_supported_outlined),
+                      : ColoredBox(
+                          color: Colors.grey.shade200,
+                          child: Image.network(
+                            product.imageUrls.first,
+                            // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: Colors.grey.shade200,
+                              child: const Icon(
+                                  Icons.image_not_supported_outlined),
+                            ),
                           ),
                         ),
                   if (product.videoClipIds.isNotEmpty)

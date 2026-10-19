@@ -119,11 +119,15 @@ class _AdsList extends StatelessWidget {
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: thumb != null
-                    ? CachedNetworkImage(
-                        imageUrl: thumb,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
+                    ? ColoredBox(
+                        color: AppColors.cardImageBg,
+                        child: CachedNetworkImage(
+                          imageUrl: thumb,
+                          width: 60,
+                          height: 60,
+                          // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                          fit: BoxFit.contain,
+                        ),
                       )
                     : _thumbPlaceholder(),
               ),

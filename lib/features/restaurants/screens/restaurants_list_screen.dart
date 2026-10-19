@@ -53,6 +53,10 @@ class RestaurantsListScreen extends StatefulWidget {
   /// Ном бўйича қидирув ҳовузи (бутун республика, D-GEO-4).
   static const searchPoolLimit = 300;
 
+  /// Тестлар орасида «охирги маълум созлама» эскирмасин.
+  @visibleForTesting
+  static void resetLastKnownConfig() => _RestaurantsListScreenState._lastConfig = null;
+
   @override
   State<RestaurantsListScreen> createState() => _RestaurantsListScreenState();
 }
@@ -79,6 +83,14 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   Stream<List<Restaurant>>? _stream;
   String _streamKey = '';
 
+  /// Охирги юкланган бўлим созламаси (илова сессияси давомида). Экран очилганда ШУНИ дарров ишлатамиз, янгиси
+  /// орқада юклананади: аввал экран аввал ресторанлар рўйхати билан очилиб, созлама келгач таомлар лентасига
+  /// «ўтиб» қоларди — икки қадамда очилиш (эга, 2026-10-19).
+  static RestaurantSectionsConfig? _lastConfig;
+
+  /// Созлама маълум бўлгунча асосий қисмда фақат юкланиш белгиси — нотўғри экран бир лаҳзага ҳам чизилмайди.
+  bool _sectionsReady = false;
+
   /// Бўлимлар (S3): созлама ҳужжати йўқ/ўчиқ бўлса чиплар умуман кўринмайди — экран аввалгидек.
   RestaurantSectionsConfig _sections = RestaurantSectionsConfig.off;
   String? _uid;
@@ -103,11 +115,11 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
           if (s != RestaurantSection.all && s != RestaurantSection.kids && (s != RestaurantSection.seasonal || _activeSeasons.isNotEmpty)) s,
       ];
 
-  /// Чиплар тартиби (эга, 2026-10-19): Барчаси · Арзон ва тўйимли · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари ·
+  /// Чиплар тартиби (эга, 2026-10-19): Барчаси · Уй таомлари (фақат уй ошпази) · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари ·
   /// Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар (· Мавсумий). `null` — «Ресторанлар» чипи.
   static const _chipOrder = <RestaurantSection?>[
     RestaurantSection.all,
-    RestaurantSection.cheap,
+    RestaurantSection.home,
     RestaurantSection.office,
     RestaurantSection.fast,
     RestaurantSection.national,
@@ -167,6 +179,13 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     _lat = widget.userLat;
     _lng = widget.userLng;
     if (_lat == null || _lng == null) _loadProfileCoords();
+    final last = _lastConfig;
+    if (last != null) {
+      _sections = last;
+      _sectionsReady = true;
+      _uid = widget.currentUid;
+      if (last.isVisible(RestaurantSection.all, _uid)) _section = RestaurantSection.all;
+    }
     _loadGps();
     _loadSections();
   }
@@ -180,7 +199,13 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
         uid = d.length == 9 ? '998$d' : d;
       } catch (_) {}
     }
-    final cfg = await _repo.getSectionsConfig();
+    // Созлама ўқилмаса ҳам экран «юкланиш»да қолиб кетмасин: охирги маълум ёки ўчиқ ҳолат.
+    RestaurantSectionsConfig cfg;
+    try {
+      cfg = await _repo.getSectionsConfig();
+    } catch (_) {
+      cfg = _lastConfig ?? RestaurantSectionsConfig.off;
+    }
     var bookingsOn = false;
     try {
       bookingsOn = (await _repo.getBookingsConfig()).visibleFor(uid);
@@ -194,7 +219,9 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
       } catch (_) {}
     }
     if (!mounted) return;
+    _lastConfig = cfg;
     setState(() {
+      _sectionsReady = true;
       _sections = cfg;
       _uid = uid;
       _bookingsOn = bookingsOn;
@@ -434,7 +461,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                     ],                  ],
                 ),
               ),
-            if (_section == null)
+            if (_sectionsReady && _section == null)
               SizedBox(
                 height: 40,
                 child: ListView(
@@ -468,7 +495,9 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                 ),
               ),
             Expanded(
-              child: _section != null
+              child: !_sectionsReady
+                  ? const Center(child: CircularProgressIndicator())
+                  : _section != null
                   ? SectionDishesView(
                       key: ValueKey('section-view-${_section!.key}'),
                       section: _section!,

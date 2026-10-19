@@ -479,22 +479,27 @@ class _SimilarAdTile extends StatelessWidget {
                         color: AppColors.cardImageBg,
                         child: Center(child: Icon(Icons.image)),
                       )
-                    : Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const ColoredBox(
-                          color: AppColors.cardImageBg,
-                          child: Center(child: Icon(Icons.broken_image)),
-                        ),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const ColoredBox(
+                    : ColoredBox(
+                        color: AppColors.cardImageBg,
+                        child: Image.network(
+                          imageUrl,
+                          // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const ColoredBox(
                             color: AppColors.cardImageBg,
-                            child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        },
+                            child: Center(child: Icon(Icons.broken_image)),
+                          ),
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const ColoredBox(
+                              color: AppColors.cardImageBg,
+                              child: Center(
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            );
+                          },
+                        ),
                       ),
               ),
               Expanded(

@@ -7,7 +7,6 @@ import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_feedback.dart';
 import '../widgets/realty_tier_sheet.dart';
-import '../widgets/realty_video_sheet.dart';
 import '../widgets/realty_wallet.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import 'add_realty_listing_screen.dart';
@@ -589,25 +588,8 @@ class _MyListingTileState extends State<_MyListingTile> {
                   ),
                 ),
               ),
-            Divider(height: 1, color: c.line),
-            // Видео боғлаш — ихтиёрий (концепция, 3-бўлим).
-            TextButton.icon(
-              onPressed: _deleting
-                  ? null
-                  : () => showRealtyVideoSheet(context, listing: r),
-              icon: Icon(
-                r.hasVideo
-                    ? Icons.play_circle_outline
-                    : Icons.video_call_outlined,
-                size: 18,
-              ),
-              label: Text(
-                context.tr(
-                  r.hasVideo ? 'realty_video_change' : 'realty_video_link',
-                ),
-              ),
-              style: TextButton.styleFrom(foregroundColor: c.ink2),
-            ),
+            // Видео — ягона умумий қатлам: таҳрир формасидаги «Видео қўшиш (ихтиёрий, 60 сония гача)» блоки. Эски
+            // «мавжуд клипни боғлаш» тугмаси олиб ташланди (дубликат, эга 2026-10-20).
             Divider(height: 1, color: c.line),
             Row(
               children: [

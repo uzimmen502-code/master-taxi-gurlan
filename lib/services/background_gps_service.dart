@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
+import '../features/restaurants/domain/courier_tracking.dart';
+import 'courier_live_background.dart';
 // ── Background GPS Service ──
 // Ҳайдовчи иловани ёпиб қўйса ҳам GPS ишлайди
 
@@ -69,6 +71,12 @@ class BackgroundGpsService {
 
   // ── Сервисни тўхтатиш ──
   static Future<void> stop() async {
+    // Курьер фаол буюртмани кузатувга ёзаётган бўлса хизмат ишлашда давом этади (ҳайдовчи оффлайн бўлса ҳам).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      if (CourierLiveBackground.parse(prefs.getStringList(CourierLiveBackground.prefsKey)).isNotEmpty) return;
+    } catch (_) {}
     final running = await _service.isRunning();
     if (running) _service.invoke('stop');
   }
@@ -101,18 +109,29 @@ void onStart(ServiceInstance service) async {
   final phone    = prefs.getString('user_phone')  ?? '';
   final driverId = phone.replaceAll(RegExp(r'[^\d]'), '');
 
-  if (driverId.isEmpty) {
+  // Хизмат икки иш учун: ҳайдовчи онлайн (drivers/{phone}) ва курьернинг фаол буюртмалари
+  // (order_courier_live/{orderId}). Иккиси ҳам йўқ бўлса — тўхтайди.
+  final startLive = CourierLiveBackground.parse(prefs.getStringList(CourierLiveBackground.prefsKey));
+  if (driverId.isEmpty && startLive.isEmpty) {
     if (service is AndroidServiceInstance) service.stopSelf();
     return;
   }
 
   final db = FirebaseFirestore.instance;
 
+  // Курьер ёзувлари учун охирги ёзилган нуқта (orderId бўйича) — ортиқча ёзмаслик (36-қоида).
+  final lastAt  = <String, DateTime>{};
+  final lastPos = <String, List<double>>{};
+
   // GPS позицияни ҳар 20 секундда янгилаш
   Timer.periodic(const Duration(seconds: 20), (timer) async {
-    // Онлайн эмас бўлса — тўхтатиш
+    // Асосий изолятда ўзгарган рўйхат/ҳолатни кўриш учун қайта ўқиймиз.
+    try { await prefs.reload(); } catch (_) {}
     final isOnline = prefs.getBool('driver_online') ?? false;
-    if (!isOnline) {
+    final live = CourierLiveBackground.parse(prefs.getStringList(CourierLiveBackground.prefsKey));
+    // Онлайн эмас ва кузатиладиган буюртма йўқ бўлса — тўхтатиш
+    final driverActive = isOnline && driverId.isNotEmpty;
+    if (!driverActive && live.isEmpty) {
       timer.cancel();
       if (service is AndroidServiceInstance) service.stopSelf();
       return;
@@ -126,17 +145,58 @@ void onStart(ServiceInstance service) async {
         ),
       );
 
-      await db.collection('drivers').doc(driverId).update({
-        'lat':       pos.latitude,
-        'lng':       pos.longitude,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      if (driverActive) {
+        await db.collection('drivers').doc(driverId).update({
+          'lat':       pos.latitude,
+          'lng':       pos.longitude,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Курьер: ҳар бир фаол буюртма учун жонли нуқта (рухсат ва фаоллик — firestore.rules).
+      final now = DateTime.now();
+      var wrote = false;
+      for (final e in live) {
+        final last = lastPos[e.orderId];
+        if (!CourierTracking.shouldPublish(
+          now: now,
+          lat: pos.latitude,
+          lng: pos.longitude,
+          lastAt: lastAt[e.orderId],
+          lastLat: last?[0],
+          lastLng: last?[1],
+        )) {
+          continue;
+        }
+        try {
+          await db.collection('order_courier_live').doc(e.orderId).set({
+            'orderId':   e.orderId,
+            'courierId': e.courierId,
+            'lat':       pos.latitude,
+            'lng':       pos.longitude,
+            if (pos.heading >= 0 && pos.heading <= 360) 'heading': pos.heading,
+            if (pos.speed >= 0 && pos.speed <= 100) 'speed': pos.speed,
+            if (pos.accuracy >= 0) 'accuracy': pos.accuracy,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          lastAt[e.orderId]  = now;
+          lastPos[e.orderId] = [pos.latitude, pos.longitude];
+          wrote = true;
+        } catch (_) {
+          // Рухсат/тармоқ: кейинги айланишда қайта уриниш.
+        }
+      }
+      if (wrote) {
+        await prefs.setInt(CourierLiveBackground.heartbeatKey, now.millisecondsSinceEpoch);
+      }
 
       // Notification янгилаш
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(
           title: 'AVA',
-          content: '🟢 GPS фаол — ${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}',
+          content: driverActive
+              ? '🟢 GPS фаол — ${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}'
+              : '🟢 Етказиб бериш кузатуви фаол',
         );
       }
     } catch (_) {}

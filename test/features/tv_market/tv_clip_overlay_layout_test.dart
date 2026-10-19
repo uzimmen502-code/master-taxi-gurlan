@@ -23,6 +23,7 @@ Future<void> _pump(
   WidgetTester tester, {
   Widget? filters,
   bool isOwner = false,
+  VoidCallback? onOpenRestaurant,
 }) async {
   await tester.binding.setSurfaceSize(const Size(400, 800));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -40,6 +41,7 @@ Future<void> _pump(
               onComment: () {},
               onShare: () {},
               onSave: () {},
+              onOpenRestaurant: onOpenRestaurant,
             ),
           ],
         ),
@@ -109,6 +111,27 @@ void main() {
       (tester) async {
     await _pump(tester);
     expect(find.text(_ownerName), findsNothing);
+  });
+
+  testWidgets('кафе-ресторанга боғланмаган клипда «Кафе» тугмаси йўқ', (tester) async {
+    await _pump(tester);
+    expect(find.byKey(const ValueKey('tv-open-restaurant')), findsNothing);
+    expect(find.byIcon(Icons.restaurant_rounded), findsNothing);
+  });
+
+  testWidgets('кафе-ресторанга боғланган клипда ўнг устунда «Кафе» тугмаси: босилса чақирилади (эга ҳам, мижоз ҳам)', (tester) async {
+    var taps = 0;
+    await _pump(tester, onOpenRestaurant: () => taps++);
+    final btn = find.byKey(const ValueKey('tv-open-restaurant'));
+    expect(btn, findsOneWidget);
+    expect(find.byIcon(Icons.restaurant_rounded), findsOneWidget);
+    // ўнг устунда (экраннинг ўнг ярмида) — «Боғланиш» пастки қаторда қолади
+    expect(tester.getCenter(btn).dx, greaterThan(300));
+    await tester.tap(btn);
+    expect(taps, 1);
+
+    await _pump(tester, isOwner: true, onOpenRestaurant: () => taps++);
+    expect(find.byKey(const ValueKey('tv-open-restaurant')), findsOneWidget, reason: 'эгага ҳам кўринади');
   });
 
   testWidgets('эганинг ўз клипида «Боғланиш» йўқ, фильтрлар эса бор',

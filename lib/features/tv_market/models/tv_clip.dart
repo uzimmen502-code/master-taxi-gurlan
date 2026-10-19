@@ -77,6 +77,7 @@ class TvClip {
     this.wholesaleProductId = '',
     this.linkKind = '',
     this.linkId = '',
+    this.linkItemId = '',
     this.socialConsent = false,
     this.socialNetworks = const [],
     this.socialPostedAt,
@@ -160,6 +161,12 @@ class TvClip {
   /// кўрсатишда клип эгаси = эълон эгаси текширилади (бегона боғлаш йўқ).
   final String linkKind;
   final String linkId;
+
+  /// Ресторан ТАОМига боғланган видео (`linkKind == 'restaurant_item'`): `linkId` — ресторан id
+  /// (шу тарзда `linkKind + linkId + status` тенгликлари билан индекссиз битта сўров), `linkItemId` —
+  /// `restaurants/{linkId}/menu_items/{id}`. Қоида: фақат шу рестораннинг а'зоси ва таом мавжуд бўлса
+  /// (`firestore.rules` `tvClipRestaurantLinkOk`). Бошқа турларда бўш.
+  final String linkItemId;
   final bool socialConsent;
   /// `instagram` | `facebook` | `youtube` | `telegram`
   final List<String> socialNetworks;
@@ -196,6 +203,10 @@ class TvClip {
   bool get isBlocked => status == 'blocked';
   bool get hasPrice => price > 0;
   bool get hasShopItem => shopItemId.trim().isNotEmpty;
+
+  /// Клип кафе-рестораннинг ўзига (`restaurant`) ёки унинг ТАОМига (`restaurant_item`) боғланган —
+  /// АВАГрам лентасида «Кафе» тугмаси шу рестораннинг менюсини очади (эга, 2026-10-19).
+  bool get isRestaurantLinked => (linkKind == 'restaurant' || linkKind == 'restaurant_item') && linkId.isNotEmpty;
   bool get socialPosted => socialPostedAt != null;
   bool get hasVariants => videoVariants.isNotEmpty;
   bool get isNews => category == 'news';
@@ -299,6 +310,7 @@ class TvClip {
     String? wholesaleProductId,
     String? linkKind,
     String? linkId,
+    String? linkItemId,
     bool? socialConsent,
     List<String>? socialNetworks,
     DateTime? socialPostedAt,
@@ -351,6 +363,7 @@ class TvClip {
       wholesaleProductId: wholesaleProductId ?? this.wholesaleProductId,
       linkKind: linkKind ?? this.linkKind,
       linkId: linkId ?? this.linkId,
+      linkItemId: linkItemId ?? this.linkItemId,
       socialConsent: socialConsent ?? this.socialConsent,
       socialNetworks: socialNetworks ?? this.socialNetworks,
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
@@ -406,6 +419,7 @@ class TvClip {
       wholesaleProductId: (d['wholesaleProductId'] ?? '') as String,
       linkKind: (d['linkKind'] ?? '') as String,
       linkId: (d['linkId'] ?? '') as String,
+      linkItemId: (d['linkItemId'] ?? '') as String,
       socialConsent: d['socialConsent'] == true,
       socialNetworks: _parseSocialNetworks(d['socialNetworks']),
       socialPostedAt: _asDate(d['socialPostedAt']),
@@ -483,6 +497,7 @@ class TvClip {
         if (linkKind.isNotEmpty && linkId.isNotEmpty) ...{
           'linkKind': linkKind,
           'linkId': linkId,
+          if (linkItemId.isNotEmpty) 'linkItemId': linkItemId,
         },
         'socialConsent': socialConsent,
         if (socialNetworks.isNotEmpty) 'socialNetworks': socialNetworks,
@@ -525,6 +540,20 @@ TvClip? pickLinkedClip(
     if (trusted || phonesMatch(c.ownerPhone, ownerPhone)) return c;
   }
   return null;
+}
+
+/// Ресторан ТАОМлари видеолари: [clips] (бир ресторанга боғланган клиплар) ичидан ҳар таом учун
+/// ЭНГ ЯНГИ ФАОЛ ва ўйнатиладигани, `itemId → клип`. Боғлаш турига мос бўлмаган, таом id'сиз,
+/// фаол бўлмаган ёки ўйнатилмайдиган клип ҳисобга олинмайди. Эгалик солиштирилмайди: боғлашга
+/// ваколат `firestore.rules`да (фақат шу рестораннинг а'зоси ва таом мавжуд бўлса).
+Map<String, TvClip> pickRestaurantItemClips(Iterable<TvClip> clips) {
+  final out = <String, TvClip>{};
+  for (final c in tvClipsNewestFirst(clips)) {
+    if (c.linkKind != 'restaurant_item' || c.linkItemId.isEmpty) continue;
+    if (!c.isActive || !c.isPlayable) continue;
+    out.putIfAbsent(c.linkItemId, () => c);
+  }
+  return out;
 }
 
 /// Янгиси биринчи (`createdAt` йўқлари — охирида). Бир `linkId`га бир нечта

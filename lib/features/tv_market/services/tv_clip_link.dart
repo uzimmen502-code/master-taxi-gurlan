@@ -18,6 +18,11 @@ abstract final class TvClipLink {
   static const kindMarket = 'market_ad';
   static const kindRestaurant = 'restaurant';
 
+  /// Ресторан ТАОМИга видео (2026-10-19, эга: «расм ёнига ихтиёрий видео, АВАГрамга ҳам жойлансин»):
+  /// linkId — ресторан id, linkItemId — таом id. АВАГрам лентасига ОДДИЙ клип сифатида тушади
+  /// (модерация, R2 — ўша қатлам); ресторан меню саҳифасида таом қаторидан очилади.
+  static const kindRestaurantItem = 'restaurant_item';
+
   /// Улгуржи бозор маҳсулоти (2026-10-17, эга қабул қилган таклиф): аввал
   /// «энг сўнгги клип»ни тахмин қилиб боғланарди, энди клип ID'си билан.
   static const kindWholesale = 'wholesale_product';
@@ -33,8 +38,11 @@ abstract final class TvClipLink {
     NavigatorState nav, {
     required String kind,
     required String linkId,
+    String linkItemId = '',
   }) async {
     if (linkId.isEmpty) return false;
+    // Таом видеосида таом id шарт: у йўқ бўлса клип ресторан видеосига ўхшаб қолмасин.
+    if (kind == kindRestaurantItem && linkItemId.isEmpty) return false;
     final published = await nav.push<bool>(
       MaterialPageRoute(
         builder: (_) => TvPublishScreen(
@@ -42,6 +50,7 @@ abstract final class TvClipLink {
           organicOnly: true,
           linkKind: kind,
           linkId: linkId,
+          linkItemId: linkItemId,
         ),
       ),
     );

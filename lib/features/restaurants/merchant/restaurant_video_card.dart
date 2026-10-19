@@ -1,6 +1,11 @@
 // Ресторан панели («Дўкон») — таомлар обзори видеоси: қўшиш, алмаштириш,
 // ўчириш, ҳолатини кўриш (эга, 2026-10-18).
 //
+// Ўша карта БИТТА ТАОМнинг видеоси учун ҳам ишлатилади (`linkItemId` берилса — эга,
+// 2026-10-19: «таом расми ёнига ихтиёрий видео, АВАГрамга ҳам жойлансин»): `restaurant_item` тури,
+// `linkId` — ресторан, `linkItemId` — таом; бир таомда битта видео, янгиси жонли бўлгач эскиси
+// ўчади. Ресторан видеоси ва таом видеолари ЎЗАРО аралашмайди (тур бўйича сузилади).
+//
 // Аввал видеони фақат рўйхатдан ўтишда қўшиш мумкин эди — ўтказиб юборилган
 // ёки рад этилган видеони кейин тузатиб бўлмасди. Энди ШУ ердан: бутун
 // жойлаш/боғлаш мантиқи ўша умумий қатламда ([TvClipLink.publish] —
@@ -26,6 +31,7 @@ class RestaurantVideoCard extends StatefulWidget {
     required this.restaurantId,
     required this.ownerPhone,
     required this.restaurantApproved,
+    this.linkItemId = '',
     this.currentPhone,
     this.loader,
     this.publisher,
@@ -38,6 +44,9 @@ class RestaurantVideoCard extends StatefulWidget {
 
   /// Ресторан `approved` бўлмаса эгага «тасдиқдан кейин кўринади» дейилади.
   final bool restaurantApproved;
+
+  /// Бўш — ресторан видеоси; берилса — шу ТАОМнинг видеоси.
+  final String linkItemId;
 
   /// Жорий фойдаланувчи телефони (ким юклаганини ажратиш учун). Берилмаса
   /// кириш ҳисобидан олинади.
@@ -59,6 +68,9 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
   bool _failed = false;
   bool _busy = false;
   late final String _me = _resolveMe();
+
+  bool get _forDish => widget.linkItemId.isNotEmpty;
+  String get _kind => _forDish ? TvClipLink.kindRestaurantItem : TvClipLink.kindRestaurant;
 
   String _resolveMe() {
     final given = widget.currentPhone;
@@ -84,6 +96,9 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
   /// а'золар ўқий олади — бу панел шундайларга очилади; ўқилмаса фақат эга.
   Future<List<TvClip>> _fetch() async {
     if (widget.loader != null) return widget.loader!();
+    final repo = TvClipsRepository();
+    // Таом видеоси: телефон бўйича сузилмайди (ваколат қоидада) — membersни ўқиш шарт эмас.
+    if (_forDish) return repo.fetchItemClips(restaurantId: widget.restaurantId, itemId: widget.linkItemId);
     final phones = <String>{widget.ownerPhone};
     try {
       final m = await FirebaseFirestore.instance
@@ -93,9 +108,11 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
           .get();
       phones.addAll(m.docs.map((d) => d.id));
     } catch (_) {}
-    return TvClipsRepository().fetchLinkedByPhones(
+    // Тур билан: таом видеолари ҳам `linkId` = ресторан id — турсиз ўқилса ресторан видеоси ўрнига ўтарди.
+    return repo.fetchLinkedByPhones(
       linkId: widget.restaurantId,
       ownerPhones: phones,
+      linkKind: TvClipLink.kindRestaurant,
     );
   }
 
@@ -142,8 +159,9 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
       final ok = await (widget.publisher?.call() ??
           TvClipLink.publish(
             Navigator.of(context),
-            kind: TvClipLink.kindRestaurant,
+            kind: _kind,
             linkId: widget.restaurantId,
+            linkItemId: widget.linkItemId,
           ));
       if (ok && mounted) await _load();
     } finally {
@@ -192,15 +210,17 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
   Widget build(BuildContext context) {
     final c = context.ava;
     return Container(
-      key: const ValueKey('restaurant-video-card'),
+      key: ValueKey(_forDish ? 'dish-video-card' : 'restaurant-video-card'),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.tr('restaurants_m_video_title'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+          Text(context.tr(_forDish ? 'restaurants_m_dish_video_title' : 'restaurants_m_video_title'),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
           const SizedBox(height: 2),
-          Text(context.tr('restaurants_m_video_hint'), style: TextStyle(fontSize: 12, color: c.ink3)),
+          Text(context.tr(_forDish ? 'restaurants_m_dish_video_hint' : 'restaurants_m_video_hint'),
+              style: TextStyle(fontSize: 12, color: c.ink3)),
           if (!widget.restaurantApproved) ...[
             const SizedBox(height: 4),
             Text(context.tr('restaurants_m_video_after_approval'), style: TextStyle(fontSize: 12, color: c.warn)),

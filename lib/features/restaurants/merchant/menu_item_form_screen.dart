@@ -1,6 +1,8 @@
 // Таом қўшиш/таҳрирлаш: ном, нарх (бутун сўм — қадоқлаш ҳақи ЙЎҚ, D-REST-28), тавсиф,
 // категория (тизим таклифи + ўзи танлайди, D-REST-29), расм (`restaurant_images/{rid}/`), «Бор/Йўқ».
 
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../data/restaurants_repository.dart';
+import '../../tv_market/models/tv_clip.dart';
 import '../domain/dish_facts.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/menu_category_names.dart';
@@ -17,6 +20,7 @@ import '../domain/restaurant_models.dart';
 import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'dish_facts_editor.dart';
+import 'dish_video_tile.dart';
 import 'menu_category_dialog.dart';
 import 'menu_category_picker.dart';
 
@@ -30,6 +34,12 @@ class MenuItemFormScreen extends StatefulWidget {
     this.initialCategoryId,
     this.homeCook = false,
     this.storage,
+    this.ownerPhone,
+    this.restaurantApproved = true,
+    this.videoLoader,
+    this.videoPublisher,
+    this.videoDeleter,
+    this.videoOpener,
   });
 
   final String restaurantId;
@@ -41,6 +51,17 @@ class MenuItemFormScreen extends StatefulWidget {
   /// Категория номи таклифлари рўйхати учун (уй ошпази / кафе).
   final bool homeCook;
   final RestaurantStorageService? storage;
+
+  /// Ресторан эгаси телефони — берилса расм ёнида ихтиёрий «Видео» катаги кўринади
+  /// (`DishVideoTile`). Берилмаса (эски чақирувлар) катак йўқ.
+  final String? ownerPhone;
+  final bool restaurantApproved;
+
+  /// Тест учун алмаштириладиган видео боғловчилари (ҳақиқийси — умумий қатлам).
+  final Future<List<TvClip>> Function(String itemId)? videoLoader;
+  final Future<bool> Function(String itemId)? videoPublisher;
+  final Future<void> Function(TvClip clip)? videoDeleter;
+  final void Function(TvClip clip)? videoOpener;
 
   @override
   State<MenuItemFormScreen> createState() => _MenuItemFormScreenState();
@@ -61,6 +82,12 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     categories: widget.categories,
   );
   late bool _available = widget.existing?.available ?? true;
+
+  // Таом ВИДЕО учун аввал сақланиши мумкин (клип таом ID'сига боғланади) — шундан кейинги
+  // сақлашлар ШУ ҳужжатни янгилайди, расм қайта юкланмайди, тартиб ўзгармайди.
+  late String? _savedId = widget.existing?.id;
+  late String _photoUrl = widget.existing?.photoUrl ?? '';
+  late final int _sort = widget.existing?.sort ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
   // Сотувчи киритган ихтиёрий фактлар (порция, КБЖУ, кухна, теглар) — таҳрирда мавжуд қиймат.
   late DishFacts _facts = widget.existing?.facts ?? DishFacts.empty;
   bool _showFactErrors = false;
@@ -128,21 +155,29 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     if (key == null) return MenuCategoryChoice.known(_categoryId, _cats);
     final name = MenuCategoryNames.presetName(key, context.contentLang);
     final same = MenuCategoryChoice.findByName(_cats, name);
-    if (same != null) return same.id;
+    if (same != null) {
+      _categoryId = same.id;
+      return same.id;
+    }
     final sort = _cats.length;
     final id = await widget.repository.upsertCategory(widget.restaurantId, name: name, sort: sort);
     _cats.add(MenuCategory(id: id, name: name, sort: sort));
+    _categoryId = id; // кейинги сақлашда такрор яратилмасин
     return id;
   }
 
-  Future<void> _save() async {
+  /// Таомни сақлайди (яратади ёки янгилайди) ва ID қайтаради; текширув ёки сақлаш хато берса —
+  /// `null` (хабар шу ерда кўрсатилади). Видео катаги ҳам шуни чақиради: янги таомга клип
+  /// боғлаш учун таом аввал яратилиши керак.
+  Future<String?> _persist() async {
+    if (_saving) return null;
     final name = _name.text.trim();
     final price = int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0;
     if (name.isEmpty || price <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('restaurants_m_err_item')), backgroundColor: Colors.red.shade700),
       );
-      return;
+      return null;
     }
     // Фактлар ихтиёрий, лекин киритилган бўлса тўғри бўлиши шарт — хатоли карточкалар очилади.
     if (_facts.validate().isNotEmpty) {
@@ -150,44 +185,50 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('restaurants_m_dish_err_fix')), backgroundColor: Colors.red.shade700),
       );
-      return;
+      return null;
     }
     setState(() => _saving = true);
     try {
-      var photoUrl = widget.existing?.photoUrl ?? '';
       if (_picked != null) {
-        photoUrl = await _storage.uploadImage(restaurantId: widget.restaurantId, image: _picked!, kind: 'item');
+        _photoUrl = await _storage.uploadImage(restaurantId: widget.restaurantId, image: _picked!, kind: 'item');
+        _picked = null; // юкланди — кейинги сақлашда қайта юкланмайди
       }
       final categoryId = await _resolveCategoryId();
-      await widget.repository.upsertMenuItem(
+      final id = await widget.repository.upsertMenuItem(
         widget.restaurantId,
-        id: widget.existing?.id,
+        id: _savedId,
         name: name,
         price: price,
         description: _desc.text.trim(),
-        photoUrl: photoUrl,
+        photoUrl: _photoUrl,
         categoryId: categoryId,
-        sort: widget.existing?.sort ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        sort: _sort,
         available: _available,
         stopUntil: _available ? widget.existing?.stopUntil : null,
         facts: _facts,
       );
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      _savedId = id;
+      return id;
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(restaurantsErrorText(context, e)), backgroundColor: Colors.red.shade700),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(restaurantsErrorText(context, e)), backgroundColor: Colors.red.shade700),
+        );
+      }
+      return null;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  Future<void> _save() async {
+    final id = await _persist();
+    if (id != null && mounted) Navigator.of(context).pop();
+  }
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final existingPhoto = widget.existing?.photoUrl.trim() ?? '';
+    final existingPhoto = _photoUrl.trim();
     const contentMaxWidth = 640.0;
     final width = MediaQuery.sizeOf(context).width;
     final gutter = width > contentMaxWidth + 32 ? (width - contentMaxWidth) / 2 : 16.0;
@@ -205,38 +246,71 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
           // Кенг экранда (веб) форма ўқилувчан кенгликда (640) марказда туради.
           padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 24),
           children: [
-            Center(
-              child: InkWell(
-                onTap: _pickPhoto,
-                borderRadius: BorderRadius.circular(12),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                    width: 140,
-                    height: 140,
-                    child: _picked != null
-                        ? FutureBuilder(
-                            future: _picked!.readAsBytes(),
-                            builder: (context, s) => s.hasData ? Image.memory(s.data!, fit: BoxFit.cover) : const SizedBox(),
-                          )
-                        : existingPhoto.startsWith('http')
-                            ? CachedNetworkImage(imageUrl: existingPhoto, fit: BoxFit.cover)
-                            : ColoredBox(
-                                color: c.surface2,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.add_a_photo_outlined, color: c.ink3),
-                                    const SizedBox(height: 4),
-                                    Text(context.tr('restaurants_m_item_photo'), style: TextStyle(fontSize: 11, color: c.ink3)),
-                                  ],
-                                ),
-                              ),
-                  ),
-                ),
-              ),
+            LayoutBuilder(
+              builder: (context, cons) {
+                final showVideo = widget.ownerPhone != null;
+                // Расм ва видео катаклари ёнма-ён сиғиши учун (320 px да ҳам): 140 дан катта эмас.
+                final size = showVideo ? math.min(140.0, (cons.maxWidth - 12) / 2) : 140.0;
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    InkWell(
+                      onTap: _pickPhoto,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: size,
+                          height: size,
+                          child: _picked != null
+                              ? FutureBuilder(
+                                  future: _picked!.readAsBytes(),
+                                  builder: (context, s) => s.hasData ? Image.memory(s.data!, fit: BoxFit.cover) : const SizedBox(),
+                                )
+                              : existingPhoto.startsWith('http')
+                                  ? CachedNetworkImage(imageUrl: existingPhoto, fit: BoxFit.cover)
+                                  : ColoredBox(
+                                      color: c.surface2,
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.add_a_photo_outlined, color: c.ink3),
+                                          const SizedBox(height: 4),
+                                          Text(context.tr('restaurants_m_item_photo'), style: TextStyle(fontSize: 11, color: c.ink3)),
+                                        ],
+                                      ),
+                                    ),
+                        ),
+                      ),
+                    ),
+                    if (showVideo) ...[
+                      const SizedBox(width: 12),
+                      DishVideoTile(
+                        restaurantId: widget.restaurantId,
+                        ownerPhone: widget.ownerPhone!,
+                        restaurantApproved: widget.restaurantApproved,
+                        itemId: _savedId,
+                        ensureSaved: _persist,
+                        size: size,
+                        loader: widget.videoLoader,
+                        publisher: widget.videoPublisher,
+                        deleter: widget.videoDeleter,
+                        opener: widget.videoOpener,
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 14),
+            if (widget.ownerPhone != null && _savedId == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  context.tr('restaurants_m_dish_video_save_hint'),
+                  textAlign: TextAlign.center,
+                  style: AvaText.caption.copyWith(color: c.ink3),
+                ),
+              ),            const SizedBox(height: 14),
             TextField(controller: _name, maxLength: 80, decoration: InputDecoration(labelText: context.tr('restaurants_m_item_name'), border: const OutlineInputBorder(), isDense: true)),
             const SizedBox(height: 8),
             TextField(

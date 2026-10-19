@@ -3,41 +3,18 @@
 // сақланиб қолиши. Репозиторий қалбаки (Firestore йўқ); ёзув семантикаси
 // (`DishFacts.patch`) `dish_facts_test.dart`да, rules — `restaurant_rules.test.js`да.
 
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/cuisine.dart';
 import 'package:ava_gurlan/features/restaurants/domain/dish_facts.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/features/restaurants/merchant/menu_item_form_screen.dart';
-import 'package:ava_gurlan/l10n/app_localizations.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-final _strings = {
-  for (final e in (jsonDecode(File('assets/lang/uz_Latn.json').readAsStringSync()) as Map<String, dynamic>).entries)
-    e.key: e.value.toString(),
-};
-String _tr(String key) => _strings[key] ?? key;
+import 'restaurants_l10n_harness.dart';
 
-class _L10n extends AppLocalizations {
-  _L10n(super.locale);
-  @override
-  String translate(String key) => _tr(key);
-}
-
-class _Delegate extends LocalizationsDelegate<AppLocalizations> {
-  const _Delegate();
-  @override
-  bool isSupported(Locale locale) => true;
-  @override
-  Future<AppLocalizations> load(Locale locale) => SynchronousFuture(_L10n(locale));
-  @override
-  bool shouldReload(covariant LocalizationsDelegate<AppLocalizations> old) => false;
-}
+final _l10n = JsonL10nDelegate();
+String _tr(String key) => _l10n.tr(key);
 
 class _Saved {
   _Saved(this.id, this.name, this.price, this.facts, this.categoryId);
@@ -98,15 +75,8 @@ Future<void> _open(
   t.view.devicePixelRatio = 3;
   addTearDown(t.view.reset);
   await t.pumpWidget(
-    MaterialApp(
-      locale: const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn'),
-      supportedLocales: const [Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn')],
-      localizationsDelegates: const [
-        _Delegate(),
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+    l10nApp(
+      delegate: _l10n,
       home: Builder(
         builder: (ctx) => Scaffold(
           body: TextButton(

@@ -120,6 +120,8 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
           initialCategoryId: _selectedCategory,
           homeCook: widget.restaurant.isHomeCook,
           repository: widget.repository,
+          ownerPhone: widget.restaurant.ownerUid,
+          restaurantApproved: widget.restaurant.isApproved,
         ),
       ),
     );

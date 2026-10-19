@@ -42,6 +42,7 @@ class TvPublishScreen extends StatefulWidget {
     this.hideShopOption = false,
     this.linkKind = '',
     this.linkId = '',
+    this.linkItemId = '',
     this.organicOnly = false,
     this.onClipCreated,
   });
@@ -57,6 +58,9 @@ class TvPublishScreen extends StatefulWidget {
   /// клип" тахмини йўқ). Қиймат ва маъно — [TvClip.linkKind].
   final String linkKind;
   final String linkId;
+
+  /// Таом видеосида (`restaurant_item`) — таом id, клипга `linkItemId` бўлиб ёзилади.
+  final String linkItemId;
 
   /// `true` — фақат оддий видео (Товар/Хизмат): пуллик реклама ва 48 соатлик
   /// «Янгилик» сегментлари кўринмайди ва матндан автотаклиф ишламайди. Боғланган
@@ -828,6 +832,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         shopItemId: shopItemId,
         linkKind: widget.linkKind,
         linkId: widget.linkId,
+        linkItemId: widget.linkItemId,
         socialConsent: _socialNetworks.isNotEmpty,
         socialNetworks: _socialNetworks.toList(),
         searchTokens: TvClipSearch.buildTokens(

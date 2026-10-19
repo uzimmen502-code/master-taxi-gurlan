@@ -448,11 +448,11 @@ class TvClipsRepository {
     String linkKind = '',
   }) async {
     if (linkId.isEmpty) return null;
-    final snap = await _col
-        .where('linkId', isEqualTo: linkId)
-        .where('status', isEqualTo: 'active')
-        .limit(10)
-        .get();
+    // [linkKind] серверда ҳам сузилади (тенглик — индекс керак эмас): ресторан `linkId`сида унинг
+    // ТАОМ видеолари ҳам бор, limit(10) ичида ресторан видеоси улардан сиқиб чиқарилмасин.
+    var q = _col.where('linkId', isEqualTo: linkId);
+    if (linkKind.isNotEmpty) q = q.where('linkKind', isEqualTo: linkKind);
+    final snap = await q.where('status', isEqualTo: 'active').limit(10).get();
     return pickLinkedClip(
       _playable(snap.docs),
       ownerPhone: ownerPhone,
@@ -465,17 +465,53 @@ class TvClipsRepository {
   /// ходимлар) юклаган клиплар — ҳар қандай ҳолатда (текширувда ва рад
   /// этилган ҳам), янгиси биринчи. Битта сўров, фақат `linkId` бўйича
   /// (қўшимча индекс керак эмас); таркиб клиентда сузилади.
+  ///
+  /// [linkKind] берилса — фақат шу тур: ресторан ва унинг ТАОМлари видеоси `linkId` (ресторан id)
+  /// ни бўлишади, шунинг учун турсиз ўқилса таом видеоси ресторан видеоси ўрнига ўтиб, `supersededClips`
+  /// уни ўчириб юборарди.
   Future<List<TvClip>> fetchLinkedByPhones({
     required String linkId,
     required Iterable<String> ownerPhones,
+    String linkKind = '',
   }) async {
     if (linkId.isEmpty) return const [];
-    final snap = await _col.where('linkId', isEqualTo: linkId).limit(20).get();
+    var q = _col.where('linkId', isEqualTo: linkId);
+    if (linkKind.isNotEmpty) q = q.where('linkKind', isEqualTo: linkKind);
+    final snap = await q.limit(20).get();
     return tvClipsNewestFirst(
       snap.docs
           .map(TvClip.fromFirestore)
+          .where((c) => linkKind.isEmpty || c.linkKind == linkKind)
           .where((c) => ownerPhones.any((p) => phonesMatch(c.ownerPhone, p))),
     );
+  }
+
+  /// Эга панели: БИТТА таомнинг видеолари (`restaurant_item`) — ҳар қандай ҳолатда (текширувда/рад
+  /// этилган ҳам), янгиси биринчи. Телефон бўйича сузилмайди: боғлаш ваколати `firestore.rules`да
+  /// (фақат шу рестораннинг а'зоси), яъни бу ҳужжатларнинг ҳаммаси қонуний. Тенгликлар (`linkKind`,
+  /// `linkId`, `linkItemId`) — қўшимча индекс керак эмас.
+  Future<List<TvClip>> fetchItemClips({required String restaurantId, required String itemId}) async {
+    if (restaurantId.isEmpty || itemId.isEmpty) return const [];
+    final snap = await _col
+        .where('linkKind', isEqualTo: 'restaurant_item')
+        .where('linkId', isEqualTo: restaurantId)
+        .where('linkItemId', isEqualTo: itemId)
+        .limit(20)
+        .get();
+    return tvClipsNewestFirst(snap.docs.map(TvClip.fromFirestore));
+  }
+
+  /// Мижоз: рестораннинг БАРЧА таом видеолари, `itemId → клип` — БИР сўров (ҳар таом учун алоҳида
+  /// эмас, 36-қоида). Тенгликлар — индекс керак эмас; чегара [limit] (бир ресторан).
+  Future<Map<String, TvClip>> fetchRestaurantItemClips(String restaurantId, {int limit = 200}) async {
+    if (restaurantId.isEmpty) return const {};
+    final snap = await _col
+        .where('linkKind', isEqualTo: 'restaurant_item')
+        .where('linkId', isEqualTo: restaurantId)
+        .where('status', isEqualTo: 'active')
+        .limit(limit)
+        .get();
+    return pickRestaurantItemClips(_playable(snap.docs));
   }
 
   /// Рўйхат учун: шу тур (`linkKind`) бўйича фаол боғланган клиплар,

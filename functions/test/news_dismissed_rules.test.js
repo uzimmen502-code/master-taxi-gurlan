@@ -12,7 +12,7 @@ const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
 const { serverTimestamp } = require('firebase/firestore');
 
-const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
+const RULES_PATH = process.env.RULES_FILE || path.join(__dirname, '..', '..', 'firestore.rules');
 const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const [HOST, PORT] = EMULATOR_HOST.split(':');
 

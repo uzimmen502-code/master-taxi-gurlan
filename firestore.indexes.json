@@ -873,12 +873,26 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "restaurantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "restaurant_bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "userPhone",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "startAt",
-          "order": "ASCENDING"
+          "order": "DESCENDING"
         }
       ]
     },

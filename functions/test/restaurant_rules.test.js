@@ -297,6 +297,15 @@ async function main() {
     await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/q1`).update({ price: 50000 }));
     await assertFails(putDish(STRANGER, 'q_stranger', { qtyTiers: [t(10, 38000)] }), 'begona yozolmaydi');
   });
+  await check('S4b acceptsPreorder: a\'zo bool yozadi; satr/son/null — rad; begona yozolmaydi', async () => {
+    const ref = (who) => as(who).doc(`restaurants/${R1}`);
+    await assertSucceeds(ref(OWNER).update({ acceptsPreorder: true }));
+    await assertSucceeds(ref(STAFF).update({ acceptsPreorder: false }));
+    for (const v of ['true', 1, 0, null, {}]) await assertFails(ref(OWNER).update({ acceptsPreorder: v }), String(v));
+    await assertFails(ref(STRANGER).update({ acceptsPreorder: true }));
+    await assertFails(ref(CUSTOMER).update({ acceptsPreorder: true }));
+    await assertFails(as(OWNER).doc(`orders/${O1}`).update({ scheduledFor: new Date(), isPreorder: true }), 'buyurtmaga oldindan vaqt yozib bo\'lmaydi');
+  });
   await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
     await assertSucceeds(anon().doc(`restaurant_dish_index/${R1}_osh`).get());
     await assertSucceeds(anon().collection('restaurant_dish_index').where('sections', 'array-contains', 'cheap').where('geo4', 'in', ['tzh1', 'tzh2']).limit(50).get());

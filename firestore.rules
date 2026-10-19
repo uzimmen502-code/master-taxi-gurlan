@@ -3056,7 +3056,7 @@ service cloud.firestore {
       return changed.hasOnly([
             'name', 'description', 'cuisineTags', 'address', 'contactPhone',
             'lat', 'lng', 'geohash', 'logoUrl', 'coverUrl', 'announcement',
-            'openingHours', 'prepTimeMin', 'minOrderAmount', 'maxQtyPerItem', 'delivery',
+            'openingHours', 'prepTimeMin', 'minOrderAmount', 'maxQtyPerItem', 'acceptsPreorder', 'delivery',
             'payment', 'pausedUntil', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
@@ -3066,6 +3066,8 @@ service cloud.firestore {
           // `MAX_QTY_CEILING` ва клиент `Restaurant.maxQtyPerItemCeiling` билан бир хил.
           && (!('maxQtyPerItem' in d)
               || (d.maxQtyPerItem is int && d.maxQtyPerItem >= 1 && d.maxQtyPerItem <= 500))
+          // S4b: «олдиндан буюртма оламан» белгиси; вақт чегаралари (60 дақиқа…7 кун) — серверда.
+          && (!('acceptsPreorder' in d) || d.acceptsPreorder is bool)
           && d.delivery is map
           && d.delivery.get('mode', 'none') in ['ava_courier', 'own_courier', 'none']
           && d.payment is map;

@@ -323,6 +323,134 @@ async function main() {
     await call('customerCancelRestaurantOrder', { orderId: ok.orderId }, CUSTOMER);
     await tierMenu().doc('tier').delete(); await tierMenu().doc('tierbad').delete(); await tierMenu().doc('tiermin').delete();
   });
+  // ── 2d. Oldindan buyurtma (S4b) ──────────────────────────────────────
+  const MINMS = 60 * 1000;
+  const restRef = () => db.collection('restaurants').doc(rid);
+  /** Toshkent (UTC+5) bo'yicha `daysAhead` kundan keyingi hh:mm — epoch ms. */
+  const tashkentAt = (daysAhead, hh, mm = 0) => {
+    const t = new Date(Date.now() + 5 * 3600 * 1000);
+    return Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + daysAhead, hh - 5, mm);
+  };
+  const tashkentHourNow = () => new Date(Date.now() + 5 * 3600 * 1000).getUTCHours();
+  const pre = (ms, over = {}) => place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 1 }, { itemId: 'somsa', qty: 2 }], scheduledForMs: ms, ...over });
+  const cancelPre = (orderId) => call('customerCancelRestaurantOrder', { orderId }, CUSTOMER);
+
+  await check('PO1 restoran belgisi yo\'q — PREORDER_NOT_ACCEPTED; belgi bilan — buyurtma: scheduledFor, isPreorder, qabul muddati min(2 soat, bajarilishdan 30 daq), natijada scheduledForMs; oddiy buyurtmada maydon YO\'Q', async () => {
+    const at = Date.now() + 120 * MINMS;
+    await expectCode(pre(at), 'PREORDER_NOT_ACCEPTED', 'failed-precondition');
+    await restRef().update({ acceptsPreorder: true });
+    const r = await pre(at);
+    assert.strictEqual(r.scheduledForMs, at);
+    const od = await order(r.orderId);
+    assert.strictEqual(od.isPreorder, true);
+    assert.strictEqual(od.scheduledFor.toMillis(), at);
+    assert.strictEqual(od.restaurantStatus, 'placed');
+    const expectedDeadline = Math.min(Date.now() + 120 * MINMS, at - 30 * MINMS);
+    assert.ok(Math.abs(od.acceptDeadlineAt.toMillis() - expectedDeadline) < 10000, 'qabul muddati 90 daqiqa atrofida (120 daq oldindan: min(2 soat, 90 daq))');
+    assert.strictEqual(r.acceptDeadlineAtMs, od.acceptDeadlineAt.toMillis());
+    await cancelPre(r.orderId);
+    const normal = await place(rid, CUSTOMER);
+    const odn = await order(normal.orderId);
+    assert.strictEqual('scheduledFor' in odn, false);
+    assert.strictEqual('isPreorder' in odn, false);
+    assert.ok(Math.abs(odn.acceptDeadlineAt.toMillis() - (Date.now() + 5 * MINMS)) < 10000, 'oddiy buyurtma — 5 daqiqa');
+    await cancelPre(normal.orderId);
+  });
+  await check('PO2 oyna: 59 daqiqa — PREORDER_TOO_SOON; 61 daqiqa ok; 7 kundan uzoq — PREORDER_TOO_FAR; noto\'g\'ri tur — PREORDER_TIME_INVALID (buyurtma yaratilmaydi)', async () => {
+    await expectCode(pre(Date.now() + 59 * MINMS), 'PREORDER_TOO_SOON');
+    await expectCode(pre(Date.now() - 5 * MINMS), 'PREORDER_TOO_SOON');
+    await expectCode(pre(Date.now() + 7 * 24 * 60 * MINMS + 5 * MINMS), 'PREORDER_TOO_FAR');
+    for (const bad of ['1800000000000', 1.5, 0, -1, Number.NaN, true]) await expectCode(pre(bad), 'PREORDER_TIME_INVALID', 'invalid-argument');
+    const ok = await pre(Date.now() + 61 * MINMS);
+    await cancelPre(ok.orderId);
+    const ok7 = await pre(Date.now() + 7 * 24 * 60 * MINMS - 5 * MINMS);
+    await cancelPre(ok7.orderId);
+  });
+  await check('PO3 ish vaqti BAJARILISH vaqtida: hozir yopiq restoranga ertangi buyurtma mumkin; oddiy buyurtma — RESTAURANT_CLOSED; ish vaqtidan tashqari vaqt — PREORDER_CLOSED_AT_TIME', async () => {
+    const h = tashkentHourNow();
+    const hh = (n) => String((h + n) % 24).padStart(2, '0');
+    await restRef().update({ openingHours: { open: `${hh(2)}:00`, close: `${hh(5)}:00` } }); // hozir YOPIQ
+    try {
+      await expectCode(place(rid, CUSTOMER), 'RESTAURANT_CLOSED');
+      const inside = await pre(tashkentAt(2, (h + 3) % 24, 30));
+      await cancelPre(inside.orderId);
+      await expectCode(pre(tashkentAt(2, (h + 8) % 24, 0)), 'PREORDER_CLOSED_AT_TIME', 'failed-precondition');
+      await expectCode(pre(tashkentAt(2, (h + 5) % 24, 0)), 'PREORDER_CLOSED_AT_TIME');
+      const atOpen = await pre(tashkentAt(2, (h + 2) % 24, 0));
+      await cancelPre(atOpen.orderId);
+    } finally {
+      await restRef().update({ openingHours: admin.firestore.FieldValue.delete() });
+    }
+  });
+  await check('PO4 pauza bajarilishdan KEYIN tugasa — mumkin; bajarilish vaqtida ham davom etsa — RESTAURANT_PAUSED', async () => {
+    const at = Date.now() + 3 * 60 * MINMS;
+    await restRef().update({ pausedUntil: admin.firestore.Timestamp.fromMillis(at + 30 * MINMS) });
+    try {
+      await expectCode(pre(at), 'RESTAURANT_PAUSED');
+      await expectCode(place(rid, CUSTOMER), 'RESTAURANT_PAUSED');
+      await restRef().update({ pausedUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * MINMS) });
+      const ok = await pre(at);
+      await cancelPre(ok.orderId);
+    } finally {
+      await restRef().update({ pausedUntil: admin.firestore.FieldValue.delete() });
+    }
+  });
+  await check('PO5 yetkazish narxining tungi koeffitsienti BAJARILISH vaqtiga qarab (02:00 — tungi, 14:00 — kunduzgi); quoteRestaurantDelivery ham', async () => {
+    const day = await pre(tashkentAt(2, 14, 0));
+    const night = await pre(tashkentAt(2, 2, 0));
+    const od1 = await order(day.orderId);
+    const od2 = await order(night.orderId);
+    assert.strictEqual(od1.deliveryTariffSnapshot.night, false);
+    assert.strictEqual(od2.deliveryTariffSnapshot.night, true);
+    assert.ok(od2.deliveryFee > od1.deliveryFee, `tungi ${od2.deliveryFee} > kunduzgi ${od1.deliveryFee}`);
+    const qDay = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC, scheduledForMs: tashkentAt(2, 14, 0) }, CUSTOMER);
+    const qNight = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC, scheduledForMs: tashkentAt(2, 2, 0) }, CUSTOMER);
+    assert.strictEqual(qDay.deliveryFee, od1.deliveryFee);
+    assert.strictEqual(qNight.deliveryFee, od2.deliveryFee);
+    const qBad = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC, scheduledForMs: 'x' }, CUSTOMER);
+    assert.ok(qBad.deliveryFee > 0, 'noto\'g\'ri vaqt — oddiy hisob, xato emas');
+    await cancelPre(day.orderId); await cancelPre(night.orderId);
+  });
+  await check('PO6 idempotent: bir xil kalit — bitta buyurtma, scheduledForMs saqlanadi', async () => {
+    const k = key();
+    const at = Date.now() + 5 * 60 * MINMS;
+    const a = await pre(at, { idempotencyKey: k });
+    const b = await pre(at, { idempotencyKey: k });
+    assert.strictEqual(b.duplicate, true);
+    assert.deepStrictEqual([b.orderId, b.scheduledForMs], [a.orderId, at]);
+    await cancelPre(a.orderId);
+  });
+  await check('PO7 qabul qilingan oldindan buyurtma: kuryer ro\'yxatida YO\'Q, kuryer ololmaydi, «tayyor» bosilmaydi (PREORDER_TOO_EARLY) — oyna (90 daq) ochilgach hammasi ishlaydi', async () => {
+    const at = Date.now() + 5 * 60 * MINMS;
+    const r = await pre(at, { items: [{ itemId: 'osh', qty: 1 }, { itemId: 'somsa', qty: 2 }] });
+    const acc = await call('restaurantAcceptOrder', { orderId: r.orderId, prepTimeMin: 30 }, STAFF);
+    assert.strictEqual(acc.couriersNotified, 0);
+    const listed = async () => (await call('listNearbyRestaurantOrders', { ...R_LOC }, COURIER_A)).orders.some((x) => x.id === r.orderId);
+    assert.strictEqual(await listed(), false, 'kunlar oldin kuryer ro\'yxatiga chiqmaydi');
+    await expectCode(call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_A), 'PREORDER_TOO_EARLY', 'failed-precondition');
+    await expectCode(call('restaurantMarkReady', { orderId: r.orderId }, STAFF), 'PREORDER_TOO_EARLY', 'failed-precondition');
+    assert.strictEqual((await order(r.orderId)).restaurantStatus, 'accepted');
+    // 89 daqiqa qoldi — oyna ochiq
+    await db.collection('orders').doc(r.orderId).update({ scheduledFor: admin.firestore.Timestamp.fromMillis(Date.now() + 89 * MINMS) });
+    assert.strictEqual(await listed(), true, 'oyna ochildi — kuryer ro\'yxatida');
+    await call('restaurantMarkReady', { orderId: r.orderId }, STAFF);
+    assert.strictEqual((await order(r.orderId)).restaurantStatus, 'ready');
+    // tozalash: kuryer olmagan, restoran rad qiladi (2 % qaytadi)
+    await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'test' }, STAFF);
+  });
+  await check('PO8 oldindan buyurtmaning qabul muddati o\'tsa — taymaut (rad) oddiy yo\'l bilan; mijoz placed holatda bekor qila oladi', async () => {
+    const r = await pre(Date.now() + 4 * 60 * MINMS);
+    await db.collection('orders').doc(r.orderId).update({ acceptDeadlineAt: admin.firestore.Timestamp.fromMillis(Date.now() - 1000) });
+    const res = await fns.expireUnacceptedRestaurantOrders.run({});
+    assert.ok(res === null || res === undefined || typeof res === 'object');
+    const od = await order(r.orderId);
+    assert.strictEqual(od.restaurantStatus, 'rejected');
+    assert.strictEqual(od.rejectReason, 'timeout');
+    const c = await pre(Date.now() + 4 * 60 * MINMS);
+    await cancelPre(c.orderId);
+    assert.strictEqual((await order(c.orderId)).restaurantStatus, 'cancelled');
+    await db.collection('restaurants').doc(rid).update({ timeoutStreak: 0, acceptsPreorder: false });
+  });
   await check('P3quoteRestaurantDelivery = buyurtmadagi narx', async () => {
     const q = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC }, CUSTOMER);
     assert.strictEqual(q.deliveryFee, feeAva);

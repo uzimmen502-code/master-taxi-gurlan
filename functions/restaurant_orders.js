@@ -41,6 +41,7 @@ const geoHash = require('./geo_hash');
 const tariff = require('./restaurant_delivery_tariff');
 const localTaxi = require('./local_taxi');
 const qtyTiers = require('./restaurant_qty_tiers');
+const preorder = require('./restaurant_preorder');
 
 const RESTAURANTS = 'restaurants';
 const MEMBERS = 'members';
@@ -192,6 +193,13 @@ function isOpenAt(openingHours, date) {
   if (open == null || close == null || open === close) return true;
   const nowMin = ((date.getUTCHours() + TASHKENT_UTC_OFFSET_H) % 24) * 60 + date.getUTCMinutes();
   return open < close ? (nowMin >= open && nowMin < close) : (nowMin >= open || nowMin < close);
+}
+
+/** Xabar matni uchun Toshkent vaqti: `21.10 19:00` (TASHKENT_UTC_OFFSET_H; yozgi vaqt yo'q). */
+function tashkentLabel(date) {
+  const t = new Date(date.getTime() + TASHKENT_UTC_OFFSET_H * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(t.getUTCDate())}.${p(t.getUTCMonth() + 1)} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
 }
 
 function pickupCode() {
@@ -387,7 +395,7 @@ function attachRestaurantOrders(exportsObj, deps) {
   }
 
   // ── Yetkazish narxi (D-REST-4) ─────────────────────────────────────────
-  async function quoteDelivery(r, { toLat, toLng }) {
+  async function quoteDelivery(r, { toLat, toLng, at: atOverride }) {
     const tariffSnap = await db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]).get();
     const tariffData = tariffSnap.exists ? (tariffSnap.data() || {}) : {};
     const fromLat = Number(r.lat);
@@ -412,7 +420,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     if (route.distanceMeters > prices.maxKm * 1000) {
       throw fail('failed-precondition', 'DELIVERY_TOO_FAR', { maxKm: prices.maxKm });
     }
-    const at = now();
+    // Oldindan buyurtmada tungi koeffitsient YETKAZISH vaqtiga qarab (S4b): ertaga 02:00 ga buyurtma — tungi narx.
+    const at = atOverride || now();
     const night = tariff.isNightAt(at, prices.nightStartH, prices.nightEndH);
     const r2 = tariff.computeDeliveryFee({ distanceMeters: route.distanceMeters, prices, night });
     return {
@@ -859,8 +868,11 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (!rs.exists) throw fail('not-found', 'RESTAURANT_NOT_FOUND');
       const r = rs.data() || {};
       const mode = (r.delivery || {}).mode;
+      // Oldindan buyurtma: tungi koeffitsient yetkazish vaqtiga (noto'g'ri qiymat e'tiborsiz — oddiy hisob).
+      const sched = preorder.parseScheduled(data && data.scheduledForMs);
+      const quoteAt = sched.ms != null ? new Date(sched.ms) : undefined;
       if (mode === 'ava_courier') {
-        const q = await quoteDelivery(r, { toLat, toLng });
+        const q = await quoteDelivery(r, { toLat, toLng, at: quoteAt });
         return { deliveryMode: mode, deliveryFee: q.deliveryFee, distanceMeters: q.distanceMeters, tariffVersion: q.deliveryTariffVersion };
       }
       if (mode === 'own_courier') {
@@ -894,6 +906,9 @@ function attachRestaurantOrders(exportsObj, deps) {
       let deliveryPaymentMethod = DELIVERY_PAYMENT.includes(d.deliveryPaymentMethod) ? d.deliveryPaymentMethod : 'cash';
       const toLat = d.lat != null ? Number(d.lat) : Number.NaN;
       const toLng = d.lng != null ? Number(d.lng) : Number.NaN;
+      // Oldindan buyurtma (S4b): bajarilish vaqti; barcha chegara va ish vaqti tekshiruvi pastda, serverda.
+      const sched = preorder.parseScheduled(d.scheduledForMs);
+      if (sched.error) throw fail('invalid-argument', sched.error);
 
       const idemRef = db.collection(IDEMPOTENCY).doc(idempotencyKey);
       const existing = await idemRef.get();
@@ -911,9 +926,21 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (r.status !== RESTAURANT_STATUS.approved) throw fail('failed-precondition', 'RESTAURANT_NOT_APPROVED');
       if (canonicalUid(String(r.ownerUid || '')) === uid) throw fail('failed-precondition', 'OWN_RESTAURANT');
       const at = now();
-      const paused = r.pausedUntil && typeof r.pausedUntil.toMillis === 'function' && r.pausedUntil.toMillis() > at.getTime();
-      if (paused) throw fail('failed-precondition', 'RESTAURANT_PAUSED');
-      if (!isOpenAt(r.openingHours, at)) throw fail('failed-precondition', 'RESTAURANT_CLOSED');
+      const pausedUntilMs = r.pausedUntil && typeof r.pausedUntil.toMillis === 'function' ? r.pausedUntil.toMillis() : 0;
+      let scheduledFor = null;
+      if (sched.ms != null) {
+        // Oldindan buyurtma: restoran belgisi, 60 daqiqa…7 kun oynasi, ish vaqti VA pauza — BAJARILISH vaqtida.
+        // «Hozir ochiqmi» tekshiruvi qo'llanmaydi (restoran hozir yopiq bo'lsa ham ertangi buyurtma mumkin).
+        if (r.acceptsPreorder !== true) throw fail('failed-precondition', 'PREORDER_NOT_ACCEPTED');
+        const windowErr = preorder.checkWindow(at.getTime(), sched.ms);
+        if (windowErr) throw fail('failed-precondition', windowErr, { minLeadMin: preorder.MIN_LEAD_MIN, maxDays: preorder.MAX_DAYS });
+        scheduledFor = new Date(sched.ms);
+        if (pausedUntilMs > sched.ms) throw fail('failed-precondition', 'RESTAURANT_PAUSED');
+        if (!isOpenAt(r.openingHours, scheduledFor)) throw fail('failed-precondition', 'PREORDER_CLOSED_AT_TIME');
+      } else {
+        if (pausedUntilMs > at.getTime()) throw fail('failed-precondition', 'RESTAURANT_PAUSED');
+        if (!isOpenAt(r.openingHours, at)) throw fail('failed-precondition', 'RESTAURANT_CLOSED');
+      }
 
       const delivery = r.delivery || {};
       let deliveryMode;
@@ -989,7 +1016,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       let deliveryFeeSource = 'none';
       let deliveryQuote = {};
       if (deliveryMode === 'ava_courier') {
-        const q = await quoteDelivery(r, { toLat, toLng });
+        const q = await quoteDelivery(r, { toLat, toLng, at: scheduledFor || undefined });
         deliveryFee = q.deliveryFee;
         deliveryFeeSource = q.deliveryFeeSource;
         deliveryQuote = {
@@ -1019,7 +1046,10 @@ function attachRestaurantOrders(exportsObj, deps) {
 
       const avaFee = { ...tariff.computeAvaFee(itemsTotal), charged: false };
       const code = pickupCode();
-      const deadline = new Date(at.getTime() + ACCEPT_TIMEOUT_MIN * 60 * 1000);
+      // Oddiy buyurtma — 5 daqiqa; oldindan — 2 soat yoki bajarilishdan 30 daqiqa oldin (restoran_preorder.js).
+      const deadline = scheduledFor
+        ? new Date(preorder.acceptDeadlineMs(at.getTime(), scheduledFor.getTime()))
+        : new Date(at.getTime() + ACCEPT_TIMEOUT_MIN * 60 * 1000);
       const orderRef = db.collection(ORDERS).doc();
       const userData = user.data;
       const payload = {
@@ -1044,12 +1074,17 @@ function attachRestaurantOrders(exportsObj, deps) {
         ...(restaurantPayment ? { restaurantPayment } : {}),
         avaFee,
         acceptDeadlineAt: tsOf(deadline),
+        // Oldindan buyurtma (S4b): bajarilish vaqti; oddiy buyurtmada maydon YO'Q.
+        ...(scheduledFor ? { scheduledFor: tsOf(scheduledFor), isPreorder: true } : {}),
         prepTimeMin: intOr(r.prepTimeMin, 20, 5, 180),
         courierId: null, deliveryRouteId: null,
         balanceApplied: 0, cashDue: 0, cashPaid: 0,
         createdAt: ts(),
       };
-      const result = { ok: true, orderId: orderRef.id, itemsTotal, deliveryFee, total: payload.total, acceptDeadlineAtMs: deadline.getTime() };
+      const result = {
+        ok: true, orderId: orderRef.id, itemsTotal, deliveryFee, total: payload.total, acceptDeadlineAtMs: deadline.getTime(),
+        ...(scheduledFor ? { scheduledForMs: scheduledFor.getTime() } : {}),
+      };
       // Parallel takror: ikkinchi chaqiruv BIRINCHISINING natijasini oladi —
       // o'zi yaratmagan orderId'ni qaytarmaydi.
       const txRes = await db.runTransaction(async (t) => {
@@ -1063,7 +1098,10 @@ function attachRestaurantOrders(exportsObj, deps) {
       });
       if (txRes.dup) return { ...txRes.dup, duplicate: true };
       log('place', { orderId: orderRef.id, restaurantId, userId: uid, result: 'ok', itemsTotal, deliveryFee, deliveryMode, durationMs: Date.now() - t0 });
-      await notifyMembers(restaurantId, { title: '🍽 Yangi buyurtma', body: `${new Intl.NumberFormat('uz-UZ').format(itemsTotal)} so'm · ${ACCEPT_TIMEOUT_MIN} daqiqada qabul qiling`, orderId: orderRef.id });
+      const sum = new Intl.NumberFormat('uz-UZ').format(itemsTotal);
+      await notifyMembers(restaurantId, scheduledFor
+        ? { title: '📅 Oldindan buyurtma', body: `${sum} so'm · ${tashkentLabel(scheduledFor)} ga · qabul qiling`, orderId: orderRef.id }
+        : { title: '🍽 Yangi buyurtma', body: `${sum} so'm · ${ACCEPT_TIMEOUT_MIN} daqiqada qabul qiling`, orderId: orderRef.id });
       return result;
     });
 
@@ -1145,11 +1183,17 @@ function attachRestaurantOrders(exportsObj, deps) {
     log('accept', { orderId, userId: uid, result: 'ok', feeAmount: out.feeAmount, durationMs: Date.now() - t0 });
     let couriersNotified = 0;
     if (!out.idempotent) {
+      const schedMs = preorder.scheduledMsOf(out.od);
       if (out.customerUid) {
-        await notifyCustomer(canonicalUid(out.customerUid), { title: '✅ Buyurtma qabul qilindi', body: `Tayyorlanmoqda, ~${out.prepTimeMin} daqiqa`, orderId });
+        await notifyCustomer(canonicalUid(out.customerUid), schedMs != null
+          ? { title: '✅ Oldindan buyurtma qabul qilindi', body: `${tashkentLabel(new Date(schedMs))} ga tayyor bo'ladi`, orderId }
+          : { title: '✅ Buyurtma qabul qilindi', body: `Tayyorlanmoqda, ~${out.prepTimeMin} daqiqa`, orderId });
       }
-      // Kuryer tayyorlanish vaqtida yo'lga chiqsin (Meituan modeli, §12.9).
-      couriersNotified = (await notifyNearbyCouriers(orderId, out.od || {}, 'accepted')).notified;
+      // Kuryer tayyorlanish vaqtida yo'lga chiqsin (Meituan modeli, §12.9). Oldindan buyurtmada — faqat
+      // bajarilishdan 90 daqiqa oldin ochilgach (kunlar oldin chaqirilmasin); oynagacha — «tayyor» bosilganda.
+      if (schedMs == null || preorder.courierWindowOpen(now().getTime(), schedMs)) {
+        couriersNotified = (await notifyNearbyCouriers(orderId, out.od || {}, 'accepted')).notified;
+      }
     }
     return { ok: true, feeAmount: out.feeAmount, idempotent: !!out.idempotent, couriersNotified };
   });
@@ -1190,6 +1234,11 @@ function attachRestaurantOrders(exportsObj, deps) {
       const od = await getOrderInTx(t, orderRef);
       await requireMemberInTx(t, String(od.restaurantId || ''), uid);
       if (od.restaurantStatus === RS.ready) return { ok: true, idempotent: true };
+      // Oldindan buyurtma: «tayyor» (= kuryer chaqiruvi) faqat bajarilishdan 90 daqiqa oldin ochiladi.
+      const schedMs = preorder.scheduledMsOf(od);
+      if (schedMs != null && !preorder.courierWindowOpen(now().getTime(), schedMs)) {
+        throw fail('failed-precondition', 'PREORDER_TOO_EARLY', { opensAtMs: schedMs - preorder.COURIER_WINDOW_MIN * 60 * 1000 });
+      }
       const from = assertTransition(od, RS.ready, orderId);
       t.update(orderRef, statusPatch(RS.ready, { readyAt: ts(), readyBy: uid }));
       addEvent(t, orderRef, { from, to: RS.ready, actor: 'restaurant', actorId: uid });
@@ -1284,6 +1333,9 @@ function attachRestaurantOrders(exportsObj, deps) {
       const od = doc.data() || {};
       if (od.deliveryMode !== 'ava_courier') continue;
       if (courierAuthOf().isOwnOrder(od, courierId)) continue;
+      // Oldindan buyurtma kuryer ro'yxatiga bajarilishdan 90 daqiqa oldin chiqadi (S4b).
+      const schedMs = preorder.scheduledMsOf(od);
+      if (schedMs != null && !preorder.courierWindowOpen(now().getTime(), schedMs)) continue;
       const buyout = od.foodPaymentMethod === 'cash_buyout';
       const foodAmount = foodAmountOf(od);
       if (buyout && foodAmount > buyoutLimit) continue;
@@ -1331,6 +1383,8 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (assigned) throw fail('failed-precondition', 'COURIER_ASSIGNMENT_CONFLICT');
       if (od.deliveryMode !== 'ava_courier') throw fail('failed-precondition', 'NOT_AVA_COURIER_ORDER');
       if (![RS.accepted, RS.ready].includes(od.restaurantStatus)) throw fail('failed-precondition', 'ORDER_NOT_CLAIMABLE', { from: od.restaurantStatus });
+      const schedMs = preorder.scheduledMsOf(od);
+      if (schedMs != null && !preorder.courierWindowOpen(now().getTime(), schedMs)) throw fail('failed-precondition', 'PREORDER_TOO_EARLY');
       if (courierAuthOf().isOwnOrder(od, courierId)) throw fail('permission-denied', 'COURIER_OWN_ORDER');
       const rRef = db.collection(RESTAURANTS).doc(String(od.restaurantId || ''));
       const [memberSnap, prefsSnap, routeSnap] = await Promise.all([

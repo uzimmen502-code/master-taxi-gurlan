@@ -72,7 +72,11 @@ class PlaceOrderResult {
     required this.deliveryFee,
     required this.total,
     this.duplicate = false,
+    this.scheduledForMs,
   });
+
+  /// Олдиндан буюртманинг бажарилиш вақти (сервер қайтаради); оддий буюртмада `null`.
+  final int? scheduledForMs;
 
   final String orderId;
   final int itemsTotal;
@@ -86,6 +90,7 @@ class PlaceOrderResult {
         deliveryFee: (m['deliveryFee'] as num?)?.toInt() ?? 0,
         total: (m['total'] as num?)?.toInt() ?? 0,
         duplicate: m['duplicate'] == true,
+        scheduledForMs: (m['scheduledForMs'] as num?)?.toInt(),
       );
 }
 
@@ -520,12 +525,15 @@ class RestaurantsRepository {
     required double lat,
     required double lng,
     int itemsTotal = 0,
+    DateTime? scheduledFor,
   }) async =>
       DeliveryQuote.fromMap(await _call('quoteRestaurantDelivery', {
         'restaurantId': restaurantId,
         'lat': lat,
         'lng': lng,
         'itemsTotal': itemsTotal,
+        // Олдиндан буюртма: тунги коэффициент етказиш вақтига қараб (S4b).
+        if (scheduledFor != null) 'scheduledForMs': scheduledFor.millisecondsSinceEpoch,
       }));
 
   Future<PlaceOrderResult> placeOrder({
@@ -541,8 +549,10 @@ class RestaurantsRepository {
     String note = '',
     int utensils = 0,
     String userName = '',
+    DateTime? scheduledFor,
   }) async =>
       PlaceOrderResult.fromMap(await _call('placeRestaurantOrder', {
+        if (scheduledFor != null) 'scheduledForMs': scheduledFor.millisecondsSinceEpoch,
         'idempotencyKey': idempotencyKey,
         'restaurantId': restaurantId,
         'items': items,

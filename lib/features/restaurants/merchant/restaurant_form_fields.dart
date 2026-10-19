@@ -253,7 +253,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
           children: [
             for (final m in RestaurantFormData.deliveryModes)
               ChoiceChip(
-                label: Text(context.tr('restaurants_m_delivery_${m == 'ava_courier' ? 'ava' : (m == 'own_courier' ? 'own' : 'none')}')),
+                label: Text(context.tr('restaurants_m_delivery_${m == 'ava_courier' ? 'ava' : 'own'}')),
                 selected: d.deliveryMode == m,
                 onSelected: (_) => _set(() => d.deliveryMode = m),
               ),
@@ -404,6 +404,16 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
             ),
             // Бўш/0 — хато (`validate` → `max_qty`), жимгина default қўйилмайди.
             onChanged: (v) => _set(() => d.maxQtyPerItem = _int(v)),
+          ),
+          // Олдиндан буюртма (S4b): профилни таҳрирлашда (рўйхатдан ўтишда эмас).
+          SwitchListTile(
+            key: const ValueKey('accepts-preorder'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(context.tr('restaurants_m_preorder'), style: TextStyle(fontSize: 13, color: c.ink)),
+            subtitle: Text(context.tr('restaurants_m_preorder_hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
+            value: d.acceptsPreorder,
+            onChanged: (v) => _set(() => d.acceptsPreorder = v),
           ),
         ],
         _section(context.tr('restaurants_m_hours')),

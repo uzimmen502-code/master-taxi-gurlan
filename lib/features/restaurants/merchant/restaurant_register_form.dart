@@ -29,6 +29,7 @@ class RestaurantFormData {
     this.prepTimeMin = 20,
     this.minOrderAmount = 0,
     this.maxQtyPerItem = Restaurant.defaultMaxQtyPerItem,
+    this.acceptsPreorder = false,
     this.alwaysOpen = true,
     this.openTime = '09:00',
     this.closeTime = '22:00',
@@ -62,6 +63,9 @@ class RestaurantFormData {
   /// Бир таомдан энг кўп миқдор (D-REST-26): фақат «Дўкон»да таҳрирланади,
   /// рўйхатдан ўтишда default.
   int maxQtyPerItem;
+
+  /// «Олдиндан буюртма оламан» (S4b): фақат «Дўкон»да таҳрирланади, рўйхатдан ўтишда ўчиқ.
+  bool acceptsPreorder;
   bool alwaysOpen;
   String openTime;
   String closeTime;
@@ -72,7 +76,10 @@ class RestaurantFormData {
   /// `yatt`/`llc` («＋» менюсида икки алоҳида банд, эга 2026-10-16).
   static const homeCookLegalType = 'individual';
   static const cafeLegalTypes = ['yatt', 'llc'];
-  static const deliveryModes = ['ava_courier', 'own_courier', 'none'];
+  /// Етказиш усули: «Етказмайман» ёқ (эга, 2026-10-19) — ҳар ресторан ё AVA курьери, ё ўз курьери билан
+  /// етказади; «олиб кетиш» алоҳида қўшимча ([pickup]). Эски ҳужжатдаги `none` ҳам ўқилади
+  /// ([Restaurant]/сервер), лекин формада танлаб бўлмайди: таҳрирда эга бирини танлайди (текширув хатоси).
+  static const deliveryModes = ['ava_courier', 'own_courier'];
 
   /// Тавсия этиладиган ошхона турлари (PROPOSED; матн калитлари
   /// `restaurants_cuisine_*`). Ресторан 1–3 та танлайди.
@@ -88,7 +95,6 @@ class RestaurantFormData {
     if (address.trim().isEmpty) errs.add('address');
     if (!legalTypes.contains(legalType)) errs.add('legal_type');
     if (!deliveryModes.contains(deliveryMode)) errs.add('delivery_mode');
-    if (deliveryMode == 'none' && !pickup) errs.add('delivery_or_pickup');
     if (!prepay && !cash) errs.add('payment_method');
     final card = cardNumber.replaceAll(RegExp(r'\D'), '');
     if (prepay && card.isNotEmpty && card.length != 16) errs.add('card_number');
@@ -150,6 +156,7 @@ class RestaurantFormData {
         'prepTimeMin': prepTimeMin,
         'minOrderAmount': minOrderAmount,
         'maxQtyPerItem': maxQtyPerItem,
+        'acceptsPreorder': acceptsPreorder,
         'delivery': _delivery(),
         'payment': {'prepay': prepay, 'cash': cash},
       };

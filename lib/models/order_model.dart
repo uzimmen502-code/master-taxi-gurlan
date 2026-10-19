@@ -89,6 +89,11 @@ class OrderModel {
   /// (`submitDishRatings`); эски буюртмаларда йўқ — бўш харита.
   final Map<String, int> dishRatings;
 
+  /// Олдиндан буюртманинг бажарилиш вақти (S4b); оддий буюртмада `null`.
+  final DateTime? scheduledFor;
+
+  bool get isPreorder => scheduledFor != null;
+
   /// Ресторан буюртмаси етказилган вақт (`deliveredAt`, эскиларда `statusUpdatedAt`) — баҳолаш
   /// муддати шундан ҳисобланади.
   final DateTime? deliveredAt;
@@ -145,6 +150,7 @@ class OrderModel {
     this.avaFeeRefunded = false,
     this.dishRatings = const {},
     this.deliveredAt,
+    this.scheduledFor,
   });
 
   bool get isRestaurant => type == 'restaurant';
@@ -340,6 +346,7 @@ class OrderModel {
       avaFeeRefunded: d['avaFee'] is Map && (d['avaFee'] as Map)['refunded'] == true,
       dishRatings: parseDishRatings(d['dishRatings']),
       deliveredAt: _parseDate(d['deliveredAt']) ?? _parseDate(d['statusUpdatedAt']),
+      scheduledFor: _parseDate(d['scheduledFor']),
     );
   }
 }

@@ -16,6 +16,7 @@ import '../../home/widgets/ava_chip.dart';
 import '../../home/widgets/ava_section.dart';
 import '../../profile/screens/wallet_screen.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/preorder.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'merchant_order_actions.dart';
@@ -305,7 +306,24 @@ class _MerchantOrderCard extends StatelessWidget {
               ),
             ],
           ),
-          if (isFresh && secs != null) ...[
+          // Олдиндан буюртма (S4b): бажарилиш вақти кўриниб туради; муддат дақиқалар эмас, соатлар — сония ҳисоби йўқ.
+          if (o.scheduledFor != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              key: const ValueKey('preorder-badge'),
+              children: [
+                Icon(Icons.event_rounded, size: 16, color: c.brandText),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    context.tr('restaurants_preorder_for').replaceAll('{when}', Preorder.format(o.scheduledFor!)),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.brandText),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (isFresh && secs != null && o.scheduledFor == null) ...[
             const SizedBox(height: 6),
             Text(
               secs > 0

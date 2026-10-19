@@ -232,7 +232,11 @@ class Restaurant {
     this.ratingAvg = 0,
     this.ratingCount = 0,
     this.maxQtyPerItem = defaultMaxQtyPerItem,
+    this.acceptsPreorder = false,
   });
+
+  /// Олдиндан буюртма оладими (S4b). Эга белгилайди; вақт чегаралари серверда.
+  final bool acceptsPreorder;
 
   /// Бир таомдан энг кўп миқдор (D-REST-26). Майдон йўқ эски ресторанлар учун
   /// — `functions/restaurant_orders.js` даги `DEFAULT_MAX_QTY` нусхаси;
@@ -321,6 +325,7 @@ class Restaurant {
       ratingAvg: _dbl(d['ratingAvg']) ?? 0,
       ratingCount: _int(d['ratingCount']),
       maxQtyPerItem: _qtyLimit(d['maxQtyPerItem']),
+      acceptsPreorder: d['acceptsPreorder'] == true,
     );
   }
 

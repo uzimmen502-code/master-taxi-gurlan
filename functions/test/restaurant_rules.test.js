@@ -85,6 +85,12 @@ async function main() {
       type: 'restaurant', restaurantId: R1, restaurantStatus: 'accepted', status: 'accepted', fulfillmentStatus: 'confirmed',
       userPhone: CUSTOMER, phone: CUSTOMER, address: 'Mijoz uyi', total: 60000, courierId: null, deliveryRouteId: null,
     });
+    for (const [id, st] of [['live_picked', 'picked'], ['live_accepted', 'accepted'], ['live_placed', 'placed'], ['live_delivered', 'delivered']]) {
+      await db.doc(`orders/${id}`).set({
+        type: 'restaurant', restaurantId: R1, restaurantStatus: st, userPhone: CUSTOMER, courierId: COURIER, courierName: 'Ali',
+      });
+    }
+    await db.doc('orders/live_bread').set({ type: 'bread', restaurantStatus: 'picked', userPhone: CUSTOMER, courierId: COURIER });
     await db.doc(`orders/${O1}/order_events/e1`).set({ from: null, to: 'placed', actor: 'customer' });
     await db.doc(`orders/${O1}/private/secrets`).set({ pickupCode: '1234', pickupAttempts: 0 });
     await db.doc(`restaurant_customer_stats/${CUSTOMER}`).set({ strikes: 0, completedCount: 1 });
@@ -296,6 +302,51 @@ async function main() {
     await assertFails(as(OWNER).doc(`restaurants/${R1}/menu_items/q1`).update({ price: 30000 }), 'asosiy narx pog\'onadan past bo\'lib qoldi (hujjat natijasi tekshiriladi)');
     await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/q1`).update({ price: 50000 }));
     await assertFails(putDish(STRANGER, 'q_stranger', { qtyTiers: [t(10, 38000)] }), 'begona yozolmaydi');
+  });
+  await check('S6 order_courier_live: faqat tayinlangan kuryer, faqat FAOL holatda yozadi; mijoz, restoran a\'zosi va admin o\'qiydi; begona va boshqa kuryer — yo\'q', async () => {
+    const { serverTimestamp } = require('firebase/firestore');
+    const live = (who, oid = 'live_picked') => as(who).doc(`order_courier_live/${oid}`);
+    const pos = (extra = {}) => ({ orderId: 'live_picked', lat: 41.84, lng: 60.39, updatedAt: serverTimestamp(), ...extra });
+    // yozish
+    await assertSucceeds(live(COURIER).set(pos()));
+    await assertSucceeds(live(COURIER).set(pos({ lat: 41.85, heading: 90, speed: 7.5, accuracy: 12, courierId: COURIER })));
+    await assertSucceeds(live(COURIER, 'live_accepted').set(pos({ orderId: 'live_accepted' })), 'qabul qilingan, kuryer biriktirilgan — ruxsat');
+    await assertFails(live(COURIER, 'live_placed').set(pos({ orderId: 'live_placed' })), 'placed — hali emas');
+    await assertFails(live(COURIER, 'live_delivered').set(pos({ orderId: 'live_delivered' })), 'yetkazilgach yozib bo\'lmaydi');
+    await assertFails(live(COURIER, 'live_bread').set(pos({ orderId: 'live_bread' })), 'restoran buyurtmasi emas');
+    await assertFails(live(COURIER, 'yoq_buyurtma').set(pos({ orderId: 'yoq_buyurtma' })), 'buyurtma yo\'q');
+    for (const who of [CUSTOMER, OWNER, STAFF, STRANGER, ADMIN]) await assertFails(live(who).set(pos()), `yozish ${who}`);
+    // qiymatlar
+    await assertFails(live(COURIER).set(pos({ lat: 91 })), 'lat > 90');
+    await assertFails(live(COURIER).set(pos({ lng: -181 })), 'lng');
+    await assertFails(live(COURIER).set(pos({ lat: '41.8' })), 'lat satr');
+    await assertFails(live(COURIER).set(pos({ heading: 361 })));
+    await assertFails(live(COURIER).set(pos({ speed: -1 })));
+    await assertFails(live(COURIER).set(pos({ orderId: 'boshqa' })), 'orderId yo\'lga mos emas');
+    await assertFails(live(COURIER).set(pos({ courierId: STRANGER })), 'courierId o\'zi emas');
+    await assertFails(live(COURIER).set(pos({ extra: 1 })), 'begona kalit');
+    await assertFails(live(COURIER).set(pos({ updatedAt: new Date() })), 'updatedAt server vaqti emas');
+    await assertFails(live(COURIER).set({ orderId: 'live_picked', lat: 41.8, lng: 60.3 }), 'updatedAt yo\'q');
+    // o'qish
+    await assertSucceeds(live(CUSTOMER).get(), 'mijoz');
+    await assertSucceeds(live(OWNER).get(), 'restoran egasi');
+    await assertSucceeds(live(STAFF).get(), 'restoran xodimi');
+    await assertSucceeds(live(ADMIN).get(), 'admin');
+    await assertFails(live(COURIER).get(), 'kuryer faqat yozadi — o\'qish unga kerak emas (minimal ruxsat)');
+  });
+  await check('S6 order_courier_live: begona/boshqa restoran a\'zosi va anonim o\'qiy olmaydi; ro\'yxat yo\'q; o\'chirish — faqat kuryer yoki admin', async () => {
+    const live = (who) => as(who).doc('order_courier_live/live_picked');
+    await assertFails(live(STRANGER).get());
+    await assertFails(live(OWNER2).get(), 'boshqa restoran egasi');
+    await assertFails(anon().doc('order_courier_live/live_picked').get());
+    await assertFails(as(ADMIN).collection('order_courier_live').get(), 'ro\'yxat umuman yo\'q');
+    await assertFails(as(CUSTOMER).collection('order_courier_live').where('orderId', '==', 'live_picked').get());
+    await assertFails(live(CUSTOMER).delete());
+    await assertFails(live(OWNER).delete());
+    await assertFails(live(STRANGER).delete());
+    await assertSucceeds(live(COURIER).delete());
+    await assertSucceeds(as(COURIER).doc('order_courier_live/live_picked').set({ orderId: 'live_picked', lat: 41.8, lng: 60.3, updatedAt: require('firebase/firestore').serverTimestamp() }));
+    await assertSucceeds(live(ADMIN).delete());
   });
   await check('S4b acceptsPreorder: a\'zo bool yozadi; satr/son/null — rad; begona yozolmaydi', async () => {
     const ref = (who) => as(who).doc(`restaurants/${R1}`);

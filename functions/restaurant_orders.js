@@ -60,6 +60,9 @@ const MODULE_CONFIG = ['module_config', 'restaurants_all'];
 const TARIFF_DOC = ['settings', 'restaurant_delivery'];
 const APP_SETTINGS = ['settings', 'app'];
 const EARNINGS_ACCOUNT = 'earnings:ava_restaurant_fee';
+/** Kuryerning buyurtma bo'yicha jonli nuqtasi (S6); yozuvchi — kuryer ilovasi (rules), o'chiruvchi — shu fayl. */
+const COURIER_LIVE = 'order_courier_live';
+const COURIER_LIVE_TTL_MIN = 120;
 
 const MODULE_ID = 'restaurants';
 /** Restoran qabul qilish muddati (PROPOSED, Wolt 3 daq / §12.8 5 daq). */
@@ -445,6 +448,17 @@ function attachRestaurantOrders(exportsObj, deps) {
     const fromLng = Number(r.lng);
     if (!validLatLng(fromLat, fromLng)) return null;
     return tariff.haversineMeters(fromLat, fromLng, toLat, toLng);
+  }
+
+  /** Kuryerning ko'rsatiladigan ismi (profilidagi `name`, ≤ 40 belgi); topilmasa bo'sh (xato yutiladi). */
+  async function courierDisplayName(courierId) {
+    try {
+      const u = await findUserRef(canonicalUid(String(courierId || '')));
+      const d = u ? u.data : {};
+      return str(d.name || d.fullName || '', 40);
+    } catch (e) {
+      return '';
+    }
   }
 
   // ── Xabarlar (best-effort, tranzaksiyadan tashqarida) ───────────────────
@@ -1213,6 +1227,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       const routeRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
       const routeSnap = routeRef ? await t.get(routeRef) : null;
       const refund = commitFeeInTx(t, prep, { orderId, actorId: uid });
+      t.delete(db.collection(COURIER_LIVE).doc(orderId)); // kuryer nuqtasi qolib ketmasin (S6, 40-qoida)
       t.update(orderRef, statusPatch(RS.rejected, { rejectedAt: ts(), rejectedBy: uid, rejectReason: reason, 'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null }));
       detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'restaurant_rejected');
       addEvent(t, orderRef, { from, to: RS.rejected, actor: 'restaurant', actorId: uid, reason, meta: { refundAmount: refund.amount } });
@@ -1376,6 +1391,7 @@ function attachRestaurantOrders(exportsObj, deps) {
     const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.new);
     const orderId = str(data && data.orderId, 64);
     const orderRef = db.collection(ORDERS).doc(orderId);
+    const courierName = await courierDisplayName(courierId);
     const out = await withContention(orderRef, 'claim', () => db.runTransaction(async (t) => {
       const od = await getOrderInTx(t, orderRef);
       const assigned = canonicalUid(String(od.courierId || ''));
@@ -1415,7 +1431,8 @@ function attachRestaurantOrders(exportsObj, deps) {
         });
         routeId = routeRef.id;
       }
-      t.update(orderRef, { courierId, deliveryRouteId: routeId, courierClaimedAt: ts(), updatedAt: ts() });
+      // `courierName` — mijoz va restoran egasi kimni kutishini bilishi uchun (S6); faqat buyurtma ishtirokchilari o'qiydi.
+      t.update(orderRef, { courierId, deliveryRouteId: routeId, courierClaimedAt: ts(), updatedAt: ts(), ...(courierName ? { courierName } : {}) });
       addEvent(t, orderRef, { from: od.restaurantStatus, to: od.restaurantStatus, actor: 'courier', actorId: courierId, reason: 'claimed', meta: { routeId } });
       return { ok: true, routeId, restaurantId: od.restaurantId, customerUid: od.userPhone };
     }), (od) => {
@@ -1561,6 +1578,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         ? (buyout ? foodAmount : 0) + (deliveryPaymentMethod === 'cash' ? fee : 0)
         : 0;
       let refund = { applied: false, amount: 0 };
+      t.delete(db.collection(COURIER_LIVE).doc(orderId)); // yetkazish tugadi — kuryer nuqtasi o'chadi (S6, 40-qoida)
       if (to === RS.delivered) {
         t.update(orderRef, statusPatch(RS.delivered, {
           deliveredAt: ts(), completedAt: ts(), courierId, deliveryPaymentMethod, deliveryFeeFallback,
@@ -1652,6 +1670,29 @@ function attachRestaurantOrders(exportsObj, deps) {
     return { scanned: snap.size, expired };
   }
 
+  /**
+   * Kuryer jonli nuqtalarini tozalash (S6, 40-qoida: PII minimal): hujjati 2 soatdan eski yoki buyurtmasi
+   * endi faol emas (terminal holat / yo'q). Asosiy tozalash buyurtma yakunida tranzaksiya ichida; bu — zaxira.
+   */
+  async function sweepCourierLive() {
+    const cutoff = tsOf(new Date(now().getTime() - COURIER_LIVE_TTL_MIN * 60 * 1000));
+    const snap = await db.collection(COURIER_LIVE).where('updatedAt', '<', cutoff).limit(400).get();
+    if (snap.empty) return { deleted: 0 };
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return { deleted: snap.size };
+  }
+
+  exportsObj.sweepRestaurantCourierLive = functions.pubsub
+    .schedule('every 60 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => {
+      const r = await sweepCourierLive();
+      if (r.deleted > 0) log('courier_live_sweep', { result: 'ok', deleted: r.deleted });
+      return null;
+    });
+
   exportsObj.expireUnacceptedRestaurantOrders = functions.pubsub
     .schedule('every 1 minutes')
     .timeZone('Asia/Tashkent')
@@ -1659,7 +1700,7 @@ function attachRestaurantOrders(exportsObj, deps) {
 
   return {
     // test/diagnostika uchun sof qismlar
-    RS, TRANSITIONS, LEGACY, canTransition, isOpenAt, expireUnaccepted, moduleAccess,
+    RS, TRANSITIONS, LEGACY, canTransition, isOpenAt, expireUnaccepted, moduleAccess, sweepCourierLive,
     ACCEPT_TIMEOUT_MIN, AUTO_PAUSE_AFTER_TIMEOUTS,
   };
 }

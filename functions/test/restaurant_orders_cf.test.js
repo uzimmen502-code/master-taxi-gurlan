@@ -451,6 +451,20 @@ async function main() {
     assert.strictEqual((await order(c.orderId)).restaurantStatus, 'cancelled');
     await db.collection('restaurants').doc(rid).update({ timeoutStreak: 0, acceptsPreorder: false });
   });
+  await check('S6 jonli nuqta tozalash: restoran rad qilsa o\'chadi; soatlik supurgi 2 soatdan eskisini o\'chiradi, yangisiga tegmaydi', async () => {
+    const live = (id) => db.collection('order_courier_live').doc(id);
+    const r = await place(rid, CUSTOMER);
+    await live(r.orderId).set({ orderId: r.orderId, lat: 41.8, lng: 60.3, updatedAt: admin.firestore.Timestamp.now() });
+    await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'test' }, OWNER);
+    assert.strictEqual((await live(r.orderId).get()).exists, false, 'rad — nuqta o\'chdi');
+    const old = admin.firestore.Timestamp.fromMillis(Date.now() - 3 * 3600 * 1000);
+    await live('sw_old').set({ orderId: 'sw_old', lat: 1, lng: 1, updatedAt: old });
+    await live('sw_new').set({ orderId: 'sw_new', lat: 1, lng: 1, updatedAt: admin.firestore.Timestamp.now() });
+    await fns.sweepRestaurantCourierLive.run({});
+    assert.strictEqual((await live('sw_old').get()).exists, false);
+    assert.strictEqual((await live('sw_new').get()).exists, true);
+    await live('sw_new').delete();
+  });
   await check('P3quoteRestaurantDelivery = buyurtmadagi narx', async () => {
     const q = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC }, CUSTOMER);
     assert.strictEqual(q.deliveryFee, feeAva);
@@ -619,7 +633,9 @@ async function main() {
     const far = await call('listNearbyRestaurantOrders', { lat: 41.3, lng: 69.2 }, COURIER_A); // Toshkent
     assert.ok(!far.orders.find((x) => x.id === o1), 'radiusdan tashqarida ko\'rinmaydi');
   });
-  await check('K2 ikki kuryer bir vaqtda oladi → bittasi; marshrut hujjati; takror idempotent; boshqasi CONFLICT', async () => {
+  await check('K2 ikki kuryer bir vaqtda oladi → bittasi; marshrut hujjati; takror idempotent; boshqasi CONFLICT; olgan kuryerning ismi buyurtmaga yoziladi (S6)', async () => {
+    await db.collection('users').doc(COURIER_A).update({ name: 'Ali Valiyev' });
+    await db.collection('users').doc(COURIER_B).update({ name: 'Bobur' });
     const [a, b] = await Promise.allSettled([
       call('courierClaimRestaurantOrder', { orderId: o1 }, COURIER_A),
       call('courierClaimRestaurantOrder', { orderId: o1 }, COURIER_B),
@@ -630,6 +646,7 @@ async function main() {
     assert.strictEqual(bad[0].reason.details.code, 'COURIER_ASSIGNMENT_CONFLICT');
     const od = await order(o1);
     assert.ok([COURIER_A, COURIER_B].includes(od.courierId));
+    assert.strictEqual(od.courierName, od.courierId === COURIER_A ? 'Ali Valiyev' : 'Bobur', 'kuryer ismi (faqat ishtirokchilar o\'qiydi)');
     const route = await db.collection('delivery_routes').doc(od.deliveryRouteId).get();
     assert.strictEqual(route.data().courierId, od.courierId);
     assert.deepStrictEqual(route.data().orders, [o1]);
@@ -677,7 +694,9 @@ async function main() {
     assert.strictEqual((await order(o1)).restaurantStatus, 'arrived');
     const c0 = await pcBal(CUSTOMER);
     const k0 = await pcBal(COURIER_A);
+    await db.collection('order_courier_live').doc(o1).set({ orderId: o1, lat: 41.84, lng: 60.39, updatedAt: admin.firestore.Timestamp.now() });
     const r = await call('courierCompleteRestaurantDelivery', { orderId: o1, outcome: 'delivered' }, COURIER_A);
+    assert.strictEqual((await db.collection('order_courier_live').doc(o1).get()).exists, false, 'yetkazish tugadi — jonli nuqta o\'chdi (S6)');
     assert.strictEqual(r.walletPaid, feeAva);
     assert.strictEqual(r.cashCollected, 0, 'oldindan to\'langan + hamyon → naqd yo\'q');
     assert.strictEqual(await pcBal(CUSTOMER), c0 - feeAva);

@@ -1431,6 +1431,52 @@ service cloud.firestore {
           && isRestaurantMember(resource.data.restaurantId);
     }
 
+    // КУРЬЕРНИНГ ЖОНЛИ ЖОЙИ — буюртма бўйича (S6, эга 2026-10-19: мижоз ва ресторан эгаси курьерни кузатсин).
+    // `order_courier_live/{orderId}`: ФАҚАТ шу буюртмага биринчи бўлиб тайинланган курьер ёзади ва ФАҚАТ
+    // буюртма фаол ҳолатларда (қабул қилинган…етказиш), ўқийди — буюртма эгаси (мижоз), шу ресторан а'золари
+    // ва админ. Курьернинг умумий жойлашуви (`provider_presence`) ҳамон ёпиқ: бу ерда фақат битта буюртма
+    // давомидаги нуқта (40-қоида). Терминал ҳолатда сервер ҳужжатни ўчиради (+ соатлик супуриш).
+    function liveOrderData(oid) {
+      return get(/databases/$(database)/documents/orders/$(oid)).data;
+    }
+    function liveOrderActive(o) {
+      return o.get('type', '') == 'restaurant'
+          && o.get('restaurantStatus', '') in ['accepted', 'ready', 'picked', 'arrived'];
+    }
+    function liveIsCourierOf(o) {
+      let me = userDocIdFromPhoneToken();
+      return me != '' && phoneDocIdsMatch(me, string(o.get('courierId', '')));
+    }
+    function liveWriteOk(oid) {
+      let d = request.resource.data;
+      return exists(/databases/$(database)/documents/orders/$(oid))
+          && liveOrderActive(liveOrderData(oid))
+          && liveIsCourierOf(liveOrderData(oid))
+          && d.keys().hasOnly(['orderId', 'courierId', 'lat', 'lng', 'heading', 'speed', 'accuracy', 'updatedAt'])
+          && d.keys().hasAll(['orderId', 'lat', 'lng', 'updatedAt'])
+          && d.orderId == oid
+          && d.lat is number && d.lat >= -90 && d.lat <= 90
+          && d.lng is number && d.lng >= -180 && d.lng <= 180
+          && (!('heading' in d) || (d.heading is number && d.heading >= 0 && d.heading <= 360))
+          && (!('speed' in d) || (d.speed is number && d.speed >= 0 && d.speed <= 100))
+          && (!('accuracy' in d) || (d.accuracy is number && d.accuracy >= 0 && d.accuracy <= 100000))
+          && (!('courierId' in d) || (d.courierId is string && phoneDocIdsMatch(userDocIdFromPhoneToken(), d.courierId)))
+          && d.updatedAt == request.time;
+    }
+    match /order_courier_live/{oid} {
+      allow get: if isAuth() && exists(/databases/$(database)/documents/orders/$(oid)) && (
+          isAdmin()
+          || phoneDocIdsMatch(phoneFromToken(), phoneDigits(liveOrderData(oid).get('userPhone', '')))
+          || isRestaurantMember(liveOrderData(oid).get('restaurantId', '_'))
+      );
+      allow list: if false;
+      allow create, update: if isAuth() && liveWriteOk(oid);
+      allow delete: if isAuth() && (
+          isAdmin()
+          || (exists(/databases/$(database)/documents/orders/$(oid)) && liveIsCourierOf(liveOrderData(oid)))
+      );
+    }
+
     match /orders/{orderId} {
       allow get: if isAuth() && (
           isStaff()

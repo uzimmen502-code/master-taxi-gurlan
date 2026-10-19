@@ -7,7 +7,6 @@ import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_feedback.dart';
 import '../widgets/realty_tier_sheet.dart';
-import '../widgets/realty_video_sheet.dart';
 import '../widgets/realty_wallet.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import 'add_realty_listing_screen.dart';
@@ -589,20 +588,8 @@ class _MyListingTileState extends State<_MyListingTile> {
                   ),
                 ),
               ),
-            // ЭСКИ «Видео боғлаш» (мавжуд клипни, жумладан пуллик реклама видеосини боғлаш) фақат объектда ЭСКИ боғлама
-            // БОР бўлса кўринади — алмаштириш/ажратиш учун. Янги видео — таҳрир формасидаги «Видео қўшиш (ихтиёрий,
-            // 60 сония гача)» блокида (иккита тугма бўлиб қолмасин; эга, 2026-10-20).
-            if (r.hasVideo) ...[
-              Divider(height: 1, color: c.line),
-              TextButton.icon(
-                onPressed: _deleting
-                    ? null
-                    : () => showRealtyVideoSheet(context, listing: r),
-                icon: const Icon(Icons.play_circle_outline, size: 18),
-                label: Text(context.tr('realty_video_change')),
-                style: TextButton.styleFrom(foregroundColor: c.ink2),
-              ),
-            ],
+            // Видео — ягона умумий қатлам: таҳрир формасидаги «Видео қўшиш (ихтиёрий, 60 сония гача)» блоки. Эски
+            // «мавжуд клипни боғлаш» тугмаси олиб ташланди (дубликат, эга 2026-10-20).
             Divider(height: 1, color: c.line),
             Row(
               children: [

@@ -12,7 +12,7 @@ import '../realty_tabs.dart';
 import '../widgets/realty_controls.dart';
 import '../widgets/realty_feedback.dart';
 import '../widgets/realty_package_sheet.dart';
-import '../widgets/realty_video_sheet.dart';
+import '../widgets/realty_video_open.dart';
 
 /// Битта объект карточкаси.
 ///

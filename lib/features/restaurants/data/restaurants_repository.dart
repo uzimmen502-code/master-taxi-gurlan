@@ -11,6 +11,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../../core/utils/merged_stream.dart';
 import '../../../models/order_model.dart';
 import '../../../utils/geo_hash.dart';
+import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 
 class RestaurantsException implements Exception {
@@ -329,8 +330,27 @@ class RestaurantsRepository {
     return ref.id;
   }
 
-  Future<void> deleteCategory(String restaurantId, String id) =>
-      _restaurants.doc(restaurantId).collection('menu_categories').doc(id).delete();
+  /// Категорияни ўчиради; ундаги таомлар ЎЧМАЙДИ — «категориясиз»
+  /// (`categoryId: ''`, мижозда «Бошқалар») бўлади. Аввал таомларда ўлик
+  /// `categoryId` қолиб кетарди (эга рўйхатида категория номи йўқолар, форма
+  /// эса жимгина бошқа бўлимга ўтказарди).
+  Future<void> deleteCategory(String restaurantId, String id) async {
+    final rest = _restaurants.doc(restaurantId);
+    try {
+      final snap = await rest.collection('menu_items').where('categoryId', isEqualTo: id).get();
+      for (final part in MenuCategoryChoice.chunks(snap.docs)) {
+        final batch = _db.batch();
+        for (final d in part) {
+          batch.update(d.reference, {'categoryId': MenuCategoryChoice.none, 'updatedAt': FieldValue.serverTimestamp()});
+        }
+        await batch.commit();
+      }
+    } catch (_) {
+      // Қайта ўтказиш йиқилса ҳам категория ўчади: таомлар мижозда барибир
+      // «Бошқалар»да чиқади (`_sections`), форма эса ўликни `none` деб олади.
+    }
+    await rest.collection('menu_categories').doc(id).delete();
+  }
 
   Future<String> upsertMenuItem(
     String restaurantId, {

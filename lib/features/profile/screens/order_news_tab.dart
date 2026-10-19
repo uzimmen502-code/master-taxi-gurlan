@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +11,6 @@ import '../../../models/news_item.dart';
 import '../../../models/news_read_state.dart';
 import '../../../models/order_news_group.dart';
 import '../../../repositories/news_repository.dart';
-import '../../../services/hidden_news_store.dart';
 import '../widgets/news_delete_button.dart';
 import 'order_news_detail_screen.dart';
 
@@ -40,6 +41,7 @@ class _OrderNewsTabState extends State<OrderNewsTab>
   Stream<List<NewsItem>>? _stream;
   String _uid = '';
   Set<String> _hidden = <String>{};
+  StreamSubscription<Set<String>>? _dismissedSub;
 
   @override
   bool get wantKeepAlive => true;
@@ -53,22 +55,29 @@ class _OrderNewsTabState extends State<OrderNewsTab>
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
-    final hidden = await HiddenNewsStore.load(uid);
     if (!mounted) return;
-    final stream =
-        context.read<NewsRepository>().watchOrderNews(userId: uid, limit: 50);
+    final repo = context.read<NewsRepository>();
+    final stream = repo.watchOrderNews(userId: uid, limit: 50);
+    // Ўчирилган хабарлар сервердан (барча қурилмада бир хил); янги ўчириш дарров, тўплам фақат ўсади.
+    _dismissedSub = repo.watchDismissedIds(uid).listen((ids) {
+      if (mounted) setState(() => _hidden = {..._hidden, ...ids});
+    });
     setState(() {
       _uid = uid;
-      _hidden = hidden;
       _stream = stream;
     });
   }
 
+  @override
+  void dispose() {
+    _dismissedSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _deleteGroup(OrderNewsGroup g) async {
-    final hidden =
-        await HiddenNewsStore.hide(_uid, g.messages.map((m) => m.id));
-    if (!mounted) return;
-    setState(() => _hidden = hidden);
+    final ids = g.messages.map((m) => m.id).toList();
+    setState(() => _hidden = {..._hidden, ...ids});
+    await context.read<NewsRepository>().dismissNews(_uid, ids);
   }
 
   String _statusLabel(String s) {

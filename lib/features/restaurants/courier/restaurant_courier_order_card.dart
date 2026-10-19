@@ -16,8 +16,10 @@ import '../../../models/order_model.dart';
 import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
 import '../../home/widgets/ava_chip.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/courier_tracking.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
+import 'courier_live_publisher.dart';
 import 'restaurant_courier_logic.dart';
 
 typedef RestaurantCompleteFn = Future<CourierCompletionSummary> Function({
@@ -38,7 +40,11 @@ class RestaurantCourierOrderCard extends StatefulWidget {
     required this.onArrive,
     required this.onComplete,
     required this.onFinalizeRoute,
+    this.livePositions,
   });
+
+  /// Тест учун жойлашув манбаи (S6); бўш бўлса ҳақиқий GPS.
+  final Stream<LivePosition> Function()? livePositions;
 
   /// Маршрутдаги snapshot; жонли ҳолат `repository.watchOrder` дан.
   final OrderModel order;
@@ -239,7 +245,27 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
     return StreamBuilder<OrderModel?>(
       stream: _stream,
       initialData: widget.order,
-      builder: (context, snap) => _card(context, snap.data ?? widget.order),
+      builder: (context, snap) {
+        final o = snap.data ?? widget.order;
+        // Фаол буюртмада курьернинг жонли нуқтаси мижоз ва ресторан эгасига кўринади (S6). Карточка
+        // йўқолса (тугади/маршрут ёпилди) ёзиш ўзи тўхтайди.
+        final live = !widget.isDone && (o.courierId ?? '').isNotEmpty && CourierTracking.activeStatuses.contains(o.restaurantStatus);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (live)
+              CourierLivePublisher(
+                key: ValueKey('live-${o.id}'),
+                orderId: o.id,
+                courierId: o.courierId!,
+                repository: widget.repository,
+                positions: widget.livePositions,
+              ),
+            _card(context, o),
+          ],
+        );
+      },
     );
   }
 

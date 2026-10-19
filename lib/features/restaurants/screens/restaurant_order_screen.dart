@@ -11,7 +11,9 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/order_model.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/courier_tracking.dart';
 import '../domain/preorder.dart';
+import '../widgets/courier_info_card.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/dish_rating_card.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
@@ -104,6 +106,11 @@ class _RestaurantOrderScreenState extends State<RestaurantOrderScreen> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
             children: [
               _StatusCard(order: o),
+              // Курьер тайинланди: исми, қўнғироқ ва харитада жонли кузатиш (S6).
+              if (CourierTracking.canTrack(o)) ...[
+                const SizedBox(height: 10),
+                CourierInfoCard(order: o, repository: _repo),
+              ],
               const SizedBox(height: 10),
               _PaymentCard(order: o, busy: _busy, onMarkPaid: () => _run(() => _repo.markPaid(o.id), okKey: 'restaurants_pay_declared_ok')),
               const SizedBox(height: 10),

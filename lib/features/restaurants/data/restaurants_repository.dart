@@ -11,6 +11,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../../core/utils/merged_stream.dart';
 import '../../../models/order_model.dart';
 import '../../../utils/geo_hash.dart';
+import '../domain/courier_tracking.dart';
 import '../domain/cuisine.dart';
 import '../domain/dish_facts.dart';
 import '../domain/dish_stats.dart';
@@ -404,6 +405,38 @@ class RestaurantsRepository {
     }, SetOptions(merge: true));
     return ref.id;
   }
+
+  // ── Курьерни кузатиш (S6) ──────────────────────────────────────────
+
+  /// Курьернинг жонли нуқтаси (`order_courier_live/{orderId}`): мижоз ва ресторан а'золари ўқийди.
+  /// Ҳужжат йўқ ёки ўқиш рад этилса (буюртма фаол эмас) — `null`; оқим узилмайди.
+  Stream<CourierLive?> watchCourierLive(String orderId) => _db
+      .collection('order_courier_live')
+      .doc(orderId)
+      .snapshots()
+      .map((s) => s.exists ? CourierLive.fromMap(s.data()) : null)
+      .handleError((Object _) {}, test: (_) => true);
+
+  /// Курьер ўз нуқтасини ёзади (фақат тайинланган курьер — `firestore.rules`): сервер вақти билан.
+  Future<void> publishCourierLive(
+    String orderId, {
+    required String courierId,
+    required double lat,
+    required double lng,
+    double? heading,
+    double? speed,
+    double? accuracy,
+  }) =>
+      _db.collection('order_courier_live').doc(orderId).set({
+        'orderId': orderId,
+        'courierId': courierId,
+        'lat': lat,
+        'lng': lng,
+        if (heading != null && heading >= 0 && heading <= 360) 'heading': heading,
+        if (speed != null && speed >= 0 && speed <= 100) 'speed': speed,
+        if (accuracy != null && accuracy >= 0) 'accuracy': accuracy,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
   // ── Бўлимлар (S3, D-REST-33) ───────────────────────────────────────
 

@@ -18,6 +18,7 @@ import 'restaurant_row.dart' show formatDistanceLabel;
 
 /// Бўлим белгиси (иконка — эмодзи эмас: қурилмага қараб ҳар хил чизилмасин).
 IconData sectionIcon(RestaurantSection s) => switch (s) {
+      RestaurantSection.all => Icons.restaurant_menu_rounded,
       RestaurantSection.cheap => Icons.savings_outlined,
       RestaurantSection.national => Icons.rice_bowl_outlined,
       RestaurantSection.world => Icons.public_rounded,
@@ -44,6 +45,7 @@ class SectionDishesView extends StatefulWidget {
     this.seasons = const [],
     this.ramadan = RamadanConfig.none,
     this.regionId,
+    this.onShowNation,
   });
 
   final RestaurantSection section;
@@ -66,6 +68,8 @@ class SectionDishesView extends StatefulWidget {
   final RamadanConfig ramadan;
   final String? regionId;
 
+  /// Яқин атрофда таом йўқ бўлганда «Бутун Ўзбекистон» тугмаси (ресторанлар рўйхатини кенгроқ очади); null — тугма йўқ.
+  final VoidCallback? onShowNation;
   @override
   State<SectionDishesView> createState() => _SectionDishesViewState();
 }
@@ -224,24 +228,59 @@ class _SectionDishesViewState extends State<SectionDishesView> {
           if (ranked.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: AvaNoticeRow(
-                  text: context.tr('restaurants_dish_empty'),
-                  icon: Icons.restaurant_outlined,
-                  color: c.ink3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AvaNoticeRow(
+                      text: context.tr('restaurants_dish_empty'),
+                      icon: Icons.restaurant_outlined,
+                      color: c.ink3),
+                  if (widget.onShowNation != null)
+                    Align(
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('dishes_show_nation'),
+                        icon: const Icon(Icons.public, size: 16),
+                        label: Text(context.tr('geo_show_nation')),
+                        onPressed: widget.onShowNation,
+                      ),
+                    ),
+                ],
+              ),
             )
           else
-            for (final r in ranked)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: SectionDishCard(
-                  key: ValueKey('dish-${r.dish.key}'),
-                  ranked: r,
-                  section: widget.section,
-                  config: widget.config,
-                  distanceKm: r.dish.distanceKmFrom(widget.lat, widget.lng),
-                  onTap: () => widget.onOpenRestaurant(r.dish.restaurantId),
-                ),
-              ),
+            // Катта расмли карточкалар: кенг экранда 2 устун, тор экранда (< 340) битта (D-REST-40, эга: «2-чисини қил»).
+            LayoutBuilder(
+              builder: (context, box) {
+                final cols = box.maxWidth >= 340 ? 2 : 1;
+                Widget card(RankedDish r) => SectionDishCard(
+                      key: ValueKey('dish-${r.dish.key}'),
+                      ranked: r,
+                      section: widget.section,
+                      config: widget.config,
+                      distanceKm: r.dish.distanceKmFrom(widget.lat, widget.lng),
+                      onTap: () => widget.onOpenRestaurant(r.dish.restaurantId),
+                    );
+                return Column(
+                  children: [
+                    for (var i = 0; i < ranked.length; i += cols)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var j = 0; j < cols; j++) ...[
+                                if (j > 0) const SizedBox(width: 8),
+                                Expanded(child: i + j < ranked.length ? card(ranked[i + j]) : const SizedBox.shrink()),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
         ],
       ),
     );
@@ -333,8 +372,8 @@ class _SectionDishesViewState extends State<SectionDishesView> {
   }
 }
 
-/// Бўлимдаги битта таом карточкаси: расм (+«Янги»), ном, ресторан · масофа, нарх (+бир кишилик),
-/// рейтинг, бўлимга хос чип (КБЖУ / тайёрлаш вақти). Ёпиқ ресторан — хира.
+/// Бўлимдаги битта таом карточкаси — КАТТА расм тепада (+«Янги»), остида ном, ресторан · масофа, нарх (+бир кишилик),
+/// рейтинг ва бўлимга хос чип (КБЖУ / тайёрлаш вақти / олдиндан буюртма). Ёпиқ ресторан — хира.
 class SectionDishCard extends StatelessWidget {
   const SectionDishCard({
     super.key,
@@ -356,8 +395,7 @@ class SectionDishCard extends StatelessWidget {
     final c = context.ava;
     final d = ranked.dish;
     final photo = d.photoUrl.trim();
-    final perPerson =
-        section == RestaurantSection.cheap ? d.pricePerPerson : null;
+    final perPerson = section == RestaurantSection.cheap ? d.pricePerPerson : null;
     final showRating = d.ratingCount >= config.newMaxRatings;
     final meta = <String>[
       d.restaurantName,
@@ -368,59 +406,44 @@ class SectionDishCard extends StatelessWidget {
       child: Material(
         color: c.surface,
         borderRadius: BorderRadius.circular(AvaRadius.card),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(AvaRadius.card),
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AvaRadius.card),
               border: Border.all(color: c.line),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
-                  width: 80,
-                  height: 80,
+                AspectRatio(
+                  aspectRatio: 1.25,
                   child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: photo.startsWith('http')
-                              ? CachedNetworkImage(
-                                  imageUrl: photo,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, __, ___) => _Placeholder(c))
-                              : _Placeholder(c),
-                        ),
-                      ),
+                      photo.startsWith('http')
+                          ? CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover, errorWidget: (_, __, ___) => _Placeholder(c))
+                          : _Placeholder(c),
                       if (ranked.isNew)
                         Positioned(
-                          left: 4,
-                          top: 4,
+                          left: 6,
+                          top: 6,
                           child: Container(
                             key: ValueKey('new-${d.key}'),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                                color: c.brand,
-                                borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(color: c.brand, borderRadius: BorderRadius.circular(8)),
                             child: Text(
                               context.tr('restaurants_dish_new'),
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: c.brandInk),
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.brandInk),
                             ),
                           ),
                         ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -428,28 +451,17 @@ class SectionDishCard extends StatelessWidget {
                         d.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AvaText.productName.copyWith(
-                            color: c.ink, fontWeight: FontWeight.w600),
+                        style: AvaText.productName.copyWith(color: c.ink, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(meta,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AvaText.caption.copyWith(color: c.ink2)),
-                          ),
-                          if (ranked.isClosed) ...[
-                            Text(' · ',
-                                style: AvaText.caption.copyWith(color: c.ink3)),
-                            Text(context.tr('restaurants_closed'),
-                                style: AvaText.caption.copyWith(color: c.warn)),
-                          ],
-                        ],
+                      Text(
+                        ranked.isClosed ? '$meta · ${context.tr('restaurants_closed')}' : meta,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AvaText.caption.copyWith(color: ranked.isClosed ? c.warn : c.ink2),
                       ),
                       const SizedBox(height: 6),
-                      // Қатор тор экранда ва катта шрифтда сиғмаса — Wrap кейинги қаторга ўтказади.
+                      // Нарх, рейтинг ва чиплар тор катакда ва катта шрифтда сиғмаса — Wrap кейинги қаторга ўтказади.
                       Wrap(
                         spacing: 8,
                         runSpacing: 4,
@@ -457,45 +469,34 @@ class SectionDishCard extends StatelessWidget {
                         children: [
                           if (perPerson != null)
                             Text(
-                              context.tr('restaurants_dish_per_person').replaceAll(
-                                  '{price}',
-                                  '${formatPrice(perPerson)} ${context.tr('sum')}'),
+                              context.tr('restaurants_dish_per_person').replaceAll('{price}', '${formatPrice(perPerson)} ${context.tr('sum')}'),
                               key: ValueKey('pp-${d.key}'),
                               style: AvaText.price.copyWith(color: c.brandText),
                             )
                           else
-                            Text('${formatPrice(d.price)} ${context.tr('sum')}',
-                                style:
-                                    AvaText.price.copyWith(color: c.brandText)),
+                            Text('${formatPrice(d.price)} ${context.tr('sum')}', style: AvaText.price.copyWith(color: c.brandText)),
                           if (perPerson != null)
-                            Text('${formatPrice(d.price)} ${context.tr('sum')}',
-                                style: AvaText.caption.copyWith(color: c.ink3)),
+                            Text('${formatPrice(d.price)} ${context.tr('sum')}', style: AvaText.caption.copyWith(color: c.ink3)),
                           if (showRating)
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.star_rounded,
-                                    size: 14, color: c.brand),
+                                Icon(Icons.star_rounded, size: 14, color: c.brand),
                                 const SizedBox(width: 2),
-                                // Wrap'даги Row: матн сиғмаса қирқилади (катта шрифт, тор экран) — синмайди.
                                 Flexible(
                                   child: Text(
                                     '${d.ratingAvg.toStringAsFixed(1)} (${d.ratingCount})',
                                     key: ValueKey('rating-${d.key}'),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: AvaText.caption
-                                        .copyWith(color: c.ink2),
+                                    style: AvaText.caption.copyWith(color: c.ink2),
                                   ),
                                 ),
                               ],
                             ),
-                          if (section == RestaurantSection.light &&
-                              d.kcal != null)
+                          if (section == RestaurantSection.light && d.kcal != null)
                             Text(
-                              context
-                                  .tr('restaurants_dish_kcal')
-                                  .replaceAll('{kcal}', '${d.kcal}'),
+                              context.tr('restaurants_dish_kcal').replaceAll('{kcal}', '${d.kcal}'),
                               key: ValueKey('kcal-${d.key}'),
                               style: AvaText.caption.copyWith(color: c.ink2),
                             ),
@@ -513,9 +514,7 @@ class SectionDishCard extends StatelessWidget {
                             ),
                           if (section == RestaurantSection.fast)
                             Text(
-                              context
-                                  .tr('restaurants_dish_prep')
-                                  .replaceAll('{min}', '${d.prepTimeMin}'),
+                              context.tr('restaurants_dish_prep').replaceAll('{min}', '${d.prepTimeMin}'),
                               key: ValueKey('prep-${d.key}'),
                               style: AvaText.caption.copyWith(color: c.ink2),
                             ),
@@ -532,7 +531,6 @@ class SectionDishCard extends StatelessWidget {
     );
   }
 }
-
 class _Placeholder extends StatelessWidget {
   const _Placeholder(this.c);
 

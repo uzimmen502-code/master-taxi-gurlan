@@ -153,7 +153,7 @@ void main() {
       expect(repo.fetched, [RestaurantSection.cheap]);
     });
 
-    testWidgets('«Фаст-фуд»: тайёрлаш вақти кўрсатилади; «Енгил»: ккал; бошқа бўлимда бундай чиплар йўқ', (t) async {
+    testWidgets('«Фаст-фуд»: тайёрлаш вақти кўрсатилади; «Парҳезли овқатлар»: ккал; бошқа бўлимда бундай чиплар йўқ', (t) async {
       final repo = _Repo(dishes: [_d('a', prep: 12, kcal: 420)]);
       await pumpView(t, repo, RestaurantSection.fast);
       expect(find.byKey(const ValueKey('prep-r1_a')), findsOneWidget);
@@ -173,8 +173,11 @@ void main() {
         _d('o', rest: 'ro', sum: 25, count: 5),
       ]);
       await pumpView(t, repo, RestaurantSection.kids, onOpen: opened.add);
-      expect(find.text(tr('restaurants_closed')), findsOneWidget);
-      expect(t.getTopLeft(find.byKey(const ValueKey('dish-ro_o'))).dy, lessThan(t.getTopLeft(find.byKey(const ValueKey('dish-rc_c'))).dy));
+      expect(find.textContaining(tr('restaurants_closed')), findsOneWidget, reason: '«Ёпиқ» ёрлиғи ресторан сатрида');
+      // 2 устунли катакда: очиқ ресторан таоми олдин (қатор бир хил бўлса — чапда).
+      final o = t.getTopLeft(find.byKey(const ValueKey('dish-ro_o')));
+      final c = t.getTopLeft(find.byKey(const ValueKey('dish-rc_c')));
+      expect(o.dy < c.dy || (o.dy == c.dy && o.dx < c.dx), isTrue);
       await t.tap(find.byKey(const ValueKey('dish-rc_c')));
       expect(opened, ['rc']);
     });
@@ -253,7 +256,8 @@ void main() {
 
   group('«Барчаси» экрани: бўлим чиплари', () {
     Future<_Repo> pumpList(WidgetTester t, _Repo repo, {String? uid = '998901234567'}) async {
-      t.view.physicalSize = const Size(390 * 3, 1800 * 3);
+      // Кенг экран: горизонтал чиплар рўйхати ленивый — ҳамма чип қурилсин.
+      t.view.physicalSize = const Size(2400 * 3, 1800 * 3);
       t.view.devicePixelRatio = 3;
       addTearDown(t.view.reset);
       await t.pumpWidget(l10nApp(

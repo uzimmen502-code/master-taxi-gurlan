@@ -14,6 +14,9 @@ import 'restaurant_models.dart';
 /// Бўлимлар — тартиб мижозга кўрсатиладиган тартиб. `key` — сервердаги `SECTION` қийматлари билан бир
 /// хил (мослик тест билан қулфланган); матн калити `restaurants_section_<key>` (3 тилда).
 enum RestaurantSection {
+  /// «Овқатлар» — яқин атрофдаги ҲАР БИР таом лентаси (D-REST-40): «Барчаси» экранининг асосий кўриниши. Оч одам
+  /// рестораннинг эмас, овқатнинг ўзини кўради. Бўлим босқичи (`all`) шу лентанинг feature flag'и.
+  all('all'),
   cheap('cheap'),
   office('office'),
   national('national'),
@@ -30,7 +33,7 @@ enum RestaurantSection {
 
   final String key;
 
-  String get l10nKey => 'restaurants_section_$key';
+  String get l10nKey => this == all ? 'restaurants_section_dishes' : 'restaurants_section_$key';
 
   /// Ичида кухна фильтри бор бўлимлар (D-REST-16: «Миллий» ва «Дунё» алоҳида, ҳар бирида фильтр).
   bool get hasCuisineFilter => this == national || this == world;
@@ -351,6 +354,17 @@ List<RankedDish> rankSectionDishes(
         return (a, b) {
           final c = cmpPrice(a, b);
           return c != 0 ? c : byDistanceName(a, b);
+        };
+      case RestaurantSection.all:
+        // Оч одам учун: энг яқини олдин, кейин рейтинг (D-REST-40).
+        return (a, b) {
+          final da = a.distanceKmFrom(lat, lng);
+          final db = b.distanceKmFrom(lat, lng);
+          if (da != null && db != null && da != db) return da.compareTo(db);
+          if (da == null && db != null) return 1;
+          if (da != null && db == null) return -1;
+          final r = cmpRating(a, b);
+          return r != 0 ? r : byDistanceName(a, b);
         };
       case RestaurantSection.fast:
         return (a, b) {

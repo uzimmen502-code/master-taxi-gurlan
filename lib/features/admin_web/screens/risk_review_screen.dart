@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../../models/risk_event.dart';
 import '../../../repositories/user_repository.dart';
 import '../services/admin_auth_service.dart';
-import '../services/admin_delete_record_service.dart';
 import '../../../core/theme/app_theme.dart';
 
 class RiskReviewScreen extends StatelessWidget {
@@ -156,17 +155,7 @@ class _RiskEventCardState extends State<_RiskEventCard> {
                   : const Icon(Icons.check, size: 16),
               label: const Text('Resolved'),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              key: const ValueKey('risk-delete'),
-              onPressed: _busy ? null : _delete,
-              icon: const Icon(Icons.delete_outline, size: 16),
-              label: const Text('Ўчириш'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: const BorderSide(color: Colors.red),
-              ),
-            ),
+            // Ўчириш йўқ (эга, 2026-10-20): ёпиш = «Resolved»; 365 кундан эски ёпилганларни фақат superadmin серверда ўчиради.
           ]),
         ]),
       ),
@@ -185,47 +174,6 @@ class _RiskEventCardState extends State<_RiskEventCard> {
       );
       messenger.showSnackBar(const SnackBar(
         content: Text('Risk event ёпилди',
-            style: TextStyle(color: AppColors.onPrimary)),
-        backgroundColor: AppColors.button,
-      ));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Риск ёзувини ЎЧИРИШ: сервер (callable) ўчиради ва audit'га нусха қолдиради.
-  Future<void> _delete() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Risk event ўчирилсинми?'),
-        content: const Text(
-            'Ёзув ТЎЛИҚ ўчирилади, қайтариб бўлмайди. Унинг нусхаси фақат '
-            'audit журналида сақланади.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Бекор'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    setState(() => _busy = true);
-    final service = context.read<AdminDeleteRecordService>();
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await service.deleteRiskEvent(widget.event.id);
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Risk event ўчирилди',
             style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));

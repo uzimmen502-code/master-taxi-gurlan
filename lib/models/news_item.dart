@@ -26,6 +26,7 @@ class NewsItem {
     this.submissionId = '',
     this.requestId = '',
     this.pushDirect = false,
+    this.retractedAt,
   });
 
   final String id;
@@ -74,6 +75,13 @@ class NewsItem {
   /// Push'ни хабар ёзган функция ўзи юборган (`notifyUserInApp`, CF
   /// ёзади) — `onAdminNewsCreate` қайта юбормайди.
   final bool pushDirect;
+
+  /// Админ хабарни ҚАЙТАРИБ олган вақти (`adminRetractNews`, 2026-10-20). Ҳужжат 90 кун сақланади, сўнг сервер
+  /// ўчиради. Фойдаланувчи лентасида кўрсатилмайди ва саналмайди; админ рўйхатида хира ва «Қайтариб олинган».
+  /// Эски ҳужжатларда майдон йўқ → `null`.
+  final DateTime? retractedAt;
+
+  bool get isRetracted => retractedAt != null;
 
   /// Буюртма хабари (фақат «Буюртма» бўлимида).
   bool get isOrderNews =>
@@ -135,6 +143,7 @@ class NewsItem {
       submissionId: (d['submissionId'] ?? '') as String,
       requestId: (d['requestId'] ?? '') as String,
       pushDirect: d['pushDirect'] == true,
+      retractedAt: (d['retractedAt'] as Timestamp?)?.toDate(),
     );
   }
 

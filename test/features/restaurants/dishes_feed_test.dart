@@ -153,9 +153,13 @@ void main() {
       }
     });
 
-    testWidgets('лента бўш: тушунарли хабар (экран бўш қолмайди)', (t) async {
+    testWidgets('лента бўш: тушунарли хабар ва «Бутун Ўзбекистон» тугмаси — босилса ресторанлар рўйхати (бутун республика)', (t) async {
       await pump(t, _Repo(sections: feedOn));
       expect(find.text(tr('restaurants_dish_empty')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('dishes_show_nation')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('section-list-all')), findsNothing);
+      expect(find.text('Gurlan osh'), findsWidgets);
     });
 
     testWidgets('тор экран 320 + шрифт ×2: лента overflow қилмайди', (t) async {

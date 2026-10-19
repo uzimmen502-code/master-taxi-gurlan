@@ -45,6 +45,7 @@ class SectionDishesView extends StatefulWidget {
     this.seasons = const [],
     this.ramadan = RamadanConfig.none,
     this.regionId,
+    this.onShowNation,
   });
 
   final RestaurantSection section;
@@ -67,6 +68,8 @@ class SectionDishesView extends StatefulWidget {
   final RamadanConfig ramadan;
   final String? regionId;
 
+  /// Яқин атрофда таом йўқ бўлганда «Бутун Ўзбекистон» тугмаси (ресторанлар рўйхатини кенгроқ очади); null — тугма йўқ.
+  final VoidCallback? onShowNation;
   @override
   State<SectionDishesView> createState() => _SectionDishesViewState();
 }
@@ -225,10 +228,24 @@ class _SectionDishesViewState extends State<SectionDishesView> {
           if (ranked.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: AvaNoticeRow(
-                  text: context.tr('restaurants_dish_empty'),
-                  icon: Icons.restaurant_outlined,
-                  color: c.ink3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AvaNoticeRow(
+                      text: context.tr('restaurants_dish_empty'),
+                      icon: Icons.restaurant_outlined,
+                      color: c.ink3),
+                  if (widget.onShowNation != null)
+                    Align(
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('dishes_show_nation'),
+                        icon: const Icon(Icons.public, size: 16),
+                        label: Text(context.tr('geo_show_nation')),
+                        onPressed: widget.onShowNation,
+                      ),
+                    ),
+                ],
+              ),
             )
           else
             for (final r in ranked)

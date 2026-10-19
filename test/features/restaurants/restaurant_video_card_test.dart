@@ -10,6 +10,7 @@ TvClip _clip(
   String processing = 'ready',
   DateTime? at,
   String reason = '',
+  String owner = '998901234567',
 }) =>
     TvClip(
       id: id,
@@ -19,7 +20,7 @@ TvClip _clip(
       price: 0,
       districtId: 'gurlan',
       districtLabel: 'Гурлан',
-      ownerPhone: '998901234567',
+      ownerPhone: owner,
       ownerName: 'Али',
       category: 'product',
       status: status,
@@ -37,6 +38,7 @@ Future<void> _pump(
   Future<void> Function(TvClip)? deleter,
   void Function(TvClip)? opener,
   bool approved = true,
+  String me = '998901234567',
 }) async {
   await t.pumpWidget(MaterialApp(
     home: Scaffold(
@@ -44,6 +46,7 @@ Future<void> _pump(
         child: RestaurantVideoCard(
           restaurantId: 'r1',
           ownerPhone: '998901234567',
+          currentPhone: me,
           restaurantApproved: approved,
           loader: loader,
           publisher: publisher,
@@ -210,6 +213,45 @@ void main() {
       await _pump(t, loader: () async => [_clip('c1')], opener: (c) => opened = c);
       await t.tap(find.byIcon(Icons.play_circle_outline_rounded));
       expect(opened?.id, 'c1');
+    });
+
+    testWidgets('ходим юклаган видео панелда кўринади, лекин уни ўчириб бўлмайди (қоида ҳам рухсат бермайди)', (t) async {
+      await _pump(t, loader: () async => [
+            _clip('mine', at: DateTime(2026, 10, 3)),
+            _clip('theirs', owner: '998905554433', status: 'pending', at: DateTime(2026, 10, 2)),
+          ]);
+      expect(find.byKey(const ValueKey('video-delete-mine')), findsOneWidget);
+      expect(find.byKey(const ValueKey('video-delete-theirs')), findsNothing);
+      expect(find.byKey(const ValueKey('video-by-colleague-theirs')), findsOneWidget);
+      expect(find.byKey(const ValueKey('video-by-colleague-mine')), findsNothing);
+    });
+
+    testWidgets('ходим кириб: эга юклаганини ўчирмайди, янги видео жонли бўлса ҳам бегона клипларга тегмайди', (t) async {
+      final deleted = <String>[];
+      await _pump(
+        t,
+        me: '998905554433',
+        loader: () async => [
+          _clip('staffNew', owner: '998905554433', at: DateTime(2026, 10, 9)),
+          _clip('ownerOld', at: DateTime(2026, 10, 2)),
+        ],
+        deleter: (c) async => deleted.add(c.id),
+      );
+      expect(deleted, isEmpty, reason: 'эганинг клипи ходимники эмас — тозаланмайди');
+      expect(find.byKey(const ValueKey('video-delete-staffNew')), findsOneWidget);
+      expect(find.byKey(const ValueKey('video-delete-ownerOld')), findsNothing);
+    });
+
+    testWidgets('ўз телефони номаълум бўлса ҳеч нарса ўчирилмайди (хавфсиз томон)', (t) async {
+      final deleted = <String>[];
+      await _pump(
+        t,
+        me: '',
+        loader: () async => [_clip('a', at: DateTime(2026, 10, 9)), _clip('b', at: DateTime(2026, 10, 1))],
+        deleter: (c) async => deleted.add(c.id),
+      );
+      expect(deleted, isEmpty);
+      expect(find.byKey(const ValueKey('video-delete-a')), findsNothing);
     });
 
     testWidgets('ресторан тасдиқланмаган бўлса огоҳлантириш қатори бор, тасдиқланган бўлса йўқ', (t) async {

@@ -4,8 +4,6 @@ import 'package:ava_gurlan/features/restaurants/merchant/menu_category_dialog.da
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-String _name(String k) => 'N:$k';
-
 void main() {
   group('MenuCategorySuggestions', () {
     test('уй ошпази қисқа, кафе кенгроқ; бошланғич 3 тадан', () {
@@ -28,37 +26,50 @@ void main() {
       }
     });
 
-    test('аллақачон бор бўлим (ҳарф катталиги/бўшлиқсиз) қайта таклиф қилинмайди', () {
-      final out = MenuCategorySuggestions.missingNames(
-        keys: const ['hot', 'sweets', 'drinks'],
-        name: _name,
-        existing: const [MenuCategory(id: 'x', name: ' n:hot ')],
-      );
-      expect(out, ['N:sweets', 'N:drinks']);
+    test('таклиф қилинадиган ҳар бир калит жадвалда бор', () {
+      for (final k in [...MenuCategorySuggestions.homeCook, ...MenuCategorySuggestions.cafe]) {
+        for (final lang in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+          expect(MenuCategoryNamesProbe.has(k, lang), isTrue, reason: '$k/$lang');
+        }
+      }
     });
 
-    test('ҳаммаси бор → бўш; ҳеч нарса йўқ → ҳаммаси', () {
+    test('аллақачон бор бўлим (ҳарф катталиги, бўшлиқ, БОШҚА ТИЛ ва ёзувда ҳам) қайта таклиф қилинмайди', () {
+      for (final existing in [' иссиқ таомлар ', 'Issiq taomlar', 'Горячие блюда']) {
+        final out = MenuCategorySuggestions.missingNames(
+          keys: const ['hot', 'sweets', 'drinks'],
+          lang: 'uz_Cyrl',
+          existing: [MenuCategory(id: 'x', name: existing)],
+        );
+        expect(out, ['Ширинликлар', 'Ичимликлар'], reason: existing);
+      }
+    });
+
+    test('матн эга тилида: лотин ва рус', () {
+      expect(MenuCategorySuggestions.missingNames(keys: const ['hot'], lang: 'uz_Latn', existing: const []), ['Issiq taomlar']);
+      expect(MenuCategorySuggestions.missingNames(keys: const ['hot'], lang: 'ru', existing: const []), ['Горячие блюда']);
+    });
+
+    test('ҳаммаси бор → бўш', () {
       expect(
-        MenuCategorySuggestions.missingNames(keys: const ['hot'], name: _name, existing: const [MenuCategory(id: 'x', name: 'N:hot')]),
+        MenuCategorySuggestions.missingNames(
+          keys: const ['hot'],
+          lang: 'uz_Cyrl',
+          existing: const [MenuCategory(id: 'x', name: 'Иссиқ таомлар')],
+        ),
         isEmpty,
       );
-      expect(MenuCategorySuggestions.missingNames(keys: const ['hot', 'sweets'], name: _name, existing: const []), ['N:hot', 'N:sweets']);
-    });
-
-    test('матн калити', () {
-      expect(MenuCategorySuggestions.textKey('hot'), 'restaurants_cat_hot');
     });
   });
 
   group('promptMenuCategoryName — чиплар', () {
-    Future<String?> open(WidgetTester t, {MenuCategory? existing, List<MenuCategory> cats = const [], bool homeCook = true}) async {
-      String? result = 'unset';
+    Future<void> open(WidgetTester t, {MenuCategory? existing, List<MenuCategory> cats = const [], bool homeCook = true}) async {
       await t.pumpWidget(MaterialApp(
         home: Builder(
           builder: (ctx) => Scaffold(
             body: Center(
               child: ElevatedButton(
-                onPressed: () async => result = await promptMenuCategoryName(ctx, existing: existing, categories: cats, homeCook: homeCook),
+                onPressed: () => promptMenuCategoryName(ctx, existing: existing, categories: cats, homeCook: homeCook),
                 child: const Text('open'),
               ),
             ),
@@ -67,10 +78,9 @@ void main() {
       ));
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
-      return result;
     }
 
-    testWidgets('янги категория: уй ошпази учун 4 та чип; босилса майдонга ёзилади ва таҳрирланади', (t) async {
+    testWidgets('янги категория: уй ошпази учун 4 та чип; босилса майдонга ёзилади', (t) async {
       await open(t);
       final chips = find.byType(ActionChip);
       expect(chips, findsNWidgets(4));
@@ -78,8 +88,7 @@ void main() {
       await t.tap(chips.first);
       await t.pump();
       final field = t.widget<TextField>(find.byKey(const ValueKey('category-name-field')));
-      expect(field.controller!.text, isNotEmpty);
-      expect(field.controller!.text, MenuCategorySuggestions.textKey('hot'), reason: 'тест муҳитида матн калити қайтади');
+      expect(field.controller!.text, 'Иссиқ таомлар');
     });
 
     testWidgets('кафе учун 7 та чип', (t) async {
@@ -87,12 +96,12 @@ void main() {
       expect(find.byType(ActionChip), findsNWidgets(7));
     });
 
-    testWidgets('мавжуд бўлим таклифдан чиқарилади', (t) async {
-      await open(t, cats: [MenuCategory(id: 'x', name: MenuCategorySuggestions.textKey('hot'))]);
+    testWidgets('мавжуд бўлим (бошқа ёзувда ҳам) таклифдан чиқарилади', (t) async {
+      await open(t, cats: const [MenuCategory(id: 'x', name: 'Issiq taomlar')]);
       expect(find.byType(ActionChip), findsNWidgets(3));
     });
 
-    testWidgets('қайта номлашда чип ва тушунтириш қатори йўқ', (t) async {
+    testWidgets('қайта номлашда чип йўқ', (t) async {
       await open(t, existing: const MenuCategory(id: 'x', name: 'Таомлар'));
       expect(find.byType(ActionChip), findsNothing);
     });
@@ -120,4 +129,14 @@ void main() {
       expect(result, isNull);
     });
   });
+}
+
+/// Тест ёрдамчиси: жадвалда калит ва тил борлигини текширади.
+abstract final class MenuCategoryNamesProbe {
+  static bool has(String key, String lang) => MenuCategorySuggestionsProbe.name(key, lang).isNotEmpty;
+}
+
+abstract final class MenuCategorySuggestionsProbe {
+  static String name(String key, String lang) =>
+      MenuCategorySuggestions.missingNames(keys: [key], lang: lang, existing: const []).firstOrNull ?? '';
 }

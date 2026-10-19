@@ -73,7 +73,7 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
     setState(() => _starterBusy = true);
     final names = MenuCategorySuggestions.missingNames(
       keys: MenuCategorySuggestions.starterKeysFor(homeCook: widget.restaurant.isHomeCook),
-      name: (k) => context.tr(MenuCategorySuggestions.textKey(k)),
+      lang: context.contentLang,
       existing: cats,
     );
     try {
@@ -185,7 +185,7 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                             ),
                           ),
                           child: ChoiceChip(
-                            label: Text(cat.name),
+                            label: Text(cat.displayName(context.contentLang)),
                             selected: _selectedCategory == cat.id,
                             onSelected: (_) => setState(() => _selectedCategory = cat.id),
                           ),
@@ -233,7 +233,7 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                           separatorBuilder: (_, __) => const SizedBox(height: 6),
                           itemBuilder: (context, i) => _ItemTile(
                             item: items[i],
-                            categoryName: cats.where((x) => x.id == items[i].categoryId).map((x) => x.name).firstOrNull ?? '',
+                            categoryName: cats.where((x) => x.id == items[i].categoryId).map((x) => x.displayName(context.contentLang)).firstOrNull ?? '',
                             onEdit: () => _openItemForm(cats, existing: items[i]),
                             onToggle: (v) => _guard(() => widget.repository.setItemAvailability(_rid, items[i].id, available: v, stopUntil: null)),
                             onStopToday: () {

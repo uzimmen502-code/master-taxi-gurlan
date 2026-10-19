@@ -1,11 +1,12 @@
 // «＋ Категория қўшиш»да эгага ёрдам: тайёр бўлим номлари (PROPOSED — рўйхат
 // 2026-10-18 да таклиф қилинди, эга номларни тасдиқлайди/ўзгартиради).
 //
-// Номлар матн калитлари (`restaurants_cat_*`, 3 тилда); категория нархи ёки
-// мантиққа таъсир қилмайди — фақат мижозга меню бўлими. Танланган матн эга
-// тилида САҚЛАНАДИ (категория эга ёзган матн, калит эмас).
+// Номларнинг ўзи [MenuCategoryNames.presets] да (3 тилда). Тайёр ном
+// танланса, мижоз уни ЎЗ тилида кўради. Категория нархга ёки мантиққа
+// таъсир қилмайди — фақат мижозга меню бўлими.
 
 import 'menu_category_choice.dart';
+import 'menu_category_names.dart';
 import 'restaurant_models.dart';
 
 abstract final class MenuCategorySuggestions {
@@ -25,20 +26,18 @@ abstract final class MenuCategorySuggestions {
   static List<String> starterKeysFor({required bool homeCook}) =>
       homeCook ? starterHomeCook : starterCafe;
 
-  /// Матн калити.
-  static String textKey(String key) => 'restaurants_cat_$key';
-
-  /// Таклифлардан бирортаси [existing] да йўқлари (аллақачон бор бўлимни
-  /// такрор таклиф қилмаймиз). [name] — калитни эга тилидаги матнга айлантиради.
+  /// Таклифлардан [existing] да ҲАЛИ ЙЎҚлари — [lang] (эганинг тили)
+  /// матнида. Аллақачон бор бўлим бошқа тилда/ёзувда бўлса ҳам такрор
+  /// таклиф қилинмайди.
   static List<String> missingNames({
     required Iterable<String> keys,
-    required String Function(String key) name,
+    required String lang,
     required Iterable<MenuCategory> existing,
   }) {
     final out = <String>[];
     for (final k in keys) {
-      final n = name(k);
-      if (MenuCategoryChoice.findByName(existing, n) == null) out.add(n);
+      final n = MenuCategoryNames.presetName(k, lang);
+      if (n.isNotEmpty && MenuCategoryChoice.findByName(existing, n) == null) out.add(n);
     }
     return out;
   }

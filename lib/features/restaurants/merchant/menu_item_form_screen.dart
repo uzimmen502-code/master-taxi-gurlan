@@ -243,7 +243,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
                 isDense: true,
               ),
               items: [
-                for (final cat in _cats) DropdownMenuItem(value: cat.id, child: Text(cat.name, overflow: TextOverflow.ellipsis)),
+                for (final cat in _cats) DropdownMenuItem(value: cat.id, child: Text(cat.displayName(context.contentLang), overflow: TextOverflow.ellipsis)),
                 // Категориясиз — доим танлаш мумкин (мижозда «Бошқалар»).
                 DropdownMenuItem(value: MenuCategoryChoice.none, child: Text(context.tr('restaurants_menu_other'))),
                 DropdownMenuItem(

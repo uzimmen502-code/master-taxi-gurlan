@@ -9,6 +9,8 @@ import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import 'menu_category_names.dart';
+
 /// `restaurantStatus` қийматлари — сервердаги жадвал билан бир хил.
 abstract final class RestaurantOrderStatus {
   static const placed = 'placed';
@@ -317,6 +319,10 @@ class MenuCategory {
   final String id;
   final String name;
   final int sort;
+
+  /// Мижоз/эга тилида кўрсатиладиган ном ([lang]: `uz_Cyrl`/`uz_Latn`/`ru`).
+  /// Сақланган `name` ўзгармайди.
+  String displayName(String lang) => MenuCategoryNames.display(name, lang);
 
   factory MenuCategory.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const {};

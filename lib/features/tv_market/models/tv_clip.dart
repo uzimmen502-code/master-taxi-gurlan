@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import '../../../core/utils/formatters.dart' show phonesMatch;
 import '../services/tv_social.dart';
 
 /// Юкланадиган клипнинг максимал давомийлиги. Бу — клиент томондаги
@@ -501,6 +502,29 @@ class TvClip {
         'showPhone': showPhone,
         if (rejectReason.isNotEmpty) 'rejectReason': rejectReason,
       };
+}
+
+/// Мижозга кўрсатиладиган клип: [candidates] (бир `linkId`даги фаол,
+/// ўйнатиладиганлар) ичидан ЭНГ ЯНГИСИ.
+///
+/// [trustLink] + [linkKind] — боғлашнинг ўзи ишончли тур (ресторан: қоида
+/// фақат шу рестораннинг а'золарига боғлашга рухсат беради,
+/// `firestore.rules` `tvClipRestaurantLinkOk`): эгалик солиштирилмайди —
+/// ходим юклаган видео ҳам кўринади, лекин тур албатта мос бўлиши шарт
+/// ([linkKind] берилмаса ишонч ҳисобга олинмайди). Акс ҳолда клип эгаси =
+/// эълон эгаси ([ownerPhone]) бўлиши керак.
+TvClip? pickLinkedClip(
+  Iterable<TvClip> candidates, {
+  required String ownerPhone,
+  bool trustLink = false,
+  String linkKind = '',
+}) {
+  final trusted = trustLink && linkKind.isNotEmpty;
+  for (final c in tvClipsNewestFirst(candidates)) {
+    if (linkKind.isNotEmpty && c.linkKind != linkKind) continue;
+    if (trusted || phonesMatch(c.ownerPhone, ownerPhone)) return c;
+  }
+  return null;
 }
 
 /// Янгиси биринчи (`createdAt` йўқлари — охирида). Бир `linkId`га бир нечта

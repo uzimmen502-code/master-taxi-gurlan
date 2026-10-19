@@ -3,6 +3,7 @@
 // Категория — эга ўзи яратадиган бўлим (`menu_categories`); мижозга меню
 // шу бўлимлар бўйича кўрсатилади. `''` = категориясиз → мижозда «Бошқалар».
 
+import 'menu_category_names.dart';
 import 'restaurant_models.dart';
 
 abstract final class MenuCategoryChoice {
@@ -32,15 +33,14 @@ abstract final class MenuCategoryChoice {
   }) =>
       known(isEdit ? (existingCategoryId ?? none) : (filterCategoryId ?? none), categories);
 
-  static String _norm(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
-
   /// Шу номли категория бор бўлса — қайтаради (бир хил ном иккинчи марта
-  /// яратилмасин: «Таомлар» / «таомлар »).
+  /// яратилмасин: «Таомлар» / «таомлар »; шунингдек кирилл ↔ лотин ва тайёр
+  /// номнинг бошқа тилдаги шакли: «Ичимликлар» = «Ichimliklar» = «Напитки»).
   static MenuCategory? findByName(Iterable<MenuCategory> categories, String name) {
-    final n = _norm(name);
-    if (n.isEmpty) return null;
+    if (name.trim().isEmpty) return null;
+    final id = MenuCategoryNames.identity(name);
     for (final c in categories) {
-      if (_norm(c.name) == n) return c;
+      if (MenuCategoryNames.identity(c.name) == id) return c;
     }
     return null;
   }

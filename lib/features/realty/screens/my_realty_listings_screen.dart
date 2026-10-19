@@ -589,25 +589,20 @@ class _MyListingTileState extends State<_MyListingTile> {
                   ),
                 ),
               ),
-            Divider(height: 1, color: c.line),
-            // Видео боғлаш — ихтиёрий (концепция, 3-бўлим).
-            TextButton.icon(
-              onPressed: _deleting
-                  ? null
-                  : () => showRealtyVideoSheet(context, listing: r),
-              icon: Icon(
-                r.hasVideo
-                    ? Icons.play_circle_outline
-                    : Icons.video_call_outlined,
-                size: 18,
+            // ЭСКИ «Видео боғлаш» (мавжуд клипни, жумладан пуллик реклама видеосини боғлаш) фақат объектда ЭСКИ боғлама
+            // БОР бўлса кўринади — алмаштириш/ажратиш учун. Янги видео — таҳрир формасидаги «Видео қўшиш (ихтиёрий,
+            // 60 сония гача)» блокида (иккита тугма бўлиб қолмасин; эга, 2026-10-20).
+            if (r.hasVideo) ...[
+              Divider(height: 1, color: c.line),
+              TextButton.icon(
+                onPressed: _deleting
+                    ? null
+                    : () => showRealtyVideoSheet(context, listing: r),
+                icon: const Icon(Icons.play_circle_outline, size: 18),
+                label: Text(context.tr('realty_video_change')),
+                style: TextButton.styleFrom(foregroundColor: c.ink2),
               ),
-              label: Text(
-                context.tr(
-                  r.hasVideo ? 'realty_video_change' : 'realty_video_link',
-                ),
-              ),
-              style: TextButton.styleFrom(foregroundColor: c.ink2),
-            ),
+            ],
             Divider(height: 1, color: c.line),
             Row(
               children: [

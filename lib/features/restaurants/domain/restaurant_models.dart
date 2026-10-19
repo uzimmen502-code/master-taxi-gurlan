@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import 'dish_facts.dart';
 import 'menu_category_names.dart';
+import 'qty_tiers.dart';
 
 /// `restaurantStatus` қийматлари — сервердаги жадвал билан бир хил.
 abstract final class RestaurantOrderStatus {
@@ -363,12 +364,20 @@ class MenuItem {
     this.available = true,
     this.stopUntil,
     this.facts = DishFacts.empty,
+    this.qtyTiers = const [],
   });
 
   final String id;
   final String name;
   final String description;
   final String photoUrl;
+
+  /// Миқдорга чегирма поғоналари (D-REST-25), ТЎҒРИ префикс ([QtyTiers.sanitize]). Ресторан берган чегирма;
+  /// ҳақиқий нарх серверда ҳисобланади.
+  final List<QtyTier> qtyTiers;
+
+  /// [qty] дона учун бир дона нархи (поғона қўлланса — арзонроқ).
+  int unitPriceAt(int qty) => QtyTiers.unitPriceFor(price, qtyTiers, qty).unitPrice;
 
   /// Сотувчи киритган ихтиёрий фактлар (порция, КБЖУ, кухна, теглар).
   final DishFacts facts;
@@ -395,6 +404,7 @@ class MenuItem {
         description: _str(d['description']),
         photoUrl: _str(d['photoUrl']),
         price: _int(d['price']),
+        qtyTiers: QtyTiers.sanitize(_int(d['price']), d['qtyTiers']),
         categoryId: _str(d['categoryId']),
         sort: _int(d['sort']),
         available: d['available'] != false,
@@ -412,7 +422,13 @@ class CartLine {
   final MenuItem item;
   final int qty;
 
-  int get lineTotal => item.price * qty;
+  /// Бир дона нархи [qty] да (миқдорга чегирма поғонаси қўлланган бўлиши мумкин).
+  int get unitPrice => item.unitPriceAt(qty);
+
+  int get lineTotal => unitPrice * qty;
+
+  /// Рўйхат нархига нисбатан чегирма (сўм); поғона қўлланмаса 0.
+  int get discount => item.price * qty - lineTotal;
 }
 
 /// Сават — БИТТА ресторандан (Meituan/Ele.me қоидаси, §12.4). Бошқа
@@ -440,6 +456,9 @@ class RestaurantCart extends ChangeNotifier {
 
   int get count => _lines.values.fold(0, (s, l) => s + l.qty);
   int get itemsTotal => _lines.values.fold(0, (s, l) => s + l.lineTotal);
+
+  /// Миқдорга чегирма жами (сўм) — сават экранида кўрсатилади; ҳақиқий сумма серверда.
+  int get qtyDiscountTotal => _lines.values.fold(0, (s, l) => s + l.discount);
 
   int qtyOf(String itemId) => _lines[itemId]?.qty ?? 0;
 

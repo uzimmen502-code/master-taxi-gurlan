@@ -6,6 +6,7 @@
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/cuisine.dart';
 import 'package:ava_gurlan/features/restaurants/domain/dish_facts.dart';
+import 'package:ava_gurlan/features/restaurants/domain/qty_tiers.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/features/restaurants/merchant/menu_item_form_screen.dart';
 import 'package:flutter/material.dart';
@@ -17,12 +18,15 @@ final _l10n = JsonL10nDelegate();
 String _tr(String key) => _l10n.tr(key);
 
 class _Saved {
-  _Saved(this.id, this.name, this.price, this.facts, this.categoryId);
+  _Saved(this.id, this.name, this.price, this.facts, this.categoryId, [this.qtyTiers]);
   final String? id;
   final String name;
   final int price;
   final DishFacts? facts;
   final String categoryId;
+
+  /// `null` — репозиторийга чегирма берилмаган (тегилмайди); бўш — «ўчирилади».
+  final List<QtyTier>? qtyTiers;
 }
 
 class _FakeRepo implements RestaurantsRepository {
@@ -44,8 +48,9 @@ class _FakeRepo implements RestaurantsRepository {
     bool available = true,
     DateTime? stopUntil,
     DishFacts? facts,
+    List<QtyTier>? qtyTiers,
   }) async {
-    saved.add(_Saved(id, name, price, facts, categoryId));
+    saved.add(_Saved(id, name, price, facts, categoryId, qtyTiers));
     return id ?? 'new1';
   }
 

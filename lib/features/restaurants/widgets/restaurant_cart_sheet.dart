@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
+import '../domain/qty_tiers.dart';
 import '../domain/restaurant_models.dart';
 
 Future<void> showRestaurantCartSheet(
@@ -101,9 +102,26 @@ class _CartSheet extends StatelessWidget {
                                   Text(l.item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.ink)),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${formatPrice(l.item.price)} × ${l.qty} = ${formatPrice(l.lineTotal)} ${context.tr('sum')}',
+                                    '${formatPrice(l.unitPrice)} × ${l.qty} = ${formatPrice(l.lineTotal)} ${context.tr('sum')}',
+                                    key: ValueKey('cart-line-${l.item.id}'),
                                     style: AvaText.caption.copyWith(color: c.ink2),
                                   ),
+                                  // Миқдорга чегирма (D-REST-25): қўлланган бўлса — қайси поғона; бўлмаса — кейингиси.
+                                  if (l.discount > 0)
+                                    Text(
+                                      context.tr('restaurants_tier_applied').replaceAll('{min}', '${QtyTiers.unitPriceFor(l.item.price, l.item.qtyTiers, l.qty).tierMinQty}'),
+                                      key: ValueKey('cart-tier-applied-${l.item.id}'),
+                                      style: AvaText.caption.copyWith(color: c.ok),
+                                    ),
+                                  if (QtyTiers.nextTier(l.item.qtyTiers, l.qty) case final next?)
+                                    Text(
+                                      context
+                                          .tr('restaurants_tier_next')
+                                          .replaceAll('{n}', '${next.minQty - l.qty}')
+                                          .replaceAll('{price}', '${formatPrice(next.price)} ${context.tr('sum')}'),
+                                      key: ValueKey('cart-tier-next-${l.item.id}'),
+                                      style: AvaText.caption.copyWith(color: c.brandText),
+                                    ),
                                 ],
                               ),
                             ),
@@ -128,6 +146,8 @@ class _CartSheet extends StatelessWidget {
                 ),
                 Divider(height: 16, color: c.line),
                 _TotalLine(label: context.tr('restaurants_items_total'), value: cart.itemsTotal),
+                if (cart.qtyDiscountTotal > 0)
+                  _TotalLine(label: context.tr('restaurants_qty_discount'), value: -cart.qtyDiscountTotal),
                 _TotalLine(label: context.tr('restaurants_total'), value: cart.itemsTotal, bold: true),
                 if (missing > 0)
                   Padding(
@@ -178,7 +198,14 @@ class _TotalLine extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label, style: style)),
-          Text('${formatPrice(value)} ${context.tr('sum')}', style: style),
+          // Катта шрифт ва узун сумма (900 000 сўм): сумма қирқилмасдан кичрайиб сиғади.
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerEnd,
+              child: Text('${formatPrice(value)} ${context.tr('sum')}', style: style),
+            ),
+          ),
         ],
       ),
     );

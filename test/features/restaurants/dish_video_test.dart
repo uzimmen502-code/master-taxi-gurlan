@@ -500,6 +500,7 @@ class _Repo implements RestaurantsRepository {
     bool available = true,
     DateTime? stopUntil,
     covariant Object? facts,
+    covariant Object? qtyTiers,
   }) async {
     upserts.add(_Upsert(id, price, sort));
     return id ?? 'dish-${upserts.length}';

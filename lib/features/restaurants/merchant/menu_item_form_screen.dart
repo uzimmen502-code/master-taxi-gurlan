@@ -20,6 +20,7 @@ import '../domain/restaurant_models.dart';
 import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'dish_facts_editor.dart';
+import 'qty_tiers_editor.dart';
 import 'dish_video_tile.dart';
 import 'menu_category_dialog.dart';
 import 'menu_category_picker.dart';
@@ -91,6 +92,9 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   // Сотувчи киритган ихтиёрий фактлар (порция, КБЖУ, кухна, теглар) — таҳрирда мавжуд қиймат.
   late DishFacts _facts = widget.existing?.facts ?? DishFacts.empty;
   bool _showFactErrors = false;
+  // Миқдорга чегирма (D-REST-25): таҳрирда мавжуд поғоналар; ўзгарганда редактор янгилайди.
+  late QtyTiersDraft _tiers = QtyTiersDraft(widget.existing?.qtyTiers ?? const []);
+  bool _showTierErrors = false;
   XFile? _picked;
   bool _saving = false;
 
@@ -187,6 +191,14 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
       );
       return null;
     }
+    // Миқдорга чегирма ихтиёрий, лекин киритилган бўлса тўғри бўлиши шарт (асосий нархдан кам, тартибли).
+    if (_tiers.errorsFor(price).isNotEmpty) {
+      setState(() => _showTierErrors = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('restaurants_m_tiers_err_fix')), backgroundColor: Colors.red.shade700),
+      );
+      return null;
+    }
     setState(() => _saving = true);
     try {
       if (_picked != null) {
@@ -206,6 +218,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
         available: _available,
         stopUntil: _available ? widget.existing?.stopUntil : null,
         facts: _facts,
+        qtyTiers: _tiers.tiers,
       );
       _savedId = id;
       return id;
@@ -318,6 +331,12 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(labelText: context.tr('restaurants_m_item_price'), suffixText: context.tr('sum'), border: const OutlineInputBorder(), isDense: true),
+            ),
+            QtyTiersEditor(
+              initial: widget.existing?.qtyTiers ?? const [],
+              priceController: _price,
+              showErrors: _showTierErrors,
+              onChanged: (d) => _tiers = d,
             ),
             const SizedBox(height: 8),
             TextField(controller: _desc, maxLength: 500, maxLines: 2, decoration: InputDecoration(labelText: context.tr('restaurants_m_item_desc'), border: const OutlineInputBorder(), isDense: true)),

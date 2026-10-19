@@ -753,6 +753,19 @@ class _MenuItemRow extends StatelessWidget {
                           maxLines: 1,
                           style: AvaText.price.copyWith(color: c.brandText),
                         ),
+                        // Миқдорга чегирма (D-REST-25): биринчи поғона — «10 тадан 32 000»; қолганлари саватда.
+                        if (item.qtyTiers.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            context
+                                .tr('restaurants_tier_from')
+                                .replaceAll('{min}', '${item.qtyTiers.first.minQty}')
+                                .replaceAll('{price}', formatPrice(item.qtyTiers.first.price)),
+                            key: Key('tier-hint-${item.id}'),
+                            maxLines: 1,
+                            style: AvaText.caption.copyWith(color: c.ok),
+                          ),
+                        ],
                         if (stats != null && stats!.showRating) ...[
                           const SizedBox(width: 8),
                           Icon(Icons.star_rounded, size: 14, color: c.brand),

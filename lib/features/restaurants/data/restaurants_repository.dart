@@ -14,6 +14,7 @@ import '../../../utils/geo_hash.dart';
 import '../domain/cuisine.dart';
 import '../domain/dish_facts.dart';
 import '../domain/dish_stats.dart';
+import '../domain/qty_tiers.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
 import '../domain/restaurant_sections.dart';
@@ -373,6 +374,7 @@ class RestaurantsRepository {
     bool available = true,
     DateTime? stopUntil,
     DishFacts? facts,
+    List<QtyTier>? qtyTiers,
   }) async {
     final col = _restaurants.doc(restaurantId).collection('menu_items');
     final ref = id == null ? col.doc() : col.doc(id);
@@ -389,6 +391,9 @@ class RestaurantsRepository {
       'stopUntil': stopUntil == null ? null : Timestamp.fromDate(stopUntil),
       // Фактлар: [facts] `null` — тегилмайди; берилса — киритилмагани ўчирилади.
       ...DishFacts.patch(facts, FieldValue.delete()),
+      // Миқдорга чегирма (D-REST-25): `null` — тегилмайди; бўш рўйхат — майдон ўчирилади (`null` ёзилмайди,
+      // rules рад этади); берилса — поғоналар.
+      if (qtyTiers != null) 'qtyTiers': qtyTiers.isEmpty ? FieldValue.delete() : [for (final t in qtyTiers) t.toMap()],
       if (id == null) 'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

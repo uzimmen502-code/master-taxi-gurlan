@@ -80,6 +80,17 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
+  testWidgets('эски «AVA дўкони» қатори матрицада чиқмайди (эга 2026-10-20); қолган қаторлар жойида', (t) async {
+    await pump(t, width: 1280);
+    expect(find.textContaining('AVA дўкони'), findsNothing);
+    expect(find.textContaining('Ёпиқ қолсин'), findsNothing);
+    expect(find.textContaining('Ovqat'), findsNothing, reason: 'эски «Овқат» қатори ҳам чизилмайди (эга 2026-10-20)');
+    expect(find.textContaining('olib tashlangan'), findsNothing);
+    expect(find.text('Mahalliy taksi'), findsOneWidget);
+    expect(find.text('Yuk: tuman ichida'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('тор админ экран (1000) ва кўп туман: ён томонга тортилади, overflow йўқ', (t) async {
     await pump(t, width: 1000, districts: 12);
     expect(t.takeException(), isNull);

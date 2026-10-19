@@ -39,7 +39,7 @@ const Map<String, String> _moduleLabels = {
   'yuk_local': 'Yuk: tuman ichida',
   'yuk_intercity': 'Yuk: shaharlararo',
   'courier': 'Kuryer',
-  'food': 'Ovqat (olib tashlangan — eski ilova uchun yashiring)',
+  'food': 'Ovqat (eski, olib tashlangan)',
   'jobs': 'Эълонлар ва хизматлар',
   'cheap_products_home': 'Aholi bozori',
   'bread': 'Non',
@@ -50,11 +50,9 @@ const Map<String, String> _moduleLabels = {
   'tire': 'Avto shina',
   'car_wash': 'Avto yuvish',
   'oil_change': 'Moy almashtirish',
-  // Эски алоҳида «AVA дўкони» экранининг дарвозаси. Янги иловада бу экран
-  // ЙЎҚ (2026-10-07): AVA товарлари Улгуржи бозорда, `wholesale_market` га
-  // бўйсунади. Калит фақат Play'даги ЭСКИ версиялар учун қолди — у ерда
-  // «AVA ДЎКОНИ» плиткаси шу калит «Ёпиқ» бўлгани учун кўринмайди.
-  'platform_store': 'AVA дўкони (эски версия — Ёпиқ қолсин)',
+  // Эски алоҳида «AVA дўкони» экранининг дарвозаси. Матрицада ЧИЗИЛМАЙДИ
+  // ([_hiddenMatrixRows], эга 2026-10-20); ном фақат журнал/тарих матнлари учун.
+  'platform_store': 'AVA дўкони (эски)',
   'tv_market': 'AVAGram',
   'chatgpt': 'AVA ёрдамчиси',
   'ev_charging': 'EV zaryadlash',
@@ -69,6 +67,14 @@ const Map<String, String> _moduleLabels = {
 };
 
 String _labelFor(String id) => _moduleLabels[id] ?? id;
+
+/// Матрицада қатор сифатида КЎРСАТИЛМАЙДИГАН модуллар (эга, 2026-10-20: «АВА дўкони (эски версия — Ёпиқ қолсин)
+/// деб ёзилган қаторни олиб ташла»; шундай «Овқат — олиб ташланган, эски илова учун яширинг»). Калитлар
+/// `kKnownModuleIds`да ва сақланган созламада ЎЗГАРИШСИЗ қолади: `platform_store` — Play'даги ЭСКИ иловаларда
+/// «AVA ДЎКОНИ» плиткаси, `food` — эски APK'даги «Овқат» плиткаси шу калит «Ёпиқ/яширин» бўлгани учун кўринмайди;
+/// қатор чизилмаса, сақланган қиймат ҳам тегилмай ўтади (кодда ЎЛИК ЭМАС: ўрнатилган эски иловалар серверда
+/// шу калитни ўқийди).
+const Set<String> _hiddenMatrixRows = {'platform_store', 'food'};
 
 /// Matritsa ustuni — bitta xizmat zonasi yoki global baseline.
 class _MatrixColumn {
@@ -1011,6 +1017,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
                 child: Column(
                   children: [
                     for (final moduleId in kKnownModuleIds)
+                      if (!_hiddenMatrixRows.contains(moduleId))
                       _moduleRow(
                         moduleId: moduleId,
                         columns: columns,

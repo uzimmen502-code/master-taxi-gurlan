@@ -58,10 +58,43 @@ class NewsRepository {
   }) {
     final uid = phoneDigits(userId);
     return items
+        // Админ қайтариб олган хабар (`retractedAt`) лентада йўқ. Шахсий хабарлар ҳеч қачон қайтарилмайди, лекин
+        // бир хил филтр. Эски APK `retractedAt`ни билмайди — улар `audience == 'retracted'` орқали яширади.
+        .where((n) => !n.isRetracted)
         .where((n) => _matchesFeed(n, feed))
         .where((n) => n.isVisibleTo(userId: uid, audiences: audiences))
         .toList(growable: false);
   }
+
+  /// Тест учун: [_filterForUser] (қайтариб олинган хабар, аудитория, лента тури).
+  @visibleForTesting
+  static List<NewsItem> filterForUserForTesting(
+    Iterable<NewsItem> items, {
+    required List<String> audiences,
+    required String userId,
+    required NewsFeedKind feed,
+  }) =>
+      _filterForUser(items, audiences: audiences, userId: userId, feed: feed);
+
+  /// Тест учун: ўқилмаганлар ҳисобига қўшиладими ([_countUnreadFiltered] ичидаги шарт).
+  @visibleForTesting
+  static bool countsAsUnreadForTesting(
+    NewsItem n, {
+    required List<String> audiences,
+    required String userId,
+    required NewsFeedKind feed,
+  }) =>
+      _countsAsUnread(n, audiences: audiences, userId: userId, feed: feed);
+
+  static bool _countsAsUnread(
+    NewsItem n, {
+    required List<String> audiences,
+    required String userId,
+    required NewsFeedKind feed,
+  }) =>
+      !n.isRetracted &&
+      _matchesFeed(n, feed) &&
+      n.isVisibleTo(userId: userId, audiences: audiences);
 
   static List<NewsItem> _mergeDedupe(List<NewsItem> a, List<NewsItem> b) {
     final byId = <String, NewsItem>{};
@@ -465,8 +498,9 @@ class NewsRepository {
     final globalSnap = await globalQ.limit(50).get();
     for (final d in globalSnap.docs) {
       final n = NewsItem.fromDoc(d);
-      if (!_matchesFeed(n, feed)) continue;
-      if (!n.isVisibleTo(userId: uid, audiences: audiences)) continue;
+      if (!_countsAsUnread(n, audiences: audiences, userId: uid, feed: feed)) {
+        continue;
+      }
       if (ids.add(n.id)) total++;
     }
 
@@ -493,8 +527,9 @@ class NewsRepository {
     }
     for (final d in personalSnap.docs) {
       final n = NewsItem.fromDoc(d);
-      if (!_matchesFeed(n, feed)) continue;
-      if (!n.isVisibleTo(userId: uid, audiences: audiences)) continue;
+      if (!_countsAsUnread(n, audiences: audiences, userId: uid, feed: feed)) {
+        continue;
+      }
       if (ids.add(n.id)) total++;
     }
 
@@ -715,7 +750,8 @@ class NewsRepository {
 
     final subNews = watchForAdmin(orderOnly: orderOnly, limit: limit).listen(
       (list) {
-        items = list;
+        // Қайтариб олинган хабар админ badge'ини оширмайди.
+        items = list.where((n) => !n.isRetracted).toList(growable: false);
         emit();
       },
       onError: controller.addError,
@@ -739,11 +775,6 @@ class NewsRepository {
 
   Future<DocumentReference<Map<String, dynamic>>> create(NewsItem item) async {
     return _col.add(item.toCreateMap());
-  }
-
-  Future<void> delete(String id) async {
-    if (id.isEmpty) return;
-    await _col.doc(id).delete();
   }
 
   /// Админ «Push qayta yuborish» — CF `onAdminNewsUpdate` триггерланadi.

@@ -57,14 +57,17 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
     );
   }
 
-  Future<void> _delete(NewsItem item) async {
+  /// Хабарни ҚАЙТАРИБ олиш (ўчириш ЭМАС): сервер (callable `adminRetractNews`) `retractedAt` қўяди ва audit ёзади;
+  /// ҳужжат 90 кун сақланади, сўнг сервер ўзи тозалайди. Шахсий/буюртма хабарлари қайтарилмайди (сервер рад этади).
+  Future<void> _retract(NewsItem item) async {
+    if (item.isRetracted) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Хабaрни ўчириш?'),
+        title: const Text('Хабарни қайтариб олиш?'),
         content: Text(
-            '"${item.title}" хабaри тоzаланaди ва барчa фойдалaнувчилaрдaн '
-            'йўq бўлaди. Бу амaлни бекор қилиш мумкин эмaс.'),
+            '"${item.title}" — хабар барча фойдаланувчилардан йўқолади, '
+            'тарихда 90 кун сақланади.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -72,23 +75,31 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+            child: const Text('Қайтариб олиш',
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
     if (confirm != true || !mounted) return;
     try {
-      // Сервер (callable) ўчиради + audit; `admin_news` rules'да client delete = false.
-      await context.read<AdminDeleteRecordService>().deleteNews(item.id);
+      await context.read<AdminDeleteRecordService>().retractNews(item.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🗑 "${item.title}" ўчирилди',
+          content: Text('↩ "${item.title}" қайтариб олинди',
               style: const TextStyle(color: AppColors.onPrimary)),
           duration: const Duration(seconds: 2),
         ),
+      );
+    } on AdminDeleteRecordException catch (e) {
+      if (!mounted) return;
+      final text = e.reason == 'PERSONAL_NEWS_NOT_RETRACTABLE'
+          ? 'Шахсий ва буюртма хабарларини қайтариб олиб бўлмайди'
+          : 'Хатoлик: $e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text(text)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -102,7 +113,10 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
   }
 
   Future<void> _resendPush(NewsItem item) async {
-    if (!item.expectsPushFromAdmin || _resendingPushIds.contains(item.id)) {
+    // Қайтариб олинган хабар учун push қайта юборилмайди.
+    if (item.isRetracted ||
+        !item.expectsPushFromAdmin ||
+        _resendingPushIds.contains(item.id)) {
       return;
     }
 
@@ -220,7 +234,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
             }
             return _ResponsiveGrid(
               items: filtered,
-              onDelete: _delete,
+              onRetract: _retract,
               onResendPush: _resendPush,
               resendingPushIds: _resendingPushIds,
             );
@@ -673,12 +687,12 @@ class _WalletNewsListState extends State<_WalletNewsList> {
 class _ResponsiveGrid extends StatelessWidget {
   const _ResponsiveGrid({
     required this.items,
-    required this.onDelete,
+    required this.onRetract,
     required this.onResendPush,
     required this.resendingPushIds,
   });
   final List<NewsItem> items;
-  final ValueChanged<NewsItem> onDelete;
+  final ValueChanged<NewsItem> onRetract;
   final ValueChanged<NewsItem> onResendPush;
   final Set<String> resendingPushIds;
 
@@ -699,7 +713,7 @@ class _ResponsiveGrid extends StatelessWidget {
         itemCount: items.length,
         itemBuilder: (_, i) => _NewsCard(
           item: items[i],
-          onDelete: () => onDelete(items[i]),
+          onRetract: () => onRetract(items[i]),
           onResendPush: () => onResendPush(items[i]),
           resendingPush: resendingPushIds.contains(items[i].id),
         ),
@@ -711,12 +725,12 @@ class _ResponsiveGrid extends StatelessWidget {
 class _NewsCard extends StatelessWidget {
   const _NewsCard({
     required this.item,
-    required this.onDelete,
+    required this.onRetract,
     required this.onResendPush,
     required this.resendingPush,
   });
   final NewsItem item;
-  final VoidCallback onDelete;
+  final VoidCallback onRetract;
   final VoidCallback onResendPush;
   final bool resendingPush;
 
@@ -759,8 +773,12 @@ class _NewsCard extends StatelessWidget {
     final color = _categoryColors[item.category] ?? Colors.grey;
     final icon = _categoryIcons[item.category] ?? Icons.notes;
     final catLabel = _categoryLabels[item.category] ?? item.category;
+    final retracted = item.isRetracted;
     final audLabel = _audienceLabels[item.audience] ?? item.audience;
-    return Container(
+    return Opacity(
+      // Қайтариб олинган хабар хира: фойдаланувчиларда йўқ, тарихда 90 кун сақланади.
+      opacity: retracted ? 0.5 : 1,
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -796,9 +814,16 @@ class _NewsCard extends StatelessWidget {
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(audLabel,
-                  style: TextStyle(
-                      fontSize: 10, color: Colors.grey.shade700)),
+              child: retracted
+                  ? Text('Қайтариб олинган',
+                      key: ValueKey('news-retracted-${item.id}'),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700))
+                  : Text(audLabel,
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.grey.shade700)),
             ),
           ]),
         ),
@@ -864,7 +889,7 @@ class _NewsCard extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 11, color: Colors.grey.shade600)),
             const Spacer(),
-            if (item.expectsPushFromAdmin)
+            if (item.expectsPushFromAdmin && !retracted)
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: resendingPush
@@ -910,20 +935,25 @@ class _NewsCard extends StatelessWidget {
                         color: Colors.amber.shade800,
                         fontWeight: FontWeight.bold)),
               ),
-            // Ўчириш: сервер callable (`adminDeleteRecord`) орқали, audit билан.
-            InkWell(
-              key: ValueKey('news-delete-${item.id}'),
-              onTap: onDelete,
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(Icons.delete_outline,
-                    size: 18, color: Colors.red.shade400),
+            // Қайтариб олиш: сервер callable (`adminRetractNews`) орқали, audit билан. Ўчириш йўқ (эга, 2026-10-20).
+            if (!retracted)
+              Tooltip(
+                message: 'Қайтариб олиш',
+                child: InkWell(
+                  key: ValueKey('news-retract-${item.id}'),
+                  onTap: onRetract,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.undo,
+                        size: 18, color: Colors.red.shade400),
+                  ),
+                ),
               ),
-            ),
           ]),
         ),
       ]),
+    ),
     );
   }
 }

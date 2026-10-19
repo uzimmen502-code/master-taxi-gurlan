@@ -1,7 +1,8 @@
 /**
- * ADMIN — yozuvni o'chirish callable (`adminDeleteRecord`): risk_event, admin_news, support_message, support_chat.
- * HAQIQIY `functions/index.js`, Firestore Emulator. Rol, validatsiya, audit snapshot (PII yo'q), idempotentlik,
- * 400 tadan batch (450 xabar), `partial` chegarasi, oxirgi xabar o'chirilganda `lastMessage` yangilanishi.
+ * ADMIN — HAQIQIY o'chirish callable (`adminDeleteRecord`), siyosat 2026-10-20: faqat SUPERADMIN, faqat
+ *   - support_chat: shaxsiy ma'lumotni o'chirish talabi (sabab >= 10 belgi) + chat avval ARXIVGA olingan;
+ *   - risk_event: status 'resolved' va resolvedAt 365 kundan eski.
+ * `admin_news` / `support_message` → KIND_INVALID. HAQIQIY `functions/index.js`, Firestore Emulator.
  *
  *   firebase emulators:exec --only firestore --project demo-admin-delete \
  *     "node functions/test/admin_delete_record_cf.test.js"
@@ -27,8 +28,10 @@ const ADMIN = '998915000001';
 const SUPER = '998915000002';
 const DISPATCHER = '998915000003';
 const USER = '998912000001';
+const DAY = 24 * 60 * 60 * 1000;
 const ctxOf = (p) => ({ auth: { uid: `uid_${p}`, token: { phone_number: `+${p}` } } });
 const call = (data, who) => fns.adminDeleteRecord.run(data, ctxOf(who));
+const REASON = 'mijoz shaxsiy malumotini ochirishni talab qildi';
 
 const results = [];
 const check = async (name, fn) => {
@@ -49,6 +52,7 @@ async function clearEmulator() {
 }
 const auditsOf = async (recordId) => (await db.collection('admin_audit').where('recordId', '==', recordId).get()).docs.map((d) => d.data());
 const exists = async (path) => (await db.doc(path).get()).exists;
+const msgCount = async (chat) => (await db.collection('support_chats').doc(chat).collection('messages').count().get()).data().count;
 
 async function seedMessages(chatId, n, { startMs = 1_700_000_000_000 } = {}) {
   for (let i = 0; i < n; i += 400) {
@@ -61,6 +65,11 @@ async function seedMessages(chatId, n, { startMs = 1_700_000_000_000 } = {}) {
     await batch.commit();
   }
 }
+/** Arxivlangan chat hujjati: updatedAt < adminArchivedAt. */
+const archivedChat = (chat, extra = {}) => db.collection('support_chats').doc(chat).set({
+  userPhone: chat, lastMessage: 'MAXFIY-OXIRGI', lastFromAdmin: false, awaitingAdmin: true,
+  updatedAt: Timestamp.fromMillis(1_700_000_000_000), adminArchivedAt: Timestamp.fromMillis(1_700_000_100_000), adminArchivedBy: ADMIN, ...extra,
+});
 
 async function main() {
   await clearEmulator();
@@ -69,161 +78,150 @@ async function main() {
   await db.collection('users').doc(DISPATCHER).set({ role: 'dispatcher' });
   await db.collection('users').doc(USER).set({ role: 'user' });
 
-  await check('A1 oddiy foydalanuvchi, dispatcher va kirmagan rad etiladi; yozuv saqlanadi, audit yo\'q', async () => {
-    await db.collection('risk_events').doc('r_auth').set({ type: 'x', severity: 'low', status: 'open', userId: USER });
-    await assert.rejects(call({ kind: 'risk_event', id: 'r_auth' }, USER), (e) => e.code === 'permission-denied');
-    await assert.rejects(call({ kind: 'risk_event', id: 'r_auth' }, DISPATCHER), (e) => e.code === 'permission-denied');
-    await assert.rejects(fns.adminDeleteRecord.run({ kind: 'risk_event', id: 'r_auth' }, {}), (e) => e.code === 'unauthenticated');
-    assert.ok(await exists('risk_events/r_auth'));
-    assert.strictEqual((await auditsOf('r_auth')).length, 0);
+  await check('A1 oddiy foydalanuvchi, dispatcher, kirmagan VA oddiy admin rad etiladi (faqat superadmin); yozuv saqlanadi, audit yo\'q', async () => {
+    const chat = '998901119001';
+    await archivedChat(chat);
+    await seedMessages(chat, 2);
+    for (const who of [USER, DISPATCHER]) {
+      await assert.rejects(call({ kind: 'support_chat', id: chat, reason: REASON }, who), (e) => e.code === 'permission-denied');
+    }
+    await assert.rejects(fns.adminDeleteRecord.run({ kind: 'support_chat', id: chat, reason: REASON }, {}), (e) => e.code === 'unauthenticated');
+    // oddiy admin: support_chat ham, risk_event ham — permission-denied
+    await assert.rejects(call({ kind: 'support_chat', id: chat, reason: REASON }, ADMIN), (e) => e.code === 'permission-denied');
+    await assert.rejects(call({ kind: 'risk_event', id: 'r_x' }, ADMIN), (e) => e.code === 'permission-denied');
+    assert.ok(await exists(`support_chats/${chat}`));
+    assert.strictEqual(await msgCount(chat), 2);
+    assert.strictEqual((await auditsOf(chat)).length, 0);
   });
 
-  await check('A2 validatsiya: noma\'lum kind, bo\'sh/yo\'lli id, chatId yo\'q, uzun sabab', async () => {
-    await expectCode(call({ kind: 'wallet', id: 'a' }, ADMIN), 'KIND_INVALID');
-    await expectCode(call({ id: 'a' }, ADMIN), 'KIND_INVALID');
-    await expectCode(call({ kind: 'risk_event', id: '' }, ADMIN), 'ID_INVALID');
-    await expectCode(call({ kind: 'risk_event', id: 'a/b' }, ADMIN), 'ID_INVALID');
-    await expectCode(call({ kind: 'risk_event', id: 5 }, ADMIN), 'ID_INVALID');
-    await expectCode(call({ kind: 'support_message', id: 'm1' }, ADMIN), 'CHAT_ID_INVALID');
-    await expectCode(call({ kind: 'support_message', id: 'm1', chatId: 'x/y' }, ADMIN), 'CHAT_ID_INVALID');
-    await expectCode(call({ kind: 'risk_event', id: 'r_auth', reason: 'x'.repeat(301) }, ADMIN), 'REASON_TOO_LONG');
-    assert.ok(await exists('risk_events/r_auth'));
+  await check('A2 validatsiya: noma\'lum kind; admin_news va support_message endi KIND_INVALID (admin va superadmin uchun ham); id; sabab', async () => {
+    for (const who of [ADMIN, SUPER]) {
+      await expectCode(call({ kind: 'wallet', id: 'a' }, who), 'KIND_INVALID');
+      await expectCode(call({ id: 'a' }, who), 'KIND_INVALID');
+      await expectCode(call({ kind: 'admin_news', id: 'n1' }, who), 'KIND_INVALID');
+      await expectCode(call({ kind: 'support_message', id: 'm1', chatId: '998901110001' }, who), 'KIND_INVALID');
+    }
+    await expectCode(call({ kind: 'risk_event', id: '' }, SUPER), 'ID_INVALID');
+    await expectCode(call({ kind: 'risk_event', id: 'a/b' }, SUPER), 'ID_INVALID');
+    await expectCode(call({ kind: 'support_chat', id: 5, reason: REASON }, SUPER), 'ID_INVALID');
+    await expectCode(call({ kind: 'support_chat', id: 'x', reason: 'x'.repeat(301) }, SUPER), 'REASON_TOO_LONG');
   });
 
-  await check('R1 risk_event: o\'chadi, bitta audit (to\'liq nusxa); superadmin ham mumkin; takroriy — deleted:false, audit ko\'paymaydi', async () => {
-    await db.collection('risk_events').doc('r1').set({
-      type: 'same_device_new_phone', severity: 'high', status: 'open', userId: USER, deviceId: 'dev-1', message: 'Qurilma bir', meta: { a: 1 }, createdAt: Timestamp.fromMillis(1_700_000_000_000),
+  await check('N0 admin_news hujjati KIND_INVALID bilan rad etilganda o\'chmaydi', async () => {
+    await db.collection('admin_news').doc('n_keep').set({ title: 'Aksiya', body: 'x', category: 'promo', audience: 'all', targetUserId: '' });
+    await expectCode(call({ kind: 'admin_news', id: 'n_keep' }, SUPER), 'KIND_INVALID');
+    assert.ok(await exists('admin_news/n_keep'));
+    assert.strictEqual((await auditsOf('n_keep')).length, 0);
+  });
+
+  await check('R1 risk_event: ochiq signal o\'chirilmaydi (RISK_EVENT_RETENTION)', async () => {
+    await db.collection('risk_events').doc('r_open').set({ type: 'x', severity: 'low', status: 'open', userId: USER, createdAt: Timestamp.fromMillis(Date.now() - 800 * DAY) });
+    await expectCode(call({ kind: 'risk_event', id: 'r_open' }, SUPER), 'RISK_EVENT_RETENTION');
+    assert.ok(await exists('risk_events/r_open'));
+    assert.strictEqual((await auditsOf('r_open')).length, 0);
+  });
+
+  await check('R2 risk_event: resolved, lekin resolvedAt yo\'q / 10 kun / 364 kun → RISK_EVENT_RETENTION; 366 kun → o\'chadi', async () => {
+    await db.collection('risk_events').doc('r_nots').set({ type: 'x', status: 'resolved' });
+    await db.collection('risk_events').doc('r_10d').set({ type: 'x', status: 'resolved', resolvedAt: Timestamp.fromMillis(Date.now() - 10 * DAY) });
+    await db.collection('risk_events').doc('r_364d').set({ type: 'x', status: 'resolved', resolvedAt: Timestamp.fromMillis(Date.now() - 364 * DAY) });
+    for (const id of ['r_nots', 'r_10d', 'r_364d']) {
+      await expectCode(call({ kind: 'risk_event', id }, SUPER), 'RISK_EVENT_RETENTION');
+      assert.ok(await exists(`risk_events/${id}`), id);
+      assert.strictEqual((await auditsOf(id)).length, 0, id);
+    }
+    await db.collection('risk_events').doc('r_366d').set({
+      type: 'same_device_new_phone', severity: 'high', status: 'resolved', userId: USER, deviceId: 'dev-1', message: 'Qurilma bir', meta: { a: 1 },
+      createdAt: Timestamp.fromMillis(Date.now() - 400 * DAY), resolvedAt: Timestamp.fromMillis(Date.now() - 366 * DAY), resolvedBy: '+998915000009',
     });
-    const r = await call({ kind: 'risk_event', id: 'r1', reason: 'eski signal' }, SUPER);
+    const r = await call({ kind: 'risk_event', id: 'r_366d', reason: 'muddati otgan' }, SUPER);
     assert.deepStrictEqual(r, { ok: true, deleted: true });
-    assert.ok(!(await exists('risk_events/r1')));
-    const a = await auditsOf('r1');
+    assert.ok(!(await exists('risk_events/r_366d')));
+    const a = await auditsOf('r_366d');
     assert.strictEqual(a.length, 1);
     assert.strictEqual(a[0].kind, 'admin_record_deleted');
     assert.strictEqual(a[0].recordKind, 'risk_event');
     assert.strictEqual(a[0].actor, SUPER);
-    assert.strictEqual(a[0].reason, 'eski signal');
+    assert.strictEqual(a[0].reason, 'muddati otgan');
+    assert.deepStrictEqual([a[0].snapshot.type, a[0].snapshot.status, a[0].snapshot.userId, a[0].snapshot.deviceId, a[0].snapshot.meta], ['same_device_new_phone', 'resolved', USER, 'dev-1', { a: 1 }]);
     assert.ok(a[0].at);
-    assert.deepStrictEqual([a[0].snapshot.type, a[0].snapshot.severity, a[0].snapshot.status, a[0].snapshot.userId, a[0].snapshot.deviceId, a[0].snapshot.message, a[0].snapshot.meta],
-      ['same_device_new_phone', 'high', 'open', USER, 'dev-1', 'Qurilma bir', { a: 1 }]);
-    assert.ok(a[0].snapshot.createdAt);
-    const again = await call({ kind: 'risk_event', id: 'r1' }, ADMIN);
-    assert.deepStrictEqual(again, { ok: true, deleted: false });
-    assert.strictEqual((await auditsOf('r1')).length, 1);
+    // takroriy: deleted:false, audit ko'paymaydi
+    assert.deepStrictEqual(await call({ kind: 'risk_event', id: 'r_366d' }, SUPER), { ok: true, deleted: false });
+    assert.strictEqual((await auditsOf('r_366d')).length, 1);
   });
 
-  await check('N1 admin_news: o\'chadi; audit snapshot sarlavha/kategoriya/auditoriya BOR, matn (body) YO\'Q; takroriy — o\'zgarishsiz', async () => {
-    await db.collection('admin_news').doc('n1').set({
-      title: 'Aksiya', body: 'MAXFIY-BODY-MATNI', category: 'promo', audience: 'user', targetUserId: USER, source: 'admin', createdAt: Timestamp.fromMillis(1_700_000_000_000), priority: 3,
-    });
-    const r = await call({ kind: 'admin_news', id: 'n1' }, ADMIN);
+  await check('C1 support_chat: sabab yo\'q / 9 belgi → REASON_REQUIRED (chat saqlanadi); 10 belgi chegara arxivga qadar o\'tadi', async () => {
+    const chat = '998901119002';
+    await archivedChat(chat);
+    await seedMessages(chat, 2);
+    await expectCode(call({ kind: 'support_chat', id: chat }, SUPER), 'REASON_REQUIRED');
+    await expectCode(call({ kind: 'support_chat', id: chat, reason: '   ' }, SUPER), 'REASON_REQUIRED');
+    await expectCode(call({ kind: 'support_chat', id: chat, reason: '123456789' }, SUPER), 'REASON_REQUIRED');
+    assert.ok(await exists(`support_chats/${chat}`));
+    assert.strictEqual(await msgCount(chat), 2);
+    assert.strictEqual((await auditsOf(chat)).length, 0);
+    // aynan 10 belgi — qabul qilinadi
+    const r = await call({ kind: 'support_chat', id: chat, reason: '1234567890' }, SUPER);
     assert.deepStrictEqual(r, { ok: true, deleted: true });
-    assert.ok(!(await exists('admin_news/n1')));
-    const a = await auditsOf('n1');
-    assert.strictEqual(a.length, 1);
-    assert.deepStrictEqual([a[0].snapshot.title, a[0].snapshot.category, a[0].snapshot.audience, a[0].snapshot.targetUserId, a[0].snapshot.source],
-      ['Aksiya', 'promo', 'user', USER, 'admin']);
-    assert.ok(!JSON.stringify(a[0]).includes('MAXFIY-BODY-MATNI'), 'body audit\'ga tushmasligi kerak');
-    assert.strictEqual(a[0].reason, '');
-    assert.deepStrictEqual(await call({ kind: 'admin_news', id: 'n1' }, ADMIN), { ok: true, deleted: false });
-    assert.strictEqual((await auditsOf('n1')).length, 1);
   });
 
-  await check('M1 support_message: o\'chadi; audit\'da matn YO\'Q (faqat uzunlik); takroriy — deleted:false', async () => {
-    const chat = '998901110001';
-    await db.collection('support_chats').doc(chat).set({ userPhone: chat, lastMessage: 'oxirgi', lastFromAdmin: false });
-    await seedMessages(chat, 3); // m0000 (mijoz), m0001 (admin), m0002 (mijoz)
-    const r = await call({ kind: 'support_message', chatId: chat, id: 'm0000' }, ADMIN);
-    assert.deepStrictEqual(r, { ok: true, deleted: true });
-    assert.ok(!(await exists(`support_chats/${chat}/messages/m0000`)));
-    assert.ok(await exists(`support_chats/${chat}/messages/m0001`));
-    const a = await auditsOf('m0000');
-    assert.strictEqual(a.length, 1);
-    assert.strictEqual(a[0].recordKind, 'support_message');
-    assert.strictEqual(a[0].chatId, chat);
-    assert.deepStrictEqual([a[0].snapshot.fromAdmin, a[0].snapshot.fromPhone, a[0].snapshot.textLength], [false, chat, 'maxfiy matn 0'.length]);
-    assert.ok(a[0].snapshot.createdAt);
-    assert.ok(!JSON.stringify(a[0]).includes('maxfiy matn'), 'xabar matni audit\'ga tushmasligi kerak');
-    assert.deepStrictEqual(await call({ kind: 'support_message', chatId: chat, id: 'm0000' }, ADMIN), { ok: true, deleted: false });
-    assert.strictEqual((await auditsOf('m0000')).length, 1);
-    // yangi bo'lmagan xabar o'chirilganda chat hujjati o'zgarmaydi
-    const chatDoc = (await db.doc(`support_chats/${chat}`).get()).data();
-    assert.strictEqual(chatDoc.lastMessage, 'oxirgi');
+  await check('C2 support_chat: ARXIVGA olinmagan chat o\'chirilmaydi (CHAT_NOT_ARCHIVED); yangi xabar kelgan (updatedAt > adminArchivedAt) chat ham', async () => {
+    const chat = '998901119003';
+    await db.collection('support_chats').doc(chat).set({ userPhone: chat, lastMessage: 'x', lastFromAdmin: false, updatedAt: Timestamp.fromMillis(1_700_000_000_000) });
+    await seedMessages(chat, 3);
+    await expectCode(call({ kind: 'support_chat', id: chat, reason: REASON }, SUPER), 'CHAT_NOT_ARCHIVED');
+    assert.ok(await exists(`support_chats/${chat}`));
+    assert.strictEqual(await msgCount(chat), 3);
+    assert.strictEqual((await auditsOf(chat)).length, 0);
+    // arxivlangan, lekin keyin yangi xabar → qayta ochilgan
+    await db.doc(`support_chats/${chat}`).update({ adminArchivedAt: Timestamp.fromMillis(1_700_000_100_000), updatedAt: Timestamp.fromMillis(1_700_000_200_000) });
+    await expectCode(call({ kind: 'support_chat', id: chat, reason: REASON }, SUPER), 'CHAT_NOT_ARCHIVED');
+    assert.strictEqual(await msgCount(chat), 3);
+    assert.strictEqual((await auditsOf(chat)).length, 0);
   });
 
-  await check('M2 eng yangi xabar o\'chirilsa lastMessage qolgan eng yangisiga o\'tadi; lastFromAdmin false → true bo\'lmaydi; awaitingAdmin tegilmaydi', async () => {
-    const chat = '998901110002';
-    const awaitAt = Timestamp.fromMillis(1_700_000_001_000);
-    await db.collection('support_chats').doc(chat).set({
-      userPhone: chat, lastMessage: 'maxfiy matn 2', lastFromAdmin: false, awaitingAdmin: true, awaitingAdminMsgAt: awaitAt,
-    });
-    await seedMessages(chat, 3); // m0001 admin
-    await call({ kind: 'support_message', chatId: chat, id: 'm0002' }, ADMIN);
-    let c = (await db.doc(`support_chats/${chat}`).get()).data();
-    assert.strictEqual(c.lastMessage, 'maxfiy matn 1');
-    assert.strictEqual(c.lastFromAdmin, false, 'mijoz o\'qigan chatda yolg\'on "o\'qilmagan" belgisi yonmasin');
-    assert.strictEqual(c.awaitingAdmin, true);
-    assert.ok(c.awaitingAdminMsgAt.isEqual(awaitAt));
-    // lastFromAdmin true bo'lsa va qolgan eng yangisi admin xabari bo'lsa — true qoladi; keyin mijoz xabari qolsa — false
-    await db.doc(`support_chats/${chat}`).update({ lastFromAdmin: true });
-    await call({ kind: 'support_message', chatId: chat, id: 'm0001' }, ADMIN); // qolgan: m0000 (mijoz)
-    c = (await db.doc(`support_chats/${chat}`).get()).data();
-    assert.deepStrictEqual([c.lastMessage, c.lastFromAdmin], ['maxfiy matn 0', false]);
-    // oxirgisi ham o'chirilsa — bo'sh
-    await call({ kind: 'support_message', chatId: chat, id: 'm0000' }, ADMIN);
-    c = (await db.doc(`support_chats/${chat}`).get()).data();
-    assert.deepStrictEqual([c.lastMessage, c.lastFromAdmin], ['', false]);
-    assert.strictEqual(c.awaitingAdmin, true);
-  });
-
-  await check('M3 lastFromAdmin true va qolgan eng yangisi admin xabari — true saqlanadi', async () => {
-    const chat = '998901110003';
-    await db.collection('support_chats').doc(chat).set({ userPhone: chat, lastMessage: 'x', lastFromAdmin: true });
-    await seedMessages(chat, 3); // m0002 mijoz (eng yangi), m0001 admin
-    await call({ kind: 'support_message', chatId: chat, id: 'm0002' }, ADMIN);
-    const c = (await db.doc(`support_chats/${chat}`).get()).data();
-    assert.deepStrictEqual([c.lastMessage, c.lastFromAdmin], ['maxfiy matn 1', true]);
-  });
-
-  await check('C1 support_chat: 450 xabar (400 + 50 batch) va chat hujjati o\'chadi; bitta audit (messageCount, matn yo\'q); takroriy — deleted:false', async () => {
-    const chat = '998901110004';
-    await db.collection('support_chats').doc(chat).set({ userPhone: chat, lastMessage: 'MAXFIY-OXIRGI', lastFromAdmin: false, awaitingAdmin: true, updatedAt: Timestamp.fromMillis(1_700_000_000_000) });
+  await check('C3 support_chat: arxivlangan, 450 xabar (400 + 50 batch) va chat hujjati o\'chadi; bitta audit (messageCount, arxiv izi, matn yo\'q); takroriy — deleted:false', async () => {
+    const chat = '998901119004';
+    await archivedChat(chat);
     await seedMessages(chat, 450);
-    const r = await call({ kind: 'support_chat', id: chat, reason: 'mijoz so\'radi' }, ADMIN);
+    const r = await call({ kind: 'support_chat', id: chat, reason: REASON }, SUPER);
     assert.deepStrictEqual(r, { ok: true, deleted: true });
     assert.ok(!(await exists(`support_chats/${chat}`)));
-    assert.strictEqual((await db.collection('support_chats').doc(chat).collection('messages').count().get()).data().count, 0);
+    assert.strictEqual(await msgCount(chat), 0);
     const a = await auditsOf(chat);
     assert.strictEqual(a.length, 1);
     assert.strictEqual(a[0].recordKind, 'support_chat');
+    assert.strictEqual(a[0].actor, SUPER);
     assert.strictEqual(a[0].snapshot.messageCount, 450);
     assert.strictEqual(a[0].snapshot.userPhone, chat);
-    assert.strictEqual(a[0].reason, 'mijoz so\'radi');
+    assert.strictEqual(a[0].snapshot.adminArchivedBy, ADMIN);
+    assert.ok(a[0].snapshot.adminArchivedAt);
+    assert.strictEqual(a[0].reason, REASON);
     assert.ok(!JSON.stringify(a[0]).includes('MAXFIY'), 'chat matni audit\'ga tushmasligi kerak');
-    assert.deepStrictEqual(await call({ kind: 'support_chat', id: chat }, ADMIN), { ok: true, deleted: false });
+    assert.deepStrictEqual(await call({ kind: 'support_chat', id: chat, reason: REASON }, SUPER), { ok: true, deleted: false });
     assert.strictEqual((await auditsOf(chat)).length, 1);
   });
 
-  await check('C2 chat hujjati yo\'q, lekin xabarlar qolgan (yetim) — xabarlar o\'chadi', async () => {
-    const chat = '998901110005';
+  await check('C4 chat hujjati yo\'q, lekin xabarlar qolgan (yetim) — arxiv sharti tekshirilmaydi, xabarlar o\'chadi', async () => {
+    const chat = '998901119005';
     await seedMessages(chat, 5);
-    const r = await call({ kind: 'support_chat', id: chat }, ADMIN);
+    const r = await call({ kind: 'support_chat', id: chat, reason: REASON }, SUPER);
     assert.deepStrictEqual(r, { ok: true, deleted: true });
-    assert.strictEqual((await db.collection('support_chats').doc(chat).collection('messages').count().get()).data().count, 0);
+    assert.strictEqual(await msgCount(chat), 0);
     assert.strictEqual((await auditsOf(chat)).length, 1);
   });
 
-  await check('C3 chegara: maxBatches=1 va 450 xabar → partial:true, chat hujjati qoladi; qayta bosilsa tugaydi (2-audit qolgan 50 uchun)', async () => {
+  await check('C5 chegara: maxBatches=1 va 450 xabar → partial:true, chat hujjati qoladi; qayta bosilsa tugaydi (2-audit qolgan 50 uchun)', async () => {
     const local = {};
-    attachAdminDeleteRecord(local, { functions, db, admin, requireCallerRoles: async () => ADMIN, maxBatches: 1 });
-    const chat = '998901110006';
-    await db.collection('support_chats').doc(chat).set({ userPhone: chat, lastMessage: 'x', lastFromAdmin: false });
+    attachAdminDeleteRecord(local, { functions, db, admin, requireCallerRoles: async () => SUPER, maxBatches: 1 });
+    const chat = '998901119006';
+    await archivedChat(chat);
     await seedMessages(chat, 450);
-    const r1 = await local.adminDeleteRecord.run({ kind: 'support_chat', id: chat }, ctxOf(ADMIN));
+    const r1 = await local.adminDeleteRecord.run({ kind: 'support_chat', id: chat, reason: REASON }, ctxOf(SUPER));
     assert.deepStrictEqual(r1, { ok: true, deleted: true, partial: true });
     assert.ok(await exists(`support_chats/${chat}`), 'chat hujjati partial\'da saqlanadi');
-    assert.strictEqual((await db.collection('support_chats').doc(chat).collection('messages').count().get()).data().count, 50);
-    const r2 = await local.adminDeleteRecord.run({ kind: 'support_chat', id: chat }, ctxOf(ADMIN));
+    assert.strictEqual(await msgCount(chat), 50);
+    const r2 = await local.adminDeleteRecord.run({ kind: 'support_chat', id: chat, reason: REASON }, ctxOf(SUPER));
     assert.deepStrictEqual(r2, { ok: true, deleted: true });
     assert.ok(!(await exists(`support_chats/${chat}`)));
     const a = await auditsOf(chat);

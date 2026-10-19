@@ -97,9 +97,12 @@ attachRestaurantSectionsConfig(exports, { functions, db, admin, canonicalUid, re
 // Мавсумий бўлимлар ва Рамазон жадвали (D-REST-22/39): settings/restaurant_seasons, settings/restaurant_ramadan — версияли, фақат CF.
 const { attachRestaurantSeasons } = require('./restaurant_seasons');
 attachRestaurantSeasons(exports, { functions, db, admin, requireCallerRoles });
-// Админ ўчириши (2026-10-19): risk_event / admin_news / support_message / support_chat — фақат callable, audit билан (§41).
+// Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
+// 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');
 attachAdminDeleteRecord(exports, { functions, db, admin, requireCallerRoles });
+const { attachAdminRetractArchive } = require('./admin_retract_archive');
+attachAdminRetractArchive(exports, { functions, db, admin, requireCallerRoles });
 // Стол бронь (S5, D-REST-23/38): AVA хизмат ҳақи ресторан ҳамёнидан бронни қабул қилишда ечилади; сўров/қабул/рад/бекор,
 // админ қайтариши ва `settings/restaurant_bookings` (версияланган, ҳужжат йўқ = OFF).
 const restaurantOrdersLib = require('./restaurant_orders');

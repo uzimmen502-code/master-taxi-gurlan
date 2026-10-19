@@ -3841,5 +3841,7 @@
   "restaurants_venue_restaurant": "Ресторан",
   "restaurants_venue_chaikhana": "Чайхана",
   "restaurants_m_venue_type": "Тип заведения",
-  "restaurants_m_err_venue_type": "Выберите: кафе, ресторан или чайхана"
+  "restaurants_m_err_venue_type": "Выберите: кафе, ресторан или чайхана",
+  "home_section_cheap_products": "Рынок населения",
+  "home_section_tv_market": "AVAGram"
 }

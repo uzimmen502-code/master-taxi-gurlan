@@ -260,6 +260,43 @@ async function main() {
       await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_osh`).delete(), `delete ${who}`);
     }
   });
+  await check('D-REST-25 qtyTiers: to\'g\'ri pog\'onalar yoziladi (1, 2, 3 ta); tartibsiz, narxi oshuvchi, asosiy narxdan past emas, 4 ta, begona kalit, tip xatosi — rad', async () => {
+    const t = (minQty, price) => ({ minQty, price });
+    await assertSucceeds(putDish(OWNER, 'q_none', {}));
+    await assertSucceeds(putDish(OWNER, 'q_empty', { qtyTiers: [] }), 'bo\'sh ro\'yxat — pog\'ona yo\'q');
+    await assertSucceeds(putDish(OWNER, 'q1', { qtyTiers: [t(10, 38000)] }));
+    await assertSucceeds(putDish(STAFF, 'q2', { qtyTiers: [t(10, 38000), t(30, 35000)] }));
+    await assertSucceeds(putDish(OWNER, 'q3', { qtyTiers: [t(2, 39999), t(3, 39998), t(500, 1)] }), 'chegaralar: minQty 2…500, narx 1');
+    const bad = {
+      'asosiy narxga teng': [t(10, 40000)],
+      'asosiydan baland': [t(10, 41000)],
+      'minQty = 1': [t(1, 30000)],
+      'minQty = 0': [t(0, 30000)],
+      'minQty 501': [t(501, 30000)],
+      'narx 0': [t(10, 0)],
+      'narx manfiy': [t(10, -5)],
+      'ikkinchi minQty kichik': [t(10, 38000), t(10, 35000)],
+      'ikkinchi minQty orqaga': [t(10, 38000), t(5, 35000)],
+      'ikkinchi narx oshdi': [t(10, 38000), t(30, 38000)],
+      'uchinchi narx oshdi': [t(10, 38000), t(30, 35000), t(50, 36000)],
+      '4 ta': [t(2, 39000), t(3, 38000), t(4, 37000), t(5, 36000)],
+      'begona kalit': [{ minQty: 10, price: 38000, note: 'x' }],
+      'minQty satr': [{ minQty: '10', price: 38000 }],
+      'narx kasr': [{ minQty: 10, price: 37999.5 }],
+      'narx satr': [{ minQty: 10, price: '38000' }],
+      'minQty kasr': [{ minQty: 10.5, price: 38000 }],
+      'element xarita emas': [10],
+      'kalit yo\'q': [{ minQty: 10 }],
+    };
+    for (const [name, tiers] of Object.entries(bad)) await assertFails(putDish(OWNER, `qb_${name.length}`, { qtyTiers: tiers }), name);
+    await assertFails(putDish(OWNER, 'qb_list', { qtyTiers: 'x' }), 'ro\'yxat emas');
+    await assertFails(putDish(OWNER, 'qb_map', { qtyTiers: { minQty: 10, price: 100 } }), 'xarita');
+    await assertFails(putDish(OWNER, 'qb_null', { qtyTiers: null }), 'null — klient yo\'q maydonni o\'chiradi');
+    // asosiy narx o'zgarganda pog'ona yangi narxga nisbatan tekshiriladi
+    await assertFails(as(OWNER).doc(`restaurants/${R1}/menu_items/q1`).update({ price: 30000 }), 'asosiy narx pog\'onadan past bo\'lib qoldi (hujjat natijasi tekshiriladi)');
+    await assertSucceeds(as(OWNER).doc(`restaurants/${R1}/menu_items/q1`).update({ price: 50000 }));
+    await assertFails(putDish(STRANGER, 'q_stranger', { qtyTiers: [t(10, 38000)] }), 'begona yozolmaydi');
+  });
   await check('D-REST-33 restaurant_dish_index: hamma o\'qiydi (loginsiz ham; bo\'lim + geo so\'rovi); HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
     await assertSucceeds(anon().doc(`restaurant_dish_index/${R1}_osh`).get());
     await assertSucceeds(anon().collection('restaurant_dish_index').where('sections', 'array-contains', 'cheap').where('geo4', 'in', ['tzh1', 'tzh2']).limit(50).get());

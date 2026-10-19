@@ -40,6 +40,7 @@ const crypto = require('crypto');
 const geoHash = require('./geo_hash');
 const tariff = require('./restaurant_delivery_tariff');
 const localTaxi = require('./local_taxi');
+const qtyTiers = require('./restaurant_qty_tiers');
 
 const RESTAURANTS = 'restaurants';
 const MEMBERS = 'members';
@@ -958,6 +959,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       const itemSnaps = await db.getAll(...[...wanted.keys()].map((id) => rRef.collection(MENU_ITEMS).doc(id)));
       const items = [];
       let itemsTotal = 0;
+      let qtyDiscountTotal = 0;
       for (const s of itemSnaps) {
         if (!s.exists) throw fail('failed-precondition', 'MENU_ITEM_NOT_FOUND', { itemId: s.id });
         const m = s.data() || {};
@@ -970,9 +972,14 @@ function attachRestaurantOrders(exportsObj, deps) {
         // Qadoqlash haqi YO'Q (D-REST-28): qadoqlashni har sotuvchi o'z narxiga kiritadi.
         // Eski menyu hujjatlaridagi `packagingFee` e'tiborsiz — buyurtma summasiga kirmaydi.
         const count = wanted.get(s.id);
-        const lineTotal = price * count;
+        // Miqdorga chegirma (D-REST-25): pog'ona menyudan, restoran hisobidan; son YIG'INDI bo'yicha.
+        const { unitPrice, tierMinQty } = qtyTiers.unitPriceFor(price, m.qtyTiers, count);
+        const lineTotal = unitPrice * count;
+        const discount = price * count - lineTotal;
         itemsTotal += lineTotal;
-        items.push({ itemId: s.id, name: str(m.name, 80), price, count, lineTotal });
+        qtyDiscountTotal += discount;
+        // `price` — ro'yxat narxi (o'zgarmas), `unitPrice` — qo'llangan narx; ikkalasi snapshot (9-qoida).
+        items.push({ itemId: s.id, name: str(m.name, 80), price, unitPrice, tierMinQty, count, lineTotal, discount });
       }
       const minOrder = intOr(r.minOrderAmount, 0, 0, 1000000000);
       if (itemsTotal < minOrder) throw fail('failed-precondition', 'MIN_ORDER_NOT_MET', { minOrderAmount: minOrder, itemsTotal });
@@ -1030,7 +1037,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         lng: Number.isFinite(toLng) ? toLng : null,
         note: str(d.note, 200),
         utensils: intOr(d.utensils, 0, 0, 20),
-        items, itemsTotal, deliveryFee,
+        items, itemsTotal, qtyDiscountTotal, deliveryFee,
         total: itemsTotal + deliveryFee,
         fulfillmentMode, deliveryMode, deliveryFeeSource, ...deliveryQuote,
         foodPaymentMethod, deliveryPaymentMethod,

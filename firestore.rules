@@ -3077,7 +3077,7 @@ service cloud.firestore {
             'name', 'description', 'photoUrl', 'price', 'packagingFee',
             'categoryId', 'sort', 'available', 'stopUntil', 'saleHours',
             'servings', 'weightG', 'kcal', 'protein', 'fat', 'carbs',
-            'cuisineGroup', 'cuisineId', 'tags',
+            'cuisineGroup', 'cuisineId', 'tags', 'qtyTiers',
             'createdAt', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 1 && d.name.size() <= 80
@@ -3089,7 +3089,24 @@ service cloud.firestore {
               || (d.description is string && d.description.size() <= 500))
           && (!('photoUrl' in d) || (d.photoUrl is string && d.photoUrl.size() <= 500))
           && (!('stopUntil' in d) || d.stopUntil == null || d.stopUntil is timestamp)
-          && dishFactsOk(d);
+          && dishFactsOk(d)
+          && qtyTiersOk(d);
+    }
+    // Миқдорга чегирма (D-REST-25): `qtyTiers: [{minQty, price}]`, ≤ 3 та. Биринчи поғона: minQty ≥ 2 ва
+    // нархи АСОСИЙ нархдан кам; кейингилар: minQty катта (≤ 500), нархи олдингисидан кам (≥ 1). Чегирма
+    // нархдан ПАСТГА тушади, юқорига эмас — шунинг учун бузилган ҳужжат орқали нарх оширилмайди.
+    // Мантиқ `functions/restaurant_qty_tiers.js` (`sanitizeTiers`) билан бир хил (сервер ишонмайди).
+    function qtyTierOk(t, prevMin, prevPrice) {
+      return t is map && t.keys().hasOnly(['minQty', 'price'])
+          && t.minQty is int && t.minQty > prevMin && t.minQty <= 500
+          && t.price is int && t.price >= 1 && t.price < prevPrice;
+    }
+    function qtyTiersOk(d) {
+      return !('qtyTiers' in d)
+          || (d.qtyTiers is list && d.qtyTiers.size() <= 3
+              && (d.qtyTiers.size() < 1 || qtyTierOk(d.qtyTiers[0], 1, d.price))
+              && (d.qtyTiers.size() < 2 || qtyTierOk(d.qtyTiers[1], d.qtyTiers[0].minQty, d.qtyTiers[0].price))
+              && (d.qtyTiers.size() < 3 || qtyTierOk(d.qtyTiers[2], d.qtyTiers[1].minQty, d.qtyTiers[1].price)));
     }
 
     // Таом маълумотлари (D-REST-16/17/24; docs/kafe_restoran_taklifi_uz.md §10.1).

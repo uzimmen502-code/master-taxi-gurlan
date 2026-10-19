@@ -262,6 +262,67 @@ async function main() {
       await db.collection('restaurants').doc(rid).update({ maxQtyPerItem: 50 });
     }
   });
+  // ── 2c. Miqdorga chegirma (D-REST-25) ────────────────────────────────
+  const tierMenu = () => db.collection('restaurants').doc(rid).collection('menu_items');
+  const placeAndCancel = async (items) => {
+    const r = await place(rid, CUSTOMER, { items });
+    const od = await order(r.orderId);
+    await call('customerCancelRestaurantOrder', { orderId: r.orderId }, CUSTOMER); // keyingi testlar uchun tozalash
+    return { r, od };
+  };
+  await check('Q1 pog\'ona chegaralari: 9 dona — asosiy narx; 10 — 32 000; 12 — 384 000 (420 000 dan); 30 — 30 000; chegirma restoran hisobidan, AVA 2 % chegirmali summadan', async () => {
+    await tierMenu().doc('tier').set({ name: 'Plov', price: 35000, available: true, categoryId: 'c1', sort: 9, qtyTiers: [{ minQty: 10, price: 32000 }, { minQty: 30, price: 30000 }] });
+    const cases = [[9, 35000, 0, 315000, 0], [10, 32000, 10, 320000, 30000], [12, 32000, 10, 384000, 36000], [29, 32000, 10, 928000, 87000], [30, 30000, 30, 900000, 150000]];
+    for (const [qty, unit, minQty, total, discount] of cases) {
+      const { r, od } = await placeAndCancel([{ itemId: 'tier', qty }]);
+      assert.strictEqual(r.itemsTotal, total, `qty ${qty}`);
+      assert.strictEqual(od.itemsTotal, total);
+      assert.strictEqual(od.qtyDiscountTotal, discount);
+      assert.strictEqual(od.total, total + od.deliveryFee);
+      assert.deepStrictEqual(od.items.map((i) => [i.price, i.unitPrice, i.tierMinQty, i.count, i.lineTotal, i.discount]), [[35000, unit, minQty, qty, total, discount]]);
+      assert.strictEqual(od.avaFee.amount, tariffMod.computeAvaFee(total).amount, 'AVA ulushi CHEGIRMALI summadan');
+    }
+    assert.notStrictEqual(tariffMod.computeAvaFee(384000).amount, tariffMod.computeAvaFee(420000).amount, 'chegirma AVA ulushini kamaytiradi');
+  });
+  await check('Q2 bir taom bir nechta qatorda — son YIG\'INDI bo\'yicha (6+6 = 12 → pog\'ona); boshqa taom bilan aralash — har biri o\'zicha', async () => {
+    const { od } = await placeAndCancel([{ itemId: 'tier', qty: 6 }, { itemId: 'tier', qty: 6 }, { itemId: 'somsa', qty: 2 }]);
+    const byId = Object.fromEntries(od.items.map((i) => [i.itemId, i]));
+    assert.deepStrictEqual([byId.tier.unitPrice, byId.tier.lineTotal, byId.tier.count], [32000, 384000, 12]);
+    assert.deepStrictEqual([byId.somsa.unitPrice, byId.somsa.tierMinQty, byId.somsa.discount, byId.somsa.lineTotal], [10000, 0, 0, 20000], 'pog\'onasiz taom o\'zgarmaydi');
+    assert.strictEqual(od.itemsTotal, 384000 + 20000);
+    assert.strictEqual(od.qtyDiscountTotal, 36000);
+  });
+  await check('Q3 klient narx/chegirma yubora olmaydi: items ichidagi price/unitPrice/discount/tierMinQty e\'tiborsiz', async () => {
+    const { od } = await placeAndCancel([{ itemId: 'tier', qty: 10, price: 1, unitPrice: 1, discount: 999999, tierMinQty: 99, lineTotal: 1 }]);
+    assert.deepStrictEqual([od.itemsTotal, od.items[0].unitPrice, od.items[0].tierMinQty], [320000, 32000, 10]);
+  });
+  await check('Q4 buzilgan hujjat (pog\'ona asosiy narxdan YUQORI, tartibsiz, noto\'g\'ri tip) narxni OSHIRMAYDI: server tozalaydi', async () => {
+    await tierMenu().doc('tierbad').set({ name: 'Bad', price: 35000, available: true, categoryId: 'c1', sort: 10, qtyTiers: [{ minQty: 5, price: 40000 }] });
+    let { od } = await placeAndCancel([{ itemId: 'tierbad', qty: 6 }]);
+    assert.deepStrictEqual([od.itemsTotal, od.qtyDiscountTotal], [210000, 0], 'yuqori narxli pog\'ona qo\'llanmadi');
+    await tierMenu().doc('tierbad').update({ qtyTiers: [{ minQty: 5, price: 30000 }, { minQty: 3, price: 20000 }, { minQty: 8, price: 10000 }] });
+    ({ od } = await placeAndCancel([{ itemId: 'tierbad', qty: 9 }]));
+    assert.deepStrictEqual([od.items[0].unitPrice, od.itemsTotal], [30000, 270000], 'birinchi noto\'g\'ri pog\'onadan keyingisi tashlandi');
+    await tierMenu().doc('tierbad').update({ qtyTiers: [{ minQty: '5', price: 100 }, 'x', null] });
+    ({ od } = await placeAndCancel([{ itemId: 'tierbad', qty: 9 }]));
+    assert.deepStrictEqual([od.items[0].unitPrice, od.qtyDiscountTotal], [35000, 0]);
+    await tierMenu().doc('tierbad').update({ qtyTiers: 'x' });
+    ({ od } = await placeAndCancel([{ itemId: 'tierbad', qty: 9 }]));
+    assert.strictEqual(od.itemsTotal, 315000);
+  });
+  await check('Q5 minimal buyurtma CHEGIRMALI summaga tekshiriladi (40 000 → 20 000 < 30 000 → MIN_ORDER_NOT_MET); menyu o\'zgarsa eski buyurtma narxi o\'zgarmaydi (snapshot)', async () => {
+    await tierMenu().doc('tiermin').set({ name: 'Min', price: 10000, available: true, categoryId: 'c1', sort: 11, qtyTiers: [{ minQty: 4, price: 5000 }] });
+    await expectCode(place(rid, CUSTOMER, { items: [{ itemId: 'tiermin', qty: 4 }] }), 'MIN_ORDER_NOT_MET', 'failed-precondition');
+    const ok = await place(rid, CUSTOMER, { items: [{ itemId: 'tiermin', qty: 3 }, { itemId: 'osh', qty: 1 }] }); // 30 000 + 40 000, pog'ona qo'llanmaydi
+    assert.strictEqual(ok.itemsTotal, 70000);
+    await tierMenu().doc('tier').update({ price: 99000, qtyTiers: [] });
+    const { od } = await placeAndCancel([{ itemId: 'tier', qty: 10 }]);
+    assert.strictEqual(od.itemsTotal, 990000, 'yangi narx — yangi buyurtmada');
+    const old = await order(ok.orderId);
+    assert.strictEqual(old.itemsTotal, 70000, 'eski buyurtma o\'zgarmadi');
+    await call('customerCancelRestaurantOrder', { orderId: ok.orderId }, CUSTOMER);
+    await tierMenu().doc('tier').delete(); await tierMenu().doc('tierbad').delete(); await tierMenu().doc('tiermin').delete();
+  });
   await check('P3quoteRestaurantDelivery = buyurtmadagi narx', async () => {
     const q = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC }, CUSTOMER);
     assert.strictEqual(q.deliveryFee, feeAva);

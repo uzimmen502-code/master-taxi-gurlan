@@ -8,8 +8,8 @@ import '../screens/tv_publish_screen.dart';
 /// Эълон / хизмат / Аҳоли бозори / ресторанга ихтиёрий видео (эга, 2026-10-16:
 /// «фойдаланувчи истаса шу ернинг ўзида видеоролик жойлаштирсин»).
 ///
-/// ЯГОНА қатлам — ҳар модул учун нусха эмас (Улгуржи эски `wholesaleProductId`
-/// йўлида қолади). Боғланиш КЛИП томонида: [TvClip.linkKind] / [TvClip.linkId].
+/// ЯГОНА қатлам — ҳар модул учун нусха эмас (Улгуржи ҳам жойлашни шу [publish] орқали қилади, 2026-10-20;
+/// фақат ўз `videoClipIds` / `wholesaleProductId` боғланиши қўшимча). Боғланиш КЛИП томонида: [TvClip.linkKind] / [TvClip.linkId].
 /// Эълон ҳужжатига (қоида/CF) тегилмайди, шунинг учун сервер ўзгармайди;
 /// эгалик кўрсатишда текширилади ([TvClipsRepository.fetchLinked]).
 abstract final class TvClipLink {
@@ -39,13 +39,17 @@ abstract final class TvClipLink {
   static final ValueNotifier<int> changes = ValueNotifier<int>(0);
 
   /// Видео жойлаш экранини ОЧАДИ: клип яратилганда `linkKind`/`linkId` шу
-  /// заҳоти ёзилади. Фақат оддий видео (реклама/янгилик сегментлари йўқ).
+  /// заҳоти ёзилади. Одатда фақат оддий видео (реклама/янгилик сегментлари йўқ);
+  /// [organicOnly] `false` — пуллик реклама ҳам танланади (Улгуржи: «Реклама»).
+  /// [onClipCreated] — янги клип ID'си (модулнинг ўз қўшимча боғланиши учун).
   /// Жойланса `true`.
   static Future<bool> publish(
     NavigatorState nav, {
     required String kind,
     required String linkId,
     String linkItemId = '',
+    bool organicOnly = true,
+    ValueChanged<String>? onClipCreated,
   }) async {
     if (linkId.isEmpty) return false;
     // Таом видеосида таом id шарт: у йўқ бўлса клип ресторан видеосига ўхшаб қолмасин.
@@ -54,10 +58,11 @@ abstract final class TvClipLink {
       MaterialPageRoute(
         builder: (_) => TvPublishScreen(
           hideShopOption: true,
-          organicOnly: true,
+          organicOnly: organicOnly,
           linkKind: kind,
           linkId: linkId,
           linkItemId: linkItemId,
+          onClipCreated: onClipCreated,
         ),
       ),
     );

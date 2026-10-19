@@ -3,6 +3,7 @@ import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/features/restaurants/screens/restaurants_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// D-GEO-4 (геo 4-босқич): рўйхат — яқиндагилар; ном бўйича қидирув —
 /// бутун республика; яқинда йўқ бўлса «Бутун Ўзбекистон» тугмаси.
@@ -46,6 +47,12 @@ Restaurant _r(String id, {double? lat, double? lng}) => Restaurant(
     );
 
 void main() {
+  // «Охирги маълум созлама» (экран очилишини тезлатади) тестлар орасида эскирмасин.
+  setUp(() {
+    RestaurantsListScreen.resetLastKnownConfig();
+    // Экран бўлим созламасини кутишдан олдин телефонни SharedPreferences'дан ўқийди (илова ичида дарров тайёр).
+    SharedPreferences.setMockInitialValues({});
+  });
   // Фойдаланувчи — Гурлан; «Тошкент» ресторани ~700 км.
   Widget host(_FakeRepo repo) => MaterialApp(
         home: RestaurantsListScreen(

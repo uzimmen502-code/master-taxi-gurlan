@@ -2,6 +2,8 @@
 // рўйхати эмас («одам оч бўлгани учун киради»). Лента — `all` бўлими (feature flag шу бўлим босқичи); ресторанлар —
 // алоҳида чип. Яқинлик бўйича тартиб, ёпиқ ресторан охирида, қидирув ресторанга қайтаради.
 
+import 'dart:async';
+
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/cuisine.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
@@ -61,7 +63,31 @@ class _Repo implements RestaurantsRepository {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
 
+/// Созлама ҲАЛИ келмаган ҳолатни кўрсатиш учун: `config` қўлда тугатилади; ресторанлар оқими очилганини санайди.
+class _SlowRepo extends _Repo {
+  _SlowRepo({super.sections, super.dishes});
+
+  final config = Completer<RestaurantSectionsConfig>();
+  int listStreams = 0;
+
+  @override
+  Future<RestaurantSectionsConfig> getSectionsConfig({bool force = false}) => config.future;
+
+  @override
+  Stream<List<Restaurant>> watchNearby({required double lat, required double lng, double radiusKm = 20, int perCellLimit = 50}) {
+    listStreams++;
+    return super.watchNearby(lat: lat, lng: lng, radiusKm: radiusKm, perCellLimit: perCellLimit);
+  }
+
+  @override
+  Stream<List<Restaurant>> watchApproved({int limit = 50}) {
+    listStreams++;
+    return super.watchApproved(limit: limit);
+  }
+}
 void main() {
+  // «Охирги маълум созлама» (экран очилишини тезлатади) тестлар орасида эскирмасин.
+  setUp(RestaurantsListScreen.resetLastKnownConfig);
   final l10n = JsonL10nDelegate();
   String tr(String key) => l10n.tr(key);
 
@@ -232,6 +258,63 @@ void main() {
       ));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
+    });
+  });
+
+  group('«Барчаси» бир қадамда очилади (эга, 2026-10-19: «Кафе-Ресторан» икки қадамда очилаяпти)', () {
+    const feedOn = RestaurantSectionsConfig(stages: {'all': 'public'});
+
+    Future<void> open(WidgetTester t, _SlowRepo repo) async {
+      t.view.physicalSize = const Size(2400 * 3, 1800 * 3);
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(l10nApp(
+        home: RestaurantsListScreen(key: UniqueKey(), repository: repo, currentUid: '998912000001', userLat: _lat, userLng: _lng, locate: () async => null),
+      ));
+    }
+
+    testWidgets('1-очилиш: созлама келгунча ресторанлар рўйхати ЧИЗИЛМАЙДИ (фақат юкланиш), келгач — бевосита таомлар', (t) async {
+      final repo = _SlowRepo(sections: feedOn, dishes: [_d('osh', lat: 41.85)]);
+      await open(t, repo);
+      await t.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text(tr('restaurants_sort_distance')), findsNothing, reason: 'саралаш чиплари (рўйхат режими) чизилмайди');
+      expect(find.text('Gurlan osh'), findsNothing);
+      expect(repo.listStreams, 0, reason: 'ресторанлар оқими умуман очилмади');
+
+      repo.config.complete(feedOn);
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dish-r1_osh')), findsOneWidget);
+      expect(repo.listStreams, 0, reason: 'рўйхат бир лаҳзага ҳам чизилмади — иккинчи қадам йўқ');
+      expect(repo.fetched, [RestaurantSection.all]);
+    });
+
+    testWidgets('2-очилиш (охирги маълум созлама бор): биринчи кадрдаёқ таомлар лентаси — созламани кутмайди', (t) async {
+      final first = _SlowRepo(sections: feedOn, dishes: [_d('osh', lat: 41.85)]);
+      await open(t, first);
+      first.config.complete(feedOn);
+      await t.pumpAndSettle();
+
+      final second = _SlowRepo(sections: feedOn, dishes: [_d('osh', lat: 41.85)]); // созлама ҳали келмаган
+      await open(t, second);
+      await t.pump();
+      expect(find.byKey(const ValueKey('section-feed')), findsOneWidget, reason: 'лента чипи дарров');
+      expect(second.listStreams, 0, reason: 'рўйхат чизилмади');
+      expect(find.text(tr('restaurants_sort_distance')), findsNothing);
+      second.config.complete(feedOn);
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dish-r1_osh')), findsOneWidget);
+    });
+
+    testWidgets('лента ўчиқ бўлса: созлама келгач ресторанлар рўйхати (аввалгидек), юкланиш белгисидан кейин', (t) async {
+      final repo = _SlowRepo(sections: RestaurantSectionsConfig.off, dishes: const []);
+      await open(t, repo);
+      await t.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      repo.config.complete(RestaurantSectionsConfig.off);
+      await t.pumpAndSettle();
+      expect(find.text('Gurlan osh'), findsWidgets);
+      expect(find.text(tr('restaurants_sort_distance')), findsOneWidget);
     });
   });
 }

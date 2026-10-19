@@ -62,6 +62,7 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
         prepTimeMin: r.prepTimeMin,
         minOrderAmount: r.minOrderAmount,
         maxQtyPerItem: r.maxQtyPerItem,
+        acceptsPreorder: r.acceptsPreorder,
         alwaysOpen: r.openingHours == null,
         openTime: r.openingHours?.open ?? '09:00',
         closeTime: r.openingHours?.close ?? '22:00',

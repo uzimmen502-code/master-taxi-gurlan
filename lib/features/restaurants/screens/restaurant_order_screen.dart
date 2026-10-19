@@ -11,6 +11,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/order_model.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/preorder.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/dish_rating_card.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
@@ -176,6 +177,23 @@ class _StatusCard extends StatelessWidget {
         children: [
           Text(order.restaurantName.isEmpty ? context.tr('home_module_restaurants') : order.restaurantName,
               style: AvaText.sectionTitle.copyWith(color: c.ink)),
+          // Олдиндан буюртма (S4b): қачонга эканлиги доим кўриниб туради.
+          if (order.scheduledFor != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              key: const ValueKey('order-preorder'),
+              children: [
+                Icon(Icons.event_rounded, size: 16, color: c.brandText),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    context.tr('restaurants_preorder_for').replaceAll('{when}', Preorder.format(order.scheduledFor!)),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.brandText),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           if (failed)
             AvaNoticeRow(
@@ -192,7 +210,11 @@ class _StatusCard extends StatelessWidget {
                 done: idx > RestaurantOrderStatus.stepIndex(steps[i]) || s == RestaurantOrderStatus.delivered,
                 active: steps[i] == s,
                 last: i == steps.length - 1,
-                note: steps[i] == RestaurantOrderStatus.accepted && s == RestaurantOrderStatus.accepted && order.prepTimeMin > 0
+                // Олдиндан буюртмада «~N дақиқа» маъносиз (кунлар олдин қабул қилинган) — вақт юқорида.
+                note: steps[i] == RestaurantOrderStatus.accepted &&
+                        s == RestaurantOrderStatus.accepted &&
+                        order.prepTimeMin > 0 &&
+                        order.scheduledFor == null
                     ? context.tr('restaurants_prep_time').replaceAll('{min}', order.prepTimeMin.toString())
                     : null,
               ),

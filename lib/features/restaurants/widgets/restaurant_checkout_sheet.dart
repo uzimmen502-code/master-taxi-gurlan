@@ -18,6 +18,7 @@ import '../../../models/user_model.dart';
 import '../../../repositories/user_repository.dart';
 import '../../profile/screens/address_edit_screen.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/preorder.dart';
 import '../domain/restaurant_models.dart';
 import '../screens/restaurant_order_screen.dart';
 
@@ -66,7 +67,11 @@ class RestaurantCheckoutSheet extends StatefulWidget {
     required this.repository,
     this.userLat,
     this.userLng,
+    this.now,
   });
+
+  /// Тест учун соат; бўш бўлса ҳақиқий вақт.
+  final DateTime Function()? now;
 
   final Restaurant restaurant;
   final RestaurantCart cart;
@@ -98,13 +103,28 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
   String? _quoteError;
   bool _sending = false;
 
+  // Олдиндан буюртма (S4b, D-REST-35): «ҳозир» ёки танланган кун ва вақт.
+  bool _preorder = false;
+  late DateTime _scheduled;
+
   Restaurant get _r => widget.restaurant;
+
+  DateTime get _now => (widget.now ?? DateTime.now)();
+
+  /// Ресторан ҳозир ёпиқ, лекин олдиндан буюртма олади — «ҳозир» танлови йўқ.
+  bool get _mustPreorder => _r.acceptsPreorder && !_r.isOpenAt(_now);
+
+  /// Танланган вақтнинг хатоси ([Preorder] қоидаси; сервер барибир текширади) — «ҳозир»да `null`.
+  String? get _preorderError =>
+      _preorder ? Preorder.check(now: _now, scheduled: _scheduled, restaurant: _r) : null;
 
   @override
   void initState() {
     super.initState();
     _fulfillment = _r.delivery.hasDelivery ? 'delivery' : 'pickup';
     _foodPayment = _defaultFoodPayment();
+    _scheduled = Preorder.suggest(_now);
+    _preorder = _mustPreorder;
     _loadProfile();
   }
 
@@ -184,6 +204,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
         lat: co.$1,
         lng: co.$2,
         itemsTotal: widget.cart.itemsTotal,
+        scheduledFor: _preorder ? _scheduled : null,
       );
       if (!mounted) return;
       setState(() => _quote = q);
@@ -247,6 +268,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
         note: _noteCtrl.text.trim(),
         utensils: _utensils,
         userName: _name,
+        scheduledFor: _preorder ? _scheduled : null,
       );
       if (!mounted) return;
       cart.clear();
@@ -275,6 +297,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
     final maxH = MediaQuery.sizeOf(context).height * 0.9;
     final canSend = !_sending &&
         cart.isNotEmpty &&
+        _preorderError == null &&
         (!delivery || (_coords != null && _quote != null && !_quoting));
 
     return ConstrainedBox(
@@ -287,6 +310,26 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
           children: [
             Text(context.tr('restaurants_checkout_title'), style: AvaText.sectionTitle.copyWith(color: c.ink)),
             const SizedBox(height: 10),
+
+            // 0. Қачон: ҳозир / олдиндан (S4b) — фақат олдиндан буюртма оладиган ресторанда.
+            if (_r.acceptsPreorder) ...[
+              _WhenBlock(
+                preorder: _preorder,
+                forced: _mustPreorder,
+                scheduled: _scheduled,
+                now: _now,
+                error: _preorderError,
+                onMode: (v) {
+                  setState(() => _preorder = v);
+                  _requote();
+                },
+                onChanged: (d) {
+                  setState(() => _scheduled = d);
+                  _requote();
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
 
             // 1. Етказиш / олиб кетиш
             if (_r.delivery.hasDelivery && _r.delivery.pickup)
@@ -331,9 +374,14 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
                   icon: const Icon(Icons.remove_circle_outline_rounded),
                   onPressed: _utensils > 0 ? () => setState(() => _utensils--) : null,
                 ),
-                Text(
-                  _utensils == 0 ? context.tr('restaurants_utensils_none') : '$_utensils',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
+                // Катта шрифт ва тор экранда матн қирқилади (сатр синмайди).
+                Flexible(
+                  child: Text(
+                    _utensils == 0 ? context.tr('restaurants_utensils_none') : '$_utensils',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
+                  ),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
@@ -462,6 +510,136 @@ class _RadioRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+/// «Қачон?» блоки (S4b): ҳозир / олдиндан; олдиндан — кун чиплари + вақт; хато аниқ ёзилади.
+class _WhenBlock extends StatelessWidget {
+  const _WhenBlock({
+    required this.preorder,
+    required this.forced,
+    required this.scheduled,
+    required this.now,
+    required this.error,
+    required this.onMode,
+    required this.onChanged,
+  });
+
+  final bool preorder;
+
+  /// Ресторан ҳозир ёпиқ — фақат олдиндан.
+  final bool forced;
+  final DateTime scheduled;
+  final DateTime now;
+  final String? error;
+  final ValueChanged<bool> onMode;
+  final ValueChanged<DateTime> onChanged;
+
+  String _dayLabel(BuildContext context, DateTime d) {
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = d.difference(today).inDays;
+    if (diff == 0) return context.tr('restaurants_preorder_today');
+    if (diff == 1) return context.tr('restaurants_preorder_tomorrow');
+    return '${_two(d.day)}.${_two(d.month)}';
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: scheduled.hour, minute: scheduled.minute),
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (t != null) onChanged(Preorder.combine(scheduled, t.hour, t.minute));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Column(
+      key: const ValueKey('when-block'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(context.tr('restaurants_preorder_when'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+        const SizedBox(height: 6),
+        if (forced)
+          Container(
+            key: const ValueKey('preorder-forced'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                Icon(Icons.nightlight_round, size: 18, color: c.warn),
+                const SizedBox(width: 8),
+                Expanded(child: Text(context.tr('restaurants_preorder_closed_now'), style: TextStyle(fontSize: 12, color: c.ink))),
+              ],
+            ),
+          )
+        else
+          SegmentedButton<bool>(
+            key: const ValueKey('preorder-mode'),
+            segments: [
+              ButtonSegment(value: false, label: Text(context.tr('restaurants_preorder_now'))),
+              ButtonSegment(value: true, label: Text(context.tr('restaurants_preorder_later'))),
+            ],
+            selected: {preorder},
+            onSelectionChanged: (s) => onMode(s.first),
+          ),
+        if (preorder) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 40,
+            child: ListView(
+              key: const ValueKey('preorder-days'),
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final d in Preorder.days(now)) ...[
+                  ChoiceChip(
+                    key: ValueKey('preorder-day-${d.year}-${d.month}-${d.day}'),
+                    label: Text(_dayLabel(context, d)),
+                    selected: d.year == scheduled.year && d.month == scheduled.month && d.day == scheduled.day,
+                    onSelected: (_) => onChanged(Preorder.combine(d, scheduled.hour, scheduled.minute)),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            key: const ValueKey('preorder-time'),
+            onPressed: () => _pickTime(context),
+            icon: const Icon(Icons.schedule_rounded, size: 18),
+            label: Text('${_two(scheduled.hour)}:${_two(scheduled.minute)}'),
+          ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                context.tr('restaurants_preorder_err_$error').replaceAll('{min}', '${Preorder.minLeadMin}').replaceAll('{days}', '${Preorder.maxDays}'),
+                key: const ValueKey('preorder-error'),
+                style: TextStyle(fontSize: 12, color: c.danger),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                context
+                    .tr('restaurants_preorder_summary')
+                    .replaceAll('{day}', _dayLabel(context, scheduled))
+                    .replaceAll('{time}', '${_two(scheduled.hour)}:${_two(scheduled.minute)}'),
+                key: const ValueKey('preorder-summary'),
+                style: TextStyle(fontSize: 12, color: c.ink2),
+              ),
+            ),
+        ],
+      ],
     );
   }
 }

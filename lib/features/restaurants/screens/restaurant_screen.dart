@@ -328,6 +328,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final c = context.ava;
     final sections = _sections;
     final open = _r.isOpenNow;
+    // Ҳозир ёпиқ ресторан олдиндан буюртма олса — таом қўшиш ва буюртма мумкин (S4b); ҳозирга эмас.
+    final canOrder = open || _r.acceptsPreorder;
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
@@ -355,7 +357,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
                 child: AvaNoticeRow(
-                  text: context.tr('restaurants_closed_now'),
+                  key: const ValueKey('closed-notice'),
+                  text: context.tr(_r.acceptsPreorder ? 'restaurants_closed_preorder' : 'restaurants_closed_now'),
                   icon: Icons.nightlight_round,
                   color: c.warn,
                 ),
@@ -418,7 +421,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                                               stats: _dishStats[s.items[i].id],
                                               qty: _cart.restaurantId == _r.id ? _cart.qtyOf(s.items[i].id) : 0,
                                               // «+» ресторан белгилаган чегарада ўчади (D-REST-26).
-                                              enabled: open && (_cart.restaurantId != _r.id || _cart.canAddMore(s.items[i].id, _r)),
+                                              enabled: canOrder && (_cart.restaurantId != _r.id || _cart.canAddMore(s.items[i].id, _r)),
                                               onAdd: () => _add(s.items[i]),
                                               onRemove: () => _cart.decrement(s.items[i].id),
                                             ),
@@ -438,7 +441,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             _CartBar(
               cart: _cart,
               restaurant: _r,
-              enabled: open,
+              enabled: canOrder,
               onOpenCart: _openCart,
               onCheckout: _openCheckout,
             ),

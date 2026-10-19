@@ -83,11 +83,12 @@ void main() {
       final f = RestaurantFormData(name: 'A');
       expect(f.validate(), containsAll(['name', 'location', 'address']));
     });
-    test('yetkazish yo\'q + olib ketish yo\'q → delivery_or_pickup', () {
-      final f = ok()
-        ..deliveryMode = 'none'
-        ..pickup = false;
-      expect(f.validate(), ['delivery_or_pickup']);
+    test('«Yetkazmayman» yo\'q (ega, 2026-10-19): faqat AVA kuryeri yoki o\'z kuryeri; eski `none` hujjat formada xato — egasi birini tanlaydi', () {
+      expect(RestaurantFormData.deliveryModes, ['ava_courier', 'own_courier']);
+      expect((ok()..deliveryMode = 'none').validate(), ['delivery_mode']);
+      expect((ok()..deliveryMode = 'none'..pickup = false).validate(), ['delivery_mode']);
+      expect((ok()..deliveryMode = 'own_courier').validate(), isEmpty);
+      expect((ok()..deliveryMode = 'ava_courier'..pickup = false).validate(), isEmpty, reason: 'olib ketish — alohida qo\'shimcha, majburiy emas');
     });
     test('to\'lov usuli bo\'sh; karta 16 raqam; tayyorlash chegarasi; ish vaqti', () {
       expect((ok()..prepay = false..cash = false).validate(), ['payment_method']);

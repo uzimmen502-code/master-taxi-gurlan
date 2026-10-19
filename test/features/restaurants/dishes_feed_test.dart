@@ -122,7 +122,7 @@ void main() {
       expect(find.byKey(const ValueKey('section-all')), findsOneWidget, reason: 'ресторанлар — алоҳида чип');
     });
 
-    testWidgets('чиплар тартиби (эга, 2026-10-19): Барчаси · Арзон ва тўйимли · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари · Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар; «Болалар» йўқ', (t) async {
+    testWidgets('чиплар тартиби (эга, 2026-10-19): Барчаси · Уй таомлари · Офис буюртма · Фаст-фуд · Миллий таомлар · Дунё таомлари · Ресторанлар · Нонушта · Тунги · Дастурхон буюртма · Парҳезли таомлар; «Болалар» йўқ', (t) async {
       const all = RestaurantSectionsConfig(stages: {
         'all': 'public', 'cheap': 'public', 'office': 'public', 'fast': 'public', 'national': 'public', 'world': 'public',
         'breakfast': 'public', 'night': 'public', 'dastarxon': 'public', 'light': 'public', 'kids': 'public', 'seasonal': 'public',

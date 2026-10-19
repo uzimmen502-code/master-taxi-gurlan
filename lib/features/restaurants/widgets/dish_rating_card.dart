@@ -1,17 +1,22 @@
 // Етказилган буюртмадаги таомларни баҳолаш карточкаси (D-REST-18).
 //
-// Мижоз ҳар таомга 1–5 юлдуз қўяди ва БИРГА юборади. Сервер баҳони ўзгартирмайди: бир марта
-// юборилган таом қулфланади (`order.dishRatings`), шунинг учун қулфланган таомлар фақат
-// кўрсатилади. Қоида ва текширув — серверда (`submitDishRatings`); бу ерда фақат UI (44-қоида).
+// Мижоз ҳар таомга 1–5 юлдуз қўяди ва БИРГА юборади. Баҳолаш муддати — етказилгандан кейин
+// 30 дақиқа (эга: «қўйилса қўйилди, бўлмаса йўқ»): муддат ўтса ҳали баҳоланмаган таомлар
+// яширилади, баҳоланганлари қулфланган ҳолда кўрсатилади. Сервер баҳони ўзгартирмайди: бир марта
+// юборилган таом қулфланади (`order.dishRatings`). Қоида ва текширув — серверда
+// (`submitDishRatings`); бу ерда фақат UI (44-қоида).
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/order_model.dart';
+import '../domain/dish_stats.dart';
 
 class DishRatingCard extends StatefulWidget {
-  const DishRatingCard({super.key, required this.order, required this.onSubmit, this.busy = false});
+  const DishRatingCard({super.key, required this.order, required this.onSubmit, this.busy = false, this.clock});
 
   final OrderModel order;
 
@@ -20,12 +25,33 @@ class DishRatingCard extends StatefulWidget {
   final Future<bool> Function(Map<String, int> stars) onSubmit;
   final bool busy;
 
+  /// Тест учун соат; бўш бўлса ҳақиқий вақт.
+  final DateTime Function()? clock;
+
   @override
   State<DishRatingCard> createState() => _DishRatingCardState();
 }
 
 class _DishRatingCardState extends State<DishRatingCard> {
   final Map<String, int> _picked = {};
+  Timer? _tick;
+
+  DateTime get _now => (widget.clock ?? DateTime.now)();
+
+  @override
+  void initState() {
+    super.initState();
+    // Муддат тугашини кутиб ўтирган экранда карточка ўзи ўзгарсин (ҳар 20 сония).
+    _tick = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
 
   /// Баҳоланадиган таомлар: идентификатори бор, такрорсиз, буюртма тартибида.
   List<OrderItem> get _items {
@@ -53,12 +79,17 @@ class _DishRatingCardState extends State<DishRatingCard> {
 
   @override
   Widget build(BuildContext context) {
-    final items = _items;
+    final saved = widget.order.dishRatings;
+    final left = dishRatingTimeLeft(widget.order.deliveredAt, _now);
+    final open = left > Duration.zero;
+    // Муддат ўтган: фақат баҳоланганлари (қулфланган) қолади.
+    final items = [for (final it in _items) if (open || saved.containsKey(it.itemId)) it];
     if (items.isEmpty) return const SizedBox.shrink();
     final c = context.ava;
-    final saved = widget.order.dishRatings;
     final allRated = items.every((it) => saved.containsKey(it.itemId));
+    final canSubmit = open && !allRated;
     final pending = _pending;
+    final minutes = (left.inSeconds / 60).ceil();
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -71,12 +102,18 @@ class _DishRatingCardState extends State<DishRatingCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            context.tr(allRated ? 'restaurants_rate_saved' : 'restaurants_rate_title'),
+            context.tr(canSubmit ? 'restaurants_rate_title' : 'restaurants_rate_saved'),
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink),
           ),
-          if (!allRated) ...[
+          if (canSubmit) ...[
             const SizedBox(height: 2),
             Text(context.tr('restaurants_rate_hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
+            const SizedBox(height: 2),
+            Text(
+              context.tr('restaurants_rate_left').replaceAll('{min}', '$minutes'),
+              key: const Key('dish-rating-left'),
+              style: TextStyle(fontSize: 12, color: minutes <= 5 ? c.warn : c.ink3),
+            ),
           ],
           const SizedBox(height: 8),
           for (final it in items)
@@ -87,7 +124,7 @@ class _DishRatingCardState extends State<DishRatingCard> {
               enabled: !widget.busy,
               onPick: (n) => setState(() => _picked[it.itemId] = n),
             ),
-          if (!allRated) ...[
+          if (canSubmit) ...[
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,

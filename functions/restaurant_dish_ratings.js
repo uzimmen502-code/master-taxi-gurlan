@@ -22,7 +22,7 @@
  *
  * Diagnostika kodlari (`details.code`): AUTH_REQUIRED, PHONE_TOKEN_REQUIRED, ORDER_ID_REQUIRED,
  * RATINGS_REQUIRED, RATING_INVALID, ORDER_NOT_FOUND, NOT_ORDER_OWNER, NOT_RESTAURANT_ORDER,
- * ORDER_NOT_DELIVERED, ITEM_NOT_IN_ORDER, CONTENTION_RETRY.
+ * ORDER_NOT_DELIVERED, RATING_WINDOW_CLOSED, ITEM_NOT_IN_ORDER, CONTENTION_RETRY.
  * Foydalanuvchi matni klientda, 3 tilda (25-qoida). Log'da telefon YO'Q (24, 40-qoida).
  */
 'use strict';
@@ -35,6 +35,19 @@ const STATS = 'menu_item_stats';
 const MODULE_ID = 'restaurants';
 
 const MAX_RATINGS = 30; // placeRestaurantOrder MAX_ITEMS bilan bir xil
+/**
+ * Baholash muddati: yetkazilgandan keyin 30 daqiqa (ega, 2026-10-19: «30 daqiqa qo'y, baho
+ * qo'yilsa qo'yildi, bo'lmasa yo'q»). Klientdagi `dishRatingWindow` shuning nusxasi — o'zgarsa
+ * ikkalasi birga (test mosligini tekshiradi).
+ */
+const RATING_WINDOW_MIN = 30;
+
+/** Muddat ochiqmi: yetkazilgan vaqt noma'lum yoki kelajakda bo'lsa — YOPIQ (xavfsiz tomon). */
+function ratingWindowOpen(deliveredMs, nowMs) {
+  if (!Number.isFinite(deliveredMs) || deliveredMs <= 0) return false;
+  const age = nowMs - deliveredMs;
+  return age >= 0 && age <= RATING_WINDOW_MIN * 60 * 1000;
+}
 const ITEM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 function str(v, max) {
@@ -52,7 +65,8 @@ function validStars(v) {
 }
 
 function attachRestaurantDishRatings(exportsObj, deps) {
-  const { functions, db, admin, callerPhone, canonicalUid } = deps;
+  const { functions, db, admin, callerPhone, canonicalUid, now: nowFn } = deps;
+  const now = nowFn || (() => new Date());
   const HttpsError = functions.https.HttpsError;
   const ts = () => admin.firestore.FieldValue.serverTimestamp();
   const inc = (n) => admin.firestore.FieldValue.increment(n);
@@ -111,6 +125,17 @@ function attachRestaurantDishRatings(exportsObj, deps) {
       }
       const ids = [...wanted.keys()];
       const existing = await Promise.all(ids.map((id) => t.get(db.collection(RATINGS).doc(ratingDocId(orderId, id)))));
+
+      // Muddat: faqat YANGI baho uchun tekshiriladi — bahosi bor taom uchun takroriy chaqiruv
+      // (tarmoq uzilib qayta yuborilgan) muddatdan keyin ham xatosiz `alreadyRated` qaytaradi.
+      const hasNew = existing.some((s) => !s.exists);
+      if (hasNew) {
+        const at = od.deliveredAt || od.statusUpdatedAt;
+        const deliveredMs = at && typeof at.toMillis === 'function' ? at.toMillis() : Number.NaN;
+        if (!ratingWindowOpen(deliveredMs, now().getTime())) {
+          throw fail('failed-precondition', 'RATING_WINDOW_CLOSED', { windowMin: RATING_WINDOW_MIN });
+        }
+      }
 
       // ── YOZISH fazasi ──
       const saved = [];
@@ -174,5 +199,7 @@ module.exports = {
   attachRestaurantDishRatings,
   ratingDocId,
   validStars,
+  ratingWindowOpen,
+  RATING_WINDOW_MIN,
   MAX_RATINGS,
 };

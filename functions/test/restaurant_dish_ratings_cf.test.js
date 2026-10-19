@@ -63,10 +63,11 @@ const items = [
   { itemId: 'osh', name: 'Osh', price: 40000, count: 1, lineTotal: 40000 },
   { itemId: 'somsa', name: 'Somsa', price: 10000, count: 2, lineTotal: 20000 },
 ];
+const minutesAgo = (m) => admin.firestore.Timestamp.fromMillis(Date.now() - m * 60 * 1000);
 async function seedOrder(id, over = {}) {
   await db.collection('orders').doc(id).set({
     type: 'restaurant', restaurantId: RID, userPhone: CUSTOMER, restaurantStatus: 'delivered',
-    items, itemsTotal: 60000, ...over,
+    deliveredAt: minutesAgo(1), items, itemsTotal: 60000, ...over,
   });
 }
 const stats = async (itemId) => (await db.collection('restaurants').doc(RID).collection('menu_item_stats').doc(itemId).get()).data() || {};
@@ -197,6 +198,53 @@ async function main() {
   await check('RT14 bir taom turli buyurtmalarda — har buyurtma o\'z bahosi (hujjat identifikatori orderId_itemId)', async () => {
     assert.strictEqual(ratings.ratingDocId('o1', 'osh'), 'o1_osh');
     assert.notStrictEqual(ratings.ratingDocId('o1', 'osh'), ratings.ratingDocId('o3', 'osh'));
+  });
+
+  await check('RT15 muddat 30 daqiqa: 29 daqiqa oldin yetkazilgan — baho qabul; 31 daqiqa — RATING_WINDOW_CLOSED, hech narsa yozilmaydi', async () => {
+    await seedOrder('w29', { deliveredAt: minutesAgo(29) });
+    const ok = await call({ orderId: 'w29', ratings: [{ itemId: 'osh', stars: 4 }] }, CUSTOMER);
+    assert.deepStrictEqual(ok.saved, ['osh']);
+    await seedOrder('w31', { deliveredAt: minutesAgo(31) });
+    const before = (await stats('osh')).ratingCount;
+    await expectCode(call({ orderId: 'w31', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER), 'RATING_WINDOW_CLOSED', 'failed-precondition');
+    assert.strictEqual((await ratingDoc('w31', 'osh')).exists, false);
+    assert.strictEqual((await stats('osh')).ratingCount, before);
+    assert.strictEqual((await order('w31')).dishRatings, undefined);
+  });
+
+  await check('RT16 muddatdan keyin: bahosi bor taom uchun takroriy chaqiruv XATOsiz alreadyRated; yangi taom — yopiq; qisman', async () => {
+    await seedOrder('w_late', { deliveredAt: minutesAgo(5) });
+    await call({ orderId: 'w_late', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER);
+    await db.collection('orders').doc('w_late').update({ deliveredAt: minutesAgo(45) }); // vaqt o'tdi
+    const again = await call({ orderId: 'w_late', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER);
+    assert.deepStrictEqual([again.saved, again.alreadyRated], [[], ['osh']]);
+    await expectCode(call({ orderId: 'w_late', ratings: [{ itemId: 'somsa', stars: 3 }] }, CUSTOMER), 'RATING_WINDOW_CLOSED');
+    await expectCode(call({ orderId: 'w_late', ratings: [{ itemId: 'osh', stars: 1 }, { itemId: 'somsa', stars: 3 }] }, CUSTOMER), 'RATING_WINDOW_CLOSED');
+    assert.strictEqual((await ratingDoc('w_late', 'somsa')).exists, false);
+  });
+
+  await check('RT17 yetkazilgan vaqt yo\'q (eski hujjat) → statusUpdatedAt; ikkalasi ham yo\'q yoki kelajakda → YOPIQ', async () => {
+    const dropDelivered = (id) => db.collection('orders').doc(id).update({ deliveredAt: admin.firestore.FieldValue.delete() });
+    await seedOrder('fb1', { statusUpdatedAt: minutesAgo(2) });
+    await dropDelivered('fb1');
+    assert.strictEqual((await call({ orderId: 'fb1', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER)).saved.length, 1);
+    await seedOrder('fb2');
+    await dropDelivered('fb2');
+    await expectCode(call({ orderId: 'fb2', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER), 'RATING_WINDOW_CLOSED');
+    await seedOrder('fb3', { deliveredAt: minutesAgo(-10) });
+    await expectCode(call({ orderId: 'fb3', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER), 'RATING_WINDOW_CLOSED');
+  });
+
+  await check('RT18 ratingWindowOpen chegaralari: 30:00 ochiq, 30:00.001 yopiq, 0 / NaN / kelajak yopiq', () => {
+    const t = 1_700_000_000_000;
+    const w = ratings.RATING_WINDOW_MIN * 60 * 1000;
+    assert.strictEqual(ratings.RATING_WINDOW_MIN, 30);
+    assert.strictEqual(ratings.ratingWindowOpen(t - w, t), true);
+    assert.strictEqual(ratings.ratingWindowOpen(t - w - 1, t), false);
+    assert.strictEqual(ratings.ratingWindowOpen(t, t), true);
+    assert.strictEqual(ratings.ratingWindowOpen(t + 1, t), false);
+    assert.strictEqual(ratings.ratingWindowOpen(0, t), false);
+    assert.strictEqual(ratings.ratingWindowOpen(Number.NaN, t), false);
   });
 
   const passed = results.filter(Boolean).length;

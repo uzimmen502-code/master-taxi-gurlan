@@ -3112,6 +3112,8 @@
   "restaurants_err_RATINGS_REQUIRED": "Баҳо танланмади.",
   "restaurants_err_ORDER_NOT_DELIVERED": "Буюртма ҳали етказилмаган — баҳолаб бўлмайди.",
   "restaurants_err_ITEM_NOT_IN_ORDER": "Бу таом буюртмада йўқ.",
+  "restaurants_rate_left": "Баҳолаш учун {min} дақиқа қолди",
+  "restaurants_err_RATING_WINDOW_CLOSED": "Баҳолаш муддати тугади (етказилгандан кейин 30 дақиқа).",
   "restaurants_err_RESTAURANT_WALLET_INSUFFICIENT": "Ҳамёнда AVA ҳақи учун маблағ етарли эмас. Ҳамённи тўлдиринг.",
   "restaurants_err_NOT_RESTAURANT_MEMBER": "Бу ресторанга кириш ҳуқуқингиз йўқ.",
   "restaurants_err_USER_NOT_FOUND": "Профил топилмади. Қайта кириб кўринг.",

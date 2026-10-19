@@ -86,6 +86,10 @@ class OrderModel {
   /// (`submitDishRatings`); эски буюртмаларда йўқ — бўш харита.
   final Map<String, int> dishRatings;
 
+  /// Ресторан буюртмаси етказилган вақт (`deliveredAt`, эскиларда `statusUpdatedAt`) — баҳолаш
+  /// муддати шундан ҳисобланади.
+  final DateTime? deliveredAt;
+
   const OrderModel({
     required this.id,
     required this.type,
@@ -136,6 +140,7 @@ class OrderModel {
     this.avaFeeCharged = false,
     this.avaFeeRefunded = false,
     this.dishRatings = const {},
+    this.deliveredAt,
   });
 
   bool get isRestaurant => type == 'restaurant';
@@ -329,6 +334,7 @@ class OrderModel {
       avaFeeCharged: d['avaFee'] is Map && (d['avaFee'] as Map)['charged'] == true,
       avaFeeRefunded: d['avaFee'] is Map && (d['avaFee'] as Map)['refunded'] == true,
       dishRatings: parseDishRatings(d['dishRatings']),
+      deliveredAt: _parseDate(d['deliveredAt']) ?? _parseDate(d['statusUpdatedAt']),
     );
   }
 }

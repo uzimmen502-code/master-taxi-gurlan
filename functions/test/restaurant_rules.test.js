@@ -89,6 +89,9 @@ async function main() {
     await db.doc(`orders/${O1}/private/secrets`).set({ pickupCode: '1234', pickupAttempts: 0 });
     await db.doc(`restaurant_customer_stats/${CUSTOMER}`).set({ strikes: 0, completedCount: 1 });
     await db.doc(`restaurant_courier_prefs/${COURIER}`).set({ buyoutEnabled: true, buyoutLimit: 100000 });
+    await db.doc(`restaurants/${R1}/menu_item_stats/osh`).set({ ratingSum: 9, ratingCount: 2 });
+    await db.doc(`restaurants/${R2}/menu_item_stats/somsa`).set({ ratingSum: 5, ratingCount: 1 });
+    await db.doc(`restaurant_dish_ratings/${O1}_osh`).set({ orderId: O1, itemId: 'osh', restaurantId: R1, userId: CUSTOMER, stars: 5 });
     await db.doc('restaurant_cuisines/national_ozbek').set({ name: 'Ўзбек', group: 'national', hidden: false });
     await db.doc('restaurant_cuisines/world_turk').set({ name: 'Турк', group: 'world', hidden: false });
     await db.doc('settings/restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
@@ -226,6 +229,36 @@ async function main() {
     await assertFails(putDish(STRANGER, 't_stranger', { tags: ['kids'] }));
     await assertFails(putDish(OWNER2, 't_owner2', { servings: 2 }), 'boshqa restoran egasi');
     await assertFails(putDish(OWNER, 't_unknown_key', { rating: 5 }), 'rating — server-only, hasOnly');
+  });
+  await check('D-REST-18 menu_item_stats: approved restoranniki hamma o\'qiydi; applied — faqat a\'zo/admin; HECH KIM yozmaydi (a\'zo, admin, mijoz ham)', async () => {
+    await assertSucceeds(anon().doc(`restaurants/${R1}/menu_item_stats/osh`).get());
+    await assertSucceeds(anon().collection(`restaurants/${R1}/menu_item_stats`).get());
+    await assertFails(anon().doc(`restaurants/${R2}/menu_item_stats/somsa`).get());
+    await assertFails(as(STRANGER).doc(`restaurants/${R2}/menu_item_stats/somsa`).get());
+    await assertSucceeds(as(OWNER2).doc(`restaurants/${R2}/menu_item_stats/somsa`).get());
+    await assertSucceeds(as(ADMIN).doc(`restaurants/${R2}/menu_item_stats/somsa`).get());
+    const ref = (who) => as(who).doc(`restaurants/${R1}/menu_item_stats/osh`);
+    for (const who of [OWNER, STAFF, ADMIN, CUSTOMER, STRANGER]) {
+      await assertFails(ref(who).update({ ratingSum: 99, ratingCount: 2 }), `update ${who}`);
+      await assertFails(ref(who).set({ ratingSum: 99, ratingCount: 1 }), `set ${who}`);
+      await assertFails(ref(who).delete(), `delete ${who}`);
+    }
+    await assertFails(as(OWNER).doc(`restaurants/${R1}/menu_item_stats/yangi`).set({ ratingSum: 5, ratingCount: 1 }), 'yangi stats hujjati');
+  });
+  await check('D-REST-18 restaurant_dish_ratings: faqat admin o\'qiydi (kim baholagani PII); hech kim yozmaydi; mijoz o\'z bahosini ham ko\'rmaydi/yozmaydi', async () => {
+    await assertSucceeds(as(ADMIN).doc(`restaurant_dish_ratings/${O1}_osh`).get());
+    for (const who of [OWNER, STAFF, CUSTOMER, STRANGER]) {
+      await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_osh`).get(), `read ${who}`);
+    }
+    await assertFails(anon().doc(`restaurant_dish_ratings/${O1}_osh`).get());
+    for (const who of [OWNER, ADMIN, CUSTOMER]) {
+      await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_somsa`).set({ orderId: O1, itemId: 'somsa', restaurantId: R1, userId: CUSTOMER, stars: 5 }), `create ${who}`);
+      await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_osh`).update({ stars: 1 }), `update ${who}`);
+      await assertFails(as(who).doc(`restaurant_dish_ratings/${O1}_osh`).delete(), `delete ${who}`);
+    }
+  });
+  await check('D-REST-18 mijoz buyurtmasiga `dishRatings` yozolmaydi (faqat CF)', async () => {
+    await assertFails(as(CUSTOMER).doc(`orders/${O1}`).update({ dishRatings: { osh: 5 } }));
   });
   await check('restaurant_cuisines: hamma o\'qiydi (loginsiz ham); hech kim yozmaydi (admin ham)', async () => {
     await assertSucceeds(anon().doc('restaurant_cuisines/national_ozbek').get());

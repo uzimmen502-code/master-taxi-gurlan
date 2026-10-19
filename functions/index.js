@@ -86,6 +86,9 @@ attachRestaurantCuisines(exports, { functions, db, admin, callerPhone, canonical
 // Таом ўчирилса унинг АВАГрам видеоси ҳам ўчади (D-REST-30); медиани `onTvClipDeleted` тозалайди.
 const { attachRestaurantDishVideoCleanup } = require('./restaurant_dish_video');
 attachRestaurantDishVideoCleanup(exports, { functions, db });
+// Таом баҳоси (D-REST-18, 2026-10-19): фақат етказилган буюртма бўйича, 1–5; агрегат — алоҳида ҳужжатда.
+const { attachRestaurantDishRatings } = require('./restaurant_dish_ratings');
+attachRestaurantDishRatings(exports, { functions, db, admin, callerPhone, canonicalUid });
 // «Барча буюртмалар» (D-ALL-1…11, 2026-10-11): `order_index` триггерлари
 // ва админ бўлим рухсатлари (docs/barcha_buyurtmalar_taklifi_uz.md).
 const { attachOrderIndex } = require('./order_index');

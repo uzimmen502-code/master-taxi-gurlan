@@ -3190,6 +3190,21 @@ service cloud.firestore {
             && restaurantMenuItemOk();
         allow delete: if isAuth() && isRestaurantMember(rid);
       }
+
+      // Таом баҳоси агрегати (D-REST-18): `ratingSum`/`ratingCount` — фақат CF
+      // (`submitDishRatings`). Менюдан АЛОҲИДА: `menu_items` қоидаси `hasOnly`, а'зо
+      // ўз таомининг рейтингини ёза олмаслиги керак (20-қоида).
+      match /menu_item_stats/{iid} {
+        allow read: if isAdmin() || restaurantApproved(rid)
+            || (isAuth() && isRestaurantMember(rid));
+        allow write: if false;
+      }
+    }
+
+    // Алоҳида баҳолар (кимнинг баҳоси — PII): фақат админ ўқийди, ёзув — фақат CF.
+    match /restaurant_dish_ratings/{ratingId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Кухналар рўйхати (D-REST-24): оммавий ўқилади (PII йўқ); ёзув фақат CF

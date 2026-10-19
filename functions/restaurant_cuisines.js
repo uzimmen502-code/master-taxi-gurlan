@@ -171,7 +171,8 @@ function attachRestaurantCuisines(exportsObj, deps) {
         errorCode: (failure.details && failure.details.code) || 'ABORTED', durationMs: Date.now() - t0,
       });
       throw failure;
-    }    log('add_cuisine', {
+    }
+    log('add_cuisine', {
       restaurantId, userId: uid, cuisineId: result.id, group, result: result.existed ? 'existed' : 'created', durationMs: Date.now() - t0,
     });
     return { ok: true, ...result };

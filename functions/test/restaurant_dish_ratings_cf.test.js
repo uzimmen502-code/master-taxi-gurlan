@@ -247,6 +247,53 @@ async function main() {
     assert.strictEqual(ratings.ratingWindowOpen(Number.NaN, t), false);
   });
 
+  const rest = async () => (await db.collection('restaurants').doc(RID).get()).data() || {};
+
+  await check('RT19 restoran reytingi = BARCHA taom baholarining o\'rtachasi (butun yig\'indi + soni, ratingAvg 2 xona); takroriy chaqiruv o\'zgartirmaydi', async () => {
+    await clearEmulator();
+    await db.collection('restaurants').doc(RID).set({ name: 'Gurlan osh', status: 'approved', ratingAvg: 0, ratingCount: 0 });
+    await seedOrder('r1');
+    await call({ orderId: 'r1', ratings: [{ itemId: 'osh', stars: 5 }, { itemId: 'somsa', stars: 4 }] }, CUSTOMER);
+    let r = await rest();
+    assert.deepStrictEqual([r.ratingSum, r.ratingCount, r.ratingAvg], [9, 2, 4.5]);
+    await seedOrder('r2', { userPhone: CUSTOMER2 });
+    await call({ orderId: 'r2', ratings: [{ itemId: 'osh', stars: 4 }] }, CUSTOMER2);
+    r = await rest();
+    assert.deepStrictEqual([r.ratingSum, r.ratingCount, r.ratingAvg], [13, 3, 4.33], '13/3 = 4.333… → 4.33');
+    await call({ orderId: 'r2', ratings: [{ itemId: 'osh', stars: 1 }] }, CUSTOMER2); // takror
+    r = await rest();
+    assert.deepStrictEqual([r.ratingSum, r.ratingCount], [13, 3], 'takror baho restoran reytingini o\'zgartirmaydi');
+    // Taom agregati bilan mos: restoran yig'indisi = taomlar yig'indilarining yig'indisi
+    const a = await stats('osh'); const b = await stats('somsa');
+    assert.strictEqual(a.ratingSum + b.ratingSum, r.ratingSum);
+    assert.strictEqual(a.ratingCount + b.ratingCount, r.ratingCount);
+  });
+
+  await check('RT20 PARALLEL turli mijozlar: restoran reytingi aniq (yo\'qolgan yozuv yo\'q)', async () => {
+    await clearEmulator();
+    await db.collection('restaurants').doc(RID).set({ name: 'Gurlan osh', status: 'approved', ratingAvg: 0, ratingCount: 0 });
+    const phones = Array.from({ length: 8 }, (_, i) => `99891200010${i}`);
+    for (const [i, p] of phones.entries()) await seedOrder(`pp${i}`, { userPhone: p });
+    const out = await Promise.allSettled(phones.map((p, i) => call({ orderId: `pp${i}`, ratings: [{ itemId: 'osh', stars: (i % 5) + 1 }] }, p)));
+    const okCount = out.filter((x) => x.status === 'fulfilled').length;
+    for (const x of out) {
+      if (x.status === 'rejected') assert.strictEqual(x.reason.details && x.reason.details.code, 'CONTENTION_RETRY');
+    }
+    const r = await rest();
+    const s = await stats('osh');
+    assert.strictEqual(r.ratingCount, okCount, 'restoran soni = muvaffaqiyatli chaqiruvlar');
+    assert.strictEqual(r.ratingCount, s.ratingCount, 'taom va restoran agregati mos');
+    assert.strictEqual(r.ratingSum, s.ratingSum);
+  });
+
+  await check('RT21 restoran hujjati yo\'q (o\'chirilgan) — baho baribir saqlanadi, xato yo\'q', async () => {
+    await clearEmulator();
+    await seedOrder('gone');
+    const r = await call({ orderId: 'gone', ratings: [{ itemId: 'osh', stars: 5 }] }, CUSTOMER);
+    assert.deepStrictEqual(r.saved, ['osh']);
+    assert.strictEqual((await db.collection('restaurants').doc(RID).get()).exists, false);
+  });
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

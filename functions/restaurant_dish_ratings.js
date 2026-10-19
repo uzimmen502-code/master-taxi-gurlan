@@ -12,6 +12,8 @@
  *   - `restaurants/{rid}/menu_item_stats/{itemId}` — AGREGAT: `ratingSum`, `ratingCount` (butun
  *     sonlar; o'rtacha klientda/bo'limda hisoblanadi — float saqlanmaydi, 8-qoida ruhi).
  *     Hamma o'qiydi, yozuv faqat shu funksiya.
+ *   - `restaurants/{rid}`: `ratingSum`/`ratingCount`/`ratingAvg` — restoran reytingi, BARCHA taom baholarining
+ *     o'rtachasi (ega, 2026-10-19). Restoran a'zosi bu maydonlarni yoza olmaydi (profil whitelist'i).
  *   - `orders/{id}.dishRatings` { itemId: stars } — mijoz ekrani qaysi taom baholanganini bilishi
  *     uchun (buyurtmani faqat egasi o'qiydi) + `order_events` ga `dish_rated` yozuvi (16-qoida).
  *
@@ -124,7 +126,11 @@ function attachRestaurantDishRatings(exportsObj, deps) {
         if (!inOrder.has(itemId)) throw fail('failed-precondition', 'ITEM_NOT_IN_ORDER', { itemId });
       }
       const ids = [...wanted.keys()];
-      const existing = await Promise.all(ids.map((id) => t.get(db.collection(RATINGS).doc(ratingDocId(orderId, id)))));
+      const rRef = db.collection(RESTAURANTS).doc(od.restaurantId);
+      const [existing, rSnap] = await Promise.all([
+        Promise.all(ids.map((id) => t.get(db.collection(RATINGS).doc(ratingDocId(orderId, id))))),
+        t.get(rRef),
+      ]);
 
       // Muddat: faqat YANGI baho uchun tekshiriladi — bahosi bor taom uchun takroriy chaqiruv
       // (tarmoq uzilib qayta yuborilgan) muddatdan keyin ham xatosiz `alreadyRated` qaytaradi.
@@ -159,6 +165,22 @@ function attachRestaurantDishRatings(exportsObj, deps) {
         saved.push(itemId);
       });
       if (saved.length > 0) {
+        // Restoran reytingi = uning BARCHA taom baholarining o'rtachasi (ega, 2026-10-19).
+        // Butun sonlar yig'indisi + soni saqlanadi; `ratingAvg` — ulardan hosil qilingan
+        // ko'rsatish qiymati (ro'yxat saralashi uchun, 2 xona). Restoran hujjati o'chirilgan bo'lsa o'tkaziladi.
+        if (rSnap.exists) {
+          const rd = rSnap.data() || {};
+          const baseCount = Number.isInteger(rd.ratingCount) && rd.ratingCount > 0 ? rd.ratingCount : 0;
+          // Eski hujjatda ratingSum yo'q: soni 0 bo'lgani uchun yig'indi ham 0 (hozirgacha hech kim yozmagan).
+          const baseSum = baseCount > 0 && Number.isInteger(rd.ratingSum) ? rd.ratingSum : 0;
+          const addSum = saved.reduce((a, id) => a + wanted.get(id), 0);
+          const newCount = baseCount + saved.length;
+          const newSum = baseSum + addSum;
+          t.update(rRef, {
+            ratingSum: newSum, ratingCount: newCount,
+            ratingAvg: Math.round((newSum / newCount) * 100) / 100,
+          });
+        }
         t.update(orderRef, { ...patch, updatedAt: ts() });
         t.set(orderRef.collection(ORDER_EVENTS).doc(), {
           from: od.restaurantStatus, to: od.restaurantStatus, actor: 'customer', actorId: uid,

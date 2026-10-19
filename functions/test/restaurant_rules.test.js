@@ -141,6 +141,21 @@ async function main() {
     await assertFails(as(OWNER).doc(`restaurants/${R1}`).update({ delivery: { mode: 'drone' } }));
     await assertFails(as(OWNER).doc(`restaurants/${R1}`).delete());
   });
+  await check('D-REST-26 maxQtyPerItem: a\'zo 1…500 butun yozadi (chegaralar ham); 0, 501, satr, kasr, begona — yo\'q', async () => {
+    const ref = (who) => as(who).doc(`restaurants/${R1}`);
+    await assertSucceeds(ref(OWNER).update({ maxQtyPerItem: 200 }));
+    await assertSucceeds(ref(STAFF).update({ maxQtyPerItem: 1 }), 'quyi chegara');
+    await assertSucceeds(ref(OWNER).update({ maxQtyPerItem: 500 }), 'yuqori chegara');
+    await assertFails(ref(OWNER).update({ maxQtyPerItem: 0 }));
+    await assertFails(ref(OWNER).update({ maxQtyPerItem: 501 }));
+    await assertFails(ref(OWNER).update({ maxQtyPerItem: -5 }));
+    await assertFails(ref(OWNER).update({ maxQtyPerItem: '100' }), 'satr');
+    await assertFails(ref(OWNER).update({ maxQtyPerItem: 100.5 }), 'kasr');
+    await assertFails(ref(OWNER).update({ maxQtyPerItem: null }), 'null');
+    await assertFails(ref(STRANGER).update({ maxQtyPerItem: 100 }), 'begona');
+    await assertFails(as(OWNER2).doc(`restaurants/${R1}`).update({ maxQtyPerItem: 100 }), 'boshqa restoran egasi');
+    await assertSucceeds(ref(OWNER).update({ maxQtyPerItem: 50 })); // keyingi testlar uchun default
+  });
   await check('members: a\'zo o\'qiydi, begona yo\'q, hech kim yozmaydi', async () => {
     await assertSucceeds(as(STAFF).doc(`restaurants/${R1}/members/${OWNER}`).get());
     await assertSucceeds(as(ADMIN).collection(`restaurants/${R1}/members`).get());

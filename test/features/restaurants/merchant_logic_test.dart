@@ -98,6 +98,15 @@ void main() {
       final hours = (ok()..alwaysOpen = false..openTime = '09:00'..closeTime = '22:00').toRegisterPayload();
       expect(hours['openingHours'], {'open': '09:00', 'close': '22:00'});
     });
+    test('maxQtyPerItem (D-REST-26): default 50; 1…500 ok; 0, 501 → max_qty; profil patch yuboradi, ro\'yxatdan o\'tish payload\'i yo\'q', () {
+      expect(ok().maxQtyPerItem, 50);
+      expect((ok()..maxQtyPerItem = 1).validate(), isEmpty, reason: 'quyi chegara');
+      expect((ok()..maxQtyPerItem = 500).validate(), isEmpty, reason: 'yuqori chegara');
+      expect((ok()..maxQtyPerItem = 0).validate(), ['max_qty'], reason: 'bo\'sh maydon (_int → 0) jim default bo\'lmaydi');
+      expect((ok()..maxQtyPerItem = 501).validate(), ['max_qty']);
+      expect((ok()..maxQtyPerItem = 120).toProfilePatch()['maxQtyPerItem'], 120);
+      expect(ok().toRegisterPayload().containsKey('maxQtyPerItem'), isFalse, reason: 'server restaurantRegister qabul qilmaydi');
+    });
     test('cuisineTags 3 tadan ko\'p bo\'lsa kesiladi; profil patch server-only maydonlarsiz', () {
       final f = ok()..cuisineTags = ['a', 'b', 'c', 'd'];
       expect((f.toRegisterPayload()['cuisineTags'] as List).length, 3);

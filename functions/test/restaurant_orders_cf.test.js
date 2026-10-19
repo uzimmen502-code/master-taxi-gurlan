@@ -244,7 +244,24 @@ async function main() {
     await expectCode(place(rid, CUSTOMER, { lat: null, lng: null }), 'DELIVERY_ADDRESS_REQUIRED');
     await expectCode(place(rid, CUSTOMER, { foodPaymentMethod: 'cash_to_restaurant' }), 'FOOD_PAYMENT_INVALID');
   });
-  await check('P3 quoteRestaurantDelivery = buyurtmadagi narx', async () => {
+  await check('P2b miqdor limiti (D-REST-26): default 50 (yig\'indi, qatorlarni bo\'lib aylanib o\'tib bo\'lmaydi); maxQtyPerItem oshirsa o\'tadi; shipi 500', async () => {
+    const mk = (q, extra = []) => place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: q }, ...extra] });
+    const unavailable = [{ itemId: 'tugadi', qty: 1 }]; // limitdan KEYINGI tekshiruvda yiqiladi — buyurtma yaratilmaydi
+    await expectCode(mk(51, unavailable), 'QTY_LIMIT_EXCEEDED', 'failed-precondition');
+    await expectCode(place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 30 }, { itemId: 'osh', qty: 30 }, ...unavailable] }), 'QTY_LIMIT_EXCEEDED');
+    await expectCode(mk(501, unavailable), 'ITEM_INVALID');
+    await db.collection('restaurants').doc(rid).update({ maxQtyPerItem: 100 });
+    try {
+      await expectCode(mk(60, unavailable), 'MENU_ITEM_UNAVAILABLE'); // 60 ≤ 100: limitdan o'tdi
+      await expectCode(mk(101, unavailable), 'QTY_LIMIT_EXCEEDED');
+      await db.collection('restaurants').doc(rid).update({ maxQtyPerItem: 9999 }); // buzilgan qiymat → default 50
+      await expectCode(mk(51, unavailable), 'QTY_LIMIT_EXCEEDED');
+      await expectCode(mk(50, unavailable), 'MENU_ITEM_UNAVAILABLE');
+    } finally {
+      await db.collection('restaurants').doc(rid).update({ maxQtyPerItem: 50 });
+    }
+  });
+  await check('P3quoteRestaurantDelivery = buyurtmadagi narx', async () => {
     const q = await call('quoteRestaurantDelivery', { restaurantId: rid, ...C_LOC }, CUSTOMER);
     assert.strictEqual(q.deliveryFee, feeAva);
     assert.strictEqual(q.deliveryMode, 'ava_courier');

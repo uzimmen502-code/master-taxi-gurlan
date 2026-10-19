@@ -66,7 +66,7 @@ void main() {
     for (final s in ['applied', 'approved', 'rejected', 'suspended', 'closed']) {
       expect(cyrl.containsKey('restaurants_m_status_$s'), isTrue, reason: s);
     }
-    for (final e in ['name', 'location', 'address', 'legal_type', 'delivery_mode', 'delivery_or_pickup', 'payment_method', 'card_number', 'prep_time', 'min_order', 'own_fee', 'hours', 'item']) {
+    for (final e in ['name', 'location', 'address', 'legal_type', 'delivery_mode', 'delivery_or_pickup', 'payment_method', 'card_number', 'prep_time', 'min_order', 'max_qty', 'own_fee', 'hours', 'item']) {
       expect(cyrl.containsKey('restaurants_m_err_$e'), isTrue, reason: e);
     }
     for (final c in ['milliy', 'fastfood', 'pizza', 'shashlik', 'sweets', 'drinks', 'home']) {
@@ -93,7 +93,7 @@ void main() {
     for (final e in [
       'COURIER_ASSIGNMENT_CONFLICT', 'NOT_AVA_COURIER_ORDER', 'ORDER_NOT_CLAIMABLE', 'COURIER_OWN_ORDER',
       'COURIER_IS_RESTAURANT_MEMBER', 'BUYOUT_LIMIT_EXCEEDED', 'PICKUP_CODE_MISMATCH', 'PICKUP_CODE_LOCKED',
-      'RESTAURANT_NOT_READY', 'USE_RESTAURANT_PICKUP', 'USE_RESTAURANT_ARRIVE',
+      'RESTAURANT_NOT_READY', 'USE_RESTAURANT_PICKUP', 'USE_RESTAURANT_ARRIVE', 'QTY_LIMIT_EXCEEDED',
     ]) {
       expect(cyrl.containsKey('restaurants_err_$e'), isTrue, reason: e);
     }

@@ -2,6 +2,8 @@
 // Экран фақат майдонларни кўрсатади; сервер (`restaurantRegister`) ўз
 // текширувини барибир қилади (18-қоида).
 
+import '../domain/restaurant_models.dart';
+
 class RestaurantFormData {
   RestaurantFormData({
     this.name = '',
@@ -26,6 +28,7 @@ class RestaurantFormData {
     this.cardHolder = '',
     this.prepTimeMin = 20,
     this.minOrderAmount = 0,
+    this.maxQtyPerItem = Restaurant.defaultMaxQtyPerItem,
     this.alwaysOpen = true,
     this.openTime = '09:00',
     this.closeTime = '22:00',
@@ -55,6 +58,10 @@ class RestaurantFormData {
   String cardHolder;
   int prepTimeMin;
   int minOrderAmount;
+
+  /// Бир таомдан энг кўп миқдор (D-REST-26): фақат «Дўкон»да таҳрирланади,
+  /// рўйхатдан ўтишда default.
+  int maxQtyPerItem;
   bool alwaysOpen;
   String openTime;
   String closeTime;
@@ -87,6 +94,7 @@ class RestaurantFormData {
     if (prepay && card.isNotEmpty && card.length != 16) errs.add('card_number');
     if (prepTimeMin < 5 || prepTimeMin > 180) errs.add('prep_time');
     if (minOrderAmount < 0) errs.add('min_order');
+    if (maxQtyPerItem < 1 || maxQtyPerItem > Restaurant.maxQtyPerItemCeiling) errs.add('max_qty');
     if (deliveryMode == 'own_courier' && ownFeeType == 'distance' && ownFeePerKm < 0) errs.add('own_fee');
     if (!alwaysOpen && (!_hhmm(openTime) || !_hhmm(closeTime))) errs.add('hours');
     return errs;
@@ -141,6 +149,7 @@ class RestaurantFormData {
         'openingHours': alwaysOpen ? null : {'open': openTime.trim(), 'close': closeTime.trim()},
         'prepTimeMin': prepTimeMin,
         'minOrderAmount': minOrderAmount,
+        'maxQtyPerItem': maxQtyPerItem,
         'delivery': _delivery(),
         'payment': {'prepay': prepay, 'cash': cash},
       };

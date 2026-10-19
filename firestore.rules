@@ -3048,12 +3048,16 @@ service cloud.firestore {
       return changed.hasOnly([
             'name', 'description', 'cuisineTags', 'address', 'contactPhone',
             'lat', 'lng', 'geohash', 'logoUrl', 'coverUrl', 'announcement',
-            'openingHours', 'prepTimeMin', 'minOrderAmount', 'delivery',
+            'openingHours', 'prepTimeMin', 'minOrderAmount', 'maxQtyPerItem', 'delivery',
             'payment', 'pausedUntil', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
           && d.prepTimeMin is int && d.prepTimeMin >= 5 && d.prepTimeMin <= 180
           && d.minOrderAmount is int && d.minOrderAmount >= 0
+          // D-REST-26: бир таомдан энг кўпи; шип 500 — functions/restaurant_orders.js
+          // `MAX_QTY_CEILING` ва клиент `Restaurant.maxQtyPerItemCeiling` билан бир хил.
+          && (!('maxQtyPerItem' in d)
+              || (d.maxQtyPerItem is int && d.maxQtyPerItem >= 1 && d.maxQtyPerItem <= 500))
           && d.delivery is map
           && d.delivery.get('mode', 'none') in ['ava_courier', 'own_courier', 'none']
           && d.payment is map;

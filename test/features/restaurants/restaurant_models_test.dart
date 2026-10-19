@@ -50,6 +50,22 @@ void main() {
       expect(r.distanceKmFrom(41.8, 60.3), isNull);
     });
 
+    test('maxQtyPerItem (D-REST-26): yo\'q → 50; 1…500 butun qabul; buzilgan qiymat → default (server intOr bilan bir xil)', () {
+      int q(Object? v) => Restaurant.fromMap('q', {'maxQtyPerItem': v}).maxQtyPerItem;
+      expect(Restaurant.fromMap('q', const {}).maxQtyPerItem, Restaurant.defaultMaxQtyPerItem);
+      expect(Restaurant.defaultMaxQtyPerItem, 50);
+      expect(q(1), 1, reason: 'quyi chegara');
+      expect(q(100), 100);
+      expect(q(100.0), 100, reason: 'web: butun son double bo\'lib kelishi mumkin');
+      expect(q(500), 500, reason: 'yuqori chegara');
+      expect(q(0), 50);
+      expect(q(501), 50);
+      expect(q(-3), 50);
+      expect(q(100.5), 50, reason: 'kasr — serverda ham default');
+      expect(q('100'), 50, reason: 'satr');
+      expect(q(null), 50);
+    });
+
     test('ish vaqti: oddiy va yarim tundan o\'tadigan oraliq; pauza', () {
       final day = Restaurant.fromMap('a', {'openingHours': {'open': '09:00', 'close': '22:00'}});
       expect(day.isOpenAt(DateTime(2026, 10, 8, 12)), isTrue);

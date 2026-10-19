@@ -69,7 +69,13 @@ const AUTO_PAUSE_MIN = 30;
 const STRIKES_FOR_PREPAY_ONLY = 2;
 const PREPAY_ONLY_DAYS = 30;
 const MAX_ITEMS = 30;
-const MAX_QTY = 50;
+/**
+ * Bir taomdan eng ko'p miqdor (D-REST-26): restoranning `maxQtyPerItem` maydoni,
+ * yo'q bo'lsa — DEFAULT. CEILING — platforma shipi (firestore.rules ham 500).
+ * Klientdagi `Restaurant.defaultMaxQtyPerItem` shu DEFAULT ning nusxasi.
+ */
+const DEFAULT_MAX_QTY = 50;
+const MAX_QTY_CEILING = 500;
 const MAX_PRICE = 50000000;
 const PICKUP_CODE_ATTEMPTS = 5;
 const NEARBY_RADIUS_KM_DEFAULT = 15;
@@ -931,9 +937,14 @@ function attachRestaurantOrders(exportsObj, deps) {
       const wanted = new Map();
       for (const it of itemsIn) {
         const id = str(it && it.itemId, 64);
-        const qty = intOr(it && it.qty, 0, 1, MAX_QTY);
+        const qty = intOr(it && it.qty, 0, 1, MAX_QTY_CEILING);
         if (!id || qty < 1) throw fail('invalid-argument', 'ITEM_INVALID');
         wanted.set(id, (wanted.get(id) || 0) + qty);
+      }
+      // Limit YIG'INDI miqdorga: bir taom bir nechta qatorda kelsa ham aylanib o'tilmaydi.
+      const maxQty = intOr(r.maxQtyPerItem, DEFAULT_MAX_QTY, 1, MAX_QTY_CEILING);
+      for (const [itemId, count] of wanted) {
+        if (count > maxQty) throw fail('failed-precondition', 'QTY_LIMIT_EXCEEDED', { itemId, maxQty });
       }
       const itemSnaps = await db.getAll(...[...wanted.keys()].map((id) => rRef.collection(MENU_ITEMS).doc(id)));
       const items = [];

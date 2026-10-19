@@ -3807,5 +3807,6 @@
   "restaurants_season_wedding": "Тўй мавсуми",
   "restaurants_ramadan_today": "Бугун: саҳарлик {sahar} · ифтор {iftar}",
   "restaurants_dish_preorder": "Олдиндан буюртма",
-  "restaurants_dish_serves": "{n} киши учун"
+  "restaurants_dish_serves": "{n} киши учун",
+  "restaurants_section_dishes": "Овқатлар"
 }

@@ -12,11 +12,18 @@ class VideoOptionTile extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.dense = true,
+    this.titleKey = 'link_video_optional',
+    this.hintKey = 'link_video_optional_hint',
   });
 
   final bool value;
   final ValueChanged<bool> onChanged;
   final bool dense;
+
+  /// Матн калитлари: бошқа модул (масалан кўчмас мулк — «60 сония гача») ўз матнини беради;
+  /// берилмаса аввалгидек умумий матн.
+  final String titleKey;
+  final String hintKey;
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +33,8 @@ class VideoOptionTile extends StatelessWidget {
       dense: dense,
       contentPadding: EdgeInsets.zero,
       controlAffinity: ListTileControlAffinity.leading,
-      title: Text(context.tr('link_video_optional')),
-      subtitle: Text(context.tr('link_video_optional_hint')),
+      title: Text(context.tr(titleKey)),
+      subtitle: Text(context.tr(hintKey)),
     );
   }
 }
@@ -63,16 +70,21 @@ class _LinkedVideoButtonState extends State<LinkedVideoButton> {
 
   // Сўров фақат bir марта (ва `linkId` ўзгарса): ота виджет қайта қурилганда
   // (масалан, сават ўзгарганда) қайта сўралмайди — 36-қоида.
-  Future<TvClip?> _load() => widget.loader != null
-      ? widget.loader!()
-      : TvClipsRepository()
-          .fetchLinked(
-            linkId: widget.linkId,
-            ownerPhone: widget.ownerPhone,
-            trustLink: widget.trustLinkKind.isNotEmpty,
-            linkKind: widget.trustLinkKind,
-          )
-          .catchError((Object _) => null);
+  // `async` + try: репозиторийни ясаш ҳам (Firebase тайёр эмас) ҳолатда видео тугмаси жимгина
+  // йўқ бўлади, экран йиқилмайди — аввал фақат сўров хатоси ушланар эди.
+  Future<TvClip?> _load() async {
+    if (widget.loader != null) return widget.loader!();
+    try {
+      return await TvClipsRepository().fetchLinked(
+        linkId: widget.linkId,
+        ownerPhone: widget.ownerPhone,
+        trustLink: widget.trustLinkKind.isNotEmpty,
+        linkKind: widget.trustLinkKind,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void didUpdateWidget(LinkedVideoButton old) {

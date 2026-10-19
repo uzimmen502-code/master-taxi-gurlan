@@ -15,10 +15,23 @@ const tvClipMaxUploadSeconds = 600;
 /// жуфти: `TV_CLIP_ITEM_MAX_SECONDS` (functions/tv_clip_limits.js) — иккиси мос туриши шарт.
 const tvClipItemMaxUploadSeconds = 60;
 
-/// Шу боғлаш турига (`linkKind`) тегишли клипнинг максимал давомийлиги, сония. Таом видеоси — 60,
-/// қолгани — умумий [tvClipMaxUploadSeconds] (ресторан видеоси ҳам).
-int tvClipMaxSecondsFor(String linkKind) =>
-    linkKind == 'restaurant_item' ? tvClipItemMaxUploadSeconds : tvClipMaxUploadSeconds;
+/// КЎЧМАС МУЛК эълони видеосининг (`realty_listing`) максимал давомийлиги — 60 сония, сотиш ҳам,
+/// ижара ҳам (эга, 2026-10-19). Серверда жуфти: `TV_CLIP_REALTY_MAX_SECONDS`
+/// (functions/tv_clip_limits.js) — иккиси мос туриши шарт.
+const tvClipRealtyMaxUploadSeconds = 60;
+
+/// Шу боғлаш турига (`linkKind`) тегишли клипнинг максимал давомийлиги, сония. Таом ва кўчмас мулк
+/// видеоси — 60, қолгани — умумий [tvClipMaxUploadSeconds] (ресторан видеоси ҳам).
+int tvClipMaxSecondsFor(String linkKind) {
+  switch (linkKind) {
+    case 'restaurant_item':
+      return tvClipItemMaxUploadSeconds;
+    case 'realty_listing':
+      return tvClipRealtyMaxUploadSeconds;
+    default:
+      return tvClipMaxUploadSeconds;
+  }
+}
 
 /// Жойлаштирувчининг профил исми (тўлиқ). @nick / телефон / UI fallback — бўш.
 String tvOwnerDisplayName(String raw) {

@@ -23,9 +23,12 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../../ads/services/ads_storage_service.dart';
 import '../../map_picker/screens/map_picker_screen.dart';
+import '../../tv_market/services/tv_clip_link.dart';
+import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_controls.dart';
 import '../widgets/realty_feedback.dart';
+import '../widgets/realty_listing_video_card.dart';
 import '../widgets/realty_quota_strip.dart';
 import 'realty_pro_screen.dart';
 
@@ -99,6 +102,11 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
   /// (концепция, 5-бўлим: «кўп расм юклаш ва тартибини ўзгартириш»).
   final List<_PhotoItem> _photos = [];
   bool _submitting = false;
+
+  /// Ихтиёрий видео (эга қарори 2026-10-19, 60 сония гача): янги эълонда белги қўйилса, эълон
+  /// сақлангач умумий видео жойлаш экрани очилади ([TvClipLink.publish], `realty_listing`).
+  /// Таҳрирда белги ўрнига видео картаси кўрсатилади ([RealtyListingVideoCard]).
+  bool _withVideo = false;
 
   /// Уйнинг ЎЗ тумани (D-GEO-11): пиндан телефон аниқлайди (А вариант),
   /// эга ўзгартира олади. Эга ўзи танласа — автоматик аниқлаш устидан
@@ -614,6 +622,15 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       await _clearDraft();
       navigator.pop();
       showRealtyInfo(messenger, message, background: _tierColor);
+      // Эълон ЯРАТИЛДИ; видео ихтиёрий қўшимча — бекор қилинса ёки йиқилса эълонга таъсир
+      // қилмайди (кейин «Таҳрирлаш»да қўшиш мумкин). Ваколат ва 60 с чегараси — сервер/қоидада.
+      if (!_isEdit && _withVideo && result.listingId.isNotEmpty) {
+        await TvClipLink.publish(
+          navigator,
+          kind: TvClipLink.kindRealty,
+          linkId: result.listingId,
+        );
+      }
     } on RealtyException catch (e) {
       // Сервер АНИҚ рад этди — эълон яратилмаган: юкланган расмлар
       // Storage'да эгасиз қолмасин ва калит янгиланади.
@@ -811,6 +828,21 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
                   context.tr('realty_photo_order_hint'),
                   style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
                 ),
+              ),
+            const SizedBox(height: 16),
+
+            // Ихтиёрий видео (≤ 60 с, АВАГрамга жойланади, эълон ўчса видео ҳам ўчади).
+            if (_isEdit)
+              RealtyListingVideoCard(
+                listingId: widget.existing!.id,
+                myPhone: _repo.myOwnerPhone,
+              )
+            else
+              VideoOptionTile(
+                value: _withVideo,
+                onChanged: _submitting ? (_) {} : (v) => setState(() => _withVideo = v),
+                titleKey: 'realty_video_option',
+                hintKey: 'realty_video_option_hint',
               ),
             const SizedBox(height: 16),
 

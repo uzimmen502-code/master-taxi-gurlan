@@ -23,6 +23,13 @@ abstract final class TvClipLink {
   /// (модерация, R2 — ўша қатлам); ресторан меню саҳифасида таом қаторидан очилади.
   static const kindRestaurantItem = 'restaurant_item';
 
+  /// Кўчмас мулк эълони (`realty_listings`, 2026-10-19, эга: «сотиш / ижарада ихтиёрий, максимум
+  /// 60 секундлик видео, АВАГрамга жойлансин, эълон ўчирилса видео ҳам ўчсин»): linkId — эълон id.
+  /// Ваколат `firestore.rules`да (`tvClipRealtyLinkOk`), 60 с — серверда (`tv_clip_limits.js`),
+  /// эълон ўчирилса клип сервердан ўчади (`functions/realty_video.js`). Кўрсатишда эгалик
+  /// солиштирилмайди (`LinkedVideoButton.trustLinkKind`) — қоида ўзи кафолатлайди.
+  static const kindRealty = 'realty_listing';
+
   /// Улгуржи бозор маҳсулоти (2026-10-17, эга қабул қилган таклиф): аввал
   /// «энг сўнгги клип»ни тахмин қилиб боғланарди, энди клип ID'си билан.
   static const kindWholesale = 'wholesale_product';

@@ -3827,6 +3827,30 @@ service cloud.firestore {
           || tvClipRestaurantLinkOk(a);
     }
 
+    // Кўчмас мулк эълони видеоси (`linkKind == 'realty_listing'`, `linkId` = `realty_listings` id;
+    // эга қарори 2026-10-19: сотиш/ижарада ихтиёрий, 60 сонияга). Ваколат ЯРАТИШДА: эълон МАВЖУД ва
+    // ШУ фойдаланувчининг `realtyOwnerKey`ига тегишли (жамоа ходими ҳам — калит умумий,
+    // `realtyListingIsMine`). Бегона эълонга ёки ўйлаб топилган id'га боғлаб бўлмайди; `linkId`
+    // ҳужжат id шаклида (`/` билан йўлни кенгайтириб бўлмасин).
+    // Кўрсатишда эгалик солиштирилмайди (`trustLinkKind`) — шунинг учун ҳам қоида қатъий.
+    function tvClipRealtyLinkOk(d) {
+      return d.get('linkKind', '') != 'realty_listing'
+          || (d.get('linkId', '') is string
+              && d.get('linkId', '').matches('[A-Za-z0-9_-]{1,64}')
+              && realtyListingIsMine(d.get('linkId', '')));
+    }
+
+    // Ўзгартириш: мавжуд клипни эълонга КЎЧИРИБ БЎЛМАЙДИ (60 сония чегараси клип ЯРАТИЛГАНДА
+    // `linkKind`дан олинади — узун клипни кейин боғлаб чегарани айланиб ўтиб бўларди) ва бошқа
+    // эълонга ҳам. Боғлаш ўзгармаса (сарлавҳа ва ҳ.к.) ёки олиб ташланса — рухсат.
+    function tvClipRealtyLinkUpdateOk() {
+      let a = request.resource.data;
+      let b = resource.data;
+      return a.get('linkKind', '') != 'realty_listing'
+          || (b.get('linkKind', '') == 'realty_listing'
+              && b.get('linkId', '') == a.get('linkId', ''));
+    }
+
     // TV Market клиплари — ўқиш ҳаммага; ёзиш authed.
     match /tv_clips/{clipId} {
       allow read: if true;
@@ -3854,7 +3878,8 @@ service cloud.firestore {
                   && !request.resource.data.keys().hasAny([
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
                       'socialVideoUrl'])
-                  && tvClipRestaurantLinkOk(request.resource.data)));
+                  && tvClipRestaurantLinkOk(request.resource.data)
+                  && tvClipRealtyLinkOk(request.resource.data)));
       // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
       // joylardi — AVA sahifalariga takroriy post. Endi faqat admin/CF.
       allow update: if isAdmin()
@@ -3862,6 +3887,7 @@ service cloud.firestore {
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
               && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
               && tvClipRestaurantLinkUpdateOk()
+              && tvClipRealtyLinkUpdateOk()
               && !request.resource.data.diff(resource.data).affectedKeys()
                   .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',

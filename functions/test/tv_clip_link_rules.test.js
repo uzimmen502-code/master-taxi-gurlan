@@ -223,6 +223,82 @@ async function main() {
   await check('N ресторан видеоси аввалгидек: таом id талаб қилинмайди', () =>
     assertSucceeds(owner().collection('tv_clips').doc('n10').set(restClip(OWNER))));
 
+  // ─── Ko'chmas mulk e'loni videosi (2026-10-19): linkKind 'realty_listing', linkId = realty_listings id ───
+  //   P  e'lon egasi (va bir xil realtyOwnerKey li jamoa a'zosi) o'z MAVJUD e'loniga bog'lab yaratadi
+  //      (sotish ham, ijara ham); begona / e'lon yo'q / id noto'g'ri shakl / kalitsiz foydalanuvchi — yo'q
+  //   Q  moderatsiya va pullik reklama yo'li o'zgarmaydi
+  //   R  ko'chirish: mavjud klipni e'longa bog'lab bo'lmaydi (60 s chegarasini aylanib o'tish), boshqa e'longa ham;
+  //      bog'lash o'zgarmasa tahrir va bog'lashni olib tashlash ishlaydi
+  const TEAM = '998906665544'; // bir xil realtyOwnerKey — jamoa hisobi
+  const KEYLESS = '998903332211'; // realtyOwnerKey yo'q
+  const team = () => testEnv.authenticatedContext('uTeam', { phone_number: `+${TEAM}` }).firestore();
+  const keyless = () => testEnv.authenticatedContext('uKeyless', { phone_number: `+${KEYLESS}` }).firestore();
+  async function resetRealty({ autoApprove = false } = {}) {
+    await reset({ autoApprove });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.collection('users').doc(OWNER).set({ phone: OWNER, realtyOwnerKey: 'keyA' });
+      await db.collection('users').doc(TEAM).set({ phone: TEAM, realtyOwnerKey: 'keyA' });
+      await db.collection('users').doc(OTHER).set({ phone: OTHER, realtyOwnerKey: 'keyB' });
+      await db.collection('users').doc(KEYLESS).set({ phone: KEYLESS });
+      await db.collection('realty_listings').doc('Lsale').set({ ownerKey: 'keyA', deal: 'sale', status: 'active' });
+      await db.collection('realty_listings').doc('Lrent').set({ ownerKey: 'keyA', deal: 'rent', status: 'pending' });
+      await db.collection('realty_listings').doc('Lother').set({ ownerKey: 'keyB', deal: 'sale', status: 'active' });
+      await db.collection('tv_clips').doc('rl1').set({
+        ownerPhone: OWNER, status: 'active', category: 'product', title: 'x',
+        linkKind: 'realty_listing', linkId: 'Lsale', viewCount: 0, likeCount: 0,
+      });
+    });
+  }
+  const realtyClip = (ownerPhone, linkId, extra = {}) => newClip({ ownerPhone, linkKind: 'realty_listing', linkId, ...extra });
+
+  await resetRealty();
+  await check('P egasi o\'z SOTISH e\'loniga bog\'lab klip yaratadi (pending)', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('p1').set(realtyClip(OWNER, 'Lsale'))));
+  await check('P2 IJARA e\'loniga ham (deal farqi yo\'q; e\'lon pending bo\'lsa ham)', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('p2').set(realtyClip(OWNER, 'Lrent'))));
+  await check('P3 jamoa a\'zosi (bir xil realtyOwnerKey) kompaniya e\'loniga yaratadi', () =>
+    assertSucceeds(team().collection('tv_clips').doc('p3').set(realtyClip(TEAM, 'Lsale'))));
+  await check('P4 BEGONA e\'longa (ownerKey boshqa) bog\'lab bo\'lmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('p4').set(realtyClip(OWNER, 'Lother'))));
+  await check('P5 begona odam egasining e\'loniga bog\'lab bo\'lmaydi', () =>
+    assertFails(other().collection('tv_clips').doc('p5').set(realtyClip(OTHER, 'Lsale'))));
+  await check('P6 mavjud bo\'lmagan e\'lon id — yaratolmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('p6').set(realtyClip(OWNER, 'yoq_elon'))));
+  await check('P7 linkId bo\'sh — yaratolmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('p7').set(realtyClip(OWNER, ''))));
+  await check('P8 linkId matn emas — yaratolmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('p8').set(realtyClip(OWNER, 5))));
+  await check('P9 linkId yo\'l qismlari bilan (Lsale/private/detail) — yaratolmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('p9').set(realtyClip(OWNER, 'Lsale/private/detail'))));
+  await check('P10 realtyOwnerKey yo\'q foydalanuvchi — yaratolmaydi', () =>
+    assertFails(keyless().collection('tv_clips').doc('p10').set(realtyClip(KEYLESS, 'Lsale'))));
+  await check('P11 begona nomdan (ownerPhone boshqa) — yaratolmaydi', () =>
+    assertFails(other().collection('tv_clips').doc('p11').set(realtyClip(OWNER, 'Lsale'))));
+
+  await check('Q moderatsiya saqlanadi: avto-tasdiq o\'chiq bo\'lsa active yaratib bo\'lmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('q1').set(realtyClip(OWNER, 'Lsale', { status: 'active' }))));
+  await check('Q2 pullik reklama yo\'li yopiq: category ad bilan yaratib bo\'lmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('q2').set(realtyClip(OWNER, 'Lsale', { category: 'ad' }))));
+  await resetRealty({ autoApprove: true });
+  await check('Q3 avto-tasdiq yoqiq — active ham yaratiladi', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('q3').set(realtyClip(OWNER, 'Lsale', { status: 'active' }))));
+
+  await resetRealty();
+  await check('R egasi bog\'lash o\'zgarmaydigan tahrirni qiladi (sarlavha)', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('rl1').update({ title: 'Yangi' })));
+  await check('R2 e\'lon bog\'lashni olib tashlash (oddiy klipga aylanadi) — ruxsat', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('rl1').update({ linkKind: '', linkId: '' })));
+  await resetRealty();
+  await check('R3 klipni BOSHQA (o\'z) e\'loniga ko\'chirib bo\'lmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('rl1').update({ linkId: 'Lrent' })));
+  await check('R4 MAVJUD oddiy klipni (ad, c1) e\'longa bog\'lab bo\'lmaydi — 60 s chegarasi aylanib o\'tilmaydi', () =>
+    assertFails(owner().collection('tv_clips').doc('c1').update({ linkKind: 'realty_listing', linkId: 'Lsale' })));
+  await check('R5 begona e\'lon klipini o\'zgartira olmaydi', () =>
+    assertFails(other().collection('tv_clips').doc('rl1').update({ title: 'Hack' })));
+  await check('R6 boshqa turlar ta\'sirlanmaydi: ad klipi (c1) ad/service ga o\'tkazish ishlaydi', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('c1').update({ linkKind: 'service', linkId: 'S9' })));
+
   await testEnv.cleanup();
   const failed = results.filter((x) => !x).length;
   console.log(`\n${results.length - failed}/${results.length} o'tdi`);

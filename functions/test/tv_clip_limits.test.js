@@ -8,7 +8,9 @@
  */
 'use strict';
 const assert = require('assert');
-const { TV_CLIP_ITEM_MAX_SECONDS, ITEM_LINK_KIND, tvClipMaxSecondsFor } = require('../tv_clip_limits');
+const {
+  TV_CLIP_ITEM_MAX_SECONDS, ITEM_LINK_KIND, TV_CLIP_REALTY_MAX_SECONDS, REALTY_LINK_KIND, tvClipMaxSecondsFor,
+} = require('../tv_clip_limits');
 
 const DEFAULT = 600;
 let failed = 0;
@@ -52,5 +54,18 @@ check('tur nomi aniq mos: katta-kichik harf yoki kengaytma 60 s bermaydi', () =>
   }
 });
 
+check('ko\'chmas mulk e\'loni videosi (realty_listing) — 60 soniya, sotish ham ijara ham (D: ega 2026-10-19)', () => {
+  assert.strictEqual(TV_CLIP_REALTY_MAX_SECONDS, 60);
+  assert.strictEqual(REALTY_LINK_KIND, 'realty_listing');
+  assert.strictEqual(tvClipMaxSecondsFor({ linkKind: 'realty_listing', linkId: 'L1' }, DEFAULT), 60);
+  assert.strictEqual(tvClipMaxSecondsFor({ linkKind: 'realty_listing' }, 1200), 60);
+});
+
+check('ko\'chmas mulk turi nomi aniq mos: katta-kichik harf/kengaytma 60 s bermaydi; taom chegarasi o\'zgarmagan', () => {
+  for (const k of ['Realty_Listing', 'realty_listings', 'realty-listing', ' realty_listing', 'realty']) {
+    assert.strictEqual(tvClipMaxSecondsFor({ linkKind: k }, DEFAULT), DEFAULT, k);
+  }
+  assert.strictEqual(tvClipMaxSecondsFor({ linkKind: 'restaurant_item' }, DEFAULT), 60);
+});
 console.log(failed ? `\n${failed} ta yiqildi` : '\nhammasi o\'tdi');
 process.exit(failed ? 1 : 0);

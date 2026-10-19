@@ -130,6 +130,9 @@ attachRealty(exports, {
   // Уйнинг ўз тумани (D-GEO-11) — Аҳоли бозоридаги текширув (hoisted).
   propertyGeoStamp: (uid, data) => marketAdGeoStamp(uid, data),
 });
+// Эълон ўчирилса унинг АВАГрам видеоси ҳам ўчади (эга қарори 2026-10-19); медиани `onTvClipDeleted` тозалайди.
+const { attachRealtyVideoCleanup } = require('./realty_video');
+attachRealtyVideoCleanup(exports, { functions, db });
 // «Шундай уй чиқса, хабар бер» (эга қарори 2026-10-08) — `realty_alerts.js`.
 const { attachRealtyAlerts } = require('./realty_alerts');
 attachRealtyAlerts(exports, {

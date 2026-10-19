@@ -14,7 +14,9 @@ import '../../../services/location_service.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
+import '../domain/restaurant_sections.dart';
 import '../widgets/restaurant_row.dart';
+import '../widgets/section_dishes_view.dart';
 import 'restaurant_screen.dart';
 
 class RestaurantsListScreen extends StatefulWidget {
@@ -25,7 +27,16 @@ class RestaurantsListScreen extends StatefulWidget {
     this.repository,
     this.cart,
     this.locate,
+    this.currentUid,
+    this.onOpenRestaurant,
   });
+
+  /// Тестда алмаштириш учун; стандарт — [RestaurantScreen] очилади.
+  final void Function(Restaurant restaurant)? onOpenRestaurant;
+
+  /// Бўлим дарвозаси учун фойдаланувчи (12 рақамли; `internal` босқич синовчиси). Бўш бўлса
+  /// SharedPreferences'даги телефондан; тестда алмаштирилади.
+  final String? currentUid;
 
   /// Профил манзили (захира) — GPS рухсати бўлса GPS устун (D-GEO-4).
   final double? userLat;
@@ -44,7 +55,8 @@ class RestaurantsListScreen extends StatefulWidget {
 }
 
 class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
-  late final RestaurantsRepository _repo = widget.repository ?? RestaurantsRepository();
+  late final RestaurantsRepository _repo =
+      widget.repository ?? RestaurantsRepository();
   late final RestaurantCart _cart = widget.cart ?? RestaurantCart.instance;
   final _searchCtrl = TextEditingController();
 
@@ -64,6 +76,11 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   Stream<List<Restaurant>>? _stream;
   String _streamKey = '';
 
+  /// Бўлимлар (S3): созлама ҳужжати йўқ/ўчиқ бўлса чиплар умуман кўринмайди — экран аввалгидек.
+  RestaurantSectionsConfig _sections = RestaurantSectionsConfig.off;
+  String? _uid;
+  RestaurantSection? _section;
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +88,34 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     _lng = widget.userLng;
     if (_lat == null || _lng == null) _loadProfileCoords();
     _loadGps();
+    _loadSections();
+  }
+
+  Future<void> _loadSections() async {
+    String? uid = widget.currentUid;
+    if (uid == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final d = phoneDigits(prefs.getString('user_phone') ?? '');
+        uid = d.length == 9 ? '998$d' : d;
+      } catch (_) {}
+    }
+    final cfg = await _repo.getSectionsConfig();
+    if (!mounted) return;
+    setState(() {
+      _sections = cfg;
+      _uid = uid;
+      // Танланган бўлим созламада ёпилган бўлса (кеш янгиланди) — умумий рўйхатга қайтамиз.
+      if (_section != null && !cfg.isVisible(_section!, uid)) _setSection(null);
+    });
+  }
+
+  /// Бўлимни алмаштириш. Ресторанлар оқими ҲАР САФАР қайта яратилади: бўлимга ўтилганда рўйхат
+  /// дарахтдан чиқади, қайтганда эски (битта obuna'ли) оқимга қайта уланиб бўлмайди.
+  void _setSection(RestaurantSection? s) {
+    _section = s;
+    _stream = null;
+    _streamKey = '';
   }
 
   /// GPS биринчи (D-GEO-4). Рухсат сўралади (эга, 2026-10-11) — модул
@@ -174,7 +219,27 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     return out;
   }
 
+  /// Бўлимдаги таом босилди: ресторан ҳужжати олинади ва ресторан экрани очилади.
+  Future<void> _openById(String restaurantId) async {
+    try {
+      final r = await _repo.getRestaurant(restaurantId);
+      if (!mounted) return;
+      if (r != null) {
+        _open(r);
+        return;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('restaurants_dish_open_failed'))));
+  }
+
   void _open(Restaurant r) {
+    final hook = widget.onOpenRestaurant;
+    if (hook != null) {
+      hook(r);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RestaurantScreen(
@@ -199,7 +264,8 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
         elevation: 0,
         title: Text(
           context.tr('home_module_restaurants'),
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.ink),
+          style: TextStyle(
+              fontSize: 15, fontWeight: FontWeight.w700, color: c.ink),
         ),
       ),
       body: SafeArea(
@@ -209,7 +275,13 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
               child: TextField(
                 controller: _searchCtrl,
-                onChanged: (v) => setState(() => _query = v),
+                onChanged: (v) => setState(() {
+                  _query = v;
+                  // Қидирув — ресторанлар бўйича: ёзила бошласа бўлимдан умумий рўйхатга қайтамиз.
+                  if (v.trim().isNotEmpty && _section != null) {
+                    _setSection(null);
+                  }
+                }),
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: context.tr('restaurants_search_hint'),
@@ -226,7 +298,8 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                   filled: true,
                   fillColor: c.surface,
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AvaRadius.search),
                     borderSide: BorderSide(color: c.line),
@@ -238,96 +311,147 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                 ),
               ),
             ),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  ChoiceChip(
-                    label: Text(context.tr('restaurants_sort_distance')),
-                    selected: _sort == 'distance',
-                    onSelected: (_) => setState(() => _sort = 'distance'),
-                  ),
-                  const SizedBox(width: 6),
-                  ChoiceChip(
-                    label: Text(context.tr('restaurants_sort_rating')),
-                    selected: _sort == 'rating',
-                    onSelected: (_) => setState(() => _sort = 'rating'),
-                  ),
-                  const SizedBox(width: 6),
-                  FilterChip(
-                    label: Text(context.tr('restaurants_filter_open')),
-                    selected: _openOnly,
-                    onSelected: (v) => setState(() => _openOnly = v),
-                  ),
-                  const SizedBox(width: 6),
-                  FilterChip(
-                    label: Text(context.tr('restaurants_filter_pickup')),
-                    selected: _pickupOnly,
-                    onSelected: (v) => setState(() => _pickupOnly = v),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: StreamBuilder<List<Restaurant>>(
-                stream: _listStream(),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snap.hasError) {
-                    return Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: AvaNoticeRow(
-                        text: context.tr('home_section_error'),
-                        icon: Icons.cloud_off_rounded,
-                        color: c.warn,
-                      ),
-                    );
-                  }
-                  final list = _apply(snap.data ?? const []);
-                  if (list.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AvaNoticeRow(
-                            text: context.tr(_nearbyMode
-                                ? 'restaurants_empty_nearby'
-                                : 'restaurants_empty_list'),
-                            icon: Icons.restaurant_outlined,
-                            color: c.ink3,
-                          ),
-                          // Яқинда йўқ — кенгроқ ҳудуд (ўзи ўтмайди).
-                          if (_nearbyMode && (snap.data ?? const []).isEmpty)
-                            Align(
-                              child: OutlinedButton.icon(
-                                key: const ValueKey('rest_list_show_all'),
-                                icon: const Icon(Icons.public, size: 16),
-                                label: Text(context.tr('geo_show_nation')),
-                                onPressed: () => setState(() => _showAll = true),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 16),
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) => RestaurantRow(
-                      restaurant: list[i],
-                      distanceKm: list[i].distanceKmFrom(_lat, _lng),
-                      onTap: () => _open(list[i]),
+            if (_sections.visibleFor(_uid).isNotEmpty)
+              SizedBox(
+                height: 44,
+                child: ListView(
+                  key: const ValueKey('section-chips'),
+                  scrollDirection: Axis.horizontal,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  children: [
+                    ChoiceChip(
+                      key: const ValueKey('section-all'),
+                      avatar: const Icon(Icons.storefront_outlined, size: 16),
+                      label: Text(context.tr('restaurants_section_all')),
+                      selected: _section == null,
+                      onSelected: (_) => setState(() => _setSection(null)),
                     ),
-                  );
-                },
+                    for (final s in _sections.visibleFor(_uid)) ...[
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        key: ValueKey('section-${s.key}'),
+                        avatar: Icon(sectionIcon(s), size: 16),
+                        label: Text(context.tr(s.l10nKey)),
+                        selected: _section == s,
+                        onSelected: (_) => setState(() {
+                          _setSection(s);
+                          // Бўлим таом бўйича; ресторан қидируви қолиб кетмасин.
+                          _searchCtrl.clear();
+                          _query = '';
+                        }),
+                      ),
+                    ],
+                  ],
+                ),
               ),
+            if (_section == null)
+              SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    ChoiceChip(
+                      label: Text(context.tr('restaurants_sort_distance')),
+                      selected: _sort == 'distance',
+                      onSelected: (_) => setState(() => _sort = 'distance'),
+                    ),
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: Text(context.tr('restaurants_sort_rating')),
+                      selected: _sort == 'rating',
+                      onSelected: (_) => setState(() => _sort = 'rating'),
+                    ),
+                    const SizedBox(width: 6),
+                    FilterChip(
+                      label: Text(context.tr('restaurants_filter_open')),
+                      selected: _openOnly,
+                      onSelected: (v) => setState(() => _openOnly = v),
+                    ),
+                    const SizedBox(width: 6),
+                    FilterChip(
+                      label: Text(context.tr('restaurants_filter_pickup')),
+                      selected: _pickupOnly,
+                      onSelected: (v) => setState(() => _pickupOnly = v),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: _section != null
+                  ? SectionDishesView(
+                      key: ValueKey('section-view-${_section!.key}'),
+                      section: _section!,
+                      config: _sections,
+                      repository: _repo,
+                      lat: _lat,
+                      lng: _lng,
+                      onOpenRestaurant: _openById,
+                    )
+                  : StreamBuilder<List<Restaurant>>(
+                      stream: _listStream(),
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting &&
+                            !snap.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+                        if (snap.hasError) {
+                          return Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: AvaNoticeRow(
+                              text: context.tr('home_section_error'),
+                              icon: Icons.cloud_off_rounded,
+                              color: c.warn,
+                            ),
+                          );
+                        }
+                        final list = _apply(snap.data ?? const []);
+                        if (list.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AvaNoticeRow(
+                                  text: context.tr(_nearbyMode
+                                      ? 'restaurants_empty_nearby'
+                                      : 'restaurants_empty_list'),
+                                  icon: Icons.restaurant_outlined,
+                                  color: c.ink3,
+                                ),
+                                // Яқинда йўқ — кенгроқ ҳудуд (ўзи ўтмайди).
+                                if (_nearbyMode &&
+                                    (snap.data ?? const []).isEmpty)
+                                  Align(
+                                    child: OutlinedButton.icon(
+                                      key: const ValueKey('rest_list_show_all'),
+                                      icon: const Icon(Icons.public, size: 16),
+                                      label:
+                                          Text(context.tr('geo_show_nation')),
+                                      onPressed: () =>
+                                          setState(() => _showAll = true),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }
+                        return ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 6, 12, 16),
+                          itemCount: list.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (context, i) => RestaurantRow(
+                            restaurant: list[i],
+                            distanceKm: list[i].distanceKmFrom(_lat, _lng),
+                            onTap: () => _open(list[i]),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

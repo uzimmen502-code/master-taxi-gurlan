@@ -3724,5 +3724,11 @@
   "realty_video_load_failed": "Videoni yuklab bo'lmadi",
   "realty_video_retry": "Qayta urinish",
   "realty_video_by_colleague": "Boshqa xodim yuklagan",
-  "courier_hub_wholesale_subtitle": "Ulgurji bozor va AVA do'koni mahsulotlari kuryer orqali yetkaziladi"
+  "courier_hub_wholesale_subtitle": "Ulgurji bozor va AVA do'koni mahsulotlari kuryer orqali yetkaziladi",
+  "restaurants_venue_home": "Uy taomi",
+  "restaurants_venue_cafe": "Kafe",
+  "restaurants_venue_restaurant": "Restoran",
+  "restaurants_venue_chaikhana": "Choyxona",
+  "restaurants_m_venue_type": "Muassasa turi",
+  "restaurants_m_err_venue_type": "Kafe, restoran yoki choyxonadan birini tanlang"
 }

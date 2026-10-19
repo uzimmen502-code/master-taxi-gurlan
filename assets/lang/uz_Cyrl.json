@@ -3724,5 +3724,11 @@
   "realty_video_load_failed": "Видеони юклаб бўлмади",
   "realty_video_retry": "Қайта уриниш",
   "realty_video_by_colleague": "Бошқа ходим юклаган",
-  "courier_hub_wholesale_subtitle": "Улгуржи бозор ва AVA дўкони маҳсулотлари курьер орқали етказилади"
+  "courier_hub_wholesale_subtitle": "Улгуржи бозор ва AVA дўкони маҳсулотлари курьер орқали етказилади",
+  "restaurants_venue_home": "Уй таоми",
+  "restaurants_venue_cafe": "Кафе",
+  "restaurants_venue_restaurant": "Ресторан",
+  "restaurants_venue_chaikhana": "Чойхона",
+  "restaurants_m_venue_type": "Муассаса тури",
+  "restaurants_m_err_venue_type": "Кафе, ресторан ёки чойхонадан бирини танланг"
 }

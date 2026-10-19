@@ -3724,5 +3724,11 @@
   "realty_video_load_failed": "Не удалось загрузить видео",
   "realty_video_retry": "Повторить",
   "realty_video_by_colleague": "Загрузил другой сотрудник",
-  "courier_hub_wholesale_subtitle": "Товары оптового рынка и магазина AVA доставляет курьер"
+  "courier_hub_wholesale_subtitle": "Товары оптового рынка и магазина AVA доставляет курьер",
+  "restaurants_venue_home": "Домашняя кухня",
+  "restaurants_venue_cafe": "Кафе",
+  "restaurants_venue_restaurant": "Ресторан",
+  "restaurants_venue_chaikhana": "Чайхана",
+  "restaurants_m_venue_type": "Тип заведения",
+  "restaurants_m_err_venue_type": "Выберите: кафе, ресторан или чайхана"
 }

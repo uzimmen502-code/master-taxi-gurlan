@@ -32,6 +32,8 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   late final RestaurantsRepository _repo = widget.repository ?? RestaurantsRepository();
   late final _data = RestaurantFormData(
     legalType: widget.homeCook ? RestaurantFormData.homeCookLegalType : RestaurantFormData.cafeLegalTypes.first,
+    // Кафе-ресторан янги рўйхатдан ўтишда тур танлаши шарт (D-REST-41); уй ошпази — автомат home (сервер).
+    venueRequired: !widget.homeCook,
   );
   bool _sending = false;
   bool _phoneLoaded = false;
@@ -112,6 +114,7 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
                     data: _data,
                     onChanged: () => setState(() {}),
                     showLegalType: !widget.homeCook,
+                    showVenueType: !widget.homeCook,
                     legalTypeOptions: RestaurantFormData.cafeLegalTypes,
                   ),
                   const SizedBox(height: 8),

@@ -50,7 +50,7 @@ const STATS = 'menu_item_stats';
 const MODULE_ID = 'restaurants';
 
 /** Indeks tuzilishi/qoidasi versiyasi — qoida o'zgarsa oshiriladi va qayta hisoblash (backfill) kerak. */
-const INDEX_RULES_VERSION = 3;
+const INDEX_RULES_VERSION = 4;
 const MAX_PRICE = 50000000;
 /** Bitta restoran uchun qayta hisoblanadigan taomlarning eng ko'pi (himoya). */
 const MAX_DISHES_PER_RESTAURANT = 500;
@@ -72,6 +72,8 @@ const DASTARXON_TAG = 'dastarxon';
 /** Taomga qo'yiladigan teglar (firestore.rules `dishFactsOk` va klient `DishTag.all` bilan bir xil). */
 const DISH_TAGS = Object.freeze(['kids', 'breakfast', 'night', 'light', DASTARXON_TAG, ...SEASON_KEYS]);
 const MAX_TAGS_PER_DISH = 4;
+/** Muassasa turi (D-REST-41): kartadagi ixcham belgi; restoran hujjatidan nusxa, eski hujjatda yo'q. */
+const VENUE_TYPES = Object.freeze(['home', 'cafe', 'restaurant', 'chaikhana']);
 
 function str(v, max) {
   return String(v == null ? '' : v).trim().slice(0, max);
@@ -172,6 +174,7 @@ function buildIndexDoc({ rid, iid, item, restaurant, stats }) {
     price, sections, tags: f.tags,
     seasons: f.tags.filter((t) => SEASON_KEYS.includes(t)),
     restaurantName: str(restaurant.name, 80),
+    ...(VENUE_TYPES.includes(restaurant.venueType) ? { venueType: restaurant.venueType } : {}),
     restaurantLat: lat, restaurantLng: lng,
     geo4: geohash.slice(0, GEO_PRECISION),
     prepTimeMin: intIn(restaurant.prepTimeMin, 5, 180) || 20,
@@ -206,7 +209,7 @@ function fingerprint(doc) {
 function restaurantFingerprint(r) {
   if (!r) return 'null';
   return fingerprint({
-    status: r.status, name: r.name, lat: r.lat, lng: r.lng, geohash: r.geohash,
+    status: r.status, name: r.name, venueType: r.venueType || null, lat: r.lat, lng: r.lng, geohash: r.geohash,
     cuisineTags: r.cuisineTags, prepTimeMin: r.prepTimeMin, openingHours: r.openingHours,
     acceptsPreorder: r.acceptsPreorder === true,
     pausedUntil: r.pausedUntil || null,
@@ -335,6 +338,7 @@ module.exports = {
   DISH_TAGS,
   MAX_TAGS_PER_DISH,
   DASTARXON_TAG,
+  VENUE_TYPES,
   INDEX,
   INDEX_RULES_VERSION,
   GEO_PRECISION,

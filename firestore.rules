@@ -3132,7 +3132,7 @@ service cloud.firestore {
             'name', 'description', 'cuisineTags', 'address', 'contactPhone',
             'lat', 'lng', 'geohash', 'logoUrl', 'coverUrl', 'announcement',
             'openingHours', 'prepTimeMin', 'minOrderAmount', 'maxQtyPerItem', 'acceptsPreorder', 'delivery',
-            'acceptsBookings', 'bookingSeats', 'bookingNote',
+            'acceptsBookings', 'bookingSeats', 'bookingNote', 'venueType',
             'payment', 'pausedUntil', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
@@ -3147,6 +3147,11 @@ service cloud.firestore {
           // S5 (D-REST-23): стол бронь белгиси, бир слотдаги ўринлар сони ва закалат матни. Бекор қилиш лимитидан
           // (`bookingCancels`, `bookingsDisabledReason` — фақат CF) автомат ўчирилган бўлса, а'зо ўзи қайта ёқа олмайди.
           && (!('acceptsBookings' in d) || d.acceptsBookings is bool)
+          // D-REST-41: муассаса тури — уй овқатчисида фақат `home`, қолганларида cafe/restaurant/chaikhana (`legalType` — фақат CF).
+          && (!('venueType' in d)
+              || (d.get('legalType', 'individual') == 'individual'
+                  ? d.venueType == 'home'
+                  : d.venueType in ['cafe', 'restaurant', 'chaikhana']))
           && (!('bookingSeats' in d) || (d.bookingSeats is int && d.bookingSeats >= 1 && d.bookingSeats <= 500))
           && (!('bookingNote' in d) || (d.bookingNote is string && d.bookingNote.size() <= 300))
           && (!changed.hasAny(['acceptsBookings'])

@@ -148,7 +148,14 @@ async function main() {
     assert.strictEqual(doc({ price: 40000, available: false }, r), null);
     assert.strictEqual(doc({ price: 0 }, r), null);
     assert.strictEqual(doc({ price: 40000 }, restaurant({ status: 'applied' })), null);
-    assert.strictEqual(idx.INDEX_RULES_VERSION, 3);
+    assert.strictEqual(idx.INDEX_RULES_VERSION, 4);
+  });
+  await check('P2d muassasa turi (D-REST-41): restoran hujjatidan indeksga nusxa; noto\'g\'ri/yo\'q — yozilmaydi; fingerprint tur o\'zgarsa o\'zgaradi', () => {
+    const doc = (r) => idx.buildIndexDoc({ rid: RID, iid: 'x', item: { price: 40000 }, restaurant: r, stats: null });
+    for (const v of ['home', 'cafe', 'restaurant', 'chaikhana']) assert.strictEqual(doc(restaurant({ venueType: v })).venueType, v);
+    for (const v of [undefined, null, '', 'bar', 'HOME', 5]) assert.strictEqual('venueType' in doc(restaurant({ venueType: v })), false, String(v));
+    assert.notStrictEqual(idx.restaurantFingerprint(restaurant()), idx.restaurantFingerprint(restaurant({ venueType: 'cafe' })));
+    assert.strictEqual(idx.INDEX_RULES_VERSION, 4);
   });
   await check('P3 indeksga kirmaydi: tasdiqlanmagan restoran, mavjud emas, noto\'g\'ri narx, noto\'g\'ri joy, bo\'limsiz', () => {
     const item = { price: 40000, servings: 4 };

@@ -419,7 +419,24 @@ async function main() {
     await assertFails(ref(OWNER).update({ bookingCancels: [] }), 'bekor qilish tarixi faqat CF');
     await assertFails(ref(OWNER).update({ bookingsDisabledReason: '' }), 'sabab belgisi faqat CF');
   });
-  await check('S5 limitdan avtomat o\'chirilgan restoran: a\'zo o\'zi qayta yoqolmaydi (false yozish mumkin)', async () => {
+  await check('D-REST-41 venueType: kafe-restoran a\'zosi cafe/restaurant/chaikhana yozadi (home — yo\'q); uy ovqatchisida faqat home; begona yozolmaydi; eski hujjat (maydon yo\'q) tegilmasa buzilmaydi', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`restaurants/${R1}`).update({ legalType: 'yatt' });
+      await ctx.firestore().doc(`restaurants/${R2}`).update({ legalType: 'individual' });
+    });
+    const ref = (who, id = R1) => as(who).doc(`restaurants/${id}`);
+    for (const v of ['cafe', 'restaurant', 'chaikhana']) await assertSucceeds(ref(OWNER).update({ venueType: v }), v);
+    for (const v of ['home', 'bar', 'CAFE', 5, null]) await assertFails(ref(OWNER).update({ venueType: v }), `kafe: ${v}`);
+    await assertSucceeds(ref(OWNER).update({ prepTimeMin: 21 }), 'turga tegilmaydigan yozuv');
+    await assertFails(ref(STRANGER).update({ venueType: 'cafe' }));
+    await assertSucceeds(ref(OWNER2, R2).update({ venueType: 'home' }), 'uy ovqatchisi — home');
+    for (const v of ['cafe', 'restaurant', 'chaikhana']) await assertFails(ref(OWNER2, R2).update({ venueType: v }), `uy ovqatchisi: ${v}`);
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const { deleteField } = require('firebase/firestore');
+      await ctx.firestore().doc(`restaurants/${R1}`).update({ legalType: deleteField(), venueType: deleteField() });
+      await ctx.firestore().doc(`restaurants/${R2}`).update({ legalType: deleteField(), venueType: deleteField() });
+    });
+  });  await check('S5 limitdan avtomat o\'chirilgan restoran: a\'zo o\'zi qayta yoqolmaydi (false yozish mumkin)', async () => {
     const ref = (who) => as(who).doc(`restaurants/${R2}`);
     await assertFails(ref(OWNER2).update({ acceptsBookings: true }), 'cancel_limit — qayta yoqib bo\'lmaydi');
     await assertSucceeds(ref(OWNER2).update({ acceptsBookings: false }));

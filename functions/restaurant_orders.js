@@ -140,6 +140,11 @@ const RESTAURANT_ADMIN_TRANSITIONS = Object.freeze({
 });
 
 const LEGAL_TYPES = ['individual', 'yatt', 'llc'];
+/**
+ * Muassasa turi — kartada ko'rinadigan ixcham nom (D-REST-41, ega 2026-10-19): uy ovqati («Уй таоми») FAQAT uy ovqatchisi
+ * (`legalType: individual`) uchun va avtomatik; kafe-restoran egasi 3 tadan birini o'zi tanlaydi. Eski hujjatlarga TEGILMAYDI.
+ */
+const VENUE_CHOICES = ['cafe', 'restaurant', 'chaikhana'];
 const DELIVERY_MODES = ['ava_courier', 'own_courier', 'none'];
 const FOOD_PAYMENT = ['prepay', 'cash_buyout', 'cash_to_restaurant'];
 const DELIVERY_PAYMENT = ['cash', 'wallet', 'none'];
@@ -583,7 +588,14 @@ function attachRestaurantOrders(exportsObj, deps) {
     const name = str(d.name, 80);
     if (name.length < 2) throw fail('invalid-argument', 'NAME_REQUIRED');
     const legalType = LEGAL_TYPES.includes(d.legalType) ? d.legalType : 'individual';
-    const lat = Number(d.lat);
+    // Uy ovqatchisi — doim `home`; boshqalar: berilgan bo'lsa to'g'ri bo'lishi shart; berilmasa (eski ilova) — maydon yozilmaydi.
+    let venueType = null;
+    if (legalType === 'individual') {
+      venueType = 'home';
+    } else if (d.venueType != null && d.venueType !== '') {
+      if (!VENUE_CHOICES.includes(d.venueType)) throw fail('invalid-argument', 'VENUE_TYPE_INVALID');
+      venueType = d.venueType;
+    }    const lat = Number(d.lat);
     const lng = Number(d.lng);
     if (!validLatLng(lat, lng)) throw fail('invalid-argument', 'LOCATION_REQUIRED');
     const delivery = d.delivery && typeof d.delivery === 'object' ? d.delivery : {};
@@ -602,6 +614,7 @@ function attachRestaurantOrders(exportsObj, deps) {
     batch.set(rRef, {
       name,
       legalType,
+      ...(venueType ? { venueType } : {}),
       description: str(d.description, 500),
       cuisineTags: Array.isArray(d.cuisineTags) ? d.cuisineTags.map((x) => str(x, 30)).filter(Boolean).slice(0, 3) : [],
       address: str(d.address, 300),

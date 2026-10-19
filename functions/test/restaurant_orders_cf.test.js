@@ -161,6 +161,19 @@ async function main() {
   let feeAva;
 
   // ── 1. Ro'yxatdan o'tish ────────────────────────────────────────────
+  await check('V1 muassasa turi (D-REST-41): uy ovqatchisi — doim `home` (tanlab bo\'lmaydi); kafe-restoran — cafe/restaurant/chaikhana; noto\'g\'ri — rad; berilmasa (eski ilova) — maydon yozilmaydi', async () => {
+    const base = { name: 'Tur sinovi', address: 'Gurlan', ...R_LOC, delivery: { mode: 'ava_courier', pickup: true }, payment: { prepay: true, cash: true } };
+    const reg = async (extra) => (await db.collection('restaurants').doc((await call('restaurantRegister', { ...base, ...extra }, OWNER2)).restaurantId).get()).data();
+    assert.strictEqual((await reg({ legalType: 'individual' })).venueType, 'home');
+    assert.strictEqual((await reg({ legalType: 'individual', venueType: 'restaurant' })).venueType, 'home', 'uy ovqatchisi boshqa tur tanlay olmaydi');
+    assert.strictEqual((await reg({})).venueType, 'home', 'legalType berilmasa individual');
+    for (const v of ['cafe', 'restaurant', 'chaikhana']) assert.strictEqual((await reg({ legalType: 'yatt', venueType: v })).venueType, v);
+    assert.strictEqual((await reg({ legalType: 'llc', venueType: 'chaikhana' })).venueType, 'chaikhana');
+    assert.strictEqual('venueType' in (await reg({ legalType: 'yatt' })), false, 'eski ilova turni yubormaydi — maydon yo\'q');
+    for (const v of ['home', 'bar', 'CAFE', 5]) {
+      await expectCode(call('restaurantRegister', { ...base, legalType: 'yatt', venueType: v }, OWNER2), 'VENUE_TYPE_INVALID', 'invalid-argument');
+    }
+  });
   await check('R1 restoran ro\'yxatdan o\'tdi (autoApprove → approved), owner a\'zo, rekvizit private da', async () => {
     rid = await registerRestaurant(OWNER);
     const r = (await db.collection('restaurants').doc(rid).get()).data();

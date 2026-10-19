@@ -23,6 +23,7 @@ class MenuItemFormScreen extends StatefulWidget {
     required this.repository,
     this.existing,
     this.initialCategoryId,
+    this.homeCook = false,
     this.storage,
   });
 
@@ -31,6 +32,9 @@ class MenuItemFormScreen extends StatefulWidget {
   final RestaurantsRepository repository;
   final MenuItem? existing;
   final String? initialCategoryId;
+
+  /// Категория номи таклифлари рўйхати учун (уй ошпази / кафе).
+  final bool homeCook;
   final RestaurantStorageService? storage;
 
   @override
@@ -88,7 +92,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   /// Форманинг ўзидан янги категория яратиш: янги ошпазда ҳали бирорта
   /// категория йўқ — аввал «Меню» табига қайтиб яратиш шарт эмас.
   Future<void> _createCategory() async {
-    final name = await promptMenuCategoryName(context);
+    final name = await promptMenuCategoryName(context, categories: _cats, homeCook: widget.homeCook);
     if (!mounted) return;
     if (name == null) {
       setState(() => _catFieldGen++);

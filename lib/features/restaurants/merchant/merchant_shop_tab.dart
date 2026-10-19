@@ -14,6 +14,7 @@ import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'restaurant_form_fields.dart';
 import 'restaurant_register_form.dart';
+import 'restaurant_video_card.dart';
 
 class MerchantShopTab extends StatefulWidget {
   const MerchantShopTab({super.key, required this.restaurant, required this.repository, this.storage});
@@ -172,6 +173,12 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
               child: _ImageSlot(label: context.tr('restaurants_m_cover'), url: _r.coverUrl, size: 84, wide: true, onTap: _uploading ? null : () => _uploadImage('cover')),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        RestaurantVideoCard(
+          restaurantId: _r.id,
+          ownerPhone: _r.ownerUid,
+          restaurantApproved: _r.status == 'approved',
         ),
         const SizedBox(height: 12),
         Text(context.tr('restaurants_m_pause'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),

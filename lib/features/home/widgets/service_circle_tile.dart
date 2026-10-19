@@ -329,10 +329,6 @@ const _kServiceSvgs = <String, String>{
 const _kServiceIcons = <String, IconData>{
   // «Хизматлар» — `jobs` модулининг иккинчи плиткаси (дарвоза `jobs`).
   'jobs_services': Icons.handyman_rounded,
-  'platform_store': Icons.storefront_rounded,
-  // «Овқат» олиб ташланган (2026-10-11) — `platform_store` каби калити эски
-  // APK'лар учун қолган; белги фақат админ «Ҳудудлар ва хизматлар» рўйхатида.
-  'food': Icons.no_meals_rounded,
   'tv_market': Icons.play_circle_filled_rounded,
   'dating': Icons.favorite_rounded,
   'chatgpt': Icons.auto_awesome_rounded,
@@ -389,9 +385,6 @@ Color olxTintFor(String moduleId) {
     case 'logistics':
       return const Color(0xFF3949AB);
     // ── Овқат ва маҳсулот ───────────────────────────────────────
-    // Олиб ташланган «Овқат» — фақат админ рўйхатида (эски APK калити).
-    case 'food':
-      return const Color(0xFFFF6B5A);
     // Кафе-ресторанлар — тўқ зангори-қизил (терракота): нон (сариқ) билан
     // бир қаторда туради, ундан тўқроқ.
     case 'restaurants':
@@ -415,8 +408,6 @@ Color olxTintFor(String moduleId) {
     // оиласидан, лекин тўқроқ туси билан ажралиб туради.
     case 'china_market':
       return const Color(0xFF0E7C72);
-    case 'platform_store':
-      return const Color(0xFF3F6FE4);
     case 'sell':
       return const Color(0xFF7E8CF2);
     // ── Медиа ва ижтимоий ───────────────────────────────────────

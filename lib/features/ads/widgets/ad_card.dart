@@ -47,19 +47,23 @@ class AdCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: MarketGridMetrics.imageAspect,
               child: imageUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      placeholder: (_, __) => const ColoredBox(
-                        color: AppColors.cardImageBg,
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                  ? ColoredBox(
+                      color: AppColors.cardImageBg,
+                      child: CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                        fit: BoxFit.contain,
+                        width: double.infinity,
+                        placeholder: (_, __) => const ColoredBox(
+                          color: AppColors.cardImageBg,
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                         ),
-                      ),
-                      errorWidget: (_, __, ___) => const ColoredBox(
-                        color: AppColors.cardImageBg,
-                        child: Icon(Icons.broken_image),
+                        errorWidget: (_, __, ___) => const ColoredBox(
+                          color: AppColors.cardImageBg,
+                          child: Icon(Icons.broken_image),
+                        ),
                       ),
                     )
                   : const ColoredBox(

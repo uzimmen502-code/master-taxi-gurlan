@@ -193,7 +193,11 @@ class _WholesaleProductDetailViewState
           children: [
             Stack(
               children: [
-                AdImageSlider(imageUrls: p.imageUrls, height: 280),
+                AdImageSlider(
+                  imageUrls: p.imageUrls,
+                  height: 280,
+                  backgroundColor: PdDark.surface2,
+                ),
                 if (p.videoClipIds.isNotEmpty)
                   Positioned(
                     left: 10,

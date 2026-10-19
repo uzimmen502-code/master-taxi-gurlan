@@ -10,10 +10,14 @@ class AdImageSlider extends StatefulWidget {
     super.key,
     required this.imageUrls,
     this.height = 300,
+    this.backgroundColor = AvaLight.surface2,
   });
 
   final List<String> imageUrls;
   final double height;
+
+  /// containда расм атрофида қоладиган фон (қоронғи саҳифада — қоронғи ранг).
+  final Color backgroundColor;
 
   @override
   State<AdImageSlider> createState() => _AdImageSliderState();
@@ -57,14 +61,19 @@ class _AdImageSliderState extends State<AdImageSlider> {
                 urls: urls,
                 initialIndex: i,
               ),
-              child: CachedNetworkImage(
-                imageUrl: urls[i],
-                fit: BoxFit.cover,
-                width: double.infinity,
-                placeholder: (_, __) => const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              // contain: катта расм четлари қирқилмай сиғиб кичраяди
+              // (ега 2026-10-19); бўш жойни ёруғ фон тўлдиради.
+              child: ColoredBox(
+                color: widget.backgroundColor,
+                child: CachedNetworkImage(
+                  imageUrl: urls[i],
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  placeholder: (_, __) => const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
                 ),
-                errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
               ),
             ),
           ),

@@ -181,23 +181,31 @@ class _Image extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = url.trim();
     if (u.isNotEmpty && isHttpImageUrl(u)) {
-      return CachedNetworkImage(
-        imageUrl: u,
-        fit: BoxFit.cover,
-        placeholder: (_, __) => const ColoredBox(
-          color: AppColors.cardImageBg,
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
-        errorWidget: (_, __, ___) => const ColoredBox(
-          color: AppColors.cardImageBg,
-          child: Icon(Icons.broken_image),
+      // contain: катта расм четлари қирқилмай катакка сиғиб кичраяди;
+      // қолган жойни cardImageBg тўлдиради (ега 2026-10-19).
+      return ColoredBox(
+        color: AppColors.cardImageBg,
+        child: CachedNetworkImage(
+          imageUrl: u,
+          fit: BoxFit.contain,
+          placeholder: (_, __) => const ColoredBox(
+            color: AppColors.cardImageBg,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          errorWidget: (_, __, ___) => const ColoredBox(
+            color: AppColors.cardImageBg,
+            child: Icon(Icons.broken_image),
+          ),
         ),
       );
     }
     if (u.isNotEmpty && isDataImageUrl(u)) {
       final bytes = decodeDataUrlImageBytes(u);
       if (bytes != null) {
-        return Image.memory(bytes, fit: BoxFit.cover);
+        return ColoredBox(
+          color: AppColors.cardImageBg,
+          child: Image.memory(bytes, fit: BoxFit.contain),
+        );
       }
     }
     return const ColoredBox(

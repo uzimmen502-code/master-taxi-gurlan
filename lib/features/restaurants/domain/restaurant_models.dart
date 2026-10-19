@@ -229,7 +229,16 @@ class Restaurant {
     this.ownerUid = '',
     this.ratingAvg = 0,
     this.ratingCount = 0,
+    this.maxQtyPerItem = defaultMaxQtyPerItem,
   });
+
+  /// Бир таомдан энг кўп миқдор (D-REST-26). Майдон йўқ эски ресторанлар учун
+  /// — `functions/restaurant_orders.js` даги `DEFAULT_MAX_QTY` нусхаси;
+  /// ҳақиқий чегарани сервер текширади, бу фақат «+» тугмасини ўчириш учун.
+  static const defaultMaxQtyPerItem = 50;
+
+  /// Платформа шипи (сервер `MAX_QTY_CEILING` ва `firestore.rules` билан бир хил).
+  static const maxQtyPerItemCeiling = 500;
 
   final String id;
   final String name;
@@ -257,6 +266,9 @@ class Restaurant {
   final String ownerUid;
   final double ratingAvg;
   final int ratingCount;
+
+  /// Эга белгилайди (1…[maxQtyPerItemCeiling]); сават ва сервер шунга қарайди.
+  final int maxQtyPerItem;
 
   bool get isApproved => status == 'approved';
   bool get isHomeCook => legalType == 'individual';
@@ -306,7 +318,15 @@ class Restaurant {
       ownerUid: _str(d['ownerUid']),
       ratingAvg: _dbl(d['ratingAvg']) ?? 0,
       ratingCount: _int(d['ratingCount']),
+      maxQtyPerItem: _qtyLimit(d['maxQtyPerItem']),
     );
+  }
+
+  /// Бузилган/чегарадан ташқари қиймат → default (сервер `intOr` билан бир хил).
+  static int _qtyLimit(Object? v) {
+    if (v is! num || v != v.truncate()) return defaultMaxQtyPerItem;
+    final n = v.toInt();
+    return n >= 1 && n <= maxQtyPerItemCeiling ? n : defaultMaxQtyPerItem;
   }
 
   factory Restaurant.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
@@ -397,7 +417,9 @@ class RestaurantCart extends ChangeNotifier {
   /// Илова бўйлаб битта сават — экранлар орасида сақланади.
   static final RestaurantCart instance = RestaurantCart();
 
-  static const maxQty = 50;
+  /// Ресторан майдони йўқ ёки сават ресторансиз текширилганда — default
+  /// (`Restaurant.defaultMaxQtyPerItem`); ҳақиқий чегара — `restaurant.maxQtyPerItem`.
+  static const maxQty = Restaurant.defaultMaxQtyPerItem;
 
   String? _restaurantId;
   String _restaurantName = '';
@@ -430,11 +452,15 @@ class RestaurantCart extends ChangeNotifier {
     _restaurantId = restaurant.id;
     _restaurantName = restaurant.name;
     final cur = _lines[item.id]?.qty ?? 0;
-    if (cur >= maxQty) return true;
+    if (cur >= restaurant.maxQtyPerItem) return true;
     _lines[item.id] = CartLine(item: item, qty: cur + 1);
     notifyListeners();
     return true;
   }
+
+  /// «+» тугмаси ёниқми: [qtyOf] ресторан чегарасидан кам.
+  bool canAddMore(String itemId, Restaurant restaurant) =>
+      qtyOf(itemId) < restaurant.maxQtyPerItem;
 
   void decrement(String itemId) {
     final cur = _lines[itemId];

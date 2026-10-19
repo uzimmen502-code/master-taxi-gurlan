@@ -116,7 +116,9 @@ class _CartSheet extends StatelessWidget {
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               icon: Icon(Icons.add_circle_rounded, color: c.brand),
-                              onPressed: () => cart.add(l.item, restaurant: restaurant),
+                              onPressed: cart.canAddMore(l.item.id, restaurant)
+                                  ? () => cart.add(l.item, restaurant: restaurant)
+                                  : null,
                             ),
                           ],
                         ),

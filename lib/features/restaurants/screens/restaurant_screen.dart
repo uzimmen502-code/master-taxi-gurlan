@@ -353,7 +353,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                                             (context, i) => _MenuItemRow(
                                               item: s.items[i],
                                               qty: _cart.restaurantId == _r.id ? _cart.qtyOf(s.items[i].id) : 0,
-                                              enabled: open,
+                                              // «+» ресторан белгилаган чегарада ўчади (D-REST-26).
+                                              enabled: open && (_cart.restaurantId != _r.id || _cart.canAddMore(s.items[i].id, _r)),
                                               onAdd: () => _add(s.items[i]),
                                               onRemove: () => _cart.decrement(s.items[i].id),
                                             ),

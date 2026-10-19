@@ -11,6 +11,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../models/map_picker_result.dart';
 import '../../../services/location_service.dart';
 import '../../map_picker/screens/map_picker_screen.dart';
+import '../domain/restaurant_models.dart' show Restaurant;
 import 'restaurant_register_form.dart';
 
 class RestaurantFormFields extends StatefulWidget {
@@ -20,6 +21,7 @@ class RestaurantFormFields extends StatefulWidget {
     required this.onChanged,
     this.showLegalType = true,
     this.showPaymentDetails = true,
+    this.showMaxQty = false,
     this.legalTypeOptions = RestaurantFormData.legalTypes,
   });
 
@@ -36,6 +38,9 @@ class RestaurantFormFields extends StatefulWidget {
   /// Карта рақами/эгаси — рўйхатдан ўтишда формада; «Дўкон»да алоҳида блок.
   final bool showPaymentDetails;
 
+  /// «Бир таомдан энг кўпи» (D-REST-26) — фақат «Дўкон»да; рўйхатдан ўтишда default.
+  final bool showMaxQty;
+
   @override
   State<RestaurantFormFields> createState() => _RestaurantFormFieldsState();
 }
@@ -48,6 +53,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
   late final _card = TextEditingController(text: widget.data.cardNumber);
   late final _holder = TextEditingController(text: widget.data.cardHolder);
   late final _minOrder = TextEditingController(text: widget.data.minOrderAmount == 0 ? '' : '${widget.data.minOrderAmount}');
+  late final _maxQty = TextEditingController(text: '${widget.data.maxQtyPerItem}');
   late final _ownFixed = TextEditingController(text: widget.data.ownFeeFixed == 0 ? '' : '${widget.data.ownFeeFixed}');
   late final _ownBase = TextEditingController(text: widget.data.ownFeeBase == 0 ? '' : '${widget.data.ownFeeBase}');
   late final _ownPerKm = TextEditingController(text: widget.data.ownFeePerKm == 0 ? '' : '${widget.data.ownFeePerKm}');
@@ -59,7 +65,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
 
   @override
   void dispose() {
-    for (final c in [_name, _desc, _address, _phone, _card, _holder, _minOrder, _ownFixed, _ownBase, _ownPerKm, _ownFree, _ownMaxKm]) {
+    for (final c in [_name, _desc, _address, _phone, _card, _holder, _minOrder, _maxQty, _ownFixed, _ownBase, _ownPerKm, _ownFree, _ownMaxKm]) {
       c.dispose();
     }
     super.dispose();
@@ -386,6 +392,20 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
           decoration: _dec(context.tr('restaurants_m_min_order')),
           onChanged: (v) => _set(() => d.minOrderAmount = _int(v)),
         ),
+        if (widget.showMaxQty) ...[
+          const SizedBox(height: 10),
+          TextField(
+            controller: _maxQty,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)],
+            decoration: _dec(context.tr('restaurants_m_max_qty')).copyWith(
+              helperText: context.tr('restaurants_m_max_qty_hint').replaceAll('{max}', '${Restaurant.maxQtyPerItemCeiling}'),
+              helperMaxLines: 3,
+            ),
+            // Бўш/0 — хато (`validate` → `max_qty`), жимгина default қўйилмайди.
+            onChanged: (v) => _set(() => d.maxQtyPerItem = _int(v)),
+          ),
+        ],
         _section(context.tr('restaurants_m_hours')),
         SwitchListTile(
           dense: true,

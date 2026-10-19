@@ -58,6 +58,26 @@ void main() {
       expect(cart.countInCategory('c9'), 0);
     });
 
+    test('chegara RESTORANDAN keladi (D-REST-26): maxQtyPerItem oshsa ko\'proq, kamaysa kamroq; canAddMore mos', () {
+      final big = Restaurant(id: 'big', name: 'Big', status: 'approved', maxQtyPerItem: 120);
+      final small = Restaurant(id: 'small', name: 'Small', status: 'approved', maxQtyPerItem: 3);
+      final cart = RestaurantCart();
+      for (var i = 0; i < 130; i++) {
+        cart.add(_m('osh', 1000), restaurant: big);
+      }
+      expect(cart.qtyOf('osh'), 120);
+      expect(cart.canAddMore('osh', big), isFalse);
+      expect(cart.canAddMore('boshqa', big), isTrue);
+      cart.clear();
+      for (var i = 0; i < 10; i++) {
+        cart.add(_m('osh', 1000), restaurant: small);
+      }
+      expect(cart.qtyOf('osh'), 3);
+      expect(cart.canAddMore('osh', small), isFalse);
+      cart.decrement('osh');
+      expect(cart.canAddMore('osh', small), isTrue, reason: 'bittasi olinsa yana qo\'shish mumkin');
+    });
+
     test('notifyListeners — har o\'zgarishda', () {
       final cart = RestaurantCart();
       var n = 0;

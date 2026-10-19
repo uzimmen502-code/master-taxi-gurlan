@@ -183,6 +183,34 @@ void main() {
       expect(find.text('Gurlan osh'), findsWidgets);
     });
 
+    testWidgets('2 УСТУН: 360 dp телефонда (ва шрифт ×1.3) икки карточка бир қаторда; 280 dp жуда тор экранда — битта устун', (t) async {
+      Future<void> at(double w, double scale) async {
+        t.view.physicalSize = Size(w * 3, 1800 * 3);
+        t.view.devicePixelRatio = 3;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(l10nApp(
+          textScale: scale,
+          home: RestaurantsListScreen(
+            key: UniqueKey(),
+            repository: _Repo(sections: feedOn, dishes: [_d('a', lat: 41.85), _d('b', lat: 41.86)]),
+            currentUid: '998912000001',
+            userLat: _lat,
+            userLng: _lng,
+            locate: () async => null,
+          ),
+        ));
+        await t.pumpAndSettle();
+      }
+
+      await at(360, 1.3);
+      final a = t.getTopLeft(find.byKey(const ValueKey('dish-r1_a')));
+      final b = t.getTopLeft(find.byKey(const ValueKey('dish-r1_b')));
+      expect(a.dy, b.dy, reason: 'бир қаторда');
+      expect(b.dx, greaterThan(a.dx));
+      expect(t.takeException(), isNull);
+      await at(280, 1.0);
+      expect(t.getTopLeft(find.byKey(const ValueKey('dish-r1_b'))).dy, greaterThan(t.getTopLeft(find.byKey(const ValueKey('dish-r1_a'))).dy), reason: 'тор экранда — устма-уст');
+    });
     testWidgets('тор экран 320 + шрифт ×2: лента overflow қилмайди', (t) async {
       t.view.physicalSize = const Size(320 * 3, 1800 * 3);
       t.view.devicePixelRatio = 3;

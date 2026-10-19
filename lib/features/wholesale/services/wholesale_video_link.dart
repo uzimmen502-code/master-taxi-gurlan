@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/screens/tv_market_feed_screen.dart';
-import '../../tv_market/screens/tv_publish_screen.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../repositories/wholesale_products_repository.dart';
 
@@ -30,19 +29,16 @@ class WholesaleVideoLink {
     required String productId,
   }) async {
     String? clipId;
-    final published = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TvPublishScreen(
-          hideShopOption: true,
-          linkKind: TvClipLink.kindWholesale,
-          linkId: productId,
-          onClipCreated: (id) => clipId = id,
-        ),
-      ),
+    // Жойлаш — ЯГОНА қатлам ([TvClipLink.publish]); Улгуржида пуллик «Реклама» ҳам бор (`organicOnly: false`).
+    final published = await TvClipLink.publish(
+      Navigator.of(context),
+      kind: TvClipLink.kindWholesale,
+      linkId: productId,
+      organicOnly: false,
+      onClipCreated: (id) => clipId = id,
     );
     final id = clipId;
-    if (published != true || id == null || id.isEmpty) return false;
+    if (!published || id == null || id.isEmpty) return false;
 
     await WholesaleProductsRepository().addVideoClip(productId, id);
     // Rules: эга ўз клипида blacklist'дан ташқари майдонни янгилай олади.

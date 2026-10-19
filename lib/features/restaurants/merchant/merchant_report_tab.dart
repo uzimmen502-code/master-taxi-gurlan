@@ -1,5 +1,5 @@
 // Ресторан панели — «Ҳисобот» (§12.8): бугун — буюртмалар, етказилди,
-// тушум (таом + қадоқлаш), AVA ҳақи (2 %), жараёндагилар; ҳамён баланси.
+// тушум (таом), AVA ҳақи (2 %), жараёндагилар; ҳамён баланси.
 // Ҳисоб — клиентда, бор буюртмалар оқимидан (100 та охиргиси).
 
 import 'package:flutter/material.dart';
@@ -45,7 +45,7 @@ class MerchantDailyStats {
       orders += 1;
       if (o.restaurantStatus == RestaurantOrderStatus.delivered) {
         delivered += 1;
-        revenue += o.itemsTotal + o.packagingTotal;
+        revenue += o.foodAmount;
       }
       if (o.avaFeeCharged && !o.avaFeeRefunded) fee += o.avaFeeAmount;
     }

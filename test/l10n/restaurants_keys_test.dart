@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ava_gurlan/features/restaurants/domain/dish_facts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, dynamic> _load(String name) =>
@@ -86,6 +87,32 @@ void main() {
     }
   });
 
+  test('taom ma\'lumotlari (S1) — dinamik kalitlar: teglar va xatolar DishFacts bilan bir xil to\'plam', () {
+    for (final t in DishTag.all) {
+      expect(cyrl.containsKey('restaurants_m_dish_tag_$t'), isTrue, reason: 'teg $t');
+    }
+    // Xato kalitlari — DishFactsError'dagi BARCHA qiymatlar (yangi xato qo'shilsa matni ham shart).
+    for (final e in [
+      DishFactsError.servings,
+      DishFactsError.weight,
+      DishFactsError.nutritionIncomplete,
+      DishFactsError.nutritionRange,
+      DishFactsError.nutritionMismatch,
+      DishFactsError.cuisine,
+      DishFactsError.tags,
+    ]) {
+      expect(cyrl.containsKey('restaurants_m_dish_err_$e'), isTrue, reason: 'xato $e');
+    }
+    expect(cyrl.containsKey('restaurants_m_dish_err_fix'), isTrue);
+    // Matn ichidagi o'rin belgilari uch tilda bir xil (tarjimada tushib qolmasin).
+    final placeholder = RegExp(r'\{[a-z]+\}');
+    for (final k in cyrl.keys.where((k) => k.startsWith('restaurants_m_dish_') || k.startsWith('restaurants_m_max_qty'))) {
+      final a = placeholder.allMatches(cyrl[k] as String).map((m) => m.group(0)).toSet();
+      expect(placeholder.allMatches(latn[k] as String).map((m) => m.group(0)).toSet(), a, reason: 'uz_Latn $k');
+      expect(placeholder.allMatches(ru[k] as String).map((m) => m.group(0)).toSet(), a, reason: 'ru $k');
+    }
+  });
+
   test('kuryer (B3) — dinamik kalitlar: sabab, xato kodlari', () {
     for (final r in ['customer_absent', 'customer_refused', 'courier_problem', 'other']) {
       expect(cyrl.containsKey('restaurants_courier_fail_$r'), isTrue, reason: r);
@@ -94,6 +121,7 @@ void main() {
       'COURIER_ASSIGNMENT_CONFLICT', 'NOT_AVA_COURIER_ORDER', 'ORDER_NOT_CLAIMABLE', 'COURIER_OWN_ORDER',
       'COURIER_IS_RESTAURANT_MEMBER', 'BUYOUT_LIMIT_EXCEEDED', 'PICKUP_CODE_MISMATCH', 'PICKUP_CODE_LOCKED',
       'RESTAURANT_NOT_READY', 'USE_RESTAURANT_PICKUP', 'USE_RESTAURANT_ARRIVE', 'QTY_LIMIT_EXCEEDED',
+      'CUISINE_RATE_LIMIT', 'CUISINE_NAME_INVALID', 'CUISINE_BLOCKED', 'CUISINE_GROUP_INVALID',
     ]) {
       expect(cyrl.containsKey('restaurants_err_$e'), isTrue, reason: e);
     }

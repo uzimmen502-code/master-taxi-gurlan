@@ -50,6 +50,21 @@ void main() {
       expect(MenuCategorySuggestions.missingNames(keys: const ['hot'], lang: 'ru', existing: const []), ['Горячие блюда']);
     });
 
+    test('missingEntries: калит + ном (форма танлови); missingNames уни қайта ишлатади — бир хил мантиқ', () {
+      const existing = [MenuCategory(id: 'x', name: 'Ichimliklar')];
+      final entries = MenuCategorySuggestions.missingEntries(
+        keys: MenuCategorySuggestions.cafe,
+        lang: 'uz_Latn',
+        existing: existing,
+      );
+      expect(entries.map((e) => e.key), ['first', 'second', 'salads', 'shashlik', 'fastfood', 'sweets'], reason: 'drinks бор (лотин ёзувда) — чиқмайди');
+      expect(entries.first.name, 'Birinchi taomlar');
+      expect(
+        MenuCategorySuggestions.missingNames(keys: MenuCategorySuggestions.cafe, lang: 'uz_Latn', existing: existing),
+        entries.map((e) => e.name).toList(),
+      );
+    });
+
     test('ҳаммаси бор → бўш', () {
       expect(
         MenuCategorySuggestions.missingNames(

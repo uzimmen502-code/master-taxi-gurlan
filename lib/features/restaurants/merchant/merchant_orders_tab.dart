@@ -333,7 +333,7 @@ class _MerchantOrderCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${context.tr('restaurants_items_total')}: ${formatPrice(o.itemsTotal + o.packagingTotal)}'
+            '${context.tr('restaurants_items_total')}: ${formatPrice(o.foodAmount)}'
             '${o.deliveryFee > 0 ? ' · ${context.tr('restaurants_delivery_fee')}: ${formatPrice(o.deliveryFee)}' : ''}',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink),
           ),

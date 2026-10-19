@@ -1,5 +1,5 @@
 // Сават варағи (§12.4): таомлар степпер билан, «Тозалаш» (тасдиқ билан),
-// қадоқлаш сатри, жами, «Буюртма бериш».
+// жами, «Буюртма бериш».
 
 import 'package:flutter/material.dart';
 
@@ -128,9 +128,7 @@ class _CartSheet extends StatelessWidget {
                 ),
                 Divider(height: 16, color: c.line),
                 _TotalLine(label: context.tr('restaurants_items_total'), value: cart.itemsTotal),
-                if (cart.packagingTotal > 0)
-                  _TotalLine(label: context.tr('restaurants_packaging'), value: cart.packagingTotal),
-                _TotalLine(label: context.tr('restaurants_total'), value: cart.itemsTotal + cart.packagingTotal, bold: true),
+                _TotalLine(label: context.tr('restaurants_total'), value: cart.itemsTotal, bold: true),
                 if (missing > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

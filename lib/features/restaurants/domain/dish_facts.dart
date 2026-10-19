@@ -82,6 +82,15 @@ class DishFacts {
   static const maxKcal = 5000;
   static const maxMacroG = 500;
 
+  /// Бир кишилик порция нархи: `ceil(нарх / порция сони)` — бутун сўм (8-қоида).
+  /// Порция сони йўқ ёки нарх нотўғри бўлса `null` («Арзон» бўлимга кирмайди).
+  /// ЯГОНА формула: `MenuItem.pricePerPerson` ва таом формасидаги кўрсатув шуни чақиради.
+  int? pricePerPerson(int price) {
+    final s = servings;
+    if (s == null || s <= 0 || price <= 0) return null;
+    return (price + s - 1) ~/ s;
+  }
+
   /// Калория ≈ 4·оқсил + 4·углевод + 9·ёғ: фарқ ≤ [kcalToleranceAbs] ккал ЁКИ
   /// ≤ [kcalTolerancePercent] % (PROPOSED — эга тасдиғи керак).
   static const kcalToleranceAbs = 20;
@@ -102,11 +111,14 @@ class DishFacts {
 
   bool get _anyNutrition => kcal != null || protein != null || fat != null || carbs != null;
 
+  /// Макроэлементлардан ҳисобланган калория: 4·оқсил + 4·углевод + 9·ёғ (ЯГОНА формула).
+  static int calcKcal({required int protein, required int fat, required int carbs}) => 4 * protein + 4 * carbs + 9 * fat;
+
   /// КБЖУдаги калория макроэлементларга мосми (чегара: [kcalToleranceAbs] /
   /// [kcalTolerancePercent]). Тўртталаси ҳам берилмаса — `true` (текшириладиган нарса йўқ).
   static bool kcalConsistent({int? kcal, int? protein, int? fat, int? carbs}) {
     if (kcal == null || protein == null || fat == null || carbs == null) return true;
-    final calc = 4 * protein + 4 * carbs + 9 * fat;
+    final calc = calcKcal(protein: protein, fat: fat, carbs: carbs);
     final diff = (kcal - calc).abs();
     return diff <= kcalToleranceAbs || diff * 100 <= calc * kcalTolerancePercent;
   }

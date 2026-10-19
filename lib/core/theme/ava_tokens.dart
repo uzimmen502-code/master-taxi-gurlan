@@ -416,6 +416,49 @@ abstract final class AvaTap {
   static const double minSize = 44;
 }
 
+/// КБЖУ диаграммаси рангларининг ягона манбаи (2026-10-19, ega: «янги ранг
+/// киритиш мумкин»; таом формаси, `DishFactsEditor`). Бренд тўқ сариғидан
+/// ва ok/warn/danger маъноларидан онгли равишда ФАРҚЛИ: оқсил — кўк, ёғ —
+/// олтин-жигарранг, углевод — зангори.
+///
+/// Контраст (WCAG, ҳисобланган): ёруғда оқ `surface` устида 5.30 / 3.64 /
+/// 4.13, крем `bg` да 4.70 / 3.23 / 3.67 — номатн белгилар учун керакли 3:1
+/// дан юқори. Қоронғида `surface` (`1B1F29`) да 7.35 / 8.22 / 8.31. Қўшни
+/// сегментлар бир-бирига яқин (1.14…1.46), шунинг учун диаграммада улар
+/// орасида бўшлиқ бор ва ҳар қиймат РАҚАМ билан ёзилади — ранг ягона
+/// белги эмас.
+@immutable
+class AvaMacroColors {
+  const AvaMacroColors({required this.protein, required this.fat, required this.carbs});
+
+  /// Оқсил.
+  final Color protein;
+
+  /// Ёғ.
+  final Color fat;
+
+  /// Углевод.
+  final Color carbs;
+
+  static const light = AvaMacroColors(
+    protein: Color(0xFF2E6DB4),
+    fat: Color(0xFFB7791F),
+    carbs: Color(0xFF1B8A8F),
+  );
+
+  static const dark = AvaMacroColors(
+    protein: Color(0xFF7FB0F0),
+    fat: Color(0xFFE0B04A),
+    carbs: Color(0xFF5CC8CC),
+  );
+}
+
+/// `context.avaMacro.protein` — мавзуга қараб.
+extension AvaMacroColorsX on BuildContext {
+  AvaMacroColors get avaMacro =>
+      Theme.of(this).brightness == Brightness.dark ? AvaMacroColors.dark : AvaMacroColors.light;
+}
+
 /// Матн услублари — тавсифдаги шкала.
 ///
 /// Ранг берилмаган: уни чақирувчи `context.ava` дан олади, шунда

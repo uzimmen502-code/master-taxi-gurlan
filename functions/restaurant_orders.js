@@ -155,6 +155,15 @@ function intOr(v, def, min, max) {
   return Number.isInteger(n) && n >= min && n <= max ? n : def;
 }
 
+/**
+ * Taom puli (mijoz restoranga to'laydigan, AVA kuryeri vykup qiladigan summa) = taom + ESKI buyurtmalardagi
+ * qadoqlash. Qadoqlash haqi olib tashlangan (D-REST-28): yangi buyurtmada packagingTotal yo'q → 0;
+ * eski hujjatlar to'g'ri o'qilishi uchun maydon saqlanadi. Hamma joyda SHU funksiya (7-qoida).
+ */
+function foodAmountOf(od) {
+  return (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+}
+
 function validLatLng(lat, lng) {
   return Number.isFinite(lat) && Number.isFinite(lng)
       && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
@@ -487,7 +496,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       const membersSnap = await db.collection(RESTAURANTS).doc(String(od.restaurantId || '')).collection(MEMBERS).get();
       const members = new Set(membersSnap.docs.map((m) => canonicalUid(m.id)));
       const buyout = od.foodPaymentMethod === 'cash_buyout';
-      const foodAmount = (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+      const foodAmount = foodAmountOf(od);
       const fee = Number(od.deliveryFee) || 0;
       const nowMs = now().getTime();
       let notified = 0;
@@ -949,7 +958,6 @@ function attachRestaurantOrders(exportsObj, deps) {
       const itemSnaps = await db.getAll(...[...wanted.keys()].map((id) => rRef.collection(MENU_ITEMS).doc(id)));
       const items = [];
       let itemsTotal = 0;
-      let packagingTotal = 0;
       for (const s of itemSnaps) {
         if (!s.exists) throw fail('failed-precondition', 'MENU_ITEM_NOT_FOUND', { itemId: s.id });
         const m = s.data() || {};
@@ -959,12 +967,12 @@ function attachRestaurantOrders(exportsObj, deps) {
         // yozadi — klient ma'lumoti, 18-qoida; qoida ham `int` talab qiladi).
         const price = typeof m.price === 'number' ? m.price : Number.NaN;
         if (!Number.isInteger(price) || price <= 0 || price > MAX_PRICE) throw fail('failed-precondition', 'MENU_PRICE_INVALID', { itemId: s.id });
-        const packagingFee = intOr(m.packagingFee, 0, 0, MAX_PRICE);
+        // Qadoqlash haqi YO'Q (D-REST-28): qadoqlashni har sotuvchi o'z narxiga kiritadi.
+        // Eski menyu hujjatlaridagi `packagingFee` e'tiborsiz — buyurtma summasiga kirmaydi.
         const count = wanted.get(s.id);
         const lineTotal = price * count;
         itemsTotal += lineTotal;
-        packagingTotal += packagingFee * count;
-        items.push({ itemId: s.id, name: str(m.name, 80), price, count, packagingFee, lineTotal });
+        items.push({ itemId: s.id, name: str(m.name, 80), price, count, lineTotal });
       }
       const minOrder = intOr(r.minOrderAmount, 0, 0, 1000000000);
       if (itemsTotal < minOrder) throw fail('failed-precondition', 'MIN_ORDER_NOT_MET', { minOrderAmount: minOrder, itemsTotal });
@@ -1022,8 +1030,8 @@ function attachRestaurantOrders(exportsObj, deps) {
         lng: Number.isFinite(toLng) ? toLng : null,
         note: str(d.note, 200),
         utensils: intOr(d.utensils, 0, 0, 20),
-        items, itemsTotal, packagingTotal, deliveryFee,
-        total: itemsTotal + packagingTotal + deliveryFee,
+        items, itemsTotal, deliveryFee,
+        total: itemsTotal + deliveryFee,
         fulfillmentMode, deliveryMode, deliveryFeeSource, ...deliveryQuote,
         foodPaymentMethod, deliveryPaymentMethod,
         ...(restaurantPayment ? { restaurantPayment } : {}),
@@ -1034,7 +1042,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         balanceApplied: 0, cashDue: 0, cashPaid: 0,
         createdAt: ts(),
       };
-      const result = { ok: true, orderId: orderRef.id, itemsTotal, packagingTotal, deliveryFee, total: payload.total, acceptDeadlineAtMs: deadline.getTime() };
+      const result = { ok: true, orderId: orderRef.id, itemsTotal, deliveryFee, total: payload.total, acceptDeadlineAtMs: deadline.getTime() };
       // Parallel takror: ikkinchi chaqiruv BIRINCHISINING natijasini oladi —
       // o'zi yaratmagan orderId'ni qaytarmaydi.
       const txRes = await db.runTransaction(async (t) => {
@@ -1270,7 +1278,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (od.deliveryMode !== 'ava_courier') continue;
       if (courierAuthOf().isOwnOrder(od, courierId)) continue;
       const buyout = od.foodPaymentMethod === 'cash_buyout';
-      const foodAmount = (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+      const foodAmount = foodAmountOf(od);
       if (buyout && foodAmount > buyoutLimit) continue;
       const rLat = num(od.restaurantLat);
       const rLng = num(od.restaurantLng);
@@ -1327,7 +1335,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (od.foodPaymentMethod === 'cash_buyout') {
         const p = prefsSnap.exists ? (prefsSnap.data() || {}) : {};
         const limit = p.buyoutEnabled === true ? intOr(p.buyoutLimit, 0, 0, 100000000) : 0;
-        const foodAmount = (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+        const foodAmount = foodAmountOf(od);
         if (foodAmount > limit) throw fail('failed-precondition', 'BUYOUT_LIMIT_EXCEEDED', { required: foodAmount, limit });
       }
       // WRITE fazasi.
@@ -1387,7 +1395,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       }
       assertTransition(od, RS.picked, orderId);
       const buyout = od.foodPaymentMethod === 'cash_buyout';
-      const foodAmount = (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+      const foodAmount = foodAmountOf(od);
       t.update(orderRef, statusPatch(RS.picked, {
         pickedAt: ts(), inDeliveryAt: ts(), courierId,
         ...(buyout ? { paymentStatus: 'paid', paidAt: ts(), paidBy: 'courier_buyout', buyoutAmount: foodAmount } : {}),
@@ -1487,7 +1495,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         }
       }
       const buyout = od.foodPaymentMethod === 'cash_buyout';
-      const foodAmount = (Number(od.itemsTotal) || 0) + (Number(od.packagingTotal) || 0);
+      const foodAmount = foodAmountOf(od);
       const cashCollected = to === RS.delivered
         ? (buyout ? foodAmount : 0) + (deliveryPaymentMethod === 'cash' ? fee : 0)
         : 0;

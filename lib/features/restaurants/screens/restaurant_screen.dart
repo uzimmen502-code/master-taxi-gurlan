@@ -731,7 +731,7 @@ class _CartBar extends StatelessWidget {
       listenable: cart,
       builder: (context, _) {
         if (cart.isEmpty || cart.restaurantId != restaurant.id) return const SizedBox.shrink();
-        final total = cart.itemsTotal + cart.packagingTotal;
+        final total = cart.itemsTotal;
         final missing = restaurant.minOrderAmount - cart.itemsTotal;
         final canCheckout = enabled && missing <= 0;
         return Container(

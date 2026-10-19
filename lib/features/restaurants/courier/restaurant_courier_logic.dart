@@ -57,7 +57,7 @@ bool isRestaurantOrderFinalized(OrderModel o) =>
 
 /// Нақд буюртмада курьер ресторанга тўлайдиган сумма (выкуп); акс ҳолда 0.
 int courierBuyoutAmount(OrderModel o) =>
-    o.foodPaymentMethod == 'cash_buyout' ? o.itemsTotal + o.packagingTotal : 0;
+    o.foodPaymentMethod == 'cash_buyout' ? o.foodAmount : 0;
 
 /// Топширишда мижоздан олинадиган НАҚД: выкуп + (етказиш нақд бўлса) ҳақи.
 /// Етказиш «ҳамён» бўлса сервер мижоз ҳамёнидан ечади; етмаса нақдга

@@ -50,8 +50,16 @@ class OrderModel {
   final double? restaurantLat;
   final double? restaurantLng;
   final int itemsTotal;
+
+  /// ФАҚАТ ЭСКИ буюртмалар: қадоқлаш ҳақи олиб ташланган (D-REST-28), янги буюртмада 0.
+  /// Эски ҳужжатларнинг жами суммаси тўғри кўриниши учун ўқилади — тўғридан-тўғри эмас,
+  /// [foodAmount] орқали.
   final int packagingTotal;
   final int deliveryFee;
+
+  /// Таом пули (мижоз ресторанга тўлайдиган / курьер выкуп қиладиган сумма) = таом + эски
+  /// қадоқлаш. Ягона ҳисоб (7-қоида); сервердаги `foodAmountOf` билан бир хил.
+  int get foodAmount => itemsTotal + packagingTotal;
 
   /// `ava_courier` · `own_courier` · `pickup`.
   final String deliveryMode;

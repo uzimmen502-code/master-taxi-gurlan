@@ -358,7 +358,6 @@ class MenuItem {
     required this.price,
     this.description = '',
     this.photoUrl = '',
-    this.packagingFee = 0,
     this.categoryId = '',
     this.sort = 0,
     this.available = true,
@@ -376,15 +375,10 @@ class MenuItem {
 
   /// Бир кишилик порция нархи, бутун сўм юқорига яхлитланади (`ceil`); порция
   /// сони йўқ бўлса `null` — «Арзон» бўлимга кирмайди.
-  int? get pricePerPerson {
-    final s = facts.servings;
-    if (s == null || s <= 0 || price <= 0) return null;
-    return (price + s - 1) ~/ s;
-  }
+  int? get pricePerPerson => facts.pricePerPerson(price);
 
   /// Бутун сўм. Буюртма нархи барибир серверда менюдан қайта ҳисобланади.
   final int price;
-  final int packagingFee;
   final String categoryId;
   final int sort;
   final bool available;
@@ -401,7 +395,6 @@ class MenuItem {
         description: _str(d['description']),
         photoUrl: _str(d['photoUrl']),
         price: _int(d['price']),
-        packagingFee: _int(d['packagingFee']),
         categoryId: _str(d['categoryId']),
         sort: _int(d['sort']),
         available: d['available'] != false,
@@ -420,7 +413,6 @@ class CartLine {
   final int qty;
 
   int get lineTotal => item.price * qty;
-  int get packagingTotal => item.packagingFee * qty;
 }
 
 /// Сават — БИТТА ресторандан (Meituan/Ele.me қоидаси, §12.4). Бошқа
@@ -448,7 +440,6 @@ class RestaurantCart extends ChangeNotifier {
 
   int get count => _lines.values.fold(0, (s, l) => s + l.qty);
   int get itemsTotal => _lines.values.fold(0, (s, l) => s + l.lineTotal);
-  int get packagingTotal => _lines.values.fold(0, (s, l) => s + l.packagingTotal);
 
   int qtyOf(String itemId) => _lines[itemId]?.qty ?? 0;
 

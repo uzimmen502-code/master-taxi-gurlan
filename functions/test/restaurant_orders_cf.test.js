@@ -143,6 +143,7 @@ async function registerRestaurant(who, over = {}) {
   const rid = r.restaurantId;
   const menu = db.collection('restaurants').doc(rid).collection('menu_items');
   await menu.doc('osh').set({ name: 'Osh', price: 40000, available: true, packagingFee: 0, categoryId: 'c1', sort: 1 });
+  // packagingFee: 500 — ESKI maydon (qadoqlash haqi olib tashlangan, D-REST-28): server e'tiborsiz qoldirishi kerak.
   await menu.doc('somsa').set({ name: 'Somsa', price: 10000, available: true, packagingFee: 500, categoryId: 'c1', sort: 2 });
   await menu.doc('tugadi').set({ name: 'Tugadi', price: 15000, available: false, categoryId: 'c1', sort: 3 });
   await menu.doc('narxsiz').set({ name: 'Narxsiz', price: '5000', available: true, categoryId: 'c1', sort: 4 });
@@ -200,7 +201,7 @@ async function main() {
 
   // ── 2. Buyurtma ─────────────────────────────────────────────────────
   let o1;
-  await check('P1 buyurtma: narx menyudan (60 000 + qadoq 1 000 + yetkazish tarifdan), placed, kod, hodisa, idempotent', async () => {
+  await check('P1 buyurtma: narx menyudan (60 000 + yetkazish tarifdan; eski packagingFee hisobga olinmaydi — D-REST-28), placed, kod, hodisa, idempotent', async () => {
     feeAva = expectedAvaFee(R_LOC, C_LOC);
     const k = key();
     const r = await call('placeRestaurantOrder', {
@@ -211,9 +212,9 @@ async function main() {
     }, CUSTOMER);
     o1 = r.orderId;
     assert.strictEqual(r.itemsTotal, 60000, 'klient narxi e\'tiborsiz');
-    assert.strictEqual(r.packagingTotal, 1000);
+    assert.strictEqual(r.packagingTotal, undefined, 'qadoqlash haqi yo\'q (D-REST-28)');
     assert.strictEqual(r.deliveryFee, feeAva, 'tarif');
-    assert.strictEqual(r.total, 61000 + feeAva);
+    assert.strictEqual(r.total, 60000 + feeAva, 'eski packagingFee jamiga KIRMAYDI');
     const od = await order(o1);
     assert.strictEqual(od.type, 'restaurant');
     assert.strictEqual(od.restaurantStatus, 'placed');
@@ -513,18 +514,18 @@ async function main() {
     assert.ok(!lB.orders.find((x) => x.id === r.orderId), 'B vykupni yoqmagan');
     await expectCode(call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_B), 'BUYOUT_LIMIT_EXCEEDED');
     const lA = await call('listNearbyRestaurantOrders', { ...R_LOC }, COURIER_A);
-    assert.strictEqual(lA.orders.find((x) => x.id === r.orderId).buyoutAmount, 61000);
+    assert.strictEqual(lA.orders.find((x) => x.id === r.orderId).buyoutAmount, 60000);
     await call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_A);
     await call('restaurantMarkReady', { orderId: r.orderId }, OWNER);
     await call('courierPickupRestaurantOrder', { orderId: r.orderId, pickupCode: (await secret(r.orderId)).pickupCode }, COURIER_A);
     let od = await order(r.orderId);
     assert.strictEqual(od.paymentStatus, 'paid');
     assert.strictEqual(od.paidBy, 'courier_buyout');
-    assert.strictEqual(od.buyoutAmount, 61000);
+    assert.strictEqual(od.buyoutAmount, 60000);
     await call('courierArriveRestaurantOrder', { orderId: r.orderId }, COURIER_A);
     const j0 = await journalBalanced();
     const res = await call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'delivered' }, COURIER_A);
-    assert.strictEqual(res.cashCollected, 61000 + feeAva);
+    assert.strictEqual(res.cashCollected, 60000 + feeAva);
     assert.strictEqual(res.walletPaid, 0);
     assert.strictEqual(await journalBalanced(), j0, 'naqdda ledger yozuvi yo\'q (AVA puli emas)');
     od = await order(r.orderId);

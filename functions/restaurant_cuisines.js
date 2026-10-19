@@ -18,7 +18,7 @@
  *
  * Diagnostika kodlari (`details.code`): AUTH_REQUIRED, PHONE_TOKEN_REQUIRED,
  * RESTAURANT_ID_REQUIRED, CUISINE_GROUP_INVALID, CUISINE_NAME_INVALID,
- * NOT_RESTAURANT_MEMBER, CUISINE_BLOCKED, CUISINE_RATE_LIMIT, CUISINE_NOT_FOUND.
+ * NOT_RESTAURANT_MEMBER, CUISINE_BLOCKED, CUISINE_RATE_LIMIT, CUISINE_NOT_FOUND, CONTENTION_RETRY.
  * Foydalanuvchi matni klientda, 3 tilda (25-qoida). Log'da nom/telefon YO'Q (24, 40-qoida).
  */
 'use strict';
@@ -127,32 +127,51 @@ function attachRestaurantCuisines(exportsObj, deps) {
     const day = tashkentDay(now());
     const quotaRef = db.collection(QUOTA).doc(`${uid}_${day}`);
 
-    let result;
-    try {
-      result = await db.runTransaction(async (t) => {
-        const [snap, quotaSnap] = await Promise.all([t.get(ref), t.get(quotaRef)]);
-        if (snap.exists) {
-          const cur = snap.data() || {};
-          if (cur.hidden === true) throw fail('failed-precondition', 'CUISINE_BLOCKED');
-          return { id, name: str(cur.name, NAME_MAX) || name, group: cur.group || group, existed: true };
-        }
-        const used = quotaSnap.exists ? (Number((quotaSnap.data() || {}).count) || 0) : 0;
-        if (used >= DAILY_NEW_LIMIT) throw fail('resource-exhausted', 'CUISINE_RATE_LIMIT', { limit: DAILY_NEW_LIMIT });
-        t.set(ref, {
-          name, nameKey: key, group, custom: true, hidden: false,
-          createdBy: uid, createdByRestaurantId: restaurantId, createdAt: ts(),
-        });
-        t.set(quotaRef, { userId: uid, day, count: used + 1, updatedAt: ts() });
-        return { id, name, group, existed: false };
+    const createOrGet = () => db.runTransaction(async (t) => {
+      const [snap, quotaSnap] = await Promise.all([t.get(ref), t.get(quotaRef)]);
+      if (snap.exists) {
+        const cur = snap.data() || {};
+        if (cur.hidden === true) throw fail('failed-precondition', 'CUISINE_BLOCKED');
+        return { id, name: str(cur.name, NAME_MAX) || name, group: cur.group || group, existed: true };
+      }
+      const used = quotaSnap.exists ? (Number((quotaSnap.data() || {}).count) || 0) : 0;
+      if (used >= DAILY_NEW_LIMIT) throw fail('resource-exhausted', 'CUISINE_RATE_LIMIT', { limit: DAILY_NEW_LIMIT });
+      t.set(ref, {
+        name, nameKey: key, group, custom: true, hidden: false,
+        createdBy: uid, createdByRestaurantId: restaurantId, createdAt: ts(),
       });
-    } catch (e) {
+      t.set(quotaRef, { userId: uid, day, count: used + 1, updatedAt: ts() });
+      return { id, name, group, existed: false };
+    });
+
+    // Parallel chaqiruvlarda tranzaksiya XOM xato bilan yiqilishi mumkin («Transaction is invalid
+    // or closed» / contention — emulator ham, server ham). Mantiqiy xatolar (HttpsError) o'z
+    // holicha qaytadi; xom xatoda hujjat g'olib tomonidan yaratilgan bo'lsa o'shani qaytaramiz,
+    // aks holda 3 martagacha qayta uramiz — natija deterministik (22, 23, 25-qoida).
+    let result = null;
+    let failure = null;
+    for (let attempt = 1; attempt <= 3 && !result && !failure; attempt += 1) {
+      try {
+        result = await createOrGet();
+      } catch (e) {
+        if (e instanceof HttpsError) {
+          failure = e;
+        } else {
+          const snap = await ref.get();
+          const cur = snap.exists ? (snap.data() || {}) : null;
+          if (cur && cur.hidden === true) failure = fail('failed-precondition', 'CUISINE_BLOCKED');
+          else if (cur) result = { id, name: str(cur.name, NAME_MAX) || name, group: cur.group || group, existed: true };
+          else if (attempt === 3) failure = fail('aborted', 'CONTENTION_RETRY');
+        }
+      }
+    }
+    if (failure) {
       log('add_cuisine', {
         restaurantId, userId: uid, group, result: 'denied',
-        errorCode: (e && e.details && e.details.code) || 'ABORTED', durationMs: Date.now() - t0,
+        errorCode: (failure.details && failure.details.code) || 'ABORTED', durationMs: Date.now() - t0,
       });
-      throw e;
-    }
-    log('add_cuisine', {
+      throw failure;
+    }    log('add_cuisine', {
       restaurantId, userId: uid, cuisineId: result.id, group, result: result.existed ? 'existed' : 'created', durationMs: Date.now() - t0,
     });
     return { ok: true, ...result };

@@ -26,6 +26,7 @@ import '../wholesale/screens/wholesale_market_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
 import 'controllers/home_controller.dart';
+import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import 'home_screen.dart' show needPhoneForAction;
 import 'screens/courier_services_hub_screen.dart';
@@ -52,6 +53,35 @@ class HomeServiceActions {
   final Future<void> Function(PaymentProviderApp app) openPayment;
   final Future<void> Function() openDating;
   final void Function() showComingSoon;
+}
+
+/// Курьер уланган хизматлар (эга, 2026-10-19: «Курьер хизмати» босилганда
+/// курьер уланган БАРЧА хизматлар кўрсатилсин). Манба — репо:
+/// `courier_screen.dart` курьерга нон/платформа буюртмаси, ресторан буюртмаси
+/// (`restaurants_courier_claimed`), гилам ва сут қабул вазифаларини беради.
+/// ⚠ «Улгуржи бозор»/AVA дўкони буюртмаларини курьер олиши репода ТАСДИҚЛАНМАГАН —
+/// UNKNOWN, шунинг учун рўйхатда йўқ; тасдиқланса шу ерга қўшилади.
+const kCourierConnectedModuleIds = <String>[
+  'bread',
+  'restaurants',
+  'carpet_wash',
+  'milk'
+];
+
+/// [kCourierConnectedModuleIds] дан бош саҳифада КЎРИНАДИГАНлари (админ дарвозаси),
+/// шу тартибда. Босилганда хизматнинг ўз кириш мантиғи ишлайди.
+List<ServiceSpotlightItem> courierConnectedServices(
+  BuildContext context, {
+  required HomeServiceActions a,
+}) {
+  final byId = {
+    for (final e in buildHomeServices(context, a: a)) e.moduleId: e
+  };
+  return [
+    for (final id in kCourierConnectedModuleIds)
+      if (byId[id] != null && HomeModuleGate.showInGrid(byId[id]!.gate))
+        byId[id]!,
+  ];
 }
 
 /// Иловадаги барча хизматлар — тартиби билан.
@@ -233,7 +263,10 @@ List<ServiceSpotlightItem> buildHomeServices(
           needPhoneForAction(context);
           return;
         }
-        await a.push(const CourierServicesHubScreen());
+        await a.push(
+          CourierServicesHubScreen(
+              items: courierConnectedServices(context, a: a)),
+        );
       },
     ),
     // AVA Logistics (Relay) — посилка жўнатиш. Admin «Ҳудудлар ва

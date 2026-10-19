@@ -543,7 +543,11 @@ class _HomeViewState extends State<_HomeView> {
           needPhoneForAction(context);
           return;
         }
-        await _push(const CourierServicesHubScreen());
+        await _push(
+          CourierServicesHubScreen(
+            items: courierConnectedServices(context, a: _serviceActions),
+          ),
+        );
       case IntentTarget.intercityTaxi:
         await _openModule(HomeModulesCatalog.byId('intercity'));
       case IntentTarget.realty:
@@ -693,7 +697,11 @@ class _HomeViewState extends State<_HomeView> {
           _showTezKundaSnack();
           return;
         }
-        await _push(const CourierServicesHubScreen());
+        await _push(
+          CourierServicesHubScreen(
+            items: courierConnectedServices(context, a: _serviceActions),
+          ),
+        );
         return;
       case 'dating':
         await _openDating();

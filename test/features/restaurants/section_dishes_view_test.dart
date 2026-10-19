@@ -153,7 +153,7 @@ void main() {
       expect(repo.fetched, [RestaurantSection.cheap]);
     });
 
-    testWidgets('«Фаст-фуд»: тайёрлаш вақти кўрсатилади; «Енгил»: ккал; бошқа бўлимда бундай чиплар йўқ', (t) async {
+    testWidgets('«Фаст-фуд»: тайёрлаш вақти кўрсатилади; «Парҳезли овқатлар»: ккал; бошқа бўлимда бундай чиплар йўқ', (t) async {
       final repo = _Repo(dishes: [_d('a', prep: 12, kcal: 420)]);
       await pumpView(t, repo, RestaurantSection.fast);
       expect(find.byKey(const ValueKey('prep-r1_a')), findsOneWidget);

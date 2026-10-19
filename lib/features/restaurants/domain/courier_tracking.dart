@@ -78,12 +78,21 @@ abstract final class CourierTracking {
     RestaurantOrderStatus.arrived,
   ];
 
-  /// Мижоз/ресторан бу буюртмада курьерни кузата оладими: AVA курьери тайинланган ва буюртма фаол.
-  static bool canTrack(OrderModel o) =>
-      o.isRestaurant &&
-      o.deliveryMode == 'ava_courier' &&
-      (o.courierId ?? '').trim().isNotEmpty &&
-      activeStatuses.contains(o.restaurantStatus);
+  /// Нон/бозор (`bread`, `platform`) буюртмасида кузатув: курьер олгандан (`courier_picked`) мижозга етгунча
+  /// (`arrived`) — `firestore.rules` `liveOrderActive` билан бир хил (мослик тест билан қулфланган).
+  static const deliveryFulfillment = ['courier_picked', 'arrived'];
+
+  static bool isBreadOrMarket(OrderModel o) => o.type == 'bread' || o.type == 'platform';
+
+  /// Мижоз/ресторан бу буюртмада курьерни кузата оладими: курьер тайинланган ва буюртма фаол. Ресторан буюртмасида
+  /// — AVA курьери; нон/бозор буюртмасида — курьер буюртмани олган (етказиш йўлида).
+  static bool canTrack(OrderModel o) {
+    if ((o.courierId ?? '').trim().isEmpty) return false;
+    if (o.isRestaurant) {
+      return o.deliveryMode == 'ava_courier' && activeStatuses.contains(o.restaurantStatus);
+    }
+    return isBreadOrMarket(o) && deliveryFulfillment.contains(o.fulfillmentStatus);
+  }
 
   /// Курьер янги нуқтани ёзиши керакми (соф қоида): биринчи нуқта — ҳа; акс ҳолда ≥ [publishMinInterval]
   /// ўтган ва ≥ [publishMinMeters] силжиган, ёки тинч туриб [publishHeartbeat] ўтган бўлса.

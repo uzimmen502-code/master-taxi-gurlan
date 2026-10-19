@@ -1440,8 +1440,12 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/orders/$(oid)).data;
     }
     function liveOrderActive(o) {
-      return o.get('type', '') == 'restaurant'
-          && o.get('restaurantStatus', '') in ['accepted', 'ready', 'picked', 'arrived'];
+      // Ресторан буюртмаси: қабул қилинган…етказиш. Нон/бозор (`bread`, `platform`) буюртмаси: курьер олгандан (courier_picked)
+      // мижозга етгунча (arrived) — шундан кейин (completed/cancelled) нуқта ёзилмайди ҳам, ўқилмайди ҳам.
+      return (o.get('type', '') == 'restaurant'
+              && o.get('restaurantStatus', '') in ['accepted', 'ready', 'picked', 'arrived'])
+          || (o.get('type', '') in ['bread', 'platform']
+              && o.get('fulfillmentStatus', '') in ['courier_picked', 'arrived']);
     }
     function liveIsCourierOf(o) {
       let me = userDocIdFromPhoneToken();
@@ -1464,10 +1468,14 @@ service cloud.firestore {
           && d.updatedAt == request.time;
     }
     match /order_courier_live/{oid} {
+      // Буюртма фаол эмас бўлса (етказилди/бекор) мижоз ва ресторан ўқий олмайди — курьер нуқтаси қолиб кетмасин
+      // (40-қоида); админ ҳар доим ўқийди.
       allow get: if isAuth() && exists(/databases/$(database)/documents/orders/$(oid)) && (
           isAdmin()
-          || phoneDocIdsMatch(phoneFromToken(), phoneDigits(liveOrderData(oid).get('userPhone', '')))
-          || isRestaurantMember(liveOrderData(oid).get('restaurantId', '_'))
+          || (liveOrderActive(liveOrderData(oid)) && (
+              phoneDocIdsMatch(phoneFromToken(), phoneDigits(liveOrderData(oid).get('userPhone', '')))
+              || isRestaurantMember(liveOrderData(oid).get('restaurantId', '_'))
+          ))
       );
       allow list: if false;
       allow create, update: if isAuth() && liveWriteOk(oid);

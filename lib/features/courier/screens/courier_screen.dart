@@ -15,7 +15,9 @@ import '../../carpet_wash/screens/carpet_wash_courier_screen.dart';
 import '../../agro_pickup/screens/agro_pickup_courier_screen.dart';
 import 'courier_mfy_selection_screen.dart';
 import '../../restaurants/courier/restaurant_courier_banner.dart';
+import '../../restaurants/courier/courier_live_publisher.dart';
 import '../../restaurants/courier/restaurant_courier_order_card.dart';
+import '../../restaurants/domain/courier_tracking.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -192,7 +194,7 @@ class _CourierViewState extends State<_CourierView> {
               onFinalizeRoute: () => c.confirmAndAdvance(orderId: o.id),
             );
           }
-          return CourierOrderTile(
+          final tile = CourierOrderTile(
             order: o,
             index: i,
             isDone: i < c.currentOrderIndex || finalized,
@@ -203,6 +205,25 @@ class _CourierViewState extends State<_CourierView> {
             onPayment: (lines) => c.submitPayment(o.id, lines),
             onFinalizeRoute: () => c.confirmAndAdvance(orderId: o.id),
           );
+          // Нон/бозор буюртмаси етказиш йўлида (курьер олган → етган): курьернинг жонли нуқтаси мижозга кўринади
+          // (ресторан буюртмасидаги каби; фон хизмати + ёзув ҳуқуқи `firestore.rules`да).
+          if (isCurrent && !finalized && CourierTracking.canTrack(o)) {
+            return Column(
+              key: ValueKey('live_${o.id}'),
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CourierLivePublisher(
+                  key: ValueKey('live-pub-${o.id}'),
+                  orderId: o.id,
+                  courierId: o.courierId!,
+                  repository: c.restaurants,
+                ),
+                tile,
+              ],
+            );
+          }
+          return tile;
         },
       )),
     ]);

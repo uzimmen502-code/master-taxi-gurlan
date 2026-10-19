@@ -91,6 +91,12 @@ async function main() {
       });
     }
     await db.doc('orders/live_bread').set({ type: 'bread', restaurantStatus: 'picked', userPhone: CUSTOMER, courierId: COURIER });
+    // Нон/бозор буюртмаси: курьер олгач (courier_picked) ва етгач (arrived) — фаол; completed — йўқ.
+    await db.doc('orders/live_bread_picked').set({ type: 'bread', fulfillmentStatus: 'courier_picked', status: 'in_delivery', userPhone: CUSTOMER, courierId: COURIER });
+    await db.doc('orders/live_market_arrived').set({ type: 'platform', fulfillmentStatus: 'arrived', status: 'in_delivery', userPhone: CUSTOMER, courierId: COURIER });
+    await db.doc('orders/live_bread_ready').set({ type: 'bread', fulfillmentStatus: 'ready', status: 'ready', userPhone: CUSTOMER, courierId: COURIER });
+    await db.doc('orders/live_bread_done').set({ type: 'bread', fulfillmentStatus: 'completed', status: 'delivered', userPhone: CUSTOMER, courierId: COURIER });
+    await db.doc('orders/live_other_type').set({ type: 'carpet', fulfillmentStatus: 'courier_picked', userPhone: CUSTOMER, courierId: COURIER });
     await db.doc(`orders/${O1}/order_events/e1`).set({ from: null, to: 'placed', actor: 'customer' });
     await db.doc(`orders/${O1}/private/secrets`).set({ pickupCode: '1234', pickupAttempts: 0 });
     await db.doc(`restaurant_customer_stats/${CUSTOMER}`).set({ strikes: 0, completedCount: 1 });
@@ -348,7 +354,36 @@ async function main() {
     await assertSucceeds(live(ADMIN).get(), 'admin');
     await assertFails(live(COURIER).get(), 'kuryer faqat yozadi — o\'qish unga kerak emas (minimal ruxsat)');
   });
-  await check('S6 order_courier_live: begona/boshqa restoran a\'zosi va anonim o\'qiy olmaydi; ro\'yxat yo\'q; o\'chirish — faqat kuryer yoki admin', async () => {
+  await check('S6 order_courier_live: NON / BOZOR buyurtmasi (bread, platform) — courier_picked va arrived da yoziladi; ready/completed/boshqa tur — yo\'q', async () => {
+    const { serverTimestamp } = require('firebase/firestore');
+    const live = (who, oid) => as(who).doc(`order_courier_live/${oid}`);
+    const pos = (oid, extra = {}) => ({ orderId: oid, lat: 41.84, lng: 60.39, updatedAt: serverTimestamp(), ...extra });
+    await assertSucceeds(live(COURIER, 'live_bread_picked').set(pos('live_bread_picked')), 'non, kuryer oldi');
+    await assertSucceeds(live(COURIER, 'live_market_arrived').set(pos('live_market_arrived', { speed: 3 })), 'bozor, yetib keldi');
+    await assertFails(live(COURIER, 'live_bread_ready').set(pos('live_bread_ready')), 'tayyor, hali olinmagan');
+    await assertFails(live(COURIER, 'live_bread_done').set(pos('live_bread_done')), 'yakunlangan');
+    await assertFails(live(COURIER, 'live_other_type').set(pos('live_other_type')), 'boshqa tur (gilam)');
+    for (const who of [STRANGER, OWNER, ADMIN]) await assertFails(live(who, 'live_bread_picked').set(pos('live_bread_picked')), `yozish ${who}`);
+    // o'qish: mijoz va admin; begona yo'q; yakunlangach mijoz ham o'qiy olmaydi, admin o'qiydi
+    await assertSucceeds(live(CUSTOMER, 'live_bread_picked').get(), 'mijoz');
+    await assertSucceeds(live(ADMIN, 'live_bread_picked').get(), 'admin');
+    await assertFails(live(STRANGER, 'live_bread_picked').get(), 'begona');
+    await assertFails(live(OWNER, 'live_bread_picked').get(), 'restoran egasi bu buyurtmaga aloqasiz');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc('order_courier_live/live_bread_done').set({ orderId: 'live_bread_done', lat: 1, lng: 1 });
+    });
+    await assertFails(live(CUSTOMER, 'live_bread_done').get(), 'yakunlangan buyurtma nuqtasi mijozga yopiq');
+    await assertSucceeds(live(ADMIN, 'live_bread_done').get(), 'admin ko\'radi');
+    await assertSucceeds(live(COURIER, 'live_bread_done').delete(), 'kuryer o\'chira oladi');
+  });
+  await check('S6 order_courier_live: restoran buyurtmasi yetkazilgach (delivered) mijoz va restoran nuqtani o\'qiy olmaydi (o\'chirish kutilmasdan)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc('order_courier_live/live_delivered').set({ orderId: 'live_delivered', lat: 1, lng: 1 });
+    });
+    await assertFails(as(CUSTOMER).doc('order_courier_live/live_delivered').get());
+    await assertFails(as(OWNER).doc('order_courier_live/live_delivered').get());
+    await assertSucceeds(as(ADMIN).doc('order_courier_live/live_delivered').get());
+  });  await check('S6 order_courier_live: begona/boshqa restoran a\'zosi va anonim o\'qiy olmaydi; ro\'yxat yo\'q; o\'chirish — faqat kuryer yoki admin', async () => {
     const live = (who) => as(who).doc('order_courier_live/live_picked');
     await assertFails(live(STRANGER).get());
     await assertFails(live(OWNER2).get(), 'boshqa restoran egasi');

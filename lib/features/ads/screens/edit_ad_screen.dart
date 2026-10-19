@@ -190,11 +190,15 @@ class _EditAdScreenState extends State<EditAdScreen> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: CachedNetworkImage(
-                                imageUrl: url,
-                                width: 72,
-                                height: 72,
-                                fit: BoxFit.cover,
+                              // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                              child: ColoredBox(
+                                color: AppColors.cardImageBg,
+                                child: CachedNetworkImage(
+                                  imageUrl: url,
+                                  width: 72,
+                                  height: 72,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
                             Positioned(
@@ -217,19 +221,22 @@ class _EditAdScreenState extends State<EditAdScreen> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: kIsWeb
-                                  ? Image.network(
-                                      f.path,
-                                      width: 72,
-                                      height: 72,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Image.file(
-                                      File(f.path),
-                                      width: 72,
-                                      height: 72,
-                                      fit: BoxFit.cover,
-                                    ),
+                              child: ColoredBox(
+                                color: AppColors.cardImageBg,
+                                child: kIsWeb
+                                    ? Image.network(
+                                        f.path,
+                                        width: 72,
+                                        height: 72,
+                                        fit: BoxFit.contain,
+                                      )
+                                    : Image.file(
+                                        File(f.path),
+                                        width: 72,
+                                        height: 72,
+                                        fit: BoxFit.contain,
+                                      ),
+                              ),
                             ),
                             Positioned(
                               right: 0,

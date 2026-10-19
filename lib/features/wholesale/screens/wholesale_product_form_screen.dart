@@ -608,7 +608,8 @@ class _WholesaleProductFormScreenState
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (var i = 0; i < _existingImageUrls.length; i++)
             _imageThumb(
-              child: Image.network(_existingImageUrls[i], fit: BoxFit.cover),
+              child:
+                  Image.network(_existingImageUrls[i], fit: BoxFit.contain),
               onRemove: () => _removeExisting(i),
             ),
           for (var i = 0; i < _newImages.length; i++)
@@ -642,10 +643,14 @@ class _WholesaleProductFormScreenState
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 84,
-            height: 84,
-            child: child,
+          // contain: расм четлари қирқилмайди (ега 2026-10-19); бўш жой — кулранг фон.
+          child: ColoredBox(
+            color: Colors.grey.shade200,
+            child: SizedBox(
+              width: 84,
+              height: 84,
+              child: child,
+            ),
           ),
         ),
         Positioned(
@@ -677,7 +682,7 @@ class _XFileImage extends StatelessWidget {
         if (!snap.hasData) {
           return Container(color: Colors.grey.shade200);
         }
-        return Image.memory(snap.data!, fit: BoxFit.cover);
+        return Image.memory(snap.data!, fit: BoxFit.contain);
       },
     );
   }

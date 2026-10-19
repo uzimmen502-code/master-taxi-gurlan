@@ -8,6 +8,7 @@ import 'dart:math';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
+import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../ads/models/ad_model.dart';
@@ -150,7 +151,14 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             footnote: _districtNote(ad.districtId),
             onTap: () => widget.onOpenAd(ad),
             image: cover.startsWith('http')
-                ? CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover)
+                ? ColoredBox(
+                    color: context.ava.surface2,
+                    child: CachedNetworkImage(
+                      imageUrl: cover,
+                      // contain: расм четлари қирқилмайди (ега 2026-10-19).
+                      fit: BoxFit.contain,
+                    ),
+                  )
                 : null,
           );
         },

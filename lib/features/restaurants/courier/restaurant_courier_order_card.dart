@@ -311,7 +311,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  '${context.tr('restaurants_courier_items').replaceAll('{n}', '${o.items.fold<int>(0, (s, i) => s + i.count)}')} · ${formatPrice(o.itemsTotal + o.packagingTotal)} ${context.tr('currency_sum')}',
+                  '${context.tr('restaurants_courier_items').replaceAll('{n}', '${o.items.fold<int>(0, (s, i) => s + i.count)}')} · ${formatPrice(o.foodAmount)} ${context.tr('currency_sum')}',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
                 AvaChip(

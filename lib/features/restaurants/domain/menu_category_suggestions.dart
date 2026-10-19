@@ -33,11 +33,20 @@ abstract final class MenuCategorySuggestions {
     required Iterable<String> keys,
     required String lang,
     required Iterable<MenuCategory> existing,
+  }) =>
+      missingEntries(keys: keys, lang: lang, existing: existing).map((e) => e.name).toList();
+
+  /// Худди [missingNames], лекин тайёр ном КАЛИТИ билан (форма танлови учун:
+  /// `MenuCategoryChoice.suggest(key)`). Ягона мантиқ шу ерда.
+  static List<({String key, String name})> missingEntries({
+    required Iterable<String> keys,
+    required String lang,
+    required Iterable<MenuCategory> existing,
   }) {
-    final out = <String>[];
+    final out = <({String key, String name})>[];
     for (final k in keys) {
       final n = MenuCategoryNames.presetName(k, lang);
-      if (n.isNotEmpty && MenuCategoryChoice.findByName(existing, n) == null) out.add(n);
+      if (n.isNotEmpty && MenuCategoryChoice.findByName(existing, n) == null) out.add((key: k, name: n));
     }
     return out;
   }

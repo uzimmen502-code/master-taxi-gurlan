@@ -271,7 +271,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
     final cart = widget.cart;
     final delivery = _fulfillment == 'delivery';
     final fee = delivery ? (_quote?.deliveryFee ?? 0) : 0;
-    final total = cart.itemsTotal + cart.packagingTotal + fee;
+    final total = cart.itemsTotal + fee;
     final maxH = MediaQuery.sizeOf(context).height * 0.9;
     final canSend = !_sending &&
         cart.isNotEmpty &&
@@ -389,7 +389,6 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
 
             // 7. Ҳисоб
             _Line(label: context.tr('restaurants_items_total'), value: formatPrice(cart.itemsTotal)),
-            if (cart.packagingTotal > 0) _Line(label: context.tr('restaurants_packaging'), value: formatPrice(cart.packagingTotal)),
             if (delivery)
               _Line(
                 label: context.tr('restaurants_delivery_fee'),

@@ -10,12 +10,25 @@ abstract final class MenuCategoryChoice {
   /// Категориясиз («Бошқалар»). Серверда `categoryId` бўш матн.
   static const none = '';
 
-  /// Рўйхатдаги «＋ Категория қўшиш» банди (ҳақиқий id эмас).
-  static const createNew = '__new_category__';
+  /// Тизим таклиф қилган, ҲАЛИ яратилмаган бўлим: танлов қиймати `__suggest__:<калит>`.
+  /// Бўлим таом САҚЛАНАЁТГАНДА яратилади (кўриб чиқиш ҳужжат яратмайди).
+  static const _suggestPrefix = '__suggest__:';
 
-  /// Шу id рўйхатда борми (бўш id — доим «категориясиз», яъни тўғри).
-  static String known(String id, Iterable<MenuCategory> categories) =>
-      id.isNotEmpty && categories.any((c) => c.id == id) ? id : none;
+  static String suggest(String presetKey) => '$_suggestPrefix$presetKey';
+
+  /// `__suggest__:<калит>` бўлса — тайёр ном калити (рўйхатда борлиги шарт), акс ҳолда `null`.
+  static String? suggestedKey(String id) {
+    if (!id.startsWith(_suggestPrefix)) return null;
+    final key = id.substring(_suggestPrefix.length);
+    return MenuCategoryNames.presets.containsKey(key) ? key : null;
+  }
+
+  /// Шу id рўйхатда борми (бўш id — доим «категориясиз», яъни тўғри). Тизим таклифи
+  /// (тайёр ном калити тўғри бўлса) ҳам тўғри танлов.
+  static String known(String id, Iterable<MenuCategory> categories) {
+    if (suggestedKey(id) != null) return id;
+    return id.isNotEmpty && categories.any((c) => c.id == id) ? id : none;
+  }
 
   /// Форма очилгандаги танлов.
   ///

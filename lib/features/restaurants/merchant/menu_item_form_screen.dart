@@ -1,5 +1,5 @@
-// Таом қўшиш/таҳрирлаш: ном, нарх (бутун сўм), тавсиф, қадоқлаш, категория,
-// расм (`restaurant_images/{rid}/`), «Бор/Йўқ».
+// Таом қўшиш/таҳрирлаш: ном, нарх (бутун сўм — қадоқлаш ҳақи ЙЎҚ, D-REST-28), тавсиф,
+// категория (тизим таклифи + ўзи танлайди, D-REST-29), расм (`restaurant_images/{rid}/`), «Бор/Йўқ».
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -9,11 +9,16 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../data/restaurants_repository.dart';
+import '../domain/dish_facts.dart';
 import '../domain/menu_category_choice.dart';
+import '../domain/menu_category_names.dart';
+import '../domain/menu_category_suggestions.dart';
 import '../domain/restaurant_models.dart';
 import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
+import 'dish_facts_editor.dart';
 import 'menu_category_dialog.dart';
+import 'menu_category_picker.dart';
 
 class MenuItemFormScreen extends StatefulWidget {
   const MenuItemFormScreen({
@@ -46,7 +51,6 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   late final _name = TextEditingController(text: widget.existing?.name ?? '');
   late final _price = TextEditingController(text: widget.existing == null ? '' : '${widget.existing!.price}');
   late final _desc = TextEditingController(text: widget.existing?.description ?? '');
-  late final _pack = TextEditingController(text: (widget.existing?.packagingFee ?? 0) == 0 ? '' : '${widget.existing!.packagingFee}');
   // Форма ичида яратилган категория ҳам рўйхатга тушсин (экран очилгандаги
   // `widget.categories` — қотган нусха).
   late final List<MenuCategory> _cats = List.of(widget.categories);
@@ -56,16 +60,16 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     filterCategoryId: widget.initialCategoryId,
     categories: widget.categories,
   );
-  // «＋ Категория қўшиш» танланиб бекор қилинса, майдон аввалги қийматга
-  // қайтиши учун (калит ўзгариб, майдон қайта қурилади).
-  int _catFieldGen = 0;
   late bool _available = widget.existing?.available ?? true;
+  // Сотувчи киритган ихтиёрий фактлар (порция, КБЖУ, кухна, теглар) — таҳрирда мавжуд қиймат.
+  late DishFacts _facts = widget.existing?.facts ?? DishFacts.empty;
+  bool _showFactErrors = false;
   XFile? _picked;
   bool _saving = false;
 
   @override
   void dispose() {
-    for (final c in [_name, _price, _desc, _pack]) {
+    for (final c in [_name, _price, _desc]) {
       c.dispose();
     }
     super.dispose();
@@ -94,16 +98,10 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   Future<void> _createCategory() async {
     final name = await promptMenuCategoryName(context, categories: _cats, homeCook: widget.homeCook);
     if (!mounted) return;
-    if (name == null) {
-      setState(() => _catFieldGen++);
-      return;
-    }
+    if (name == null) return;
     final same = MenuCategoryChoice.findByName(_cats, name);
     if (same != null) {
-      setState(() {
-        _categoryId = same.id;
-        _catFieldGen++;
-      });
+      setState(() => _categoryId = same.id);
       return;
     }
     try {
@@ -113,15 +111,28 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
       setState(() {
         _cats.add(MenuCategory(id: id, name: name, sort: sort));
         _categoryId = id;
-        _catFieldGen++;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _catFieldGen++);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(restaurantsErrorText(context, e)), backgroundColor: Colors.red.shade700),
       );
     }
+  }
+
+  /// Танланган категориянинг ҳақиқий id'си. Тизим таклифи танланган бўлса — бўлим ШУ ЕРДА (таом
+  /// сақланаётганда) яратилади: фақат кўриб чиқиш ҳужжат яратмайди. Шу ном билан категория
+  /// ўрталикда пайдо бўлган бўлса (бошқа қурилма) — такрор яратилмайди.
+  Future<String> _resolveCategoryId() async {
+    final key = MenuCategoryChoice.suggestedKey(_categoryId);
+    if (key == null) return MenuCategoryChoice.known(_categoryId, _cats);
+    final name = MenuCategoryNames.presetName(key, context.contentLang);
+    final same = MenuCategoryChoice.findByName(_cats, name);
+    if (same != null) return same.id;
+    final sort = _cats.length;
+    final id = await widget.repository.upsertCategory(widget.restaurantId, name: name, sort: sort);
+    _cats.add(MenuCategory(id: id, name: name, sort: sort));
+    return id;
   }
 
   Future<void> _save() async {
@@ -133,12 +144,21 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
       );
       return;
     }
+    // Фактлар ихтиёрий, лекин киритилган бўлса тўғри бўлиши шарт — хатоли карточкалар очилади.
+    if (_facts.validate().isNotEmpty) {
+      setState(() => _showFactErrors = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('restaurants_m_dish_err_fix')), backgroundColor: Colors.red.shade700),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       var photoUrl = widget.existing?.photoUrl ?? '';
       if (_picked != null) {
         photoUrl = await _storage.uploadImage(restaurantId: widget.restaurantId, image: _picked!, kind: 'item');
       }
+      final categoryId = await _resolveCategoryId();
       await widget.repository.upsertMenuItem(
         widget.restaurantId,
         id: widget.existing?.id,
@@ -146,11 +166,11 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
         price: price,
         description: _desc.text.trim(),
         photoUrl: photoUrl,
-        packagingFee: int.tryParse(_pack.text.replaceAll(RegExp(r'\D'), '')) ?? 0,
-        categoryId: MenuCategoryChoice.known(_categoryId, _cats),
+        categoryId: categoryId,
         sort: widget.existing?.sort ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
         available: _available,
         stopUntil: _available ? widget.existing?.stopUntil : null,
+        facts: _facts,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -168,6 +188,9 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   Widget build(BuildContext context) {
     final c = context.ava;
     final existingPhoto = widget.existing?.photoUrl.trim() ?? '';
+    const contentMaxWidth = 640.0;
+    final width = MediaQuery.sizeOf(context).width;
+    final gutter = width > contentMaxWidth + 32 ? (width - contentMaxWidth) / 2 : 16.0;
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
@@ -179,7 +202,8 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          // Кенг экранда (веб) форма ўқилувчан кенгликда (640) марказда туради.
+          padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 24),
           children: [
             Center(
               child: InkWell(
@@ -224,44 +248,26 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
             const SizedBox(height: 8),
             TextField(controller: _desc, maxLength: 500, maxLines: 2, decoration: InputDecoration(labelText: context.tr('restaurants_m_item_desc'), border: const OutlineInputBorder(), isDense: true)),
             const SizedBox(height: 8),
-            TextField(
-              controller: _pack,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(labelText: context.tr('restaurants_m_item_packaging'), suffixText: context.tr('sum'), border: const OutlineInputBorder(), isDense: true),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              key: ValueKey('cat-${_cats.length}-$_categoryId-$_catFieldGen'),
-              initialValue: MenuCategoryChoice.known(_categoryId, _cats),
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: context.tr('restaurants_m_item_category'),
-                helperText: context.tr('restaurants_m_item_category_hint'),
-                helperMaxLines: 2,
-                border: const OutlineInputBorder(),
-                isDense: true,
+            MenuCategoryPicker(
+              categories: _cats,
+              suggestions: MenuCategorySuggestions.missingEntries(
+                keys: MenuCategorySuggestions.keysFor(homeCook: widget.homeCook),
+                lang: context.contentLang,
+                existing: _cats,
               ),
-              items: [
-                for (final cat in _cats) DropdownMenuItem(value: cat.id, child: Text(cat.displayName(context.contentLang), overflow: TextOverflow.ellipsis)),
-                // Категориясиз — доим танлаш мумкин (мижозда «Бошқалар»).
-                DropdownMenuItem(value: MenuCategoryChoice.none, child: Text(context.tr('restaurants_menu_other'))),
-                DropdownMenuItem(
-                  value: MenuCategoryChoice.createNew,
-                  child: Row(children: [
-                    Icon(Icons.add_rounded, size: 18, color: c.brand),
-                    const SizedBox(width: 6),
-                    Text(context.tr('restaurants_m_add_category')),
-                  ]),
-                ),
-              ],
-              onChanged: (v) {
-                if (v == MenuCategoryChoice.createNew) {
-                  _createCategory();
-                } else {
-                  setState(() => _categoryId = v ?? MenuCategoryChoice.none);
-                }
-              },
+              selectedId: MenuCategoryChoice.known(_categoryId, _cats),
+              lang: context.contentLang,
+              onSelected: (id) => setState(() => _categoryId = id),
+              onCreateOwn: _createCategory,
+            ),
+            DishFactsEditor(
+              initial: _facts,
+              priceController: _price,
+              showErrors: _showFactErrors,
+              onChanged: (f) => _facts = f,
+              loadCuisines: widget.repository.listCuisines,
+              addCuisine: (name, group) =>
+                  widget.repository.addCuisine(restaurantId: widget.restaurantId, name: name, group: group),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

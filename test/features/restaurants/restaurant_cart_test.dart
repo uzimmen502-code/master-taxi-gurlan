@@ -2,19 +2,17 @@ import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Restaurant _r(String id) => Restaurant(id: id, name: 'R$id', status: 'approved');
-MenuItem _m(String id, int price, {String cat = 'c1', int pack = 0}) =>
-    MenuItem(id: id, name: id, price: price, categoryId: cat, packagingFee: pack);
+MenuItem _m(String id, int price, {String cat = 'c1'}) => MenuItem(id: id, name: id, price: price, categoryId: cat);
 
 void main() {
   group('RestaurantCart', () {
     test('qo\'shish, sanash, yig\'indi — butun so\'m', () {
       final cart = RestaurantCart();
       expect(cart.add(_m('osh', 40000), restaurant: _r('a')), isTrue);
-      expect(cart.add(_m('somsa', 10000, pack: 500), restaurant: _r('a')), isTrue);
-      expect(cart.add(_m('somsa', 10000, pack: 500), restaurant: _r('a')), isTrue);
+      expect(cart.add(_m('somsa', 10000), restaurant: _r('a')), isTrue);
+      expect(cart.add(_m('somsa', 10000), restaurant: _r('a')), isTrue);
       expect(cart.count, 3);
       expect(cart.itemsTotal, 60000);
-      expect(cart.packagingTotal, 1000);
       expect(cart.qtyOf('somsa'), 2);
       expect(cart.restaurantId, 'a');
       expect(cart.restaurantName, 'Ra');

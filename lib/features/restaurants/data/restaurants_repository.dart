@@ -58,7 +58,6 @@ class PlaceOrderResult {
   const PlaceOrderResult({
     required this.orderId,
     required this.itemsTotal,
-    required this.packagingTotal,
     required this.deliveryFee,
     required this.total,
     this.duplicate = false,
@@ -66,7 +65,6 @@ class PlaceOrderResult {
 
   final String orderId;
   final int itemsTotal;
-  final int packagingTotal;
   final int deliveryFee;
   final int total;
   final bool duplicate;
@@ -74,7 +72,6 @@ class PlaceOrderResult {
   factory PlaceOrderResult.fromMap(Map<String, dynamic> m) => PlaceOrderResult(
         orderId: (m['orderId'] ?? '') as String,
         itemsTotal: (m['itemsTotal'] as num?)?.toInt() ?? 0,
-        packagingTotal: (m['packagingTotal'] as num?)?.toInt() ?? 0,
         deliveryFee: (m['deliveryFee'] as num?)?.toInt() ?? 0,
         total: (m['total'] as num?)?.toInt() ?? 0,
         duplicate: m['duplicate'] == true,
@@ -361,7 +358,6 @@ class RestaurantsRepository {
     required int price,
     String description = '',
     String photoUrl = '',
-    int packagingFee = 0,
     String categoryId = '',
     int sort = 0,
     bool available = true,
@@ -375,7 +371,8 @@ class RestaurantsRepository {
       'price': price,
       'description': description,
       'photoUrl': photoUrl,
-      'packagingFee': packagingFee,
+      // Қадоқлаш ҳақи олиб ташланган (D-REST-28): таҳрирда ESKI ҳужжатдаги майдон тозаланади.
+      'packagingFee': FieldValue.delete(),
       'categoryId': categoryId,
       'sort': sort,
       'available': available,

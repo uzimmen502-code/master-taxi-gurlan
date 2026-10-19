@@ -44,11 +44,30 @@ void main() {
   });
 
   group('MenuCategoryChoice.known', () {
-    test('мавжуд id ўзгармайди, номаълум ва «＋» банди сақланмайди', () {
+    test('мавжуд id ўзгармайди, номаълум id сақланмайди', () {
       expect(MenuCategoryChoice.known('c1', _cats), 'c1');
       expect(MenuCategoryChoice.known('zzz', _cats), '');
-      expect(MenuCategoryChoice.known(MenuCategoryChoice.createNew, _cats), '');
       expect(MenuCategoryChoice.known('', _cats), '');
+    });
+  });
+
+  group('MenuCategoryChoice — тизим таклифи (D-REST-29)', () {
+    test('suggest ↔ suggestedKey: айлантириб қайтади; оддий id ва бўш — null', () {
+      expect(MenuCategoryChoice.suggestedKey(MenuCategoryChoice.suggest('drinks')), 'drinks');
+      expect(MenuCategoryChoice.suggestedKey('c1'), isNull);
+      expect(MenuCategoryChoice.suggestedKey(''), isNull);
+    });
+
+    test('номаълум тайёр ном калити тўғри ЭМАС (қўлда ясалган қиймат категорияга айланмайди)', () {
+      expect(MenuCategoryChoice.suggestedKey('__suggest__:nope'), isNull);
+      expect(MenuCategoryChoice.suggestedKey('__suggest__:'), isNull);
+      expect(MenuCategoryChoice.known('__suggest__:nope', _cats), '');
+    });
+
+    test('known: тўғри таклиф танлови сақланади (яратилмаган бўлса ҳам)', () {
+      final id = MenuCategoryChoice.suggest('hot');
+      expect(MenuCategoryChoice.known(id, _cats), id);
+      expect(MenuCategoryChoice.known(id, const []), id);
     });
   });
 

@@ -247,7 +247,7 @@ class _PaymentCard extends StatelessWidget {
     final c = context.ava;
     final o = order;
     final closed = RestaurantOrderStatus.isFailed(o.restaurantStatus);
-    final foodAmount = o.itemsTotal + o.packagingTotal;
+    final foodAmount = o.foodAmount;
     final pay = o.restaurantPayment;
     final cardNo = (pay?['cardNumber'] ?? '') as String;
     final holder = (pay?['cardHolder'] ?? '') as String;

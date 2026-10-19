@@ -252,6 +252,33 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
               );
             },
           ),
+          // «+» — юқоридаги барнинг ўнг томонида, ихчам (эга, 2026-10-19; аввал қидирув қаторининг ёнида эди).
+          Padding(
+            padding: const EdgeInsets.only(right: 10, left: 2),
+            child: Center(
+              child: Material(
+                key: const ValueKey('cheap-add-ad'),
+                color: _addRed,
+                borderRadius: BorderRadius.circular(9),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(9),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CreateAdScreen(),
+                      ),
+                    );
+                  },
+                  child: const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Icon(Icons.add, color: Colors.white, size: 20),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       body: Column(
@@ -282,33 +309,6 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         borderSide: BorderSide.none,
                       ),
                       isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Material(
-                  color: _addRed,
-                  elevation: 4,
-                  shadowColor: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CreateAdScreen(),
-                        ),
-                      );
-                    },
-                    child: const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 22,
-                      ),
                     ),
                   ),
                 ),

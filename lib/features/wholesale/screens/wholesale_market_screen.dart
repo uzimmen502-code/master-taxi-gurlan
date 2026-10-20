@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../china_inquiry/widgets/china_inquiry_entry.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
@@ -181,6 +182,7 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
           ),
         ),
       ),
+      if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
       if (!_isChina)
         GeoTierBar(
           moduleId: _geoModule,

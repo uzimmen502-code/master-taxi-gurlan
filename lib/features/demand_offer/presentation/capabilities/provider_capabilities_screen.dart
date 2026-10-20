@@ -35,8 +35,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/ava_tokens.dart';
+import '../../../../models/geo_area.dart';
+import '../../../../repositories/service_config_repository.dart';
 import '../../data/demand_repository.dart' show kDemandCoreRegion;
 import '../../domain/demand_enums.dart';
+import '../../domain/region_options.dart';
 
 /// Push созламаси — концепция: «ёқиш, ўчириш ёки фақат кечки дайжест».
 enum ProviderPushMode { on, digestOnly, off }
@@ -52,7 +55,7 @@ class ProviderCapabilitiesScreen extends StatefulWidget {
     this.initialRegionIds = const [],
     this.initialDistrictIds = const [],
     this.initialPushMode = ProviderPushMode.on,
-    this.availableRegions = const ['xorazm'],
+    this.regionLoader,
     this.consentPrompt = false,
   });
 
@@ -70,7 +73,10 @@ class ProviderCapabilitiesScreen extends StatefulWidget {
   final List<String> initialRegionIds;
   final List<String> initialDistrictIds;
   final ProviderPushMode initialPushMode;
-  final List<String> availableRegions;
+
+  /// Вилоятлар манбаси (тест учун алмаштирилади). Стандарт — `geo_regions`
+  /// (14 вилоят, республика миқёси): аввал қаттиқ `['xorazm']` эди.
+  final Future<List<GeoRegion>> Function()? regionLoader;
 
   /// `true` — cold start розилик оқими (матн бошқача).
   final bool consentPrompt;
@@ -93,21 +99,83 @@ class _ProviderCapabilitiesScreenState
   bool _saving = false;
   String? _error;
 
+  /// Вилоят чиплари (`geo_regions`дан). Юкланмагунча/хатода бўш.
+  List<RegionOption> _options = const [];
+  bool _regionsLoading = true;
+  bool _regionsFailed = false;
+  bool _regionsRequested = false;
+
   FirebaseFirestore get _db => widget.firestore ?? FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
     _categories = widget.initialCategoryIds.toSet();
-    _regions = widget.initialRegionIds.isNotEmpty
-        ? widget.initialRegionIds.toSet()
-        : widget.availableRegions.take(1).toSet();
+    // Ҳеч қайси вилоят ўзбошимчалик билан танланмайди: рўйхат юклангач
+    // берилган ID'лар ёки фойдаланувчининг ўз вилояти қўйилади.
+    _regions = widget.initialRegionIds.toSet();
     _pushMode = widget.initialPushMode;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Тил (`contentLang`) контекстдан келади — шу сабаб initState'да эмас.
+    if (!_regionsRequested) {
+      _regionsRequested = true;
+      _loadRegions();
+    }
+  }
+
+  Future<void> _loadRegions() async {
+    setState(() {
+      _regionsLoading = true;
+      _regionsFailed = false;
+    });
+    try {
+      final loader = widget.regionLoader ?? ServiceConfigRepository().fetchRegions;
+      final list = await loader();
+      if (!mounted) return;
+      final options = buildRegionOptions(list, context.contentLang);
+      // `fetchRegions` хатода бўш рўйхат қайтаради — бу «вилоят йўқ» эмас, юкланмади.
+      if (options.isEmpty) throw StateError('geo_regions bo\'sh');
+      final own = widget.initialRegionIds.isEmpty ? await _userRegion() : null;
+      if (!mounted) return;
+      setState(() {
+        _options = options;
+        _regions = resolveInitialRegions(
+          initial: _regions,
+          userRegion: own,
+          options: options.map((o) => o.id),
+        );
+        _regionsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _regionsLoading = false;
+        _regionsFailed = true;
+      });
+    }
+  }
+
+  /// Профилдаги вилоят (`users/{id}.regionId`) — фақат бошланғич танлов учун.
+  Future<String?> _userRegion() async {
+    try {
+      final u = await _db.collection('users').doc(widget.userId).get();
+      return u.data()?['regionId']?.toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _save() async {
     if (_categories.isEmpty) {
       setState(() => _error = context.tr('request_what_needed'));
+      return;
+    }
+    if (_regions.isEmpty) {
+      setState(() => _error = context.tr('capabilities_regions_pick'));
       return;
     }
     setState(() {
@@ -252,26 +320,44 @@ class _ProviderCapabilitiesScreenState
 
             _sectionLabel(context, 'capabilities_regions'),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final r in widget.availableRegions)
-                  _toggleChip(
-                    context,
-                    label: r,
-                    selected: _regions.contains(r),
-                    onTap: () => setState(() {
-                      if (_regions.contains(r)) {
-                        // Камида битта ҳудуд қолиши керак.
-                        if (_regions.length > 1) _regions.remove(r);
-                      } else {
-                        _regions.add(r);
-                      }
-                    }),
+            if (_regionsLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
+            else if (_regionsFailed)
+              InkWell(
+                onTap: _loadRegions,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    context.tr('capabilities_regions_failed'),
+                    style: TextStyle(fontSize: 12, color: c.danger),
                   ),
-              ],
-            ),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final o in _options)
+                    _toggleChip(
+                      context,
+                      label: o.label,
+                      selected: _regions.contains(o.id),
+                      onTap: () => setState(() {
+                        _error = null;
+                        if (_regions.contains(o.id)) {
+                          // Камида битта ҳудуд қолиши керак.
+                          if (_regions.length > 1) _regions.remove(o.id);
+                        } else {
+                          _regions.add(o.id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
             const SizedBox(height: 20),
 
             if (widget.module == DemandModule.courier) ...[

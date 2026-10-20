@@ -209,6 +209,8 @@ const GLOBAL_DEFAULTS = {
 
 const GLOBAL_DOC_ID = 'global';
 const COLLECTION = 'module_config';
+/** «Butun respublika» hududi — `module_config/{module}_all` (zaxira qatlam). */
+const ALL_REGION = 'all';
 
 /** @type {Map<string, {at: number, value: object}>} */
 const cache = new Map();
@@ -295,10 +297,26 @@ async function getModuleConfig(db, module, regionId, opts = {}) {
     if (hit && now - hit.at < CACHE_TTL_MS) return hit.value;
   }
 
+  /**
+   * RESPUBLIKA BO'YICHA ZAXIRA (ega 2026-10-20: qoidalar butun respublikada).
+   *
+   * Qatlamlar (kuchsizdan kuchliga): DEFAULTS < `{module}_all` < `{module}_{hudud}`.
+   * Shunda bitta `{module}_all` hujjati 14 viloyatni ham yoqadi, alohida viloyat
+   * esa o'z hujjati bilan o'zgartiriladi yoki o'chiriladi (`enabled: false`).
+   * Hujjatlarning ikkalasi yo'q bo'lsa modul O'CHIQ qoladi (DEFAULTS.enabled).
+   * `all` hududining o'zi uchun zaxira yo'q (masalan `logistics_all`).
+   */
+  const sharedKey = regionId === ALL_REGION ? null : moduleRegionKey(module, ALL_REGION);
+
   let override = {};
   try {
-    const snap = await db.collection(COLLECTION).doc(key).get();
-    if (snap.exists) override = snap.data() || {};
+    const [own, shared] = await Promise.all([
+      db.collection(COLLECTION).doc(key).get(),
+      sharedKey ? db.collection(COLLECTION).doc(sharedKey).get() : null,
+    ]);
+    const base = shared && shared.exists ? (shared.data() || {}) : {};
+    const mine = own.exists ? (own.data() || {}) : {};
+    override = deepMerge(base, mine);
   } catch (e) {
     // Konfig o'qilmasa standart qiymatlar bilan davom etamiz, lekin
     // `pushEnabled` ni MAJBURAN o'chiramiz: noma'lum holatda push yubormaslik
@@ -375,6 +393,7 @@ function clearCache() {
 
 module.exports = {
   COLLECTION,
+  ALL_REGION,
   GLOBAL_DOC_ID,
   CACHE_TTL_MS,
   DEFAULTS,

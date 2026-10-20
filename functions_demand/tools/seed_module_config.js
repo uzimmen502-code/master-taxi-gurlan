@@ -6,8 +6,8 @@
  *   node functions_demand/tools/seed_module_config.js --kill      # kill switch
  *   node functions_demand/tools/seed_module_config.js --status    # фақат ўқиш
  *
- * НИМА ҚИЛАДИ: `module_config/global` ва `module_config/service_xorazm`
- * ҳужжатларини ёзади. Кодда стандарт қиймат `enabled: false`, шунинг
+ * НИМА ҚИЛАДИ: `module_config/global` ва `module_config/service_all`
+ * (бутун республика; алоҳида вилоят: `--region xorazm`) ҳужжатларини ёзади. Кодда стандарт қиймат `enabled: false`, шунинг
  * учун деплойдан кейин ҳеч нарса ўзидан ишга тушмайди — модул
  * АЙНИ ШУ СКРИПТ билан ёқилади.
  *
@@ -24,7 +24,13 @@
 const path = require('path');
 
 const MODULE = 'service';
-const REGION = 'xorazm';
+// Standart — `all` (butun respublika, `module_config/service_all`); alohida
+// viloyat uchun: `--region xorazm`. Eski qat'iy `xorazm` olib tashlandi
+// (ega 2026-10-20: qoidalar butun respublikada).
+const regionIdx = process.argv.indexOf('--region');
+const REGION = regionIdx >= 0 && /^[a-z][a-z0-9_]{0,40}$/.test(process.argv[regionIdx + 1] || '')
+  ? process.argv[regionIdx + 1]
+  : 'all';
 
 const admin = require(path.join(__dirname, '..', 'node_modules', 'firebase-admin'));
 

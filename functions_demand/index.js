@@ -46,7 +46,7 @@ const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
-const { getModuleConfig } = require('./core/config');
+const { getModuleConfig, ALL_REGION } = require('./core/config');
 const caps = require('./core/capabilities');
 const { toCanonicalId } = require('./core/ids');
 const { enabledModules } = require('./core/registry');
@@ -394,8 +394,9 @@ exports.recomputeTrust = fn.firestore
     if (!e.subjectId) return null;
     try {
       // Konfig modul bo'yicha, lekin trust GLOBAL — shuning uchun
-      // pilot modulining konfigi ishlatiladi (vaznlar bir xil).
-      const config = await getModuleConfig(db, 'service', 'xorazm');
+      // pilot modulining UMUMIY (`service_all`) konfigi ishlatiladi: hech bir
+      // hududga bog'lanmaydi (ega 2026-10-20: qoidalar butun respublikada).
+      const config = await getModuleConfig(db, 'service', ALL_REGION);
       await trustEventsApi.recompute(db, e.subjectId, config);
     } catch (err) {
       console.error(`recomputeTrust xatosi (${e.subjectId}): ${err.message}`);

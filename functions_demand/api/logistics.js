@@ -42,9 +42,9 @@ const MAX_PARCELS = 5;
 
 /**
  * Konfig HUDUDSIZ: `module_config/logistics_all`. Logistika hududlararo
- * (Xorazm → Toshkent), bitta kill switch yetadi. Yana bir sabab: yadroning
- * `moduleRegionKey` `_`li hudud ID'sini (`toshkent_shahri`) qabul qilmaydi —
- * bu ids.js'dagi mavjud chegara, shu yerda aylanib o'tilmaydi.
+ * (Xorazm → Toshkent), bitta kill switch yetadi. (Eslatma: `moduleRegionKey`
+ * avval `_`li hudud ID'sini rad etardi; 2026-10-20 dan `__` bilan qabul qiladi,
+ * lekin logistika baribir hududsiz qoladi.)
  */
 const CONFIG_REGION = 'all';
 

@@ -64,6 +64,7 @@ import '../driver_hub/screens/driver_hub_screen.dart';
 import '../../shared/car/car_edit_dialog.dart';
 import '../assistant/assistant_entry.dart';
 import '../demand_offer/data/demand_repository.dart';
+import '../demand_offer/data/match_repository.dart';
 import '../demand_offer/presentation/activity/demand_activity_entry.dart'
     show kDemandUiAdapters;
 import '../demand_offer/presentation/demand_composer/demand_composer_screen.dart';
@@ -196,6 +197,12 @@ class _HomeViewState extends State<_HomeView> {
       watch: ({required userId, required audiences}) =>
           news.watchUnreadTotal(userId: userId, audiences: audiences),
       audience: UserAudience.current,
+      // Талаб радари: «Менга келган» янги сўровлар пастки «Хабарлар» белгисига
+      // ҳам қўшилади. Дарвоза (`demand_intent`) ёпиқ бўлса — 0 (воқеа пайтида
+      // текширилади: конфиг кечроқ юкланиши мумкин).
+      watchExtra: (uid) => MatchRepository().newMatchCount(uid).map(
+            (n) => ServiceConfigHolder.isOpenable('demand_intent') ? n : 0,
+          ),
     );
     _configListener = () {
       if (mounted) setState(() {});

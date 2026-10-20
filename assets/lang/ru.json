@@ -3736,5 +3736,10 @@
   "capabilities_regions_pick": "Выберите хотя бы один регион",
   "capabilities_regions_failed": "Не удалось загрузить регионы. Нажмите, чтобы повторить.",
   "activity_become_provider_title": "Оказываете услуги?",
-  "activity_become_provider_sub": "Для мастеров и исполнителей: подходящие заявки будут приходить вам."
+  "activity_become_provider_sub": "Для мастеров и исполнителей: подходящие заявки будут приходить вам.",
+  "hub_tab_demand": "Заявки",
+  "radar_empty": "Пока нет заявок и предложений",
+  "radar_new_incoming": "Новые заявки для вас",
+  "radar_my_active": "Мои активные заявки",
+  "radar_open": "Открыть заявки и предложения"
 }

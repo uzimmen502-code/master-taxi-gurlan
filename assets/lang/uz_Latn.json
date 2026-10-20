@@ -3736,5 +3736,10 @@
   "capabilities_regions_pick": "Kamida bitta hududni tanlang",
   "capabilities_regions_failed": "Hududlar yuklanmadi. Qayta urinish uchun bosing.",
   "activity_become_provider_title": "Xizmat ko'rsatasizmi?",
-  "activity_become_provider_sub": "Ustalar va xizmat ko'rsatuvchilar uchun: mos so'rovlar sizga keladi."
+  "activity_become_provider_sub": "Ustalar va xizmat ko'rsatuvchilar uchun: mos so'rovlar sizga keladi.",
+  "hub_tab_demand": "Talab",
+  "radar_empty": "Hozircha so'rov va taklif yo'q",
+  "radar_new_incoming": "Menga kelgan yangi so'rovlar",
+  "radar_my_active": "Mening faol so'rovlarim",
+  "radar_open": "Talab va takliflarni ochish"
 }

@@ -130,6 +130,109 @@ void main() {
     b.dispose();
   });
 
+  group('қўшимча манба (радар: янги келган сўровлар)', () {
+    test('сон = хабарлар + қўшимча; ҳар иккиси жонли', () async {
+      final f = _Fake();
+      final extra = StreamController<int>();
+      final extraUids = <String>[];
+      final b = HomeUnreadBadge(
+        watch: f.watch,
+        audience: f.audience,
+        watchExtra: (uid) {
+          extraUids.add(uid);
+          return extra.stream;
+        },
+      );
+      await b.sync('998901234567');
+      expect(extraUids, ['998901234567']);
+
+      f.controllers.single.add(2);
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 2);
+      extra.add(3);
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 5);
+      f.controllers.single.add(1);
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 4);
+      b.dispose();
+      await extra.close();
+    });
+
+    test('қўшимча манба хатоси — охирги сон қолади', () async {
+      final f = _Fake();
+      final extra = StreamController<int>();
+      final b = HomeUnreadBadge(
+        watch: f.watch,
+        audience: f.audience,
+        watchExtra: (_) => extra.stream,
+      );
+      await b.sync('998901234567');
+      f.controllers.single.add(1);
+      extra.add(2);
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 3);
+      extra.addError(StateError('permission-denied'));
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 3);
+      b.dispose();
+      await extra.close();
+    });
+
+    test('телефон йўқ бўлса иккала манба ёпилади ва сон 0', () async {
+      final f = _Fake();
+      final extra = StreamController<int>();
+      final b = HomeUnreadBadge(
+        watch: f.watch,
+        audience: f.audience,
+        watchExtra: (_) => extra.stream,
+      );
+      await b.sync('998901234567');
+      f.controllers.single.add(1);
+      extra.add(1);
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 2);
+
+      await b.sync('');
+      expect(b.total, 0);
+      expect(f.controllers.single.hasListener, isFalse);
+      expect(extra.hasListener, isFalse);
+      b.dispose();
+      await extra.close();
+    });
+
+    test('роль ўзгарса қўшимча оқим ҳам қайта уланади, эскиси ёпилади', () async {
+      final f = _Fake();
+      final controllers = <StreamController<int>>[];
+      final b = HomeUnreadBadge(
+        watch: f.watch,
+        audience: f.audience,
+        watchExtra: (_) {
+          final c = StreamController<int>();
+          controllers.add(c);
+          return c.stream;
+        },
+      );
+      await b.sync('998901234567');
+      f.role = 'driver';
+      await b.sync('998901234567');
+      expect(controllers, hasLength(2));
+      expect(controllers.first.hasListener, isFalse);
+      expect(controllers.last.hasListener, isTrue);
+      b.dispose();
+    });
+
+    test('watchExtra берилмаса — хулқ ўзгармайди (фақат хабарлар)', () async {
+      final f = _Fake();
+      final b = f.make();
+      await b.sync('998901234567');
+      f.controllers.single.add(7);
+      await Future<void>.delayed(Duration.zero);
+      expect(b.total, 7);
+      b.dispose();
+    });
+  });
+
   test('dispose дан кейин келган натижа ҳеч нарса қилмайди', () async {
     final f = _Fake();
     final slow = Completer<String>();

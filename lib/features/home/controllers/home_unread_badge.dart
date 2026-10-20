@@ -14,7 +14,11 @@ import '../../../core/utils/formatters.dart';
 /// Аудитория (`['all', роль]`) `NewsHubScreen` билан бир хил қоида бўйича
 /// олинади (`UserAudience`) — белги ва очилган экран сони бир хил чиқсин.
 class HomeUnreadBadge extends ChangeNotifier {
-  HomeUnreadBadge({required this.watch, required this.audience});
+  HomeUnreadBadge({
+    required this.watch,
+    required this.audience,
+    this.watchExtra,
+  });
 
   /// `NewsRepository.watchUnreadTotal`.
   final Stream<int> Function({
@@ -25,6 +29,11 @@ class HomeUnreadBadge extends ChangeNotifier {
   /// Ҳозирги аудитория роли (`UserAudience.current`).
   final Future<String> Function() audience;
 
+  /// ҚЎШИМЧА манба (ихтиёрий): масалан, талаб радарида янги келган сўровлар
+  /// (`MatchRepository.newMatchCount`). Белги сони = хабарлар + шу манба.
+  /// Берилмаса хулқ олдингидек.
+  final Stream<int> Function(String userId)? watchExtra;
+
   /// Кўрсатиладиган сон (0 — белги йўқ).
   int total = 0;
 
@@ -32,6 +41,9 @@ class HomeUnreadBadge extends ChangeNotifier {
   int _generation = 0;
   bool _disposed = false;
   StreamSubscription<int>? _sub;
+  StreamSubscription<int>? _extraSub;
+  int _newsCount = 0;
+  int _extraCount = 0;
 
   /// Телефон ёки роль ўзгарганда оқимни қайта улайди; ўзгармаган бўлса —
   /// ҳеч нарса қилмайди (бош саҳифага қайтишда ортиқча Firestore тингловчиси
@@ -41,6 +53,8 @@ class HomeUnreadBadge extends ChangeNotifier {
     final gen = ++_generation;
     if (uid.length < 9) {
       _stop();
+      _newsCount = 0;
+      _extraCount = 0;
       _set(0);
       return;
     }
@@ -52,17 +66,34 @@ class HomeUnreadBadge extends ChangeNotifier {
     _stop();
     _key = key;
     _sub = watch(userId: uid, audiences: ['all', role]).listen(
-      _set,
+      (n) {
+        _newsCount = n;
+        _recompute();
+      },
       // Оқим узилса охирги сон қолади — белги «сакраб» 0 бўлмайди.
       onError: (_) {},
     );
+    final extra = watchExtra;
+    if (extra != null) {
+      _extraSub = extra(uid).listen(
+        (n) {
+          _extraCount = n;
+          _recompute();
+        },
+        onError: (_) {},
+      );
+    }
   }
 
   void _stop() {
     _sub?.cancel();
     _sub = null;
+    _extraSub?.cancel();
+    _extraSub = null;
     _key = '';
   }
+
+  void _recompute() => _set(_newsCount + _extraCount);
 
   void _set(int n) {
     if (_disposed || n == total) return;
@@ -74,6 +105,7 @@ class HomeUnreadBadge extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _sub?.cancel();
+    _extraSub?.cancel();
     super.dispose();
   }
 }

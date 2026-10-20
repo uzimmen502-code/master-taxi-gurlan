@@ -3847,5 +3847,10 @@
   "capabilities_regions_pick": "Камида битта ҳудудни танланг",
   "capabilities_regions_failed": "Ҳудудлар юкланмади. Қайта уриниш учун босинг.",
   "activity_become_provider_title": "Хизмат кўрсатасизми?",
-  "activity_become_provider_sub": "Усталар ва хизмат кўрсатувчилар учун: мос сўровлар сизга келади."
+  "activity_become_provider_sub": "Усталар ва хизмат кўрсатувчилар учун: мос сўровлар сизга келади.",
+  "hub_tab_demand": "Талаб",
+  "radar_empty": "Ҳозирча сўров ва таклиф йўқ",
+  "radar_new_incoming": "Менга келган янги сўровлар",
+  "radar_my_active": "Менинг фаол сўровларим",
+  "radar_open": "Талаб ва таклифларни очиш"
 }

@@ -214,6 +214,11 @@ class _NewsHubScreenState extends State<NewsHubScreen>
         foregroundColor: AppColors.onPrimary,
         bottom: TabBar(
           controller: _tabs,
+          // 4 таб (радар билан) тор экранда ва рус/катта шрифтда қирқилади
+          // (веб-кўринишда топилди) — шунда панел айлантирилади. 3 табда
+          // эски хулқ (тенг бўлинади) ўзгармайди.
+          isScrollable: _hasDemandTab,
+          tabAlignment: _hasDemandTab ? TabAlignment.start : null,
           indicatorColor: AppColors.onPrimary,
           labelColor: AppColors.onPrimary,
           unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),

@@ -61,6 +61,7 @@ import 'warehouse_stock_screen.dart';
 import 'sell_submissions_admin_screen.dart';
 import 'risk_review_screen.dart';
 import 'anomaly_settings_screen.dart';
+import 'demand_core_admin_screen.dart';
 import 'service_config_admin_screen.dart';
 import 'splash_taglines_screen.dart';
 import 'users_devices_screen.dart';
@@ -401,6 +402,15 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'Фойдаланувчилар ва созламалар',
+      label: 'Талаб ядроси',
+      icon: Icons.hub_outlined,
+      description: 'Ҳудуд бўйича ёқиш (Ўчиқ / Shadow / Push) ва push чегараси',
+      // Серверда ёзиш фақат admin/superadmin (`adminSetCoreConfig`): dispatcher
+      // бўлимни очса, ҳар амали рад этилар эди.
+      access: _SectionAccess.users,
+    ),
+    _AdminSection(
+      group: 'Фойдаланувчилар ва созламалар',
       label: 'Risk review',
       icon: Icons.security,
       description: 'Хавфли сигналлар',
@@ -559,6 +569,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Ҳудудлар ва хизматлар') {
       return const ServiceConfigAdminScreen();
+    }
+    if (section.label == 'Талаб ядроси') {
+      return const DemandCoreAdminScreen();
     }
     if (section.label == 'Splash soʻzlari') {
       return const SplashTaglinesScreen();

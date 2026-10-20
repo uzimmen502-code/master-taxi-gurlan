@@ -37,6 +37,7 @@ import 'logistics_admin_screen.dart';
 import 'restaurants_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
+import 'china_inquiries_admin_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
@@ -582,6 +583,10 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Хитой бозори') {
       return const WholesaleModerationScreen(
         market: WholesaleProduct.marketChina,
+        leadingTab: (
+          label: '📨 Сўровлар',
+          child: ChinaInquiriesAdminScreen(),
+        ),
       );
     }
     if (section.label == 'EV зарядлаш') {

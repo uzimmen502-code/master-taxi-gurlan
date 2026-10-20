@@ -3843,5 +3843,7 @@
   "restaurants_m_venue_type": "Muassasa turi",
   "restaurants_m_err_venue_type": "Kafe, restoran yoki choyxonadan birini tanlang",
   "home_section_cheap_products": "Aholi bozori",
-  "home_section_tv_market": "AVAGram"
+  "home_section_tv_market": "AVAGram",
+  "capabilities_regions_pick": "Kamida bitta hududni tanlang",
+  "capabilities_regions_failed": "Hududlar yuklanmadi. Qayta urinish uchun bosing."
 }

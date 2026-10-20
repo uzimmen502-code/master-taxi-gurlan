@@ -1965,6 +1965,47 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Хитой бозори «Сўров қолдириш» (2026-10-20, ega: variant A). БАРЧА ёзув фақат CF'лар
+    // (`createChinaInquiry`, `admin*China*` — functions/china_inquiries.js, 18/20-банд).
+    // Мижоз ФАҚАТ ўз сўровини ва унинг `offers`ини (таъминотчисиз нусха) ўқийди; таъминотчилар,
+    // ички таклифлар, жўнатиш тарихи ва events — фақат админ. Тест: china_inquiries_rules.test.js
+    match /china_inquiries/{inquiryId} {
+      allow get, list: if isAdmin() || (isAuth() && isOwner(resource.data.ownerId));
+      allow write: if false;
+      match /offers/{offerId} {
+        allow read: if isAdmin()
+            || (isAuth() && isOwner(get(/databases/$(database)/documents/china_inquiries/$(inquiryId)).data.ownerId));
+        allow write: if false;
+      }
+      match /quotes/{quoteId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+      match /dispatches/{supplierId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+      match /events/{eventId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    match /china_suppliers/{supplierId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /china_inquiry_config/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /china_inquiry_config_history/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /china_inquiry_meta/{docId} {
+      allow read, write: if false;
+    }
+
     // Кафе-ресторан бўлимлари созламаси (`settings/restaurant_sections`) тарихи (`v{n}`) —
     // ўзгармас, фақат CF (`adminSetRestaurantSections`, версия + audit, 9/41-банд).
     match /restaurant_sections_history/{versionId} {

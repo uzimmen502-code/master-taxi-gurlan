@@ -125,6 +125,11 @@ attachAdminSectionGrants(exports, {
   functions, db, admin, canonicalUid, requireCallerRoles,
   PANEL_ROLES: adminPin.PANEL_ROLES,
 });
+// Хитой бозори «Сўров қолдириш» (2026-10-20, ega: variant A — operator WeChat'га қўлда юборади). Босқич: china_inquiry_config/main (сукут — OFF).
+const { attachChinaInquiries } = require('./china_inquiries');
+attachChinaInquiries(exports, {
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
+});
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {

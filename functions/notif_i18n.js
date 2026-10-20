@@ -30,6 +30,11 @@ const MESSAGES = {
     uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Bugungi surish limiti ({max} marta) tugadi. Yangi vaqtni o\'zingiz belgilang yoki reysni tugating.' },
     ru: { title: '⏱ Рейс больше не переносится автоматически', body: 'Лимит переносов на сегодня ({max}) исчерпан. Укажите новое время сами или завершите рейс.' },
   },
+  china_quote_ready: {
+    uz_Cyrl: { title: '🇨🇳 Хитой сўровингизга таклиф келди', body: '{refNo} бўйича таклифни иловада кўришингиз мумкин.' },
+    uz_Latn: { title: '🇨🇳 Xitoy so\'rovingizga taklif keldi', body: '{refNo} bo\'yicha taklifni ilovada ko\'rishingiz mumkin.' },
+    ru: { title: '🇨🇳 Получено предложение по запросу в Китай', body: 'Предложение по {refNo} можно посмотреть в приложении.' },
+  },
   auto_shift_stop_midnight: {
     uz_Cyrl: { title: '⏱ Рейс автоматик сурилмайди', body: 'Жўнаш вақти кеч бўлгани учун рейс бугун яна сурилмайди. Янги кунга кўчиринг ёки тугатинг.' },
     uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Jo\'nash vaqti kech bo\'lgani uchun reys bugun yana surilmaydi. Yangi kunga ko\'chiring yoki tugating.' },

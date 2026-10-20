@@ -74,6 +74,8 @@
     "test:job-ad-submit-cf": "firebase emulators:exec --only firestore --project demo-job-ad-submit \"node test/job_ad_submit_cf.test.js\"",
     "test:order-news": "firebase emulators:exec --only firestore --project demo-order-news \"node test/order_news_flow_cf.test.js\"",
     "test:carpet-agro-courier-rules": "node test/carpet_agro_courier_rules.test.js",
+    "test:china-inquiry-rules": "firebase emulators:exec --only firestore --project demo-china-rules \"node test/china_inquiries_rules.test.js\"",
+    "test:china-inquiry-cf": "firebase emulators:exec --only firestore --project demo-china-cf \"node test/china_inquiries_cf.test.js\"",
     "test:carpet-agro-tasks": "firebase emulators:exec --only firestore --project demo-carpet-agro-tasks \"node test/carpet_agro_courier_tasks_cf.test.js\""
   },
   "engines": {

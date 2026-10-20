@@ -3734,5 +3734,7 @@
   "home_section_cheap_products": "Аҳоли бозори",
   "home_section_tv_market": "AVAGram",
   "capabilities_regions_pick": "Камида битта ҳудудни танланг",
-  "capabilities_regions_failed": "Ҳудудлар юкланмади. Қайта уриниш учун босинг."
+  "capabilities_regions_failed": "Ҳудудлар юкланмади. Қайта уриниш учун босинг.",
+  "activity_become_provider_title": "Хизмат кўрсатасизми?",
+  "activity_become_provider_sub": "Усталар ва хизмат кўрсатувчилар учун: мос сўровлар сизга келади."
 }

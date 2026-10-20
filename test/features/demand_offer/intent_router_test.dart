@@ -391,5 +391,29 @@ void main() {
       final r = IntentRouter.setForTest(dict);
       expect(r.categoryGroup('santexnik'), 'uy_tamir');
     });
+
+    test('categoryNames — барча 40 категория ID → ном (таклифчи экрани чиплари)', () {
+      final r = IntentRouter.setForTest(dict);
+      final names = r.categoryNames('uz_Latn');
+      expect(names.length, 40);
+      expect(names['santexnik'], 'Santexnik');
+      expect(names['elektrik'], isNotEmpty);
+    });
+
+    test('categoryNames — тил бўйича, ном бўш бўлмайди', () {
+      final r = IntentRouter.setForTest(dict);
+      expect(r.categoryNames('uz_Cyrl')['santexnik'], 'Сантехник');
+      for (final lang in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+        for (final e in r.categoryNames(lang).entries) {
+          expect(e.value.trim(), isNotEmpty, reason: '$lang/${e.key}');
+        }
+      }
+    });
+
+    test('categoryNames — луғат бўш бўлса бўш харита (йиқилмайди)', () {
+      final empty = IntentRouter.setForTest(<String, dynamic>{});
+      expect(empty.categoryNames('ru'), isEmpty);
+      IntentRouter.setForTest(dict);
+    });
   });
 }

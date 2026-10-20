@@ -14,14 +14,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../data/demand_repository.dart';
 import '../../data/match_repository.dart';
 import '../../domain/demand.dart';
 import '../../domain/demand_enums.dart';
 import '../../domain/demand_match.dart';
+import '../../intent/intent_router.dart';
 import '../../../logistics/ui/logistics_ui_adapter.dart';
 import '../../ui_adapters/demand_ui_adapter.dart';
 import '../../ui_adapters/service_ui_adapter.dart';
+import '../capabilities/provider_capabilities_screen.dart';
 import '../demand_detail/demand_detail_screen.dart';
 import '../demand_detail/demand_match_detail_screen.dart';
 import 'activity_screen.dart';
@@ -114,6 +117,9 @@ class _DemandActivityEntryState extends State<DemandActivityEntry> {
     }
 
     return ActivityScreen(
+      // `isProvider` ўзгарса экран қайта қурилади: TabController узунлиги
+      // (1 ёки 2 таб) фақат initState'да белгиланади.
+      key: ValueKey<bool>(_isProvider!),
       userId: widget.userId,
       demandRepository: _demands,
       matchRepository: _matches,
@@ -121,7 +127,25 @@ class _DemandActivityEntryState extends State<DemandActivityEntry> {
       isProvider: _isProvider!,
       onOpenDemand: _openDemand,
       onOpenMatch: _openMatch,
+      onBecomeProvider: _isProvider! ? null : _becomeProvider,
     );
+  }
+
+  /// «Мен хизмат кўрсатаман»: имконият экрани, сақлангач таклифчи бўлими очилади.
+  Future<void> _becomeProvider() async {
+    final router = await IntentRouter.instance();
+    if (!mounted) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ProviderCapabilitiesScreen(
+          userId: widget.userId,
+          module: DemandModule.service,
+          categories: router.categoryNames(context.contentLang),
+          firestore: widget.firestore,
+        ),
+      ),
+    );
+    if (saved == true) await _checkProvider();
   }
 
   void _openDemand(Demand demand) {

@@ -33,6 +33,7 @@ class ActivityScreen extends StatefulWidget {
     this.isProvider = false,
     this.onOpenDemand,
     this.onOpenMatch,
+    this.onBecomeProvider,
   });
 
   /// Канон телефон ID (`998XXXXXXXXX`).
@@ -49,6 +50,12 @@ class ActivityScreen extends StatefulWidget {
 
   final void Function(Demand demand)? onOpenDemand;
   final void Function(DemandMatch match)? onOpenMatch;
+
+  /// «Мен хизмат кўрсатаман» — таклифчи бўлиш (мустақил кириш нуқтаси).
+  /// Берилмаса ва фойдаланувчи таклифчи эмас бўлса, карточка кўринмайди.
+  /// Усиз уста рўйхатдан ўтолмайди: имконият экрани аввал фақат келган
+  /// мослик ичидан очиларди, мослик эса имкониятсиз келмайди.
+  final VoidCallback? onBecomeProvider;
 
   @override
   State<ActivityScreen> createState() => _ActivityScreenState();
@@ -79,10 +86,18 @@ class _ActivityScreenState extends State<ActivityScreen>
       return Scaffold(
         backgroundColor: c.bg,
         appBar: _appBar(context),
-        body: _MyDemandsList(
-          userId: widget.userId,
-          repository: widget.demandRepository,
-          onOpen: widget.onOpenDemand,
+        body: Column(
+          children: [
+            if (widget.onBecomeProvider != null)
+              _BecomeProviderCard(onTap: widget.onBecomeProvider!),
+            Expanded(
+              child: _MyDemandsList(
+                userId: widget.userId,
+                repository: widget.demandRepository,
+                onOpen: widget.onOpenDemand,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -145,6 +160,59 @@ class _ActivityScreenState extends State<ActivityScreen>
         ),
       ),
       bottom: bottom,
+    );
+  }
+}
+
+/// «Хизмат кўрсатасизми?» — таклифчи бўлишга таклиф (таклифчи бўлмаганларга).
+class _BecomeProviderCard extends StatelessWidget {
+  const _BecomeProviderCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Material(
+        color: c.brandSoft,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(Icons.handyman_rounded, color: c.brand),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('activity_become_provider_title'),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        context.tr('activity_become_provider_sub'),
+                        style: TextStyle(fontSize: 12, color: c.ink2),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: c.ink3),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

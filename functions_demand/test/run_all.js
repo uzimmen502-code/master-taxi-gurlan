@@ -40,6 +40,8 @@ const SUITES = [
   'analytics.test.js',
   'wholesale_admin.test.js',
   'supply_report.test.js',
+  'notify_dispatch.test.js',
+  'calibration.test.js',
 ];
 
 let failed = 0;

@@ -10,7 +10,7 @@
  */
 const assert = require('assert');
 const p = require('../notify/policy');
-const { DEFAULTS } = require('../core/config');
+const { DEFAULTS, deepMerge } = require('../core/config');
 
 let passed = 0;
 function ok(name, fn) {
@@ -41,12 +41,19 @@ function provider(over = {}) {
   };
 }
 
+/**
+ * Калибровкаланган конфиг: `push.minScore = 0.70` (ҳар мослик учун push чегараси,
+ * ега 2026-10-20, вариант 3). Стандарт `minScore: null` — калибровка йўқ.
+ */
+const calibrated = deepMerge(DEFAULTS, { push: { minScore: 0.7 } });
+
 function decide(over = {}) {
   return p.decidePush({
     mode: 'quote',
-    config: cfg,
+    config: calibrated,
     pushEnabled: true,
     provider: provider(),
+    score: 0.8,
     now: kunduzi,
     ...over,
   });
@@ -188,6 +195,85 @@ ok('alert rejimida qattiqroq limit (3/soat, 10/kun)', () => {
   assert.strictEqual(r1.digest, true);
   const r2 = decide({ mode: 'alert', provider: provider({ sentLastHour: 2 }) });
   assert.strictEqual(r2.send, true);
+});
+
+console.log('ҲАР МОСЛИК УЧУН PUSH ЧЕГАРАСИ (push.minScore, вариант 3)');
+ok('стандарт minScore = null (калибровка ўтказилмаган)', () => {
+  assert.strictEqual(DEFAULTS.push.minScore, null);
+});
+ok('калибровкасиз (minScore: null) quote push ҚИЛМАЙДИ, дайжест ҳам йўқ', () => {
+  const r = decide({ config: cfg, score: 0.99 });
+  assert.strictEqual(r.send, false);
+  assert.strictEqual(r.digest, false);
+  assert.strictEqual(r.reason, p.REASON.SCORE_NOT_CALIBRATED);
+});
+ok('чегарадан юқори (0.79 >= 0.70) -> push', () => {
+  const r = decide({ score: 0.79 });
+  assert.strictEqual(r.send, true);
+  assert.strictEqual(r.reason, p.REASON.SEND);
+});
+ok('чегарага АЙНАН тенг (0.70) -> push (>= қоидаси)', () => {
+  assert.strictEqual(decide({ score: 0.7 }).send, true);
+});
+ok('чегарадан бир оз паст (0.699) -> push йўқ, дайжест ҳам йўқ', () => {
+  const r = decide({ score: 0.699 });
+  assert.strictEqual(r.send, false);
+  assert.strictEqual(r.digest, false, 'паст мослик дайжестга ҳам тушмайди — фақат рўйхатда кўринади');
+  assert.strictEqual(r.reason, p.REASON.BELOW_MIN_SCORE);
+});
+ok('score йўқ/NaN/матн -> паст деб ҳисобланади (хавфсиз томон)', () => {
+  for (const bad of [undefined, null, NaN, 'yuqori']) {
+    const r = decide({ score: bad });
+    assert.strictEqual(r.send, false, `score=${String(bad)}`);
+    assert.strictEqual(r.reason, p.REASON.BELOW_MIN_SCORE);
+  }
+});
+ok('dispatch (курьер) чегарага ва калибровкага ТАЪСИР ҚИЛМАЙДИ', () => {
+  const r = p.decidePush({
+    mode: 'dispatch', config: cfg, pushEnabled: true, provider: provider(), now: kunduzi,
+  });
+  assert.strictEqual(r.send, true, 'score йўқ, minScore null — барибир push');
+});
+ok('alert ва recurring режимларига ҳам чегара қўлланади', () => {
+  for (const mode of ['alert', 'recurring']) {
+    assert.strictEqual(decide({ mode, score: 0.5 }).reason, p.REASON.BELOW_MIN_SCORE, mode);
+    assert.strictEqual(decide({ mode, score: 0.9 }).send, true, mode);
+  }
+});
+ok('паст мослик «фақат дайжест» ёки лимитдан ОЛДИН тўхтайди', () => {
+  const r1 = decide({ score: 0.5, provider: provider({ digestOnly: true }) });
+  assert.strictEqual(r1.reason, p.REASON.BELOW_MIN_SCORE);
+  assert.strictEqual(r1.digest, false);
+  const r2 = decide({ score: 0.5, provider: provider({ sentToday: 99, sentLastHour: 99 }) });
+  assert.strictEqual(r2.reason, p.REASON.BELOW_MIN_SCORE);
+  const r3 = decide({ score: 0.5, now: kechasi });
+  assert.strictEqual(r3.reason, p.REASON.BELOW_MIN_SCORE);
+});
+ok('чегарадан юқори + тинч соат -> дайжест (аввалги қоида сақланади)', () => {
+  const r = decide({ score: 0.9, now: kechasi });
+  assert.strictEqual(r.digest, true);
+  assert.strictEqual(r.reason, p.REASON.QUIET_HOURS);
+});
+ok('чегарадан юқори + лимит -> дайжест (аввалги қоида сақланади)', () => {
+  const r = decide({ score: 0.9, provider: provider({ sentLastHour: 5 }) });
+  assert.strictEqual(r.digest, true);
+  assert.strictEqual(r.reason, p.REASON.HOURLY_LIMIT);
+});
+ok('қарор тартиби: kill switch / optOut / alreadySeen чегарадан кучли', () => {
+  assert.strictEqual(
+    decide({ pushEnabled: false, score: 0.1 }).reason, p.REASON.PUSH_DISABLED_MODULE,
+  );
+  assert.strictEqual(
+    decide({ score: 0.1, provider: provider({ moduleOptOut: true }) }).reason,
+    p.REASON.PUSH_DISABLED_BY_PROVIDER,
+  );
+  assert.strictEqual(decide({ score: 0.1, alreadySeen: true }).reason, p.REASON.SEEN_ALREADY);
+  assert.strictEqual(decide({ score: 0.1, alreadyLogged: true }).reason, p.REASON.ALREADY_SENT);
+});
+ok('чегара 1.0 бўлса фақат мукаммал (1.0) score push олади', () => {
+  const strict = deepMerge(DEFAULTS, { push: { minScore: 1 } });
+  assert.strictEqual(decide({ config: strict, score: 0.999 }).send, false);
+  assert.strictEqual(decide({ config: strict, score: 1 }).send, true);
 });
 
 console.log('limitsForMode');

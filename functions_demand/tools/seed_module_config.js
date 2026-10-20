@@ -28,6 +28,7 @@ const MODULE = 'service';
 // viloyat uchun: `--region xorazm`. Eski qat'iy `xorazm` olib tashlandi
 // (ega 2026-10-20: qoidalar butun respublikada).
 const { moduleRegionKey } = require('../core/ids');
+const { parseMinScoreArg } = require('../core/calibration');
 
 const regionIdx = process.argv.indexOf('--region');
 // `--region` berilgan, lekin noto'g'ri bo'lsa JIM `all`ga tushmaydi: xato yozilgan
@@ -105,6 +106,41 @@ async function status(db) {
     !enabled ? 'O\'CHIQ'
       : (matching && !push ? 'SHADOW MODE' : (matching && push ? 'TO\'LIQ' : 'noma\'lum'))
   }`);
+
+  // Har moslik uchun push chegarasi — core/config.deepMerge bilan BIR XIL qoida:
+  // hudud hujjatidagi son `_all` dagidan ustun; `null` hech narsani bekor qilmaydi.
+  const pmOf = (doc) => {
+    const v = doc && doc.exists ? ((doc.data() || {}).push || {}).minScore : undefined;
+    return typeof v === 'number' ? v : null;
+  };
+  const minScore = pmOf(m) !== null ? pmOf(m) : pmOf(a);
+  console.log(`  push.minScore   : ${minScore === null ? 'null (KALIBROVKA YO\'Q)' : minScore}`);
+  if (minScore === null) {
+    console.log(
+      '  DIQQAT: chegara o\'lchab tanlanmaguncha quote/alert/recurring push ketmaydi'
+      + ' (`score_not_calibrated`).\n'
+      + '          Tartib: review_matches.js --csv -> `relevant` to\'ldirish -> '
+      + 'calibrate_push_threshold.js -> --min-score.',
+    );
+  }
+}
+
+/** `--min-score <0.01..1>` (yoki `off`): faqat `push.minScore` yoziladi (boshqa maydonlarga tegmaydi). */
+async function setMinScore(db, raw) {
+  const value = parseMinScoreArg(raw);
+  await db.collection('module_config').doc(MODULE_KEY).set({
+    push: { minScore: value },
+    module: MODULE,
+    regionId: REGION,
+    updatedAt: new Date(),
+    updatedBy: 'seed_module_config.js',
+  }, { merge: true });
+  console.log(`  yozildi: module_config/${MODULE_KEY}  push.minScore = ${value === null ? 'null (o\'chirildi)' : value}`);
+  if (value === null && REGION !== 'all') {
+    console.log('  Eslatma: `null` faqat shu hujjatning o\'z qiymatini tozalaydi; `_all` dagi son baribir amal qiladi.');
+  }
+  console.log('');
+  await status(db);
 }
 
 async function apply(db, presetName) {
@@ -143,12 +179,15 @@ async function apply(db, presetName) {
 
   if (arg === 'status') {
     await status(db);
+  } else if (arg === 'min-score') {
+    await setMinScore(db, process.argv[3]);
   } else if (PRESETS[arg]) {
     await apply(db, arg);
   } else {
     console.error(
       'Ishlatish:\n'
       + '  node tools/seed_module_config.js --status   # faqat o\'qish\n'
+      + '  node tools/seed_module_config.js --min-score 0.75 [--region xorazm]   # har moslik uchun push chegarasi (o\'lchab tanlangan)\n'
       + '  node tools/seed_module_config.js --shadow   # matching ON, push OFF\n'
       + '  node tools/seed_module_config.js --push     # push ON (darvozadan keyin)\n'
       + '  node tools/seed_module_config.js --kill     # butun yadroni to\'xtatish',

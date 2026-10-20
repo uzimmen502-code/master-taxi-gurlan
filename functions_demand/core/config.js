@@ -118,6 +118,23 @@ const DEFAULTS = {
    * o'chiradi. KO'RINISHGA tegilmaydi (inbox limitsiz), faqat PUSH chegaralanadi.
    */
   push: {
+    /**
+     * HAR MOSLIK UCHUN PUSH CHEGARASI (ega 2026-10-20, variant 3).
+     *
+     * «Push faqat talab taklifchiga mantiqan ~90 % mos bo'lsa ketsin.»
+     * `score` formula (kategoriya 40 % + yaqinlik 40 % + manba 20 %), «necha
+     * foiz mantiqan mos» EMAS: xizmat modulida eng yuqori score ≈ 0.85, ya'ni
+     * 0.90 ni to'g'ridan-to'g'ri qo'yib bo'lmaydi (hech qachon push ketmasdi).
+     * Shuning uchun chegara 50 moslikni qo'lda baholashdan O'LCHAB tanlanadi
+     * (`tools/calibrate_push_threshold.js`): qaysi score'dan yuqorisi «mantiqan
+     * mos» aniqligi >= 90 % bergan bo'lsa, shu qiymat.
+     *
+     *   null  — KALIBROVKA YO'Q: quote/alert/recurring push UMUMAN ketmaydi
+     *           (`score_not_calibrated`); dispatch (kuryer) ta'sirlanmaydi.
+     *   0..1  — score shundan past bo'lsa push YO'Q (`below_min_score`), lekin
+     *           moslik `demand_matches`da KO'RINADI (ko'rinish va push alohida).
+     */
+    minScore: null,
     quote: { perHour: 5, perDay: 20 },
     alert: { perHour: 3, perDay: 10 },
     /** dispatch — bitta kuryer kerak, har soniya muhim. Limit yo'q. */
@@ -266,6 +283,14 @@ function validateConfig(cfg) {
       if (cfg.waves[i].etaMaxMinutes <= cfg.waves[i - 1].etaMaxMinutes) {
         errors.push(`waves[${i}].etaMaxMinutes oldingisidan katta bo'lishi kerak`);
       }
+    }
+  }
+  const pm = (cfg.push || {}).minScore;
+  if (pm !== null && pm !== undefined) {
+    if (typeof pm !== 'number' || !Number.isFinite(pm) || pm <= 0 || pm > 1) {
+      errors.push(
+        `push.minScore null yoki (0, 1] oralig'ida bo'lishi kerak, hozir ${String(pm)}`,
+      );
     }
   }
   const q = (cfg.push || {}).quietHours || {};

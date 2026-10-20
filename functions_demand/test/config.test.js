@@ -135,6 +135,28 @@ ok('fairness juda kuchli bo`lsa xato', () => {
   assert.ok(cfg.validateConfig(bad).some((e) => /maxShift/.test(e)));
 });
 
+console.log('validateConfig — push.minScore (har moslik uchun push chegarasi)');
+ok('standart minScore = null (kalibrovka yo`q) — xato emas', () => {
+  assert.strictEqual(cfg.DEFAULTS.push.minScore, null);
+  assert.deepStrictEqual(cfg.validateConfig(cfg.DEFAULTS), []);
+});
+ok('to`g`ri qiymatlar: 0.01, 0.7, 1 — xato emas', () => {
+  for (const v of [0.01, 0.7, 1]) {
+    const c = cfg.deepMerge(cfg.DEFAULTS, { push: { minScore: v } });
+    assert.deepStrictEqual(cfg.validateConfig(c), [], `minScore=${v}`);
+  }
+});
+ok('noto`g`ri qiymatlar xato beradi: 0, manfiy, >1, matn, NaN', () => {
+  for (const v of [0, -0.1, 1.01, 'yuqori', NaN, Infinity]) {
+    const c = JSON.parse(JSON.stringify(cfg.DEFAULTS));
+    c.push.minScore = v;
+    assert.ok(
+      cfg.validateConfig(c).some((e) => /minScore/.test(e)),
+      `minScore=${String(v)} rad etilishi kerak`,
+    );
+  }
+});
+
 console.log('getModuleConfig');
 okAsync('hujjat yo`q -> standart qiymatlar', async () => {
   cfg.clearCache();

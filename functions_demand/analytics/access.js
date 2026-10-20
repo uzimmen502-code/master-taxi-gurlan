@@ -29,11 +29,11 @@ function fail(code, message) {
 }
 
 /**
- * Чақирувчи админми.
+ * Чақирувчи берилган роллардан биридами.
  *
  * @returns {Promise<string>} канон ID
  */
-async function assertAnalyticsAdmin(db, context) {
+async function assertRole(db, context, roles) {
   const callerId = callerIdFrom(context);
   if (!callerId) {
     throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
@@ -45,7 +45,7 @@ async function assertAnalyticsAdmin(db, context) {
       const snap = await db.collection('users').doc(id).get();
       if (!snap.exists) continue;
       const role = (snap.data() || {}).role || 'user';
-      if (ADMIN_ROLES.has(role)) return callerId;
+      if (roles.has(role)) return callerId;
     } catch (e) {
       console.error(`rol o'qilmadi (${id}): ${e.message}`);
     }
@@ -54,4 +54,20 @@ async function assertAnalyticsAdmin(db, context) {
   throw fail('permission-denied', 'Ruxsat yo\'q');
 }
 
-module.exports = { ADMIN_ROLES, assertAnalyticsAdmin };
+/** Чақирувчи админми (admin / superadmin / dispatcher). */
+function assertAnalyticsAdmin(db, context) {
+  return assertRole(db, context, ADMIN_ROLES);
+}
+
+/**
+ * ЯДРО КАЛИТИНИ ЎЗГАРТИРУВЧИ рол: фақат admin / superadmin.
+ * `dispatcher` ўқиши мумкин, лекин ҳудудни ёқиш/ўчириш — муҳим амал (41-банд).
+ */
+const CORE_CONFIG_WRITE_ROLES = new Set(['admin', 'superadmin']);
+function assertCoreConfigAdmin(db, context) {
+  return assertRole(db, context, CORE_CONFIG_WRITE_ROLES);
+}
+
+module.exports = {
+  ADMIN_ROLES, CORE_CONFIG_WRITE_ROLES, assertAnalyticsAdmin, assertCoreConfigAdmin,
+};

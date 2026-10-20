@@ -157,6 +157,19 @@ ok('noto`g`ri qiymatlar xato beradi: 0, manfiy, >1, matn, NaN', () => {
   }
 });
 
+console.log('validateConfig — enableMinProviders (hududni yoqish uchun taklifchi soni)');
+ok('standart N = 5; noto`g`ri qiymatlar xato: 0, kasr, matn, NaN', () => {
+  assert.strictEqual(cfg.DEFAULTS.enableMinProviders, 5);
+  for (const v of [0, 1.5, '5', NaN, null]) {
+    const c = JSON.parse(JSON.stringify(cfg.DEFAULTS));
+    c.enableMinProviders = v;
+    assert.ok(
+      cfg.validateConfig(c).some((e) => /enableMinProviders/.test(e)),
+      `enableMinProviders=${String(v)} rad etilishi kerak`,
+    );
+  }
+});
+
 console.log('getModuleConfig');
 okAsync('hujjat yo`q -> standart qiymatlar', async () => {
   cfg.clearCache();

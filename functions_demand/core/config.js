@@ -49,6 +49,13 @@ const DEFAULTS = {
   /** dispatch | quote | alert | recurring */
   mode: 'quote',
 
+  /**
+   * Hududni yoqish uchun KAMIDA nechta ishlay oladigan taklifchi kerak
+   * (variant A, ega 2026-10-20: N = 5). Admin «Talab yadrosi» shuni SERVERDA
+   * tekshiradi — ekran emas.
+   */
+  enableMinProviders: 5,
+
   // ─── Matching (Т-18) ────────────────────────────────────────────────
   /** Mos hisoblanish chegarasi. Bundan past nomzod MOS EMAS. */
   minScore: 0.35,
@@ -284,6 +291,11 @@ function validateConfig(cfg) {
         errors.push(`waves[${i}].etaMaxMinutes oldingisidan katta bo'lishi kerak`);
       }
     }
+  }
+  if (!Number.isInteger(cfg.enableMinProviders) || cfg.enableMinProviders < 1) {
+    errors.push(
+      `enableMinProviders butun son >= 1 bo'lishi kerak, hozir ${String(cfg.enableMinProviders)}`,
+    );
   }
   const pm = (cfg.push || {}).minScore;
   if (pm !== null && pm !== undefined) {

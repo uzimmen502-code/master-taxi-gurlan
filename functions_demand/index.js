@@ -44,6 +44,7 @@ const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
 const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
+const coreConfigAdminApi = require('./api/core_config_admin');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig, ALL_REGION } = require('./core/config');
@@ -240,6 +241,25 @@ exports.adminPlanShipmentRoute = fn.https.onCall(wrapCallable(
 /** ADMIN — muddati tugagan LEG'ni qayta ochish (matching qaytadan, payout o'zgarmaydi). */
 exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminReactivateLeg(logisticsDeps),
+));
+
+// ═══════════════════════════════════════════════════════════════════════
+// TALAB YADROSI — admin: hudud bo'yicha yoqish va push chegarasi
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ADMIN — hududni yoqish/o'chirish (off | shadow | push) va `push.minScore`
+ * (ega 2026-10-20). Faqat admin/superadmin. Server tekshiradi: hududda
+ * ishlay oladigan taklifchi >= 5; push uchun chegara o'lchab qo'yilgan bo'lishi
+ * shart. Har o'zgarish `admin_audit`ga (41-qoida), konfig bilan bir tranzaksiyada.
+ */
+exports.adminSetCoreConfig = fn.https.onCall(wrapCallable(
+  coreConfigAdminApi.makeAdminSetCoreConfig({ db }),
+));
+
+/** ADMIN (o'qish: admin/superadmin/dispatcher) — hududlar holati, taklifchilar, audit. */
+exports.adminGetCoreOverview = fn.https.onCall(wrapCallable(
+  coreConfigAdminApi.makeAdminGetCoreOverview({ db }),
 ));
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -42,6 +42,8 @@ const SUITES = [
   'supply_report.test.js',
   'notify_dispatch.test.js',
   'calibration.test.js',
+  'core_admin.test.js',
+  'core_config_admin_api.test.js',
 ];
 
 let failed = 0;

@@ -111,6 +111,13 @@ class IntentRouter {
   String? categoryGroup(String categoryId) =>
       _data.categories[categoryId]?.group;
 
+  /// Барча категориялар: ID → кўринадиган ном (фойдаланувчи тилида).
+  /// Таклифчи экранида «мен нима қиламан» чиплари учун — луғат қурилмада,
+  /// тармоқ сўрови йўқ. Луғат бўш бўлса — бўш харита.
+  Map<String, String> categoryNames(String langCode) => {
+        for (final id in _data.categories.keys) id: categoryName(id, langCode),
+      };
+
   bool get isEmpty => _data.keywords.isEmpty;
 
   /// Матнни таҳлил қилади.

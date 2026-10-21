@@ -4,6 +4,7 @@ import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
 import 'package:ava_gurlan/features/tv_market/services/tv_clip_cache_service.dart';
 import 'package:ava_gurlan/features/tv_market/services/tv_clip_compress.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/server_checkout.dart';
 
 TvClip _clip({
   String processingStatus = 'ready',
@@ -202,7 +203,7 @@ void main() {
       expect(TvClipCompress.trimToSeconds(601 * 1000), tvClipMaxUploadSeconds);
     });
 
-    test('сервердаги таом чегараси (functions/tv_clip_limits.js) клиентнинг tvClipItemMaxUploadSeconds билан мос', () {
+    test('сервердаги таом чегараси (functions/tv_clip_limits.js) клиентнинг tvClipItemMaxUploadSeconds билан мос', skip: serverParitySkip, () {
       final js = File('functions/tv_clip_limits.js').readAsStringSync();
       final m = RegExp(r'const TV_CLIP_ITEM_MAX_SECONDS = (\d+);').firstMatch(js);
       expect(m, isNotNull, reason: 'functions/tv_clip_limits.js: TV_CLIP_ITEM_MAX_SECONDS йўқ');
@@ -211,7 +212,7 @@ void main() {
       expect(kind!.group(1), 'restaurant_item', reason: 'сервер ва клиент бир хил боғлаш турини кутади');
     });
 
-    test('index.js transcode ШУ чегарани клипнинг linkKind\'идан олади (учала ffmpeg `-t` қиймати қотирилмаган)', () {
+    test('index.js transcode ШУ чегарани клипнинг linkKind\'идан олади (учала ffmpeg `-t` қиймати қотирилмаган)', skip: serverParitySkip, () {
       final js = File('functions/index.js').readAsStringSync();
       expect(js, contains("require('./tv_clip_limits')"));
       expect(js, contains('tvClipMaxSecondsFor(cur, TV_CLIP_MAX_SECONDS)'));
@@ -238,7 +239,7 @@ void main() {
       expect(TvClipCompress.trimToSeconds(5 * 60 * 1000, maxSeconds: tvClipRealtyMaxUploadSeconds), 60);
     });
 
-    test('сервердаги чегара (functions/tv_clip_limits.js) клиентнинг tvClipRealtyMaxUploadSeconds билан мос', () {
+    test('сервердаги чегара (functions/tv_clip_limits.js) клиентнинг tvClipRealtyMaxUploadSeconds билан мос', skip: serverParitySkip, () {
       final js = File('functions/tv_clip_limits.js').readAsStringSync();
       final m = RegExp(r'const TV_CLIP_REALTY_MAX_SECONDS = (\d+);').firstMatch(js);
       expect(m, isNotNull, reason: 'functions/tv_clip_limits.js: TV_CLIP_REALTY_MAX_SECONDS йўқ');

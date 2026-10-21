@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 RestaurantFormData _cafe({String? venue, bool required = true}) => RestaurantFormData(
       name: 'Gurlan osh',
@@ -49,7 +50,7 @@ void main() {
       }
     });
 
-    test('СЕРВЕР билан мослик: restaurantRegister `VENUE_CHOICES` ва индекс `VENUE_TYPES`', () {
+    test('СЕРВЕР билан мослик: restaurantRegister `VENUE_CHOICES` ва индекс `VENUE_TYPES`', skip: serverParitySkip, () {
       final orders = File('functions/restaurant_orders.js').readAsStringSync();
       final choices = RegExp(r"const VENUE_CHOICES = \[([^\]]*)\]").firstMatch(orders)![1]!;
       expect(RegExp(r"'(\w+)'").allMatches(choices).map((m) => m[1]).toList(), VenueType.choices);

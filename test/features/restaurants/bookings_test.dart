@@ -21,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 const _uid = '998912000001';
 
@@ -122,7 +123,7 @@ void main() {
       }
     });
 
-    test('SERVER BILAN MOSLIK: default pog\'onalar va qoidalar functions/restaurant_bookings.js DEFAULTS bilan bir xil', () {
+    test('SERVER BILAN MOSLIK: default pog\'onalar va qoidalar functions/restaurant_bookings.js DEFAULTS bilan bir xil', skip: serverParitySkip, () {
       final src = File('functions/restaurant_bookings.js').readAsStringSync();
       final tiers = RegExp(r'Object\.freeze\(\{ upTo: (\d+), fee: (\d+) \}\)').allMatches(src).map((m) => (int.parse(m[1]!), int.parse(m[2]!))).toList();
       expect(tiers, BookingConfig.defaultTiers.map((t) => (t.upTo, t.fee)).toList());

@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 final _now = DateTime(2026, 10, 19, 12, 0);
 
@@ -35,7 +36,7 @@ void main() {
   String tr(String key) => l10n.tr(key);
 
   group('Preorder — сервер билан мослик', () {
-    test('чегаралар сервердаги MIN_LEAD_MIN / MAX_DAYS билан бир хил (эга: 60 дақиқа / 7 кун)', () {
+    test('чегаралар сервердаги MIN_LEAD_MIN / MAX_DAYS билан бир хил (эга: 60 дақиқа / 7 кун)', skip: serverParitySkip, () {
       final js = File('functions/restaurant_preorder.js').readAsStringSync();
       expect(int.parse(RegExp(r'const MIN_LEAD_MIN = (\d+);').firstMatch(js)!.group(1)!), Preorder.minLeadMin);
       expect(int.parse(RegExp(r'const MAX_DAYS = (\d+);').firstMatch(js)!.group(1)!), Preorder.maxDays);

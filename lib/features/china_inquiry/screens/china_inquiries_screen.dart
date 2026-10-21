@@ -6,7 +6,8 @@ import '../data/china_inquiry_repository.dart';
 /// «Менинг сўровларим» (Хитой бозори). Таклифлар сўров ичида; таъминотчи номи/ички изоҳ
 /// мижозга умуман келмайди (сервер `offers` нусхаси таъминотчисиз).
 class ChinaInquiriesScreen extends StatelessWidget {
-  const ChinaInquiriesScreen({super.key, required this.phone, ChinaInquiryRepository? repository})
+  const ChinaInquiriesScreen(
+      {super.key, required this.phone, ChinaInquiryRepository? repository})
       : _repo = repository;
 
   final String phone;
@@ -24,9 +25,13 @@ class ChinaInquiriesScreen extends StatelessWidget {
             debugPrint('[ChinaInquiries] ${snap.error}');
             return Center(child: Text(context.tr('china_inq_load_failed')));
           }
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final items = snap.data!;
-          if (items.isEmpty) return Center(child: Text(context.tr('china_inq_empty')));
+          if (items.isEmpty) {
+            return Center(child: Text(context.tr('china_inq_empty')));
+          }
           return ListView.separated(
             padding: const EdgeInsets.all(12),
             itemCount: items.length,
@@ -35,7 +40,8 @@ class ChinaInquiriesScreen extends StatelessWidget {
               final q = items[i];
               return Card(
                 child: ListTile(
-                  title: Text('${q.refNo} · ${q.text}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                  title: Text('${q.refNo} · ${q.text}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                     context.tr('china_inq_status_${q.status}'),
                     style: TextStyle(color: _statusColor(q.status)),
@@ -44,7 +50,8 @@ class ChinaInquiriesScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => ChinaInquiryDetailScreen(inquiry: q, repository: repo),
+                      builder: (_) => ChinaInquiryDetailScreen(
+                          inquiry: q, repository: repo),
                     ),
                   ),
                 ),
@@ -70,13 +77,15 @@ Color _statusColor(String s) {
 }
 
 class ChinaInquiryDetailScreen extends StatefulWidget {
-  const ChinaInquiryDetailScreen({super.key, required this.inquiry, required this.repository});
+  const ChinaInquiryDetailScreen(
+      {super.key, required this.inquiry, required this.repository});
 
   final ChinaInquiry inquiry;
   final ChinaInquiryRepository repository;
 
   @override
-  State<ChinaInquiryDetailScreen> createState() => _ChinaInquiryDetailScreenState();
+  State<ChinaInquiryDetailScreen> createState() =>
+      _ChinaInquiryDetailScreenState();
 }
 
 class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
@@ -89,9 +98,11 @@ class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
         title: Text(context.tr('china_inq_cancel_confirm')),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('china_inq_no'))),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(context.tr('china_inq_no'))),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true), child: Text(context.tr('china_inq_yes'))),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(context.tr('china_inq_yes'))),
         ],
       ),
     );
@@ -104,8 +115,8 @@ class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
       debugPrint('[ChinaInquiryDetail] cancel $e');
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(context.tr('china_inq_cancel_failed'))));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(context.tr('china_inq_cancel_failed'))));
     }
   }
 
@@ -118,7 +129,8 @@ class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(context.tr('china_inq_status_${q.status}'),
-              style: TextStyle(fontWeight: FontWeight.w600, color: _statusColor(q.status))),
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, color: _statusColor(q.status))),
           const SizedBox(height: 8),
           Text(q.text),
           if (q.quantity.isNotEmpty) ...[
@@ -126,7 +138,8 @@ class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
             Text(q.quantity, style: const TextStyle(color: Colors.black54)),
           ],
           const Divider(height: 32),
-          Text(context.tr('china_inq_offers'), style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('china_inq_offers'),
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           StreamBuilder<List<ChinaOffer>>(
             stream: widget.repository.watchOffers(q.id),
@@ -136,14 +149,17 @@ class _ChinaInquiryDetailScreenState extends State<ChinaInquiryDetailScreen> {
                 return Text(context.tr('china_inq_load_failed'));
               }
               final offers = snap.data ?? const <ChinaOffer>[];
-              if (offers.isEmpty) return Text(context.tr('china_inq_offers_none'));
+              if (offers.isEmpty) {
+                return Text(context.tr('china_inq_offers_none'));
+              }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (final o in offers) _OfferCard(offer: o),
                   const SizedBox(height: 4),
                   Text(context.tr('china_inq_offers_note'),
-                      style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                      style:
+                          const TextStyle(color: Colors.black54, fontSize: 12)),
                 ],
               );
             },
@@ -170,36 +186,46 @@ class _OfferCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final muted = offer.withdrawn;
     final style = muted
-        ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.black45)
+        ? const TextStyle(
+            decoration: TextDecoration.lineThrough, color: Colors.black45)
         : null;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context
-                  .tr('china_inq_offer_price')
-                  .replaceAll('{price}', offer.priceText)
-                  .replaceAll('{cur}', offer.currency),
-              style: (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.w600),
-            ),
-            if (offer.minOrderQty != null)
+    return SizedBox(
+      width: double.infinity,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                context.tr('china_inq_offer_moq').replaceAll('{n}', '${offer.minOrderQty}'),
-                style: style,
+                context
+                    .tr('china_inq_offer_price')
+                    .replaceAll('{price}', offer.priceText)
+                    .replaceAll('{cur}', offer.currency),
+                style: (style ?? const TextStyle())
+                    .copyWith(fontWeight: FontWeight.w600),
               ),
-            if (offer.leadTimeDays != null)
-              Text(
-                context.tr('china_inq_offer_lead').replaceAll('{n}', '${offer.leadTimeDays}'),
-                style: style,
-              ),
-            if (offer.customerNote.isNotEmpty) Text(offer.customerNote, style: style),
-            if (muted)
-              Text(context.tr('china_inq_offer_withdrawn'),
-                  style: const TextStyle(color: Colors.black54)),
-          ],
+              if (offer.minOrderQty != null)
+                Text(
+                  context
+                      .tr('china_inq_offer_moq')
+                      .replaceAll('{n}', '${offer.minOrderQty}'),
+                  style: style,
+                ),
+              if (offer.leadTimeDays != null)
+                Text(
+                  context
+                      .tr('china_inq_offer_lead')
+                      .replaceAll('{n}', '${offer.leadTimeDays}'),
+                  style: style,
+                ),
+              if (offer.customerNote.isNotEmpty)
+                Text(offer.customerNote, style: style),
+              if (muted)
+                Text(context.tr('china_inq_offer_withdrawn'),
+                    style: const TextStyle(color: Colors.black54)),
+            ],
+          ),
         ),
       ),
     );

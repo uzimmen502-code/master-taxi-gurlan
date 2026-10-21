@@ -29,7 +29,7 @@ import '../customer_confirm/widgets/customer_confirm_banner.dart';
 import 'widgets/home_info_ticker.dart';
 import '../../core/widgets/zone_gate.dart';
 import '../ads/models/ad_model.dart';
-import '../ads/screens/ad_details_screen.dart';
+import '../ads/screens/ad_details_route.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../ads/screens/create_ad_screen.dart';
 import '../profile/screens/news_hub_screen.dart';
@@ -1081,12 +1081,13 @@ class _HomeViewState extends State<_HomeView> {
   /// Илгари бу ерда эълон объекти `(_)` билан ташлаб юбориларди ва
   /// модулнинг умумий рўйхати очиларди — фойдаланувчи босган эълонини
   /// рўйхатдан қайтадан қидиришга мажбур эди.
-  Future<void> _openMarketAd(AdModel ad) async {
+  Future<void> _openMarketAd(AdModel ad, List<AdModel> shelf) async {
     if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
       _showTezKundaSnack();
       return;
     }
-    await _push(AdDetailsScreen(ad: ad));
+    // Бўлимдаги эълонлар орасида суриб ўтиш мумкин (эга талаби 2026-10-21).
+    await _push(adDetailsFor(ad, shelf));
   }
 
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.

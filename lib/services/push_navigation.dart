@@ -28,6 +28,7 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
+import '../features/china_inquiry/screens/china_inquiries_screen.dart';
 import '../features/profile/screens/wallet_screen.dart';
 import '../features/realty/screens/my_realty_listings_screen.dart';
 import '../features/realty/screens/realty_alerts_screen.dart';
@@ -340,6 +341,19 @@ class PushNavigation {
         ),
       );
       return;
+    }
+
+    // Хитой бозори: «сўровингизга таклиф келди» (functions/china_inquiries.js,
+    // `screen: 'china_inquiry'`). Телефон номаълум бўлса — аввалги умумий йўл.
+    if (screen == 'china_inquiry' || type == 'china_quote') {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (phone.length >= 12) {
+        await nav.push(
+          MaterialPageRoute(builder: (_) => ChinaInquiriesScreen(phone: phone)),
+        );
+        return;
+      }
     }
 
     // ── Ҳамён (telegram_wallet_bot.js) ───────────────────────────────

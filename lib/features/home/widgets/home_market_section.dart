@@ -28,7 +28,8 @@ class HomeMarketSection extends StatefulWidget {
   });
 
   final VoidCallback onOpenAll;
-  final void Function(AdModel ad) onOpenAd;
+  /// Босилган эълон ва бўлимдаги БАРЧА эълонлар (тафсилотда суриб ўтиш учун).
+  final void Function(AdModel ad, List<AdModel> shelf) onOpenAd;
 
   /// Икки қатор тўлиши учун 5 эмас, 10 та (қаранг: [AvaProductShelf]).
   static const limit = 10;
@@ -149,7 +150,9 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             // Эълоннинг ЎЗ тумани (аввал кўраётганнинг тумани ёзиларди —
             // ҳудудсиз эски эълонлар ҳам «Гурлан» кўринарди, geo аудит).
             footnote: _districtNote(ad.districtId),
-            onTap: () => widget.onOpenAd(ad),
+            // Нусха: тафсилот очиқ турганда бўлим янги эълон қўшса, суриш
+            // рўйхати силжиб кетмасин.
+            onTap: () => widget.onOpenAd(ad, List<AdModel>.of(_items)),
             image: cover.startsWith('http')
                 ? ColoredBox(
                     color: context.ava.surface2,

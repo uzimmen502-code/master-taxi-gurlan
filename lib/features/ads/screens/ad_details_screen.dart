@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_image_slider.dart';
+import 'ad_details_route.dart';
 import 'cheap_products_screen.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
@@ -426,7 +427,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => AdDetailsScreen(ad: similar),
+                                      // Ўхшашлар орасида ҳам сурилади (аудит,
+                                      // эга талаби 2026-10-21).
+                                      builder: (_) => adDetailsFor(similar, items),
                                     ),
                                   );
                                 },

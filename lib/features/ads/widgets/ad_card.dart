@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
-import '../screens/ad_details_screen.dart';
-import '../screens/ad_swipe_screen.dart';
+import '../screens/ad_details_route.dart';
 import 'market_grid.dart';
 
 /// Grid tile for cheap product listing.
@@ -20,14 +19,9 @@ class AdCard extends StatelessWidget {
   final List<AdModel> catalog;
 
   void _open(BuildContext context) {
-    final i = catalog.indexWhere((e) => e.id == ad.id);
     Navigator.push(
       context,
-      MaterialPageRoute<void>(
-        builder: (_) => i < 0
-            ? AdDetailsScreen(ad: ad)
-            : AdSwipeScreen(ads: catalog, initialIndex: i),
-      ),
+      MaterialPageRoute<void>(builder: (_) => adDetailsFor(ad, catalog)),
     );
   }
 

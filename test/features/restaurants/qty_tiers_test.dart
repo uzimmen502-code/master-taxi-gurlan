@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 QtyTier t(int q, int p) => QtyTier(minQty: q, price: p);
 
@@ -26,13 +27,13 @@ void main() {
   String tr(String key) => l10n.tr(key);
 
   group('QtyTiers — сервер билан мослик', () {
-    test('чегаралар сервердаги MAX_TIERS / MAX_TIER_QTY билан бир хил', () {
+    test('чегаралар сервердаги MAX_TIERS / MAX_TIER_QTY билан бир хил', skip: serverParitySkip, () {
       final js = File('functions/restaurant_qty_tiers.js').readAsStringSync();
       expect(int.parse(RegExp(r'const MAX_TIERS = (\d+);').firstMatch(js)!.group(1)!), QtyTiers.maxTiers);
       expect(int.parse(RegExp(r'const MAX_TIER_QTY = (\d+);').firstMatch(js)!.group(1)!), QtyTiers.maxMinQty);
     });
 
-    test('rules: поғона чегаралари (≤3, minQty ≤ 500, биринчиси ≥ 2) клиентдагига тенг', () {
+    test('rules: поғона чегаралари (≤3, minQty ≤ 500, биринчиси ≥ 2) клиентдагига тенг', skip: serverParitySkip, () {
       final rules = File('firestore.rules').readAsStringSync();
       expect(rules, contains('d.qtyTiers.size() <= 3'));
       expect(rules, contains('t.minQty <= 500'));

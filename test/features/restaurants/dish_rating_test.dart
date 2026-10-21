@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 OrderModel _order({
   String restaurantStatus = 'delivered',
@@ -91,7 +92,7 @@ void main() {
       expect(dishRatingTimeLeft(t0.add(const Duration(minutes: 1)), t0), Duration.zero);
     });
 
-    test('klient muddati serverdagi RATING_WINDOW_MIN bilan bir xil', () {
+    test('klient muddati serverdagi RATING_WINDOW_MIN bilan bir xil', skip: serverParitySkip, () {
       final js = File('functions/restaurant_dish_ratings.js').readAsStringSync();
       final m = RegExp(r'const RATING_WINDOW_MIN = (\d+);').firstMatch(js);
       expect(m, isNotNull, reason: 'functions/restaurant_dish_ratings.js: RATING_WINDOW_MIN yo\'q');

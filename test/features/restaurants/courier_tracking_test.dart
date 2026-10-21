@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 final _t0 = DateTime(2026, 10, 19, 12);
 
@@ -83,7 +84,7 @@ void main() {
       expect(CourierTracking.isBreadOrMarket(b('restaurant', '')), isFalse);
     });
 
-    test('нон/бозор ҳолатлари firestore.rules liveOrderActive билан бир хил', () {
+    test('нон/бозор ҳолатлари firestore.rules liveOrderActive билан бир хил', skip: serverParitySkip, () {
       final rules = File('firestore.rules').readAsStringSync();
       final fn = RegExp(r'function liveOrderActive[\s\S]*?\n    \}').firstMatch(rules)!.group(0)!;
       final lists = RegExp(r"in \[([^\]]*)\]").allMatches(fn).map((m) => RegExp(r"'(\w+)'").allMatches(m.group(1)!).map((x) => x.group(1)!).toList()).toList();
@@ -91,7 +92,7 @@ void main() {
       expect(lists[1].toSet(), {'bread', 'platform'});
       expect(lists[2].toSet(), CourierTracking.deliveryFulfillment.toSet());
     });
-    test('фаол ҳолатлар firestore.rules `liveOrderActive` билан бир хил тўплам', () {
+    test('фаол ҳолатлар firestore.rules `liveOrderActive` билан бир хил тўплам', skip: serverParitySkip, () {
       final rules = File('firestore.rules').readAsStringSync();
       final m = RegExp(r"function liveOrderActive[\s\S]*?in \[([^\]]*)\]").firstMatch(rules)!.group(1)!;
       final inRules = RegExp(r"'(\w+)'").allMatches(m).map((x) => x.group(1)!).toSet();

@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'restaurants_l10n_harness.dart';
+import '../../support/server_checkout.dart';
 
 const _lat = 41.8406;
 const _lng = 60.3917;
@@ -170,9 +171,10 @@ void main() {
     });
   });
 
-  group('Teglar va bo\'limlar: SERVER bilan moslik', () {
-    final server = File('functions/restaurant_dish_index.js').readAsStringSync();
-    final rules = File('firestore.rules').readAsStringSync();
+  group('Teglar va bo\'limlar: SERVER bilan moslik', skip: serverParitySkip, () {
+    // Guruh tanasi e'lon qilinganda bajariladi (skip bo'lsa ham): fayl yo'q bo'lsa yiqilmasin.
+    final server = serverParitySkip == null ? File('functions/restaurant_dish_index.js').readAsStringSync() : '';
+    final rules = serverParitySkip == null ? File('firestore.rules').readAsStringSync() : '';
 
     test('DishTag.all = serverdagi DISH_TAGS = rules tags.hasOnly', () {
       final seasonKeys = RegExp(r"SEASON_KEYS = Object\.freeze\(\[([^\]]*)\]").firstMatch(server)![1]!.split(',').map((s) => s.trim().replaceAll("'", '')).toList();

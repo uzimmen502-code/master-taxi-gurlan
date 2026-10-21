@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_sections.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../support/server_checkout.dart';
 
 final _now = DateTime(2026, 10, 19, 12);
 const _cfg = RestaurantSectionsConfig();
@@ -53,14 +54,14 @@ List<RankedDish> _rank(List<SectionDish> d, RestaurantSection s, {RestaurantSect
 
 void main() {
   group('Сервер билан мослик', () {
-    test('бўлим калитлари сервердаги SECTION билан бир хил тўплам', () {
+    test('бўлим калитлари сервердаги SECTION билан бир хил тўплам', skip: serverParitySkip, () {
       final js = File('functions/restaurant_dish_index.js').readAsStringSync();
       final block = RegExp(r'const SECTION = Object\.freeze\(\{([^}]*)\}\)').firstMatch(js)!.group(1)!;
       final server = RegExp(r"(\w+):\s*'(\w+)'").allMatches(block).map((m) => m.group(2)!).toSet();
       expect(RestaurantSection.values.map((s) => s.key).toSet(), server);
     });
 
-    test('созлама бошланғич қийматлари сервердаги DEFAULTS билан бир хил (эга: 5.0 / 5 / 30 / 3)', () {
+    test('созлама бошланғич қийматлари сервердаги DEFAULTS билан бир хил (эга: 5.0 / 5 / 30 / 3)', skip: serverParitySkip, () {
       final js = File('functions/restaurant_sections_config.js').readAsStringSync();
       final block = RegExp(r'const DEFAULTS = Object\.freeze\(\{([^}]*)\}\)').firstMatch(js)!.group(1)!;
       final m = {for (final x in RegExp(r'(\w+):\s*([\d.]+)').allMatches(block)) x.group(1)!: double.parse(x.group(2)!)};

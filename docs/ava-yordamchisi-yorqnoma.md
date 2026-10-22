@@ -53,7 +53,7 @@ Firebase Console → Firestore → `settings` → `assistant` ҳужжати (й
 | `reasoningEffort` | `low` | gpt-5*/o* учун; `minimal`/`low`/`medium` |
 | `perMinuteLimit` | `8` | тезлик чегараси |
 | `maxHistoryMessages` | `12` | суҳбат контексти (охирги N хабар) |
-| `packages` | 7/15/30 кун | `[{id, days, price, promo}]` массив |
+| `packages` | бир марталик `once` — 25 000 сўм, 3650 кун (эга қарори, 2026-09-22) | `[{id, days, price, promo, oneTime}]` массив. Майдон БЎЛМАСА ёки бўш бўлса — default (`once`) ишлайди. Эски 7/15/30 кунликни қайтариш фақат эга қарори билан |
 | `systemPrompt` | код ичидаги | тўлиқ алмаштиради (эҳтиёт бўлинг) |
 | `extraKnowledge` | — | prompt охирига қўшилади — янги модул/акция ҳақида қисқа матн |
 

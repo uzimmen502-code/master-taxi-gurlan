@@ -19,6 +19,7 @@ import '../../../repositories/orders_repository.dart';
 import '../../../repositories/trips_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
+import '../../orders/screens/orders_screen.dart';
 import '../../seller/screens/seller_pos_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../../realty/screens/my_realty_listings_screen.dart';
@@ -34,9 +35,8 @@ import '../../demand_offer/presentation/activity/demand_activity_entry.dart';
 /// Профил — аватар, манзил, фойдаланувчи маълумотлари, роль панеллари.
 /// Сотиш, хабарлар, чат, кошелёк — бош экран пастида (HomeBottomBar).
 ///
-/// Эски "Сафарлар тарихи" ва "Буюртмалар тарихи" — олиб ташланди.
-/// Маълумот сақланиб қолади, лекин шу йерда кўрсатилмайди (профил —
-/// "сервислар маркази", тарихни ўз модулдан кўрилади).
+/// Эски "Сафарлар тарихи" — олиб ташланди (тарих ўз модулидан кўрилади).
+/// «Буюртмалар» (OrdersScreen) 2026-10-22 дан «Фаолият» бўлимида қайта уланди.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
@@ -270,6 +270,17 @@ class _ProfileViewState extends State<_ProfileView> {
             CabinetSection(
               title: context.tr('cab_sec_activity'),
               children: [
+                // Мижознинг буюртмалари (нон, таом, гилам, сут) — Фаол/Тугаган.
+                // Экран тайёр эди, лекин ҳеч қаердан очилмасди (2026-10-22
+                // аудит); эга уланишини сўради. Номи — мавжуд `bottom_orders`.
+                CabinetRow(
+                  icon: Icons.receipt_long_rounded,
+                  title: context.tr('bottom_orders'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const OrdersScreen()),
+                  ),
+                ),
                 // ТАЛАБ ВА ТАКЛИФЛАР (эга қарори, 2026-10-03): пастки
                 // навигацияга янги таб қўшилмайди — бўлим шу ерда туради.
                 if (demandUid.isNotEmpty)

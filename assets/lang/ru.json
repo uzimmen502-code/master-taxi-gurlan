@@ -379,7 +379,7 @@
   "create_ad_name_label": "Название товара *",
   "create_ad_name_short": "Минимум 3 символа",
   "create_ad_phone_note": "Номер звонка — телефон из профиля. Покупатель свяжется по нему.",
-  "create_ad_photos_hint": "1–5 шт. Первое станет обложкой.",
+  "create_ad_photos_hint": "1–7 шт. Первое станет обложкой.",
   "create_ad_photos_label": "Фото товара",
   "create_ad_price_digits": "Только цифры",
   "create_ad_price_hint": "Например: 25000",

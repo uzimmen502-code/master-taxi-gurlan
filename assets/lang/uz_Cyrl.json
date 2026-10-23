@@ -3074,6 +3074,7 @@
   "restaurants_err_RESTAURANT_NOT_FOUND": "Ресторан топилмади.",
   "restaurants_err_RESTAURANT_NOT_APPROVED": "Ресторан ҳозирча буюртма қабул қилмайди.",
   "restaurants_err_RESTAURANT_PAUSED": "Ресторан вақтинча тўхтатилган. Кейинроқ уриниб кўринг.",
+  "restaurants_err_RESTAURANT_DEMO": "Бу намуна ресторан — буюртма қабул қилмайди. Ҳақиқий ресторанлар рўйхатдан ўтгач намуналар ўчади.",
   "restaurants_err_RESTAURANT_CLOSED": "Ресторан ҳозир ёпиқ.",
   "restaurants_err_OWN_RESTAURANT": "Ўз ресторанингиздан буюртма бериб бўлмайди.",
   "restaurants_err_PICKUP_NOT_AVAILABLE": "Бу ресторанда олиб кетиш йўқ.",

@@ -58,8 +58,7 @@ async function seedDemos(db, admin, { apply = false } = {}) {
 
 async function realCounts(db) {
   const approvedAll = (await db.collection(demo.RESTAURANTS).where('status', '==', 'approved').count().get()).data().count;
-  const approvedHome = (await db.collection(demo.RESTAURANTS)
-    .where('status', '==', 'approved').where('venueType', '==', 'home').count().get()).data().count;
+  const approvedHome = await demo.countApprovedHome(db);
   return { home: approvedHome, cafe: approvedAll - approvedHome };
 }
 

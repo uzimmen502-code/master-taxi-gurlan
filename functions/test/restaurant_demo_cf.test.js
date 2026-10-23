@@ -30,9 +30,12 @@ async function clearEmulator() {
 const exists = async (id) => (await db.collection('restaurants').doc(id).get()).exists;
 const ids = async () => (await db.collection('restaurants').where('isDemo', '==', true).get()).docs.map((d) => d.id).sort();
 
-async function addReal(id, venueType, status = 'approved') {
+/** `venueType` 'home' → legalType individual (restaurantRegister qoidasi); `legacyHome` — eski hujjat: legalType bor, venueType YO'Q. */
+async function addReal(id, venueType, status = 'approved', { legacyHome = false } = {}) {
+  const home = venueType === 'home' || legacyHome;
   await db.collection('restaurants').doc(id).set({
-    name: id, status, ...(venueType ? { venueType } : {}), ownerUid: `owner_${id}`, lat: 41.3, lng: 69.2,
+    name: id, status, legalType: home ? 'individual' : 'llc',
+    ...(venueType && !legacyHome ? { venueType } : {}), ownerUid: `owner_${id}`, lat: 41.3, lng: 69.2,
   });
 }
 
@@ -74,6 +77,16 @@ async function main() {
       assert.strictEqual(d.items.length, 5);
       assert.ok(d.items.every((i) => ['c1', 'c2'].includes(i.data.categoryId)));
     }
+  });
+
+  await check('K1 kindOf: legalType individual = uy oshpazi (venueType bo\'lmasa ham); yatt/llc = kafe; bo\'sh = kafe', () => {
+    assert.strictEqual(demo.kindOf({ legalType: 'individual' }), 'home');
+    assert.strictEqual(demo.kindOf({ legalType: 'individual', venueType: 'home' }), 'home');
+    assert.strictEqual(demo.kindOf({ venueType: 'home' }), 'home');
+    assert.strictEqual(demo.kindOf({ legalType: 'llc' }), 'cafe');
+    assert.strictEqual(demo.kindOf({ legalType: 'yatt', venueType: 'chaikhana' }), 'cafe');
+    assert.strictEqual(demo.kindOf({}), 'cafe');
+    assert.strictEqual(demo.kindOf(null), 'cafe');
   });
 
   await check('P3 har bir namuna taomi uchun bosh sahifa indeksi (restaurant_dish_index) hujjati hosil bo\'ladi', () => {
@@ -166,7 +179,8 @@ async function main() {
 
   await check('C5 uy ovqatchilari: 3 ta haqiqiy approved uy ovqatchisi — uy namunalari o\'chadi', async () => {
     await addReal('real_home_1', 'home');
-    await addReal('real_home_2', 'home');
+    // ESKI hujjat (prodagi 2 ta shunday): legalType individual, venueType YO'Q — uy oshpazi sifatida sanalishi shart.
+    await addReal('real_home_2', undefined, 'approved', { legacyHome: true });
     assert.deepStrictEqual((await demo.cleanupDemos(db, { admin })).removed, []);
     await addReal('real_home_3', 'home');
     const out = await demo.cleanupDemos(db, { admin });

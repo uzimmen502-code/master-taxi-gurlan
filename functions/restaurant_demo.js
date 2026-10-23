@@ -167,9 +167,20 @@ function buildDemoDocs(spec, { ts, pausedUntil }) {
   return { restaurant, categories, items };
 }
 
-/** Тур: уй ошпази (`venueType: 'home'`) ёки кафе-ресторан (қолган ҳаммаси, эски ҳужжатлар ҳам). */
+/**
+ * Тур: уй ошпази ёки кафе-ресторан. `legalType: 'individual'` ⇔ уй ошпази (`restaurantRegister`: individual бўлса
+ * `venueType` ДОИМ `home`); эски ҳужжатларда `venueType` ЙЎҚ, лекин `legalType` бор — шунинг учун `legalType`
+ * асосий белги (прода 2 та шундай эски уй ошпази аниқланди), `venueType === 'home'` — захира.
+ */
 function kindOf(data) {
-  return data && data.venueType === 'home' ? 'home' : 'cafe';
+  if (!data) return 'cafe';
+  return data.legalType === 'individual' || data.venueType === 'home' ? 'home' : 'cafe';
+}
+
+/** Тасдиқланган уй ошпазлари сони (`legalType == individual`; эски ҳужжатларни ҳам тутади). */
+async function countApprovedHome(db) {
+  return (await db.collection(RESTAURANTS)
+    .where('status', '==', 'approved').where('legalType', '==', 'individual').count().get()).data().count;
 }
 
 /**
@@ -181,8 +192,7 @@ async function evaluate(db) {
   const demos = demoSnap.docs.map((d) => ({ id: d.id, ref: d.ref, data: d.data() }));
   if (demos.length === 0) return { demos, real: null, kindsToRemove: [] };
   const approvedAll = (await db.collection(RESTAURANTS).where('status', '==', 'approved').count().get()).data().count;
-  const approvedHome = (await db.collection(RESTAURANTS)
-    .where('status', '==', 'approved').where('venueType', '==', 'home').count().get()).data().count;
+  const approvedHome = await countApprovedHome(db);
   const demoApproved = demos.filter((d) => d.data.status === 'approved');
   const demoHome = demoApproved.filter((d) => kindOf(d.data) === 'home').length;
   const demoCafe = demoApproved.length - demoHome;
@@ -249,6 +259,6 @@ function attachRestaurantDemoCleanup(exportsObj, deps) {
 }
 
 module.exports = {
-  attachRestaurantDemoCleanup, cleanupDemos, evaluate, shouldEvaluate, buildDemoDocs, kindOf,
+  attachRestaurantDemoCleanup, cleanupDemos, evaluate, countApprovedHome, shouldEvaluate, buildDemoDocs, kindOf,
   DEMO_SET, DEMO_BATCH, REAL_THRESHOLD, PAUSED_UNTIL_ISO, OWNER_UID, NOTICE, RESTAURANTS,
 };

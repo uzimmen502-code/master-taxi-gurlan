@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
@@ -100,12 +103,41 @@ class _EvChargingMapView extends StatefulWidget {
   State<_EvChargingMapView> createState() => _EvChargingMapViewState();
 }
 
-class _EvChargingMapViewState extends State<_EvChargingMapView> {
+class _EvChargingMapViewState extends State<_EvChargingMapView>
+    with WidgetsBindingObserver {
   late final EvNavigationSessionController _nav;
+  StreamSubscription<ServiceStatus>? _gpsStatusSub;
+
+  /// «GPS ўчиқ» хабари кўрсатилган бўлса, жойлашувни қайта аниқлайди — GPS ёқилгандан кейин хабар кетади.
+  void _retryLocationIfNeeded() {
+    if (!mounted) return;
+    final controller = context.read<EvChargingMapController>();
+    if (controller.error != null) controller.refreshLocation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Созламалардан (GPS/рухсат) қайтганда.
+    if (state == AppLifecycleState.resumed) _retryLocationIfNeeded();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Тезкор панелдан GPS ёқилса — илова ёпилмайди, шунинг учун хизмат ҳолатини ҳам тинглаймиз.
+    if (!kIsWeb) {
+      try {
+        _gpsStatusSub = Geolocator.getServiceStatusStream().listen(
+          (status) {
+            if (status == ServiceStatus.enabled) _retryLocationIfNeeded();
+          },
+          onError: (Object _) {},
+        );
+      } catch (_) {
+        // Платформада қўллаб-қувватланмаса — фақат lifecycle ишлайди.
+      }
+    }
     EvChargingRulesHolder.load();
     _nav = EvNavigationSessionController()
       ..onArrived = (station) {
@@ -119,6 +151,8 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _gpsStatusSub?.cancel();
     _nav.dispose();
     super.dispose();
   }

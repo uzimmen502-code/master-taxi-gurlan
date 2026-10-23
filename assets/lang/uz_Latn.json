@@ -3946,5 +3946,8 @@
   "business_cat_it_media": "IT, reklama, aloqa",
   "business_cat_other": "Boshqa",
   "home_create_business_map": "Biznesimni xaritaga qo'shish",
-  "home_create_business_map_sub": "Do'kon, kafe yoki xizmat joyingiz — mijozlar topadi"
+  "home_create_business_map_sub": "Do'kon, kafe yoki xizmat joyingiz — mijozlar topadi",
+  "wholesale_pick_on_map": "Xaritada belgilash",
+  "wholesale_location_required_hint": "Joyni xaritada belgilang yoki GPS ishlating (shart)",
+  "wholesale_err_location_required": "Joyni xaritada belgilang (O'zbekiston ichida)"
 }

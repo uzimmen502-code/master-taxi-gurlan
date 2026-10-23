@@ -8,11 +8,14 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/uz_bounds.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../models/geo_area.dart';
+import '../../../models/map_picker_result.dart';
 import '../../../repositories/service_config_repository.dart';
 import '../../../services/location_service.dart';
+import '../../map_picker/screens/map_picker_screen.dart';
 
 /// Форма қиймати — соф, Firestore'сиз (тест учун).
 class ShipFromDraft {
@@ -47,11 +50,16 @@ class ShipFromDraft {
       );
 
   /// Хато калити ёки `null` (тўғри). Вилоят + туман + манзил (≥5) шарт.
-  String? validate() {
+  ///
+  /// [requireCoords] — ЯНГИ рўйхатдан ўтишда (эга, 2026-10-23): координата ҳам шарт ва Ўзбекистон
+  /// чегарасида (rules `wholesaleSellerLocationRequiredOk` билан бир хил). Эски сотувчининг манзилини
+  /// таҳрири қатъий эмас (`false`).
+  String? validate({bool requireCoords = false}) {
     if (regionId.trim().isEmpty) return 'wholesale_err_region_required';
     if (districtId.trim().isEmpty) return 'wholesale_err_district_required';
     if (address.trim().length < 5) return 'wholesale_err_address_required';
     if (address.trim().length > 300) return 'wholesale_err_address_required';
+    if (requireCoords && !inUzbekistanBounds(lat, lng)) return 'wholesale_err_location_required';
     return null;
   }
 }
@@ -63,10 +71,14 @@ class ShipFromFields extends StatefulWidget {
     required this.onChanged,
     this.geoRepository,
     this.locate,
+    this.locationRequired = false,
   });
 
   final ShipFromDraft value;
   final ValueChanged<ShipFromDraft> onChanged;
+
+  /// Янги рўйхатдан ўтишда: координата мажбурий (матн шуни айтади). Таҳрирда — ихтиёрий.
+  final bool locationRequired;
   final ServiceConfigRepository? geoRepository;
 
   /// Тестда алмаштириш учун; стандарт — GPS.
@@ -81,6 +93,9 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
   List<GeoRegion> _regions = const [];
   final Map<String, List<GeoDistrict>> _districts = {};
   bool _locating = false;
+
+  /// Манзил харитадан тўлдирилганда матн майдони қайта қурилсин (`initialValue` ўзи янгиланмайди).
+  int _addressNonce = 0;
 
   @override
   void initState() {
@@ -129,6 +144,20 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
     }
   }
 
+  /// Жойни мавжуд харита танлагичида белгилаш; манзил бўш бўлса, харита матни билан тўлдирилади.
+  Future<void> _pickOnMap() async {
+    final r = await Navigator.of(context).push<MapPickerResult>(
+      MaterialPageRoute(builder: (_) => MapPickerScreen(title: context.tr('wholesale_pick_on_map'))),
+    );
+    if (r == null || !mounted) return;
+    var next = widget.value.copyWith(lat: r.lat, lng: r.lng);
+    if (widget.value.address.trim().isEmpty && r.label.trim().isNotEmpty) {
+      next = next.copyWith(address: r.label.trim());
+      setState(() => _addressNonce++);
+    }
+    widget.onChanged(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     final v = widget.value;
@@ -166,6 +195,7 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
         ),
         const SizedBox(height: 8),
         TextFormField(
+          key: ValueKey('ship-address-$_addressNonce'),
           initialValue: v.address,
           maxLength: 300,
           buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
@@ -173,24 +203,34 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
           onChanged: (s) => widget.onChanged(v.copyWith(address: s)),
         ),
         const SizedBox(height: 8),
-        Row(children: [
-          OutlinedButton.icon(
-            onPressed: _locating ? null : _locateMe,
-            icon: _locating
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.my_location, size: 18),
-            label: Text(context.tr('wholesale_locate_me')),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              v.lat != null && v.lng != null
-                  ? context.tr('wholesale_location_set')
-                  : context.tr('wholesale_location_optional'),
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _locating ? null : _pickOnMap,
+              icon: const Icon(Icons.add_location_alt_rounded, size: 18),
+              label: Text(context.tr('wholesale_pick_on_map')),
             ),
-          ),
-        ]),
+            OutlinedButton.icon(
+              onPressed: _locating ? null : _locateMe,
+              icon: _locating
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.my_location, size: 18),
+              label: Text(context.tr('wholesale_locate_me')),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          v.lat != null && v.lng != null
+              ? context.tr('wholesale_location_set')
+              : context.tr(widget.locationRequired
+                  ? 'wholesale_location_required_hint'
+                  : 'wholesale_location_optional'),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
       ],
     );
   }

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/map_launcher.dart';
+import '../../../core/utils/phone_launcher.dart';
 import '../../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/screens/restaurant_screen.dart';
@@ -28,14 +29,13 @@ class BusinessDetailSheet extends StatelessWidget {
     );
   }
 
+  /// Умумий `callPhone` (кафе, юк, такси ва бошқа экранлар билан бир хил): рақам яроқсиз бўлса ёки
+  /// телефон иловаси йўқ бўлса — жим қолмай хабар кўрсатади.
   Future<void> _call(BuildContext context) async {
-    final digits = pin.phone.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (digits.isEmpty) return;
-    final uri = Uri.parse('tel:${digits.startsWith('+') ? digits : '+$digits'}');
-    if (!await launchUrl(uri) && context.mounted) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(context.tr('bizmap_err_generic'))));
-    }
+    final ok = await callPhone(pin.phone);
+    if (ok || !context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(context.tr('tv_market_call_failed'))));
   }
 
   Future<void> _openWebsite() async {

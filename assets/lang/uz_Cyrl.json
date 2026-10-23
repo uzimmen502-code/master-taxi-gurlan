@@ -3842,5 +3842,8 @@
   "business_cat_it_media": "ИТ, реклама, алоқа",
   "business_cat_other": "Бошқа",
   "home_create_business_map": "Бизнесимни харитага қўшиш",
-  "home_create_business_map_sub": "Дўкон, кафе ёки хизмат жойингиз — мижозлар топади"
+  "home_create_business_map_sub": "Дўкон, кафе ёки хизмат жойингиз — мижозлар топади",
+  "wholesale_pick_on_map": "Харитада белгилаш",
+  "wholesale_location_required_hint": "Жойни харитада белгиланг ёки GPS ишлатинг (шарт)",
+  "wholesale_err_location_required": "Жойни харитада белгиланг (Ўзбекистон ичида)"
 }

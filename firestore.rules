@@ -2931,6 +2931,19 @@ service cloud.firestore {
           && (('lat' in d) == ('lng' in d));
     }
 
+    // ЯНГИ рўйхатдан ўтган сотувчи учун манзил матни (≥5) ва координата МАЖБУРИЙ (эга, 2026-10-23):
+    // сотувчи бизнес харитасида кўринсин ва курьер аниқ жойдан олсин. Ўзгартириш (update) йўлига
+    // ТЕГМАЙДИ — эски сотувчилар таъсирланмайди. Координата чегараси — `functions/business_directory.js`
+    // даги BOUNDS билан бир хил (Ўзбекистон атрофи; PROPOSED B-11).
+    function wholesaleSellerLocationRequiredOk() {
+      let d = request.resource.data;
+      return d.get('address', '') is string && d.get('address', '').size() >= 5
+          && 'lat' in d && 'lng' in d
+          && d.lat is number && d.lng is number
+          && d.lat >= 36 && d.lat <= 46
+          && d.lng >= 55 && d.lng <= 74;
+    }
+
     function wholesaleSellerCreateOk(phone) {
       return isAuth()
           && isOwner(phone)
@@ -2951,6 +2964,7 @@ service cloud.firestore {
           // ҳудуди шундан олинади (`wholesale_geo.js`).
           && request.resource.data.get('regionId', '') != ''
           && request.resource.data.get('districtId', '') != ''
+          && wholesaleSellerLocationRequiredOk()
           && request.resource.data.keys().hasOnly([
                 'phone', 'companyName', 'ownerName', 'sellerType',
                 'approvalStatus', 'createdAt', 'approvedAt', 'approvedBy',

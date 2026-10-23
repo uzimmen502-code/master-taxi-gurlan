@@ -291,7 +291,8 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
       );
       return;
     }
-    final shipErr = _shipFrom.validate();
+    // Янги рўйхатдан ўтишда координата ҳам шарт (эга, 2026-10-23); сервер rules'и ҳам шуни талаб қилади.
+    final shipErr = _shipFrom.validate(requireCoords: true);
     if (shipErr != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr(shipErr))),
@@ -408,6 +409,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         const SizedBox(height: 16),
         ShipFromFields(
           value: _shipFrom,
+          locationRequired: true,
           onChanged: (v) => setState(() => _shipFrom = v),
         ),
         const SizedBox(height: 20),

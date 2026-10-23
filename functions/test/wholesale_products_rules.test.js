@@ -230,6 +230,22 @@ async function main() {
       regionId: 'xorazm', districtId: 'gurlan', address: 'Markaz 1', lat: 41.84, lng: 60.39,
     }))));
   await seed();
+  // Эга, 2026-10-23: ЯНГИ сотувчида манзил матни (≥5) ва координата ҳам мажбурий (бизнес харитаси).
+  await check('D2b yangi sotuvchi: koordinatasiz / manzilsiz-qisqa manzil / O\'zbekiston tashqarisi — RAD', async () => {
+    const geo = { regionId: 'xorazm', districtId: 'gurlan' };
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, address: 'Markaz 1' })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, lat: 41.84, lng: 60.39 })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, address: 'abcd', lat: 41.84, lng: 60.39 })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, address: 'Markaz 1', lat: 10, lng: 60.39 })));
+    await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, address: 'Markaz 1', lat: 41.84, lng: 100 })));
+  });
+  await check('D2c chegara: Ozbekiston qutisining chekka qiymatlari va 5 belgili manzil — o\'tadi', async () => {
+    const geo = { regionId: 'xorazm', districtId: 'gurlan' };
+    await assertSucceeds(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, address: 'abcde', lat: 36, lng: 55 })));
+    await seed();
+    await assertSucceeds(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ ...geo, address: 'abcde', lat: 46, lng: 74 })));
+  });
+  await seed();
   await check('D3 noto\'g\'ri manzil: lat satr / lat yolg\'iz / lat 95 / tuman viloyatsiz / manzil 301 — rad', async () => {
     await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', lat: '41', lng: 60 })));
     await assertFails(sellersCol(newSellerDb).doc(NEW_SELLER).set(sellerCreate({ regionId: 'x', districtId: 'g', lat: 41 })));

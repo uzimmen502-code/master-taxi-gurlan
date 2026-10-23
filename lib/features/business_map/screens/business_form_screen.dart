@@ -10,6 +10,7 @@ import '../../map_picker/screens/map_picker_screen.dart';
 import '../data/business_repository.dart';
 import '../domain/business.dart';
 import '../domain/business_category.dart';
+import '../domain/website_link.dart';
 
 /// Эга ўз объектини қўшади/таҳрирлайди (B-1). Жойни мавжуд [MapPickerScreen] билан белгилайди (B-5).
 /// Ҳамма текширув серверда (`upsertMyBusiness`); бу ерда фақат тез инкор ва тушунарли хато матни.
@@ -135,6 +136,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
     if (_phone.text.replaceAll(RegExp(r'\D'), '').length < 9) {
       return setState(() => _error = context.tr('bizmap_err_phone'));
     }
+    if (!websiteFieldValid(_website.text)) return setState(() => _error = context.tr('bizmap_err_website'));
     setState(() {
       _busy = true;
       _error = null;
@@ -257,7 +259,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
             enabled: !_busy,
             keyboardType: TextInputType.url,
             maxLength: 120,
-            decoration: _dec('bizmap_f_website'),
+            decoration: _dec('bizmap_f_website').copyWith(helperText: context.tr('bizmap_f_website_hint'), helperMaxLines: 2),
           ),
           if (_error != null)
             Padding(

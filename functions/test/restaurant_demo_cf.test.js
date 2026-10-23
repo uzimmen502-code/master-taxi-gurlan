@@ -62,14 +62,14 @@ async function main() {
     }
   });
 
-  await check('P2 hujjat shakli: demo belgisi, buyurtma TO\'SILGAN (pausedUntil kelajakda), telefon bo\'sh, koordinata O\'zbekistonda', () => {
+  await check('P2 hujjat shakli: demo belgisi, lentada KO\'RINADI (pauza ham, ish vaqti ham yo\'q), telefon bo\'sh, koordinata O\'zbekistonda', () => {
     const ts = new Date();
-    const pausedUntil = new Date(demo.PAUSED_UNTIL_ISO);
     for (const s of demo.DEMO_SET) {
-      const d = demo.buildDemoDocs(s, { ts, pausedUntil });
+      const d = demo.buildDemoDocs(s, { ts });
       assert.strictEqual(d.restaurant.isDemo, true);
       assert.strictEqual(d.restaurant.status, 'approved');
-      assert.ok(d.restaurant.pausedUntil.getTime() > Date.now() + 365 * 86400000);
+      assert.strictEqual(d.restaurant.pausedUntil, null, 'pauza bo\'lsa lenta/bosh sahifadan yashiriladi');
+      assert.strictEqual(d.restaurant.openingHours, null, 'ish vaqti bo\'lsa kechasi yopiq ko\'rinadi');
       assert.strictEqual(d.restaurant.contactPhone, '');
       assert.ok(d.restaurant.lat >= 36 && d.restaurant.lat <= 46 && d.restaurant.lng >= 55 && d.restaurant.lng <= 74);
       assert.ok(d.restaurant.address.length >= 5 && d.restaurant.geohash.length === 7);
@@ -93,7 +93,7 @@ async function main() {
     const { buildIndexDoc } = require('../restaurant_dish_index');
     const ts = new Date();
     for (const s of demo.DEMO_SET) {
-      const d = demo.buildDemoDocs(s, { ts, pausedUntil: new Date(demo.PAUSED_UNTIL_ISO) });
+      const d = demo.buildDemoDocs(s, { ts });
       for (const i of d.items) {
         const x = buildIndexDoc({ rid: s.id, iid: i.id, item: i.data, restaurant: d.restaurant, stats: null });
         assert.ok(x, `${s.id}/${i.id} indeksga kirmaydi`);
@@ -195,6 +195,31 @@ async function main() {
     assert.strictEqual(r.plan.filter((p) => p.action === 'skip_real_enough').length, 6);
     assert.deepStrictEqual(r.created, []);
     assert.deepStrictEqual(await ids(), []);
+  });
+
+  await check('F1 --refresh: eski (pausedUntil 2099 + ish vaqti) namunalar tuzatiladi; toza namunaga tegilmaydi; dry-run yozmaydi', async () => {
+    await clearEmulator();
+    await seedDemos(db, admin, { apply: true });
+    // Eski holatni taqlid qilamiz (prodagi 6 ta shunday yaratilgan edi).
+    await db.collection('restaurants').doc('demo_cafe_1').update({
+      pausedUntil: admin.firestore.Timestamp.fromDate(new Date('2099-01-01T00:00:00Z')),
+      openingHours: { open: '09:00', close: '22:00' },
+    });
+    await db.collection('restaurants').doc('demo_home_2').update({ pausedUntil: admin.firestore.Timestamp.fromDate(new Date('2099-01-01T00:00:00Z')) });
+    const { refreshDemos } = require('../tools/seed_demo_restaurants');
+    const dry = await refreshDemos(db, admin, { apply: false });
+    assert.deepStrictEqual(dry.ids.sort(), ['demo_cafe_1', 'demo_home_2']);
+    assert.notStrictEqual((await db.collection('restaurants').doc('demo_cafe_1').get()).data().pausedUntil, null, 'dry-run yozmaydi');
+    const r = await refreshDemos(db, admin, { apply: true });
+    assert.strictEqual(r.applied, true);
+    for (const id of ['demo_cafe_1', 'demo_home_2']) {
+      const x = (await db.collection('restaurants').doc(id).get()).data();
+      assert.strictEqual(x.pausedUntil, null, id);
+      assert.strictEqual(x.openingHours, null, id);
+      assert.strictEqual(x.isDemo, true);
+      assert.strictEqual(x.status, 'approved');
+    }
+    assert.deepStrictEqual((await refreshDemos(db, admin, { apply: true })).ids, [], 'takror — hech narsa (idempotent)');
   });
 
   await check('R1 --remove: barcha demo qo\'lda olib tashlanadi; haqiqiylar qoladi', async () => {

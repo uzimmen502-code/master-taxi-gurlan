@@ -5,6 +5,7 @@
  *   - DRY RUN — стандарт: нима яратилиши чиқади, ҳеч нарса ёзилмайди.
  *   - `--apply`: фақат ҳали йўқ ҳужжатларни яратади (бор бўлса тегмайди); тури бўйича ҳақиқий тасдиқланган сони
  *     аллақачон ≥ 3 бўлса, шу тур намунаси ЯРАТИЛМАЙДИ (кўрсатадиган нарса қолмаган).
+ *   - `--refresh`: аввал яратилган намуналарнинг кўриниш майдонларини тузатади (`pausedUntil`/иш вақти → null).
  *   - `--remove`: қўлда олиб ташлаш (авто-ўчириш триггеридан мустақил); барча `isDemo==true` ҳужжатлар, audit билан.
  *   - Орқага қайтариш: `--remove` (ёки триггер ўзи).
  *
@@ -34,11 +35,10 @@ async function seedDemos(db, admin, { apply = false } = {}) {
   if (!apply) return { plan, real: counts, applied: false };
 
   const ts = admin.firestore.FieldValue.serverTimestamp();
-  const pausedUntil = admin.firestore.Timestamp.fromDate(new Date(demo.PAUSED_UNTIL_ISO));
   const created = [];
   for (const p of plan.filter((x) => x.action === 'create')) {
     const spec = demo.DEMO_SET.find((s) => s.id === p.id);
-    const docs = demo.buildDemoDocs(spec, { ts, pausedUntil });
+    const docs = demo.buildDemoDocs(spec, { ts });
     const ref = db.collection(demo.RESTAURANTS).doc(spec.id);
     const batch = db.batch();
     batch.create(ref, docs.restaurant); // create: бор бўлса хато — устига ёзмайди
@@ -54,6 +54,24 @@ async function seedDemos(db, admin, { apply = false } = {}) {
     });
   }
   return { plan, real: counts, applied: true, created };
+}
+
+/**
+ * Аввал яратилган намуналардаги кўриниш майдонларини тузатади (2026-10-23: `pausedUntil` 2099 + иш вақти
+ * намунани лентадан яширган эди). Фақат мавжуд `isDemo` ҳужжатлар; фақат шу 3 майдон; триггер индексни қайта қуради.
+ */
+async function refreshDemos(db, admin, { apply = false } = {}) {
+  const snap = await db.collection(demo.RESTAURANTS).where('isDemo', '==', true).get();
+  const todo = snap.docs.filter((d) => {
+    const x = d.data();
+    return x.pausedUntil != null || x.openingHours != null;
+  }).map((d) => d.id);
+  if (!apply || todo.length === 0) return { ids: todo, applied: false };
+  const ts = admin.firestore.FieldValue.serverTimestamp();
+  for (const id of todo) {
+    await db.collection(demo.RESTAURANTS).doc(id).update({ pausedUntil: null, openingHours: null, updatedAt: ts });
+  }
+  return { ids: todo, applied: true };
 }
 
 async function realCounts(db) {
@@ -92,8 +110,10 @@ async function main() {
   const db = admin.firestore();
   const apply = process.argv.includes('--apply');
   const remove = process.argv.includes('--remove');
-  console.log(`${apply ? 'APPLY' : 'DRY RUN'} ${remove ? '--remove' : 'seed'}  project=${admin.app().options.projectId || '(service account)'}`);
-  const out = remove ? await removeAllDemos(db, admin, { apply }) : await seedDemos(db, admin, { apply });
+  const refresh = process.argv.includes('--refresh');
+  console.log(`${apply ? 'APPLY' : 'DRY RUN'} ${remove ? '--remove' : (refresh ? '--refresh' : 'seed')}  project=${admin.app().options.projectId || '(service account)'}`);
+  const out = remove ? await removeAllDemos(db, admin, { apply })
+    : (refresh ? await refreshDemos(db, admin, { apply }) : await seedDemos(db, admin, { apply }));
   console.log(JSON.stringify(out, null, 2));
   if (!apply) console.log('DRY RUN: ҳеч нарса ёзилмади. Ёзиш учун --apply.');
 }
@@ -102,4 +122,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { seedDemos, removeAllDemos, realCounts };
+module.exports = { seedDemos, removeAllDemos, refreshDemos, realCounts };

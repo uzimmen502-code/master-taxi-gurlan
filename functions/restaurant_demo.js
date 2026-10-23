@@ -4,7 +4,9 @@
  *
  * Қоидалар (28, 16, 41-банд):
  *   - Ҳар намуна ҳужжатида `isDemo: true` (ёзади фақат Admin SDK; мижоз rules whitelist'ида йўқ).
- *   - Буюртма ТЎСИЛАДИ: `pausedUntil` узоқ келажакда → `placeRestaurantOrder` → `RESTAURANT_PAUSED` (сервер текшируви).
+ *   - Буюртма ТЎСИЛАДИ: `placeRestaurantOrder` `isDemo` ресторанга `RESTAURANT_DEMO` қайтаради (сервер текшируви).
+ *     (Аввал `pausedUntil` 2099 қўйилган эди — лекин ёпиқ ресторан лента ва бош саҳифадан яширилар эди; эга «кўринсин»
+ *     деди, шунинг учун пауза ҳам, иш вақти ҳам ЙЎҚ: намуна доим «очиқ» кўринади, буюртма эса серверда тўсилади.)
  *   - Телефон бўш (`contactPhone: ''`) — ҳеч ким «қўнғироқ қилиб» чалғитилмайди; эълон матни «намуна» дейди.
  *   - ID'лар аниқ (`demo_cafe_1…`, `demo_home_1…`) — қайта ишга тушириш такрор яратмайди.
  *   - АВТО-ЎЧИРИШ: тури бўйича (кафе / уй ошпази) ҳақиқий (isDemo эмас) тасдиқланган субъект сони ≥ 3 бўлса, шу
@@ -23,8 +25,6 @@ const ADMIN_AUDIT = 'admin_audit';
 const DEMO_BATCH = 'demo-2026-10-23';
 const REAL_THRESHOLD = 3;
 const KINDS = Object.freeze(['cafe', 'home']);
-/** `pausedUntil` — узоқ келажак: буюртма қабул қилинмайди. */
-const PAUSED_UNTIL_ISO = '2099-01-01T00:00:00.000Z';
 const OWNER_UID = 'demo_owner';
 const NOTICE = 'Намуна · Namuna · Пример — буюртма қабул қилинмайди';
 
@@ -125,7 +125,7 @@ const DEMO_SET = Object.freeze([
 const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
 /** Битта намунанинг Firestore ҳужжатлари (соф). `ts` — серверTimestamp ёки test Date. */
-function buildDemoDocs(spec, { ts, pausedUntil }) {
+function buildDemoDocs(spec, { ts }) {
   const lat = clamp(CENTER.lat + spec.dLat, -90, 90);
   const lng = clamp(CENTER.lng + spec.dLng, -180, 180);
   const restaurant = {
@@ -139,7 +139,7 @@ function buildDemoDocs(spec, { ts, pausedUntil }) {
     lat, lng,
     geohash: geoHash.encode(lat, lng, 7),
     logoUrl: '', coverUrl: '', announcement: NOTICE,
-    openingHours: { open: '09:00', close: '22:00' },
+    openingHours: null, // доим очиқ кўринади (лентада яширилмасин); буюртма — `isDemo` билан серверда тўсилган
     prepTimeMin: 20,
     minOrderAmount: 0,
     delivery: {
@@ -147,7 +147,7 @@ function buildDemoDocs(spec, { ts, pausedUntil }) {
       ownFee: { type: 'fixed', fixed: 0, base: 0, perKm: 0, freeAbove: null, maxKm: null },
     },
     payment: { prepay: true, cash: true },
-    pausedUntil,
+    pausedUntil: null,
     status: 'approved',
     ownerUid: OWNER_UID,
     ratingAvg: 0, ratingCount: 0, timeoutStreak: 0,
@@ -260,5 +260,5 @@ function attachRestaurantDemoCleanup(exportsObj, deps) {
 
 module.exports = {
   attachRestaurantDemoCleanup, cleanupDemos, evaluate, countApprovedHome, shouldEvaluate, buildDemoDocs, kindOf,
-  DEMO_SET, DEMO_BATCH, REAL_THRESHOLD, PAUSED_UNTIL_ISO, OWNER_UID, NOTICE, RESTAURANTS,
+  DEMO_SET, DEMO_BATCH, REAL_THRESHOLD, OWNER_UID, NOTICE, RESTAURANTS,
 };

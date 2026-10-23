@@ -956,6 +956,8 @@ function attachRestaurantOrders(exportsObj, deps) {
       if (!rSnap.exists) throw fail('not-found', 'RESTAURANT_NOT_FOUND');
       const r = rSnap.data() || {};
       if (r.status !== RESTAURANT_STATUS.approved) throw fail('failed-precondition', 'RESTAURANT_NOT_APPROVED');
+      // Намуна (demo) ресторан: лентада кўринади, лекин буюртма қабул қилинмайди (`functions/restaurant_demo.js`).
+      if (r.isDemo === true) throw fail('failed-precondition', 'RESTAURANT_DEMO');
       if (canonicalUid(String(r.ownerUid || '')) === uid) throw fail('failed-precondition', 'OWN_RESTAURANT');
       const at = now();
       const pausedUntilMs = r.pausedUntil && typeof r.pausedUntil.toMillis === 'function' ? r.pausedUntil.toMillis() : 0;

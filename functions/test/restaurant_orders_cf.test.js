@@ -221,6 +221,14 @@ async function main() {
     await db.collection('module_config').doc('restaurants_all').set({ restaurants: { stage: 'public', testerIds: [] } });
   });
 
+  await check('R3 namuna (isDemo) restoran: buyurtma RESTAURANT_DEMO bilan rad; belgi olinsa — oddiy restoran', async () => {
+    const ref = db.collection('restaurants').doc(rid);
+    await ref.update({ isDemo: true });
+    await expectCode(place(rid, CUSTOMER), 'RESTAURANT_DEMO', 'failed-precondition');
+    await ref.update({ isDemo: admin.firestore.FieldValue.delete() });
+    assert.strictEqual((await ref.get()).data().isDemo, undefined);
+  });
+
   // ── 2. Buyurtma ─────────────────────────────────────────────────────
   let o1;
   await check('P1 buyurtma: narx menyudan (60 000 + yetkazish tarifdan; eski packagingFee hisobga olinmaydi — D-REST-28), placed, kod, hodisa, idempotent', async () => {

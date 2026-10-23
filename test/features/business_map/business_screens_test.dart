@@ -250,6 +250,26 @@ void main() {
       expect(repo.calls.single, startsWith('upsert:7:Мой Дўкон:retail:'));
     });
 
+    testWidgets('«Ўз сайтингиз»: изоҳ кўринади; @ҳандл рад этилади; тўғри сайт сақланади', (tester) async {
+      final repo = _FakeRepo([]);
+      await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));
+      final field = find.widgetWithText(TextField, 'bizmap_f_website');
+      await tester.ensureVisible(field);
+      expect(find.text('bizmap_f_website_hint'), findsOneWidget);
+
+      await tester.enterText(field, '@kafe_gurlan');
+      await tester.ensureVisible(find.text('bizmap_save'));
+      await tester.tap(find.text('bizmap_save'));
+      await tester.pumpAndSettle();
+      expect(find.text('bizmap_err_website'), findsOneWidget);
+      expect(repo.calls, isEmpty, reason: 'яроқсиз сайт билан сервер чақирилмайди');
+
+      await tester.enterText(field, 'kafe.uz');
+      await tester.tap(find.text('bizmap_save'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.single, startsWith('upsert:7:Мой Дўкон:retail:'));
+    });
+
     testWidgets('сервер BUSINESS_LIMIT_REACHED қайтарса — тушунарли хато, ёпилмайди', (tester) async {
       final repo = _FakeRepo([])..failWith = StateError('x');
       await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));

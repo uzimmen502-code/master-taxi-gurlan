@@ -9,6 +9,7 @@ import '../../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/screens/restaurant_screen.dart';
 import '../domain/business_pin.dart';
+import '../domain/website_link.dart';
 
 /// Нуқта босилганда чиқадиган тўлиқ маълумот варағи (эга қарори: «танлаб босилганда тўлиқ маълумот»).
 ///
@@ -39,9 +40,7 @@ class BusinessDetailSheet extends StatelessWidget {
   }
 
   Future<void> _openWebsite() async {
-    final raw = pin.website.trim();
-    if (raw.isEmpty) return;
-    final uri = Uri.tryParse(raw.startsWith('http') ? raw : 'https://$raw');
+    final uri = websiteUri(pin.website);
     if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
@@ -83,7 +82,7 @@ class BusinessDetailSheet extends StatelessWidget {
             if (pin.phone.isNotEmpty)
               _Line(icon: Icons.phone_outlined, text: pin.phone, onTap: () => _call(context)),
             if (pin.website.isNotEmpty)
-              _Line(icon: Icons.public_rounded, text: pin.website, onTap: _openWebsite),
+              _Line(icon: Icons.public_rounded, text: pin.website, onTap: websiteUri(pin.website) == null ? null : _openWebsite),
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,

@@ -3,6 +3,7 @@
 
 import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
 import 'package:ava_gurlan/features/restaurants/domain/cuisine.dart';
+import 'package:ava_gurlan/features/restaurants/domain/dish_stats.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_sections.dart';
 import 'package:ava_gurlan/features/restaurants/screens/restaurants_list_screen.dart';
@@ -93,6 +94,14 @@ class _Repo implements RestaurantsRepository {
   Future<Restaurant?> getRestaurant(String id) async =>
       id == 'missing' ? null : Restaurant(id: id, name: 'Rest $id', status: 'approved');
 
+  /// Таом ҳужжати: `gone` дан бошланган идентификатор — ўчирилган таом (null).
+  @override
+  Future<MenuItem?> getMenuItem(String restaurantId, String itemId) async =>
+      itemId.startsWith('gone') ? null : MenuItem(id: itemId, name: 'Tafsilot $itemId', price: 40000, description: 'To\'liq tavsif $itemId');
+
+  @override
+  Future<DishStats> getDishStat(String restaurantId, String itemId) async => DishStats.empty;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
@@ -128,7 +137,7 @@ void main() {
           lat: lat,
           lng: lng,
           now: () => _now,
-          onOpenRestaurant: onOpen ?? (_) {},
+          onOpenDish: (d) => onOpen?.call(d.restaurantId),
         ),
       ),
     ));
@@ -318,7 +327,26 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('dish-r1_a')));
       await t.pumpAndSettle();
+      // Таом босилса ресторан экрани эмас, ТАОМ ТАФСИЛОТИ варағи очилади (экран қолади).
+      expect(repo.opened, isEmpty, reason: 'ресторан экрани ҳали очилмади');
+      expect(find.byKey(const ValueKey('dish-sheet-name')), findsOneWidget);
+      expect(find.text('Tafsilot a'), findsOneWidget);
+      // «Менюни кўриш» — ресторан экрани.
+      await t.tap(find.byKey(const ValueKey('dish-sheet-open-menu')));
+      await t.pumpAndSettle();
       expect(repo.opened, ['r1'], reason: 'ресторан ҳужжати олинди ва экран очиш чақирилди');
+      expect(find.byKey(const ValueKey('dish-sheet-name')), findsNothing, reason: 'варақ ёпилди');
+    });
+
+    testWidgets('таом ҳужжати ўчирилган — варақ эмас, ресторан менюси очилади (фойдаланувчи тўхтаб қолмайди)', (t) async {
+      final repo = _Repo(config: publicCfg, dishes: [_d('gone1', pp: 5000)]);
+      await pumpList(t, repo);
+      await t.tap(find.byKey(const ValueKey('section-home')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('dish-r1_gone1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dish-sheet-name')), findsNothing);
+      expect(repo.opened, ['r1']);
     });
 
     testWidgets('бўлимда қидирув ёзилса — умумий рўйхатга қайтади; ресторан топилмаса — хабар', (t) async {

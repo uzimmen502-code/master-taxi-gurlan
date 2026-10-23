@@ -340,8 +340,19 @@ class _MerchantOrderCard extends StatelessWidget {
             CourierInfoCard(order: o, repository: repository, compact: true),
           ],
           const SizedBox(height: 8),
-          for (final it in o.items)
+          for (final it in o.items) ...[
             Text('• ${it.name} × ${it.count}  —  ${formatPrice(it.lineTotal)}', style: TextStyle(fontSize: 13, color: c.ink)),
+            // Мижознинг шу таомга изоҳи («пиёзсиз») — ошпаз кўриши шарт, шунинг учун ажралиб туради.
+            if (it.note.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 2),
+                child: Text(
+                  '↳ ${it.note}',
+                  key: ValueKey('order-item-note-${it.itemId}'),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.brandText),
+                ),
+              ),
+          ],
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,

@@ -23,7 +23,9 @@ import '../domain/bookings.dart';
 import '../domain/menu_scroll_sync.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/booking_sheet.dart';
+import '../widgets/dish_detail_sheet.dart';
 import '../widgets/menu_item_video_badge.dart';
+import '../widgets/restaurant_cart_actions.dart';
 import '../widgets/restaurant_cart_sheet.dart';
 import '../widgets/restaurant_checkout_sheet.dart';
 import '../widgets/restaurant_row.dart';
@@ -46,7 +48,11 @@ class RestaurantScreen extends StatefulWidget {
     this.itemClipOpener,
     this.dishStatsLoader,
     this.restaurantVideoLoader,
+    this.focusItemId,
   });
+
+  /// Лентадан «Менюни кўриш» босилганда: меню шу таомгача скролл қилинади ва қатор қисқа ёритилади.
+  final String? focusItemId;
 
   /// Рестораннинг умумий обзор видеоси; бўш бўлса ҳақиқий репозиторий (тест учун алмаштирилади).
   final Future<TvClip?> Function()? restaurantVideoLoader;
@@ -104,6 +110,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   int _active = 0;
   bool _lock = false;
 
+  /// Фокусланган таом ([RestaurantScreen.focusItemId]): ёритилган қатор ва бир марталик скролл.
+  String? _highlightId;
+  bool _focusDone = false;
+  bool _categoriesLoaded = false;
+
   static const double _leftWidth = 96;
   static const double _leftItemHeight = 56;
 
@@ -118,7 +129,19 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       if (r != null && mounted) setState(() => _r = r);
     });
     _cSub = _repo.watchCategories(_r.id).listen((c) {
-      if (mounted) setState(() => _categories = c);
+      if (mounted) {
+        setState(() {
+          _categories = c;
+          _categoriesLoaded = true;
+        });
+        _tryFocus();
+      }
+    }, onError: (Object e) {
+      debugPrint('[RestaurantScreen] categories $e');
+      if (mounted) {
+        setState(() => _categoriesLoaded = true);
+        _tryFocus();
+      }
     });
     _mSub = _repo.watchMenu(_r.id).listen((m) {
       if (mounted) {
@@ -126,10 +149,41 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           _menu = m;
           _menuLoaded = true;
         });
+        _tryFocus();
       }
     }, onError: (Object e) {
       debugPrint('[RestaurantScreen] menu $e');
       if (mounted) setState(() => _menuLoaded = true);
+    });
+  }
+
+  /// Фокусланган таомгача БИР марта скролл: меню ҳам, категориялар ҳам келгандан кейин (категориясиз таом
+  /// «Бошқалар»га тушиб, нотўғри жойга олиб бормасин). Таом топилмаса (ўчирилган) меню ўзгармайди.
+  void _tryFocus() {
+    final id = widget.focusItemId;
+    if (id == null || _focusDone || !_menuLoaded || !_categoriesLoaded) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _focusDone || !_right.hasClients) return;
+      final sections = _sections;
+      for (var s = 0; s < sections.length; s++) {
+        final i = sections[s].items.indexWhere((m) => m.id == id);
+        if (i < 0) continue;
+        _focusDone = true;
+        final target = _syncFor(sections).offsetOfItem(s, i, maxScrollExtent: _right.position.maxScrollExtent);
+        setState(() {
+          _active = s;
+          _lock = true;
+          _highlightId = id;
+        });
+        _ensureLeftVisible(s);
+        _right
+            .animateTo(target, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic)
+            .whenComplete(() {
+          if (mounted) setState(() => _lock = false);
+        });
+        return;
+      }
+      _focusDone = true;
     });
   }
 
@@ -223,12 +277,16 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return out;
   }
 
+  bool get _hasTiers => _menu.any((m) => m.qtyTiers.isNotEmpty);
+
   double get _headerH => MediaQuery.textScalerOf(context).scale(13) * 1.3 + 16;
 
   double get _itemH {
     final ts = MediaQuery.textScalerOf(context);
     double line(double s) => ts.scale(s) * 1.3;
-    final text = line(13) * 2 + 4 + line(12) + 6 + line(14);
+    var text = line(13) * 2 + 4 + line(12) + 6 + line(14);
+    // Миқдорга чегирма ҳинти ёки тавсифнинг 2-қатори учун 4-қатор — фақат менюда чегирмали таом бўлсагина.
+    if (_hasTiers) text += line(12) + 2;
     return 16 + (text > 72 ? text : 72);
   }
 
@@ -275,27 +333,25 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   // ── Сават ──────────────────────────────────────────────────────────
   Future<void> _add(MenuItem item) async {
-    if (_cart.add(item, restaurant: _r)) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('restaurants_cart_switch_title')),
-        content: Text(
-          ctx.tr('restaurants_cart_switch_body')
-              .replaceAll('{old}', _cart.restaurantName)
-              .replaceAll('{new}', _r.name),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('restaurants_cart_switch_ok'))),
-        ],
-      ),
+    await addToCartOrAskSwitch(context, cart: _cart, item: item, restaurant: _r);
+  }
+
+  /// Таом тафсилоти варағи (қатор босилганда ёки сават варағидаги таом номи босилганда).
+  void _openItem(MenuItem item) {
+    showDishDetailSheet(
+      context,
+      item: item,
+      restaurant: _r,
+      cart: _cart,
+      stats: _dishStats[item.id],
+      clip: _itemClips[item.id],
+      onPlayVideo: _playItemClip,
+      cuisineLoader: () => _repo.listCuisines(),
     );
-    if (ok == true) _cart.replaceWith(item, restaurant: _r);
   }
 
   void _openCart() {
-    showRestaurantCartSheet(context, cart: _cart, restaurant: _r, onCheckout: _openCheckout);
+    showRestaurantCartSheet(context, cart: _cart, restaurant: _r, onCheckout: _openCheckout, onOpenItem: _openItem);
   }
 
   void _openCheckout() {
@@ -306,6 +362,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       repository: _repo,
       userLat: widget.userLat,
       userLng: widget.userLng,
+    );
+  }
+
+  /// Қўнғироқ очилмаса (рақам нотўғри ёки телефон иловаси йўқ) жим қолмайди: варақ ёпилиб, хабар кўрсатилади
+  /// (варақ SnackBar'ни тўсиб туради). Бошқа экранлар билан бир хил матн.
+  Future<void> _callRestaurant(BuildContext sheetContext) async {
+    final ok = await callPhone(_r.contactPhone);
+    if (ok || !mounted) return;
+    if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('tv_market_call_failed'))),
     );
   }
 
@@ -346,7 +413,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => callPhone(_r.contactPhone),
+                  onPressed: () => _callRestaurant(ctx),
                   icon: const Icon(Icons.call_outlined),
                   label: Text(ctx.tr('restaurants_call')),
                 ),
@@ -467,6 +534,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                                               enabled: canOrder && (_cart.restaurantId != _r.id || _cart.canAddMore(s.items[i].id, _r)),
                                               onAdd: () => _add(s.items[i]),
                                               onRemove: () => _cart.decrement(s.items[i].id),
+                                              onOpen: () => _openItem(s.items[i]),
+                                              tierLine: _hasTiers,
+                                              highlighted: _highlightId == s.items[i].id,
                                             ),
                                             childCount: s.items.length,
                                           ),
@@ -705,12 +775,24 @@ class _MenuItemRow extends StatelessWidget {
     required this.enabled,
     required this.onAdd,
     required this.onRemove,
+    required this.onOpen,
+    this.tierLine = false,
+    this.highlighted = false,
     this.videoClip,
     this.onPlayVideo,
     this.stats,
   });
 
   final MenuItem item;
+
+  /// Қатор (расм, ном, нарх) босилди — таом тафсилоти варағи. «+/−» ва ▶ ўз босишларига эга (улар ютади).
+  final VoidCallback onOpen;
+
+  /// Менюда камида битта миқдорга чегирмали таом бор: ҳамма қаторда 4-қатор ажратилган (қатъий баландлик).
+  final bool tierLine;
+
+  /// Лентадан келган таом: фон бренд рангидан шаффофга секин сўнади (бир марта).
+  final bool highlighted;
 
   /// Баҳо агрегати (бўлса): етарли баҳо йиғилган бўлсагина нархнинг ёнида ★ кўрсатилади.
   final DishStats? stats;
@@ -728,11 +810,12 @@ class _MenuItemRow extends StatelessWidget {
     final c = context.ava;
     final available = item.isAvailable;
     final photo = item.photoUrl.trim();
-    return Opacity(
-      opacity: available ? 1 : 0.5,
+    Widget row(Color? bg) => InkWell(
+      key: ValueKey('menu-row-${item.id}'),
+      onTap: onOpen,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+        decoration: BoxDecoration(color: bg, border: Border(bottom: BorderSide(color: c.line))),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -777,17 +860,19 @@ class _MenuItemRow extends StatelessWidget {
                   ),
                   if (item.description.isNotEmpty) ...[
                     const SizedBox(height: 2),
+                    // Менюда миқдорга чегирмали таом бор — барча қаторда 4-қатор ажратилган ([tierLine]); чегирмаси
+                    // йўқ таомда у тавсифнинг иккинчи қатори бўлади. Тўлиқ тавсиф — таом варағида.
                     Text(
                       item.description,
-                      maxLines: 1,
+                      maxLines: tierLine && item.qtyTiers.isEmpty ? 2 : 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AvaText.caption.copyWith(color: c.ink2),
+                      style: AvaText.dishNote.copyWith(color: c.ink2),
                     ),
                   ],
                   const SizedBox(height: 4),
-                  // Қатор баландлиги қотирилган (SliverFixedExtentList): баҳо ЯНГИ қатор эмас, нарх ёнида.
-                  // Матн устуни тор бўлиши мумкин (чапда категория панели, ўнгда «+»): сиғмаса бутун
-                  // қатор кичраяди — нарх ҳам, ★ ҳам йўқолмайди.
+                  // Қатор баландлиги қотирилган (SliverFixedExtentList). НАРХ ҲАР ДОИМ тўлиқ ўлчамда: аввал
+                  // нарх + чегирма + ★ битта қаторга сиғдирилиб, бутун қатор ~10 px гача кичрайиб кетарди
+                  // (ўқилмасди). Энди нарх + ★ (қисқа) бир қаторда, чегирма ҳинти — алоҳида қаторда.
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: AlignmentDirectional.centerStart,
@@ -799,19 +884,6 @@ class _MenuItemRow extends StatelessWidget {
                           maxLines: 1,
                           style: AvaText.price.copyWith(color: c.brandText),
                         ),
-                        // Миқдорга чегирма (D-REST-25): биринчи поғона — «10 тадан 32 000»; қолганлари саватда.
-                        if (item.qtyTiers.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            context
-                                .tr('restaurants_tier_from')
-                                .replaceAll('{min}', '${item.qtyTiers.first.minQty}')
-                                .replaceAll('{price}', formatPrice(item.qtyTiers.first.price)),
-                            key: Key('tier-hint-${item.id}'),
-                            maxLines: 1,
-                            style: AvaText.caption.copyWith(color: c.ok),
-                          ),
-                        ],
                         if (stats != null && stats!.showRating) ...[
                           const SizedBox(width: 8),
                           Icon(Icons.star_rounded, size: 14, color: c.brand),
@@ -820,12 +892,26 @@ class _MenuItemRow extends StatelessWidget {
                             '${stats!.average.toStringAsFixed(1)} (${stats!.ratingCount})',
                             key: Key('dish-rating-${item.id}'),
                             maxLines: 1,
-                            style: AvaText.caption.copyWith(color: c.ink2),
+                            style: AvaText.dishNote.copyWith(color: c.ink2),
                           ),
                         ],
                       ],
                     ),
                   ),
+                  // Миқдорга чегирма (D-REST-25): биринчи поғона — «10 тадан 32 000»; қолганлари таом варағида ва саватда.
+                  if (item.qtyTiers.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      context
+                          .tr('restaurants_tier_from')
+                          .replaceAll('{min}', '${item.qtyTiers.first.minQty}')
+                          .replaceAll('{price}', formatPrice(item.qtyTiers.first.price)),
+                      key: Key('tier-hint-${item.id}'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AvaText.dishNote.copyWith(color: c.ok),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -837,6 +923,18 @@ class _MenuItemRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+    return Opacity(
+      opacity: available ? 1 : 0.5,
+      child: highlighted
+          ? TweenAnimationBuilder<Color?>(
+              key: ValueKey('menu-highlight-${item.id}'),
+              tween: ColorTween(begin: c.brandSoft, end: c.brandSoft.withValues(alpha: 0)),
+              duration: const Duration(milliseconds: 2200),
+              curve: Curves.easeIn,
+              builder: (context, bg, _) => row(bg),
+            )
+          : row(null),
     );
   }
 }

@@ -750,6 +750,18 @@ class RestaurantsRepository {
 
   /// Ресторан менюсидаги таомларнинг баҳо агрегатлари: `itemId → DishStats`. Меню очилганда БИР марта
   /// ўқилади (ҳар таом учун алоҳида эмас — 37-қоида); хато бўлса меню баҳосиз кўрсатилади.
+  /// Битта таом (тафсилот варағи лентадан очилганда): ҳужжат йўқ бўлса `null`.
+  Future<MenuItem?> getMenuItem(String restaurantId, String itemId) async {
+    final d = await _restaurants.doc(restaurantId).collection('menu_items').doc(itemId).get();
+    return d.exists ? MenuItem.fromDoc(d) : null;
+  }
+
+  /// Битта таомнинг баҳо агрегати (ҳамма таом эмас — 500 ҳужжат ўқилмайди); ҳужжат йўқ — [DishStats.empty].
+  Future<DishStats> getDishStat(String restaurantId, String itemId) async {
+    final d = await _restaurants.doc(restaurantId).collection('menu_item_stats').doc(itemId).get();
+    return d.exists ? DishStats.fromMap(d.data()) : DishStats.empty;
+  }
+
   Future<Map<String, DishStats>> getDishStats(String restaurantId) async {
     final snap = await _restaurants.doc(restaurantId).collection('menu_item_stats').limit(500).get();
     return {for (final d in snap.docs) d.id: DishStats.fromMap(d.data())};

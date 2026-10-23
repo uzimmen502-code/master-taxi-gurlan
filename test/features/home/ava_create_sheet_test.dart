@@ -47,11 +47,12 @@ Future<AvaCreateAction?> _open(
 }
 
 const _allKeys = [
+  // «Менинг бизнесим» — сарлавҳасиз, энг юқорида ягона қатор (эга, 2026-10-23).
+  'home_create_business_map',
   'home_create_video',
   'home_create_ad',
   'home_create_service',
   'home_create_shop_online',
-  'home_create_business_map',
   'home_create_driver',
   'home_create_courier',
   'home_create_cargo',
@@ -73,6 +74,30 @@ void main() {
       expect(top, greaterThan(prevTop), reason: '$key тартиб бузилди');
       prevTop = top;
     }
+  });
+
+  testWidgets('«Менинг бизнесим» қатори энг юқорида, ҳеч қандай гуруҳ сарлавҳаси остида эмас; «Сотиш»да фақат онлайн дўкон', (tester) async {
+    await _open(tester);
+    final biz = tester.getTopLeft(find.text('home_create_business_map')).dy;
+    final firstGroup = tester.getTopLeft(find.text('home_create_group_quick')).dy;
+    expect(biz, lessThan(firstGroup), reason: 'ҳеч бир сарлавҳадан кейин эмас');
+    // «Сотиш» гуруҳи сақланган ва онлайн дўкон унинг остида; бизнес қатори эса ундан юқорида.
+    final sell = tester.getTopLeft(find.text('home_create_group_sell')).dy;
+    final shop = tester.getTopLeft(find.text('home_create_shop_online')).dy;
+    expect(sell, lessThan(shop));
+    expect(biz, lessThan(sell));
+  });
+
+  testWidgets('«Менинг бизнесим» бир босишда тўғридан-тўғри шу амални қайтаради (оралиқ танлов варағи йўқ)', (tester) async {
+    final picked = await _open(tester, tapKey: 'home_create_business_map');
+    expect(picked, AvaCreateAction.businessMap);
+  });
+
+  testWidgets('модул яширин бўлса (hidden) «Менинг бизнесим» қатори ва унинг бўш гуруҳи чиқмайди', (tester) async {
+    await _open(tester, hidden: {AvaCreateAction.businessMap});
+    expect(find.text('home_create_business_map'), findsNothing);
+    expect(find.text('home_create_group_quick'), findsOneWidget);
+    expect(find.text('home_create_title'), findsOneWidget);
   });
 
   testWidgets('5 гуруҳ сарлавҳаси ўз тартибида; бўш гуруҳ кўрсатилмайди', (tester) async {

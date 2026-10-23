@@ -7,6 +7,7 @@ import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/business_map/screens/business_form_screen.dart';
 import 'package:ava_gurlan/features/business_map/screens/my_businesses_screen.dart';
+import 'package:ava_gurlan/features/home/widgets/home_business_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -120,6 +121,30 @@ void main() {
       await tester.tap(find.text('Сақлаш'));
       await tester.pumpAndSettle();
       expect(repo.calls, ['adminUpdate:1:Авто Мойка:имло']);
+    });
+  });
+
+  group('HomeBusinessSection', () {
+    testWidgets('тор экранда ҳам оверфлоу йўқ ва иккала тугма босилади', (tester) async {
+      tester.view.physicalSize = const Size(320 * 2, 640 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      var opened = 0;
+      var added = 0;
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: HomeBusinessSection(onOpenMap: () => opened++, onAddMine: () => added++),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'RenderFlex overflow бўлмаслиги керак');
+      await tester.tap(find.text('bizmap_open_map'));
+      await tester.tap(find.text('bizmap_add_mine'));
+      expect([opened, added], [1, 1]);
     });
   });
 

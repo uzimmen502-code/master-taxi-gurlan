@@ -44,14 +44,17 @@ class HomeBusinessSection extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
+              // Wrap: тор экранда ва катта шрифтда иккинчи тугма пастга тушади (карточка четидан чиқмайди).
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   FilledButton.icon(
                     onPressed: onOpenMap,
                     icon: const Icon(Icons.map_outlined, size: 18),
                     label: Text(context.tr('bizmap_open_map')),
                   ),
-                  const SizedBox(width: 8),
                   TextButton(
                     onPressed: onAddMine,
                     child: Text(context.tr('bizmap_add_mine')),

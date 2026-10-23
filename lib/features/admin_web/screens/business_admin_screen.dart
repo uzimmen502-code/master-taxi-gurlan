@@ -164,7 +164,7 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('Кўрсатилди: ${rows.length} / ${_all.length} (энг сўнгги ${_all.length})'),
+              child: Text('Кўрсатилди: ${rows.length} / ${_all.length} (энг сўнгги 200 тагача юкланади)'),
             ),
           ),
           Expanded(

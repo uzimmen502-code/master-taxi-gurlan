@@ -31,7 +31,7 @@ class EvChargingMapScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
-      return const _EvChargingAnonymousGate();
+      return const EvChargingAnonymousGate();
     }
     return ChangeNotifierProvider<EvChargingMapController>(
       create: (ctx) => EvChargingMapController(
@@ -43,14 +43,16 @@ class EvChargingMapScreen extends StatelessWidget {
   }
 }
 
-class _EvChargingAnonymousGate extends StatelessWidget {
-  const _EvChargingAnonymousGate();
+/// Рўйхатдан ўтмаган (меҳмон) фойдаланувчига кўрсатиладиган экран. Матнлар — 3 тилда (`ev_guest_gate_*`);
+/// эга матни 2026-10-23: «EV станциялари базасини кўриш учун рўйхатдан ўтинг».
+class EvChargingAnonymousGate extends StatelessWidget {
+  const EvChargingAnonymousGate({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
-      appBar: AppBar(title: const Text('⚡ Зарядлаш нуқталари')),
+      appBar: AppBar(title: Text('⚡ ${context.tr('ev_guest_gate_title')}')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -59,10 +61,10 @@ class _EvChargingAnonymousGate extends StatelessWidget {
             children: [
               const Icon(Icons.ev_station_rounded, size: 64, color: AppColors.primaryText),
               const SizedBox(height: 16),
-              const Text(
-                'Бу бўлим фақат рўйхатдан ўтган фойдаланувчилар учун очиқ.',
+              Text(
+                context.tr('ev_guest_gate_message'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 20),
               SizedBox(
@@ -80,7 +82,7 @@ class _EvChargingAnonymousGate extends StatelessWidget {
                     foregroundColor: AppColors.onPrimary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: const Text('Рўйхатдан ўтиш'),
+                  child: Text(context.tr('ev_guest_gate_register')),
                 ),
               ),
             ],

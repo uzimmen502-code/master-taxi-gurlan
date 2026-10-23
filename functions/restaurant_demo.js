@@ -35,7 +35,7 @@ function dish(name, description, price, servings, weightG) {
 }
 
 /** Намуна маълумот тўплами (соф; тест ва tool ишлатади). */
-const DEMO_SET = Object.freeze([
+const GURLAN_SET = Object.freeze([
   {
     id: 'demo_cafe_1', kind: 'cafe', legalType: 'yatt', venueType: 'cafe',
     name: 'Бахор кафеси', address: 'Гурлан тумани, Мустақиллик кўчаси 12', cuisineTags: ['milliy'],
@@ -122,12 +122,42 @@ const DEMO_SET = Object.freeze([
   },
 ]);
 
+/**
+ * ТОШКЕНТ нусхаси (эга, 2026-10-23: намуналар Гурланда эди, эганинг ҳақиқий рестораны ва қурилмаси эса Тошкентда —
+ * ресторанлар блоки ~20 км атрофни кўрсатади, шунинг учун Гурландаги намуналар Тошкентда «яқин» эмас эди).
+ * Тўплам Гурландаги билан бир хил (таом ва тур), ном/манзил/жой — Тошкент; ID'лар `demo_*_t1…t3`.
+ */
+const TASHKENT_CENTER = Object.freeze({ lat: 41.2950, lng: 69.3300 });
+const TASHKENT_VARIANTS = [
+  ['demo_cafe_1', 'demo_cafe_t1', 'Навруз кафеси', 'Тошкент, Мирзо Улуғбек тумани, Буюк Ипак йўли 21'],
+  ['demo_cafe_2', 'demo_cafe_t2', 'Чорсу чойхонаси', 'Тошкент, Шайхонтоҳур тумани, Навоий кўчаси 14'],
+  ['demo_cafe_3', 'demo_cafe_t3', 'Юнусобод фастфуд', 'Тошкент, Юнусобод тумани, Амир Темур шоҳ кўчаси 60'],
+  ['demo_home_1', 'demo_home_t1', 'Гулнора опа — уй таомлари', 'Тошкент, Мирзо Улуғбек тумани, Ойбек кўчаси 5'],
+  ['demo_home_2', 'demo_home_t2', 'Саодат опа ошхонаси', 'Тошкент, Чилонзор тумани, Қатортол кўчаси 9'],
+  ['demo_home_3', 'demo_home_t3', 'Мунира — уй қандолатлари', 'Тошкент, Яккасарой тумани, Шота Руставели кўчаси 3'],
+];
+const TASHKENT_SET = Object.freeze(TASHKENT_VARIANTS.map(([baseId, id, name, address], i) => {
+  const base = GURLAN_SET.find((s) => s.id === baseId);
+  return Object.freeze({
+    ...base,
+    id, name, address,
+    center: TASHKENT_CENTER,
+    // Тошкентда ҳам бир-биридан фарқли нуқталар (~1–3 км): якка кўчада йиғилиб қолмасин.
+    dLat: [0.004, -0.008, 0.012, -0.003, 0.007, -0.011][i],
+    dLng: [0.006, 0.010, -0.004, -0.009, 0.003, -0.002][i],
+  });
+}));
+
+/** Барча намуналар (Гурлан + Тошкент): ҳар шаҳарда 3 кафе-ресторан + 3 уй ошпази, ҳар бирида 5 таом. */
+const DEMO_SET = Object.freeze([...GURLAN_SET, ...TASHKENT_SET]);
+
 const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
 /** Битта намунанинг Firestore ҳужжатлари (соф). `ts` — серверTimestamp ёки test Date. */
 function buildDemoDocs(spec, { ts }) {
-  const lat = clamp(CENTER.lat + spec.dLat, -90, 90);
-  const lng = clamp(CENTER.lng + spec.dLng, -180, 180);
+  const center = spec.center || CENTER;
+  const lat = clamp(center.lat + spec.dLat, -90, 90);
+  const lng = clamp(center.lng + spec.dLng, -180, 180);
   const restaurant = {
     name: spec.name,
     legalType: spec.legalType,
@@ -260,5 +290,5 @@ function attachRestaurantDemoCleanup(exportsObj, deps) {
 
 module.exports = {
   attachRestaurantDemoCleanup, cleanupDemos, evaluate, countApprovedHome, shouldEvaluate, buildDemoDocs, kindOf,
-  DEMO_SET, DEMO_BATCH, REAL_THRESHOLD, OWNER_UID, NOTICE, RESTAURANTS,
+  DEMO_SET, GURLAN_SET, TASHKENT_SET, DEMO_BATCH, REAL_THRESHOLD, OWNER_UID, NOTICE, RESTAURANTS,
 };

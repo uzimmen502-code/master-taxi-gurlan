@@ -42,11 +42,15 @@ async function addReal(id, venueType, status = 'approved', { legacyHome = false 
 async function main() {
   await clearEmulator();
 
-  await check('P1 tuplam: 6 ta (3 kafe + 3 uy), har birida 5 taom, 2 kategoriya; ID/tur/narx to\'g\'ri', () => {
-    assert.strictEqual(demo.DEMO_SET.length, 6);
-    assert.strictEqual(demo.DEMO_SET.filter((s) => s.kind === 'cafe').length, 3);
-    assert.strictEqual(demo.DEMO_SET.filter((s) => s.kind === 'home').length, 3);
-    assert.strictEqual(new Set(demo.DEMO_SET.map((s) => s.id)).size, 6);
+  await check('P1 tuplam: 12 ta (Gurlan 3+3 va Toshkent 3+3), har birida 5 taom, 2 kategoriya; ID/tur/narx to\'g\'ri', () => {
+    assert.strictEqual(demo.DEMO_SET.length, 12);
+    assert.strictEqual(demo.DEMO_SET.filter((s) => s.kind === 'cafe').length, 6);
+    assert.strictEqual(demo.DEMO_SET.filter((s) => s.kind === 'home').length, 6);
+    assert.strictEqual(new Set(demo.DEMO_SET.map((s) => s.id)).size, 12);
+    for (const set of [demo.GURLAN_SET, demo.TASHKENT_SET]) {
+      assert.strictEqual(set.filter((s) => s.kind === 'cafe').length, 3);
+      assert.strictEqual(set.filter((s) => s.kind === 'home').length, 3);
+    }
     for (const s of demo.DEMO_SET) {
       assert.strictEqual(s.dishes.length, 5, s.id);
       assert.strictEqual(s.categories.length, 2, s.id);
@@ -102,16 +106,16 @@ async function main() {
     }
   });
 
-  await check('S1 dry-run: hech narsa yozilmaydi, reja 6 ta create', async () => {
+  await check('S1 dry-run: hech narsa yozilmaydi, reja 12 ta create', async () => {
     const r = await seedDemos(db, admin, { apply: false });
     assert.strictEqual(r.applied, false);
-    assert.strictEqual(r.plan.filter((p) => p.action === 'create').length, 6);
+    assert.strictEqual(r.plan.filter((p) => p.action === 'create').length, 12);
     assert.deepStrictEqual(await ids(), []);
   });
 
-  await check('S2 apply: 6 restoran, har birida 5 taom + 2 kategoriya; audit yoziladi', async () => {
+  await check('S2 apply: 12 restoran, har birida 5 taom + 2 kategoriya; audit yoziladi', async () => {
     const r = await seedDemos(db, admin, { apply: true });
-    assert.strictEqual(r.created.length, 6);
+    assert.strictEqual(r.created.length, 12);
     assert.deepStrictEqual(await ids(), demo.DEMO_SET.map((s) => s.id).sort());
     for (const s of demo.DEMO_SET) {
       const base = db.collection('restaurants').doc(s.id);
@@ -125,7 +129,7 @@ async function main() {
     await db.collection('restaurants').doc('demo_cafe_1').update({ name: 'Admin o\'zgartirgan' });
     const r = await seedDemos(db, admin, { apply: true });
     assert.deepStrictEqual(r.created, []);
-    assert.strictEqual(r.plan.filter((p) => p.action === 'exists').length, 6);
+    assert.strictEqual(r.plan.filter((p) => p.action === 'exists').length, 12);
     assert.strictEqual((await db.collection('restaurants').doc('demo_cafe_1').get()).data().name, 'Admin o\'zgartirgan');
     assert.strictEqual((await db.collection('admin_audit').where('kind', '==', 'demo_restaurants_seed').get()).size, 1);
   });
@@ -145,7 +149,7 @@ async function main() {
     const out = await demo.cleanupDemos(db, { admin });
     assert.deepStrictEqual(out.removed, []);
     assert.deepStrictEqual(out.real, { home: 0, cafe: 2 });
-    assert.strictEqual((await ids()).length, 6);
+    assert.strictEqual((await ids()).length, 12);
   });
 
   await check('C2 applied/rejected haqiqiy subyektlar hisoblanmaydi (faqat approved)', async () => {
@@ -160,14 +164,15 @@ async function main() {
     await db.collection('restaurant_dish_index').doc('demo_cafe_2_d1').set({ restaurantId: 'demo_cafe_2', itemId: 'd1' });
     await addReal('real_cafe_3', undefined); // venueType yo'q (eski hujjat) = kafe
     const out = await demo.cleanupDemos(db, { admin });
-    assert.deepStrictEqual(out.removed.sort(), ['demo_cafe_1', 'demo_cafe_2', 'demo_cafe_3']);
-    assert.deepStrictEqual(await ids(), ['demo_home_1', 'demo_home_2', 'demo_home_3']);
+    const cafeIds = ['demo_cafe_1', 'demo_cafe_2', 'demo_cafe_3', 'demo_cafe_t1', 'demo_cafe_t2', 'demo_cafe_t3'];
+    assert.deepStrictEqual(out.removed.sort(), cafeIds.sort());
+    assert.deepStrictEqual(await ids(), ['demo_home_1', 'demo_home_2', 'demo_home_3', 'demo_home_t1', 'demo_home_t2', 'demo_home_t3'], 'har ikki shahardagi kafe ketdi, uy oshpazlari qoldi');
     assert.strictEqual((await db.collection('restaurants').doc('demo_cafe_1').collection('menu_items').get()).size, 0, 'menyu ham o\'chdi');
     assert.strictEqual((await db.collection('restaurant_dish_index').where('restaurantId', '==', 'demo_cafe_2').get()).size, 0);
     assert.strictEqual(await exists('real_cafe_1'), true, 'haqiqiy subyektga tegilmaydi');
     const audit = (await db.collection('admin_audit').where('kind', '==', 'demo_restaurants_cleanup').get()).docs.map((d) => d.data());
     assert.strictEqual(audit.length, 1);
-    assert.deepStrictEqual(audit[0].removed.sort(), ['demo_cafe_1', 'demo_cafe_2', 'demo_cafe_3']);
+    assert.deepStrictEqual(audit[0].removed.sort(), ['demo_cafe_1', 'demo_cafe_2', 'demo_cafe_3', 'demo_cafe_t1', 'demo_cafe_t2', 'demo_cafe_t3']);
     assert.strictEqual(audit[0].actor, 'system:demo_cleanup');
   });
 
@@ -184,7 +189,7 @@ async function main() {
     assert.deepStrictEqual((await demo.cleanupDemos(db, { admin })).removed, []);
     await addReal('real_home_3', 'home');
     const out = await demo.cleanupDemos(db, { admin });
-    assert.deepStrictEqual(out.removed.sort(), ['demo_home_1', 'demo_home_2', 'demo_home_3']);
+    assert.deepStrictEqual(out.removed.sort(), ['demo_home_1', 'demo_home_2', 'demo_home_3', 'demo_home_t1', 'demo_home_t2', 'demo_home_t3']);
     assert.deepStrictEqual(await ids(), []);
     // kafe haqiqiylari uy hisobiga aralashmagan edi
     assert.deepStrictEqual(out.real, { home: 3, cafe: 3 });
@@ -192,11 +197,30 @@ async function main() {
 
   await check('S4 haqiqiy soni yetarli bo\'lsa seed shu turni yaratmaydi (skip_real_enough)', async () => {
     const r = await seedDemos(db, admin, { apply: true });
-    assert.strictEqual(r.plan.filter((p) => p.action === 'skip_real_enough').length, 6);
+    assert.strictEqual(r.plan.filter((p) => p.action === 'skip_real_enough').length, 12);
     assert.deepStrictEqual(r.created, []);
     assert.deepStrictEqual(await ids(), []);
   });
 
+  await check('P4 Toshkent namunalari Toshkent ichida (<=20 km: ro\'yxat bloki radiusi), Gurlanniki Gurlanda; hammasi O\'zbekistonda', () => {
+    const km = (a, b, c, d) => {
+      const R = 6371; const r = (x) => (x * Math.PI) / 180;
+      const h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    };
+    const ts = new Date();
+    for (const s of demo.TASHKENT_SET) {
+      const r = demo.buildDemoDocs(s, { ts }).restaurant;
+      assert.ok(km(r.lat, r.lng, 41.2995, 69.2401) < 20, `${s.id} Toshkent markazidan 20 km ichida`);
+      assert.ok(km(r.lat, r.lng, 41.8442, 60.3925) > 500, `${s.id} Gurlanda emas`);
+    }
+    for (const s of demo.GURLAN_SET) {
+      const r = demo.buildDemoDocs(s, { ts }).restaurant;
+      assert.ok(km(r.lat, r.lng, 41.8442, 60.3925) < 20, `${s.id} Gurlan ichida`);
+    }
+    assert.ok(new Set(demo.TASHKENT_SET.map((s) => s.name)).size === 6, 'Toshkent nomlari takrorsiz');
+    for (const s of demo.TASHKENT_SET) assert.ok(!demo.GURLAN_SET.some((g) => g.name === s.name), `${s.id} nomi Gurlandagi bilan bir xil emas`);
+  });
   await check('F1 --refresh: eski (pausedUntil 2099 + ish vaqti) namunalar tuzatiladi; toza namunaga tegilmaydi; dry-run yozmaydi', async () => {
     await clearEmulator();
     await seedDemos(db, admin, { apply: true });
@@ -226,12 +250,12 @@ async function main() {
     await clearEmulator();
     await addReal('real_x', 'cafe');
     await seedDemos(db, admin, { apply: true });
-    assert.strictEqual((await ids()).length, 6);
+    assert.strictEqual((await ids()).length, 12);
     const dry = await removeAllDemos(db, admin, { apply: false });
-    assert.strictEqual(dry.ids.length, 6);
-    assert.strictEqual((await ids()).length, 6, 'dry-run o\'chirmaydi');
+    assert.strictEqual(dry.ids.length, 12);
+    assert.strictEqual((await ids()).length, 12, 'dry-run o\'chirmaydi');
     const r = await removeAllDemos(db, admin, { apply: true });
-    assert.strictEqual(r.ids.length, 6);
+    assert.strictEqual(r.ids.length, 12);
     assert.deepStrictEqual(await ids(), []);
     assert.strictEqual(await exists('real_x'), true);
   });

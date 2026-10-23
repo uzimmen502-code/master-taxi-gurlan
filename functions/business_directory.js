@@ -1,8 +1,9 @@
 /**
  * БИЗНЕС ХАРИТАСИ — тадбиркорлик объектлари реестри (ega qarori 2026-10-23, docs/biznes_xaritasi_2026-10-23_uz.md).
  *
- * Қоида (B-1): объектни ЭГАСИ ўзи қўшади ва таҳрирлайди; админ қўшмайди — фақат таҳрирлайди ва ўчиради
- * (ҳар бири `admin_audit`га сабаб билан тушади, 41-банд). Тасдиқлаш навбати йўқ: ёзув дарҳол харитада.
+ * Қоида (B-1): объектни ЭГАСИ ўзи қўшади ва таҳрирлайди. 2026-10-23 эга қарори билан админ ҲАМ қўша олади
+ * (`adminCreateBusiness`), таҳрирлайди ва ўчиради — ҳар бири `admin_audit`га сабаб билан тушади (41-банд).
+ * Тасдиқлаш навбати йўқ: ёзув дарҳол харитада.
  *
  * Коллекция (client-write ЁПИҚ, фақат шу callable'лар ёзади; ўқиш — оммавий):
  *   businesses/{ownerId}_{clientRequestId}
@@ -15,7 +16,7 @@
  *
  * Диагностика кодлари: BUSINESS_NAME_INVALID, BUSINESS_CATEGORY_INVALID, BUSINESS_LOCATION_INVALID,
  * BUSINESS_PHONE_INVALID, BUSINESS_FIELD_INVALID, BUSINESS_LIMIT_REACHED, BUSINESS_NOT_FOUND,
- * BUSINESS_NOT_OWNER, REQUEST_ID_INVALID, GEO_DISTRICT_INVALID, REASON_REQUIRED.
+ * BUSINESS_NOT_OWNER, BUSINESS_OWNER_INVALID, REQUEST_ID_INVALID, GEO_DISTRICT_INVALID, REASON_REQUIRED.
  */
 'use strict';
 
@@ -256,6 +257,45 @@ function attachBusinessDirectory(exportsObj, deps) {
       return { changed: true };
     });
     log({ action: 'adminUpdateBusiness', userId: actor, businessId: ref.id, result: out.changed ? 'updated' : 'noop', durationMs: Date.now() - started });
+    return { ok: true, businessId: ref.id, ...out };
+  });
+
+  /**
+   * data: { clientRequestId, reason, ownerPhone?, ...майдонлар (upsert билан бир хил) } → { ok, businessId, duplicate }.
+   * Эга қарори (2026-10-23): админ ҲАМ объект ҚЎША олади (аввал B-1: фақат таҳрир/ўчириш эди).
+   * `ownerPhone` берилса — ёзув шу фойдаланувчиники бўлади (у кейин ўзи таҳрирлайди); берилмаса — `ownerId: 'admin'`
+   * (ҳеч бир фойдаланувчи эга эмас, фақат админ таҳрирлайди). Лимит (`maxPerOwner`) админга қўлланмайди.
+   * ID `admin_<clientRequestId>` — қайта чақирув такрор яратмайди (21-банд). `admin_audit` (`business_create`).
+   */
+  exportsObj.adminCreateBusiness = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireAdmin(context);
+    const d = data || {};
+    const reason = reasonOf(d);
+    const clientRequestId = str(d.clientRequestId, 64);
+    if (!ID_RE.test(clientRequestId)) throw fail('invalid-argument', 'REQUEST_ID_INVALID', 'Қайта уриниб кўринг.');
+    const fields = normalizeInput(d, fail);
+    await assertGeo(fields);
+    let ownerId = 'admin';
+    if (d.ownerPhone != null && String(d.ownerPhone).trim() !== '') {
+      ownerId = canonicalUid(String(d.ownerPhone));
+      if (!/^\d{12}$/.test(ownerId)) {
+        throw fail('invalid-argument', 'BUSINESS_OWNER_INVALID', 'Эга телефони нотўғри.');
+      }
+    }
+    const ref = db.collection(COLLECTION).doc(`admin_${clientRequestId}`);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (snap.exists) return { duplicate: true };
+      t.create(ref, {
+        ownerId, ...fields, status: 'active', source: 'admin', createdBy: actor, createdAt: ts(), updatedAt: ts(),
+      });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'business_create', actor, target: ref.id, reason, ownerId, at: ts(),
+      });
+      return { duplicate: false };
+    });
+    log({ action: 'adminCreateBusiness', userId: actor, businessId: ref.id, result: out.duplicate ? 'duplicate' : 'created', durationMs: Date.now() - started });
     return { ok: true, businessId: ref.id, ...out };
   });
 

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -33,7 +36,7 @@ class EvChargingMapScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
-      return const _EvChargingAnonymousGate();
+      return const EvChargingAnonymousGate();
     }
     return ChangeNotifierProvider<EvChargingMapController>(
       create: (ctx) => EvChargingMapController(
@@ -45,14 +48,16 @@ class EvChargingMapScreen extends StatelessWidget {
   }
 }
 
-class _EvChargingAnonymousGate extends StatelessWidget {
-  const _EvChargingAnonymousGate();
+/// Рўйхатдан ўтмаган (меҳмон) фойдаланувчига кўрсатиладиган экран. Матнлар — 3 тилда (`ev_guest_gate_*`);
+/// эга матни 2026-10-23: «EV станциялари базасини кўриш учун рўйхатдан ўтинг».
+class EvChargingAnonymousGate extends StatelessWidget {
+  const EvChargingAnonymousGate({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
-      appBar: AppBar(title: const Text('⚡ Зарядлаш нуқталари')),
+      appBar: AppBar(title: Text('⚡ ${context.tr('ev_guest_gate_title')}')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -61,10 +66,10 @@ class _EvChargingAnonymousGate extends StatelessWidget {
             children: [
               const Icon(Icons.ev_station_rounded, size: 64, color: AppColors.primaryText),
               const SizedBox(height: 16),
-              const Text(
-                'Бу бўлим фақат рўйхатдан ўтган фойдаланувчилар учун очиқ.',
+              Text(
+                context.tr('ev_guest_gate_message'),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 20),
               SizedBox(
@@ -82,7 +87,7 @@ class _EvChargingAnonymousGate extends StatelessWidget {
                     foregroundColor: AppColors.onPrimary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: const Text('Рўйхатдан ўтиш'),
+                  child: Text(context.tr('ev_guest_gate_register')),
                 ),
               ),
             ],
@@ -100,12 +105,41 @@ class _EvChargingMapView extends StatefulWidget {
   State<_EvChargingMapView> createState() => _EvChargingMapViewState();
 }
 
-class _EvChargingMapViewState extends State<_EvChargingMapView> {
+class _EvChargingMapViewState extends State<_EvChargingMapView>
+    with WidgetsBindingObserver {
   late final EvNavigationSessionController _nav;
+  StreamSubscription<ServiceStatus>? _gpsStatusSub;
+
+  /// «GPS ўчиқ» хабари кўрсатилган бўлса, жойлашувни қайта аниқлайди — GPS ёқилгандан кейин хабар кетади.
+  void _retryLocationIfNeeded() {
+    if (!mounted) return;
+    final controller = context.read<EvChargingMapController>();
+    if (controller.error != null) controller.refreshLocation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Созламалардан (GPS/рухсат) қайтганда.
+    if (state == AppLifecycleState.resumed) _retryLocationIfNeeded();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Тезкор панелдан GPS ёқилса — илова ёпилмайди, шунинг учун хизмат ҳолатини ҳам тинглаймиз.
+    if (!kIsWeb) {
+      try {
+        _gpsStatusSub = Geolocator.getServiceStatusStream().listen(
+          (status) {
+            if (status == ServiceStatus.enabled) _retryLocationIfNeeded();
+          },
+          onError: (Object _) {},
+        );
+      } catch (_) {
+        // Платформада қўллаб-қувватланмаса — фақат lifecycle ишлайди.
+      }
+    }
     // Харита статус бар ва пастки соҳа остигача (эга қарори, 2026-10-16).
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     EvChargingRulesHolder.load();
@@ -121,6 +155,8 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _gpsStatusSub?.cancel();
     // Бошқа экранлар учун одатдаги тизим панелларига қайтарилади.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);

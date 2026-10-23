@@ -5,7 +5,7 @@ import 'package:ava_gurlan/features/business_map/data/business_pin_loader.dart';
 import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_pin.dart';
-import 'package:ava_gurlan/features/business_map/domain/viewport_cells.dart';
+import 'package:ava_gurlan/core/geo/viewport_cells.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_seller.dart';
 import 'package:ava_gurlan/models/ev_charging_station.dart';

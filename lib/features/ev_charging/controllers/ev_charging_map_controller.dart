@@ -104,12 +104,31 @@ class EvChargingMapController extends ChangeNotifier {
   void recenterOnGps(double lat, double lng) {
     _lat = lat;
     _lng = lng;
+    // GPS нуқтаси бор — «GPS ўчиқ» хабари эскирган (аввал ҳеч қачон ўчмасди).
+    error = null;
     _watchStations();
     notifyListeners();
   }
 
+  /// GPS ёқилганда / рухсат берилганда жойлашувни қайта аниқлайди ва «GPS ўчиқ» хабарини ўчиради.
+  /// Рухсат СЎРАМАЙДИ ([LocationService.getCoordsIfAllowed]): GPS ҳали йўқ бўлса хабар қолади.
+  /// Экран иловага қайтганда ва GPS хизмати ёқилганда чақиради. Қайтади: хабар ўчдими.
+  Future<bool> refreshLocation() async {
+    final coords = await _locationService.getCoordsIfAllowed();
+    if (_disposed) return false;
+    if (coords == null) return false;
+    _lat = coords.lat;
+    _lng = coords.lng;
+    error = null;
+    notifyListeners();
+    return true;
+  }
+
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     _stationsSub?.cancel();
     super.dispose();
   }

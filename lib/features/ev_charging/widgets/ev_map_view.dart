@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../../core/ev_charging_rules_holder.dart';
+import '../../../core/geo/viewport_cells.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/ev_charging_station.dart';
-import '../controllers/ev_cluster_calculator.dart';
-import '../models/ev_cluster.dart';
+import '../controllers/ev_station_cap.dart';
 
 /// `GoogleMap` chaqiruvlarini shu fayl ichiga izolyatsiya qiladigan thin
 /// wrapper — repozitoriyda umumiy map-abstraksiya konventsiyasi yo'q
@@ -38,7 +38,12 @@ class EvMapView extends StatefulWidget {
 
 class _EvMapViewState extends State<EvMapView> {
   GoogleMapController? _map;
-  double _zoom = 14;
+
+  /// Камера маркази: ≤400 нуқта «марказга яқинлари» шунга нисбатан (кластер йўқ).
+  late LatLng _center = LatLng(widget.centerLat, widget.centerLng);
+
+  /// Кўринган ҳудуд жуда катта (>30 geohash катакча — вилоят/мамлакат миқёси): «яқинлаштиринг» хабари.
+  bool _tooWide = false;
 
   /// Бир марта: биринчи нуқталар келганда бутун Ўзбекистон бўйлаб барча
   /// станциялар кўринадиган қилиб камерани мослаш (эга қарори, 2026-09-22
@@ -49,7 +54,6 @@ class _EvMapViewState extends State<EvMapView> {
   @override
   void initState() {
     super.initState();
-    _zoom = widget.initialZoom;
   }
 
   @override
@@ -105,56 +109,87 @@ class _EvMapViewState extends State<EvMapView> {
     }
   }
 
+  /// Кластер ЙЎҚ (эга, 2026-10-23): ҳар станция — алоҳида маркер; бир вақтда ≤400 тасини, камера марказига яқинларини
+  /// кўрсатади ([capNearestStations]). Бизнес харитаси билан бир хил қоида.
   Set<Marker> _buildMarkers() {
-    final threshold = EvChargingRulesHolder.current.clusteringThreshold;
-    final clusters = EvClusterCalculator.build(
-      widget.stations,
-      threshold: threshold,
-      zoom: _zoom,
-    );
-    return clusters.map(_markerFor).toSet();
+    final shown = capNearestStations(widget.stations, _center.latitude, _center.longitude);
+    return {
+      for (final s in shown)
+        Marker(
+          markerId: MarkerId(s.id),
+          position: LatLng(s.latitude, s.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          onTap: () => widget.onStationTap(s),
+        ),
+    };
   }
 
-  Marker _markerFor(EvCluster cluster) {
-    if (cluster.isSingle) {
-      final station = cluster.stations.first;
-      return Marker(
-        markerId: MarkerId(cluster.id),
-        position: LatLng(cluster.lat, cluster.lng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        onTap: () => widget.onStationTap(station),
-      );
+  /// Камера тўхтагач: кўринган ҳудуд жуда катта эканини аниқлаб, «яқинлаштиринг» хабарини ёқади/ўчиради.
+  Future<void> _onIdle() async {
+    final map = _map;
+    var wide = _tooWide;
+    if (map != null) {
+      try {
+        final r = await map.getVisibleRegion();
+        wide = ViewportCells.forBounds(
+              south: r.southwest.latitude,
+              west: r.southwest.longitude,
+              north: r.northeast.latitude,
+              east: r.northeast.longitude,
+            ) ==
+            null;
+      } catch (_) {
+        // Харита ҳали тайёр эмас — олдинги ҳолат қолади.
+      }
     }
-    return Marker(
-      markerId: MarkerId(cluster.id),
-      position: LatLng(cluster.lat, cluster.lng),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-      infoWindow: InfoWindow(title: '⚡ ${cluster.count} нуқта'),
-      onTap: () => _map?.animateCamera(
-        CameraUpdate.newLatLngZoom(LatLng(cluster.lat, cluster.lng), _zoom + 2),
-      ),
-    );
+    if (mounted) setState(() => _tooWide = wide);
   }
 
   @override
   Widget build(BuildContext context) {
-    return GoogleMap(
-      initialCameraPosition: CameraPosition(
-        target: LatLng(widget.centerLat, widget.centerLng),
-        zoom: widget.initialZoom,
-      ),
-      markers: _buildMarkers(),
-      padding: widget.padding,
-      myLocationEnabled: true,
-      myLocationButtonEnabled: true,
-      onMapCreated: (c) {
-        _map = c;
-        if (!_didFitAll && widget.stations.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _fitAllStations());
-        }
-      },
-      onCameraMove: (pos) => _zoom = pos.zoom,
-      onCameraIdle: () => setState(() {}),
+    return Stack(
+      children: [
+        GoogleMap(
+          initialCameraPosition: CameraPosition(
+            target: LatLng(widget.centerLat, widget.centerLng),
+            zoom: widget.initialZoom,
+          ),
+          markers: _buildMarkers(),
+          padding: widget.padding,
+          myLocationEnabled: true,
+          myLocationButtonEnabled: true,
+          onMapCreated: (c) {
+            _map = c;
+            if (!_didFitAll && widget.stations.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => _fitAllStations());
+            }
+          },
+          onCameraMove: (pos) => _center = pos.target,
+          onCameraIdle: _onIdle,
+        ),
+        if (_tooWide)
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 92,
+            child: IgnorePointer(
+              child: Material(
+                key: const ValueKey('ev_zoom_in_hint'),
+                elevation: 3,
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Text(
+                    context.tr('ev_map_zoom_in'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

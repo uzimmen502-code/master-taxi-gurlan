@@ -223,10 +223,21 @@ class RestaurantsRepository {
     for (final h in cells.skip(1)) {
       merged = mergeListStreams(merged, cell(h), idOf: (r) => r.id);
     }
+    // Намуна ресторанлар (эга қарори, 2026-10-23): фойдаланувчи қайси туманда бўлса ҳам кўринсин — ҳақиқийлардан кейин.
+    merged = mergeListStreams(merged, watchDemos(), idOf: (r) => r.id);
     return merged.map((all) => withinRadius(all, lat, lng, radiusKm));
   }
 
-  /// [radiusKm] ичидагилар, энг яқини биринчи. Координатасиз — чиқмайди.
+  /// Намуна ресторанлар (`isDemo == true`, ≤12): иккита тенглик — битта майдонли индекслар кифоя, янги индекс керак эмас.
+  /// Сервер биринчи 3 та ҳақиқий субъектдан кейин ўчиради.
+  Stream<List<Restaurant>> watchDemos({int limit = 20}) => _restaurants
+      .where('status', isEqualTo: 'approved')
+      .where('isDemo', isEqualTo: true)
+      .limit(limit)
+      .snapshots()
+      .map((s) => s.docs.map(Restaurant.fromDoc).toList(growable: false));
+
+  /// [radiusKm] ичидагилар, энг яқини биринчи. Координатасиз — чиқмайди. Намуналар (`isDemo`) масофадан қатъи назар, охирида.
   static List<Restaurant> withinRadius(
     Iterable<Restaurant> all,
     double lat,
@@ -234,12 +245,18 @@ class RestaurantsRepository {
     double radiusKm,
   ) {
     final rows = <(Restaurant, double)>[];
+    final demos = <Restaurant>[];
     for (final r in all) {
+      if (r.isDemo) {
+        demos.add(r);
+        continue;
+      }
       final d = r.distanceKmFrom(lat, lng);
       if (d != null && d <= radiusKm) rows.add((r, d));
     }
     rows.sort((a, b) => a.$2.compareTo(b.$2));
-    return [for (final x in rows) x.$1];
+    demos.sort((a, b) => a.name.compareTo(b.name));
+    return [for (final x in rows) x.$1, ...demos];
   }
 
   Stream<Restaurant?> watchRestaurant(String id) => _restaurants

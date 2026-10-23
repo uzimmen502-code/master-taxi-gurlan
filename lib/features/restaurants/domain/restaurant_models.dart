@@ -239,7 +239,12 @@ class Restaurant {
     this.bookingSeats = 0,
     this.bookingNote = '',
     this.bookingsDisabled = false,
+    this.isDemo = false,
   });
+
+  /// Намуна ресторан (`isDemo`, сервер ёзади): буюртма серверда блокланади (`RESTAURANT_DEMO`), масофадан қатъи назар
+  /// кўрсатилади, биринчи 3 та ҳақиқий субъектдан кейин сервер ўчиради (`restaurantDemoCleanup`).
+  final bool isDemo;
 
   /// Олдиндан буюртма оладими (S4b). Эга белгилайди; вақт чегаралари серверда.
   final bool acceptsPreorder;
@@ -293,6 +298,9 @@ class Restaurant {
   /// Эга белгилайди (1…[maxQtyPerItemCeiling]); сават ва сервер шунга қарайди.
   final int maxQtyPerItem;
 
+  /// Намунада масофа шу чегарадан ошса кўрсатилмайди ([RestaurantsRepository.nearbyRadiusKm] билан бир хил).
+  static const demoDistanceShowKm = 20.0;
+
   bool get isApproved => status == 'approved';
   bool get isHomeCook => legalType == 'individual';
   bool get hasLocation => lat != null && lng != null;
@@ -308,7 +316,10 @@ class Restaurant {
   /// Фойдаланувчидан масофа (км); координата йўқ бўлса `null`.
   double? distanceKmFrom(double? userLat, double? userLng) {
     if (userLat == null || userLng == null || !hasLocation) return null;
-    return haversineMeters(userLat, userLng, lat!, lng!) / 1000;
+    final km = haversineMeters(userLat, userLng, lat!, lng!) / 1000;
+    // Намуна бошқа туманда бўлиши мумкин: «~950 км» деб алдамаслик учун масофа кўрсатилмайди.
+    if (isDemo && km > demoDistanceShowKm) return null;
+    return km;
   }
 
   factory Restaurant.fromMap(String id, Map<String, dynamic> d) {
@@ -348,6 +359,7 @@ class Restaurant {
       bookingSeats: _bookingSeats(d['bookingSeats']),
       bookingNote: _str(d['bookingNote']),
       bookingsDisabled: d['bookingsDisabledReason'] == 'cancel_limit',
+      isDemo: d['isDemo'] == true,
     );
   }
 

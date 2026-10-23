@@ -130,6 +130,11 @@ const { attachChinaInquiries } = require('./china_inquiries');
 attachChinaInquiries(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
 });
+// Бизнес харитаси (2026-10-23, ega): объектни эгаси қўшади, админ фақат таҳрирлайди/ўчиради. Дарвоза — мижозда (`business_map` модули).
+const { attachBusinessDirectory } = require('./business_directory');
+attachBusinessDirectory(exports, {
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
+});
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {

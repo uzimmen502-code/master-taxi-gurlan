@@ -2008,10 +2008,11 @@ service cloud.firestore {
 
     // Бизнес харитаси (2026-10-23, ega): тадбиркорлик объектлари реестри. БАРЧА ёзув фақат CF'лар
     // (`upsertMyBusiness`, `deleteMyBusiness`, `adminUpdateBusiness`, `adminDeleteBusiness` —
-    // functions/business_directory.js; 18/20-банд). Ўқиш — фақат логин қилган фойдаланувчи (телефон ва
-    // манзил оммавий қидирувга очилмасин, 40-банд). Тест: functions/test/business_directory_rules.test.js
+    // functions/business_directory.js; 18/20-банд). Ўқиш — фақат ТЕЛЕФОНИ тасдиқланган фойдаланувчи (меҳмон/
+    // анонимный эмас; `ev_charging_stations` билан бир хил): телефон ва манзил оммавий скрапингга очилмасин,
+    // 40-банд. Тест: functions/test/business_directory_rules.test.js
     match /businesses/{businessId} {
-      allow read: if isAuth();
+      allow read: if isAuth() && phoneFromToken() != '';
       allow write: if false;
     }
 

@@ -54,9 +54,12 @@ async function main() {
     await assertSucceeds(as(OTHER).collection('businesses').where('geohash4', 'in', ['tn']).get());
   });
 
-  await check('R2 loginsiz o\'qiy olmaydi (telefon/manzil ommaviy skrapingga ochiq emas)', async () => {
+  await check('R2 loginsiz va telefonsiz (mehmon/anonim) o\'qiy olmaydi (telefon/manzil ommaviy skrapingga ochiq emas)', async () => {
     await assertFails(anon().doc(`businesses/${BIZ}`).get());
     await assertFails(anon().collection('businesses').get());
+    const guest = testEnv.authenticatedContext('guest_uid', { firebase: { sign_in_provider: 'anonymous' } }).firestore();
+    await assertFails(guest.doc(`businesses/${BIZ}`).get());
+    await assertFails(guest.collection('businesses').where('geohash4', 'in', ['tn']).get());
   });
 
   await check('R3 mijoz yaratolmaydi (egasi o\'zi uchun ham, boshqa nom bilan ham)', async () => {

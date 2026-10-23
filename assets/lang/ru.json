@@ -3148,6 +3148,7 @@
   "restaurants_err_RESTAURANT_NOT_FOUND": "Ресторан не найден.",
   "restaurants_err_RESTAURANT_NOT_APPROVED": "Ресторан пока не принимает заказы.",
   "restaurants_err_RESTAURANT_PAUSED": "Ресторан временно приостановлен. Попробуйте позже.",
+  "restaurants_err_RESTAURANT_DEMO": "Это демонстрационный ресторан — заказы не принимаются. Когда зарегистрируются настоящие рестораны, демо исчезнут.",
   "restaurants_err_RESTAURANT_CLOSED": "Ресторан сейчас закрыт.",
   "restaurants_err_OWN_RESTAURANT": "Нельзя заказать в собственном ресторане.",
   "restaurants_err_PICKUP_NOT_AVAILABLE": "В этом ресторане нет самовывоза.",

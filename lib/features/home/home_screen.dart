@@ -108,6 +108,9 @@ import 'widgets/home_restaurants_section.dart';
 import 'widgets/home_avagram_section.dart';
 import 'widgets/home_dating_section.dart';
 import 'widgets/home_ev_section.dart';
+import 'widgets/home_business_section.dart';
+import '../business_map/screens/business_map_screen.dart';
+import '../business_map/screens/my_businesses_screen.dart';
 import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
 import 'widgets/home_realty_section.dart';
@@ -835,6 +838,8 @@ class _HomeViewState extends State<_HomeView> {
           AvaCreateAction.cafe,
         },
         if (!ServiceConfigHolder.isVisible('yuk_local')) AvaCreateAction.cargo,
+        if (!ServiceConfigHolder.isVisible('business_map'))
+          AvaCreateAction.businessMap,
       },
     );
     if (action == null || !mounted) return;
@@ -885,6 +890,8 @@ class _HomeViewState extends State<_HomeView> {
               WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
             );
         }
+      case AvaCreateAction.businessMap:
+        await _push(const MyBusinessesScreen());
       case AvaCreateAction.driver:
         await _openWork();
       case AvaCreateAction.courier:
@@ -1477,6 +1484,20 @@ class _HomeViewState extends State<_HomeView> {
                                 userLng: user?.address.lng,
                                 onOpenMap: () =>
                                     _push(const EvChargingMapScreen()),
+                              ),
+                            ],
+                            // Бизнес харитаси (2026-10-23, эга): ҳамма турдаги объектлар битта харитада.
+                            // Дарвоза `business_map` — admin ёқмагунча яширин (OFF → пилот → ҳамма).
+                            if (HomeModuleGate.showInGrid('business_map')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeBusinessSection(
+                                key: _sectionKey('business_map'),
+                                onOpenMap: () => _push(BusinessMapScreen(
+                                  initialLat: user?.address.lat,
+                                  initialLng: user?.address.lng,
+                                )),
+                                onAddMine: () =>
+                                    _push(const MyBusinessesScreen()),
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('tv_market')) ...[

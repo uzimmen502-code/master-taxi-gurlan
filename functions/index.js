@@ -135,6 +135,9 @@ const { attachBusinessDirectory } = require('./business_directory');
 attachBusinessDirectory(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
 });
+// Намуна кафе/уй ошпазлари (2026-10-23, ega): ҳақиқий 3 та тасдиқланган субъект бўлгач (тури бўйича) намуналар автоматик ўчади.
+const { attachRestaurantDemoCleanup } = require('./restaurant_demo');
+attachRestaurantDemoCleanup(exports, { functions, db, admin });
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {

@@ -107,6 +107,15 @@
 - **Қаерда:** rules `wholesaleSellerLocationRequiredOk` (фақат `create` йўли); клиент — `ShipFromDraft.validate(requireCoords: true)`, формада «Харитада белгилаш» (мавжуд `MapPickerScreen`) ва GPS тугмаси. Чегара уч жойда бир хил (`uz_bounds.dart`, `business_directory.js`, rules) — паритет тести қулфлайди.
 - **Таъсир:** мавжуд сотувчилар ТАЪСИРЛАНМАЙДИ (`update` йўли ўзгармаган, тест E2/D4); улар координатани ўзлари кейин киритса харитада кўринади, backfill йўқ. Эски илова/APK'дан координатасиз рўйхатдан ўтиш энди рад этилади (хато хабари, маълумот йўқолмайди) — шунинг учун веб олдин, rules кейин чиқарилади.
 
+## Намуна кафе ва уй ошпазлари (эга, 2026-10-23)
+
+- **Нима:** 3 та намуна кафе-ресторан ва 3 та намуна уй ошпази, ҳар бирида 5 та таом ва 2 категория (`functions/restaurant_demo.js`, tool `functions/tools/seed_demo_restaurants.js`). ID'лар аниқ: `demo_cafe_1..3`, `demo_home_1..3`.
+- **Нега:** модул бўш кўринмасин; «дастлабки 3 та субъект рўйхатдан ўтгунча кўрсат, кейин ўчириб ташла».
+- **Хавфсизлик:** `isDemo: true` (фақат Admin SDK ёзади); буюртма ТЎСИЛАДИ (`pausedUntil` 2099 → `placeRestaurantOrder` `RESTAURANT_PAUSED`); телефон бўш; эълон матни «Намуна · Namuna · Пример»; `ownerUid: demo_owner` (ҳақиқий фойдаланувчи эмас).
+- **Авто-ўчириш:** триггер `restaurantDemoCleanup` (`restaurants/{rid}` янги `approved` бўлганда, намуна эмас). Тури бўйича ҳисобланади — кафе-ресторан ва уй ошпази АЛОҲИДА (**талқин: «3 та субъект» = ҳар турда 3 та ҳақиқий тасдиқланган**; INFERRED). Ҳақиқий сони ≥ 3 бўлган турнинг намуналари ўчади (меню ва индекс билан), `admin_audit` (`demo_restaurants_cleanup`, актор `system:demo_cleanup`). Идемпотент.
+- **Қўлда олиб ташлаш:** `node functions/tools/seed_demo_restaurants.js --remove --apply`.
+- **Тест:** emulator 14/14 (`restaurant_demo_cf.test.js`).
+
 ## Хавфлар ва очиқ масалалар
 
 | # | Масала | Ҳолат |

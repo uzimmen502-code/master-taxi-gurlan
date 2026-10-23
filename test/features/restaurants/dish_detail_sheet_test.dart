@@ -153,6 +153,7 @@ void main() {
       TvClip? clip,
       void Function(TvClip)? onPlayVideo,
       VoidCallback? onOpenMenu,
+      VoidCallback? onCheckout,
       Future<List<Cuisine>> Function()? cuisineLoader,
       double textScale = 1.0,
     }) async {
@@ -173,6 +174,7 @@ void main() {
               clip: clip,
               onPlayVideo: onPlayVideo,
               onOpenMenu: onOpenMenu,
+              onCheckout: onCheckout,
               cuisineLoader: cuisineLoader,
             ),
           ),
@@ -342,6 +344,31 @@ void main() {
       expect(applied, findsOneWidget);
     });
 
+    testWidgets('лентадан очилганда (onCheckout бор): таом саватга тушгач пастки тугма «Буюртма бериш · сават жами →»; босилса callback; «Тайёр» йўқ', (t) async {
+      var checkouts = 0;
+      final cart = await pumpSheet(t, onCheckout: () => checkouts++);
+      expect(find.byKey(const ValueKey('dish-sheet-checkout')), findsNothing, reason: 'сават бўш — аввал «Саватга қўшиш»');
+      await t.tap(find.byKey(const ValueKey('dish-sheet-add')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dish-sheet-done')), findsNothing);
+      final label = '${tr('restaurants_checkout')} · 40 000 ${tr('sum')} →';
+      expect(find.descendant(of: find.byKey(const ValueKey('dish-sheet-checkout')), matching: find.text(label)), findsOneWidget);
+      // Жами — бутун САВАТ (бошқа таомлар билан), шу қатор эмас.
+      cart.add(_item(id: 'somsa', name: 'Somsa', price: 10000), restaurant: _rest);
+      await t.pumpAndSettle();
+      expect(find.text('${tr('restaurants_checkout')} · 50 000 ${tr('sum')} →'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('dish-sheet-checkout')));
+      expect(checkouts, 1);
+    });
+
+    testWidgets('менюдан очилганда (onCheckout йўқ): пастки тугма «Тайёр» ва варақни ёпади', (t) async {
+      await pumpSheet(t);
+      await t.tap(find.byKey(const ValueKey('dish-sheet-add')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dish-sheet-done')), findsOneWidget);
+      expect(find.byKey(const ValueKey('dish-sheet-checkout')), findsNothing);
+    });
+
     testWidgets('«Менюни кўриш» фақат лентадан очилганда; босилса callback', (t) async {
       var opened = 0;
       await pumpSheet(t, onOpenMenu: () => opened++);
@@ -429,6 +456,36 @@ void main() {
       expect(find.byKey(const ValueKey('menu-row-b9')), findsOneWidget);
       expect(find.byKey(const ValueKey('menu-highlight-b9')), findsOneWidget);
       expect(find.byKey(const ValueKey('menu-row-a0')), findsNothing, reason: 'меню 1-таомдан узоқлашди');
+      expect(t.takeException(), isNull);
+    });
+
+    Future<void> pumpOpenCart(WidgetTester t, RestaurantCart cart) async {
+      t.view.physicalSize = const Size(390 * 3, 900 * 3);
+      t.view.devicePixelRatio = 3;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(l10nApp(
+        home: RestaurantScreen(
+          restaurant: _rest,
+          repository: _MenuRepo(perCat: 2),
+          cart: cart,
+          openCartOnStart: true,
+          itemClipsLoader: (_) async => const {},
+          restaurantVideoLoader: () async => null,
+          dishStatsLoader: (_) async => const {},
+        ),
+      ));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('openCartOnStart: сават тўла бўлса экран очилгач сават варағи ўзи очилади', (t) async {
+      await pumpOpenCart(t, RestaurantCart()..add(_item(id: 'a0', name: 'Taom a0'), restaurant: _rest));
+      expect(find.byKey(const ValueKey('cart-open-a0')), findsOneWidget);
+    });
+
+    testWidgets('openCartOnStart: сават бўш бўлса бўш варақ очилмайди', (t) async {
+      await pumpOpenCart(t, RestaurantCart());
+      expect(find.byKey(const ValueKey('cart-open-a0')), findsNothing);
+      expect(find.text(tr('restaurants_cart_empty')), findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -523,7 +580,7 @@ void main() {
   group('«Барчаси» лентаси: таом босилса варақ; иккинчи босишдан ҳимоя', () {
     const feedOn = RestaurantSectionsConfig(stages: {'all': 'public'});
 
-    Future<_FeedRepo> pumpFeed(WidgetTester t, _FeedRepo repo, {void Function(Restaurant)? onOpen, void Function(BuildContext, TvClip)? clipOpener}) async {
+    Future<_FeedRepo> pumpFeed(WidgetTester t, _FeedRepo repo, {void Function(Restaurant)? onOpen, void Function(BuildContext, TvClip)? clipOpener, RestaurantCart? cart}) async {
       t.view.physicalSize = const Size(2400 * 3, 1800 * 3);
       t.view.devicePixelRatio = 3;
       addTearDown(t.view.reset);
@@ -531,7 +588,7 @@ void main() {
         home: RestaurantsListScreen(
           key: UniqueKey(),
           repository: repo,
-          cart: RestaurantCart(),
+          cart: cart ?? RestaurantCart(),
           currentUid: '998912000001',
           userLat: 41.8406,
           userLng: 60.3917,
@@ -597,6 +654,33 @@ void main() {
       await t.tap(find.byKey(const ValueKey('dish-r1_osh')));
       await t.pumpAndSettle();
       expect(repo.restaurantReads, 2, reason: 'қулф ечилган');
+    });
+
+    testWidgets('лентадан саватга қўшиб «Буюртма бериш»: варақ ёпилади, ресторан экрани САВАТ ВАРАҒИ очиқ ҳолда очилади (лентада сават панели йўқ)', (t) async {
+      final cart = RestaurantCart();
+      await pumpFeed(t, _FeedRepo(config: feedOn), cart: cart);
+      await t.tap(find.byKey(const ValueKey('dish-r1_osh')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('dish-sheet-add')));
+      await t.pumpAndSettle();
+      expect(cart.qtyOf('osh'), 1);
+      await t.tap(find.byKey(const ValueKey('dish-sheet-checkout')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dish-sheet-name')), findsNothing, reason: 'варақ ёпилди');
+      expect(find.byType(RestaurantScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('cart-open-osh')), findsOneWidget, reason: 'сават варағи очиқ');
+      expect(find.text(tr('restaurants_checkout')), findsWidgets);
+    });
+
+    testWidgets('«Менюни кўриш» — сават варағисиз, таомга фокус билан', (t) async {
+      final cart = RestaurantCart();
+      await pumpFeed(t, _FeedRepo(config: feedOn), cart: cart);
+      await t.tap(find.byKey(const ValueKey('dish-r1_osh')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('dish-sheet-open-menu')));
+      await t.pumpAndSettle();
+      expect(find.byType(RestaurantScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('cart-open-osh')), findsNothing);
     });
 
     testWidgets('варақдаги ▶ видеони очади', (t) async {
@@ -771,6 +855,16 @@ class _FeedRepo implements RestaurantsRepository {
 
   @override
   Stream<List<Restaurant>> watchApproved({int limit = 50}) => Stream.value(const [_rest]);
+
+  // Ресторан экрани очилганда (тафсилот варағидан «Буюртма бериш» / «Менюни кўриш»).
+  @override
+  Stream<Restaurant?> watchRestaurant(String id) => Stream.value(_rest);
+
+  @override
+  Stream<List<MenuCategory>> watchCategories(String restaurantId) => Stream.value(const [MenuCategory(id: 'c1', name: 'Asosiy', sort: 1)]);
+
+  @override
+  Stream<List<MenuItem>> watchMenu(String restaurantId) => Stream.value([_item(id: 'osh', name: 'Osh')]);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');

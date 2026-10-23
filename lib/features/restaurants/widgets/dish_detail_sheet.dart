@@ -32,6 +32,7 @@ Future<void> showDishDetailSheet(
   TvClip? clip,
   void Function(TvClip clip)? onPlayVideo,
   VoidCallback? onOpenMenu,
+  VoidCallback? onCheckout,
   Future<List<Cuisine>> Function()? cuisineLoader,
 }) {
   final c = context.ava;
@@ -49,6 +50,7 @@ Future<void> showDishDetailSheet(
       clip: clip,
       onPlayVideo: onPlayVideo,
       onOpenMenu: onOpenMenu,
+      onCheckout: onCheckout,
       cuisineLoader: cuisineLoader,
     ),
   );
@@ -64,6 +66,7 @@ class DishDetailSheet extends StatefulWidget {
     this.clip,
     this.onPlayVideo,
     this.onOpenMenu,
+    this.onCheckout,
     this.cuisineLoader,
   });
 
@@ -74,6 +77,10 @@ class DishDetailSheet extends StatefulWidget {
   final TvClip? clip;
   final void Function(TvClip clip)? onPlayVideo;
   final VoidCallback? onOpenMenu;
+
+  /// Лентадан очилганда: лентада сават панели йўқ, шунинг учун таом саватга тушгач пастки тугма «Буюртма бериш»
+  /// бўлади ва ресторан экранини сават очиқ ҳолда очади. `null` (менюдан очилганда) — «Тайёр» (варақни ёпади).
+  final VoidCallback? onCheckout;
   final Future<List<Cuisine>> Function()? cuisineLoader;
 
   @override
@@ -542,13 +549,15 @@ class _DishDetailSheetState extends State<DishDetailSheet> {
           const SizedBox(width: 12),
           Expanded(
             child: FilledButton(
-              key: const ValueKey('dish-sheet-done'),
-              onPressed: () => Navigator.of(context).pop(),
+              key: ValueKey(widget.onCheckout == null ? 'dish-sheet-done' : 'dish-sheet-checkout'),
+              onPressed: widget.onCheckout ?? () => Navigator.of(context).pop(),
               style: style,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  '${context.tr('restaurants_dish_done')} · ${formatPrice(line.lineTotal)} ${context.tr('sum')}',
+                  widget.onCheckout == null
+                      ? '${context.tr('restaurants_dish_done')} · ${formatPrice(line.lineTotal)} ${context.tr('sum')}'
+                      : '${context.tr('restaurants_checkout')} · ${formatPrice(widget.cart.itemsTotal)} ${context.tr('sum')} →',
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                 ),
               ),

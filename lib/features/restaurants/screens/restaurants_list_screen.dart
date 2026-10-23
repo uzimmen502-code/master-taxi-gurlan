@@ -422,11 +422,16 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
         Navigator.of(context).pop();
         _open(restaurant, focusItemId: d.itemId);
       },
+      // Лентада сават панели йўқ: таом саватга тушгач «Буюртма бериш» ресторан экранини сават очиқ ҳолда очади.
+      onCheckout: () {
+        Navigator.of(context).pop();
+        _open(restaurant, openCartOnStart: true);
+      },
       cuisineLoader: () => _repo.listCuisines(),
     );
   }
 
-  void _open(Restaurant r, {String? focusItemId}) {
+  void _open(Restaurant r, {String? focusItemId, bool openCartOnStart = false}) {
     final hook = widget.onOpenRestaurant;
     if (hook != null) {
       hook(r);
@@ -441,6 +446,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
           repository: _repo,
           cart: _cart,
           focusItemId: focusItemId,
+          openCartOnStart: openCartOnStart,
         ),
       ),
     );

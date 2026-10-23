@@ -49,6 +49,10 @@ class BusinessPinLoader {
   FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
   BusinessRepository get _biz => _businesses ?? BusinessRepository();
 
+  /// EV станциялар харитада ВАҚТИНЧА яширилган (эга, 2026-10-23: «вақтинчалик EV станцияларини ёпиб қўй, кўздан
+  /// яшир»). Қайта кўрсатиш учун — `true`. Станциялар ўз модулида (EV харитаси) ўзгаришсиз; бу ерда ўқилмайди ҳам.
+  static const bool showEvStations = false;
+
   /// Ҳар сўровда харитага чиқадиган энг кўп нуқта.
   static const int maxPins = 400;
   static const int _perCellLimit = 50;
@@ -83,7 +87,7 @@ class BusinessPinLoader {
               for (final b in await _biz.fetchRecent(limit: _overviewBusinesses)) BusinessPin.fromBusiness(b),
             ]),
         guarded(BusinessSource.restaurant, _restaurantsOverview),
-        guarded(BusinessSource.evStation, _evOverview),
+        if (showEvStations) guarded(BusinessSource.evStation, _evOverview),
         guarded(BusinessSource.wholesaleSeller, _wholesaleSellers),
       ]);
       final all = <BusinessPin>[
@@ -104,7 +108,7 @@ class BusinessPinLoader {
         return [for (final b in rows) BusinessPin.fromBusiness(b)];
       }),
       guarded(BusinessSource.restaurant, () => _restaurants(cells)),
-      guarded(BusinessSource.evStation, () => _evStations(cells)),
+      if (showEvStations) guarded(BusinessSource.evStation, () => _evStations(cells)),
       guarded(BusinessSource.wholesaleSeller, _wholesaleSellers),
     ]);
 

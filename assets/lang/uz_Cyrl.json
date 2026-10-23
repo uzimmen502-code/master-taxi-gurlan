@@ -3952,5 +3952,6 @@
   "wholesale_err_location_required": "Жойни харитада белгиланг (Ўзбекистон ичида)",
   "ev_guest_gate_title": "EV зарядлаш станциялари",
   "ev_guest_gate_message": "EV станциялари базасини кўриш учун рўйхатдан ўтинг",
-  "ev_guest_gate_register": "Рўйхатдан ўтиш"
+  "ev_guest_gate_register": "Рўйхатдан ўтиш",
+  "ev_map_zoom_in": "Харитани яқинлаштиринг"
 }

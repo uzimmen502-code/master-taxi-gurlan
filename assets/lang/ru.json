@@ -3952,5 +3952,6 @@
   "wholesale_err_location_required": "Укажите место на карте (в пределах Узбекистана)",
   "ev_guest_gate_title": "Зарядные станции EV",
   "ev_guest_gate_message": "Зарегистрируйтесь, чтобы просматривать базу EV-станций",
-  "ev_guest_gate_register": "Зарегистрироваться"
+  "ev_guest_gate_register": "Зарегистрироваться",
+  "ev_map_zoom_in": "Приблизьте карту"
 }

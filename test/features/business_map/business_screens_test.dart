@@ -40,6 +40,17 @@ class _FakeRepo extends BusinessRepository {
   Future<void> deleteMine(String businessId) async => calls.add('delete:$businessId');
 
   @override
+  Future<String> adminCreate(
+    Business b, {
+    required String reason,
+    required String clientRequestId,
+    String ownerPhone = '',
+  }) async {
+    calls.add('adminCreate:${b.name}:${b.category.wire}:${b.lat},${b.lng}:owner=$ownerPhone:$reason');
+    return 'admin_new';
+  }
+
+  @override
   Future<void> adminUpdate(Business b, {required String reason}) async =>
       calls.add('adminUpdate:${b.id}:${b.name}:$reason');
 
@@ -69,7 +80,7 @@ Future<void> _pump(WidgetTester tester, Widget home) async {
 
 void main() {
   group('BusinessAdminScreen', () {
-    testWidgets('рўйхат, қидирув ва тур бўйича фильтр; «қўшиш» тугмаси ЙЎҚ (B-1)', (tester) async {
+    testWidgets('рўйхат, қидирув ва тур бўйича фильтр; «қўшиш» тугмаси БОР (эга қарори 2026-10-23)', (tester) async {
       final repo = _FakeRepo([
         _b('1', 'Авто Мойка', BusinessCategory.auto),
         _b('2', 'Нон дўкони', BusinessCategory.retail, owner: '998902222222'),
@@ -77,8 +88,7 @@ void main() {
       await _pump(tester, BusinessAdminScreen(repository: repo));
       expect(find.text('Авто Мойка'), findsOneWidget);
       expect(find.text('Нон дўкони'), findsOneWidget);
-      expect(find.byIcon(Icons.add), findsNothing);
-      expect(find.byIcon(Icons.add_business_rounded), findsNothing);
+      expect(find.byKey(const ValueKey('biz_admin_add')), findsOneWidget, reason: 'админ ҳам объект қўша олади');
 
       await tester.enterText(find.byType(TextField).first, 'нон');
       await tester.pumpAndSettle();
@@ -88,6 +98,38 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '998902222222'); // эга рақами бўйича
       await tester.pumpAndSettle();
       expect(find.text('Нон дўкони'), findsOneWidget);
+    });
+
+    testWidgets('қўшиш: ном/координата/сабабсиз юборилмайди; тўлдирилса adminCreate (эга телефони билан)', (tester) async {
+      final repo = _FakeRepo([]);
+      await _pump(tester, BusinessAdminScreen(repository: repo));
+      await tester.tap(find.byKey(const ValueKey('biz_admin_add')));
+      await tester.pumpAndSettle();
+      expect(find.text('Объект қўшиш'), findsWidgets);
+      expect(find.byKey(const ValueKey('biz_admin_pick_map')), findsOneWidget, reason: 'пин билан белгилаш тугмаси');
+      expect(find.widgetWithText(TextField, 'Эга телефони (ихтиёрий; бўш бўлса — эгасиз, фақат админ таҳрирлайди)'), findsOneWidget);
+
+      // Координатасиз
+      await tester.tap(find.text('Қўшиш'));
+      await tester.pumpAndSettle();
+      expect(find.text('Координата нотўғри'), findsOneWidget);
+      expect(repo.calls, isEmpty);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Номи'), 'Янги мойка');
+      await tester.enterText(find.widgetWithText(TextField, 'Телефон'), '998901234567');
+      await tester.enterText(find.widgetWithText(TextField, 'Кенглик (lat)'), '41.84');
+      await tester.enterText(find.widgetWithText(TextField, 'Узунлик (lng)'), '60.39');
+      // Сабабсиз
+      await tester.tap(find.text('Қўшиш'));
+      await tester.pumpAndSettle();
+      expect(find.text('Сабабни ёзинг'), findsOneWidget);
+      expect(repo.calls, isEmpty);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Эга телефони (ихтиёрий; бўш бўлса — эгасиз, фақат админ таҳрирлайди)'), '998912000001');
+      await tester.enterText(find.widgetWithText(TextField, 'Қўшиш сабаби (шарт)'), 'телефонда келишилди');
+      await tester.tap(find.text('Қўшиш'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, ['adminCreate:Янги мойка:retail:41.84,60.39:owner=998912000001:телефонда келишилди']);
     });
 
     testWidgets('ўчириш: сабаб ёзилмагунча тугма ўчик; сабаб билан adminDelete чақирилади', (tester) async {

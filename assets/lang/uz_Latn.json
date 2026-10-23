@@ -3952,5 +3952,6 @@
   "wholesale_err_location_required": "Joyni xaritada belgilang (O'zbekiston ichida)",
   "ev_guest_gate_title": "EV zaryadlash stansiyalari",
   "ev_guest_gate_message": "EV stansiyalari bazasini ko'rish uchun ro'yxatdan o'ting",
-  "ev_guest_gate_register": "Ro'yxatdan o'tish"
+  "ev_guest_gate_register": "Ro'yxatdan o'tish",
+  "ev_map_zoom_in": "Xaritani yaqinlashtiring"
 }

@@ -5,7 +5,7 @@ import '../../../models/ev_charging_station.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../wholesale/models/wholesale_seller.dart';
 import '../domain/business_pin.dart';
-import '../domain/viewport_cells.dart';
+import '../../../core/geo/viewport_cells.dart';
 import 'business_repository.dart';
 
 /// Камера ҳудуди (градус).
@@ -31,7 +31,8 @@ class PinLoadResult {
   /// Ўқиб бўлмаган манбалар (масалан, EV — логин/рухсат). Бошқа манбалар барибир кўринади.
   final Set<BusinessSource> failed;
 
-  /// Камера жуда катта ҳудудни қоплайди — ўқиш бажарилмади («яқинлаштиринг»).
+  /// Камера жуда катта ҳудудни қоплайди: катакчалар бўйича ўқилмади, фақат чекланган НАМУНА (≤400) кўрсатилади
+  /// ва экран «харитани яқинлаштиринг» дейди.
   final bool tooWide;
 }
 
@@ -52,6 +53,9 @@ class BusinessPinLoader {
   static const int maxPins = 400;
   static const int _perCellLimit = 50;
   static const int _wholesaleLimit = 300;
+  static const int _overviewBusinesses = 150;
+  static const int _overviewRestaurants = 100;
+  static const int _overviewEv = 200;
 
   Future<PinLoadResult> load(MapBounds bounds) async {
     final cells = ViewportCells.forBounds(
@@ -60,8 +64,6 @@ class BusinessPinLoader {
       north: bounds.north,
       east: bounds.east,
     );
-    if (cells == null) return const PinLoadResult(pins: [], tooWide: true);
-
     final failed = <BusinessSource>{};
     Future<List<BusinessPin>> guarded(BusinessSource s, Future<List<BusinessPin>> Function() run) async {
       try {
@@ -71,6 +73,29 @@ class BusinessPinLoader {
         failed.add(s);
         return const [];
       }
+    }
+
+    // Жуда катта ҳудуд (>30 катак, масалан бутун мамлакат): катакчалар бўйича ўқиб бўлмайди — ҳар манбадан
+    // чекланган НАМУНА (≤400, марказга яқинлари) + «яқинлаштиринг» хабари (эга, 2026-10-23).
+    if (cells == null) {
+      final wide = await Future.wait([
+        guarded(BusinessSource.business, () async => [
+              for (final b in await _biz.fetchRecent(limit: _overviewBusinesses)) BusinessPin.fromBusiness(b),
+            ]),
+        guarded(BusinessSource.restaurant, _restaurantsOverview),
+        guarded(BusinessSource.evStation, _evOverview),
+        guarded(BusinessSource.wholesaleSeller, _wholesaleSellers),
+      ]);
+      final all = <BusinessPin>[
+        for (final list in wide)
+          for (final p in list)
+            if (bounds.contains(p.lat, p.lng)) p,
+      ];
+      return PinLoadResult(
+        pins: capNearest(all, bounds.centerLat, bounds.centerLng),
+        failed: failed,
+        tooWide: true,
+      );
     }
 
     final parts = await Future.wait([
@@ -123,6 +148,32 @@ class BusinessPinLoader {
       }
     }
     return out;
+  }
+
+  /// Катта ҳудуд учун: тасдиқланган ресторанлардан чекланган намуна.
+  Future<List<BusinessPin>> _restaurantsOverview() async {
+    final snap = await _db
+        .collection('restaurants')
+        .where('status', isEqualTo: 'approved')
+        .limit(_overviewRestaurants)
+        .get();
+    return [
+      for (final d in snap.docs)
+        if (BusinessPin.fromRestaurant(Restaurant.fromDoc(d)) case final p?) p,
+    ];
+  }
+
+  /// Катта ҳудуд учун: фаол станциялардан чекланган намуна.
+  Future<List<BusinessPin>> _evOverview() async {
+    final snap = await _db
+        .collection('ev_charging_stations')
+        .where('isActive', isEqualTo: true)
+        .limit(_overviewEv)
+        .get();
+    return [
+      for (final d in snap.docs)
+        if (BusinessPin.fromEvStation(EvChargingStation.fromDoc(d)) case final p?) p,
+    ];
   }
 
   Future<List<BusinessPin>> _evStations(List<String> cells) async {

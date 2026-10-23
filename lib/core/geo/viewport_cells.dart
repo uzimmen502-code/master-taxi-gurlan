@@ -1,4 +1,4 @@
-import '../../../utils/geo_hash.dart';
+import '../../utils/geo_hash.dart';
 
 /// Харита камераси қоплаган `geohash4` катакчалари (кластерсиз ўқиш режаси, docs/biznes_xaritasi_2026-10-23_uz.md).
 ///

@@ -71,6 +71,23 @@ class BusinessRepository {
     await _fns.httpsCallable('deleteMyBusiness').call<Object?>({'businessId': businessId});
   }
 
+  /// Админ ЯНГИ объект қўшади (эга қарори 2026-10-23). [ownerPhone] берилса — ёзув шу фойдаланувчиники;
+  /// берилмаса — эгасиз (фақат админ таҳрирлайди). [clientRequestId] такрор босишда битта ёзув беради.
+  Future<String> adminCreate(
+    Business b, {
+    required String reason,
+    required String clientRequestId,
+    String ownerPhone = '',
+  }) async {
+    final res = await _fns.httpsCallable('adminCreateBusiness').call<Object?>({
+      ...b.toCallable(),
+      if (ownerPhone.trim().isNotEmpty) 'ownerPhone': ownerPhone.trim(),
+      'reason': reason,
+      'clientRequestId': clientRequestId,
+    });
+    return '${(res.data as Map)['businessId']}';
+  }
+
   Future<void> adminUpdate(Business b, {required String reason}) async {
     await _fns.httpsCallable('adminUpdateBusiness').call<Object?>({
       ...b.toCallable(),

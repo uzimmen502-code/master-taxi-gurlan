@@ -48,6 +48,15 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
 
   bool get _isEdit => widget.existing != null;
 
+  /// Янги объектда телефон эганинг рақамидан бошланади (ўзгартириш мумкин). Firebase тайёр бўлмаса — бўш.
+  static String _ownPhone() {
+    try {
+      return canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -55,8 +64,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
     _name = TextEditingController(text: b?.name ?? '');
     _subtype = TextEditingController(text: b?.subtype ?? '');
     _description = TextEditingController(text: b?.description ?? '');
-    _phone = TextEditingController(
-        text: b?.phone ?? canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? ''));
+    _phone = TextEditingController(text: b?.phone ?? _ownPhone());
     _address = TextEditingController(text: b?.address ?? '');
     _hours = TextEditingController(text: b?.openingHours ?? '');
     _website = TextEditingController(text: b?.website ?? '');
@@ -187,6 +195,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
           const SizedBox(height: 8),
           DropdownButtonFormField<BusinessCategory>(
             initialValue: _category,
+            isExpanded: true,
             decoration: _dec('bizmap_f_category'),
             items: [
               for (final c in BusinessCategory.values)

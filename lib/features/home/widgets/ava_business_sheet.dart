@@ -161,6 +161,16 @@ class _BusinessSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = <(String, List<_Item>)>[
+      // «Менинг бизнесим» (эга, 2026-10-23): сарлавҳасиз, энг юқорида ЯГОНА қатор — бир босишда «Менинг
+      // бизнесларим» очилади (дўкон, кафе, мойка, цех, хизмат — барча жисмоний объектлар харитага).
+      // Аввал «Сотиш» гуруҳи ичида эди, лекин кафе ёки мойка «сотиш» эмас.
+      (
+        '',
+        _visible(const [
+          _Item(AvaCreateAction.businessMap, Icons.add_business_rounded,
+              'home_create_business_map', 'home_create_business_map_sub'),
+        ]),
+      ),
       (
         'home_create_group_quick',
         _visible(const [
@@ -177,9 +187,6 @@ class _BusinessSheet extends StatelessWidget {
         _visible(const [
           _Item(AvaCreateAction.shopOnline, Icons.storefront_rounded,
               'home_create_shop_online', 'home_create_shop_online_hint'),
-          // Бизнес харитаси (2026-10-23): жисмоний жойни (дўкон, кафе, хизмат) харитага қўшиш.
-          _Item(AvaCreateAction.businessMap, Icons.add_business_rounded,
-              'home_create_business_map', 'home_create_business_map_sub'),
         ]),
       ),
       (
@@ -251,7 +258,7 @@ class _BusinessSheet extends StatelessWidget {
                     AvaSpace.screen, 4, AvaSpace.screen, 20),
                 children: [
                   for (final g in groups) ...[
-                    _GroupTitle(context.tr(g.$1)),
+                    if (g.$1.isNotEmpty) _GroupTitle(context.tr(g.$1)),
                     _Card(
                       children: [
                         for (final it in g.$2)

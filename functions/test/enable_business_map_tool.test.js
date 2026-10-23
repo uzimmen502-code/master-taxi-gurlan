@@ -76,6 +76,27 @@ async function main() {
     assert.strictEqual(currentStatus(await dm('gurlan'), 'district', 'business_map'), 'hidden');
   });
 
+  await check('G1 --global: baseline katagi yoqiladi; boshqa modullar va enforce tegilmaydi; audit scope global; takror — already', async () => {
+    const { enableBusinessMapGlobal } = require('../tools/enable_business_map');
+    await db.collection('config').doc('module_defaults').set({ enforce: true, modules: { restaurants: { status: 'enabled' }, bread: { status: 'hidden' } } });
+    const dry = await enableBusinessMapGlobal(db, admin, { apply: false });
+    assert.deepStrictEqual([dry.action, dry.from], ['would_set', null]);
+    assert.strictEqual(currentStatus((await db.collection('config').doc('module_defaults').get()).data(), 'global', 'business_map'), null, 'dry-run yozmaydi');
+    const r = await enableBusinessMapGlobal(db, admin, { apply: true });
+    assert.deepStrictEqual([r.action, r.to], ['set', 'enabled']);
+    const d = (await db.collection('config').doc('module_defaults').get()).data();
+    assert.strictEqual(currentStatus(d, 'global', 'business_map'), 'enabled');
+    assert.strictEqual(currentStatus(d, 'global', 'restaurants'), 'enabled');
+    assert.strictEqual(currentStatus(d, 'global', 'bread'), 'hidden');
+    assert.strictEqual(d.enforce, true, 'enforce tegilmadi');
+    const g = (await audits()).filter((x) => x.scope === 'global');
+    assert.strictEqual(g.length, 1);
+    assert.strictEqual(g[0].targetId, 'module_defaults');
+    assert.deepStrictEqual(g[0].changes, [{ moduleId: 'business_map', from: null, to: 'enabled' }]);
+    assert.strictEqual((await enableBusinessMapGlobal(db, admin, { apply: true })).action, 'already');
+    assert.strictEqual((await audits()).filter((x) => x.scope === 'global').length, 1);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

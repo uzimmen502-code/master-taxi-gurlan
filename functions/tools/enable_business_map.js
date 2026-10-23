@@ -11,6 +11,7 @@
  *   - Орқага қайтариш: админ экранида катакни «Ёпиқ»/«мерос»га қайтариш (ёки `--status=hidden`).
  *
  * Ишлатиш: node functions/tools/enable_business_map.js [--districts=gurlan,urganch_shahri] [--status=enabled] [--apply]
+ *          node functions/tools/enable_business_map.js --global [--status=enabled] [--apply]   # бутун республика
  */
 'use strict';
 
@@ -55,6 +56,30 @@ async function enableBusinessMap(db, admin, { districts = DEFAULT_DISTRICTS, sta
   return out;
 }
 
+/**
+ * РЕСПУБЛИКА бўйича (барча вилоят, шаҳар, туман): global baseline `config/module_defaults` катаги. Туман/МФЙ
+ * override'лари бўлмаса улар шу қийматни мерос олади. Ёзув `adminSaveModuleConfig` (scope `global`) билан бир хил:
+ * `modules.business_map = {status}` + `admin_audit` (targetId `module_defaults`), бир транзакцияда; `enforce` тегилмайди.
+ */
+async function enableBusinessMapGlobal(db, admin, { status = 'enabled', apply = false, actor = 'script:enable_business_map' } = {}) {
+  if (!STATUSES.includes(status)) throw new Error(`status noto'g'ri: ${status}`);
+  const ts = admin.firestore.FieldValue.serverTimestamp();
+  const ref = db.collection('config').doc('module_defaults');
+  return db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    const cur = snap.exists ? (snap.data() || {}) : {};
+    const from = currentStatus(cur, 'global', MODULE_ID);
+    if (from === status) return { scope: 'global', action: 'already', from };
+    if (!apply) return { scope: 'global', action: 'would_set', from, to: status };
+    t.set(ref, { modules: { [MODULE_ID]: { status } }, updatedAt: ts, updatedBy: actor }, { merge: true });
+    t.create(db.collection('admin_audit').doc(), {
+      kind: 'module_config_changed', actor, actorRole: 'script', scope: 'global', targetId: 'module_defaults',
+      changes: [{ moduleId: MODULE_ID, from, to: status }], enforce: null, source: 'script', at: ts,
+    });
+    return { scope: 'global', action: 'set', from, to: status };
+  });
+}
+
 async function main() {
   const admin = require('firebase-admin');
   const path = require('path');
@@ -68,6 +93,12 @@ async function main() {
   const arg = (n, d) => ((process.argv.find((a) => a.startsWith(`--${n}=`)) || '').split('=')[1]) || d;
   const districts = arg('districts', DEFAULT_DISTRICTS.join(',')).split(',').map((s) => s.trim()).filter(Boolean);
   const apply = process.argv.includes('--apply');
+  if (process.argv.includes('--global')) {
+    console.log(`${apply ? 'APPLY' : 'DRY RUN'} ${MODULE_ID}=${arg('status', 'enabled')} GLOBAL (butun respublika)`);
+    console.log(JSON.stringify(await enableBusinessMapGlobal(admin.firestore(), admin, { status: arg('status', 'enabled'), apply }), null, 2));
+    if (!apply) console.log('DRY RUN: ҳеч нарса ёзилмади. Ёзиш учун --apply.');
+    return;
+  }
   console.log(`${apply ? 'APPLY' : 'DRY RUN'} ${MODULE_ID}=${arg('status', 'enabled')} districts=${districts.join(',')}`);
   console.log(JSON.stringify(await enableBusinessMap(admin.firestore(), admin, { districts, status: arg('status', 'enabled'), apply }), null, 2));
   if (!apply) console.log('DRY RUN: ҳеч нарса ёзилмади. Ёзиш учун --apply.');
@@ -77,4 +108,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { enableBusinessMap };
+module.exports = { enableBusinessMap, enableBusinessMapGlobal };

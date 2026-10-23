@@ -138,6 +138,10 @@
 - rules — олдинги ruleset `ad2f7ce3-4e20-46c2-af7c-a22a9d04c49f` (Rules API'дан олиб, алоҳида деплой);
 - functions — 4 та callable'ни ўчириш (маълумотга таъсир қилмайди; `businesses` ҳозирча бўш).
 
+Янгиланиш 2026-10-23 05:00–05:02Z (улгуржи сотувчи: янги рўйхатдан ўтишда манзил ва координата; қўнғироқ умумий `callPhone` орқали):
+- hosting release `c20f8a679403b6c4` (05:00:50Z): user `0366CAF9…`, admin `DA889D03…` (жонли = локал); lineage `deploy/hosting-business-map` `f6521de8`; орқага қайтариш — `fdf0ba0d6924f45a`;
+- rules ruleset `e5c4186c-b58e-41c8-8bd6-eaa7c13bbbe7` (05:02:17Z) = олдинги `01db459f` + 14 қатор (`wholesaleSellerLocationRequiredOk`), мазмун жонлидан таққосланган; орқага қайтариш — `01db459f-8a7b-441c-8e10-d75a659a1fbb`.
+
 ## Текширилган / текширилмаган
 
 - Текширилди: callable тестлар 17/17, rules 6/6 (жонли матн + блок устида ҳам; Хитой rules 7/7), Dart `business_map` 34/34, home+admin_web+restaurants (lineage) 909 ўтди / 14 skip / 0 хато, release web preview (эмулятор): харита, нуқта варағи, тур фильтри, форма дропдауни, админ рўйхати; тармоқда фақат localhost/эмулятор.

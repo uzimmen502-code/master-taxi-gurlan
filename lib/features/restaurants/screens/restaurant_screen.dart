@@ -49,7 +49,12 @@ class RestaurantScreen extends StatefulWidget {
     this.dishStatsLoader,
     this.restaurantVideoLoader,
     this.focusItemId,
+    this.openCartOnStart = false,
   });
+
+  /// Лентадан таом варағидаги «Буюртма бериш» босилганда: экран очилгач сават варағи ўзи очилади
+  /// (лентада сават панели йўқ — мижоз саватини кўриб, расмийлаштиришга ўтади).
+  final bool openCartOnStart;
 
   /// Лентадан «Менюни кўриш» босилганда: меню шу таомгача скролл қилинади ва қатор қисқа ёритилади.
   final String? focusItemId;
@@ -122,6 +127,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   void initState() {
     super.initState();
     _right.addListener(_onRightScroll);
+    if (widget.openCartOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _cart.isNotEmpty) _openCart();
+      });
+    }
     _loadItemClips();
     _loadDishStats();
     _loadBookingConfig();

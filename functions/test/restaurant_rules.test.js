@@ -171,6 +171,19 @@ async function main() {
     await assertFails(as(OWNER).doc(`restaurants/${R1}`).update({ delivery: { mode: 'drone' } }));
     await assertFails(as(OWNER).doc(`restaurants/${R1}`).delete());
   });
+  await check('manzil/joylashuv majburiy (2026-10-23): a\'zo manzilni bo\'shata/o\'chira olmaydi, joylashuvni null/chegaradan tashqari qila olmaydi; to\'g\'ri o\'zgartirish ok; manzili bo\'sh eski hujjatda boshqa maydon tahriri buzilmaydi', async () => {
+    const ref = (uid) => as(uid).doc(`restaurants/${R1}`);
+    await assertFails(ref(OWNER).update({ address: '' }), 'bo\'sh manzil');
+    await assertFails(ref(OWNER).update({ address: 5 }), 'satr emas');
+    await assertFails(ref(OWNER).update({ lat: null }), 'null lat');
+    await assertFails(ref(OWNER).update({ lat: 95, lng: 60.3 }), 'lat chegara');
+    await assertFails(ref(OWNER).update({ lat: 41.8, lng: 181 }), 'lng chegara');
+    await assertFails(ref(OWNER).update({ lat: '41.8', lng: '60.3' }), 'satr koordinata');
+    await assertSucceeds(ref(OWNER).update({ address: 'Gurlan, markaz', lat: 41.8, lng: 60.3 }));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().doc(`restaurants/${R1}`).update({ address: '' }); });
+    await assertSucceeds(ref(OWNER).update({ announcement: 'Bugun osh' }), 'manzilga tegilmasa — eski bo\'sh hujjat ishlayveradi');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => { await ctx.firestore().doc(`restaurants/${R1}`).update({ address: 'Gurlan, markaz' }); });
+  });
   await check('D-REST-26 maxQtyPerItem: a\'zo 1…500 butun yozadi (chegaralar ham); 0, 501, satr, kasr, begona — yo\'q', async () => {
     const ref = (who) => as(who).doc(`restaurants/${R1}`);
     await assertSucceeds(ref(OWNER).update({ maxQtyPerItem: 200 }));

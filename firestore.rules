@@ -3183,6 +3183,12 @@ service cloud.firestore {
             'payment', 'pausedUntil', 'updatedAt'
           ])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
+          // Манзил (матн) ва жойлашув мажбурий (эга 2026-10-23): ўзгартирилса — бўш/нол бўлмаслиги шарт.
+          // Фақат ўзгарганда текширилади: манзили бўш эски ҳужжатни бошқа майдон таҳрири бузмасин.
+          && (!changed.hasAny(['address']) || (d.address is string && d.address.size() >= 1 && d.address.size() <= 300))
+          && (!changed.hasAny(['lat', 'lng'])
+              || (d.lat is number && d.lng is number
+                  && d.lat >= -90 && d.lat <= 90 && d.lng >= -180 && d.lng <= 180))
           && d.prepTimeMin is int && d.prepTimeMin >= 5 && d.prepTimeMin <= 180
           && d.minOrderAmount is int && d.minOrderAmount >= 0
           // D-REST-26: бир таомдан энг кўпи; шип 500 — functions/restaurant_orders.js

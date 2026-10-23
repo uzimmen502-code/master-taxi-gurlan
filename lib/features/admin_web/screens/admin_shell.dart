@@ -38,6 +38,7 @@ import 'restaurants_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'china_inquiries_admin_screen.dart';
+import 'business_admin_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
@@ -342,6 +343,12 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.apartment_outlined,
       description: 'Объект эълонлари — тасдиқлаш, блоклаш, ўчириш',
     ),
+    _AdminSection(
+      group: 'Бозорлар ва эълонлар',
+      label: 'Бизнес харитаси',
+      icon: Icons.add_business_outlined,
+      description: 'Эгалар қўшган объектлар — таҳрирлаш ва ўчириш',
+    ),
     // «Сотиш аризалари» ёрлиғи яширилди (1-босқич, 2026-09-24): СОТИНГ
     // модулига фойдаланувчи томонидан кириш йўли ёпилди, янги ариза
     // келмайди. Экраннинг ўзи ва CF/rules тегилмаган — эски
@@ -627,6 +634,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Кўчмас мулк кластери') {
       return const RealtyModerationScreen();
+    }
+    if (section.label == 'Бизнес харитаси') {
+      return const BusinessAdminScreen();
     }
     if (section.label == 'AVA Logistics') {
       return const LogisticsAdminScreen();

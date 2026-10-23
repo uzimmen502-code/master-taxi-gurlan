@@ -51,6 +51,7 @@ const _allKeys = [
   'home_create_ad',
   'home_create_service',
   'home_create_shop_online',
+  'home_create_business_map',
   'home_create_driver',
   'home_create_courier',
   'home_create_cargo',

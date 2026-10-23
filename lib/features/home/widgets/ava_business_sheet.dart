@@ -14,6 +14,7 @@ enum AvaCreateAction {
   ad,
   service,
   shopOnline,
+  businessMap,
   driver,
   courier,
   homeCook,
@@ -176,6 +177,9 @@ class _BusinessSheet extends StatelessWidget {
         _visible(const [
           _Item(AvaCreateAction.shopOnline, Icons.storefront_rounded,
               'home_create_shop_online', 'home_create_shop_online_hint'),
+          // Бизнес харитаси (2026-10-23): жисмоний жойни (дўкон, кафе, хизмат) харитага қўшиш.
+          _Item(AvaCreateAction.businessMap, Icons.add_business_rounded,
+              'home_create_business_map', 'home_create_business_map_sub'),
         ]),
       ),
       (

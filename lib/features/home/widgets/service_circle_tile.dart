@@ -338,6 +338,7 @@ const _kServiceIcons = <String, IconData>{
   'logistics': Icons.local_post_office_rounded,
   // Плитка йўқ — фақат админ рўйхати ва тест жадвали учун.
   'demand_intent': Icons.support_agent_rounded,
+  'business_map': Icons.add_business_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -422,6 +423,9 @@ Color olxTintFor(String moduleId) {
     // «Уста чақириш» — плиткаси йўқ, лекин админ рўйхатида доира ранги керак.
     case 'demand_intent':
       return const Color(0xFF8D6E63);
+    // «Бизнес харитаси» — плиткаси йўқ (бош саҳифа бўлими), админ рўйхати учун ранг.
+    case 'business_map':
+      return const Color(0xFFE08A2B);
     // ── Автохизмат ──────────────────────────────────────────────
     case 'oil_change':
       return const Color(0xFF6E7B8B);

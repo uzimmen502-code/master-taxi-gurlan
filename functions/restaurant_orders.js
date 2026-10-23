@@ -74,6 +74,8 @@ const AUTO_PAUSE_MIN = 30;
 const STRIKES_FOR_PREPAY_ONLY = 2;
 const PREPAY_ONLY_DAYS = 30;
 const MAX_ITEMS = 30;
+/** Taomga alohida izoh uzunligi (klientdagi `RestaurantCart.maxItemNote` shuning nusxasi). */
+const MAX_ITEM_NOTE = 100;
 /**
  * Bir taomdan eng ko'p miqdor (D-REST-26): restoranning `maxQtyPerItem` maydoni,
  * yo'q bo'lsa — DEFAULT. CEILING — platforma shipi (firestore.rules ham 500).
@@ -598,6 +600,9 @@ function attachRestaurantOrders(exportsObj, deps) {
     }    const lat = Number(d.lat);
     const lng = Number(d.lng);
     if (!validLatLng(lat, lng)) throw fail('invalid-argument', 'LOCATION_REQUIRED');
+    // Matnli manzil ham majburiy (ega 2026-10-23): mijoz «olib ketish»da va kuryer shu manzilga boradi.
+    const address = str(d.address, 300);
+    if (!address) throw fail('invalid-argument', 'ADDRESS_REQUIRED');
     const delivery = d.delivery && typeof d.delivery === 'object' ? d.delivery : {};
     const mode = DELIVERY_MODES.includes(delivery.mode) ? delivery.mode : 'none';
     const pickup = delivery.pickup === true;
@@ -617,7 +622,7 @@ function attachRestaurantOrders(exportsObj, deps) {
       ...(venueType ? { venueType } : {}),
       description: str(d.description, 500),
       cuisineTags: Array.isArray(d.cuisineTags) ? d.cuisineTags.map((x) => str(x, 30)).filter(Boolean).slice(0, 3) : [],
-      address: str(d.address, 300),
+      address,
       contactPhone: str(d.contactPhone, 20).replace(/[^\d+]/g, ''),
       lat, lng,
       geohash: geoHash.encode(lat, lng, 7),
@@ -999,11 +1004,16 @@ function attachRestaurantOrders(exportsObj, deps) {
 
       // Menyu — narx faqat serverdan (klient narxi e'tiborsiz).
       const wanted = new Map();
+      // Taomga alohida izoh («piyozsiz»): bir taom bir nechta qatorda kelsa, birinchi BO'SH BO'LMAGAN izoh olinadi.
+      // Izoh narxga ta'sir qilmaydi, faqat oshpazga ko'rsatiladi; eski klient yubormaydi — maydon ixtiyoriy.
+      const itemNotes = new Map();
       for (const it of itemsIn) {
         const id = str(it && it.itemId, 64);
         const qty = intOr(it && it.qty, 0, 1, MAX_QTY_CEILING);
         if (!id || qty < 1) throw fail('invalid-argument', 'ITEM_INVALID');
         wanted.set(id, (wanted.get(id) || 0) + qty);
+        const itemNote = str(it && it.note, MAX_ITEM_NOTE);
+        if (itemNote && !itemNotes.has(id)) itemNotes.set(id, itemNote);
       }
       // Limit YIG'INDI miqdorga: bir taom bir nechta qatorda kelsa ham aylanib o'tilmaydi.
       const maxQty = intOr(r.maxQtyPerItem, DEFAULT_MAX_QTY, 1, MAX_QTY_CEILING);
@@ -1033,7 +1043,10 @@ function attachRestaurantOrders(exportsObj, deps) {
         itemsTotal += lineTotal;
         qtyDiscountTotal += discount;
         // `price` — ro'yxat narxi (o'zgarmas), `unitPrice` — qo'llangan narx; ikkalasi snapshot (9-qoida).
-        items.push({ itemId: s.id, name: str(m.name, 80), price, unitPrice, tierMinQty, count, lineTotal, discount });
+        items.push({
+          itemId: s.id, name: str(m.name, 80), price, unitPrice, tierMinQty, count, lineTotal, discount,
+          ...(itemNotes.has(s.id) ? { note: itemNotes.get(s.id) } : {}),
+        });
       }
       const minOrder = intOr(r.minOrderAmount, 0, 0, 1000000000);
       if (itemsTotal < minOrder) throw fail('failed-precondition', 'MIN_ORDER_NOT_MET', { minOrderAmount: minOrder, itemsTotal });

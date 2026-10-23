@@ -174,6 +174,15 @@ async function main() {
       await expectCode(call('restaurantRegister', { ...base, legalType: 'yatt', venueType: v }, OWNER2), 'VENUE_TYPE_INVALID', 'invalid-argument');
     }
   });
+  await check('V2 manzil majburiy (ega 2026-10-23): matnli manzil yo\'q/bo\'sh/probel → ADDRESS_REQUIRED; joylashuv yo\'q → LOCATION_REQUIRED; ikkalasi bor → ok', async () => {
+    const base = { name: 'Manzil sinovi', ...R_LOC, delivery: { mode: 'ava_courier', pickup: true }, payment: { prepay: true, cash: true } };
+    for (const bad of [{}, { address: '' }, { address: '   ' }, { address: null }]) {
+      await expectCode(call('restaurantRegister', { ...base, ...bad }, OWNER2), 'ADDRESS_REQUIRED', 'invalid-argument');
+    }
+    await expectCode(call('restaurantRegister', { name: 'Joy yo\'q', address: 'Gurlan, markaz', delivery: { mode: 'ava_courier', pickup: true } }, OWNER2), 'LOCATION_REQUIRED', 'invalid-argument');
+    const ok = await call('restaurantRegister', { ...base, address: '  Gurlan, markaz  ' }, OWNER2);
+    assert.strictEqual((await db.collection('restaurants').doc(ok.restaurantId).get()).data().address, 'Gurlan, markaz', 'probel kesiladi');
+  });
   await check('R1 restoran ro\'yxatdan o\'tdi (autoApprove → approved), owner a\'zo, rekvizit private da', async () => {
     rid = await registerRestaurant(OWNER);
     const r = (await db.collection('restaurants').doc(rid).get()).data();
@@ -257,6 +266,25 @@ async function main() {
     await expectCode(place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 0 }] }), 'ITEM_INVALID');
     await expectCode(place(rid, CUSTOMER, { lat: null, lng: null }), 'DELIVERY_ADDRESS_REQUIRED');
     await expectCode(place(rid, CUSTOMER, { foodPaymentMethod: 'cash_to_restaurant' }), 'FOOD_PAYMENT_INVALID');
+  });
+  await check('P2a taomga alohida izoh: buyurtma itemsida saqlanadi (kesiladi, bo\'sh yozilmaydi, narxga ta\'sir yo\'q); bir taom ikki qatorda — birinchi bo\'sh bo\'lmagan izoh; eski klient (izohsiz) — maydon yo\'q', async () => {
+    const long = 'x'.repeat(150);
+    const r = await place(rid, CUSTOMER, {
+      items: [{ itemId: 'osh', qty: 1, note: '  piyozsiz  ' }, { itemId: 'somsa', qty: 2, note: '   ' }, { itemId: 'osh', qty: 1, note: 'ikkinchi' }],
+    });
+    const items = (await order(r.orderId)).items;
+    const osh = items.find((i) => i.itemId === 'osh');
+    const somsa = items.find((i) => i.itemId === 'somsa');
+    assert.strictEqual(osh.note, 'piyozsiz', 'trim + birinchi bo\'sh bo\'lmagan izoh');
+    assert.strictEqual(osh.count, 2, 'ikki qator yig\'iladi');
+    assert.strictEqual('note' in somsa, false, 'bo\'sh izoh yozilmaydi');
+    assert.strictEqual(r.itemsTotal, 2 * 40000 + 2 * 10000, 'izoh narxga ta\'sir qilmaydi');
+    const r2 = await place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 1, note: long }] });
+    assert.strictEqual((await order(r2.orderId)).items[0].note.length, 100, 'izoh 100 belgigacha kesiladi');
+    const r3 = await place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 1, note: 123 }] });
+    assert.strictEqual((await order(r3.orderId)).items[0].note, '123', 'son satrga aylanadi, buyurtma yiqilmaydi');
+    const r4 = await place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: 1 }] });
+    assert.strictEqual('note' in (await order(r4.orderId)).items[0], false, 'eski klient izohsiz yuboradi');
   });
   await check('P2b miqdor limiti (D-REST-26): default 50 (yig\'indi, qatorlarni bo\'lib aylanib o\'tib bo\'lmaydi); maxQtyPerItem oshirsa o\'tadi; shipi 500', async () => {
     const mk = (q, extra = []) => place(rid, CUSTOMER, { items: [{ itemId: 'osh', qty: q }, ...extra] });

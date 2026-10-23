@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/map_picker_result.dart';
 import '../../business_map/data/business_repository.dart';
 import '../../business_map/domain/business.dart';
 import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_map_screen.dart';
+import '../../map_picker/screens/map_picker_screen.dart';
 
-/// Админ: тадбиркорлик объектлари реестри (B-1, B-6). Админ ЯНГИ объект қўшмайди — фақат эгалар қўшган
-/// объектларни таҳрирлайди ва ўчиради; ҳар бир ўзгариш `admin_audit`га сабаб билан тушади (41-банд,
-/// сервер: `adminUpdateBusiness` / `adminDeleteBusiness`).
+/// Админ: тадбиркорлик объектлари реестри (B-1, B-6). Админ объект ҚЎШАДИ (эга қарори 2026-10-23, `adminCreateBusiness`),
+/// эгалар қўшганларини таҳрирлайди ва ўчиради; ҳар бир ўзгариш `admin_audit`га сабаб билан тушади (41-банд).
 class BusinessAdminScreen extends StatefulWidget {
   const BusinessAdminScreen({super.key, BusinessRepository? repository}) : _repo = repository;
 
@@ -87,6 +88,18 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
     }
   }
 
+  /// Янги объект қўшиш (эга қарори 2026-10-23): эга телефони ихтиёрий; сабаб шарт.
+  Future<void> _create() async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditDialog(repo: _repo),
+    );
+    if (saved == true) {
+      _snack('Қўшилди');
+      await _load();
+    }
+  }
+
   Future<void> _delete(Business b) async {
     final text = await showDialog<String>(
       context: context,
@@ -109,6 +122,12 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
       appBar: AppBar(
         title: const Text('🗺 Бизнес харитаси', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(
+            key: const ValueKey('biz_admin_add'),
+            tooltip: 'Объект қўшиш',
+            icon: const Icon(Icons.add_business_rounded),
+            onPressed: _create,
+          ),
           IconButton(
             tooltip: 'Харитада кўриш',
             icon: const Icon(Icons.map_outlined),
@@ -287,10 +306,11 @@ class _DeleteDialogState extends State<_DeleteDialog> {
   }
 }
 
+/// Таҳрирлаш ([business] берилган) ёки ЯНГИ объект қўшиш ([business] `null`, эга қарори 2026-10-23) ойнаси.
 class _EditDialog extends StatefulWidget {
-  const _EditDialog({required this.business, required this.repo});
+  const _EditDialog({this.business, required this.repo});
 
-  final Business business;
+  final Business? business;
   final BusinessRepository repo;
 
   @override
@@ -298,26 +318,58 @@ class _EditDialog extends StatefulWidget {
 }
 
 class _EditDialogState extends State<_EditDialog> {
-  late final _name = TextEditingController(text: widget.business.name);
-  late final _subtype = TextEditingController(text: widget.business.subtype);
-  late final _description = TextEditingController(text: widget.business.description);
-  late final _phone = TextEditingController(text: widget.business.phone);
-  late final _address = TextEditingController(text: widget.business.address);
-  late final _hours = TextEditingController(text: widget.business.openingHours);
-  late final _website = TextEditingController(text: widget.business.website);
-  late final _lat = TextEditingController(text: '${widget.business.lat}');
-  late final _lng = TextEditingController(text: '${widget.business.lng}');
+  bool get _isCreate => widget.business == null;
+
+  late final _name = TextEditingController(text: widget.business?.name ?? '');
+  late final _subtype = TextEditingController(text: widget.business?.subtype ?? '');
+  late final _description = TextEditingController(text: widget.business?.description ?? '');
+  late final _phone = TextEditingController(text: widget.business?.phone ?? '');
+  late final _address = TextEditingController(text: widget.business?.address ?? '');
+  late final _hours = TextEditingController(text: widget.business?.openingHours ?? '');
+  late final _website = TextEditingController(text: widget.business?.website ?? '');
+  late final _lat = TextEditingController(text: widget.business == null ? '' : '${widget.business!.lat}');
+  late final _lng = TextEditingController(text: widget.business == null ? '' : '${widget.business!.lng}');
+  final _ownerPhone = TextEditingController();
   final _reason = TextEditingController();
-  late BusinessCategory _category = widget.business.category;
+  late BusinessCategory _category = widget.business?.category ?? BusinessCategory.retail;
+
+  /// Бир ойна = бир калит: «Қўшиш» икки марта босилса ҳам битта объект (21-банд).
+  final String _requestId = 'a${DateTime.now().microsecondsSinceEpoch}';
+  String _regionId = '';
+  String _districtId = '';
   bool _busy = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _regionId = widget.business?.regionId ?? '';
+    _districtId = widget.business?.districtId ?? '';
+  }
+
+  @override
   void dispose() {
-    for (final c in [_name, _subtype, _description, _phone, _address, _hours, _website, _lat, _lng, _reason]) {
+    for (final c in [_name, _subtype, _description, _phone, _address, _hours, _website, _lat, _lng, _ownerPhone, _reason]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Жойни харитада пин билан белгилаш (қўлда координата ёзиш ўрнига; хато камаяди).
+  Future<void> _pickOnMap() async {
+    final r = await Navigator.of(context).push<MapPickerResult>(
+      MaterialPageRoute(builder: (_) => const MapPickerScreen(title: 'Жойни харитада белгилаш')),
+    );
+    if (r == null || !mounted) return;
+    setState(() {
+      _lat.text = r.lat.toStringAsFixed(6);
+      _lng.text = r.lng.toStringAsFixed(6);
+      if (_address.text.trim().isEmpty) _address.text = r.label;
+      // Ҳудуд янги нуқтага мос келмай қолмасин: туман/вилоят пин ўзгарса тозаланади (ихтиёрий майдон).
+      _regionId = '';
+      _districtId = '';
+      _error = null;
+    });
   }
 
   Future<void> _save() async {
@@ -331,8 +383,8 @@ class _EditDialogState extends State<_EditDialog> {
     });
     final b = widget.business;
     final edited = Business(
-      id: b.id,
-      ownerId: b.ownerId,
+      id: b?.id ?? '',
+      ownerId: b?.ownerId ?? '',
       name: _name.text.trim(),
       category: _category,
       subtype: _subtype.text.trim(),
@@ -341,19 +393,28 @@ class _EditDialogState extends State<_EditDialog> {
       address: _address.text.trim(),
       lat: lat,
       lng: lng,
-      regionId: b.regionId,
-      districtId: b.districtId,
+      regionId: _regionId,
+      districtId: _districtId,
       openingHours: _hours.text.trim(),
       website: _website.text.trim(),
     );
     try {
-      await widget.repo.adminUpdate(edited, reason: _reason.text.trim());
+      if (_isCreate) {
+        await widget.repo.adminCreate(
+          edited,
+          reason: _reason.text.trim(),
+          clientRequestId: _requestId,
+          ownerPhone: _ownerPhone.text,
+        );
+      } else {
+        await widget.repo.adminUpdate(edited, reason: _reason.text.trim());
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = 'Сақлаб бўлмади (${BusinessRepository.errorCode(e)})';
+        _error = '${_isCreate ? 'Қўшиб' : 'Сақлаб'} бўлмади (${BusinessRepository.errorCode(e)})';
       });
     }
   }
@@ -373,7 +434,7 @@ class _EditDialogState extends State<_EditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Объектни таҳрирлаш'),
+      title: Text(_isCreate ? 'Объект қўшиш' : 'Объектни таҳрирлаш'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -407,7 +468,20 @@ class _EditDialogState extends State<_EditDialog> {
                   Expanded(child: _field(_lng, 'Узунлик (lng)', type: const TextInputType.numberWithOptions(decimal: true))),
                 ],
               ),
-              _field(_reason, 'Таҳрир сабаби (шарт)', max: 300),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  key: const ValueKey('biz_admin_pick_map'),
+                  onPressed: _busy ? null : _pickOnMap,
+                  icon: const Icon(Icons.add_location_alt_rounded, size: 18),
+                  label: const Text('Харитада белгилаш'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (_isCreate)
+                _field(_ownerPhone, 'Эга телефони (ихтиёрий; бўш бўлса — эгасиз, фақат админ таҳрирлайди)',
+                    type: TextInputType.phone),
+              _field(_reason, _isCreate ? 'Қўшиш сабаби (шарт)' : 'Таҳрир сабаби (шарт)', max: 300),
               if (_error != null)
                 Align(
                   alignment: Alignment.centerLeft,
@@ -423,7 +497,7 @@ class _EditDialogState extends State<_EditDialog> {
           onPressed: _busy ? null : _save,
           child: _busy
               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Сақлаш'),
+              : Text(_isCreate ? 'Қўшиш' : 'Сақлаш'),
         ),
       ],
     );

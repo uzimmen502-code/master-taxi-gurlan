@@ -1492,10 +1492,8 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeBusinessSection(
                                 key: _sectionKey('business_map'),
-                                onOpenMap: () => _push(BusinessMapScreen(
-                                  initialLat: user?.address.lat,
-                                  initialLng: user?.address.lng,
-                                )),
+                                // GPS бўлса шу жой, бўлмаса бутун мамлакат (эга, 2026-10-23) — профил манзили ишлатилмайди.
+                                onOpenMap: () => _push(const BusinessMapScreen()),
                                 onAddMine: () =>
                                     _push(const MyBusinessesScreen()),
                               ),

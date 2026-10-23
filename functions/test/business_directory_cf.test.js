@@ -227,6 +227,52 @@ async function main() {
     assert.strictEqual((await db.collection('admin_audit').where('kind', '==', 'business_delete').get()).size, 1);
   });
 
+  // ── Admin QO'SHA oladi (ega qarori 2026-10-23) ──────────────────────────
+  await check('A5 adminCreateBusiness: faqat admin; sabab va clientRequestId shart; mijoz rad', async () => {
+    await assert.rejects(call('adminCreateBusiness', { ...BASE, clientRequestId: 'adm-00000001', reason: 'qo\'shish' }, OWNER));
+    await expectCode(call('adminCreateBusiness', { ...BASE, clientRequestId: 'adm-00000001', reason: '' }, ADMIN), 'REASON_REQUIRED');
+    await expectCode(call('adminCreateBusiness', { ...BASE, reason: 'qo\'shish' }, ADMIN), 'REQUEST_ID_INVALID');
+    await expectCode(call('adminCreateBusiness', { ...BASE, name: 'A', clientRequestId: 'adm-00000001', reason: 'qo\'shish' }, ADMIN), 'BUSINESS_NAME_INVALID');
+  });
+
+  await check('A6 egasiz yaratish: ownerId "admin", status active, geohash serverda, audit; takror — duplicate', async () => {
+    const r = await call('adminCreateBusiness', { ...BASE, clientRequestId: 'adm-00000002', reason: 'telefon orqali olingan' }, ADMIN);
+    assert.deepStrictEqual([r.ok, r.duplicate, r.businessId], [true, false, 'admin_adm-00000002']);
+    const d = await biz(r.businessId);
+    assert.strictEqual(d.ownerId, 'admin');
+    assert.strictEqual(d.status, 'active');
+    assert.strictEqual(d.source, 'admin');
+    assert.strictEqual(d.createdBy, ADMIN);
+    assert.strictEqual(d.geohash4, encode(41.8442, 60.3925, 4));
+    const a = (await db.collection('admin_audit').where('kind', '==', 'business_create').get()).docs.map((x) => x.data());
+    assert.strictEqual(a.length, 1);
+    assert.deepStrictEqual([a[0].target, a[0].actor, a[0].reason, a[0].ownerId], ['admin_adm-00000002', ADMIN, 'telefon orqali olingan', 'admin']);
+    const again = await call('adminCreateBusiness', { ...BASE, name: 'Boshqa', clientRequestId: 'adm-00000002', reason: 'qayta' }, ADMIN);
+    assert.strictEqual(again.duplicate, true);
+    assert.strictEqual((await biz(r.businessId)).name, BASE.name, 'takror yozmaydi');
+    assert.strictEqual((await db.collection('admin_audit').where('kind', '==', 'business_create').get()).size, 1);
+  });
+
+  await check('A7 egasiz ob\'ektni hech bir foydalanuvchi o\'zgartira/o\'chira olmaydi; admin tahrirlaydi', async () => {
+    await expectCode(call('upsertMyBusiness', { ...BASE, businessId: 'admin_adm-00000002', name: 'Hack' }, OWNER), 'BUSINESS_NOT_OWNER');
+    await expectCode(call('deleteMyBusiness', { businessId: 'admin_adm-00000002' }, OWNER), 'BUSINESS_NOT_OWNER');
+    const r = await call('adminUpdateBusiness', { ...BASE, businessId: 'admin_adm-00000002', name: 'Admin tuzatdi', reason: 'imlo' }, ADMIN);
+    assert.strictEqual(r.changed, true);
+  });
+
+  await check('A8 ownerPhone bilan: ob\'ekt shu foydalanuvchiniki (o\'zi tahrirlaydi); noto\'g\'ri telefon — rad; limit adminga tegmaydi', async () => {
+    const r = await call('adminCreateBusiness', { ...BASE, clientRequestId: 'adm-00000003', ownerPhone: '+998 91 200-00-01', reason: 'egasi uchun' }, ADMIN);
+    assert.strictEqual((await biz(r.businessId)).ownerId, '998912000001');
+    const edit = await call('upsertMyBusiness', { ...BASE, businessId: r.businessId, name: 'Egasi tahrirladi' }, OWNER);
+    assert.strictEqual(edit.changed, true);
+    await expectCode(call('adminCreateBusiness', { ...BASE, clientRequestId: 'adm-00000004', ownerPhone: '12345', reason: 'x1x' }, ADMIN), 'BUSINESS_OWNER_INVALID');
+    // OWNER'da allaqachon limitga yetgan holat bo'lmasa ham: admin yaratishi egasining kvotasiga ta'sir qilmaydi (kod yo'li alohida)
+    for (let i = 0; i < LIMITS.maxPerOwner + 2; i += 1) {
+      await call('adminCreateBusiness', { ...BASE, clientRequestId: `adm-bulk-${String(i).padStart(4, '0')}`, ownerPhone: OTHER, reason: 'kvota sinovi' }, ADMIN);
+    }
+    assert.ok((await db.collection('businesses').where('ownerId', '==', OTHER).get()).size > LIMITS.maxPerOwner, 'admin limitdan ortiq qo\'sha oladi');
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

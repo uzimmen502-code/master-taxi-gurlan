@@ -3949,5 +3949,8 @@
   "home_create_business_map_sub": "Магазин, кафе или место услуг — клиенты вас найдут",
   "wholesale_pick_on_map": "Указать на карте",
   "wholesale_location_required_hint": "Укажите место на карте или используйте GPS (обязательно)",
-  "wholesale_err_location_required": "Укажите место на карте (в пределах Узбекистана)"
+  "wholesale_err_location_required": "Укажите место на карте (в пределах Узбекистана)",
+  "ev_guest_gate_title": "Зарядные станции EV",
+  "ev_guest_gate_message": "Зарегистрируйтесь, чтобы просматривать базу EV-станций",
+  "ev_guest_gate_register": "Зарегистрироваться"
 }

@@ -50,6 +50,18 @@ class MenuScrollSync {
     return active;
   }
 
+  /// Бўлимдаги [index]-таом ёпишқоқ сарлавҳанинг ТЎҒРИДАН остида турадиган offset (бўлимнинг ўзи сарлавҳа
+  /// остида қолади). Индекс бўлим чегарасига қисилади; [maxScrollExtent] дан ошмайди.
+  double offsetOfItem(int section, int index, {double? maxScrollExtent}) {
+    if (sectionOffsets.isEmpty) return 0;
+    final s = section.clamp(0, sectionOffsets.length - 1);
+    final count = sectionItemCounts[s];
+    final i = count <= 0 ? 0 : index.clamp(0, count - 1);
+    final o = sectionOffsets[s] + i * itemHeight;
+    if (maxScrollExtent == null) return o;
+    return o > maxScrollExtent ? maxScrollExtent : o;
+  }
+
   /// Бўлим сарлавҳасини тепага келтирадиган offset; [maxScrollExtent] дан
   /// ошмайди (охирги қисқа бўлимлар учун).
   double offsetOf(int section, {double? maxScrollExtent}) {

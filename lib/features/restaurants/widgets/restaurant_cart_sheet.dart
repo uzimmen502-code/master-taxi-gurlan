@@ -14,6 +14,7 @@ Future<void> showRestaurantCartSheet(
   required RestaurantCart cart,
   required Restaurant restaurant,
   required VoidCallback onCheckout,
+  void Function(MenuItem item)? onOpenItem,
 }) {
   final c = context.ava;
   return showModalBottomSheet<void>(
@@ -21,16 +22,19 @@ Future<void> showRestaurantCartSheet(
     showDragHandle: true,
     isScrollControlled: true,
     backgroundColor: c.surface,
-    builder: (ctx) => _CartSheet(cart: cart, restaurant: restaurant, onCheckout: onCheckout),
+    builder: (ctx) => _CartSheet(cart: cart, restaurant: restaurant, onCheckout: onCheckout, onOpenItem: onOpenItem),
   );
 }
 
 class _CartSheet extends StatelessWidget {
-  const _CartSheet({required this.cart, required this.restaurant, required this.onCheckout});
+  const _CartSheet({required this.cart, required this.restaurant, required this.onCheckout, this.onOpenItem});
 
   final RestaurantCart cart;
   final Restaurant restaurant;
   final VoidCallback onCheckout;
+
+  /// Таом номи босилса — тафсилот варағи (изоҳни шу ерда таҳрирлаш мумкин).
+  final void Function(MenuItem item)? onOpenItem;
 
   Future<void> _clear(BuildContext context) async {
     final ok = await showDialog<bool>(
@@ -99,7 +103,19 @@ class _CartSheet extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(l.item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.ink)),
+                                  InkWell(
+                                    key: ValueKey('cart-open-${l.item.id}'),
+                                    onTap: onOpenItem == null ? null : () => onOpenItem!(l.item),
+                                    child: Text(l.item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.ink)),
+                                  ),
+                                  if (l.note.isNotEmpty)
+                                    Text(
+                                      '${context.tr('restaurants_note')}: ${l.note}',
+                                      key: ValueKey('cart-note-${l.item.id}'),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AvaText.caption.copyWith(color: c.ink2, fontStyle: FontStyle.italic),
+                                    ),
                                   const SizedBox(height: 2),
                                   Text(
                                     '${formatPrice(l.unitPrice)} × ${l.qty} = ${formatPrice(l.lineTotal)} ${context.tr('sum')}',

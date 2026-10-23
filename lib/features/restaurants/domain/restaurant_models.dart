@@ -451,10 +451,13 @@ class MenuItem {
 }
 
 class CartLine {
-  const CartLine({required this.item, required this.qty});
+  const CartLine({required this.item, required this.qty, this.note = ''});
 
   final MenuItem item;
   final int qty;
+
+  /// Мижознинг шу таомга алоҳида изоҳи («пиёзсиз»); бўш бўлса юборилмайди. Нархга таъсир қилмайди.
+  final String note;
 
   /// Бир дона нархи [qty] да (миқдорга чегирма поғонаси қўлланган бўлиши мумкин).
   int get unitPrice => item.unitPriceAt(qty);
@@ -511,9 +514,25 @@ class RestaurantCart extends ChangeNotifier {
     _restaurantName = restaurant.name;
     final cur = _lines[item.id]?.qty ?? 0;
     if (cur >= restaurant.maxQtyPerItem) return true;
-    _lines[item.id] = CartLine(item: item, qty: cur + 1);
+    _lines[item.id] = CartLine(item: item, qty: cur + 1, note: _lines[item.id]?.note ?? '');
     notifyListeners();
     return true;
+  }
+
+  /// Таом изоҳининг энг узун ҳажми. Серверда `MAX_ITEM_NOTE` (мослик тест билан қулфланган).
+  static const maxItemNote = 100;
+
+  String noteOf(String itemId) => _lines[itemId]?.note ?? '';
+
+  /// Саватдаги таомга изоҳ. Саватда йўқ таомга изоҳ ёзилмайди (қатор ўчса, изоҳ ҳам кетади).
+  void setNote(String itemId, String note) {
+    final cur = _lines[itemId];
+    if (cur == null) return;
+    var next = note.trim();
+    if (next.length > maxItemNote) next = next.substring(0, maxItemNote);
+    if (next == cur.note) return;
+    _lines[itemId] = CartLine(item: cur.item, qty: cur.qty, note: next);
+    notifyListeners();
   }
 
   /// «+» тугмаси ёниқми: [qtyOf] ресторан чегарасидан кам.
@@ -526,7 +545,7 @@ class RestaurantCart extends ChangeNotifier {
     if (cur.qty <= 1) {
       _lines.remove(itemId);
     } else {
-      _lines[itemId] = CartLine(item: cur.item, qty: cur.qty - 1);
+      _lines[itemId] = CartLine(item: cur.item, qty: cur.qty - 1, note: cur.note);
     }
     if (_lines.isEmpty) _restaurantId = null;
     notifyListeners();
@@ -555,7 +574,7 @@ class RestaurantCart extends ChangeNotifier {
 
   /// `placeRestaurantOrder` учун `items`.
   List<Map<String, dynamic>> toOrderItems() => [
-        for (final l in _lines.values) {'itemId': l.item.id, 'qty': l.qty},
+        for (final l in _lines.values) {'itemId': l.item.id, 'qty': l.qty, if (l.note.isNotEmpty) 'note': l.note},
       ];
 }
 

@@ -372,7 +372,11 @@ class OrderItem {
   final String productType;
   final int itemTotal;
 
+  /// Фақат ресторан буюртмасида: мижознинг шу таомга изоҳи (эски буюртмаларда йўқ — бўш).
+  final String note;
+
   const OrderItem({
+    this.note = '',
     this.itemId = '',
     required this.name,
     this.count = 1,
@@ -400,6 +404,7 @@ class OrderItem {
     final line = (m['lineTotal'] as num?)?.toInt() ?? (base + fm);
     final foodTotal = (m['total'] as num?)?.toInt() ?? 0;
     return OrderItem(
+      note: m['note'] is String ? (m['note'] as String).trim() : '',
       itemId: (m['itemId'] ?? '') as String,
       name: m['name'] ?? '',
       count: count,

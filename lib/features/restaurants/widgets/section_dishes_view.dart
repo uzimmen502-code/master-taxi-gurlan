@@ -42,7 +42,7 @@ class SectionDishesView extends StatefulWidget {
     required this.repository,
     required this.lat,
     required this.lng,
-    required this.onOpenRestaurant,
+    required this.onOpenDish,
     this.now,
     this.seasons = const [],
     this.ramadan = RamadanConfig.none,
@@ -58,8 +58,8 @@ class SectionDishesView extends StatefulWidget {
   final double? lat;
   final double? lng;
 
-  /// Таом босилди: ресторан идентификатори.
-  final void Function(String restaurantId) onOpenRestaurant;
+  /// Таом босилди: таомнинг ўзи (ресторан + таом идентификатори) — тафсилот варағи шу таомни очади.
+  final void Function(SectionDish dish) onOpenDish;
 
   /// Тест учун соат.
   final DateTime Function()? now;
@@ -261,7 +261,7 @@ class _SectionDishesViewState extends State<SectionDishesView> {
                       section: widget.section,
                       config: widget.config,
                       distanceKm: r.dish.distanceKmFrom(widget.lat, widget.lng),
-                      onTap: () => widget.onOpenRestaurant(r.dish.restaurantId),
+                      onTap: () => widget.onOpenDish(r.dish),
                     );
                 return Column(
                   children: [
@@ -478,7 +478,7 @@ class SectionDishCard extends StatelessWidget {
                         ranked.isClosed ? '$meta · ${context.tr('restaurants_closed')}' : meta,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AvaText.caption.copyWith(color: ranked.isClosed ? c.warn : c.ink2),
+                        style: AvaText.dishNote.copyWith(color: ranked.isClosed ? c.warn : c.ink2),
                       ),
                       const SizedBox(height: 6),
                       // Нарх, рейтинг ва чиплар тор катакда ва катта шрифтда сиғмаса — Wrap кейинги қаторга ўтказади.
@@ -496,7 +496,7 @@ class SectionDishCard extends StatelessWidget {
                           else
                             Text('${formatPrice(d.price)} ${context.tr('sum')}', style: AvaText.price.copyWith(color: c.brandText)),
                           if (perPerson != null)
-                            Text('${formatPrice(d.price)} ${context.tr('sum')}', style: AvaText.caption.copyWith(color: c.ink3)),
+                            Text('${formatPrice(d.price)} ${context.tr('sum')}', style: AvaText.dishNote.copyWith(color: c.ink2)),
                           if (showRating)
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -509,7 +509,7 @@ class SectionDishCard extends StatelessWidget {
                                     key: ValueKey('rating-${d.key}'),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: AvaText.caption.copyWith(color: c.ink2),
+                                    style: AvaText.dishNote.copyWith(color: c.ink2),
                                   ),
                                 ),
                               ],
@@ -518,25 +518,25 @@ class SectionDishCard extends StatelessWidget {
                             Text(
                               context.tr('restaurants_dish_kcal').replaceAll('{kcal}', '${d.kcal}'),
                               key: ValueKey('kcal-${d.key}'),
-                              style: AvaText.caption.copyWith(color: c.ink2),
+                              style: AvaText.dishNote.copyWith(color: c.ink2),
                             ),
                           if (section.isPreorderBased)
                             Text(
                               context.tr('restaurants_dish_preorder'),
                               key: ValueKey('pre-${d.key}'),
-                              style: AvaText.caption.copyWith(color: c.brandText),
+                              style: AvaText.dishNote.copyWith(color: c.brandText),
                             ),
                           if (section == RestaurantSection.dastarxon && d.servings != null)
                             Text(
                               context.tr('restaurants_dish_serves').replaceAll('{n}', '${d.servings}'),
                               key: ValueKey('serves-${d.key}'),
-                              style: AvaText.caption.copyWith(color: c.ink2),
+                              style: AvaText.dishNote.copyWith(color: c.ink2),
                             ),
                           if (section == RestaurantSection.fast)
                             Text(
                               context.tr('restaurants_dish_prep').replaceAll('{min}', '${d.prepTimeMin}'),
                               key: ValueKey('prep-${d.key}'),
-                              style: AvaText.caption.copyWith(color: c.ink2),
+                              style: AvaText.dishNote.copyWith(color: c.ink2),
                             ),
                         ],
                       ),

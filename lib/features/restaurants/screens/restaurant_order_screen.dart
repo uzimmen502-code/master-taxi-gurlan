@@ -397,10 +397,21 @@ class _ItemsCard extends StatelessWidget {
           for (final it in o.items)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: Text('${it.name} × ${it.count}', style: TextStyle(fontSize: 13, color: c.ink))),
-                  Text(formatPrice(it.lineTotal), style: TextStyle(fontSize: 13, color: c.ink)),
+                  Row(
+                    children: [
+                      Expanded(child: Text('${it.name} × ${it.count}', style: TextStyle(fontSize: 13, color: c.ink))),
+                      Text(formatPrice(it.lineTotal), style: TextStyle(fontSize: 13, color: c.ink)),
+                    ],
+                  ),
+                  if (it.note.isNotEmpty)
+                    Text(
+                      '${context.tr('restaurants_note')}: ${it.note}',
+                      key: ValueKey('order-item-note-${it.itemId}'),
+                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: c.ink2),
+                    ),
                 ],
               ),
             ),

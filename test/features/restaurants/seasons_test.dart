@@ -229,7 +229,7 @@ void main() {
             seasons: seasons,
             ramadan: ramadan,
             regionId: region,
-            onOpenRestaurant: (_) {},
+            onOpenDish: (_) {},
           ),
         ),
       ));

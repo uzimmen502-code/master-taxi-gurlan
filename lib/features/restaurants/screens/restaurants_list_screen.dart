@@ -15,10 +15,15 @@ import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
 import '../domain/restaurant_sections.dart';
+import '../widgets/dish_detail_sheet.dart';
 import '../widgets/restaurant_row.dart';
 import '../widgets/section_dishes_view.dart';
 import '../../../core/geo/geo_context.dart';
+import '../domain/dish_stats.dart';
 import '../domain/seasons.dart';
+import '../../tv_market/models/tv_clip.dart';
+import '../../tv_market/repositories/tv_clips_repository.dart';
+import '../../tv_market/services/tv_clip_link.dart';
 import 'my_bookings_screen.dart';
 import 'restaurant_screen.dart';
 
@@ -32,10 +37,16 @@ class RestaurantsListScreen extends StatefulWidget {
     this.locate,
     this.currentUid,
     this.onOpenRestaurant,
+    this.itemClipsLoader,
+    this.itemClipOpener,
   });
 
   /// Тестда алмаштириш учун; стандарт — [RestaurantScreen] очилади.
   final void Function(Restaurant restaurant)? onOpenRestaurant;
+
+  /// Лентадан очилган таом варағи учун ресторан таом видеолари (`itemId → клип`); тестда алмаштирилади.
+  final Future<Map<String, TvClip>> Function(String restaurantId)? itemClipsLoader;
+  final void Function(BuildContext context, TvClip clip)? itemClipOpener;
 
   /// Бўлим дарвозаси учун фойдаланувчи (12 рақамли; `internal` босқич синовчиси). Бўш бўлса
   /// SharedPreferences'даги телефондан; тестда алмаштирилади.
@@ -343,22 +354,79 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
     return out;
   }
 
-  /// Бўлимдаги таом босилди: ресторан ҳужжати олинади ва ресторан экрани очилади.
-  Future<void> _openById(String restaurantId) async {
+  /// Таом очилмоқда: ресторан ва таом ҳужжатлари юкланяпти. Шу пайтда яна босилса иккинчи экран очилмайди.
+  bool _opening = false;
+
+  Future<T?> _soft<T>(Future<T> Function() load) async {
     try {
-      final r = await _repo.getRestaurant(restaurantId);
-      if (!mounted) return;
-      if (r != null) {
-        _open(r);
-        return;
-      }
-    } catch (_) {}
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('restaurants_dish_open_failed'))));
+      return await load();
+    } catch (e) {
+      debugPrint('[RestaurantsList] optional load $e');
+      return null;
+    }
   }
 
-  void _open(Restaurant r) {
+  /// Лентадаги таом босилди: ресторан + таом (+ баҳо, видео) юкланиб, ТАОМ ТАФСИЛОТИ варағи очилади.
+  /// Таом ҳужжати топилмаса (ўчирилган) — ресторан менюси шу таомга скролл билан очилади. Ресторан
+  /// топилмаса — хато хабари.
+  Future<void> _openDish(SectionDish d) async {
+    if (_opening) return;
+    setState(() => _opening = true);
+    Restaurant? r;
+    MenuItem? item;
+    DishStats? stats;
+    TvClip? clip;
+    try {
+      final rF = _soft(() => _repo.getRestaurant(d.restaurantId));
+      final iF = _soft(() => _repo.getMenuItem(d.restaurantId, d.itemId));
+      // Баҳо ва видео — ихтиёрий қўшимча: юкланмаса варақ улар кўринмасдан очилади.
+      final sF = _soft(() => _repo.getDishStat(d.restaurantId, d.itemId));
+      final cF = _soft(() async {
+        final loader = widget.itemClipsLoader ?? (id) => TvClipsRepository().fetchRestaurantItemClips(id);
+        return (await loader(d.restaurantId))[d.itemId];
+      });
+      r = await rF;
+      item = await iF;
+      stats = await sF;
+      clip = await cF;
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+    if (!mounted) return;
+    final restaurant = r;
+    if (restaurant == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('restaurants_dish_open_failed'))));
+      return;
+    }
+    if (item == null) {
+      _open(restaurant, focusItemId: d.itemId);
+      return;
+    }
+    await showDishDetailSheet(
+      context,
+      item: item,
+      restaurant: restaurant,
+      cart: _cart,
+      stats: stats,
+      clip: clip,
+      onPlayVideo: (c) {
+        final opener = widget.itemClipOpener;
+        if (opener != null) {
+          opener(context, c);
+        } else {
+          TvClipLink.open(context, c);
+        }
+      },
+      onOpenMenu: () {
+        // Варақни ёпиб, менюни шу таомга скролл қилиб очамиз.
+        Navigator.of(context).pop();
+        _open(restaurant, focusItemId: d.itemId);
+      },
+      cuisineLoader: () => _repo.listCuisines(),
+    );
+  }
+
+  void _open(Restaurant r, {String? focusItemId}) {
     final hook = widget.onOpenRestaurant;
     if (hook != null) {
       hook(r);
@@ -372,6 +440,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
           userLng: _lng,
           repository: _repo,
           cart: _cart,
+          focusItemId: focusItemId,
         ),
       ),
     );
@@ -494,6 +563,11 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                   ],
                 ),
               ),
+            // Таом очилаётганда юкланиш чизиғи (экран қотиб қолгандек кўринмасин); баландлик ўзгармайди.
+            SizedBox(
+              height: 2,
+              child: _opening ? LinearProgressIndicator(key: const ValueKey('dish-opening'), minHeight: 2, color: c.brand) : null,
+            ),
             Expanded(
               child: !_sectionsReady
                   ? const Center(child: CircularProgressIndicator())
@@ -505,7 +579,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                       repository: _repo,
                       lat: _lat,
                       lng: _lng,
-                      onOpenRestaurant: _openById,
+                      onOpenDish: _openDish,
                       seasons: _activeSeasons,
                       ramadan: _ramadan,
                       regionId: GeoContext.active.regionId,

@@ -3976,7 +3976,7 @@
   "my_shop_title": "Менинг дўконим",
   "my_shop_row_sub": "Дўконларингиз ва янги маҳсулот қўшиш",
   "my_shop_main_title": "Асосий дўкон",
-  "my_shop_main_sub": "Аҳоли ва Улгуржи бозор маҳсулотлари",
+  "my_shop_main_sub": "Аҳоли, Улгуржи ва AVAGram маҳсулотлари",
   "my_shop_other_title": "Бошқа дўконлар",
   "my_shop_new_shop": "Янги дўкон",
   "my_shop_rename": "Таҳрирлаш",
@@ -3985,7 +3985,5 @@
   "my_shop_name_hint": "Масалан: Баракат кийим",
   "my_shop_name_note": "Ном дўкон саҳифангизда кўринади. Кейин ўзгартириш мумкин.",
   "my_shop_name_err": "Номни камида 2 та белгидан ёзинг",
-  "my_shop_name_save_failed": "Номни сақлаб бўлмади. Қайта уриниб кўринг.",
-  "my_shop_vitrine_title": "AVAGram дўкони",
-  "my_shop_vitrine_sub": "Видеога боғланган маҳсулотлар ва роликлар"
+  "my_shop_name_save_failed": "Номни сақлаб бўлмади. Қайта уриниб кўринг."
 }

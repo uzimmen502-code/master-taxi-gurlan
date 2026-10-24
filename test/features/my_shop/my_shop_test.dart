@@ -190,6 +190,7 @@ void main() {
         saveName: save ?? (n) async => saved.add(n),
         retailView: (_) => const Center(child: Text('RETAIL')),
         wholesaleView: (_) => const Center(child: Text('WHOLESALE')),
+        avagramView: (_) => const Center(child: Text('AVAGRAM')),
       )));
       await tester.pumpAndSettle();
       return saved;
@@ -202,11 +203,23 @@ void main() {
       expect(find.text('my_shop_main_title'), findsOneWidget);
     });
 
-    testWidgets('бошланғич сегмент: 0 — Аҳоли, 1 — Улгуржи', (tester) async {
+    testWidgets('бошланғич сегмент: 0 — Аҳоли, 1 — Улгуржи, 2 — AVAGram', (tester) async {
       await open(tester);
       expect(find.text('RETAIL'), findsOneWidget);
       await open(tester, segment: 1);
       expect(find.text('WHOLESALE'), findsOneWidget);
+      await open(tester, segment: kAvagramSegment);
+      expect(find.text('AVAGRAM'), findsOneWidget);
+    });
+
+    testWidgets('учта бўлим: Аҳоли бозори, Улгуржи, AVAGram (алоҳида дўкон эмас)', (tester) async {
+      await open(tester);
+      expect(find.text('tv_shop_to_market'), findsOneWidget);
+      expect(find.text('home_module_wholesale'), findsOneWidget);
+      expect(find.text('AVAGram'), findsOneWidget);
+      await tester.tap(find.text('AVAGram'));
+      await tester.pumpAndSettle();
+      expect(find.text('AVAGRAM'), findsOneWidget);
     });
 
     testWidgets('номни ўзгартириш: тўғри ном сақланади ва сарлавҳа янгиланади', (tester) async {
@@ -349,37 +362,13 @@ void main() {
     });
   });
 
-  group('MyShopScreen: «AVAGram дўкони» банди', () {
-    Future<void> open(WidgetTester tester, {required bool vitrine}) async {
-      _bigView(tester);
-      await tester.pumpWidget(_app(MyShopScreen(
-        key: UniqueKey(),
-        phone: _phone,
-        showVitrine: vitrine,
-        businesses: Stream.value(const []),
-        loadMainName: () async => '',
-      )));
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets('tv_shops ҳужжати бор — банд кўринади', (tester) async {
-      await open(tester, vitrine: true);
-      expect(find.text('my_shop_vitrine_title'), findsOneWidget);
-      expect(find.text('my_shop_vitrine_sub'), findsOneWidget);
-    });
-
-    testWidgets('ҳужжат йўқ — банд йўқ', (tester) async {
-      await open(tester, vitrine: false);
-      expect(find.text('my_shop_vitrine_title'), findsNothing);
-    });
-  });
-
   group('openMyShop (« + » менюси ва видеодаги «Дўкон» тугмаси учун ягона оқим)', () {
     /// Оқимни ишга туширади; ўтказилган экранлар ва сақланган номлар қайтади.
     Future<({List<Widget> pushed, List<String> saved})> run(
       WidgetTester tester, {
       required MyShopPresence presence,
       bool canCreate = true,
+      bool preferMain = false,
       AvaFirstShop? first,
       bool saveFails = false,
     }) async {
@@ -395,6 +384,7 @@ void main() {
                 phone: _phone,
                 presence: presence,
                 canCreateShop: canCreate,
+                preferMain: preferMain,
                 push: (w) async => pushed.add(w),
                 askFirstShop: (_) async => first,
                 saveName: (phone, name) async {
@@ -429,15 +419,24 @@ void main() {
       expect(screen.openAddOnStart, isFalse);
     });
 
-    testWidgets('tv_shops бор — рўйхатда «AVAGram дўкони» банди (харита ёпиқ бўлса ҳам)', (tester) async {
+    testWidgets('фақат tv_shops бор, харита ёпиқ — алоҳида AVAGram карточкаси йўқ: тўғридан-тўғри асосий дўкон', (tester) async {
       final r = await run(
         tester,
         presence: const MyShopPresence(mainShop: true),
         canCreate: false,
       );
-      final screen = r.pushed.single as MyShopScreen;
-      expect(screen.showVitrine, isTrue);
-      expect(screen.canCreateShop, isFalse);
+      expect(r.pushed.single, isA<MainShopScreen>());
+    });
+
+    testWidgets('видеодаги «Дўкон» тугмаси: ҳар доим асосий дўконнинг AVAGram бўлими (рўйхатсиз)', (tester) async {
+      final r = await run(
+        tester,
+        presence: const MyShopPresence(retail: true, otherShops: 2),
+        canCreate: true,
+        preferMain: true,
+      );
+      final screen = r.pushed.single as MainShopScreen;
+      expect(screen.initialSegment, kAvagramSegment);
     });
 
     testWidgets('қўшимча дўкон бор — харита ёпиқ бўлса ҳам рўйхат', (tester) async {

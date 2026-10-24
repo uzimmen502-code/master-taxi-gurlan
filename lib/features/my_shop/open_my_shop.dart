@@ -16,8 +16,9 @@ typedef MyShopPush = Future<void> Function(Widget screen);
 ///  · AVAGram видеосидаги «Дўкон» тугмаси (эганинг ўз видеоси).
 ///
 /// Дўкони бор эга ([MyShopPresence.any]) — дўконлар рўйхатига ([MyShopScreen]);
-/// фақат Аҳоли/Улгуржи маҳсулоти бор, қўшимча дўкон очиш ёпиқ бўлса —
-/// тўғридан-тўғри асосий дўконга. Дўкони йўқ эга — биринчи кириш: ном (ихтиёрий)
+/// қўшимча дўкон очиш ёпиқ ва бошқа дўкони йўқ бўлса — тўғридан-тўғри асосий
+/// дўконга. [preferMain] (видеодаги «Дўкон» тугмаси) — ҳар доим асосий дўконнинг
+/// AVAGram бўлимига. Дўкони йўқ эга — биринчи кириш: ном (ихтиёрий)
 /// + «қаерга қўшамиз?», кейин асосий дўкон (Аҳоли бозорида форма дарҳол
 /// очилади, ёпилгач рўйхат ва «Янги маҳсулот» тугмаси турибди).
 ///
@@ -28,6 +29,7 @@ Future<void> openMyShop(
   required String phone,
   required MyShopPresence presence,
   required MyShopPush push,
+  bool preferMain = false,
   bool? canCreateShop,
   Future<AvaFirstShop?> Function(BuildContext context)? askFirstShop,
   Future<void> Function(String phone, String name)? saveName,
@@ -35,12 +37,14 @@ Future<void> openMyShop(
   if (presence.any) {
     // Бизнес харитаси модули ёпиқ бўлса «Янги дўкон» чиқмайди.
     final canCreate = canCreateShop ?? ServiceConfigHolder.isVisible('business_map');
-    if (canCreate || presence.otherShops > 0 || presence.mainShop) {
+    if (preferMain) {
+      // Видеодаги «Дўкон» тугмаси: видео шу дўконнинг AVAGram бўлимига тегишли.
+      await push(MainShopScreen(phone: phone, initialSegment: kAvagramSegment));
+    } else if (canCreate || presence.otherShops > 0) {
       await push(MyShopScreen(
         phone: phone,
         initialSegment: presence.initialSegment,
         canCreateShop: canCreate,
-        showVitrine: presence.mainShop,
       ));
     } else {
       await push(MainShopScreen(

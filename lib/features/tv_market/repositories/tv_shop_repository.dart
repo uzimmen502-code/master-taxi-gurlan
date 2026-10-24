@@ -88,16 +88,31 @@ class TvShopRepository {
     }
   }
 
-  Future<List<TvShopItem>> fetchByOwner(String ownerPhone) async {
+  Future<List<TvShopItem>> fetchByOwner(String ownerPhone, {int limit = 80}) async {
     final id = canonicalPhoneId(ownerPhone);
     if (id.isEmpty) return const [];
     final snap = await _items
         .where('ownerPhone', isEqualTo: id)
         .orderBy('createdAt', descending: true)
-        .limit(80)
+        .limit(limit)
         .get();
     return snap.docs.map(TvShopItem.fromFirestore).toList();
   }
+
+  /// Эганинг ЎЗ дўкони маҳсулотлари: `businessId`и бўш (Бизнес харитаси объектига боғланмаган),
+  /// ўчирилмаган, [onlyActive]да фаол. Мавжуд [fetchByOwner] сўрови (индекс бор), фильтр клиентда.
+  Future<List<TvShopItem>> fetchOwnShopItems(String ownerPhone, {bool onlyActive = false}) async {
+    final all = await fetchByOwner(ownerPhone, limit: 200);
+    return visibleOwnShopItems(all, ownerPhone: ownerPhone, onlyActive: onlyActive);
+  }
+
+  /// [fetchOwnShopItems] фильтри (соф функция — тест учун).
+  static List<TvShopItem> visibleOwnShopItems(
+    Iterable<TvShopItem> all, {
+    required String ownerPhone,
+    bool onlyActive = false,
+  }) =>
+      visibleBusinessItems(all.where((i) => i.businessId.isEmpty), ownerPhone: ownerPhone, onlyActive: onlyActive);
 
   /// Бизнес харитаси объектининг маҳсулотлари (`businessId`). Битта майдонли сўров — композит индекс керак эмас;
   /// ўчирилганлар ва [onlyActive] да фаол бўлмаганлар клиентда чиқарилади, энг янгиси биринчи.

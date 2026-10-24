@@ -13,6 +13,7 @@ import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
+import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
@@ -22,8 +23,6 @@ import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/platform_market_card.dart';
-import 'create_ad_screen.dart';
-import 'my_ads_screen.dart';
 
 /// Аҳоли бозори: қидирув + лента.
 class CheapProductsScreen extends StatefulWidget {
@@ -267,14 +266,9 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
         foregroundColor: AppColors.onPrimary,
         actions: [
           IconButton(
-            icon: const Icon(Icons.list_alt),
-            tooltip: context.tr('jobs_my_ads'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MyAdsScreen()),
-              );
-            },
+            icon: const Icon(Icons.storefront_outlined),
+            tooltip: context.tr('my_shop_title'),
+            onPressed: () => openMyShopFromMarket(context),
           ),
           // «+» — юқоридаги барнинг ўнг томонида, ихчам (эга, 2026-10-19; аввал қидирув қаторининг ёнида эди).
           Padding(
@@ -284,14 +278,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
               child: InkWell(
                 key: const ValueKey('cheap-add-ad'),
                 customBorder: const CircleBorder(),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const CreateAdScreen(),
-                    ),
-                  );
-                },
+                onTap: () => openNewProduct(context),
+
                 child: SizedBox(
                   width: 48,
                   height: 48,

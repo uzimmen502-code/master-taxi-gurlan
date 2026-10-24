@@ -43,6 +43,22 @@ class Business {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  /// «Менинг дўконим»нинг ЎЗ дўкони (харитада жойи йўқ): эганинг usinessIdсиз маҳсулотлари.
+  /// Харита объекти эмас — фақат шу каталог экранлари битта кодда ишлаши учун (id бўш).
+  factory Business.ownShop({required String ownerId, required String name, String districtId = ''}) => Business(
+        id: '',
+        ownerId: ownerId,
+        name: name,
+        category: BusinessCategory.retail,
+        phone: ownerId,
+        lat: 0,
+        lng: 0,
+        districtId: districtId,
+      );
+
+  /// 	rue — харита объекти эмас, эганинг ўз дўкони ([Business.ownShop]).
+  bool get isOwnShop => id.isEmpty;
+
   static String _s(Object? v) => v is String ? v.trim() : '';
 
   static DateTime? _t(Object? v) => v is Timestamp ? v.toDate() : (v is DateTime ? v : null);

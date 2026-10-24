@@ -33,7 +33,9 @@ class AdCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: GestureDetector(
+      // InkWell: босганда ripple (қўшни карталардаги каби); аввал
+      // GestureDetector эди — босиш эффекти йўқ эди.
+      child: InkWell(
         onTap: () => _open(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -67,7 +69,8 @@ class AdCard extends StatelessWidget {
             ),
             MarketCardText(
               title: ad.title,
-              price: formatMoney(ad.price),
+              // Нархсиз эълон «0 сўм» эмас — бош саҳифа бўлими билан бир хил.
+              price: ad.price > 0 ? formatMoney(ad.price) : null,
               caption: ad.description,
             ),
           ],

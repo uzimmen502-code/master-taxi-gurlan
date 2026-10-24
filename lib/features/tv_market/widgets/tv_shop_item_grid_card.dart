@@ -63,7 +63,8 @@ class TvShopItemGridCard extends StatelessWidget {
                         child: _Pill(
                           text: context.tr('tv_shop_mine'),
                           color: AvaLight.ok,
-                          fg: Colors.black,
+                          // Оқ матн яшил фонда ≈5.3:1 (қора ≈3.9:1 эди).
+                          fg: Colors.white,
                         ),
                       ),
                     if (photos > 1)

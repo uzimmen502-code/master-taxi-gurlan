@@ -73,23 +73,28 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
           ),
           // Нечанчи эълон эканини кўрсатиб туради — фойдаланувчи
           // лентанинг ичида эканини билсин.
+          // Тепада ЎРТАДА: ўнг томонда AppBar'нинг «шикоят» иконкаси бор,
+          // чап томонда — орқага тугмаси (счётчик иконка устига тушарди).
           Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            right: 12,
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 0,
+            right: 0,
             child: IgnorePointer(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${_index + 1} / ${ads.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: AppText.labelTiny,
-                    fontWeight: FontWeight.w700,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_index + 1} / ${ads.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: AppText.labelTiny,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),

@@ -44,6 +44,13 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   final _platformRepo = PlatformProductsRepository();
   final _shopRepo = TvShopRepository();
   late String _query = widget.initialQuery;
+
+  /// Серверга кетадиган қидирув — ёзиш тўхтагандан кейингина янгиланади
+  /// (аввал ҳар ҳарфда янги Firestore сўрови очиларди). Платформа ва дўкон
+  /// рўйхатлари хотирада фильтрланади, улар `_query` билан дарҳол янгиланади.
+  late String _streamQuery = widget.initialQuery;
+  Timer? _debounce;
+  static const _searchDebounce = Duration(milliseconds: 350);
   List<PlatformProduct> _platform = const [];
   List<TvShopItem> _shopItems = const [];
   bool _platformLoaded = false;
@@ -64,10 +71,10 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   String _streamKey = '';
 
   Stream<List<AdModel>> _adsFor(AdsRepository repo) {
-    final key = '${_scope.key}|$_query';
+    final key = '${_scope.key}|$_streamQuery';
     if (_adsStream == null || key != _streamKey) {
       _streamKey = key;
-      _adsStream = repo.searchScoped(_query, _scope);
+      _adsStream = repo.searchScoped(_streamQuery, _scope);
     }
     return _adsStream!;
   }
@@ -126,13 +133,27 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  void _onQueryChanged(String v) {
+    setState(() => _query = v);
+    _debounce?.cancel();
+    _debounce = Timer(_searchDebounce, () {
+      if (!mounted) return;
+      setState(() => _streamQuery = _query);
+    });
+  }
+
   void _clearSearch() {
+    _debounce?.cancel();
     _searchCtrl.clear();
-    setState(() => _query = '');
+    setState(() {
+      _query = '';
+      _streamQuery = '';
+    });
   }
 
   List<PlatformProduct> _filteredPlatform() {
@@ -290,7 +311,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchCtrl,
-                    onChanged: (v) => setState(() => _query = v),
+                    onChanged: _onQueryChanged,
                     decoration: InputDecoration(
                       hintText: context.tr('platform_store_search_hint'),
                       prefixIcon: const Icon(Icons.search),

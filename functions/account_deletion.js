@@ -25,6 +25,7 @@
 
 const core = require('./account_deletion_core');
 const settlementLedger = require('./settlement_ledger');
+const { createHider } = require('./account_deletion_hide');
 
 const COL = 'account_deletions';
 const HISTORY = 'account_deletion_history';
@@ -499,6 +500,7 @@ function attachAccountDeletion(exportsObj, deps) {
     db,
     admin,
     auth: admin.auth(),
+    hiders: [createHider({ db, admin })],
     deleteStoragePath: async (p) => { try { await admin.storage().bucket().file(p).delete(); } catch (_) { /* noop */ } },
     deleteStoragePrefix: async (prefix) => {
       try {

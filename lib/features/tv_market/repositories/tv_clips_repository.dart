@@ -202,6 +202,34 @@ class TvClipsRepository {
     );
   }
 
+  /// «Кун янгиликлари» нуқтаси учун: ҳудуддаги энг сўнгги фаол янгиликлар (кичик сўров, саҳифалаш йўқ).
+  /// Туман ва республика — битта сўров (≤[perQuery]); вилоят — ҳар туман учун биттадан (≤ туманлар сони ўқиш).
+  /// Сўров шакли `fetchNearby`/`fetchAllActive` билан бир хил (`category whereIn ['news']`) — янги индекс керак эмас.
+  Future<List<TvClip>> fetchLatestNews({
+    String districtId = '',
+    String regionId = '',
+    int perQuery = 3,
+  }) async {
+    const news = ['news'];
+    Future<List<TvClip>> top(Query<Map<String, dynamic>> q, int n) async {
+      final snap = await _withCategory(q, news).orderBy('createdAt', descending: true).limit(n).get();
+      return _playable(snap.docs);
+    }
+
+    final active = _col.where('status', isEqualTo: 'active');
+    if (districtId.isNotEmpty) {
+      return top(active.where('districtId', isEqualTo: districtId), perQuery);
+    }
+    if (regionId.isNotEmpty) {
+      final districts = await ServiceConfigRepository().fetchDistricts(regionId);
+      final lists = await Future.wait([
+        for (final d in districts) top(active.where('districtId', isEqualTo: d.id), 1),
+      ]);
+      return [for (final l in lists) ...l];
+    }
+    return top(active, perQuery);
+  }
+
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).
   Future<List<TvClip>> fetchRecommended({
     required String districtId,

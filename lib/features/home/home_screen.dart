@@ -99,6 +99,7 @@ import '../../models/search_index_entry.dart';
 import 'widgets/all_services_screen.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
+import 'widgets/wallet_card.dart';
 import '../realty/screens/realty_detail_screen.dart';
 import '../realty/screens/realty_map_screen.dart';
 import '../realty/screens/realty_screen.dart';
@@ -145,10 +146,21 @@ double _sectionGap(BuildContext context, {required double base}) {
   return (base * scale * heightFactor).clamp(6.0, base);
 }
 
+String _todayText(BuildContext context) {
+  final now = DateTime.now();
+  final d = now.day.toString().padLeft(2, '0');
+  final m = now.month.toString().padLeft(2, '0');
+  return context
+      .tr('home_date_today')
+      .replaceAll('{day}', d)
+      .replaceAll('{month}', m)
+      .replaceAll('{year}', '${now.year}');
+}
+
 /// Бош саҳифа — янги дизайн тизими.
 ///
 /// Тартиби: юқори қатор (AVA + ҳудуд) · фаол буюртма карточкаси ·
-/// сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
+/// ҳамён банери (11 с) · сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
 /// пастки меню. Ҳар бўлим `AvaSection` устига қурилган, шунинг учун
 /// юкланиш / бўш / хатолик ҳолатлари бир хил.
 class HomeScreen extends StatelessWidget {
@@ -192,9 +204,16 @@ class _HomeViewState extends State<_HomeView> {
   /// маълумотини қайта сўрайди (қаранг: [_refreshHome]).
   int _refreshEpoch = 0;
 
+  /// Ҳамён банери: очилганда кўринади, 11 с дан кейин йиғилади. Профилдан
+  /// қайтганда яна 11 с кўринади (хизматдан қайтганда — йўқ).
+  int _walletRevealEpoch = 0;
+  bool _walletVisible = true;
+  Timer? _walletHideTimer;
+
   @override
   void initState() {
     super.initState();
+    _armWalletHideTimer();
     final news = context.read<NewsRepository>();
     _unread = HomeUnreadBadge(
       watch: ({required userId, required audiences}) =>
@@ -222,9 +241,26 @@ class _HomeViewState extends State<_HomeView> {
     });
   }
 
+  void _armWalletHideTimer() {
+    _walletHideTimer?.cancel();
+    _walletHideTimer = Timer(const Duration(seconds: 11), () {
+      if (!mounted) return;
+      setState(() => _walletVisible = false);
+    });
+  }
+
   /// Home яна кўринганда.
-  void _onHomeResurface() {
+  /// [revealWallet]: фақат профил/ҳамён дан қайтганда — хизматдан
+  /// қайтганда ҳамён мажбурий очилмайди (сатҳ силжиши йўқ).
+  void _onHomeResurface({bool revealWallet = false}) {
     if (!mounted) return;
+    if (revealWallet) {
+      setState(() {
+        _walletRevealEpoch++;
+        _walletVisible = true;
+      });
+      _armWalletHideTimer();
+    }
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
     _scheduleDeferredConfigBootstrap();
     unawaited(_checkLocationSuggestion());
@@ -277,9 +313,8 @@ class _HomeViewState extends State<_HomeView> {
     });
   }
 
-  /// Битта `users/{uid}` стрими geo конфигни ҳам боқади — иккинчи
-  /// Firestore кузатувчиси йўқ. (Илгари бу стрим ҳамён карточкаси учун
-  /// ҳам ишлатиларди; карточка олиб ташланди, стрим қолди.)
+  /// Single `users/{uid}` stream (WalletCard) also drives geo config — no
+  /// second Firestore watch.
   void _maybeApplyUserGeo(UserModel? user) {
     if (user == null) return;
     final areaId = user.serviceAreaId.trim();
@@ -363,6 +398,7 @@ class _HomeViewState extends State<_HomeView> {
 
   @override
   void dispose() {
+    _walletHideTimer?.cancel();
     _deferredBootstrapTimer?.cancel();
     _promoSub?.cancel();
     _unread.dispose();
@@ -409,7 +445,7 @@ class _HomeViewState extends State<_HomeView> {
         transitionDuration: const Duration(milliseconds: 280),
       ),
     );
-    // Home яна кўринганда spotlight авто / ҳамён 11 с қайта.
+    // Home яна кўринганда spotlight авто қайта.
     if (mounted) _onHomeResurface();
   }
 
@@ -498,6 +534,25 @@ class _HomeViewState extends State<_HomeView> {
         return;
     }
     await _push(screen);
+  }
+
+  String _displayName(
+      BuildContext context, UserModel? user, HomeController home) {
+    final name = (user?.name ?? home.name).trim();
+    final phone =
+        user?.phone.trim().isNotEmpty == true ? user!.phone : home.phone;
+    if (name.isEmpty) {
+      return phone.isNotEmpty ? phone : context.tr('user_default_name');
+    }
+    final gender = (user?.gender.trim().isNotEmpty == true
+            ? user!.gender
+            : home.gender)
+        .trim()
+        .toLowerCase();
+    final key = gender == 'female'
+        ? 'home_display_name_opa'
+        : 'home_display_name_aka';
+    return context.tr(key).replaceAll('{name}', name);
   }
 
   void _showTezKundaSnack() {
@@ -772,7 +827,7 @@ class _HomeViewState extends State<_HomeView> {
       if (leaving == AvaNavTab.cabinet) {
         unawaited(context.read<HomeController>().refreshUser());
       }
-      _onHomeResurface();
+      _onHomeResurface(revealWallet: leaving == AvaNavTab.cabinet);
     }
   }
 
@@ -1257,15 +1312,44 @@ class _HomeViewState extends State<_HomeView> {
                             const CustomerConfirmBanner(),
                             _ActiveOrderSlot(onOpen: _openActiveOrder),
                             SizedBox(height: _sectionGap(context, base: 10)),
-                            // Ҳамён карточкаси интерфейсдан олиб
-                            // ташланди (тавсиф: «Ҳамён коддан
-                            // ўчирилмайди, фақат интерфейсда
-                            // яширилади»). `WalletScreen` жойида ва
-                            // ишлайверади: AVA AI ҳамда EV ичидаги
-                            // «тўлдириш» уни тўғридан-тўғри очади.
-                            // Қуйидаги `openWalletScreen()` эса ҳозир
-                            // чақирилмайди — ҳамён яна кўринадиган
-                            // бўлса, тайёр туриши учун қолдирилди.
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 280),
+                              curve: Curves.easeInOut,
+                              alignment: Alignment.topCenter,
+                              child: _walletVisible
+                                  ? Column(
+                                      key: ValueKey(_walletRevealEpoch),
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        WalletCard(
+                                          balanceAmount: formatPrice(
+                                              user?.bonusBalance ?? 0),
+                                          balanceCurrency: kCurrencySum,
+                                          lastTxAmount: '—',
+                                          displayName: _displayName(
+                                              context, user, home),
+                                          dateText: _todayText(context),
+                                          locationText: ServiceConfigHolder
+                                              .districtLabel,
+                                          lastTxIsCredit: null,
+                                          onHistoryTap: () async {
+                                            await openWalletScreen(context);
+                                            if (mounted) {
+                                              _onHomeResurface(
+                                                  revealWallet: true);
+                                            }
+                                          },
+                                        ),
+                                        SizedBox(
+                                          height: _sectionGap(context,
+                                              base: 10),
+                                        ),
+                                      ],
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
                                   .read<HomeTickerRepository>()
@@ -1673,9 +1757,8 @@ void needPhoneForAction(BuildContext context) {
 
 /// Ҳамён экрани.
 ///
-/// Ҳамён пастки менюдан олиб ташланди (тавсиф талаби — «коддан
-/// ўчирилмайди, фақат интерфейсда яширилади»), лекин бу йўл қолди:
-/// ҳамён карточкаси, AVA AI ва EV ичидаги «тўлдириш» шуни чақиради.
+/// Ҳамён пастки менюда йўқ; уни бош саҳифадаги ҳамён банери, AVA AI ва EV
+/// ичидаги «тўлдириш» чақиради.
 Future<void> openWalletScreen(BuildContext context) async {
   final phone = phoneDigits(context.read<HomeController>().phone);
   if (phone.length < 9) {

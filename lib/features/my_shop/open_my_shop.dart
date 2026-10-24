@@ -17,8 +17,8 @@ typedef MyShopPush = Future<void> Function(Widget screen);
 ///
 /// Дўкони бор эга ([MyShopPresence.any]) — дўконлар рўйхатига ([MyShopScreen]);
 /// қўшимча дўкон очиш ёпиқ ва бошқа дўкони йўқ бўлса — тўғридан-тўғри асосий
-/// дўконга. [preferMain] (видеодаги «Дўкон» тугмаси) — ҳар доим асосий дўконнинг
-/// AVAGram бўлимига. Дўкони йўқ эга — биринчи кириш: ном (ихтиёрий)
+/// дўконга. [preferMain] (видеодаги «Дўкон» тугмаси) — ҳар доим тўғридан-тўғри
+/// асосий дўконга (бошқа дўконлар рўйхатисиз). Дўкони йўқ эга — биринчи кириш: ном (ихтиёрий)
 /// + «қаерга қўшамиз?», кейин асосий дўкон (Аҳоли бозорида форма дарҳол
 /// очилади, ёпилгач рўйхат ва «Янги маҳсулот» тугмаси турибди).
 ///
@@ -38,8 +38,8 @@ Future<void> openMyShop(
     // Бизнес харитаси модули ёпиқ бўлса «Янги дўкон» чиқмайди.
     final canCreate = canCreateShop ?? ServiceConfigHolder.isVisible('business_map');
     if (preferMain) {
-      // Видеодаги «Дўкон» тугмаси: видео шу дўконнинг AVAGram бўлимига тегишли.
-      await push(MainShopScreen(phone: phone, initialSegment: kAvagramSegment));
+      // Видеодаги «Дўкон» тугмаси: рўйхатсиз, тўғридан-тўғри асосий дўкон.
+      await push(MainShopScreen(phone: phone, initialSegment: presence.initialSegment));
     } else if (canCreate || presence.otherShops > 0) {
       await push(MyShopScreen(
         phone: phone,

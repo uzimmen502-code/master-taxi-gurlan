@@ -3976,7 +3976,7 @@
   "my_shop_title": "Mening do‘konim",
   "my_shop_row_sub": "Do‘konlaringiz va yangi mahsulot qo‘shish",
   "my_shop_main_title": "Asosiy do‘kon",
-  "my_shop_main_sub": "Aholi, Ulgurji va AVAGram mahsulotlari",
+  "my_shop_main_sub": "Aholi va Ulgurji bozor mahsulotlari",
   "my_shop_other_title": "Boshqa do‘konlar",
   "my_shop_new_shop": "Yangi do‘kon",
   "my_shop_rename": "Tahrirlash",
@@ -3985,5 +3985,7 @@
   "my_shop_name_hint": "Masalan: Barakat kiyim",
   "my_shop_name_note": "Nom do‘kon sahifangizda ko‘rinadi. Keyin o‘zgartirish mumkin.",
   "my_shop_name_err": "Nomni kamida 2 ta belgidan yozing",
-  "my_shop_name_save_failed": "Nomni saqlab bo‘lmadi. Qayta urinib ko‘ring."
+  "my_shop_name_save_failed": "Nomni saqlab bo‘lmadi. Qayta urinib ko‘ring.",
+  "my_shop_video_add": "Video qo‘shish",
+  "my_shop_catalog_empty": "Bu yerda hali mahsulot yo‘q. «Yangi mahsulot»ni bosib qo‘shing."
 }

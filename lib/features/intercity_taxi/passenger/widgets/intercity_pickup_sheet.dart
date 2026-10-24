@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../intercity_tap_target.dart';
 import '../intercity_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/intercity_booking.dart';
@@ -127,9 +128,18 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
         geoUpdatedAt: _hasGps ? DateTime.now() : null,
       );
 
+  /// `UserAddress.validationError` модел ичида ҳардкод Кирилл матн қайтаради —
+  /// бу ерда ўрнига 3 тилли калит.
+  String? _validationKey(UserAddress a) {
+    if (a.validationError == null) return null;
+    return a.hasManualAddress ? 'gps_error' : 'addr_err_manual_required';
+  }
+
   Future<void> _useProfileAddress() async {
-    if (!_profileAddress.isComplete) {
-      setState(() => _err = _profileAddress.validationError);
+    if (_saving) return;
+    final key = _validationKey(_profileAddress);
+    if (key != null) {
+      setState(() => _err = key);
       return;
     }
     _applyAddress(_profileAddress);
@@ -196,55 +206,57 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
   }
 
   Future<void> _save() async {
+    // Қайта босишдан ҳимоя: биринчи await'дан ОЛДИН банд қиламиз.
+    if (_saving) return;
     final draft = _draftAddress;
-    final validation = draft.validationError;
-    if (validation != null) {
-      setState(() => _err = validation);
+    final validationKey = _validationKey(draft);
+    if (validationKey != null) {
+      setState(() => _err = validationKey);
       return;
     }
-
-    final prefs = await SharedPreferences.getInstance();
-    final phone = phoneDigits(prefs.getString('user_phone') ?? '');
-    if (phone.length < 9) {
-      setState(() => _err = 'Аввал телефонни тасдиqlang');
-      return;
-    }
-
-    final fields = SellSubmission.pickupFieldsFromAddress(
-      address: draft,
-      legacy: prefs.getString('user_address') ?? '',
-    );
-    final addressText = (fields['pickupAddress'] as String?) ?? '';
-    final lat = (fields['pickupLat'] as num?)?.toDouble();
-    final lng = (fields['pickupLng'] as num?)?.toDouble();
-    if (addressText.isEmpty || lat == null || lng == null) {
-      setState(() => _err = 'gps_error');
-      return;
-    }
-
     setState(() {
       _saving = true;
       _err = null;
     });
 
-    if (!mounted) return;
-    final repo = context.read<IntercityBookingsRepository>();
     try {
-      await repo.updatePickup(
-            bookingId: widget.booking.id,
-            userPhone: phone,
-            address: addressText,
-            lat: lat,
-            lng: lng,
-          );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('intercity_pickup_saved'))),
+      final prefs = await SharedPreferences.getInstance();
+      final phone = phoneDigits(prefs.getString('user_phone') ?? '');
+      if (phone.length < 9) {
+        if (mounted) setState(() => _err = 'addr_err_phone_first');
+        return;
+      }
+
+      final fields = SellSubmission.pickupFieldsFromAddress(
+        address: draft,
+        legacy: prefs.getString('user_address') ?? '',
       );
-    } catch (e) {
+      final addressText = (fields['pickupAddress'] as String?) ?? '';
+      final lat = (fields['pickupLat'] as num?)?.toDouble();
+      final lng = (fields['pickupLng'] as num?)?.toDouble();
+      if (addressText.isEmpty || lat == null || lng == null) {
+        if (mounted) setState(() => _err = 'gps_error');
+        return;
+      }
+
       if (!mounted) return;
-      setState(() => _err = e.toString());
+      final repo = context.read<IntercityBookingsRepository>();
+      await repo.updatePickup(
+        bookingId: widget.booking.id,
+        userPhone: phone,
+        address: addressText,
+        lat: lat,
+        lng: lng,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final savedText = context.tr('intercity_pickup_saved');
+      Navigator.of(context).pop(true);
+      messenger.showSnackBar(SnackBar(content: Text(savedText)));
+    } catch (e) {
+      // Ички сабаб фақат логда; фойдаланувчига тушунарли хабар (CLAUDE.md §25).
+      debugPrint('intercity updatePickup failed: $e');
+      if (mounted) setState(() => _err = 'ic_ux_action_failed');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -253,9 +265,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    final errText = _err == null
-        ? null
-        : (_err!.contains('_') ? context.tr(_err!) : _err);
+    final errText = _err == null ? null : context.tr(_err!);
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
@@ -281,18 +291,33 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                   ),
                 ),
               ),
-              Text(
-                context.tr('pickup_sheet_title'),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _green,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      context.tr('pickup_sheet_title'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: _green,
+                      ),
+                    ),
+                  ),
+                  // Ёпиш йўли: фақат тортиш/фон босишга таянмаймиз.
+                  IconButton(
+                    tooltip: context.tr('close'),
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
                 context.tr('pickup_where_question'),
-                style: TextStyle(fontSize: 13, color: IntercityColors.textMuted),
+                style: const TextStyle(
+                    fontSize: 14, color: IntercityColors.textMuted),
               ),
               if (_loadingProfile)
                 const Padding(
@@ -310,8 +335,8 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                   const SizedBox(height: 8),
                   Text(
                     _profileAddress.formatted,
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: const TextStyle(
+                      fontSize: 13,
                       color: IntercityColors.textMuted,
                     ),
                   ),
@@ -332,17 +357,20 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                   const SizedBox(height: 8),
                   Text(
                     '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}',
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: const TextStyle(
+                      fontSize: 12,
                       color: AppColors.primaryText,
                     ),
                   ),
                 ],
                 const SizedBox(height: 16),
+                // Белгилар профил манзили экрани билан бир хил (`addr_*`,
+                // мажбурийлиги `*` билан кўрсатилган).
                 TextField(
                   controller: _mfyCtrl,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
-                    labelText: 'MFY',
+                    labelText: context.tr('addr_mfy_label'),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -352,8 +380,9 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _streetCtrl,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
-                    labelText: 'Кўча',
+                    labelText: context.tr('addr_street_label'),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -363,8 +392,9 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _houseCtrl,
+                  textInputAction: TextInputAction.done,
                   decoration: InputDecoration(
-                    labelText: 'Уй рақами',
+                    labelText: context.tr('addr_house_label'),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -373,13 +403,42 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                 ),
                 TextButton(
                   onPressed: _saving ? null : _openAddressEditor,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, IntercityTapTarget.minSize),
+                  ),
                   child: Text(context.tr('edit')),
                 ),
                 if (errText != null) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    errText,
-                    style: TextStyle(color: IntercityColors.danger, fontSize: 12),
+                  // Хато майдонлар остида, иконка + матн (фақат ранг эмас),
+                  // screen reader дарҳол ўқийди.
+                  Semantics(
+                    liveRegion: true,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: IntercityColors.dangerSoft,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: IntercityColors.danger),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const ExcludeSemantics(
+                            child: Icon(Icons.error_outline,
+                                size: 18, color: IntercityColors.danger),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              errText,
+                              style: const TextStyle(
+                                  color: IntercityColors.danger, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -387,6 +446,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                   onPressed: _saving ? null : _save,
                   style: FilledButton.styleFrom(
                     backgroundColor: IntercityColors.primary,
+                    foregroundColor: IntercityColors.onPrimary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

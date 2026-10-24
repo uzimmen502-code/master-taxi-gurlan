@@ -355,7 +355,7 @@ class _DriversTabState extends State<_DriversTab> {
                         '${_seatsLabel(d)} joy  '
                         "${formatMoney(d['price'] ?? 0)}\n"
                         '${scheduleDate.isNotEmpty ? 'Sana: $scheduleDate  ' : ''}'
-                        '${kino ? '🎬 Kino ruxsati: yoqilgan' : '🎬 Kino: o‘chiq'}',
+                        '${kino ? 'Kino ruxsati: yoqilgan' : 'Kino: o‘chiq'}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

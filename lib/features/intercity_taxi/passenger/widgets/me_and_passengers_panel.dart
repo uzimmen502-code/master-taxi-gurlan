@@ -10,6 +10,7 @@ import '../../../../models/intercity_booking.dart';
 import '../../../../repositories/entertainment_repository.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../entertainment/passenger/screens/entertainment_list_screen.dart';
+import '../../intercity_tap_target.dart';
 import '../controllers/intercity_taxi_controller.dart';
 import '../controllers/me_and_passengers_controller.dart';
 import 'intercity_pickup_sheet.dart';
@@ -226,7 +227,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '${context.tr('passengers')} soni',
+                  context.tr('ic_ux_passengers_title'),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -234,11 +235,11 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 ),
               )
             else if (c.isPreview)
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Бронни тасдиқланг',
-                  style: TextStyle(
+                  context.tr('ic_ux_confirm_booking'),
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -322,17 +323,18 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primaryText,
-                  side: BorderSide(color: IntercityColors.border),
+                  side: const BorderSide(color: IntercityColors.border),
+                  minimumSize: const Size(0, IntercityTapTarget.minSize),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   padding: EdgeInsets.symmetric(vertical: vPad),
                 ),
                 onPressed: () => callPhone(booking!.driverPhone),
-                icon: const Icon(Icons.phone, size: 16),
+                icon: const Icon(Icons.phone, size: 18),
                 label: Text(
                   context.tr('call_lowercase'),
-                  style: const TextStyle(fontSize: 13),
+                  style: const TextStyle(fontSize: 14),
                 ),
               ),
             ),
@@ -341,17 +343,18 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: IntercityColors.danger,
-                  side: BorderSide(color: IntercityColors.danger),
+                  side: const BorderSide(color: IntercityColors.danger),
+                  minimumSize: const Size(0, IntercityTapTarget.minSize),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   padding: EdgeInsets.symmetric(vertical: vPad),
                 ),
                 onPressed: () => _confirmCancel(context, c),
-                icon: const Icon(Icons.cancel_outlined, size: 16),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
                 label: Text(
                   context.tr('cancel'),
-                  style: const TextStyle(fontSize: 13),
+                  style: const TextStyle(fontSize: 14),
                 ),
               ),
             ),
@@ -363,18 +366,19 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             width: double.infinity,
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.deepPurple.shade700,
-                side: BorderSide(color: Colors.deepPurple.shade200),
+                foregroundColor: AppColors.primaryText,
+                side: const BorderSide(color: IntercityColors.border),
+                minimumSize: const Size(0, IntercityTapTarget.minSize),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 padding: EdgeInsets.symmetric(vertical: vPad),
               ),
               onPressed: () => _openEntertainment(context, booking),
-              icon: const Icon(Icons.movie_outlined, size: 16),
-              label: const Text(
-                'Kino',
-                style: TextStyle(fontSize: 13),
+              icon: const Icon(Icons.movie_outlined, size: 18),
+              label: Text(
+                context.tr('tooltip_cinema'),
+                style: const TextStyle(fontSize: 14),
               ),
             ),
           ),
@@ -396,11 +400,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Кинони фақат тасдиқланган бронингиз бўлганда томоша қила оласиз.',
-          ),
-        ),
+        SnackBar(content: Text(context.tr('ic_ux_cinema_need_booking'))),
       );
       return;
     }
@@ -433,16 +433,16 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
         children: [
           Text(
             c.routeDisplayLabel(Localizations.localeOf(context)),
-            style: TextStyle(fontSize: 13, color: IntercityColors.textMuted),
+            style: const TextStyle(fontSize: 13, color: IntercityColors.textMuted),
           ),
           const SizedBox(height: 4),
           Text(
-            'Бўш ўрин: $maxSeats',
-            style: TextStyle(fontSize: 12, color: IntercityColors.textFaint),
+            context.tr('ic_ux_free_seats').replaceAll('{n}', '$maxSeats'),
+            style: const TextStyle(fontSize: 12, color: IntercityColors.textMuted),
           ),
           const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             decoration: BoxDecoration(
               color: IntercityColors.surfaceSoft,
               borderRadius: BorderRadius.circular(14),
@@ -450,8 +450,10 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             ),
             child: Row(
               children: [
-                Icon(Icons.people_outline,
-                    color: AppColors.primaryText, size: 20),
+                const ExcludeSemantics(
+                  child: Icon(Icons.people_outline,
+                      color: AppColors.primaryText, size: 20),
+                ),
                 const SizedBox(width: 12),
                 Text(
                   context.tr('passengers'),
@@ -462,24 +464,31 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 ),
                 const Spacer(),
                 _pickCounterBtn(
+                  context.tr('ic_ux_seat_minus'),
                   Icons.remove,
                   taxiCtrl.passengers <= 1
                       ? null
                       : () => taxiCtrl.decPassengersForSeats(),
-                  IntercityColors.surfaceSoft,
+                  IntercityColors.surface,
                   IntercityColors.textMuted,
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  '${taxiCtrl.passengers}',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryText,
+                const SizedBox(width: 4),
+                Semantics(
+                  liveRegion: true,
+                  label: '${context.tr('passengers')}: ${taxiCtrl.passengers}',
+                  excludeSemantics: true,
+                  child: Text(
+                    '${taxiCtrl.passengers}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 4),
                 _pickCounterBtn(
+                  context.tr('ic_ux_seat_plus'),
                   Icons.add,
                   taxiCtrl.passengers >= maxSeats
                       ? null
@@ -494,9 +503,10 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Жами:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              Text(
+                '${context.tr('total')}:',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               Text(
                 formatMoney(total),
@@ -513,8 +523,11 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             children: [
               Expanded(
                 child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, IntercityTapTarget.minSize),
+                  ),
                   onPressed: c.cancelPassengerPick,
-                  child: const Text('Бекор'),
+                  child: Text(context.tr('cancel')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -524,11 +537,12 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: IntercityColors.primary,
                     foregroundColor: IntercityColors.onPrimary,
+                    minimumSize: const Size(0, IntercityTapTarget.minSize),
                   ),
                   onPressed: () => c.confirmPassengerCount(),
-                  child: const Text(
-                    'Давом etish',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  child: Text(
+                    context.tr('continue'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -540,23 +554,26 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
   }
 
   Widget _pickCounterBtn(
+    String label,
     IconData icon,
     VoidCallback? onTap,
     Color bg,
     Color iconColor,
   ) {
-    return GestureDetector(
+    return IntercityTapTarget(
+      label: label,
       onTap: onTap,
       child: Opacity(
         opacity: onTap == null ? 0.4 : 1,
         child: Container(
-          width: 36,
-          height: 36,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: IntercityColors.border),
           ),
-          child: Icon(icon, size: 20, color: iconColor),
+          child: Icon(icon, size: 22, color: iconColor),
         ),
       ),
     );
@@ -575,24 +592,41 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PreviewRow('👤', 'Ҳайдовчи', ride.driverName),
-          _PreviewRow('🚗', 'Машина', '${ride.carModel} • ${ride.carNumber}'),
           _PreviewRow(
-            '📍',
-            'Йўналиш',
+            Icons.person_outline,
+            context.tr('driver_label'),
+            ride.driverName,
+          ),
+          _PreviewRow(
+            Icons.directions_car_outlined,
+            context.tr('car_label'),
+            '${ride.carModel} • ${ride.carNumber}',
+          ),
+          _PreviewRow(
+            Icons.place_outlined,
+            context.tr('route_label'),
             ride.routeDisplayLabel(Localizations.localeOf(context)),
           ),
-          _PreviewRow('🕐', 'Жўнаш', _formatPreviewTime(ride.departureTime)),
-          _PreviewRow('💺', 'Йўловчилар', '${taxiCtrl.passengers} та'),
+          _PreviewRow(
+            Icons.access_time,
+            context.tr('departure'),
+            _formatPreviewTime(ride.departureTime),
+          ),
+          _PreviewRow(
+            Icons.airline_seat_recline_normal,
+            context.tr('passengers'),
+            '${taxiCtrl.passengers} ${context.tr('passengers_unit')}',
+          ),
           const SizedBox(height: 10),
-          Divider(color: IntercityColors.border),
+          const Divider(color: IntercityColors.border),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Жами:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              Text(
+                '${context.tr('total')}:',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               Text(
                 formatMoney(total),
@@ -606,16 +640,32 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
           ),
           if (_previewError != null) ...[
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: IntercityColors.dangerSoft,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: IntercityColors.danger),
-              ),
-              child: Text(
-                _previewError!,
-                style: TextStyle(color: IntercityColors.danger, fontSize: 12),
+            Semantics(
+              liveRegion: true,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: IntercityColors.dangerSoft,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: IntercityColors.danger),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const ExcludeSemantics(
+                      child: Icon(Icons.error_outline,
+                          size: 18, color: IntercityColors.danger),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _previewError!,
+                        style: const TextStyle(
+                            color: IntercityColors.danger, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -624,8 +674,11 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             children: [
               Expanded(
                 child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, IntercityTapTarget.minSize),
+                  ),
                   onPressed: _previewLoading ? null : () => c.backToPassengerPick(),
-                  child: const Text('Орқaga'),
+                  child: Text(context.tr('back')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -635,6 +688,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: IntercityColors.primary,
                     foregroundColor: IntercityColors.onPrimary,
+                    minimumSize: const Size(0, IntercityTapTarget.minSize),
                   ),
                   onPressed:
                       _previewLoading ? null : () => _confirmPreview(context, c),
@@ -644,12 +698,12 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: IntercityColors.surface,
+                            color: IntercityColors.onPrimary,
                           ),
                         )
-                      : const Text(
-                          'Тасдиқлаш',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                      : Text(
+                          context.tr('confirm'),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                 ),
               ),
@@ -676,7 +730,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       final taxiCtrl = context.read<IntercityTaxiController>();
       final (booking, errorKey) = await taxiCtrl.bookRide(
         ride,
-        defaultPassengerName: 'Йўловчи',
+        defaultPassengerName: context.tr('default_passenger_name'),
       );
 
       if (!mounted) return;
@@ -700,19 +754,32 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text(
-            '✅ Брон муваффақиятли юборилди!',
-            style: TextStyle(color: IntercityColors.onPrimary),
+          content: Row(
+            children: [
+              const ExcludeSemantics(
+                child: Icon(Icons.check_circle_outline,
+                    color: IntercityColors.onPrimary),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  context.tr('booking_sent'),
+                  style: const TextStyle(color: IntercityColors.onPrimary),
+                ),
+              ),
+            ],
           ),
           backgroundColor: IntercityColors.primary,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
     } catch (e) {
+      // Ички сабаб фақат логда; фойдаланувчига тушунарли хабар (CLAUDE.md §25).
+      debugPrint('intercity bookRide failed: $e');
       if (!mounted) return;
       setState(() {
         _previewLoading = false;
-        _previewError = e.toString();
+        _previewError = context.tr('ic_ux_action_failed');
       });
     }
   }
@@ -739,7 +806,10 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             child: Text(context.tr('no')),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: IntercityColors.danger),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: IntercityColors.danger,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: Text(context.tr('yes_cancel')),
           ),
@@ -761,10 +831,14 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
           );
       c.detach();
     } catch (e) {
+      debugPrint('intercity cancelBooking failed: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Хатолик: $e'),
+          content: Text(
+            context.tr('ic_ux_action_failed'),
+            style: const TextStyle(color: Colors.white),
+          ),
           backgroundColor: IntercityColors.danger,
         ),
       );
@@ -791,12 +865,16 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
         _ratingLoading = false;
       });
     } catch (e) {
+      debugPrint('intercity rating failed: $e');
       if (!mounted) return;
       setState(() => _ratingLoading = false);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Хатолик: $e'),
+          content: Text(
+            context.tr('ic_ux_action_failed'),
+            style: const TextStyle(color: Colors.white),
+          ),
           backgroundColor: IntercityColors.danger,
         ),
       );
@@ -837,7 +915,7 @@ class _StatusBadge extends StatelessWidget {
                 ? context.tr('trip_completed')
                 : context.tr('booking_confirmed'),
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           color: isPending
               ? IntercityColors.warning
               : isCompleted
@@ -850,9 +928,9 @@ class _StatusBadge extends StatelessWidget {
 }
 
 class _PreviewRow extends StatelessWidget {
-  const _PreviewRow(this.emoji, this.label, this.value);
+  const _PreviewRow(this.icon, this.label, this.value);
 
-  final String emoji;
+  final IconData icon;
   final String label;
   final String value;
 
@@ -862,19 +940,22 @@ class _PreviewRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 15)),
+          ExcludeSemantics(
+            child: Icon(icon, size: 18, color: IntercityColors.textMuted),
+          ),
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: TextStyle(fontSize: 12, color: IntercityColors.textMuted),
+            style: const TextStyle(fontSize: 13, color: IntercityColors.textMuted),
           ),
           Expanded(
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -899,16 +980,19 @@ class _InfoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 15, color: IntercityColors.textFaint),
+        ExcludeSemantics(
+          child: Icon(icon, size: 16, color: IntercityColors.textMuted),
+        ),
         const SizedBox(width: 6),
         Text(
           '$label: ',
-          style: TextStyle(fontSize: 12, color: IntercityColors.textMuted),
+          style: const TextStyle(fontSize: 13, color: IntercityColors.textMuted),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -955,15 +1039,15 @@ class _RatingWidget extends StatelessWidget {
         const SizedBox(height: 10),
         Row(
           children: List.generate(5, (i) {
-            return GestureDetector(
+            return IntercityTapTarget(
+              label: context.tr('ic_ux_star').replaceAll('{n}', '${i + 1}'),
+              selected: i < selected,
               onTap: () => onRate(i + 1),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Icon(
-                  i < selected ? Icons.star : Icons.star_border,
-                  color: Colors.amber,
-                  size: 32,
-                ),
+              radius: 24,
+              child: Icon(
+                i < selected ? Icons.star : Icons.star_border,
+                color: IntercityColors.gold,
+                size: 32,
               ),
             );
           }),
@@ -1010,10 +1094,12 @@ class _RatingDone extends StatelessWidget {
       children: [
         ...List.generate(
           5,
-          (i) => Icon(
-            i < rating ? Icons.star : Icons.star_border,
-            color: Colors.amber,
-            size: 22,
+          (i) => ExcludeSemantics(
+            child: Icon(
+              i < rating ? Icons.star : Icons.star_border,
+              color: IntercityColors.gold,
+              size: 22,
+            ),
           ),
         ),
         const SizedBox(width: 8),

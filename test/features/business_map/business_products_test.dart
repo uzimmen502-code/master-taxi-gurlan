@@ -6,6 +6,7 @@ import 'package:ava_gurlan/features/business_map/domain/product_kind.dart';
 import 'package:ava_gurlan/features/business_map/screens/business_product_form_screen.dart';
 import 'package:ava_gurlan/features/business_map/screens/business_products_screen.dart';
 import 'package:ava_gurlan/features/business_map/widgets/business_detail_sheet.dart';
+import 'package:ava_gurlan/features/tv_market/models/tv_ad_prefill.dart';
 import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
 import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.dart';
 import 'package:flutter/material.dart';
@@ -316,6 +317,35 @@ void main() {
       expect(shop.calls.where((c) => c.startsWith('delete')).length, 1);
     });
 
+    testWidgets('«Реклама қилиш»: фақат фаол маҳсулотда; босилса — шу маҳсулот билан чақирилади (янги тизим эмас)', (tester) async {
+      TvShopItem? promoted;
+      final shop = _FakeShop([
+        _item('a', title: 'Нон', price: 5000),
+        _item('p', title: 'Кутилмоқда', status: 'pending'),
+      ]);
+      await _pump(
+        tester,
+        BusinessProductsScreen(business: _biz(), repository: shop, onPromote: (ctx, it) => promoted = it),
+      );
+      expect(find.byKey(const ValueKey('bizprod_promote_a')), findsOneWidget);
+      expect(find.byKey(const ValueKey('bizprod_promote_p')), findsNothing, reason: 'кутилаётган/блокли маҳсулот рекламаланмайди');
+      await tester.tap(find.byKey(const ValueKey('bizprod_promote_a')));
+      await tester.pump();
+      expect(promoted?.id, 'a');
+    });
+
+    testWidgets('ўчириш — рўйхат қайта юкланади (кейинги сўров) ва маҳсулот йўқолади', (tester) async {
+      final shop = _FakeShop([_item('a', title: 'Нон')]);
+      await _pump(tester, BusinessProductsScreen(business: _biz(), repository: shop));
+      await tester.tap(find.byTooltip('bizmap_delete').first);
+      await tester.pumpAndSettle();
+      shop.items = []; // сервер ўчиргандан кейин рўйхат бўш
+      await tester.tap(find.widgetWithText(TextButton, 'bizmap_delete'));
+      await tester.pumpAndSettle();
+      expect(shop.calls.where((c) => c.startsWith('fetch')).length, 2, reason: 'ўчиргандан кейин қайта юкланган');
+      expect(find.text('Нон'), findsNothing);
+      expect(find.text('bizprod_empty'), findsOneWidget);
+    });
     testWidgets('қўшиш тугмаси форма экранини очади', (tester) async {
       await _pump(tester, BusinessProductsScreen(business: _biz(), repository: _FakeShop()));
       await tester.tap(find.byKey(const ValueKey('bizprod_fab')));
@@ -347,4 +377,28 @@ void main() {
       expect(find.text('bizprod_section'), findsNothing);
     });
   });
-}
+
+  group('TvAdPrefill', () {
+    test('маҳсулотдан: ном/нарх/тавсиф; узун матн реклама экрани чегарасигача қирқилади', () {
+      final p = TvAdPrefill.fromItem(_item('a', title: ' Нон ', price: 5000));
+      expect([p.title, p.price], ['Нон', 5000]);
+      final long = _item('b', title: 'x' * 120).toMap();
+      final cut = TvAdPrefill.fromItem(TvShopItem(
+        id: 'b', ownerPhone: '1', ownerName: '', title: 'я' * 120, price: -5, photoUrl: '', kind: 'product',
+        districtId: '', districtLabel: '', description: 'ў' * 700,
+      ));
+      expect(long['title'], isNotEmpty);
+      expect(cut.title.length, TvAdPrefill.titleMax);
+      expect(cut.description.length, TvAdPrefill.descriptionMax);
+      expect(cut.price, 0, reason: 'манфий нарх — 0 (нарх майдони бўш)');
+    });
+
+    test('эмодзи (суррогат жуфт) ўртасидан қирқилмайди', () {
+      final p = TvAdPrefill.fromItem(TvShopItem(
+        id: 'c', ownerPhone: '1', ownerName: '', title: '😀' * 100, price: 0, photoUrl: '', kind: 'product',
+        districtId: '', districtLabel: '',
+      ));
+      expect(p.title.runes.length, TvAdPrefill.titleMax);
+      expect(p.title.runes.every((r) => r == 0x1F600), isTrue);
+    });
+  });}

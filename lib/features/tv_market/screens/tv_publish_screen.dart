@@ -16,6 +16,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../../../repositories/user_repository.dart';
+import '../models/tv_ad_prefill.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
@@ -45,7 +46,12 @@ class TvPublishScreen extends StatefulWidget {
     this.linkItemId = '',
     this.organicOnly = false,
     this.onClipCreated,
+    this.adPrefill,
   });
+
+  /// Берилса — экран пуллик «Эълон» (реклама) режимида очилади ва ном/нарх/тавсиф шундан тўлдирилади
+  /// (Бизнес харитаси маҳсулотидан «Реклама қилиш»). Таҳрир ([editClip]) режимида эътиборга олинмайди.
+  final TvAdPrefill? adPrefill;
 
   /// Клип яратилгач ЯНГИ клипнинг ID'сини қайтаради (оддий видео — `tv_clips.add`,
   /// пуллик реклама — CF `publishTvAd` жавоби). Чақирувчи боғлашни шу ID билан
@@ -147,6 +153,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _attachItemId = widget.attachItemId;
+    final pre = widget.adPrefill;
+    if (pre != null && widget.editClip == null && !widget.organicOnly) {
+      _category = 'ad';
+      _categoryTouched = true; // автотаклиф «Янгилик»ка ўтказмасин
+      _titleCtrl.text = pre.title;
+      _priceCtrl.text = pre.price > 0 ? '${pre.price}' : '';
+      _descCtrl.text = pre.description;
+    }
     if (widget.organicOnly) {
       _category = TvPublishRules.organicCategory(widget.linkKind);
       _categoryTouched = true; // автотаклиф «Янгилик»ка ўтказмасин

@@ -130,6 +130,48 @@ function changedKeys(cur, next) {
   return EDITABLE.filter((k) => cur[k] !== next[k]);
 }
 
+const CASCADE_BATCH = 400;
+const digitsOf = (v) => String(v == null ? '' : v).replace(/\D/g, '');
+
+/**
+ * Объект ўчирилганда унинг маҳсулотларини юмшоқ ўчиради (`status: 'deleted'`) — Аҳоли бозорида «эгасиз» қолмасин
+ * (эга қарори, 2026-10-24). Фақат ЭГАСИНИНГ ўз ҳужжатлари: бошқа эга `businessId` ёзиб қўйган «ёт» ҳужжатга ва
+ * аллақачон ўчирилганга тегилмайди. Идемпотент (қайта чақириш зарарсиз), саҳифалаб (400 тадан) — сони чекланмаган.
+ * Эгаси фойдаланувчи телефони бўлмаган объект (`ownerId: 'admin'`) учун ҳеч нарса қилмайди.
+ */
+async function cascadeBusinessProducts(db, admin, businessId, ownerId) {
+  const owner = digitsOf(ownerId);
+  if (owner.length < 12 || !businessId) return { scanned: 0, updated: 0 };
+  const { FieldValue, FieldPath } = admin.firestore;
+  let last = null;
+  let scanned = 0;
+  let updated = 0;
+  for (;;) {
+    let q = db.collection(ITEMS).where('businessId', '==', businessId).orderBy(FieldPath.documentId()).limit(CASCADE_BATCH);
+    if (last) q = q.startAfter(last);
+    const snap = await q.get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    let n = 0;
+    snap.docs.forEach((d) => {
+      scanned += 1;
+      const x = d.data() || {};
+      if (x.status === 'deleted' || digitsOf(x.ownerPhone) !== owner) return;
+      batch.update(d.ref, {
+        status: 'deleted', deletedAt: FieldValue.serverTimestamp(), deletedBy: 'system:business_deleted', updatedAt: FieldValue.serverTimestamp(),
+      });
+      n += 1;
+    });
+    if (n > 0) {
+      await batch.commit();
+      updated += n;
+    }
+    last = snap.docs[snap.docs.length - 1];
+    if (snap.size < CASCADE_BATCH) break;
+  }
+  return { scanned, updated };
+}
+
 function attachBusinessDirectory(exportsObj, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
@@ -323,6 +365,27 @@ function attachBusinessDirectory(exportsObj, deps) {
     return { ok: true, ...out };
   });
 
+  /**
+   * Объект ҳужжати ўчирилганда (эга ёки админ) — унинг маҳсулотлари юмшоқ ўчади. Триггер: ўчириш қайси йўл билан
+   * бўлмасин бир хил ишлайди ва чақирув ичидаги ярим ишдан ҳимояланган. Хато — `BUSINESS_CASCADE_FAILED` логда.
+   */
+  exportsObj.businessProductsCascade = functions.firestore
+    .document(`${COLLECTION}/{businessId}`)
+    .onDelete(async (snap, context) => {
+      const t0 = Date.now();
+      const businessId = context.params.businessId;
+      try {
+        const out = await cascadeBusinessProducts(db, admin, businessId, (snap.data() || {}).ownerId);
+        log({ action: 'businessProductsCascade', businessId, result: out.updated ? 'deleted_products' : 'noop', ...out, durationMs: Date.now() - t0 });
+      } catch (e) {
+        console.error(JSON.stringify({
+          module: 'business_directory', action: 'businessProductsCascade', businessId, result: 'error',
+          errorCode: 'BUSINESS_CASCADE_FAILED', message: String((e && e.message) || e).slice(0, 200), durationMs: Date.now() - t0,
+        }));
+      }
+      return null;
+    });
+
   // ───────────────── Объект маҳсулотлари (эга қарори, 2026-10-24) ─────────────────
   // Маҳсулот — АВАГрам витрина ҳужжати `tv_shop_items/{id}` + `businessId`. Эга уни ўзи жойлайди (модерациясиз);
   // админ фақат шу ҳужжатларни ТАҲРИРЛАЙДИ/ЎЧИРАДИ ва ҳар бир ҳаракат `admin_audit`га сабаби билан тушади (41-банд).
@@ -425,4 +488,5 @@ function attachBusinessDirectory(exportsObj, deps) {
 
 module.exports = {
   attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LIMITS, BOUNDS, EDITABLE, PRODUCT_LIMITS,
+  cascadeBusinessProducts,
 };

@@ -101,7 +101,7 @@ class _MainShopScreenState extends State<MainShopScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_name.isNotEmpty ? _name : context.tr('my_shop_main_title')),
+        title: Text(_name.isNotEmpty ? _name : context.tr('my_shop_title')),
         actions: [
           IconButton(
             tooltip: context.tr('my_shop_rename'),

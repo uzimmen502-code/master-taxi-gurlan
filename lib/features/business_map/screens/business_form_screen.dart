@@ -15,7 +15,7 @@ import '../domain/website_link.dart';
 /// Эга ўз объектини қўшади/таҳрирлайди (B-1). Жойни мавжуд [MapPickerScreen] билан белгилайди (B-5).
 /// Ҳамма текширув серверда (`upsertMyBusiness`); бу ерда фақат тез инкор ва тушунарли хато матни.
 class BusinessFormScreen extends StatefulWidget {
-  const BusinessFormScreen({super.key, this.existing, this.initialCategory, BusinessRepository? repository})
+  const BusinessFormScreen({super.key, this.existing, this.initialCategory, this.lockCategory = false, BusinessRepository? repository})
       : _repo = repository;
 
   final Business? existing;
@@ -23,6 +23,10 @@ class BusinessFormScreen extends StatefulWidget {
   /// Янги объектда олдиндан танланган тур («Менинг дўконим» → «Янги дўкон» — чакана).
   /// Таҳрирда [existing]нинг тури устун.
   final BusinessCategory? initialCategory;
+
+  /// «Менинг дўконим»: тур танлови яширилади (тур [initialCategory] ёки [existing]дан). Харита
+  /// рўйхатидаги умумий форма (alse) аввалгидек тур танлайди.
+  final bool lockCategory;
   final BusinessRepository? _repo;
 
   @override
@@ -199,24 +203,26 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
             decoration: _dec('bizmap_f_name'),
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<BusinessCategory>(
-            initialValue: _category,
-            isExpanded: true,
-            decoration: _dec('bizmap_f_category'),
-            items: [
-              for (final c in BusinessCategory.values)
-                DropdownMenuItem(
-                  value: c,
-                  child: Row(children: [
-                    Icon(c.icon, size: 18),
-                    const SizedBox(width: 8),
-                    Flexible(child: Text(context.tr(c.labelKey), overflow: TextOverflow.ellipsis)),
-                  ]),
-                ),
-            ],
-            onChanged: _busy ? null : (v) => setState(() => _category = v),
-          ),
-          const SizedBox(height: 16),
+          if (!widget.lockCategory) ...[
+            DropdownButtonFormField<BusinessCategory>(
+              initialValue: _category,
+              isExpanded: true,
+              decoration: _dec('bizmap_f_category'),
+              items: [
+                for (final c in BusinessCategory.values)
+                  DropdownMenuItem(
+                    value: c,
+                    child: Row(children: [
+                      Icon(c.icon, size: 18),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(context.tr(c.labelKey), overflow: TextOverflow.ellipsis)),
+                    ]),
+                  ),
+              ],
+              onChanged: _busy ? null : (v) => setState(() => _category = v),
+            ),
+            const SizedBox(height: 16),
+          ],
           TextField(
             controller: _subtype,
             enabled: !_busy,

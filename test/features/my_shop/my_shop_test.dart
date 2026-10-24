@@ -142,15 +142,18 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('асосий дўкон номи билан; бошқа дўкон йўқ — «Бошқа дўконлар» чиқмайди', (tester) async {
+    testWidgets('дўкон номи билан; «асосий/бошқа» ёрлиқлари йўқ', (tester) async {
       await open(tester, name: 'Barakat kiyim');
       expect(find.text('Barakat kiyim'), findsOneWidget);
+      expect(find.text('my_shop_main_title'), findsNothing);
       expect(find.text('my_shop_other_title'), findsNothing);
     });
 
-    testWidgets('ном қўйилмаган — «Асосий дўкон»', (tester) async {
+    testWidgets('ном қўйилмаган — «Менинг дўконим» (ёрлиқсиз)', (tester) async {
       await open(tester);
-      expect(find.text('my_shop_main_title'), findsOneWidget);
+      // Сарлавҳада ва карточкада — иккитаси.
+      expect(find.text('my_shop_title'), findsNWidgets(2));
+      expect(find.text('my_shop_main_title'), findsNothing);
     });
 
     testWidgets('бир нечта қўшимча дўкон кўринади, чакана/улгуржи бўлмаганлари — йўқ', (tester) async {
@@ -159,8 +162,12 @@ void main() {
         _biz('2', 'Ulgurji ombor', BusinessCategory.wholesale),
         _biz('3', 'Oshxona', BusinessCategory.food),
       ]);
-      expect(find.text('my_shop_other_title'), findsOneWidget);
+      expect(find.text('my_shop_other_title'), findsNothing);
       expect(find.text('Kiyim do‘koni'), findsOneWidget);
+      // «Чакана/Улгуржи» тури кўрсатилмайди, фақат манзил.
+      expect(find.text('business_cat_retail'), findsNothing);
+      expect(find.text('business_cat_wholesale'), findsNothing);
+      expect(find.text('Gurlan'), findsOneWidget);
       expect(find.text('Ulgurji ombor'), findsOneWidget);
       expect(find.text('Oshxona'), findsNothing);
     });
@@ -199,7 +206,8 @@ void main() {
       await open(tester, name: 'Barakat kiyim');
       expect(find.text('Barakat kiyim'), findsOneWidget);
       await open(tester);
-      expect(find.text('my_shop_main_title'), findsOneWidget);
+      expect(find.text('my_shop_title'), findsOneWidget);
+      expect(find.text('my_shop_main_title'), findsNothing);
     });
 
     testWidgets('бошланғич сегмент: 0 — Аҳоли, 1 — Улгуржи', (tester) async {

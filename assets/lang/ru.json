@@ -3959,5 +3959,9 @@
   "ic_ux_to_home": "На главную",
   "ic_ux_phone_required": "Номер телефона не сохранён в профиле.",
   "ic_ux_price_changed": "Цена изменилась. Обновите рейс и проверьте цену.",
-  "ic_ux_passengers_invalid": "Неверное количество пассажиров."
+  "ic_ux_passengers_invalid": "Неверное количество пассажиров.",
+  "ad_swipe_prev": "Предыдущее объявление",
+  "ad_swipe_next": "Следующее объявление",
+  "cheap_products_empty": "Пока нет объявлений",
+  "cheap_products_load_error": "Не удалось загрузить данные. Попробуйте позже."
 }

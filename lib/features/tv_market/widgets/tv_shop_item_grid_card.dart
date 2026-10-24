@@ -4,7 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
-import '../../../core/theme/ava_tokens.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../ads/widgets/market_grid.dart';
 
 /// Очиқ дўкон / Аҳоли бозори — 2 устунли товар плиткаси.
@@ -26,23 +26,22 @@ class TvShopItemGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cover = item.coverPhotoUrl;
     final photos = item.displayPhotos.length;
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+    // Карта кўриниши Аҳоли бозоридаги бошқа карталар (AdCard,
+    // PlatformMarketCard) билан бир хил: Card, соя 2, радиус 12, расм
+    // `contain` (четлари қирқилмайди, эга 2026-10-19). Ажратиб турадиган
+    // ягона жой — `highlight` рамкаси.
+    return Card(
       clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: highlight
+            ? const BorderSide(color: AvaLight.ok, width: 1.6)
+            : BorderSide.none,
+      ),
       child: InkWell(
         onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: highlight
-                  ? AvaLight.ok
-                  : const Color(0xFFE6E8EE),
-              width: highlight ? 1.6 : 1,
-            ),
-          ),
-          child: Column(
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               AspectRatio(
@@ -51,11 +50,17 @@ class TvShopItemGridCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     cover.isEmpty
-                        ? ColoredBox(
-                            color: Colors.grey.shade200,
-                            child: const Icon(Icons.image_outlined, size: 36),
+                        ? const ColoredBox(
+                            color: AppColors.cardImageBg,
+                            child: Icon(Icons.image_outlined, size: 36),
                           )
-                        : TvShopNetworkImage(url: cover, fit: BoxFit.cover),
+                        : ColoredBox(
+                            color: AppColors.cardImageBg,
+                            child: TvShopNetworkImage(
+                              url: cover,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
                     if (showShopBadge)
                       Positioned(
                         left: 6,
@@ -93,11 +98,10 @@ class TvShopItemGridCard extends StatelessWidget {
                 title: item.title,
                 titleLines: 2,
                 price: item.hasPrice ? formatMoney(item.price) : null,
-                priceColor: AvaLight.ok,
+                // Нарх ранги бошқа карталардагидек (AdCard — primaryText).
               ),
             ],
           ),
-        ),
       ),
     );
   }
@@ -126,7 +130,7 @@ class _Pill extends StatelessWidget {
         text,
         style: TextStyle(
           color: fg,
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: FontWeight.w800,
         ),
       ),

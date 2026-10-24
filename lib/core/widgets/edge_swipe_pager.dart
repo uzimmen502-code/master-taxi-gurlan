@@ -32,7 +32,12 @@ class EdgeSwipePager extends StatefulWidget {
     this.initialIndex = 0,
     this.onPageChanged,
     this.threshold = 56,
+    this.controller,
   });
+
+  /// Ташқаридан бошқариш (тугма билан ўтиш — свайпга муқобил). Берилса,
+  /// пейджер уни ЎЗИ ёпмайди; `initialPage` ташқарида белгиланади.
+  final PageController? controller;
 
   final int itemCount;
   final int initialIndex;
@@ -70,7 +75,7 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager>
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.itemCount - 1);
-    _ctrl = PageController(initialPage: _index);
+    _ctrl = widget.controller ?? PageController(initialPage: _index);
     // `initState`да яратилади: `late` лазй бўлса, dispose'да биринчи марта
     // яратилиб, «ўчирилган виджет аждоди» хатосини берарди.
     _back = AnimationController(
@@ -85,7 +90,7 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager>
   void dispose() {
     _back.dispose();
     _pull.dispose();
-    _ctrl.dispose();
+    if (widget.controller == null) _ctrl.dispose();
     super.dispose();
   }
 
@@ -108,6 +113,11 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager>
     _back.stop();
     _pull.value = 0;
     HapticFeedback.lightImpact();
+    // Ҳаракатни камайтириш (reduced motion) ёқилган бўлса — анимациясиз.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.jumpToPage(target);
+      return;
+    }
     _ctrl.animateToPage(
       target,
       duration: const Duration(milliseconds: 280),

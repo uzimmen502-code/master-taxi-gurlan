@@ -21,11 +21,11 @@ class MarketGridMetrics {
 
   /// Шрифт масштаби чегараси: катта тизим шрифтида ёзув кесилмасин, лекин
   /// катак ҳам чексиз ўсмасин.
-  static const double textScaleCap = 1.15;
+  static const double textScaleCap = 1.3;
 
   static const double titleSize = 13;
   static const double priceSize = 13;
-  static const double captionSize = 11;
+  static const double captionSize = 12;
   static const double lineHeight = 1.2;
   static const double lineGap = 2;
 

@@ -3959,5 +3959,9 @@
   "ic_ux_to_home": "Bosh sahifaga",
   "ic_ux_phone_required": "Telefon raqamingiz profilda saqlanmagan.",
   "ic_ux_price_changed": "Narx yangilandi. Reysni qayta yuklab, narxni tekshiring.",
-  "ic_ux_passengers_invalid": "Yo'lovchilar soni noto'g'ri."
+  "ic_ux_passengers_invalid": "Yo'lovchilar soni noto'g'ri.",
+  "ad_swipe_prev": "Oldingi e'lon",
+  "ad_swipe_next": "Keyingi e'lon",
+  "cheap_products_empty": "Hozircha e'lonlar yo'q",
+  "cheap_products_load_error": "Ma'lumotlarni yuklashda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring."
 }

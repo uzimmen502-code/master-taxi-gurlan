@@ -31,7 +31,6 @@ import '../../core/widgets/zone_gate.dart';
 import '../ads/models/ad_model.dart';
 import '../ads/screens/ad_details_route.dart';
 import '../ads/screens/cheap_products_screen.dart';
-import '../ads/screens/create_ad_screen.dart';
 import '../profile/screens/news_hub_screen.dart';
 import '../tv_market/screens/tv_publish_screen.dart';
 import 'widgets/ava_bottom_nav.dart';
@@ -112,6 +111,8 @@ import 'widgets/home_ev_section.dart';
 import 'widgets/home_business_section.dart';
 import '../business_map/screens/business_map_screen.dart';
 import '../business_map/screens/my_businesses_screen.dart';
+import '../my_shop/my_shop_presence.dart';
+import '../my_shop/open_my_shop.dart';
 import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
 import 'widgets/home_realty_section.dart';
@@ -238,6 +239,7 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
       unawaited(_checkLocationSuggestion());
       unawaited(_refreshDriverRoles());
+      unawaited(_refreshShopPresence());
     });
   }
 
@@ -292,6 +294,7 @@ class _HomeViewState extends State<_HomeView> {
       home.refreshUser(),
       _checkLocationSuggestion(),
       _refreshDriverRoles(),
+      _refreshShopPresence(),
       _syncUnread(),
       Future<void>.delayed(const Duration(milliseconds: 500)),
     ].map((f) => f.catchError((Object _) {})));
@@ -865,21 +868,42 @@ class _HomeViewState extends State<_HomeView> {
     unawaited(_syncUnread());
   }
 
+  /// «＋» менюсидаги «Онлайн дўкон» қатори учун: эгада маҳсулот борми (кэш).
+  /// Ўқилмаса — «йўқ» (қатор аввалги «очиш» оқимига қайтади).
+  MyShopPresence _shop = MyShopPresence.none;
+  bool _shopLoaded = false;
+
+  Future<void> _refreshShopPresence() async {
+    final phone = canonicalPhoneId(context.read<HomeController>().phone);
+    if (phoneDigits(phone).length < 9) return;
+    final presence = await MyShopPresence.load(phone);
+    if (!mounted) return;
+    setState(() {
+      _shop = presence;
+      _shopLoaded = true;
+    });
+  }
+
   /// «＋» — «Менинг бизнесим»: видео · эълон · хизмат · онлайн дўкон · дўкон ·
   /// ҳайдовчи · курьер · уй ошпази · кафе · юк ташувчи · китоб · AVA AI.
   Future<void> _openCreateSheet() async {
     // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — ҳолат ҳали юкланмаган
     // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз.
-    if (!_driverRolesLoaded) {
-      await _refreshDriverRoles()
-          .timeout(const Duration(milliseconds: 1500), onTimeout: () {});
+    if (!_driverRolesLoaded || !_shopLoaded) {
+      await Future.wait<void>([
+        if (!_driverRolesLoaded) _refreshDriverRoles(),
+        if (!_shopLoaded) _refreshShopPresence(),
+      ]).timeout(const Duration(milliseconds: 1500),
+          onTimeout: () => const <void>[]);
       if (!mounted) return;
     } else {
       unawaited(_refreshDriverRoles());
+      unawaited(_refreshShopPresence());
     }
     final action = await showAvaCreateSheet(
       context,
       driverRoles: _driverRoles,
+      hasShop: _shop.any,
       // Кафе-ресторан модули яширин бўлса — «Уй ошпази» ва «Кафе» ҳам йўқ.
       hidden: {
         if (!ServiceConfigHolder.isVisible('restaurants')) ...{
@@ -929,17 +953,17 @@ class _HomeViewState extends State<_HomeView> {
           ),
         );
       case AvaCreateAction.shopOnline:
-        final target = await showAvaShopTargetSheet(context);
-        if (target == null || !mounted) return;
-        switch (target) {
-          case AvaShopTarget.retail:
-            await _push(const CreateAdScreen());
-          case AvaShopTarget.wholesale:
-            await _push(
-              WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
-            );
-        }
-      case AvaCreateAction.businessMap:
+        // Ягона оқим (`openMyShop`): дўкони бор — «Менинг дўконим», йўқ — биринчи кириш
+        // (ном + бозор). AVAGram видеосидаги «Дўкон» тугмаси ҳам шуни чақиради.
+        await openMyShop(
+          context,
+          phone: phone,
+          presence: _shop,
+          push: _push,
+        );
+        // Қайтганда ҳолат янгиланади: маҳсулот қўшилган бўлса қатор энди
+        // «Менинг дўконим».
+        if (mounted) unawaited(_refreshShopPresence());      case AvaCreateAction.businessMap:
         await _push(const MyBusinessesScreen());
       case AvaCreateAction.driver:
         await _openWork();

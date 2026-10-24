@@ -185,3 +185,24 @@ class _AdsListState extends State<_AdsList> {
     );
   }
 }
+
+/// «Менинг дўконим» (Аҳоли бозори сегменти) учун: эгасининг эълонлари — Фаол ·
+/// Текширувда · Яширилган. [MyAdsScreen] билан БИР ХИЛ рўйхат (`_AdsList`);
+/// ўраб турган `DefaultTabController(length: 3)` ва шу тартибдаги TabBar керак.
+class MyAdsTabView extends StatelessWidget {
+  const MyAdsTabView({super.key, required this.uid});
+
+  /// Каноник телефон (9+ рақам) — чақирувчи текширади.
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return TabBarView(
+      children: [
+        _AdsList(uid: uid, status: 'active'),
+        _AdsList(uid: uid, status: 'pending', pendingOnly: true),
+        _AdsList(uid: uid, status: 'inactive'),
+      ],
+    );
+  }
+}

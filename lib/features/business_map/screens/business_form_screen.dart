@@ -15,10 +15,14 @@ import '../domain/website_link.dart';
 /// Эга ўз объектини қўшади/таҳрирлайди (B-1). Жойни мавжуд [MapPickerScreen] билан белгилайди (B-5).
 /// Ҳамма текширув серверда (`upsertMyBusiness`); бу ерда фақат тез инкор ва тушунарли хато матни.
 class BusinessFormScreen extends StatefulWidget {
-  const BusinessFormScreen({super.key, this.existing, BusinessRepository? repository})
+  const BusinessFormScreen({super.key, this.existing, this.initialCategory, BusinessRepository? repository})
       : _repo = repository;
 
   final Business? existing;
+
+  /// Янги объектда олдиндан танланган тур («Менинг дўконим» → «Янги дўкон» — чакана).
+  /// Таҳрирда [existing]нинг тури устун.
+  final BusinessCategory? initialCategory;
   final BusinessRepository? _repo;
 
   @override
@@ -69,7 +73,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
     _address = TextEditingController(text: b?.address ?? '');
     _hours = TextEditingController(text: b?.openingHours ?? '');
     _website = TextEditingController(text: b?.website ?? '');
-    _category = b?.category;
+    _category = b?.category ?? widget.initialCategory;
     _lat = b?.lat;
     _lng = b?.lng;
     _regionId = b?.regionId ?? '';

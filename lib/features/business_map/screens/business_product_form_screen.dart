@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../tv_market/models/tv_shop.dart';
@@ -133,7 +134,8 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           photoUrls: urls,
           kind: _kind,
           districtId: widget.business.districtId,
-          districtLabel: '',
+          // Ўз дўкони (харитасиз): туман номи ҳам ёзилади — лентада кўринади; харита объектида аввалгидек бўш.
+          districtLabel: widget.business.isOwnShop ? ServiceConfigHolder.districtLabel.trim() : '',
           description: _desc.text.trim(),
           status: 'active',
           businessId: widget.business.id,

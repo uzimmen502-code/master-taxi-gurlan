@@ -13,11 +13,24 @@ import 'business_product_form_screen.dart';
 /// Эганинг объекти маҳсулотлари: рўйхат, қўшиш, таҳрирлаш, ўчириш (юмшоқ ўчириш — `status: deleted`).
 /// Сони чекланмаган (эга қарори, 2026-10-24).
 class BusinessProductsScreen extends StatefulWidget {
-  const BusinessProductsScreen({super.key, required this.business, TvShopRepository? repository, this.onPromote})
-      : _repo = repository;
+  const BusinessProductsScreen({
+    super.key,
+    required this.business,
+    TvShopRepository? repository,
+    this.onPromote,
+    this.embedded = false,
+    this.openFormOnStart = false,
+  }) : _repo = repository;
 
+  /// Харита объекти ёки эганинг ўз дўкони ([Business.ownShop], `id` бўш).
   final Business business;
   final TvShopRepository? _repo;
+
+  /// «Менинг дўконим» ичида: ўз `AppBar`и йўқ (сарлавҳа ташқарида).
+  final bool embedded;
+
+  /// Биринчи киришда янги маҳсулот формаси дарҳол очилади (ёпилгач рўйхат ва «қўшиш» тугмаси турибди).
+  final bool openFormOnStart;
 
   /// «Реклама қилиш» — тест учун алмаштирилади; бўлмаса пуллик реклама экрани (`TvPublishScreen`) очилади.
   final void Function(BuildContext context, TvShopItem item)? onPromote;
@@ -30,8 +43,19 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
   late final TvShopRepository _repo = widget._repo ?? TvShopRepository();
   late Future<List<TvShopItem>> _future = _load();
 
-  Future<List<TvShopItem>> _load() =>
-      _repo.fetchByBusiness(widget.business.id, ownerPhone: widget.business.ownerId, onlyActive: false);
+  Future<List<TvShopItem>> _load() => widget.business.isOwnShop
+      ? _repo.fetchOwnShopItems(widget.business.ownerId)
+      : _repo.fetchByBusiness(widget.business.id, ownerPhone: widget.business.ownerId, onlyActive: false);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.openFormOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openForm();
+      });
+    }
+  }
 
   void _reload() => setState(() {
         _future = _load();
@@ -85,7 +109,16 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${context.tr('bizprod_title')} · ${widget.business.name}', maxLines: 1)),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: Text(
+                widget.business.isOwnShop
+                    ? widget.business.name
+                    : '${context.tr('bizprod_title')} · ${widget.business.name}',
+                maxLines: 1,
+              ),
+            ),
       body: FutureBuilder<List<TvShopItem>>(
         future: _future,
         builder: (context, snap) {

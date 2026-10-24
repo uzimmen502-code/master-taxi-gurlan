@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../ads/screens/create_ad_screen.dart';
+import '../../../core/service_config_holder.dart';
+import '../../business_map/domain/business.dart';
+import '../../business_map/screens/business_products_screen.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/screens/wholesale_market_screen.dart';
-import '../widgets/shop_ads_catalog.dart';
 import '../widgets/shop_name_dialog.dart';
 
 /// Асосий дўкон — эганинг ўз маҳсулотлари бир жойда, икки бўлимда: Аҳоли бозори
@@ -55,6 +56,10 @@ class _MainShopScreenState extends State<MainShopScreen>
   late final TabController _tabCtrl;
   String _name = '';
 
+  /// Ном ўқиб бўлингач (ёки ўқилмади) — Аҳоли каталоги шундан кейин қурилади: маҳсулотга
+  /// дўкон номи ёзилади ([Business.ownShop]).
+  bool _nameLoaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -64,12 +69,8 @@ class _MainShopScreenState extends State<MainShopScreen>
       initialIndex: widget.initialSegment.clamp(0, 1),
     );
     _loadName();
-    if (widget.openAddOnStart && widget.initialSegment == 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) openRetailAddForm(context);
-      });
-    }
   }
+
 
   @override
   void dispose() {
@@ -81,11 +82,34 @@ class _MainShopScreenState extends State<MainShopScreen>
     try {
       final load = widget.loadName ?? () => loadMainShopName(widget.phone);
       final name = await load();
-      if (mounted) setState(() => _name = name);
+      if (mounted) {
+        setState(() {
+          _name = name;
+          _nameLoaded = true;
+        });
+      }
     } catch (e) {
-      // Ном ҳамроҳ маълумот: ўқилмаса сарлавҳа «Асосий дўкон» бўлиб қолади.
+      // Ном ҳамроҳ маълумот: ўқилмаса сарлавҳа «Менинг дўконим» бўлиб қолади, каталог барибир очилади.
       debugPrint('[MainShop] loadName failed: $e');
+      if (mounted) setState(() => _nameLoaded = true);
     }
+  }
+
+  /// Аҳоли бозори каталоги: ЯГОНА омбор — `tv_shop_items` (эганинг `businessId`сиз маҳсулотлари), расм ва видео
+  /// билан; қўшимча дўконлар билан бир хил экран ([BusinessProductsScreen]).
+  Widget _retail(BuildContext context) {
+    final custom = widget.retailView;
+    if (custom != null) return custom(context);
+    if (!_nameLoaded) return const Center(child: CircularProgressIndicator());
+    return BusinessProductsScreen(
+      business: Business.ownShop(
+        ownerId: widget.phone,
+        name: _name.isNotEmpty ? _name : context.tr('my_shop_title'),
+        districtId: ServiceConfigHolder.districtId.trim(),
+      ),
+      embedded: true,
+      openFormOnStart: widget.openAddOnStart && widget.initialSegment == 0,
+    );
   }
 
   Future<void> _rename() async {
@@ -126,7 +150,7 @@ class _MainShopScreenState extends State<MainShopScreen>
         // суриш иккита жестни тўқнаштирар эди — сегмент фақат босиш билан алмашади.
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          widget.retailView?.call(context) ?? _RetailShopView(uid: widget.phone),
+          _retail(context),
           widget.wholesaleView?.call(context) ??
               WholesaleSellerArea(
                 phone: widget.phone,
@@ -147,34 +171,3 @@ Future<String> loadMainShopName(String phone) async {
 /// Номни сақлайди ([TvShopRepository.saveName]: ҳужжат бўлмаса яратади).
 Future<void> saveMainShopName(String phone, String name) =>
     TvShopRepository().saveName(ownerPhone: phone, name: name);
-
-/// Аҳоли бозорига янги маҳсулот формаси (ягона кириш нуқтаси).
-Future<void> openRetailAddForm(BuildContext context) => Navigator.push<void>(
-      context,
-      MaterialPageRoute(builder: (_) => const CreateAdScreen()),
-    );
-
-/// Аҳоли бозори сегменти: расм ва видеоли каталог + пастда «Янги маҳсулот».
-class _RetailShopView extends StatelessWidget {
-  const _RetailShopView({required this.uid});
-
-  final String uid;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: ShopAdsCatalog(uid: uid),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            onPressed: () => openRetailAddForm(context),
-            icon: const Icon(Icons.add),
-            label: Text(context.tr('wholesale_new_product')),
-          ),
-        ),
-      ),
-    );
-  }
-}

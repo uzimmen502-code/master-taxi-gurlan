@@ -15076,6 +15076,17 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
           'permission-denied', 'Phone mismatch');
     }
 
+    // Ихтиёрий: реклама ЭГАСИНИНГ ўз фаол каталог маҳсулотига боғланади (Бизнес харитаси «Реклама қилиш», эга қарори
+    // 2026-10-24): клипда `shopItemId` бўлади — томошабин дўконда шу маҳсулотга ўтади. Мижозга ишонилмайди (18-банд):
+    // ҳужжат мавжуд, фаол ва эгаси шу чақирувчи бўлиши шарт — ТЎЛОВДАН ОЛДИН текширилади (`SHOP_ITEM_INVALID`).
+    const shopItemId = data.shopItemId == null ? '' : String(data.shopItemId).trim();
+    if (shopItemId && !/^[A-Za-z0-9_-]{1,128}$/.test(shopItemId)) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'SHOP_ITEM_INVALID', {code: 'SHOP_ITEM_INVALID'});
+    }
+    const shopItemRef = shopItemId ?
+      db.collection('tv_shop_items').doc(shopItemId) : null;
+
     const adPrice = await tvAdPriceFor(tier, durationDays, scope);
     const userRef = db.collection('users').doc(uid);
     const clipRef = db.collection('tv_clips').doc();
@@ -15087,6 +15098,17 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
       const idemSnap = await t.get(idemRef);
       if (idemSnap.exists) {
         return idemSnap.data().result || {ok: true, duplicate: true};
+      }
+
+      if (shopItemRef) {
+        const itemSnap = await t.get(shopItemRef);
+        const item = itemSnap.exists ? (itemSnap.data() || {}) : null;
+        if (!item || item.status !== 'active' ||
+            canonicalUid(String(item.ownerPhone || '')) !== uid) {
+          throw new functions.https.HttpsError(
+              'failed-precondition', 'SHOP_ITEM_INVALID',
+              {code: 'SHOP_ITEM_INVALID'});
+        }
       }
 
       if (adPrice > 0) {
@@ -15158,6 +15180,7 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
         adTier: tier,
         adScope: scope,
         ...(regionId ? {regionId} : {}),
+        ...(shopItemId ? {shopItemId} : {}),
         showPhone,
         socialConsent: false,
         processingStatus: 'ready',

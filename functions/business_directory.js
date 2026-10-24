@@ -25,6 +25,11 @@ const { encode: geohashEncode } = require('./geo_hash');
 const COLLECTION = 'businesses';
 const GEO_DISTRICTS = 'geo_districts';
 const ADMIN_AUDIT = 'admin_audit';
+const ITEMS = 'tv_shop_items';
+const PRODUCT_KINDS = Object.freeze(['product', 'service']);
+/** Админ маҳсулотни фақат фаол ёки блокланган қила олади (кутилаётган/ўчирилган ҳолатларни ўрнатмайди). */
+const PRODUCT_ADMIN_STATUSES = Object.freeze(['active', 'blocked']);
+const PRODUCT_LIMITS = Object.freeze({ titleMin: 2, titleMax: 120, descriptionMax: 1000, priceMax: 999999999 });
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 
 /** Тур гуруҳлари (B-10). Рўйхат Dart томонида `BusinessCategory` билан бир хил бўлиши шарт. */
@@ -317,8 +322,107 @@ function attachBusinessDirectory(exportsObj, deps) {
     log({ action: 'adminDeleteBusiness', userId: actor, businessId: ref.id, result: out.deleted ? 'deleted' : 'noop', durationMs: Date.now() - started });
     return { ok: true, ...out };
   });
+
+  // ───────────────── Объект маҳсулотлари (эга қарори, 2026-10-24) ─────────────────
+  // Маҳсулот — АВАГрам витрина ҳужжати `tv_shop_items/{id}` + `businessId`. Эга уни ўзи жойлайди (модерациясиз);
+  // админ фақат шу ҳужжатларни ТАҲРИРЛАЙДИ/ЎЧИРАДИ ва ҳар бир ҳаракат `admin_audit`га сабаби билан тушади (41-банд).
+
+  function itemRefOf(data) {
+    return db.collection(ITEMS).doc(docId(data && data.itemId, 'PRODUCT_NOT_FOUND'));
+  }
+
+  /** Фақат Бизнес харитаси маҳсулоти (businessId бор) — умумий витрина ҳужжатига бу йўл орқали тегилмайди. */
+  function assertBusinessProduct(snap) {
+    if (!snap.exists || !str((snap.data() || {}).businessId, 128)) {
+      throw fail('not-found', 'PRODUCT_NOT_FOUND', 'Маҳсулот топилмади.');
+    }
+  }
+
+  /**
+   * data: { itemId, reason, title?, price?, description?, kind?, status? ('active' | 'blocked') } → { ok, changed, changedKeys }.
+   * Фақат берилган майдонлар ўзгаради; ўзгариш бўлмаса audit ёзилмайди (идемпотент). Ўчирилган (`deleted`) тикланмайди.
+   */
+  exportsObj.adminUpdateBusinessProduct = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireAdmin(context);
+    const d = data || {};
+    const reason = reasonOf(d);
+    const patch = {};
+    if (d.title !== undefined) {
+      const v = str(d.title, PRODUCT_LIMITS.titleMax + 1);
+      if (v.length < PRODUCT_LIMITS.titleMin || v.length > PRODUCT_LIMITS.titleMax) {
+        throw fail('invalid-argument', 'PRODUCT_TITLE_INVALID', 'Ном нотўғри.');
+      }
+      patch.title = v;
+    }
+    if (d.description !== undefined) {
+      const v = str(d.description, PRODUCT_LIMITS.descriptionMax + 1);
+      if (v.length > PRODUCT_LIMITS.descriptionMax) throw fail('invalid-argument', 'PRODUCT_FIELD_INVALID', 'Тавсиф жуда узун.');
+      patch.description = v;
+    }
+    if (d.price !== undefined) {
+      const v = d.price;
+      if (!Number.isInteger(v) || v < 0 || v > PRODUCT_LIMITS.priceMax) {
+        throw fail('invalid-argument', 'PRODUCT_PRICE_INVALID', 'Нарх нотўғри.');
+      }
+      patch.price = v;
+    }
+    if (d.kind !== undefined) {
+      if (!PRODUCT_KINDS.includes(d.kind)) throw fail('invalid-argument', 'PRODUCT_KIND_INVALID', 'Тур нотўғри.');
+      patch.kind = d.kind;
+    }
+    if (d.status !== undefined) {
+      if (!PRODUCT_ADMIN_STATUSES.includes(d.status)) {
+        throw fail('invalid-argument', 'PRODUCT_STATUS_INVALID', 'Ҳолат нотўғри.');
+      }
+      patch.status = d.status;
+    }
+    if (Object.keys(patch).length === 0) throw fail('invalid-argument', 'PRODUCT_NOTHING_TO_UPDATE', 'Ўзгариш йўқ.');
+
+    const ref = itemRefOf(d);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      assertBusinessProduct(snap);
+      const cur = snap.data();
+      if (cur.status === 'deleted') throw fail('failed-precondition', 'PRODUCT_DELETED', 'Маҳсулот ўчирилган.');
+      const keys = Object.keys(patch).filter((k) => cur[k] !== patch[k]);
+      if (keys.length === 0) return { changed: false, changedKeys: [] };
+      const next = {};
+      keys.forEach((k) => { next[k] = patch[k]; });
+      t.update(ref, { ...next, updatedAt: ts(), updatedBy: actor });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'business_product_update', actor, target: ref.id, businessId: cur.businessId, reason, changedKeys: keys, at: ts(),
+      });
+      return { changed: true, changedKeys: keys };
+    });
+    log({ action: 'adminUpdateBusinessProduct', userId: actor, itemId: ref.id, result: out.changed ? 'updated' : 'noop', durationMs: Date.now() - started });
+    return { ok: true, ...out };
+  });
+
+  /** data: { itemId, reason } → { ok, deleted }. Юмшоқ ўчириш (`status: 'deleted'`); audit'да олдинги ҳолат сақланади. */
+  exportsObj.adminDeleteBusinessProduct = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireAdmin(context);
+    const reason = reasonOf(data);
+    const ref = itemRefOf(data);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      assertBusinessProduct(snap);
+      const cur = snap.data();
+      if (cur.status === 'deleted') return { deleted: false };
+      t.update(ref, { status: 'deleted', deletedAt: ts(), deletedBy: actor, updatedAt: ts() });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'business_product_delete', actor, target: ref.id, businessId: cur.businessId, reason,
+        snapshot: { title: cur.title || '', ownerPhone: cur.ownerPhone || '', price: cur.price || 0, status: cur.status || '' },
+        at: ts(),
+      });
+      return { deleted: true };
+    });
+    log({ action: 'adminDeleteBusinessProduct', userId: actor, itemId: ref.id, result: out.deleted ? 'deleted' : 'noop', durationMs: Date.now() - started });
+    return { ok: true, ...out };
+  });
 }
 
 module.exports = {
-  attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LIMITS, BOUNDS, EDITABLE,
+  attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LIMITS, BOUNDS, EDITABLE, PRODUCT_LIMITS,
 };

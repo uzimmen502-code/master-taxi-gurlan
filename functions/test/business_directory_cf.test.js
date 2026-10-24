@@ -273,6 +273,83 @@ async function main() {
     assert.ok((await db.collection('businesses').where('ownerId', '==', OTHER).get()).size > LIMITS.maxPerOwner, 'admin limitdan ortiq qo\'sha oladi');
   });
 
+  // ───────── Объект маҳсулотлари (tv_shop_items + businessId): админ таҳрир/ўчириш, audit ─────────
+  const items = db.collection('tv_shop_items');
+  const auditOf = async (kind, target) =>
+    (await db.collection('admin_audit').where('kind', '==', kind).where('target', '==', target).get()).docs.map((d) => d.data());
+  await items.doc('p_biz').set({ ownerPhone: OWNER, title: 'Non', price: 5000, description: '', kind: 'product', status: 'active', businessId: 'bX' });
+  await items.doc('p_plain').set({ ownerPhone: OWNER, title: 'Oddiy vitrina', price: 100, kind: 'product', status: 'active' });
+
+  await check('M1 admin mahsulot: faqat admin; sabab shart; mijoz rad', async () => {
+    await assert.rejects(call('adminUpdateBusinessProduct', { itemId: 'p_biz', title: 'Hack', reason: 'tuzatish' }, OWNER));
+    await assert.rejects(call('adminDeleteBusinessProduct', { itemId: 'p_biz', reason: 'tuzatish' }, OWNER));
+    await expectCode(call('adminUpdateBusinessProduct', { itemId: 'p_biz', title: 'Nonn', reason: 'x' }, ADMIN), 'REASON_REQUIRED');
+    await expectCode(call('adminDeleteBusinessProduct', { itemId: 'p_biz', reason: '' }, ADMIN), 'REASON_REQUIRED');
+    assert.strictEqual((await items.doc('p_biz').get()).data().title, 'Non', 'rad etilgan chaqiruv hech narsani o\'zgartirmagan');
+  });
+
+  await check('M2 admin tahrirlaydi: faqat berilgan maydonlar, audit changedKeys+reason; o\'zgarishsiz — audit yo\'q', async () => {
+    const r = await call('adminUpdateBusinessProduct', { itemId: 'p_biz', title: 'Non (issiq)', price: 6000, reason: 'imlo' }, ADMIN);
+    assert.deepStrictEqual([r.changed, r.changedKeys.sort()], [true, ['price', 'title']]);
+    const d = (await items.doc('p_biz').get()).data();
+    assert.deepStrictEqual([d.title, d.price, d.ownerPhone, d.businessId, d.status], ['Non (issiq)', 6000, OWNER, 'bX', 'active']);
+    assert.ok(d.updatedBy === ADMIN || d.updatedBy);
+    const a = await auditOf('business_product_update', 'p_biz');
+    assert.strictEqual(a.length, 1);
+    assert.strictEqual(a[0].reason, 'imlo');
+    assert.deepStrictEqual(a[0].changedKeys.sort(), ['price', 'title']);
+    const again = await call('adminUpdateBusinessProduct', { itemId: 'p_biz', title: 'Non (issiq)', price: 6000, reason: 'imlo' }, ADMIN);
+    assert.strictEqual(again.changed, false);
+    assert.strictEqual((await auditOf('business_product_update', 'p_biz')).length, 1, 'takror — audit ortmaydi (21-band)');
+  });
+
+  await check('M3 tekshiruv: sarlavha/narx/tur/holat chegaralari; hech narsa berilmasa — rad', async () => {
+    const code = async (over) => { try { await call('adminUpdateBusinessProduct', { itemId: 'p_biz', reason: 'sinov', ...over }, ADMIN); return 'OK'; } catch (e) { return (e.details && e.details.code) || e.message; } };
+    assert.strictEqual(await code({ title: 'A' }), 'PRODUCT_TITLE_INVALID');
+    assert.strictEqual(await code({ title: 'x'.repeat(121) }), 'PRODUCT_TITLE_INVALID');
+    assert.strictEqual(await code({ price: -1 }), 'PRODUCT_PRICE_INVALID');
+    assert.strictEqual(await code({ price: 12.5 }), 'PRODUCT_PRICE_INVALID'); // pul butun (8-band)
+    assert.strictEqual(await code({ price: '5000' }), 'PRODUCT_PRICE_INVALID');
+    assert.strictEqual(await code({ kind: 'weapon' }), 'PRODUCT_KIND_INVALID');
+    assert.strictEqual(await code({ status: 'deleted' }), 'PRODUCT_STATUS_INVALID'); // o'chirish — alohida callable
+    assert.strictEqual(await code({ status: 'pending' }), 'PRODUCT_STATUS_INVALID');
+    assert.strictEqual(await code({ description: 'x'.repeat(1001) }), 'PRODUCT_FIELD_INVALID');
+    assert.strictEqual(await code({}), 'PRODUCT_NOTHING_TO_UPDATE');
+    assert.strictEqual(await code({ title: 'x'.repeat(120) }), 'OK'); // chegara: aynan max
+    assert.strictEqual(await code({ price: 0 }), 'OK');
+  });
+
+  await check('M4 admin blokla/ochadi (status active<->blocked)', async () => {
+    await call('adminUpdateBusinessProduct', { itemId: 'p_biz', status: 'blocked', reason: 'qoida buzilgan' }, ADMIN);
+    assert.strictEqual((await items.doc('p_biz').get()).data().status, 'blocked');
+    await call('adminUpdateBusinessProduct', { itemId: 'p_biz', status: 'active', reason: 'xato bloklangan' }, ADMIN);
+    assert.strictEqual((await items.doc('p_biz').get()).data().status, 'active');
+  });
+
+  await check('M5 oddiy vitrina hujjatiga (businessId yo\'q) bu yo\'l bilan tegib bo\'lmaydi; yo\'q hujjat — rad', async () => {
+    await expectCode(call('adminUpdateBusinessProduct', { itemId: 'p_plain', title: 'Hack', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('adminDeleteBusinessProduct', { itemId: 'p_plain', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('adminDeleteBusinessProduct', { itemId: 'yoq_hujjat', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('adminDeleteBusinessProduct', { itemId: '../x', reason: 'sinov' }, ADMIN), 'PRODUCT_NOT_FOUND');
+    assert.strictEqual((await items.doc('p_plain').get()).data().title, 'Oddiy vitrina');
+  });
+
+  await check('M6 admin o\'chiradi: yumshoq (status deleted), audit snapshot bilan; takror — deleted:false, audit ortmaydi; o\'chirilganni tahrirlab bo\'lmaydi', async () => {
+    const r = await call('adminDeleteBusinessProduct', { itemId: 'p_biz', reason: 'soxta mahsulot' }, ADMIN);
+    assert.strictEqual(r.deleted, true);
+    const d = (await items.doc('p_biz').get()).data();
+    assert.strictEqual(d.status, 'deleted');
+    assert.strictEqual(d.businessId, 'bX', 'hujjat saqlanadi — tiklash/tekshirish mumkin');
+    const a = await auditOf('business_product_delete', 'p_biz');
+    assert.strictEqual(a.length, 1);
+    assert.strictEqual(a[0].reason, 'soxta mahsulot');
+    assert.strictEqual(a[0].snapshot.ownerPhone, OWNER);
+    const again = await call('adminDeleteBusinessProduct', { itemId: 'p_biz', reason: 'soxta mahsulot' }, ADMIN);
+    assert.strictEqual(again.deleted, false);
+    assert.strictEqual((await auditOf('business_product_delete', 'p_biz')).length, 1);
+    await expectCode(call('adminUpdateBusinessProduct', { itemId: 'p_biz', title: 'Qayta', reason: 'sinov' }, ADMIN), 'PRODUCT_DELETED');
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

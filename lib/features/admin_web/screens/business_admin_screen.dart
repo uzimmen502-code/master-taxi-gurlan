@@ -6,6 +6,7 @@ import '../../business_map/domain/business.dart';
 import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_map_screen.dart';
 import '../../map_picker/screens/map_picker_screen.dart';
+import 'business_products_admin_dialog.dart';
 
 /// Админ: тадбиркорлик объектлари реестри (B-1, B-6). Админ объект ҚЎШАДИ (эга қарори 2026-10-23, `adminCreateBusiness`),
 /// эгалар қўшганларини таҳрирлайди ва ўчиради; ҳар бир ўзгариш `admin_audit`га сабаб билан тушади (41-банд).
@@ -211,6 +212,14 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              IconButton(
+                                tooltip: 'Маҳсулотлар',
+                                icon: const Icon(Icons.inventory_2_outlined),
+                                onPressed: () => showDialog<void>(
+                                  context: context,
+                                  builder: (_) => BusinessProductsAdminDialog(business: b, repo: _repo),
+                                ),
+                              ),
                               IconButton(
                                 tooltip: 'Таҳрирлаш',
                                 icon: const Icon(Icons.edit_outlined),

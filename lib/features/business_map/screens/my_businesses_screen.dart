@@ -7,6 +7,7 @@ import '../../../core/utils/formatters.dart';
 import '../data/business_repository.dart';
 import '../domain/business.dart';
 import 'business_form_screen.dart';
+import 'business_products_screen.dart';
 
 /// Эганинг ўз объектлари: рўйхат, қўшиш, таҳрирлаш, ўчириш (B-1, B-8).
 class MyBusinessesScreen extends StatefulWidget {
@@ -30,6 +31,9 @@ class _MyBusinessesScreenState extends State<MyBusinessesScreen> {
 
   Future<void> _openForm([Business? b]) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => BusinessFormScreen(existing: b)));
+
+  Future<void> _openProducts(Business b) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => BusinessProductsScreen(business: b)));
 
   Future<void> _delete(Business b) async {
     final ok = await showDialog<bool>(
@@ -108,10 +112,20 @@ class _MyBusinessesScreenState extends State<MyBusinessesScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   onTap: () => _openForm(b),
-                  trailing: IconButton(
-                    tooltip: context.tr('bizmap_delete'),
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    onPressed: () => _delete(b),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: context.tr('bizprod_open'),
+                        icon: const Icon(Icons.inventory_2_outlined),
+                        onPressed: () => _openProducts(b),
+                      ),
+                      IconButton(
+                        tooltip: context.tr('bizmap_delete'),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        onPressed: () => _delete(b),
+                      ),
+                    ],
                   ),
                 ),
               );

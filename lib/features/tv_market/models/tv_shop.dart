@@ -31,7 +31,8 @@ class TvShop {
 }
 
 /// Витрина товар/хизмати — `tv_shop_items/{id}`.
-/// Расмлар: `photoUrls` (1–5). `photoUrl` — қоплама (биринчи расм, back-compat).
+/// Расмлар: `photoUrls` (1–7). `photoUrl` — қоплама (биринчи расм, back-compat).
+/// `businessId` — Бизнес харитасидаги объектнинг маҳсулоти/хизмати (ихтиёрий; эски ҳужжатларда йўқ).
 class TvShopItem {
   const TvShopItem({
     required this.id,
@@ -52,9 +53,14 @@ class TvShopItem {
     this.socialPostedAt,
     this.status = 'active',
     this.createdAt,
+    this.businessId = '',
   });
 
-  static const maxPhotos = 5;
+  /// Эга қарори (2026-10-24): 7 тагача расм (Аҳоли бозори эълони билан бир хил).
+  static const maxPhotos = 7;
+
+  /// Бизнес харитаси объекти (`businesses/{id}`); бўш — оддий витрина товари.
+  final String businessId;
 
   final String id;
   final String ownerPhone;
@@ -157,12 +163,14 @@ class TvShopItem {
       socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
       status: (d['status'] ?? 'active') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      businessId: (d['businessId'] ?? '') is String ? (d['businessId'] ?? '') as String : '',
     );
   }
 
   Map<String, dynamic> toMap() {
     final photos = normalizePhotos(rawUrls: photoUrls, photoUrl: photoUrl);
     return {
+      if (businessId.isNotEmpty) 'businessId': businessId,
       'ownerPhone': ownerPhone,
       'ownerName': ownerName,
       'title': title,

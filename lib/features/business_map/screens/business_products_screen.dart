@@ -3,19 +3,24 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../tv_market/models/tv_ad_prefill.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
+import '../../tv_market/screens/tv_publish_screen.dart';
 import '../domain/business.dart';
 import 'business_product_form_screen.dart';
 
 /// Эганинг объекти маҳсулотлари: рўйхат, қўшиш, таҳрирлаш, ўчириш (юмшоқ ўчириш — `status: deleted`).
 /// Сони чекланмаган (эга қарори, 2026-10-24).
 class BusinessProductsScreen extends StatefulWidget {
-  const BusinessProductsScreen({super.key, required this.business, TvShopRepository? repository})
+  const BusinessProductsScreen({super.key, required this.business, TvShopRepository? repository, this.onPromote})
       : _repo = repository;
 
   final Business business;
   final TvShopRepository? _repo;
+
+  /// «Реклама қилиш» — тест учун алмаштирилади; бўлмаса пуллик реклама экрани (`TvPublishScreen`) очилади.
+  final void Function(BuildContext context, TvShopItem item)? onPromote;
 
   @override
   State<BusinessProductsScreen> createState() => _BusinessProductsScreenState();
@@ -37,6 +42,16 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
       MaterialPageRoute<bool>(builder: (_) => BusinessProductFormScreen(business: widget.business, existing: item)),
     );
     if (changed == true && mounted) _reload();
+  }
+
+  /// Каталог маҳсулоти → пуллик АВАГрам рекламаси (алоҳида механизм): мавжуд реклама экрани ном/нарх/тавсиф
+  /// олдиндан тўлдирилган ҳолда очилади; видео, тариф ва тўловни эга шу ерда танлайди.
+  void _promote(TvShopItem item) {
+    final custom = widget.onPromote;
+    if (custom != null) return custom(context, item);
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => TvPublishScreen(hideShopOption: true, adPrefill: TvAdPrefill.fromItem(item)),
+    ));
   }
 
   Future<void> _delete(TvShopItem item) async {
@@ -123,10 +138,22 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   onTap: () => _openForm(it),
-                  trailing: IconButton(
-                    tooltip: context.tr('bizmap_delete'),
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    onPressed: () => _delete(it),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (it.isActive)
+                        IconButton(
+                          key: ValueKey('bizprod_promote_${it.id}'),
+                          tooltip: context.tr('bizprod_promote'),
+                          icon: const Icon(Icons.campaign_outlined),
+                          onPressed: () => _promote(it),
+                        ),
+                      IconButton(
+                        tooltip: context.tr('bizmap_delete'),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        onPressed: () => _delete(it),
+                      ),
+                    ],
                   ),
                 ),
               );

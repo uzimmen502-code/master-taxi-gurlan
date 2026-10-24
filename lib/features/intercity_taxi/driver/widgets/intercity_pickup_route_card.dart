@@ -31,7 +31,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AvaLight.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: primaryColor.withValues(alpha: 0.35)),
           ),
@@ -53,7 +53,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                       .tr('intercity_pickup_route_chain')
                       .replaceAll('{from}', from)
                       .replaceAll('{to}', to),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  style: const TextStyle(fontSize: 13, color: AvaLight.ink2),
                 ),
               ],
               const SizedBox(height: 10),
@@ -84,7 +84,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   _routeErrorText(context, c.routeError!),
-                  style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                  style: const TextStyle(fontSize: 13, color: AvaLight.danger),
                 ),
               ],
               if (route != null) ...[
@@ -116,8 +116,8 @@ class IntercityPickupRouteCard extends StatelessWidget {
                           ),
                           child: Text(
                             '${stop.sequence}',
-                            style: TextStyle(
-                              fontSize: 11,
+                            style: const TextStyle(
+                              fontSize: 12,
                               fontWeight: FontWeight.w800,
                               color: AppColors.primaryText,
                             ),
@@ -146,9 +146,9 @@ class IntercityPickupRouteCard extends StatelessWidget {
                                         '{count}',
                                         '${stop.booking.passengers}',
                                       ),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AvaLight.ink2,
                                   ),
                                 ),
                             ],

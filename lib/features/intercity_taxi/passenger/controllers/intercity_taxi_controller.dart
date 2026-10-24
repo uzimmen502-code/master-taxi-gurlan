@@ -436,13 +436,15 @@ class IntercityTaxiController extends ChangeNotifier {
       return (null, key);
     } catch (e) {
       final msg = e.toString();
+      // Хом exception фойдаланувчига кўрсатилмайди (CLAUDE.md §25) — логда.
+      debugPrint('intercity bookRide failed: $e');
       isBooking = false;
       notifyListeners();
       return (
         null,
         msg.contains('permission-denied')
             ? 'booking_permission_denied'
-            : 'booking_error|$e',
+            : 'ic_ux_action_failed',
       );
     }
   }

@@ -15,6 +15,7 @@ import '../../../../repositories/intercity_rides_repository.dart';
 import '../../../../utils/intercity_places.dart';
 import '../../../../utils/locale_utils.dart';
 import '../controllers/intercity_taxi_controller.dart';
+import '../../intercity_tap_target.dart';
 import '../controllers/me_and_passengers_controller.dart';
 import '../intercity_colors.dart';
 import '../services/intercity_place_history.dart';
@@ -411,14 +412,14 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       content: Row(children: [
         Icon(
           isNoDriver ? Icons.info_outline : Icons.warning_amber,
-          color: isNoDriver ? AppColors.primaryText : IntercityColors.onPrimary,
+          color: isNoDriver ? AppColors.primaryText : Colors.white,
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             context.trMsg(err),
             style: TextStyle(
-              color: isNoDriver ? IntercityColors.text : IntercityColors.onPrimary,
+              color: isNoDriver ? IntercityColors.text : Colors.white,
             ),
           ),
         ),
@@ -516,37 +517,46 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     final today = DateTime.now();
     final tomorrow = today.add(const Duration(days: 1));
 
-    return Scaffold(
-      backgroundColor: IntercityColors.bg,
-      appBar: c.hasSearched
-          ? null
-          : AppBar(
-              backgroundColor: IntercityColors.primary,
-              foregroundColor: IntercityColors.onPrimary,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.pop(context),
+    // Натижалар кўринганда тизим «орқага» тугмаси модулдан чиқармасин —
+    // экран ичидаги «орқага» каби қидирув шаклига қайтарсин.
+    return PopScope(
+      canPop: !c.hasSearched,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) c.resetSearch();
+      },
+      child: Scaffold(
+        backgroundColor: IntercityColors.bg,
+        appBar: c.hasSearched
+            ? null
+            : AppBar(
+                backgroundColor: IntercityColors.primary,
+                foregroundColor: IntercityColors.onPrimary,
+                elevation: 0,
+                leading: IconButton(
+                  tooltip: context.tr('back'),
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                title: Text(context.tr('intercity_taxi'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
-              title: Text(context.tr('intercity_taxi'),
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+        body: Stack(
+          children: [
+            c.hasSearched
+                ? _buildResultsView(c)
+                : _buildSearchForm(c, today, tomorrow),
+            const Positioned.fill(
+              child: MeAndPassengersPanel(),
             ),
-      body: Stack(
-        children: [
-          c.hasSearched
-              ? _buildResultsView(c)
-              : _buildSearchForm(c, today, tomorrow),
-          const Positioned.fill(
-            child: MeAndPassengersPanel(),
-          ),
-          Consumer<MeAndPassengersController>(
-            builder: (_, panel, __) {
-              final id = panel.myBooking?.id ?? '';
-              if (id.isEmpty) return const SizedBox.shrink();
-              return IntercitySettlementWatcher(bookingId: id);
-            },
-          ),
-        ],
+            Consumer<MeAndPassengersController>(
+              builder: (_, panel, __) {
+                final id = panel.myBooking?.id ?? '';
+                if (id.isEmpty) return const SizedBox.shrink();
+                return IntercitySettlementWatcher(bookingId: id);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -565,29 +575,30 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
           ),
           child: Row(
             children: [
-              GestureDetector(
-                onTap: () {
-                  c.resetSearch();
-                },
+              IntercityTapTarget(
+                label: context.tr('back'),
+                onTap: c.resetSearch,
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: IntercityColors.onPrimary.withValues(alpha: 0.22),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.arrow_back,
-                      color: IntercityColors.onPrimary, size: 20),
+                      color: IntercityColors.onPrimary, size: 22),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${c.selectedFromLocation ?? ''}'
+                      // Форма каби — жорий тилдаги номлар (каноник эмас).
+                      '${IntercityPlaces.displayForLocale(c.selectedFromLocation ?? '', _currentLocale)}'
                       ' → '
-                      '${c.selectedToLocation ?? ''}',
+                      '${IntercityPlaces.displayForLocale(c.selectedToLocation ?? '', _currentLocale)}',
                       style: const TextStyle(
                         color: IntercityColors.onPrimary,
                         fontWeight: FontWeight.bold,
@@ -598,10 +609,10 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     ),
                     Text(
                       c.isSearching
-                          ? 'Қидирилмоқда...'
-                          : '${c.rides.length} та рейс топилди',
+                          ? context.tr('searching')
+                          : '${c.rides.length} ${context.tr('rides_found')}',
                       style: TextStyle(
-                        color: IntercityColors.onPrimary.withValues(alpha: 0.72),
+                        color: IntercityColors.onPrimary.withValues(alpha: 0.85),
                         fontSize: 13,
                       ),
                     ),
@@ -623,24 +634,37 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.directions_bus_outlined,
-                            size: 64,
-                            color: IntercityColors.textFaint,
+                          const ExcludeSemantics(
+                            child: Icon(
+                              Icons.directions_bus_outlined,
+                              size: 64,
+                              color: IntercityColors.textFaint,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Рейс топилмади',
-                            style: TextStyle(
-                              color: IntercityColors.textMuted,
+                            context.tr('no_rides'),
+                            style: const TextStyle(
+                              color: IntercityColors.text,
                               fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Тикланиш йўли: кун ёки йўналишни ўзгартириш.
+                          Text(
+                            context.tr('ic_ux_try_other_day'),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: IntercityColors.textMuted,
+                              fontSize: 14,
                             ),
                           ),
                           const SizedBox(height: 8),
                           TextButton.icon(
                             onPressed: c.resetSearch,
                             icon: const Icon(Icons.refresh),
-                            label: const Text('Қайта қидириш'),
+                            label: Text(context.tr('retry_search')),
                           ),
                         ],
                       ),
@@ -831,61 +855,84 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
   }
 
   Widget _dateCard(String title, String date, bool sel, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 7),
-        decoration: BoxDecoration(
-          gradient: sel
-              ? const LinearGradient(
-                  colors: [IntercityColors.primary, IntercityColors.primaryMid])
-              : null,
-          color: sel ? null : IntercityColors.surface,
+    return Semantics(
+      button: true,
+      selected: sel,
+      label: '$title, $date',
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: sel
-              ? [
-                  BoxShadow(
-                      color: IntercityColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2))
-                ]
-              : [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
-                ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              sel ? Icons.calendar_today : Icons.calendar_today_outlined,
-              size: 14,
-              color: sel ? IntercityColors.onPrimary : IntercityColors.textFaint,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            constraints:
+                const BoxConstraints(minHeight: IntercityTapTarget.minSize),
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 7),
+            decoration: BoxDecoration(
+              gradient: sel
+                  ? const LinearGradient(colors: [
+                      IntercityColors.primary,
+                      IntercityColors.primaryMid
+                    ])
+                  : null,
+              color: sel ? null : IntercityColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: sel ? null : Border.all(color: IntercityColors.border),
+              boxShadow: sel
+                  ? [
+                      BoxShadow(
+                          color:
+                              IntercityColors.primary.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2))
+                    ]
+                  : [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 6)
+                    ],
             ),
-            const SizedBox(width: 6),
-            // Учта карта (Бугун / Эртага / Бошқа кун) тор экранда сиғсин.
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: sel ? IntercityColors.onPrimary : IntercityColors.text)),
-                      Text(date,
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: sel ? IntercityColors.onPrimary.withValues(alpha: 0.72) : IntercityColors.textFaint)),
-                    ]),
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  sel ? Icons.calendar_today : Icons.calendar_today_outlined,
+                  size: 14,
+                  color: sel
+                      ? IntercityColors.onPrimary
+                      : IntercityColors.textMuted,
+                ),
+                const SizedBox(width: 6),
+                // Учта карта (Бугун / Эртага / Бошқа кун) тор экранда сиғсин.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: sel
+                                      ? IntercityColors.onPrimary
+                                      : IntercityColors.text)),
+                          Text(date,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: sel
+                                      ? IntercityColors.onPrimary
+                                      : IntercityColors.textMuted)),
+                        ]),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -983,18 +1030,20 @@ class _RouteCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Container(width: 2, height: 22, color: IntercityColors.border),
                 const Spacer(),
-                GestureDetector(
+                IntercityTapTarget(
+                  label: context.tr('swap_direction'),
                   onTap: onSwap,
                   child: Container(
-                    padding: const EdgeInsets.all(5),
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: IntercityColors.surfaceSoft,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.swap_vert,
                       color: AppColors.primaryText,
-                      size: 18,
+                      size: 22,
                     ),
                   ),
                 ),

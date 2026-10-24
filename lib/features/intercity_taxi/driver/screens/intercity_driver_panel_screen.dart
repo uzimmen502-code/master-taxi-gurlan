@@ -10,6 +10,7 @@ import '../../../../repositories/schedules_repository.dart';
 import '../../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../../entertainment/driver/widgets/driver_entertainment_picker.dart';
 import '../../../driver_home/widgets/fare_calculator_dialog.dart';
+import '../../intercity_tap_target.dart';
 import '../controllers/intercity_driver_panel_controller.dart';
 import '../intercity_route_stops.dart';
 import '../widgets/intercity_booking_request_dialog.dart';
@@ -154,6 +155,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         foregroundColor: AppColors.onPrimary,
         actions: [
           IconButton(
+            tooltip: context.tr('ic_ux_to_home'),
             icon: const Icon(Icons.home_outlined),
             onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
           ),
@@ -182,7 +184,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                   contentPadding: EdgeInsets.zero,
                   title: Text(context.tr('auto_accept_bookings')),
                   subtitle: Text(context.tr('auto_accept_off_hint'),
-                      style: const TextStyle(fontSize: 11)),
+                      style: const TextStyle(fontSize: 12)),
                   value: c.autoAccept,
                   onChanged: (v) => c.setAutoAccept(v),
                 ),
@@ -199,12 +201,12 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                         style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
-                            color: Colors.orange)),
+                            color: AvaLight.warn)),
                     const Spacer(),
                     Text(context.tr('count_items')
                         .replaceAll('{count}', '${c.pending.length}'),
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.orange.shade700)),
+                        style: const TextStyle(
+                            fontSize: 12, color: AvaLight.warn)),
                   ]),
                   const SizedBox(height: 6),
                   ...c.pending.map(
@@ -226,15 +228,15 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                   const Spacer(),
                   Text(context.tr('count_items')
                       .replaceAll('{count}', '${c.confirmedBookings.length}'),
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600)),
+                      style: const TextStyle(
+                          fontSize: 12, color: AvaLight.ink2)),
                 ]),
                 const SizedBox(height: 8),
                 if (c.confirmedBookings.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AvaLight.surface,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -266,6 +268,31 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                         onPressed: () => _confirmStartTrip(context),
                       ),
                     ),
+                  )
+                else if (c.confirmedBookings.isNotEmpty)
+                  // «Сафарни бошлаш» нега йўқлигини тушунтириш.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const ExcludeSemantics(
+                          child: Icon(Icons.info_outline,
+                              size: 18, color: AvaLight.ink2),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            context.tr('ic_ux_start_waiting').replaceAll(
+                                  '{n}',
+                                  '${c.confirmedBookings.where((b) => !b.pickedUp).length}',
+                                ),
+                            style: const TextStyle(
+                                fontSize: 13, color: AvaLight.ink2),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),
@@ -287,10 +314,10 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AvaLight.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: listed ? AppColors.primaryText : Colors.grey.shade300),
+            color: listed ? AppColors.primaryText : AvaLight.line),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
@@ -301,21 +328,25 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                 : context.tr('trip_finished'),
             style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: listed ? AppColors.primaryText : Colors.grey)),
+                color: listed ? AppColors.primaryText : AvaLight.ink2)),
         if (scheduleDate.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(
               context
                   .tr('schedule_date')
                   .replaceAll('{date}', scheduleDate),
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+              style: const TextStyle(fontSize: 13, color: AvaLight.ink2)),
         ],
         const SizedBox(height: 6),
         Text(route,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('🕐 ${context.tr('departure')}: ${hour.toString().padLeft(2, '0')}:'
-            '${((c.tripData?['minute'] as num?)?.toInt() ?? 0).clamp(0, 59).toString().padLeft(2, '0')}'),
+        IntercityIconText(
+          icon: Icons.access_time,
+          iconColor: AvaLight.ink2,
+          text: '${context.tr('departure')}: ${hour.toString().padLeft(2, '0')}:'
+              '${((c.tripData?['minute'] as num?)?.toInt() ?? 0).clamp(0, 59).toString().padLeft(2, '0')}',
+        ),
         Text(
             total > 0
                 ? context
@@ -340,7 +371,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                     ? scheduleDate
                     : context.tr('tomorrow_short'),
               ),
-              style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+              style: const TextStyle(fontSize: 12, color: AvaLight.ink2),
             ),
           ),
         const SizedBox(height: 8),
@@ -352,7 +383,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
             label: Text(context.tr('return_route')),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.primaryText,
-              side: BorderSide(color: Colors.blue.shade200),
+              side: const BorderSide(color: AvaLight.line),
             ),
           ),
         ),
@@ -366,8 +397,8 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                 icon: const Icon(Icons.phone_disabled_outlined, size: 18),
                 label: Text(context.tr('intercity_leave_panel_btn')),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey.shade800,
-                  side: BorderSide(color: Colors.grey.shade300),
+                  foregroundColor: AvaLight.ink,
+                  side: const BorderSide(color: AvaLight.line),
                 ),
               ),
             )
@@ -417,15 +448,15 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                       TextButton(
                           onPressed: () => Navigator.pop(ctx, true),
                           child: Text(ctx.tr('yes_end_trip'),
-                              style: const TextStyle(color: Colors.red))),
+                              style: const TextStyle(color: AvaLight.danger))),
                     ],
                   ),
                 );
                 if (ok == true) await c.endTripListing();
               },
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red.shade700,
-                side: BorderSide(color: Colors.red.shade200),
+                foregroundColor: AvaLight.danger,
+                side: const BorderSide(color: AvaLight.danger),
               ),
               child: Text(context.tr('end_trip_btn')),
             ),
@@ -554,7 +585,10 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     if (!context.mounted) return;
     if (notice != null && notice.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(notice), backgroundColor: Colors.orange),
+        SnackBar(
+          content: Text(notice, style: const TextStyle(color: Colors.white)),
+          backgroundColor: AvaLight.warn,
+        ),
       );
     }
   }
@@ -587,7 +621,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AvaLight.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -597,26 +631,29 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('👤 ${context.trMsg(b.userName)} • ${b.userPhone}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        _infoRow(
+          Icons.person_outline,
+          '${context.trMsg(b.userName)} • ${b.userPhone}',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
         const SizedBox(height: 4),
         if (b.userGender.isNotEmpty)
           _infoRow(
-            b.userGender == 'female' ? '👩' : '👨',
+            b.userGender == 'female' ? Icons.female : Icons.male,
             context.tr(b.userGender == 'female'
                 ? 'gender_female' : 'gender_male'),
           ),
         if (age != null)
           _infoRow(
-            '🎂',
+            Icons.cake_outlined,
             '$age ${context.tr('age_years')}',
           ),
         if (b.passengers > 1)
           _infoRow(
-            '💺',
+            Icons.airline_seat_recline_normal,
             '${b.passengers} ${context.tr('passengers')}',
           ),
-        Text('📍 $pickup', style: const TextStyle(fontSize: 12)),
+        _infoRow(Icons.place_outlined, pickup),
         if (b.hasPickupGps) ...[
           const SizedBox(height: 6),
           Container(
@@ -629,12 +666,14 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.location_on,
-                    color: AvaLight.ok, size: 14),
+                const ExcludeSemantics(
+                  child: Icon(Icons.location_on,
+                      color: AvaLight.ok, size: 14),
+                ),
                 const SizedBox(width: 4),
                 Text(
                   context.tr('gps_received'),
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AvaLight.ok,
                     fontSize: 12,
                   ),
@@ -644,29 +683,47 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           ),
         ],
         if (b.dropoffNote.isNotEmpty)
-          Text('🏁 ${b.dropoffNote}', style: const TextStyle(fontSize: 12)),
-        Text(
-            '✅ ${_statusLabel(b.status)} • 💰 ${formatPrice(b.totalAmount)} ${context.tr('sum')} • #${b.shortRef}',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          _infoRow(Icons.flag_outlined, b.dropoffNote),
+        const SizedBox(height: 2),
+        // Ҳолат · нарх · буюртма рақами: иконкалар ўрнига матн ўзи.
+        Row(children: [
+          const ExcludeSemantics(
+            child: Icon(Icons.check_circle_outline,
+                size: 16, color: AvaLight.ink2),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${_statusLabel(b.status)} • '
+              '${formatPrice(b.totalAmount)} ${context.tr('sum')} • '
+              '#${b.shortRef}',
+              style: const TextStyle(fontSize: 12, color: AvaLight.ink2),
+            ),
+          ),
+        ]),
         const SizedBox(height: 8),
         Row(children: [
           IconButton(
-            visualDensity: VisualDensity.compact,
+            tooltip: context.tr('call_lowercase'),
             onPressed: () => callPhone(b.userPhone),
             icon: const Icon(Icons.call, color: AppColors.primaryText),
           ),
           if (b.hasPickupGps)
             TextButton.icon(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 48),
+              ),
               onPressed: () => openMapsNavigation(
                 lat: b.pickupLat!,
                 lng: b.pickupLng!,
                 label: b.pickupAddress,
               ),
-              icon: const Icon(Icons.map, size: 16),
-              label: const Text('📍 GPS'),
+              icon: const Icon(Icons.map_outlined, size: 18),
+              label: const Text('GPS'),
             ),
           const Spacer(),
           TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
             onPressed: () => _onCompleteBooking(context, c, b),
             child: Text(context.tr('complete_btn')),
           ),
@@ -679,6 +736,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AvaLight.ok,
                 foregroundColor: Colors.white,
+                minimumSize: const Size(0, 48),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
@@ -740,9 +798,24 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     ));
   }
 
-  Widget _infoRow(String emoji, String text) => Padding(
+  /// «Иконка + матн» қатори (эмодзи ўрнига вектор иконка).
+  Widget _infoRow(IconData icon, String text, {TextStyle? style}) => Padding(
         padding: const EdgeInsets.only(bottom: 2),
-        child: Text('$emoji $text', style: const TextStyle(fontSize: 12)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(
+              child: Icon(icon, size: 16, color: AvaLight.ink2),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                text,
+                style: style ?? const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
       );
 }
 
@@ -764,9 +837,9 @@ class _PendingBookingCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: AvaLight.warnSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: AvaLight.warn),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -788,7 +861,9 @@ class _PendingBookingCard extends StatelessWidget {
               icon: const Icon(Icons.touch_app, size: 18),
               label: Text(context.tr('accept_reject_call')),
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.orange.shade800,
+                backgroundColor: AvaLight.warn,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 48),
               ),
             ),
           ),

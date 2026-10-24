@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../intercity_colors.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../services/settlement_service.dart';
 
@@ -60,19 +61,20 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Qaytim — hamyonga'),
+        title: Text(ctx.tr('ic_ux_settle_title')),
         content: Text(
-          'Haydovchi ${formatMoney(amount)} qaytimni hamyoningizga '
-          'o\'tkazmoqchi. Tasdiqlaysizmi?',
+          ctx
+              .tr('ic_ux_settle_body')
+              .replaceAll('{amount}', formatMoney(amount)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
-            child: const Text('Naqd kerak'),
+            child: Text(ctx.tr('ic_ux_settle_cash')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, 'confirm'),
-            child: const Text('Tasdiqlayman'),
+            child: Text(ctx.tr('ic_ux_settle_confirm')),
           ),
         ],
       ),
@@ -83,7 +85,12 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatMoney(amount)} hamyoningizga qo\'shildi'),
+          content: Text(
+            context
+                .tr('ic_ux_settle_added')
+                .replaceAll('{amount}', formatMoney(amount)),
+            style: const TextStyle(color: Colors.white),
+          ),
           backgroundColor: IntercityColors.success,
         ));
       } else {
@@ -93,10 +100,15 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
         );
       }
     } catch (e) {
+      // Ички сабаб фақат логда; фойдаланувчига тушунарли хабар (CLAUDE.md §25).
+      debugPrint('intercity settlement failed: $e');
       if (!mounted) return;
       _handledSettlementId = null;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Settlement: $e'),
+        content: Text(
+          context.tr('ic_ux_action_failed'),
+          style: const TextStyle(color: Colors.white),
+        ),
         backgroundColor: IntercityColors.danger,
       ));
     }

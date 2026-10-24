@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../intercity_tap_target.dart';
 import '../intercity_colors.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../utils/intercity_places.dart';
 
 /// Шаҳарлараро қидирув maydoni + autokomplit (tarix + IntercityPlaces).
@@ -53,24 +55,31 @@ class IntercityPlaceField extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: SizedBox(
-                height: 36,
+                height: IntercityTapTarget.minSize,
                 child: TextField(
                   controller: controller,
                   focusNode: focusNode,
                   onChanged: onChanged,
                   onTap: onTap,
+                  textInputAction: TextInputAction.next,
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: hint,
-                    hintStyle:
-                        TextStyle(color: IntercityColors.textFaint, fontSize: 14),
+                    // Placeholder эмас, ўқиладиган белги: screen reader
+                    // «Қаердан» / «Қаерга» деб айтади.
+                    labelText: hint,
+                    floatingLabelBehavior: FloatingLabelBehavior.never,
+                    labelStyle: const TextStyle(
+                      color: IntercityColors.textMuted,
+                      fontSize: 14,
+                    ),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     suffixIcon: controller.text.isNotEmpty
                         ? IconButton(
-                            icon: Icon(Icons.clear,
-                                size: 16, color: IntercityColors.textFaint),
+                            tooltip: context.tr('ic_ux_clear'),
+                            icon: const Icon(Icons.clear,
+                                size: 18, color: IntercityColors.textMuted),
                             onPressed: onClear,
                           )
                         : null,
@@ -107,7 +116,11 @@ class IntercityPlaceField extends StatelessWidget {
                 final isRecent = recentDisplay.contains(label);
                 return InkWell(
                   onTap: () => onSelected(label),
-                  child: Padding(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: IntercityTapTarget.minSize,
+                    ),
+                    child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 9,
@@ -125,13 +138,14 @@ class IntercityPlaceField extends StatelessWidget {
                         Expanded(
                           child: Text(
                             label,
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(fontSize: 14),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
+                  ),
                   ),
                 );
               },

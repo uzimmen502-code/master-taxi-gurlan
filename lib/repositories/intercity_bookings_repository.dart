@@ -75,16 +75,14 @@ class IntercityBookingsRepository {
             IntercityBookingErrorKind.alreadyActive, 'Сизда актив брон мавжуд');
       case 'phone_required':
         return const IntercityBookingException(
-            IntercityBookingErrorKind.unknown,
-            'Телефон рақамингиз профилда сақланган эмас');
+            IntercityBookingErrorKind.unknown, 'ic_ux_phone_required');
       case 'ride_not_accepting':
         return const IntercityBookingException(
             IntercityBookingErrorKind.unknown, 'ride_not_accepting');
       // Нарх серверда бошқача — жим равишда бошқа суммага ёзиб қўймаймиз.
       case 'price_changed':
         return const IntercityBookingException(
-            IntercityBookingErrorKind.unknown,
-            'Нарх янгиланди. Рейсни қайта юклаб, нархни текширинг.');
+            IntercityBookingErrorKind.unknown, 'ic_ux_price_changed');
     }
     if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
       return const IntercityBookingException(
@@ -92,8 +90,10 @@ class IntercityBookingsRepository {
         'booking_permission_denied',
       );
     }
-    return IntercityBookingException(
-        IntercityBookingErrorKind.unknown, 'Бронлашда хатолик: $detail');
+    // Сервер ички матни фойдаланувчига кўрсатилмайди (CLAUDE.md §25) — логда.
+    debugPrint('intercityCreateBooking failed: ${e.code} $detail');
+    return const IntercityBookingException(
+        IntercityBookingErrorKind.unknown, 'ic_ux_action_failed');
   }
 
   // ─── Мижознинг бронлари ─────────────────────────────────────────────
@@ -225,14 +225,13 @@ class IntercityBookingsRepository {
   }) async {
     if (passengers < 1) {
       throw const IntercityBookingException(
-          IntercityBookingErrorKind.unknown, 'Йўловчилар сони нотўғри');
+          IntercityBookingErrorKind.unknown, 'ic_ux_passengers_invalid');
     }
 
     final userKey = canonicalPhoneId(userPhone);
     if (userKey.isEmpty || phoneDigits(userKey).length < 9) {
       throw const IntercityBookingException(
-          IntercityBookingErrorKind.unknown,
-          'Телефон рақамингиз профилда сақланган эмас');
+          IntercityBookingErrorKind.unknown, 'ic_ux_phone_required');
     }
 
     final totalAmount = passengers * pricePerSeat;
@@ -271,7 +270,7 @@ class IntercityBookingsRepository {
           (data['status'] as String?) ?? IntercityBookingStatus.pending;
       if (bookingId.isEmpty) {
         throw const IntercityBookingException(
-            IntercityBookingErrorKind.unknown, 'Бронлашда хатолик');
+            IntercityBookingErrorKind.unknown, 'ic_ux_action_failed');
       }
 
       return IntercityBooking(
@@ -309,8 +308,9 @@ class IntercityBookingsRepository {
           'booking_permission_denied',
         );
       }
-      throw IntercityBookingException(
-          IntercityBookingErrorKind.unknown, 'Бронлашда хатолик: $e');
+      debugPrint('intercityCreateBooking failed: $e');
+      throw const IntercityBookingException(
+          IntercityBookingErrorKind.unknown, 'ic_ux_action_failed');
     }
   }
 

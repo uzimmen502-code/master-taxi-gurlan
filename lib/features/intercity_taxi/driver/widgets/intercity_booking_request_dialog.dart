@@ -7,6 +7,9 @@ import '../../../../models/intercity_booking.dart';
 import '../../intercity_driver_alert_text.dart';
 
 /// Янги pending брон — қабул/рад диалоги (овозли push билан бирга).
+///
+/// Битта асосий амал — «Қабул қилиш»; «Қўнғироқ» иккинчи даражали (контур),
+/// «Рад этиш» — хавфли амал ранги билан алоҳида.
 Future<void> showIntercityBookingRequestDialog({
   required BuildContext context,
   required IntercityBooking booking,
@@ -20,7 +23,9 @@ Future<void> showIntercityBookingRequestDialog({
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Row(children: [
-        const Icon(Icons.notifications_active, color: Colors.orange),
+        const ExcludeSemantics(
+          child: Icon(Icons.notifications_active, color: AvaLight.warn),
+        ),
         const SizedBox(width: 8),
         Expanded(child: Text(ctx.tr('intercity_new_booking'))),
       ]),
@@ -31,7 +36,7 @@ Future<void> showIntercityBookingRequestDialog({
           Text(ctx.trMsg(booking.userName),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 6),
-          Text(routeDisplay, style: const TextStyle(fontSize: 13)),
+          Text(routeDisplay, style: const TextStyle(fontSize: 14)),
           const SizedBox(height: 4),
           Text(
             ctx
@@ -48,52 +53,73 @@ Future<void> showIntercityBookingRequestDialog({
                   ? booking.pickupAddress
                   : ctx.tr('pickup_not_entered'),
             ),
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            style: const TextStyle(fontSize: 13, color: AvaLight.ink2),
           ),
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: AvaLight.brandSoft,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.blue.shade100),
+              border: Border.all(color: AvaLight.line),
             ),
-            child: Text(
-              ctx.tr('call_passenger_hint').replaceAll(
-                '{phone}',
-                formatPhoneForCallHint(booking.userPhone),
-              ),
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.35,
-                color: Colors.blue.shade900,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ExcludeSemantics(
+                  child: Icon(Icons.phone_in_talk_outlined,
+                      size: 18, color: AvaLight.brandText),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    ctx.tr('call_passenger_hint').replaceAll(
+                      '{phone}',
+                      formatPhoneForCallHint(booking.userPhone),
+                    ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: AvaLight.ink,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+      actionsOverflowButtonSpacing: 8,
       actions: [
         TextButton(
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            foregroundColor: AvaLight.danger,
+          ),
           onPressed: () async {
             Navigator.pop(ctx);
             await onReject();
           },
-          child: Text(ctx.tr('reject_booking'),
-              style: const TextStyle(color: Colors.red)),
+          child: Text(ctx.tr('reject_booking')),
         ),
-        FilledButton.icon(
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: () => callPhone(booking.userPhone),
           icon: const Icon(Icons.call, size: 18),
-          label: const Text('Қўнғироқ'),
+          label: Text(ctx.tr('call_lowercase')),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: () async {
             Navigator.pop(ctx);
             await onAccept();
           },
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.button),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.button,
+            foregroundColor: AppColors.onPrimary,
+            minimumSize: const Size(0, 48),
+          ),
           child: Text(ctx.tr('accept_booking')),
         ),
       ],

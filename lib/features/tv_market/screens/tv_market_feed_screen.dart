@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/module_geo_policy.dart';
+import '../../../core/theme/app_theme.dart' show AppColors;
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/geo_area.dart';
@@ -31,6 +32,7 @@ import '../services/tv_player_pool.dart';
 import '../services/tv_playback_analytics_recorder.dart';
 import '../services/tv_screen_playback.dart';
 import '../services/tv_segment_prefetcher.dart';
+import '../utils/tv_news_unread.dart';
 import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_comment_sheet.dart';
@@ -103,6 +105,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   int _activateGen = 0;
   String _mePhone = '';
   String _meDisplayName = '';
+
+  /// «Кун янгиликлари» табидаги ўқилмаганлик нуқтаси: ҳудудда энг сўнгги янгилик ва охирги кўрилгани (қурилмада).
+  DateTime? _newsLatestAt;
+  DateTime? _newsSeenAt;
   final _publicNames = <String, String>{};
   String _filterDistrictId = '';
   List<GeoDistrict> _districts = const [];
@@ -198,6 +204,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
+    if (_tabController.index == 1) _markNewsSeen();
     tvOnPlaybackBlocked();
     setState(() {
       _clips.clear();
@@ -212,12 +219,39 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (mounted) setState(() => _quality = q);
   }
 
+  /// Ҳудуддаги энг сўнгги янгиликни кичик сўров билан билади (AVAGram очилганда ва ҳудуд ўзгарганда — тинглагич йўқ).
+  Future<void> _refreshNewsBadge() async {
+    try {
+      _newsSeenAt ??= await TvNewsSeenStore.read();
+      final clips = await _repo.fetchLatestNews(
+        districtId: _filterDistrictId,
+        regionId: _filterDistrictId.isEmpty ? _filterRegionId : '',
+      );
+      if (!mounted) return;
+      setState(() => _newsLatestAt = newestVisibleNewsAt(clips, mePhone: _mePhone, now: DateTime.now()));
+      if (_tabController.index == 1) _markNewsSeen();
+    } catch (e) {
+      debugPrint('[TvMarketFeed] news badge: $e');
+    }
+  }
+
+  /// «Кун янгиликлари» очилди — нуқта ўчади (охирги кўрилган вақт олдинга сурилади).
+  void _markNewsSeen([DateTime? at]) {
+    final target = at ?? _newsLatestAt;
+    if (target == null) return;
+    final seen = _newsSeenAt;
+    if (seen != null && !target.isAfter(seen)) return;
+    setState(() => _newsSeenAt = target);
+    unawaited(TvNewsSeenStore.markSeen(target));
+  }
+
   Future<void> _loadMe() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _mePhone = phoneDigits(prefs.getString('user_phone') ?? '');
     });
+    unawaited(_refreshNewsBadge());
     try {
       final hasShop = await _shopRepo.hasShop(_mePhone);
       if (mounted && hasShop != _hasMyShop) {
@@ -422,6 +456,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         list.insertAll(0, missing);
       }
       _firstLoadDone = true;
+      if (_tabController.index == 1) {
+        // CDN бироз эскирган бўлиши мумкин: кўрсатилган энг сўнгги янгиликкача «кўрилди».
+        _markNewsSeen(newestVisibleNewsAt(list, mePhone: '', now: DateTime.now()));
+      }
       setState(() {
         _clips
           ..clear()
@@ -1195,6 +1233,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       _loading = true;
     });
     _persistScope();
+    unawaited(_refreshNewsBadge());
     await _loadClips();
   }
 
@@ -1253,6 +1292,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       _loading = true;
     });
     _persistScope();
+    unawaited(_refreshNewsBadge());
     await _loadDistricts();
     await _loadClips();
   }
@@ -1410,7 +1450,12 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
             ),
             tabs: [
               _tvTabLabel(context.tr('tv_tab_avagram')),
-              _tvTabLabel(context.tr('tv_tab_news')),
+              _tvTabLabel(
+                context.tr('tv_tab_news'),
+                badgeKey: const ValueKey('tv_news_unread_dot'),
+                showBadge: tvNewsHasUnread(latest: _newsLatestAt, seen: _newsSeenAt),
+                badgeLabel: context.tr('tv_news_unread'),
+              ),
               _tvTabLabel(context.tr('tv_tab_ads')),
             ],
           ),
@@ -1502,15 +1547,35 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
 /// Узун ёрлиқлар (мас. «Реклама ва эълонлар») экранга сиғиши учун 2
 /// қаторга ўралади — қирқилмайди, isScrollable шарт эмас.
-Tab _tvTabLabel(String text) => Tab(
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        softWrap: true,
-        overflow: TextOverflow.ellipsis,
+Tab _tvTabLabel(String text, {Key? badgeKey, bool showBadge = false, String badgeLabel = ''}) {
+  final label = Text(
+    text,
+    textAlign: TextAlign.center,
+    maxLines: 2,
+    softWrap: true,
+    overflow: TextOverflow.ellipsis,
+  );
+  if (!showBadge) return Tab(child: label);
+  // Ўқилмаган янгилик: ёзув ёнида кичик нуқта (Semantics — экран ўқувчи учун).
+  return Tab(
+    child: Semantics(
+      label: badgeLabel,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: label),
+          const SizedBox(width: 4),
+          Container(
+            key: badgeKey,
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+          ),
+        ],
       ),
-    );
+    ),
+  );
+}
 
 /// Ҳудуд фильтри тугмаси — туман ва вилоят учун бир хил.
 class _AreaFilterChip extends StatelessWidget {

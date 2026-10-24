@@ -26,6 +26,7 @@
 const core = require('./account_deletion_core');
 const settlementLedger = require('./settlement_ledger');
 const { createHider } = require('./account_deletion_hide');
+const { createContentSteps } = require('./account_deletion_content');
 
 const COL = 'account_deletions';
 const HISTORY = 'account_deletion_history';
@@ -248,6 +249,8 @@ function createAccountDeletion(deps) {
     return n;
   }
 
+  const contentSteps = createContentSteps({ db, admin, deleteStoragePrefix: deps.deleteStoragePrefix }).STEPS;
+
   const STEPS = [
     {
       name: 'forfeit_wallet',
@@ -346,6 +349,7 @@ function createAccountDeletion(deps) {
         return { interests };
       },
     },
+    ...contentSteps,
     {
       name: 'user_shell',
       /** `users/{id}` ўчирилмайди: «ўчирилган» қобиқ (арвоҳ ҳужжатдан сақлайди; ҳужжат ID да телефон қолади). */

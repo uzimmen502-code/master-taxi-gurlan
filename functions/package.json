@@ -82,7 +82,8 @@
     "test:carpet-agro-tasks": "firebase emulators:exec --only firestore --project demo-carpet-agro-tasks \"node test/carpet_agro_courier_tasks_cf.test.js\"",
     "test:account-deletion-blockers": "firebase emulators:exec --only firestore --project demo-acct-del-blockers \"node test/account_deletion_blockers_cf.test.js\"",
     "test:account-deletion-cf": "firebase emulators:exec --only firestore --project demo-acct-del-cf \"node test/account_deletion_cf.test.js\"",
-    "test:account-deletion-hide": "firebase emulators:exec --only firestore --project demo-acct-del-hide \"node test/account_deletion_hide_cf.test.js\""
+    "test:account-deletion-hide": "firebase emulators:exec --only firestore --project demo-acct-del-hide \"node test/account_deletion_hide_cf.test.js\"",
+    "test:account-deletion-content": "firebase emulators:exec --only firestore --project demo-acct-del-content \"node test/account_deletion_content_cf.test.js\""
   },
   "engines": {
     "node": "20"

@@ -106,7 +106,13 @@ class _CartSheet extends StatelessWidget {
                                   InkWell(
                                     key: ValueKey('cart-open-${l.item.id}'),
                                     onTap: onOpenItem == null ? null : () => onOpenItem!(l.item),
-                                    child: Text(l.item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.ink)),
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(minHeight: AvaTap.minSize),
+                                      child: Align(
+                                        alignment: AlignmentDirectional.centerStart,
+                                        child: Text(l.item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.ink)),
+                                      ),
+                                    ),
                                   ),
                                   if (l.note.isNotEmpty)
                                     Text(
@@ -141,15 +147,16 @@ class _CartSheet extends StatelessWidget {
                                 ],
                               ),
                             ),
+                            // Standart zichlik: 48x48 (compact 40x40 berardi). Ikonka rangi oq fonda 3:1 dan yuqori bo'lishi uchun brandText.
                             IconButton(
-                              visualDensity: VisualDensity.compact,
+                              tooltip: context.tr('restaurants_a11y_remove').replaceAll('{name}', l.item.name),
                               icon: const Icon(Icons.remove_circle_outline_rounded),
                               onPressed: () => cart.decrement(l.item.id),
                             ),
                             Text('${l.qty}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink)),
                             IconButton(
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(Icons.add_circle_rounded, color: c.brand),
+                              tooltip: context.tr('restaurants_a11y_more').replaceAll('{name}', l.item.name),
+                              icon: Icon(Icons.add_circle_rounded, color: c.brandText),
                               onPressed: cart.canAddMore(l.item.id, restaurant)
                                   ? () => cart.add(l.item, restaurant: restaurant)
                                   : null,

@@ -588,7 +588,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         posterUrl: _videoFile != null ? posterUrl : null,
       );
       saved = true;
-      if (clip.shopItemId.isNotEmpty) {
+      // Реклама клипининг ном/нархи/тавсифи боғланган каталог маҳсулотини ЎЗГАРТИРМАЙДИ (реклама — вақтинчалик матн,
+      // каталог — доимий): синхронлаш фақат оддий товар/хизмат клиплари учун.
+      if (clip.shopItemId.isNotEmpty && clip.category != 'ad') {
         try {
           await _shopRepo.updateItem(clip.shopItemId, {
             'title': title,
@@ -752,6 +754,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           scope: _adScope,
           regionId: geo.regionId,
           showPhone: _showPhone,
+          shopItemId: widget.adPrefill?.shopItemId ?? '',
           searchTokens: TvClipSearch.buildTokens(
             title: title,
             description: description,
@@ -895,8 +898,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       if (!mounted) return;
       Navigator.pop(context, true);
     } on FirebaseFunctionsException catch (e) {
-      final msg =
-          e.code == 'failed-precondition' && e.message == 'insufficient_balance'
+      final msg = e.message == 'SHOP_ITEM_INVALID'
+          ? (mounted ? context.tr('tv_ad_shop_item_invalid') : '')
+          : e.code == 'failed-precondition' && e.message == 'insufficient_balance'
               ? (mounted ? context.tr('tv_ad_insufficient_balance') : '')
               : 'Хатолик: ${e.message ?? e.code}';
       if (!mounted) return;

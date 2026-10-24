@@ -993,6 +993,7 @@
   "tv_ad_free": "Bepul",
   "tv_ad_wallet_balance": "Hamyoningizda: {balance}",
   "tv_ad_insufficient_balance": "Balans yetarli emas — hamyonni to'ldiring",
+  "tv_ad_shop_item_invalid": "Mahsulot topilmadi yoki faol emas. Ro'yxatni yangilab, qayta urinib ko'ring.",
   "tv_ad_renew_title": "Reklamani uzaytirish",
   "tv_ad_renew_pay": "Uzaytirish — {price}",
   "tv_ad_renew_expired": "Muddati tugagan — uzaytirish",

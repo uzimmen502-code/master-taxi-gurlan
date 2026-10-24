@@ -206,6 +206,10 @@ class _ProfileViewState extends State<_ProfileView> {
               changePhotoLabel: loc.translate('profile_photo'),
               onAvatarTap: () => _showImagePicker(c, loc),
               onRoleTap: _onRoleLabelTap,
+              // Чиқиш — ўнг юқори бурчакда ихчам стрелка (эга, 2026-10-24).
+              actionIcon: Icons.logout_rounded,
+              actionLabel: loc.translate('logout'),
+              onAction: () => _showLogoutDialog(c, loc),
               // Ҳайдовчи индикатори — ҳедер ичида (фақат ҳайдовчида кўринади).
               footer: demandUid.isEmpty
                   ? null
@@ -322,9 +326,8 @@ class _ProfileViewState extends State<_ProfileView> {
                     }
                   },
                 ),
-                // «Чиқиш» қатори олиб ташланди (эга, 2026-10-24): Google Play
-                // чиқиш тугмасини талаб қилмайди (ҳисобни ўчириш йўли бошқа
-                // масала). `ProfileController.logout()` жойида қолди.
+                // «Чиқиш» қатори бу ерда йўқ: у ҳедернинг ўнг юқори бурчагидаги
+                // ихчам стрелкага кўчди (эга, 2026-10-24).
               ],
             ),
             const SizedBox(height: 32),
@@ -417,6 +420,38 @@ class _ProfileViewState extends State<_ProfileView> {
               },
             ),
         ]),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(ProfileController c, AppLocalizations loc) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(loc.translate('logout_confirm')),
+        content: Text(loc.translate('logout_message')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(loc.translate('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await c.logout();
+              if (!mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                (_) => false,
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(loc.translate('logout'),
+                style: const TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

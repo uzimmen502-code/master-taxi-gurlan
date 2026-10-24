@@ -166,6 +166,45 @@ void main() {
       expect(find.text('+998901234567'), findsNothing);
     });
 
+    testWidgets('ўнг юқори бурчакдаги ихчам тугма: чиқади, босилади, ёрлиғи бор', (tester) async {
+      final semantics = tester.ensureSemantics();
+      var taps = 0;
+      await tester.pumpWidget(_host(CabinetHeader(
+        avatar: const SizedBox(),
+        title: 'жаноб Али',
+        roleLabel: 'Фойдаланувчи',
+        changePhotoLabel: 'Расм',
+        onAvatarTap: () {},
+        actionIcon: Icons.logout_rounded,
+        actionLabel: 'Чиқиш',
+        onAction: () => taps++,
+      )));
+      final btn = find.byKey(const ValueKey('cabinet-header-action'));
+      expect(btn, findsOneWidget);
+      expect(find.bySemanticsLabel('Чиқиш'), findsOneWidget);
+      // Ўнг юқори бурчакда, босиш майдони камида 44 px.
+      final header = tester.getRect(find.byType(CabinetHeader));
+      final r = tester.getRect(btn);
+      expect(r.right, lessThanOrEqualTo(header.right));
+      expect(r.top, lessThan(header.top + 12));
+      expect(r.width, greaterThanOrEqualTo(44));
+      expect(r.height, greaterThanOrEqualTo(44));
+      await tester.tap(btn);
+      expect(taps, 1);
+      semantics.dispose();
+    });
+
+    testWidgets('onAction берилмаса тугма йўқ', (tester) async {
+      await tester.pumpWidget(_host(CabinetHeader(
+        avatar: const SizedBox(),
+        title: 'жаноб Али',
+        roleLabel: 'Фойдаланувчи',
+        changePhotoLabel: 'Расм',
+        onAvatarTap: () {},
+      )));
+      expect(find.byKey(const ValueKey('cabinet-header-action')), findsNothing);
+    });
+
     testWidgets('жуда узун исм 2 қаторга қирқилади', (tester) async {
       await tester.pumpWidget(_host(CabinetHeader(
         avatar: const SizedBox(),
@@ -192,6 +231,9 @@ void main() {
               roleLabel: '🛵 Курьер',
               changePhotoLabel: 'Расм',
               onAvatarTap: () {},
+              actionIcon: Icons.logout_rounded,
+              actionLabel: 'Чиқиш',
+              onAction: () {},
             ),
             CabinetWalletCard(
               title: 'Ҳамён',

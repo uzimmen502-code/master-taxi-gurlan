@@ -370,7 +370,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
               children: [
                 Expanded(child: Text(context.tr('restaurants_utensils'), style: TextStyle(fontSize: 13, color: c.ink))),
                 IconButton(
-                  visualDensity: VisualDensity.compact,
+                  tooltip: context.tr('restaurants_a11y_utensils_less'),
                   icon: const Icon(Icons.remove_circle_outline_rounded),
                   onPressed: _utensils > 0 ? () => setState(() => _utensils--) : null,
                 ),
@@ -384,7 +384,7 @@ class _RestaurantCheckoutSheetState extends State<RestaurantCheckoutSheet> {
                   ),
                 ),
                 IconButton(
-                  visualDensity: VisualDensity.compact,
+                  tooltip: context.tr('restaurants_a11y_utensils_more'),
                   icon: const Icon(Icons.add_circle_outline_rounded),
                   onPressed: _utensils < 10 ? () => setState(() => _utensils++) : null,
                 ),
@@ -483,31 +483,42 @@ class _RadioRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-              size: 20,
-              color: selected ? c.brand : c.ink3,
+    // Radio: guruh ichida yagona tanlov sifatida e'lon qilinadi (TalkBack: «tanlangan/tanlanmagan»),
+    // bosish maydoni >= 44 px, ikonka rangi oq fonda 3:1 dan yuqori (brandText / ink2).
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      checked: selected,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: AvaTap.minSize),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ExcludeSemantics(
+                  child: Icon(
+                    selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                    size: 20,
+                    color: selected ? c.brandText : c.ink2,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: TextStyle(fontSize: 13, color: c.ink)),
+                      if (subtitle != null && subtitle!.isNotEmpty)
+                        Text(subtitle!, style: TextStyle(fontSize: 11, color: c.ink2)),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: TextStyle(fontSize: 13, color: c.ink)),
-                  if (subtitle != null && subtitle!.isNotEmpty)
-                    Text(subtitle!, style: TextStyle(fontSize: 11, color: c.ink2)),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

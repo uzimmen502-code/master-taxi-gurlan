@@ -3992,5 +3992,8 @@
   "restaurants_demo_banner": "Bu namuna restoran: menyuni ko'rishingiz mumkin, lekin buyurtma qabul qilinmaydi.",
   "restaurants_demo_btn": "Namuna — buyurtma yo'q",
   "restaurants_a11y_add": "{name}: savatga qo'shish",
-  "restaurants_a11y_remove": "{name}: miqdorni kamaytirish"
+  "restaurants_a11y_remove": "{name}: miqdorni kamaytirish",
+  "restaurants_a11y_more": "{name}: miqdorni oshirish",
+  "restaurants_a11y_utensils_less": "Idish-tovoqni kamaytirish",
+  "restaurants_a11y_utensils_more": "Idish-tovoqni ko'paytirish"
 }

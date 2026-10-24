@@ -112,7 +112,7 @@ class _DishRatingCardState extends State<DishRatingCard> {
             Text(
               context.tr('restaurants_rate_left').replaceAll('{min}', '$minutes'),
               key: const Key('dish-rating-left'),
-              style: TextStyle(fontSize: 12, color: minutes <= 5 ? c.warn : c.ink3),
+              style: TextStyle(fontSize: 12, color: minutes <= 5 ? c.warn : c.ink2),
             ),
           ],
           const SizedBox(height: 8),
@@ -137,7 +137,7 @@ class _DishRatingCardState extends State<DishRatingCard> {
             if (pending.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(context.tr('restaurants_rate_pick'), style: TextStyle(fontSize: 11, color: c.ink3)),
+                child: Text(context.tr('restaurants_rate_pick'), style: TextStyle(fontSize: 11, color: c.ink2)),
               ),
           ],
         ],

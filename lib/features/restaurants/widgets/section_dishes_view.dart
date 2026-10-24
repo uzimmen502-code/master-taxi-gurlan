@@ -225,7 +225,7 @@ class _SectionDishesViewState extends State<SectionDishesView> {
               child: AvaNoticeRow(
                   text: context.tr('restaurants_dish_truncated'),
                   icon: Icons.info_outline_rounded,
-                  color: c.ink3),
+                  color: c.ink2),
             ),
           if (ranked.isEmpty)
             Padding(
@@ -236,7 +236,7 @@ class _SectionDishesViewState extends State<SectionDishesView> {
                   AvaNoticeRow(
                       text: context.tr('restaurants_dish_empty'),
                       icon: Icons.restaurant_outlined,
-                      color: c.ink3),
+                      color: c.ink2),
                   if (widget.onShowNation != null)
                     Align(
                       child: OutlinedButton.icon(

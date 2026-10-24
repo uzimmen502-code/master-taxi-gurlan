@@ -515,7 +515,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         child: AvaNoticeRow(
           text: context.tr('restaurants_menu_empty'),
           icon: Icons.restaurant_menu_rounded,
-          color: c.ink3,
+          color: c.ink2,
         ),
       );
     }
@@ -1281,7 +1281,7 @@ class _CartBar extends StatelessWidget {
                                     : context.tr('restaurants_cart_hint'),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AvaText.caption.copyWith(color: missing > 0 ? c.warn : c.ink3),
+                                style: AvaText.caption.copyWith(color: missing > 0 ? c.warn : c.ink2),
                               ),
                             ],
                           ),

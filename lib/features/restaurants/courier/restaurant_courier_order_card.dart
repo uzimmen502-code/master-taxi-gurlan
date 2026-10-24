@@ -314,7 +314,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade700), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),

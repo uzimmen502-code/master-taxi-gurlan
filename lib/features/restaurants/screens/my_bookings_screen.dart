@@ -122,7 +122,7 @@ class _BookingCard extends StatelessWidget {
     final color = switch (b.status) {
       BookingStatus.confirmed => c.ok,
       BookingStatus.requested => c.warn,
-      _ => c.ink3,
+      _ => c.ink2,
     };
     return Container(
       key: ValueKey('booking-${b.id}'),
@@ -158,7 +158,7 @@ class _BookingCard extends StatelessWidget {
             '${Booking.format(b.startAt)} · ${context.tr('restaurants_booking_guests_n').replaceAll('{n}', '${b.guests}')}',
             style: TextStyle(fontSize: 13, color: c.ink),
           ),
-          if (b.restaurantAddress.isNotEmpty) Text(b.restaurantAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.ink3)),
+          if (b.restaurantAddress.isNotEmpty) Text(b.restaurantAddress, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.ink2)),
           if (b.note.isNotEmpty) Text(b.note, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.ink2)),
           if (b.status != BookingStatus.rejected && b.bookingNote.isNotEmpty && b.isActive)
             Padding(

@@ -3992,5 +3992,8 @@
   "restaurants_demo_banner": "Это демонстрационный ресторан: меню можно смотреть, но заказы не принимаются.",
   "restaurants_demo_btn": "Демо — без заказов",
   "restaurants_a11y_add": "{name}: добавить в корзину",
-  "restaurants_a11y_remove": "{name}: уменьшить количество"
+  "restaurants_a11y_remove": "{name}: уменьшить количество",
+  "restaurants_a11y_more": "{name}: увеличить количество",
+  "restaurants_a11y_utensils_less": "Уменьшить количество приборов",
+  "restaurants_a11y_utensils_more": "Увеличить количество приборов"
 }

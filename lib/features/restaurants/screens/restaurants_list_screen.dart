@@ -626,7 +626,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
                                       ? 'restaurants_empty_nearby'
                                       : 'restaurants_empty_list'),
                                   icon: Icons.restaurant_outlined,
-                                  color: c.ink3,
+                                  color: c.ink2,
                                 ),
                                 // Яқинда йўқ — кенгроқ ҳудуд (ўзи ўтмайди).
                                 if (_nearbyMode &&

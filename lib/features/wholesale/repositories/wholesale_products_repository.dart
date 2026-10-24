@@ -65,6 +65,17 @@ class WholesaleProductsRepository {
     });
   }
 
+  /// Яширилган (`inactive`) маҳсулотни қайта текширувга юбориш. Эга ўзини
+  /// `active` қила олмайди (Rules): `inactive → pending`, admin тасдиқлагач
+  /// яна лентада чиқади.
+  Future<void> republish(String productId) async {
+    if (productId.isEmpty) return;
+    await _col.doc(productId).update({
+      'status': WholesaleProduct.statusPending,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> delete(String productId) async {
     if (productId.isEmpty) return;
     await _col.doc(productId).delete();
@@ -178,19 +189,31 @@ class WholesaleProductsRepository {
   }) {
     final q = query.trim();
     final poolLimit = q.isEmpty ? limit : feedLimit;
-    return getActiveProducts(limit: poolLimit, market: market, geo: geo).map((items) {
-      final filtered = items.where((p) {
-        return CatalogSearch.matches(q, [
-          p.title,
-          p.description,
-          p.sellerCompanyName,
-          '${p.basePrice}',
-          ...p.searchTokens,
-        ]);
-      }).toList();
-      if (filtered.length > limit) return filtered.sublist(0, limit);
-      return filtered;
-    });
+    return getActiveProducts(limit: poolLimit, market: market, geo: geo)
+        .map((items) => filterBySearch(items, q, limit: limit));
+  }
+
+  /// Қидирув филтри (кирилл↔лотин) — Firestore сўровисиз. Экран лентани БИР
+  /// марта олади ва ҳар ҳарфда шу функция билан филтрлайди: аввал ҳар ҳарф
+  /// янги Firestore сўрови очарди.
+  static List<WholesaleProduct> filterBySearch(
+    List<WholesaleProduct> items,
+    String query, {
+    int limit = 100,
+  }) {
+    final q = query.trim();
+    if (q.isEmpty) return items;
+    final filtered = items.where((p) {
+      return CatalogSearch.matches(q, [
+        p.title,
+        p.description,
+        p.sellerCompanyName,
+        '${p.basePrice}',
+        ...p.searchTokens,
+      ]);
+    }).toList();
+    if (filtered.length > limit) return filtered.sublist(0, limit);
+    return filtered;
   }
 
   /// Сотувчининг ўз маҳсулотлари (ҳар қандай статус).

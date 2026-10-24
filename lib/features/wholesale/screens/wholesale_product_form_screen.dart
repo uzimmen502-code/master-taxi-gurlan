@@ -10,6 +10,7 @@ import '../repositories/wholesale_products_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart' show kWholesaleDefaultUnit;
+import '../widgets/wholesale_field_error.dart';
 import '../widgets/wholesale_tier_picker.dart' show kWholesaleTapSize;
 
 /// Тайёр нарх поғонаси — қатъий МОҚ чегараси (1 / 10 / 50) ва кўринадиган
@@ -212,6 +213,14 @@ class _WholesaleProductFormScreenState
 
   int get _totalImageCount => _existingImageUrls.length + _newImages.length;
 
+  /// Бўлим остидаги хатолар ва скролл учун калитлар.
+  bool _tiersErr = false;
+  bool _imagesErr = false;
+  final _imagesKey = GlobalKey();
+  final _titleKey = GlobalKey();
+  final _tiersKey = GlobalKey();
+  final _shippingKey = GlobalKey();
+
   Future<void> _pickImages() async {
     final remaining = _maxImages - _totalImageCount;
     if (remaining <= 0) return;
@@ -219,6 +228,7 @@ class _WholesaleProductFormScreenState
     if (picked.isEmpty) return;
     setState(() {
       _newImages.addAll(picked.take(remaining));
+      _imagesErr = false;
     });
   }
 
@@ -231,28 +241,28 @@ class _WholesaleProductFormScreenState
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Хатолар майдон/бўлим ёнида (SnackBar эмас): барчаси бирданига кўрсатилади
+    // ва биринчи хатога скролл қилинади.
+    final formOk = _formKey.currentState!.validate();
     final tiers = _collectTiers();
-    if (tiers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.tr('wholesale_err_tier_required')),
-        ),
-      );
-      return;
-    }
-    if (_totalImageCount == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(context.tr('wholesale_err_image_required'))),
-      );
-      return;
-    }
     final shipping = _collectShipping();
-    if (shipping.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr(shipping.error!))),
-      );
+    final tiersBad = tiers.isEmpty;
+    final imagesBad = _totalImageCount == 0;
+    if (!formOk || tiersBad || imagesBad || shipping.error != null) {
+      setState(() {
+        _tiersErr = tiersBad;
+        _imagesErr = imagesBad;
+      });
+      final first = imagesBad
+          ? _imagesKey
+          : (!formOk ? _titleKey : (tiersBad ? _tiersKey : _shippingKey));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final c = first.currentContext;
+        if (c != null) {
+          Scrollable.ensureVisible(c,
+              duration: const Duration(milliseconds: 200), alignment: 0.1);
+        }
+      });
       return;
     }
     setState(() => _saving = true);
@@ -316,7 +326,7 @@ class _WholesaleProductFormScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.error,
             content: Text(context.tr('wholesale_action_failed'))),
       );
     } finally {
@@ -363,7 +373,7 @@ class _WholesaleProductFormScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.error,
             content: Text(context.tr('wholesale_action_failed'))),
       );
     }
@@ -398,12 +408,17 @@ class _WholesaleProductFormScreenState
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
+        // SingleChildScrollView (ListView эмас): барча бўлимлар қурилган бўлсин,
+        // хатога скролл қилиш учун.
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
+          child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _imagesSection(),
             const SizedBox(height: 16),
             TextFormField(
+              key: _titleKey,
               controller: _titleCtrl,
               maxLength: 120,
               decoration: InputDecoration(
@@ -432,9 +447,9 @@ class _WholesaleProductFormScreenState
               _chinaSection(),
             ],
             const SizedBox(height: 16),
-            _tiersSection(),
+            KeyedSubtree(key: _tiersKey, child: _tiersSection()),
             const SizedBox(height: 16),
-            _shippingSection(),
+            KeyedSubtree(key: _shippingKey, child: _shippingSection()),
             const SizedBox(height: 12),
             TextFormField(
               controller: _unitCtrl,
@@ -458,6 +473,7 @@ class _WholesaleProductFormScreenState
                   : Text(context.tr(_isEdit ? 'save' : 'wholesale_submit')),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -524,7 +540,7 @@ class _WholesaleProductFormScreenState
         const SizedBox(height: 4),
         Text(
           context.tr('wholesale_shipping_help'),
-          style: TextStyle(fontSize: AppText.labelTiny, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: AppText.bodySmall, color: AppColors.sectionMuted),
         ),
         const SizedBox(height: 10),
         TextFormField(
@@ -555,10 +571,10 @@ class _WholesaleProductFormScreenState
         ]),
         if (preview != null) ...[
           const SizedBox(height: 6),
-          Text(preview, style: TextStyle(fontSize: AppText.labelTiny, color: AppColors.primaryText)),
+          Text(preview, style: TextStyle(fontSize: AppText.bodySmall, color: AppColors.primaryText)),
         ] else if (s.error != null) ...[
           const SizedBox(height: 6),
-          Text(context.tr(s.error!), style: TextStyle(fontSize: AppText.labelTiny, color: Colors.red.shade700)),
+          WholesaleFieldError(textKey: s.error!),
         ],
       ],
     );
@@ -575,10 +591,11 @@ class _WholesaleProductFormScreenState
         const SizedBox(height: 4),
         Text(
           context.tr('wholesale_tiers_help'),
-          style: TextStyle(fontSize: AppText.labelTiny, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: AppText.bodySmall, color: AppColors.sectionMuted),
         ),
         const SizedBox(height: 10),
         for (var i = 0; i < _kFixedTiers.length; i++) _tierRow(i, unit),
+        if (_tiersErr) const WholesaleFieldError(textKey: 'wholesale_err_tier_required'),
       ],
     );
   }
@@ -602,6 +619,9 @@ class _WholesaleProductFormScreenState
             controller: _priceCtrls[index],
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) {
+              if (_tiersErr) setState(() => _tiersErr = false);
+            },
             decoration: InputDecoration(
               labelText: context
                   .tr('wholesale_field_tier_price')
@@ -617,6 +637,7 @@ class _WholesaleProductFormScreenState
 
   Widget _imagesSection() {
     return Column(
+      key: _imagesKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
@@ -639,19 +660,25 @@ class _WholesaleProductFormScreenState
               onRemove: () => _removeNew(i),
             ),
           if (_totalImageCount < _maxImages)
-            InkWell(
-              onTap: _pickImages,
-              child: Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(8),
+            Semantics(
+              button: true,
+              label: context.tr('wholesale_add_photo'),
+              child: InkWell(
+                onTap: _pickImages,
+                child: Container(
+                  width: 84,
+                  height: 84,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                        color: _imagesErr ? AppColors.error : Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.add_a_photo_outlined),
                 ),
-                child: const Icon(Icons.add_a_photo_outlined),
               ),
             ),
         ]),
+        if (_imagesErr) const WholesaleFieldError(textKey: 'wholesale_err_image_required'),
       ],
     );
   }

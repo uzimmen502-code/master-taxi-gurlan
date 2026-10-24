@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Улгуржи экранларидаги `StreamBuilder` учун ягона қоида: хато бўлса
 /// «бўш» ёки «рўйхатдан ўтиш» ҳолати ЭМАС, балки хато ва «Қайта уриниш».
@@ -60,7 +61,7 @@ class WholesaleLoadError extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.cloud_off_outlined,
-                size: 48, color: Colors.grey.shade600),
+                size: 48, color: AppColors.sectionMuted),
             const SizedBox(height: 12),
             Text(
               context.tr('wholesale_load_error'),

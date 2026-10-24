@@ -350,6 +350,65 @@ async function main() {
     await expectCode(call('adminUpdateBusinessProduct', { itemId: 'p_biz', title: 'Qayta', reason: 'sinov' }, ADMIN), 'PRODUCT_DELETED');
   });
 
+  // ───────── Каскад: объект ўчирилганда маҳсулотлар юмшоқ ўчади ─────────
+  const { cascadeBusinessProducts } = require('../business_directory');
+  const status = async (id) => (await items.doc(id).get()).data().status;
+
+  await check('K1 cascade: faqat egasining faol mahsulotlari o\'chadi; begona egaga va "admin"ga tegilmaydi; 400 dan ko\'p ham (sahifalash)', async () => {
+    const OWNER_PHONE = '998913000001';
+    const ALIEN = '998913000002';
+    await items.doc('k_mine1').set({ ownerPhone: OWNER_PHONE, title: 'A', status: 'active', businessId: 'kBiz' });
+    await items.doc('k_mine2').set({ ownerPhone: '+998 91 300-00-01', title: 'B', status: 'pending', businessId: 'kBiz' });
+    await items.doc('k_gone').set({ ownerPhone: OWNER_PHONE, title: 'C', status: 'deleted', businessId: 'kBiz', deletedBy: 'seller' });
+    await items.doc('k_alien').set({ ownerPhone: ALIEN, title: 'Spoof', status: 'active', businessId: 'kBiz' });
+    await items.doc('k_other_biz').set({ ownerPhone: OWNER_PHONE, title: 'Boshqa obyekt', status: 'active', businessId: 'kOther' });
+    await items.doc('k_plain').set({ ownerPhone: OWNER_PHONE, title: 'Oddiy vitrina', status: 'active' });
+    // 400 dan ko'p: ikkinchi sahifa ham qamrab olinishi shart
+    const bulk = db.batch();
+    for (let i = 0; i < 430; i += 1) bulk.set(items.doc(`k_bulk_${String(i).padStart(3, '0')}`), { ownerPhone: OWNER_PHONE, title: `P${i}`, status: 'active', businessId: 'kBiz' });
+    await bulk.commit();
+
+    const r = await cascadeBusinessProducts(db, admin, 'kBiz', OWNER_PHONE);
+    assert.strictEqual(r.updated, 432, '2 ta oddiy + 430 ta bulk; allaqachon o\'chgan va begona sanalmaydi');
+    assert.strictEqual(await status('k_mine1'), 'deleted');
+    assert.strictEqual(await status('k_mine2'), 'deleted');
+    assert.strictEqual((await items.doc('k_gone').get()).data().deletedBy, 'seller', 'oldin o\'chirilganga qayta yozilmaydi');
+    assert.strictEqual(await status('k_alien'), 'active', 'begona eganing "spoof" hujjatiga tegilmaydi');
+    assert.strictEqual(await status('k_other_biz'), 'active');
+    assert.strictEqual(await status('k_plain'), 'active');
+    assert.strictEqual(await status('k_bulk_429'), 'deleted', 'oxirgi sahifa ham');
+    const d = (await items.doc('k_mine1').get()).data();
+    assert.strictEqual(d.deletedBy, 'system:business_deleted');
+    assert.ok(d.deletedAt && d.updatedAt);
+  });
+
+  await check('K2 cascade idempotent: ikkinchi chaqiruv — 0 yangilanish; egasiz ("admin") obyekt — hech narsa', async () => {
+    const again = await cascadeBusinessProducts(db, admin, 'kBiz', '998913000001');
+    assert.strictEqual(again.updated, 0);
+    await items.doc('k_adm').set({ ownerPhone: '998913000001', title: 'X', status: 'active', businessId: 'admin_x' });
+    const adm = await cascadeBusinessProducts(db, admin, 'admin_x', 'admin');
+    assert.deepStrictEqual(adm, { scanned: 0, updated: 0 });
+    assert.strictEqual(await status('k_adm'), 'active');
+    const none = await cascadeBusinessProducts(db, admin, '', '998913000001');
+    assert.strictEqual(none.updated, 0);
+  });
+
+  await check('K3 trigger: egasi o\'chirsa ham, admin o\'chirsa ham hujjat o\'chgach mahsulotlar o\'chadi (trigger ishlaydi)', async () => {
+    const OWN = '998913000009';
+    const ownerBiz = await call('upsertMyBusiness', { ...BASE, clientRequestId: 'casc-00000001' }, OWN);
+    await items.doc('k_t1').set({ ownerPhone: OWN, title: 'T1', status: 'active', businessId: ownerBiz.businessId });
+    await call('deleteMyBusiness', { businessId: ownerBiz.businessId }, OWN);
+    const snapLike = { data: () => ({ ownerId: OWN }) };
+    await fns.businessProductsCascade.run(snapLike, { params: { businessId: ownerBiz.businessId } });
+    assert.strictEqual(await status('k_t1'), 'deleted');
+
+    const admBiz = await call('adminCreateBusiness', { ...BASE, clientRequestId: 'casc-00000002', ownerPhone: OWN, reason: 'sinov' }, ADMIN);
+    await items.doc('k_t2').set({ ownerPhone: OWN, title: 'T2', status: 'active', businessId: admBiz.businessId });
+    await call('adminDeleteBusiness', { businessId: admBiz.businessId, reason: 'sinov' }, ADMIN);
+    await fns.businessProductsCascade.run({ data: () => ({ ownerId: OWN }) }, { params: { businessId: admBiz.businessId } });
+    assert.strictEqual(await status('k_t2'), 'deleted');
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

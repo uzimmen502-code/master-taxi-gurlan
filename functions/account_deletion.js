@@ -351,6 +351,35 @@ function createAccountDeletion(deps) {
     },
     ...contentSteps,
     {
+      name: 'archive_wallet_ledger',
+      /**
+       * `users/{id}/wallet_ledger` (молиявий тарих, 3 йил сақланади) архивга КЎЧИРИЛАДИ ва фойдаланувчи йўлидан
+       * олинади: рақам қайта берилса янги эга эски тўлов тарихини кўрмасин. Архив: `account_deletion_archive/{uid}/wallet_ledger`.
+       * Идемпотент: аввал нусха (merge), кейин ўчириш.
+       */
+      async run({ identity, uid }) {
+        let moved = 0;
+        for (const id of identity.userDocIds) {
+          const src = db.collection('users').doc(id).collection('wallet_ledger');
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const snap = await src.limit(400).get();
+            if (snap.empty) break;
+            const b = db.batch();
+            for (const d of snap.docs) {
+              b.set(db.collection('account_deletion_archive').doc(uid).collection('wallet_ledger').doc(`${id}__${d.id}`),
+                { ...d.data(), _archivedFrom: `users/${id}/wallet_ledger/${d.id}`, _archivedAt: ts() }, { merge: true });
+              b.delete(d.ref);
+            }
+            await b.commit();
+            moved += snap.size;
+            if (snap.size < 400) break;
+          }
+        }
+        return { moved };
+      },
+    },
+    {
       name: 'user_shell',
       /** `users/{id}` ўчирилмайди: «ўчирилган» қобиқ (арвоҳ ҳужжатдан сақлайди; ҳужжат ID да телефон қолади). */
       async run({ identity }) {
@@ -496,6 +525,27 @@ function createAccountDeletion(deps) {
   return { preview, request, cancel, execute, runDue, readConfig, STEPS };
 }
 
+/**
+ * Қобиқ «тирилиши»: ўчирилган ҳисоб (`users/{id}.deleted === true`) ўша телефон билан қайта рўйхатдан ўтганда
+ * клиент профил майдонларини (phone, name…) шу ҳужжатга ёзади. Шу пайтда `deleted` белгилари олинади ва
+ * `createdAt` янгиланади (янги ҳисоб). Киришнинг марказий функциясига ТЕГИЛМАЙДИ (хавфсизлик): алоҳида триггер.
+ * @returns {Promise<boolean>} тирилдими
+ */
+async function reviveShellIfNeeded({ admin, ref, before, after }) {
+  if (!before || !after) return false;
+  if (before.deleted !== true || after.deleted !== true) return false;
+  const phone = typeof after.phone === 'string' ? after.phone.trim() : '';
+  if (!phone) return false; // қобиқда телефон майдони йўқ; профил ёзилгач бор
+  const FV = admin.firestore.FieldValue;
+  await ref.update({
+    deleted: FV.delete(),
+    deletedAt: FV.delete(),
+    revivedAt: FV.serverTimestamp(),
+    createdAt: FV.serverTimestamp(),
+  });
+  return true;
+}
+
 /** Callable'лар ва режали функция (index.js `attachAccountDeletion(exports, {...})`). */
 function attachAccountDeletion(exportsObj, deps) {
   const { functions, db, admin, callerPhone, canonicalUid } = deps;
@@ -551,6 +601,20 @@ function attachAccountDeletion(exportsObj, deps) {
   exportsObj.requestAccountDeletion = functions.https.onCall(wrap((uid) => svc.request(uid, { source: 'app' })));
   exportsObj.cancelAccountDeletion = functions.https.onCall(wrap((uid) => svc.cancel(uid)));
 
+  exportsObj.onUserShellRevived = functions.firestore
+    .document('users/{userId}')
+    .onUpdate(async (change) => {
+      try {
+        const revived = await reviveShellIfNeeded({
+          admin, ref: change.after.ref, before: change.before.data(), after: change.after.data(),
+        });
+        if (revived) console.log(JSON.stringify({ module: 'account_deletion', action: 'shell_revived', userId: change.after.id }));
+      } catch (e) {
+        console.error(JSON.stringify({ module: 'account_deletion', result: 'error', errorCode: 'SHELL_REVIVE_FAILED', userId: change.after.id }));
+      }
+      return null;
+    });
+
   exportsObj.executeAccountDeletions = functions
     .runWith({ timeoutSeconds: 540, memory: '512MB' })
     .pubsub.schedule('every 60 minutes')
@@ -563,5 +627,5 @@ function attachAccountDeletion(exportsObj, deps) {
 }
 
 module.exports = {
-  createAccountDeletion, attachAccountDeletion, USER_SUBCOLLECTIONS, ACTIVE_STATES, COL, HISTORY,
+  createAccountDeletion, attachAccountDeletion, reviveShellIfNeeded, USER_SUBCOLLECTIONS, ACTIVE_STATES, COL, HISTORY,
 };

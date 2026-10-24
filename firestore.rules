@@ -34,13 +34,16 @@ service cloud.firestore {
     // ko'chirilgandan keyingi `deviceTrustMode: limited` cheklovi) — faqat
     // server: avval egasi o'ziga KYC belgisini qo'yib yoki cheklovni olib
     // tashlab pul yechishi mumkin edi (hamyon auditi O-17).
+    // `deletion` / `deleted` / `deletedAt` / `revivedAt` (hisobni o'chirish, 2026-10-24) — faqat server:
+    // klient o'chirish holatini soxtalashtirmasin va "o'chirilgan qobiq" belgisini qo'ymasin/olmasin.
     function walletFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny([
             'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
             'realtyUnlocksLeft', 'realtyOwnerKey',
             'realtyPro', 'realtyTeamOwner', 'accountId',
-            'payoutKycVerified', 'security'
+            'payoutKycVerified', 'security',
+            'deletion', 'deleted', 'deletedAt', 'revivedAt'
           ]);
     }
 
@@ -773,7 +776,8 @@ service cloud.firestore {
                'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
                'realtyUnlocksLeft', 'realtyOwnerKey',
                'realtyPro', 'realtyTeamOwner', 'accountId',
-               'payoutKycVerified', 'security'
+               'payoutKycVerified', 'security',
+               'deletion', 'deleted', 'deletedAt', 'revivedAt'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 

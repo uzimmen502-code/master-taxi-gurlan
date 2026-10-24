@@ -135,6 +135,10 @@ const { attachBusinessDirectory } = require('./business_directory');
 attachBusinessDirectory(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles,
 });
+// Ҳисобни автоматик ўчириш (2026-10-24, ega; docs/hisobni_ochirish_2026-10-24_uz.md). Дарвоза: `settings/account_deletion`
+// { enabled: true } — ҳужжат йўқ ёки enabled≠true бўлса ЁПИҚ (callable'лар ACCOUNT_DELETION_DISABLED беради, режали ижро ҳеч нарса қилмайди).
+const { attachAccountDeletion } = require('./account_deletion');
+attachAccountDeletion(exports, { functions, db, admin, callerPhone, canonicalUid });
 // Намуна кафе/уй ошпазлари (2026-10-23, ega): ҳақиқий 3 та тасдиқланган субъект бўлгач (тури бўйича) намуналар автоматик ўчади.
 const { attachRestaurantDemoCleanup } = require('./restaurant_demo');
 attachRestaurantDemoCleanup(exports, { functions, db, admin });

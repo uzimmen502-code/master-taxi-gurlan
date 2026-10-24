@@ -209,9 +209,10 @@ async function main() {
     const j = (await get(`journal_entries/bonus:acct_del_forfeit_${U}`)).data();
     assert.strictEqual(j.kind, 'account_deletion_forfeit');
     assert.strictEqual(j.amount, 50000);
-    assert.strictEqual((await get(`users/${U}/wallet_ledger/account_deletion_${U}`)).data().amount, -50000);
-    // moliyaviy tarix saqlandi
-    assert.strictEqual(await exists(`users/${U}/wallet_ledger/l1`), true);
+    // moliyaviy tarix foydalanuvchi yo'lidan arxivga ko'chdi (raqam qayta berilsa yangi egasi ko'rmasin) — yo'qolmadi
+    assert.strictEqual(await countCol(`users/${U}/wallet_ledger`), 0);
+    assert.strictEqual((await get(`account_deletion_archive/${U}/wallet_ledger/${U}__l1`)).data().amount, 50000);
+    assert.strictEqual((await get(`account_deletion_archive/${U}/wallet_ledger/${U}__account_deletion_${U}`)).data().amount, -50000);
     assert.strictEqual(await exists('orders/o_done'), true);
     // shaxsiy ost-kolleksiyalar o'chdi
     assert.strictEqual(await countCol(`users/${U}/vehicles`), 0);
@@ -227,7 +228,9 @@ async function main() {
     // holat va tarix
     const st = (await get(`account_deletions/${U}`)).data();
     assert.strictEqual(st.status, 'DONE');
-    for (const name of ['forfeit_wallet', 'delete_device_and_links', 'delete_user_subcollections', 'dating_own_side', 'user_shell', 'auth_delete']) {
+    for (const name of ['forfeit_wallet', 'delete_device_and_links', 'delete_user_subcollections', 'dating_own_side',
+      'delete_public_content', 'release_ev_stations', 'delete_provider_and_support', 'anonymize_records',
+      'archive_wallet_ledger', 'user_shell', 'auth_delete']) {
       assert.strictEqual(st.steps[name].done, true, name);
     }
     assert.strictEqual((await db.collection('account_deletion_history').get()).size, 1);
@@ -418,6 +421,33 @@ async function main() {
     assert.strictEqual((await db.collection('account_deletion_history').get()).size, 1);
     const types = (await db.collection(`account_deletions/${U}/events`).get()).docs.map((d) => d.data().type).sort();
     assert.deepStrictEqual(types, ['done', 'executing', 'requested', 'requested'], 'voqealar jurnali saqlanmadi');
+  });
+
+  await check(`R3 qobiq qayta ro'yxatdan o'tganda tiriladi: flaglar olinadi, createdAt yangilanadi; boshqa holatda tegilmaydi`, async () => {
+    const { reviveShellIfNeeded } = require('../account_deletion');
+    await seedUser();
+    const s = svc();
+    await requestAndDue(s);
+    await s.execute(U);
+    const ref = db.collection('users').doc(U);
+    const shell = (await ref.get()).data();
+    assert.strictEqual(shell.deleted, true);
+    // telefon yo'q — tegilmaydi
+    assert.strictEqual(await reviveShellIfNeeded({ admin, ref, before: shell, after: shell }), false);
+    assert.strictEqual((await ref.get()).data().deleted, true);
+    // klient yangi ro'yxatdan o'tishda profil yozadi
+    const before = shell;
+    await ref.update({ phone: `+${U}`, name: 'Ali yangi' });
+    const after = (await ref.get()).data();
+    assert.strictEqual(await reviveShellIfNeeded({ admin, ref, before, after }), true);
+    const live = (await ref.get()).data();
+    assert.ok(!('deleted' in live) && !('deletedAt' in live));
+    assert.ok(live.createdAt && live.revivedAt);
+    assert.strictEqual(live.name, 'Ali yangi');
+    // takror chaqiruv — before.deleted yo'q: tegilmaydi
+    assert.strictEqual(await reviveShellIfNeeded({ admin, ref, before: live, after: live }), false);
+    // oddiy (qobiq emas) hujjat — tegilmaydi
+    assert.strictEqual(await reviveShellIfNeeded({ admin, ref, before: { phone: 'x' }, after: { phone: 'y' } }), false);
   });
 
   await check(`P1 preview: faqat o'qiydi; hamyon, pullik xizmat va blokirovkalarni qaytaradi`, async () => {

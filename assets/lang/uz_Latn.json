@@ -3322,6 +3322,8 @@
   "restaurants_m_err_own_fee": "O'z kuryeri narxini tekshiring",
   "restaurants_m_err_hours": "Ish vaqtini tekshiring",
   "restaurants_m_err_item": "Taom nomi va narxini kiriting",
+  "restaurants_m_err_item_name": "Taom nomini kiriting",
+  "restaurants_m_err_item_price": "Narxini kiriting",
   "restaurants_m_tab_orders": "Buyurtmalar",
   "restaurants_m_tab_menu": "Menyu",
   "restaurants_m_tab_shop": "Do'kon",

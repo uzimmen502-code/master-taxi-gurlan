@@ -3322,6 +3322,8 @@
   "restaurants_m_err_own_fee": "Ўз курьери нархини текширинг",
   "restaurants_m_err_hours": "Иш вақтини текширинг",
   "restaurants_m_err_item": "Таом номи ва нархини киритинг",
+  "restaurants_m_err_item_name": "Таом номини киритинг",
+  "restaurants_m_err_item_price": "Нархини киритинг",
   "restaurants_m_tab_orders": "Буюртмалар",
   "restaurants_m_tab_menu": "Меню",
   "restaurants_m_tab_shop": "Дўкон",

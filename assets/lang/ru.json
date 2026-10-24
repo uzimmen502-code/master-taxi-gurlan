@@ -3322,6 +3322,8 @@
   "restaurants_m_err_own_fee": "Проверьте стоимость своей доставки",
   "restaurants_m_err_hours": "Проверьте часы работы",
   "restaurants_m_err_item": "Введите название и цену блюда",
+  "restaurants_m_err_item_name": "Введите название блюда",
+  "restaurants_m_err_item_price": "Введите цену",
   "restaurants_m_tab_orders": "Заказы",
   "restaurants_m_tab_menu": "Меню",
   "restaurants_m_tab_shop": "Магазин",

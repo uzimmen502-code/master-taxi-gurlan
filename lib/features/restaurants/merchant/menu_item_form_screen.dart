@@ -95,6 +95,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
   // Миқдорга чегирма (D-REST-25): таҳрирда мавжуд поғоналар; ўзгарганда редактор янгилайди.
   late QtyTiersDraft _tiers = QtyTiersDraft(widget.existing?.qtyTiers ?? const []);
   bool _showTierErrors = false;
+  bool _showItemErrors = false;
   XFile? _picked;
   bool _saving = false;
 
@@ -178,6 +179,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
     final name = _name.text.trim();
     final price = int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0;
     if (name.isEmpty || price <= 0) {
+      setState(() => _showItemErrors = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('restaurants_m_err_item')), backgroundColor: Colors.red.shade700),
       );
@@ -267,7 +269,12 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    InkWell(
+                    Semantics(
+                      button: true,
+                      label: context.tr('restaurants_m_item_photo'),
+                      excludeSemantics: true,
+                      onTap: _pickPhoto,
+                      child: InkWell(
                       onTap: _pickPhoto,
                       borderRadius: BorderRadius.circular(12),
                       child: ClipRRect(
@@ -324,13 +331,36 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
                   style: AvaText.caption.copyWith(color: c.ink3),
                 ),
               ),            const SizedBox(height: 14),
-            TextField(controller: _name, maxLength: 80, decoration: InputDecoration(labelText: context.tr('restaurants_m_item_name'), border: const OutlineInputBorder(), isDense: true)),
+            TextField(
+              controller: _name,
+              maxLength: 80,
+              onChanged: (_) {
+                if (_showItemErrors) setState(() {});
+              },
+              decoration: InputDecoration(
+                labelText: context.tr('restaurants_m_item_name'),
+                errorText: _showItemErrors && _name.text.trim().isEmpty ? context.tr('restaurants_m_err_item_name') : null,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _price,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(labelText: context.tr('restaurants_m_item_price'), suffixText: context.tr('sum'), border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) {
+                if (_showItemErrors) setState(() {});
+              },
+              decoration: InputDecoration(
+                labelText: context.tr('restaurants_m_item_price'),
+                errorText: _showItemErrors && (int.tryParse(_price.text.replaceAll(RegExp(r'\D'), '')) ?? 0) <= 0
+                    ? context.tr('restaurants_m_err_item_price')
+                    : null,
+                suffixText: context.tr('sum'),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
             ),
             QtyTiersEditor(
               initial: widget.existing?.qtyTiers ?? const [],

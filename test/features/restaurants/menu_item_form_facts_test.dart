@@ -361,4 +361,19 @@ void main() {
     expect(repo.saved, isEmpty);
     expect(find.text(_tr('restaurants_m_err_item')), findsOneWidget);
   });
+
+  testWidgets('бўш ном/нарх: ҳар майдон остида ўз хатоси, тўлдирилса шу майдонники кетади (#3)', (t) async {
+    final repo = _FakeRepo();
+    await _open(t, repo);
+    expect(find.text(_tr('restaurants_m_err_item_name')), findsNothing, reason: 'юборишдан олдин хато йўқ');
+    await _tapSave(t);
+    final name = _field('restaurants_m_item_name');
+    final price = _field('restaurants_m_item_price');
+    expect(find.descendant(of: name, matching: find.text(_tr('restaurants_m_err_item_name'))), findsOneWidget);
+    expect(find.descendant(of: price, matching: find.text(_tr('restaurants_m_err_item_price'))), findsOneWidget);
+    await t.enterText(name, 'Osh');
+    await t.pump();
+    expect(find.text(_tr('restaurants_m_err_item_name')), findsNothing);
+    expect(find.text(_tr('restaurants_m_err_item_price')), findsOneWidget);
+  });
 }

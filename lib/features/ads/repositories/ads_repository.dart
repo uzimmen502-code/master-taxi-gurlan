@@ -280,6 +280,20 @@ class AdsRepository {
     });
   }
 
+  /// Эгада ЭНГ КАМИДА битта эълон борми (ҳар қандай ҳолатда: фаол, текширувда,
+  /// яширин). «＋» менюсида «Менинг дўконим» қатори шу билан танланади.
+  /// Сўров шакли [getMyAds] билан бир хил (`type` + `ownerId` whereIn), фақат
+  /// `limit(1)` — битта ўқиш, янги индекс керак эмас.
+  Future<bool> hasAnyAd(String uid) async {
+    final aliases = _ownerAliases(uid);
+    if (aliases.isEmpty) return false;
+    final snap = await _cheapQuery()
+        .where('ownerId', whereIn: aliases)
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
+
   Future<bool> canCreateAd(String uid) async {
     final aliases = _ownerAliases(uid);
     if (aliases.isEmpty) return false;

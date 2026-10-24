@@ -259,19 +259,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('«Онлайн Дўкон очиш» ичида Аҳоли бозори ва Улгуржи танлови', (tester) async {
+  testWidgets('«Онлайн Дўкон очиш» биринчи кириш варағи: Аҳоли бозори ва Улгуржи танлови', (tester) async {
     for (final e in const {
       'tv_shop_to_market': AvaShopTarget.retail,
       'home_module_wholesale': AvaShopTarget.wholesale,
     }.entries) {
-      AvaShopTarget? result;
+      AvaFirstShop? result;
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light,
           home: Builder(
             builder: (context) => Scaffold(
               body: ElevatedButton(
-                onPressed: () async => result = await showAvaShopTargetSheet(context),
+                onPressed: () async => result = await showAvaFirstShopSheet(context),
                 child: const Text('open'),
               ),
             ),
@@ -282,8 +282,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('home_create_shop_where'), findsOneWidget);
       await tester.tap(find.text(e.key));
+      await tester.tap(find.text('my_shop_continue'));
       await tester.pumpAndSettle();
-      expect(result, e.value, reason: e.key);
+      expect(result?.target, e.value, reason: e.key);
     }
   });
 

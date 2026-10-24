@@ -171,7 +171,7 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
         controller: _tabCtrl,
         children: [
           _marketTab(),
-          _SellerAreaTab(phone: widget.userPhone, market: widget.market),
+          WholesaleSellerArea(phone: widget.userPhone, market: widget.market),
         ],
       ),
     );
@@ -267,8 +267,11 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
 
 /// "Мен сотувчиман" — сотувчи ҳолатига қараб: рўйхатдан ўтиш формаси,
 /// кутилмоқда/рад этилган ҳолат, ёки ўз маҳсулотлари рўйхати.
-class _SellerAreaTab extends StatefulWidget {
-  const _SellerAreaTab({required this.phone, required this.market});
+///
+/// Public: «Менинг дўконим» (`MyShopScreen`) ҳам шу вижетни қайта ишлатади —
+/// рўйхатдан ўтиш, ҳолат ва маҳсулотлар рўйхати иккинчи марта ёзилмайди.
+class WholesaleSellerArea extends StatefulWidget {
+  const WholesaleSellerArea({super.key, required this.phone, required this.market});
 
   final String phone;
 
@@ -276,10 +279,10 @@ class _SellerAreaTab extends StatefulWidget {
   final String market;
 
   @override
-  State<_SellerAreaTab> createState() => _SellerAreaTabState();
+  State<WholesaleSellerArea> createState() => _WholesaleSellerAreaState();
 }
 
-class _SellerAreaTabState extends State<_SellerAreaTab> {
+class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
   final _sellersRepo = WholesaleSellersRepository();
   final _companyCtrl = TextEditingController();
   final _ownerCtrl = TextEditingController();

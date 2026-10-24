@@ -3972,5 +3972,20 @@
   "ad_swipe_prev": "Предыдущее объявление",
   "ad_swipe_next": "Следующее объявление",
   "cheap_products_empty": "Пока нет объявлений",
-  "cheap_products_load_error": "Не удалось загрузить данные. Попробуйте позже."
+  "cheap_products_load_error": "Не удалось загрузить данные. Попробуйте позже.",
+  "my_shop_title": "Мой магазин",
+  "my_shop_row_sub": "Ваши магазины и добавление товара",
+  "my_shop_main_title": "Основной магазин",
+  "my_shop_main_sub": "Товары Народного базара и Оптового рынка",
+  "my_shop_other_title": "Другие магазины",
+  "my_shop_new_shop": "Новый магазин",
+  "my_shop_rename": "Изменить",
+  "my_shop_continue": "Продолжить",
+  "my_shop_name_title": "Название магазина",
+  "my_shop_name_hint": "Например: Барака Одежда",
+  "my_shop_name_note": "Название видно на странице вашего магазина. Его можно изменить позже.",
+  "my_shop_name_err": "Введите название не короче 2 символов",
+  "my_shop_name_save_failed": "Не удалось сохранить название. Попробуйте ещё раз.",
+  "my_shop_vitrine_title": "Магазин в AVAGram",
+  "my_shop_vitrine_sub": "Товары и ролики, привязанные к видео"
 }

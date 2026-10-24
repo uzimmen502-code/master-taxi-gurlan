@@ -40,7 +40,8 @@ import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
 import 'tv_channel_screen.dart';
 import 'tv_clip_search_screen.dart';
-import 'tv_my_shop_screen.dart';
+import '../../my_shop/my_shop_presence.dart';
+import '../../my_shop/open_my_shop.dart';
 import 'tv_publish_screen.dart';
 import 'tv_shop_public_screen.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -1096,40 +1097,36 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Future<void> _onOpenShop(TvClip clip) async {
     tvOnPlaybackBlocked();
     final owner = _isOwner(clip);
-    final hasShop = owner
-        ? _hasMyShop
-        : await _shopRepo.hasShop(clip.ownerPhone);
-    if (!mounted) return;
 
-    final displayName = _overlayName(clip);
-    final district = clip.districtLabel.trim();
-
-    Widget screen;
-    if (hasShop) {
-      screen = owner
-          ? TvMyShopScreen(ownerPhone: clip.ownerPhone)
-          : TvShopPublicScreen(
+    if (owner) {
+      await _openOwnShop();
+    } else {
+      final hasShop = await _shopRepo.hasShop(clip.ownerPhone);
+      if (!mounted) return;
+      final displayName = _overlayName(clip);
+      final district = clip.districtLabel.trim();
+      final Widget screen = hasShop
+          ? TvShopPublicScreen(
               ownerPhone: clip.ownerPhone,
               highlightItemId: clip.shopItemId,
               ownerDisplayName: displayName,
               districtLabel: district,
               districtId: clip.districtId,
+            )
+          : TvChannelScreen(
+              ownerPhone: clip.ownerPhone,
+              ownerDisplayName: displayName,
+              districtLabel: district,
+              districtId: clip.districtId,
+              highlightClipId: clip.id,
+              isOwner: false,
             );
-    } else {
-      screen = TvChannelScreen(
-        ownerPhone: clip.ownerPhone,
-        ownerDisplayName: displayName,
-        districtLabel: district,
-        districtId: clip.districtId,
-        highlightClipId: clip.id,
-        isOwner: owner,
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => screen),
       );
     }
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => screen),
-    );
     if (owner && mounted) {
       try {
         final ok = await _shopRepo.hasShop(_mePhone);
@@ -1141,6 +1138,25 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (mounted && tvCanPlay) tvOnPlaybackAllowed();
   }
 
+  /// Эганинг ўз видеосидаги «Дўкон» тугмаси — «＋» менюсидаги билан БИР ХИЛ
+  /// «Менинг дўконим» оқими (`openMyShop`): дўконлар рўйхати, дўкони йўқ бўлса —
+  /// биринчи кириш. Аввал бу тугма фақат AVAGram мини-дўконини очар эди; у энди
+  /// рўйхатдаги «AVAGram дўкони» бандида.
+  Future<void> _openOwnShop() async {
+    final phone = canonicalPhoneId(_mePhone);
+    if (phoneDigits(phone).length < 9) return;
+    final presence = await MyShopPresence.load(phone);
+    if (!mounted) return;
+    await openMyShop(
+      context,
+      phone: phone,
+      presence: presence,
+      push: (screen) => Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (_) => screen),
+      ),
+    );
+  }
   /// Клип улгуржи маҳсулотга боғланган — тафсилотга ўтиш (фаол бўлмаса
   /// ёки ўчирилган бўлса — огоҳлантириш).
   Future<void> _onOpenWholesale(TvClip clip) async {

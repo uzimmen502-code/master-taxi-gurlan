@@ -63,6 +63,31 @@ class TvShopRepository {
     });
   }
 
+  /// Дўкон номини сақлайди («Менинг дўконим»). Ҳужжат бор бўлса — фақат `name`
+  /// ўзгаради (`createdAt` сақланади), йўқ бўлса — [ensureShop] билан бир хил шаклда
+  /// яратилади. Rules: эга `create` ва `update`ни ўзи қила олади (`tv_shops/{phone}`).
+  Future<void> saveName({
+    required String ownerPhone,
+    required String name,
+  }) async {
+    final id = canonicalPhoneId(ownerPhone);
+    final clean = name.trim();
+    if (id.isEmpty || clean.length < 2) {
+      throw ArgumentError('shop name must be at least 2 characters');
+    }
+    final ref = _shops.doc(id);
+    final snap = await ref.get();
+    if (snap.exists) {
+      await ref.update({'name': clean});
+    } else {
+      await ref.set({
+        'name': clean,
+        'ownerPhone': id,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
   Future<List<TvShopItem>> fetchByOwner(String ownerPhone) async {
     final id = canonicalPhoneId(ownerPhone);
     if (id.isEmpty) return const [];

@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/driver_roles.dart';
 import '../../../repositories/courier_capability_repository.dart';
+import '../../my_shop/widgets/shop_name_dialog.dart';
 
 /// «＋» — «Менинг бизнесим»: фойдаланувчи ўз ишини шу ердан бошлайди.
 ///
@@ -36,6 +37,7 @@ Future<AvaCreateAction?> showAvaCreateSheet(
   BuildContext context, {
   DriverRoles driverRoles = DriverRoles.none,
   Set<AvaCreateAction> hidden = const {},
+  bool hasShop = false,
 }) {
   return showModalBottomSheet<AvaCreateAction>(
     context: context,
@@ -46,7 +48,11 @@ Future<AvaCreateAction?> showAvaCreateSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (ctx) => _Scaled(
-      child: _BusinessSheet(driverRoles: driverRoles, hidden: hidden),
+      child: _BusinessSheet(
+        driverRoles: driverRoles,
+        hidden: hidden,
+        hasShop: hasShop,
+      ),
     ),
   );
 }
@@ -69,31 +75,75 @@ class _Scaled extends StatelessWidget {
   }
 }
 
-/// «Онлайн Дўкон очиш» → маҳсулот қаерга қўшилади: Аҳоли бозори ёки Улгуржи.
-Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
-  return showModalBottomSheet<AvaShopTarget>(
+/// Биринчи киришда («Онлайн Дўкон очиш»): дўкон номи (ихтиёрий) ва маҳсулот
+/// қаерга қўшилиши. Ном бўш қолса сақланмайди — кейин ҳам қўйиш мумкин.
+class AvaFirstShop {
+  const AvaFirstShop({required this.name, required this.target});
+
+  /// Тозаланган ном; бўш — ном қўйилмади.
+  final String name;
+  final AvaShopTarget target;
+}
+
+Future<AvaFirstShop?> showAvaFirstShopSheet(BuildContext context) {
+  return showModalBottomSheet<AvaFirstShop>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
     backgroundColor: context.ava.bg,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) {
-      final c = ctx.ava;
-      return _Scaled(
-          child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-              AvaSpace.screen, 0, AvaSpace.screen, AvaSpace.screen),
+    builder: (ctx) => _Scaled(child: const _FirstShopSheet()),
+  );
+}
+
+class _FirstShopSheet extends StatefulWidget {
+  const _FirstShopSheet();
+
+  @override
+  State<_FirstShopSheet> createState() => _FirstShopSheetState();
+}
+
+class _FirstShopSheetState extends State<_FirstShopSheet> {
+  final _name = TextEditingController();
+  AvaShopTarget _target = AvaShopTarget.retail;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _continue() {
+    final raw = _name.text.trim();
+    final clean = validShopName(raw);
+    // Ном ихтиёрий: бўш — ўтказиб юборилади; тўлдирилган, лекин яроқсиз — хато.
+    if (raw.isNotEmpty && clean == null) {
+      setState(() => _error = context.tr('my_shop_name_err'));
+      return;
+    }
+    Navigator.of(context).pop(AvaFirstShop(name: clean ?? '', target: _target));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(AvaSpace.screen, 0, AvaSpace.screen,
+            AvaSpace.screen + MediaQuery.viewInsetsOf(context).bottom),
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 14),
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
                 child: Text(
-                  ctx.tr('home_create_shop_where'),
+                  context.tr('my_shop_name_title'),
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -102,30 +152,61 @@ Future<AvaShopTarget?> showAvaShopTargetSheet(BuildContext context) {
                   ),
                 ),
               ),
-              _Card(
-                children: [
-                  _RowTile(
-                    icon: Icons.storefront_outlined,
-                    label: ctx.tr('tv_shop_to_market'),
-                    subtitle: ctx.tr('home_create_shop_retail_sub'),
-                    onTap: () => Navigator.of(ctx).pop(AvaShopTarget.retail),
+              TextField(
+                controller: _name,
+                maxLength: kShopNameMaxLength,
+                textInputAction: TextInputAction.done,
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+                decoration: InputDecoration(
+                  hintText: context.tr('my_shop_name_hint'),
+                  helperText: context.tr('my_shop_name_note'),
+                  helperMaxLines: 2,
+                  errorText: _error,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                child: Text(
+                  context.tr('home_create_shop_where'),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: c.ink,
                   ),
-                  _RowTile(
-                    icon: Icons.inventory_2_outlined,
-                    label: ctx.tr('home_module_wholesale'),
-                    subtitle: ctx.tr('home_create_shop_wholesale_sub'),
-                    onTap: () => Navigator.of(ctx).pop(AvaShopTarget.wholesale),
+                ),
+              ),
+              SegmentedButton<AvaShopTarget>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                    value: AvaShopTarget.retail,
+                    label: Text(context.tr('tv_shop_to_market')),
+                  ),
+                  ButtonSegment(
+                    value: AvaShopTarget.wholesale,
+                    label: Text(context.tr('home_module_wholesale')),
                   ),
                 ],
+                selected: {_target},
+                onSelectionChanged: (s) => setState(() => _target = s.first),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: _continue,
+                child: Text(context.tr('my_shop_continue')),
               ),
             ],
           ),
         ),
-      ));
-    },
-  );
+      ),
+    );
+  }
 }
-
 /// Бир қатор бандининг маълумоти (матн калитлари — 3 тилда).
 class _Item {
   const _Item(this.action, this.icon, this.labelKey, this.subKey,
@@ -144,10 +225,14 @@ class _BusinessSheet extends StatelessWidget {
   const _BusinessSheet({
     this.driverRoles = DriverRoles.none,
     this.hidden = const {},
+    this.hasShop = false,
   });
 
   final DriverRoles driverRoles;
   final Set<AvaCreateAction> hidden;
+
+  /// Эгада Аҳоли/Улгуржи маҳсулоти бор: «Онлайн Дўкон очиш» ўрнига «Менинг дўконим».
+  final bool hasShop;
 
   /// Курьер панели бор (ёки тўхтатилган, лекин қўлдаги ишни тугатиши керак).
   bool get _courierHasPanel =>
@@ -184,9 +269,13 @@ class _BusinessSheet extends StatelessWidget {
       ),
       (
         'home_create_group_sell',
-        _visible(const [
-          _Item(AvaCreateAction.shopOnline, Icons.storefront_rounded,
-              'home_create_shop_online', 'home_create_shop_online_hint'),
+        _visible([
+          _Item(
+            AvaCreateAction.shopOnline,
+            Icons.storefront_rounded,
+            hasShop ? 'my_shop_title' : 'home_create_shop_online',
+            hasShop ? 'my_shop_row_sub' : 'home_create_shop_online_hint',
+          ),
         ]),
       ),
       (

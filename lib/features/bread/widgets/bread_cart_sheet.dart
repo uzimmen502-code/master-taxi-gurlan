@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/user_model.dart';
 import '../../../core/utils/formatters.dart';
@@ -14,15 +15,16 @@ import '../../../widgets/order_checkout_wallet_banner.dart';
 import '../controllers/bread_controller.dart';
 import 'extras_count_item.dart';
 
-String _extraLineSubtitle(BreadExtraProduct p) {
-  final price = formatPrice(p.price);
+String _extraLineSubtitle(BuildContext context, BreadExtraProduct p) {
+  final price =
+      context.trMsg('price_sum_short', params: {'price': formatPrice(p.price)});
   final cap = p.caption.trim();
-  if (cap.isNotEmpty) return '$cap — $price сўм';
+  if (cap.isNotEmpty) return '$cap — $price';
   final q = p.qty;
   if (q != null && '$q'.trim().isNotEmpty) {
-    return '${p.qty} ${p.unitRu} — $price сўм';
+    return '${p.qty} ${p.unitRu} — $price';
   }
-  return '${p.unitRu} — $price сўм';
+  return '${p.unitRu} — $price';
 }
 
 /// Сават bottom sheet — буюртмани якунлаш ва юбориш.
@@ -196,7 +198,11 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
 
       if (!mounted) return;
       if (!result.success) {
-        _showError(result.error ?? loc.translate('bread_error_fallback'));
+        // `result.error` — l10n kaliti (controller xom matn qaytarmaydi).
+        final errKey = result.error;
+        _showError(errKey != null
+            ? context.trMsg(errKey)
+            : loc.translate('bread_error_fallback'));
         return;
       }
 
@@ -273,7 +279,7 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                   children: [
                     Expanded(
                       child: _BreadModeChip(
-                        label: 'Yetkazish',
+                        label: loc.translate('delivery'),
                         selected: c.fulfillmentMode == 'delivery',
                         onTap: () => c.setFulfillmentMode('delivery'),
                       ),
@@ -281,7 +287,7 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _BreadModeChip(
-                        label: 'Olib ketish',
+                        label: loc.translate('bread_mode_pickup'),
                         selected: c.fulfillmentMode == 'pickup',
                         onTap: () => c.setFulfillmentMode('pickup'),
                       ),
@@ -352,7 +358,7 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                       ExtrasCountItem(
                         emoji: p.displayEmoji,
                         name: p.name,
-                        qty: _extraLineSubtitle(p),
+                        qty: _extraLineSubtitle(context, p),
                         count: c.extraProductsCart[p.id] ?? 0,
                         max: p.effectiveMaxQtyValue(c.yopishTotalCount),
                         qtyStep: p.qtyStep,
@@ -598,7 +604,9 @@ class _PriceSummary extends StatelessWidget {
 
   static const _green = AppColors.primaryDark;
 
-  Widget _summaryRow(String label, String val, {Color? color}) => Padding(
+  Widget _summaryRow(BuildContext context, String label, String val,
+          {Color? color}) =>
+      Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: Row(children: [
           Expanded(
@@ -606,7 +614,7 @@ class _PriceSummary extends StatelessWidget {
                   style: TextStyle(
                       fontSize: AppText.bodySmall,
                       color: color ?? Colors.grey.shade700))),
-          Text('$val сўм',
+          Text(context.trMsg('price_sum_short', params: {'price': val}),
               style: TextStyle(
                   fontSize: AppText.bodySmall,
                   fontWeight: FontWeight.w600,
@@ -631,6 +639,7 @@ class _PriceSummary extends StatelessWidget {
               .firstWhere((p) => p.id == entry.key, orElse: () => _empty);
           if (p.id == 0) return const SizedBox.shrink();
           return _summaryRow(
+              context,
               '${p.emoji} ${p.name} × ${entry.value}',
               formatPrice(c.productPrice(p) * entry.value));
         }),
@@ -641,6 +650,7 @@ class _PriceSummary extends StatelessWidget {
           final choice = c.flourMilkChoice[entry.key] ?? 'ours';
           if ((p.isYopish || p.isToy) && choice == 'ours') {
             return _summaryRow(
+                context,
                 loc
                     .translate('bread_summary_flour_milk')
                     .replaceAll('{name}', p.name),
@@ -652,12 +662,14 @@ class _PriceSummary extends StatelessWidget {
         for (final p in c.extraProducts) ...[
           if ((c.extraProductsCart[p.id] ?? 0) > 1e-9) ...[
             _summaryRow(
+              context,
               '${p.displayEmoji} ${p.name} (${p.qtyCaptionNum(c.extraProductsCart[p.id] ?? 0)})',
               formatPrice(p.lineTotal(c.extraProductsCart[p.id] ?? 0)),
               color: AppColors.primaryText,
             ),
             if (p.discountFor(c.extraProductsCart[p.id] ?? 0) > 0)
               _summaryRow(
+                context,
                 loc.translate('bread_summary_bonus'),
                 '-${formatPrice(p.discountFor(c.extraProductsCart[p.id] ?? 0))}',
                 color: Colors.orange.shade700,
@@ -667,6 +679,7 @@ class _PriceSummary extends StatelessWidget {
         if (c.saltYeastCost > 0) ...[
           const Divider(height: 12),
           _summaryRow(
+            context,
             c.cartHasYopishBread
                 ? loc.translate('bread_summary_salt_yeast_full')
                 : loc.translate('bread_summary_salt_yeast'),

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import '../../../models/message_thread_group.dart';
 import '../../../models/news_item.dart';
 import '../../../models/news_read_state.dart';
@@ -81,6 +83,14 @@ class _MessagesTabState extends State<MessagesTab>
     });
   }
 
+  /// Хато бўлса — фақат хабарлар оқимини қайта очади.
+  void _retryNews() {
+    final newsRepo = context.read<NewsRepository>();
+    setState(() {
+      _newsStream = newsRepo.watchDialogNews(userId: _uid, limit: 80);
+    });
+  }
+
   @override
   void dispose() {
     _dismissedSub?.cancel();
@@ -99,7 +109,7 @@ class _MessagesTabState extends State<MessagesTab>
     if (!_ready) return const Center(child: CircularProgressIndicator());
     final uid = _uid;
     if (uid.length < 9) {
-      return const Center(child: Text('Телефон рақамини профилда киритинг'));
+      return Center(child: Text(context.tr('msgs_phone_required')));
     }
 
     return StreamBuilder<List<NewsItem>>(
@@ -116,7 +126,10 @@ class _MessagesTabState extends State<MessagesTab>
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (newsSnap.hasError && !newsSnap.hasData) {
-                  return Center(child: Text('Хатолик: ${newsSnap.error}'));
+                  return LoadErrorView(
+                    error: newsSnap.error!,
+                    onRetry: _retryNews,
+                  );
                 }
 
                 final chatUnread = chatUnreadSnap.data ?? false;
@@ -171,7 +184,7 @@ class _MessagesTabState extends State<MessagesTab>
           Icon(Icons.inbox_outlined, color: Colors.grey.shade400, size: 48),
           const SizedBox(height: 12),
           Text(
-            'Хабарлар йўқ',
+            context.tr('no_messages'),
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -180,7 +193,7 @@ class _MessagesTabState extends State<MessagesTab>
           ),
           const SizedBox(height: 6),
           Text(
-            'Мурожаат жавоби шу йерда кўринади',
+            context.tr('msgs_empty_hint'),
             style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
           ),
         ],
@@ -233,16 +246,18 @@ class _MessagesTabState extends State<MessagesTab>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '💬 Админ билан чат',
-                      style: TextStyle(
+                    Text(
+                      context.tr('chat_admin_title'),
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      unread ? 'Янги жавоб бор' : 'Ёзишмалар тарихи',
+                      unread
+                          ? context.tr('msgs_new_reply')
+                          : context.tr('msgs_history'),
                       style: TextStyle(
                         fontSize: 12,
                         color:
@@ -288,9 +303,10 @@ class _MessagesTabState extends State<MessagesTab>
           child: const Icon(Icons.local_taxi, color: Colors.blue),
         ),
         title:
-            Text(g.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(context.tr(g.title),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(
-          g.subtitle,
+          g.subtitleText(context.tr),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -342,7 +358,7 @@ class _MessagesTabState extends State<MessagesTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      g.title,
+                      context.tr(g.title),
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight:
@@ -351,7 +367,10 @@ class _MessagesTabState extends State<MessagesTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${g.messages.length} хабар · ${g.subtitle}',
+                      context.trMsg('msgs_group_summary', params: {
+                        'n': '${g.messages.length}',
+                        'subtitle': g.subtitleText(context.tr),
+                      }),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

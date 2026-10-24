@@ -109,7 +109,7 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
       });
     } on LocationException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(LocationException.userMessage(e.kind))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(LocationException.userMessage(e.kind)))));
       }
     } catch (_) {
       if (mounted) {

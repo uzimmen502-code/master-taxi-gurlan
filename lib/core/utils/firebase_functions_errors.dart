@@ -1,43 +1,22 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
-/// Firebase callable xatolari uchun foydalanuvchiga tushunarli matn.
-String firebaseFunctionsUserMessage(FirebaseFunctionsException e) {
-  final code = e.code.trim().toLowerCase();
-  final detail = e.message?.trim();
-  final detailUpper = (detail ?? '').toUpperCase();
+import 'user_error.dart';
 
-  // Infrastructure / transport codes — never surface raw DEADLINE_EXCEEDED etc.
-  if (code == 'deadline-exceeded' ||
-      detailUpper.contains('DEADLINE_EXCEEDED')) {
-    return 'Сервер жавоб бермади. Бироздан кейин қайта уриниб кўринг.';
+/// Onboarding (telefon / qurilma tasdig'i) callable xatolari -> l10n kaliti.
+///
+/// Umumiy xatolar (tarmoq, vaqt, limit, server) [userErrorKey] bilan bir xil;
+/// faqat tasdiq kodi va qurilma bog'lash oqimiga xos uch kod alohida matn oladi.
+/// Server `message` matni (lotincha / dasturchi matni) HECH QACHON ko'rsatilmaydi
+/// (CLAUDE.md §25) — natija kalit, ekran uni `context.tr` bilan chiqaradi.
+String onboardingErrorKey(FirebaseFunctionsException e) {
+  switch (e.code.trim().toLowerCase()) {
+    case 'not-found':
+      return 'ob_err_code_request_not_found';
+    case 'permission-denied':
+      return 'ob_err_code_wrong';
+    case 'failed-precondition':
+      return 'ob_err_device_mismatch';
+    default:
+      return userErrorKey(e);
   }
-  if (code == 'unavailable') {
-    return 'Интернет уланиши йўқ ёки серверга уланиб бўлмади. '
-        'Интернетни ёқинг ва қайта уриниб кўринг.';
-  }
-  if (code == 'resource-exhausted') {
-    return 'Жуда кўп уриниш. Бироз кутиб қайта уриниб кўринг.';
-  }
-
-  // Prefer server-provided human message when it is not a raw status code.
-  if (detail != null &&
-      detail.isNotEmpty &&
-      detail != 'INTERNAL' &&
-      !_looksLikeRawErrorCode(detail)) {
-    return detail;
-  }
-
-  return switch (code) {
-    'internal' => 'Сервер хатоси. Кейинроқ қайта уриниб кўринг.',
-    'not-found' => 'Код сўрови топилмади',
-    'permission-denied' => 'Код нотўғри',
-    'failed-precondition' => 'Қурилма ёки рақам мос эмас',
-    'invalid-argument' => 'Нотўғри маълумот',
-    _ => 'Хатолик юз берди. Қайта уриниб кўринг.',
-  };
-}
-
-bool _looksLikeRawErrorCode(String value) {
-  // e.g. DEADLINE_EXCEEDED, INTERNAL, UNAVAILABLE
-  return RegExp(r'^[A-Z][A-Z0-9_]+$').hasMatch(value.trim());
 }

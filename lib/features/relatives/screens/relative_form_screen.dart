@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../l10n/relatives_l10n.dart';
@@ -135,8 +135,10 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
         _photoPath = res.path;
       });
     } catch (e) {
-      _snack(RelativesL10n.trParams(
-          context, 'rel_photo_upload_error', {'error': '$e'}));
+      if (mounted) {
+        _snack(userErrorMessage(context, e,
+            fallbackKey: 'rel_fix_photo_upload_failed'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -311,9 +313,9 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
 
   String _errMsg(Object e) {
     if (e is FirebaseFunctionsException) {
-      return firebaseFunctionsUserMessage(e);
+      return userErrorMessage(context, e);
     }
-    return RelativesL10n.trParams(context, 'error_generic', {'error': '$e'});
+    return userErrorMessage(context, e);
   }
 
   Future<void> _save() async {

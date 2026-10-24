@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/circle.dart';
 import '../../../models/circle_member.dart';
 import '../../../repositories/circles_repository.dart';
@@ -76,19 +78,22 @@ class _CircleProfileFormScreenState extends State<CircleProfileFormScreen> {
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      _snack('Исм-фамилияни киритинг.');
+      _snack(context.tr('circ_name_required'));
       return;
     }
     for (final f in widget.spec.identityFields) {
       final val = _ctrls[f.key]!.text.trim();
+      final fieldName = context.tr(f.labelKey).replaceAll(' *', '');
       if (f.required && val.isEmpty) {
-        _snack('«${f.label.replaceAll(' *', '')}» ни киритинг.');
+        _snack(context.trMsg('circ_field_required',
+            params: {'field': fieldName}));
         return;
       }
       if (f.number && val.isNotEmpty) {
         final n = int.tryParse(val);
         if (n == null || n < 1900 || n > DateTime.now().year + 1) {
-          _snack('«${f.label.replaceAll(' *', '')}» ни тўғри киритинг.');
+          _snack(context.trMsg('circ_field_invalid',
+              params: {'field': fieldName}));
           return;
         }
       }
@@ -128,7 +133,7 @@ class _CircleProfileFormScreenState extends State<CircleProfileFormScreen> {
         ),
       );
     } catch (e) {
-      if (mounted) _snack('Хатолик: $e');
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -138,19 +143,21 @@ class _CircleProfileFormScreenState extends State<CircleProfileFormScreen> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Мавжуд давра топилди'),
-        content: Text('«${c.title}» — ${c.memberCount} аъзо.\n'
-            'Шу даврага қўшиласизми?'),
+        title: Text(ctx.tr('circ_join_existing_title')),
+        content: Text(ctx.trMsg('circ_join_existing_body', params: {
+          'title': c.title,
+          'count': '${c.memberCount}',
+        })),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Йўқ')),
+              child: Text(ctx.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: CircleProfileFormScreen._accent,
                 foregroundColor: Colors.white),
-            child: const Text('Ҳа, қўшиламан'),
+            child: Text(ctx.tr('circ_join_yes')),
           ),
         ],
       ),
@@ -166,27 +173,28 @@ class _CircleProfileFormScreenState extends State<CircleProfileFormScreen> {
     final fields = [...widget.spec.identityFields, ...widget.spec.profileFields];
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.spec.title),
+        title: Text(context.tr(widget.spec.titleKey)),
         backgroundColor: CircleProfileFormScreen._accent,
         foregroundColor: Colors.white,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _field(_nameCtrl, 'Исм-фамилия *', Icons.person_outline),
+          _field(_nameCtrl, context.tr('circ_f_full_name'),
+              Icons.person_outline),
           for (final f in fields)
-            _field(_ctrls[f.key]!, f.label, Icons.edit_outlined,
+            _field(_ctrls[f.key]!, context.tr(f.labelKey), Icons.edit_outlined,
                 number: f.number),
           const SizedBox(height: 8),
           SwitchListTile(
             value: _phoneVisible,
             activeThumbColor: CircleProfileFormScreen._accent,
             contentPadding: EdgeInsets.zero,
-            title: const Text('Телефонимни давра аъзоларига кўрсатиш'),
+            title: Text(context.tr('circ_phone_visible_title')),
             subtitle: Text(
               _phoneVisible
-                  ? 'Аъзолар телефонингизни кўради.'
-                  : 'Телефонингиз яширин (тавсия).',
+                  ? context.tr('circ_phone_visible_on')
+                  : context.tr('circ_phone_visible_off'),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             onChanged: (v) => setState(() => _phoneVisible = v),
@@ -205,7 +213,7 @@ class _CircleProfileFormScreenState extends State<CircleProfileFormScreen> {
                       height: 22,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : const Text('Давранга қўшилиш'),
+                  : Text(context.tr('circ_join_button')),
             ),
           ),
         ],

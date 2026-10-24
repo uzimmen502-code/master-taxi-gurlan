@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/bread_product.dart';
 import '../../../models/order_model.dart';
 import '../../../repositories/bread_repository.dart';
@@ -212,7 +213,7 @@ class SellerPosController extends ChangeNotifier {
       notifyListeners();
     }, onError: (e) {
       debugPrint('seller pickup orders: $e');
-      ordersLoadError = 'Buyurtmalar yuklanmadi';
+      ordersLoadError = 'pos_err_orders_load';
       notifyListeners();
     });
   }
@@ -264,7 +265,7 @@ class SellerPosController extends ChangeNotifier {
       sessionTotal = s.total;
       await _persistDailyTotal();
     } catch (e) {
-      shiftLoadError = 'Smena yuklanmadi';
+      shiftLoadError = 'pos_err_shift_load';
       debugPrint('seller shift: $e');
     } finally {
       shiftLoading = false;
@@ -384,17 +385,17 @@ class SellerPosController extends ChangeNotifier {
           await SellerSaleService.getCustomerWalletBalance(customerPhone);
       if (!res.ok) {
         walletBalance = 0;
-        walletLoadError = 'Hamyon o\'qilmadi (tarmoq)';
+        walletLoadError = 'pos_err_wallet_unreadable';
       } else if (!res.found) {
         walletBalance = 0;
-        walletLoadError = 'Mijoz topilmadi';
+        walletLoadError = 'pos_err_customer_not_found';
       } else {
         walletBalance = res.balance;
         walletLoadError = null;
       }
     } catch (e) {
       walletBalance = 0;
-      walletLoadError = 'Hamyon xatosi';
+      walletLoadError = 'pos_err_wallet_error';
       debugPrint('seller wallet: $e');
     }
     walletLoading = false;
@@ -410,7 +411,7 @@ class SellerPosController extends ChangeNotifier {
       await SellerSaleService.markPickupReady(order.id);
       return true;
     } catch (e) {
-      lastError = '$e';
+      lastError = userErrorKey(e, fallbackKey: 'pos_err_mark_ready_failed');
       return false;
     } finally {
       busy = false;
@@ -429,24 +430,24 @@ class SellerPosController extends ChangeNotifier {
       w = maxWallet;
       c = (total - w).clamp(0, 999999999);
       if (w <= 0) {
-        lastError = 'Hamyon bo\'sh yoki telefon kiritilmagan';
+        lastError = 'pos_err_wallet_empty_or_no_phone';
         notifyListeners();
         return null;
       }
       if (customerPhone.trim().isEmpty) {
-        lastError = 'Hamyon uchun mijoz telefonini kiriting';
+        lastError = 'pos_err_wallet_need_phone';
         notifyListeners();
         return null;
       }
     } else {
       w = maxWallet;
       if (c + w < total) {
-        lastError = 'To\'lov yetarli emas';
+        lastError = 'pos_err_payment_short';
         notifyListeners();
         return null;
       }
       if (w > 0 && customerPhone.trim().isEmpty) {
-        lastError = 'Hamyon uchun mijoz telefonini kiriting';
+        lastError = 'pos_err_wallet_need_phone';
         notifyListeners();
         return null;
       }
@@ -518,7 +519,7 @@ class SellerPosController extends ChangeNotifier {
       unawaited(refreshShiftSummary());
       return result;
     } catch (e) {
-      lastError = '$e';
+      lastError = userErrorKey(e, fallbackKey: 'pos_err_sale_failed');
       return null;
     } finally {
       busy = false;
@@ -567,7 +568,7 @@ class SellerPosController extends ChangeNotifier {
       unawaited(refreshShiftSummary());
       return result;
     } catch (e) {
-      lastError = '$e';
+      lastError = userErrorKey(e, fallbackKey: 'pos_err_sale_failed');
       return null;
     } finally {
       busy = false;

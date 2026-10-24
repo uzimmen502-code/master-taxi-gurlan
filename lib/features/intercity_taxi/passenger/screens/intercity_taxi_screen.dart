@@ -780,8 +780,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     context.tr('today'),
                     formatPickDateLabel(
                       today,
-                      yearSuffix:
-                          _currentLocale.languageCode == 'ru' ? ' г.' : ' y',
+                      yearSuffix: ' ${context.tr('icx_year_short')}',
                     ),
                     c.isToday,
                     () => c.setIsToday(true))),
@@ -791,8 +790,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     context.tr('tomorrow'),
                     formatPickDateLabel(
                       tomorrow,
-                      yearSuffix:
-                          _currentLocale.languageCode == 'ru' ? ' г.' : ' y',
+                      yearSuffix: ' ${context.tr('icx_year_short')}',
                     ),
                     c.isTomorrow,
                     () => c.setIsToday(false))),
@@ -804,9 +802,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     c.dayOffset >= 2
                         ? formatPickDateLabel(
                             c.searchDay(),
-                            yearSuffix: _currentLocale.languageCode == 'ru'
-                                ? ' г.'
-                                : ' y',
+                            yearSuffix: ' ${context.tr('icx_year_short')}',
                           )
                         : '…',
                     c.dayOffset >= 2,

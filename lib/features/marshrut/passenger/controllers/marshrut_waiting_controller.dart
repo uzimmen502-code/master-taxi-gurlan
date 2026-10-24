@@ -9,6 +9,7 @@ import '../../../../models/marshrut_driver_option.dart';
 import '../../../../models/schedule.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
+import '../../../../core/utils/user_error.dart';
 
 /// Marshrut taksi qidirilayotgan paytdagi state mashinasini boshqaradi:
 /// haydovchilarni navbat bilan chaqirib chiqadi, har biri uchun [_timeoutSec]
@@ -183,11 +184,11 @@ class MarshrutWaitingController extends ChangeNotifier {
     } on StateError catch (e) {
       _errorMessage = e.message == 'active_marshrut_request_exists'
           ? 'active_marshrut_request_exists'
-          : 'error_generic|${e.message}';
+          : userErrorKey(e);
       _safeNotify();
       return;
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
       return;
     }

@@ -75,8 +75,9 @@ class RouteCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       seatsLeft == 0
-                          ? '🚫 Бўш жой йўқ'
-                          : '💺 $seatsLeft та бўш жой',
+                          ? context.tr('no_seats_available')
+                          : context.trMsg('seats_left_count',
+                              params: {'count': '$seatsLeft'}),
                       style: TextStyle(
                           fontSize: AppText.bodyMedium,
                           fontWeight: FontWeight.bold,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/message_thread_group.dart';
 import '../../../models/news_item.dart';
@@ -18,18 +19,18 @@ class DialogNewsDetailScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: Text(group.title),
+        title: Text(context.tr(group.title)),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          if (group.subtitle.isNotEmpty)
+          if (group.subtitleText(context.tr).isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                group.subtitle,
+                group.subtitleText(context.tr),
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
               ),
             ),

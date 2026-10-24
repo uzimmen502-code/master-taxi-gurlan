@@ -2,6 +2,7 @@ import 'package:ava_gurlan/features/carpet_wash/screens/carpet_wash_courier_scre
 import 'package:ava_gurlan/models/carpet_wash_order.dart';
 import 'package:ava_gurlan/models/customer_confirm.dart';
 import 'package:ava_gurlan/services/carpet_wash_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -273,12 +274,15 @@ void main() {
         <CarpetWashOrder>[],
       ],
     })
-      ..actionError = Exception('already claimed');
+      ..actionError = FirebaseFunctionsException(
+          code: 'failed-precondition', message: 'already claimed');
     await _pump(tester, service);
 
     await tester.tap(find.text('carpet_claim_pickup'));
     await tester.pumpAndSettle();
-    expect(find.text('Exception: already claimed'), findsOneWidget);
+    // Xom xato matni emas — tushunarli matn (test muhitida: l10n kaliti).
+    expect(find.text('err_conflict'), findsOneWidget);
+    expect(find.textContaining('already claimed'), findsNothing);
     expect(service.listCalls[CarpetWashService.courierListPickup], 2);
     expect(find.text('carpet_no_pickup_tasks'), findsOneWidget);
   });

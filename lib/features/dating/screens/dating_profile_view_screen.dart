@@ -1,7 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/dating_profile.dart';
 import '../../../repositories/dating_repository.dart';
 import '../services/dating_service.dart';
@@ -41,29 +42,31 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
       final res = await DatingService.sendInterest(widget.profile.userId);
       if (!mounted) return;
       if (res['matched'] == true) {
-        _snack('🎉 Мослашув! Энди ёзишувингиз мумкин.');
+        _snack(context.tr('dating_match_now'));
       } else if (res['alreadySent'] == true) {
-        _snack('Қизиқиш аввал юборилган.');
+        _snack(context.tr('dating_interest_already'));
       } else {
-        _snack('Қизиқиш юборилди.');
+        _snack(context.tr('dating_interest_sent'));
       }
       Navigator.pop(context);
     } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
+      _snack(userErrorMessage(context, e));
     } catch (e) {
-      _snack('Хатолик: $e');
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _block() async {
-    final ok = await _confirm('Блоклаш',
-        '«${widget.profile.displayName}» ни блокласизми? У сизни кўрмайди.');
+    final ok = await _confirm(
+        context.tr('dating_block_title'),
+        context.trMsg('dating_block_confirm',
+            params: {'name': widget.profile.displayName}));
     if (ok != true) return;
     await _repo.block(widget.myUid, widget.profile.userId);
     if (mounted) {
-      _snack('Блокланди.');
+      _snack(context.tr('dating_blocked'));
       Navigator.pop(context);
     }
   }
@@ -75,22 +78,22 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
       reason = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Шикоят'),
+          title: Text(ctx.tr('ad_report_title')),
           content: TextField(
             controller: ctrl,
             maxLines: 3,
-            decoration: const InputDecoration(
-              hintText: 'Сабабини ёзинг (масалан: сохта профил)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: ctx.tr('dating_report_hint'),
+              border: const OutlineInputBorder(),
             ),
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Бекор')),
+                child: Text(ctx.tr('cancel'))),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-              child: const Text('Юбориш'),
+              child: Text(ctx.tr('submit')),
             ),
           ],
         ),
@@ -104,7 +107,7 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
       targetId: widget.profile.userId,
       reason: reason,
     );
-    if (mounted) _snack('Шикоят юборилди. Раҳмат.');
+    if (mounted) _snack(context.tr('dating_report_sent'));
   }
 
   Future<bool?> _confirm(String title, String body) {
@@ -116,12 +119,12 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Йўқ')),
+              child: Text(ctx.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Ҳа'),
+            child: Text(ctx.tr('yes')),
           ),
         ],
       ),
@@ -150,9 +153,13 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
                 if (v == 'report') _report();
                 if (v == 'block') _block();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'report', child: Text('🚩 Шикоят')),
-                PopupMenuItem(value: 'block', child: Text('⛔ Блоклаш')),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                    value: 'report',
+                    child: Text(context.tr('dating_menu_report'))),
+                PopupMenuItem(
+                    value: 'block',
+                    child: Text(context.tr('dating_menu_block'))),
               ],
             ),
         ],
@@ -182,8 +189,8 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
                 _chips(p),
                 if (p.about.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const Text('Ўзи ҳақида',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text(context.tr('dating_about'),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   Text(p.about, style: const TextStyle(height: 1.4)),
                 ],
@@ -211,7 +218,7 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.favorite),
-                    label: const Text('Қизиқиш билдириш'),
+                    label: Text(context.tr('dating_send_interest')),
                   ),
                 ),
               ),
@@ -272,7 +279,7 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
   Widget _chips(DatingProfile p) {
     final items = <String>[
       if (p.city.isNotEmpty) '📍 ${p.city}',
-      if (p.maritalStatus.isNotEmpty) _maritalLabel(p.maritalStatus),
+      if (p.maritalStatus.isNotEmpty) _maritalLabel(context, p.maritalStatus),
       if (p.education.isNotEmpty) '🎓 ${p.education}',
       if (p.job.isNotEmpty) '💼 ${p.job}',
     ];
@@ -290,14 +297,14 @@ class _DatingProfileViewScreenState extends State<DatingProfileViewScreen> {
     );
   }
 
-  String _maritalLabel(String m) {
+  String _maritalLabel(BuildContext context, String m) {
     switch (m) {
       case 'single':
-        return 'Бўйдоқ';
+        return context.tr('dating_marital_single_short');
       case 'divorced':
-        return 'Ажрашган';
+        return context.tr('dating_marital_divorced');
       case 'widowed':
-        return 'Бева';
+        return context.tr('dating_marital_widowed');
       default:
         return '';
     }

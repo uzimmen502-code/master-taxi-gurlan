@@ -17,7 +17,11 @@ String formatPhoneForCallHint(String raw) {
   return '+$d';
 }
 
+/// [template] — `icx_alert_body` l10n matni (`{name}` `{route}` `{passengers}`
+/// `{price}` `{phone}` o'rinbosarlari bilan); kontekstsiz joyda
+/// `OfflineL10n.tr('icx_alert_body')` orqali olinadi.
 String intercityDriverBookingAlertBody({
+  required String template,
   required String userName,
   required String routeLabel,
   required int passengers,
@@ -26,6 +30,10 @@ String intercityDriverBookingAlertBody({
 }) {
   final phone = formatPhoneForCallHint(userPhone);
   final price = pricePart ?? '';
-  return '$userName · $routeLabel · $passengers ўрин$price\n'
-      '📞 Аввал йўловчига қўнғироқ қилинг: $phone';
+  return template
+      .replaceAll('{name}', userName)
+      .replaceAll('{route}', routeLabel)
+      .replaceAll('{passengers}', '$passengers')
+      .replaceAll('{price}', price)
+      .replaceAll('{phone}', phone);
 }

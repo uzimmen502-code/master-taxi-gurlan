@@ -429,7 +429,7 @@ class DriverScheduleController extends ChangeNotifier {
       final startMin = startTime.hour * 60 + startTime.minute;
       final endMin = endTime.hour * 60 + endTime.minute;
       if (endMin <= startMin) {
-        return 'Тугаш вақти бошланишдан кейин бўлиши керак';
+        return 'sched_err_end_after_start';
       }
     }
     return null;

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
@@ -79,8 +80,8 @@ class _EditAdScreenState extends State<EditAdScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_totalImages < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Камida 1 та расм қолсин'),
+        SnackBar(
+          content: Text(context.tr('adsx_min_one_photo')),
           backgroundColor: Colors.red,
         ),
       );
@@ -136,8 +137,8 @@ class _EditAdScreenState extends State<EditAdScreen> {
         SnackBar(
           content: Text(
             ad.isActive
-                ? 'Сақланди. Қайта модерацияга юборилди'
-                : 'Сақланди',
+                ? context.tr('adsx_saved_remoderation')
+                : context.tr('saved'),
           ),
         ),
       );
@@ -146,7 +147,8 @@ class _EditAdScreenState extends State<EditAdScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Хатолик: $e'),
+            content: Text(userErrorMessage(context, e,
+                fallbackKey: 'create_ad_err_generic')),
             backgroundColor: Colors.red,
           ),
         );
@@ -169,7 +171,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
     final bottomPad = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Таҳрирлаш'),
+        title: Text(context.tr('edit')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
@@ -255,7 +257,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
                       OutlinedButton.icon(
                         onPressed: _loading ? null : _pickImages,
                         icon: const Icon(Icons.add_photo_alternate),
-                        label: const Text('Расм'),
+                        label: Text(context.tr('tv_shop_photos_add')),
                       ),
                     ],
                   ),
@@ -263,10 +265,13 @@ class _EditAdScreenState extends State<EditAdScreen> {
                   TextFormField(
                     controller: _titleCtrl,
                     maxLength: 120,
-                    decoration: const InputDecoration(labelText: 'Номи *'),
+                    decoration: InputDecoration(
+                        labelText: context.tr('create_ad_name_label')),
                     validator: (v) {
                       final t = v?.trim() ?? '';
-                      if (t.length < 3) return 'Камида 3 белги';
+                      if (t.length < 3) {
+                        return context.tr('create_ad_name_short');
+                      }
                       return null;
                     },
                   ),
@@ -274,15 +279,15 @@ class _EditAdScreenState extends State<EditAdScreen> {
                   TextFormField(
                     controller: _priceCtrl,
                     keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Нархи (сўм) *'),
+                    decoration: InputDecoration(
+                        labelText: context.tr('adsx_price_sum_label')),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
-                        return 'Нархни киритинг';
+                        return context.tr('create_ad_price_required');
                       }
                       final n = int.tryParse(v.trim());
-                      if (n == null) return 'Фақат рақам';
-                      if (n < 1) return 'Нарх 0 дан катта бўлсин';
+                      if (n == null) return context.tr('create_ad_price_digits');
+                      if (n < 1) return context.tr('create_ad_price_positive');
                       return null;
                     },
                   ),
@@ -291,10 +296,13 @@ class _EditAdScreenState extends State<EditAdScreen> {
                     controller: _descCtrl,
                     maxLines: 4,
                     maxLength: 2000,
-                    decoration: const InputDecoration(labelText: 'Тавсиф *'),
+                    decoration: InputDecoration(
+                        labelText: context.tr('create_ad_desc_label')),
                     validator: (v) {
                       final t = v?.trim() ?? '';
-                      if (t.length < 3) return 'Камида 3 белги';
+                      if (t.length < 3) {
+                        return context.tr('create_ad_desc_short');
+                      }
                       return null;
                     },
                   ),
@@ -306,7 +314,8 @@ class _EditAdScreenState extends State<EditAdScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Телефон: ${widget.ad.phone} (ўзгартирилмайди)',
+                    context.trMsg('adsx_phone_fixed',
+                        params: {'phone': widget.ad.phone}),
                     style:
                         TextStyle(fontSize: 13, color: Colors.grey.shade600),
                   ),
@@ -340,7 +349,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
                           color: AppColors.onPrimary,
                         ),
                       )
-                    : const Text('Сақлаш'),
+                    : Text(context.tr('save')),
               ),
             ),
           ],

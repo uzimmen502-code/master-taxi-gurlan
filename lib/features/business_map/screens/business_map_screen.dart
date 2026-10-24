@@ -285,7 +285,7 @@ class _BusinessMapScreenState extends State<BusinessMapScreen> with WidgetsBindi
                 BusinessCategoryChips(selected: _category, onChanged: (c) => setState(() => _category = c)),
                 if (gpsError != null) ...[
                   const SizedBox(height: 8),
-                  _GpsBanner(text: gpsError),
+                  _GpsBanner(text: context.trMsg(gpsError)),
                 ],
               ],
             ),

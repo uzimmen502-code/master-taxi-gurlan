@@ -650,7 +650,11 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     }
     String f(double v) =>
         v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
-    return '${f(d.bodyLengthM)} × ${f(d.bodyWidthM)} × ${f(d.bodyHeightM)} м';
+    return context.trMsg('taxi_misc_body_dims', params: {
+      'l': f(d.bodyLengthM),
+      'w': f(d.bodyWidthM),
+      'h': f(d.bodyHeightM),
+    });
   }
 
   String _radiusLabel(int km) {

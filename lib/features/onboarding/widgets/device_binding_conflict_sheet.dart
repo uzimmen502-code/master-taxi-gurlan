@@ -1,12 +1,14 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../controllers/onboarding_controller.dart';
 import '../screens/device_transfer_pending_screen.dart';
+import '../../../core/utils/user_error.dart';
 
 /// phone_bound_other_device / device_bound_other_phone / blocked uchun tanlov.
 Future<bool> showDeviceBindingConflictSheet({
@@ -41,7 +43,8 @@ Future<bool> showDeviceBindingConflictSheet({
       if (transfer.requestId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(transfer.message ?? 'So‘rov yaratilmadi'),
+            // Server matni (lotincha) ko'rsatilmaydi — til bo'yicha o'z matnimiz.
+            content: Text(context.tr('ob_dev_request_failed')),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -68,7 +71,7 @@ Future<bool> showDeviceBindingConflictSheet({
       if (!context.mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(firebaseFunctionsUserMessage(e)),
+          content: Text(context.tr(onboardingErrorKey(e))),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -77,7 +80,7 @@ Future<bool> showDeviceBindingConflictSheet({
       if (!context.mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$e'),
+          content: Text(userErrorMessage(context, e)),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -102,28 +105,25 @@ class _ConflictSheetBody extends StatelessWidget {
     final isBlocked = result.status == DeviceBindingStatus.blocked;
     final label = result.oldDeviceLabel.trim();
 
+    // Matnlar kalit bo'yicha (3 til); serverdan kelgan `result.message`
+    // faqat lotincha bo'lgani uchun ko'rsatilmaydi.
     String title;
     String body;
     if (isPhoneOther) {
-      title = 'Raqam boshqa qurilmada';
+      title = context.tr('ob_dev_phone_other_title');
       body = label.isEmpty
-          ? 'Bu raqam allaqachon boshqa telefonga bog‘langan. '
-              'Eski qurilmangizdan «Ruxsat berish» orqali yangi telefonga ko‘chirishingiz mumkin.'
-          : 'Bu raqam ($label) qurilmasiga bog‘langan. '
-              'Eski qurilmadan tasdiqlasangiz, yangi telefonga o‘tadi.';
+          ? context.tr('ob_dev_phone_other_body_nolabel')
+          : context.trMsg('ob_dev_phone_other_body_label',
+              params: {'label': label});
     } else if (isBlocked) {
-      title = 'Vaqtincha cheklangan';
-      body = result.message ??
-          'Bir necha marta noto‘g‘ri urinish bo‘ldi. '
-              'To‘g‘ri raqam bilan kiring yoki birozdan keyin qayta urinib ko‘ring.';
+      title = context.tr('ob_dev_blocked_title');
+      body = context.tr('ob_dev_blocked_body');
     } else if (isDeviceOther) {
-      title = 'Qurilma boshqa raqamga bog‘liq';
-      body = result.message ??
-          'Bu telefonda boshqa raqam bilan kirilgan. '
-              'Shu qurilmaga biriktirilgan raqamni kiriting.';
+      title = context.tr('ob_dev_device_other_title');
+      body = context.tr('ob_dev_device_other_body');
     } else {
-      title = 'Kirish cheklangan';
-      body = result.message ?? 'Qayta urinib ko‘ring.';
+      title = context.tr('ob_dev_limited_title');
+      body = context.tr('ob_dev_retry_body');
     }
 
     return SafeArea(
@@ -163,7 +163,7 @@ class _ConflictSheetBody extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 icon: const Icon(Icons.phonelink_setup),
-                label: const Text('Eski qurilmadan tasdiqlash'),
+                label: Text(context.tr('ob_dev_confirm_old')),
               ),
               const SizedBox(height: 10),
             ],
@@ -171,13 +171,13 @@ class _ConflictSheetBody extends StatelessWidget {
               onPressed: () => Navigator.pop(context, _ConflictAction.dismiss),
               child: Text(
                 isDeviceOther || isBlocked
-                    ? 'Tushundim'
-                    : 'Bekor qilish',
+                    ? context.tr('ob_dev_understood')
+                    : context.tr('cancel'),
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Agar eski telefon yo‘qolgan bo‘lsa — operatorga murojaat qiling.',
+              context.tr('ob_dev_lost_hint'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),

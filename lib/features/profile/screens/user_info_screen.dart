@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../l10n/app_localizations.dart';
 import '../controllers/profile_controller.dart';
 import '../widgets/language_settings_tile.dart';
@@ -110,7 +111,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final err = c.consumeError();
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(err), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.trMsg(err)), backgroundColor: Colors.red),
       );
       return;
     }
@@ -119,7 +120,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            msg,
+            context.trMsg(msg),
             style: const TextStyle(color: AppColors.onPrimary),
           ),
           backgroundColor: AppColors.button,

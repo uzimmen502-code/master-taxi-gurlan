@@ -13,6 +13,7 @@ import 'messages_tab.dart';
 import 'order_news_tab.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../services/user_audience.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// Хабарлар — «Янгилик», «Хабарлар», «Буюртма».
 class NewsHubScreen extends StatefulWidget {
@@ -171,7 +172,7 @@ class _NewsHubScreenState extends State<NewsHubScreen>
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('Хабарлар'),
+        title: Text(context.tr('bottom_news')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         bottom: TabBar(
@@ -182,19 +183,19 @@ class _NewsHubScreenState extends State<NewsHubScreen>
           tabs: [
             Tab(
               child: _TabLabel(
-                text: 'Янгилик',
+                text: context.tr('tv_publish_news'),
                 badge: _unreadBroadcast,
               ),
             ),
             Tab(
               child: _TabLabel(
-                text: 'Хабарлар',
+                text: context.tr('messages_title'),
                 badge: _unreadMessages,
               ),
             ),
             Tab(
               child: _TabLabel(
-                text: 'Буюртма',
+                text: context.tr('order'),
                 badge: _unreadOrders,
               ),
             ),

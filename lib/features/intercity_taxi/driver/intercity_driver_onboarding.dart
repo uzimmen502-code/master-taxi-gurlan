@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/navigation/ensure_car_info_via_profile.dart';
@@ -37,16 +38,14 @@ class IntercityDriverOnboarding {
         context,
         blocked
             ? context.tr('taxi_not_allowed')
-            : context
-                .tr('driver_mode_error')
-                .replaceAll('{error}', e.message ?? e.code),
+            : userErrorMessage(context, e, fallbackKey: 'driver_mode_error'),
         IntercityColors.danger,
       );
     } catch (e) {
       if (!context.mounted) return;
       _snack(
         context,
-        context.tr('driver_mode_error').replaceAll('{error}', '$e'),
+        userErrorMessage(context, e, fallbackKey: 'driver_mode_error'),
         IntercityColors.danger,
       );
     }

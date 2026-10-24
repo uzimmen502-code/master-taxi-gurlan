@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../core/utils/firebase_functions_errors.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/dating_profile.dart';
 import '../services/dating_photo_storage.dart';
 import '../services/dating_service.dart';
@@ -70,7 +70,7 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
 
   Future<void> _addPhotos() async {
     if (_photos.length >= 6) {
-      _snack('Кўпи билан 6 та расм.');
+      _snack(context.tr('dating_photos_max'));
       return;
     }
     final files = await _picker.pickMultiImage(imageQuality: 90);
@@ -84,7 +84,10 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
       }
       setState(() {});
     } catch (e) {
-      _snack('Юклашда хатолик: $e');
+      if (mounted) {
+        _snack(userErrorMessage(context, e,
+            fallbackKey: 'dating_photo_upload_failed'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -98,21 +101,21 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
 
   Future<void> _save() async {
     if (_nameCtrl.text.trim().length < 2) {
-      _snack('Исмни киритинг.');
+      _snack(context.tr('dating_name_required'));
       return;
     }
     if (!['male', 'female'].contains(_gender)) {
-      _snack('Жинсни танланг.');
+      _snack(context.tr('dating_gender_required'));
       return;
     }
     final year = int.tryParse(_yearCtrl.text.trim()) ?? 0;
     final nowY = DateTime.now().year;
     if (year < nowY - 80 || year > nowY - 18) {
-      _snack('Туғилган йил 18+ ва реалистик бўлсин.');
+      _snack(context.tr('dating_year_invalid'));
       return;
     }
     if (_photos.isEmpty) {
-      _snack('Камида 1 та реал расм керак.');
+      _snack(context.tr('dating_photo_required'));
       return;
     }
     setState(() => _busy = true);
@@ -129,13 +132,11 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
         'photos': _photos.map((p) => p.toMap()).toList(),
       });
       if (mounted) {
-        _snack('Сақланди. Админ тасдиғидан сўнг кўринади.');
+        _snack(context.tr('dating_saved_pending'));
         Navigator.pop(context, true);
       }
-    } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
     } catch (e) {
-      _snack('Хатолик: $e');
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -152,7 +153,9 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F4F6),
       appBar: AppBar(
-        title: Text(isEdit ? 'Профилни таҳрирлаш' : 'Танишув профили'),
+        title: Text(isEdit
+            ? context.tr('dating_edit_profile')
+            : context.tr('dating_form_title')),
         backgroundColor: datingAccent,
         foregroundColor: Colors.white,
       ),
@@ -161,23 +164,25 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
         children: [
           _photoSection(),
           const SizedBox(height: 16),
-          _field(_nameCtrl, 'Исм *', Icons.person_outline),
+          _field(_nameCtrl, context.tr('dating_f_name'), Icons.person_outline),
           const SizedBox(height: 12),
           _genderSelector(),
           const SizedBox(height: 12),
-          _field(_yearCtrl, 'Туғилган йил * (масалан: 1998)',
+          _field(_yearCtrl, context.tr('dating_f_year'),
               Icons.cake_outlined,
               keyboard: TextInputType.number),
           const SizedBox(height: 12),
-          _field(_cityCtrl, 'Шаҳар/туман', Icons.location_city_outlined),
+          _field(_cityCtrl, context.tr('dating_f_city'),
+              Icons.location_city_outlined),
           const SizedBox(height: 12),
           _maritalSelector(),
           const SizedBox(height: 12),
-          _field(_eduCtrl, 'Маълумоти (ихтиёрий)', Icons.school_outlined),
+          _field(_eduCtrl, context.tr('dating_f_edu'), Icons.school_outlined),
           const SizedBox(height: 12),
-          _field(_jobCtrl, 'Иш/касб (ихтиёрий)', Icons.work_outline),
+          _field(_jobCtrl, context.tr('dating_f_job'), Icons.work_outline),
           const SizedBox(height: 12),
-          _field(_aboutCtrl, 'Ўзингиз ҳақингизда', Icons.notes_outlined,
+          _field(_aboutCtrl, context.tr('dating_f_about'),
+              Icons.notes_outlined,
               maxLines: 4),
           const SizedBox(height: 20),
           SizedBox(
@@ -192,13 +197,12 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
                       height: 22,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : const Text('Сақлаш'),
+                  : Text(context.tr('save')),
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Эслатма: фақат реал расм юкланг. Профил админ модерациясидан '
-            'ўтгач бошқаларга кўринади.',
+            context.tr('dating_form_note'),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         ],
@@ -210,8 +214,8 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Расмлар (1–6)',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+        Text(context.tr('dating_photos_title'),
+            style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -272,9 +276,11 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
   Widget _genderSelector() {
     return Row(
       children: [
-        Expanded(child: _genderChip('male', '👨 Эркак')),
+        Expanded(
+            child: _genderChip('male', context.tr('dating_gender_male'))),
         const SizedBox(width: 10),
-        Expanded(child: _genderChip('female', '👩 Аёл')),
+        Expanded(
+            child: _genderChip('female', context.tr('dating_gender_female'))),
       ],
     );
   }
@@ -303,21 +309,28 @@ class _DatingProfileFormScreenState extends State<DatingProfileFormScreen> {
 
   Widget _maritalSelector() {
     return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'Оилавий ҳолат',
-        prefixIcon: Icon(Icons.favorite_border),
-        border: OutlineInputBorder(),
+      decoration: InputDecoration(
+        labelText: context.tr('dating_marital_label'),
+        prefixIcon: const Icon(Icons.favorite_border),
+        border: const OutlineInputBorder(),
         isDense: true,
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _marital.isEmpty ? '' : _marital,
           isExpanded: true,
-          items: const [
-            DropdownMenuItem(value: '', child: Text('Танланмаган')),
-            DropdownMenuItem(value: 'single', child: Text('Бўйдоқ/Турмушга чиқмаган')),
-            DropdownMenuItem(value: 'divorced', child: Text('Ажрашган')),
-            DropdownMenuItem(value: 'widowed', child: Text('Бева')),
+          items: [
+            DropdownMenuItem(
+                value: '', child: Text(context.tr('rel_gender_none'))),
+            DropdownMenuItem(
+                value: 'single',
+                child: Text(context.tr('dating_marital_single'))),
+            DropdownMenuItem(
+                value: 'divorced',
+                child: Text(context.tr('dating_marital_divorced'))),
+            DropdownMenuItem(
+                value: 'widowed',
+                child: Text(context.tr('dating_marital_widowed'))),
           ],
           onChanged: (v) => setState(() => _marital = v ?? ''),
         ),

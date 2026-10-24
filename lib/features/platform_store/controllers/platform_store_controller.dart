@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/platform_product.dart';
 import '../../../models/price_tier.dart';
 import '../../../repositories/platform_products_repository.dart';
@@ -218,7 +219,7 @@ class PlatformStoreController extends ChangeNotifier {
       _pruneMissing();
       await _loadWallet();
     } catch (e) {
-      errorMessage = e.toString();
+      errorMessage = userErrorKey(e, fallbackKey: 'err_load_failed');
       _products = const [];
     } finally {
       loading = false;
@@ -342,7 +343,7 @@ class PlatformStoreController extends ChangeNotifier {
     required String phone,
   }) async {
     if (_cart.isEmpty) {
-      errorMessage = 'Сават бўш';
+      errorMessage = 'cart_empty';
       notifyListeners();
       return (success: false, error: errorMessage);
     }
@@ -356,7 +357,7 @@ class PlatformStoreController extends ChangeNotifier {
       final userPhone = canonicalPhoneId(userPhoneRaw);
       if (phoneDigits(userPhone).length < 9) {
         isSubmitting = false;
-        errorMessage = 'Телефон рақамингизни профилда тўлдиринг.';
+        errorMessage = 'misc_profile_phone_required';
         notifyListeners();
         return (success: false, error: errorMessage);
       }
@@ -386,7 +387,7 @@ class PlatformStoreController extends ChangeNotifier {
       }
       if (items.isEmpty) {
         isSubmitting = false;
-        errorMessage = 'Сават бўш';
+        errorMessage = 'cart_empty';
         notifyListeners();
         return (success: false, error: errorMessage);
       }
@@ -430,13 +431,22 @@ class PlatformStoreController extends ChangeNotifier {
       return (success: true, error: null);
     } on FirebaseFunctionsException catch (e) {
       isSubmitting = false;
-      final m = e.message ?? e.code;
-      errorMessage = e.code == 'failed-precondition' ? '⚠️ $m' : 'Хатолик: $m';
+      // `placeOrderPostPaid` xabarlari — developer/aralash tilli matn: l10n
+      // kaliti qaytariladi (UI `context.trMsg(error)` bilan chiqaradi).
+      errorMessage = userErrorKey(
+        e,
+        fallbackKey: e.code == 'failed-precondition'
+            ? 'misc_stock_insufficient'
+            : 'err_unexpected',
+        byServerMessage: const {
+          'insufficient_balance': 'misc_wallet_insufficient',
+        },
+      );
       notifyListeners();
       return (success: false, error: errorMessage);
     } catch (e) {
       isSubmitting = false;
-      errorMessage = 'Хатолик: $e';
+      errorMessage = userErrorKey(e);
       notifyListeners();
       return (success: false, error: errorMessage);
     }

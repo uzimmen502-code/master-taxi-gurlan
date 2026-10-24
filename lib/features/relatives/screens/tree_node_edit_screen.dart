@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/tree_person.dart';
 import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
@@ -94,8 +94,10 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
         _photoPath = res.path;
       });
     } catch (e) {
-      _snack(RelativesL10n.trParams(
-          context, 'rel_photo_upload_error', {'error': '$e'}));
+      if (mounted) {
+        _snack(userErrorMessage(context, e,
+            fallbackKey: 'rel_fix_photo_upload_failed'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -160,10 +162,9 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
       );
       if (mounted) Navigator.pop(context);
     } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
+      _snack(userErrorMessage(context, e));
     } catch (e) {
-      _snack(RelativesL10n.trParams(
-          context, 'error_generic', {'error': '$e'}));
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

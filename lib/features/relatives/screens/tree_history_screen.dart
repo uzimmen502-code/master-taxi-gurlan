@@ -2,7 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/tree_history_entry.dart';
 import '../../../repositories/tree_repository.dart';
 import '../l10n/relatives_l10n.dart';
@@ -146,10 +146,9 @@ class _TreeHistoryScreenState extends State<TreeHistoryScreen> {
       await TreeService.undoOperation(e.id);
       _snack(context.tr('rel_undo_done'));
     } on FirebaseFunctionsException catch (ex) {
-      _snack(firebaseFunctionsUserMessage(ex));
+      _snack(userErrorMessage(context, ex));
     } catch (ex) {
-      _snack(RelativesL10n.trParams(
-          context, 'error_generic', {'error': '$ex'}));
+      if (mounted) _snack(userErrorMessage(context, ex));
     } finally {
       if (mounted) setState(() => _busy.remove(e.id));
     }

@@ -187,8 +187,8 @@ class LegMatchCard extends StatelessWidget {
               _chip(
                 context,
                 Icons.scale_outlined,
-                '${logisticsWeightLabel(leg.chargeableWeightG)} · '
-                    '${leg.lengthCm}×${leg.widthCm}×${leg.heightCm} см',
+                '${logisticsWeightLabel(leg.chargeableWeightG, gramUnit: context.tr('misc_unit_g'), kgUnit: context.tr('kg'))} · '
+                    '${leg.lengthCm}×${leg.widthCm}×${leg.heightCm} ${context.tr('misc_unit_cm')}',
               ),
               if (leg.fragile)
                 _chip(context, Icons.warning_amber_rounded, context.tr('logistics_fragile')),
@@ -197,7 +197,7 @@ class LegMatchCard extends StatelessWidget {
                   context,
                   Icons.straighten,
                   '${context.tr('match_distance_from_you')} '
-                      '${match.metrics.distanceKm!.toStringAsFixed(1)} km',
+                      '${match.metrics.distanceKm!.toStringAsFixed(1)} ${context.tr('ev_trip_km')}',
                 ),
             ],
           ),

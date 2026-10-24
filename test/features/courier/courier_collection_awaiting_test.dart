@@ -100,9 +100,9 @@ Future<void> _open(
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   // Yig'ishni yakunlash → hisob-kitob varag'i → Tasdiqlash
-  await tester.tap(find.text('Йиғишни якунлаш'));
+  await tester.tap(find.text('crr_task_finalize_btn'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Тасдиқлаш'));
+  await tester.tap(find.text('confirm'));
   await tester.pumpAndSettle();
 }
 
@@ -117,14 +117,14 @@ void main() {
     expect(finalize.calls.single.single['qty'], 10);
     // Varaqda ham, orqadagi ekranda ham (2 + 1) kutish ko'rinadi.
     expect(find.text('customer_confirm_waiting'), findsNWidgets(3));
-    expect(find.textContaining('Маҳсулот қабул қилинди'), findsNothing);
+    expect(find.textContaining('crr_task_received'), findsNothing);
 
     await tester.tap(find.text('ok'));
     await tester.pumpAndSettle();
 
     // Bottom bar: kutish bloki + o'chiq tugma; "Yakunlash" tugmasi YO'Q.
     expect(find.text('customer_confirm_waiting'), findsNWidgets(2));
-    expect(find.text('Йиғишни якунлаш'), findsNothing);
+    expect(find.text('crr_task_finalize_btn'), findsNothing);
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.enabled, isFalse, reason: 'mijoz ko\'rayotganda raqam o\'zgarmaydi');
 
@@ -163,10 +163,10 @@ void main() {
     final repo = _FakeRepo([_task()]);
     await _open(tester, finalize: finalize, repo: repo);
 
-    expect(find.textContaining('Маҳсулот қабул қилинди'), findsOneWidget);
+    expect(find.textContaining('crr_task_received'), findsOneWidget);
     expect(find.text('customer_confirm_waiting'), findsNothing);
 
-    await tester.tap(find.text('Якунлаш'));
+    await tester.tap(find.text('courier_finalize'));
     await tester.pumpAndSettle();
     expect(find.byType(CourierCollectionDetailScreen), findsNothing);
     expect(repo.calls, 0, reason: 'kutish bo\'lmasa holat tekshirilmaydi');

@@ -4,8 +4,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/relative_person.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
@@ -158,7 +158,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       await _showBothClaimedDialog();
       return;
     }
-    final label = duplicateGroupLabel(group);
+    final label = duplicateGroupLabel(
+      group,
+      maleLabel: context.tr('rel_gender_male'),
+      femaleLabel: context.tr('rel_gender_female'),
+    );
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -192,12 +196,14 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         'name': keep.fullName,
       }));
     } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
+      _snack(userErrorMessage(context, e));
     } catch (e) {
-      _snack(RelativesL10n.trParams(context, 'rel_tree_merge_partial_error', {
-        'done': '$done',
-        'error': '$e',
-      }));
+      debugPrint('[merge] partial failure after $done merged: $e');
+      if (mounted) {
+        _snack(RelativesL10n.trParams(context, 'rel_fix_merge_partial_failed', {
+          'done': '$done',
+        }));
+      }
     }
   }
 
@@ -263,8 +269,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         _snack(context.tr('rel_tree_export_capture_fail'));
       }
     } catch (e) {
-      _snack(RelativesL10n.trParams(
-          context, 'error_generic', {'error': '$e'}));
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) {
         setState(() => _exportBusy = false);
@@ -273,14 +278,24 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     }
   }
 
-  Future<void> _exportGedcom() =>
-      _runExport(() => TreeExportService.shareGedcom(_exportPeople));
+  Future<void> _exportGedcom() {
+    final subject = context.tr('rel_fix_export_subject_gedcom');
+    return _runExport(
+        () => TreeExportService.shareGedcom(_exportPeople, subject: subject));
+  }
 
-  Future<void> _exportPng() =>
-      _runExport(() => TreeExportService.shareTreePng(_treeCaptureKey));
+  Future<void> _exportPng() {
+    final subject = context.tr('rel_fix_export_subject');
+    return _runExport(() =>
+        TreeExportService.shareTreePng(_treeCaptureKey, subject: subject));
+  }
 
-  Future<void> _exportPdf() =>
-      _runExport(() => TreeExportService.shareTreePdf(_treeCaptureKey));
+  Future<void> _exportPdf() {
+    final subject = context.tr('rel_fix_export_subject_pdf');
+    final pdfTitle = context.tr('rel_fix_export_pdf_title');
+    return _runExport(() => TreeExportService.shareTreePdf(_treeCaptureKey,
+        subject: subject, pdfTitle: pdfTitle));
+  }
 
   Widget _dupBar(List<List<TreePerson>> groups) {
     final count = groups.fold<int>(0, (a, g) => a + g.length);
@@ -343,7 +358,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                     children: [
                       Text(
                           RelativesL10n.trParams(ctx, 'rel_tree_dup_group', {
-                            'label': duplicateGroupLabel(g),
+                            'label': duplicateGroupLabel(
+                              g,
+                              maleLabel: ctx.tr('rel_gender_male'),
+                              femaleLabel: ctx.tr('rel_gender_female'),
+                            ),
                             'count': '${g.length}',
                           }),
                           style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -503,10 +522,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
           ? context.tr('rel_link_already_sent')
           : context.tr('rel_link_sent'));
     } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
+      _snack(userErrorMessage(context, e));
     } catch (e) {
-      _snack(RelativesL10n.trParams(
-          context, 'error_generic', {'error': '$e'}));
+      if (mounted) _snack(userErrorMessage(context, e));
     }
   }
 
@@ -526,7 +544,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '$error',
+              userErrorMessage(context, error ?? 'unknown',
+                  fallbackKey: 'err_load_failed'),
               style: const TextStyle(color: Colors.grey, fontSize: 12),
               textAlign: TextAlign.center,
               maxLines: 3,

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/user_error.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../models/entertainment_video.dart';
@@ -28,7 +30,9 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
   bool _allowed = false;
   bool _loading = true;
   bool _saving = false;
-  String? _error;
+
+  /// Xato matni emas — l10n kaliti (ekranda `context.tr(_errorKey!)`).
+  String? _errorKey;
 
   @override
   void initState() {
@@ -54,7 +58,7 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _errorKey = userErrorKey(e, fallbackKey: 'err_load_failed');
         _loading = false;
       });
     }
@@ -69,20 +73,24 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Фильмлар сақланди')),
+        SnackBar(content: Text(context.tr('ent_saved'))),
       );
     } on FirebaseException catch (e) {
       if (!mounted) return;
       final msg = e.code == 'permission-denied'
-          ? 'Рухсат йўқ: админ «Kino» ёқилганини текширинг'
-          : 'Firestore: ${e.message ?? e.code}';
+          ? context.tr('ent_perm_denied')
+          : userErrorMessage(context, e, fallbackKey: 'ent_save_failed');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
       );
     } catch (e) {
       if (!mounted) return;
+      // Repozitoriy (setDriverEntertainmentIds) kirill matnli Exception
+      // tashlaydi — xom matn ko'rsatilmaydi, faqat umumiy xabar.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+            content: Text(
+                userErrorMessage(context, e, fallbackKey: 'ent_save_failed'))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -116,17 +124,17 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
           color: Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Text(
-          '🎬 Кино: админ рухсати керак. Админ панелдан «Кино рухсати»ни ёқинг.',
-          style: TextStyle(fontSize: 12),
+        child: Text(
+          context.tr('ent_need_admin'),
+          style: const TextStyle(fontSize: 12),
         ),
       );
     }
 
     if (_catalog.isEmpty) {
-      return const Text(
-        'Админ ҳали кино юкламаган.',
-        style: TextStyle(fontSize: 12, color: Colors.grey),
+      return Text(
+        context.tr('ent_catalog_empty'),
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
       );
     }
 
@@ -134,8 +142,9 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          const Text('🎬 САФАР КИНО',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(context.tr('ent_picker_title'),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           const Spacer(),
           Text(
             '${_selected.length}/${EntertainmentRepository.maxDriverSelection}',
@@ -143,13 +152,14 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
           ),
         ]),
         const SizedBox(height: 6),
-        const Text(
-          'Йўловчилар танланган фильмларни Wi‑Fi да юклаб, сафарда офлайн томоша қилади.',
-          style: TextStyle(fontSize: 11, color: Colors.grey),
+        Text(
+          context.tr('ent_picker_hint'),
+          style: const TextStyle(fontSize: 11, color: Colors.grey),
         ),
-        if (_error != null) ...[
+        if (_errorKey != null) ...[
           const SizedBox(height: 6),
-          Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 11)),
+          Text(context.tr(_errorKey!),
+              style: const TextStyle(color: Colors.red, fontSize: 11)),
         ],
         const SizedBox(height: 8),
         ..._catalog.map((v) {
@@ -181,7 +191,7 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: AppColors.onPrimary),
                   )
-                : const Text('ФИЛМЛАРНИ САҚЛАШ'),
+                : Text(context.tr('ent_picker_save')),
           ),
         ),
       ],

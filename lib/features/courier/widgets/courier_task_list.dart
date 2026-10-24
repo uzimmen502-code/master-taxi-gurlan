@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Курьер вазифалари рўйхати — callable'дан, pull-to-refresh билан
 /// (гилам ва сут курьер экранлари).
@@ -131,9 +131,8 @@ class _CourierTaskListState<T> extends State<CourierTaskList<T>> {
             Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                context
-                    .tr('courier_error_generic')
-                    .replaceAll('{error}', '${snap.error}'),
+                userErrorMessage(context, snap.error!,
+                    fallbackKey: 'courier_error_generic'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.red.shade700),
               ),

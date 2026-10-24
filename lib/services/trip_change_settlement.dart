@@ -73,7 +73,7 @@ class TripChangeSettlement {
         return TripChangeSettlementOutcome(
           status: TripChangeSettlementStatus.opened,
           settlementId: settlementId,
-          userMessage: 'Qaytim $change сўм yo\'lovchi tasdiqlashini kutmoqda',
+          userMessage: 'tcs_change_waiting|$change',
         );
       } on FirebaseFunctionsException catch (e, st) {
         lastError = e;
@@ -108,14 +108,10 @@ class TripChangeSettlement {
       settlementAmount: change,
     );
 
-    final deferredMsg = lastError != null
-        ? '${_parseError(lastError).userMessage} — navbatga saqlandi, internet qaytgach yuboriladi'
-        : 'Tarmoq xatosi — qaytim navbatga saqlandi';
-
     return TripChangeSettlementOutcome(
       status: TripChangeSettlementStatus.deferred,
       reasonCode: lastError?.code ?? 'network',
-      userMessage: deferredMsg,
+      userMessage: 'tcs_deferred_queued',
       settlementId: opId,
     );
   }
@@ -128,27 +124,28 @@ class TripChangeSettlement {
       if (msg.contains('Float kritik') || msg.contains('faqat naqd')) {
         return _ParsedSettlementError(
           code: 'float_critical',
-          userMessage: 'Float kritik — qaytim faqat naqd. Admin float to\'ldirsin.',
+          userMessage: 'tcs_float_critical',
           permanent: true,
         );
       }
       if (msg.contains('Float yetarli emas')) {
         return _ParsedSettlementError(
           code: 'float_insufficient',
-          userMessage: 'Float yetarli emas — qolgan qaytimni naqd bering.',
+          userMessage: 'tcs_float_insufficient',
           permanent: true,
         );
       }
       if (msg.contains('identifikatsiyadan')) {
         return _ParsedSettlementError(
           code: 'not_identified',
-          userMessage: 'Yo\'lovchi yoki haydovchi identifikatsiyadan o\'tmagan.',
+          userMessage: 'tcs_not_identified',
           permanent: true,
         );
       }
       return _ParsedSettlementError(
         code: code,
-        userMessage: msg.isNotEmpty ? msg : 'Settlement ochib bo\'lmadi',
+        // Server matni foydalanuvchiga CHIQMAYDI (CLAUDE.md §25) — faqat kalit.
+        userMessage: 'tcs_open_failed',
         permanent: true,
       );
     }
@@ -158,7 +155,11 @@ class TripChangeSettlement {
         code == 'unauthenticated') {
       return _ParsedSettlementError(
         code: code,
-        userMessage: msg.isNotEmpty ? msg : code,
+        userMessage: code == 'permission-denied'
+            ? 'err_permission'
+            : code == 'unauthenticated'
+                ? 'err_auth'
+                : 'err_invalid',
         permanent: true,
       );
     }
@@ -166,7 +167,7 @@ class TripChangeSettlement {
     const retryable = {'unavailable', 'deadline-exceeded', 'internal', 'unknown'};
     return _ParsedSettlementError(
       code: code,
-      userMessage: msg.isNotEmpty ? msg : 'Tarmoq xatosi — qayta uriniladi',
+      userMessage: retryable.contains(code) ? 'err_network' : 'tcs_open_failed',
       retryable: retryable.contains(code),
     );
   }

@@ -9,6 +9,7 @@ import '../models/tv_shop.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_storage_service.dart';
 import '../widgets/tv_shop_photo_gallery.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Эгаси товар расмларини 5 тагача қўшади / олиб ташлайди.
 class TvShopItemPhotosScreen extends StatefulWidget {
@@ -82,7 +83,7 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
       debugPrint('[TvShopPhotos] $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(userErrorMessage(context, e, fallbackKey: 'err_photo_upload'))),
         );
       }
     } finally {
@@ -135,7 +136,7 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
+        SnackBar(content: Text(userErrorMessage(context, e, fallbackKey: 'err_photo_upload'))),
       );
     }
   }

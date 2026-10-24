@@ -250,7 +250,7 @@ class IntercityBillingFlow {
           children: [
             Text(
               fee > 0
-                  ? '${_fmtSum(fee)} сўм'
+                  ? '${_fmtSum(fee)} ${ctx.tr('currency_sum')}'
                   : ctx.tr('taxi_fee_free_starter'),
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
             ),
@@ -260,7 +260,7 @@ class IntercityBillingFlow {
             if (fee > 0 && quote.walletBalance != null) ...[
               const SizedBox(height: 8),
               Text(
-                '${ctx.tr('taxi_fee_wallet_balance')}: ${_fmtSum(quote.walletBalance!)} сўм',
+                '${ctx.tr('taxi_fee_wallet_balance')}: ${_fmtSum(quote.walletBalance!)} ${ctx.tr('currency_sum')}',
                 style: const TextStyle(fontSize: 13),
               ),
             ],

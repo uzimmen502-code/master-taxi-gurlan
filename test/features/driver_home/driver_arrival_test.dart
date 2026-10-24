@@ -1,9 +1,10 @@
-import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/driver_home/widgets/active_ride_card.dart';
 import 'package:ava_gurlan/models/active_trip.dart';
 import 'package:ava_gurlan/models/trip_request.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../restaurants/restaurants_l10n_harness.dart';
 
 TripRequest _ride({DateTime? arrivedAt}) => TripRequest(
       id: 't1',
@@ -17,8 +18,8 @@ TripRequest _ride({DateTime? arrivedAt}) => TripRequest(
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(
-    MaterialApp(
-      theme: AppTheme.light,
+    l10nApp(
+      delegate: JsonL10nDelegate('uz_Cyrl'),
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );

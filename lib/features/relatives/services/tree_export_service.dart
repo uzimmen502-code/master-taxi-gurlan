@@ -17,7 +17,11 @@ import 'gedcom_exporter.dart';
 class TreeExportService {
   TreeExportService._();
 
-  static Future<void> shareGedcom(List<RelativePerson> people) async {
+  /// `subject` / `pdfTitle` — chaqiruvchi tomonidan joriy tilda tarjima qilinadi.
+  static Future<void> shareGedcom(
+    List<RelativePerson> people, {
+    required String subject,
+  }) async {
     if (people.isEmpty) {
       throw StateError('empty');
     }
@@ -26,22 +30,29 @@ class TreeExportService {
     final file = await _writeTemp('nasab_daraxti_$stamp.ged', body);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'text/plain')],
-      subject: 'AVA — nasab daraxti (GEDCOM)',
+      subject: subject,
     );
   }
 
-  static Future<void> shareTreePng(GlobalKey captureKey) async {
+  static Future<void> shareTreePng(
+    GlobalKey captureKey, {
+    required String subject,
+  }) async {
     final png = await _capturePng(captureKey);
     if (png == null) throw StateError('capture');
     final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
     final file = await _writeTempBytes('nasab_daraxti_$stamp.png', png);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'image/png')],
-      subject: 'AVA — nasab daraxti',
+      subject: subject,
     );
   }
 
-  static Future<void> shareTreePdf(GlobalKey captureKey) async {
+  static Future<void> shareTreePdf(
+    GlobalKey captureKey, {
+    required String subject,
+    required String pdfTitle,
+  }) async {
     final png = await _capturePng(captureKey);
     if (png == null) throw StateError('capture');
     final doc = pw.Document();
@@ -54,7 +65,7 @@ class TreeExportService {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              'AVA — Насаб дарахти',
+              pdfTitle,
               style: pw.TextStyle(
                 fontSize: 14,
                 fontWeight: pw.FontWeight.bold,
@@ -80,7 +91,7 @@ class TreeExportService {
     final file = await _writeTempBytes('nasab_daraxti_$stamp.pdf', bytes);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/pdf')],
-      subject: 'AVA — nasab daraxti (PDF)',
+      subject: subject,
     );
   }
 

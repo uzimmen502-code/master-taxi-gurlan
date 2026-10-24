@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/l10n/l10n_extension.dart';
 import '../../core/theme/app_theme.dart';
 
 import '../../core/utils/order_receipt_format.dart';
@@ -19,8 +20,8 @@ class OrderReceiptView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lines = OrderReceiptFormat.lines(order);
-    final module = order.typeLabelUz;
+    final lines = OrderReceiptFormat.lines(order, tr: context.trMsg);
+    final module = context.tr(order.typeLabelKey);
 
     return Container(
       width: double.infinity,
@@ -39,7 +40,9 @@ class OrderReceiptView extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  title ?? '🧾 Чек · $module',
+                  title ??
+                      context.trMsg('misc_receipt_title',
+                          params: {'module': module}),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -49,16 +52,17 @@ class OrderReceiptView extends StatelessWidget {
             ],
           ),
           const Divider(height: 16),
-          ...lines.map(_receiptLine),
+          ...lines.map((l) => _receiptLine(context, l)),
         ],
       ),
     );
   }
 
-  static bool _isTotalLine(String line) => line.startsWith('Жами:');
+  static bool _isTotalLine(BuildContext context, String line) =>
+      OrderReceiptFormat.isTotalLine(line, tr: context.trMsg);
 
-  Widget _receiptLine(String line) {
-    if (!_isTotalLine(line)) {
+  Widget _receiptLine(BuildContext context, String line) {
+    if (!_isTotalLine(context, line)) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: Text(

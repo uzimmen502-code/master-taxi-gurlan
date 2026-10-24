@@ -14,6 +14,7 @@ import '../../../repositories/user_repository.dart';
 import '../../../services/carpet_wash_service.dart';
 import 'carpet_wash_orders_screen.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/user_error.dart';
 
 const _bg = AvaLight.surface2;
 const _titleDark = AvaLight.ink;
@@ -76,7 +77,7 @@ class _CarpetWashScreenState extends State<CarpetWashScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = '$e';
+        _loadError = userErrorMessage(context, e, fallbackKey: 'err_load_failed');
       });
     }
   }
@@ -118,12 +119,12 @@ class _CarpetWashScreenState extends State<CarpetWashScreen> {
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? e.code)),
+        SnackBar(content: Text(userErrorMessage(context, e))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
+        SnackBar(content: Text(userErrorMessage(context, e))),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);

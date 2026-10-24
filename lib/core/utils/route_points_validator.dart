@@ -11,6 +11,7 @@ class RoutePointsValidator {
   }
 
   /// `from` / `to` / `mid` — qaysi maydon uchun tekshirilayotgani.
+  /// Qaytadigan qiymat — l10n KALITI (`rpv_*`); ekranda `context.trMsg(key)`.
   static String? duplicateMessage({
     required String candidate,
     required String from,
@@ -23,11 +24,11 @@ class RoutePointsValidator {
 
     if (role == 'from') {
       if (samePoint(v, to)) {
-        return 'Bu MFY allaqachon oxirgi nuqta sifatida tanlangan';
+        return 'rpv_dup_as_last';
       }
       for (final mid in midStops) {
         if (samePoint(v, mid)) {
-          return 'Bu MFY allaqachon o‘rta nuqta sifatida tanlangan';
+          return 'rpv_dup_as_mid';
         }
       }
       return null;
@@ -35,25 +36,25 @@ class RoutePointsValidator {
 
     if (role == 'to') {
       if (samePoint(v, from)) {
-        return 'Bu MFY allaqachon boshlang‘ich nuqta sifatida tanlangan';
+        return 'rpv_dup_as_first';
       }
       for (final mid in midStops) {
         if (samePoint(v, mid)) {
-          return 'Bu MFY allaqachon o‘rta nuqta sifatida tanlangan';
+          return 'rpv_dup_as_mid';
         }
       }
       return null;
     }
 
     if (samePoint(v, from)) {
-      return 'Bu MFY allaqachon boshlang‘ich nuqta sifatida tanlangan';
+      return 'rpv_dup_as_first';
     }
     if (samePoint(v, to)) {
-      return 'Bu MFY allaqachon oxirgi nuqta sifatida tanlangan';
+      return 'rpv_dup_as_last';
     }
     for (final mid in midStops) {
       if (samePoint(v, mid)) {
-        return 'Bu nuqta allaqachon qo‘shilgan';
+        return 'rpv_point_already_added';
       }
     }
     return null;
@@ -65,8 +66,8 @@ class RoutePointsValidator {
     required String to,
     required List<String> midStops,
   }) {
-    if (from.trim().isEmpty) return 'Boshlang‘ich nuqtani tanlang';
-    if (to.trim().isEmpty) return 'Oxirgi nuqtani tanlang';
+    if (from.trim().isEmpty) return 'rpv_pick_first';
+    if (to.trim().isEmpty) return 'rpv_pick_last';
 
     final errFrom = duplicateMessage(
       candidate: from,
@@ -91,7 +92,7 @@ class RoutePointsValidator {
       final key = normalize(stop);
       if (key.isEmpty) continue;
       if (seen.contains(key)) {
-        return 'Marshrut nuqtalari takrorlanmasin';
+        return 'rpv_points_must_differ';
       }
       seen.add(key);
     }

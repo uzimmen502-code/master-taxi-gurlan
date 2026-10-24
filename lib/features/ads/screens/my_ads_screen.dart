@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/my_ad_actions.dart';
@@ -42,7 +44,7 @@ class _MyAdsScreenState extends State<MyAdsScreen>
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Менинг эълонларим'),
+          title: Text(context.tr('jobs_my_ads')),
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
           bottom: TabBar(
@@ -50,15 +52,15 @@ class _MyAdsScreenState extends State<MyAdsScreen>
             unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),
             indicatorColor: AppColors.onPrimary,
             isScrollable: true,
-            tabs: const [
-              Tab(text: 'Фаол'),
-              Tab(text: 'Текширувда'),
-              Tab(text: 'Яширилган'),
+            tabs: [
+              Tab(text: context.tr('jobs_status_active')),
+              Tab(text: context.tr('jobs_status_pending')),
+              Tab(text: context.tr('wholesale_status_inactive')),
             ],
           ),
         ),
         body: _uid.length < 9
-            ? const Center(child: Text('Телефон тасдиқланмаган'))
+            ? Center(child: Text(context.tr('adsx_phone_unverified')))
             : TabBarView(
                 children: [
                   _AdsList(uid: _uid, status: 'active'),
@@ -71,7 +73,7 @@ class _MyAdsScreenState extends State<MyAdsScreen>
   }
 }
 
-class _AdsList extends StatelessWidget {
+class _AdsList extends StatefulWidget {
   const _AdsList({
     required this.uid,
     required this.status,
@@ -83,7 +85,15 @@ class _AdsList extends StatelessWidget {
   final bool pendingOnly;
 
   @override
+  State<_AdsList> createState() => _AdsListState();
+}
+
+class _AdsListState extends State<_AdsList> {
+  @override
   Widget build(BuildContext context) {
+    final uid = widget.uid;
+    final status = widget.status;
+    final pendingOnly = widget.pendingOnly;
     final repo = context.read<AdsRepository>();
     final dateFmt = DateFormat('dd.MM.yyyy');
 
@@ -95,15 +105,18 @@ class _AdsList extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return Center(child: Text('Хатолик: ${snap.error}'));
+          return LoadErrorView(
+            error: snap.error!,
+            onRetry: () => setState(() {}),
+          );
         }
         final ads = snap.data ?? const [];
         if (ads.isEmpty) {
           return Center(
             child: Text(
               pendingOnly
-                  ? 'Moderatsiyada e\'lonlar yo\'q'
-                  : 'E\'lonlar yo\'q',
+                  ? context.tr('adsx_empty_pending')
+                  : context.tr('adsx_empty'),
             ),
           );
         }
@@ -145,7 +158,7 @@ class _AdsList extends StatelessWidget {
                   ),
                   if (pendingOnly)
                     Text(
-                      'Moderatsiyada — admin tasdiqlagach bozorda ko\'rinadi',
+                      context.tr('adsx_pending_hint'),
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.orange.shade800,

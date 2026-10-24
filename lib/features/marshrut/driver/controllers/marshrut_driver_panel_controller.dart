@@ -17,6 +17,7 @@ import '../../../../repositories/user_repository.dart';
 import '../../../../services/notification_service.dart';
 import '../../../../services/trip_change_settlement.dart';
 import '../../../../utils/gurlan_places.dart';
+import '../../../../core/utils/user_error.dart';
 
 /// Marshrut haydovchi panelining state mashinasi.
 ///
@@ -446,7 +447,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _startReachabilityProbe();
       await _loadEndStopCoords();
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -658,7 +659,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _autoPausedReason = null;
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -802,7 +803,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       if (_disposed) return;
       await _applyDirectionSwitch();
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -820,7 +821,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       if (_disposed) return;
       await goOffline(force: true);
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -843,7 +844,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       await _loadEndStopCoords();
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -889,7 +890,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _safeNotify();
       return true;
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
       return false;
     }
@@ -921,7 +922,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _info = 'booking_cancelled_reassign';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -950,7 +951,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _info = 'trip_completed';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
       _safeNotify();
     }
   }
@@ -967,7 +968,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       change: change,
     );
     if (outcome.status == TripChangeSettlementStatus.failedPermanent) {
-      _errorMessage = 'settlement_${outcome.reasonCode}|${outcome.userMessage}';
+      _errorMessage = outcome.userMessage ?? 'tcs_open_failed';
       _safeNotify();
     } else if (outcome.status == TripChangeSettlementStatus.deferred &&
         outcome.userMessage != null) {

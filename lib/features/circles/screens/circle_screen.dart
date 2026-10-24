@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/circle.dart';
 import '../../../models/circle_chat_message.dart';
 import '../../../models/circle_event.dart';
@@ -63,7 +65,9 @@ class _CircleScreenState extends State<CircleScreen> {
 
   Future<void> _leave(Circle c) async {
     final ok = await _confirm(
-        'Давradан чиқиш', '«${c.title}» даврасидан чиқасизми?', 'Чиқаман',
+        context.tr('circ_leave_title'),
+        context.trMsg('circ_leave_body', params: {'title': c.title}),
+        context.tr('circ_leave_confirm'),
         danger: true);
     if (ok != true) return;
     await _repo.leaveCircle(circleId: widget.circleId, userId: widget.phone);
@@ -79,22 +83,22 @@ class _CircleScreenState extends State<CircleScreen> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Шикоят'),
+          title: Text(ctx.tr('ad_report_title')),
           content: TextField(
             controller: reasonCtrl,
             maxLines: 3,
-            decoration: const InputDecoration(
-              hintText: 'Сабаби (масалан: танимайман / нотўғри маълумот)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: ctx.tr('circ_report_hint'),
+              border: const OutlineInputBorder(),
             ),
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Бекор')),
+                child: Text(ctx.tr('cancel'))),
             ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Юбориш')),
+                child: Text(ctx.tr('submit'))),
           ],
         ),
       );
@@ -106,7 +110,7 @@ class _CircleScreenState extends State<CircleScreen> {
         reporterId: widget.phone,
         reason: reasonCtrl.text.trim(),
       );
-      if (mounted) _snack('Шикоят юборилди.');
+      if (mounted) _snack(context.tr('circ_report_sent'));
     } finally {
       reasonCtrl.dispose();
     }
@@ -128,7 +132,7 @@ class _CircleScreenState extends State<CircleScreen> {
       );
       _postCtrl.clear();
     } catch (e) {
-      _snack('Хатолик: $e');
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -147,7 +151,7 @@ class _CircleScreenState extends State<CircleScreen> {
       );
       _chatCtrl.clear();
     } catch (e) {
-      _snack('Хатолик: $e');
+      if (mounted) _snack(userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _chatSending = false);
     }
@@ -163,27 +167,29 @@ class _CircleScreenState extends State<CircleScreen> {
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setLocal) => AlertDialog(
-            title: const Text('Учрашув қўшиш'),
+            title: Text(ctx.tr('circ_event_add')),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
                     controller: titleCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Сарлавҳа *', border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: ctx.tr('circ_event_title_label'),
+                        border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: placeCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Жой', border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: ctx.tr('circ_event_place_label'),
+                        border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.event),
                     label: Text(picked == null
-                        ? 'Сана ва вақтни танланг'
+                        ? ctx.tr('circ_event_pick_date')
                         : _fmtTime(picked)),
                     onPressed: () async {
                       final d = await showDatePicker(
@@ -210,13 +216,13 @@ class _CircleScreenState extends State<CircleScreen> {
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Бекор')),
+                  child: Text(ctx.tr('cancel'))),
               ElevatedButton(
                 onPressed: () {
                   if (titleCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx, true);
                 },
-                child: const Text('Сақлаш'),
+                child: Text(ctx.tr('save')),
               ),
             ],
           ),
@@ -262,7 +268,10 @@ class _CircleScreenState extends State<CircleScreen> {
         ),
       );
     } catch (e) {
-      _snack('Юклашда хатолик: $e');
+      if (mounted) {
+        _snack(userErrorMessage(context, e,
+            fallbackKey: 'circ_photo_upload_failed'));
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -283,27 +292,28 @@ class _CircleScreenState extends State<CircleScreen> {
             appBar: AppBar(
               backgroundColor: CircleScreen._accent,
               foregroundColor: Colors.white,
-              title: Text(circle?.title ?? 'Давра'),
+              title: Text(circle?.title ?? context.tr('circ_default_title')),
               actions: [
                 PopupMenuButton<String>(
                   onSelected: (v) {
                     if (v == 'leave' && circle != null) _leave(circle);
                   },
                   itemBuilder: (_) => [
-                    const PopupMenuItem(
-                        value: 'leave', child: Text('Давradан чиқиш')),
+                    PopupMenuItem(
+                        value: 'leave',
+                        child: Text(context.tr('circ_leave_title'))),
                   ],
                 ),
               ],
-              bottom: const TabBar(
+              bottom: TabBar(
                 isScrollable: true,
                 indicatorColor: Colors.white,
                 tabs: [
-                  Tab(text: 'Аъзолар'),
-                  Tab(text: 'Лента'),
-                  Tab(text: 'Учрашувлар'),
-                  Tab(text: 'Альбом'),
-                  Tab(text: 'Чат'),
+                  Tab(text: context.tr('circ_tab_members')),
+                  Tab(text: context.tr('circ_tab_feed')),
+                  Tab(text: context.tr('circ_tab_events')),
+                  Tab(text: context.tr('circ_tab_album')),
+                  Tab(text: context.tr('bottom_chat')),
                 ],
               ),
             ),
@@ -340,7 +350,7 @@ class _CircleScreenState extends State<CircleScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (members.isEmpty) {
-          return const Center(child: Text('Ҳали аъзолар йўқ.'));
+          return Center(child: Text(context.tr('circ_no_members')));
         }
         return ListView.separated(
           padding: const EdgeInsets.all(12),
@@ -372,7 +382,8 @@ class _CircleScreenState extends State<CircleScreen> {
       title: Row(
         children: [
           Flexible(
-            child: Text(m.fullName.isEmpty ? 'Номсиз' : m.fullName,
+            child: Text(
+                m.fullName.isEmpty ? context.tr('circ_unnamed') : m.fullName,
                 style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
           if (m.isOwner) ...[
@@ -386,7 +397,7 @@ class _CircleScreenState extends State<CircleScreen> {
           ? null
           : IconButton(
               icon: const Icon(Icons.flag_outlined, size: 20),
-              tooltip: 'Шикоят',
+              tooltip: context.tr('ad_report_title'),
               onPressed: () =>
                   _report(targetType: 'member', targetId: m.userId),
             ),
@@ -407,7 +418,7 @@ class _CircleScreenState extends State<CircleScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (posts.isEmpty) {
-                return const Center(child: Text('Ҳали эълон йўқ.'));
+                return Center(child: Text(context.tr('circ_no_posts')));
               }
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
@@ -428,9 +439,9 @@ class _CircleScreenState extends State<CircleScreen> {
                     controller: _postCtrl,
                     minLines: 1,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: 'Эълон ёзинг...',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: context.tr('circ_post_hint'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -462,7 +473,10 @@ class _CircleScreenState extends State<CircleScreen> {
             Row(
               children: [
                 Expanded(
-                  child: Text(p.authorName.isEmpty ? 'Аъзо' : p.authorName,
+                  child: Text(
+                      p.authorName.isEmpty
+                          ? context.tr('circ_member_default')
+                          : p.authorName,
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 Text(_fmtTime(p.createdAt),
@@ -480,11 +494,12 @@ class _CircleScreenState extends State<CircleScreen> {
                   },
                   itemBuilder: (_) => [
                     if (canDelete)
-                      const PopupMenuItem(
-                          value: 'delete', child: Text('Ўчириш')),
+                      PopupMenuItem(
+                          value: 'delete', child: Text(context.tr('delete'))),
                     if (!canDelete)
-                      const PopupMenuItem(
-                          value: 'report', child: Text('Шикоят')),
+                      PopupMenuItem(
+                          value: 'report',
+                          child: Text(context.tr('ad_report_title'))),
                   ],
                 ),
               ],
@@ -508,7 +523,7 @@ class _CircleScreenState extends State<CircleScreen> {
             child: OutlinedButton.icon(
               onPressed: _createEvent,
               icon: const Icon(Icons.add),
-              label: const Text('Учрашув қўшиш'),
+              label: Text(context.tr('circ_event_add')),
             ),
           ),
         ),
@@ -522,7 +537,7 @@ class _CircleScreenState extends State<CircleScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (events.isEmpty) {
-                return const Center(child: Text('Ҳали учрашув йўқ.'));
+                return Center(child: Text(context.tr('circ_no_events')));
               }
               return ListView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -571,9 +586,9 @@ class _CircleScreenState extends State<CircleScreen> {
             Wrap(
               spacing: 6,
               children: [
-                _rsvpChip(e, 'yes', 'Бораман', my),
-                _rsvpChip(e, 'maybe', 'Балки', my),
-                _rsvpChip(e, 'no', 'Йўқ', my),
+                _rsvpChip(e, 'yes', context.tr('circ_rsvp_yes'), my),
+                _rsvpChip(e, 'maybe', context.tr('circ_rsvp_maybe'), my),
+                _rsvpChip(e, 'no', context.tr('no'), my),
                 Padding(
                   padding: const EdgeInsets.only(left: 4, top: 6),
                   child: Text('✅ ${e.yesCount}',
@@ -618,7 +633,9 @@ class _CircleScreenState extends State<CircleScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.add_a_photo_outlined),
-              label: Text(_uploading ? 'Юкланмоқда...' : 'Расм қўшиш'),
+              label: Text(_uploading
+                  ? context.tr('circ_uploading')
+                  : context.tr('circ_add_photo')),
             ),
           ),
         ),
@@ -632,7 +649,7 @@ class _CircleScreenState extends State<CircleScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (photos.isEmpty) {
-                return const Center(child: Text('Ҳали расм йўқ.'));
+                return Center(child: Text(context.tr('circ_no_photos')));
               }
               return GridView.builder(
                 padding: const EdgeInsets.all(12),
@@ -699,8 +716,8 @@ class _CircleScreenState extends State<CircleScreen> {
                   if (canDelete)
                     TextButton.icon(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      label: const Text('Ўчириш',
-                          style: TextStyle(color: Colors.red)),
+                      label: Text(ctx.tr('delete'),
+                          style: const TextStyle(color: Colors.red)),
                       onPressed: () async {
                         Navigator.pop(ctx);
                         await _repo.deletePhoto(
@@ -731,7 +748,7 @@ class _CircleScreenState extends State<CircleScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (msgs.isEmpty) {
-                return const Center(child: Text('Ҳали хабар йўқ.'));
+                return Center(child: Text(context.tr('circ_no_messages')));
               }
               return ListView.builder(
                 reverse: true,
@@ -753,9 +770,9 @@ class _CircleScreenState extends State<CircleScreen> {
                     controller: _chatCtrl,
                     minLines: 1,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: 'Хабар ёзинг...',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: context.tr('circ_chat_hint'),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -824,7 +841,7 @@ class _CircleScreenState extends State<CircleScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Йўқ')),
+              child: Text(ctx.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: danger

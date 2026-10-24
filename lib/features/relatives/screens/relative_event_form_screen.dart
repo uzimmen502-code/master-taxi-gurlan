@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
@@ -102,8 +103,7 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        _snack(RelativesL10n.trParams(
-            context, 'error_generic', {'error': '$e'}));
+        _snack(userErrorMessage(context, e));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

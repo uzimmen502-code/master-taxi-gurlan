@@ -4,8 +4,9 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/dating_interest.dart';
 import '../../../models/dating_match.dart';
 import '../../../models/dating_profile.dart';
@@ -90,8 +91,8 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
     }
     if (uid.length < 12) {
       return _simpleScaffold(
-        'Танишув',
-        _info('Аввал профилда телефонни тасдиқланг.'),
+        context.tr('dating_short_label'),
+        _info(context.tr('dating_need_phone')),
       );
     }
     return StreamBuilder<DatingProfile?>(
@@ -115,7 +116,7 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
 
   Widget _onboarding(String uid) {
     return _simpleScaffold(
-      'Танишув',
+      context.tr('dating_short_label'),
       Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -124,14 +125,13 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
             children: [
               const Text('❤️', style: TextStyle(fontSize: 56)),
               const SizedBox(height: 14),
-              const Text('Турмуш ўртоғингизни топинг',
+              Text(context.tr('dating_onb_title'),
                   textAlign: TextAlign.center,
-                  style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Text(
-                'Профил яратинг — у админ модерациясидан ўтгач, бошқа '
-                'фойдаланувчиларга кўринади. Фақат реал расм юкланг.',
+                context.tr('dating_onb_body'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600),
               ),
@@ -145,7 +145,7 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
                       backgroundColor: datingAccent,
                       foregroundColor: Colors.white),
                   icon: const Icon(Icons.add),
-                  label: const Text('Профил яратиш'),
+                  label: Text(context.tr('dating_create_profile')),
                 ),
               ),
             ],
@@ -159,7 +159,7 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
     final blocked = p.status == 'blocked';
     final rejected = p.status == 'rejected';
     return _simpleScaffold(
-      'Танишув',
+      context.tr('dating_short_label'),
       Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -171,22 +171,23 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
               const SizedBox(height: 14),
               Text(
                 blocked
-                    ? 'Профилингиз блокланган'
+                    ? context.tr('dating_gate_blocked_title')
                     : rejected
-                        ? 'Профил рад этилди'
-                        : 'Профил текширувда',
+                        ? context.tr('dating_gate_rejected_title')
+                        : context.tr('dating_gate_pending_title'),
                 style: const TextStyle(
                     fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 blocked
-                    ? 'Қоидабузарлик аниқланди. Қўллаб-қувватлашга мурожаат қилинг.'
+                    ? context.tr('dating_gate_blocked_body')
                     : rejected
                         ? (p.rejectionReason.isNotEmpty
-                            ? 'Сабаб: ${p.rejectionReason}\nТаҳрирлаб қайта юборинг.'
-                            : 'Профилни таҳрирлаб қайта юборинг.')
-                        : 'Админ тасдиғини кутинг. Одатда қисқа вақт ичида.',
+                            ? context.trMsg('dating_gate_rejected_reason_body',
+                                params: {'reason': p.rejectionReason})
+                            : context.tr('dating_gate_rejected_body'))
+                        : context.tr('dating_gate_pending_body'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600),
               ),
@@ -195,7 +196,7 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
                 OutlinedButton.icon(
                   onPressed: () => _openForm(uid, p),
                   icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Профилни таҳрирлаш'),
+                  label: Text(context.tr('dating_edit_profile')),
                 ),
             ],
           ),
@@ -258,7 +259,7 @@ class _DatingApprovedHome extends StatelessWidget {
           return Scaffold(
             backgroundColor: const Color(0xFFF7F4F6),
             appBar: AppBar(
-              title: const Text('Танишув'),
+              title: Text(context.tr('dating_short_label')),
               backgroundColor: datingAccent,
               foregroundColor: Colors.white,
               actions: const [DatingBotButton()],
@@ -272,22 +273,22 @@ class _DatingApprovedHome extends StatelessWidget {
                   _datingTab(
                     controller: tabCtrl,
                     index: 0,
-                    label: '🔍 Тавсия',
+                    label: context.tr('dating_tab_discover'),
                   ),
                   _datingTab(
                     controller: tabCtrl,
                     index: 1,
-                    label: '❤️ Қизиқишлар',
+                    label: context.tr('dating_tab_interests'),
                   ),
                   _datingTab(
                     controller: tabCtrl,
                     index: 2,
-                    label: '💬 Чатлар',
+                    label: context.tr('dating_tab_chats'),
                   ),
                   _datingTab(
                     controller: tabCtrl,
                     index: 3,
-                    label: '👤 Профил',
+                    label: context.tr('dating_tab_profile'),
                   ),
                 ],
               ),
@@ -340,9 +341,10 @@ class _DiscoveryTab extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    'Танланган ёш оралиғида (${profile.prefMinAge}–'
-                    '${profile.prefMaxAge}) ҳозирча мос профил йўқ.\n'
-                    'Профил табида оралиқни кенайтиринг.',
+                    context.trMsg('dating_discover_empty', params: {
+                      'min': '${profile.prefMinAge}',
+                      'max': '${profile.prefMaxAge}',
+                    }),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
@@ -453,13 +455,13 @@ class _InterestsTab extends StatelessWidget {
       final res = await DatingService.respondInterest(it.id, accept);
       if (!context.mounted) return;
       if (res['status'] == 'accepted') {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('🎉 Мослашув! «Чатлар»да ёзишинг мумкин.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.tr('dating_match_toast'))));
       }
     } on FirebaseFunctionsException catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(firebaseFunctionsUserMessage(e))));
+            SnackBar(content: Text(userErrorMessage(context, e))));
       }
     }
   }
@@ -472,7 +474,7 @@ class _InterestsTab extends StatelessWidget {
         final incoming = snap.data ?? const <DatingInterest>[];
         if (incoming.isEmpty) {
           return Center(
-            child: Text('Сизга юборилган қизиқиш йўқ.',
+            child: Text(context.tr('dating_no_incoming'),
                 style: TextStyle(color: Colors.grey.shade600)),
           );
         }
@@ -493,8 +495,10 @@ class _InterestsTab extends StatelessWidget {
                       color: datingAccent, fontWeight: FontWeight.bold),
                 ),
               ),
-              title: Text(it.fromName.isEmpty ? 'Фойдаланувчи' : it.fromName),
-              subtitle: const Text('Сизга қизиқиш билдирди'),
+              title: Text(it.fromName.isEmpty
+                  ? context.tr('user_default_name')
+                  : it.fromName),
+              subtitle: Text(context.tr('dating_interest_from')),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -531,7 +535,7 @@ class _MatchesTab extends StatelessWidget {
         final matches = snap.data ?? const <DatingMatch>[];
         if (matches.isEmpty) {
           return Center(
-            child: Text('Ҳали мослашув йўқ.',
+            child: Text(context.tr('dating_no_matches'),
                 style: TextStyle(color: Colors.grey.shade600)),
           );
         }
@@ -551,10 +555,12 @@ class _MatchesTab extends StatelessWidget {
                       color: datingAccent, fontWeight: FontWeight.bold),
                 ),
               ),
-              title: Text(name.isEmpty ? 'Чат' : name,
+              title: Text(name.isEmpty ? context.tr('bottom_chat') : name,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
-                m.lastMessage.isEmpty ? 'Ёзишувни бошланг' : m.lastMessage,
+                m.lastMessage.isEmpty
+                    ? context.tr('dating_chat_start')
+                    : m.lastMessage,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -620,19 +626,19 @@ class _MyProfileTabState extends State<_MyProfileTab> {
       await DatingService.setAgePreference(minAge: minAge, maxAge: maxAge);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ёш оралиғи сақланди')),
+          SnackBar(content: Text(context.tr('dating_age_saved'))),
         );
       }
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(firebaseFunctionsUserMessage(e))),
+          SnackBar(content: Text(userErrorMessage(context, e))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Хатолик: $e')),
+          SnackBar(content: Text(userErrorMessage(context, e))),
         );
       }
     } finally {
@@ -654,16 +660,12 @@ class _MyProfileTabState extends State<_MyProfileTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Профилни ўчириш'),
-        content: const Text(
-          'Танишув профили, расмлар, қизиқишлар ва чатлар '
-          'бутунлай ўчирилади. Бу амални қайтариб бўлмайди.\n\n'
-          'Давом этасизми?',
-        ),
+        title: Text(ctx.tr('dating_delete_title')),
+        content: Text(ctx.tr('dating_delete_body')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
+            child: Text(ctx.tr('no')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -671,7 +673,7 @@ class _MyProfileTabState extends State<_MyProfileTab> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Ўчираман'),
+            child: Text(ctx.tr('rel_delete_i_confirm')),
           ),
         ],
       ),
@@ -683,19 +685,19 @@ class _MyProfileTabState extends State<_MyProfileTab> {
       await DatingService.deleteProfile();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Профил ўчирилди')),
+          SnackBar(content: Text(context.tr('dating_deleted'))),
         );
       }
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(firebaseFunctionsUserMessage(e))),
+          SnackBar(content: Text(userErrorMessage(context, e))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Хатолик: $e')),
+          SnackBar(content: Text(userErrorMessage(context, e))),
         );
       }
     } finally {
@@ -728,14 +730,15 @@ class _MyProfileTabState extends State<_MyProfileTab> {
           ),
         ),
         Center(
-          child: Text('✓ ${p.statusLabel}',
+          // Bu ekranga faqat status == 'approved' profil keladi.
+          child: Text('✓ ${context.tr('dating_status_approved')}',
               style: const TextStyle(color: AvaLight.ok)),
         ),
         const SizedBox(height: 16),
         SwitchListTile(
           activeThumbColor: datingAccent,
-          title: const Text('Профил кўринади'),
-          subtitle: const Text('Ўчирсангиз тавсиада чиқмайсиз'),
+          title: Text(context.tr('dating_visible_title')),
+          subtitle: Text(context.tr('dating_visible_hint')),
           value: p.active,
           onChanged: _busy ? null : _toggleActive,
         ),
@@ -743,8 +746,10 @@ class _MyProfileTabState extends State<_MyProfileTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
-            'Тавсия ёш оралиғи: ${_ageRange.start.round()} – '
-            '${_ageRange.end.round()} ёш',
+            context.trMsg('dating_age_range_label', params: {
+              'min': '${_ageRange.start.round()}',
+              'max': '${_ageRange.end.round()}',
+            }),
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
@@ -777,8 +782,8 @@ class _MyProfileTabState extends State<_MyProfileTab> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.edit_outlined),
-          title: const Text('Профилни таҳрирлаш'),
-          subtitle: const Text('Ўзгартиргач қайта модерациядан ўтади'),
+          title: Text(context.tr('dating_edit_profile')),
+          subtitle: Text(context.tr('dating_edit_hint')),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -790,12 +795,13 @@ class _MyProfileTabState extends State<_MyProfileTab> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
-          title: const Text(
-            'Профилни ўчириш',
-            style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+          title: Text(
+            context.tr('dating_delete_title'),
+            style: const TextStyle(
+                color: Colors.red, fontWeight: FontWeight.w600),
           ),
-          subtitle: const Text(
-            'Расмлар, қизиқишлар ва чатлар ҳам ўчирилади',
+          subtitle: Text(
+            context.tr('dating_delete_hint'),
           ),
           enabled: !_busy,
           onTap: _busy ? null : _deleteProfile,

@@ -15,6 +15,7 @@ class MessageThreadGroup {
     required this.id,
     required this.title,
     required this.subtitle,
+    this.subtitleKey = '',
     required this.lastUpdate,
     this.messages = const [],
     this.driverStatus = '',
@@ -24,8 +25,15 @@ class MessageThreadGroup {
 
   final MessageThreadKind kind;
   final String id;
+
+  /// l10n KALITI (ekranda `context.tr(title)`).
   final String title;
+
+  /// Server/foydalanuvchi matni (xabar sarlavhasi, rad sababi) — o'zgarishsiz.
   final String subtitle;
+
+  /// Bo'sh bo'lmasa — [subtitle] o'rniga ko'rsatiladigan l10n kaliti.
+  final String subtitleKey;
   final DateTime lastUpdate;
   final List<NewsItem> messages;
   final String driverStatus;
@@ -34,6 +42,10 @@ class MessageThreadGroup {
 
   NewsItem? get latestNews =>
       messages.isEmpty ? null : messages.last;
+
+  /// Ekranga chiqadigan sarlavha ostidagi matn ([tr] — `context.tr`).
+  String subtitleText(String Function(String key) tr) =>
+      subtitleKey.isNotEmpty ? tr(subtitleKey) : subtitle;
 
   static List<MessageThreadGroup> fromDialogNews(List<NewsItem> items) {
     final map = <String, List<NewsItem>>{};
@@ -62,14 +74,14 @@ class MessageThreadGroup {
     switch (n.source) {
       case 'sell_offer':
       case 'sell_offer_forward':
-        return '🛒 Сотиш таклифи';
+        return 'mdl_thread_sell_offer';
       case 'identity_request':
-        return '🪪 Шахсий маълумот';
+        return 'mdl_thread_identity';
       case 'ad_moderation':
       case 'ad_published':
-        return '📢 Эълон модерацияси';
+        return 'mdl_thread_ad_moderation';
       default:
-        return '📩 Хабар';
+        return 'mdl_thread_generic';
     }
   }
 
@@ -84,21 +96,26 @@ class MessageThreadGroup {
         (data['createdAt'] as Timestamp?)?.toDate() ??
         DateTime.now();
     final title = switch (status) {
-      'approved' => '✅ Ҳайдовчи аризаси — тасдиқ',
-      'rejected' => '❌ Ҳайдовчи аризаси — рад',
-      'revoked' => '⚠️ Ҳайдовчи рухсати бекор',
-      _ => '🚕 Ҳайдовчи аризаси',
+      'approved' => 'mdl_thread_drv_approved',
+      'rejected' => 'mdl_thread_drv_rejected',
+      'revoked' => 'mdl_thread_drv_revoked',
+      _ => 'mdl_thread_drv_default',
     };
     final reason = (data['rejectedReason'] ?? data['revokedReason'] ?? '')
         as String;
-    final subtitle = reason.trim().isNotEmpty
-        ? reason.trim()
-        : 'Статус: $status · $taxiType';
+    final hasReason = reason.trim().isNotEmpty;
+    final subtitleKey = switch (status) {
+      'approved' => 'mdl_thread_drv_sub_approved',
+      'rejected' => 'mdl_thread_drv_sub_rejected',
+      'revoked' => 'mdl_thread_drv_sub_revoked',
+      _ => 'mdl_thread_drv_sub_pending',
+    };
     return MessageThreadGroup(
       kind: MessageThreadKind.driverRequest,
       id: 'driver:$uid',
       title: title,
-      subtitle: subtitle,
+      subtitle: hasReason ? reason.trim() : '',
+      subtitleKey: hasReason ? '' : subtitleKey,
       lastUpdate: updated,
       driverStatus: status,
       driverTaxiType: taxiType,

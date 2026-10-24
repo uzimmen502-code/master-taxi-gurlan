@@ -5,7 +5,34 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../repositories/device_binding_repository.dart';
+
+/// `requestWalletWithdrawal` callable xatosi -> l10n kaliti (server matni
+/// ko'rsatilmaydi: u lotincha / kirillcha aralash). Bir xil `failed-precondition`
+/// kodi to'rt xil holat: yangi qurilma cheklovi (`details.code`),
+/// ro'yxatdan o'tilmagan (`Avval…`), mablag' yetmaydi (`Yetarli…`) va
+/// kutilayotgan ariza bor (server matni kirillcha).
+String _withdrawErrorKey(FirebaseFunctionsException e) {
+  switch (e.code) {
+    case 'invalid-argument':
+      return 'wlt_wd_fill_all';
+    case 'failed-precondition':
+      final d = e.details;
+      if (d is Map && d['code'] == 'device_trust_limited') {
+        return 'wlt_wd_new_device';
+      }
+      final m = e.message ?? '';
+      if (m.startsWith('Avval')) return 'prof_err_register_first';
+      if (m.startsWith('Yetarli')) return 'prof_wd_failed';
+      if (m.codeUnits.any((c) => c >= 0x0400 && c <= 0x04FF)) {
+        return 'prof_wd_err_pending'; // server matni kirillcha
+      }
+      return 'prof_wd_failed';
+    default:
+      return userErrorKey(e, fallbackKey: 'prof_wd_failed');
+  }
+}
 
 /// Фойдаланувчи ўз ҳамёнидан пул ечиш аризаси.
 class WalletWithdrawPanel extends StatelessWidget {
@@ -221,7 +248,7 @@ class WalletWithdrawPanel extends StatelessWidget {
                           setLocal(() => busy = false);
                           if (!ctx.mounted) return;
                           ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                            content: Text(e.message ?? e.code),
+                            content: Text(ctx.tr(_withdrawErrorKey(e))),
                             backgroundColor: Colors.red,
                           ));
                         }

@@ -165,9 +165,9 @@ void main() {
     final stale = find.byKey(const ValueKey('order-news-o-old'));
     expect(fresh, findsOneWidget);
     expect(stale, findsOneWidget);
-    expect(weightOf(t, fresh, 'Нон буюртма'), FontWeight.bold);
+    expect(weightOf(t, fresh, 'bread_order'), FontWeight.bold);
     expect(weightOf(t, fresh, 'Буюртма o-new'), FontWeight.bold);
-    expect(weightOf(t, stale, 'Нон буюртма'), FontWeight.normal);
+    expect(weightOf(t, stale, 'bread_order'), FontWeight.normal);
     expect(weightOf(t, stale, 'Буюртма o-old'), FontWeight.normal);
     expect(find.text('news_new_label'), findsNothing,
         reason: '«Янги» белгиси йўқ');

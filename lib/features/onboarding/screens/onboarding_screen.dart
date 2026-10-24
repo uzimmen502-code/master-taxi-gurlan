@@ -80,7 +80,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
+      // `msg` — tayyor matn yoki controller kaliti (`ob_ctl_*`); noma'lum
+      // kalit o'zi qaytadi, shuning uchun ikkalasi uchun ham xavfsiz.
+      content: Text(AppLocalizations.of(context)?.translate(msg) ?? msg),
       backgroundColor: Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

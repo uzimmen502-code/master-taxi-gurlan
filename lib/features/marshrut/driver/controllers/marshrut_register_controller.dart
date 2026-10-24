@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/car/car_info_record.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/route_points_validator.dart';
+import '../../../../core/utils/user_error.dart';
 import '../../../../models/marshrut_driver_profile.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/marshrut_route_price_repository.dart';
@@ -325,7 +326,7 @@ class MarshrutRegisterController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = userErrorKey(e);
       _isSaving = false;
       notifyListeners();
       return false;

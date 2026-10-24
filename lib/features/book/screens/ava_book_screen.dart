@@ -170,9 +170,13 @@ class _AvaBookScreenState extends State<AvaBookScreen> {
         return _book!.introTitle;
       case _UnitKind.partDivider:
       case _UnitKind.partOnly:
-        return 'ҚИСМ ${u.part!.roman}';
+        return context
+            .trMsg('book_part_label', params: {'roman': u.part!.roman});
       case _UnitKind.chapter:
-        return 'ҚИСМ ${u.part!.roman} · ${u.chapter!.num}-БОБ';
+        return context.trMsg('book_part_chapter_label', params: {
+          'roman': u.part!.roman,
+          'num': '${u.chapter!.num}',
+        });
       case _UnitKind.finalPage:
         return context.tr('book_final_page');
     }
@@ -195,12 +199,16 @@ class _AvaBookScreenState extends State<AvaBookScreen> {
       case _UnitKind.chapter:
         return _ProsePage(
           eyebrow: u.part!.title,
-          title: '${u.chapter!.num}-боб. ${u.chapter!.title}',
+          title: context.trMsg('book_chapter_title', params: {
+            'num': '${u.chapter!.num}',
+            'title': u.chapter!.title,
+          }),
           blocks: u.chapter!.blocks,
         );
       case _UnitKind.partOnly:
         return _ProsePage(
-          eyebrow: 'ҚИСМ ${u.part!.roman}',
+          eyebrow: context
+              .trMsg('book_part_label', params: {'roman': u.part!.roman}),
           title: u.part!.title,
           blocks: u.part!.preamble,
           timeline: u.part!.roman == 'XVII',
@@ -347,7 +355,7 @@ class _CoverPage extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            '${cover.year} · AVA нашри',
+            context.trMsg('book_edition', params: {'year': cover.year}),
             style: const TextStyle(
               fontFamily: 'monospace',
               fontSize: 11,
@@ -372,16 +380,16 @@ class _FinalPage extends StatelessWidget {
         children: [
           const Text('✨', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 10),
-          const Text(
-            'AVA — платформа сиз учун',
+          Text(
+            context.tr('book_final_title'),
             textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19, color: _inkStrong),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 19, color: _inkStrong),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Касбингиз, маҳсулотингиз, ғоянгиз бор — уларни фақат ўзингизда сақлаб қўйманг.',
+          Text(
+            context.tr('book_final_body'),
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, height: 1.5, color: _muted),
+            style: const TextStyle(fontSize: 14, height: 1.5, color: _muted),
           ),
           const SizedBox(height: 26),
           FilledButton(
@@ -392,7 +400,7 @@ class _FinalPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
             ),
-            child: const Text('Бошлаш', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: Text(context.tr('book_final_start'), style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -411,7 +419,7 @@ class _PartDividerPage extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            'ҚИСМ ${part.roman}',
+            context.trMsg('book_part_label', params: {'roman': part.roman}),
             style: const TextStyle(
               fontFamily: 'monospace',
               fontWeight: FontWeight.w700,
@@ -476,12 +484,12 @@ class _ProsePage extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 19, height: 1.28, color: _inkStrong),
         ),
         const SizedBox(height: 16),
-        ..._renderBlocks(blocks, timeline: timeline),
+        ..._renderBlocks(context, blocks, timeline: timeline),
       ],
     );
   }
 
-  List<Widget> _renderBlocks(List<AvaBookBlock> blocks, {required bool timeline}) {
+  List<Widget> _renderBlocks(BuildContext context, List<AvaBookBlock> blocks, {required bool timeline}) {
     final out = <Widget>[];
     final tsteps = <Widget>[];
 
@@ -508,13 +516,13 @@ class _ProsePage extends StatelessWidget {
         continue;
       }
       flushTimeline();
-      out.add(_blockWidget(b));
+      out.add(_blockWidget(context, b));
     }
     flushTimeline();
     return out;
   }
 
-  Widget _blockWidget(AvaBookBlock b) {
+  Widget _blockWidget(BuildContext context, AvaBookBlock b) {
     switch (b.type) {
       case 'p':
         return Padding(
@@ -589,7 +597,7 @@ class _ProsePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('ҚОИДА', style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 10, letterSpacing: 1.6, color: _accentBright)),
+              Text(context.tr('book_rule_label'), style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 10, letterSpacing: 1.6, color: _accentBright)),
               const SizedBox(height: 6),
               Text(b.text ?? '', style: const TextStyle(fontStyle: FontStyle.italic, fontWeight: FontWeight.w600, fontSize: 14.5, height: 1.45, color: _paper)),
             ],
@@ -607,7 +615,7 @@ class _ProsePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Муҳим чегара', style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: AvaLight.ink2)),
+              Text(context.tr('book_warning_label'), style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: AvaLight.ink2)),
               const SizedBox(height: 6),
               Text(b.text ?? '', style: const TextStyle(fontSize: 13, height: 1.5, color: AvaLight.ink2)),
             ],
@@ -779,7 +787,12 @@ class _ContentsDrawer extends StatelessWidget {
         children: [
           _drawerItem(context, '— ${context.tr('book_section_start')} —', headIndex, dense: true),
           ...p.chapters.map((c) =>
-              _drawerItem(context, '${c.num}-боб. ${c.title}', indexForPart(p.roman, c.num), dense: true)),
+              _drawerItem(
+                  context,
+                  context.trMsg('book_chapter_title',
+                      params: {'num': '${c.num}', 'title': c.title}),
+                  indexForPart(p.roman, c.num),
+                  dense: true)),
         ],
       ),
     );

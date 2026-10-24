@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/ev_station_repository.dart';
@@ -52,7 +53,7 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Тарифларни юклаб бўлмади. Интернетни текшириб, қайта уриниб кўринг.';
+        _error = 'ev_tariff_load_failed';
       });
     }
   }
@@ -74,7 +75,7 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
                 child: Center(child: CircularProgressIndicator()),
               )
             : _error != null
-                ? _ErrorBody(message: _error!, onRetry: () {
+                ? _ErrorBody(message: context.tr(_error!), onRetry: () {
                     setState(() => _loading = true);
                     _load();
                   })
@@ -108,19 +109,18 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
             children: [
               const Icon(Icons.ev_station_rounded, color: AppColors.primaryText),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Зарядлаш станциясини қўшиш',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  context.tr('ev_add_station_title'),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Ўз (ёки бошқа) зарядлаш станциянгизни расмий рўйхатга киритиш '
-            'учун — обуна тарифини танланг:',
-            style: TextStyle(fontSize: 13.5, color: Colors.black54, height: 1.4),
+          Text(
+            context.tr('ev_tariff_intro'),
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54, height: 1.4),
           ),
           const SizedBox(height: 14),
           for (final t in tariffs)
@@ -141,18 +141,15 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
             onTopUpAmount: (a) => openWalletTopUp(Navigator.of(context), suggestedAmount: a),
           ),
           const Divider(height: 24),
-          const Text(
-            'Тўловни амалга ошириш қадамлари',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          Text(
+            context.tr('ev_tariff_steps_title'),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
-          const _Step(number: 1, text: 'Харитадан станция турган аниқ жойни танланг.'),
-          const _Step(
-              number: 2,
-              text: 'Станция маълумотларини тўлдиринг (қувват, разъём тури — '
-                  'ихтиёрий, кейин ҳам тўлдириш мумкин).'),
-          const _Step(number: 3, text: 'Тарифни танлаб, тасдиқласангиз — тўлов AVA ҳамёнидан ечилади.'),
-          const _Step(number: 4, text: 'Станция шу заҳоти харитада барчага кўринади.'),
+          _Step(number: 1, text: context.tr('ev_tariff_step_1')),
+          _Step(number: 2, text: context.tr('ev_tariff_step_2')),
+          _Step(number: 3, text: context.tr('ev_tariff_step_3')),
+          _Step(number: 4, text: context.tr('ev_tariff_step_4')),
           const SizedBox(height: 18),
           SizedBox(
             height: 48,
@@ -166,8 +163,9 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
               ),
               child: Text(
                 selected == null
-                    ? 'Давом этиш'
-                    : 'Давом этиш — ${formatMoney(selected.price)}',
+                    ? context.tr('ob_pre_continue')
+                    : context.trMsg('ev_continue_with_price',
+                        params: {'price': formatMoney(selected.price)}),
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
             ),
@@ -185,12 +183,12 @@ class _TariffTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  String get _label {
+  String _label(BuildContext context) {
     if (tariff.months % 12 == 0 && tariff.months >= 12) {
       final years = tariff.months ~/ 12;
-      return years == 1 ? '1 йиллик обуна' : '$years йиллик обуна';
+      return context.trMsg('ev_tariff_years', params: {'years': '$years'});
     }
-    return '${tariff.months} ойлик обуна';
+    return context.trMsg('ev_tariff_months', params: {'months': '${tariff.months}'});
   }
 
   @override
@@ -221,9 +219,9 @@ class _TariffTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_label,
+                    Text(_label(context),
                         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                    Text('битта станция учун',
+                    Text(context.tr('ev_tariff_per_station'),
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                   ],
                 ),
@@ -292,7 +290,7 @@ class _ErrorBody extends StatelessWidget {
         children: [
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: onRetry, child: const Text('Қайта уриниш')),
+          OutlinedButton(onPressed: onRetry, child: Text(context.tr('err_retry'))),
         ],
       ),
     );

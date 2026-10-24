@@ -290,16 +290,13 @@ class LocationException implements Exception {
   const LocationException(this.kind);
   final LocationErrorKind kind;
 
+  /// l10n KALITI (matn emas): ekranda `context.trMsg(...)` / `context.tr(...)`.
   static String userMessage(LocationErrorKind kind) {
     return switch (kind) {
-      LocationErrorKind.permissionDenied =>
-        'GPS рухсати йўқ. Илтимос, телефон созламаларидан рухсат беринг.',
-      LocationErrorKind.serviceDisabled =>
-        'GPS ўчиқ. Телефон созламаларидан «Жойлашув»ни ёқинг.',
-      LocationErrorKind.timeout =>
-        'GPS жавоб бермади. Очиқ жойга чиқиб қайта уриниб кўринг.',
-      LocationErrorKind.lookupFailed =>
-        'GPS аниқланмади. Очиқ жойга чиқиб қайта уриниб кўринг.',
+      LocationErrorKind.permissionDenied => 'loc_err_permission_denied',
+      LocationErrorKind.serviceDisabled => 'loc_err_service_disabled',
+      LocationErrorKind.timeout => 'loc_err_timeout',
+      LocationErrorKind.lookupFailed => 'loc_err_lookup_failed',
     };
   }
 }

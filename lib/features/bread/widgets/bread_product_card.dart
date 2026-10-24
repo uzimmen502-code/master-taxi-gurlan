@@ -109,9 +109,9 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 decoration: BoxDecoration(
                     color: Colors.deepOrange.shade700,
                     borderRadius: BorderRadius.circular(6)),
-                child: const Text(
-                  'Тайёр',
-                  style: TextStyle(
+                child: Text(
+                  loc.translate('bread_category_ready'),
+                  style: const TextStyle(
                     fontSize: AppText.labelTiny,
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -169,10 +169,10 @@ class _BreadProductCardState extends State<BreadProductCard> {
                       borderRadius: BorderRadius.circular(6)),
                   child: Text(
                     product.isYopish
-                        ? 'Ёпиш хизмати'
+                        ? loc.translate('bread_category_yopish')
                         : product.isToy
-                            ? 'Тўй нони'
-                            : 'Тайёр',
+                            ? loc.translate('bread_category_wedding')
+                            : loc.translate('bread_category_ready'),
                     style: TextStyle(
                       fontSize: AppText.labelTiny,
                       color: AppColors.primaryText,

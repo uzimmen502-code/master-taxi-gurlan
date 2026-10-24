@@ -2,7 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../repositories/tree_repository.dart';
 import '../l10n/relatives_l10n.dart';
@@ -150,14 +150,13 @@ Future<void> _respond(
   } on FirebaseFunctionsException catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(firebaseFunctionsUserMessage(e))),
+      SnackBar(content: Text(userErrorMessage(context, e))),
     );
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-            RelativesL10n.trParams(context, 'error_generic', {'error': '$e'})),
+        content: Text(userErrorMessage(context, e)),
       ),
     );
   }

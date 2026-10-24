@@ -19,6 +19,7 @@ import '../../../../services/location_service.dart';
 import '../../../../services/settlement_service.dart';
 import '../models/marshrut_passenger_route_context.dart';
 import 'marshrut_waiting_screen.dart';
+import '../../../../core/utils/user_error.dart';
 
 /// Marshrut — haydovchi qabul qilgandan keyingi to'liq safar ekrani.
 class MarshrutAcceptedScreen extends StatefulWidget {
@@ -523,19 +524,19 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Қайтим — ҳамёнга'),
+        title: Text(ctx.tr('local_change_to_wallet_title')),
         content: Text(
-          'Ҳайдовчи ${formatMoney(amount)} қайтимни ҳамёнингизга '
-          'ўтказмоқчи. Тасдиқлайсизми?',
+          ctx.trMsg('local_change_to_wallet_body',
+              params: {'amount': formatMoney(amount)}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
-            child: const Text('Нақд керак'),
+            child: Text(ctx.tr('local_change_want_cash')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, 'confirm'),
-            child: const Text('Тасдиқлайман'),
+            child: Text(ctx.tr('local_change_confirm')),
           ),
         ],
       ),
@@ -546,7 +547,8 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatMoney(amount)} ҳамёнингизга қўшилди'),
+          content: Text(context.trMsg('local_change_added',
+              params: {'amount': formatMoney(amount)})),
           backgroundColor: AvaLight.ok,
         ));
       } else {
@@ -556,9 +558,11 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         );
       }
     } catch (e) {
+      debugPrint('marshrut settlement: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Settlement: $e'),
+        content: Text(userErrorMessage(context, e,
+            fallbackKey: 'local_change_failed')),
         backgroundColor: Colors.red,
       ));
     }

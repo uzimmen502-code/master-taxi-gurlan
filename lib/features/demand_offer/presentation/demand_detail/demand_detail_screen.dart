@@ -7,10 +7,12 @@
 // `isOwner(resource.data.ownerId)`). Таклифчилар бир-бирининг нархини
 // кўрмайди — улар умуман бу экранни очолмайди.
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/ava_tokens.dart';
+import '../../../../core/utils/user_error.dart';
 import '../../data/demand_repository.dart';
 import '../../domain/demand.dart';
 import '../../domain/demand_enums.dart';
@@ -76,7 +78,7 @@ class _DemandDetailScreenState extends State<DemandDetailScreen> {
           content: Text(
             e.code == 'failed-precondition'
                 ? context.tr('demand_error_taken')
-                : e.message,
+                : _errorText(e),
           ),
         ),
       );
@@ -111,11 +113,18 @@ class _DemandDetailScreenState extends State<DemandDetailScreen> {
     } on DemandException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(_errorText(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// `DemandException.message` — server/developer matni: foydalanuvchiga
+  /// ko'rsatilmaydi, kod bo'yicha umumiy l10n matni tanlanadi (xom matn logga).
+  String _errorText(DemandException e) => userErrorMessage(
+        context,
+        FirebaseFunctionsException(message: e.message, code: e.code),
+      );
 
   @override
   Widget build(BuildContext context) {

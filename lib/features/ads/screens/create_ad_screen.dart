@@ -13,6 +13,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../onboarding/screens/phone_reverify_screen.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
@@ -149,20 +150,22 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
   String _cfError(Object e) {
     if (e is FirebaseFunctionsException) {
+      // `submitMarketAd` xabarlari — developer matni (inglizcha), shuning
+      // uchun foydalanuvchiga KO'RSATILMAYDI: faqat aniq xabar -> l10n kaliti.
       switch (e.code) {
         case 'unauthenticated':
           return context.tr('create_ad_err_auth');
-        case 'resource-exhausted':
-          return e.message ?? context.tr('create_ad_err_limit');
-        case 'invalid-argument':
-          return e.message ?? context.tr('create_ad_err_invalid');
         case 'permission-denied':
           return context.tr('create_ad_err_permission');
-        default:
-          return e.message ?? context.tr('create_ad_err_generic').replaceAll('{code}', e.code);
+        case 'resource-exhausted':
+          return context.tr(e.message == 'Active ad limit reached'
+              ? 'create_ad_err_limit_full'
+              : 'create_ad_err_limit');
+        case 'invalid-argument':
+          return context.tr('create_ad_err_invalid');
       }
     }
-    return context.tr('create_ad_err_generic').replaceAll('{code}', '$e');
+    return userErrorMessage(context, e, fallbackKey: 'create_ad_err_generic');
   }
 
   Future<void> _submit() async {

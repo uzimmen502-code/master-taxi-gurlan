@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../../../core/utils/formatters.dart';
@@ -63,7 +64,7 @@ class TripCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                trip.from.isEmpty ? 'Йўналиш' : '${trip.from} → ${trip.to}',
+                trip.from.isEmpty ? context.tr('bizmap_route') :'${trip.from} → ${trip.to}',
                 style: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600),
                 maxLines: 1,

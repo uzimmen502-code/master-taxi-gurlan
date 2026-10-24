@@ -8,6 +8,7 @@ import '../../../core/brand_labels.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/widgets/service_area_picker.dart';
 import '../../../models/user_address.dart';
@@ -141,15 +142,21 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
         _gpsLoading = false;
       });
       final acc = coords.accuracy;
-      final accText = acc != null ? ' (±${acc.toStringAsFixed(0)}m)' : '';
       final lowAcc = coords.isLowAccuracy;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         backgroundColor: AppColors.primaryDark,
         content: Text(
           lowAcc
-              ? '📍 GPS олинди (паст аниқлик ±${acc!.toStringAsFixed(0)} м). Очиқ жойда қайта урининг.'
-              : '📍 GPS олинди: ${coords.lat.toStringAsFixed(5)}, ${coords.lng.toStringAsFixed(5)}$accText',
+              ? context.trMsg('prof_gps_low_accuracy',
+                  params: {'acc': acc!.toStringAsFixed(0)})
+              : context.trMsg(
+                  acc != null ? 'prof_gps_got_acc' : 'prof_gps_got',
+                  params: {
+                    'lat': coords.lat.toStringAsFixed(5),
+                    'lng': coords.lng.toStringAsFixed(5),
+                    'acc': acc?.toStringAsFixed(0) ?? '',
+                  }),
           style: const TextStyle(color: AppColors.onPrimary),
         ),
       ));
@@ -159,7 +166,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     } on LocationException catch (e) {
       if (mounted) {
         setState(() {
-          _err = LocationException.userMessage(e.kind);
+          _err = context.tr(LocationException.userMessage(e.kind));
           _gpsLoading = false;
         });
       }
@@ -262,7 +269,8 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       if (!mounted) return;
       Navigator.pop(context, address);
     } catch (e) {
-      setState(() => _err = '${context.tr('addr_err_save')}: $e');
+      setState(() => _err = userErrorMessage(context, e,
+          fallbackKey: 'addr_err_save'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

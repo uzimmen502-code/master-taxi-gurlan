@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import '../../../models/agro_pickup_order.dart';
 import '../../../models/carpet_wash_order.dart';
 import '../../../repositories/agro_pickup_orders_repository.dart';
@@ -76,10 +77,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.home_outlined),
-          tooltip: 'Бош саҳифа',
+          tooltip: context.tr('bottom_home'),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('Буюртмалар'),
+        title: Text(context.tr('bottom_orders')),
         centerTitle: true,
       ),
       body: Column(
@@ -98,27 +99,27 @@ class _OrdersScreenState extends State<OrdersScreen> {
               child: Row(
                 children: [
                   _TypeChip(
-                    label: 'Ҳаммаси',
+                    label: context.tr('bizmap_all'),
                     selected: _typeFilter == null,
                     onTap: () => setState(() => _typeFilter = null),
                   ),
                   const SizedBox(width: 8),
                   _TypeChip(
-                    label: 'Дўкон',
+                    label: context.tr('tv_market_shop'),
                     selected: _typeFilter == CustomerOrderKind.food,
                     onTap: () =>
                         setState(() => _typeFilter = CustomerOrderKind.food),
                   ),
                   const SizedBox(width: 8),
                   _TypeChip(
-                    label: 'Гилам',
+                    label: context.tr('orders_filter_carpet'),
                     selected: _typeFilter == CustomerOrderKind.carpet,
                     onTap: () =>
                         setState(() => _typeFilter = CustomerOrderKind.carpet),
                   ),
                   const SizedBox(width: 8),
                   _TypeChip(
-                    label: 'Сут',
+                    label: context.tr('milk'),
                     selected: _typeFilter == CustomerOrderKind.milk,
                     onTap: () =>
                         setState(() => _typeFilter = CustomerOrderKind.milk),
@@ -142,7 +143,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             child: CircularProgressIndicator());
                       }
                       if (snap.hasError) {
-                        return Center(child: Text('Хатолик: ${snap.error}'));
+                        return LoadErrorView(
+                          error: snap.error!,
+                          onRetry: () => setState(() {}),
+                        );
                       }
                       final all = snap.data ?? const <CustomerOrderEntry>[];
                       final filtered = all.where((e) {
@@ -464,9 +468,9 @@ class _SegmentToggle extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       child: Row(
         children: [
-          _seg(context, label: '📌 Фаол', selected: showActive,
+          _seg(context, label: context.tr('orders_seg_active'), selected: showActive,
               onTap: () => onChanged(true)),
-          _seg(context, label: '✅ Тугаган', selected: !showActive,
+          _seg(context, label: context.tr('orders_seg_done'), selected: !showActive,
               onTap: () => onChanged(false)),
         ],
       ),
@@ -526,8 +530,8 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             showActive
-                ? 'Фаол буюртмалар йўқ'
-                : 'Тугаган буюртмалар йўқ',
+                ? context.tr('orders_empty_active')
+                : context.tr('orders_empty_done'),
             style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
           ),
         ],

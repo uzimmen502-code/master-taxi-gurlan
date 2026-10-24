@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
@@ -79,7 +80,9 @@ class _ChatViewState extends State<_ChatView> {
   @override
   Widget build(BuildContext context) {
     final ctrl = context.read<ChatController>();
-    final title = ctrl.isAdmin ? '💬 Мижоз чати' : '💬 Админ билан чат';
+    final title = ctrl.isAdmin
+        ? context.tr('chat_customer_title')
+        : context.tr('chat_admin_title');
 
     return Scaffold(
       appBar: AppBar(
@@ -98,7 +101,7 @@ class _ChatViewState extends State<_ChatView> {
                 }
                 final messages = snap.data!;
                 if (messages.isEmpty) {
-                  return const Center(child: Text('Ҳозирча хабарлар йўқ'));
+                  return Center(child: Text(context.tr('chat_empty')));
                 }
                 return ListView.builder(
                   controller: _scrollCtrl,
@@ -129,7 +132,7 @@ class _ChatViewState extends State<_ChatView> {
                       minLines: 1,
                       maxLines: 4,
                       decoration: InputDecoration(
-                        hintText: 'Хабар ёзинг...',
+                        hintText: context.tr('chat_hint'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

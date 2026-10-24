@@ -31,12 +31,12 @@ class OrderCard extends StatelessWidget {
             : order.restaurantName)
         : isPlatform
             ? context.tr('wholesale_title')
-            : 'Нон буюртма';
+            : context.tr('bread_order');
     final color = AppColors.primaryText;
 
     final dt = order.createdAt;
     final dateStr =
-        dt != null ? '${dt.day}-${monthNameUz(dt.month)}' : '';
+        dt != null ? '${dt.day}-${context.tr('orders_month_${dt.month}')}' : '';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -78,12 +78,15 @@ class OrderCard extends StatelessWidget {
           );
         }),
         if (order.items.length > 3)
-          Text('... ва яна ${order.items.length - 3} та',
+          Text(
+              context.trMsg('orders_more_items',
+                  params: {'n': '${order.items.length - 3}'}),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
         const SizedBox(height: 8),
         if (order.deliveryTime.isNotEmpty)
           _BadgeBox(
-            text: '🕐 Тахминий вақт: ${order.deliveryTime}',
+            text: context.trMsg('orders_eta',
+                params: {'time': order.deliveryTime}),
             color: AppColors.primaryText,
           ),
         if (order.rejectReason.isNotEmpty)
@@ -108,7 +111,7 @@ class OrderCard extends StatelessWidget {
           Text(formatPrice(order.total),
               style: TextStyle(
                   fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-          Text(' сўм',
+          Text(' ${context.tr('currency_sum')}',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
         ]),
         if (onCancel != null && order.canCustomerCancel) ...[
@@ -149,13 +152,13 @@ class _StatusChip extends StatelessWidget {
   /// `status` бўйича (ундан ҳосил қилинган).
   final String? labelOverride;
 
-  static const _map = <String, ({String label, Color color})>{
-    'new': (label: '🔵 Янги', color: AppColors.primaryText),
-    'accepted': (label: '🟡 Қабул', color: AppColors.primaryText),
-    'ready': (label: '🟠 Тайёр', color: AppColors.warning),
-    'delivered': (label: '🟢 Етказилди', color: AppColors.primaryText),
-    'cancelled': (label: 'Бекор', color: Colors.red),
-    'rejected': (label: 'Бекор', color: Colors.red),
+  static const _map = <String, ({String labelKey, Color color})>{
+    'new': (labelKey: 'orders_st_new', color: AppColors.primaryText),
+    'accepted': (labelKey: 'orders_st_accepted', color: AppColors.primaryText),
+    'ready': (labelKey: 'orders_st_ready', color: AppColors.warning),
+    'delivered': (labelKey: 'orders_st_delivered', color: AppColors.primaryText),
+    'cancelled': (labelKey: 'order_status_cancelled', color: Colors.red),
+    'rejected': (labelKey: 'order_status_cancelled', color: Colors.red),
   };
 
   @override
@@ -167,7 +170,7 @@ class _StatusChip extends StatelessWidget {
         : status;
     final info = _map[key];
     final label = labelOverride ??
-        info?.label ??
+        (info != null ? context.tr(info.labelKey) : null) ??
         (key == 'cancelled' ? context.tr('order_status_cancelled') : status);
     final color = info?.color ?? Colors.grey;
     return Container(

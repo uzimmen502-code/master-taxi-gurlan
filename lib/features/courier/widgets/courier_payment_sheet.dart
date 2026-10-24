@@ -11,6 +11,7 @@ import '../../../models/procurement_product.dart';
 import '../../../services/order_payment_service.dart';
 import '../../../services/procurement_prices_service.dart';
 import '../controllers/courier_controller.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Курьер «Тўлов» — нақд / карта / кошелёк / маҳсулот(лар).
 class CourierPaymentSheet extends StatefulWidget {
@@ -500,39 +501,43 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     final newBalance = x + diff; // X + (Z - Y)
 
     final rows = <Widget>[
-      _summaryRow('Кошелёк', '${formatPrice(x)} $_cur'),
-      _summaryRow('Тўлов', '${formatPrice(y)} $_cur'),
-      _summaryRow('Маҳсулот', '${formatPrice(z)} $_cur'),
+      _summaryRow(_l('crr_pay_wallet'), '${formatPrice(x)} $_cur'),
+      _summaryRow(_l('courier_pay_btn'), '${formatPrice(y)} $_cur'),
+      _summaryRow(_l('courier_product_field'), '${formatPrice(z)} $_cur'),
     ];
 
     Color borderColor;
     if (diff > 0) {
       // Ортиқча — қайтим
-      rows.add(_summaryRow('Қайтим', '${formatPrice(diff)} $_cur',
+      rows.add(_summaryRow(_l('wlt_l_change'), '${formatPrice(diff)} $_cur',
           color: AppColors.primaryText));
-      rows.add(_summaryRow('Кошелёк (янги)', '${formatPrice(newBalance)} $_cur',
+      rows.add(_summaryRow(
+          _l('crr_pay_wallet_new'), '${formatPrice(newBalance)} $_cur',
           bold: true, color: AppColors.primaryText));
       borderColor = AppColors.primary;
     } else if (diff == 0) {
-      rows.add(_summaryRow('Кошелёк (янги)', '${formatPrice(x)} $_cur',
+      rows.add(_summaryRow(
+          _l('crr_pay_wallet_new'), '${formatPrice(x)} $_cur',
           bold: true, color: AppColors.primaryText));
       borderColor = AppColors.primary;
     } else {
       // Маҳсулот кам — кошелёкдан Y - Z
       final need = -diff; // Y - Z
-      rows.add(_summaryRow('Кошелёкдан', '${formatPrice(need)} $_cur',
+      rows.add(_summaryRow(
+          _l('crr_pay_from_wallet'), '${formatPrice(need)} $_cur',
           color: Colors.orange.shade800));
       if (newBalance >= 0) {
         rows.add(_summaryRow(
-            'Кошелёк (янги)', '${formatPrice(newBalance)} $_cur',
+            _l('crr_pay_wallet_new'), '${formatPrice(newBalance)} $_cur',
             bold: true, color: AppColors.primaryText));
         borderColor = AppColors.primary;
       } else {
-        rows.add(_summaryRow('Етишмаяпти', '${formatPrice(-newBalance)} $_cur',
+        rows.add(_summaryRow(
+            _l('crr_pay_missing'), '${formatPrice(-newBalance)} $_cur',
             bold: true, color: Colors.red.shade700));
         rows.add(const SizedBox(height: 4));
         rows.add(Text(
-          'Маҳсулотингиз етмади — маҳсулот қўшинг ёки миқдорни оширинг',
+          _l('crr_pay_product_short'),
           style: TextStyle(
               color: Colors.red.shade700,
               fontWeight: FontWeight.w600,
@@ -842,7 +847,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(userErrorMessage(context, e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted && _confirmationSummary == null) {
@@ -862,7 +867,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(userErrorMessage(context, e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1014,7 +1019,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
           for (final p in productLines)
             Text(
               '     • ${p['productLabel'] ?? p['productCode']}: '
-              '${formatPrice((p['amount'] as num?)?.toInt() ?? 0)} сўм',
+              '${formatPrice((p['amount'] as num?)?.toInt() ?? 0)} $_cur',
             ),
         ],
         const SizedBox(height: 16),

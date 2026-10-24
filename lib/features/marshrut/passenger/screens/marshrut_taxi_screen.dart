@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/user_error.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
@@ -527,7 +528,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
           _snack(context.tr('auth_required_to_order'), Colors.orange);
         } else {
           _snack(
-            '${context.tr('driver_mode_error')}: ${e.message}',
+            userErrorMessage(context, e, fallbackKey: 'driver_mode_error'),
             Colors.red,
           );
         }

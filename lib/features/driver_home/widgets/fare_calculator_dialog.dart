@@ -114,15 +114,17 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
         Icon(widget.fareLocked ? Icons.lock : Icons.calculate,
             color: AppColors.primaryText, size: 24),
         const SizedBox(width: 8),
-        Text(widget.fareLocked ? 'Қулфланган йўлкира' : 'Йўлкира ҳисоблаш'),
+        Text(widget.fareLocked
+            ? context.tr('driver_map_locked_fare')
+            : context.tr('fare_calc_title')),
       ]),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (!widget.fareLocked) ...[
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
-              child: Text('📍 Масофа (км)',
-                  style: TextStyle(
+              child: Text(context.tr('fare_distance_label'),
+                  style: const TextStyle(
                       fontSize: AppText.bodySmall,
                       fontWeight: FontWeight.w600)),
             ),
@@ -143,10 +145,10 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                       style:
                           const TextStyle(fontWeight: FontWeight.bold))),
             ]),
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
-              child: Text('⏱ Кутиш (дақ)',
-                  style: TextStyle(
+              child: Text(context.tr('fare_wait_label'),
+                  style: const TextStyle(
                       fontSize: AppText.bodySmall,
                       fontWeight: FontWeight.w600)),
             ),
@@ -162,20 +164,22 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                           setState(() => _waitMins = v.round()))),
               SizedBox(
                   width: 50,
-                  child: Text('$_waitMins дақ',
+                  child: Text(
+                      context.trMsg('fare_wait_value',
+                          params: {'n': '$_waitMins'}),
                       textAlign: TextAlign.center,
                       style:
                           const TextStyle(fontWeight: FontWeight.bold))),
             ]),
             const Divider(height: 16),
             Wrap(spacing: 6, runSpacing: 6, children: [
-              _coefChip('🌙 Тунги', _isNight,
+              _coefChip(context.tr('fare_coef_night'), _isNight,
                   (v) => setState(() => _isNight = v)),
-              _coefChip('🚨 Шошилинч', _isUrgent,
+              _coefChip(context.tr('fare_coef_urgent'), _isUrgent,
                   (v) => setState(() => _isUrgent = v)),
-              _coefChip('🎉 Байрам', _isHoliday,
+              _coefChip(context.tr('fare_coef_holiday'), _isHoliday,
                   (v) => setState(() => _isHoliday = v)),
-              _coefChip('🌧 Ёмғир', _isRainy,
+              _coefChip(context.tr('fare_coef_rain'), _isRainy,
                   (v) => setState(() => _isRainy = v)),
             ]),
             const Divider(height: 20),
@@ -189,7 +193,10 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                '💳 Yo\'lovchi hamyon: ${FareCalculator.format(widget.passengerWalletIntent)} сўм',
+                context.trMsg('fare_passenger_wallet', params: {
+                  'amount':
+                      FareCalculator.format(widget.passengerWalletIntent),
+                }),
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: Colors.blue.shade900,
@@ -206,11 +213,16 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: _green.withValues(alpha: 0.3))),
             child: Column(children: [
-              Text(widget.fareLocked ? '🔒 Қулфланган йўлкира' : '💰 Йўлкира',
+              Text(
+                  widget.fareLocked
+                      ? context.tr('fare_locked_title')
+                      : context.tr('fare_total_title'),
                   style: const TextStyle(
                       fontSize: AppText.bodyMedium, color: Colors.grey)),
               const SizedBox(height: 4),
-              Text('${FareCalculator.format(fare)} сўм',
+              Text(
+                  context.trMsg('fare_amount_sum',
+                      params: {'amount': FareCalculator.format(fare)}),
                   style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -221,9 +233,9 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
           TextField(
             controller: _cashPaidCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Мижоз берган нақд (сўм)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: context.tr('fare_cash_given_label'),
+              border: const OutlineInputBorder(),
               isDense: true,
             ),
             onChanged: (_) => setState(() => _cashPaidEdited = true),
@@ -253,8 +265,8 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Орқага',
-                style: TextStyle(color: Colors.grey))),
+            child: Text(context.tr('back'),
+                style: const TextStyle(color: Colors.grey))),
         ElevatedButton.icon(
           onPressed: () {
             final paid = int.tryParse(
@@ -263,7 +275,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             Navigator.of(context).pop((fare: fare, cashPaid: paid));
           },
           icon: const Icon(Icons.check_circle, size: 18),
-          label: const Text('ЯКУНЛАШ'),
+          label: Text(context.tr('fare_finish_btn')),
           style: ElevatedButton.styleFrom(
               backgroundColor: _green,
               foregroundColor: AppColors.onPrimary,

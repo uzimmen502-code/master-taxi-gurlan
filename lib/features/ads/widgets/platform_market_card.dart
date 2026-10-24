@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
@@ -84,10 +85,10 @@ class PlatformMarketCard extends StatelessWidget {
             MarketCardText(
               title: product.name,
               price: wholesale
-                  ? _wholesalePriceLine(product)
+                  ? _wholesalePriceLine(context, product)
                   : formatMoney(product.displayPrice),
               caption: wholesale
-                  ? _wholesaleSubLine(product)
+                  ? _wholesaleSubLine(context, product)
                   : BrandLabels.brand,
             ),
           ],
@@ -102,23 +103,32 @@ class PlatformMarketCard extends StatelessWidget {
 /// Эга қарори (2026-10-06): поғонаси қўйилмаган товарда базадаги нарх —
 /// ўрта поғона, карточкада «10–50 дона: 10 000 сўм». Админ поғона қўйган
 /// товар — аввалгидек «дан 9 000 сўм / дона».
-String platformWholesalePriceLine(PlatformProduct p) {
+///
+/// [fromWord] — «дан» сўзи (экранда `home_price_from` калити билан берилади).
+String platformWholesalePriceLine(PlatformProduct p,
+    {String fromWord = 'дан'}) {
   final mid = p.midTier;
   if (p.hasDerivedTiers && mid != null) {
     return '${p.tierRangeLabel(1)} ${p.unit}: ${formatMoney(mid.price)}';
   }
-  return '${p.effectiveTiers.length > 1 ? 'дан ' : ''}'
+  return '${p.effectiveTiers.length > 1 ? '$fromWord ' : ''}'
       '${formatMoney(p.wholesaleBasePrice)} / ${p.unit}';
 }
 
 /// Иккинчи қатор: ҳисобланган поғонада кам миқдор нархи («1–9 дона:
 /// 10 500 сўм» — харидор 1 дона олса қанча тўлашини кўрсин), акс ҳолда МОҚ.
-String platformWholesaleSubLine(PlatformProduct p) {
+///
+/// [moqTemplate] — «МОҚ {qty} {unit}» шаблони (экранда `wholesale_moq_line`
+/// калити билан берилади).
+String platformWholesaleSubLine(PlatformProduct p,
+    {String moqTemplate = 'МОҚ {qty} {unit}'}) {
   final t = p.effectiveTiers;
   if (p.hasDerivedTiers && t.isNotEmpty) {
     return '${p.tierRangeLabel(0)} ${p.unit}: ${formatMoney(t.first.price)}';
   }
-  return 'МОҚ ${p.wholesaleMinQty} ${p.unit}';
+  return moqTemplate
+      .replaceAll('{qty}', '${p.wholesaleMinQty}')
+      .replaceAll('{unit}', p.unit);
 }
 
 /// Бош саҳифадаги тор карточка (148 px) учун ҚИСҚА нарх ва изоҳ.
@@ -169,8 +179,10 @@ Future<void> openPlatformProductDetail(
   );
 }
 
-String _wholesalePriceLine(PlatformProduct p) => platformWholesalePriceLine(p);
-String _wholesaleSubLine(PlatformProduct p) => platformWholesaleSubLine(p);
+String _wholesalePriceLine(BuildContext context, PlatformProduct p) =>
+    platformWholesalePriceLine(p, fromWord: context.tr('home_price_from'));
+String _wholesaleSubLine(BuildContext context, PlatformProduct p) =>
+    platformWholesaleSubLine(p, moqTemplate: context.tr('wholesale_moq_line'));
 
 class _Image extends StatelessWidget {
   const _Image({required this.url});

@@ -63,7 +63,7 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
     if (!sessionOk) {
       setState(() {
         _retrying = false;
-        _error = c.consumeError() ?? loc.translate('ob_device_linking');
+        _error = loc.translate(c.consumeError() ?? 'ob_device_linking');
       });
       return;
     }
@@ -76,7 +76,7 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
     if (!prefsOk) {
       setState(() {
         _retrying = false;
-        _error = c.consumeError() ?? loc.translate('ob_err_zone');
+        _error = loc.translate(c.consumeError() ?? 'ob_err_zone');
       });
       return;
     }

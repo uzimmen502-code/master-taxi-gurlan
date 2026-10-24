@@ -165,7 +165,7 @@ void main() {
       final repo = await pumpForm(tester);
       await tester.tap(find.byKey(const ValueKey('realty_alert_pick')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('5 км'));
+      await tester.tap(find.text('5 ev_trip_km'));
       await tester.tap(find.text('2'));
       await tester.tap(find.text('3'));
       await tester.enterText(find.byKey(const ValueKey('realty_alert_price')), '3 000 000');

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
@@ -37,7 +38,7 @@ class MessageBubble extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 2),
               child: Text(
-                'Админ',
+                context.tr('chat_admin_label'),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,

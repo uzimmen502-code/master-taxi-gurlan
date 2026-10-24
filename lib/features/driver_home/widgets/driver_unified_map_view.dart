@@ -578,7 +578,9 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     final result = await c.acceptRide(ride);
     if (!mounted) return;
     if (!result.success) {
-      if (result.error != null) widget.onSnack(result.error!, Colors.orange);
+      if (result.error != null) {
+        widget.onSnack(context.trMsg(result.error!), Colors.orange);
+      }
       return;
     }
     _resetTripState();
@@ -643,7 +645,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     final c = context.watch<DriverHomeController>();
 
     if (c.offersStreamError != null) {
-      final msg = c.offersStreamError!;
+      final msg = context.trMsg(c.offersStreamError!);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         widget.onSnack(msg, Colors.orange);
@@ -924,12 +926,18 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
           Row(children: [
             const Icon(Icons.timer, size: 14, color: Colors.grey),
             const SizedBox(width: 4),
-            Text('$m:${s.toString().padLeft(2, '0')} қолди',
+            Text(
+                context.trMsg('drv_offer_time_left', params: {
+                  'time': '$m:${s.toString().padLeft(2, '0')}',
+                }),
                 style: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600)),
             const Spacer(),
             if (ride.distanceKm > 0)
-              Text('${ride.distanceKm.toStringAsFixed(1)} км',
+              Text(
+                  context.trMsg('drv_km_value', params: {
+                    'km': ride.distanceKm.toStringAsFixed(1),
+                  }),
                   style: TextStyle(
                       fontSize: 13, color: Colors.grey.shade700)),
           ]),

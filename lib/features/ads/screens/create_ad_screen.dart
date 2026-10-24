@@ -19,12 +19,17 @@ import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
 import '../widgets/ad_district_field.dart';
+import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/services/tv_clip_link.dart';
+import '../utils/seller_name.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 /// Онлайн бозорга янги эълон жойлаш — профессионал форма.
 class CreateAdScreen extends StatefulWidget {
-  const CreateAdScreen({super.key});
+  const CreateAdScreen({super.key, @visibleForTesting this.loadShopName});
+
+  /// Тест учун: дўкон номини ўқиш ўрнига (Firestore'га уланмайди).
+  final Future<String> Function(String ownerId)? loadShopName;
 
   @override
   State<CreateAdScreen> createState() => _CreateAdScreenState();
@@ -118,14 +123,29 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     });
   }
 
-  String _sellerName() {
+  /// Дўкон номи («Менинг дўконим», `tv_shops.name`) — эълонда сотувчи номи
+  /// сифатида кўринади. Ўқилмаса (тармоқ, ruxsat) эълон ТЎХТАМАЙДИ: аввалги
+  /// қоида (профил исми) ишлайди.
+  Future<String> _loadShopName(String ownerId) async {
+    try {
+      final load = widget.loadShopName;
+      if (load != null) return await load(ownerId);
+      final shop = await TvShopRepository().fetchShop(ownerId);
+      return shop?.name ?? '';
+    } catch (e) {
+      debugPrint('[CreateAd] shop name unavailable: $e');
+      return '';
+    }
+  }
+
+  Future<String> _sellerName(String ownerId) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return 'Сотувчи';
-    final name = user.displayName?.trim();
-    if (name != null && name.isNotEmpty) return name;
-    final email = user.email?.trim();
-    if (email != null && email.isNotEmpty) return email;
-    return 'Сотувчи';
+    return resolveSellerName(
+      shopName: await _loadShopName(ownerId),
+      authName: user?.displayName,
+      email: user?.email,
+      fallback: 'Сотувчи',
+    );
   }
 
   Future<void> _pickImages() async {
@@ -237,7 +257,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         price: int.parse(_priceCtrl.text.trim()),
-        sellerName: _sellerName(),
+        sellerName: await _sellerName(ownerId),
         imageUrls: uploaded,
         districtId: _district.districtId,
         regionId: _district.regionId,

@@ -9,8 +9,14 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 app.use(express.json());
 
+// Fail fast: never fall back to a hard-coded connection string (secrets must not live in the repo).
+if (!process.env.DATABASE_URL) {
+  console.error('FATAL: DATABASE_URL environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
+
 const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:mORgvAXSfEcAHFHeasglhTFnTIhWFJsN@postgres.railway.internal:5432/railway',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 

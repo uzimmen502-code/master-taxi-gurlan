@@ -229,7 +229,8 @@ class AvaTileCard extends StatelessWidget {
               footnote!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AvaText.caption.copyWith(color: c.ink3),
+              // ink2: оқ фонда ≥4.5:1 (ink3 ≈2.7:1 эди).
+              style: AvaText.caption.copyWith(color: c.ink2),
             ),
           ],
         ],

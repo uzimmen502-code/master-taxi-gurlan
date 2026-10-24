@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -236,18 +237,38 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: ElevatedButton.icon(
-            onPressed: canCall ? _callSeller : null,
-            icon: const Text('📞'),
-            label: Text(context.tr('wholesale_call')),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-              minimumSize: const Size.fromHeight(48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Тугма ўчиқ бўлса сабаби кўринсин (аввал сабабсиз ўчиқ эди,
+              // `_callSeller` ичидаги хабарга эса ҳеч қачон етилмасди).
+              if (!canCall)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    context.tr('ad_details_phone_invalid'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: AppText.bodySmall,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ElevatedButton.icon(
+                onPressed: canCall ? _callSeller : null,
+                icon: const Icon(Icons.call),
+                label: Text(context.tr('wholesale_call')),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -321,11 +342,17 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
+                      Icon(
+                        Icons.visibility_outlined,
+                        size: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        '👁 ${context.tr('ad_details_views').replaceAll('{count}', '${ad.views}')}',
+                        context.tr('ad_details_views').replaceAll('{count}', '${ad.views}'),
                         style: TextStyle(
                           fontSize: AppText.labelSmall,
-                          color: Colors.grey.shade600,
+                          color: Colors.grey.shade700,
                           height: 1.2,
                         ),
                       ),
@@ -484,24 +511,22 @@ class _SimilarAdTile extends StatelessWidget {
                       )
                     : ColoredBox(
                         color: AppColors.cardImageBg,
-                        child: Image.network(
-                          imageUrl,
+                        // CachedNetworkImage: диск кеши бор (Image.network ҳар
+                        // очилишда қайта юклар эди) — қолган лентадагидек.
+                        child: CachedNetworkImage(
+                          imageUrl: imageUrl,
                           // contain: расм четлари қирқилмайди (ега 2026-10-19).
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const ColoredBox(
+                          errorWidget: (_, __, ___) => const ColoredBox(
                             color: AppColors.cardImageBg,
                             child: Center(child: Icon(Icons.broken_image)),
                           ),
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return const ColoredBox(
-                              color: AppColors.cardImageBg,
-                              child: Center(
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            );
-                          },
+                          placeholder: (_, __) => const ColoredBox(
+                            color: AppColors.cardImageBg,
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
                         ),
                       ),
               ),

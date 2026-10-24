@@ -160,6 +160,11 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
                       imageUrl: cover,
                       // contain: расм четлари қирқилмайди (ега 2026-10-19).
                       fit: BoxFit.contain,
+                      // Юкланмаса бўш жой эмас, ўрин эгаси (бозор лентасидаги каби).
+                      errorWidget: (_, __, ___) => Icon(
+                        Icons.broken_image,
+                        color: context.ava.ink3,
+                      ),
                     ),
                   )
                 : null,

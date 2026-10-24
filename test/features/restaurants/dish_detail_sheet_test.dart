@@ -548,7 +548,7 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    testWidgets('нарх + ★ бир қаторда, чегирма ҳинти ТАГИДА алоҳида қаторда; нарх кичрайиб кетмайди (14 px)', (t) async {
+    testWidgets('нарх + ★ бир қаторда, чегирма ҳинти нархнинг ТАГИДА; нарх кичрайиб кетмайди (15 px, 2026-10-24 қайта лойиҳа)', (t) async {
       await pumpTierMenu(t);
       final price = find.descendant(of: find.byKey(const ValueKey('menu-row-a0')), matching: find.textContaining('40 000'));
       final hint = find.byKey(const Key('tier-hint-a0'));
@@ -558,15 +558,15 @@ void main() {
       expect(rating, findsOneWidget);
       expect(t.getTopLeft(hint).dy, greaterThan(t.getBottomLeft(price).dy - 1), reason: 'ҳинт нархнинг остида');
       expect((t.getTopLeft(rating).dy - t.getTopLeft(price).dy).abs(), lessThan(8), reason: '★ нарх билан бир қаторда');
-      // Нарх FittedBox орқали кичрайтирилмайди: ўлчами 14 px · 1.2 га яқин.
-      expect(t.getSize(price).height, closeTo(14 * 1.2, 2));
+      // Нарх FittedBox орқали кичрайтирилмайди: ўлчами 15 px · 1.2 га яқин.
+      expect(t.getSize(price).height, closeTo(15 * 1.2, 2));
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('чегирмасиз таомда 4-қатор — тавсифнинг иккинчи қатори (чегирмали таом бор менюда)', (t) async {
+    testWidgets('тавсиф ҳамма қаторда БИР қатор (чегирмали таом бор менюда ҳам): қатор баландлиги бир хил, нарх/степпер бир чизиқда', (t) async {
       await pumpTierMenu(t);
       final d = t.widget<Text>(find.descendant(of: find.byKey(const ValueKey('menu-row-a1')), matching: find.textContaining('Uzun tavsif')));
-      expect(d.maxLines, 2);
+      expect(d.maxLines, 1);
       final withTier = t.widget<Text>(find.descendant(of: find.byKey(const ValueKey('menu-row-a0')), matching: find.textContaining('Uzun tavsif')));
       expect(withTier.maxLines, 1);
     });

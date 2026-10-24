@@ -3983,5 +3983,9 @@
   "ev_guest_gate_title": "EV zaryadlash stansiyalari",
   "ev_guest_gate_message": "EV stansiyalari bazasini ko'rish uchun ro'yxatdan o'ting",
   "ev_guest_gate_register": "Ro'yxatdan o'tish",
-  "ev_map_zoom_in": "Xaritani yaqinlashtiring"
+  "ev_map_zoom_in": "Xaritani yaqinlashtiring",
+  "restaurants_demo_banner": "Bu namuna restoran: menyuni ko'rishingiz mumkin, lekin buyurtma qabul qilinmaydi.",
+  "restaurants_demo_btn": "Namuna — buyurtma yo'q",
+  "restaurants_a11y_add": "{name}: savatga qo'shish",
+  "restaurants_a11y_remove": "{name}: miqdorni kamaytirish"
 }

@@ -76,13 +76,13 @@ Future<void> openRestaurantBusiness(
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              ctx.tr('restaurants_m_choose_cafe'),
+              ctx.tr(homeCook ? 'restaurants_m_choose_home_cook' : 'restaurants_m_choose_cafe'),
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
           ),
           for (final r in mine)
             ListTile(
-              leading: const Icon(Icons.restaurant_rounded),
+              leading: Icon(homeCook ? Icons.soup_kitchen_rounded : Icons.restaurant_rounded),
               title: Text(r.name),
               subtitle: Text(ctx.tr('restaurants_m_status_${r.status}')),
               onTap: () {

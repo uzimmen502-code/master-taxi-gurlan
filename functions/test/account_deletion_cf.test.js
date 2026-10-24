@@ -423,6 +423,43 @@ async function main() {
     assert.deepStrictEqual(types, ['done', 'executing', 'requested', 'requested'], 'voqealar jurnali saqlanmadi');
   });
 
+  await check(`AL1 INTERNAL: allow ro'yxati — ro'yxatdagi telefon so'rov yubora oladi, boshqalar DISABLED (preview ham enabled=false)`, async () => {
+    await seedUser();
+    await db.collection('settings').doc('account_deletion').set({ enabled: true, allow: [OTHER] });
+    await db.collection('orders').doc('o_other').delete(); // OTHER'ning faol buyurtmasi bloklamasin
+    const s = svc();
+    await expectCode(s.request(U), 'ACCOUNT_DELETION_DISABLED');
+    assert.strictEqual((await s.preview(U)).enabled, false);
+    assert.strictEqual((await s.preview(OTHER)).enabled, true);
+    assert.strictEqual((await s.request(OTHER)).status, 'PENDING');
+    assert.strictEqual(await exists(`account_deletions/${U}`), false);
+    // bo'sh ro'yxat = hamma (PUBLIC)
+    await db.collection('settings').doc('account_deletion').set({ enabled: true, allow: [] });
+    assert.strictEqual((await s.request(U)).status, 'PENDING');
+  });
+
+  await check(`AL2 allow 9 xonali/+ shaklda berilsa ham normallashadi; enabled=false bo'lsa ro'yxat ahamiyatsiz`, async () => {
+    await seedUser();
+    await db.collection('settings').doc('account_deletion').set({ enabled: true, allow: ['+998 90 111-22-33', U9] });
+    assert.deepStrictEqual((await svc().readConfig()).allow, [U]);
+    assert.strictEqual((await svc().request(U)).status, 'PENDING');
+    await seedUser();
+    await db.collection('settings').doc('account_deletion').set({ enabled: false, allow: [U] });
+    await expectCode(svc().request(U), 'ACCOUNT_DELETION_DISABLED');
+  });
+
+  await check(`AL3 mavjud so'rov ijrosi allow ro'yxatiga qaramaydi (so'rov vaqtida ruxsat bor edi)`, async () => {
+    await seedUser();
+    await db.collection('settings').doc('account_deletion').set({ enabled: true, allow: [U] });
+    const s = svc();
+    await s.request(U);
+    await db.collection('settings').doc('account_deletion').set({ enabled: true, allow: [OTHER] });
+    T = T0 + 11 * DAY;
+    const r = await s.runDue();
+    assert.strictEqual(r.processed, 1);
+    assert.strictEqual((await get(`account_deletions/${U}`)).data().status, 'DONE');
+  });
+
   await check(`R3 qobiq qayta ro'yxatdan o'tganda tiriladi: flaglar olinadi, createdAt yangilanadi; boshqa holatda tegilmaydi`, async () => {
     const { reviveShellIfNeeded } = require('../account_deletion');
     await seedUser();

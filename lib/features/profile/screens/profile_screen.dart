@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,6 +27,7 @@ import '../../realty/screens/my_realty_listings_screen.dart';
 import '../controllers/profile_controller.dart';
 import '../widgets/cabinet_ui.dart';
 import 'address_edit_screen.dart';
+import 'delete_account_screen.dart';
 import 'user_info_screen.dart';
 import '../../../core/theme/app_theme.dart';
 // «Талаб ва таклифлар» бўлими (эга қарори, 2026-10-03).
@@ -234,6 +236,13 @@ class _ProfileViewState extends State<_ProfileView> {
                 ),
               ),
             ),
+            if (c.deletionPending)
+              CabinetNotice(
+                key: const ValueKey('profile-deletion-pending'),
+                text: context.tr('acct_del_pending_body').replaceAll('{date}', _fmtDate(c.deletionScheduledFor)),
+                actionLabel: context.tr('acct_del_cancel_btn'),
+                onAction: () => _openDeleteAccount(c),
+              ),
             if (!c.hasUsableAddress)
               CabinetNotice(
                 text: loc.translate('profile_address_incomplete_banner'),
@@ -339,6 +348,14 @@ class _ProfileViewState extends State<_ProfileView> {
                 ),
                 // «Чиқиш» қатори бу ерда йўқ: у ҳедернинг ўнг юқори бурчагидаги
                 // ихчам стрелкага кўчди (эга, 2026-10-24).
+                CabinetRow(
+                  key: const ValueKey('profile-delete-account'),
+                  icon: Icons.delete_forever_rounded,
+                  title: context.tr('acct_del_row_title'),
+                  subtitle: context.tr('acct_del_row_sub'),
+                  danger: true,
+                  onTap: () => _openDeleteAccount(c),
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -433,6 +450,45 @@ class _ProfileViewState extends State<_ProfileView> {
         ]),
       ),
     );
+  }
+
+  String _fmtDate(DateTime? d) => d == null
+      ? ''
+      : '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+
+  /// «Ҳисобни ўчириш» экрани. Сўров қабул қилингач: тушунтириш ойнаси → сессия тозаланади → кириш экрани
+  /// (ўчириш ижроси серверда; шу вақтгача қайта кириб бекор қилиш мумкин).
+  Future<void> _openDeleteAccount(ProfileController c) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DeleteAccountScreen(
+          onRequested: (screenCtx, days) async {
+            await showDialog<void>(
+              context: screenCtx,
+              barrierDismissible: false,
+              builder: (dialogCtx) => AlertDialog(
+                title: Text(dialogCtx.tr('acct_del_done_title')),
+                content: Text(dialogCtx.tr('acct_del_done_body').replaceAll('{days}', '$days')),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    child: Text(dialogCtx.tr('understand')),
+                  ),
+                ],
+              ),
+            );
+            await c.logout();
+            if (!mounted) return;
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+              (_) => false,
+            );
+          },
+        ),
+      ),
+    );
+    if (mounted) unawaited(c.load());
   }
 
   void _showLogoutDialog(ProfileController c, AppLocalizations loc) {

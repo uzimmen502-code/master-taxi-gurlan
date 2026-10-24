@@ -72,11 +72,23 @@ function createAccountDeletion(deps) {
   const at = (ms) => TS.fromMillis(ms);
   const fail = (code, message, extra) => Object.assign(new Error(message || code), { code, extra: extra || {} });
 
+  /**
+   * `allow` — ИЧКИ синов рўйхати (42-банд INTERNAL): бўш бўлмаса, фақат шу телефонлар (12 хонали) сўров юбора олади.
+   * Бўш/йўқ — ҳамма (PUBLIC). Мавжуд сўровларнинг ижроси рўйхатга қарамайди.
+   */
   async function readConfig() {
     const snap = await db.collection(CONFIG_PATH[0]).doc(CONFIG_PATH[1]).get();
     const d = snap.exists ? (snap.data() || {}) : {};
-    return { enabled: d.enabled === true, waitDays: clampDays(d.waitDays) };
+    const allow = Array.isArray(d.allow)
+      ? [...new Set(d.allow
+        .map((x) => String(x == null ? '' : x).replace(/\D/g, ''))
+        .filter((x) => x.length >= 9)
+        .map((x) => (x.length === 9 ? `998${x}` : x)))]
+      : [];
+    return { enabled: d.enabled === true, waitDays: clampDays(d.waitDays), allow };
   }
+
+  const allowedFor = (cfg, uid) => cfg.enabled && (cfg.allow.length === 0 || cfg.allow.includes(uid));
 
   const stateRef = (uid) => db.collection(COL).doc(uid);
 
@@ -117,7 +129,7 @@ function createAccountDeletion(deps) {
     const state = cur.exists ? cur.data() : null;
     const blockers = identity.userDocIds.length === 0 ? [] : await core.findBlockers(db, identity);
     return {
-      enabled: cfg.enabled,
+      enabled: allowedFor(cfg, identity.d12),
       waitDays: cfg.waitDays,
       exists: identity.userDocIds.length > 0,
       blockers: publicBlockers(blockers),
@@ -134,8 +146,8 @@ function createAccountDeletion(deps) {
 
   async function request(uid, { source = 'app' } = {}) {
     const cfg = await readConfig();
-    if (!cfg.enabled) throw fail('ACCOUNT_DELETION_DISABLED', 'Ҳисобни ўчириш ҳозирча мавжуд эмас.');
     const identity = await core.resolveIdentity(db, uid);
+    if (!allowedFor(cfg, identity.d12)) throw fail('ACCOUNT_DELETION_DISABLED', 'Ҳисобни ўчириш ҳозирча мавжуд эмас.');
     if (identity.userDocIds.length === 0) throw fail('ACCOUNT_NOT_FOUND', 'Ҳисоб топилмади.');
     const blockers = await core.findBlockers(db, identity);
     if (blockers.length > 0) {

@@ -45,6 +45,10 @@ class UserModel {
   final String districtId;
   final String serviceAreaId;
 
+  /// Ҳисобни ўчириш сўрови ҳолати (`users.deletion`, фақат сервер ёзади): `PENDING | POSTPONED | EXECUTING` ёки бўш.
+  final String deletionStatus;
+  final DateTime? deletionScheduledFor;
+
   const UserModel({
     required this.id,
     this.name = '',
@@ -65,6 +69,8 @@ class UserModel {
     this.regionId = '',
     this.districtId = '',
     this.serviceAreaId = '',
+    this.deletionStatus = '',
+    this.deletionScheduledFor,
   });
 
   /// Манзил тўлдирилганми? (4 та мажбурий майдон).
@@ -102,6 +108,13 @@ class UserModel {
       regionId: (d['regionId'] ?? '') as String,
       districtId: (d['districtId'] ?? '') as String,
       serviceAreaId: (d['serviceAreaId'] ?? '') as String,
+      deletionStatus: d['deletion'] is Map ? ((d['deletion'] as Map)['status'] ?? '').toString() : '',
+      deletionScheduledFor: d['deletion'] is Map
+          ? ((d['deletion'] as Map)['scheduledFor'] as Timestamp?)?.toDate()
+          : null,
     );
   }
+
+  /// Ўчириш сўрови кутилмоқда (бекор қилиш мумкин).
+  bool get deletionPending => deletionStatus == 'PENDING' || deletionStatus == 'POSTPONED';
 }

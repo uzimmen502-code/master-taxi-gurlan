@@ -85,7 +85,8 @@
     "test:account-deletion-hide": "firebase emulators:exec --only firestore --project demo-acct-del-hide \"node test/account_deletion_hide_cf.test.js\"",
     "test:account-deletion-content": "firebase emulators:exec --only firestore --project demo-acct-del-content \"node test/account_deletion_content_cf.test.js\"",
     "test:account-deletion-callable": "firebase emulators:exec --only firestore --project demo-acct-del-callable \"node test/account_deletion_callable_cf.test.js\"",
-    "test:account-deletion-rules": "firebase emulators:exec --only firestore --project demo-acct-del-rules \"node test/account_deletion_rules.test.js\""
+    "test:account-deletion-rules": "firebase emulators:exec --only firestore --project demo-acct-del-rules \"node test/account_deletion_rules.test.js\"",
+    "test:account-deletion-gate": "firebase emulators:exec --only firestore --project demo-acct-gate \"node test/account_deletion_gate_tool.test.js\""
   },
   "engines": {
     "node": "20"

@@ -83,4 +83,34 @@
 - Давралар ва шажара (қарор 9, кейинга).
 - Ҳамён сўндирилиши ҳуқуқий/солиқ жиҳати: **UNKNOWN**, текширув эганинг «Админ ва бошқалар» ўзи.
 - Ҳар коллекция учун яшириш механизми (A1), `collection_tasks` / `supplier_payable` / карпет `delivered` маъноси.
-- Қобиқ ва қайта рўйхатдан ўтиш: ўша телефон билан қайта кирилса қобиқ янги ҳисобга айлантирилади (`createdAt` янгиланиши) — таҳлилда ёзилади.
+- Қобиқ ва қайта рўйхатдан ўтиш: **ҳал қилинди** — киришнинг марказий функциясига тегилмайди; алоҳида триггер `onUserShellRevived`: қобиқ (`deleted:true`) ҳужжатга клиент `phone` ёзганда белгилар олинади ва `createdAt` янгиланади (янги ҳисоб). Ҳамён тарихи ўчиришда `account_deletion_archive/{uid}/wallet_ledger` га кўчади (рақам қайта берилса янги эга эски тарихни кўрмасин).
+
+## 11. Ҳолат (2026-10-24 кечаси) — сервер ва клиент КОД ТАЙЁР, production'да ҲАЛИ ЙЎҚ
+
+| Қисм | Файл | Тест |
+|---|---|---|
+| Блок текшируви (ўқиш) | `functions/account_deletion_core.js` | 27 |
+| Сўров/бекор/ижро/режали ижро, дарвоза, INTERNAL рўйхат | `functions/account_deletion.js` | 26 |
+| Дарҳол яшириш/қайтариш | `functions/account_deletion_hide.js` | 9 |
+| Якуний ўчириш ва тозалаш | `functions/account_deletion_content.js` | 7 |
+| Callable қатлами (ҳақиқий index.js) | `functions/index.js` (attach) | 8 |
+| Firestore rules (клиент `deletion/deleted/…` ёзолмайди; `account_deletions*` ёпиқ) | `firestore.rules` (REPO нусхаси) | 7 |
+| Дарвоза воситаси (OFF/INTERNAL/PUBLIC, audit) | `functions/tools/set_account_deletion.js` | 7 |
+| Клиент: экран, репозиторий, Кабинет қатори ва банер, 3 тил (37 калит) | `lib/features/profile/…`, `assets/lang/*.json` | 19 |
+
+**Ёқиш босқичлари (42-банд):** OFF (ҳозир: ҳужжат йўқ) → INTERNAL (`--enabled=true --allow=<ички телефонлар>`; биринчи ҳақиқий ўчириш фақат шу ҳисобларда) → PUBLIC (`--allow=` бўш).
+
+**Production'га чиқаришдан олдин (ҳали бажарилмаган):**
+1. Функциялар НОМ бўйича (пинланган worktree, жонли функциялар асоси + шу файллар + index.js'даги 3 қатор; бутун `functions:default` ЭМАС): `previewAccountDeletion`, `requestAccountDeletion`, `cancelAccountDeletion`, `executeAccountDeletions`, `onUserShellRevived`. Дарвоза ёпиқ — қўшимча хавф йўқ.
+2. Rules — АЛОҲИДА командада, ЖОНЛИ қоида матнига ЯМОҚ (repo `firestore.rules` жонлидан фарқ қилади, бутунини чиқариш МУМКИН ЭМАС): `walletFieldsUntouched()` ва `users` create рўйхатига 4 калит: `deletion, deleted, deletedAt, revivedAt`.
+3. Илова (APK) — эганинг ҳар build учун рухсати билан; Google Play иловада йўл талаб қилади (текширув: support.google.com/googleplay/android-developer/answer/13327111).
+4. Матнлар (ёқиш пайтида): `web/delete-account.html` — иловадаги йўл, 10 кун, ҳамён қайтарилмаслиги, сақланадиганлар (молиявий ёзувларда телефон 3 йил), учинчи томонлар (OpenAI чат матни, Crashlytics, Telegram бот, ижтимоий саҳифалардаги постлар, CDN кэши); махфийлик сиёсати; Play Data Safety.
+5. Биринчи ҳақиқий ижро фақат INTERNAL ҳисобда; кузатиш: `account_deletions/{uid}` (ҳолат, `steps`, `lastError`), `events`, структурали логлар (`module: account_deletion`).
+
+**Ҳали ЙЎҚ / очиқ:**
+- Админ экрани («Ўчириш сўровлари»: рўйхат, бекор қилиш, қўлда сўров) ва дарвозани админдан бошқариш — ҳозир `set_account_deletion.js` воситаси.
+- Давралар ва шажара (эга: кейинга); comments/likes/ratings, relative_phone_watchers, notifications, admin_news (шахсий хабарлар), topup_receipts, logistics, restaurants — ижро қилинмайди (UNKNOWN), ҳужжатда номма-ном.
+- Яширилмайдиганлар: businesses, tv_public_profiles, tv_shops, wholesale_sellers, yuk_local_drivers, comments/likes — якуний ўчиришгача кўринади.
+- Ҳамён сўндирилишининг ҳисобчилик/ҳуқуқий жиҳати (`admin_clearing` га ёзув) — UNKNOWN, «Админ ва бошқалар».
+- Ижро пайтида Firebase Auth/Storage/R2 ҳақиқий муҳитда синалмаган (эмуляторда Auth/Storage сохта) — INTERNAL босқич шунинг учун шарт.
+- Ёқилган APK ва ўчирилгандан кейин қурилма: Auth фойдаланувчиси ўчади, қурилма боғланиши ўчади; иловада сақланган `user_phone` билан «қайта тасдиқлаш» мастери очилиши мумкин — INTERNAL синовда текширилади.

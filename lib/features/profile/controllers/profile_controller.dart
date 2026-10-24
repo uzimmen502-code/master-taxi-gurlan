@@ -74,6 +74,10 @@ class ProfileController extends ChangeNotifier {
   /// Структуралaнган манзил — мажбурий 4 майдон + GPS.
   UserAddress structuredAddress = const UserAddress();
 
+  /// Ҳисобни ўчириш сўрови (`users.deletion`): кутилаётган бўлса Кабинетда банер чиқади.
+  bool deletionPending = false;
+  DateTime? deletionScheduledFor;
+
   String? imagePath;
   String photoUrl = '';
   String _photoPath = '';
@@ -202,6 +206,11 @@ class ProfileController extends ChangeNotifier {
       final user = await _userRepo.getById(uid);
       if (user == null) return;
       structuredAddress = user.address;
+      if (deletionPending != user.deletionPending || deletionScheduledFor != user.deletionScheduledFor) {
+        deletionPending = user.deletionPending;
+        deletionScheduledFor = user.deletionScheduledFor;
+        notifyListeners();
+      }
       // Legacy address — agar Firestore'da bo'lsa va SharedPreferences bo'sh
       // bo'lsa — to'ldiramiz (eskи фойдаланувчилар учун).
       if (address.isEmpty && user.addressLegacy.isNotEmpty) {

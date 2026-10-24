@@ -262,10 +262,10 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: muted ? Colors.grey.shade50 : Colors.white,
+        color: muted ? c.surface2 : c.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: widget.isCurrent ? AppColors.primaryText : Colors.grey.shade200,
+          color: widget.isCurrent ? c.brandText : c.line,
           width: widget.isCurrent ? 2 : 1,
         ),
       ),
@@ -283,13 +283,21 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '🍽 $title',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: muted ? Colors.grey.shade400 : Colors.black87),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          ExcludeSemantics(child: Icon(Icons.restaurant_rounded, size: 16, color: muted ? c.ink2 : c.brandText)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: muted ? c.ink2 : c.ink),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(subtitle, style: TextStyle(fontSize: 12, color: c.ink2), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -298,7 +306,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
                   child: Text(
                     context.tr(RestaurantOrderStatus.labelKey(o.restaurantStatus)),
                     textAlign: TextAlign.end,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: muted ? Colors.grey : AppColors.primaryText),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: muted ? c.ink2 : c.brandText),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -313,7 +321,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
               children: [
                 Text(
                   '${context.tr('restaurants_courier_items').replaceAll('{n}', '${o.items.fold<int>(0, (s, i) => s + i.count)}')} · ${formatPrice(o.foodAmount)} ${context.tr('currency_sum')}',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: c.ink2),
                 ),
                 AvaChip(
                   label: context.tr(feeKey).replaceAll('{amount}', formatPrice(o.deliveryFee)),
@@ -330,7 +338,14 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
             ),
             if (o.note.trim().isNotEmpty && widget.isCurrent) ...[
               const SizedBox(height: 4),
-              Text('📝 ${o.note}', style: TextStyle(fontSize: 11, color: c.ink2), maxLines: 2, overflow: TextOverflow.ellipsis),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ExcludeSemantics(child: Icon(Icons.notes_rounded, size: 16, color: c.ink2)),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(o.note, style: TextStyle(fontSize: 12, color: c.ink2), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                ],
+              ),
             ],
             if (stage == CourierRestaurantStage.cancelled) ...[
               const SizedBox(height: 8),
@@ -476,7 +491,7 @@ class _CollectSummary extends StatelessWidget {
           else
             Text(context.tr('restaurants_courier_collect_none'), style: line(c.ok)),
           if (order.deliveryPaymentMethod == 'wallet')
-            Text(context.tr('restaurants_courier_fee_from_wallet'), style: TextStyle(fontSize: 11, color: c.ink2)),
+            Text(context.tr('restaurants_courier_fee_from_wallet'), style: TextStyle(fontSize: 12, color: c.ink2)),
         ],
       ),
     );
@@ -590,15 +605,16 @@ class _IndexBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ava;
     return Container(
       width: 28,
       height: 28,
       decoration: BoxDecoration(
         color: muted
-            ? Colors.grey.shade300
+            ? c.line
             : current
                 ? AppColors.primaryDark
-                : Colors.orange.shade100,
+                : c.brandSoft,
         shape: BoxShape.circle,
       ),
       child: Center(
@@ -608,10 +624,10 @@ class _IndexBadge extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.bold,
             color: muted
-                ? Colors.grey
+                ? c.ink2
                 : current
                     ? AppColors.onPrimary
-                    : AppColors.primaryText,
+                    : c.brandText,
           ),
         ),
       ),

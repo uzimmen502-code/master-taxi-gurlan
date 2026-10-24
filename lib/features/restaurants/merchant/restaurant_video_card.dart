@@ -238,7 +238,7 @@ class _RestaurantVideoCardState extends State<RestaurantVideoCard> {
               _ClipRow(clip: clip, mine: _mine(clip), busy: _busy, onOpen: () => _open(clip), onDelete: () => _delete(clip)),
             if (_clips.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(context.tr('restaurants_m_video_replace_hint'), style: TextStyle(fontSize: 11, color: c.ink3)),
+              Text(context.tr('restaurants_m_video_replace_hint'), style: TextStyle(fontSize: 12, color: c.ink3)),
               const SizedBox(height: 6),
             ],
             OutlinedButton.icon(
@@ -288,18 +288,18 @@ class _ClipRow extends StatelessWidget {
                   key: ValueKey('video-status-$status'),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-                  child: Text(context.tr('restaurants_m_video_st_$status'), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
+                  child: Text(context.tr('restaurants_m_video_st_$status'), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
                 ),
                 if (reason.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(reason, style: TextStyle(fontSize: 11, color: c.ink3)),
+                    child: Text(reason, style: TextStyle(fontSize: 12, color: c.ink3)),
                   ),
                 if (!mine)
                   Padding(
                     key: ValueKey('video-by-colleague-${clip.id}'),
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(context.tr('restaurants_m_video_by_colleague'), style: TextStyle(fontSize: 11, color: c.ink3)),
+                    child: Text(context.tr('restaurants_m_video_by_colleague'), style: TextStyle(fontSize: 12, color: c.ink3)),
                   ),
               ],
             ),

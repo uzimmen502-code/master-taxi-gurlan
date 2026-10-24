@@ -167,7 +167,7 @@ class _Stat extends StatelessWidget {
           children: [
             Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c.ink)),
             const SizedBox(height: 2),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: c.ink2)),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.ink2)),
           ],
         ),
       ),

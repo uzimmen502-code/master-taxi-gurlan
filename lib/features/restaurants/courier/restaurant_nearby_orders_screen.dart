@@ -325,7 +325,11 @@ class _NearbyOrderCard extends StatelessWidget {
         children: [
           Row(children: [
             Expanded(
-              child: Text('🍽 ${o.restaurantName}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink), maxLines: 1, overflow: TextOverflow.ellipsis),
+              child: Row(children: [
+                ExcludeSemantics(child: Icon(Icons.restaurant_rounded, size: 16, color: c.brandText)),
+                const SizedBox(width: 4),
+                Expanded(child: Text(o.restaurantName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ]),
             ),
             const SizedBox(width: 6),
             AvaChip(

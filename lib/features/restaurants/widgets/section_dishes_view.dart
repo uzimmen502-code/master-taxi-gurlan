@@ -441,7 +441,7 @@ class SectionDishCard extends StatelessWidget {
                             child: Text(
                               context.tr(VenueType.l10nKey(d.venueType)),
                               maxLines: 1,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white, height: 1.2),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white, height: 1.2),
                             ),
                           ),
                         ),
@@ -455,7 +455,7 @@ class SectionDishCard extends StatelessWidget {
                             decoration: BoxDecoration(color: c.brand, borderRadius: BorderRadius.circular(8)),
                             child: Text(
                               context.tr('restaurants_dish_new'),
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.brandInk),
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.brandInk),
                             ),
                           ),
                         ),

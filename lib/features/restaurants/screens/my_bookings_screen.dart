@@ -147,7 +147,7 @@ class _BookingCard extends StatelessWidget {
                     key: ValueKey('booking-status-${b.id}'),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
                   ),
                 ),
               ),

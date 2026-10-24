@@ -137,7 +137,7 @@ class _DishRatingCardState extends State<DishRatingCard> {
             if (pending.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(context.tr('restaurants_rate_pick'), style: TextStyle(fontSize: 11, color: c.ink2)),
+                child: Text(context.tr('restaurants_rate_pick'), style: TextStyle(fontSize: 12, color: c.ink2)),
               ),
           ],
         ],

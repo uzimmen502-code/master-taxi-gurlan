@@ -9,6 +9,7 @@ import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
+import '../widgets/wholesale_tier_picker.dart' show kWholesaleTapSize;
 
 /// Тайёр нарх поғонаси — қатъий МОҚ чегараси (1 / 10 / 50) ва кўринадиган
 /// диапазон ёрлиғи. Нарх тўлдириш ихтиёрий (эга қарори, 2026-09-24):
@@ -296,10 +297,12 @@ class _WholesaleProductFormScreenState
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
+      debugPrint('[Wholesale] save product failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content:
-              Text(context.tr('error_generic').replaceAll('{error}', '$e'))),
+        SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(context.tr('wholesale_action_failed'))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -341,10 +344,12 @@ class _WholesaleProductFormScreenState
         SnackBar(content: Text(context.tr('wholesale_video_linked'))),
       );
     } catch (e) {
+      debugPrint('[Wholesale] link video failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content:
-              Text(context.tr('error_generic').replaceAll('{error}', '$e'))),
+        SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(context.tr('wholesale_action_failed'))),
       );
     }
   }
@@ -653,15 +658,31 @@ class _WholesaleProductFormScreenState
             ),
           ),
         ),
+        // Кўринадиган доира кичик (22), лекин босиладиган майдон 48×48.
         Positioned(
-          top: 2,
-          right: 2,
-          child: GestureDetector(
-            onTap: onRemove,
-            child: const CircleAvatar(
-              radius: 11,
-              backgroundColor: Colors.black54,
-              child: Icon(Icons.close, size: 14, color: Colors.white),
+          top: 0,
+          right: 0,
+          child: Semantics(
+            button: true,
+            label: context.tr('delete'),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onRemove,
+              child: const SizedBox(
+                width: kWholesaleTapSize,
+                height: kWholesaleTapSize,
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: EdgeInsets.all(2),
+                    child: CircleAvatar(
+                      radius: 11,
+                      backgroundColor: Colors.black54,
+                      child: Icon(Icons.close, size: 14, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),

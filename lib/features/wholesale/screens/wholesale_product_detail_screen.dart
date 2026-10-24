@@ -50,6 +50,31 @@ class _WholesaleProductDetailScreenState
   );
   late int _index = _swipeList.indexWhere((p) => p.id == widget.product.id);
 
+  /// Тугма билан ўтиш учун: пейджерни ташқаридан бошқарамиз (свайпга муқобил).
+  late final PageController _pageCtrl = PageController(initialPage: _index);
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  /// -1 — олдинги, +1 — кейинги маҳсулот.
+  void _step(int delta) {
+    final target = (_index + delta).clamp(0, _swipeList.length - 1);
+    if (target == _index) return;
+    // Ҳаракатни камайтириш ёқилган бўлса — анимациясиз.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pageCtrl.jumpToPage(target);
+    } else {
+      _pageCtrl.animateToPage(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = _swipeList;
@@ -67,6 +92,7 @@ class _WholesaleProductDetailScreenState
       child: Stack(
         children: [
           EdgeSwipePager(
+            controller: _pageCtrl,
             itemCount: list.length,
             initialIndex: _index,
             onPageChanged: (i) => setState(() => _index = i),
@@ -79,26 +105,70 @@ class _WholesaleProductDetailScreenState
             ),
           ),
           Positioned(
-            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 6,
-            right: 12,
-            child: IgnorePointer(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${_index + 1} / ${list.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 2,
+            right: 8,
+            child: WholesaleSwipeNav(
+              index: _index,
+              count: list.length,
+              onStep: _step,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// «‹ 3 / 12 ›» — нечанчи маҳсулот эканини кўрсатади ва свайпга муқобил:
+/// олдинги/кейинги маҳсулотга тугма билан ўтиш (WCAG 2.5.7, экран ўқувчи учун
+/// ҳам). Чегарада тегишли тугма ўчиқ. Ҳар тугма 48×48 dp.
+class WholesaleSwipeNav extends StatelessWidget {
+  const WholesaleSwipeNav({
+    super.key,
+    required this.index,
+    required this.count,
+    required this.onStep,
+  });
+
+  final int index;
+  final int count;
+
+  /// -1 = олдинги, +1 = кейинги.
+  final ValueChanged<int> onStep;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            key: const ValueKey('wholesale-swipe-prev'),
+            tooltip: context.tr('wholesale_swipe_prev'),
+            color: Colors.white,
+            disabledColor: Colors.white38,
+            icon: const Icon(Icons.chevron_left_rounded),
+            onPressed: index > 0 ? () => onStep(-1) : null,
+          ),
+          Text(
+            '${index + 1} / $count',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('wholesale-swipe-next'),
+            tooltip: context.tr('wholesale_swipe_next'),
+            color: Colors.white,
+            disabledColor: Colors.white38,
+            icon: const Icon(Icons.chevron_right_rounded),
+            onPressed: index < count - 1 ? () => onStep(1) : null,
           ),
         ],
       ),
@@ -354,9 +424,11 @@ class _WholesaleProductDetailViewState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        context.tr('wholesale_total'),
+                        // «Тахминий»: нарх сотувчи билан келишилади, бу
+                        // буюртма суммаси эмас (чекаут йўқ, фақат қўнғироқ).
+                        context.tr('wholesale_total_approx'),
                         style:
-                            const TextStyle(fontSize: 11, color: PdDark.muted),
+                            const TextStyle(fontSize: 12, color: PdDark.muted),
                       ),
                       Text(
                         '${formatPrice(total)} ${p.currencyLabel}',

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -46,11 +47,16 @@ class WholesaleProductCard extends StatelessWidget {
                         )
                       : ColoredBox(
                           color: Colors.grey.shade200,
-                          child: Image.network(
-                            product.imageUrls.first,
+                          // Кэш + кичрайтирилган декодлаш (memCacheWidth): гридда
+                          // тўлиқ ҳажмли расмлар декодланмасин (лента шиддати).
+                          child: CachedNetworkImage(
+                            imageUrl: product.imageUrls.first,
                             // contain: расм четлари қирқилмайди (ега 2026-10-19).
                             fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => Container(
+                            memCacheWidth: 400,
+                            placeholder: (_, __) =>
+                                ColoredBox(color: Colors.grey.shade200),
+                            errorWidget: (_, __, ___) => Container(
                               color: Colors.grey.shade200,
                               child: const Icon(
                                   Icons.image_not_supported_outlined),

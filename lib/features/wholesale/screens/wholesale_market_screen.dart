@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_tier_bar.dart';
+import '../../../core/geo/module_geo_policy.dart' show GeoLevel;
 import '../../../core/l10n/l10n_extension.dart';
 import '../../china_inquiry/widgets/china_inquiry_entry.dart';
 import '../../../core/theme/app_theme.dart';
@@ -21,6 +22,8 @@ import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart';
 import '../widgets/ship_from_fields.dart';
+import '../widgets/wholesale_empty_market.dart';
+import '../widgets/wholesale_field_error.dart';
 import '../widgets/wholesale_product_card.dart';
 import '../widgets/wholesale_stream_builder.dart';
 import 'wholesale_product_detail_screen.dart';
@@ -121,6 +124,11 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
 
   bool get _isChina => widget.market == WholesaleProduct.marketChina;
 
+  void _clearSearch() {
+    _searchCtrl.clear();
+    setState(() => _query = '');
+  }
+
   /// Улгуржи — ҳудудни фойдаланувчи танлайди (Республика / вилоят / туман),
   /// ҳар сафар Республикадан (D-GEO-10). Хитой — доим Республика.
   static const _geoModule = 'wholesale_market';
@@ -130,13 +138,13 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   String _streamKey = '';
 
   Stream<List<WholesaleProduct>> _productsStream() {
+    // Stream фақат ҲУДУД бўйича (қидирув матни бўйича ЭМАС): қидирув
+    // натижада, клиентда филтрланади — ҳар ҳарфда янги Firestore сўрови йўқ.
     final geo = _isChina ? null : _scope;
-    final key = '${geo?.key}|$_query';
+    final key = '${geo?.key}';
     if (_stream == null || key != _streamKey) {
       _streamKey = key;
-      _stream = _query.trim().isEmpty
-          ? _productsRepo.getActiveProducts(market: widget.market, geo: geo)
-          : _productsRepo.searchActiveProducts(_query, market: widget.market, geo: geo);
+      _stream = _productsRepo.getActiveProducts(market: widget.market, geo: geo);
     }
     return _stream!;
   }
@@ -150,9 +158,9 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
         ),
         bottom: TabBar(
           controller: _tabCtrl,
-          labelColor: Colors.black,
-          unselectedLabelColor: Colors.black54,
-          indicatorColor: Colors.black,
+          labelColor: AvaLight.ink,
+          unselectedLabelColor: AppColors.sectionMuted,
+          indicatorColor: AvaLight.ink,
           tabs: [
             Tab(text: context.tr('wholesale_tab_market')),
             Tab(text: context.tr('wholesale_tab_seller')),
@@ -175,10 +183,19 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
         padding: const EdgeInsets.all(12),
         child: TextField(
           controller: _searchCtrl,
+          textInputAction: TextInputAction.search,
           onChanged: (v) => setState(() => _query = v),
           decoration: InputDecoration(
             hintText: context.tr('wholesale_search_hint'),
             prefixIcon: const Icon(Icons.search),
+            // Тозалаш: матн бор бўлсагина (48 dp босиладиган майдон).
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: context.tr('wholesale_empty_clear_search'),
+                    icon: const Icon(Icons.close),
+                    onPressed: _clearSearch,
+                  ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             isDense: true,
           ),
@@ -197,11 +214,15 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
           // Firestore stream хатодан кейин ёпилади: кэшни ташлаб қайта улаймиз.
           onRetry: () => setState(() => _stream = null),
           builder: (context, data) {
-            final items = data ?? const <WholesaleProduct>[];
+            final items = WholesaleProductsRepository.filterBySearch(
+                data ?? const <WholesaleProduct>[], _query);
             final platform = _filteredPlatform();
             if (items.isEmpty && platform.isEmpty) {
-              return Center(
-                child: Text(context.tr('wholesale_empty_products')),
+              return WholesaleEmptyMarket(
+                hasQuery: _query.trim().isNotEmpty,
+                // Ҳудуд торайтирилган бўлса — бошқа ҳудудни кўриш таклифи.
+                narrowedArea: !_isChina && _scope.level != GeoLevel.nation,
+                onClearSearch: _clearSearch,
               );
             }
             // Навбатма-навбат: AVA товари лентанинг бошида тўпланиб
@@ -271,6 +292,14 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
   /// Рад этилган сотувчи маълумотини тузатиб қайта юбориш формаси очиқми.
   bool _editingRejected = false;
 
+  /// Майдон ёнидаги хато матн калитлари (`null` — хато йўқ) ва скролл учун калитлар.
+  String? _typeErr;
+  String? _companyErr;
+  String? _shipErr;
+  final _typeKey = GlobalKey();
+  final _companyKey = GlobalKey();
+  final _shipKey = GlobalKey();
+
   /// Сотувчи ҳужжати stream'и: аввал `build` ичида ҳар қайта чизишда янгидан
   /// очилар эди (янги obuna) — энди телефонга қараб бир марта.
   Stream<WholesaleSeller?>? _sellerStream;
@@ -310,24 +339,27 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
 
   Future<void> _register() async {
     final company = _companyCtrl.text.trim();
-    if (company.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('wholesale_err_company_name'))),
-      );
-      return;
-    }
-    if (_sellerType.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('wholesale_err_seller_type'))),
-      );
-      return;
-    }
+    // Хатолар майдон ёнида (SnackBar эмас) + биринчи хатога скролл.
     // Янги рўйхатдан ўтишда координата ҳам шарт (эга, 2026-10-23); сервер rules'и ҳам шуни талаб қилади.
+    final typeErr = _sellerType.isEmpty ? 'wholesale_err_seller_type' : null;
+    final companyErr = company.length < 2 ? 'wholesale_err_company_name' : null;
     final shipErr = _shipFrom.validate(requireCoords: true);
-    if (shipErr != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr(shipErr))),
-      );
+    if (typeErr != null || companyErr != null || shipErr != null) {
+      setState(() {
+        _typeErr = typeErr;
+        _companyErr = companyErr;
+        _shipErr = shipErr;
+      });
+      final first = typeErr != null
+          ? _typeKey
+          : (companyErr != null ? _companyKey : _shipKey);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final c = first.currentContext;
+        if (c != null) {
+          Scrollable.ensureVisible(c,
+              duration: const Duration(milliseconds: 200), alignment: 0.1);
+        }
+      });
       return;
     }
     setState(() => _registering = true);
@@ -372,7 +404,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.error,
           content: Text(context.tr('wholesale_action_failed')),
         ),
       );
@@ -433,7 +465,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
               context
                   .tr('wholesale_reason')
                   .replaceAll('{note}', rejected.adminNote),
-              style: TextStyle(color: Colors.red.shade700),
+              style: TextStyle(color: AppColors.error),
             ),
           ),
         Text(
@@ -443,10 +475,11 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
               (widget.market == WholesaleProduct.marketChina
                   ? context.tr('wholesale_register_body_china')
                   : ''),
-          style: TextStyle(color: Colors.grey.shade700),
+          style: TextStyle(color: AppColors.sectionMuted),
         ),
         const SizedBox(height: 20),
         Text(context.tr('wholesale_who_are_you'),
+            key: _typeKey,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
@@ -454,14 +487,23 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
             ChoiceChip(
               label: Text(context.tr(WholesaleSeller.typeLabelKey(t))),
               selected: _sellerType == t,
-              onSelected: (_) => setState(() => _sellerType = t),
+              onSelected: (_) => setState(() {
+                _sellerType = t;
+                _typeErr = null;
+              }),
             ),
         ]),
+        if (_typeErr != null) WholesaleFieldError(textKey: _typeErr!),
         const SizedBox(height: 16),
         TextField(
+          key: _companyKey,
           controller: _companyCtrl,
+          onChanged: (_) {
+            if (_companyErr != null) setState(() => _companyErr = null);
+          },
           decoration: InputDecoration(
             labelText: context.tr('wholesale_field_company'),
+            errorText: _companyErr == null ? null : context.tr(_companyErr!),
             border: const OutlineInputBorder(),
           ),
         ),
@@ -474,11 +516,18 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
           ),
         ),
         const SizedBox(height: 16),
-        ShipFromFields(
-          value: _shipFrom,
-          locationRequired: true,
-          onChanged: (v) => setState(() => _shipFrom = v),
+        KeyedSubtree(
+          key: _shipKey,
+          child: ShipFromFields(
+            value: _shipFrom,
+            locationRequired: true,
+            onChanged: (v) => setState(() {
+              _shipFrom = v;
+              _shipErr = null;
+            }),
+          ),
         ),
+        if (_shipErr != null) WholesaleFieldError(textKey: _shipErr!),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _registering ? null : _register,
@@ -533,7 +582,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
                       .tr('wholesale_reason')
                       .replaceAll('{note}', seller.adminNote),
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade700)),
+                  style: TextStyle(color: AppColors.sectionMuted)),
             ],
             // Рад этилганда чиқиш йўли: маълумотни тузатиб қайта юбориш.
             if (!pending) ...[
@@ -685,7 +734,7 @@ class _MyProductsView extends StatelessWidget {
                       debugPrint('[Wholesale] updateShipFrom failed: $e');
                       if (!ctx.mounted) return;
                       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppColors.error,
                         content: Text(ctx.tr('wholesale_action_failed')),
                       ));
                     }
@@ -735,7 +784,7 @@ class _MyProductsView extends StatelessWidget {
             child: Text(dialogCtx.tr('cancel')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text(dialogCtx.tr('delete')),
           ),
@@ -766,8 +815,25 @@ class _MyProductsView extends StatelessWidget {
                 WholesaleProductFormScreen(seller: seller, existing: p),
           ),
         );
-      } else if (action == 'hide') {
-        await repo.deactivate(p.id);
+      } else if (action == 'hide' || action == 'republish') {
+        // Натижа кўринсин: аввал ҳеч қандай жавоб йўқ эди.
+        final messenger = ScaffoldMessenger.of(context);
+        final okText = context.tr(action == 'hide'
+            ? 'wholesale_hidden'
+            : 'wholesale_republished');
+        final failText = context.tr('wholesale_action_failed');
+        try {
+          if (action == 'hide') {
+            await repo.deactivate(p.id);
+          } else {
+            await repo.republish(p.id);
+          }
+          messenger.showSnackBar(SnackBar(content: Text(okText)));
+        } catch (e) {
+          debugPrint('[Wholesale] $action failed: $e');
+          messenger.showSnackBar(SnackBar(
+              backgroundColor: AppColors.error, content: Text(failText)));
+        }
       } else if (action == 'delete') {
         await _confirmDelete(context, repo, p);
       } else if (action == 'add_video') {
@@ -855,6 +921,13 @@ class _MyProductsView extends StatelessWidget {
                             PopupMenuItem(
                                 value: 'hide',
                                 child: Text(context.tr('wholesale_menu_hide'))),
+                          // Яширилган маҳсулотни қайта текширувга юбориш
+                          // (Rules: inactive → pending; ўзини active қилолмайди).
+                          if (p.isInactive)
+                            PopupMenuItem(
+                                value: 'republish',
+                                child: Text(
+                                    context.tr('wholesale_menu_republish'))),
                           PopupMenuItem(
                               value: 'delete',
                               child: Text(context.tr('delete'))),
@@ -892,7 +965,7 @@ class _MyProductsView extends StatelessWidget {
               ' · ${context.tr(_statusLabelKey(p.status))}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 12, color: AppColors.sectionMuted),
             ),
           ],
         ),
@@ -921,7 +994,7 @@ class _MyProductsView extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.error,
           content: Text(context.tr('wholesale_action_failed')),
         ),
       );

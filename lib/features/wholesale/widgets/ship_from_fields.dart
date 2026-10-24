@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/geo/uz_bounds.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../models/geo_area.dart';
 import '../../../models/map_picker_result.dart';
@@ -172,7 +173,7 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
       children: [
         Text(context.tr('wholesale_ship_from_title'), style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        Text(context.tr('wholesale_ship_from_help'), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        Text(context.tr('wholesale_ship_from_help'), style: TextStyle(fontSize: 12, color: AppColors.sectionMuted)),
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           key: ValueKey('ship-region-${_regions.length}-$regionValue'),
@@ -229,7 +230,7 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
               : context.tr(widget.locationRequired
                   ? 'wholesale_location_required_hint'
                   : 'wholesale_location_optional'),
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 12, color: AppColors.sectionMuted),
         ),
       ],
     );

@@ -142,7 +142,7 @@ class _Tile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style:
-                          const TextStyle(fontSize: 11, color: PdDark.muted),
+                          const TextStyle(fontSize: 12, color: PdDark.muted),
                     ),
                     if (district.isNotEmpty)
                       Text(
@@ -150,7 +150,7 @@ class _Tile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: PdDark.muted,
                         ),
                       ),

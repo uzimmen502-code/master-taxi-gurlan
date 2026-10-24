@@ -95,6 +95,18 @@ service cloud.firestore {
       return phoneFromToken();
     }
 
+    // `admin_news.targetUserId` — токендаги телефонга тенгми. Каноник шакл
+    // 998+9 рақам; илова сўровидаги (`phoneAliases`) `+998…` ва 9 хонали
+    // мерос шакллари ҳам қабул қилинади. Телефонсиз (аноним) сессия — false.
+    function adminNewsIsMine(target) {
+      let d = phoneFromToken();
+      return d.size() == 12 && d[0:3] == '998'
+          ? target in [d, '+' + d, d[3:12]]
+          : d.size() == 9
+            ? target in [d, '998' + d, '+998' + d]
+            : false;
+    }
+
     // Nasab daraxti — joriy foydalanuvchining komponenti (tree_persons read uchun).
     function myTreeComponent() {
       let uid = userDocIdFromPhoneToken();
@@ -1793,15 +1805,28 @@ service cloud.firestore {
     // «Push qayta yuborish» (`requestPushResend`); буюртма чеклари ва
     // ҳолат хабарлари — CF (Admin SDK, rules'дан ташқари).
     //
-    // ⚠ Ўқиш ҳали `if true`: CF шахсий чекларни (`targetUserId`, манзил,
-    // сумма) ҳам шу ерга ёзади. Ёпиш учун илова сўровини
-    // (`NewsRepository` — `orderBy createdAt limit 50`) аввал янги версияда
-    // ўзгартириш керак (ҳозирги сўров ёпиқ қоидада бутунлай рад бўлади).
+    // Ўқиш: CF шахсий чекларни (`targetUserId` = телефон, манзил, сумма) ҳам
+    // шу ерга ёзади, шунинг учун ўқиш `if true` бўла олмайди. Ҳар бир ҳужжат
+    // `targetUserId` майдонига эга (умумий хабарда `''`, шахсийда телефон) —
+    // `onAdminNewsCreate` майдонсизини `''` қилиб қўяди.
     //
-    // Тест: functions/test/admin_panel_audit_rules.test.js
+    // ИЛОВА СЎРОВЛАРИ (`NewsRepository`, 2c9aa76c дан бери, build ≥ 72) қоида
+    // билан ИСБОТЛАНАДИ — LIST'да `.get(f, default)` ишлатилмайди, майдон
+    // тўғридан-тўғри:
+    //   • `where targetUserId == ''` (+ orderBy createdAt, + createdAt > …)
+    //   • `where targetUserId in [998…, +998…, 9 хонали]` (+ orderBy createdAt)
+    // ЭСКИ илова (build < 72, филтрсиз `orderBy createdAt`) бу қоидада
+    // бутунлай рад бўлади — деплойдан ОЛДИН `config/app_version`
+    // (`minSupportedBuild`) билан мажбурий янгилаш ва эга қарори керак.
+    //
+    // Тест: functions/test/admin_news_read_rules.test.js
     match /admin_news/{newsId} {
-      // Ўқиш — барча фойдаланувчилар (фильтр client-side).
-      allow read: if true;
+      // Админ: админ панел (`orderBy createdAt`, `category == 'order'`).
+      // Кирган сессия: умумий хабар (`''`). Эга: ўз шахсий хабари
+      // (токендаги телефон; 9/12 хонали ва `+` шакллари).
+      allow read: if isAdmin()
+          || (isAuth() && resource.data.targetUserId == '')
+          || adminNewsIsMine(resource.data.targetUserId);
 
       // Яратиш — фақат админ; мажбурий майдонлар ва типлар тeкширилaди.
       // category ва audience aniq qiymatlardан bo'lsin.

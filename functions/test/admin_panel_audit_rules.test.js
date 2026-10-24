@@ -182,8 +182,9 @@ async function main() {
       }, {merge: true})));
 
   // ── admin_news ──────────────────────────────────────────────────────
-  await check('admin_news: o\'qish hamon ochiq (ilova lentasi buzilmaydi)',
-      () => assertSucceeds(unauth().collection('admin_news').doc('n1').get()));
+  // O'qish endi yopiq (shaxsiy xabarlar sizib chiqardi); batafsil: admin_news_read_rules.test.js
+  await check('admin_news: kirmagan o\'qiy olmaydi (shaxsiy xabarlar sizmasin)',
+      () => assertFails(unauth().collection('admin_news').doc('n1').get()));
   await check('admin_news: kirmagan yarata olmaydi (hammaga push)',
       () => assertFails(unauth().collection('admin_news').add(news())));
   await check('admin_news: oddiy foydalanuvchi yarata olmaydi',

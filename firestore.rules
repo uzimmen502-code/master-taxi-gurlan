@@ -671,6 +671,48 @@ service cloud.firestore {
           && notChanged('ownerPhone')
           && notChanged('viewCount');
     }
+    // Vitrina hujjati o'lchami/qiymati (yaratish va eganing tahriri uchun umumiy). Joriy ilova yozadigan hamma
+    // shakl o'tadi: title<=200, description<=2000, price butun 0..999999999, photoUrls<=7, clipIds<=50, tur product|service.
+    function tvShopItemShapeOk(d) {
+      return d.get('title', '') is string && d.get('title', '').size() <= 200
+          && d.get('description', '') is string && d.get('description', '').size() <= 2000
+          && d.get('price', 0) is int && d.get('price', 0) >= 0 && d.get('price', 0) <= 999999999
+          && d.get('photoUrls', []) is list && d.get('photoUrls', []).size() <= 7
+          && d.get('clipIds', []) is list && d.get('clipIds', []).size() <= 50
+          && d.get('kind', 'product') in ['product', 'service'];
+    }
+
+    // businessId faqat shu foydalanuvchining O'Z ob'ektiga (businesses/{id}.ownerId); mavjud bo'lmagan ob'ektga
+    // yoki egasiz ('admin') ob'ektga bog'lab bo'lmaydi.
+    function tvShopBusinessLinkOk(d) {
+      return !('businessId' in d)
+          || (d.businessId is string
+              && d.businessId.size() > 0 && d.businessId.size() <= 128
+              && exists(/databases/$(database)/documents/businesses/$(d.businessId))
+              && phoneDocIdsMatch(
+                  userDocIdFromPhoneToken(),
+                  get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('ownerId', '')));
+    }
+
+    function tvShopItemCreateOk() {
+      let d = request.resource.data;
+      return !('boostUntil' in d)
+          && !('socialPostedAt' in d)
+          && d.get('viewCount', 0) == 0
+          && d.get('status', 'active') in ['active', 'pending']
+          && d.get('clipIds', []) is list && d.get('clipIds', []).size() == 0
+          && tvShopItemShapeOk(d)
+          && tvShopBusinessLinkOk(d);
+    }
+
+    function tvShopOwnerUpdateOk() {
+      let d = request.resource.data;
+      return notChanged('businessId')
+          && notChanged('createdAt')
+          && (d.get('status', 'active') == resource.data.get('status', 'active')
+              || d.get('status', 'active') == 'deleted')
+          && tvShopItemShapeOk(d);
+    }
 
     function passengerDocIdMatches(userId, tripPhone) {
       return userId == tripPhone
@@ -4063,12 +4105,18 @@ service cloud.firestore {
 
     match /tv_shop_items/{itemId} {
       allow read: if true;
+      // 2026-10-24 (ega: "qoidani qattiqroq qil"): mijoz boostUntil/viewCount/socialPostedAt ni o'zi qo'ya olmaydi,
+      // holat/tur/o'lcham tekshiriladi, businessId faqat O'Z ob'ektiga bog'lanadi (tvShopItemCreateOk).
       allow create: if isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), request.resource.data.ownerPhone);
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), request.resource.data.ownerPhone)
+          && tvShopItemCreateOk();
+      // Ega: faqat o'z matn/rasm/video maydonlari; holatni o'zi faqat 'deleted' ga o'tkazadi (admin bloklagan yoki
+      // tasdiqlanmagan hujjatni o'zi 'active' qila olmaydi); businessId o'zgarmaydi (tvShopOwnerUpdateOk).
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
-              && tvShopOwnerFieldsLocked());
+              && tvShopOwnerFieldsLocked()
+              && tvShopOwnerUpdateOk());
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));

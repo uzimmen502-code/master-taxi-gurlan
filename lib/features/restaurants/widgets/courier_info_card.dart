@@ -50,7 +50,7 @@ class CourierInfoCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.tr('restaurants_courier_title'), style: TextStyle(fontSize: 11, color: c.ink2)),
+                    Text(context.tr('restaurants_courier_title'), style: TextStyle(fontSize: 12, color: c.ink2)),
                     Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink)),
                   ],
                 ),

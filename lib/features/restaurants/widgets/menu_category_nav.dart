@@ -137,7 +137,7 @@ class MenuCategoryTile extends StatelessWidget {
                     child: Text(
                       '$badge',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.brandInk),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.brandInk),
                     ),
                   ),
               ],
@@ -278,7 +278,7 @@ class _Chip extends StatelessWidget {
                         decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(9)),
                         child: Text(
                           '$badge',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c.surface),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: c.surface),
                         ),
                       ),
                     ],

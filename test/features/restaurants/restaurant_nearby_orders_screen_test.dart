@@ -95,8 +95,8 @@ void main() {
     expect(repo.listCalls, 1);
     expect(repo.lastRadius, 15);
     expect(repo.lastLat, 41.84);
-    expect(find.text('🍽 Osh a'), findsOneWidget);
-    expect(find.text('🍽 Osh b'), findsOneWidget);
+    expect(find.text('Osh a'), findsOneWidget);
+    expect(find.text('Osh b'), findsOneWidget);
     expect(find.text('restaurants_courier_ready_badge'), findsOneWidget);
     expect(find.text('restaurants_courier_preparing'), findsOneWidget);
     expect(find.text('restaurants_courier_buyout_badge'), findsOneWidget, reason: 'faqat naqd buyurtmada');

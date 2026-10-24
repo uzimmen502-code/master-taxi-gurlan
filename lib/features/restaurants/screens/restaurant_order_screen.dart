@@ -262,7 +262,7 @@ class _Step extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label, style: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.w700 : FontWeight.w400, color: active || done ? c.ink : c.ink2)),
-                  if (note != null) Text(note!, style: TextStyle(fontSize: 11, color: c.ink2)),
+                  if (note != null) Text(note!, style: TextStyle(fontSize: 12, color: c.ink2)),
                 ],
               ),
             ),

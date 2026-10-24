@@ -296,7 +296,7 @@ class _MenuItemFormScreenState extends State<MenuItemFormScreen> {
                                         children: [
                                           Icon(Icons.add_a_photo_outlined, color: c.ink3),
                                           const SizedBox(height: 4),
-                                          Text(context.tr('restaurants_m_item_photo'), style: TextStyle(fontSize: 11, color: c.ink3)),
+                                          Text(context.tr('restaurants_m_item_photo'), style: TextStyle(fontSize: 12, color: c.ink3)),
                                         ],
                                       ),
                                     ),

@@ -204,7 +204,7 @@ class _Card extends StatelessWidget {
                   textAlign: TextAlign.end,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: b.status == BookingStatus.confirmed ? c.ok : c.ink3),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: b.status == BookingStatus.confirmed ? c.ok : c.ink3),
                 ),
               ),
             ],
@@ -238,7 +238,7 @@ class _Card extends StatelessWidget {
           if (b.status == BookingStatus.requested && b.acceptDeadlineAt != null)
             Text(
               context.tr('restaurants_m_bk_deadline').replaceAll('{time}', _hhmm(b.acceptDeadlineAt!)),
-              style: TextStyle(fontSize: 11, color: c.ink3),
+              style: TextStyle(fontSize: 12, color: c.ink3),
             ),
           if (b.canRestaurantAnswer(now))
             Padding(

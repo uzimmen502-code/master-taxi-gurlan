@@ -226,7 +226,7 @@ class _BookingSheetState extends State<BookingSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.tr('restaurants_booking_from_cafe'), style: TextStyle(fontSize: 11, color: c.ink2)),
+                    Text(context.tr('restaurants_booking_from_cafe'), style: TextStyle(fontSize: 12, color: c.ink2)),
                     const SizedBox(height: 2),
                     Text(_r.bookingNote.trim(), style: TextStyle(fontSize: 13, color: c.ink)),
                   ],

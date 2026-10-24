@@ -239,7 +239,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(context.tr('restaurants_m_status_$status'), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+      child: Text(context.tr('restaurants_m_status_$status'), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }

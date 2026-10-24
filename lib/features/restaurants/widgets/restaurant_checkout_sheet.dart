@@ -512,7 +512,7 @@ class _RadioRow extends StatelessWidget {
                     children: [
                       Text(title, style: TextStyle(fontSize: 13, color: c.ink)),
                       if (subtitle != null && subtitle!.isNotEmpty)
-                        Text(subtitle!, style: TextStyle(fontSize: 11, color: c.ink2)),
+                        Text(subtitle!, style: TextStyle(fontSize: 12, color: c.ink2)),
                     ],
                   ),
                 ),

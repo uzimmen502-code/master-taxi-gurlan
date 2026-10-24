@@ -282,9 +282,9 @@ class _ImageSlot extends StatelessWidget {
                 alignment: Alignment.bottomCenter,
                 child: Container(
                   width: double.infinity,
-                  color: Colors.black.withValues(alpha: 0.35),
+                  color: Colors.black.withValues(alpha: 0.55),
                   padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                  child: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white)),
                 ),
               ),
             ],

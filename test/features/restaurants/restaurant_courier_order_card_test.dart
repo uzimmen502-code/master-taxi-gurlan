@@ -109,7 +109,7 @@ void main() {
     final repo = _FakeRepo();
     await _pump(tester, _o(rs: 'accepted'), repo: repo);
 
-    expect(find.text('🍽 Gurlan osh'), findsOneWidget);
+    expect(find.text('Gurlan osh'), findsOneWidget);
     expect(find.text('Markaz'), findsOneWidget);
     expect(find.text('restaurants_courier_preparing'), findsOneWidget);
     expect(find.text('restaurants_courier_call_restaurant'), findsOneWidget);
@@ -154,7 +154,7 @@ void main() {
   testWidgets('picked: mijoz nomi/manzili, «yetib keldim» → onArrive; «yetkazib bo\'lmadi» sabab bilan → onComplete(failed)', (tester) async {
     final repo = _FakeRepo();
     final calls = await _pump(tester, _o(rs: 'picked'), repo: repo);
-    expect(find.text('🍽 Mijoz'), findsOneWidget);
+    expect(find.text('Mijoz'), findsOneWidget);
     expect(find.text('Navoiy 1'), findsOneWidget);
     expect(find.text('restaurants_courier_call_customer'), findsOneWidget);
 
@@ -287,6 +287,6 @@ void main() {
     await _pump(tester, _o(rs: 'ready'), repo: repo, isCurrent: false);
     expect(find.text('restaurants_courier_pickup_btn'), findsNothing);
     expect(find.text('restaurants_courier_call_restaurant'), findsNothing);
-    expect(find.text('🍽 Gurlan osh'), findsOneWidget);
+    expect(find.text('Gurlan osh'), findsOneWidget);
   });
 }

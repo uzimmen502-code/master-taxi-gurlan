@@ -74,7 +74,7 @@ class _RestaurantCourierBannerState extends State<RestaurantCourierBanner> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AvaLight.line))),
           child: Row(children: [
-            const Text('🍽', style: TextStyle(fontSize: 18)),
+            const ExcludeSemantics(child: Icon(Icons.restaurant_rounded, size: 22, color: AvaLight.brandText)),
             const SizedBox(width: 10),
             Expanded(
               child: Text(

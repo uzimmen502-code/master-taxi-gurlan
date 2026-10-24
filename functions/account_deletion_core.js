@@ -17,7 +17,9 @@
  * payout_requests.userPhone, delivery_routes.courierId, provider_capabilities.debt.taxi (accountId орқали),
  * ledger_accounts/{courier_cash:phone12 | driver_float:uid}.balance.
  * «Фаол» қийматлар рўйхати — PROPOSED (инвентаризация, 2026-10-24); битта манба шу файл, тест қулфлайди.
- * UNKNOWN (A1 таҳлили): collection_tasks, supplier_payable, гилам `delivered` маъноси — ҳозирча текширилмайди.
+ * A1 таҳлили (2026-10-24, коддан): collection_tasks фаол = assigned, collecting (customerPhone/customerUid/courierId);
+ * гилам `delivered` — эски қиймат, клиент уни ФАОЛ деб ҳисоблайди; supplier_payable фақат МУСБАТ қолдиқ блок
+ * (манфий = creditSupplier ўтказган, оддий ҳисоб); ёпилмаган ресторан эгаси — блок (PROPOSED).
  */
 'use strict';
 
@@ -28,10 +30,16 @@ const ACTIVE = Object.freeze({
   ordersStatus: Object.freeze(['new', 'accepted', 'ready', 'in_delivery', 'courier']),
   ordersFulfillment: Object.freeze(['pending', 'confirmed', 'ready', 'courier_picked', 'arrived']),
   restaurantStatus: Object.freeze(['placed', 'accepted', 'ready', 'picked', 'arrived']),
+  // `delivered` — эски қиймат: ҳеч бир код ёзмайди, лекин клиент модели уни ФАОЛ деб ҳисоблайди
+  // (carpet_wash_order.dart isActive) — хавфсиз томон: блок.
   carpet: Object.freeze([
     'new', 'accepted', 'pickup_ready', 'pickup_in_delivery', 'picked_up', 'washing', 'drying', 'ready',
-    'return_ready', 'return_in_delivery',
+    'return_ready', 'return_in_delivery', 'delivered',
   ]),
+  /** collection_tasks: код ёзадиган қийматлар assigned → collecting → completed (бекор қилиш йўли йўқ). */
+  collectionTasks: Object.freeze(['assigned', 'collecting']),
+  /** restaurants.status: ёпиқ (closed) ва рад этилган (rejected) эгадан бошқа ҳаммаси — юридик ҳужжатлар ва аъзолар бор. */
+  restaurantOwned: Object.freeze(['approved', 'applied', 'suspended']),
   agro: Object.freeze(['new', 'accepted', 'pickup_in_delivery', 'picked_up']),
   trips: Object.freeze(['searching', 'accepted', 'pending']),
   intercity: Object.freeze(['pending', 'confirmed']),
@@ -192,6 +200,10 @@ async function findBlockers(db, identity, { cap = SCAN_CAP } = {}) {
     await sc('carpet_wash_orders', 'customerPhone', forms, ['status'], (d) => inList(A.carpet, d.status)));
   add('AGRO_ACTIVE', 'orders',
     await sc('agro_pickup_orders', 'customerPhone', forms, ['status'], (d) => inList(A.agro, d.status)));
+  const taskActive = (d) => inList(A.collectionTasks, d.status);
+  add('COLLECTION_TASK_ACTIVE', 'orders', await sc('collection_tasks', 'customerPhone', forms, ['status'], taskActive));
+  add('COLLECTION_TASK_ACTIVE', 'orders', await sc('collection_tasks', 'customerUid', ids, ['status'], taskActive));
+  add('COLLECTION_TASK_ACTIVE', 'courier', await sc('collection_tasks', 'courierId', ids, ['status'], taskActive));
 
   // Ресторан эгаси: ўз ресторанларига кирган фаол буюртмалар
   const restSnap = await sc('restaurants', 'ownerUid', ids, ['ownerUid'], () => true);
@@ -202,6 +214,10 @@ async function findBlockers(db, identity, { cap = SCAN_CAP } = {}) {
       await sc('orders', 'restaurantId', restSnap.active.map((r) => r.id), ['restaurantStatus'],
         (d) => inList(A.restaurantStatus, d.restaurantStatus)));
   }
+  // Ресторан ҳали ёпилмаган эга (юридик ҳужжатлар, аъзолар, 2% ҳақ ҳамёндан) — аввал админ ёпади.
+  // PROPOSED (эга қарорида йўқ): хавфсиз томон — блок. Ёпиқ/рад этилган ресторан тўсмайди.
+  add('RESTAURANT_OWNER', 'other',
+    await sc('restaurants', 'ownerUid', ids, ['status'], (d) => inList(A.restaurantOwned, d.status)));
 
   // ── Сафарлар ва бронлар
   const tripActive = (d) => inList(A.trips, d.status);
@@ -244,6 +260,12 @@ async function findBlockers(db, identity, { cap = SCAN_CAP } = {}) {
     if (flt.exists && Number((flt.data() || {}).balance || 0) !== 0) {
       out.push({ code: 'DRIVER_FLOAT_NONZERO', area: 'courier', count: 1, sample: [flt.id] });
     }
+    // supplier_payable: ЖАВОБГАРЛИК ҳисоби. Мусбат қолдиқ = AVA ижрочига ҳали тўламаган иш ҳақи (relay_escrow);
+    // манфий — creditSupplier ҳамёнга ўтказган (оддий ҳисоб, блок эмас). Фақат мусбат блокланади.
+    const sup = await db.collection('ledger_accounts').doc(`supplier_payable:${id}`).get();
+    if (sup.exists && Number((sup.data() || {}).balance || 0) > 0) {
+      out.push({ code: 'SUPPLIER_PAYABLE_OWED', area: 'money', count: 1, sample: [sup.id] });
+    }
   }
   for (const accountId of identity.accountIds) {
     const cap = await db.collection('provider_capabilities').doc(accountId).get();
@@ -262,7 +284,7 @@ async function findBlockers(db, identity, { cap = SCAN_CAP } = {}) {
   // Бир хил код такрорланса (икки сўров) битта қилиб, сонларни қўшамиз.
   const merged = new Map();
   for (const b of out) {
-    const k = `${b.code}|${b.detail || ''}`;
+    const k = `${b.code}|${b.area}|${b.detail || ''}`;
     const cur = merged.get(k);
     if (!cur) merged.set(k, { ...b, sample: [...b.sample] });
     else {

@@ -228,6 +228,48 @@ async function main() {
     assert.deepStrictEqual(await blockersOf(), []);
   });
 
+  // ── A1 tahlilidan keyingi qoidalar
+  await check('A1 collection_tasks: assigned/collecting bloklaydi (mijoz va kuryer tomoni), completed — yo\'q', async () => {
+    await db.collection('collection_tasks').doc('ct1').set({ customerPhone: U9, status: 'assigned' });
+    await db.collection('collection_tasks').doc('ct2').set({ customerUid: U, status: 'collecting' });
+    await db.collection('collection_tasks').doc('ct3').set({ courierId: U, status: 'assigned' });
+    await db.collection('collection_tasks').doc('ct4').set({ customerUid: U, status: 'completed' });
+    const bl = await blockersOf();
+    // mijoz tomoni (2 ta) 'orders' ostida, kuryer tomoni (1 ta) 'courier' ostida alohida yozuv
+    assert.deepStrictEqual(codes(bl), ['COLLECTION_TASK_ACTIVE', 'COLLECTION_TASK_ACTIVE']);
+    assert.deepStrictEqual(bl.map((b) => `${b.area}:${b.count}`).sort(), ['courier:1', 'orders:2']);
+    for (const id of ['ct1', 'ct2', 'ct3', 'ct4']) await db.collection('collection_tasks').doc(id).delete();
+    assert.deepStrictEqual(await blockersOf(), []);
+  });
+  await check('A2 gilam \'delivered\' (eski qiymat) FAOL hisoblanadi — xavfsiz tomon', async () => {
+    await db.collection('carpet_wash_orders').doc('cd').set({ customerPhone: U, status: 'delivered' });
+    assert.deepStrictEqual(codes(await blockersOf()), ['CARPET_ACTIVE']);
+    await db.collection('carpet_wash_orders').doc('cd').update({ status: 'completed' });
+    assert.deepStrictEqual(await blockersOf(), []);
+  });
+  await check('A3 supplier_payable: faqat MUSBAT qoldiq bloklaydi; manfiy/0 — yo\'q', async () => {
+    await db.collection('ledger_accounts').doc(`supplier_payable:${U}`).set({ balance: 90000 });
+    assert.deepStrictEqual(codes(await blockersOf()), ['SUPPLIER_PAYABLE_OWED']);
+    await db.collection('ledger_accounts').doc(`supplier_payable:${U}`).update({ balance: -40000 });
+    assert.deepStrictEqual(await blockersOf(), []);
+    await db.collection('ledger_accounts').doc(`supplier_payable:${U}`).update({ balance: 0 });
+    assert.deepStrictEqual(await blockersOf(), []);
+    await db.collection('ledger_accounts').doc(`supplier_payable:${U9}`).set({ balance: 5 });
+    assert.deepStrictEqual(codes(await blockersOf()), ['SUPPLIER_PAYABLE_OWED']); // 9 xonali kalit ham
+    await db.collection('ledger_accounts').doc(`supplier_payable:${U9}`).delete();
+  });
+  await check('A4 ochiq restoran egasi bloklanadi (approved/applied/suspended); closed/rejected — yo\'q', async () => {
+    for (const s of core.ACTIVE.restaurantOwned) {
+      await db.collection('restaurants').doc('rx').set({ ownerUid: U, status: s });
+      assert.deepStrictEqual(codes(await blockersOf()), ['RESTAURANT_OWNER'], `status ${s}`);
+    }
+    for (const s of ['closed', 'rejected']) {
+      await db.collection('restaurants').doc('rx').set({ ownerUid: U, status: s });
+      assert.deepStrictEqual(await blockersOf(), [], `status ${s}`);
+    }
+    await db.collection('restaurants').doc('rx').delete();
+  });
+
   // ── Xodim roli
   await check('R1 admin/moliya/dispetcher/staff/auditor roli — blok; oddiy rol — yo\'q', async () => {
     for (const r of core.STAFF_ROLES) {

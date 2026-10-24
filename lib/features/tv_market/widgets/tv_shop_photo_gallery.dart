@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../models/tv_shop.dart';
 
 /// Тўлиқ экран: pinch/double-tap зум, свайп, миниатюра танлаш.
 Future<void> openTvShopPhotoGallery(
@@ -17,7 +18,7 @@ Future<void> openTvShopPhotoGallery(
   final cleaned = urls
       .map((e) => e.trim())
       .where((e) => e.isNotEmpty)
-      .take(5)
+      .take(TvShopItem.maxPhotos)
       .toList(growable: false);
   if (cleaned.isEmpty) return;
   final start = initialIndex.clamp(0, cleaned.length - 1);

@@ -103,6 +103,36 @@ class BusinessRepository {
     });
   }
 
+  /// Админ объект маҳсулотини таҳрирлайди (сервер: `adminUpdateBusinessProduct`, audit + сабаб шарт, 41-банд).
+  /// Фақат берилган майдонлар юборилади; [status] — `active` | `blocked`.
+  Future<void> adminUpdateProduct(
+    String itemId, {
+    required String reason,
+    String? title,
+    int? price,
+    String? description,
+    String? kind,
+    String? status,
+  }) async {
+    await _fns.httpsCallable('adminUpdateBusinessProduct').call<Object?>({
+      'itemId': itemId,
+      'reason': reason,
+      if (title != null) 'title': title,
+      if (price != null) 'price': price,
+      if (description != null) 'description': description,
+      if (kind != null) 'kind': kind,
+      if (status != null) 'status': status,
+    });
+  }
+
+  /// Юмшоқ ўчириш (`status: deleted`), audit'да нусха сақланади.
+  Future<void> adminDeleteProduct(String itemId, {required String reason}) async {
+    await _fns.httpsCallable('adminDeleteBusinessProduct').call<Object?>({
+      'itemId': itemId,
+      'reason': reason,
+    });
+  }
+
   /// Callable хатосидан диагностика коди (`details.code`) — UI оддий жумла кўрсатади (25-банд).
   static String errorCode(Object e) {
     if (e is FirebaseFunctionsException) {

@@ -20,10 +20,11 @@ void main() {
       );
     });
 
-    test('5 тадан ошмайди', () {
+    test('7 тадан ошмайди (эга қарори, 2026-10-24: 5 → 7)', () {
+      expect(TvShopItem.maxPhotos, 7);
       expect(
         TvShopItem.normalizePhotos(
-          rawUrls: ['1', '2', '3', '4', '5', '6'],
+          rawUrls: ['1', '2', '3', '4', '5', '6', '7', '8'],
         ).length,
         TvShopItem.maxPhotos,
       );

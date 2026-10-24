@@ -74,6 +74,42 @@ class TvShopRepository {
     return snap.docs.map(TvShopItem.fromFirestore).toList();
   }
 
+  /// Бизнес харитаси объектининг маҳсулотлари (`businessId`). Битта майдонли сўров — композит индекс керак эмас;
+  /// ўчирилганлар ва [onlyActive] да фаол бўлмаганлар клиентда чиқарилади, энг янгиси биринчи.
+  /// [ownerPhone] берилса — бошқа эганинг `businessId` ёзиб қўйган «ёт» ҳужжатлари кўрсатилмайди (спуфинг).
+  Future<List<TvShopItem>> fetchByBusiness(
+    String businessId, {
+    String ownerPhone = '',
+    bool onlyActive = true,
+    int limit = 200,
+  }) async {
+    if (businessId.isEmpty) return const [];
+    final snap = await _items.where('businessId', isEqualTo: businessId).limit(limit).get();
+    return visibleBusinessItems(
+      snap.docs.map(TvShopItem.fromFirestore),
+      ownerPhone: ownerPhone,
+      onlyActive: onlyActive,
+    );
+  }
+
+  /// [fetchByBusiness] фильтри (соф функция — тест учун): ўчирилганлар, [onlyActive]да фаол бўлмаганлар ва
+  /// [ownerPhone]дан бошқа эганинг ҳужжатлари чиқарилади; энг янгиси биринчи.
+  static List<TvShopItem> visibleBusinessItems(
+    Iterable<TvShopItem> all, {
+    String ownerPhone = '',
+    bool onlyActive = true,
+  }) {
+    final owner = canonicalPhoneId(ownerPhone);
+    final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+    return all.where((i) {
+      if (i.status == 'deleted') return false;
+      if (onlyActive && !i.isActive) return false;
+      if (owner.isNotEmpty && canonicalPhoneId(i.ownerPhone) != owner) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => (b.createdAt ?? epoch).compareTo(a.createdAt ?? epoch));
+  }
+
   Future<TvShopItem?> fetchItem(String itemId) async {
     if (itemId.isEmpty) return null;
     final snap = await _items.doc(itemId).get();

@@ -3,11 +3,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/screens/restaurant_screen.dart';
+import '../../tv_market/models/tv_shop.dart';
+import '../../tv_market/repositories/tv_shop_repository.dart';
+import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../domain/business.dart';
 import '../domain/business_pin.dart';
 import '../domain/website_link.dart';
 
@@ -16,9 +21,12 @@ import '../domain/website_link.dart';
 /// Матн фақат берилган майдонларни кўрсатади (бўш қатор йўқ). Кафе ва зарядка станцияси учун
 /// ўз экранини очиш тугмаси бор; улгуржи сотувчи ва оддий объектда — қўнғироқ ва йўналиш.
 class BusinessDetailSheet extends StatelessWidget {
-  const BusinessDetailSheet({super.key, required this.pin});
+  const BusinessDetailSheet({super.key, required this.pin, this.shopRepository});
 
   final BusinessPin pin;
+
+  /// Тест учун; бўлмаса — ҳақиқий витрина репозиторийси.
+  final TvShopRepository? shopRepository;
 
   static Future<void> show(BuildContext context, BusinessPin pin) {
     return showModalBottomSheet<void>(
@@ -83,6 +91,7 @@ class BusinessDetailSheet extends StatelessWidget {
               _Line(icon: Icons.phone_outlined, text: pin.phone, onTap: () => _call(context)),
             if (pin.website.isNotEmpty)
               _Line(icon: Icons.public_rounded, text: pin.website, onTap: websiteUri(pin.website) == null ? null : _openWebsite),
+            if (origin is Business) _ProductsStrip(business: origin, repository: shopRepository),
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
@@ -126,6 +135,92 @@ class BusinessDetailSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Объектнинг маҳсулот/хизматлари (фақат фаол ва ЭГАСИ ўзи ёзганлар): горизонтал қатор, босилса — детал.
+/// Битта сўров (usinessId), фақат шу варақ очилганда; харита ва рўйхатда ўқиш йўқ (36-банд).
+class _ProductsStrip extends StatefulWidget {
+  const _ProductsStrip({required this.business, this.repository});
+
+  final Business business;
+  final TvShopRepository? repository;
+
+  @override
+  State<_ProductsStrip> createState() => _ProductsStripState();
+}
+
+class _ProductsStripState extends State<_ProductsStrip> {
+  late final Future<List<TvShopItem>> _future = _load();
+
+  Future<List<TvShopItem>> _load() async {
+    try {
+      return await (widget.repository ?? TvShopRepository())
+          .fetchByBusiness(widget.business.id, ownerPhone: widget.business.ownerId, limit: 40);
+    } catch (_) {
+      return const []; // каталог ўқилмаса — карточканинг қолган қисми ишлайверади
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<TvShopItem>>(
+      future: _future,
+      builder: (context, snap) {
+        final items = snap.data ?? const <TvShopItem>[];
+        if (items.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(context.tr('bizprod_section'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 118,
+                child: ListView.separated(
+                  key: const ValueKey('biz_products_strip'),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) {
+                    final it = items[i];
+                    final cover = it.coverPhotoUrl;
+                    return InkWell(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => TvShopItemDetailScreen(item: it)),
+                      ),
+                      child: SizedBox(
+                        width: 96,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 96,
+                                height: 76,
+                                child: cover.isEmpty
+                                    ? const ColoredBox(color: Color(0x11000000))
+                                    : Image.network(cover, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0x11000000))),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                            if (it.hasPrice)
+                              Text(formatMoney(it.price), maxLines: 1, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

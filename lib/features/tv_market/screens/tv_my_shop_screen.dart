@@ -22,17 +22,9 @@ import '../../../core/utils/user_error.dart';
 
 /// Эгасининг мини-дўкони — товар/нарх/видео таҳрири.
 class TvMyShopScreen extends StatefulWidget {
-  const TvMyShopScreen({
-    super.key,
-    required this.ownerPhone,
-    this.embedded = false,
-  });
+  const TvMyShopScreen({super.key, required this.ownerPhone});
 
   final String ownerPhone;
-
-  /// «Менинг дўконим» ичидаги «AVAGram» бўлими: ўз `AppBar`и йўқ (юқорида дўкон
-  /// сарлавҳаси бор), табли рўйхат ва «＋» тугмаси шу ерда қолади.
-  final bool embedded;
 
   @override
   State<TvMyShopScreen> createState() => _TvMyShopScreenState();
@@ -357,47 +349,58 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
     }
   }
 
-  List<Widget> _toolbarActions(BuildContext context) => [
-        IconButton(
-          tooltip: context.tr('tv_shop_to_market'),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const CheapProductsScreen(),
-              ),
-            );
-          },
-          icon: const Icon(Icons.storefront_outlined),
-        ),
-        IconButton(
-          tooltip: context.tr('tv_shop_preview'),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    TvShopPublicScreen(ownerPhone: widget.ownerPhone),
-              ),
-            );
-          },
-          icon: const Icon(Icons.visibility_outlined),
-        ),
-      ];
-
-  TabBar _tabBar(BuildContext context) => TabBar(
-        controller: _tabController,
-        labelColor: Colors.black87,
-        unselectedLabelColor: Colors.black54,
-        indicatorColor: AvaLight.ok,
-        indicatorWeight: 3,
-        tabs: [
-          Tab(text: context.tr('tv_my_shop_tab_items')),
-          Tab(text: context.tr('tv_my_shop_tab_clips')),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6F7F9),
+      appBar: AppBar(
+        leading: const BackButton(color: Colors.black87),
+        title: Text(context.tr('tv_shop_mine')),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        actionsIconTheme: const IconThemeData(color: Colors.black87),
+        elevation: 0.4,
+        actions: [
+          IconButton(
+            tooltip: context.tr('tv_shop_to_market'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CheapProductsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.storefront_outlined),
+          ),
+          IconButton(
+            tooltip: context.tr('tv_shop_preview'),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      TvShopPublicScreen(ownerPhone: widget.ownerPhone),
+                ),
+              );
+            },
+            icon: const Icon(Icons.visibility_outlined),
+          ),
         ],
-      );
-
-  Widget _addButton() => AnimatedBuilder(
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.black87,
+          unselectedLabelColor: Colors.black54,
+          indicatorColor: AvaLight.ok,
+          indicatorWeight: 3,
+          tabs: [
+            Tab(text: context.tr('tv_my_shop_tab_items')),
+            Tab(text: context.tr('tv_my_shop_tab_clips')),
+          ],
+        ),
+      ),
+      floatingActionButton: AnimatedBuilder(
         animation: _tabController,
         builder: (context, _) {
           final isItems = _tabController.index == 0;
@@ -412,56 +415,16 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
             ),
           );
         },
-      );
-
-  Widget _content() => _loading
-      ? const Center(child: CircularProgressIndicator())
-      : TabBarView(
-          controller: _tabController,
-          children: [
-            _buildItemsTab(),
-            _buildClipsTab(),
-          ],
-        );
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.embedded) {
-      // «Менинг дўконим» ичида: сарлавҳа ташқарида; витрина тугмалари табларнинг ёнида.
-      return Scaffold(
-        backgroundColor: const Color(0xFFF6F7F9),
-        floatingActionButton: _addButton(),
-        body: Column(
-          children: [
-            Material(
-              color: Colors.white,
-              child: Row(
-                children: [
-                  Expanded(child: _tabBar(context)),
-                  ..._toolbarActions(context),
-                ],
-              ),
-            ),
-            Expanded(child: _content()),
-          ],
-        ),
-      );
-    }
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7F9),
-      appBar: AppBar(
-        leading: const BackButton(color: Colors.black87),
-        title: Text(context.tr('tv_shop_mine')),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        actionsIconTheme: const IconThemeData(color: Colors.black87),
-        elevation: 0.4,
-        actions: _toolbarActions(context),
-        bottom: _tabBar(context),
       ),
-      floatingActionButton: _addButton(),
-      body: _content(),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildItemsTab(),
+                _buildClipsTab(),
+              ],
+            ),
     );
   }
 }

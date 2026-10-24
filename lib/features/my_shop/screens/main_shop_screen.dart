@@ -3,22 +3,16 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../ads/screens/create_ad_screen.dart';
-import '../../ads/screens/my_ads_screen.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
-import '../../tv_market/screens/tv_my_shop_screen.dart';
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/screens/wholesale_market_screen.dart';
+import '../widgets/shop_ads_catalog.dart';
 import '../widgets/shop_name_dialog.dart';
 
-/// [MainShopScreen]даги бўлимлар: 0 — Аҳоли, 1 — Улгуржи, 2 — AVAGram.
-const kAvagramSegment = 2;
-
-/// Асосий дўкон — эганинг ўз маҳсулотлари бир жойда, учта бўлимда:
-/// Аҳоли бозори (`ads`), Улгуржи (`wholesale_*`) ва AVAGram (`tv_shop_items`:
-/// видеога боғланган витрина маҳсулотлари ва роликлар). AVAGram дўкони — шу
-/// онлайн дўконнинг ўзи (алоҳида карточка эмас); видеодаги «Дўкон» тугмаси шу
-/// экранни AVAGram бўлими очиқ ҳолда очади. Номи `tv_shops/{телефон}.name`да
-/// (ўзгартириш мумкин).
+/// Асосий дўкон — эганинг ўз маҳсулотлари бир жойда, икки бўлимда: Аҳоли бозори
+/// (`ads`) ва Улгуржи (`wholesale_*`). Каталогда ҳар маҳсулот РАСМ ва ВИДЕО билан
+/// (видео AVAGram лентасига ҳам тушади, лекин AVAGram алоҳида бўлим эмас). Номи
+/// `tv_shops/{телефон}.name`да (ўзгартириш мумкин).
 ///
 /// Янги маълумот модели йўқ: рўйхатлар мавжуд омборлардан, мавжуд вижетлар
 /// билан. Қўшимча дўконлар — Бизнес харитаси объектлари ([MyShopScreen]).
@@ -32,13 +26,12 @@ class MainShopScreen extends StatefulWidget {
     @visibleForTesting this.saveName,
     @visibleForTesting this.retailView,
     @visibleForTesting this.wholesaleView,
-    @visibleForTesting this.avagramView,
   });
 
   /// Каноник телефон (`canonicalPhoneId`) — чақирувчи 9+ рақам эканини текширади.
   final String phone;
 
-  /// 0 — Аҳоли бозори, 1 — Улгуржи, 2 — AVAGram.
+  /// 0 — Аҳоли бозори, 1 — Улгуржи.
   final int initialSegment;
 
   /// Биринчи киришда («Онлайн Дўкон очиш» → Аҳоли бозори): янги маҳсулот
@@ -52,7 +45,6 @@ class MainShopScreen extends StatefulWidget {
   final Future<void> Function(String name)? saveName;
   final WidgetBuilder? retailView;
   final WidgetBuilder? wholesaleView;
-  final WidgetBuilder? avagramView;
 
   @override
   State<MainShopScreen> createState() => _MainShopScreenState();
@@ -67,9 +59,9 @@ class _MainShopScreenState extends State<MainShopScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
-      initialIndex: widget.initialSegment.clamp(0, 2),
+      initialIndex: widget.initialSegment.clamp(0, 1),
     );
     _loadName();
     if (widget.openAddOnStart && widget.initialSegment == 0) {
@@ -125,7 +117,6 @@ class _MainShopScreenState extends State<MainShopScreen>
           tabs: [
             Tab(text: context.tr('tv_shop_to_market')),
             Tab(text: context.tr('home_module_wholesale')),
-            const Tab(text: 'AVAGram'),
           ],
         ),
       ),
@@ -141,8 +132,6 @@ class _MainShopScreenState extends State<MainShopScreen>
                 phone: widget.phone,
                 market: WholesaleProduct.marketWholesale,
               ),
-          widget.avagramView?.call(context) ??
-              TvMyShopScreen(ownerPhone: widget.phone, embedded: true),
         ],
       ),
     );
@@ -165,7 +154,7 @@ Future<void> openRetailAddForm(BuildContext context) => Navigator.push<void>(
       MaterialPageRoute(builder: (_) => const CreateAdScreen()),
     );
 
-/// Аҳоли бозори сегменти: ўз эълонлари (уч ҳолат) + пастда «Янги маҳсулот».
+/// Аҳоли бозори сегменти: расм ва видеоли каталог + пастда «Янги маҳсулот».
 class _RetailShopView extends StatelessWidget {
   const _RetailShopView({required this.uid});
 
@@ -173,36 +162,16 @@ class _RetailShopView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        body: Column(
-          children: [
-            Material(
-              color: Colors.transparent,
-              child: TabBar(
-                labelColor: AvaLight.ink,
-                unselectedLabelColor: AppColors.sectionMuted,
-                indicatorColor: AvaLight.ink,
-                tabs: [
-                  Tab(text: context.tr('jobs_status_active')),
-                  Tab(text: context.tr('jobs_status_pending')),
-                  Tab(text: context.tr('wholesale_status_inactive')),
-                ],
-              ),
-            ),
-            Expanded(child: MyAdsTabView(uid: uid)),
-          ],
-        ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: () => openRetailAddForm(context),
-              icon: const Icon(Icons.add),
-              label: Text(context.tr('wholesale_new_product')),
-            ),
+    return Scaffold(
+      body: ShopAdsCatalog(uid: uid),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            onPressed: () => openRetailAddForm(context),
+            icon: const Icon(Icons.add),
+            label: Text(context.tr('wholesale_new_product')),
           ),
         ),
       ),

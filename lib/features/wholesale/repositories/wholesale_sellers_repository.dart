@@ -73,6 +73,15 @@ class WholesaleSellersRepository {
     await _col.doc(id).update(seller.toFirestoreShipFromUpdate());
   }
 
+  /// Рад этилган сотувчи маълумотини тузатиб қайта юборади (`rejected` →
+  /// `pending`). Rules фақат шу ўтишга рухсат беради; бошқа ҳолатда
+  /// (масалан тасдиқланган) `permission-denied` қайтади.
+  Future<void> resubmit(WholesaleSeller seller) async {
+    final id = canonicalPhoneId(seller.phone);
+    if (id.isEmpty) return;
+    await _col.doc(id).update(seller.toFirestoreResubmit());
+  }
+
   Future<WholesaleSeller?> fetchByPhone(String phone) async {
     final id = canonicalPhoneId(phone);
     if (id.isEmpty) return null;

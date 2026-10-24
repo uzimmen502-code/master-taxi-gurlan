@@ -144,7 +144,7 @@ function createAccountDeletion(deps) {
 
   // ───────────────────────── Сўров ─────────────────────────
 
-  async function request(uid, { source = 'app' } = {}) {
+  async function request(uid, { source = 'app', audit = null } = {}) {
     const cfg = await readConfig();
     const identity = await core.resolveIdentity(db, uid);
     if (!allowedFor(cfg, identity.d12)) throw fail('ACCOUNT_DELETION_DISABLED', 'Ҳисобни ўчириш ҳозирча мавжуд эмас.');
@@ -181,6 +181,7 @@ function createAccountDeletion(deps) {
         updatedAt: ts(),
       });
       eventIn(t, identity.d12, 'requested', { source, waitDays: cfg.waitDays, walletAtRequest: wallet });
+      if (audit) t.create(db.collection('admin_audit').doc(), { ...audit, targetId: identity.d12, at: ts() });
       for (const s of userSnaps) {
         if (!s.exists) continue; // арвоҳ ҳужжат яратмаймиз
         t.update(s.ref, { deletion: { status: 'PENDING', requestedAt: ts(), scheduledFor: at(scheduledMs) } });
@@ -201,7 +202,7 @@ function createAccountDeletion(deps) {
 
   // ───────────────────────── Бекор қилиш ─────────────────────────
 
-  async function cancel(uid) {
+  async function cancel(uid, { audit = null } = {}) {
     const identity = await core.resolveIdentity(db, uid);
     const ref = stateRef(identity.d12);
     let result = null;
@@ -216,7 +217,8 @@ function createAccountDeletion(deps) {
       const userSnaps = [];
       for (const id of identity.userDocIds) userSnaps.push(await t.get(db.collection('users').doc(id)));
       t.update(ref, { status: 'CANCELLED', cancelledAt: ts(), updatedAt: ts() });
-      eventIn(t, identity.d12, 'cancelled', { from: st });
+      eventIn(t, identity.d12, 'cancelled', { from: st, ...(audit ? { by: audit.actor } : {}) });
+      if (audit) t.create(db.collection('admin_audit').doc(), { ...audit, targetId: identity.d12, at: ts() });
       for (const s of userSnaps) if (s.exists) t.update(s.ref, { deletion: FV.delete() });
       result = { ok: true, status: 'CANCELLED' };
     });
@@ -534,7 +536,127 @@ function createAccountDeletion(deps) {
     return { processed: out.length, results: out };
   }
 
-  return { preview, request, cancel, execute, runDue, readConfig, STEPS };
+  // ───────────────────────── Админ (docs §8; 41-банд: ҳар амал сабаб билан аудитга) ─────────────────────────
+
+  const ms = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
+  const LIST_STATUSES = Object.freeze(['PENDING', 'POSTPONED', 'EXECUTING', 'FAILED', 'DONE', 'CANCELLED']);
+  const DEFAULT_LIST = Object.freeze(['PENDING', 'POSTPONED', 'EXECUTING', 'FAILED']);
+  const STATUS_ORDER = { FAILED: 0, POSTPONED: 1, EXECUTING: 2, PENDING: 3, DONE: 4, CANCELLED: 5 };
+
+  const rowOf = (id, d) => ({
+    uid: id,
+    status: d.status || '',
+    source: d.source || 'app',
+    requestedAtMs: ms(d.requestedAt),
+    scheduledForMs: ms(d.scheduledFor),
+    nextCheckAtMs: ms(d.nextCheckAt),
+    completedAtMs: ms(d.completedAt),
+    attempts: Number(d.attempts) || 0,
+    walletAtRequest: Number(d.walletAtRequest) || 0,
+    hidePending: d.hidePending === true,
+    lastError: d.lastError ? String(d.lastError).slice(0, 300) : '',
+    lastBlockers: Array.isArray(d.lastBlockers)
+      ? d.lastBlockers.map((b) => ({ code: String(b.code || ''), area: String(b.area || ''), count: Number(b.count) || 0 }))
+      : [],
+  });
+
+  /** Сўровлар рўйхати (индекссиз: `status in [...]`, хотирада тартибланади). Фақат ўқийди. */
+  async function adminList({ statuses, limit = 100 } = {}) {
+    let st = Array.isArray(statuses) && statuses.length > 0 ? statuses.map(String) : [...DEFAULT_LIST];
+    st = [...new Set(st)];
+    if (st.some((s) => !LIST_STATUSES.includes(s))) throw fail('INVALID_STATUS', 'Ҳолат нотўғри.');
+    const lim = Math.max(1, Math.min(200, Math.trunc(Number(limit)) || 100));
+    const snap = await db.collection(COL).where('status', 'in', st).limit(lim).get();
+    const rows = snap.docs.map((d) => rowOf(d.id, d.data() || {}));
+    rows.sort((a, b) => (STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+      || ((b.requestedAtMs || 0) - (a.requestedAtMs || 0)));
+    return { rows, truncated: snap.size >= lim };
+  }
+
+  /** Тафсилот: ҳолат + қадамлар + охирги 50 воқеа + яширилганлар сони. */
+  async function adminDetail(uid) {
+    const id = core.phoneForms(uid).d12;
+    if (!id) throw fail('ACCOUNT_NOT_FOUND', 'Ҳисоб топилмади.');
+    const snap = await stateRef(id).get();
+    if (!snap.exists) throw fail('ACCOUNT_DELETION_NOT_PENDING', 'Ўчириш сўрови йўқ.');
+    const d = snap.data() || {};
+    const ev = await stateRef(id).collection('events').orderBy('at', 'desc').limit(50).get();
+    const hidden = await stateRef(id).collection('hidden').where('restored', '==', false).get();
+    const steps = {};
+    for (const [k, v] of Object.entries(d.steps || {})) steps[k] = { done: !!(v && v.done), atMs: (v && v.atMs) || null };
+    return {
+      ...rowOf(id, d),
+      steps,
+      hiddenCount: hidden.size,
+      events: ev.docs.map((e) => {
+        const x = e.data() || {};
+        const { at, type, ...rest } = x;
+        return { type: String(type || ''), atMs: ms(at), meta: JSON.parse(JSON.stringify(rest)) };
+      }),
+    };
+  }
+
+  const needReason = (reason) => {
+    const r = String(reason == null ? '' : reason).trim().slice(0, 300);
+    if (r.length < 3) throw fail('REASON_REQUIRED', 'Сабабни ёзинг.');
+    return r;
+  };
+
+  const auditOf = (kind, actor, reason) => ({ kind, actor, actorRole: 'admin', reason, source: 'admin_panel' });
+
+  /** Админ бекор қилади (масалан, фойдаланувчи илова орқали эмас, чат орқали сўраган). */
+  async function adminCancel(uid, { actor, reason }) {
+    const r = needReason(reason);
+    return cancel(uid, { audit: auditOf('account_deletion_admin_cancel', actor, r) });
+  }
+
+  /** Илова йўқ фойдаланувчи учун қўлда сўров (веб-саҳифа/email йўли). Шахс тасдиғи — админнинг масъулияти. */
+  async function adminRequest(phone, { actor, reason }) {
+    const r = needReason(reason);
+    const uid = core.phoneForms(phone).d12;
+    if (!uid) throw fail('ACCOUNT_NOT_FOUND', 'Телефон нотўғри.');
+    return request(uid, { source: 'admin', audit: auditOf('account_deletion_admin_request', actor, r) });
+  }
+
+  /** FAILED сўровни қайта уриниш учун очади (кутиш муддатини ҚИСҚАРТИРМАЙДИ: PENDING га тегмайди). */
+  async function adminRetry(uid, { actor, reason }) {
+    const r = needReason(reason);
+    const id = core.phoneForms(uid).d12;
+    if (!id) throw fail('ACCOUNT_NOT_FOUND', 'Ҳисоб топилмади.');
+    const ref = stateRef(id);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) throw fail('ACCOUNT_DELETION_NOT_PENDING', 'Ўчириш сўрови йўқ.');
+      if ((snap.data() || {}).status !== 'FAILED') throw fail('ACCOUNT_DELETION_NOT_FAILED', 'Фақат муваффақиятсиз сўровни қайта юритиш мумкин.');
+      t.update(ref, { status: 'POSTPONED', attempts: 0, nextCheckAt: at(now()), updatedAt: ts() });
+      eventIn(t, id, 'admin_retry', { by: actor });
+      t.create(db.collection('admin_audit').doc(), { ...auditOf('account_deletion_admin_retry', actor, r), targetId: id, at: ts() });
+    });
+    log({ action: 'admin_retry', result: 'ok', userId: id, actor });
+    return { ok: true, status: 'POSTPONED' };
+  }
+
+  async function adminGetGate() {
+    return readConfig();
+  }
+
+  /** Дарвозани ўзгартириш (фақат superadmin; INTERNAL рўйхат ва кутиш кунлари). Аудит: `setAccountDeletion`. */
+  async function adminSetGate({ enabled, waitDays, allow, actor, reason }) {
+    const r = needReason(reason);
+    const { setAccountDeletion } = require('./tools/set_account_deletion');
+    try {
+      return await setAccountDeletion(db, admin, {
+        enabled, waitDays, allow, apply: true, actor, actorRole: 'superadmin', source: 'admin_panel', reason: r,
+      });
+    } catch (e) {
+      throw fail('INVALID_GATE', String((e && e.message) || e).slice(0, 200));
+    }
+  }
+
+  return {
+    preview, request, cancel, execute, runDue, readConfig, STEPS,
+    adminList, adminDetail, adminCancel, adminRequest, adminRetry, adminGetGate, adminSetGate,
+  };
 }
 
 /**
@@ -560,7 +682,7 @@ async function reviveShellIfNeeded({ admin, ref, before, after }) {
 
 /** Callable'лар ва режали функция (index.js `attachAccountDeletion(exports, {...})`). */
 function attachAccountDeletion(exportsObj, deps) {
-  const { functions, db, admin, callerPhone, canonicalUid } = deps;
+  const { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles } = deps;
   const HttpsError = functions.https.HttpsError;
   const svc = createAccountDeletion({
     db,
@@ -582,7 +704,12 @@ function attachAccountDeletion(exportsObj, deps) {
     ACCOUNT_NOT_FOUND: 'Ҳисоб топилмади.',
     ACCOUNT_DELETION_NOT_PENDING: 'Ўчириш сўрови йўқ.',
     ACCOUNT_DELETION_IN_PROGRESS: 'Ўчириш бошланган, бекор қилиб бўлмайди.',
+    ACCOUNT_DELETION_NOT_FAILED: 'Фақат муваффақиятсиз сўровни қайта юритиш мумкин.',
+    REASON_REQUIRED: 'Сабабни ёзинг.',
+    INVALID_STATUS: 'Ҳолат нотўғри.',
+    INVALID_GATE: 'Дарвоза қиймати нотўғри.',
   };
+  const argErrors = new Set(['REASON_REQUIRED', 'INVALID_STATUS', 'INVALID_GATE']);
 
   function requireUid(context) {
     if (!context || !context.auth) throw new HttpsError('unauthenticated', 'Authentication required');
@@ -591,27 +718,64 @@ function attachAccountDeletion(exportsObj, deps) {
     return uid;
   }
 
+  function mapError(e) {
+    if (e instanceof HttpsError) return e;
+    if (e && e.code && userMessage[e.code]) {
+      const code = e.code;
+      let status = 'failed-precondition';
+      if (code === 'ACCOUNT_NOT_FOUND') status = 'not-found';
+      else if (argErrors.has(code)) status = 'invalid-argument';
+      return new HttpsError(status, userMessage[code], { code, ...(e.extra || {}) });
+    }
+    console.error(JSON.stringify({ module: 'account_deletion', result: 'error', errorCode: 'INTERNAL', message: String((e && e.message) || e).slice(0, 200) }));
+    return new HttpsError('internal', 'Хатолик. Қайта уриниб кўринг.', { code: 'INTERNAL' });
+  }
+
   function wrap(fn) {
     return async (data, context) => {
       const uid = requireUid(context);
       try {
         return await fn(uid, data || {});
       } catch (e) {
-        if (e instanceof HttpsError) throw e;
-        if (e && e.code && userMessage[e.code]) {
-          const code = e.code;
-          const status = code === 'ACCOUNT_NOT_FOUND' ? 'not-found' : 'failed-precondition';
-          throw new HttpsError(status, userMessage[code], { code, ...(e.extra || {}) });
-        }
-        console.error(JSON.stringify({ module: 'account_deletion', result: 'error', errorCode: 'INTERNAL', message: String((e && e.message) || e).slice(0, 200) }));
-        throw new HttpsError('internal', 'Хатолик. Қайта уриниб кўринг.', { code: 'INTERNAL' });
+        throw mapError(e);
       }
     };
   }
 
+  /** Админ callable: роль серверда текширилади (`requireCallerRoles`), actor = админнинг каноник телефони. */
+  function wrapAdmin(roles, fn) {
+    return async (data, context) => {
+      const actor = await requireCallerRoles(context, roles, 'Admin role required');
+      try {
+        return await fn(actor, data || {});
+      } catch (e) {
+        throw mapError(e);
+      }
+    };
+  }
+  const ADMIN_ROLES = ['admin', 'superadmin'];
+  const SUPER_ONLY = ['superadmin'];
+
   exportsObj.previewAccountDeletion = functions.https.onCall(wrap((uid) => svc.preview(uid)));
   exportsObj.requestAccountDeletion = functions.https.onCall(wrap((uid) => svc.request(uid, { source: 'app' })));
   exportsObj.cancelAccountDeletion = functions.https.onCall(wrap((uid) => svc.cancel(uid)));
+
+  // Админ панел («Ҳисобни ўчириш» бўлими): рўйхат/тафсилот/бекор қилиш — admin|superadmin;
+  // қўлда сўров, қайта юритиш ва дарвоза — фақат superadmin. Ҳар ўзгартирувчи амал сабаб билан admin_audit'га тушади.
+  exportsObj.adminListAccountDeletions = functions.https.onCall(wrapAdmin(ADMIN_ROLES,
+    (actor, d) => svc.adminList({ statuses: d.statuses, limit: d.limit })));
+  exportsObj.adminGetAccountDeletion = functions.https.onCall(wrapAdmin(ADMIN_ROLES,
+    (actor, d) => svc.adminDetail(d.uid)));
+  exportsObj.adminCancelAccountDeletion = functions.https.onCall(wrapAdmin(ADMIN_ROLES,
+    (actor, d) => svc.adminCancel(d.uid, { actor, reason: d.reason })));
+  exportsObj.adminRequestAccountDeletion = functions.https.onCall(wrapAdmin(SUPER_ONLY,
+    (actor, d) => svc.adminRequest(d.phone, { actor, reason: d.reason })));
+  exportsObj.adminRetryAccountDeletion = functions.https.onCall(wrapAdmin(SUPER_ONLY,
+    (actor, d) => svc.adminRetry(d.uid, { actor, reason: d.reason })));
+  exportsObj.adminGetAccountDeletionGate = functions.https.onCall(wrapAdmin(ADMIN_ROLES,
+    () => svc.adminGetGate()));
+  exportsObj.adminSetAccountDeletionGate = functions.https.onCall(wrapAdmin(SUPER_ONLY,
+    (actor, d) => svc.adminSetGate({ enabled: d.enabled, waitDays: d.waitDays, allow: d.allow, actor, reason: d.reason })));
 
   exportsObj.onUserShellRevived = functions.firestore
     .document('users/{userId}')

@@ -38,6 +38,7 @@ import 'restaurants_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'china_inquiries_admin_screen.dart';
+import 'account_deletion_admin_screen.dart';
 import 'business_admin_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
@@ -418,6 +419,15 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'Фойдаланувчилар ва созламалар',
+      label: 'Ҳисобни ўчириш',
+      icon: Icons.delete_forever_outlined,
+      description: 'Ўчириш сўровлари, дарвоза (ёпиқ / ички / очиқ)',
+      // Рўйхат ва бекор қилиш — admin|superadmin; қўлда сўров, қайта юритиш ва дарвоза — фақат superadmin
+      // (сервер `adminSetAccountDeletionGate` ва бошқалар ролни ўзи текширади).
+      access: _SectionAccess.users,
+    ),
+    _AdminSection(
+      group: 'Фойдаланувчилар ва созламалар',
       label: 'Risk review',
       icon: Icons.security,
       description: 'Хавфли сигналлар',
@@ -617,6 +627,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Бизнес харитаси') {
       return const BusinessAdminScreen();
+    }
+    if (section.label == 'Ҳисобни ўчириш') {
+      return const AccountDeletionAdminScreen();
     }
     if (section.label == 'AVA Logistics') {
       return const LogisticsAdminScreen();

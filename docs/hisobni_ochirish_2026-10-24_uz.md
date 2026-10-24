@@ -96,6 +96,8 @@
 | Callable қатлами (ҳақиқий index.js) | `functions/index.js` (attach) | 8 |
 | Firestore rules (клиент `deletion/deleted/…` ёзолмайди; `account_deletions*` ёпиқ) | `firestore.rules` (REPO нусхаси) | 7 |
 | Дарвоза воситаси (OFF/INTERNAL/PUBLIC, audit) | `functions/tools/set_account_deletion.js` | 7 |
+| Админ callable'лари (рўйхат, тафсилот, бекор қилиш, қайта юритиш, қўлда сўров, дарвоза; сабаб + audit) | `functions/account_deletion.js` | 14 |
+| Админ панел бўлими «Ҳисобни ўчириш» (рўйхат, фильтр, тафсилот, бекор қилиш, қайта юритиш, қўлда сўров, дарвоза ойнаси) | `lib/features/admin_web/screens/account_deletion_admin_screen.dart`, `…/services/account_deletion_admin_service.dart` | 20 |
 | Клиент: экран, репозиторий, Кабинет қатори ва банер, 3 тил (37 калит) | `lib/features/profile/…`, `assets/lang/*.json` | 19 |
 
 **Ёқиш босқичлари (42-банд):** OFF (ҳозир: ҳужжат йўқ) → INTERNAL (`--enabled=true --allow=<ички телефонлар>`; биринчи ҳақиқий ўчириш фақат шу ҳисобларда) → PUBLIC (`--allow=` бўш).
@@ -108,7 +110,7 @@
 5. Биринчи ҳақиқий ижро фақат INTERNAL ҳисобда; кузатиш: `account_deletions/{uid}` (ҳолат, `steps`, `lastError`), `events`, структурали логлар (`module: account_deletion`).
 
 **Ҳали ЙЎҚ / очиқ:**
-- Админ экрани («Ўчириш сўровлари»: рўйхат, бекор қилиш, қўлда сўров) ва дарвозани админдан бошқариш — ҳозир `set_account_deletion.js` воситаси.
+- Админ экрани ЁЗИЛДИ (2026-10-24): роллар — рўйхат/тафсилот/бекор қилиш admin|superadmin; қўлда сўров, қайта юритиш, дарвоза — ФАҚАТ superadmin (сервер текширади); ҳар амал сабаб билан `admin_audit`: `account_deletion_admin_cancel | _admin_request | _admin_retry | _gate_changed`. Қайта юритиш ФАҚАТ FAILED да (кутиш муддатини қисқартириб бўлмайди). «Ҳамма учун очиш» қўшимча тасдиқ талаб қилади. Production'да ҲАЛИ ЙЎҚ: 7 та янги callable функция ном бўйича чиқарилиши керак (`adminListAccountDeletions`, `adminGetAccountDeletion`, `adminCancelAccountDeletion`, `adminRequestAccountDeletion`, `adminRetryAccountDeletion`, `adminGetAccountDeletionGate`, `adminSetAccountDeletionGate`) + hosting (админ веб).
 - Давралар ва шажара (эга: кейинга); comments/likes/ratings, relative_phone_watchers, notifications, admin_news (шахсий хабарлар), topup_receipts, logistics, restaurants — ижро қилинмайди (UNKNOWN), ҳужжатда номма-ном.
 - Яширилмайдиганлар: businesses, tv_public_profiles, tv_shops, wholesale_sellers, yuk_local_drivers, comments/likes — якуний ўчиришгача кўринади.
 - Ҳамён сўндирилишининг ҳисобчилик/ҳуқуқий жиҳати (`admin_clearing` га ёзув) — UNKNOWN, «Админ ва бошқалар».

@@ -26,7 +26,10 @@ const normPhones = (arr) => [...new Set(arr
  * @param allow ИЧКИ синов рўйхати (INTERNAL): телефонлар массиви; `[]` — рўйхатни тозалаш (PUBLIC);
  *              берилмаса — жорий рўйхат ўзгармайди.
  */
-async function setAccountDeletion(db, admin, { enabled, waitDays, allow, apply = false, actor = 'script:set_account_deletion' } = {}) {
+async function setAccountDeletion(db, admin, {
+  enabled, waitDays, allow, apply = false, actor = 'script:set_account_deletion',
+  actorRole = 'script', source = 'script', reason = '',
+} = {}) {
   if (typeof enabled !== 'boolean') throw new Error('enabled true yoki false bo\'lsin');
   let days = waitDays;
   if (days !== undefined) {
@@ -61,8 +64,8 @@ async function setAccountDeletion(db, admin, { enabled, waitDays, allow, apply =
     if (!apply) return { action: 'would_set', from, to };
     t.set(ref, { enabled: to.enabled, waitDays: to.waitDays, allow: to.allow, updatedAt: ts, updatedBy: actor }, { merge: true });
     t.create(db.collection('admin_audit').doc(), {
-      kind: 'account_deletion_gate_changed', actor, actorRole: 'script', targetId: 'settings/account_deletion',
-      changes: [{ from, to }], source: 'script', at: ts,
+      kind: 'account_deletion_gate_changed', actor, actorRole, targetId: 'settings/account_deletion',
+      changes: [{ from, to }], source, ...(reason ? { reason } : {}), at: ts,
     });
     return { action: 'set', from, to };
   });

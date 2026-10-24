@@ -5,6 +5,7 @@ import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/product_detail_dark.dart';
 import '../models/wholesale_product.dart';
+import '../utils/wholesale_labels.dart';
 
 /// Тафсилот экрани пастидаги горизонтал лента («Ўхшаш маҳсулотлар»,
 /// «Сотувчининг бошқа маҳсулотлари»). Карточкада НАРХ, ўлчов ва МИНИМАЛ
@@ -69,7 +70,7 @@ class _Tile extends StatelessWidget {
     final moq = context
         .tr('wholesale_moq_short')
         .replaceAll('{qty}', '${product.moq}')
-        .replaceAll('{unit}', product.unit);
+        .replaceAll('{unit}', wholesaleUnitLabel(context, product.unit));
     // Сотувчи қайси ҳудудда — харидорга яқини муҳим. Эски ҳужжатда
     // `districtId` бўш: сатр умуман кўринмайди.
     final district = product.districtId.isEmpty
@@ -126,7 +127,7 @@ class _Tile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      product.priceLine,
+                      wholesalePriceLine(context, product),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

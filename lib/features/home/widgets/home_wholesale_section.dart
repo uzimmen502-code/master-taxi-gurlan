@@ -17,6 +17,7 @@ import '../../../repositories/platform_products_repository.dart';
 import '../../ads/widgets/platform_market_card.dart' show platformShelfPrice;
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
+import '../../wholesale/utils/wholesale_labels.dart';
 import 'ava_list_row.dart';
 import 'ava_section.dart';
 
@@ -29,7 +30,7 @@ import 'ava_section.dart';
 String formatTierNote(BuildContext context, WholesaleProduct p) {
   if (p.priceTiers.isEmpty) return '';
   final t = p.priceTiers.first;
-  return '${t.minQty}+ ${p.unit}';
+  return '${t.minQty}+ ${wholesaleUnitLabel(context, p.unit)}';
 }
 
 /// Бош саҳифа карточкасидаги нарх: «4 743 $» (нарх йўқ бўлса `null`).

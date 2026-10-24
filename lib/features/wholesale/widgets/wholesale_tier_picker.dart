@@ -6,6 +6,7 @@ import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/price_tier.dart';
 import '../models/wholesale_product.dart';
+import '../utils/wholesale_labels.dart';
 
 /// Миқдорнинг юқори чегараси (UI). Сотувчи товарида қолдиқ йўқ, шунинг
 /// учун бу фақат «999999999 кг» каби тасодифий киритишдан сақлайди.
@@ -99,6 +100,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
     final saved = tiers.first.price * qty - total;
     final next = nextTierAfter(tiers, qty);
     final cur = p.currencyLabel;
+    final unitLabel = wholesaleUnitLabel(context, p.unit);
 
     String money(int v) => '${formatPrice(v)} $cur';
 
@@ -117,7 +119,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
             children: [
               for (final (i, t) in tiers.indexed)
                 _TierChip(
-                  label: _tierLabel(p, i),
+                  label: _tierLabel(p, i, unitLabel),
                   price: formatPrice(t.price),
                   active: i == active,
                   onTap: () => _set(t.minQty),
@@ -175,7 +177,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
                 context
                     .tr('wholesale_min_order')
                     .replaceAll('{qty}', '$_moq')
-                    .replaceAll('{unit}', p.unit),
+                    .replaceAll('{unit}', unitLabel),
                 style: const TextStyle(fontSize: 12, color: PdDark.muted),
               ),
             ),
@@ -193,7 +195,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Line(
-                label: '$qty ${p.unit} × ${money(price)}',
+                label: '$qty $unitLabel × ${money(price)}',
                 value: money(total),
                 bold: true,
               ),
@@ -213,7 +215,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
                       context
                           .tr('wholesale_next_tier_hint')
                           .replaceAll('{need}', '${next.minQty - qty}')
-                          .replaceAll('{unit}', p.unit)
+                          .replaceAll('{unit}', unitLabel)
                           .replaceAll('{price}', money(next.price)),
                       style:
                           const TextStyle(fontSize: 12, color: PdDark.muted),
@@ -233,7 +235,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
                             context
                                 .tr('wholesale_set_qty')
                                 .replaceAll('{qty}', '${next.minQty}')
-                                .replaceAll('{unit}', p.unit),
+                                .replaceAll('{unit}', unitLabel),
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -254,8 +256,8 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
   }
 
   /// «1–9 кг», «10–49 кг», «50+ кг» (`tierRangeText`).
-  static String _tierLabel(WholesaleProduct p, int i) =>
-      '${tierRangeText(p.priceTiers, i)} ${p.unit}';
+  static String _tierLabel(WholesaleProduct p, int i, String unit) =>
+      '${tierRangeText(p.priceTiers, i)} $unit';
 }
 
 class _TierChip extends StatelessWidget {

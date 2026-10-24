@@ -9,6 +9,7 @@ import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
+import '../utils/wholesale_labels.dart' show kWholesaleDefaultUnit;
 import '../widgets/wholesale_tier_picker.dart' show kWholesaleTapSize;
 
 /// Тайёр нарх поғонаси — қатъий МОҚ чегараси (1 / 10 / 50) ва кўринадиган
@@ -29,15 +30,17 @@ const _kFixedTiers = <_FixedTier>[
 /// Хитой бозори учун валюта танлови. Бўш қиймат — сўм (модел `currency`
 /// бўш бўлса сўм деб қарайди), шунинг учун "сўм" чипи бўш сақланади.
 class _CurrencyOption {
-  const _CurrencyOption(this.value, this.label);
+  const _CurrencyOption(this.value, this.labelKey);
   final String value;
-  final String label;
+
+  /// Матн калити (уч тилда): `currency_sum` ҳамма тилда «сўм» (иловадаги ягона ёзув).
+  final String labelKey;
 }
 
 const _kCurrencies = <_CurrencyOption>[
-  _CurrencyOption('', 'сўм'),
-  _CurrencyOption('\$', '\$ доллар'),
-  _CurrencyOption('¥', '¥ юань'),
+  _CurrencyOption('', 'currency_sum'),
+  _CurrencyOption('\$', 'wholesale_currency_usd'),
+  _CurrencyOption('¥', 'wholesale_currency_cny'),
 ];
 
 /// Маҳсулот қўшиш/таҳрирлаш — ном, тавсиф, нарх поғоналари, бирлик, расм(1-5).
@@ -105,7 +108,13 @@ class _WholesaleProductFormScreenState
 
   /// Нарх майдонларидаги валюта ёрлиғи.
   String get _currencyLabel =>
-      _currency.trim().isEmpty ? 'сўм' : _currency.trim();
+      _currency.trim().isEmpty ? context.tr('currency_sum') : _currency.trim();
+
+  /// Бирлик майдони бўш бўлса кўрсатиладиган (ва базага `дона` деб ёзиладиган) бирлик.
+  String get _unitText {
+    final t = _unitCtrl.text.trim();
+    return t.isEmpty ? context.tr('piece') : t;
+  }
 
   @override
   void initState() {
@@ -113,7 +122,11 @@ class _WholesaleProductFormScreenState
     final e = widget.existing;
     _titleCtrl = TextEditingController(text: e?.title ?? '');
     _descCtrl = TextEditingController(text: e?.description ?? '');
-    _unitCtrl = TextEditingController(text: e?.unit ?? 'дона');
+    // Ўрнатилган «дона» майдонга ёзилмайди: бўш қолади, ҳинт тилга мос
+    // кўрсатилади ва сақлашда `дона` ёзилади (эски мижозлар билан мос).
+    _unitCtrl = TextEditingController(
+      text: e == null || e.unit == kWholesaleDefaultUnit ? '' : e.unit,
+    );
     _deliveryCtrl = TextEditingController(
       text: (e?.deliveryDays ?? 0) > 0 ? '${e!.deliveryDays}' : '',
     );
@@ -260,7 +273,9 @@ class _WholesaleProductFormScreenState
         titleLower: _titleCtrl.text.trim().toLowerCase(),
         description: _descCtrl.text.trim(),
         priceTiers: tiers,
-        unit: _unitCtrl.text.trim().isEmpty ? 'дона' : _unitCtrl.text.trim(),
+        unit: _unitCtrl.text.trim().isEmpty
+            ? kWholesaleDefaultUnit
+            : _unitCtrl.text.trim(),
         imageUrls: imageUrls,
         market: _market,
         // Валюта ва етказиш муддати — фақат Хитой бозорида. Улгуржида
@@ -427,6 +442,7 @@ class _WholesaleProductFormScreenState
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: context.tr('wholesale_field_unit'),
+                hintText: context.tr('piece'),
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -461,7 +477,7 @@ class _WholesaleProductFormScreenState
         Wrap(spacing: 8, children: [
           for (final c in _kCurrencies)
             ChoiceChip(
-              label: Text(c.label),
+              label: Text(context.tr(c.labelKey)),
               selected: _currency.trim() == c.value,
               onSelected: (_) => setState(() => _currency = c.value),
             ),
@@ -484,7 +500,7 @@ class _WholesaleProductFormScreenState
   /// Етказиш учун вазн/ўлчам (У1). Пулли вазн жонли кўрсатилади — сотувчи
   /// катта қути учун ҳажмий вазн ҳақиқийдан ошишини кўради.
   Widget _shippingSection() {
-    final unit = _unitCtrl.text.trim().isEmpty ? 'дона' : _unitCtrl.text.trim();
+    final unit = _unitText;
     final s = _collectShipping();
     String? preview;
     if (s.error == null && s.weightG != null) {
@@ -549,7 +565,7 @@ class _WholesaleProductFormScreenState
   }
 
   Widget _tiersSection() {
-    final unit = _unitCtrl.text.trim().isEmpty ? 'дона' : _unitCtrl.text.trim();
+    final unit = _unitText;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

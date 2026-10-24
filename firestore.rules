@@ -3040,6 +3040,31 @@ service cloud.firestore {
               || request.resource.data.get('districtId', '') != '');
     }
 
+    // Рад этилган сотувчи маълумотини тузатиб қайта юборади (2026-10-24, UI/UX
+    // аудит). ФАҚАТ `rejected` → `pending`: ўзини `approved` қила олмайди,
+    // `adminNote`/`approvedAt`/`approvedBy` га тегмайди. Маълумот талаблари
+    // рўйхатдан ўтиш (create) билан бир хил: манзил ≥5, координата Ўзбекистон ичида.
+    function wholesaleSellerResubmitOk(phone) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isOwner(phone)
+          && resource.data.get('approvalStatus', '') == 'rejected'
+          && request.resource.data.get('approvalStatus', '') == 'pending'
+          && request.resource.data.phone == resource.data.phone
+          && changed.hasOnly([
+                'approvalStatus', 'companyName', 'ownerName', 'sellerType',
+                'updatedAt', 'regionId', 'districtId', 'address', 'lat', 'lng'
+              ])
+          && request.resource.data.get('sellerType', '')
+              in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && request.resource.data.companyName is string
+          && request.resource.data.companyName.size() >= 2
+          && request.resource.data.companyName.size() <= 200
+          && wholesaleSellerShipFromOk()
+          && request.resource.data.get('regionId', '') != ''
+          && request.resource.data.get('districtId', '') != ''
+          && wholesaleSellerLocationRequiredOk();
+    }
+
     // Фақат admin (isAdmin() шу ердаги мажбурий шарт — эга/бошқа ҳеч ким
     // ушбу whitelist билан ёза олмайди).
     function wholesaleSellerApprovalPatchOnly() {
@@ -3052,7 +3077,9 @@ service cloud.firestore {
     match /wholesale_sellers/{phone} {
       allow read: if true;
       allow create: if wholesaleSellerCreateOk(phone);
-      allow update: if wholesaleSellerOwnerUpdateOk(phone) || wholesaleSellerApprovalPatchOnly();
+      allow update: if wholesaleSellerOwnerUpdateOk(phone)
+          || wholesaleSellerResubmitOk(phone)
+          || wholesaleSellerApprovalPatchOnly();
       allow delete: if false;
     }
 

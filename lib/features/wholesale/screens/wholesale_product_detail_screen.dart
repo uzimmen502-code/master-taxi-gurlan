@@ -9,6 +9,7 @@ import '../../ads/widgets/ad_image_slider.dart';
 import '../models/wholesale_product.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../services/wholesale_video_link.dart';
+import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
 import '../widgets/wholesale_product_strip.dart';
 import '../widgets/wholesale_tier_picker.dart';
@@ -200,8 +201,8 @@ class _WholesaleProductDetailViewState
                 ),
                 if (p.videoClipIds.isNotEmpty)
                   Positioned(
-                    left: 10,
-                    bottom: 8,
+                    left: 2,
+                    bottom: 0,
                     child: _VideoChip(
                       label: context.tr('wholesale_watch_video'),
                       onTap: _openVideo,
@@ -233,7 +234,7 @@ class _WholesaleProductDetailViewState
                   // Танланган миқдордаги ҳақиқий бир дона нархи: поғона
                   // босилса ёки миқдор ўзгарса шу ердаги нарх ҳам ўзгаради.
                   Text(
-                    '${formatPrice(price)} ${p.currencyLabel} / ${p.unit}',
+                    '${formatPrice(price)} ${p.currencyLabel} / ${wholesaleUnitLabel(context, p.unit)}',
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
@@ -441,29 +442,45 @@ class _VideoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Кўринадиган «таблетка» аввалгидек (~32 dp), босиладиган майдон 48 dp баландликда.
     return Material(
-      color: Colors.black54,
-      borderRadius: BorderRadius.circular(16),
+      type: MaterialType.transparency,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.play_circle_outline,
-                  size: 16, color: Colors.white),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+        child: SizedBox(
+          height: kWholesaleTapSize,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Center(
+              widthFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.play_circle_outline,
+                          size: 16, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

@@ -146,6 +146,18 @@ class WholesaleSeller {
         if (hasShipFrom || address.trim().isNotEmpty) ...shipFromFields(),
       };
 
+  /// Рад этилган сотувчи маълумотини тузатиб қайта юбориши
+  /// (`wholesaleSellerResubmitOk`): ФАҚАТ `rejected` → `pending`; тасдиқлаш
+  /// (`approved`), `adminNote`, `approvedAt/By` га тегилмайди — буни фақат admin қилади.
+  Map<String, dynamic> toFirestoreResubmit() => {
+        'companyName': companyName.trim(),
+        'ownerName': ownerName.trim(),
+        'sellerType': sellerType,
+        'approvalStatus': statusPending,
+        'updatedAt': FieldValue.serverTimestamp(),
+        ...shipFromFields(),
+      };
+
   /// Эга жўнатиш манзилини ўзгартириши (`wholesaleSellerOwnerUpdateOk`).
   /// Координата олиб ташланса — ўчирилади (иккаласи бирга).
   Map<String, dynamic> toFirestoreShipFromUpdate() => {

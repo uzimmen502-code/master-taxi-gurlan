@@ -19,6 +19,7 @@ import '../repositories/wholesale_products_repository.dart';
 import '../repositories/wholesale_sellers_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
+import '../utils/wholesale_labels.dart';
 import '../widgets/ship_from_fields.dart';
 import '../widgets/wholesale_product_card.dart';
 import '../widgets/wholesale_stream_builder.dart';
@@ -267,6 +268,22 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
   /// Жўнатиш манзили (У1) — етказиш ҳақи учун мажбурий.
   ShipFromDraft _shipFrom = shipFromDraftFromCurrentArea();
 
+  /// Рад этилган сотувчи маълумотини тузатиб қайта юбориш формаси очиқми.
+  bool _editingRejected = false;
+
+  /// Сотувчи ҳужжати stream'и: аввал `build` ичида ҳар қайта чизишда янгидан
+  /// очилар эди (янги obuna) — энди телефонга қараб бир марта.
+  Stream<WholesaleSeller?>? _sellerStream;
+  String _sellerStreamPhone = '';
+
+  Stream<WholesaleSeller?> _watchSeller(String phone) {
+    if (_sellerStream == null || _sellerStreamPhone != phone) {
+      _sellerStreamPhone = phone;
+      _sellerStream = _sellersRepo.watchByPhone(phone);
+    }
+    return _sellerStream!;
+  }
+
   @override
   void dispose() {
     _companyCtrl.dispose();
@@ -275,6 +292,21 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
   }
 
   String get _phone => widget.phone;
+
+  /// Рад этилган сотувчининг мавжуд маълумотини формага қўяди ва форма очади.
+  void _startResubmit(WholesaleSeller s) {
+    _companyCtrl.text = s.companyName;
+    _ownerCtrl.text = s.ownerName;
+    _sellerType = s.sellerType;
+    _shipFrom = ShipFromDraft(
+      regionId: s.regionId,
+      districtId: s.districtId,
+      address: s.address,
+      lat: s.lat,
+      lng: s.lng,
+    );
+    setState(() => _editingRejected = true);
+  }
 
   Future<void> _register() async {
     final company = _companyCtrl.text.trim();
@@ -300,6 +332,26 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
     }
     setState(() => _registering = true);
     try {
+      if (_editingRejected) {
+        // Рад этилган сотувчи: ҳужжат ўша, ҳолат rejected → pending (Rules фақат шуни беради).
+        await _sellersRepo.resubmit(WholesaleSeller(
+          phone: _phone,
+          companyName: company,
+          ownerName: _ownerCtrl.text.trim(),
+          sellerType: _sellerType,
+          regionId: _shipFrom.regionId,
+          districtId: _shipFrom.districtId,
+          address: _shipFrom.address.trim(),
+          lat: _shipFrom.lat,
+          lng: _shipFrom.lng,
+        ));
+        if (!mounted) return;
+        setState(() => _editingRejected = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('wholesale_resubmit_sent'))),
+        );
+        return;
+      }
       await _sellersRepo.register(
         phone: _phone,
         companyName: company,
@@ -344,27 +396,46 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
       );
     }
     return WholesaleStreamBuilder<WholesaleSeller?>(
-      stream: _sellersRepo.watchByPhone(phone),
+      stream: _watchSeller(phone),
       // Хато — «сотувчи йўқ» эмас: ўқилмаса рўйхатдан ўтиш формаси очилмасин.
-      onRetry: () => setState(() {}),
+      // Firestore stream хатодан кейин ёпилади: кэшни ташлаб қайта улаймиз.
+      onRetry: () => setState(() => _sellerStream = null),
       builder: (context, seller) {
         if (seller == null) return _registerForm();
         if (seller.isPending) return _statusCard(seller);
-        if (seller.isRejected) return _statusCard(seller);
+        if (seller.isRejected) {
+          return _editingRejected
+              ? _registerForm(rejected: seller)
+              : _statusCard(seller);
+        }
         return _MyProductsView(seller: seller, market: widget.market);
       },
     );
   }
 
-  Widget _registerForm() {
+  /// [rejected] берилса — рад этилган сотувчи маълумотини тузатиб қайта юбориш.
+  Widget _registerForm({WholesaleSeller? rejected}) {
+    final resubmit = rejected != null;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
         Text(
-          context.tr('wholesale_register_title'),
+          context.tr(resubmit
+              ? 'wholesale_resubmit_title'
+              : 'wholesale_register_title'),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
+        if (resubmit && rejected.adminNote.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              context
+                  .tr('wholesale_reason')
+                  .replaceAll('{note}', rejected.adminNote),
+              style: TextStyle(color: Colors.red.shade700),
+            ),
+          ),
         Text(
           // Рўйхат битта — иккала бозор ҳам `wholesale_sellers`дан
           // фойдаланади, шунинг учун Хитой бозорида буни айтиб қўямиз.
@@ -416,8 +487,20 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(context.tr('wholesale_register_cta')),
+              : Text(context.tr(
+                  resubmit ? 'wholesale_resubmit_cta' : 'wholesale_register_cta')),
         ),
+        if (resubmit)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: _registering
+                  ? null
+                  : () => setState(() => _editingRejected = false),
+              child: Text(context.tr('cancel')),
+            ),
+          ),
       ],
     );
   }
@@ -451,6 +534,16 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
                       .replaceAll('{note}', seller.adminNote),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade700)),
+            ],
+            // Рад этилганда чиқиш йўли: маълумотни тузатиб қайта юбориш.
+            if (!pending) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: () => _startResubmit(seller),
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                label: Text(context.tr('wholesale_resubmit_cta')),
+              ),
             ],
           ],
         ),
@@ -785,7 +878,7 @@ class _MyProductsView extends StatelessWidget {
               ),
             ),
             Text(
-              p.priceLine,
+              wholesalePriceLine(context, p),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -795,7 +888,7 @@ class _MyProductsView extends StatelessWidget {
               ),
             ),
             Text(
-              '${context.tr('wholesale_moq_line').replaceAll('{qty}', '${p.moq}').replaceAll('{unit}', p.unit)}'
+              '${context.tr('wholesale_moq_line').replaceAll('{qty}', '${p.moq}').replaceAll('{unit}', wholesaleUnitLabel(context, p.unit))}'
               ' · ${context.tr(_statusLabelKey(p.status))}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../ads/widgets/market_grid.dart';
 import '../models/wholesale_product.dart';
+import '../utils/wholesale_labels.dart';
 
 class WholesaleProductCard extends StatelessWidget {
   const WholesaleProductCard({
@@ -19,7 +20,7 @@ class WholesaleProductCard extends StatelessWidget {
     final moq = context
         .tr('wholesale_moq_short')
         .replaceAll('{qty}', '${product.moq}')
-        .replaceAll('{unit}', product.unit);
+        .replaceAll('{unit}', wholesaleUnitLabel(context, product.unit));
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 0,
@@ -78,7 +79,7 @@ class WholesaleProductCard extends StatelessWidget {
             // сонига мослаб ҳисобланган, MarketGridMetrics).
             MarketCardText(
               title: product.title,
-              price: product.priceLine,
+              price: wholesalePriceLine(context, product),
               caption: product.sellerCompanyName.isEmpty
                   ? moq
                   : '$moq · ${product.sellerCompanyName}',

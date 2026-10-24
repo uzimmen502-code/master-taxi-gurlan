@@ -11,6 +11,10 @@ import '../models/wholesale_product.dart';
 /// учун бу фақат «999999999 кг» каби тасодифий киритишдан сақлайди.
 const int kWholesaleMaxQty = 1000000;
 
+/// Босиладиган элементларнинг минимал ўлчами (dp): Android 48, iOS 44 —
+/// каттасини оламиз. UI/UX Pro Max «Touch target» қоидаси.
+const double kWholesaleTapSize = 48;
+
 /// Киритилган миқдорни [moq] (энг паст поғона) ва [kWholesaleMaxQty]
 /// орасига солади. Минимал буюртмадан кам миқдор — минимумга кўтарилади.
 int clampWholesaleQty(int value, int moq) {
@@ -131,7 +135,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
             const SizedBox(width: 8),
             SizedBox(
               width: 76,
-              height: 40,
+              height: kWholesaleTapSize,
               child: TextField(
                 controller: _ctrl,
                 focusNode: _focus,
@@ -215,18 +219,26 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
                           const TextStyle(fontSize: 12, color: PdDark.muted),
                     ),
                     InkWell(
+                      borderRadius: BorderRadius.circular(8),
                       onTap: () => _set(next.minQty),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          context
-                              .tr('wholesale_set_qty')
-                              .replaceAll('{qty}', '${next.minQty}')
-                              .replaceAll('{unit}', p.unit),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: PdDark.brand,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: kWholesaleTapSize,
+                          minWidth: kWholesaleTapSize,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: 1,
+                          child: Text(
+                            context
+                                .tr('wholesale_set_qty')
+                                .replaceAll('{qty}', '${next.minQty}')
+                                .replaceAll('{unit}', p.unit),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: PdDark.brand,
+                            ),
                           ),
                         ),
                       ),
@@ -324,8 +336,8 @@ class _StepBtn extends StatelessWidget {
                 onTap!();
               },
         child: SizedBox(
-          width: 40,
-          height: 40,
+          width: kWholesaleTapSize,
+          height: kWholesaleTapSize,
           child: Icon(
             icon,
             size: 22,

@@ -21,6 +21,7 @@ import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
 import '../widgets/ship_from_fields.dart';
 import '../widgets/wholesale_product_card.dart';
+import '../widgets/wholesale_stream_builder.dart';
 import 'wholesale_product_detail_screen.dart';
 import 'wholesale_product_form_screen.dart';
 
@@ -190,14 +191,12 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
           onChanged: (s) => setState(() => _scope = s),
         ),
       Expanded(
-        child: StreamBuilder<List<WholesaleProduct>>(
+        child: WholesaleStreamBuilder<List<WholesaleProduct>>(
           stream: _productsStream(),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting &&
-                !snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final items = snap.data ?? const <WholesaleProduct>[];
+          // Firestore stream хатодан кейин ёпилади: кэшни ташлаб қайта улаймиз.
+          onRetry: () => setState(() => _stream = null),
+          builder: (context, data) {
+            final items = data ?? const <WholesaleProduct>[];
             final platform = _filteredPlatform();
             if (items.isEmpty && platform.isEmpty) {
               return Center(
@@ -317,13 +316,12 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         SnackBar(content: Text(context.tr('wholesale_register_sent'))),
       );
     } catch (e) {
+      debugPrint('[Wholesale] register failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text(
-            context.tr('error_generic').replaceAll('{error}', '$e'),
-          ),
+          content: Text(context.tr('wholesale_action_failed')),
         ),
       );
     } finally {
@@ -345,13 +343,11 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         ),
       );
     }
-    return StreamBuilder<WholesaleSeller?>(
+    return WholesaleStreamBuilder<WholesaleSeller?>(
       stream: _sellersRepo.watchByPhone(phone),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final seller = snap.data;
+      // Хато — «сотувчи йўқ» эмас: ўқилмаса рўйхатдан ўтиш формаси очилмасин.
+      onRetry: () => setState(() {}),
+      builder: (context, seller) {
         if (seller == null) return _registerForm();
         if (seller.isPending) return _statusCard(seller);
         if (seller.isRejected) return _statusCard(seller);
@@ -518,13 +514,13 @@ class _MyProductsView extends StatelessWidget {
               ),
             ),
           Expanded(
-            child: StreamBuilder<List<WholesaleProduct>>(
+            // StatefulBuilder: «Қайта уриниш» шу ерни қайта қуради ва янги stream олинади.
+            child: StatefulBuilder(
+              builder: (context, setRetry) => WholesaleStreamBuilder<List<WholesaleProduct>>(
               stream: repo.watchBySeller(seller.phone, market: market),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final items = snap.data ?? const <WholesaleProduct>[];
+              onRetry: () => setRetry(() {}),
+              builder: (context, data) {
+                final items = data ?? const <WholesaleProduct>[];
                 if (items.isEmpty) {
                   return Center(
                       child: Text(context.tr('wholesale_no_products_yet')));
@@ -543,6 +539,7 @@ class _MyProductsView extends StatelessWidget {
                   itemBuilder: (_, i) => _myProductTile(context, repo, items[i]),
                 );
               },
+              ),
             ),
           ),
         ],
@@ -592,10 +589,11 @@ class _MyProductsView extends StatelessWidget {
                       ));
                       if (ctx.mounted) Navigator.pop(ctx, true);
                     } catch (e) {
+                      debugPrint('[Wholesale] updateShipFrom failed: $e');
                       if (!ctx.mounted) return;
                       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
                         backgroundColor: Colors.red,
-                        content: Text(ctx.tr('error_generic').replaceAll('{error}', '$e')),
+                        content: Text(ctx.tr('wholesale_action_failed')),
                       ));
                     }
                   },
@@ -826,13 +824,12 @@ class _MyProductsView extends StatelessWidget {
         SnackBar(content: Text(context.tr('wholesale_video_linked'))),
       );
     } catch (e) {
+      debugPrint('[Wholesale] addVideo failed: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text(
-            context.tr('error_generic').replaceAll('{error}', '$e'),
-          ),
+          content: Text(context.tr('wholesale_action_failed')),
         ),
       );
     }

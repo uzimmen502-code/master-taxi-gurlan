@@ -26,7 +26,16 @@ class RestaurantFormFields extends StatefulWidget {
     this.showMaxQty = false,
     this.bookingsDisabled = false,
     this.legalTypeOptions = RestaurantFormData.legalTypes,
+    this.errors = const {},
+    this.anchors = const {},
   });
+
+  /// Текширув хато калитлари ([RestaurantFormData.validate]): тегишли майдон
+  /// остида `restaurants_m_err_<калит>` матни чиқади (қизил SnackBar ёлғиз эмас).
+  final Set<String> errors;
+
+  /// Хато калити → майдон жойи; рўйхатдан ўтиш экрани биринчи хатога скролл қилади.
+  final Map<String, GlobalKey> anchors;
 
   /// Танлаш мумкин бўлган юридик шакллар (кафе: `yatt`/`llc`; уй ошпази
   /// танловсиз — `showLegalType: false`).
@@ -143,12 +152,26 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
     });
   }
 
-  InputDecoration _dec(String label, {String? hint}) => InputDecoration(
+  InputDecoration _dec(String label, {String? hint, String? error}) => InputDecoration(
         labelText: label,
         hintText: hint,
+        errorText: error,
         isDense: true,
         border: const OutlineInputBorder(),
       );
+
+  String? _err(String key) => widget.errors.contains(key) ? context.tr('restaurants_m_err_$key') : null;
+
+  Widget _anchor(String key, Widget child) => KeyedSubtree(key: widget.anchors[key], child: child);
+
+  Widget _errorLine(String key) {
+    final msg = _err(key);
+    if (msg == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(msg, style: TextStyle(fontSize: 12, color: context.ava.danger)),
+    );
+  }
 
   Widget _section(String title) {
     final c = context.ava;
@@ -164,11 +187,14 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _name,
-          maxLength: 80,
-          decoration: _dec(context.tr('restaurants_m_name')),
-          onChanged: (v) => _set(() => d.name = v),
+        _anchor(
+          'name',
+          TextField(
+            controller: _name,
+            maxLength: 80,
+            decoration: _dec(context.tr('restaurants_m_name'), error: _err('name')),
+            onChanged: (v) => _set(() => d.name = v),
+          ),
         ),
         if (widget.showLegalType) ...[
           _section(context.tr('restaurants_m_legal_type')),
@@ -184,21 +210,29 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
             ],
           ),
         ],
-        if (widget.showVenueType) ...[
-          _section(context.tr('restaurants_m_venue_type')),
-          Wrap(
-            spacing: 6,
-            children: [
-              for (final t in VenueType.choices)
-                ChoiceChip(
-                  key: ValueKey('venue-choice-$t'),
-                  label: Text(context.tr(VenueType.l10nKey(t))),
-                  selected: d.venueType == t,
-                  onSelected: (_) => _set(() => d.venueType = t),
+        if (widget.showVenueType)
+          _anchor(
+            'venue_type',
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _section(context.tr('restaurants_m_venue_type')),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    for (final t in VenueType.choices)
+                      ChoiceChip(
+                        key: ValueKey('venue-choice-$t'),
+                        label: Text(context.tr(VenueType.l10nKey(t))),
+                        selected: d.venueType == t,
+                        onSelected: (_) => _set(() => d.venueType = t),
+                      ),
+                  ],
                 ),
-            ],
+                _errorLine('venue_type'),
+              ],
+            ),
           ),
-        ],
         _section(context.tr('restaurants_m_cuisine')),        Wrap(
           spacing: 6,
           runSpacing: 4,
@@ -228,11 +262,14 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
           onChanged: (v) => _set(() => d.description = v),
         ),
         _section(context.tr('restaurants_m_location')),
-        TextField(
-          controller: _address,
-          maxLength: 300,
-          decoration: _dec(context.tr('restaurants_m_address')),
-          onChanged: (v) => _set(() => d.address = v),
+        _anchor(
+          'address',
+          TextField(
+            controller: _address,
+            maxLength: 300,
+            decoration: _dec(context.tr('restaurants_m_address'), error: _err('address')),
+            onChanged: (v) => _set(() => d.address = v),
+          ),
         ),
         const SizedBox(height: 6),
         Row(
@@ -256,13 +293,19 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            d.hasLocation
-                ? '${context.tr('restaurants_m_location_set')} · ${d.lat!.toStringAsFixed(5)}, ${d.lng!.toStringAsFixed(5)}'
-                : context.tr('restaurants_m_err_location'),
-            style: TextStyle(fontSize: 12, color: d.hasLocation ? c.ok : c.warn),
+        _anchor(
+          'location',
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              d.hasLocation
+                  ? '${context.tr('restaurants_m_location_set')} · ${d.lat!.toStringAsFixed(5)}, ${d.lng!.toStringAsFixed(5)}'
+                  : context.tr('restaurants_m_err_location'),
+              style: TextStyle(
+                fontSize: 12,
+                color: d.hasLocation ? c.ok : (widget.errors.contains('location') ? c.danger : c.warn),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -365,29 +408,41 @@ class _RestaurantFormFieldsState extends State<RestaurantFormFields> {
             ],
           ),
         ],
-        _section(context.tr('restaurants_m_payment')),
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: Text(context.tr('restaurants_m_payment_prepay'), style: TextStyle(fontSize: 13, color: c.ink)),
-          value: d.prepay,
-          onChanged: (v) => _set(() => d.prepay = v),
-        ),
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: Text(context.tr('restaurants_m_payment_cash'), style: TextStyle(fontSize: 13, color: c.ink)),
-          value: d.cash,
-          onChanged: (v) => _set(() => d.cash = v),
+        _anchor(
+          'payment_method',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _section(context.tr('restaurants_m_payment')),
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(context.tr('restaurants_m_payment_prepay'), style: TextStyle(fontSize: 13, color: c.ink)),
+                value: d.prepay,
+                onChanged: (v) => _set(() => d.prepay = v),
+              ),
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(context.tr('restaurants_m_payment_cash'), style: TextStyle(fontSize: 13, color: c.ink)),
+                value: d.cash,
+                onChanged: (v) => _set(() => d.cash = v),
+              ),
+              _errorLine('payment_method'),
+            ],
+          ),
         ),
         if (widget.showPaymentDetails && d.prepay) ...[
           const SizedBox(height: 6),
-          TextField(
-            controller: _card,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(16)],
-            decoration: _dec(context.tr('restaurants_m_card_number'), hint: '8600 0000 0000 0000'),
-            onChanged: (v) => _set(() => d.cardNumber = v),
+          _anchor(
+            'card_number',
+            TextField(
+              controller: _card,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(16)],
+              decoration: _dec(context.tr('restaurants_m_card_number'), hint: '8600 0000 0000 0000', error: _err('card_number')),
+              onChanged: (v) => _set(() => d.cardNumber = v),
+            ),
           ),
           const SizedBox(height: 6),
           TextField(

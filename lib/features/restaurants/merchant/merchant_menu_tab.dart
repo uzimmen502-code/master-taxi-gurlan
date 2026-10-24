@@ -96,6 +96,37 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
     if (_selectedCategory == cat.id) setState(() => _selectedCategory = null);
   }
 
+  /// Категория амаллари: номини ўзгартириш · ўчириш (узоқ босиш ва «⋯» тугмаси — битта йўл).
+  Future<void> _showCategoryActions(MenuCategory cat, List<MenuCategory> cats) {
+    final c = context.ava;
+    return showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(ctx.tr('restaurants_m_rename')),
+              onTap: () {
+                Navigator.pop(ctx);
+                _editCategory(existing: cat, cats: cats);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: c.danger),
+              title: Text(ctx.tr('restaurants_m_delete'), style: TextStyle(color: c.danger)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteCategory(cat);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<bool> _confirm(String text) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -146,11 +177,12 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                 .toList(growable: false);
             return Column(
               children: [
+                // 56 = чип (32) + 48 dp босиш майдони сиғадиган жой (touch target ≥48).
                 SizedBox(
-                  height: 44,
+                  height: 56,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
                     children: [
                       ChoiceChip(
                         label: Text(context.tr('home_section_see_all')),
@@ -160,38 +192,21 @@ class _MerchantMenuTabState extends State<MerchantMenuTab> {
                       for (final cat in cats) ...[
                         const SizedBox(width: 6),
                         GestureDetector(
-                          onLongPress: () => showModalBottomSheet<void>(
-                            context: context,
-                            builder: (ctx) => SafeArea(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.edit_outlined),
-                                    title: Text(ctx.tr('restaurants_m_rename')),
-                                    onTap: () {
-                                      Navigator.pop(ctx);
-                                      _editCategory(existing: cat, cats: cats);
-                                    },
-                                  ),
-                                  ListTile(
-                                    leading: Icon(Icons.delete_outline, color: c.danger),
-                                    title: Text(ctx.tr('restaurants_m_delete'), style: TextStyle(color: c.danger)),
-                                    onTap: () {
-                                      Navigator.pop(ctx);
-                                      _deleteCategory(cat);
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          onLongPress: () => _showCategoryActions(cat, cats),
                           child: ChoiceChip(
                             label: Text(cat.displayName(context.contentLang)),
                             selected: _selectedCategory == cat.id,
                             onSelected: (_) => setState(() => _selectedCategory = cat.id),
                           ),
                         ),
+                        // Узоқ босиш яширин имо: танланган категорияда кўринадиган «⋯» тугмаси.
+                        if (_selectedCategory == cat.id)
+                          IconButton(
+                            key: const ValueKey('category-actions'),
+                            tooltip: context.tr('restaurants_m_rename'),
+                            icon: const Icon(Icons.more_horiz_rounded),
+                            onPressed: () => _showCategoryActions(cat, cats),
+                          ),
                       ],
                       const SizedBox(width: 6),
                       ActionChip(
@@ -329,7 +344,10 @@ class _ItemTile extends StatelessWidget {
               ],
             ),
           ),
-          Switch(value: item.available && !stopped, onChanged: onToggle),
+          Semantics(
+            label: '${item.name}: ${context.tr('restaurants_m_item_available')}',
+            child: Switch(value: item.available && !stopped, onChanged: onToggle),
+          ),
           PopupMenuButton<String>(
             onSelected: (v) {
               switch (v) {

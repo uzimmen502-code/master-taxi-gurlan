@@ -38,6 +38,13 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   bool _sending = false;
   bool _phoneLoaded = false;
 
+  /// Охирги муваффақиятсиз юборишдаги хато калитлари: майдон остида кўрсатилади,
+  /// эга тузатган сайин камаяди.
+  Set<String> _errors = const {};
+  final Map<String, GlobalKey> _anchors = {
+    for (final k in const ['name', 'venue_type', 'location', 'address', 'payment_method', 'card_number']) k: GlobalKey(),
+  };
+
   /// Рўйхатдан ўтгач таомлар обзори видеосини жойлаш (ихтиёрий).
   bool _withVideo = false;
 
@@ -59,9 +66,20 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   Future<void> _submit() async {
     final errs = _data.validate();
     if (errs.isNotEmpty) {
+      setState(() => _errors = errs.toSet());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('restaurants_m_err_${errs.first}')), backgroundColor: Colors.red.shade700),
       );
+      // Биринчи хато майдонига скролл: хато матни экрандан ташқарида қолмасин.
+      final first = errs.where(_anchors.containsKey).firstOrNull;
+      if (first != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = _anchors[first]?.currentContext;
+          if (ctx != null && ctx.mounted) {
+            Scrollable.ensureVisible(ctx, alignment: 0.15, duration: const Duration(milliseconds: 250));
+          }
+        });
+      }
       return;
     }
     setState(() => _sending = true);
@@ -116,7 +134,11 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
                 children: [
                   RestaurantFormFields(
                     data: _data,
-                    onChanged: () => setState(() {}),
+                    onChanged: () => setState(() {
+                      if (_errors.isNotEmpty) _errors = _data.validate().toSet();
+                    }),
+                    errors: _errors,
+                    anchors: _anchors,
                     showLegalType: !widget.homeCook,
                     showVenueType: !widget.homeCook,
                     legalTypeOptions: RestaurantFormData.cafeLegalTypes,

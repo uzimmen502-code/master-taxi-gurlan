@@ -425,9 +425,12 @@ class _RowTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     final sub = subtitle;
+    // Изоҳ ҳам экран ўқувчига ўқилади (аввал фақат ном эди).
     return Semantics(
       button: true,
-      label: label,
+      label: (sub == null || sub.isEmpty) ? label : '$label. $sub',
+      excludeSemantics: true,
+      onTap: onTap,
       child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(

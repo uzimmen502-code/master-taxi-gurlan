@@ -148,16 +148,12 @@ class _ProfileViewState extends State<_ProfileView> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final err = c.consumeError();
-      // Рақам алмаштириш хатолари l10n калити (`profile_phone_change_*`),
-      // қолганлари — аввалгидек тайёр матн.
+      // Контроллер хабарлари — l10n калитлари (`key` ёки `key|param`).
       if (err != null && mounted) {
-        _snack(
-          err.startsWith('profile_phone_change_') ? context.tr(err) : err,
-          isError: true,
-        );
+        _snack(context.trMsg(err), isError: true);
       }
       final ok = c.consumeSuccess();
-      if (ok != null && mounted) _snack(ok);
+      if (ok != null && mounted) _snack(context.trMsg(ok));
     });
 
     final c0 = context.ava;
@@ -570,26 +566,27 @@ class _ProfileViewState extends State<_ProfileView> {
     if (!mounted || confirmed != true) return;
 
     if (entered != _rolePin) {
-      _snack('Нотўғри PIN', isError: true);
+      _snack(context.tr('prof_pin_wrong'), isError: true);
       return;
     }
 
     final c = context.read<ProfileController>();
     if (c.role == 'driver') {
-      _snack('Haydovchi rolini PIN orqali o\'zgartirib bo\'lmaydi', isError: true);
+      _snack(context.tr('prof_driver_pin_blocked'), isError: true);
       return;
     }
     final newRole = c.role == 'courier' ? 'user' : 'courier';
     final ok = await c.quickSaveRole(newRole);
     if (!mounted) return;
     if (!ok && c.errorMessage != null) {
-      _snack(c.errorMessage!, isError: true);
+      _snack(context.trMsg(c.errorMessage!), isError: true);
       c.consumeError();
       return;
     }
     await c.load();
     if (!mounted) return;
-    _snack('Роль ўзгартирилди: ${_roleLabel(context, c.role, loc)}');
+    _snack(context.trMsg('prof_role_changed',
+        params: {'role': _roleLabel(context, c.role, loc)}));
   }
 
   void _snack(String msg, {bool isError = false}) {

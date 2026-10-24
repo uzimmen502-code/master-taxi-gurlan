@@ -1,40 +1,58 @@
 import '../../models/order_model.dart';
 import 'formatters.dart';
 
+/// Tarjimon: `context.trMsg` bilan mos (kalit + `{param}` lar).
+typedef ReceiptTr = String Function(String key,
+    {Map<String, String> params});
+
+String _identityTr(String key, {Map<String, String> params = const {}}) => key;
+
 /// Буюртма чеки — матн ва қаторлар (мижоз савати билан бир хил).
+///
+/// Matn qismlari l10n kalitlari orqali [ReceiptTr] bilan tarjima qilinadi
+/// (ekranda `context.trMsg`). [tr] berilmasa kalitning o'zi chiqadi (testlar).
 class OrderReceiptFormat {
   OrderReceiptFormat._();
 
-  static List<String> lines(OrderModel order) {
+  static List<String> lines(OrderModel order, {ReceiptTr tr = _identityTr}) {
     final out = <String>[];
     switch (order.type) {
       case 'bread':
-        out.addAll(_breadItemLines(order));
-        out.addAll(_breadExtraLines(order.extras));
+        out.addAll(_breadItemLines(order, tr));
+        out.addAll(_breadExtraLines(order.extras, tr));
         if (order.saltYeastCost > 0) {
-          out.add(_saltYeastLine(order));
+          out.add(_saltYeastLine(order, tr));
         }
         break;
       default:
         for (final it in order.items) {
           out.add('• ${_genericItemLine(it)}');
         }
-        out.addAll(_breadExtraLines(order.extras));
+        out.addAll(_breadExtraLines(order.extras, tr));
     }
-    if (out.isEmpty) out.add('• (маҳсулот йўқ)');
-    out.addAll(_footerLines(order));
+    if (out.isEmpty) out.add('• ${tr('rcpt_no_items')}');
+    out.addAll(_footerLines(order, tr));
     return out;
   }
 
-  static String bodyText(OrderModel order) => lines(order).join('\n');
+  static String bodyText(OrderModel order, {ReceiptTr tr = _identityTr}) =>
+      lines(order, tr: tr).join('\n');
+
+  /// «Жами: …» қатори (чек кўринишида алоҳида ажратилади).
+  static bool isTotalLine(String line, {ReceiptTr tr = _identityTr}) =>
+      line.startsWith('${tr('total')}:');
 
   // ─── Нон (bread_cart_sheet _PriceSummary) ───────────────────────────
 
-  static Iterable<String> _breadItemLines(OrderModel order) sync* {
+  static Iterable<String> _breadItemLines(
+    OrderModel order,
+    ReceiptTr tr,
+  ) sync* {
     for (final it in order.items) {
       yield '• ${_breadBaseLine(it)}';
       if (it.flourMilkCost > 0) {
-        yield '• 🌾 Un+Sut (${it.name}): ${formatMoney(it.flourMilkCost)}';
+        yield '• ${tr('rcpt_flour_milk', params: {'name': it.name})}: '
+            '${formatMoney(it.flourMilkCost)}';
       }
     }
   }
@@ -51,6 +69,7 @@ class OrderReceiptFormat {
 
   static Iterable<String> _breadExtraLines(
     List<Map<String, dynamic>> extras,
+    ReceiptTr tr,
   ) sync* {
     for (final ex in extras) {
       final name = (ex['name'] ?? '') as String;
@@ -84,15 +103,15 @@ class OrderReceiptFormat {
       }
 
       if (discount > 0) {
-        yield '• 🎁 Bonus: -${formatMoney(discount)}';
+        yield '• ${tr('rcpt_bonus')}: -${formatMoney(discount)}';
       }
     }
   }
 
-  static String _saltYeastLine(OrderModel order) {
+  static String _saltYeastLine(OrderModel order, ReceiptTr tr) {
     final label = order.cartHadYopishBread
-        ? '🧂 Tuz · xamirturush · drojya'
-        : '🧂 Tuz va drojya';
+        ? tr('rcpt_salt_yeast_dough')
+        : tr('rcpt_salt_yeast');
     return '• $label: ${formatMoney(order.saltYeastCost)}';
   }
 
@@ -130,16 +149,16 @@ class OrderReceiptFormat {
 
   // ─── Жами, манзил ───────────────────────────────────────────────────
 
-  static Iterable<String> _footerLines(OrderModel order) sync* {
-    yield 'Жами: ${formatMoney(order.total)}';
+  static Iterable<String> _footerLines(OrderModel order, ReceiptTr tr) sync* {
+    yield '${tr('total')}: ${formatMoney(order.total)}';
     if (order.balanceApplied > 0) {
-      yield 'Кошелёкдан: ${formatMoney(order.balanceApplied)}';
+      yield '${tr('crr_pay_from_wallet')}: ${formatMoney(order.balanceApplied)}';
     }
     if (order.cashDue > 0) {
-      yield 'Нақд тўлов: ${formatMoney(order.cashDue)}';
+      yield '${tr('rcpt_cash_due')}: ${formatMoney(order.cashDue)}';
     }
     if (order.cashPaid > 0 && order.cashPaid != order.cashDue) {
-      yield 'Берилган нақд: ${formatMoney(order.cashPaid)}';
+      yield '${tr('rcpt_cash_given')}: ${formatMoney(order.cashPaid)}';
     }
     if (order.address.isNotEmpty) yield '📍 ${order.address}';
     if (order.userPhone.isNotEmpty) yield '📞 ${order.userPhone}';

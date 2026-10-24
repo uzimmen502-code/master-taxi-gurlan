@@ -9,6 +9,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
@@ -147,7 +148,6 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
     if (_signingIn || _signedIn) return;
     final invalidDeviceMsg = context.tr('reverify_device_id_invalid');
     final bindFailedMsg = context.tr('reverify_bind_failed');
-    final errorPrefix = context.tr('error');
     setState(() {
       _signingIn = true;
       _error = null;
@@ -156,7 +156,9 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
     try {
       final snapshot = await _fingerprintService.collect();
       if (!DeviceBindingRepository.isValidFingerprintHash(snapshot.hash)) {
-        throw StateError(invalidDeviceMsg);
+        if (!mounted) return;
+        setState(() => _error = invalidDeviceMsg);
+        return;
       }
 
       final result = await _bindingRepo.checkDeviceBinding(
@@ -196,11 +198,12 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             }
             return;
           }
-          setState(() => _error = result.message ?? bindFailedMsg);
+          // Server `message` matni lotincha — ko'rsatilmaydi.
+          setState(() => _error = bindFailedMsg);
           return;
         }
         setState(() {
-          _error = result.message ?? bindFailedMsg;
+          _error = bindFailedMsg;
         });
         return;
       }
@@ -222,10 +225,10 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
       }
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
-      setState(() => _error = firebaseFunctionsUserMessage(e));
+      setState(() => _error = context.tr(onboardingErrorKey(e)));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$errorPrefix: $e');
+      setState(() => _error = userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _signingIn = false);
     }

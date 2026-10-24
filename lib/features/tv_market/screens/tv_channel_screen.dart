@@ -18,6 +18,7 @@ import '../widgets/tv_clip_poster.dart';
 import 'tv_market_feed_screen.dart';
 import 'tv_publish_screen.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Doʻkonsiz nashriyotchi kanali — roliklar grid + qoʻngʻiroq.
 class TvChannelScreen extends StatefulWidget {
@@ -169,7 +170,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
     } catch (e) {
       debugPrint('[TvChannel] photo $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(userErrorMessage(context, e, fallbackKey: 'err_photo_upload'))));
       }
     }
   }

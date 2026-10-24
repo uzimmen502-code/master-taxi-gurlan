@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/user_error.dart';
 import '../../repositories/schedules_repository.dart';
 import 'intercity_billing_flow.dart';
 import '../../utils/intercity_places.dart';
@@ -131,21 +132,21 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
     final priceText = _priceCtrl.text.trim().replaceAll(' ', '');
 
     if (fromText.isEmpty) {
-      _snack('Қаердан — шаҳарни киритинг');
+      _snack(context.tr('drvapp_from_city_required'));
       return;
     }
     if (toText.isEmpty) {
-      _snack('Қаерга — шаҳарни киритинг');
+      _snack(context.tr('drvapp_to_city_required'));
       return;
     }
     if (priceText.isEmpty) {
-      _snack('Нархни киритинг');
+      _snack(context.tr('create_ad_price_required'));
       return;
     }
 
     final uid = phoneDigits(widget.driverPhone);
     if (uid.length < 9) {
-      _snack('Телефон рақами топилмади');
+      _snack(context.tr('leave_driver_error_phone'));
       return;
     }
 
@@ -224,11 +225,11 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
       setState(() => _saving = false);
       final msg = e.toString();
       if (msg.contains('permission-denied')) {
-        _snack('Firestore рухсати йўқ. Admin тасдиғи ва интернетни текширинг.');
+        _snack(context.tr('drvapp_publish_permission_denied'));
       } else if (msg.contains('failed-precondition')) {
         _snack(context.tr('taxi_publish_failed'));
       } else {
-        _snack('Хатолик: $e');
+        _snack(userErrorMessage(context, e, fallbackKey: 'taxi_publish_failed'));
       }
     }
   }
@@ -276,10 +277,10 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                           const Icon(Icons.route,
                               color: AppColors.primaryText, size: 24),
                           const SizedBox(width: 8),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Шаҳарлараро — ишга чиқиш',
-                              style: TextStyle(
+                              context.tr('drvapp_qs_title'),
+                              style: const TextStyle(
                                   fontSize: 17, fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -295,7 +296,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                         children: [
                           _placeField(
                             ctrl: _fromCtrl,
-                            hint: 'Қаердан (шаҳар)',
+                            hint: context.tr('drvapp_from_city_hint'),
                             color: AppColors.primaryText,
                             showSug: _showFromSug,
                             query: _fromQuery,
@@ -312,7 +313,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                           const SizedBox(height: 12),
                           _placeField(
                             ctrl: _toCtrl,
-                            hint: 'Қаерга (шаҳар)',
+                            hint: context.tr('drvapp_to_city_hint'),
                             color: AppColors.primaryText,
                             showSug: _showToSug,
                             query: _toQuery,
@@ -330,7 +331,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                           Row(children: [
                             Expanded(
                               child: ChoiceChip(
-                                label: const Text('Бугун'),
+                                label: Text(context.tr('today_short')),
                                 selected: !_departureIsTomorrow,
                                 onSelected: (_) => setState(
                                     () => _departureIsTomorrow = false),
@@ -346,7 +347,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: ChoiceChip(
-                                label: const Text('Эртага'),
+                                label: Text(context.tr('tomorrow_short')),
                                 selected: _departureIsTomorrow,
                                 onSelected: (_) => setState(
                                     () => _departureIsTomorrow = true),
@@ -368,7 +369,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                 icon: const Icon(Icons.access_time,
                                     size: 18, color: AppColors.primaryText),
                                 label: Text(
-                                  'Жўнаш: ${_fmtTime(_departure)}',
+                                  '${context.tr('departure')}: ${_fmtTime(_departure)}',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600),
                                 ),
@@ -392,7 +393,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                   FilteringTextInputFormatter.digitsOnly
                                 ],
                                 decoration: InputDecoration(
-                                  hintText: 'Нарх (сўм)',
+                                  hintText: context.tr('drvapp_price_sum_hint'),
                                   prefixIcon: const Icon(Icons.payments_outlined,
                                       color: AppColors.primaryText, size: 20),
                                   border: OutlineInputBorder(
@@ -416,9 +417,9 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                               const Icon(Icons.event_seat,
                                   color: AppColors.primaryText, size: 20),
                               const SizedBox(width: 8),
-                              const Text('Ўриндиқлар',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w600)),
+                              Text(context.tr('drvapp_seats_label'),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
                               const Spacer(),
                               IconButton(
                                 onPressed: _seats > 1
@@ -465,7 +466,9 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                             : const Icon(Icons.check_circle_outline,
                                 size: 22),
                         label:
-                            Text(_saving ? 'Сақланмоқда...' : 'Тасдиқлаш'),
+                            Text(_saving
+                                ? context.tr('saving_in_progress')
+                                : context.tr('confirm')),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: color,
                           foregroundColor: AppColors.onPrimary,

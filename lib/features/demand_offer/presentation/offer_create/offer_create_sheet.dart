@@ -14,6 +14,7 @@ import '../../../../core/theme/ava_tokens.dart';
 import '../../data/demand_repository.dart' show DemandException;
 import '../../data/match_repository.dart';
 import '../../domain/demand_match.dart';
+import '../../../../core/utils/user_error.dart';
 
 /// Таклиф варақасини кўрсатади. `true` — таклиф юборилди.
 Future<bool?> showOfferCreateSheet(
@@ -108,7 +109,7 @@ class _OfferCreateSheetState extends State<OfferCreateSheet> {
           'resource-exhausted' => context.tr('match_revise_limit'),
           'failed-precondition' => context.tr('demand_error_taken'),
           'permission-denied' => context.tr('demand_error_expired'),
-          _ => e.message,
+          _ => context.tr(userErrorKeyFromCode(e.code)),
         };
       });
     }

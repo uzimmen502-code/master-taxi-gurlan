@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/dating_match.dart';
 import '../../../repositories/dating_repository.dart';
 import 'dating_profile_form_screen.dart' show datingAccent;
@@ -43,8 +45,9 @@ class _DatingChatScreenState extends State<DatingChatScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Хатолик: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(userErrorMessage(context, e,
+                fallbackKey: 'dating_message_failed'))));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -57,7 +60,7 @@ class _DatingChatScreenState extends State<DatingChatScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F4F6),
       appBar: AppBar(
-        title: Text(otherName.isEmpty ? 'Чат' : otherName),
+        title: Text(otherName.isEmpty ? context.tr('bottom_chat') : otherName),
         backgroundColor: datingAccent,
         foregroundColor: Colors.white,
       ),
@@ -70,7 +73,7 @@ class _DatingChatScreenState extends State<DatingChatScreen> {
                 final msgs = snap.data ?? const <DatingMessage>[];
                 if (msgs.isEmpty) {
                   return Center(
-                    child: Text('Биринчи хабарни ёзинг 👋',
+                    child: Text(context.tr('dating_chat_empty'),
                         style: TextStyle(color: Colors.grey.shade600)),
                   );
                 }
@@ -119,7 +122,7 @@ class _DatingChatScreenState extends State<DatingChatScreen> {
                       minLines: 1,
                       maxLines: 4,
                       decoration: InputDecoration(
-                        hintText: 'Хабар...',
+                        hintText: context.tr('dating_message_hint'),
                         filled: true,
                         fillColor: Colors.white,
                         contentPadding: const EdgeInsets.symmetric(

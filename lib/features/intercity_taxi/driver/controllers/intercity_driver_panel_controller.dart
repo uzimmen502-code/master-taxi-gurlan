@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../../core/l10n/offline_l10n.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../../../models/intercity_pickup_route.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
@@ -115,24 +116,31 @@ class IntercityDriverPanelController extends ChangeNotifier {
         final newest = list.first;
         if (!prevIds.contains(newest.id)) {
           pendingDialogBookingId = newest.id;
-          unawaited(
-            NotificationDelivery.show(
-              title: '🔔 Янги брон сўрови!',
-              body: intercityDriverBookingAlertBody(
-                userName: newest.userName,
-                routeLabel: IntercityPlaces.shortRouteLabel(
-                  IntercityPlaces.rawRouteFromTrip(tripData),
-                ),
-                passengers: newest.passengers,
-                userPhone: newest.userPhone,
-              ),
-              type: 'intercity_booking_pending',
-            ),
-          );
+          unawaited(_showNewBookingAlert(newest));
         }
       }
       _safeNotify();
     });
+  }
+
+  Future<void> _showNewBookingAlert(IntercityBooking newest) async {
+    final routeLabel = IntercityPlaces.shortRouteLabel(
+      IntercityPlaces.rawRouteFromTrip(tripData),
+    );
+    // Kontekstsiz joy — matn foydalanuvchi tanlagan tilda `OfflineL10n` orqali.
+    final title = await OfflineL10n.tr('intercity_new_booking');
+    final template = await OfflineL10n.tr('icx_alert_body');
+    await NotificationDelivery.show(
+      title: title,
+      body: intercityDriverBookingAlertBody(
+        template: template,
+        userName: newest.userName,
+        routeLabel: routeLabel,
+        passengers: newest.passengers,
+        userPhone: newest.userPhone,
+      ),
+      type: 'intercity_booking_pending',
+    );
   }
 
   void dialogShown() {
@@ -284,7 +292,7 @@ class IntercityDriverPanelController extends ChangeNotifier {
         change: change,
       );
       if (outcome.status == TripChangeSettlementStatus.failedPermanent) {
-        return outcome.userMessage ?? 'settlement_failed';
+        return outcome.userMessage ?? 'tcs_open_failed';
       }
       if (outcome.status == TripChangeSettlementStatus.deferred) {
         return outcome.userMessage;

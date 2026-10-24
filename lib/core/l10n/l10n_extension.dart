@@ -26,7 +26,10 @@ extension L10nExtension on BuildContext {
       switch (key) {
         case 'error_generic':
         case 'courier_error_generic':
-          merged['error'] = tail;
+          // Xom xato matni (`Exception: …`, `[firestore/…] …`) foydalanuvchiga
+          // CHIQMAYDI (CLAUDE.md §25) — faqat logga. Aniq matn kerak bo'lsa,
+          // chaqiruvchi `userErrorKey(e)` kalitini beradi.
+          debugPrint('[trMsg] $key detail: $tail');
           break;
         case 'max_saved_places':
           merged['count'] = tail;

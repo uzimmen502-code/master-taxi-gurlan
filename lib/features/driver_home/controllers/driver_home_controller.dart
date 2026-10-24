@@ -17,6 +17,7 @@ import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../services/background_gps_service.dart';
 import '../../../services/deferred_settlement_queue.dart';
 import '../../../services/local_taxi_payment_service.dart';
@@ -324,7 +325,7 @@ class DriverHomeController extends ChangeNotifier {
   /// Ҳеч қандай экран ёки диалог очилмайди.
   Future<({bool success, String? error})> startLocalWork() async {
     if (session.driverId.isEmpty) {
-      return (success: false, error: 'Ҳайдовчи топилмади');
+      return (success: false, error: 'driver_not_found');
     }
     try {
       if (!hasScheduleToday) {
@@ -350,14 +351,9 @@ class DriverHomeController extends ChangeNotifier {
       }
       return (success: true, error: null);
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('permission-denied')) {
-        return (
-          success: false,
-          error: 'Firestore рухсати йўқ. Admin тасдиғини текширинг.'
-        );
-      }
-      return (success: false, error: 'Хатолик: $e');
+      // Xom xato matni foydalanuvchiga chiqmaydi (permission-denied ham
+      // `userErrorKey` ichida `err_permission` ga aylanadi).
+      return (success: false, error: userErrorKey(e));
     }
   }
 
@@ -374,7 +370,7 @@ class DriverHomeController extends ChangeNotifier {
         if (!hasValid) {
           return (
             success: false,
-            error: '⚠️ Аввал "ИШНИ БОШЛАШ" ни босинг!',
+            error: 'drv_press_start_first',
           );
         }
       }
@@ -384,7 +380,7 @@ class DriverHomeController extends ChangeNotifier {
           isOnline = true; // rollback — safar ochiq turib offline bo'lmasin
           return (
             success: false,
-            error: '⚠️ Аввал сафарни якунланг ёки тарк этинг',
+            error: 'drv_finish_or_leave_first',
           );
         }
         activeRequests = const [];
@@ -401,8 +397,7 @@ class DriverHomeController extends ChangeNotifier {
           notifyListeners();
           return (
             success: false,
-            error:
-                '⚠️ GPS aniqlanmadi. Online bo\'lish uchun joylashuvni yoqing.',
+            error: 'drv_gps_required_online',
           );
         }
       } else {
@@ -410,7 +405,7 @@ class DriverHomeController extends ChangeNotifier {
       }
       return (success: true, error: null);
     } catch (e) {
-      return (success: false, error: 'Хатолик: $e');
+      return (success: false, error: userErrorKey(e));
     }
   }
 
@@ -593,7 +588,7 @@ class DriverHomeController extends ChangeNotifier {
       _rebuildOffers(trips, announce: true);
     }, onError: (Object e, StackTrace st) {
       debugPrint('offers stream error: $e\n$st');
-      offersStreamError = 'Чақирувларни ўқиб бўлмади. Қайтa уриниб кўринг.';
+      offersStreamError = 'drv_offers_load_failed';
       _lastOfferTrips = const [];
       activeRequests = const [];
       notifyListeners();
@@ -715,12 +710,12 @@ class DriverHomeController extends ChangeNotifier {
     );
     if (!result.success) {
       if (result.errorCode == 'no_seats') {
-        return (success: false, error: '⚠️ Ўрин қолмаган');
+        return (success: false, error: 'drv_accept_no_seats');
       }
       if (result.errorCode == 'busy') {
-        return (success: false, error: '⚠️ Аввал жорий сафарни якунланг');
+        return (success: false, error: 'drv_accept_busy');
       }
-      return (success: false, error: '⚠️ Аллақачон қабул қилинган');
+      return (success: false, error: 'drv_accept_taken');
     }
 
     // Local taxi (alone/local) — "ўрин" тушунчаси йўқ (битта ҳайдовчи,
@@ -905,7 +900,7 @@ class DriverHomeController extends ChangeNotifier {
         driverId: session.driverId,
       );
       if (!ok) {
-        return (success: false, error: '⚠️ Сафарни тарк этиб бўлмади');
+        return (success: false, error: 'drv_abandon_failed');
       }
       acceptedRide = null;
       isBusy = false;
@@ -915,7 +910,7 @@ class DriverHomeController extends ChangeNotifier {
       return (success: true, error: null);
     } catch (e) {
       debugPrint('abandonRide: $e');
-      return (success: false, error: '⚠️ Сафарни тарк этиб бўлмади');
+      return (success: false, error: 'drv_abandon_failed');
     } finally {
       _releasingTripId = null;
     }
@@ -938,20 +933,20 @@ class DriverHomeController extends ChangeNotifier {
     );
     if (newSeats == null) return (success: false, error: null);
     if (newSeats < 0) {
-      return (success: false, error: '⚠️ Бўш ўрин йўқ');
+      return (success: false, error: 'drv_no_free_seat');
     }
     await _driverRepo.decrementSeats(session.driverId);
     await _queueRepo.decrementSeats(
         driverId: session.driverId, currentSeats: seatsLeft);
     seatsLeft = (newSeats).clamp(0, totalSeats);
     notifyListeners();
-    return (success: true, error: '✅ +1 кўча йўловчи (қолди: $seatsLeft)');
+    return (success: true, error: 'drv_street_passenger_added|$seatsLeft');
   }
 
   Future<({bool success, String? error})> removePassenger() async {
     if (session.driverId.isEmpty) return (success: false, error: null);
     if (seatsLeft >= totalSeats) {
-      return (success: false, error: 'Барча ўринлар бўш');
+      return (success: false, error: 'drv_all_seats_free');
     }
     final newSeats = await _schedulesRepo.adjustSeatsToday(
       driverId: session.driverId,
@@ -963,7 +958,7 @@ class DriverHomeController extends ChangeNotifier {
     await _queueRepo.incrementSeats(session.driverId);
     seatsLeft = newSeats.clamp(0, totalSeats);
     notifyListeners();
-    return (success: true, error: '✅ Йўловчи камайтирилди');
+    return (success: true, error: 'drv_street_passenger_removed');
   }
 
   // ─── Иш кунини якунлаш ──────────────────────────────────────────

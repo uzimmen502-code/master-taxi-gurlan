@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/map_picker_result.dart';
 import '../../../models/saved_place.dart';
@@ -136,8 +137,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           if (_selectedLocation != null)
             TextButton(
               onPressed: _confirmSelection,
-              child: const Text('Танлаш',
-                  style: TextStyle(
+              child: Text(context.tr('offer_choose'),
+                  style: const TextStyle(
                       color: AppColors.onPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 16)),
@@ -192,7 +193,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  _gpsError!,
+                  context.tr(_gpsError!),
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
@@ -251,7 +252,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             const Icon(Icons.history, size: 18, color: AppColors.primaryText),
             const SizedBox(width: 6),
             Text(
-              'Сақланган ${widget.recentPlaces.length}',
+              context.trMsg('misc_saved_count',
+                  params: {'n': '${widget.recentPlaces.length}'}),
               style: const TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w500),
             ),
@@ -291,8 +293,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                     borderRadius: BorderRadius.circular(2)),
               ),
               const Spacer(),
-              const Text('Сақланган манзиллар',
-                  style: TextStyle(
+              Text(context.tr('saved_places'),
+                  style: const TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w600)),
               const Spacer(),
               IconButton(
@@ -338,8 +340,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           child: ElevatedButton.icon(
             onPressed: _confirmSelection,
             icon: const Icon(Icons.check, size: 20),
-            label: const Text('Тасдиқлаш',
-                style: TextStyle(
+            label: Text(context.tr('confirm'),
+                style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.button,

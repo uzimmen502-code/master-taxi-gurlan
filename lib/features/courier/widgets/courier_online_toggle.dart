@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Kuryer paneli AppBar tugmasi — online/offline holatini almashtiradi.
@@ -25,7 +26,9 @@ class CourierOnlineToggle extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            isOnline ? '🟢 Онлайн' : '⚫ Оффлайн',
+            isOnline
+                ? context.tr('courier_info_online')
+                : context.tr('courier_info_offline'),
             style: TextStyle(
                 fontSize: 12,
                 color: isOnline ? AppColors.onPrimary : Colors.white,

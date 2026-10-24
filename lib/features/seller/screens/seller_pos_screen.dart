@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
@@ -36,7 +37,7 @@ class _SellerPosView extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: AppColors.primaryDark,
         foregroundColor: AppColors.onPrimary,
-        title: const Text('Sotuv'),
+        title: Text(context.tr('pos_title')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -54,7 +55,9 @@ class _SellerPosView extends StatelessWidget {
                   child: Text(
                     c.shiftLoading
                         ? '…'
-                        : 'Bugun: ${formatPrice(c.sessionTotal)}',
+                        : context.trMsg('pos_today_total', params: {
+                            'amount': formatPrice(c.sessionTotal),
+                          }),
                     style: const TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w600),
                   ),
@@ -95,7 +98,10 @@ void _showShiftSheet(BuildContext context, SellerPosController c) {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Bugungi smena${s != null ? ' · ${s.dateKey}' : ''}',
+                  s != null
+                      ? ctx.trMsg('pos_shift_title_date',
+                          params: {'date': s.dateKey})
+                      : ctx.tr('pos_shift_title'),
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w700),
                 ),
@@ -108,19 +114,20 @@ void _showShiftSheet(BuildContext context, SellerPosController c) {
                     ),
                   )
                 else if (c.shiftLoadError != null)
-                  Text(c.shiftLoadError!,
+                  Text(ctx.trMsg(c.shiftLoadError!),
                       style: TextStyle(color: Colors.red.shade700))
                 else if (s == null)
-                  const Text('Ma\'lumot yo\'q')
+                  Text(ctx.tr('pos_no_data'))
                 else ...[
-                  _ShiftRow('Jami', formatPrice(s.total)),
-                  _ShiftRow('Sotuvlar', '${s.count}'),
-                  _ShiftRow('Tezkor', '${s.posCount}'),
-                  _ShiftRow('Olib ketish', '${s.pickupCount}'),
-                  _ShiftRow('Naqd', formatPrice(s.cashPaid)),
-                  _ShiftRow('Hamyon', formatPrice(s.walletPaid)),
+                  _ShiftRow(ctx.tr('total'), formatPrice(s.total)),
+                  _ShiftRow(ctx.tr('pos_sales'), '${s.count}'),
+                  _ShiftRow(ctx.tr('pos_tab_quick'), '${s.posCount}'),
+                  _ShiftRow(ctx.tr('pos_pickup'), '${s.pickupCount}'),
+                  _ShiftRow(ctx.tr('pos_cash'), formatPrice(s.cashPaid)),
+                  _ShiftRow(ctx.tr('pos_wallet'), formatPrice(s.walletPaid)),
                   if (s.changeCredit > 0)
-                    _ShiftRow('Qaytim', formatPrice(s.changeCredit)),
+                    _ShiftRow(
+                        ctx.tr('pos_change'), formatPrice(s.changeCredit)),
                 ],
               ],
             ),
@@ -168,7 +175,8 @@ Future<void> _showSaleReceipt(
     context: context,
     builder: (ctx) {
       return AlertDialog(
-        title: Text(receipt.pickup ? 'Olib ketish to\'lovi' : 'Sotuv cheki'),
+        title: Text(ctx.tr(
+            receipt.pickup ? 'pos_receipt_pickup_title' : 'pos_receipt_title')),
         content: SizedBox(
           width: 360,
           child: Column(
@@ -176,7 +184,9 @@ Future<void> _showSaleReceipt(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (receipt.customerPhone.isNotEmpty)
-                Text('Mijoz: ${receipt.customerPhone}',
+                Text(
+                    ctx.trMsg('pos_customer_phone_line',
+                        params: {'phone': receipt.customerPhone}),
                     style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
               if (r.orderId.isNotEmpty)
                 Text(
@@ -200,19 +210,19 @@ Future<void> _showSaleReceipt(
                 ),
               ),
               const Divider(),
-              _ShiftRow('Jami', '${formatMoney(r.total)}'),
-              _ShiftRow('Naqd', formatPrice(r.cashPaid)),
+              _ShiftRow(ctx.tr('total'), '${formatMoney(r.total)}'),
+              _ShiftRow(ctx.tr('pos_cash'), formatPrice(r.cashPaid)),
               if (r.walletPaid > 0)
-                _ShiftRow('Hamyon', formatPrice(r.walletPaid)),
+                _ShiftRow(ctx.tr('pos_wallet'), formatPrice(r.walletPaid)),
               if (r.changeCredit > 0)
-                _ShiftRow('Qaytim', formatPrice(r.changeCredit)),
+                _ShiftRow(ctx.tr('pos_change'), formatPrice(r.changeCredit)),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
+            child: Text(ctx.tr('ok')),
           ),
         ],
       );
@@ -232,7 +242,7 @@ class _MainTabs extends StatelessWidget {
         children: [
           Expanded(
             child: _TabBtn(
-              label: 'Tezkor',
+              label: context.tr('pos_tab_quick'),
               selected: c.mainTab == SellerMainTab.tezkor,
               onTap: () => c.setMainTab(SellerMainTab.tezkor),
             ),
@@ -240,7 +250,7 @@ class _MainTabs extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: _TabBtn(
-              label: 'Buyurtmalar',
+              label: context.tr('pos_tab_orders'),
               selected: c.mainTab == SellerMainTab.orders,
               badge: c.queueBadgeCount,
               onTap: () => c.setMainTab(SellerMainTab.orders),
@@ -389,7 +399,7 @@ class _OrdersBody extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
           child: TextField(
             decoration: InputDecoration(
-              hintText: 'Telefon yoki ism',
+              hintText: context.tr('pos_search_hint'),
               prefixIcon: const Icon(Icons.search),
               isDense: true,
               filled: true,
@@ -406,19 +416,22 @@ class _OrdersBody extends StatelessWidget {
           child: Row(
             children: [
               _FilterChip(
-                label: 'Tayyor${c.readyBadgeCount > 0 ? ' (${c.readyBadgeCount})' : ''}',
+                label:
+                    '${context.tr('pos_filter_ready')}${c.readyBadgeCount > 0 ? ' (${c.readyBadgeCount})' : ''}',
                 selected: c.orderFilter == SellerOrderFilter.ready,
                 onTap: () => c.setOrderFilter(SellerOrderFilter.ready),
               ),
               const SizedBox(width: 6),
               _FilterChip(
-                label: 'Kutilmoqda${c.waitingBadgeCount > 0 ? ' (${c.waitingBadgeCount})' : ''}',
+                label:
+                    '${context.tr('pos_filter_waiting')}${c.waitingBadgeCount > 0 ? ' (${c.waitingBadgeCount})' : ''}',
                 selected: c.orderFilter == SellerOrderFilter.waiting,
                 onTap: () => c.setOrderFilter(SellerOrderFilter.waiting),
               ),
               const SizedBox(width: 6),
               _FilterChip(
-                label: 'Hammasi${c.queueBadgeCount > 0 ? ' (${c.queueBadgeCount})' : ''}',
+                label:
+                    '${context.tr('pos_filter_all')}${c.queueBadgeCount > 0 ? ' (${c.queueBadgeCount})' : ''}',
                 selected: c.orderFilter == SellerOrderFilter.all,
                 onTap: () => c.setOrderFilter(SellerOrderFilter.all),
               ),
@@ -428,20 +441,20 @@ class _OrdersBody extends StatelessWidget {
         if (c.ordersLoadError != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(c.ordersLoadError!,
+            child: Text(context.trMsg(c.ordersLoadError!),
                 style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
           ),
         if (c.lastError != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(c.lastError!,
+            child: Text(context.trMsg(c.lastError!),
                 style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
           ),
         Expanded(
           child: orders.isEmpty
               ? Center(
                   child: Text(
-                    'Buyurtma yo\'q',
+                    context.tr('pos_orders_empty'),
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                 )
@@ -512,19 +525,19 @@ class _OrderCard extends StatelessWidget {
     String chipLabel;
     if (paid) {
       chipColor = Colors.grey;
-      chipLabel = 'To\'landi';
+      chipLabel = context.tr('pos_chip_paid');
     } else if (ready) {
       chipColor = AppColors.primaryText;
-      chipLabel = 'Tayyor';
+      chipLabel = context.tr('pos_filter_ready');
     } else {
       chipColor = Colors.orange;
-      chipLabel = 'Kutilmoqda';
+      chipLabel = context.tr('pos_filter_waiting');
     }
 
     final itemsText = order.items
         .map((it) => '${it.name} ×${it.qty}')
         .join(', ');
-    final waitLabel = _waitLabel(order.createdAt);
+    final waitLabel = _waitLabel(context, order.createdAt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -568,7 +581,7 @@ class _OrderCard extends StatelessWidget {
               ],
               const Spacer(),
               Text(
-                paid ? 'To\'langan' : 'To\'lanmagan',
+                context.tr(paid ? 'pos_paid' : 'pos_unpaid'),
                 style: TextStyle(
                   fontSize: 12,
                   color: paid ? Colors.grey : Colors.red.shade700,
@@ -579,7 +592,7 @@ class _OrderCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${order.userName.isNotEmpty ? order.userName : 'Mijoz'}'
+            '${order.userName.isNotEmpty ? order.userName : context.tr('pos_customer')}'
             '${order.userPhone.isNotEmpty ? ' · ${order.userPhone}' : ''}',
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
           ),
@@ -603,7 +616,7 @@ class _OrderCard extends StatelessWidget {
               children: [
                 if (order.userPhone.isNotEmpty)
                   IconButton(
-                    tooltip: 'Qo\'ng\'iroq',
+                    tooltip: context.tr('courier_call'),
                     onPressed: () => callPhone(order.userPhone),
                     icon: const Icon(Icons.phone_outlined),
                   ),
@@ -617,7 +630,8 @@ class _OrderCard extends StatelessWidget {
                             if (!context.mounted || ok) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(c.lastError ?? 'Xato'),
+                                content: Text(
+                                    context.trMsg(c.lastError ?? 'err_unexpected')),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -625,7 +639,7 @@ class _OrderCard extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.orange.shade700,
                     ),
-                    child: const Text('Tayyor qilish'),
+                    child: Text(context.tr('pos_mark_ready')),
                   ),
                 if (ready)
                   FilledButton(
@@ -633,7 +647,7 @@ class _OrderCard extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                     ),
-                    child: const Text('To\'lov'),
+                    child: Text(context.tr('pos_pay')),
                   ),
               ],
             ),
@@ -643,14 +657,18 @@ class _OrderCard extends StatelessWidget {
     );
   }
 
-  static String _waitLabel(DateTime? createdAt) {
+  static String _waitLabel(BuildContext context, DateTime? createdAt) {
     if (createdAt == null) return '';
     final mins = DateTime.now().difference(createdAt).inMinutes;
-    if (mins < 1) return 'hozir';
-    if (mins < 60) return '$mins daq';
+    if (mins < 1) return context.tr('pos_wait_now');
+    if (mins < 60) {
+      return context.trMsg('pos_wait_min', params: {'n': '$mins'});
+    }
     final h = mins ~/ 60;
     final m = mins % 60;
-    return m == 0 ? '$h soat' : '$h soat $m daq';
+    return m == 0
+        ? context.trMsg('pos_wait_hour', params: {'h': '$h'})
+        : context.trMsg('pos_wait_hour_min', params: {'h': '$h', 'm': '$m'});
   }
 }
 
@@ -669,7 +687,7 @@ class _ProductGrid extends StatelessWidget {
           ...c.breadProducts.map((p) => _BreadTile(product: p, c: c)),
         ];
         if (tiles.isEmpty) {
-          return const Center(child: Text('Mahsulotlar yuklanmoqda…'));
+          return Center(child: Text(context.tr('pos_products_loading')));
         }
         return GridView.builder(
           padding: const EdgeInsets.all(12),
@@ -700,7 +718,9 @@ class _BreadTile extends StatelessWidget {
       emoji: product.emoji,
       imageUrl: product.imageUrl,
       assetImage: product.image,
-      name: product.isYopish ? '${product.name} (qoldiq)' : product.name,
+      name: product.isYopish
+          ? context.trMsg('pos_leftover_name', params: {'name': product.name})
+          : product.name,
       price: product.price ?? 0,
       stockLabel: stock,
       soldOut: soldOut,
@@ -814,7 +834,7 @@ class _ProductCard extends StatelessWidget {
                 ),
               ),
               Text(
-                'Qoldiq: $stockLabel',
+                context.trMsg('pos_stock_line', params: {'stock': stockLabel}),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
@@ -892,7 +912,10 @@ class _PhoneCartBar extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  empty ? 'Savat' : 'Savat · ${c.cartCount} ta',
+                  empty
+                      ? context.tr('cart')
+                      : context.trMsg('pos_cart_count',
+                          params: {'count': '${c.cartCount}'}),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: AppText.titleMedium,
@@ -902,7 +925,7 @@ class _PhoneCartBar extends StatelessWidget {
               if (!empty)
                 TextButton(
                   onPressed: c.busy ? null : c.clearCart,
-                  child: const Text('Tozalash'),
+                  child: Text(context.tr('pos_clear')),
                 ),
             ],
           ),
@@ -910,7 +933,7 @@ class _PhoneCartBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                'Mahsulot tanlang',
+                context.tr('pos_pick_product'),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
             )
@@ -942,7 +965,8 @@ class _PhoneCartBar extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Jami: ${formatMoney(c.cartTotal)}',
+              context.trMsg('pos_total_line',
+                  params: {'amount': formatMoney(c.cartTotal)}),
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -961,8 +985,9 @@ class _PhoneCartBar extends StatelessWidget {
                 : () => _showPayExpandSheet(context, c),
             child: Text(
               empty
-                  ? 'To\'lov'
-                  : 'To\'lov · ${formatPrice(c.cartTotal)}',
+                  ? context.tr('pos_pay')
+                  : context.trMsg('pos_pay_amount',
+                      params: {'amount': formatPrice(c.cartTotal)}),
             ),
           ),
         ],
@@ -1106,7 +1131,8 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'To\'lov · ${formatMoney(total)}',
+                  context.trMsg('pos_pay_amount',
+                      params: {'amount': formatMoney(total)}),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: AppText.titleMedium,
@@ -1124,7 +1150,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
                   decoration: InputDecoration(
-                    labelText: 'Mijoz telefoni (ixtiyoriy)',
+                    labelText: context.tr('pos_customer_phone_optional'),
                     hintText: '90 123 45 67',
                     isDense: true,
                     border: OutlineInputBorder(
@@ -1151,7 +1177,8 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                 if (c.customerPhone.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Hamyon: ${formatMoney(c.walletBalance)}',
+                    context.trMsg('pos_wallet_line',
+                        params: {'amount': formatMoney(c.walletBalance)}),
                     style:
                         TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
@@ -1159,7 +1186,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                 if (c.walletLoadError != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    c.walletLoadError!,
+                    context.trMsg(c.walletLoadError!),
                     style:
                         TextStyle(fontSize: 12, color: Colors.red.shade700),
                   ),
@@ -1168,19 +1195,19 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                 Row(
                   children: [
                     _PayChip(
-                      label: 'Naqd',
+                      label: context.tr('pos_cash'),
                       selected: c.payMode == SellerPayMode.cash,
                       onTap: () => c.setPayMode(SellerPayMode.cash),
                     ),
                     const SizedBox(width: 6),
                     _PayChip(
-                      label: 'Hamyon',
+                      label: context.tr('pos_wallet'),
                       selected: c.payMode == SellerPayMode.wallet,
                       onTap: () => c.setPayMode(SellerPayMode.wallet),
                     ),
                     const SizedBox(width: 6),
                     _PayChip(
-                      label: 'Aralash',
+                      label: context.tr('pos_mixed'),
                       selected: c.payMode == SellerPayMode.mixed,
                       onTap: () => c.setPayMode(SellerPayMode.mixed),
                     ),
@@ -1193,7 +1220,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: InputDecoration(
-                      labelText: 'Naqd olingan',
+                      labelText: context.tr('pos_cash_received'),
                       isDense: true,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10)),
@@ -1205,8 +1232,10 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      'Hamyondan: ${formatPrice(c.walletPaid)} · '
-                      'Naqd: ${formatPrice(c.cashDue)}',
+                      context.trMsg('local_wallet_split_line', params: {
+                        'wallet': formatPrice(c.walletPaid),
+                        'cash': formatPrice(c.cashDue),
+                      }),
                       style: TextStyle(
                           fontSize: 12, color: Colors.blue.shade800),
                     ),
@@ -1215,7 +1244,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      c.lastError!,
+                      context.trMsg(c.lastError!),
                       style: TextStyle(
                           color: Colors.red.shade700, fontSize: 12),
                     ),
@@ -1244,7 +1273,8 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: AppColors.onPrimary),
                         )
-                      : Text('Tasdiqlash · ${formatPrice(total)}'),
+                      : Text(context.trMsg('pos_confirm_amount',
+                          params: {'amount': formatPrice(total)})),
                 ),
               ],
             ),
@@ -1328,8 +1358,12 @@ class _CartPanelState extends State<_CartPanel> {
               Expanded(
                 child: Text(
                   pickup
-                      ? 'To\'lov · ${c.payingOrder!.userName.isNotEmpty ? c.payingOrder!.userName : 'buyurtma'}'
-                      : 'Savat · ${c.cartCount} ta',
+                      ? (c.payingOrder!.userName.isNotEmpty
+                          ? context.trMsg('pos_pay_order_title',
+                              params: {'name': c.payingOrder!.userName})
+                          : context.tr('pos_pay_order_title_default'))
+                      : context.trMsg('pos_cart_count',
+                          params: {'count': '${c.cartCount}'}),
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: AppText.titleMedium),
@@ -1338,12 +1372,12 @@ class _CartPanelState extends State<_CartPanel> {
               if (pickup)
                 TextButton(
                   onPressed: c.busy ? null : c.cancelPayingOrder,
-                  child: const Text('Orqaga'),
+                  child: Text(context.tr('back')),
                 )
               else if (lines.isNotEmpty)
                 TextButton(
                   onPressed: c.busy ? null : c.clearCart,
-                  child: const Text('Tozalash'),
+                  child: Text(context.tr('pos_clear')),
                 ),
             ],
           ),
@@ -1381,7 +1415,7 @@ class _CartPanelState extends State<_CartPanel> {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      'Mahsulot tanlang',
+                      context.tr('pos_pick_product'),
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
                   )
@@ -1422,7 +1456,8 @@ class _CartPanelState extends State<_CartPanel> {
                   }),
                 const Divider(height: 16),
                 Text(
-                  'Jami: ${formatMoney(total)}',
+                  context.trMsg('pos_total_line',
+                      params: {'amount': formatMoney(total)}),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1435,7 +1470,7 @@ class _CartPanelState extends State<_CartPanel> {
                     controller: _phoneCtrl,
                     keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
-                      labelText: 'Mijoz telefoni (ixtiyoriy)',
+                      labelText: context.tr('pos_customer_phone_optional'),
                       hintText: '90 123 45 67',
                       isDense: true,
                       border: OutlineInputBorder(
@@ -1462,14 +1497,18 @@ class _CartPanelState extends State<_CartPanel> {
                   )
                 else
                   Text(
-                    'Mijoz: ${c.customerPhone} · Hamyon: ${formatPrice(c.walletBalance)}',
+                    context.trMsg('pos_customer_wallet_line', params: {
+                      'phone': c.customerPhone,
+                      'amount': formatPrice(c.walletBalance),
+                    }),
                     style:
                         TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                 if (!pickup && c.customerPhone.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Hamyon: ${formatMoney(c.walletBalance)}',
+                    context.trMsg('pos_wallet_line',
+                        params: {'amount': formatMoney(c.walletBalance)}),
                     style:
                         TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
@@ -1477,7 +1516,7 @@ class _CartPanelState extends State<_CartPanel> {
                 if (c.walletLoadError != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    c.walletLoadError!,
+                    context.trMsg(c.walletLoadError!),
                     style:
                         TextStyle(fontSize: 12, color: Colors.red.shade700),
                   ),
@@ -1486,19 +1525,19 @@ class _CartPanelState extends State<_CartPanel> {
                 Row(
                   children: [
                     _PayChip(
-                      label: 'Naqd',
+                      label: context.tr('pos_cash'),
                       selected: c.payMode == SellerPayMode.cash,
                       onTap: () => c.setPayMode(SellerPayMode.cash),
                     ),
                     const SizedBox(width: 6),
                     _PayChip(
-                      label: 'Hamyon',
+                      label: context.tr('pos_wallet'),
                       selected: c.payMode == SellerPayMode.wallet,
                       onTap: () => c.setPayMode(SellerPayMode.wallet),
                     ),
                     const SizedBox(width: 6),
                     _PayChip(
-                      label: 'Aralash',
+                      label: context.tr('pos_mixed'),
                       selected: c.payMode == SellerPayMode.mixed,
                       onTap: () => c.setPayMode(SellerPayMode.mixed),
                     ),
@@ -1511,7 +1550,7 @@ class _CartPanelState extends State<_CartPanel> {
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: InputDecoration(
-                      labelText: 'Naqd olingan',
+                      labelText: context.tr('pos_cash_received'),
                       isDense: true,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10)),
@@ -1523,8 +1562,10 @@ class _CartPanelState extends State<_CartPanel> {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      'Hamyondan: ${formatPrice(c.walletPaid)} · '
-                      'Naqd: ${formatPrice(c.cashDue)}',
+                      context.trMsg('local_wallet_split_line', params: {
+                        'wallet': formatPrice(c.walletPaid),
+                        'cash': formatPrice(c.cashDue),
+                      }),
                       style: TextStyle(
                           fontSize: 12, color: Colors.blue.shade800),
                     ),
@@ -1533,7 +1574,7 @@ class _CartPanelState extends State<_CartPanel> {
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      c.lastError!,
+                      context.trMsg(c.lastError!),
                       style: TextStyle(
                           color: Colors.red.shade700, fontSize: 12),
                     ),
@@ -1560,7 +1601,8 @@ class _CartPanelState extends State<_CartPanel> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: AppColors.onPrimary),
                         )
-                      : Text('To\'lov · ${formatPrice(total)}'),
+                      : Text(context.trMsg('pos_pay_amount',
+                          params: {'amount': formatPrice(total)})),
                 ),
                 const SizedBox(height: 4),
               ],

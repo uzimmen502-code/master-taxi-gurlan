@@ -22,6 +22,7 @@ import '../../data/demand_repository.dart';
 import '../../domain/demand.dart';
 import '../../ui_adapters/demand_ui_adapter.dart';
 import '../demand_confirm/demand_confirm_sheet.dart';
+import '../../../../core/utils/user_error.dart';
 
 class DemandComposerScreen extends StatefulWidget {
   const DemandComposerScreen({
@@ -156,7 +157,8 @@ class _DemandComposerScreenState extends State<DemandComposerScreen> {
       case 'invalid-argument':
         return context.tr('demand_error_moderation');
       default:
-        return e.message;
+        // Server matni (lotincha) o'rniga kod bo'yicha 3 tilli matn.
+        return context.tr(userErrorKeyFromCode(e.code));
     }
   }
 

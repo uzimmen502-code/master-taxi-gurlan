@@ -6,6 +6,7 @@ import '../models/tv_comment.dart';
 import '../repositories/tv_clips_repository.dart';
 import 'tv_owner_avatar.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Изоҳлар шифти — фақат тайёр саволлар (эркин матн йўқ, spam хавфи паст).
 /// Чақирувчи томон auth текширувини аллақачон ўтказган бўлиши керак.
@@ -100,7 +101,7 @@ class _TvCommentSheetState extends State<_TvCommentSheet> {
       widget.onCommentAdded();
       await _load();
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -125,7 +126,7 @@ class _TvCommentSheetState extends State<_TvCommentSheet> {
       widget.onCommentAdded();
       await _load();
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _sending = false);
     }

@@ -13,6 +13,7 @@ import '../models/tv_clip.dart';
 import '../services/tv_ad_service.dart';
 import 'tv_ad_tier_picker.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Эълонни узайтириш — тариф + муддат танлаб, wallet'дан тўлаш.
 /// Видеони қайта юклаш шарт эмас (CF `renewTvAd` фақат муддатни узайтиради).
@@ -120,12 +121,11 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
       Navigator.pop(context, true);
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.code == 'failed-precondition' &&
-              e.message == 'insufficient_balance'
-          ? context.tr('tv_ad_insufficient_balance')
-          : (e.message ?? e.code));
+      setState(() => _error = userErrorMessage(context, e, byServerMessage: const {
+        'insufficient_balance': 'tv_ad_insufficient_balance',
+      }));
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = userErrorMessage(context, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

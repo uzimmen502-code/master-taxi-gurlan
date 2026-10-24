@@ -209,7 +209,7 @@ class _NewsHubScreenState extends State<NewsHubScreen>
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('Хабарлар'),
+        title: Text(context.tr('bottom_news')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         bottom: TabBar(
@@ -225,19 +225,19 @@ class _NewsHubScreenState extends State<NewsHubScreen>
           tabs: [
             Tab(
               child: _TabLabel(
-                text: 'Янгилик',
+                text: context.tr('tv_publish_news'),
                 badge: _unreadBroadcast,
               ),
             ),
             Tab(
               child: _TabLabel(
-                text: 'Хабарлар',
+                text: context.tr('messages_title'),
                 badge: _unreadMessages,
               ),
             ),
             Tab(
               child: _TabLabel(
-                text: 'Буюртма',
+                text: context.tr('order'),
                 badge: _unreadOrders,
               ),
             ),

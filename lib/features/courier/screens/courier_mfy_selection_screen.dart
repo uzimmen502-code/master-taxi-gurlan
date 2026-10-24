@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/order_model.dart';
 import '../../../services/courier_delivery_route_optimizer.dart';
 import '../../../services/courier_route_service.dart';
 import '../../../services/location_service.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import '../controllers/courier_controller.dart';
 
 const String _unknownMfyKey = '__unknown_mfy__';
-const String _unknownMfyLabel = 'МФЙ аниқланмаган';
 
 class _MfyGroup {
   const _MfyGroup({
@@ -94,7 +96,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
   final Set<String> _selectedMfyKeys = {};
   bool _optimizing = false;
-  String _loadingMessage = 'Маршрут ҳисобланмоқда...';
+  /// l10n kaliti (ekranda `context.tr` bilan chiqadi).
+  String _loadingMessage = 'crr_route_calculating';
   List<OrderModel> _orderedStops = const [];
 
   List<_MfyGroup> _groupByMfy(List<OrderModel> orders) {
@@ -122,7 +125,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
     if (unknown.isNotEmpty) {
       groups.add(_MfyGroup(
         key: _unknownMfyKey,
-        label: _unknownMfyLabel,
+        label: context.tr('crr_mfy_unknown'),
         orders: unknown,
       ));
     }
@@ -174,16 +177,6 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
     }
   }
 
-  String _errorMessage(Object error) {
-    var message = error.toString();
-    if (message.startsWith('Exception: ')) {
-      message = message.substring('Exception: '.length);
-    } else if (message.startsWith('StateError: ')) {
-      message = message.substring('StateError: '.length);
-    }
-    return message;
-  }
-
   Future<String?> _resolveCourierPhone() async {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('user_phone')?.trim() ?? '';
@@ -198,7 +191,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
     setState(() {
       _optimizing = true;
-      _loadingMessage = 'Маршрут ҳисобланмоқда...';
+      _loadingMessage = 'crr_route_calculating';
     });
 
     try {
@@ -206,8 +199,20 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
       if (!mounted) return;
       if (position == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS аниқланмади — жойлашув рухсатини ёқинг'),
+          SnackBar(
+            content: Text(context.tr('crr_gps_unknown')),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // Optimizer koordinatali buyurtma topolmasa `StateError` tashlaydi
+      // (kirill matn). Xabarni shu yerda l10n bilan beramiz.
+      if (!selectedOrders.any(CourierDeliveryRouteOptimizer.hasValidCoords)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.tr('crr_route_no_coords')),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -233,8 +238,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${result.skippedNoCoords} та буюртма координатасиз — '
-              'маршрутдан ўтказилди',
+              context.trMsg('crr_route_skipped_no_coords',
+                  params: {'n': '${result.skippedNoCoords}'}),
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -243,8 +248,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
       if (_orderedStops.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Координатали буюртма қолмади'),
+          SnackBar(
+            content: Text(context.tr('crr_route_no_coords_left')),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -255,15 +260,15 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
       if (!mounted) return;
       if (courierPhone == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Курьер телефони аниқланмади — қайта киринг'),
+          SnackBar(
+            content: Text(context.tr('crr_phone_unknown')),
             behavior: SnackBarBehavior.floating,
           ),
         );
         return;
       }
 
-      setState(() => _loadingMessage = 'Маршрут сақланмоқда...');
+      setState(() => _loadingMessage = 'crr_route_saving');
 
       final created = await _routeService.createRoute(
         courierPhone: courierPhone,
@@ -272,9 +277,14 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
       if (!mounted) return;
       if (created.error != null) {
+        // Servis xabari (`no_ready_orders`, inglizcha yoki kirill literal)
+        // foydalanuvchiga chiqmaydi — faqat logga.
+        debugPrint('CourierMfySelection: createRoute error: ${created.error}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(created.error!),
+            content: Text(context.tr(created.error == 'no_ready_orders'
+                ? 'crr_route_orders_taken'
+                : 'crr_route_create_failed')),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -292,7 +302,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Маршрут яратилди: ${created.count} та тўхташ'),
+          content: Text(context.trMsg('crr_route_created',
+              params: {'n': '${created.count}'})),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -301,7 +312,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_errorMessage(e)),
+          content: Text(
+              userErrorMessage(context, e, fallbackKey: 'crr_route_create_failed')),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -315,7 +327,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('МФЙ танлаш'),
+        title: Text(context.tr('crr_mfy_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
@@ -333,13 +345,9 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
           if (snapshot.hasError) {
             return _refreshable(
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Хато: ${snapshot.error}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
+              LoadErrorView(
+                error: snapshot.error!,
+                onRetry: () => _reload(),
               ),
             );
           }
@@ -348,7 +356,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
           if (orders.isEmpty) {
             return _refreshable(
               Text(
-                'Фаол буюртма йўқ',
+                context.tr('crr_no_active_orders'),
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey.shade500,
@@ -402,7 +410,11 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        '${group.label} — ${group.orders.length} та',
+                                        context.trMsg('crr_mfy_group_count',
+                                            params: {
+                                              'label': group.label,
+                                              'n': '${group.orders.length}',
+                                            }),
                                         style: const TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
@@ -456,7 +468,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
                             ),
                           ),
                           child: Text(
-                            'Маршрут яратиш ($selectedCount та буюртма)',
+                            context.trMsg('crr_route_create_btn',
+                                params: {'n': '$selectedCount'}),
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -482,7 +495,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
                               const CircularProgressIndicator(),
                               const SizedBox(height: 12),
                               Text(
-                                _loadingMessage,
+                                context.tr(_loadingMessage),
                                 style: TextStyle(color: Colors.grey.shade700),
                               ),
                             ],

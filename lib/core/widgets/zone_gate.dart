@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../repositories/user_repository.dart';
+import '../l10n/l10n_extension.dart';
 import '../service_config_holder.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -165,8 +166,7 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
       widget.onDone();
     } catch (_) {
       if (mounted) {
-        setState(() => _error =
-            'Saqlab bo\'lmadi. Internet ulanishini tekshirib qayta urining.');
+        setState(() => _error = 'zone_save_failed');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -196,16 +196,15 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
                   const Icon(Icons.holiday_village,
                       size: 56, color: AppColors.primaryText),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Xizmat zonangizni tanlang',
+                  Text(
+                    context.tr('zone_title'),
                     textAlign: TextAlign.center,
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Hududingizda qaysi xizmatlar mavjudligini aniqlash uchun '
-                    'viloyat va tumaningizni tanlang. Bu bir marta so\'raladi.',
+                    context.tr('zone_subtitle'),
                     textAlign: TextAlign.center,
                     style:
                         TextStyle(fontSize: 13, color: Colors.grey.shade600),
@@ -223,7 +222,7 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Text(_error!,
+                    Text(context.trMsg(_error!),
                         style: const TextStyle(
                             color: Colors.red, fontSize: 13)),
                   ],
@@ -246,8 +245,8 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
                               child: CircularProgressIndicator(
                                   strokeWidth: 2, color: AppColors.onPrimary),
                             )
-                          : const Text('Davom etish',
-                              style: TextStyle(
+                          : Text(context.tr('zone_continue'),
+                              style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold)),
                     ),

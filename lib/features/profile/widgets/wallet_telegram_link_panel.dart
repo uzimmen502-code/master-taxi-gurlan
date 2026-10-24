@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import 'wallet_amount_sheet.dart';
 
 /// Telegram бот орқали ҳамён тўлдириш — бир тугмали боғлаш.
@@ -115,7 +116,14 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.message ?? e.code),
+        content: Text(userErrorMessage(
+          context,
+          e,
+          fallbackKey: 'prof_tg_link_failed',
+          byServerMessage: const {
+            'Avval ilovada ro\'yxatdan o\'ting': 'prof_err_register_first',
+          },
+        )),
         backgroundColor: Colors.red,
       ));
     } finally {

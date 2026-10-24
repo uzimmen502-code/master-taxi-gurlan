@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/ev_charging_report.dart';
 import '../../../models/ev_charging_station.dart';
@@ -19,10 +20,10 @@ class EvArrivalFlow {
   }) async {
     final isHere = await _confirm(
       context,
-      title: '⚡ Зарядлаш нуқтасига етиб келдингиз',
-      body: 'Геолокацияда хатолик бўлиши мумкин. Нуқта шу ердами?',
-      yes: 'Ҳа, шу ерда',
-      no: 'Йўқ, нуқта йўқ',
+      title: context.tr('ev_arrival_title'),
+      body: context.tr('ev_arrival_body'),
+      yes: context.tr('ev_arrival_yes'),
+      no: context.tr('ev_arrival_no'),
     );
     if (isHere == null || !context.mounted) return;
 
@@ -31,11 +32,10 @@ class EvArrivalFlow {
       if (!context.mounted) return;
       final wantsCheck = await _confirm(
         context,
-        title: '✅ Тасдиқланди',
-        body: 'Зарядлаш нуқтаси жойида эканлиги тасдиқланди. '
-            'Маълумотларни текширишни хоҳлайсизми?',
-        yes: 'Текшириш',
-        no: 'Кейин',
+        title: context.tr('ev_confirmed_title'),
+        body: context.tr('ev_confirmed_body'),
+        yes: context.tr('ev_confirmed_check'),
+        no: context.tr('ev_confirmed_later'),
       );
       if (wantsCheck == true && context.mounted) {
         await Navigator.push(
@@ -50,10 +50,10 @@ class EvArrivalFlow {
 
     final wantsReport = await _confirm(
       context,
-      title: '⚠️ Зарядлаш нуқтаси топилмади',
-      body: 'Бу жойда зарядлаш нуқтаси йўқлиги ҳақида хабар беришингиз мумкин.',
-      yes: 'Хабар бериш',
-      no: 'Бекор қилиш',
+      title: context.tr('ev_not_found_title'),
+      body: context.tr('ev_not_found_body'),
+      yes: context.tr('ev_not_found_report'),
+      no: context.tr('cancel'),
     );
     if (wantsReport != true || !context.mounted) return;
 
@@ -66,13 +66,12 @@ class EvArrivalFlow {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('✅ Раҳмат!'),
-          content: const Text(
-              'Хабарингиз қабул қилинди ва маълумотни текшириш учун юборилди.'),
+          title: Text(ctx.tr('ev_report_thanks_title')),
+          content: Text(ctx.tr('ev_report_thanks_body')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Яхши'),
+              child: Text(ctx.tr('ev_report_thanks_ok')),
             ),
           ],
         ),
@@ -80,8 +79,8 @@ class EvArrivalFlow {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Хабар юборилмади — бу нуқта учун лимитга етдингиз.'),
+        SnackBar(
+          content: Text(context.tr('ev_report_limit_reached')),
         ),
       );
     }

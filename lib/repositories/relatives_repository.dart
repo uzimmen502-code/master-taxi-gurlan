@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
-import '../core/utils/firebase_functions_errors.dart';
 import '../models/relative_event.dart';
 import '../models/relative_person.dart';
 import '../models/relative_photo.dart';
@@ -59,7 +58,7 @@ class RelativesRepository {
       throw FirebaseException(
         plugin: 'cloud_functions',
         code: e.code,
-        message: firebaseFunctionsUserMessage(e),
+        message: e.message,
       );
     }
   }
@@ -104,7 +103,7 @@ class RelativesRepository {
       throw FirebaseException(
         plugin: 'cloud_functions',
         code: e.code,
-        message: firebaseFunctionsUserMessage(e),
+        message: e.message,
       );
     }
   }

@@ -18,6 +18,7 @@ import 'tv_publish_screen.dart';
 import 'tv_shop_item_photos_screen.dart';
 import 'tv_shop_public_screen.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Эгасининг мини-дўкони — товар/нарх/видео таҳрири.
 class TvMyShopScreen extends StatefulWidget {
@@ -114,7 +115,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
     } catch (e) {
       debugPrint('[TvMyShop] photo $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(userErrorMessage(context, e, fallbackKey: 'err_photo_upload'))));
       }
     }
   }

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import '../../../models/news_item.dart';
 import '../../../models/news_read_state.dart';
 import '../../../models/order_news_group.dart';
@@ -68,6 +69,15 @@ class _OrderNewsTabState extends State<OrderNewsTab>
     });
   }
 
+  /// Хато бўлса — фақат хабарлар оқимини қайта очади (ўчирилганлар обунаси
+  /// иккинчи марта очилмайди).
+  void _retry() {
+    final repo = context.read<NewsRepository>();
+    setState(() {
+      _stream = repo.watchOrderNews(userId: _uid, limit: 50);
+    });
+  }
+
   @override
   void dispose() {
     _dismissedSub?.cancel();
@@ -83,15 +93,15 @@ class _OrderNewsTabState extends State<OrderNewsTab>
   String _statusLabel(String s) {
     switch (s) {
       case 'accepted':
-        return 'Қабул';
+        return context.tr('news_st_accepted');
       case 'ready':
-        return 'Тайёр';
+        return context.tr('news_st_ready');
       case 'delivered':
-        return 'Етказилди';
+        return context.tr('news_st_delivered');
       case 'rejected':
-        return 'Рад';
+        return context.tr('news_st_rejected');
       case 'new':
-        return 'Юборилди';
+        return context.tr('sent');
       // CF `onOrderUpdate` бу статусларни ҳам ёзади — аввал мижозга хом
       // `in_delivery` / `cancelled` чиқарди.
       case 'in_delivery':
@@ -117,7 +127,7 @@ class _OrderNewsTabState extends State<OrderNewsTab>
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError && !snap.hasData) {
-          return Center(child: Text('Хатолик: ${snap.error}'));
+          return LoadErrorView(error: snap.error!, onRetry: _retry);
         }
         final visible = (snap.data ?? const <NewsItem>[])
             .where((n) => !_hidden.contains(n.id));
@@ -140,13 +150,13 @@ class _OrderNewsTabState extends State<OrderNewsTab>
         children: [
           Icon(Icons.receipt_long, color: Colors.grey.shade400, size: 48),
           const SizedBox(height: 12),
-          Text('Буюртма хабарлари йўқ',
+          Text(context.tr('news_orders_empty_title'),
               style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey.shade700)),
           const SizedBox(height: 6),
-          Text('Статус ўзгарса шу йерда кўринади',
+          Text(context.tr('news_orders_empty_hint'),
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
         ],
       ),
@@ -202,7 +212,7 @@ class _OrderNewsTabState extends State<OrderNewsTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      g.moduleLabel,
+                      context.tr(g.moduleLabelKey),
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight:
@@ -211,7 +221,10 @@ class _OrderNewsTabState extends State<OrderNewsTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${g.messages.length} хабар · сўнгги: $status',
+                      context.trMsg('news_group_summary', params: {
+                        'n': '${g.messages.length}',
+                        'status': status,
+                      }),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight:

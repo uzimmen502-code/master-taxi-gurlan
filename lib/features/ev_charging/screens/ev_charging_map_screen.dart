@@ -197,7 +197,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView>
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('⚡ Зарядлаш нуқталари'),
+        title: Text('⚡ ${context.tr('ev_map_title')}'),
       ),
       body: controller.loading
           ? const Center(child: CircularProgressIndicator())
@@ -207,7 +207,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView>
                     // юқорида (аввал фақат хато матни эди).
                     if (controller.error != null)
                       MaterialBanner(
-                        content: Text(controller.error!),
+                        content: Text(context.trMsg(controller.error!)),
                         leading: const Icon(Icons.location_off_outlined),
                         actions: const [SizedBox.shrink()],
                       ),
@@ -304,7 +304,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView>
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                _filterChip('Ҳаммаси', null, controller),
+                _filterChip(context.tr('bizmap_all'), null, controller),
                 _filterChip('AC', 'AC', controller),
                 _filterChip('DC', 'DC', controller),
                 _filterChip('AC+DC', 'AC+DC', controller),
@@ -408,9 +408,9 @@ class _PaidAddStationBar extends StatelessWidget {
             children: [
               const Icon(Icons.add_rounded, color: AppColors.onPrimary, size: 20),
               const SizedBox(width: 6),
-              const Text(
-                'Станция қўшиш',
-                style: TextStyle(
+              Text(
+                context.tr('ev_add_station'),
+                style: const TextStyle(
                   color: AppColors.onPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -424,9 +424,9 @@ class _PaidAddStationBar extends StatelessWidget {
                   color: _badgeGold,
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Text(
-                  'пуллик',
-                  style: TextStyle(
+                child: Text(
+                  context.tr('ev_paid_badge'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,

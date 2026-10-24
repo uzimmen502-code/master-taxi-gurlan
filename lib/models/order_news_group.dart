@@ -21,12 +21,13 @@ class OrderNewsGroup {
     return sorted.last;
   }
 
-  String get moduleLabel {
+  /// l10n КАЛИТИ (экранда `context.tr(moduleLabelKey)`).
+  String get moduleLabelKey {
     switch (orderType) {
       case 'bread':
-        return 'Нон буюртма';
+        return 'bread_order';
       default:
-        return 'Буюртма';
+        return 'order';
     }
   }
 

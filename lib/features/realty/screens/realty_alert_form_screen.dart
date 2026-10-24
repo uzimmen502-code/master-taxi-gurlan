@@ -181,7 +181,7 @@ class _RealtyAlertFormScreenState extends State<RealtyAlertFormScreen> {
             children: [
               for (final km in RealtyAlert.radiusOptionsKm)
                 ChoiceChip(
-                  label: Text('$km км'),
+                  label: Text('$km ${context.tr('ev_trip_km')}'),
                   selected: _radiusKm == km,
                   onSelected: (_) => setState(() => _radiusKm = km),
                 ),

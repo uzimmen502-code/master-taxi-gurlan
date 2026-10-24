@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/user_error.dart';
 import '../../../../models/entertainment_video.dart';
 import '../../../../repositories/entertainment_repository.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
@@ -34,7 +36,9 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
   final _cache = EntertainmentCacheService();
   List<EntertainmentVideo> _videos = const [];
   bool _loading = true;
-  String? _error;
+
+  /// Xato matni emas — l10n kaliti (ekranda `context.trMsg(_errorKey!)`).
+  String? _errorKey;
   final Set<String> _cached = {};
   final Set<String> _downloading = {};
 
@@ -47,7 +51,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _errorKey = null;
     });
     try {
       final repo = context.read<EntertainmentRepository>();
@@ -68,16 +72,16 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
         _cached.addAll(cached);
         _loading = false;
       });
-    } on EntertainmentAccessException catch (e) {
+    } on EntertainmentAccessException {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        _errorKey = 'ent_access_denied';
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _errorKey = userErrorKey(e, fallbackKey: 'err_load_failed');
         _loading = false;
       });
     }
@@ -97,13 +101,15 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
         setState(() => _cached.add(video.id));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Юклаб бўлмади. Wi‑Fi ни текширинг.')),
+          SnackBar(content: Text(context.tr('ent_download_failed'))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Хато: $e')),
+          SnackBar(
+              content: Text(userErrorMessage(context, e,
+                  fallbackKey: 'ent_download_failed'))),
         );
       }
     } finally {
@@ -134,21 +140,21 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
     return Scaffold(
       backgroundColor: AppColors.moduleBg,
       appBar: AppBar(
-        title: const Text('🎬 Сафар кинотеатри'),
+        title: Text(context.tr('ent_list_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text(_error!))
+          : _errorKey != null
+              ? Center(child: Text(context.trMsg(_errorKey!)))
               : _videos.isEmpty
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          '${widget.driverName} бу рейс учун фильм танламаган.\n'
-                          'Кейинроқ уриниб кўринг ёки ҳайдовчига мурожаат қилинг.',
+                          context.trMsg('ent_list_empty',
+                              params: {'driver': widget.driverName}),
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey.shade700),
                         ),
@@ -163,9 +169,9 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text(
-                            'Wi‑Fi да фильмни юклаб олинг, сафарда интернетсиз томоша қилинг.',
-                            style: TextStyle(fontSize: 12, height: 1.35),
+                          child: Text(
+                            context.tr('ent_wifi_hint'),
+                            style: const TextStyle(fontSize: 12, height: 1.35),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -191,7 +197,9 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                                 [
                                   if (v.durationLabel.isNotEmpty)
                                     v.durationLabel,
-                                  cached ? 'Офлайн тайёр' : 'Онлайн кўрилади',
+                                  cached
+                                      ? context.tr('ent_offline_ready')
+                                      : context.tr('ent_online_only'),
                                 ].join(' · '),
                               ),
                               trailing: Row(
@@ -208,7 +216,8 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                                         : IconButton(
                                             icon: const Icon(
                                                 Icons.download_outlined),
-                                            tooltip: 'Wi‑Fi да юклаб олиш',
+                                            tooltip:
+                                                context.tr('ent_wifi_download'),
                                             onPressed: () => _downloadVideo(v),
                                           ),
                                   const Icon(Icons.play_circle_fill),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../screens/edit_ad_screen.dart';
@@ -135,7 +136,7 @@ class MyAdActions extends StatelessWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${context.tr('error')}: $e'),
+              content: Text(userErrorMessage(context, e)),
               backgroundColor: Colors.red,
             ),
           );

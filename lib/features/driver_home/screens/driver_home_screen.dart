@@ -62,7 +62,8 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   }
 
   void _showPassengerCancelledSnack() {
-    _showSnack('⚠️ Йўловчи сафарни бекор қилди', Colors.orange);
+    if (!mounted) return;
+    _showSnack(context.tr('drv_passenger_cancelled'), Colors.orange);
   }
 
   @override
@@ -94,17 +95,17 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: const [
-          Text('🎉', style: TextStyle(fontSize: 48)),
-          SizedBox(height: 12),
-          Text('БЎШ ЖОЙ ҚОЛМАДИ!',
-              style: TextStyle(
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('🎉', style: TextStyle(fontSize: 48)),
+          const SizedBox(height: 12),
+          Text(context.tr('drv_seats_full_title'),
+              style: const TextStyle(
                   fontSize: AppText.titleMedium,
                   fontWeight: FontWeight.bold),
               textAlign: TextAlign.center),
-          SizedBox(height: 8),
-          Text('ҲАРАКАТНИ БОШЛАШИНГИЗ МУМКИН!',
-              style: TextStyle(
+          const SizedBox(height: 8),
+          Text(context.tr('drv_seats_full_body'),
+              style: const TextStyle(
                   fontSize: AppText.bodyMedium,
                   color: AppColors.primaryText,
                   fontWeight: FontWeight.w600),
@@ -130,10 +131,10 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     final result = await c.startLocalWork();
     if (!mounted) return;
     if (!result.success && result.error != null) {
-      _showSnack(result.error!, Colors.orange);
+      _showSnack(context.trMsg(result.error!), Colors.orange);
       return;
     }
-    _showSnack('🟢 Иш бошланди — онлайн', _green);
+    _showSnack(context.tr('drv_work_started'), _green);
   }
 
   Future<void> _onEndWork() async {
@@ -141,10 +142,10 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     final ok = await c.endWorkDay();
     if (!mounted) return;
     if (!ok) {
-      _showSnack('⚠️ Аввал сафарни якунланг ёки тарк этинг', Colors.orange);
+      _showSnack(context.tr('drv_finish_or_leave_first'), Colors.orange);
       return;
     }
-    _showSnack('⚫ Иш тугатилди — оффлайн', Colors.grey.shade700);
+    _showSnack(context.tr('drv_work_ended'), Colors.grey.shade700);
   }
 
   Future<void> _onCompleteNonLocalRide() async {
@@ -154,7 +155,9 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     final fare = await c.finishRide(fare: result.fare, cashPaid: result.cashPaid);
     if (!mounted) return;
     _showSnack(
-        '✅ Сафар якунланди! +${FareCalculator.format(fare)} сўм', _green);
+        context.trMsg('drv_trip_done_fare',
+            params: {'amount': FareCalculator.format(fare)}),
+        _green);
     _maybeShowSettlementNotice(c);
   }
 
@@ -167,7 +170,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
       return;
     }
     _showSnack(
-      settlement.userMessage!,
+      context.trMsg(settlement.userMessage!),
       settlement.status == TripChangeSettlementStatus.deferred
           ? Colors.orange
           : Colors.red,
@@ -216,7 +219,9 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     }
     if (!mounted) return true;
     _showSnack(
-        '✅ Сафар якунланди! +${FareCalculator.format(earned)} сўм', _green);
+        context.trMsg('drv_trip_done_fare',
+            params: {'amount': FareCalculator.format(earned)}),
+        _green);
     // Server hisoblagan naqd ulush (hamyon balansi intent'dan kam bo'lishi
     // mumkin) — haydovchi kam olgan bo'lsa ogohlantiramiz.
     final done = c.lastLocalComplete;
@@ -239,7 +244,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     final result = await c.abandonRide();
     if (!mounted) return result.success;
     if (!result.success && result.error != null) {
-      _showSnack(result.error!, Colors.orange);
+      _showSnack(context.trMsg(result.error!), Colors.orange);
     }
     return result.success;
   }

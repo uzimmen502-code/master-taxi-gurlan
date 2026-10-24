@@ -53,7 +53,7 @@ void main() {
       expect(groups, hasLength(2));
       final standalone = groups.firstWhere((g) => g.orderId.isEmpty);
       expect(standalone.messages.single.id, 'r');
-      expect(standalone.moduleLabel, 'Буюртма');
+      expect(standalone.moduleLabelKey, 'order');
     });
 
     test('иккита orderId сиз хабар — иккита алоҳида карта', () {

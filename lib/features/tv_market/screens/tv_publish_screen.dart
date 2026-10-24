@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../../../repositories/user_repository.dart';
 import '../models/tv_ad_prefill.dart';
@@ -539,7 +540,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Auth required')),
+        SnackBar(content: Text(context.tr('err_auth'))),
       );
       return;
     }
@@ -698,7 +699,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Auth required')),
+        SnackBar(content: Text(context.tr('err_auth'))),
       );
       return;
     }
@@ -902,13 +903,13 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           ? (mounted ? context.tr('tv_ad_shop_item_invalid') : '')
           : e.code == 'failed-precondition' && e.message == 'insufficient_balance'
               ? (mounted ? context.tr('tv_ad_insufficient_balance') : '')
-              : 'Хатолик: ${e.message ?? e.code}';
+              : (mounted ? userErrorMessage(context, e) : '');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Хатолик: $e')),
+        SnackBar(content: Text(userErrorMessage(context, e))),
       );
     } finally {
       // Клип яратилмаган бўлса — юкланган видео/постер Storage'да
@@ -1059,7 +1060,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   ? 'tv_publish_price_product'
                   : 'tv_publish_price',
             ),
-            suffixText: 'сўм',
+            suffixText: context.tr('currency_sum'),
             counterText: '',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),

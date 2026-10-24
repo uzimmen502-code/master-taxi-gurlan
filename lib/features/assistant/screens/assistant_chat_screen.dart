@@ -313,7 +313,9 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     final b = StringBuffer();
     if (_convTitle.isNotEmpty) b.writeln('# $_convTitle\n');
     for (final m in _lastMessages) {
-      b.writeln(m.isUser ? '**Сиз:**' : '**AVA ёрдамчиси:**');
+      b.writeln(m.isUser
+          ? '**${context.tr('passenger_map_you')}:**'
+          : '**${context.tr('assistant_title')}:**');
       b.writeln(m.text.trim());
       b.writeln();
     }

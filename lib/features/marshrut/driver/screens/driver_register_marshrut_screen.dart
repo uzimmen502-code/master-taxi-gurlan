@@ -427,7 +427,7 @@ class _DriverRegisterMarshrutViewState
   }
 
   Widget _priceSection(MarshrutRegisterController c) {
-    final titleWidget = _sectionTitle('Бир ўрин нархи');
+    final titleWidget = _sectionTitle(context.tr('mrt_seat_price_title'));
 
     if (c.priceLoading) {
       return Column(
@@ -474,7 +474,7 @@ class _DriverRegisterMarshrutViewState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Бу йўналиш нархи белгиланган — фақат админ ўзгартиради',
+                        context.tr('mrt_route_price_locked'),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -496,8 +496,7 @@ class _DriverRegisterMarshrutViewState
         titleWidget,
         const SizedBox(height: 4),
         Text(
-          'Сиз бу йўналишда биринчи ҳайдовчисиз — бир ўрин нархини белгиланг. '
-          'Кейинги ҳайдовчилар учун шу нарх амал қилади.',
+          context.tr('mrt_first_driver_set_price'),
           style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
         ),
         const SizedBox(height: 8),
@@ -514,9 +513,9 @@ class _DriverRegisterMarshrutViewState
             keyboardType: TextInputType.number,
             onChanged: (v) => c.setPriceInput(int.tryParse(v.trim())),
             decoration: InputDecoration(
-              hintText: 'Масалан: 6000',
+              hintText: context.tr('mrt_price_hint'),
               prefixIcon: const Icon(Icons.payments_outlined, color: AppColors.primaryText),
-              suffixText: 'сўм',
+              suffixText: context.tr('currency_sum'),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,

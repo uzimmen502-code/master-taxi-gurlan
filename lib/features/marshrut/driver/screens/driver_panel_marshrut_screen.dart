@@ -705,7 +705,8 @@ class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Нарх:', style: TextStyle(color: Colors.grey.shade700)),
+              Text(context.tr('mrt_fare_label'),
+                  style: TextStyle(color: Colors.grey.shade700)),
               Text('${formatMoney(_fare)}',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
@@ -718,8 +719,8 @@ class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
             onChanged: (v) =>
                 setState(() => _cash = int.tryParse(v.trim()) ?? 0),
             decoration: InputDecoration(
-              labelText: 'Йўловчи берган нақд',
-              suffixText: 'сўм',
+              labelText: context.tr('mrt_cash_given_label'),
+              suffixText: context.tr('currency_sum'),
               border: const OutlineInputBorder(),
               isDense: true,
             ),
@@ -739,8 +740,8 @@ class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Қайтим ${formatMoney(change)} — йўловчи ҳисобига '
-                      'ўтказилади.',
+                      context.trMsg('mrt_change_to_passenger_wallet',
+                          params: {'amount': formatMoney(change)}),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
@@ -917,7 +918,7 @@ class _WaitingPlaceholder extends StatelessWidget {
       child: Column(children: [
         const Text('⏳', style: TextStyle(fontSize: 36)),
         const SizedBox(height: 10),
-        Text('Йўловчи кутилмоқда...',
+        Text(context.tr('driver_map_waiting_passenger'),
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: AppText.bodyMedium,

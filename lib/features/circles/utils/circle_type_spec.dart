@@ -5,13 +5,15 @@ import 'school_normalizer.dart';
 class CircleFieldSpec {
   const CircleFieldSpec({
     required this.key,
-    required this.label,
+    required this.labelKey,
     this.number = false,
     this.required = true,
   });
 
   final String key;
-  final String label;
+
+  /// l10n kaliti (ekranda `context.tr(labelKey)`); `key` — ma'lumot kaliti.
+  final String labelKey;
   final bool number;
   final bool required;
 }
@@ -22,16 +24,18 @@ class CircleTypeSpec {
   const CircleTypeSpec({
     required this.type,
     required this.emoji,
-    required this.title,
-    required this.subtitle,
+    required this.titleKey,
+    required this.subtitleKey,
     required this.identityFields,
     required this.profileFields,
   });
 
   final CircleType type;
   final String emoji;
-  final String title;
-  final String subtitle;
+
+  /// l10n kalitlari (ekranda `context.tr(titleKey)` / `context.tr(subtitleKey)`).
+  final String titleKey;
+  final String subtitleKey;
 
   /// Davrani aniqlovchi (kalit + meta) majburiy maydonlar.
   final List<CircleFieldSpec> identityFields;
@@ -114,51 +118,54 @@ class CircleTypeSpec {
   static const classmates = CircleTypeSpec(
     type: CircleType.classmates,
     emoji: '🎓',
-    title: 'Синфдошларим',
-    subtitle: 'Мактаб + битирган йил бўйича давра',
+    titleKey: 'circ_classmates_title',
+    subtitleKey: 'circ_classmates_subtitle',
     identityFields: [
-      CircleFieldSpec(key: 'school', label: 'Мактаб * (масалан: 1-мактаб)'),
+      CircleFieldSpec(key: 'school', labelKey: 'circ_f_school'),
       CircleFieldSpec(
-          key: 'year', label: 'Битирган йил * (масалан: 2008)', number: true),
+          key: 'year', labelKey: 'circ_f_grad_year_2008', number: true),
     ],
     profileFields: [
-      CircleFieldSpec(key: 'classLabel', label: 'Синф (масалан: А)', required: false),
-      CircleFieldSpec(key: 'city', label: 'Ҳозирги шаҳар', required: false),
-      CircleFieldSpec(key: 'job', label: 'Иш жойи', required: false),
+      CircleFieldSpec(
+          key: 'classLabel', labelKey: 'circ_f_class_label', required: false),
+      CircleFieldSpec(key: 'city', labelKey: 'circ_f_city', required: false),
+      CircleFieldSpec(key: 'job', labelKey: 'circ_f_job', required: false),
     ],
   );
 
   static const coursemates = CircleTypeSpec(
     type: CircleType.coursemates,
     emoji: '🎓',
-    title: 'Курсдошларим',
-    subtitle: 'Университет + факультет + гуруҳ бўйича',
+    titleKey: 'circ_coursemates_title',
+    subtitleKey: 'circ_coursemates_subtitle',
     identityFields: [
-      CircleFieldSpec(key: 'university', label: 'Университет *'),
-      CircleFieldSpec(key: 'faculty', label: 'Факультет *'),
-      CircleFieldSpec(key: 'group', label: 'Гуруҳ *'),
+      CircleFieldSpec(key: 'university', labelKey: 'circ_f_university'),
+      CircleFieldSpec(key: 'faculty', labelKey: 'circ_f_faculty'),
+      CircleFieldSpec(key: 'group', labelKey: 'circ_f_group'),
       CircleFieldSpec(
-          key: 'year', label: 'Битирган йил * (масалан: 2015)', number: true),
+          key: 'year', labelKey: 'circ_f_grad_year_2015', number: true),
     ],
     profileFields: [
-      CircleFieldSpec(key: 'course', label: 'Курс', required: false),
-      CircleFieldSpec(key: 'city', label: 'Ҳозирги шаҳар', required: false),
-      CircleFieldSpec(key: 'job', label: 'Иш жойи', required: false),
+      CircleFieldSpec(key: 'course', labelKey: 'circ_f_course', required: false),
+      CircleFieldSpec(key: 'city', labelKey: 'circ_f_city', required: false),
+      CircleFieldSpec(key: 'job', labelKey: 'circ_f_job', required: false),
     ],
   );
 
   static const colleagues = CircleTypeSpec(
     type: CircleType.colleagues,
     emoji: '💼',
-    title: 'Ҳамкасбларим',
-    subtitle: 'Компания (+ бўлим) бўйича давра',
+    titleKey: 'circ_colleagues_title',
+    subtitleKey: 'circ_colleagues_subtitle',
     identityFields: [
-      CircleFieldSpec(key: 'company', label: 'Компания *'),
-      CircleFieldSpec(key: 'department', label: 'Бўлим', required: false),
+      CircleFieldSpec(key: 'company', labelKey: 'circ_f_company'),
+      CircleFieldSpec(
+          key: 'department', labelKey: 'circ_f_department', required: false),
     ],
     profileFields: [
-      CircleFieldSpec(key: 'position', label: 'Лавозим', required: false),
-      CircleFieldSpec(key: 'email', label: 'Email', required: false),
+      CircleFieldSpec(
+          key: 'position', labelKey: 'circ_f_position', required: false),
+      CircleFieldSpec(key: 'email', labelKey: 'circ_f_email', required: false),
     ],
   );
 }

@@ -1,8 +1,10 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 
@@ -46,9 +48,9 @@ class _DeviceTransferApproveScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            approve
-                ? 'Yangi qurilmaga ruxsat berildi. 24 soat pul yechish cheklanadi.'
-                : 'So‘rov rad etildi.',
+            context.tr(approve
+                ? 'ob_dev_approve_done'
+                : 'ob_dev_approve_rejected_done'),
             style: TextStyle(color: approve ? AppColors.onPrimary : null),
           ),
           backgroundColor: approve ? AppColors.primary : Colors.red.shade700,
@@ -58,13 +60,13 @@ class _DeviceTransferApproveScreenState
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = firebaseFunctionsUserMessage(e);
+        _error = context.tr(onboardingErrorKey(e));
         _busy = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(context, e);
         _busy = false;
       });
     }
@@ -75,7 +77,7 @@ class _DeviceTransferApproveScreenState
     final label = widget.newDeviceLabel.trim();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Qurilma almashtirish'),
+        title: Text(context.tr('ob_dev_approve_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
@@ -89,15 +91,15 @@ class _DeviceTransferApproveScreenState
             const SizedBox(height: 20),
             Text(
               label.isEmpty
-                  ? 'Boshqa qurilma shu raqam bilan kirish so‘ramoqda.'
-                  : 'Yangi qurilma ($label) shu raqam bilan kirish so‘ramoqda.',
+                  ? context.tr('ob_dev_approve_req_nolabel')
+                  : context.trMsg('ob_dev_approve_req_label',
+                      params: {'label': label}),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
-              'Faqat o‘zingiz so‘ragan bo‘lsangiz «Ruxsat berish»ni bosing. '
-              'Tasdiqlangandan keyin yangi qurilmada 24 soat pul yechish cheklanadi.',
+              context.tr('ob_dev_approve_hint'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4),
             ),
@@ -125,12 +127,12 @@ class _DeviceTransferApproveScreenState
                         color: AppColors.onPrimary,
                       ),
                     )
-                  : const Text('Ruxsat berish'),
+                  : Text(context.tr('ob_dev_approve_allow')),
             ),
             const SizedBox(height: 10),
             OutlinedButton(
               onPressed: _busy ? null : () => _respond(false),
-              child: const Text('Rad etish'),
+              child: Text(context.tr('ob_dev_approve_reject')),
             ),
           ],
         ),

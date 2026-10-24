@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/pending_commerce_orders.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/bread_extra_product.dart';
 import '../../../models/bread_product.dart';
 import '../../../models/order_model.dart';
@@ -460,7 +461,8 @@ class BreadController extends ChangeNotifier {
   int get cashDuePreview => grandTotal - walletApplyAmount;
 
   // ─── Buyurtma юбориш ────────────────────────────────────────────────
-  /// Натижа: `(success: bool, isOffline: bool, error: String?)`
+  /// Натижа: `(success: bool, isOffline: bool, error: String?)`.
+  /// `error` — хато матни эмас, l10n КАЛИТИ (UI: `context.trMsg(error)`).
   Future<({bool success, bool isOffline, String? error})> sendOrder({
     required String name,
     required String phone,
@@ -501,7 +503,7 @@ class BreadController extends ChangeNotifier {
         notifyListeners();
         return (success: true, isOffline: true, error: null);
       } catch (e) {
-        return (success: false, isOffline: false, error: 'Хатолик: $e');
+        return (success: false, isOffline: false, error: userErrorKey(e));
       }
     }
 
@@ -521,14 +523,13 @@ class BreadController extends ChangeNotifier {
         return (
           success: false,
           isOffline: false,
-          error:
-              'Тўлов етишмади. Кошелёк ва нақд миқдорини текширинг (сервер талаби).',
+          error: 'bread_error_insufficient_cash',
         );
       }
-      final msg = _mapFunctionError(e.code, e.message);
+      final msg = _mapFunctionError(e);
       return (success: false, isOffline: false, error: msg);
     } catch (e) {
-      return (success: false, isOffline: false, error: 'Хатолик: $e');
+      return (success: false, isOffline: false, error: userErrorKey(e));
     }
   }
 
@@ -571,20 +572,22 @@ class BreadController extends ChangeNotifier {
     return hash.toRadixString(16).padLeft(16, '0');
   }
 
-  String _mapFunctionError(String code, String? message) {
-    switch (code) {
+  /// Сервер хатоси → l10n КАЛИТИ. Сервер матни (`e.message`) фойдаланувчига
+  /// чиқмайди (у ё инглизча, ё фақат кирилл тилида).
+  String _mapFunctionError(FirebaseFunctionsException e) {
+    switch (e.code) {
       case 'unauthenticated':
-        return 'Буюртма учун тизимга кириш талаб этилади';
+        return 'auth_required_to_order';
       case 'permission-denied':
-        return 'Телефон рақамингиз тасдиқланмаган';
+        return 'bread_error_phone_unverified';
       case 'not-found':
-        return 'Фойдаланувчи топилмади. Профилингизни текширинг';
+        return 'bread_error_user_not_found';
       case 'invalid-argument':
-        return 'Буюртма маълумотлари нотўғри';
+        return 'bread_error_order_invalid';
       case 'failed-precondition':
-        return message ?? 'Буюртма юборилмади. Қайта уриниб кўринг';
+        return 'bread_error_order_failed';
       default:
-        return 'Хатолик: ${message ?? code}';
+        return userErrorKey(e);
     }
   }
 

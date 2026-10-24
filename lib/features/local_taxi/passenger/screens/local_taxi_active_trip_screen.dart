@@ -32,10 +32,16 @@ class LocalTaxiActiveTripScreen extends StatefulWidget {
     super.key,
     required this.tripId,
     this.initialTrip,
+    this.tripStreamFactory,
   });
 
   final String tripId;
   final ActiveTrip? initialTrip;
+
+  /// Faqat testlar uchun: safar hujjati oqimini Firestore'siz berish
+  /// (xato / «Qayta urinish» holatlarini tekshirish).
+  final Stream<DocumentSnapshot<Map<String, dynamic>>> Function()?
+      tripStreamFactory;
 
   @override
   State<LocalTaxiActiveTripScreen> createState() =>
@@ -56,16 +62,40 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
 
   // Oqimlar bir marta yaratiladi — `build` ichida yaratilsa, har haydovchi
   // GPS yangilanishidagi setState yangi listener ochardi (ortiqcha read).
-  late final Stream<DocumentSnapshot<Map<String, dynamic>>> _tripStream;
+  // «Qayta urinish» (`_retryTripStream`) oqimni qayta ochgani uchun `final` emas.
+  late Stream<DocumentSnapshot<Map<String, dynamic>>> _tripStream;
   Stream<int>? _balanceStream;
+
+  /// Xarita markazi — na olib ketish nuqtasi, na haydovchi, na yo'lovchi
+  /// joylashuvi ma'lum bo'lmaganda (davlat ko'rinishi). Aks holda ekran
+  /// spinnerda qolib, qo'ng'iroq va bekor qilish tugmalari ko'rinmasdi.
+  static const _fallbackTarget = LatLng(41.3775, 64.5853);
+  static const _fallbackZoom = 5.6;
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> _openTripStream() =>
+      widget.tripStreamFactory?.call() ??
+      FirebaseFirestore.instance
+          .collection('trips')
+          .doc(widget.tripId)
+          .snapshots();
+
+  // Yangi oqim bilan StreamBuilder holati (eski xato ham) tozalansin: `key`
+  // o'zgarmasa, `AsyncSnapshot` xatoni saqlab «Qayta urinish» bosilgandan keyin
+  // ham birinchi hodisagacha xato ekranini ko'rsatib turardi.
+  int _tripStreamGen = 0;
+
+  void _retryTripStream() {
+    if (!mounted) return;
+    setState(() {
+      _tripStream = _openTripStream();
+      _tripStreamGen++;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    _tripStream = FirebaseFirestore.instance
-        .collection('trips')
-        .doc(widget.tripId)
-        .snapshots();
+    _tripStream = _openTripStream();
     _trip = widget.initialTrip;
     _loadPassengerUid();
     _initPassengerPosition();
@@ -187,9 +217,9 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
           children: [
             Text(arrivedBody),
             const SizedBox(height: 12),
-            _infoRow('👤', name),
-            _infoRow('🚗', car),
-            _infoRow('🔢', plate),
+            _infoRow(Icons.person_outline, name),
+            _infoRow(Icons.directions_car_outlined, car),
+            _infoRow(Icons.pin_outlined, plate),
           ],
         ),
         actions: [
@@ -226,11 +256,13 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     } catch (_) {}
   }
 
-  Widget _infoRow(String emoji, String text) => Padding(
+  Widget _infoRow(IconData icon, String text) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 18)),
+            ExcludeSemantics(
+              child: Icon(icon, size: 20, color: LocalTaxiColors.textMuted),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(text, style: const TextStyle(fontSize: 15)),
@@ -238,6 +270,53 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
           ],
         ),
       );
+
+  /// Safar hujjatini o'qib bo'lmaganda (xato / oflayn / topilmadi) — chiqish
+  /// yo'li bor ekran: «Qayta urinish» va «Orqaga». Oldin bu holatda cheksiz
+  /// spinner turardi.
+  Widget _tripLoadFailure(
+    BuildContext context, {
+    required String messageKey,
+    required bool canRetry,
+  }) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  size: 48, color: LocalTaxiColors.textMuted),
+              const SizedBox(height: 12),
+              Text(
+                context.tr(messageKey),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 15, height: 1.35),
+              ),
+              const SizedBox(height: 20),
+              if (canRetry)
+                FilledButton(
+                  onPressed: _retryTripStream,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: LocalTaxiColors.primary,
+                    foregroundColor: LocalTaxiColors.onPrimary,
+                    minimumSize: const Size(160, 48),
+                  ),
+                  child: Text(context.tr('err_retry')),
+                ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                style: TextButton.styleFrom(minimumSize: const Size(160, 48)),
+                child: Text(context.tr('back')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _animateCamera() async {
     if (_driverLatLng == null) return;
@@ -317,7 +396,8 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                 : () => _callDriver(trip.driverPhone),
             style: FilledButton.styleFrom(
               backgroundColor: LocalTaxiColors.primary,
-              visualDensity: VisualDensity.compact,
+              foregroundColor: LocalTaxiColors.onPrimary,
+              minimumSize: const Size(0, 48),
             ),
             icon: const Icon(Icons.call, size: 18),
             label: Text(context.tr('trip_call_driver')),
@@ -353,17 +433,40 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '👤 ${trip.driverName}',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                const ExcludeSemantics(
+                  child: Icon(Icons.person_outline,
+                      size: 20, color: LocalTaxiColors.textMuted),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    trip.driverName,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
-            Text(
-              '🚗 ${trip.driverCar}  ${trip.driverPlate}',
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            Row(
+              children: [
+                const ExcludeSemantics(
+                  child: Icon(Icons.directions_car_outlined,
+                      size: 20, color: LocalTaxiColors.textMuted),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${trip.driverCar}  ${trip.driverPlate}',
+                    style:
+                        TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  ),
+                ),
+              ],
             ),
             if (estimatedPrice > 0) ...[
               const SizedBox(height: 8),
@@ -446,10 +549,14 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Widget _buildCancelButton(BuildContext context) {
     return TextButton.icon(
       onPressed: () => _confirmCancel(context),
-      icon: const Icon(Icons.cancel_outlined, color: LocalTaxiColors.danger, size: 18),
+      style: TextButton.styleFrom(
+        foregroundColor: LocalTaxiColors.danger,
+        minimumSize: const Size(0, 48),
+      ),
+      icon: const Icon(Icons.cancel_outlined, size: 18),
       label: Text(
         context.tr('cancel_trip'),
-        style: const TextStyle(color: Colors.red),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -719,10 +826,30 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     return Scaffold(
       backgroundColor: LocalTaxiColors.bg,
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        key: ValueKey<int>(_tripStreamGen),
         stream: _tripStream,
         builder: (context, docSnap) {
-          if (!docSnap.hasData || !docSnap.data!.exists) {
+          if (docSnap.hasError) {
+            debugPrint('localTrip stream: ${docSnap.error}');
+            return _tripLoadFailure(
+              context,
+              messageKey: 'local_trip_load_failed',
+              canRetry: true,
+            );
+          }
+          if (!docSnap.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (!docSnap.data!.exists) {
+            // Kesh orqali kelgan «yo'q» — aslida oflayn; serverdan kelgani —
+            // safar haqiqatan topilmadi (o'chirilgan / ruxsat yo'q).
+            final offline = docSnap.data!.metadata.isFromCache;
+            return _tripLoadFailure(
+              context,
+              messageKey:
+                  offline ? 'local_trip_load_failed' : 'local_trip_not_found',
+              canRetry: offline,
+            );
           }
 
           final trip = ActiveTrip.fromDoc(docSnap.data!);
@@ -832,15 +959,16 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
             );
           }
 
-          final LatLng? initialTarget = trip.fromLat != 0 || trip.fromLng != 0
+          // Olib ketish nuqtasi → haydovchi → yo'lovchi joylashuvi → davlat
+          // ko'rinishi. Hech biri bo'lmasa ham ekran ochiladi (oldin cheksiz
+          // spinner: qo'ng'iroq va bekor qilish tugmalari ko'rinmasdi).
+          final LatLng? knownTarget = trip.fromLat != 0 || trip.fromLng != 0
               ? LatLng(trip.fromLat, trip.fromLng)
-              : _driverLatLng;
-
-          if (initialTarget == null) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
+              : (_driverLatLng ??
+                  (_myPosition == null
+                      ? null
+                      : LatLng(_myPosition!.latitude, _myPosition!.longitude)));
+          final initialTarget = knownTarget ?? _fallbackTarget;
 
           return Stack(
             children: [
@@ -848,7 +976,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                 child: GoogleMap(
                   initialCameraPosition: CameraPosition(
                     target: initialTarget,
-                    zoom: 14,
+                    zoom: knownTarget == null ? _fallbackZoom : 14,
                   ),
                   onMapCreated: _mapController.complete,
                   markers: _buildMarkers(trip),
@@ -893,18 +1021,28 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                 bottom: 0,
                 child: SafeArea(
                   top: false,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (trip.driverPhone.isNotEmpty) _phonePanel(trip),
-                      _tripInfoPanel(
-                        context,
-                        trip,
-                        displayFare,
-                        statusText,
-                        walletSection: walletSection,
+                  // Panellar balandligi ekranning 62 % idan oshmaydi va
+                  // ichida aylanadi: kichik ekran / katta shrift / klaviaturada
+                  // «Bekor qilish» tugmasi kesilmasin va xarita to'liq yopilmasin.
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (trip.driverPhone.isNotEmpty) _phonePanel(trip),
+                          _tripInfoPanel(
+                            context,
+                            trip,
+                            displayFare,
+                            statusText,
+                            walletSection: walletSection,
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/relative_person.dart';
 import '../../../models/relative_photo.dart';
 import '../../../repositories/relatives_repository.dart';
-import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
 
 /// 📷 Qarindosh fotoalbomi — bir qarindoshga bir nechta rasm.
@@ -45,8 +45,10 @@ class _RelativeAlbumScreenState extends State<RelativeAlbumScreen> {
         );
       }
     } catch (e) {
-      _snack(RelativesL10n.trParams(
-          context, 'rel_photo_upload_error', {'error': '$e'}));
+      if (mounted) {
+        _snack(userErrorMessage(context, e,
+            fallbackKey: 'rel_fix_photo_upload_failed'));
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }

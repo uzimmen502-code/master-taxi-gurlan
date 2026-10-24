@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/news_item.dart';
 import '../../../models/order_news_group.dart';
 import '../../../models/order_model.dart';
@@ -16,18 +17,18 @@ class OrderNewsDetailScreen extends StatelessWidget {
 
   static const _green = AppColors.primaryText;
 
-  String _statusLabel(String s) {
+  String _statusLabel(BuildContext context, String s) {
     switch (s) {
       case 'new':
-        return '🔵 Юборилди';
+        return context.tr('news_dt_new');
       case 'accepted':
-        return '🟡 Қабул';
+        return context.tr('news_dt_accepted');
       case 'ready':
-        return '🟠 Тайёр';
+        return context.tr('news_dt_ready');
       case 'delivered':
-        return '🟢 Етказилди';
+        return context.tr('news_dt_delivered');
       case 'rejected':
-        return '🔴 Рад';
+        return context.tr('news_dt_rejected');
       default:
         return s;
     }
@@ -57,7 +58,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: Text(group.moduleLabel),
+        title: Text(context.tr(group.moduleLabelKey)),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
@@ -84,13 +85,13 @@ class OrderNewsDetailScreen extends StatelessWidget {
                   child: Text(
                     group.messages.isNotEmpty
                         ? group.messages.first.body
-                        : 'Чек маълумоти топилмади',
+                        : context.tr('news_receipt_not_found'),
                     style: const TextStyle(fontSize: 13, height: 1.4),
                   ),
                 ),
               const SizedBox(height: 16),
               Text(
-                'Хабарлар тарихи',
+                context.tr('news_history_title'),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -98,7 +99,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              ...group.messages.map(_messageTile),
+              ...group.messages.map((n) => _messageTile(context, n)),
             ],
           );
         },
@@ -106,7 +107,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _messageTile(NewsItem n) {
+  Widget _messageTile(BuildContext context, NewsItem n) {
     final color = _statusColor(n.orderStatus);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -123,7 +124,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  _statusLabel(n.orderStatus),
+                  _statusLabel(context, n.orderStatus),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,

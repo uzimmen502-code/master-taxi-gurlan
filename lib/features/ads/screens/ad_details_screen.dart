@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
@@ -212,7 +213,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
       if (!mounted) return;
       final msg = e.code == 'resource-exhausted'
           ? context.tr('ad_report_limit')
-          : (e.message ?? context.trMsg('error_generic|${e.code}'));
+          : userErrorMessage(context, e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: Colors.red),
       );
@@ -220,7 +221,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.trMsg('error_generic|$e')),
+          content: Text(userErrorMessage(context, e)),
           backgroundColor: Colors.red,
         ),
       );

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
@@ -253,11 +254,10 @@ class _RelativesScreenState extends State<RelativesScreen>
       return switch (e.code) {
         'permission-denied' => context.tr('rel_delete_denied'),
         'unavailable' => context.tr('rel_delete_offline'),
-        _ => RelativesL10n.trParams(
-            context, 'rel_delete_error', {'error': e.message ?? e.code}),
+        _ => userErrorMessage(context, e, fallbackKey: 'rel_fix_delete_failed'),
       };
     }
-    return RelativesL10n.trParams(context, 'rel_delete_error', {'error': '$e'});
+    return userErrorMessage(context, e, fallbackKey: 'rel_fix_delete_failed');
   }
 
   Future<void> _delete(RelativePerson p) async {
@@ -561,7 +561,14 @@ class _RelativesScreenState extends State<RelativesScreen>
     ].join('|');
     if (sig == _reminderSig) return;
     _reminderSig = sig;
-    unawaited(_scheduler.sync(people: people, events: events));
+    unawaited(_scheduler.sync(
+      people: people,
+      events: events,
+      // Matnlar hozir (kontekst tirik paytda) tarjima qilinadi.
+      tomorrowTemplate: context.tr('rel_fix_remind_tomorrow'),
+      birthdayBodyTemplate: context.tr('rel_fix_remind_birthday_body'),
+      importantDateBody: context.tr('rel_fix_remind_important'),
+    ));
   }
 
   List<_Reminder> _buildReminders(

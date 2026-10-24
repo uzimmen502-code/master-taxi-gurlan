@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n_extension.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/intercity_places.dart';
 import 'mfy_field.dart';
@@ -124,11 +125,11 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
   Widget build(BuildContext context) {
     final color = widget.isMarshrut ? _green : _blue;
     final title = widget.isMarshrut
-        ? 'Маршрут такси — маршрутингиз'
-        : 'Шаҳарлараро — йўналишингиз';
+        ? context.tr('drvapp_route_title_marshrut')
+        : context.tr('drvapp_route_title_intercity');
     final subtitle = widget.isMarshrut
-        ? 'Ариза юборишдан олдин қайси йўналишда ишлайсиз?'
-        : 'Ариза юборишдан олдин қайси шаҳарлар орасида ишлайсиз?';
+        ? context.tr('drvapp_route_sub_marshrut')
+        : context.tr('drvapp_route_sub_intercity');
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -156,7 +157,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
             if (widget.isMarshrut) ...[
               MfyField(
                 ctrl: _fromCtrl,
-                hint: 'Қаердан (МФЙ)',
+                hint: context.tr('drvapp_from_mfy_hint'),
                 iconColor: AppColors.primaryText,
                 showSug: _showFromSug,
                 query: _fromQuery,
@@ -175,7 +176,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               const SizedBox(height: 12),
               MfyField(
                 ctrl: _toCtrl,
-                hint: 'Қаерга (МФЙ)',
+                hint: context.tr('drvapp_to_mfy_hint'),
                 iconColor: AppColors.primaryText,
                 showSug: _showToSug,
                 query: _toQuery,
@@ -194,7 +195,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
             ] else ...[
               _intercityField(
                 ctrl: _fromCtrl,
-                hint: 'Қаердан (шаҳар)',
+                hint: context.tr('drvapp_from_city_hint'),
                 color: AppColors.primaryText,
                 showSug: _showFromSug,
                 query: _fromQuery,
@@ -208,7 +209,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               const SizedBox(height: 12),
               _intercityField(
                 ctrl: _toCtrl,
-                hint: 'Қаерга (шаҳар)',
+                hint: context.tr('drvapp_to_city_hint'),
                 color: AppColors.primaryText,
                 showSug: _showToSug,
                 query: _toQuery,
@@ -226,7 +227,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               child: ElevatedButton.icon(
                 onPressed: _valid ? _submit : null,
                 icon: const Icon(Icons.check, size: 18),
-                label: const Text('Давом этиш'),
+                label: Text(context.tr('ob_pre_continue')),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: color,
                   foregroundColor: AppColors.onPrimary,
@@ -239,7 +240,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Бекор қилиш'),
+              child: Text(context.tr('cancel')),
             ),
           ],
         ),

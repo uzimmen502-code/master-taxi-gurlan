@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -33,6 +35,7 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
   // рўйхат spinner билан «милтилламасин».
   Stream<List<NewsItem>>? _stream;
   String _uid = '';
+  String _role = 'all';
   Set<String> _hidden = <String>{};
   StreamSubscription<Set<String>>? _dismissedSub;
 
@@ -59,7 +62,17 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
     });
     setState(() {
       _uid = uid;
+      _role = role;
       _stream = stream;
+    });
+  }
+
+  /// Хато бўлса — фақат янгиликлар оқимини қайта очади.
+  void _retry() {
+    final repo = context.read<NewsRepository>();
+    setState(() {
+      _stream = repo.watchBroadcastNews(
+          audiences: ['all', _role], userId: _uid, limit: 50);
     });
   }
 
@@ -88,10 +101,7 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError && !snap.hasData) {
-          return Center(
-            child: Text('Хатолик: ${snap.error}',
-                style: const TextStyle(color: Colors.red)),
-          );
+          return LoadErrorView(error: snap.error!, onRetry: _retry);
         }
         final items = (snap.data ?? const <NewsItem>[])
             .where((n) => !_hidden.contains(n.id))
@@ -120,7 +130,7 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
         children: [
           Icon(Icons.campaign_outlined, color: Colors.grey.shade400, size: 48),
           const SizedBox(height: 12),
-          Text('Янги хабар йўқ',
+          Text(context.tr('news_general_empty'),
               style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -214,23 +224,27 @@ class _GeneralNewsTabState extends State<GeneralNewsTab>
   String _labelFor(String cat) {
     switch (cat) {
       case 'emergency':
-        return 'ШОШИЛИНЧ';
+        return context.tr('news_cat_urgent');
       case 'warning':
-        return 'Огоҳлантириш';
+        return context.tr('news_cat_warning');
       case 'promo':
-        return 'Акция';
+        return context.tr('news_cat_promo');
       case 'update':
-        return 'Янгилaниш';
+        return context.tr('news_cat_update');
       default:
-        return 'Маълумот';
+        return context.tr('restaurants_info');
     }
   }
 
   String _ago(DateTime t) {
     final diff = DateTime.now().difference(t);
-    if (diff.inMinutes < 1) return 'ҳозиргина';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} дақ.';
-    if (diff.inHours < 24) return '${diff.inHours} соат';
+    if (diff.inMinutes < 1) return context.tr('addr_time_just_now');
+    if (diff.inMinutes < 60) {
+      return context.trMsg('news_ago_min', params: {'n': '${diff.inMinutes}'});
+    }
+    if (diff.inHours < 24) {
+      return context.trMsg('news_ago_hour', params: {'n': '${diff.inHours}'});
+    }
     return '${t.day}.${t.month.toString().padLeft(2, '0')}.${t.year}';
   }
 }

@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../controllers/onboarding_controller.dart';
@@ -75,18 +77,18 @@ class _DeviceTransferPendingScreenState
           st.status == 'expired' ||
           st.status == 'cancelled') {
         setState(() {
-          _error = st.status == 'rejected'
-              ? 'Eski qurilmada so‘rov rad etildi.'
-              : 'Tasdiq muddati tugadi. Qayta urinib ko‘ring.';
+          _error = context.tr(st.status == 'rejected'
+              ? 'ob_dev_pending_rejected'
+              : 'ob_dev_pending_expired');
         });
         _timer?.cancel();
       }
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
-      setState(() => _error = firebaseFunctionsUserMessage(e));
+      setState(() => _error = context.tr(onboardingErrorKey(e)));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(() => _error = userErrorMessage(context, e));
     }
   }
 
@@ -127,7 +129,7 @@ class _DeviceTransferPendingScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tasdiq kutilmoqda'),
+        title: Text(context.tr('ob_dev_pending_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
       ),
@@ -141,15 +143,15 @@ class _DeviceTransferPendingScreenState
             const SizedBox(height: 20),
             Text(
               label.isEmpty
-                  ? 'Eski qurilmangizga so‘rov yuborildi.'
-                  : 'Eski qurilmaga ($label) so‘rov yuborildi.',
+                  ? context.tr('ob_dev_pending_sent_nolabel')
+                  : context.trMsg('ob_dev_pending_sent_label',
+                      params: {'label': label}),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
-              'Eski telefonda AVA ilovasini oching va «Ruxsat berish» tugmasini bosing. '
-              'So‘rov taxminan 30 daqiqa amal qiladi.',
+              context.tr('ob_dev_pending_hint'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4),
             ),
@@ -165,13 +167,13 @@ class _DeviceTransferPendingScreenState
               const SizedBox(height: 16),
               OutlinedButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Orqaga'),
+                child: Text(context.tr('back')),
               ),
             ],
             const Spacer(),
             TextButton(
               onPressed: _finishing ? null : _poll,
-              child: const Text('Holatni yangilash'),
+              child: Text(context.tr('ob_dev_pending_refresh')),
             ),
           ],
         ),

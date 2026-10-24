@@ -138,7 +138,11 @@ List<List<TreePerson>> findDuplicateGroups(List<TreePerson> nodes) {
   return out;
 }
 
-String duplicateGroupLabel(List<TreePerson> group) {
+String duplicateGroupLabel(
+  List<TreePerson> group, {
+  required String maleLabel,
+  required String femaleLabel,
+}) {
   final first = group.first;
   final parts = <String>[first.fullName];
   if (first.birthDate != null) {
@@ -147,7 +151,7 @@ String duplicateGroupLabel(List<TreePerson> group) {
         '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}');
   }
   if (first.gender.isNotEmpty) {
-    parts.add(first.gender == 'male' ? 'Эркак' : 'Аёл');
+    parts.add(first.gender == 'male' ? maleLabel : femaleLabel);
   }
   return parts.join(' · ');
 }

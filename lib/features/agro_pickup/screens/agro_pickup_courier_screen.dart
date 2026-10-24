@@ -8,6 +8,7 @@ import '../../../models/agro_pickup_order.dart';
 import '../../../services/agro_pickup_service.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../courier/widgets/courier_task_list.dart';
+import '../../../core/utils/user_error.dart';
 
 const _green = AvaLight.ok;
 
@@ -55,7 +56,7 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(userErrorMessage(context, e))),
         );
       }
     }

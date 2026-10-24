@@ -185,6 +185,13 @@ class OrderModel {
         _ => 'Нон',
       };
 
+  /// [typeLabelUz]нинг l10n калити (мижоз экранлари: `context.tr(typeLabelKey)`).
+  String get typeLabelKey => switch (type) {
+        'restaurant' => 'home_module_restaurants',
+        'platform' => 'home_module_wholesale',
+        _ => 'wlt_m_bread',
+      };
+
   bool get hasCoordinates => lat != null && lng != null;
 
   bool get hasRestaurantCoordinates =>

@@ -2,8 +2,9 @@ import 'package:ava_gurlan/features/courier/screens/courier_mfy_selection_screen
 import 'package:ava_gurlan/models/order_model.dart';
 import 'package:ava_gurlan/services/courier_route_service.dart';
 import 'package:ava_gurlan/services/location_service.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../restaurants/restaurants_l10n_harness.dart';
 
 /// МФЙ экрани `ready` буюртмаларни `courierListReadyOrders` callable'дан
 /// олади: `orders` қоидаси capability курьерга тўғридан-тўғри рўйхат
@@ -41,6 +42,9 @@ class _FakeRouteService implements CourierRouteService {
       (routeId: null, count: 0, revived: false);
 }
 
+/// Ҳақиқий uz_Cyrl матнлар (калит унутилса — хом калит чиқади ва тест йиқилади).
+final _l10n = JsonL10nDelegate('uz_Cyrl');
+
 OrderModel _stop(String id, String? mfy) =>
     CourierRouteService.readyStopFromMap({
       'id': id,
@@ -55,7 +59,8 @@ Future<void> _pump(
   _FakeRouteService service, {
   LocationCoords? gps,
 }) async {
-  await tester.pumpWidget(MaterialApp(
+  await tester.pumpWidget(l10nApp(
+    delegate: _l10n,
     home: CourierMfySelectionScreen(
       routeService: service,
       locate: () async => gps,
@@ -127,10 +132,10 @@ void main() {
       [_stop('a', 'Navoiy')],
     ]);
     await _pump(tester, service);
-    expect(find.textContaining('Хато:'), findsOneWidget);
+    expect(find.text(_l10n.tr('err_load_failed')), findsOneWidget);
 
     await tester.fling(
-        find.textContaining('Хато:'), const Offset(0, 400), 1000);
+        find.text(_l10n.tr('err_load_failed')), const Offset(0, 400), 1000);
     await tester.pumpAndSettle();
 
     expect(service.listCalls, 2);

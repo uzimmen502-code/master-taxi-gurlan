@@ -15,6 +15,7 @@ import '../../../../repositories/schedules_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../utils/gurlan_places.dart';
 import '../models/marshrut_search_filter_stats.dart';
+import '../../../../core/utils/user_error.dart';
 
 /// Marshrut yo'lovchi qidiruv ekrani state mashinasi.
 ///
@@ -239,7 +240,7 @@ class MarshrutSearchController extends ChangeNotifier {
       final schedules = await _schedules.searchActiveToday(date: dateStr);
       _results = await _filterAndSort(schedules);
     } catch (e) {
-      _errorMessage = 'error_generic|$e';
+      _errorMessage = userErrorKey(e);
     }
 
     _isSearching = false;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/trip_request.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -31,11 +32,12 @@ class ActiveRideCard extends StatelessWidget {
         border: Border.all(color: _green.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.directions_car, color: AppColors.primaryText, size: 20),
-          SizedBox(width: 8),
-          Text('Фаол сафар',
-              style: TextStyle(
+        Row(children: [
+          const Icon(Icons.directions_car,
+              color: AppColors.primaryText, size: 20),
+          const SizedBox(width: 8),
+          Text(context.tr('active_ride'),
+              style: const TextStyle(
                   fontSize: AppText.bodyLarge,
                   fontWeight: FontWeight.bold,
                   color: AppColors.primaryText)),
@@ -55,7 +57,7 @@ class ActiveRideCard extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: onArrived,
               icon: const Icon(Icons.where_to_vote_outlined, size: 18),
-              label: const Text('ЕТИБ КЕЛДИМ'),
+              label: Text(context.tr('drv_arrived_btn')),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primaryText,
                 side: const BorderSide(color: AppColors.primaryText),
@@ -67,12 +69,13 @@ class ActiveRideCard extends StatelessWidget {
           )
         else if (ride.hasArrived)
           Row(
-            children: const [
-              Icon(Icons.where_to_vote, color: AppColors.primaryText, size: 16),
-              SizedBox(width: 6),
+            children: [
+              const Icon(Icons.where_to_vote,
+                  color: AppColors.primaryText, size: 16),
+              const SizedBox(width: 6),
               Text(
-                'Йўловчи хабардор қилинди',
-                style: TextStyle(
+                context.tr('driver_arrived_notified'),
+                style: const TextStyle(
                   fontSize: AppText.bodySmall,
                   fontWeight: FontWeight.w600,
                   color: AppColors.primaryText,
@@ -86,7 +89,7 @@ class ActiveRideCard extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: onComplete,
             icon: const Icon(Icons.check_circle, size: 18),
-            label: const Text('САФАРНИ ЯКУНЛАШ'),
+            label: Text(context.tr('complete_ride')),
             style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
                 foregroundColor: AppColors.onPrimary,

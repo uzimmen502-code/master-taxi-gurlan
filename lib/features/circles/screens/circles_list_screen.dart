@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/circle.dart';
 import '../../../repositories/circles_repository.dart';
@@ -40,7 +41,7 @@ class _CirclesListScreenState extends State<CirclesListScreen> {
     final phone = _phone;
     if (phone == null || phone.length < 12) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Аввал профилда телефонни тасдиқланг.')),
+        SnackBar(content: Text(context.tr('dating_need_phone'))),
       );
       return;
     }
@@ -59,7 +60,7 @@ class _CirclesListScreenState extends State<CirclesListScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F4F8),
       appBar: AppBar(
-        title: Text(widget.spec.title),
+        title: Text(context.tr(widget.spec.titleKey)),
         backgroundColor: CirclesListScreen.accent,
         foregroundColor: Colors.white,
       ),
@@ -68,7 +69,7 @@ class _CirclesListScreenState extends State<CirclesListScreen> {
         foregroundColor: Colors.white,
         onPressed: _openForm,
         icon: const Icon(Icons.add),
-        label: const Text('Давра топиш / яратиш'),
+        label: Text(context.tr('circ_find_or_create')),
       ),
       body: phone == null
           ? const Center(child: CircularProgressIndicator())
@@ -118,7 +119,8 @@ class _CirclesListScreenState extends State<CirclesListScreen> {
         ),
         title:
             Text(c.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('${c.memberCount} аъзо'),
+        subtitle: Text(context.trMsg('circ_members_count',
+            params: {'count': '${c.memberCount}'})),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.push(
           context,
@@ -140,7 +142,7 @@ class _CirclesListScreenState extends State<CirclesListScreen> {
             Text(widget.spec.emoji, style: const TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
             Text(
-              'Ҳали даврага қўшилмагансиз.\n«Давра топиш / яратиш» орқали қўшилинг.',
+              context.tr('circ_list_empty'),
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
             ),

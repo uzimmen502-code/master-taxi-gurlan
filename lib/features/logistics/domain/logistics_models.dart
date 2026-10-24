@@ -589,10 +589,15 @@ String logisticsMoney(int v) {
   return buf.toString();
 }
 
-/// Грамм → «1,2 кг» кўриниши.
-String logisticsWeightLabel(int grams) {
-  if (grams < 1000) return '$grams г';
+/// Грамм → «1,2 кг» кўриниши. [gramUnit]/[kgUnit] — экранда `misc_unit_g` ва
+/// `kg` калитларидан берилади (моделда `BuildContext` йўқ).
+String logisticsWeightLabel(
+  int grams, {
+  String gramUnit = 'г',
+  String kgUnit = 'кг',
+}) {
+  if (grams < 1000) return '$grams $gramUnit';
   final kg = grams / 1000;
   final text = kg == kg.roundToDouble() ? kg.toStringAsFixed(0) : kg.toStringAsFixed(1);
-  return '${text.replaceAll('.', ',')} кг';
+  return '${text.replaceAll('.', ',')} $kgUnit';
 }

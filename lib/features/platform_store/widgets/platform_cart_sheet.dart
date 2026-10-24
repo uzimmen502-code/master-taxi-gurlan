@@ -160,7 +160,10 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
       final result = await c.submitOrder(address: deliveryText, phone: phone);
       if (!mounted) return;
       if (!result.success) {
-        _showError(result.error ?? loc.translate('bread_error_fallback'));
+        final err = result.error;
+        _showError(err == null
+            ? loc.translate('bread_error_fallback')
+            : context.trMsg(err));
         return;
       }
       final rootMessenger = ScaffoldMessenger.of(

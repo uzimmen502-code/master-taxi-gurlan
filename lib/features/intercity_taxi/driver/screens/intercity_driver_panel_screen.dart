@@ -586,7 +586,8 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     if (notice != null && notice.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(notice, style: const TextStyle(color: Colors.white)),
+          content: Text(context.trMsg(notice),
+              style: const TextStyle(color: Colors.white)),
           backgroundColor: AvaLight.warn,
         ),
       );

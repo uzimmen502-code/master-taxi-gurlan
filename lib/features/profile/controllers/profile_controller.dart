@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../../../models/user_model.dart';
 import '../../../models/order_model.dart';
@@ -457,19 +458,17 @@ class ProfileController extends ChangeNotifier {
 
   Future<bool> quickSaveRole(String v) async {
     if (!isClientAssignableRole(v)) {
-      errorMessage =
-          'Админ ролини фақат админ панел орқали бериш мумкин.';
+      errorMessage = 'prof_admin_role_panel_only';
       notifyListeners();
       return false;
     }
     if (v == 'courier' && role == 'driver') {
-      errorMessage = 'Haydovchi rolini PIN orqali kuryerga o\'zgartirib bo\'lmaydi.';
+      errorMessage = 'prof_driver_to_courier_blocked';
       notifyListeners();
       return false;
     }
     if (UserRoleSync.isPrivileged(role)) {
-      errorMessage =
-          'Админ ролини фақат админ панел орқали бериш мумкин.';
+      errorMessage = 'prof_admin_role_panel_only';
       notifyListeners();
       return false;
     }
@@ -503,7 +502,7 @@ class ProfileController extends ChangeNotifier {
     required String newAddress,
   }) async {
     if (newName.trim().isEmpty) {
-      errorMessage = 'Исмни киритинг';
+      errorMessage = 'prof_name_required';
       notifyListeners();
       return false;
     }
@@ -522,7 +521,7 @@ class ProfileController extends ChangeNotifier {
       final currentUid = phoneDigits(currentPhone);
       if (currentUid.length < 9 || phoneDigits(requestedPhone).length < 9) {
         isSaving = false;
-        errorMessage = 'Телефон рақамини тўлиқ киритинг';
+        errorMessage = 'ob_phone_required';
         notifyListeners();
         return false;
       }
@@ -532,7 +531,7 @@ class ProfileController extends ChangeNotifier {
         notifyListeners();
         return false;
       }
-      successMessage = 'Телефон рақами янгиланди';
+      successMessage = 'prof_phone_updated';
     }
 
     await prefs.setString('user_name', newName.trim());
@@ -556,7 +555,7 @@ class ProfileController extends ChangeNotifier {
     address = newAddress.trim();
     isEditing = false;
     isSaving = false;
-    successMessage ??= 'Маълумотлар сақланди';
+    successMessage ??= 'prof_data_saved';
     notifyListeners();
 
     try {
@@ -592,14 +591,14 @@ class ProfileController extends ChangeNotifier {
   Future<bool> saveBirthDateOrRequest(String requestedBirthDate) async {
     final requested = requestedBirthDate.trim();
     if (!_isValidBirthDate(requested)) {
-      errorMessage = 'Туғилган кун формати YYYY-MM-DD бўлсин';
+      errorMessage = 'prof_birth_format';
       notifyListeners();
       return false;
     }
 
     final uid = canonicalPhoneId(phone);
     if (uid.length < 9) {
-      errorMessage = 'Аввал телефон рақамингизни профилда сақланг';
+      errorMessage = 'prof_phone_save_first';
       notifyListeners();
       return false;
     }
@@ -612,14 +611,14 @@ class ProfileController extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_birth_date', requested);
         birthDate = requested;
-        successMessage = 'Туғилган кун сақланди';
+        successMessage = 'prof_birth_saved';
       } else {
         await _userRepo.requestBirthDateChange(
           uid: uid,
           currentBirthDate: birthDate,
           requestedBirthDate: requested,
         );
-        successMessage = 'Ўзгартириш сўрови админга юборилди';
+        successMessage = 'prof_change_request_sent';
       }
       return true;
     } on StateError catch (_) {
@@ -628,10 +627,10 @@ class ProfileController extends ChangeNotifier {
         currentBirthDate: birthDate,
         requestedBirthDate: requested,
       );
-      successMessage = 'Ўзгартириш сўрови админга юборилди';
+      successMessage = 'prof_change_request_sent';
       return true;
     } catch (e) {
-      errorMessage = 'Хатолик: $e';
+      errorMessage = userErrorKey(e);
       return false;
     } finally {
       isSaving = false;
@@ -662,7 +661,7 @@ class ProfileController extends ChangeNotifier {
     if (file == null) return;
     final uid = canonicalPhoneId(phone);
     if (uid.length < 12) {
-      errorMessage = 'Аввал телефонни тасдиқланг';
+      errorMessage = 'addr_err_phone_first';
       notifyListeners();
       return;
     }
@@ -690,7 +689,7 @@ class ProfileController extends ChangeNotifier {
       unawaited(TreeService.ensureMyTree().catchError((_) => <String, dynamic>{}));
       notifyListeners();
     } catch (e) {
-      errorMessage = 'Расм юклашда хатолик: $e';
+      errorMessage = userErrorKey(e, fallbackKey: 'prof_photo_upload_failed');
       notifyListeners();
     } finally {
       _photoSyncing = false;
@@ -758,13 +757,13 @@ class ProfileController extends ChangeNotifier {
       final snapshot = await _fingerprintService.collect();
       final fingerprintHash = snapshot.hash;
       if (!DeviceBindingRepository.isValidFingerprintHash(fingerprintHash)) {
-        _showError('Қурилма идентификатори хато');
+        _showError('prof_device_id_invalid');
         return;
       }
       final currentBinding =
           await _bindingRepo.getBinding(fingerprintHash);
       if (currentBinding == null) {
-        _showError('Қурилма топилмади');
+        _showError('prof_device_not_found');
         return;
       }
       await FirebaseFunctions.instance

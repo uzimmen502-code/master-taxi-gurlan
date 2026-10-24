@@ -1,6 +1,8 @@
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/user_error.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../models/entertainment_video.dart';
@@ -29,7 +31,9 @@ class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   bool _loading = true;
-  String? _error;
+
+  /// Xato matni emas — l10n kaliti (ekranda `context.tr(_errorKey!)`).
+  String? _errorKey;
 
   @override
   void initState() {
@@ -52,7 +56,12 @@ class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
           url = await _storage.downloadUrl(widget.video.storagePath);
         }
         if (url.isEmpty) {
-          throw Exception('Видео манзили топилмади.');
+          if (!mounted) return;
+          setState(() {
+            _errorKey = 'ent_video_url_missing';
+            _loading = false;
+          });
+          return;
         }
         vc = VideoPlayerController.networkUrl(Uri.parse(url));
       }
@@ -77,7 +86,7 @@ class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _errorKey = userErrorKey(e, fallbackKey: 'ent_video_failed');
         _loading = false;
       });
     }
@@ -106,18 +115,18 @@ class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
                 children: [
                   const CircularProgressIndicator(color: Colors.white),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Тайёрланмоқда…',
-                    style: TextStyle(color: Colors.white70),
+                  Text(
+                    context.tr('ent_preparing'),
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
             )
-          : _error != null
+          : _errorKey != null
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(_error!,
+                    child: Text(context.tr(_errorKey!),
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.white70)),
                   ),

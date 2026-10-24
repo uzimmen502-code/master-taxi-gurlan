@@ -296,7 +296,7 @@ class _ShipmentCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${logisticsWeightLabel(p.actualWeightG)} · ${p.lengthCm}×${p.widthCm}×${p.heightCm} см'
+            '${logisticsWeightLabel(p.actualWeightG, gramUnit: context.tr('misc_unit_g'), kgUnit: context.tr('kg'))} · ${p.lengthCm}×${p.widthCm}×${p.heightCm} ${context.tr('misc_unit_cm')}'
             '${p.description.isNotEmpty ? ' · ${p.description}' : ''}',
             style: TextStyle(fontSize: 12, color: c.ink2),
           ),

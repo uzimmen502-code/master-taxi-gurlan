@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../relatives/widgets/tree_link_invite_indicator.dart';
 import '../../relatives/screens/relatives_screen.dart';
@@ -43,7 +44,7 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F4F8),
       appBar: AppBar(
-        title: const Text('Менинг яқинларим'),
+        title: Text(context.tr('home_module_relatives')),
         backgroundColor: CirclesHubScreen._accent,
         foregroundColor: Colors.white,
       ),
@@ -52,8 +53,8 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
         children: [
           _CircleCard(
             emoji: '👨‍👩‍👧',
-            title: 'Қариндошларим',
-            subtitle: 'Шахсий рўйхат + туғилган кун эслатмаси',
+            title: context.tr('rel_title'),
+            subtitle: context.tr('circ_relatives_subtitle'),
             color: CirclesHubScreen._accent,
             trailing: uid == null
                 ? null
@@ -74,7 +75,8 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              '$count таклиф',
+                              context.trMsg('circ_invites_count',
+                                  params: {'count': '$count'}),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 11,
@@ -97,8 +99,8 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
           for (final spec in specs) ...[
             _CircleCard(
               emoji: spec.emoji,
-              title: spec.title,
-              subtitle: spec.subtitle,
+              title: context.tr(spec.titleKey),
+              subtitle: context.tr(spec.subtitleKey),
               color: CirclesHubScreen._accent,
               onTap: () => Navigator.push(
                 context,

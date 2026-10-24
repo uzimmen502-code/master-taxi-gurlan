@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/collection_task.dart';
 import '../../../services/collection_service.dart';
 import '../../../services/order_payment_service.dart';
@@ -106,7 +107,12 @@ class _CourierCollectionDetailScreenState
       if (!mounted) return;
       setState(() => _markingArrived = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(
+            userErrorMessage(context, e, fallbackKey: 'crr_task_arrive_failed'),
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -117,7 +123,9 @@ class _CourierCollectionDetailScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${widget.task.items[i].label}: миқдорни киритинг',
+              context.trMsg('crr_task_enter_qty', params: {
+                'label': widget.task.items[i].label,
+              }),
             ),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
@@ -148,7 +156,7 @@ class _CourierCollectionDetailScreenState
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('📦 Қабул вазифаси'),
+        title: Text(context.tr('crr_task_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
@@ -158,13 +166,13 @@ class _CourierCollectionDetailScreenState
         children: [
           _customerCard(task),
           const SizedBox(height: 12),
-          const Text(
-            'Маҳсулотлар',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          Text(
+            context.tr('crr_task_items_title'),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
-            'Ҳақиқатда йиғилган миқдорни киритинг — нарх админ белгилаган.',
+            context.tr('crr_task_items_hint'),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
@@ -196,7 +204,7 @@ class _CourierCollectionDetailScreenState
                 child: Text(
                   task.customerName.isNotEmpty
                       ? task.customerName
-                      : 'Мижоз',
+                      : context.tr('crr_task_customer'),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -239,7 +247,7 @@ class _CourierCollectionDetailScreenState
               child: OutlinedButton.icon(
                 onPressed: _openMaps,
                 icon: const Icon(Icons.map_outlined, size: 18),
-                label: const Text('Google Maps\'да очиш'),
+                label: Text(context.tr('crr_task_open_maps')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primaryText,
                   shape: RoundedRectangleBorder(
@@ -287,7 +295,10 @@ class _CourierCollectionDetailScreenState
           ),
           const SizedBox(height: 4),
           Text(
-            'Режа: ${_qtyText(item.qty)} ${item.unit}',
+            context.trMsg('crr_task_plan', params: {
+              'qty': _qtyText(item.qty),
+              'unit': item.unit,
+            }),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 10),
@@ -302,7 +313,8 @@ class _CourierCollectionDetailScreenState
                     FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
                   ],
                   decoration: InputDecoration(
-                    labelText: 'Йиғилди (${item.unit})',
+                    labelText: context.trMsg('crr_task_collected_label',
+                        params: {'unit': item.unit}),
                     isDense: true,
                     border: const OutlineInputBorder(),
                   ),
@@ -314,7 +326,7 @@ class _CourierCollectionDetailScreenState
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Қатор',
+                    context.tr('crr_task_line'),
                     style:
                         TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
@@ -350,9 +362,10 @@ class _CourierCollectionDetailScreenState
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Жами қиймат:',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                Text(
+                  context.tr('crr_task_total_label'),
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 Text(
                   '${formatMoney(_grandTotal)}',
@@ -402,9 +415,10 @@ class _CourierCollectionDetailScreenState
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
-                  'Йиғишни якунлаш',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                child: Text(
+                  context.tr('crr_task_finalize_btn'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
           ],
@@ -499,8 +513,8 @@ class _SettlementSheetState extends State<_SettlementSheet> {
 
   bool get _cashTooBig => _cashGiven > _maxCash;
 
-  String get _cashTooBigMessage =>
-      'Нақд жами қиймат + кошелёк баланси (=${formatPrice(_maxCash)})дан ошмасин';
+  String get _cashTooBigMessage => context.trMsg('crr_task_cash_too_big',
+      params: {'max': formatPrice(_maxCash)});
 
   Future<void> _submit() async {
     if (_cashTooBig) {
@@ -519,23 +533,24 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Диққат — кошелёкдан ечиш'),
+          title: Text(context.tr('crr_task_withdraw_title')),
           content: Text(
-            'Мижозга товар қийматидан ${formatMoney(withdrawal)} ортиқ '
-            'нақд беряпсиз. Бу сумма унинг кошелёгидан ечилади.\n'
-            'Янги баланс: ${formatMoney(_newBalance)}. Тасдиқлайсизми?',
+            context.trMsg('crr_task_withdraw_body', params: {
+              'withdrawal': formatMoney(withdrawal),
+              'balance': formatMoney(_newBalance),
+            }),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Бекор'),
+              child: Text(context.tr('crr_task_cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.orange.shade800,
               ),
-              child: const Text('Ҳа, тасдиқлайман'),
+              child: Text(context.tr('crr_task_confirm_yes')),
             ),
           ],
         ),
@@ -548,7 +563,17 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       final prefs = await SharedPreferences.getInstance();
       final courierPhone = prefs.getString('user_phone') ?? '';
       if (courierPhone.isEmpty) {
-        throw Exception('Курьер телефони топилмади — қайта киринг');
+        // Avval `throw Exception('<kirill matn>')` + `'$e'` edi; xatti-harakat
+        // o'sha: band bayrog'i tushadi, qizil snackbar chiqadi.
+        if (!mounted) return;
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.tr('crr_task_phone_missing')),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
       }
       final result = await CollectionService.finalizeCollection(
         courierPhone: courierPhone,
@@ -565,7 +590,13 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(
+            userErrorMessage(context, e,
+                fallbackKey: 'crr_task_finalize_failed'),
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -592,12 +623,14 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Ҳисоб-китоб · ${formatMoney(widget.totalValue)}',
+          context.trMsg('crr_task_settle_title',
+              params: {'amount': formatMoney(widget.totalValue)}),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
-          'Жами қиймат: ${formatMoney(widget.totalValue)}',
+          context.trMsg('crr_task_total_line',
+              params: {'amount': formatMoney(widget.totalValue)}),
           style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
         ),
         const SizedBox(height: 4),
@@ -611,8 +644,12 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               )
             else
               Text(
-                '💼 Мижоз кошелёги: ${formatMoney(_customerBalance)}'
-                '${_balanceUnknown ? ' (баланс аниқланмади)' : ''}',
+                context.trMsg(
+                  _balanceUnknown
+                      ? 'crr_task_cust_wallet_unknown'
+                      : 'crr_task_cust_wallet',
+                  params: {'amount': formatMoney(_customerBalance)},
+                ),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -629,9 +666,10 @@ class _SettlementSheetState extends State<_SettlementSheet> {
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: InputDecoration(
-            labelText: 'Нақд берилди (мижозга)',
-            suffixText: 'сўм',
-            helperText: 'Макс: ${formatMoney(_maxCash)}',
+            labelText: context.tr('crr_task_cash_given_label'),
+            suffixText: context.tr('crr_currency_unit'),
+            helperText: context.trMsg('crr_task_max',
+                params: {'amount': formatMoney(_maxCash)}),
             border: const OutlineInputBorder(),
             errorText: _cashTooBig ? _cashTooBigMessage : null,
           ),
@@ -665,10 +703,13 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                   Expanded(
                     child: Text(
                       isWithdrawal
-                          ? '💼 Кошелёкдан ечилади: '
-                              '${formatMoney(_cashGiven - widget.totalValue)}'
-                          : '💼 Кошелёкка қўшилади: '
-                              '${formatMoney(_walletDelta)}',
+                          ? context.trMsg('crr_task_wallet_debit', params: {
+                              'amount': formatMoney(
+                                  _cashGiven - widget.totalValue),
+                            })
+                          : context.trMsg('crr_task_wallet_credit', params: {
+                              'amount': formatMoney(_walletDelta),
+                            }),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
@@ -684,7 +725,8 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               Padding(
                 padding: const EdgeInsets.only(left: 28),
                 child: Text(
-                  '💼 Янги баланс: ${formatMoney(_newBalance)}',
+                  context.trMsg('crr_task_new_balance',
+                      params: {'amount': formatMoney(_newBalance)}),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -706,7 +748,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Бекор'),
+                child: Text(context.tr('crr_task_cancel')),
               ),
             ),
             const SizedBox(width: 10),
@@ -730,9 +772,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                           color: AppColors.onPrimary,
                         ),
                       )
-                    : const Text(
-                        'Тасдиқлаш',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                    : Text(
+                        context.tr('confirm'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
               ),
             ),
@@ -756,28 +798,32 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          '✅ Маҳсулот қабул қилинди',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        Text(
+          context.tr('crr_task_received'),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Text(
-          'Жами: ${formatMoney(v)}',
+          context.trMsg('crr_task_sum_line',
+              params: {'amount': formatMoney(v)}),
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         if (cashGiven > 0) ...[
           const SizedBox(height: 6),
-          Text('💵 Нақд берилди: ${formatMoney(cashGiven)}'),
+          Text(context.trMsg('crr_task_cash_line',
+              params: {'amount': formatMoney(cashGiven)})),
         ],
         if (walletCredit > 0) ...[
           const SizedBox(height: 6),
-          Text('💼 Кошелёкка қўшилди: ${formatMoney(walletCredit)}'),
+          Text(context.trMsg('crr_task_credited_line',
+              params: {'amount': formatMoney(walletCredit)})),
         ],
         if (withdrawnFromBalance > 0) ...[
           const SizedBox(height: 6),
           Text(
-            '💼 Кошелёкдан нақд олинди: ${formatMoney(withdrawnFromBalance)}',
+            context.trMsg('crr_task_withdrawn_line',
+                params: {'amount': formatMoney(withdrawnFromBalance)}),
             style: TextStyle(
               color: Colors.orange.shade900,
               fontWeight: FontWeight.w600,
@@ -805,8 +851,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               Expanded(
                 child: Text(
                   newBalance != null
-                      ? '💼 Мижоз янги баланси:\n${formatMoney(newBalance)}'
-                      : '💼 Аввал якунланган вазифа',
+                      ? context.trMsg('crr_task_cust_new_balance',
+                          params: {'amount': formatMoney(newBalance)})
+                      : context.tr('crr_task_already_done'),
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
@@ -824,9 +871,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
             backgroundColor: AppColors.primaryDark,
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
-          child: const Text(
-            'Якунлаш',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          child: Text(
+            context.tr('courier_finalize'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
         const SizedBox(height: 12),

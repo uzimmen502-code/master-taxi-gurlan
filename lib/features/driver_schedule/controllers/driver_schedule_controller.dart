@@ -5,6 +5,7 @@ import '../../../core/car/car_info_record.dart';
 import '../../../core/utils/driver_car_prefill.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/route_points_validator.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/marshrut_driver_profile.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
@@ -388,17 +389,17 @@ class DriverScheduleController extends ChangeNotifier {
       );
     } else if (!isAlone) {
       // Маҳаллий такси (alone) йўналиш белгиламайди — манзил талаб қилинмайди.
-      if (fromAddr.trim().isEmpty) return 'Қаердан манзилини киритинг';
-      if (toAddr.trim().isEmpty) return 'Қаерга манзилини киритинг';
+      if (fromAddr.trim().isEmpty) return 'sched_err_from_required';
+      if (toAddr.trim().isEmpty) return 'sched_err_to_required';
     }
     if (isIntercity && priceText.trim().isEmpty) {
-      return 'Нархни киритинг';
+      return 'sched_err_price_required';
     }
     if (isAlone) {
       final startMin = startTime.hour * 60 + startTime.minute;
       final endMin = endTime.hour * 60 + endTime.minute;
       if (endMin <= startMin) {
-        return 'Тугаш вақти бошланишдан кейин бўлиши керак';
+        return 'sched_err_end_after_start';
       }
     }
     return null;
@@ -433,7 +434,7 @@ class DriverScheduleController extends ChangeNotifier {
 
     final uid = await _loadUid();
     if (uid.isEmpty) {
-      errorMessage = 'Телефон рақами топилмади';
+      errorMessage = 'sched_err_phone_missing';
       notifyListeners();
       return false;
     }
@@ -503,7 +504,7 @@ class DriverScheduleController extends ChangeNotifier {
           final publish = intercityPublisher;
           if (publish == null) {
             isSaving = false;
-            errorMessage = 'Рейсни эълон қилиб бўлмади. Қайта уриниб кўринг.';
+            errorMessage = 'sched_err_publish_failed';
             notifyListeners();
             return false;
           }
@@ -553,23 +554,15 @@ class DriverScheduleController extends ChangeNotifier {
       isSaving = false;
       notifyListeners();
       return true;
-    } on DriverScheduleApprovalException catch (e) {
+    } on DriverScheduleApprovalException catch (_) {
       isSaving = false;
-      errorMessage = e.message;
+      errorMessage = 'sched_err_not_approved';
       notifyListeners();
       return false;
     } catch (e) {
       isSaving = false;
-      final msg = e.toString();
-      if (msg.contains('permission-denied')) {
-        errorMessage =
-            'Firestore рухсати йўқ. Admin тасдиғини ва интернетни текширинг.';
-      } else if (msg.contains('failed-precondition')) {
-        errorMessage =
-            'Индекс кутилмоқда. Бир неча дақиқа сабр қилинг ёки админга мурожаат қилинг.';
-      } else {
-        errorMessage = 'Хатолик: $e';
-      }
+      // Xom xato matni foydalanuvchiga chiqmaydi (log'ga `userErrorKey` yozadi).
+      errorMessage = userErrorKey(e, fallbackKey: 'sched_err_save_failed');
       notifyListeners();
       return false;
     }

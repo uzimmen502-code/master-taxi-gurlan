@@ -11,9 +11,15 @@ class RelativeReminderScheduler {
   static const _prefsKey = 'relative_reminder_ids';
   static const _notifyHour = 9; // 09:00 da eslatma
 
+  /// [tomorrowTemplate] — `{title}`, [birthdayBodyTemplate] — `{age}` o'rniga
+  /// qiymat qo'yiladi; [importantDateBody] — izohsiz sana uchun matn.
+  /// Matnlar chaqiruvchi tomonidan (joriy til bilan) oldindan tarjima qilinadi.
   Future<void> sync({
     required List<RelativePerson> people,
     required List<RelativeEvent> events,
+    required String tomorrowTemplate,
+    required String birthdayBodyTemplate,
+    required String importantDateBody,
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -41,7 +47,7 @@ class RelativeReminderScheduler {
       );
       await NotificationService.instance.scheduleReminder(
         id: idDayBefore,
-        title: 'Эртага: $title',
+        title: tomorrowTemplate.replaceAll('{title}', title),
         body: body,
         when: dayBefore,
       );
@@ -56,7 +62,7 @@ class RelativeReminderScheduler {
       await add(
         'bd_${p.id}',
         '🎂 ${p.fullName}',
-        'Туғилган куни — $turning ёшга тўлади',
+        birthdayBodyTemplate.replaceAll('{age}', '$turning'),
         nb,
       );
     }
@@ -70,7 +76,7 @@ class RelativeReminderScheduler {
       await add(
         'ev_${e.id}',
         '${e.type.emoji} ${e.title}',
-        body.isEmpty ? 'Муҳим сана' : body,
+        body.isEmpty ? importantDateBody : body,
         e.nextOccurrence,
       );
     }

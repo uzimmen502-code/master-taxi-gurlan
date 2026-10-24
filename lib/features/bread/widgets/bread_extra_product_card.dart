@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/bread_extra_product.dart';
@@ -44,7 +45,7 @@ class BreadExtraProductCard extends StatelessWidget {
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold)),
             Text(
-              _cardSubtitle(product),
+              _cardSubtitle(context, product),
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade500),
             ),
@@ -164,13 +165,14 @@ Widget _imageTile(BreadExtraProduct product, bool isSoldOut) {
   );
 }
 
-String _cardSubtitle(BreadExtraProduct product) {
-  final price = formatPrice(product.price);
+String _cardSubtitle(BuildContext context, BreadExtraProduct product) {
+  final price = context
+      .trMsg('price_sum_short', params: {'price': formatPrice(product.price)});
   final cap = product.caption.trim();
-  if (cap.isNotEmpty) return '$cap · $price сўм/${product.unitRu}';
+  if (cap.isNotEmpty) return '$cap · $price/${product.unitRu}';
   final q = product.qty;
   if (q != null && '$q'.trim().isNotEmpty) {
-    return '${product.qty} ${product.unitRu} · $price сўм';
+    return '${product.qty} ${product.unitRu} · $price';
   }
-  return '$price сўм/${product.unitRu}';
+  return '$price/${product.unitRu}';
 }

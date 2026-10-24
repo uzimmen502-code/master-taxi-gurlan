@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/l10n/l10n_extension.dart';
 import '../../core/utils/formatters.dart';
 import '../../features/driver_schedule/screens/driver_schedule_screen.dart';
 import '../../repositories/user_repository.dart';
@@ -19,8 +20,8 @@ Future<bool> showDriverCarInfoDialog({
   final uid = canonicalPhoneId(phone.replaceAll(RegExp(r'[^\d]'), ''));
   if (!context.mounted) return false;
   if (uid.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Аввал профилдан телефон рақамини киритинг')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.tr('fill_phone_in_profile'))));
     return false;
   }
 

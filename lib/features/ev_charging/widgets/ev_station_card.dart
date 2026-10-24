@@ -52,7 +52,7 @@ class EvStationCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    station.hasName ? station.name! : 'Зарядлаш нуқтаси',
+                    station.hasName ? station.name! : context.tr('ev_trip_station'),
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -63,7 +63,7 @@ class EvStationCard extends StatelessWidget {
             if (station.isImported) ...[
               const SizedBox(height: 4),
               Text(
-                'Очиқ манбадан${station.sourceProvider?.isNotEmpty == true ? " • ${station.sourceProvider}" : ""}',
+                '${context.tr('ev_card_open_source')}${station.sourceProvider?.isNotEmpty == true ? " • ${station.sourceProvider}" : ""}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -73,9 +73,9 @@ class EvStationCard extends StatelessWidget {
             ],
             if (station.isPaidListing) ...[
               const SizedBox(height: 4),
-              const Text(
-                '💳 Расмий рўйхат (пуллик қўшилган)',
-                style: TextStyle(
+              Text(
+                context.tr('ev_card_official_listing'),
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AvaLight.ok,
@@ -83,26 +83,49 @@ class EvStationCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 10),
-            if (distanceKm != null) _line('📍', '${distanceKm!.toStringAsFixed(1)} км'),
+            if (distanceKm != null)
+              _line('📍', '${distanceKm!.toStringAsFixed(1)} ${context.tr('ev_trip_km')}'),
             if (station.region?.isNotEmpty == true) _line('🗺️', station.region!),
             if (station.hasAddress) _line('🏠', station.address!),
             if (station.hasChargingType)
               _line('⚡', station.chargingTypes.join(' + ')),
-            if (station.hasConnectors) _line('🔌', station.connectors.join(', ')),
+            if (station.hasConnectors)
+              _line(
+                '🔌',
+                // `Бошқа` — Firestore'даги қиймат; кўриниши тилга қараб.
+                station.connectors
+                    .map((c) => c == 'Бошқа' ? context.tr('ev_connector_other') : c)
+                    .join(', '),
+              ),
             if (station.hasPowerKw) _line('🔋', '${station.powerKw} kW'),
             if (!station.hasPowerKw && station.hasPowerRatingsKw)
-              _line('🔋', 'Қувват вариантлари: ${station.powerRatingsKw.join(" / ")} kW'),
+              _line(
+                '🔋',
+                context.trMsg('ev_card_power_options',
+                    params: {'values': station.powerRatingsKw.join(" / ")}),
+              ),
             if (station.hasSitePowerKw)
-              _line('🏭', 'Майдон умумий қуввати: ${station.sitePowerKw} kW'),
+              _line(
+                '🏭',
+                context.trMsg('ev_card_site_power',
+                    params: {'value': '${station.sitePowerKw}'}),
+              ),
             if (station.hasPrice)
-              _line('💰', '1 kWh — ${station.price} сўм${hasPriceOrPower ? " *" : ""}'),
+              _line(
+                '💰',
+                '${context.trMsg('ev_card_price', params: {'price': '${station.price}'})}${hasPriceOrPower ? " *" : ""}',
+              ),
             if (station.hasOperatorName) _line('🏢', station.operatorName!),
             if (station.hasWorkingHours) _line('🕒', station.workingHours!),
             if (station.hasPhone) _linkLine('📞', station.phone!, 'tel:${station.phone}'),
             if (station.hasWebsite) _linkLine('🌐', station.website!, station.website!),
             if (station.hasNote) _line('📝', station.note!),
             if (station.hasSourceReportedStatus)
-              _line('ℹ️', 'Манба хабари (реал вақт эмас): ${station.sourceReportedStatus}'),
+              _line(
+                'ℹ️',
+                context.trMsg('ev_card_source_status',
+                    params: {'status': '${station.sourceReportedStatus}'}),
+              ),
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,8 +135,8 @@ class EvStationCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     hasPriceOrPower
-                        ? 'ℹ️ Маълумотлар жамоа (foydalanuvchilar) tomonidan kiritilgan, aniqligiga kafolat berilmaydi.*'
-                        : 'ℹ️ Маълумотлар жамоа (foydalanuvchilar) tomonidan kiritilgan, aniqligiga kafolat berilmaydi.',
+                        ? '${context.tr('ev_card_disclaimer')}*'
+                        : context.tr('ev_card_disclaimer'),
                     style: const TextStyle(fontSize: 11, color: Colors.black54),
                   ),
                 ),
@@ -126,7 +149,7 @@ class EvStationCard extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: onNavigate,
                 icon: const Icon(Icons.navigation_rounded),
-                label: const Text('Йўл кўрсатиш'),
+                label: Text(context.tr('ev_card_navigate')),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryDark,
                   foregroundColor: AppColors.onPrimary,

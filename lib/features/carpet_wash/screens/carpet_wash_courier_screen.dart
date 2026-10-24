@@ -8,6 +8,7 @@ import '../../../models/carpet_wash_order.dart';
 import '../../../services/carpet_wash_service.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../courier/widgets/courier_task_list.dart';
+import '../../../core/utils/user_error.dart';
 
 const _brown = Color(0xFF6D4C41);
 
@@ -55,7 +56,7 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(userErrorMessage(context, e))),
         );
       }
     }

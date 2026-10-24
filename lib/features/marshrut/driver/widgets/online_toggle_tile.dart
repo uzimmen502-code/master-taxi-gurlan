@@ -59,8 +59,9 @@ class OnlineToggleTile extends StatelessWidget {
                         : Colors.grey.shade600)),
             Text(
               isOnline
-                  ? 'Навбат: $queuePosition-ўрин'
-                  : 'Буюртмалар тўхтатилган',
+                  ? context.trMsg('queue_position_format',
+                      params: {'position': '$queuePosition'})
+                  : context.tr('orders_stopped_offline'),
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade500),
             ),

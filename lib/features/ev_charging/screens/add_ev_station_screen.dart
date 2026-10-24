@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/ev_charging_station.dart';
 import '../../../repositories/ev_station_repository.dart';
 import '../../../services/location_service.dart';
@@ -102,8 +104,8 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e is LocationException
-              ? LocationException.userMessage(e.kind)
-              : 'GPS xatosi'),
+              ? context.tr(LocationException.userMessage(e.kind))
+              : context.tr('ev_gps_error')),
         ),
       );
     }
@@ -113,19 +115,18 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Яқин атрофда нуқта бор'),
+        title: Text(ctx.tr('ev_dup_title')),
         content: Text(
-          'Ушбу жойдан ${dups.length} та зарядлаш нуқтаси аллақачон мавжуд. '
-          'Баribир davom etasizmi?',
+          ctx.trMsg('ev_dup_body', params: {'count': '${dups.length}'}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
+            child: Text(ctx.tr('no')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Давом этиш'),
+            child: Text(ctx.tr('ob_pre_continue')),
           ),
         ],
       ),
@@ -181,12 +182,13 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
         final balance = (e.details['balance'] as num?)?.toInt();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(balance != null
-              ? 'Баланс етарли эмас (${formatMoney(balance)}) — аввал ҳамённи тўлдиринг.'
-              : 'Баланс етарли эмас — аввал ҳамённи тўлдиринг.'),
+              ? context.trMsg('ev_pay_insufficient_balance',
+                  params: {'balance': formatMoney(balance)})
+              : context.tr('ev_pay_insufficient')),
           action: widget.phone == null
               ? null
               : SnackBarAction(
-                  label: 'Тўлдириш',
+                  label: context.tr('assistant_topup'),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -196,13 +198,19 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
         ));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Тўлов амалга ошмади: ${e.code}')),
+          SnackBar(
+            content: Text(userErrorMessage(context, e,
+                fallbackKey: 'ev_payment_failed')),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Хатолик: $e')),
+          SnackBar(
+            content: Text(userErrorMessage(context, e,
+                fallbackKey: 'ev_save_failed')),
+          ),
         );
       }
     } finally {
@@ -215,19 +223,20 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Тўловни тасдиқлаш'),
+        title: Text(ctx.tr('ev_confirm_payment_title')),
         content: Text(
-          '${formatMoney(tariff.price)} ҳамёндан ечилади ва станция '
-          'шу заҳоти харитада кўринади. Давом этасизми?',
+          ctx.trMsg('ev_confirm_payment_body',
+              params: {'price': formatMoney(tariff.price)}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Бекор қилиш'),
+            child: Text(ctx.tr('cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Тўлаш — ${formatMoney(tariff.price)}'),
+            child: Text(ctx.trMsg('ev_pay_button',
+                params: {'price': formatMoney(tariff.price)})),
           ),
         ],
       ),
@@ -242,8 +251,8 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         title: Text(_isEditing
-            ? 'Маълумотни текшириш'
-            : 'Зарядлаш станциясини қўшиш'),
+            ? context.tr('ev_edit_title')
+            : context.tr('ev_add_station_title')),
       ),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
@@ -275,8 +284,10 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Танланган тариф: ${widget.tariff!.months} ой — '
-                            '${formatMoney(widget.tariff!.price)}',
+                            context.trMsg('ev_selected_tariff', params: {
+                              'months': '${widget.tariff!.months}',
+                              'price': formatMoney(widget.tariff!.price),
+                            }),
                             style: const TextStyle(
                                 fontSize: 13, fontWeight: FontWeight.w600),
                           ),
@@ -286,30 +297,34 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                _sectionTitle('⚡ Қувватлаш тури'),
+                _sectionTitle(context.tr('ev_field_charging_type')),
                 _chipsRow(_chargingTypesAll, _selectedChargingTypes),
                 const SizedBox(height: 16),
-                _sectionTitle('🔌 Разъём'),
+                _sectionTitle(context.tr('ev_field_connector')),
                 _chipsRow(_connectorsAll, _selectedConnectors),
                 const SizedBox(height: 16),
-                _sectionTitle('🔋 Қувват (kW)'),
+                _sectionTitle(context.tr('ev_field_power')),
                 TextField(
                   controller: _powerCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: 'Масалан: 60'),
+                  decoration: InputDecoration(
+                      hintText: context
+                          .trMsg('ev_field_example', params: {'value': '60'})),
                 ),
                 const SizedBox(height: 16),
-                _sectionTitle('💰 Нарх (1 kWh, сўм)'),
+                _sectionTitle(context.tr('ev_field_price')),
                 TextField(
                   controller: _priceCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: 'Масалан: 1500'),
+                  decoration: InputDecoration(
+                      hintText: context.trMsg('ev_field_example',
+                          params: {'value': '1500'})),
                 ),
                 const SizedBox(height: 16),
-                _sectionTitle('🏢 Оператор номи'),
+                _sectionTitle(context.tr('ev_field_operator')),
                 TextField(controller: _operatorCtrl),
                 const SizedBox(height: 16),
-                _sectionTitle('📝 Изоҳ'),
+                _sectionTitle(context.tr('ev_field_note')),
                 TextField(controller: _noteCtrl, maxLines: 3),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -332,8 +347,10 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
                                 strokeWidth: 2, color: AppColors.onPrimary),
                           )
                         : Text(_isEditing
-                            ? 'Сақлаш'
-                            : 'Тўлаш ва сақлаш — ${formatMoney(widget.tariff!.price)}'),
+                            ? context.tr('save')
+                            : context.trMsg('ev_pay_and_save', params: {
+                                'price': formatMoney(widget.tariff!.price),
+                              })),
                   ),
                 ),
               ],
@@ -388,11 +405,11 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
           ),
         ),
         if (!hasCoords)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             child: Text(
-              'Харитадан нуқтани танланг ёки жойлашувдан фойдаланинг — координата мажбурий.',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              context.tr('ev_pick_location_required'),
+              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
             ),
           ),
       ],
@@ -411,7 +428,9 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
       children: options.map((o) {
         final isOn = selected.contains(o);
         return FilterChip(
-          label: Text(o),
+          // `Бошқа` — Firestore'да сақланадиган қиймат (ўзгармайди); фақат
+          // кўриниши тилга қараб.
+          label: Text(o == 'Бошқа' ? context.tr('ev_connector_other') : o),
           selected: isOn,
           onSelected: (v) => setState(() {
             if (v) {

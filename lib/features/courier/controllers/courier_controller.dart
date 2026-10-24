@@ -19,6 +19,7 @@ import '../../../services/courier_route_service.dart';
 import '../../../services/order_payment_service.dart';
 import '../../restaurants/courier/restaurant_courier_logic.dart';
 import '../../restaurants/data/restaurants_repository.dart';
+import '../../../core/utils/user_error.dart';
 
 /// Kuryer paneli — marshrut + post-paid to'lov.
 class CourierController extends ChangeNotifier {
@@ -144,7 +145,7 @@ class CourierController extends ChangeNotifier {
       }
       await _applyRoute(route);
     } catch (e) {
-      _errorMessage = 'courier_error_generic|$e';
+      _errorMessage = userErrorKey(e, fallbackKey: 'courier_error_generic');
       _safeNotify();
     }
   }
@@ -285,7 +286,7 @@ class CourierController extends ChangeNotifier {
       _info = 'courier_info_picked';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'courier_error_generic|$e';
+      _errorMessage = userErrorKey(e, fallbackKey: 'courier_error_generic');
       _safeNotify();
     }
   }
@@ -302,7 +303,7 @@ class CourierController extends ChangeNotifier {
       _info = 'courier_info_arrived';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'courier_error_generic|$e';
+      _errorMessage = userErrorKey(e, fallbackKey: 'courier_error_generic');
       _safeNotify();
     }
   }
@@ -367,7 +368,7 @@ class CourierController extends ChangeNotifier {
       _safeNotify();
       return result;
     } catch (e) {
-      _errorMessage = 'courier_error_generic|$e';
+      _errorMessage = userErrorKey(e, fallbackKey: 'courier_error_generic');
       _safeNotify();
       rethrow;
     }
@@ -410,7 +411,7 @@ class CourierController extends ChangeNotifier {
       }
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'courier_error_generic|$e';
+      _errorMessage = userErrorKey(e, fallbackKey: 'courier_error_generic');
       _safeNotify();
       rethrow;
     } finally {

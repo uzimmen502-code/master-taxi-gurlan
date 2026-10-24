@@ -232,9 +232,9 @@ class _AlertTile extends StatelessWidget {
                 : '${a.roomsMin}–${a.roomsMax} ${context.tr('realty_alert_rooms_short')}'));
     final parts = [
       context.tr(a.deal == RealtyDeal.rent ? 'realty_deal_rent' : 'realty_deal_sale'),
-      '${a.radiusKm} км',
+      '${a.radiusKm} ${context.tr('ev_trip_km')}',
       if (rooms.isNotEmpty) rooms,
-      if (a.priceMax != null) '≤ ${a.priceMax} сўм',
+      if (a.priceMax != null) '≤ ${a.priceMax} ${context.tr('currency_sum')}',
     ];
     final statusKey = a.isExpired
         ? 'realty_alert_status_expired'

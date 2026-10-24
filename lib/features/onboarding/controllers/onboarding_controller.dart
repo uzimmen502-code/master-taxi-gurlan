@@ -180,8 +180,7 @@ class OnboardingController extends ChangeNotifier {
   Future<bool> _requireValidFingerprintHash() async {
     final snapshot = await _ensureFingerprint();
     if (!DeviceBindingRepository.isValidFingerprintHash(snapshot.hash)) {
-      phoneStepError =
-          'Qurilma identifikatori noto\'g\'ri. Ilovani qayta oching yoki qayta o\'rnating.';
+      phoneStepError = 'ob_ctl_fingerprint_invalid';
       notifyListeners();
       return false;
     }
@@ -208,8 +207,7 @@ class OnboardingController extends ChangeNotifier {
 
     try {
       if (!await _hasNetworkInterface()) {
-        phoneStepError =
-            'Интернет уланиши йўқ. Internetni yoqing va qayta urinib ko\'ring.';
+        phoneStepError = 'ob_ctl_no_internet';
         return false;
       }
       if (!await _requireValidFingerprintHash()) {
@@ -233,29 +231,37 @@ class OnboardingController extends ChangeNotifier {
 
         case DeviceBindingStatus.needsVerification:
           // Pending-code оқими олиб ташланди — фақат fingerprint bind.
-          phoneStepError = result.message ??
-              'Қурилмани боғлаб бўлмади. Қайта уриниб кўринг.';
+          // Server `message` matni lotincha — ko'rsatilmaydi, kalit ishlatiladi.
+          phoneStepError = 'ob_ctl_bind_failed';
           return false;
 
         case DeviceBindingStatus.deviceBoundOtherPhone:
-        case DeviceBindingStatus.phoneBoundOtherDevice:
-        case DeviceBindingStatus.blocked:
           // UI conflict sheet ko‘rsatadi (self-serve / soft limit).
-          phoneStepError = result.message;
+          phoneStepError = 'ob_dev_device_other_body';
+          return false;
+
+        case DeviceBindingStatus.phoneBoundOtherDevice:
+          phoneStepError = 'ob_dev_phone_other_short';
+          return false;
+
+        case DeviceBindingStatus.blocked:
+          phoneStepError = 'ob_dev_blocked_body';
           return false;
 
         case DeviceBindingStatus.unknown:
-          phoneStepError = result.message ?? 'Noma\'lum xatolik. Qayta urinib ko\'ring.';
+          phoneStepError = 'ob_ctl_unknown_error';
           return false;
       }
     } on FirebaseFunctionsException catch (e) {
-      phoneStepError = firebaseFunctionsUserMessage(e);
+      phoneStepError = onboardingErrorKey(e);
       return false;
     } catch (e) {
+      // Xom matn foydalanuvchiga chiqmaydi — faqat logga (CLAUDE.md §25).
+      debugPrint('[onboarding] checkPhoneDeviceLock: $e');
       final raw = e.toString().toUpperCase();
       phoneStepError = raw.contains('DEADLINE_EXCEEDED')
-          ? 'Сервер жавоб бермади. Бироздан кейин қайта уриниб кўринг.'
-          : 'Хатолик: $e';
+          ? 'ob_ctl_server_timeout'
+          : 'ob_ctl_unknown_error';
       return false;
     } finally {
       isCheckingDevice = false;
@@ -282,7 +288,7 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
     try {
       if (!await _requireValidFingerprintHash()) {
-        errorMessage = phoneStepError ?? 'Қурилма аниқланмади';
+        errorMessage = phoneStepError ?? 'ob_ctl_device_unknown';
         return false;
       }
       final cached = lastBindingResult?.customToken?.trim() ?? '';
@@ -313,13 +319,14 @@ class OnboardingController extends ChangeNotifier {
       await _signInWithPhoneCustomToken(token);
       return true;
     } on FirebaseFunctionsException catch (e) {
-      errorMessage = firebaseFunctionsUserMessage(e);
+      errorMessage = onboardingErrorKey(e);
       return false;
     } catch (e) {
+      debugPrint('[onboarding] establishPhoneSession: $e');
       final raw = e.toString().toUpperCase();
       errorMessage = raw.contains('DEADLINE_EXCEEDED')
-          ? 'Сервер жавоб бермади. Бироздан кейин қайта уриниб кўринг.'
-          : 'Хатолик: $e';
+          ? 'ob_ctl_server_timeout'
+          : 'ob_ctl_unknown_error';
       return false;
     } finally {
       isSubmitting = false;
@@ -335,7 +342,7 @@ class OnboardingController extends ChangeNotifier {
       await loadPreselectedGeo();
     }
     if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
-      errorMessage = 'Xizmat zonasi — tumanni tanlang (til ekranida)';
+      errorMessage = 'ob_err_zone';
       notifyListeners();
       return false;
     }
@@ -441,11 +448,8 @@ class OnboardingController extends ChangeNotifier {
       unawaited(syncProfileZoneFcmInBackground(name: name, phone: phone));
       return true;
     } catch (e) {
-      if (e is ArgumentError) {
-        errorMessage = e.message?.toString() ?? e.toString();
-      } else {
-        errorMessage = 'Хатолик: $e';
-      }
+      debugPrint('[onboarding] finish: $e');
+      errorMessage = 'ob_ctl_unknown_error';
       return false;
     } finally {
       isSubmitting = false;

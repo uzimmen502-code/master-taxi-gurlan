@@ -1,38 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/collection_task.dart';
 import '../../../repositories/collection_tasks_repository.dart';
+import '../../../shared/widgets/load_error_view.dart';
 import 'courier_collection_detail_screen.dart';
 
 /// Курьер — қабул (йиғиб олиш) вазифалари рўйхати.
-class CourierCollectionTasksScreen extends StatelessWidget {
+class CourierCollectionTasksScreen extends StatefulWidget {
   const CourierCollectionTasksScreen({super.key, required this.courierUid});
 
   final String courierUid;
 
   @override
+  State<CourierCollectionTasksScreen> createState() =>
+      _CourierCollectionTasksScreenState();
+}
+
+class _CourierCollectionTasksScreenState
+    extends State<CourierCollectionTasksScreen> {
+  late Stream<List<CollectionTask>> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _open();
+  }
+
+  Stream<List<CollectionTask>> _open() => context
+      .read<CollectionTasksRepository>()
+      .watchForCourier(widget.courierUid);
+
+  @override
   Widget build(BuildContext context) {
-    final repo = context.read<CollectionTasksRepository>();
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('📦 Қабул вазифалари'),
+        title: Text(context.tr('crr_task_list_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: StreamBuilder<List<CollectionTask>>(
-        stream: repo.watchForCourier(courierUid),
+        stream: _stream,
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting &&
               !snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            return Center(child: Text('Хатолик: ${snap.error}'));
+            return LoadErrorView(
+              error: snap.error!,
+              onRetry: () => setState(() => _stream = _open()),
+            );
           }
           final tasks = snap.data ?? const <CollectionTask>[];
           if (tasks.isEmpty) {
@@ -43,7 +66,7 @@ class CourierCollectionTasksScreen extends StatelessWidget {
                   const Text('📦', style: TextStyle(fontSize: 64)),
                   const SizedBox(height: 12),
                   Text(
-                    'Қабул вазифаси йўқ',
+                    context.tr('crr_task_list_empty'),
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey.shade500,
@@ -69,6 +92,21 @@ class _TaskCard extends StatelessWidget {
   const _TaskCard({required this.task});
 
   final CollectionTask task;
+
+  /// Holat matni — model (`CollectionTask.statusLabel`) kirill literal
+  /// qaytaradi, shuning uchun bu yerda l10n kalitiga o'giramiz.
+  String _statusText(BuildContext context) {
+    switch (task.status) {
+      case 'collecting':
+        return context.tr('crr_task_status_collecting');
+      case 'completed':
+        return context.tr('crr_task_status_completed');
+      case 'cancelled':
+        return context.tr('crr_task_status_cancelled');
+      default:
+        return context.tr('crr_task_status_assigned');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +157,7 @@ class _TaskCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      CollectionTask.statusLabel(task.status),
+                      _statusText(context),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -158,7 +196,8 @@ class _TaskCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '🧺 ${task.items.length} та маҳсулот',
+                    context.trMsg('crr_task_items_count',
+                        params: {'n': '${task.items.length}'}),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -166,7 +205,8 @@ class _TaskCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    'Жами: ${formatMoney(task.totalValue)}',
+                    context.trMsg('crr_task_sum_line',
+                        params: {'amount': formatMoney(task.totalValue)}),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,

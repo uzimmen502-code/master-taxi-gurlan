@@ -313,6 +313,12 @@ class Restaurant {
 
   bool get isOpenNow => isOpenAt(DateTime.now());
 
+  /// Мижоз ҳозир таом қўшиб буюртма бера оладими. ЯГОНА қоида — меню, таом варағи ва сават шунга қарайди
+  /// (аввал бу шарт икки жойда алоҳида ёзилган эди). Намуна ресторан ([isDemo]) ҳеч қачон: сервер барибир
+  /// `RESTAURANT_DEMO` билан рад этади, шунинг учун мижозга «+» кўрсатилмайди. Ёпиқ ресторан — фақат
+  /// олдиндан буюртма ([acceptsPreorder]) бўлса (S4b).
+  bool get canTakeOrdersNow => !isDemo && (isOpenNow || acceptsPreorder);
+
   /// Фойдаланувчидан масофа (км); координата йўқ бўлса `null`.
   double? distanceKmFrom(double? userLat, double? userLng) {
     if (userLat == null || userLng == null || !hasLocation) return null;

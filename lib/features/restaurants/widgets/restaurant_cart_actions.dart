@@ -14,6 +14,13 @@ Future<bool> addToCartOrAskSwitch(
   required MenuItem item,
   required Restaurant restaurant,
 }) async {
+  // Намуна ресторанга таом қўшилмайди (интерфейс «+» ни кўрсатмайди; бу — иккинчи қатлам ҳимоя).
+  if (restaurant.isDemo) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(context.tr('restaurants_err_RESTAURANT_DEMO'))),
+    );
+    return false;
+  }
   if (cart.add(item, restaurant: restaurant)) return true;
   final ok = await showDialog<bool>(
     context: context,

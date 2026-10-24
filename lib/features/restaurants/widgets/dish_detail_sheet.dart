@@ -95,8 +95,8 @@ class _DishDetailSheetState extends State<DishDetailSheet> {
 
   int get _qty => widget.cart.restaurantId == widget.restaurant.id ? widget.cart.qtyOf(widget.item.id) : 0;
 
-  /// Ресторан ҳозир очиқ ёки олдиндан буюртма олади (S4b) — ресторан экранидаги қоида билан бир хил.
-  bool get _canOrder => widget.restaurant.isOpenNow || widget.restaurant.acceptsPreorder;
+  /// Ресторан экранидаги ЯГОНА қоида ([Restaurant.canTakeOrdersNow]): очиқ ёки олдиндан буюртма (S4b); намуна — йўқ.
+  bool get _canOrder => widget.restaurant.canTakeOrdersNow;
 
   @override
   void dispose() {
@@ -340,6 +340,17 @@ class _DishDetailSheetState extends State<DishDetailSheet> {
         ),
       ];
     }
+    if (widget.restaurant.isDemo) {
+      return [
+        const SizedBox(height: 8),
+        AvaNoticeRow(
+          key: const ValueKey('dish-sheet-demo'),
+          text: context.tr('restaurants_demo_banner'),
+          icon: Icons.info_outline_rounded,
+          color: c.warn,
+        ),
+      ];
+    }
     if (!_canOrder) {
       return [
         const SizedBox(height: 8),
@@ -510,7 +521,7 @@ class _DishDetailSheetState extends State<DishDetailSheet> {
         key: const ValueKey('dish-sheet-add'),
         onPressed: null,
         style: style,
-        child: Text(context.tr('restaurants_closed')),
+        child: Text(context.tr(restaurant.isDemo ? 'restaurants_demo_btn' : 'restaurants_closed')),
       );
     } else if (qty == 0) {
       action = FilledButton(

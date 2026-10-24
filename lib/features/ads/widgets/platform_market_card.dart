@@ -70,7 +70,7 @@ class PlatformMarketCard extends StatelessWidget {
                         'AVA',
                         style: TextStyle(
                           color: AppColors.onPrimary,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
                         ),
                       ),

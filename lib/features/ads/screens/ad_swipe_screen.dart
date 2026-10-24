@@ -35,11 +35,34 @@ class AdSwipeScreen extends StatefulWidget {
 
 class _AdSwipeScreenState extends State<AdSwipeScreen> {
   late int _index;
+  late final PageController _pager;
 
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.ads.length - 1);
+    _pager = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pager.dispose();
+    super.dispose();
+  }
+
+  /// Свайпга муқобил тугма (WCAG 2.5.7): олдинги/кейинги эълонга ўтиш.
+  void _step(int delta) {
+    final target = _index + delta;
+    if (target < 0 || target >= widget.ads.length) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pager.jumpToPage(target);
+      return;
+    }
+    _pager.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -62,6 +85,7 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
           EdgeSwipePager(
             itemCount: ads.length,
             initialIndex: _index,
+            controller: _pager,
             onPageChanged: (i) => setState(() => _index = i),
             itemBuilder: (_, i) => AdDetailsScreen(
               // Калит бўлмаса Flutter саҳифа ҳолатини қайта ишлатиб
@@ -75,28 +99,17 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
           // лентанинг ичида эканини билсин.
           // Тепада ЎРТАДА: ўнг томонда AppBar'нинг «шикоят» иконкаси бор,
           // чап томонда — орқага тугмаси (счётчик иконка устига тушарди).
+          // Икки томонида — олдинги/кейинги тугмаси: свайп ягона йўл
+          // бўлмасин (экран ўқувчи ва тугма билан ишловчилар учун).
           Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
+            top: MediaQuery.of(context).padding.top + 4,
             left: 0,
             right: 0,
-            child: IgnorePointer(
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${_index + 1} / ${ads.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: AppText.labelTiny,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+            child: Center(
+              child: AdSwipeNav(
+                index: _index,
+                count: ads.length,
+                onStep: _step,
               ),
             ),
           ),
@@ -148,3 +161,60 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
     );
   }
 }
+
+/// «‹ 3 / 12 ›» — нечанчи эълон эканини кўрсатади ва свайпга муқобил:
+/// олдинги/кейинги эълонга тугма билан ўтиш (WCAG 2.5.7, экран ўқувчи учун
+/// ҳам). Чегарада тегишли тугма ўчиқ.
+class AdSwipeNav extends StatelessWidget {
+  const AdSwipeNav({
+    super.key,
+    required this.index,
+    required this.count,
+    required this.onStep,
+  });
+
+  final int index;
+  final int count;
+
+  /// -1 = олдинги, +1 = кейинги.
+  final ValueChanged<int> onStep;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            key: const ValueKey('ad-swipe-prev'),
+            tooltip: context.tr('ad_swipe_prev'),
+            color: Colors.white,
+            disabledColor: Colors.white38,
+            icon: const Icon(Icons.chevron_left_rounded),
+            onPressed: index > 0 ? () => onStep(-1) : null,
+          ),
+          Text(
+            '${index + 1} / $count',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: AppText.labelSmall,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('ad-swipe-next'),
+            tooltip: context.tr('ad_swipe_next'),
+            color: Colors.white,
+            disabledColor: Colors.white38,
+            icon: const Icon(Icons.chevron_right_rounded),
+            onPressed: index < count - 1 ? () => onStep(1) : null,
+          ),
+        ],
+      ),
+    );
+  }
+}

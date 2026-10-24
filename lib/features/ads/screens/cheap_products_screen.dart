@@ -56,8 +56,11 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   bool _platformLoaded = false;
   bool _shopLoaded = false;
 
-  static const _loadErrorMessage =
-      'Маълумотларни юклашда хатолик юз берди. Илтимос кейинроқ қайта уриниб кўринг.';
+  /// «Қайта уриниш»: эълонлар оқими қайтадан очилади.
+  void _retryAds() => setState(() {
+        _adsStream = null;
+        _streamKey = '';
+      });
 
   static const _moduleId = 'cheap_products_home';
 
@@ -265,7 +268,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.list_alt),
-            tooltip: 'Менинг эълонларим',
+            tooltip: context.tr('jobs_my_ads'),
             onPressed: () {
               Navigator.push(
                 context,
@@ -275,26 +278,37 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
           ),
           // «+» — юқоридаги барнинг ўнг томонида, ихчам (эга, 2026-10-19; аввал қидирув қаторининг ёнида эди).
           Padding(
-            padding: const EdgeInsets.only(right: 10, left: 2),
+            padding: const EdgeInsets.only(right: 2, left: 2),
             child: Center(
-              child: Material(
+              // Кўриниши 32×32, босиш майдони 48×48 (≥48dp қоидаси).
+              child: InkWell(
                 key: const ValueKey('cheap-add-ad'),
-                color: _addRed,
-                borderRadius: BorderRadius.circular(9),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(9),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CreateAdScreen(),
+                customBorder: const CircleBorder(),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CreateAdScreen(),
+                    ),
+                  );
+                },
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Center(
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _addRed,
+                        borderRadius: BorderRadius.circular(9),
                       ),
-                    );
-                  },
-                  child: const SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: Icon(Icons.add, color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.add,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -324,7 +338,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                               onPressed: _clearSearch,
                             ),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: AppColors.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -341,10 +355,9 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
             child: StreamBuilder<List<AdModel>>(
               stream: _adsFor(repo),
               builder: (context, snap) {
-                if ((snap.connectionState == ConnectionState.waiting &&
-                        !snap.hasData) ||
-                    !_platformLoaded ||
-                    !_shopLoaded) {
+                if (snap.connectionState == ConnectionState.waiting &&
+                    !snap.hasData &&
+                    !snap.hasError) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snap.hasError) {
@@ -352,13 +365,24 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _loadErrorMessage,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: AppText.bodyLarge,
-                          color: Colors.grey.shade700,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            context.tr('cheap_products_load_error'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: AppText.bodyLarge,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            key: const ValueKey('cheap-retry'),
+                            onPressed: _retryAds,
+                            child: Text(context.tr('home_section_retry')),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -369,6 +393,13 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 final shop = _filteredShop();
                 final found = platform.length + ads.length + shop.length;
 
+                // Эълонлар келди, платформа/дўкон ҳали юкланяпти: бирорта ҳам
+                // карта йўқ бўлса «бўш» эмас — юкланиш (аввал учаласи
+                // кутилар эди; энди биринчи келган кўрсатилади).
+                if (found == 0 && (!_platformLoaded || !_shopLoaded)) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
                 if (platform.isEmpty && ads.isEmpty && shop.isEmpty) {
                   return Center(
                     child: SingleChildScrollView(
@@ -378,7 +409,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         children: [
                           Text(
                             CatalogSearch.normalize(_query).isEmpty
-                                ? 'Ҳозирча эълонлар йўқ'
+                                ? context.tr('cheap_products_empty')
                                 : context
                                     .tr('platform_store_search_none')
                                     .replaceAll('{query}', _query.trim()),

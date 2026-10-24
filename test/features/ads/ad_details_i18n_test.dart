@@ -21,6 +21,11 @@ void main() {
     'ad_report_reason_phone',
     'ad_report_reason_spam',
     'ad_report_reason_abuse',
+    // UI/UX аудити 2026-10-24: свайп тугмалари ва бозор экрани матнлари.
+    'ad_swipe_prev',
+    'ad_swipe_next',
+    'cheap_products_empty',
+    'cheap_products_load_error',
   ];
 
   Map<String, dynamic> load(String lang) => jsonDecode(

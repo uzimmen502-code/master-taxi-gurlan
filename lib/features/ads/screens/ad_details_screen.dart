@@ -304,9 +304,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                     children: [
                       Expanded(
                         child: Text(
+                          // Тўлиқ ном: тафсилотда кесилмайди (2 қаторда
+                          // кесилса, эълон номи охиригача ўқилмасди).
                           ad.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: AppText.titleLarge,
                             fontWeight: FontWeight.bold,
@@ -395,10 +395,16 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                     FutureBuilder<List<AdModel>>(
                       future: _similarAdsFuture,
                       builder: (context, snap) {
+                        // Лента баландлиги тизим шрифтига эргашади (катта
+                        // шрифтда ном/нарх тошиб кетмасин); 1.6 дан ошмайди.
+                        final shelfHeight = 206 *
+                            (MediaQuery.textScalerOf(context).scale(14) / 14)
+                                .clamp(1.0, 1.6);
                         if (snap.connectionState == ConnectionState.waiting) {
-                          return const SizedBox(
-                            height: 206,
-                            child: Center(child: CircularProgressIndicator()),
+                          return SizedBox(
+                            height: shelfHeight,
+                            child: const Center(
+                                child: CircularProgressIndicator()),
                           );
                         }
                         if (snap.hasError) {
@@ -439,7 +445,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                           _logSimilarMetrics('impression', shownCount: items.length);
                         }
                         return SizedBox(
-                          height: 206,
+                          height: shelfHeight,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: items.length,

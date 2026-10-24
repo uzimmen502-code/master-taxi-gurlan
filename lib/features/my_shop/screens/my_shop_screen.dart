@@ -77,6 +77,8 @@ class _MyShopScreenState extends State<MyShopScreen> {
           builder: (_) => BusinessFormScreen(
             existing: b,
             initialCategory: BusinessCategory.retail,
+            // Дўконда «чакана/улгуржи» танлови йўқ — одамни чалкаштиради (эга, 2026-10-24).
+            lockCategory: true,
           ),
         ),
       );
@@ -88,8 +90,8 @@ class _MyShopScreenState extends State<MyShopScreen> {
       body: StreamBuilder<List<Business>>(
         stream: _stream,
         builder: (context, snap) {
-          // Хато/юкланмоқда — асосий дўкон барибир кўринади (унинг маълумоти бошқа
-          // манбадан); қўшимча дўконлар рўйхати фақат ўқилса чиқади.
+          // Хато/юкланмоқда — биринчи дўкон барибир кўринади (унинг номи бошқа
+          // манбадан); қолган дўконлар рўйхати фақат ўқилса чиқади.
           final shops = (snap.data ?? const <Business>[])
               .where(MyShopPresence.isShopCategory)
               .toList(growable: false);
@@ -102,49 +104,38 @@ class _MyShopScreenState extends State<MyShopScreen> {
                   final name = (nameSnap.data ?? '').trim();
                   return _ShopCard(
                     icon: Icons.storefront_rounded,
-                    title: name.isNotEmpty ? name : context.tr('my_shop_main_title'),
+                    title: name.isNotEmpty ? name : context.tr('my_shop_title'),
                     subtitle: context.tr('my_shop_main_sub'),
                     onTap: _openMain,
                   );
                 },
               ),
-              if (shops.isNotEmpty || snap.hasError) ...[
+              if (snap.hasError)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
-                  child: Text(
-                    context.tr('my_shop_other_title'),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: Text(context.tr('bizmap_err_generic')),
                 ),
-                if (snap.hasError)
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Text(context.tr('bizmap_err_generic')),
-                  ),
-                for (final b in shops)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _ShopCard(
-                      icon: b.category.icon,
-                      title: b.name,
-                      subtitle: [
-                        context.tr(b.category.labelKey),
-                        if (b.address.isNotEmpty) b.address,
-                      ].join(' · '),
-                      onTap: () => _openProducts(b),
-                      trailing: IconButton(
-                        tooltip: context.tr('my_shop_rename'),
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _openForm(b),
-                      ),
+              // Битта рўйхат: «асосий/бошқа», «чакана/улгуржи» ёрлиқларисиз — фақат
+              // дўкон номи ва манзили.
+              for (final b in shops)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: _ShopCard(
+                    icon: Icons.storefront_outlined,
+                    title: b.name,
+                    subtitle: b.address,
+                    onTap: () => _openProducts(b),
+                    trailing: IconButton(
+                      tooltip: context.tr('my_shop_rename'),
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () => _openForm(b),
                     ),
                   ),
-              ],
+                ),
             ],
           );
         },
-      ),
-      floatingActionButton: widget.canCreateShop
+      ),      floatingActionButton: widget.canCreateShop
           ? FloatingActionButton.extended(
               onPressed: _openForm,
               backgroundColor: AppColors.primaryDark,
@@ -180,7 +171,7 @@ class _ShopCard extends StatelessWidget {
         minVerticalPadding: 12,
         leading: Icon(icon, color: AppColors.primaryDark),
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: subtitle.isEmpty ? null : Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: trailing ?? const Icon(Icons.chevron_right),
         onTap: onTap,
       ),

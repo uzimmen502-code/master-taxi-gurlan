@@ -1151,6 +1151,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       context,
       phone: phone,
       presence: presence,
+      preferMain: true,
       push: (screen) => Navigator.push<void>(
         context,
         MaterialPageRoute(builder: (_) => screen),

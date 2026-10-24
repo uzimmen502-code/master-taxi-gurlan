@@ -7,12 +7,11 @@ import '../../business_map/domain/business.dart';
 import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_form_screen.dart';
 import '../../business_map/screens/business_products_screen.dart';
-import '../../tv_market/screens/tv_my_shop_screen.dart';
 import '../my_shop_presence.dart';
 import 'main_shop_screen.dart';
 
 /// «Менинг дўконим» — эганинг ВАЖДА БИТТА эмас, бир нечта дўкони:
-///  · «Асосий дўкон» — Аҳоли ва Улгуржи бозор маҳсулотлари ([MainShopScreen]);
+///  · «Асосий дўкон» — Аҳоли, Улгуржи ва AVAGram маҳсулотлари ([MainShopScreen]);
 ///  · «Бошқа дўконлар» — Бизнес харитасидаги чакана/улгуржи объектлар: ҳар
 ///    бирининг ўз номи ва ўз маҳсулотлари (сони чекланмаган), мавжуд
 ///    [BusinessProductsScreen] билан.
@@ -23,7 +22,6 @@ class MyShopScreen extends StatefulWidget {
     required this.phone,
     this.initialSegment = 0,
     this.canCreateShop = true,
-    this.showVitrine = false,
     @visibleForTesting this.businesses,
     @visibleForTesting this.loadMainName,
   });
@@ -36,11 +34,6 @@ class MyShopScreen extends StatefulWidget {
 
   /// «Янги дўкон» тугмаси: Бизнес харитаси модули очиқ бўлса.
   final bool canCreateShop;
-
-  /// «AVAGram дўкони» банди: `tv_shops` ҳужжати бор (видеога боғланган витрина
-  /// маҳсулотлари ва роликлар — [TvMyShopScreen]; шу экранга аввал видеодаги
-  /// «Дўкон» тугмаси олиб борар эди, энди у ҳам шу рўйхатдан очилади).
-  final bool showVitrine;
 
   /// Тест учун: ҳақиқий Firestore обунаси ва ном ўқиш ўрнига.
   final Stream<List<Business>>? businesses;
@@ -74,10 +67,6 @@ class _MyShopScreenState extends State<MyShopScreen> {
     // Номи ўзгарган бўлиши мумкин.
     if (mounted) setState(() => _nameFuture = _loadName());
   }
-
-  Future<void> _openVitrine() => Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => TvMyShopScreen(ownerPhone: widget.phone)),
-      );
 
   Future<void> _openProducts(Business b) => Navigator.of(context).push<void>(
         MaterialPageRoute(builder: (_) => BusinessProductsScreen(business: b)),
@@ -119,16 +108,6 @@ class _MyShopScreenState extends State<MyShopScreen> {
                   );
                 },
               ),
-              if (widget.showVitrine)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: _ShopCard(
-                    icon: Icons.play_circle_outline_rounded,
-                    title: context.tr('my_shop_vitrine_title'),
-                    subtitle: context.tr('my_shop_vitrine_sub'),
-                    onTap: _openVitrine,
-                  ),
-                ),
               if (shops.isNotEmpty || snap.hasError) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),

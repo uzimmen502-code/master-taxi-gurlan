@@ -3853,5 +3853,9 @@
   "ev_guest_gate_title": "Зарядные станции EV",
   "ev_guest_gate_message": "Зарегистрируйтесь, чтобы просматривать базу EV-станций",
   "ev_guest_gate_register": "Зарегистрироваться",
-  "ev_map_zoom_in": "Приблизьте карту"
+  "ev_map_zoom_in": "Приблизьте карту",
+  "restaurants_demo_banner": "Это демонстрационный ресторан: меню можно смотреть, но заказы не принимаются.",
+  "restaurants_demo_btn": "Демо — без заказов",
+  "restaurants_a11y_add": "{name}: добавить в корзину",
+  "restaurants_a11y_remove": "{name}: уменьшить количество"
 }

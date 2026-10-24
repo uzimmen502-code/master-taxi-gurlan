@@ -71,7 +71,11 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
       final rid = (res['restaurantId'] ?? '') as String;
       final status = (res['status'] ?? 'applied') as String;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr(status == 'approved' ? 'restaurants_m_submitted_approved' : 'restaurants_m_submitted_pending'))),
+        SnackBar(
+          content: Text(context.tr(status == 'approved'
+              ? (widget.homeCook ? 'restaurants_m_submitted_approved_home_cook' : 'restaurants_m_submitted_approved')
+              : 'restaurants_m_submitted_pending')),
+        ),
       );
       final nav = Navigator.of(context);
       // `pushReplacement` панел ёпилгунча тугамайди — кутмаймиз.

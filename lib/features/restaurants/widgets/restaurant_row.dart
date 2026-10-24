@@ -104,9 +104,12 @@ class RestaurantRow extends StatelessWidget {
           .tr('restaurants_eta')
           .replaceAll('{min}', estimatedMinutes(r, distanceKm).toString()),
     ];
+    // «Уй ошпази» — кафедан ажратадиган ягона белги; `take(3)` кесмаслиги учун
+    // рўйхат бошида (ёпиқ ҳолатдан кейин).
     final chips = <Widget>[
       if (!open)
         AvaChip(label: context.tr('restaurants_closed'), tone: AvaChipTone.warn),
+      if (r.isHomeCook) AvaChip(label: context.tr('restaurants_chip_home_cook')),
       if (r.delivery.isAvaCourier)
         AvaChip(label: context.tr('restaurants_chip_delivery'), tone: AvaChipTone.brand),
       if (r.delivery.isOwnCourier)
@@ -118,7 +121,6 @@ class RestaurantRow extends StatelessWidget {
               .tr('restaurants_chip_min')
               .replaceAll('{amount}', formatPrice(r.minOrderAmount)),
         ),
-      if (r.isHomeCook) AvaChip(label: context.tr('restaurants_chip_home_cook')),
     ];
     return AvaListRow(
       title: r.name,

@@ -96,4 +96,12 @@ void main() {
     final screen = t.widget<RestaurantRegisterScreen>(find.byType(RestaurantRegisterScreen));
     expect(screen.homeCook, isTrue);
   });
+
+  testWidgets('уй ошпази варағи «ресторан» эмас: ўз сарлавҳаси ва ошхона белгиси', (t) async {
+    await _open(t, _FakeRepo(const [_home1]), homeCook: true);
+    expect(find.text('restaurants_m_choose_home_cook'), findsOneWidget);
+    expect(find.text('restaurants_m_choose_cafe'), findsNothing);
+    expect(find.byIcon(Icons.soup_kitchen_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.restaurant_rounded), findsNothing);
+  });
 }

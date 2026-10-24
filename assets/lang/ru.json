@@ -995,6 +995,7 @@
   "tv_ad_free": "Бесплатно",
   "tv_ad_wallet_balance": "На кошельке: {balance}",
   "tv_ad_insufficient_balance": "Недостаточно средств — пополните кошелёк",
+  "tv_ad_shop_item_invalid": "Товар не найден или не активен. Обновите список и повторите попытку.",
   "tv_ad_renew_title": "Продление рекламы",
   "tv_ad_renew_pay": "Продлить — {price}",
   "tv_ad_renew_expired": "Срок истёк — продлить",

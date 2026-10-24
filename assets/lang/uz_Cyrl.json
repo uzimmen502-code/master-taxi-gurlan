@@ -995,6 +995,7 @@
   "tv_ad_free": "Бепул",
   "tv_ad_wallet_balance": "Ҳамённгизда: {balance}",
   "tv_ad_insufficient_balance": "Баланс етарли эмас — ҳамённи тўлдиринг",
+  "tv_ad_shop_item_invalid": "Маҳсулот топилмади ёки фаол эмас. Рўйхатни янгилаб, қайта уриниб кўринг.",
   "tv_ad_renew_title": "Рекламани узайтириш",
   "tv_ad_renew_pay": "Узайтириш — {price}",
   "tv_ad_renew_expired": "Муддати тугаган — узайтириш",

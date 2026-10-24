@@ -25,6 +25,9 @@ class TvAdService {
     String regionId = '',
     bool showPhone = true,
     List<String> searchTokens = const [],
+
+    /// Ихтиёрий: эганинг ўз фаол каталог маҳсулоти — реклама клипи шунга боғланади (сервер текширади, `SHOP_ITEM_INVALID`).
+    String shopItemId = '',
   }) async {
     final callable = _fn.httpsCallable('publishTvAd');
     final result = await callable.call(<String, dynamic>{
@@ -41,6 +44,7 @@ class TvAdService {
       'tier': tier,
       'scope': scope,
       if (regionId.isNotEmpty) 'regionId': regionId,
+      if (shopItemId.isNotEmpty) 'shopItemId': shopItemId,
       'showPhone': showPhone,
       if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
     });

@@ -382,6 +382,7 @@ void main() {
     test('маҳсулотдан: ном/нарх/тавсиф; узун матн реклама экрани чегарасигача қирқилади', () {
       final p = TvAdPrefill.fromItem(_item('a', title: ' Нон ', price: 5000));
       expect([p.title, p.price], ['Нон', 5000]);
+      expect(p.shopItemId, 'a', reason: 'реклама шу каталог маҳсулотига боғланади');
       final long = _item('b', title: 'x' * 120).toMap();
       final cut = TvAdPrefill.fromItem(TvShopItem(
         id: 'b', ownerPhone: '1', ownerName: '', title: 'я' * 120, price: -5, photoUrl: '', kind: 'product',

@@ -22,6 +22,9 @@ class CabinetHeader extends StatelessWidget {
     this.phone = '',
     this.onRoleTap,
     this.footer,
+    this.actionIcon,
+    this.actionLabel = '',
+    this.onAction,
   });
 
   /// Доира ичидаги расм (ёки бош ҳарф).
@@ -38,12 +41,19 @@ class CabinetHeader extends StatelessWidget {
   final VoidCallback? onRoleTap;
   final Widget? footer;
 
+  /// Ўнг юқори бурчакдаги ихчам тугма (масалан, чиқиш стрелкаси). [onAction]
+  /// берилмаса кўринмайди; [actionLabel] — экран ўқувчи учун ёрлиқ.
+  final IconData? actionIcon;
+  final String actionLabel;
+  final VoidCallback? onAction;
+
   static const double _avatarSize = 92;
+  static const double _actionSize = 44;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    return Container(
+    final body = Container(
       width: double.infinity,
       color: c.brand,
       padding: const EdgeInsets.fromLTRB(AvaSpace.screen, 4, AvaSpace.screen, 30),
@@ -148,6 +158,34 @@ class CabinetHeader extends StatelessWidget {
           if (footer != null) footer!,
         ],
       ),
+    );
+    if (onAction == null || actionIcon == null) return body;
+    // Ўнг юқори бурчакдаги ихчам тугма (аватарга тегмайди: 320 px да ҳам
+    // аватар ўртада, тугма четда).
+    return Stack(
+      children: [
+        body,
+        Positioned(
+          top: 0,
+          right: AvaSpace.screen - 8,
+          child: Semantics(
+            button: true,
+            label: actionLabel,
+            child: ExcludeSemantics(
+              child: InkResponse(
+                key: const ValueKey('cabinet-header-action'),
+                onTap: onAction,
+                radius: _actionSize / 2,
+                child: SizedBox(
+                  width: _actionSize,
+                  height: _actionSize,
+                  child: Icon(actionIcon, size: 22, color: c.brandInk),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

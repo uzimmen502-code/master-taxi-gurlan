@@ -78,6 +78,44 @@ void main() {
     });
   });
 
+  group('7-босқич: AVA тармоқларига жойлаш розилиги', () {
+    bool missing({String cat = 'product', Set<String> nets = const {}, bool ok = false}) =>
+        TvPublishRules.socialConsentMissing(category: cat, networks: nets, consentChecked: ok);
+
+    test('тармоқ танланган, «Рухсат бераман» йўқ → жойлаш тўхтатилади', () {
+      expect(missing(nets: {'telegram'}), isTrue);
+      expect(missing(cat: 'service', nets: {'instagram', 'youtube'}), isTrue);
+    });
+
+    test('белгиланган ёки тармоқ йўқ → тўсиқ йўқ', () {
+      expect(missing(nets: {'telegram'}, ok: true), isFalse);
+      expect(missing(), isFalse);
+    });
+
+    test('пуллик реклама: чип йўқ, тўловдан олдин огоҳлантириш — текширилмайди', () {
+      expect(missing(cat: 'ad', nets: {'telegram'}), isFalse);
+    });
+
+    test('майдонлар: тармоқ бўлса сервер вақти + версия; бўлмаса ҳеч нарса', () {
+      const ts = 'SERVER_TS';
+      expect(
+        TvPublishRules.socialConsentFields(networks: {'telegram'}, version: 1, serverTime: ts),
+        {'socialConsentAt': ts, 'socialConsentVersion': 1},
+      );
+      expect(TvPublishRules.socialConsentFields(networks: const {}, version: 1, serverTime: ts), isEmpty);
+    });
+
+    test('розилик асоси сервер ёзувидан ўқилади; ҳали жойланмаган — бўш', () {
+      TvClip withPost(Map<String, dynamic> p) => TvClip(
+            id: 'c', videoUrl: '', posterUrl: '', title: '', price: 0, districtId: '', districtLabel: '',
+            ownerPhone: '1', ownerName: '', category: 'product', socialPost: p,
+          );
+      expect(withPost({'consent': {'basis': 'explicit', 'version': 1}}).socialConsentBasis, 'explicit');
+      expect(withPost({'status': 'posting'}).socialConsentBasis, '');
+      expect(withPost(const {}).socialConsentBasis, '');
+    });
+  });
+
   group('pickLinkedClip — мижозга қайси видео кўрсатилади', () {
     TvClip c(String id, {String owner = '998901234567', String kind = 'restaurant', DateTime? at}) => TvClip(
           id: id,

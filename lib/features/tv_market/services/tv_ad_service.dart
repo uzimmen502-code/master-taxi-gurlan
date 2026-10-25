@@ -28,6 +28,9 @@ class TvAdService {
 
     /// Ихтиёрий: эганинг ўз фаол каталог маҳсулоти — реклама клипи шунга боғланади (сервер текширади, `SHOP_ITEM_INVALID`).
     String shopItemId = '',
+
+    /// Тўловдан олдин кўрсатилган «AVA тармоқларига ҳам чиқади» огоҳлантириши версияси (0 — кўрсатилмаган).
+    int socialNoticeVersion = 0,
   }) async {
     final callable = _fn.httpsCallable('publishTvAd');
     final result = await callable.call(<String, dynamic>{
@@ -45,6 +48,7 @@ class TvAdService {
       'scope': scope,
       if (regionId.isNotEmpty) 'regionId': regionId,
       if (shopItemId.isNotEmpty) 'shopItemId': shopItemId,
+      if (socialNoticeVersion > 0) 'socialNoticeVersion': socialNoticeVersion,
       'showPhone': showPhone,
       if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
     });

@@ -831,6 +831,13 @@ class _TvClipDetailDialog extends StatelessWidget {
                         ? 'Ҳа'
                         : clip.socialNetworks.join(', '))
                     : 'Йўқ'),
+                if (clip.socialConsentBasis.isNotEmpty)
+                  _row('Розилик асоси', switch (clip.socialConsentBasis) {
+                    'explicit' => '«Рухсат бераман» белгиси',
+                    'ad_terms' => 'Пуллик реклама шарти',
+                    'legacy' => 'Эски илова (фақат тармоқ танлови)',
+                    final b => b,
+                  }),
                 _row('Соцсетда', _socialLine(clip)),
                 if ('${clip.socialPost['error'] ?? ''}'.trim().isNotEmpty)
                   _row('Соцсет хато', '${clip.socialPost['error']}'),

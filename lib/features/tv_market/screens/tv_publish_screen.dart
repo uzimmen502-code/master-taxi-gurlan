@@ -122,6 +122,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   bool _progressDeterminate = false;
   bool _openShop = false;
   final _socialNetworks = <String>{};
+
+  /// «Рухсат бераман» (7-босқич): тармоқ танланган бўлса шарт; янги тармоқ қўшилса қайта сўралади.
+  bool _socialConsentChecked = false;
   String _attachItemId = '';
   final _productPhotos = <XFile>[];
   List<TvShopItem> _myItems = const [];
@@ -668,6 +671,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       );
       return;
     }
+    if (TvPublishRules.socialConsentMissing(
+      category: _category,
+      networks: _socialNetworks,
+      consentChecked: _socialConsentChecked,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_social_consent_required'))),
+      );
+      return;
+    }
 
     // «Эълон» — дўкон/витрина оқимидан мустақил. Аввал дўкони бор
     // фойдаланувчида `_openShop` авто-`true` бўлиб қолар ва эълон
@@ -755,6 +768,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           regionId: geo.regionId,
           showPhone: _showPhone,
           shopItemId: widget.adPrefill?.shopItemId ?? '',
+          socialNoticeVersion: TvSocial.adNoticeVersion,
           searchTokens: TvClipSearch.buildTokens(
             title: title,
             description: description,
@@ -869,7 +883,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
 
       final clipRef = await FirebaseFirestore.instance
           .collection('tv_clips')
-          .add(clip.toMap());
+          .add({
+        ...clip.toMap(),
+        ...TvPublishRules.socialConsentFields(
+          networks: _socialNetworks,
+          version: TvSocial.consentVersion,
+          serverTime: FieldValue.serverTimestamp(),
+        ),
+      });
       completed = true;
       widget.onClipCreated?.call(clipRef.id);
       if (shopItemId.isNotEmpty) {
@@ -992,6 +1013,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   onTopUpAmount: (a) =>
                       openWalletTopUp(Navigator.of(context), suggestedAmount: a),
                 ),
+                const SizedBox(height: 12),
+                const _AdSocialNotice(),
                 const SizedBox(height: 16),
               ],
               if (!_isEdit && _category != 'ad') ...[
@@ -1001,11 +1024,17 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   ..._shopSection(context),
                 _SocialPicker(
                   selected: _socialNetworks,
-                  onToggle: (id, on) => setState(
-                    () => on
-                        ? _socialNetworks.add(id)
-                        : _socialNetworks.remove(id),
-                  ),
+                  consent: _socialConsentChecked,
+                  onToggle: (id, on) => setState(() {
+                    if (on) {
+                      _socialNetworks.add(id);
+                      // Янги тармоққа рози бўлганини алоҳида тасдиқласин.
+                      _socialConsentChecked = false;
+                    } else {
+                      _socialNetworks.remove(id);
+                    }
+                  }),
+                  onConsent: (v) => setState(() => _socialConsentChecked = v),
                 ),
               ],
               const SizedBox(height: 8),
@@ -1439,12 +1468,46 @@ class _ProductPhotoStrip extends StatelessWidget {
   }
 }
 
+/// Пуллик реклама AVA'нинг расмий тармоқларига ҳам чиқиши — тўловдан олдин
+/// очиқ айтилади (7-босқич; тармоқлар рўйхати сервер билан бир: [TvSocial.adForced]).
+class _AdSocialNotice extends StatelessWidget {
+  const _AdSocialNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final names = [for (final id in TvSocial.adForced) context.tr(TvSocial.labelKey(id))].join(', ');
+    return Row(
+      key: const ValueKey('tv_ad_social_notice'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.info_outline_rounded, size: 18, color: Colors.grey.shade700),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            context.tr('tv_ad_social_notice').replaceAll('{networks}', names),
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Роликни AVA расмий ижтимоий тармоқларига ҳам юбориш танлови.
+/// Тармоқ танланса — «Рухсат бераман» белгиси (7-босқич): нима ва қаерга очиқ
+/// жойланиши аниқ ёзилади; белгиланмаса жойлаш тўхтатилади.
 class _SocialPicker extends StatelessWidget {
-  const _SocialPicker({required this.selected, required this.onToggle});
+  const _SocialPicker({
+    required this.selected,
+    required this.onToggle,
+    required this.consent,
+    required this.onConsent,
+  });
 
   final Set<String> selected;
   final void Function(String id, bool on) onToggle;
+  final bool consent;
+  final ValueChanged<bool> onConsent;
 
   @override
   Widget build(BuildContext context) {
@@ -1477,6 +1540,24 @@ class _SocialPicker extends StatelessWidget {
               ),
           ],
         ),
+        if (selected.isNotEmpty)
+          CheckboxListTile(
+            key: const ValueKey('tv_social_consent'),
+            value: consent,
+            onChanged: (v) => onConsent(v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              context.tr('tv_social_consent_check').replaceAll(
+                    '{networks}',
+                    [
+                      for (final id in TvSocial.ordered)
+                        if (selected.contains(id)) context.tr(TvSocial.labelKey(id)),
+                    ].join(', '),
+                  ),
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
       ],
     );
   }

@@ -64,8 +64,14 @@ function requestedNetworks(clip) {
   }
   // Сотувчининг ЎЗ Telegram канали (2026-10-25, `seller_tg_channel.js`) — ўша розилик билан, фақат товар/хизмат
   // видеоси (янгилик эмас). Эски сервер бу қийматни танимайди: фақат шу танланган бўлса ҳеч қаерга жойламайди.
+  // Фақат АНИҚ қиймат (катта-кичик ҳарф вариантлари rules'дан ўтиб кетарди — review M1) ва розилик матни канални
+  // айтган версия (≥ 2) билан — серверда ҳам, фақат rules'га ишонилмайди.
   const cat = String(clip.category || 'product');
-  if (lower.includes(sellerTg.NET) && (cat === 'product' || cat === 'service')) picked.push(sellerTg.NET);
+  const v = clip.socialConsentVersion;
+  if (raw.includes(sellerTg.NET) && (cat === 'product' || cat === 'service')
+      && Number.isInteger(v) && v >= 2) {
+    picked.push(sellerTg.NET);
+  }
   if (picked.length) return picked;
   // Эга тармоқ танлаган, лекин уларнинг бирортаси ҳозир қўллаб-
   // қувватланмайди (масалан, TikTok олиб ташланганидан олдинги
@@ -557,7 +563,14 @@ function attachTvSocialPublish(exports, deps) {
     }
     await ref.update(patch);
 
-    if (allPosted && str(clip.shopItemId, 80)) {
+    // Маҳсулотнинг «AVA саҳифаларига чиқди» белгиси — фақат AVA тармоқларидан (сотувчи канали хатоси/муваффақияти
+    // унга таъсир қилмайди). `socialPost.status` ва клипнинг `socialPostedAt`и — аввалгидек БАРЧА тармоқлардан
+    // (каналда хато бўлса админ «Қайта жойлаш» тугмасини кўраверади).
+    const avaNets = allNets.filter((n) => n !== sellerTg.NET);
+    const avaPosted = avaNets.length > 0 && avaNets.every((n) =>
+      networks[n] && networks[n].status === 'posted');
+    const avaThisRun = claimed.nets.some((n) => n !== sellerTg.NET);
+    if (avaPosted && avaThisRun && str(clip.shopItemId, 80)) {
       try {
         await db.collection('tv_shop_items').doc(clip.shopItemId).set(
             { socialPostedAt: admin.firestore.FieldValue.serverTimestamp() },

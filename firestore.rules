@@ -3497,6 +3497,14 @@ service cloud.firestore {
             || (isAuth() && isRestaurantMember(rid));
         allow write: if false;
       }
+
+      // Кўришлар статистикаси (2026-10-25; functions/shop_stats.js `recordShopEvent`): кунлик ҳужжат
+      // `view_stats/{yyyymmdd}`. Фақат шу рестораннинг а'золари (эга/ходим) ва админ ID бўйича `get` қилади
+      // (ҳали йўқ кун ҳам — 0); рўйхат ва ёзув ёпиқ — фақат CF ёзади (20-банд).
+      match /view_stats/{day} {
+        allow get: if isAdmin() || (isAuth() && isRestaurantMember(rid));
+        allow list, create, update, delete: if false;
+      }
     }
 
     // Бўлимлар индекси (S3, D-REST-33): таомнинг тайёр кўриниши (`functions/restaurant_dish_index.js`).

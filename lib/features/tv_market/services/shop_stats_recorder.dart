@@ -6,11 +6,15 @@ import 'package:flutter/foundation.dart';
 /// хато ёки логинсизлик харидорга ҳеч қачон кўрсатилмайди. Бир сессияда бир объект бир марта юборилади
 /// (керакмас чақирувлар бўлмасин).
 ///
-/// Манбалар: market | video | map | link | qr | search | shop | product | other (сервер рўйхати билан бир хил).
+/// Манбалар: market | video | map | link | qr | search | shop | product | other, кафе-ресторан учун яна
+/// list | home | section | restaurant (сервер рўйхати `functions/shop_stats.js` билан бир хил).
 class ShopStatsRecorder {
   ShopStatsRecorder._();
 
-  static const sources = ['market', 'video', 'map', 'link', 'qr', 'search', 'shop', 'product', 'other'];
+  static const sources = [
+    'market', 'video', 'map', 'link', 'qr', 'search', 'shop', 'product', 'other',
+    'list', 'home', 'section', 'restaurant',
+  ];
 
   static final Set<String> _sent = {};
 
@@ -27,8 +31,20 @@ class ShopStatsRecorder {
   static void productView({required String ownerPhone, required String itemId, String source = 'other'}) =>
       _send({'kind': 'product_view', 'ownerPhone': ownerPhone, 'itemId': itemId, 'source': source});
 
+  /// Кафе-ресторан (меню) экрани очилди. Ресторан а'золари серверда саналмайди.
+  static void restaurantView({required String restaurantId, String source = 'other'}) {
+    if (restaurantId.isEmpty) return;
+    _send({'kind': 'restaurant_view', 'restaurantId': restaurantId, 'source': source});
+  }
+
+  /// Таом варағи очилди.
+  static void dishView({required String restaurantId, required String itemId, String source = 'other'}) {
+    if (restaurantId.isEmpty || itemId.isEmpty) return;
+    _send({'kind': 'dish_view', 'restaurantId': restaurantId, 'itemId': itemId, 'source': source});
+  }
+
   static void _send(Map<String, Object?> data) {
-    final key = '${data['kind']}|${data['ownerPhone']}|${data['businessId'] ?? ''}|${data['itemId'] ?? ''}';
+    final key = '${data['kind']}|${data['ownerPhone'] ?? data['restaurantId']}|${data['businessId'] ?? ''}|${data['itemId'] ?? ''}';
     if (!_sent.add(key)) return;
     final payload = {...data, 'source': sources.contains(data['source']) ? data['source'] : 'other'};
     final custom = sink;

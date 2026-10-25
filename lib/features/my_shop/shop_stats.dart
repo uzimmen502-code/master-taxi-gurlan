@@ -37,14 +37,21 @@ class ShopStatsSummary {
   static Map<String, int> _map(Object? v) =>
       v is Map ? {for (final e in v.entries) '${e.key}': _int(e.value)} : const {};
 
-  static ShopStatsSummary fromDays(List<Map<String, dynamic>> docs, {required int days}) {
+  /// [mainKey]/[itemKey] — кунлик ҳужжатдаги ҳисоблагич номлари: дўкон `shopViews`/`productViews`, кафе-ресторан
+  /// `restaurantViews`/`dishViews` (`restaurants/{rid}/view_stats`). Қолган майдонлар (`src`, `items`) бир хил.
+  static ShopStatsSummary fromDays(
+    List<Map<String, dynamic>> docs, {
+    required int days,
+    String mainKey = 'shopViews',
+    String itemKey = 'productViews',
+  }) {
     var shop = 0;
     var prod = 0;
     final src = <String, int>{};
     final items = <String, int>{};
     for (final d in docs) {
-      shop += _int(d['shopViews']);
-      prod += _int(d['productViews']);
+      shop += _int(d[mainKey]);
+      prod += _int(d[itemKey]);
       _map(d['src']).forEach((k, v) => src[k] = (src[k] ?? 0) + v);
       _map(d['items']).forEach((k, v) => items[k] = (items[k] ?? 0) + v);
     }

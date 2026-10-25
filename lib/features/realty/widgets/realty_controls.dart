@@ -88,6 +88,9 @@ class RealtyChoice extends StatelessWidget {
 }
 
 /// Эълоннинг даражасини кўрсатадиган ёрлиқ (ўқиш учун).
+///
+/// Харидор экранида [tier] сифатида `RealtyListing.displayTier` берилади —
+/// пуллик муддат тугаган эълон «РЕКЛАМА/СРОЧНО» бўлиб қолмасин.
 class RealtyTierBadge extends StatelessWidget {
   const RealtyTierBadge({super.key, required this.tier});
 
@@ -95,18 +98,24 @@ class RealtyTierBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: RealtyTabs.colorFor(tier),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        context.tr(RealtyTabs.labelKey(tier)),
-        style: const TextStyle(
-          fontSize: AppText.labelTiny,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
+    final text = context.tr(RealtyTabs.labelKey(tier));
+    return Semantics(
+      label: text,
+      excludeSemantics: true,
+      child: Container(
+        key: const ValueKey('realty_tier_badge'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: RealtyTabs.colorFor(tier),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: AppText.labelTiny,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
       ),
     );

@@ -2617,9 +2617,11 @@ service cloud.firestore {
 
     // Shikoyatlar — dating/market CF orqali; boshqa turlar client yaratishi mumkin.
     match /reports/{reportId} {
+      // shop_content (do'kon/mahsulot shikoyati) — faqat submitShopComplaint (kunlik cheklov, takrorga qarshi), 2026-10-25.
       allow create: if isAuth()
           && request.resource.data.get('type', '') != 'dating_profile'
-          && request.resource.data.get('type', '') != 'market_ad';
+          && request.resource.data.get('type', '') != 'market_ad'
+          && request.resource.data.get('type', '') != 'shop_content';
       allow read, update, delete: if isAdmin();
     }
 

@@ -220,6 +220,11 @@ async function main() {
     await assertSucceeds(ref.update({ title: 'Tahrirlandi' }));
   });
 
+  await check('C6 reports: shop_content shikoyatini mijoz bevosita yozolmaydi (faqat submitShopComplaint); boshqa turlar avvalgidek', async () => {
+    await assertFails(as(SELLER).collection('reports').add({ type: 'shop_content', targetType: 'shop_item', targetId: 'x', reporterId: SELLER, reason: 'spam', status: 'open' }));
+    await assertSucceeds(as(SELLER).collection('reports').add({ type: 'tv_clip', targetId: 'c1', reporterId: SELLER, reason: 'spam' }));
+  });
+
   await check('C5 admin tv_shops va mahsulotni bevosita yozishi buzilmagan', async () => {
     await assertSucceeds(as(ADMIN).doc(`tv_shops/${SELLER2}`).update({ status: 'active' }));
     await reset('m3', { status: 'blocked', blockedByParent: 'shop' });

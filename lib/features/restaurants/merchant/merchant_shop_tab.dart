@@ -13,6 +13,7 @@ import '../domain/restaurant_models.dart';
 import '../services/restaurant_storage_service.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'restaurant_form_fields.dart';
+import 'restaurant_growth_tiles.dart';
 import 'restaurant_register_form.dart';
 import 'restaurant_video_card.dart';
 
@@ -185,6 +186,8 @@ class _MerchantShopTabState extends State<MerchantShopTab> {
           ownerPhone: _r.ownerUid,
           restaurantApproved: _r.status == 'approved',
         ),
+        const SizedBox(height: 12),
+        RestaurantLinkTile(restaurant: _r),
         const SizedBox(height: 12),
         Text(context.tr('restaurants_m_pause'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
         const SizedBox(height: 6),

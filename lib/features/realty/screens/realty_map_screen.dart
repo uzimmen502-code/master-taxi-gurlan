@@ -408,7 +408,7 @@ class _StripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final tierColor = RealtyTabs.colorFor(listing.tier);
+    final tierColor = RealtyTabs.colorFor(listing.displayTier);
     final image =
         listing.imageUrls.isNotEmpty ? listing.imageUrls.first : null;
     return Material(
@@ -550,7 +550,7 @@ class _ApproxPinSheet extends StatelessWidget {
                   height: 10,
                   margin: const EdgeInsets.only(top: 5, right: 8),
                   decoration: BoxDecoration(
-                    color: RealtyTabs.colorFor(listing.tier),
+                    color: RealtyTabs.colorFor(listing.displayTier),
                     shape: BoxShape.circle,
                   ),
                 ),

@@ -14,6 +14,7 @@ import '../../profile/screens/wallet_screen.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/restaurant_models.dart';
 import 'merchant_order_actions.dart';
+import 'restaurant_growth_tiles.dart';
 
 /// Бугунги кўрсаткичлар (соф, тестланади).
 class MerchantDailyStats {
@@ -138,6 +139,8 @@ class _MerchantReportTabState extends State<MerchantReportTab> {
             ),
             const SizedBox(height: 8),
             Text(context.tr('restaurants_m_fee_hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
+            const SizedBox(height: 16),
+            RestaurantViewsTile(restaurant: widget.restaurant),
           ],
         );
       },

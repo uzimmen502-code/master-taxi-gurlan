@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../../complaints/widgets/content_complaint_button.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 import '../realty_tabs.dart';
@@ -110,7 +111,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
   Widget build(BuildContext context) {
     final c = context.ava;
     final r = widget.listing;
-    final tierColor = RealtyTabs.colorFor(r.tier);
+    final tierColor = RealtyTabs.colorFor(r.displayTier);
     final specs = r.specsLabel;
     final detail = _detail;
 
@@ -145,7 +146,8 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
 
           Row(
             children: [
-              RealtyTierBadge(tier: r.tier),
+              // Пуллик муддат тугаган бўлса — ОДДИЙ (хом `tier` эмас).
+              RealtyTierBadge(tier: r.displayTier),
               const SizedBox(width: 8),
               Text(
                 context.tr(
@@ -277,6 +279,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
             )
           else
             _LockedPanel(unlocksLeft: _repo.watchUnlocksLeft()),
+          ContentComplaintButton.realty(listing: r, ownerKeyLoader: _repo.myOwnerKey),
         ],
       ),
       bottomNavigationBar: SafeArea(

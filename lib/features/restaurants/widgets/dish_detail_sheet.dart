@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
+import '../../complaints/widgets/content_complaint_button.dart';
 import '../../home/widgets/ava_chip.dart';
 import '../../home/widgets/ava_section.dart';
 import '../../tv_market/models/tv_clip.dart';
@@ -194,6 +195,7 @@ class _DishDetailSheetState extends State<DishDetailSheet> {
                       ..._facts(context, c, lang),
                       ..._tiers(context, c, qty),
                       if (qty > 0) ..._noteField(context, c),
+                      ContentComplaintButton.dish(restaurant: widget.restaurant, item: widget.item, closeSheetFirst: true),
                     ],
                   ),
                 ),

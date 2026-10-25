@@ -127,7 +127,7 @@ class RealtyMapViewState extends State<RealtyMapView> {
 
   String _iconKey(RealtyListing r, {required bool approx}) {
     final selected = widget.selectedId == r.id;
-    return '${r.tier.name}|$selected|${labelTextFor(r, approx: approx)}';
+    return '${r.displayTier.name}|$selected|${labelTextFor(r, approx: approx)}';
   }
 
   Future<void> _rebuildIcons() async {
@@ -153,7 +153,7 @@ class RealtyMapViewState extends State<RealtyMapView> {
       for (final e in needed.entries) {
         final bytes = await _drawLabel(
           text: labelTextFor(e.value.r, approx: e.value.approx),
-          color: RealtyTabs.colorFor(e.value.r.tier),
+          color: RealtyTabs.colorFor(e.value.r.displayTier),
           selected: widget.selectedId == e.value.r.id,
           dpr: dpr,
         );
@@ -334,7 +334,7 @@ class RealtyMapViewState extends State<RealtyMapView> {
         // турмасин.
         icon: icon ??
             BitmapDescriptor.defaultMarkerWithHue(
-              RealtyTabs.markerHueFor(r.tier),
+              RealtyTabs.markerHueFor(r.displayTier),
             ),
         // Ёрлиқ пастки учи билан нуқтани кўрсатади (стандарт пиннинг
         // ҳам таянчи шу).

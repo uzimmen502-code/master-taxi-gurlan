@@ -17,6 +17,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../home/widgets/ava_chip.dart';
+import '../../complaints/widgets/content_complaint_button.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/bookings.dart';
@@ -35,6 +36,7 @@ import '../domain/dish_stats.dart';
 import 'my_bookings_screen.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
+import '../../tv_market/services/shop_stats_recorder.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
@@ -419,6 +421,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   /// Таом тафсилоти варағи (қатор босилганда ёки сават варағидаги таом номи босилганда).
   void _openItem(MenuItem item) {
+    ShopStatsRecorder.dishView(restaurantId: _r.id, itemId: item.id, source: 'restaurant');
     showDishDetailSheet(
       context,
       item: item,
@@ -463,7 +466,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       context: context,
       showDragHandle: true,
       backgroundColor: c.surface,
-      builder: (ctx) => Padding(
+      // Кичик экран / катта шрифт / узун тавсиф: мазмун варақ ичида айланади (ортиб кетмайди).
+      builder: (ctx) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -500,6 +504,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 ),
               ),
             ],
+            ContentComplaintButton.restaurant(restaurant: _r, closeSheetFirst: true, reserveSpace: true),
           ],
         ),
       ),

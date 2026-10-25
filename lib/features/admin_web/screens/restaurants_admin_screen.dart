@@ -22,6 +22,7 @@ import '../../restaurants/domain/restaurant_models.dart';
 import '../services/admin_restaurants_service.dart';
 import '../utils/restaurant_tariff_draft.dart';
 import '../widgets/restaurant_fee_card.dart';
+import '../widgets/shop_complaints_panel.dart';
 
 final _dateFmt = DateFormat('dd.MM HH:mm');
 
@@ -199,6 +200,8 @@ class _RestaurantsTabState extends State<_RestaurantsTab> {
         final shown = docs.where((d) => _filter.isEmpty || d.data()['status'] == _filter).toList();
         return Column(
           children: [
+            // Харидор шикоятлари (ресторан ва таом, `submitContentComplaint`): тўхтатиш — қуйидаги карточкада.
+            const ShopComplaintsPanel(source: FirestoreShopComplaintsSource(type: 'restaurant_content'), maxListHeight: 240),
             _FilterBar(
               value: _filter,
               options: {

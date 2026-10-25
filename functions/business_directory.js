@@ -23,8 +23,8 @@
  *   • онлайн дўкон `tv_shops/{phone}` ва йўналиш дўкони `businesses/{id}` — `status: active | blocked`;
  *   • блокланганда фарзанд ёзувлар ҳам блокланади ва `blockedByParent` белгиси олади (`shop` ёки
  *     `business:<id>`) — блок олинганда ФАҚАТ шу белгили ёзувлар қайтади; админ алоҳида блоклагани қолади;
- *   • блокланган объект харитадан `geohash`/`geohash4`ни олиб ташлаш орқали йўқолади — харита сўрови
- *     (`geohash4 in`) уни эски APK'ларда ҳам топмайди; блок олинганда координатадан қайта ҳисобланади.
+ *   • блокланган объект харитадан йўқолади: `lat`/`lng`/`geohash`лар `blockedGeo`га олинади — харита катак
+ *     сўрови ҳам, умумий кўриниш ҳам (эски APK'ларда ҳам) координатасиз ҳужжатни чизмайди; блок олинганда тикланади.
  */
 'use strict';
 
@@ -146,11 +146,16 @@ function changedKeys(cur, next) {
 
 const isBlocked = (snap) => !!snap && snap.exists && (snap.data() || {}).status === 'blocked';
 
-/** Блокланган объект таҳрирланса ҳам харитага қайтмайди: `geohash`лар ёзилмайди (блок олинганда тикланади). */
+/**
+ * Блокланган объект таҳрирланса ҳам харитага қайтмайди: координата `blockedGeo`га ёзилади, `lat`/`lng`/`geohash`лар
+ * ёзилмайди (блок олинганда тикланади).
+ */
 function visibleFields(cur, fields) {
   if (!cur || cur.status !== 'blocked') return fields;
-  const { geohash, geohash4, ...rest } = fields; // eslint-disable-line no-unused-vars
-  return rest;
+  const {
+    geohash, geohash4, lat, lng, ...rest // eslint-disable-line no-unused-vars
+  } = fields;
+  return { ...rest, blockedGeo: { lat, lng } };
 }
 
 const CASCADE_BATCH = 400;
@@ -233,19 +238,48 @@ function phoneVariants(phone12) {
   return [phone12, phone12.slice(3), `+${phone12}`];
 }
 
-/** Объект харитадан йўқолиши учун: `geohash`лар ўчирилади (харита сўрови `geohash4 in`). */
-function businessBlockPatch(FieldValue, extra) {
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+
+/** Блокланган объектнинг координатаси `blockedGeo`да сақланади; ҳақиқий жойи (таҳрир ва audit учун). */
+function geoOf(cur) {
+  const g = cur && cur.blockedGeo;
+  if (g && isNum(g.lat) && isNum(g.lng)) return { lat: g.lat, lng: g.lng };
+  return cur && isNum(cur.lat) && isNum(cur.lng) ? { lat: cur.lat, lng: cur.lng } : null;
+}
+
+/** Ўзгариш аниқлаш учун: блокланган объект координатаси `blockedGeo`дан олинади. */
+function effective(cur) {
+  const g = geoOf(cur);
+  return g ? { ...cur, ...g } : cur;
+}
+
+/**
+ * Объект харитадан ВА эски APK'лардан йўқолиши учун: `lat`/`lng`/`geohash`лар `blockedGeo`га олинади. Харита катак
+ * сўрови (`geohash4 in`) ҳам, умумий кўриниш (`createdAt` бўйича) ҳам координатасиз ҳужжатни чизмайди
+ * (`Business.tryFromMap` эски иловада `null` қайтаради). Блок олинганда ҳаммаси тикланади.
+ */
+function businessBlockPatch(FieldValue, cur, extra) {
+  const g = geoOf(cur);
   return {
-    status: 'blocked', geohash: FieldValue.delete(), geohash4: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp(), ...extra,
+    status: 'blocked',
+    ...(g ? { blockedGeo: g } : {}),
+    lat: FieldValue.delete(),
+    lng: FieldValue.delete(),
+    geohash: FieldValue.delete(),
+    geohash4: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+    ...extra,
   };
 }
 
-/** Блок олинганда: `geohash`лар координатадан қайта ҳисобланади, блок майдонлари тозаланади. */
+/** Блок олинганда: координата `blockedGeo`дан қайтади, `geohash`лар қайта ҳисобланади, блок майдонлари тозаланади. */
 function businessUnblockPatch(FieldValue, cur, extra) {
-  const geo = typeof cur.lat === 'number' && typeof cur.lng === 'number' ? geohashPair(cur.lat, cur.lng) : {};
+  const g = geoOf(cur);
+  const geo = g ? { lat: g.lat, lng: g.lng, ...geohashPair(g.lat, g.lng) } : {};
   return {
     status: 'active',
     ...geo,
+    blockedGeo: FieldValue.delete(),
     blockedByParent: FieldValue.delete(),
     blockedAt: FieldValue.delete(),
     blockedBy: FieldValue.delete(),
@@ -285,7 +319,7 @@ async function cascadeShopBlock(db, admin, phone12, block) {
   const { FieldValue } = admin.firestore;
   const ts = FieldValue.serverTimestamp();
   const businesses = await patchPaged(db, admin, db.collection(COLLECTION).where('ownerId', '==', phone12), (x) => {
-    if (block) return x.status === 'blocked' ? null : businessBlockPatch(FieldValue, { blockedByParent: PARENT_SHOP });
+    if (block) return x.status === 'blocked' ? null : businessBlockPatch(FieldValue, x, { blockedByParent: PARENT_SHOP });
     return x.status === 'blocked' && x.blockedByParent === PARENT_SHOP ? businessUnblockPatch(FieldValue, x) : null;
   });
   let stillBlocked = new Set();
@@ -363,7 +397,7 @@ function attachBusinessDirectory(exportsObj, deps) {
         if (!snap.exists) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
         const cur = snap.data();
         if (cur.ownerId !== uid) throw fail('permission-denied', 'BUSINESS_NOT_OWNER', 'Объект топилмади.');
-        if (changedKeys(cur, fields).length === 0) return { changed: false };
+        if (changedKeys(effective(cur), fields).length === 0) return { changed: false };
         t.update(ref, { ...visibleFields(cur, fields), updatedAt: ts() });
         return { changed: true };
       });
@@ -430,7 +464,7 @@ function attachBusinessDirectory(exportsObj, deps) {
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (!snap.exists) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
-      const keys = changedKeys(snap.data(), fields);
+      const keys = changedKeys(effective(snap.data()), fields);
       if (keys.length === 0) return { changed: false };
       t.update(ref, { ...visibleFields(snap.data(), fields), updatedAt: ts(), updatedBy: actor });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
@@ -533,7 +567,7 @@ function attachBusinessDirectory(exportsObj, deps) {
       if (was === status && !explicitOverParent) return { changed: false, ownerId: cur.ownerId };
       const meta = { blockedAt: ts(), blockedBy: actor, blockReason: reason, blockedByParent: FieldValue.delete() };
       t.update(ref, status === 'blocked'
-        ? businessBlockPatch(FieldValue, { ...meta, updatedBy: actor })
+        ? businessBlockPatch(FieldValue, cur, { ...meta, updatedBy: actor })
         : businessUnblockPatch(FieldValue, cur, { updatedBy: actor }));
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: status === 'blocked' ? 'business_block' : 'business_unblock', actor, target: ref.id, ownerId: cur.ownerId || '', reason, at: ts(),

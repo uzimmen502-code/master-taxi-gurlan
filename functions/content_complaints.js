@@ -106,7 +106,8 @@ function attachContentComplaints(exportsObj, deps) {
       if ((myKey && myKey === String(x.ownerKey || '')) || (ownerId && ownerId === uid)) {
         throw fail('failed-precondition', 'COMPLAINT_OWN');
       }
-      return { title: str(x.title || x.text, 120) };
+      // Эркин матн (`text`) олинмайди — унда эга ёзган телефон бўлиши мумкин (40-банд); сарлавҳасиз эски эълон — ID.
+      return { title: str(x.title, 120) || `#${p.targetId}` };
     }
     const rRef = db.collection(RESTAURANTS).doc(p.restaurantId);
     const reads = [rRef.get(), rRef.collection('members').doc(uid).get()];

@@ -82,6 +82,11 @@ async function seed() {
   await m.doc('osh').set({ name: 'Osh', price: 40000, available: true, sort: 2, photoUrl: 'https://x/osh.jpg' });
   await m.doc('somsa').set({ name: 'Somsa', price: 8000, available: true, sort: 1 });
   await m.doc('stop').set({ name: 'Manti (tugadi)', price: 30000, available: false, sort: 3 });
+  // Stop-list (`stopUntil` kelajakda) — sotuvda emas; muddati o'tgan stop — yana sotuvda (restaurant_orders.js qoidasi).
+  await m.doc('chuchvara').set({ name: 'Chuchvara (stop)', price: 25000, available: true, sort: 4,
+    stopUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 3600000) });
+  await m.doc('lagmon').set({ name: 'Lagmon', price: 35000, available: true, sort: 5,
+    stopUntil: admin.firestore.Timestamp.fromMillis(Date.now() - 3600000) });
   await rRef(R2).set({ name: 'Yangi kafe', status: 'applied', ownerUid: OWNER, legalType: 'llc' });
   await rRef(R2).collection('members').doc(OWNER).set({ role: 'owner' });
   await rRef(RHOME).set({ name: 'Onamning oshxonasi', status: 'approved', ownerUid: STRANGER, legalType: 'individual', address: 'uy manzili' });
@@ -129,6 +134,8 @@ async function main() {
     assert.ok(p.body.includes('Кафе-ресторан') && p.body.includes('Менюни очиш') && p.body.includes('Таомлар'));
     assert.ok(p.body.indexOf('Somsa') < p.body.indexOf('>Osh<'), 'sort tartibi');
     assert.ok(!p.body.includes('Manti'), 'sotuvda yo\'q taom ko\'rinmaydi');
+    assert.ok(!p.body.includes('Chuchvara'), 'stop-list (stopUntil kelajakda) taomi ko\'rinmaydi');
+    assert.ok(p.body.includes('Lagmon'), 'stop muddati o\'tgan taom yana ko\'rinadi');
     assert.ok(!p.body.includes('915100001') && !p.body.includes('Mustaqillik'), 'telefon va manzil yo\'q');
     assert.ok(p.body.includes('og:image" content="https://x/cover.jpg'));
     assert.ok(p.body.includes(`?shop=${rid1}&amp;src=link`));

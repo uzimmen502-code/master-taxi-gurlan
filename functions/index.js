@@ -12425,6 +12425,8 @@ require('./shop_links').attachShopLinks(exports, {
   functions, db, admin, callerPhone, canonicalUid,
   publicBase: AVA_PUBLIC_BASE, playUrl: AVA_PLAY_URL, apkUrl: AVA_APP_DOWNLOAD_PAGE,
 });
+// Сотувчи статистикаси: recordShopEvent, shopStatsSeenCleanup (2026-10-25, 6-босқич; functions/shop_stats.js).
+require('./shop_stats').attachShopStats(exports, { functions, db, admin, callerPhone, canonicalUid });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EV XARITASI — Maps Static API proksisi

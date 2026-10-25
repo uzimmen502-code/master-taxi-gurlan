@@ -18,7 +18,7 @@ List<String> tvSocialPostedNetworks(TvClip clip) {
   final nets = clip.socialPost['networks'];
   if (nets is! Map) return const [];
   return [
-    for (final id in TvSocial.ordered)
+    for (final id in TvSocial.known)
       if (nets[id] is Map && '${(nets[id] as Map)['status'] ?? ''}' == 'posted') id,
   ];
 }

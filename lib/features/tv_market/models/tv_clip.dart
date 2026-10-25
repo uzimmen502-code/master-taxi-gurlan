@@ -68,7 +68,7 @@ List<String> _parseSocialNetworks(dynamic raw) {
   final out = <String>[];
   for (final e in raw) {
     final id = '$e'.trim().toLowerCase();
-    if (TvSocial.ordered.contains(id) && !out.contains(id)) out.add(id);
+    if (TvSocial.known.contains(id) && !out.contains(id)) out.add(id);
   }
   return out;
 }

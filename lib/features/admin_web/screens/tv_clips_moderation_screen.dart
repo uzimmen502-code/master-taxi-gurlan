@@ -953,7 +953,7 @@ class _TvClipDetailDialog extends StatelessWidget {
     final nets = clip.socialPost['networks'];
     if (nets is! Map) return clip.socialPostSummary();
     final parts = <String>[];
-    for (final id in TvSocial.ordered) {
+    for (final id in TvSocial.known) {
       final row = nets[id];
       if (row is Map && '${row['status'] ?? ''}'.isNotEmpty) {
         parts.add('$id: ${row['status']}');

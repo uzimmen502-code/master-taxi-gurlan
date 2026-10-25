@@ -77,4 +77,21 @@ class SearchIndexRepository {
 
     return GlobalSearch.rank(pool, query, limit: limit);
   }
+
+  /// Аҳоли бозори қидирувидаги «Дўконлар» қатори: фақат токен сўрови (1500 лик кэш ЮКЛАНМАЙДИ — бозор экрани
+  /// ҳар қидирувда арзон қолсин, 36-37-банд), турини `shop` га фильтрлаб.
+  Future<List<SearchIndexEntry>> searchShops(String query, {int limit = 10}) async {
+    final tokens = GlobalSearch.queryTokens(query);
+    if (tokens.isEmpty) return const [];
+    final snap = await _col
+        .where('active', isEqualTo: true)
+        .where('searchTokens', arrayContains: tokens.first)
+        .limit(60)
+        .get();
+    final shops = snap.docs
+        .map(SearchIndexEntry.fromFirestore)
+        .where((e) => e.type == SearchIndexEntry.typeShop && e.targetOwner.isNotEmpty)
+        .toList(growable: false);
+    return GlobalSearch.rank(shops, query, limit: limit);
+  }
 }

@@ -43,6 +43,9 @@ HomeSearchKind homeSearchKindOf(SearchIndexEntry e) {
     case SearchIndexEntry.typePlatformProduct:
     case SearchIndexEntry.typeBreadProduct:
     case SearchIndexEntry.typeFoodProduct:
+    // Онлайн дўкон маҳсулоти ва дўконнинг ўзи (2026-10-25) — «Маҳсулот» тоифаси (дўкон маҳсулот сотади).
+    case SearchIndexEntry.typeShopItem:
+    case SearchIndexEntry.typeShop:
       return HomeSearchKind.product;
   }
   // Номаълум тур (индекс янгиланса) — «Эълон» энг нейтрал тоифа.

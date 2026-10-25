@@ -195,7 +195,9 @@ class _DishDetailSheetState extends State<DishDetailSheet> {
                       ..._facts(context, c, lang),
                       ..._tiers(context, c, qty),
                       if (qty > 0) ..._noteField(context, c),
-                      ContentComplaintButton.dish(restaurant: widget.restaurant, item: widget.item, closeSheetFirst: true),
+                      // Сотувда бўлмаган таомга шикоят йўқ (эга қарори 2026-10-25; сервер ҳам рад этади).
+                      if (widget.item.isAvailable)
+                        ContentComplaintButton.dish(restaurant: widget.restaurant, item: widget.item, closeSheetFirst: true),
                     ],
                   ),
                 ),

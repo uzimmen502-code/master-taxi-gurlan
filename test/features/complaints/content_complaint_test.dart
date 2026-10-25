@@ -303,6 +303,25 @@ void main() {
       expect(find.text(tr('content_report_reason_fraud')), findsOneWidget);
     });
 
+    testWidgets('таом варағи: сотувда йўқ (available:false ёки stop-list) таомда шикоят тугмаси ЙЎҚ (эга қарори)', (t) async {
+      for (final off in [
+        const MenuItem(id: 'off', name: 'Manti', price: 20000, available: false),
+        MenuItem(id: 'stop', name: 'Chuchvara', price: 20000, stopUntil: DateTime.now().add(const Duration(hours: 1))),
+      ]) {
+        late BuildContext ctx;
+        await t.pumpWidget(l10nApp(home: Scaffold(key: UniqueKey(), body: Builder(builder: (c) {
+          ctx = c;
+          return const SizedBox();
+        }))));
+        showDishDetailSheet(ctx, item: off, restaurant: _rest, cart: RestaurantCart());
+        await t.pumpAndSettle();
+        expect(find.byKey(const ValueKey('dish-sheet-name')), findsOneWidget);
+        expect(find.byKey(const ValueKey('content_report_dish')), findsNothing, reason: off.id);
+        Navigator.of(ctx).pop();
+        await t.pumpAndSettle();
+      }
+    });
+
     testWidgets('кўчмас мулк: бегонага тугма бор, эгага (бир хил калит) — йўқ', (t) async {
       await t.pumpWidget(l10nApp(home: RealtyDetailScreen(listing: _listing(), repository: _RealtyRepo('k_buyer'))));
       await t.pumpAndSettle();

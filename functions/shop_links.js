@@ -276,11 +276,13 @@ function attachShopLinks(exportsObj, deps) {
           return;
         }
         const items = await pageItems(db, r);
+        // Манба (6-босқич статистикаси): QR ёки улашилган ҳавола — иловага шу белги билан ўтади.
+        const src = req.query && req.query.src === 'qr' ? 'qr' : 'link';
         // Блок тез акс этсин: CDN кэши 5 дақиқа.
         res.set('Cache-Control', 'public, max-age=120, s-maxage=300');
         res.status(200).send(buildShopPageHtml({
           shopName: r.shopName, directionName: r.directionName, items, pageUrl: urlOf(id),
-          webUrl: `${publicBase}/?shop=${id}`, appUrl: playUrl, altUrl: apkUrl, lang,
+          webUrl: `${publicBase}/?shop=${id}&src=${src}`, appUrl: playUrl, altUrl: apkUrl, lang,
         }));
         log({ action: 'shopPage', result: 'ok', items: items.length, durationMs: Date.now() - started });
       } catch (e) {

@@ -42,7 +42,9 @@ async function renderPage(path, lang = 'uz') {
   let status = 0;
   let body = '';
   const headers = {};
-  const req = { path, get: (h) => (h.toLowerCase() === 'accept-language' ? lang : '') };
+  const [p, qs] = path.split('?');
+  const query = Object.fromEntries(new URLSearchParams(qs || ''));
+  const req = { path: p, query, get: (h) => (h.toLowerCase() === 'accept-language' ? lang : '') };
   const res = {
     set: (k, v) => { headers[k] = v; return res; },
     status: (s) => { status = s; return res; },
@@ -138,6 +140,9 @@ async function main() {
     const dir = await renderPage(`/s/${bizId}`);
     assert.ok(dir.body.includes('Sidabilla — Kiyim') && dir.body.includes('Ko&#39;ylak'));
     assert.ok(!dir.body.includes('Non &lt;b&gt;'), 'boshqa yo\'nalish mahsuloti yo\'q');
+    assert.ok(all.body.includes(`?shop=${shopId}&amp;src=link`), 'manba: havola');
+    assert.ok((await renderPage(`/s/${shopId}?src=qr`)).body.includes(`?shop=${shopId}&amp;src=qr`), 'manba: QR');
+    assert.ok((await renderPage(`/s/${shopId}?src=<x>`)).body.includes('src=link'), 'notanish manba -> link');
     const nf = await renderPage('/s/ZZZZZZZZZZ');
     assert.ok(nf.body.includes('noindex') && nf.body.includes('Дўкон топилмади'));
   });

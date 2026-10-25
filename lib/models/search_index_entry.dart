@@ -20,7 +20,17 @@ class SearchIndexEntry {
     this.districtId = '',
     this.priorityBoost = 0,
     this.active = true,
+    this.targetOwner = '',
+    this.targetBusinessId = '',
   });
+
+  /// Онлайн дўкон маҳсулоти (`tv_shop_items`) ва дўкон/йўналиш (`tv_shops`, `businesses`), 2026-10-25.
+  static const typeShopItem = 'shop_item';
+  static const typeShop = 'shop';
+
+  /// Натижа АЙНАН қайси онлайн дўконни ва йўналишни очади (`target` — сервер ёзади).
+  final String targetOwner;
+  final String targetBusinessId;
 
   static const typeService = 'service';
   static const typePlatformProduct = 'platform_product';
@@ -67,6 +77,8 @@ class SearchIndexEntry {
     if (geo is Map) {
       g = Map<String, dynamic>.from(geo);
     }
+    final target = d['target'];
+    final t = target is Map ? Map<String, dynamic>.from(target) : const <String, dynamic>{};
     return SearchIndexEntry(
       id: doc.id,
       type: (d['type'] as String?)?.trim() ?? '',
@@ -85,6 +97,8 @@ class SearchIndexEntry {
       districtId: (g['districtId'] as String?)?.trim() ?? '',
       priorityBoost: (d['priorityBoost'] as num?)?.toInt() ?? 0,
       active: d['active'] as bool? ?? true,
+      targetOwner: (t['ownerPhone'] as String?)?.trim() ?? '',
+      targetBusinessId: (t['businessId'] as String?)?.trim() ?? '',
     );
   }
 }

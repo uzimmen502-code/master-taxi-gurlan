@@ -6,20 +6,26 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_districts_cache.dart';
 import '../../../core/geo/geo_tier_bar.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
+import '../../../models/search_index_entry.dart';
 import '../../../repositories/platform_products_repository.dart';
+import '../../../repositories/search_index_repository.dart';
 import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../../tv_market/screens/tv_shop_public_screen.dart';
 import '../../tv_market/widgets/tv_shop_item_grid_card.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
+import '../utils/market_shop_items.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/platform_market_card.dart';
 
@@ -54,6 +60,15 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   bool _platformLoaded = false;
   bool _shopLoaded = false;
 
+  /// Қидирувда сервер топган онлайн дўкон маҳсулотлари (`searchTokens`, охирги 80 та билан чекланмайди) ва номи
+  /// мос келган дўконлар (`search_index`, тури `shop`) — 2026-10-25, 4-босқич.
+  List<TvShopItem> _searchedItems = const [];
+  List<SearchIndexEntry> _shopHits = const [];
+  late final SearchIndexRepository _searchIndex = SearchIndexRepository();
+
+  /// Вилоят даражасида ҳудуд фильтри учун шу вилоят туманлари (эълонлар каби, `inGeoScope`).
+  Set<String> _regionDistricts = const {};
+
   /// «Қайта уриниш»: эълонлар оқими қайтадан очилади.
   void _retryAds() => setState(() {
         _adsStream = null;
@@ -80,13 +95,62 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     return _adsStream!;
   }
 
-  void _setScope(GeoScope s) => setState(() => _scope = s);
+  void _setScope(GeoScope s) {
+    setState(() => _scope = s);
+    unawaited(_loadRegionDistricts());
+  }
+
+  Future<void> _loadRegionDistricts() async {
+    final scope = _scope;
+    final rid = scope.area.regionId.trim();
+    if (scope.level != GeoLevel.region || rid.isEmpty) {
+      if (mounted && _regionDistricts.isNotEmpty) setState(() => _regionDistricts = const {});
+      return;
+    }
+    try {
+      final ids = await GeoDistrictsCache.districtIdsOf(rid);
+      if (mounted && identical(scope, _scope)) setState(() => _regionDistricts = ids.toSet());
+    } catch (e) {
+      debugPrint('[CheapProducts] region districts: $e');
+    }
+  }
+
+  /// Дўкон маҳсулотлари ва дўкон номлари бўйича сервер қидируви (ёзиш тўхтагач, эълонлар оқими билан бирга).
+  Future<void> _runShopSearch(String q) async {
+    final token = CatalogSearch.normalize(q).split(' ').firstWhere((w) => w.length >= 2, orElse: () => '');
+    if (token.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _searchedItems = const [];
+          _shopHits = const [];
+        });
+      }
+      return;
+    }
+    final results = await Future.wait<Object>([
+      _shopRepo.searchForMarket(token).catchError((Object e) {
+        debugPrint('[CheapProducts] item search: $e');
+        return const <TvShopItem>[];
+      }),
+      _searchIndex.searchShops(q).catchError((Object e) {
+        debugPrint('[CheapProducts] shop search: $e');
+        return const <SearchIndexEntry>[];
+      }),
+    ]);
+    if (!mounted || q != _streamQuery) return;
+    setState(() {
+      _searchedItems = results[0] as List<TvShopItem>;
+      _shopHits = results[1] as List<SearchIndexEntry>;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadPlatform());
     unawaited(_loadShopItems());
+    unawaited(_loadRegionDistricts());
+    if (CatalogSearch.normalize(_streamQuery).isNotEmpty) unawaited(_runShopSearch(_streamQuery));
   }
 
   Future<void> _loadShopItems() async {
@@ -145,6 +209,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     _debounce = Timer(_searchDebounce, () {
       if (!mounted) return;
       setState(() => _streamQuery = _query);
+      unawaited(_runShopSearch(_query));
     });
   }
 
@@ -154,6 +219,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     setState(() {
       _query = '';
       _streamQuery = '';
+      _searchedItems = const [];
+      _shopHits = const [];
     });
   }
 
@@ -175,7 +242,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   }
 
   List<TvShopItem> _filteredShop() {
-    var list = List<TvShopItem>.from(_shopItems);
+    var list = marketShopPool(_shopItems, _searchedItems, _scope, _regionDistricts);
     final q = _query;
     if (CatalogSearch.normalize(q).isEmpty) return list;
     list = list.where((i) {
@@ -439,6 +506,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         ),
                       ),
                     ),
+                    if (_shopHits.isNotEmpty && CatalogSearch.normalize(_query).isNotEmpty)
+                      _ShopHitsStrip(hits: _shopHits),
                     Expanded(
                       child: MarketProductGrid(
                         itemCount: entries.length,
@@ -489,6 +558,41 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Қидирувда номи мос келган онлайн дўконлар (`search_index`, тури `shop`): босилса айнан шу дўкон ва йўналиш.
+class _ShopHitsStrip extends StatelessWidget {
+  const _ShopHitsStrip({required this.hits});
+
+  final List<SearchIndexEntry> hits;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ListView.separated(
+        key: const ValueKey('market_shop_hits'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        itemCount: hits.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final e = hits[i];
+          return ActionChip(
+            key: ValueKey('market_shop_hit_${e.id}'),
+            avatar: const Icon(Icons.storefront_rounded, size: 18),
+            label: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId),
+            )),
+          );
+        },
       ),
     );
   }

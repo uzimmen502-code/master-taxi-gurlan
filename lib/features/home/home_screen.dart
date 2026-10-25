@@ -102,7 +102,10 @@ import 'widgets/wallet_card.dart';
 import '../realty/screens/realty_detail_screen.dart';
 import '../realty/screens/realty_map_screen.dart';
 import '../realty/screens/realty_screen.dart';
+import '../tv_market/repositories/tv_shop_repository.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
+import '../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../tv_market/screens/tv_shop_public_screen.dart';
 import 'widgets/home_ads_section.dart';
 import 'widgets/home_restaurants_section.dart';
 import 'widgets/home_avagram_section.dart';
@@ -670,6 +673,23 @@ class _HomeViewState extends State<_HomeView> {
         ),
       );
       return;
+    }
+
+    // Онлайн дўкон (2026-10-25): дўкон/йўналиш натижаси — айнан шу дўкон (йўналиш танланган); маҳсулот — ўзининг
+    // экрани (ҳолати қайта текширилади, дўкон тугмаси ўз йўналишини очади). Топилмаса — Аҳоли бозори.
+    if (e.type == SearchIndexEntry.typeShop && e.targetOwner.isNotEmpty) {
+      await _push(TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId));
+      return;
+    }
+    if (e.type == SearchIndexEntry.typeShopItem && e.sourceId.isNotEmpty) {
+      final item = await TvShopRepository()
+          .fetchItem(e.sourceId)
+          .catchError((Object _) => null);
+      if (!mounted) return;
+      if (item != null) {
+        await _push(TvShopItemDetailScreen(item: item, showShopButton: true));
+        return;
+      }
     }
 
     // AVA товари / эски «AVA дўкони» хизмат картаси — алоҳида дўкон экрани

@@ -192,6 +192,18 @@ class TvShopRepository {
     return snap.docs.map(TvShopItem.fromFirestore).toList(growable: false);
   }
 
+  /// Аҳоли бозори қидируви: сервер ёзган `searchTokens` бўйича (охирги 80 та билан чекланмайди). Битта
+  /// `array-contains` — автоматик индекс; ҳолат ва қоплама расм клиентда (2026-10-25, 4-босқич).
+  Future<List<TvShopItem>> searchForMarket(String token, {int limit = 60}) async {
+    final t = token.trim().toLowerCase();
+    if (t.length < 2) return const [];
+    final snap = await _items.where('searchTokens', arrayContains: t).limit(limit).get();
+    return snap.docs
+        .map(TvShopItem.fromFirestore)
+        .where((i) => i.isActive && i.coverPhotoUrl.isNotEmpty)
+        .toList(growable: false);
+  }
+
   /// Аҳоли бозори лентаси: фаол товарлар (қоплама расм бор).
   Future<List<TvShopItem>> fetchForMarket({int limit = 80}) async {
     final snap = await _items

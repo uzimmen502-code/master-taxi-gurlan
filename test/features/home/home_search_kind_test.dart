@@ -42,6 +42,11 @@ void main() {
       }
     });
 
+    test('Маҳсулот: онлайн дўкон маҳсулоти ва дўконнинг ўзи (2026-10-25)', () {
+      expect(homeSearchKindOf(_e(SearchIndexEntry.typeShopItem)), HomeSearchKind.product);
+      expect(homeSearchKindOf(_e(SearchIndexEntry.typeShop)), HomeSearchKind.product);
+    });
+
     test('номаълум тур йиқилмайди — «Эълон» га тушади', () {
       expect(homeSearchKindOf(_e('kelajakdagi_tur')), HomeSearchKind.ad);
       expect(homeSearchKindOf(_e('')), HomeSearchKind.ad);

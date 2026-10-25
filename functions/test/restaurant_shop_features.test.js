@@ -141,6 +141,11 @@ async function main() {
     assert.ok(p.body.includes(`?shop=${rid1}&amp;src=link`));
     assert.ok((await renderPage(`/s/${rid1}?src=qr`)).body.includes(`?shop=${rid1}&amp;src=qr`));
     assert.ok((await renderPage(`/s/${rid1}`, 'ru')).body.includes('Открыть меню'));
+    // Deferred deep link: Play + referrer (restoran ham o'sha publicId — ilova resolveShopLink orqali restoranni ochadi).
+    const PLAY = 'https://play.google.com/store/apps/details?id=uz.ava.gurlan';
+    assert.ok(p.body.includes(`<a class="alt" href="${PLAY}&amp;referrer=ava_shop%3D${rid1}%26src%3Dlink">📲 AVA иловасида очиш</a>`), 'referrer: havola');
+    assert.ok((await renderPage(`/s/${rid1}?src=qr`)).body.includes(`href="${PLAY}&amp;referrer=ava_shop%3D${rid1}%26src%3Dqr"`), 'referrer: QR');
+    assert.ok(!/referrer=[^"]*(915100|rAppr1)/.test(p.body), 'referrer\'da telefon/ichki ID yo\'q');
   });
 
   await check('L5 to\'xtatilgan/yopilgan restoran: havola ochilmaydi (noindex «topilmadi»), yangi havola berilmaydi; qayta tasdiqlansa — o\'sha havola ishlaydi', async () => {
@@ -149,6 +154,7 @@ async function main() {
       assert.deepStrictEqual(await call('resolveShopLink', { publicId: rid1 }), { ok: true, available: false }, st);
       const p = await renderPage(`/s/${rid1}`);
       assert.ok(p.body.includes('noindex') && !p.body.includes('Gurlan'), st);
+      assert.ok(!p.body.includes('referrer='), `${st}: topilmadi sahifasida referrer yo'q`);
       await expectCode(call('getMyShopLink', { restaurantId: R1 }, OWNER), 'RESTAURANT_NOT_APPROVED');
     }
     await rRef(R1).update({ status: 'approved' });

@@ -94,6 +94,18 @@ async function main() {
     assert.strictEqual(links.langOf('uz,en'), 'uz');
   });
 
+  await check('P3 Play referrer (deferred deep link): faqat publicId+manba, URL-kodlangan; noto\'g\'ri ID/bo\'sh — oddiy Play', () => {
+    const P = 'https://play.google.com/store/apps/details?id=uz.ava.gurlan';
+    assert.strictEqual(links.playUrlWithReferrer(P, 'AbCdEfGh23', 'qr'), `${P}&referrer=ava_shop%3DAbCdEfGh23%26src%3Dqr`);
+    assert.strictEqual(links.playUrlWithReferrer(P, 'AbCdEfGh23', 'link'), `${P}&referrer=ava_shop%3DAbCdEfGh23%26src%3Dlink`);
+    assert.strictEqual(links.playUrlWithReferrer(P, 'AbCdEfGh23', '<x>&y=1'), `${P}&referrer=ava_shop%3DAbCdEfGh23%26src%3Dlink`, 'notanish manba -> link');
+    assert.strictEqual(links.playUrlWithReferrer('https://p.example/app', 'AbCdEfGh23', 'qr'), 'https://p.example/app?referrer=ava_shop%3DAbCdEfGh23%26src%3Dqr');
+    for (const bad of ['', '998914200001', '../../x', 'AbCdEfGh23&x=1', null]) assert.strictEqual(links.playUrlWithReferrer(P, bad, 'qr'), P, String(bad));
+    assert.strictEqual(links.playUrlWithReferrer('', 'AbCdEfGh23', 'qr'), '');
+    const html = links.buildShopPageHtml({ shopName: 'S', items: [], appUrl: links.playUrlWithReferrer(P, 'AbCdEfGh23', 'qr') });
+    assert.ok(html.includes(`<a class="alt" href="${P}&amp;referrer=ava_shop%3DAbCdEfGh23%26src%3Dqr">📲 AVA иловасида очиш</a>`), 'HTML: & ekranlangan');
+  });
+
   let shopId;
   let bizId;
   let branchId;
@@ -145,6 +157,13 @@ async function main() {
     assert.ok((await renderPage(`/s/${shopId}?src=<x>`)).body.includes('src=link'), 'notanish manba -> link');
     const nf = await renderPage('/s/ZZZZZZZZZZ');
     assert.ok(nf.body.includes('noindex') && nf.body.includes('Дўкон топилмади'));
+    // Deferred deep link: «AVA иловасида очиш» — Play + referrer (ava_shop + manba); topilmadi — oddiy Play.
+    const PLAY = 'https://play.google.com/store/apps/details?id=uz.ava.gurlan';
+    assert.ok(all.body.includes(`<a class="alt" href="${PLAY}&amp;referrer=ava_shop%3D${shopId}%26src%3Dlink">📲 AVA иловасида очиш</a>`), 'referrer: havola');
+    assert.ok((await renderPage(`/s/${shopId}?src=qr`)).body.includes(`href="${PLAY}&amp;referrer=ava_shop%3D${shopId}%26src%3Dqr"`), 'referrer: QR');
+    assert.ok(dir.body.includes(`href="${PLAY}&amp;referrer=ava_shop%3D${bizId}%26src%3Dlink"`), 'referrer: yo\'nalish');
+    assert.ok(!all.body.includes(OWNER) && !/referrer=[^"]*99891/.test(all.body), 'referrer\'da telefon yo\'q');
+    assert.ok(nf.body.includes(`href="${PLAY}"`) && !nf.body.includes('referrer='), 'topilmadi sahifasi o\'zgarmagan');
   });
 
   await check('L6 bloklangan do\'kon/yo\'nalish: havola ochilmaydi, yangi havola berilmaydi; blok olinsa yana ishlaydi', async () => {

@@ -83,6 +83,20 @@ const TEXTS = Object.freeze({
   },
 });
 
+/**
+ * Deferred deep link (2026-10-25, Agent E): иловаси йўқ харидор «AVA иловасида очиш» → Play'дан ўрнатади → илова
+ * биринчи очилишда Install Referrer'дан `ava_shop=<publicId>&src=<qr|link>` ни ўқиб, ШУ дўкон/ресторанни очади
+ * (lib/features/my_shop/install_referrer_link.dart). Play URL форматы: `…details?id=…&referrer=<url-encoded>`.
+ * Фақат publicId ва манба — телефон/шахсий маълумот ЙЎҚ (40-банд). ID нотўғри бўлса — оддий Play ҳаволаси.
+ */
+function playUrlWithReferrer(playUrl, publicId, src) {
+  const base = String(playUrl == null ? '' : playUrl).trim();
+  if (!base || !isPublicId(publicId)) return base;
+  const source = src === 'qr' ? 'qr' : 'link';
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}referrer=${encodeURIComponent(`ava_shop=${publicId}&src=${source}`)}`;
+}
+
 function langOf(acceptLanguage) {
   return /^\s*ru\b/i.test(String(acceptLanguage || '')) ? 'ru' : 'uz';
 }
@@ -246,6 +260,48 @@ async function restaurantPageItems(db, restaurantId, nowMs = Date.now()) {
     .map((x) => ({ title: x.name, price: x.price, photoUrl: x.photoUrl || '' }));
 }
 
+/** Хато: `code` — диагностика коди (`fail` берилмаса — оддий Error, сервер ичида ишлатиш учун). */
+const plainFail = (status, code, message) => Object.assign(new Error(code), { code, status, userMessage: message || '' });
+
+/** Учала тўпламда ягона янги `publicId` (транзакция ичида). */
+async function uniqueIdInTx(db, t, fail = plainFail) {
+  for (let i = 0; i < 5; i += 1) {
+    const id = newPublicId();
+    const [a, b, c] = await Promise.all([
+      t.get(db.collection(SHOPS).where('publicId', '==', id).limit(1)),
+      t.get(db.collection(BUSINESSES).where('publicId', '==', id).limit(1)),
+      t.get(db.collection(RESTAURANTS).where('publicId', '==', id).limit(1)),
+    ]);
+    if (a.empty && b.empty && c.empty) return id;
+  }
+  throw fail('aborted', 'SHOP_LINK_RETRY', 'Қайта уриниб кўринг.');
+}
+
+/**
+ * Эганинг онлайн дўкони (`tv_shops/{uid}`) ҳаволаси — транзакция ичида: бор бўлса ўша, йўқ бўлса бир марта берилади.
+ * Блокланган дўкон — `SHOP_BLOCKED`. `getMyShopLink` ва сотувчи Telegram канали пости (`seller_tg_channel.js`) учун
+ * ЯГОНА қоида (7-банд).
+ */
+async function shopLinkInTx(db, admin, t, uid, fail = plainFail) {
+  const shopRef = db.collection(SHOPS).doc(uid);
+  const shopSnap = await t.get(shopRef);
+  if (shopSnap.exists && (shopSnap.data() || {}).status === 'blocked') {
+    throw fail('failed-precondition', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
+  }
+  const cur = shopSnap.exists ? (shopSnap.data() || {}) : null;
+  if (cur && isPublicId(cur.publicId)) return { publicId: cur.publicId, created: false };
+  const id = await uniqueIdInTx(db, t, fail);
+  t.set(shopRef, {
+    ownerPhone: uid, publicId: id, ...(cur ? {} : { name: '', createdAt: admin.firestore.FieldValue.serverTimestamp() }),
+  }, { merge: true });
+  return { publicId: id, created: true };
+}
+
+/** Сервер ичидан (callable'сиз): эганинг онлайн дўкони ҳаволаси `{ publicId, created }`; блокланган — Error `code: SHOP_BLOCKED`. */
+function ensureOwnShopLink(db, admin, uid) {
+  return db.runTransaction((t) => shopLinkInTx(db, admin, t, uid));
+}
+
 function attachShopLinks(exportsObj, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, publicBase, playUrl, apkUrl,
@@ -255,18 +311,7 @@ function attachShopLinks(exportsObj, deps) {
   const log = (o) => console.log(JSON.stringify({ module: 'shop_links', ...o }));
   const urlOf = (id) => `${publicBase}/s/${id}`;
 
-  async function uniqueId(t) {
-    for (let i = 0; i < 5; i += 1) {
-      const id = newPublicId();
-      const [a, b, c] = await Promise.all([
-        t.get(db.collection(SHOPS).where('publicId', '==', id).limit(1)),
-        t.get(db.collection(BUSINESSES).where('publicId', '==', id).limit(1)),
-        t.get(db.collection(RESTAURANTS).where('publicId', '==', id).limit(1)),
-      ]);
-      if (a.empty && b.empty && c.empty) return id;
-    }
-    throw fail('aborted', 'SHOP_LINK_RETRY', 'Қайта уриниб кўринг.');
-  }
+  const uniqueId = (t) => uniqueIdInTx(db, t, fail);
 
   /**
    * Ресторан ҳаволаси (транзакция ичида): фақат а'зо (эга/ходим), фақат `approved`. Бегона ёки йўқ ресторан —
@@ -305,29 +350,20 @@ function attachShopLinks(exportsObj, deps) {
       return { ok: true, publicId: r.publicId, url: urlOf(r.publicId) };
     }
     const out = await db.runTransaction(async (t) => {
-      const shopRef = db.collection(SHOPS).doc(uid);
-      const shopSnap = await t.get(shopRef);
+      if (!businessId) return shopLinkInTx(db, admin, t, uid, fail);
+      const shopSnap = await t.get(db.collection(SHOPS).doc(uid));
       if (shopSnap.exists && (shopSnap.data() || {}).status === 'blocked') {
         throw fail('failed-precondition', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
       }
-      if (businessId) {
-        if (!/^[A-Za-z0-9_-]{1,128}$/.test(businessId)) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
-        const ref = db.collection(BUSINESSES).doc(businessId);
-        const snap = await t.get(ref);
-        const x = snap.exists ? (snap.data() || {}) : null;
-        if (!x || x.ownerId !== uid) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
-        if (x.status === 'blocked') throw fail('failed-precondition', 'BUSINESS_BLOCKED', 'Объект вақтинча блокланган.');
-        if (isPublicId(x.publicId)) return { publicId: x.publicId, created: false };
-        const id = await uniqueId(t);
-        t.update(ref, { publicId: id });
-        return { publicId: id, created: true };
-      }
-      const cur = shopSnap.exists ? (shopSnap.data() || {}) : null;
-      if (cur && isPublicId(cur.publicId)) return { publicId: cur.publicId, created: false };
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(businessId)) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
+      const ref = db.collection(BUSINESSES).doc(businessId);
+      const snap = await t.get(ref);
+      const x = snap.exists ? (snap.data() || {}) : null;
+      if (!x || x.ownerId !== uid) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
+      if (x.status === 'blocked') throw fail('failed-precondition', 'BUSINESS_BLOCKED', 'Объект вақтинча блокланган.');
+      if (isPublicId(x.publicId)) return { publicId: x.publicId, created: false };
       const id = await uniqueId(t);
-      t.set(shopRef, {
-        ownerPhone: uid, publicId: id, ...(cur ? {} : { name: '', createdAt: admin.firestore.FieldValue.serverTimestamp() }),
-      }, { merge: true });
+      t.update(ref, { publicId: id });
       return { publicId: id, created: true };
     });
     log({ action: 'getMyShopLink', kind: businessId ? 'business' : 'shop', result: out.created ? 'created' : 'existing', durationMs: Date.now() - started });
@@ -373,7 +409,7 @@ function attachShopLinks(exportsObj, deps) {
           shopName: r.shopName,
           directionName: isRest ? (r.home ? t.home_cook : t.restaurant) : r.directionName,
           items, pageUrl: urlOf(id),
-          webUrl: `${publicBase}/?shop=${id}&src=${src}`, appUrl: playUrl, altUrl: apkUrl, lang,
+          webUrl: `${publicBase}/?shop=${id}&src=${src}`, appUrl: playUrlWithReferrer(playUrl, id, src), altUrl: apkUrl, lang,
           kind: isRest ? 'restaurant' : 'shop', coverUrl: isRest ? r.coverUrl : '',
         }));
         log({ action: 'shopPage', kind: isRest ? 'restaurant' : 'shop', result: 'ok', items: items.length, durationMs: Date.now() - started });
@@ -386,5 +422,6 @@ function attachShopLinks(exportsObj, deps) {
 
 module.exports = {
   attachShopLinks, resolvePublicId, buildShopPageHtml, buildShopNotFoundHtml, newPublicId, isPublicId, langOf, pageItems,
-  restaurantPageItems,
+  playUrlWithReferrer,
+  restaurantPageItems, ensureOwnShopLink,
 };

@@ -14,6 +14,7 @@
  * йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
  */
 const axios = require('axios');
+const sellerTg = require('./seller_tg_channel');
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
@@ -56,9 +57,20 @@ function requestedNetworks(clip) {
   // `socialConsent: true` ёзади; `false` — ўзгартирилган клиент ёки эга
   // розилигини қайтариб олган.
   if (raw.length > 0 && clip.socialConsent !== true) return [];
+  const lower = raw.map((x) => String(x).toLowerCase());
   const picked = [];
   for (const id of ORDERED) {
-    if (raw.map((x) => String(x).toLowerCase()).includes(id)) picked.push(id);
+    if (lower.includes(id)) picked.push(id);
+  }
+  // Сотувчининг ЎЗ Telegram канали (2026-10-25, `seller_tg_channel.js`) — ўша розилик билан, фақат товар/хизмат
+  // видеоси (янгилик эмас). Эски сервер бу қийматни танимайди: фақат шу танланган бўлса ҳеч қаерга жойламайди.
+  // Фақат АНИҚ қиймат (катта-кичик ҳарф вариантлари rules'дан ўтиб кетарди — review M1) ва розилик матни канални
+  // айтган версия (≥ 2) билан — серверда ҳам, фақат rules'га ишонилмайди.
+  const cat = String(clip.category || 'product');
+  const v = clip.socialConsentVersion;
+  if (raw.includes(sellerTg.NET) && (cat === 'product' || cat === 'service')
+      && Number.isInteger(v) && v >= 2) {
+    picked.push(sellerTg.NET);
   }
   if (picked.length) return picked;
   // Эга тармоқ танлаган, лекин уларнинг бирортаси ҳозир қўллаб-
@@ -201,6 +213,7 @@ function attachTvSocialPublish(exports, deps) {
   const { functions, db, admin, requireCallerRoles } = deps;
   const playUrl = str(deps.playUrl, 300);
   const heavy = functions.runWith({ timeoutSeconds: 540, memory: '512MB' });
+  const sellerPoster = sellerTg.createSellerChannelPoster({ db, admin, publicBase: deps.publicBase });
 
   async function loadSettings() {
     const snap = await db.collection(SETTINGS_PATH[0]).doc(SETTINGS_PATH[1]).get();
@@ -218,10 +231,9 @@ function attachTvSocialPublish(exports, deps) {
           || str(process.env.YOUTUBE_CLIENT_SECRET, 200),
       youtubeRefreshToken: str(s.youtubeRefreshToken, 800)
           || str(process.env.YOUTUBE_REFRESH_TOKEN, 800),
-      telegramBotToken: str(s.telegramBotToken, 200)
-          || str(process.env.TELEGRAM_CHANNEL_BOT_TOKEN, 200),
-      telegramChannelId: str(s.telegramChannelId, 80)
-          || str(process.env.TELEGRAM_CHANNEL_ID, 80),
+      // Бот созламаси — ягона манба (сотувчи канали ҳам шуни ишлатади).
+      telegramBotToken: sellerTg.telegramBotFromSettings(s).token,
+      telegramChannelId: sellerTg.telegramBotFromSettings(s).channelId,
     };
   }
 
@@ -506,8 +518,10 @@ function attachTvSocialPublish(exports, deps) {
 
     for (const net of claimed.nets) {
       try {
-        const caption = buildCaption(clip, s.captionPrefix, net, playUrl);
-        const posted = await publishOne(net, videoUrl, caption, s);
+        // Сотувчи канали — ўз матни (сарлавҳа, нарх, тавсиф, дўкон ҳаволаси) ва ўз текширувлари.
+        const posted = net === sellerTg.NET
+            ? await sellerPoster.post(clip, videoUrl, s.telegramBotToken)
+            : await publishOne(net, videoUrl, buildCaption(clip, s.captionPrefix, net, playUrl), s);
         networks[net] = {
           status: 'posted',
           id: posted.id || '',
@@ -549,7 +563,14 @@ function attachTvSocialPublish(exports, deps) {
     }
     await ref.update(patch);
 
-    if (allPosted && str(clip.shopItemId, 80)) {
+    // Маҳсулотнинг «AVA саҳифаларига чиқди» белгиси — фақат AVA тармоқларидан (сотувчи канали хатоси/муваффақияти
+    // унга таъсир қилмайди). `socialPost.status` ва клипнинг `socialPostedAt`и — аввалгидек БАРЧА тармоқлардан
+    // (каналда хато бўлса админ «Қайта жойлаш» тугмасини кўраверади).
+    const avaNets = allNets.filter((n) => n !== sellerTg.NET);
+    const avaPosted = avaNets.length > 0 && avaNets.every((n) =>
+      networks[n] && networks[n].status === 'posted');
+    const avaThisRun = claimed.nets.some((n) => n !== sellerTg.NET);
+    if (avaPosted && avaThisRun && str(clip.shopItemId, 80)) {
       try {
         await db.collection('tv_shop_items').doc(clip.shopItemId).set(
             { socialPostedAt: admin.firestore.FieldValue.serverTimestamp() },

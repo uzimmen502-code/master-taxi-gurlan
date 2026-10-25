@@ -17,6 +17,8 @@
     "test:ev-charging-paid": "node test/ev_charging_paid.test.js",
     "test:clip-page": "node test/tv_clip_page.test.js",
     "test:tv-social": "node test/tv_social_caption.test.js",
+    "test:seller-tg-cf": "firebase emulators:exec --only firestore --project demo-seller-tg \"node test/seller_tg_channel_cf.test.js\"",
+    "test:seller-tg-rules": "firebase emulators:exec --only firestore --project demo-seller-tg-rules \"node test/seller_tg_channel_rules.test.js\"",
     "test:intercity": "node test/intercity_rules.test.js",
     "test:assistant": "node test/assistant_chat.test.js",
     "test:ev-static-map": "node test/ev_static_map.test.js",

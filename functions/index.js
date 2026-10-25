@@ -12426,6 +12426,8 @@ require('./shop_links').attachShopLinks(exports, {
   functions, db, admin, callerPhone, canonicalUid,
   publicBase: AVA_PUBLIC_BASE, playUrl: AVA_PLAY_URL, apkUrl: AVA_APP_DOWNLOAD_PAGE,
 });
+// Сотувчининг ўз Telegram канали: sellerTgChannelStatus/Prepare/Connect/Disconnect (2026-10-25; functions/seller_tg_channel.js).
+require('./seller_tg_channel').attachSellerTgChannel(exports, { functions, db, admin, callerPhone, canonicalUid });
 // Сотувчи статистикаси: recordShopEvent, shopStatsSeenCleanup (2026-10-25, 6-босқич; functions/shop_stats.js).
 require('./shop_stats').attachShopStats(exports, { functions, db, admin, callerPhone, canonicalUid });
 
@@ -20131,4 +20133,6 @@ attachTvSocialPublish(exports, {
   requireCallerRoles,
   // Play havolasi bitta manbadan — podpisga ham shu qo'shiladi.
   playUrl: AVA_PLAY_URL,
+  // Sotuvchi Telegram kanali posti: do'konning doimiy /s/<publicId> havolasi (seller_tg_channel.js).
+  publicBase: AVA_PUBLIC_BASE,
 });

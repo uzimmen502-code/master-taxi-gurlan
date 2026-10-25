@@ -13,6 +13,7 @@ import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
 import '../../tv_market/screens/tv_shop_public_screen.dart';
+import '../../tv_market/services/shop_stats_recorder.dart';
 import '../domain/business.dart';
 import '../domain/business_pin.dart';
 import '../domain/website_link.dart';
@@ -128,6 +129,7 @@ class BusinessDetailSheet extends StatelessWidget {
                 if (origin is Restaurant)
                   OutlinedButton.icon(
                     onPressed: () {
+                      ShopStatsRecorder.restaurantView(restaurantId: origin.id, source: 'map');
                       Navigator.of(context).pop();
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(builder: (_) => RestaurantScreen(restaurant: origin)),

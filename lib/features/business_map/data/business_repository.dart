@@ -153,24 +153,29 @@ class BusinessRepository {
     });
   }
 
-  /// Эганинг онлайн дўкони ёки йўналиши [businessId] доимий ҳаволаси (`getMyShopLink`): бир марта берилади,
-  /// ўзгармайди; телефон йўқ. Қайтаради: `https://…/s/<publicId>`.
-  Future<String> getMyShopLink({String businessId = ''}) async {
+  /// Эганинг онлайн дўкони, йўналиши [businessId] ёки а'зоси бўлган кафе-ресторан [restaurantId] доимий ҳаволаси
+  /// (`getMyShopLink`): бир марта берилади, ўзгармайди; телефон йўқ. Қайтаради: `https://…/s/<publicId>`.
+  Future<String> getMyShopLink({String businessId = '', String restaurantId = ''}) async {
     final res = await _fns.httpsCallable('getMyShopLink').call<Object?>({
       if (businessId.isNotEmpty) 'businessId': businessId,
+      if (restaurantId.isNotEmpty) 'restaurantId': restaurantId,
     });
     return '${(res.data as Map)['url']}';
   }
 
-  /// Веб-ҳаволадаги ID → қайси онлайн дўкон ва йўналиш (`resolveShopLink`, логинсиз). Блокланган/номаълум —
-  /// `null` (бошқа дўкон очилмайди).
-  Future<({String ownerPhone, String businessId})?> resolveShopLink(String publicId) async {
+  /// Веб-ҳаволадаги ID → қайси онлайн дўкон ва йўналиш ёки қайси кафе-ресторан (`resolveShopLink`, логинсиз).
+  /// Блокланган/тасдиқланмаган/номаълум — `null` (бошқа объект очилмайди).
+  Future<({String ownerPhone, String businessId, String restaurantId})?> resolveShopLink(String publicId) async {
     final res = await _fns.httpsCallable('resolveShopLink').call<Object?>({'publicId': publicId});
     final d = res.data as Map;
     if (d['available'] != true) return null;
+    if (d['kind'] == 'restaurant') {
+      final rid = '${d['restaurantId'] ?? ''}';
+      return rid.isEmpty ? null : (ownerPhone: '', businessId: '', restaurantId: rid);
+    }
     final owner = '${d['ownerPhone'] ?? ''}';
     if (owner.isEmpty) return null;
-    return (ownerPhone: owner, businessId: '${d['businessId'] ?? ''}');
+    return (ownerPhone: owner, businessId: '${d['businessId'] ?? ''}', restaurantId: '');
   }
 
   /// Харидор шикояти (`submitShopComplaint`): [targetType] — `shop_item` (маҳсулот ID) ёки `shop` (сотувчи телефони).

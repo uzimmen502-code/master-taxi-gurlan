@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/l10n/l10n_extension.dart';
 import '../business_map/data/business_repository.dart';
+import '../restaurants/open_restaurant_checked.dart';
 import '../tv_market/screens/tv_shop_public_screen.dart';
 
 /// Веб-ҳаволадан келган дўкон (`/?shop=<publicId>`, 5-босқич): `/s/<id>` саҳифасидаги «Дўконни очиш» тугмаси
@@ -38,20 +39,28 @@ class PendingShopLink {
     return v;
   }
 
+  /// [openRestaurant] — тест учун; бўлмаса [openRestaurantChecked] (ҳолат очиш вақтида қайта текширилади).
   static Future<void> openIfAny(
     BuildContext context, {
-    Future<({String ownerPhone, String businessId})?> Function(String publicId)? resolve,
+    Future<({String ownerPhone, String businessId, String restaurantId})?> Function(String publicId)? resolve,
     void Function(Widget screen)? push,
+    Future<void> Function(BuildContext context, String restaurantId, String source)? openRestaurant,
   }) async {
     final id = take();
     if (id == null) return;
-    ({String ownerPhone, String businessId})? target;
+    ({String ownerPhone, String businessId, String restaurantId})? target;
     try {
       target = await (resolve ?? BusinessRepository().resolveShopLink)(id);
     } catch (e) {
       debugPrint('[PendingShopLink] resolve: $e');
     }
     if (!context.mounted) return;
+    // Кафе-ресторан ҳаволаси (2026-10-25): ўша `/s/<id>` → ўша параметр, фақат очиладиган объект бошқа.
+    if (target != null && target.restaurantId.isNotEmpty) {
+      final open = openRestaurant ??
+          (c, rid, src) => openRestaurantChecked(c, rid, source: src, push: push);
+      return open(context, target.restaurantId, _source);
+    }
     if (target == null) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_unavailable'))));
       return;

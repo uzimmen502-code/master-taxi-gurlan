@@ -25,6 +25,7 @@ import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/shop_stats_recorder.dart';
 import '../services/tv_clip_delete.dart';
 import '../services/tv_clip_share.dart';
 import '../services/tv_clip_view_recorder.dart';
@@ -1247,6 +1248,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       return;
     }
     final r = restaurant;
+    ShopStatsRecorder.restaurantView(restaurantId: r.id, source: 'video');
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => RestaurantScreen(restaurant: r)),

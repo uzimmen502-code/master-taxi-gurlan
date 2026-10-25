@@ -35,6 +35,7 @@ import '../domain/dish_stats.dart';
 import 'my_bookings_screen.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
+import '../../tv_market/services/shop_stats_recorder.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
@@ -419,6 +420,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   /// Таом тафсилоти варағи (қатор босилганда ёки сават варағидаги таом номи босилганда).
   void _openItem(MenuItem item) {
+    ShopStatsRecorder.dishView(restaurantId: _r.id, itemId: item.id, source: 'restaurant');
     showDishDetailSheet(
       context,
       item: item,

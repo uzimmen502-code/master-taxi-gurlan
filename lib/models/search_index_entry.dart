@@ -28,6 +28,9 @@ class SearchIndexEntry {
   static const typeShopItem = 'shop_item';
   static const typeShop = 'shop';
 
+  /// Кафе-ресторан / уй ошпази (`restaurants`, 2026-10-25): [sourceId] — очиладиган ресторан ID'си.
+  static const typeRestaurant = 'restaurant';
+
   /// Натижа АЙНАН қайси онлайн дўконни ва йўналишни очади (`target` — сервер ёзади).
   final String targetOwner;
   final String targetBusinessId;

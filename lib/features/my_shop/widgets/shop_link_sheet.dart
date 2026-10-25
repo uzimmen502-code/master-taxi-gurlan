@@ -21,21 +21,40 @@ Future<void> showShopLinkSheet(
   required String title,
   String businessId = '',
   Future<String> Function({String businessId})? loadLink,
+  String headingKey = 'shop_link_title',
+  String hintKey = 'shop_link_hint',
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     useSafeArea: true,
-    builder: (_) => ShopLinkSheet(title: title, businessId: businessId, loadLink: loadLink),
+    builder: (_) => ShopLinkSheet(
+      title: title,
+      businessId: businessId,
+      loadLink: loadLink,
+      headingKey: headingKey,
+      hintKey: hintKey,
+    ),
   );
 }
 
 class ShopLinkSheet extends StatefulWidget {
-  const ShopLinkSheet({super.key, required this.title, this.businessId = '', this.loadLink});
+  const ShopLinkSheet({
+    super.key,
+    required this.title,
+    this.businessId = '',
+    this.loadLink,
+    this.headingKey = 'shop_link_title',
+    this.hintKey = 'shop_link_hint',
+  });
 
   final String title;
   final String businessId;
+
+  /// Сарлавҳа ва изоҳ матн калитлари: дўкон (стандарт) ёки кафе-ресторан (`restaurant_link_title/hint`).
+  final String headingKey;
+  final String hintKey;
 
   /// Тест учун алмаштирилади; бўлмаса `getMyShopLink` callable.
   final Future<String> Function({String businessId})? loadLink;
@@ -93,10 +112,14 @@ class _ShopLinkSheetState extends State<ShopLinkSheet> {
           if (snap.hasError) {
             final code = BusinessRepository.errorCode(snap.error!);
             final blocked = code == 'SHOP_BLOCKED' || code == 'BUSINESS_BLOCKED';
+            // Кафе-ресторан тасдиқланмаган/тўхтатилган (2026-10-25) — ҳавола берилмайди, сабаб тушунарли айтилади.
+            final key = code == 'RESTAURANT_NOT_APPROVED'
+                ? 'restaurant_link_not_approved'
+                : (blocked ? 'bizprod_blocked_banner' : 'shop_link_err');
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Text(
-                context.tr(blocked ? 'bizprod_blocked_banner' : 'shop_link_err'),
+                context.tr(key),
                 key: const ValueKey('shop_link_error'),
                 textAlign: TextAlign.center,
               ),
@@ -110,7 +133,7 @@ class _ShopLinkSheetState extends State<ShopLinkSheet> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(context.tr('shop_link_title'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text(context.tr(widget.headingKey), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 Text(widget.title, style: TextStyle(color: Colors.grey.shade700), textAlign: TextAlign.center),
                 const SizedBox(height: 14),
@@ -141,7 +164,7 @@ class _ShopLinkSheetState extends State<ShopLinkSheet> {
                 const SizedBox(height: 10),
                 SelectableText(url, key: const ValueKey('shop_link_url'), textAlign: TextAlign.center),
                 const SizedBox(height: 6),
-                Text(context.tr('shop_link_hint'),
+                Text(context.tr(widget.hintKey),
                     textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
                 const SizedBox(height: 14),
                 Wrap(

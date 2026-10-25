@@ -628,6 +628,14 @@ class TvClipsRepository {
     await _col.doc(clipId).update(data);
   }
 
+  /// Эга AVA саҳифаларига жойлаш розилигини қайтариб олади: сервер `socialConsent != true`
+  /// клипни ҳеч бир тармоққа жойламайди. Розилик вақти/версияси (тарих учун) қолади —
+  /// қоида уларни ўзгартиришга йўл қўймайди.
+  Future<void> withdrawSocialConsent(String clipId) async {
+    if (clipId.isEmpty) return;
+    await _col.doc(clipId).update({'socialConsent': false, 'socialNetworks': <String>[]});
+  }
+
   Future<bool> isLiked({
     required String clipId,
     required String likerId,

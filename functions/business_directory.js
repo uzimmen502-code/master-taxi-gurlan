@@ -17,7 +17,8 @@
  * Диагностика кодлари: BUSINESS_NAME_INVALID, BUSINESS_CATEGORY_INVALID, BUSINESS_LOCATION_INVALID,
  * BUSINESS_PHONE_INVALID, BUSINESS_FIELD_INVALID, BUSINESS_LIMIT_REACHED, BUSINESS_NOT_FOUND,
  * BUSINESS_NOT_OWNER, BUSINESS_OWNER_INVALID, REQUEST_ID_INVALID, GEO_DISTRICT_INVALID, REASON_REQUIRED,
- * BUSINESS_STATUS_INVALID, BUSINESS_BLOCKED, SHOP_BLOCKED, SHOP_OWNER_INVALID, SHOP_NOT_FOUND, PARENT_BLOCKED.
+ * BUSINESS_STATUS_INVALID, BUSINESS_BLOCKED, SHOP_BLOCKED, SHOP_OWNER_INVALID, SHOP_NOT_FOUND, PARENT_BLOCKED,
+ * COMPLAINT_TARGET_INVALID, COMPLAINT_OWN, COMPLAINT_LIMIT.
  *
  * БЛОКЛАШ (эга қарори 2026-10-25: «админ назорати барча кириш йўлларида»):
  *   • онлайн дўкон `tv_shops/{phone}` ва йўналиш дўкони `businesses/{id}` — `status: active | blocked`;
@@ -40,6 +41,10 @@ const BLOCK_STATUSES = Object.freeze(['active', 'blocked']);
 /** `blockedByParent` белгиси: дўкон блоки ёки муайян йўналиш блоки. */
 const PARENT_SHOP = 'shop';
 const parentOfBusiness = (businessId) => `business:${businessId}`;
+/** Харидор шикояти (`reports`): маҳсулот ёки бутун дўкон. Кунлик чеклов — бозор шикояти билан бир хил (20). */
+const COMPLAINT_TYPE = 'shop_content';
+const COMPLAINT_TARGETS = Object.freeze(['shop_item', 'shop']);
+const COMPLAINT_DAILY_LIMIT = 20;
 const PRODUCT_KINDS = Object.freeze(['product', 'service']);
 /** Админ маҳсулотни фақат фаол ёки блокланган қила олади (кутилаётган/ўчирилган ҳолатларни ўрнатмайди). */
 const PRODUCT_ADMIN_STATUSES = Object.freeze(['active', 'blocked']);
@@ -761,9 +766,66 @@ function attachBusinessDirectory(exportsObj, deps) {
     log({ action: 'adminDeleteBusinessProduct', userId: actor, itemId: ref.id, result: out.deleted ? 'deleted' : 'noop', durationMs: Date.now() - started });
     return { ok: true, ...out };
   });
+
+  // ───────────────── Харидор шикояти: маҳсулот ёки дўкон (эга қарори 2026-10-25) ─────────────────
+  // `reports/{id}` (`type: shop_content`) — фақат шу callable ёзади (rules мижоз ёзишини ёпади); админ
+  // «Онлайн дўконлар» бўлимида кўради ва мавжуд `adminResolveDatingReport` билан ёпади. Кунлик чеклов ва
+  // очиқ такрорга қарши ҳимоя — мавжуд `submitMarketComplaint` каби (21-банд).
+
+  /**
+   * data: { targetType: 'shop_item' | 'shop', targetId, reason (3..300) } → { ok, reportId, duplicate? }.
+   * `shop` учун `targetId` — сотувчи телефони (дўкон ҳужжати ID'си). Ўзининг маҳсулоти/дўконига — COMPLAINT_OWN.
+   */
+  exportsObj.submitShopComplaint = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const uid = requireUser(context);
+    const d = data || {};
+    const targetType = d.targetType;
+    if (!COMPLAINT_TARGETS.includes(targetType)) throw fail('invalid-argument', 'COMPLAINT_TARGET_INVALID', 'Шикоят юбориб бўлмади.');
+    const reason = str(d.reason, 301);
+    if (reason.length < 3 || reason.length > 300) throw fail('invalid-argument', 'REASON_REQUIRED', 'Сабабни ёзинг.');
+
+    let targetId;
+    let ownerPhone;
+    let businessId = '';
+    let title = '';
+    if (targetType === 'shop_item') {
+      targetId = docId(d.targetId, 'PRODUCT_NOT_FOUND');
+      const snap = await db.collection(ITEMS).doc(targetId).get();
+      const x = snap.exists ? (snap.data() || {}) : null;
+      if (!x || x.status === 'deleted') throw fail('not-found', 'PRODUCT_NOT_FOUND', 'Маҳсулот топилмади.');
+      ownerPhone = canonicalUid(String(x.ownerPhone || ''));
+      businessId = str(x.businessId, 128);
+      title = str(x.title, 120);
+    } else {
+      targetId = canonicalUid(String(d.targetId || ''));
+      if (!/^\d{12}$/.test(targetId)) throw fail('invalid-argument', 'SHOP_OWNER_INVALID', 'Дўкон топилмади.');
+      ownerPhone = targetId;
+    }
+    if (ownerPhone && ownerPhone === uid) throw fail('failed-precondition', 'COMPLAINT_OWN', 'Ўзингизга шикоят қилиб бўлмайди.');
+
+    const reports = db.collection('reports');
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const today = await reports.where('type', '==', COMPLAINT_TYPE).where('reporterId', '==', uid)
+      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart)).limit(COMPLAINT_DAILY_LIMIT + 1).get();
+    if (today.size >= COMPLAINT_DAILY_LIMIT) throw fail('resource-exhausted', 'COMPLAINT_LIMIT', 'Бугунги шикоятлар чегараси тугади.');
+    const open = await reports.where('type', '==', COMPLAINT_TYPE).where('reporterId', '==', uid)
+      .where('targetId', '==', targetId).where('status', '==', 'open').limit(1).get();
+    if (!open.empty) return { ok: true, reportId: open.docs[0].id, duplicate: true };
+
+    const ref = reports.doc();
+    await ref.set({
+      type: COMPLAINT_TYPE, targetType, targetId, ownerPhone: ownerPhone || '', businessId, title,
+      reporterId: uid, reason, status: 'open', createdAt: ts(),
+    });
+    log({ action: 'submitShopComplaint', userId: uid, targetType, result: 'created', durationMs: Date.now() - started });
+    return { ok: true, reportId: ref.id };
+  });
 }
 
 module.exports = {
   attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LIMITS, BOUNDS, EDITABLE, PRODUCT_LIMITS,
   cascadeBusinessProducts, cascadeBusinessBlock, cascadeShopBlock, visibleFields, PARENT_SHOP, parentOfBusiness,
+  COMPLAINT_TYPE, COMPLAINT_DAILY_LIMIT,
 };

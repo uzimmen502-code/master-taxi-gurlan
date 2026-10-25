@@ -4106,5 +4106,7 @@
   "seller_tg_err_SHOP_BLOCKED": "Ваш магазин временно заблокирован.",
   "seller_tg_err_NO_PENDING_CODE": "Сначала нажмите «Получить код».",
   "seller_tg_err_CODE_EXPIRED": "Срок действия кода истёк. Получите новый код.",
-  "seller_tg_err_CODE_NOT_FOUND": "Код не найден в описании канала. Проверьте, что описание сохранено."
+  "seller_tg_err_CODE_NOT_FOUND": "Код не найден в описании канала. Проверьте, что описание сохранено.",
+  "seller_tg_err_SELLER_TG_RATE_LIMIT": "Слишком много попыток. Попробуйте снова через час.",
+  "seller_tg_err_TG_TRY_LATER": "Telegram сейчас не отвечает. Попробуйте чуть позже."
 }

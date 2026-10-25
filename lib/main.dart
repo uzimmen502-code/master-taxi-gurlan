@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
@@ -80,6 +81,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Дўкон ҳаволаси (`/?shop=<id>`) — бош саҳифа очилгач шу дўкон очилади (5-босқич, фақат веб).
   PendingShopLink.captureFromUrl();
+  // Android App Links: `https://master-taxi-gurlan.web.app/s/<id>` иловани очса (cold start ҳам, ишлаб турганда
+  // ҳам) — ўша навбатга тушади. Оқим бошланғич ҳаволани ҳам беради. Вебда чақирилмайди (веб — юқоридаги қатор).
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    PendingShopLink.listenAppLinks(AppLinks().uriLinkStream);
+  }
   // Firestore veb SDK "Unexpected state" bug'idan avto-tiklash (faqat web).
   installFirestoreCrashGuard();
 

@@ -237,10 +237,12 @@ class _HomeViewState extends State<_HomeView> {
     };
     ServiceConfigHolder.revision.addListener(_configListener!);
     GeoContext.revision.addListener(_configListener!);
+    // Android App Link (`/s/<id>`) илова очиқ турганда келди — шу ерда очилади (cold start — пастдаги post-frame).
+    PendingShopLink.arrivals.addListener(_onShopLinkArrived);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ServiceConfigHolder.bootstrap());
-      // Веб: дўкон ҳаволаси (`/?shop=<id>`) билан очилган бўлса — шу дўкон (5-босқич).
+      // Дўкон ҳаволаси (веб `/?shop=<id>` ёки Android App Link `/s/<id>`) билан очилган бўлса — шу дўкон.
       unawaited(PendingShopLink.openIfAny(context));
       // Фаол буюртма топилганда АВТОМАТИК кузатиш экранига ўтиш олиб
       // ташланди (эга қарори) — энди `ActiveOrderCard` кўринади ва ўтиш
@@ -423,7 +425,12 @@ class _HomeViewState extends State<_HomeView> {
       ServiceConfigHolder.revision.removeListener(_configListener!);
       GeoContext.revision.removeListener(_configListener!);
     }
+    PendingShopLink.arrivals.removeListener(_onShopLinkArrived);
     super.dispose();
+  }
+
+  void _onShopLinkArrived() {
+    if (mounted) unawaited(PendingShopLink.openIfAny(context));
   }
 
   void _showAgroPromo(void _) {

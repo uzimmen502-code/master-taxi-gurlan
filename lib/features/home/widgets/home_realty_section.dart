@@ -172,7 +172,7 @@ class _HomeRealtySectionState extends State<HomeRealtySection> {
               onOpenModule: widget.onOpenAll,
               rows: [
                 for (final r in _items)
-                  _RealtyRow(
+                  HomeRealtyRow(
                     listing: r,
                     onTap: () => widget.onOpenListing(r),
                   ),
@@ -282,8 +282,9 @@ class _Badge extends StatelessWidget {
 }
 
 /// Битта объект қатори — даража рангидаги нуқта + сарлавҳа + нарх.
-class _RealtyRow extends StatelessWidget {
-  const _RealtyRow({required this.listing, required this.onTap});
+@visibleForTesting
+class HomeRealtyRow extends StatelessWidget {
+  const HomeRealtyRow({super.key, required this.listing, required this.onTap});
 
   final RealtyListing listing;
   final VoidCallback onTap;
@@ -314,6 +315,22 @@ class _RealtyRow extends StatelessWidget {
               style: AvaText.feedRow.copyWith(color: c.inkRow),
             ),
           ),
+          // Бош саҳифада ранг изоҳи (лента табы ёки харита легендаси) йўқ —
+          // пуллик даража амалда бўлса унинг МАВЖУД номи ёзилади
+          // («РЕКЛАМА»/«СРОЧНО», `RealtyTabs.labelKey`). `RealtyTierBadge`
+          // қутиси 14 px қаторга сиғмайди, шунинг учун матн шаклида.
+          if (listing.isPromoted) ...[
+            const SizedBox(width: 8),
+            Text(
+              context.tr(RealtyTabs.labelKey(listing.tier)),
+              key: const ValueKey('home_realty_tier_label'),
+              maxLines: 1,
+              style: AvaText.feedRow.copyWith(
+                color: RealtyTabs.colorFor(listing.tier),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
           if (listing.priceText.isNotEmpty) ...[
             const SizedBox(width: 8),
             Text(

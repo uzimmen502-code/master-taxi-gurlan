@@ -1,5 +1,4 @@
-import 'package:ava_gurlan/core/widgets/ava_ad_badge.dart';
-import 'package:ava_gurlan/core/theme/ava_tokens.dart';
+import 'package:ava_gurlan/features/home/widgets/home_realty_section.dart';
 import 'package:ava_gurlan/features/realty/screens/realty_detail_screen.dart';
 import 'package:ava_gurlan/features/realty/widgets/realty_card.dart';
 import 'package:ava_gurlan/models/realty_listing.dart';
@@ -8,11 +7,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Кўчмас мулк: пуллик РЕКЛАМА/СРОЧНО жойлашуви харидорга «Реклама» деб
-/// белгиланади — ФАҚАТ муддати амалда бўлса (2026-10-25).
+/// Кўчмас мулк: пуллик РЕКЛАМА/СРОЧНО даражаси харидорга МАВЖУД ёрлиқ
+/// (`RealtyTierBadge`, «РЕКЛАМА»/«СРОЧНО») билан кўрсатилади — фақат муддати
+/// амалда бўлса; янги «Реклама» белгиси қўшилмайди (эга, 2026-10-25).
 ///
 /// Локализация делегати атайлаб уланмаган — `context.tr` калитнинг ўзини
-/// қайтаради (`tv_ad_label`).
+/// қайтаради (`realty_tier_promo` ва ҳ.к.).
 class _FakeRepo implements RealtyRepository {
   @override
   Future<RealtyDetail?> fetchDetail(String listingId) async => null;
@@ -28,7 +28,8 @@ class _FakeRepo implements RealtyRepository {
       throw UnimplementedError(invocation.memberName.toString());
 }
 
-const _badge = ValueKey('ava_ad_badge');
+const _pill = ValueKey('realty_tier_badge');
+const _homeLabel = ValueKey('home_realty_tier_label');
 
 RealtyListing _listing({
   RealtyTier tier = RealtyTier.plain,
@@ -54,8 +55,8 @@ void main() {
   final future = DateTime.now().add(const Duration(days: 5));
   final past = DateTime.now().subtract(const Duration(days: 1));
 
-  group('RealtyListing.isPromotedAt — «пуллик ва амалда»', () {
-    test('РЕКЛАМА/СРОЧНО муддати келажакда — ҳа', () {
+  group('RealtyListing.isPromotedAt / displayTier', () {
+    test('РЕКЛАМА/СРОЧНО муддати келажакда — амалда', () {
       expect(
         _listing(tier: RealtyTier.promo, tierUntil: now.add(const Duration(days: 1)))
             .isPromotedAt(now),
@@ -68,7 +69,7 @@ void main() {
       );
     });
 
-    test('муддати ўтган ёки айнан ҳозир тугаган — йўқ', () {
+    test('муддати ўтган ёки айнан ҳозир тугаган — амалда эмас', () {
       expect(
         _listing(tier: RealtyTier.promo, tierUntil: now.subtract(const Duration(seconds: 1)))
             .isPromotedAt(now),
@@ -77,16 +78,23 @@ void main() {
       expect(_listing(tier: RealtyTier.urgent, tierUntil: now).isPromotedAt(now), isFalse);
     });
 
-    test('пуллик даража, лекин tierUntil йўқ — йўқ (тўлов исботи йўқ)', () {
+    test('пуллик даража, лекин tierUntil йўқ — амалда эмас', () {
       expect(_listing(tier: RealtyTier.promo).isPromotedAt(now), isFalse);
     });
 
-    test('ОДДИЙ (бепул) — tierUntil бўлса ҳам йўқ', () {
+    test('ОДДИЙ — tierUntil бўлса ҳам амалда эмас', () {
       expect(
         _listing(tier: RealtyTier.plain, tierUntil: now.add(const Duration(days: 9)))
             .isPromotedAt(now),
         isFalse,
       );
+    });
+
+    test('displayTier: амалда — ўз даражаси; тугаган — ОДДИЙ', () {
+      expect(_listing(tier: RealtyTier.urgent, tierUntil: future).displayTier, RealtyTier.urgent);
+      expect(_listing(tier: RealtyTier.promo, tierUntil: past).displayTier, RealtyTier.plain);
+      expect(_listing(tier: RealtyTier.promo).displayTier, RealtyTier.plain);
+      expect(_listing().displayTier, RealtyTier.plain);
     });
 
     test('Firestore ҳужжатидан: tier + Timestamp tierUntil', () {
@@ -103,35 +111,7 @@ void main() {
     });
   });
 
-  group('RealtyCard (лента ва хабарнома рўйхати)', () {
-    Future<void> pump(WidgetTester tester, RealtyListing l) => tester.pumpWidget(
-          MaterialApp(home: Scaffold(body: RealtyCard(listing: l, onTap: () {}))),
-        );
-
-    testWidgets('амалдаги пуллик — белги бор', (tester) async {
-      await pump(tester, _listing(tier: RealtyTier.promo, tierUntil: future));
-      expect(find.byKey(_badge), findsOneWidget);
-      expect(find.text('tv_ad_label'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('СРОЧНО ҳам пуллик — белги бор', (tester) async {
-      await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: future));
-      expect(find.byKey(_badge), findsOneWidget);
-    });
-
-    testWidgets('муддати ўтган пуллик — белги йўқ', (tester) async {
-      await pump(tester, _listing(tier: RealtyTier.promo, tierUntil: past));
-      expect(find.byKey(_badge), findsNothing);
-    });
-
-    testWidgets('бепул ОДДИЙ — белги йўқ', (tester) async {
-      await pump(tester, _listing());
-      expect(find.byKey(_badge), findsNothing);
-    });
-  });
-
-  group('RealtyDetailScreen', () {
+  group('RealtyDetailScreen — мавжуд ёрлиқ (RealtyTierBadge)', () {
     Future<void> pump(WidgetTester tester, RealtyListing l) async {
       await tester.pumpWidget(MaterialApp(
         home: RealtyDetailScreen(listing: l, repository: _FakeRepo()),
@@ -139,47 +119,75 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('амалдаги СРОЧНО — белги бор', (tester) async {
+    testWidgets('амалдаги СРОЧНО — «СРОЧНО» ёрлиғи, битта, номи бор', (tester) async {
       await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: future));
-      expect(find.byKey(_badge), findsOneWidget);
-      // Қатор битта семантик тугунга бирлашади: «СРОЧНО, Реклама, Сотиш».
-      expect(find.bySemanticsLabel(RegExp('tv_ad_label')), findsOneWidget);
+      expect(find.byKey(_pill), findsOneWidget);
+      expect(find.text('realty_tier_urgent'), findsOneWidget);
+      // Қатор битта семантик тугунга бирлашади: «СРОЧНО, Сотиш».
+      expect(find.bySemanticsLabel(RegExp('realty_tier_urgent')), findsOneWidget);
+      expect(find.text('tv_ad_label'), findsNothing, reason: 'иккинчи белги йўқ');
     });
 
-    testWidgets('муддати ўтган — белги йўқ; ОДДИЙ — белги йўқ', (tester) async {
-      await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: past));
-      expect(find.byKey(_badge), findsNothing);
+    testWidgets('амалдаги РЕКЛАМА — «РЕКЛАМА» ёрлиғи', (tester) async {
+      await pump(tester, _listing(tier: RealtyTier.promo, tierUntil: future));
+      expect(find.text('realty_tier_promo'), findsOneWidget);
+    });
+
+    testWidgets('REGRESSION: муддати ўтган РЕКЛАМА — пуллик ёрлиқ йўқ (ОДДИЙ)', (tester) async {
+      await pump(tester, _listing(tier: RealtyTier.promo, tierUntil: past));
+      expect(find.text('realty_tier_promo'), findsNothing);
+      expect(find.text('realty_tier_plain'), findsOneWidget);
+    });
+
+    testWidgets('ОДДИЙ — пуллик ёрлиқ йўқ', (tester) async {
       await pump(tester, _listing());
-      expect(find.byKey(_badge), findsNothing);
+      expect(find.text('realty_tier_promo'), findsNothing);
+      expect(find.text('realty_tier_urgent'), findsNothing);
+      expect(find.byKey(_pill), findsOneWidget, reason: '«ОДДИЙ» ёрлиғи аввалгидек');
     });
   });
 
-  group('AvaAdBadge inline (бош саҳифа 14 px қатори)', () {
-    testWidgets('14 px қаторга сиғади, қутисиз, экран ўқувчиси учун ном бор', (tester) async {
+  group('RealtyCard — янги белги қўшилмаган', () {
+    testWidgets('амалдаги пуллик картада ҳам қўшимча белги йўқ (ранг тасмаси — мавжуд)', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: SizedBox(
-            width: 360,
-            height: 14,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: Text('Уй', style: AvaText.feedRow)),
-                const SizedBox(width: 8),
-                const AvaAdBadge(inline: true),
-                const SizedBox(width: 8),
-                Text('50 000 \$', style: AvaText.feedRow),
-              ],
-            ),
+          body: RealtyCard(
+            listing: _listing(tier: RealtyTier.promo, tierUntil: future),
+            onTap: () {},
           ),
         ),
       ));
+      expect(find.byKey(_pill), findsNothing);
+      expect(find.text('tv_ad_label'), findsNothing);
+      expect(find.text('realty_tier_promo'), findsNothing);
+    });
+  });
+
+  group('HomeRealtyRow — бош саҳифа қатори (ранг изоҳи йўқ жой)', () {
+    Future<void> pump(WidgetTester tester, RealtyListing l) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 360,
+                height: 14,
+                child: HomeRealtyRow(listing: l, onTap: () {}),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('амалдаги СРОЧНО — даража номи, 14 px қаторга сиғади', (tester) async {
+      await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: future));
       expect(tester.takeException(), isNull);
-      expect(find.byKey(_badge), findsOneWidget);
-      expect(find.byType(DecoratedBox).evaluate().where(
-            (e) => e.widget.key == _badge,
-          ), isEmpty);
-      expect(find.bySemanticsLabel('tv_ad_label'), findsOneWidget);
+      expect(find.byKey(_homeLabel), findsOneWidget);
+      expect(find.text('realty_tier_urgent'), findsOneWidget);
+    });
+
+    testWidgets('муддати ўтган ёки ОДДИЙ — ном йўқ', (tester) async {
+      await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: past));
+      expect(find.byKey(_homeLabel), findsNothing);
+      await pump(tester, _listing());
+      expect(find.byKey(_homeLabel), findsNothing);
     });
   });
 }

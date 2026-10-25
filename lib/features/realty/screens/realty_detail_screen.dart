@@ -110,7 +110,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
   Widget build(BuildContext context) {
     final c = context.ava;
     final r = widget.listing;
-    final tierColor = RealtyTabs.colorFor(r.tier);
+    final tierColor = RealtyTabs.colorFor(r.displayTier);
     final specs = r.specsLabel;
     final detail = _detail;
 
@@ -145,7 +145,8 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
 
           Row(
             children: [
-              RealtyTierBadge(tier: r.tier),
+              // Пуллик муддат тугаган бўлса — ОДДИЙ (хом `tier` эмас).
+              RealtyTierBadge(tier: r.displayTier),
               const SizedBox(width: 8),
               Text(
                 context.tr(

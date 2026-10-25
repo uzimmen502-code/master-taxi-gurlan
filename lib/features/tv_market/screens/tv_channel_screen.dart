@@ -12,6 +12,7 @@ import '../services/tv_clip_delete.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_highlight_order.dart';
 import '../utils/tv_view_format.dart';
+import '../widgets/tv_ad_label.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_channel_header.dart';
 import '../widgets/tv_clip_poster.dart';
@@ -369,6 +370,12 @@ class _ClipTile extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     TvClipPoster(url: clip.posterUrl),
+                    if (clip.isAd)
+                      Positioned(
+                        left: 6,
+                        bottom: 6,
+                        child: TvAdLabel(clip: clip, compact: true),
+                      ),
                     if (highlight)
                       Positioned(
                         top: 6,

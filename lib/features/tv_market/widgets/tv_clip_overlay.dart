@@ -5,6 +5,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
+import 'tv_ad_label.dart';
 import 'tv_owner_action_bar.dart';
 import 'tv_owner_avatar.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -182,6 +183,10 @@ class _InfoColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (clip.isAd) ...[
+          TvAdLabel(clip: clip),
+          const SizedBox(height: 6),
+        ],
         Text(
           clip.title,
           maxLines: 2,

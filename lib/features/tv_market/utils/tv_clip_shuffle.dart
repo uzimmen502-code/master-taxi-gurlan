@@ -30,18 +30,12 @@ List<TvClip> tvApplyAdTierPriority(
   int maxBoostedSlots = 6,
 }) {
   if (items.length < 2) return List<TvClip>.from(items);
-  final boosted = <TvClip>[];
-  final rest = <TvClip>[];
-  for (final c in items) {
-    if (c.adBoostWeight > 0) {
-      boosted.add(c);
-    } else {
-      rest.add(c);
-    }
-  }
+  final boosted = [for (final c in items) if (c.adBoostWeight > 0) c];
   if (boosted.isEmpty) return items;
   boosted.sort((a, b) => b.adBoostWeight.compareTo(a.adBoostWeight));
-  final promoted = boosted.take(maxBoostedSlots);
-  final overflow = boosted.skip(maxBoostedSlots);
-  return [...promoted, ...rest, ...overflow];
+  final promoted = boosted.take(maxBoostedSlots).toList();
+  final promotedIds = {for (final c in promoted) c.id};
+  // Аввал ортиқча пуллик клиплар лента ОХИРИГА тушарди — оддий (бепул)
+  // контентдан ҳам кейинга (изоҳдагидан тескари, 8-босқич аудити 2026-10-25).
+  return [...promoted, for (final c in items) if (!promotedIds.contains(c.id)) c];
 }

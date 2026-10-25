@@ -3996,6 +3996,24 @@ service cloud.firestore {
                   && d.socialConsentVersion < 100));
     }
 
+    // Сотувчининг ЎЗ Telegram канали (`socialNetworks` ичида 'seller_telegram', 2026-10-25): фақат ЯРАТИШДА ва
+    // «Рухсат бераман» билан — розилик матни каналнинг номини айтган (версия ≥ 2). Кейин қўшиб бўлмайди (олиб
+    // ташлаш — розиликни қайтариб олиш — мумкин). `is list` — эски/ғалати ҳужжатларда хато бермасин.
+    function tvClipSellerChannelCreateOk(d) {
+      return !(d.get('socialNetworks', []) is list
+              && d.get('socialNetworks', []).hasAny(['seller_telegram']))
+          || (d.get('socialConsent', false) == true
+              && d.get('socialConsentVersion', 0) is int
+              && d.get('socialConsentVersion', 0) >= 2);
+    }
+
+    function tvClipSellerChannelUpdateOk() {
+      let a = request.resource.data.get('socialNetworks', []);
+      let b = resource.data.get('socialNetworks', []);
+      return !(a is list && a.hasAny(['seller_telegram']))
+          || (b is list && b.hasAny(['seller_telegram']));
+    }
+
     // Ресторан видеоси (`linkKind == 'restaurant'`, `linkId` = ресторан id)
     // фақат ШУ рестораннинг а'золари (эга ёки ходим — `members`) томонидан
     // боғланади. Аввал боғлаш клип ҳужжатида эркин эди ва ҳимоя фақат
@@ -4085,6 +4103,7 @@ service cloud.firestore {
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
                       'socialVideoUrl', 'socialNoticeVersion'])
                   && tvClipSocialConsentOk(request.resource.data)
+                  && tvClipSellerChannelCreateOk(request.resource.data)
                   && tvClipRestaurantLinkOk(request.resource.data)
                   && tvClipRealtyLinkOk(request.resource.data)));
       // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
@@ -4095,6 +4114,7 @@ service cloud.firestore {
               && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
               && tvClipRestaurantLinkUpdateOk()
               && tvClipRealtyLinkUpdateOk()
+              && tvClipSellerChannelUpdateOk()
               && !request.resource.data.diff(resource.data).affectedKeys()
                   .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',
@@ -4210,6 +4230,19 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
     match /shop_stats_seen/{docId} {
+      allow read, write: if false;
+    }
+
+    // Сотувчининг ўз Telegram канали (2026-10-25; functions/seller_tg_channel.js). Ёзиш — фақат callable'лар
+    // (эгалик коди, бир канал = бир сотувчи транзакцияси). Эга ўз ҳужжатини фақат ID билан ўқийди (жойлаш экранидаги
+    // «Менинг каналим» чипи учун); рўйхат ва бегона ҳужжат — йўқ. Канал → сотувчи индекси — фақат сервер.
+    match /seller_tg_channels/{ownerPhone} {
+      allow get: if isAuth()
+          && userDocIdFromPhoneToken().size() == 12
+          && userDocIdFromPhoneToken() == ownerPhone;
+      allow list, create, update, delete: if false;
+    }
+    match /seller_tg_channel_chats/{chatId} {
       allow read, write: if false;
     }
 

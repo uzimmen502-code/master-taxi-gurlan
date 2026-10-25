@@ -217,6 +217,7 @@ class TvVitrineCard extends StatelessWidget {
                                   MaterialPageRoute(
                                     builder: (_) => TvShopPublicScreen(
                                       ownerPhone: item.ownerPhone,
+                                      businessId: item.businessId,
                                       highlightItemId: item.id,
                                     ),
                                   ),

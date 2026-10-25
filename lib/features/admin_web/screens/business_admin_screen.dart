@@ -227,6 +227,7 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
                           title: Text(b.name),
                           subtitle: Text([
                             if (b.isBlocked) 'БЛОКЛАНГАН',
+                            if (b.online) 'фақат онлайн',
                             _catLabel(b.category),
                             if (b.subtype.isNotEmpty) b.subtype,
                             if (b.address.isNotEmpty) b.address,
@@ -412,9 +413,12 @@ class _EditDialogState extends State<_EditDialog> {
     });
   }
 
+  /// Фақат онлайн йўналиш (эга белгилаган): координата йўқ ва талаб қилинмайди; тури сақланади.
+  bool get _online => widget.business?.online ?? false;
+
   Future<void> _save() async {
-    final lat = double.tryParse(_lat.text.trim().replaceAll(',', '.'));
-    final lng = double.tryParse(_lng.text.trim().replaceAll(',', '.'));
+    final lat = _online ? 0.0 : double.tryParse(_lat.text.trim().replaceAll(',', '.'));
+    final lng = _online ? 0.0 : double.tryParse(_lng.text.trim().replaceAll(',', '.'));
     if (lat == null || lng == null) return setState(() => _error = 'Координата нотўғри');
     if (_reason.text.trim().length < 3) return setState(() => _error = 'Сабабни ёзинг');
     setState(() {
@@ -438,6 +442,7 @@ class _EditDialogState extends State<_EditDialog> {
       openingHours: _hours.text.trim(),
       website: _website.text.trim(),
       status: b?.status ?? 'active',
+      online: _online,
     );
     try {
       if (_isCreate) {
@@ -502,22 +507,29 @@ class _EditDialogState extends State<_EditDialog> {
               _field(_address, 'Манзил', max: 200),
               _field(_hours, 'Иш вақти', max: 120),
               _field(_website, 'Сайт', max: 120),
-              Row(
-                children: [
-                  Expanded(child: _field(_lat, 'Кенглик (lat)', type: const TextInputType.numberWithOptions(decimal: true))),
-                  const SizedBox(width: 8),
-                  Expanded(child: _field(_lng, 'Узунлик (lng)', type: const TextInputType.numberWithOptions(decimal: true))),
-                ],
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  key: const ValueKey('biz_admin_pick_map'),
-                  onPressed: _busy ? null : _pickOnMap,
-                  icon: const Icon(Icons.add_location_alt_rounded, size: 18),
-                  label: const Text('Харитада белгилаш'),
+              if (_online)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: Text('Фақат онлайн йўналиш — харитада йўқ, координата керак эмас.'),
+                )
+              else ...[
+                Row(
+                  children: [
+                    Expanded(child: _field(_lat, 'Кенглик (lat)', type: const TextInputType.numberWithOptions(decimal: true))),
+                    const SizedBox(width: 8),
+                    Expanded(child: _field(_lng, 'Узунлик (lng)', type: const TextInputType.numberWithOptions(decimal: true))),
+                  ],
                 ),
-              ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('biz_admin_pick_map'),
+                    onPressed: _busy ? null : _pickOnMap,
+                    icon: const Icon(Icons.add_location_alt_rounded, size: 18),
+                    label: const Text('Харитада белгилаш'),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               if (_isCreate)
                 _field(_ownerPhone, 'Эга телефони (ихтиёрий; бўш бўлса — эгасиз, фақат админ таҳрирлайди)',

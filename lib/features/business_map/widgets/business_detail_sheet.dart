@@ -12,6 +12,7 @@ import '../../restaurants/screens/restaurant_screen.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../../tv_market/screens/tv_shop_public_screen.dart';
 import '../domain/business.dart';
 import '../domain/business_pin.dart';
 import '../domain/website_link.dart';
@@ -108,6 +109,22 @@ class BusinessDetailSheet extends StatelessWidget {
                   icon: const Icon(Icons.directions_rounded, size: 18),
                   label: Text(context.tr('bizmap_route')),
                 ),
+                // Харита нуқтаси → ЎША онлайн дўкон, айнан шу йўналиш танланган (эга қарори 2026-10-25).
+                // Эгасиз (админ қўшган) объектнинг онлайн дўкони йўқ — тугма ҳам йўқ.
+                if (origin is Business && !origin.isBlocked && phoneDigits(origin.ownerId).length >= 9)
+                  OutlinedButton.icon(
+                    key: const ValueKey('biz_open_shop'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TvShopPublicScreen(ownerPhone: origin.ownerId, businessId: origin.id),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.storefront_rounded, size: 18),
+                    label: Text(context.tr('shop_go_to_shop')),
+                  ),
                 if (origin is Restaurant)
                   OutlinedButton.icon(
                     onPressed: () {
@@ -189,7 +206,9 @@ class _ProductsStripState extends State<_ProductsStrip> {
                     final cover = it.coverPhotoUrl;
                     return InkWell(
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => TvShopItemDetailScreen(item: it)),
+                        MaterialPageRoute<void>(
+                          builder: (_) => TvShopItemDetailScreen(item: it, showShopButton: true, similarPool: items),
+                        ),
                       ),
                       child: SizedBox(
                         width: 96,

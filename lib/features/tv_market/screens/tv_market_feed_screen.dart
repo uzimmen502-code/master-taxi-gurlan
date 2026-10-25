@@ -20,7 +20,9 @@ import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/screens/restaurant_screen.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../../wholesale/screens/wholesale_product_detail_screen.dart';
+import '../domain/clip_product_link.dart';
 import '../models/tv_clip.dart';
+import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
@@ -44,6 +46,7 @@ import 'tv_clip_search_screen.dart';
 import '../../my_shop/my_shop_presence.dart';
 import '../../my_shop/open_my_shop.dart';
 import 'tv_publish_screen.dart';
+import 'tv_shop_item_detail_screen.dart';
 import 'tv_shop_public_screen.dart';
 import '../../../core/theme/ava_tokens.dart';
 
@@ -1172,6 +1175,33 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       ),
     );
   }
+  /// Клип каталог маҳсулотига боғланган (`clip.shopItemId`) — маҳсулотнинг ўзи очилади (2026-10-25). Маҳсулот
+  /// клип эгасиники бўлиши шарт (видео бегона маҳсулотга адашиб боғланмасин), фаол бўлмаса — «вақтинча мавжуд эмас».
+  /// Маҳсулот экранидаги дўкон тугмаси шу маҳсулотнинг ЎЗ йўналишини очади.
+  Future<void> _onOpenProduct(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    TvShopItem? item;
+    try {
+      item = await _shopRepo.fetchItem(clip.shopItemId);
+    } catch (e) {
+      debugPrint('[TvFeed] product: $e');
+    }
+    if (!mounted) return;
+    final valid = productForClip(clip, item);
+    if (valid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('product_unavailable'))),
+      );
+      if (tvCanPlay) tvOnPlaybackAllowed();
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: valid, showShopButton: true)),
+    );
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+  }
+
   /// Клип улгуржи маҳсулотга боғланган — тафсилотга ўтиш (фаол бўлмаса
   /// ёки ўчирилган бўлса — огоҳлантириш).
   Future<void> _onOpenWholesale(TvClip clip) async {
@@ -1560,6 +1590,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                               : null,
                           onOpenRestaurant: clip.isRestaurantLinked
                               ? () => _onOpenRestaurant(clip)
+                              : null,
+                          onOpenProduct: clip.shopItemId.isNotEmpty
+                              ? () => _onOpenProduct(clip)
                               : null,
                         ),
                         if (isActive)

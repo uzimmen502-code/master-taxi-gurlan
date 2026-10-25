@@ -45,6 +45,9 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
   late final TextEditingController _website;
 
   BusinessCategory? _category;
+
+  /// Фақат онлайн (2026-10-25): жойи сўралмайди, харитага тушмайди (уй манзили мажбуран нуқта бўлмасин).
+  bool _online = false;
   double? _lat;
   double? _lng;
   String _regionId = '';
@@ -78,8 +81,9 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
     _hours = TextEditingController(text: b?.openingHours ?? '');
     _website = TextEditingController(text: b?.website ?? '');
     _category = b?.category ?? widget.initialCategory;
-    _lat = b?.lat;
-    _lng = b?.lng;
+    _online = b?.online ?? false;
+    _lat = (b == null || b.online) ? null : b.lat;
+    _lng = (b == null || b.online) ? null : b.lng;
     _regionId = b?.regionId ?? '';
     _districtId = b?.districtId ?? '';
   }
@@ -140,7 +144,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
     if (category == null) return setState(() => _error = context.tr('bizmap_err_category'));
     final lat = _lat;
     final lng = _lng;
-    if (lat == null || lng == null) return setState(() => _error = context.tr('bizmap_err_location'));
+    if (!_online && (lat == null || lng == null)) return setState(() => _error = context.tr('bizmap_err_location'));
     if (_phone.text.replaceAll(RegExp(r'\D'), '').length < 9) {
       return setState(() => _error = context.tr('bizmap_err_phone'));
     }
@@ -158,9 +162,10 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
         subtype: _subtype.text.trim(),
         description: _description.text.trim(),
         phone: _phone.text.trim(),
-        address: _address.text.trim(),
-        lat: lat,
-        lng: lng,
+        address: _online ? '' : _address.text.trim(),
+        lat: _online ? 0 : lat!,
+        lng: _online ? 0 : lng!,
+        online: _online,
         regionId: _regionId,
         districtId: _districtId,
         openingHours: _hours.text.trim(),
@@ -243,21 +248,36 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
             keyboardType: TextInputType.phone,
             decoration: _dec('bizmap_f_phone'),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _pickLocation,
-            icon: Icon(hasLocation ? Icons.check_circle_rounded : Icons.add_location_alt_rounded,
-                color: hasLocation ? Colors.green.shade700 : null),
-            label: Text(context.tr(hasLocation ? 'bizmap_location_set' : 'bizmap_pick_location')),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            key: const ValueKey('biz_online_switch'),
+            contentPadding: EdgeInsets.zero,
+            value: _online,
+            onChanged: _busy ? null : (v) => setState(() {
+                  _online = v;
+                  _error = null;
+                }),
+            title: Text(context.tr('bizmap_f_online')),
+            subtitle: Text(context.tr('bizmap_f_online_hint')),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _address,
-            enabled: !_busy,
-            maxLength: 200,
-            decoration: _dec('bizmap_f_address'),
-          ),
+          if (!_online) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _pickLocation,
+              icon: Icon(hasLocation ? Icons.check_circle_rounded : Icons.add_location_alt_rounded,
+                  color: hasLocation ? Colors.green.shade700 : null),
+              label: Text(context.tr(hasLocation ? 'bizmap_location_set' : 'bizmap_pick_location')),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _address,
+              enabled: !_busy,
+              maxLength: 200,
+              decoration: _dec('bizmap_f_address'),
+            ),
+          ],
+          const SizedBox(height: 4),
           TextField(
             controller: _hours,
             enabled: !_busy,

@@ -565,6 +565,48 @@ async function main() {
     assert.strictEqual((await auditOf('shop_unblock', SELLER)).length, 1);
   });
 
+  // ───────── Харидор шикояти (submitShopComplaint) ─────────
+  const BUYER = '998914000009';
+  const reportsOf = async (who) => (await db.collection('reports').where('reporterId', '==', who).get()).docs.map((x) => x.data());
+  await items.doc('c_item').set({ ownerPhone: SELLER, title: 'Shikoyatli mahsulot', status: 'active', businessId: b1 });
+  await items.doc('c_gone').set({ ownerPhone: SELLER, title: 'O\'chgan', status: 'deleted' });
+
+  await check('R1 shikoyat tekshiruvi: tur, sabab, loginsiz, o\'ziga, yo\'q/o\'chgan mahsulot, noto\'g\'ri telefon', async () => {
+    await assert.rejects(fns.submitShopComplaint.run({ targetType: 'shop_item', targetId: 'c_item', reason: 'spam' }, {}));
+    await expectCode(call('submitShopComplaint', { targetType: 'ad', targetId: 'c_item', reason: 'spam' }, BUYER), 'COMPLAINT_TARGET_INVALID');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'x' }, BUYER), 'REASON_REQUIRED');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'spam' }, SELLER), 'COMPLAINT_OWN');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: SELLER, reason: 'spam' }, SELLER), 'COMPLAINT_OWN');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'yoq_hujjat', reason: 'spam' }, BUYER), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_gone', reason: 'spam' }, BUYER), 'PRODUCT_NOT_FOUND');
+    await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: '123', reason: 'spam' }, BUYER), 'SHOP_OWNER_INVALID');
+    assert.strictEqual((await reportsOf(BUYER)).length, 0);
+  });
+
+  await check('R2 mahsulot shikoyati: reports (shop_content) egasi/yo\'nalishi/nomi bilan; takror — duplicate, yangi hujjat yo\'q', async () => {
+    const r = await call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'Aldamchi e\'lon' }, BUYER);
+    assert.strictEqual(r.ok, true);
+    const d = (await db.collection('reports').doc(r.reportId).get()).data();
+    assert.deepStrictEqual(
+      [d.type, d.targetType, d.targetId, d.ownerPhone, d.businessId, d.title, d.reporterId, d.status],
+      ['shop_content', 'shop_item', 'c_item', SELLER, b1, 'Shikoyatli mahsulot', BUYER, 'open'],
+    );
+    const again = await call('submitShopComplaint', { targetType: 'shop_item', targetId: 'c_item', reason: 'Spam' }, BUYER);
+    assert.deepStrictEqual([again.duplicate, again.reportId], [true, r.reportId]);
+    assert.strictEqual((await reportsOf(BUYER)).length, 1);
+  });
+
+  await check('R3 do\'kon shikoyati telefon bo\'yicha; kunlik chegara (20) — keyingisi COMPLAINT_LIMIT', async () => {
+    const r = await call('submitShopComplaint', { targetType: 'shop', targetId: '+998 91 400-00-01', reason: 'Firibgar' }, BUYER);
+    assert.strictEqual((await db.collection('reports').doc(r.reportId).get()).data().targetId, SELLER);
+    const { COMPLAINT_DAILY_LIMIT } = require('../business_directory');
+    for (let i = 2; i < COMPLAINT_DAILY_LIMIT; i += 1) {
+      await call('submitShopComplaint', { targetType: 'shop', targetId: `9989150000${String(i).padStart(2, '0')}`, reason: 'spam' }, BUYER);
+    }
+    assert.strictEqual((await reportsOf(BUYER)).length, COMPLAINT_DAILY_LIMIT);
+    await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: '998915000099', reason: 'spam' }, BUYER), 'COMPLAINT_LIMIT');
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

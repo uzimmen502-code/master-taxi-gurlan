@@ -85,6 +85,23 @@ check('podpis tartibi — CTA birinchi, #AVA oxirgi', () => {
   assert.strictEqual(lines[lines.length - 1], '#AVA');
 });
 
+check('pullik reklama — birinchi qator «Реклама» (barcha tarmoq, uzun tavsifda ham)', () => {
+  for (const net of ['instagram', 'facebook', 'youtube', 'telegram']) {
+    const c = buildCaption(clip({ category: 'ad', description: 'x'.repeat(5000) }), PREFIX, net, PLAY);
+    const lines = c.split('\n');
+    assert.strictEqual(lines[0], 'Реклама', `${net}: belgi yo'q`);
+    assert.strictEqual(lines[1], PREFIX);
+    assert.strictEqual(lines[lines.length - 1], '#AVA');
+  }
+});
+
+check('oddiy klipda «Реклама» belgisi YO\'Q', () => {
+  for (const cat of [undefined, 'product', 'service', 'news']) {
+    const c = buildCaption(clip({ category: cat }), PREFIX, 'telegram', PLAY);
+    assert.ok(!c.split('\n').includes('Реклама'), `${cat}: ortiqcha belgi`);
+  }
+});
+
 check('playUrl berilmasa — havola qatori umuman bo\'lmaydi', () => {
   const c = buildCaption(clip(), PREFIX, 'telegram', '');
   assert.ok(!c.includes('play.google.com'));

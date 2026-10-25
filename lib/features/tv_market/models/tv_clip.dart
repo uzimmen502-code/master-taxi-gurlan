@@ -230,6 +230,15 @@ class TvClip {
   /// АВАГрам лентасида «Кафе» тугмаси шу рестораннинг менюсини очади (эга, 2026-10-19).
   bool get isRestaurantLinked => (linkKind == 'restaurant' || linkKind == 'restaurant_item') && linkId.isNotEmpty;
   bool get socialPosted => socialPostedAt != null;
+
+  /// AVA тармоқларига жойлаш розилиги асоси (7-босқич, 2026-10-25) — сервер биринчи жойлашда
+  /// `socialPost.consent`га бир марта ёзади: `explicit` («Рухсат бераман»), `legacy` (эски илова,
+  /// фақат чип), `ad_terms` (пуллик реклама). Ҳали жойланмаган бўлса — бўш.
+  String get socialConsentBasis {
+    final c = socialPost['consent'];
+    return c is Map ? '${c['basis'] ?? ''}'.trim() : '';
+  }
+
   bool get hasVariants => videoVariants.isNotEmpty;
   bool get isNews => category == 'news';
   bool get isAd => category == 'ad';

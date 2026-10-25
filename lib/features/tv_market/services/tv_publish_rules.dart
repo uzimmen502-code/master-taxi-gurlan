@@ -31,4 +31,25 @@ abstract final class TvPublishRules {
   /// [organicOnly] режимида клип тури.
   static String organicCategory(String linkKind) =>
       linkKind == 'service' ? 'service' : 'product';
+
+  /// AVA расмий тармоқларига жойлаш (7-босқич, 2026-10-25): тармоқ танланган, лекин
+  /// «Рухсат бераман» белгиланмаган — жойлаш тўхтатилади. Пуллик рекламада чип йўқ
+  /// (тармоқлар мажбурий, тўловдан олдин огоҳлантирилади) — текширилмайди.
+  static bool socialConsentMissing({
+    required String category,
+    required Set<String> networks,
+    required bool consentChecked,
+  }) =>
+      category != 'ad' && networks.isNotEmpty && !consentChecked;
+
+  /// Клипга розилик билан бирга ёзиладиган майдонлар. Вақт — фақат сервер вақти
+  /// (қоида `request.time` талаб қилади), шунинг учун [serverTime] ташқаридан берилади.
+  static Map<String, Object> socialConsentFields({
+    required Set<String> networks,
+    required int version,
+    required Object serverTime,
+  }) =>
+      networks.isEmpty
+          ? const {}
+          : {'socialConsentAt': serverTime, 'socialConsentVersion': version};
 }

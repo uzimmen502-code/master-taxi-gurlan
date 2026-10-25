@@ -17,6 +17,7 @@ import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_public_profiles_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/shop_stats_recorder.dart';
 import '../utils/tv_highlight_order.dart';
 import '../widgets/shop_complaint_sheet.dart';
 import '../widgets/shop_unavailable_view.dart';
@@ -42,8 +43,12 @@ class TvShopPublicScreen extends StatefulWidget {
     BusinessRepository? businessRepository,
     this.loadChannelInfo = true,
     this.pageSize = 100,
+    this.source = 'other',
   })  : _shopRepo = shopRepository,
         _bizRepo = businessRepository;
+
+  /// Статистика манбаи (`ShopStatsRecorder.sources`): харидор бу дўконга қаердан келди.
+  final String source;
 
   final String ownerPhone;
 
@@ -187,6 +192,12 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
           }
         }
       });
+      // Статистика (6-босқич): дўкон кўриши — очилган йўналиш ва манба билан; санашни сервер қилади.
+      ShopStatsRecorder.shopView(
+        ownerPhone: widget.ownerPhone,
+        businessId: selection.businessId ?? '',
+        source: widget.source,
+      );
       if (widget.loadChannelInfo) await _loadChannel(shop);
     } catch (e) {
       debugPrint('[TvShopPublic] $e');
@@ -307,7 +318,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
     await Navigator.push(
       context,
       // Дўкон ичида: дўкон тугмаси керак эмас; ўхшашлар — шу дўконнинг юкланган каталогидан.
-      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: item, similarPool: _items)),
+      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: item, similarPool: _items, source: 'shop')),
     );
   }
 

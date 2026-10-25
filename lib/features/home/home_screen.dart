@@ -675,7 +675,7 @@ class _HomeViewState extends State<_HomeView> {
     // Онлайн дўкон (2026-10-25): дўкон/йўналиш натижаси — айнан шу дўкон (йўналиш танланган); маҳсулот — ўзининг
     // экрани (ҳолати қайта текширилади, дўкон тугмаси ўз йўналишини очади). Топилмаса — Аҳоли бозори.
     if (e.type == SearchIndexEntry.typeShop && e.targetOwner.isNotEmpty) {
-      await _push(TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId));
+      await _push(TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId, source: 'search'));
       return;
     }
     if (e.type == SearchIndexEntry.typeShopItem && e.sourceId.isNotEmpty) {
@@ -684,7 +684,7 @@ class _HomeViewState extends State<_HomeView> {
           .catchError((Object _) => null);
       if (!mounted) return;
       if (item != null) {
-        await _push(TvShopItemDetailScreen(item: item, showShopButton: true));
+        await _push(TvShopItemDetailScreen(item: item, showShopButton: true, source: 'search'));
         return;
       }
     }

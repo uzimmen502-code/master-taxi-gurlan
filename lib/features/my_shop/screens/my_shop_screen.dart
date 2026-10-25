@@ -10,6 +10,7 @@ import '../../business_map/screens/business_products_screen.dart';
 import '../my_shop_presence.dart';
 import '../widgets/shop_link_sheet.dart';
 import 'main_shop_screen.dart';
+import 'shop_stats_screen.dart';
 
 /// «Менинг дўконим» — эганинг ВАЖДА БИТТА эмас, бир нечта дўкони:
 ///  · «Асосий дўкон» — Аҳоли, Улгуржи ва AVAGram маҳсулотлари ([MainShopScreen]);
@@ -26,7 +27,11 @@ class MyShopScreen extends StatefulWidget {
     @visibleForTesting this.businesses,
     @visibleForTesting this.loadMainName,
     @visibleForTesting this.loadLink,
+    @visibleForTesting this.statsScreen,
   });
+
+  /// Тест учун: статистика экрани (Firebase'сиз).
+  final Widget Function()? statsScreen;
 
   /// Тест учун: доимий ҳавола (`getMyShopLink`) ўрнига.
   final Future<String> Function({String businessId})? loadLink;
@@ -95,7 +100,19 @@ class _MyShopScreenState extends State<MyShopScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('my_shop_title'))),
+      appBar: AppBar(
+        title: Text(context.tr('my_shop_title')),
+        actions: [
+          IconButton(
+            key: const ValueKey('my_shop_stats'),
+            tooltip: context.tr('stats_title'),
+            icon: const Icon(Icons.insights_rounded),
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => widget.statsScreen?.call() ?? ShopStatsScreen(phone: widget.phone)),
+            ),
+          ),
+        ],
+      ),
       body: StreamBuilder<List<Business>>(
         stream: _stream,
         builder: (context, snap) {

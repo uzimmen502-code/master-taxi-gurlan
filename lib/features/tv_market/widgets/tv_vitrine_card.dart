@@ -219,6 +219,7 @@ class TvVitrineCard extends StatelessWidget {
                                       ownerPhone: item.ownerPhone,
                                       businessId: item.businessId,
                                       highlightItemId: item.id,
+                                      source: 'video',
                                     ),
                                   ),
                                 );

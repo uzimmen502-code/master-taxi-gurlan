@@ -452,6 +452,8 @@ async function main() {
     assert.deepStrictEqual([r.changed, r.products], [true, 1]);
     const d = await biz(b1);
     assert.deepStrictEqual([d.status, d.blockReason, d.blockedBy, d.geohash4, d.geohash], ['blocked', 'soxta do\'kon', ADMIN, undefined, undefined]);
+    assert.deepStrictEqual([d.lat, d.lng, d.blockedGeo], [undefined, undefined, { lat: BASE.lat, lng: BASE.lng }],
+      'koordinatasiz hujjatni eski APK umumiy ko\'rinishda ham chizmaydi (Business.tryFromMap -> null); joyi saqlanadi');
     assert.ok(!(await inCell(CELL)).includes(b1), 'xarita so\'rovi (eski APK ham) uni topmaydi');
     assert.ok((await inCell(CELL)).includes(b2), 'boshqa yo\'nalish ko\'rinib turadi');
     assert.deepStrictEqual([(await item('s_b1a')).status, (await item('s_b1a')).blockedByParent], ['blocked', `business:${b1}`]);
@@ -470,10 +472,15 @@ async function main() {
   });
 
   await check('B4 bloklangan obyekt: egasi tahrirlasa ham xaritaga qaytmaydi; egasi o\'chira olmaydi', async () => {
+    const same = await call('upsertMyBusiness', { ...BASE, businessId: b1, name: 'Sidabilla Kiyim' }, SELLER);
+    assert.strictEqual(same.changed, false, 'blokda ham o\'zgarishsiz tahrir — changed:false (joy blockedGeo\'dan solishtiriladi)');
     const e = await call('upsertMyBusiness', { ...BASE, businessId: b1, name: 'Yangi nom', lat: 41.3, lng: 69.2 }, SELLER);
     assert.strictEqual(e.changed, true);
     const d = await biz(b1);
-    assert.deepStrictEqual([d.name, d.status, d.geohash4], ['Yangi nom', 'blocked', undefined]);
+    assert.deepStrictEqual([d.name, d.status, d.geohash4, d.lat, d.blockedGeo], ['Yangi nom', 'blocked', undefined, undefined, { lat: 41.3, lng: 69.2 }]);
+    const a = await call('adminUpdateBusiness', { ...BASE, businessId: b1, name: 'Admin nomi', lat: 41.3, lng: 69.2, reason: 'imlo' }, ADMIN);
+    assert.strictEqual(a.changed, true);
+    assert.deepStrictEqual([(await biz(b1)).lat, (await biz(b1)).geohash4], [undefined, undefined], 'admin tahriri ham xaritaga qaytarmaydi');
     await expectCode(call('deleteMyBusiness', { businessId: b1 }, SELLER), 'BUSINESS_BLOCKED');
     assert.ok(await biz(b1));
   });
@@ -492,6 +499,7 @@ async function main() {
     assert.deepStrictEqual([r.changed, r.products], [true, 1]);
     const d = await biz(b1);
     assert.deepStrictEqual([d.status, d.geohash4, d.blockReason, d.blockedBy], ['active', encode(41.3, 69.2, 4), undefined, undefined]);
+    assert.deepStrictEqual([d.lat, d.lng, d.blockedGeo, d.geohash], [41.3, 69.2, undefined, encode(41.3, 69.2, 9)]);
     assert.deepStrictEqual([(await item('s_b1a')).status, (await item('s_b1a')).blockedByParent], ['active', undefined]);
     assert.strictEqual((await item('s_b1x')).status, 'blocked', 'admin alohida bloklagani qoladi');
     assert.strictEqual((await item('s_b1b')).status, 'blocked', 'alohida bloklangan (belgisi olingan) qoladi');
@@ -514,7 +522,8 @@ async function main() {
     assert.deepStrictEqual([s.status, s.ownerPhone, s.blockReason], ['blocked', SELLER, 'firibgarlik']);
     for (const id of [b1, b2]) {
       const d = await biz(id);
-      assert.deepStrictEqual([d.status, d.blockedByParent, d.geohash4], ['blocked', 'shop', undefined]);
+      assert.deepStrictEqual([d.status, d.blockedByParent, d.geohash4, d.lat], ['blocked', 'shop', undefined, undefined]);
+      assert.ok(d.blockedGeo && typeof d.blockedGeo.lat === 'number');
     }
     assert.deepStrictEqual([(await item('s_own')).status, (await item('s_own')).blockedByParent], ['blocked', 'shop']);
     assert.strictEqual((await item('s_own9')).status, 'blocked', '9 xonali egasi yozuvi ham');
@@ -538,8 +547,9 @@ async function main() {
     assert.strictEqual(r.changed, true);
     assert.strictEqual((await shopDoc()).status, 'active');
     const d1 = await biz(b1);
-    assert.deepStrictEqual([d1.status, d1.geohash4], ['active', encode(41.3, 69.2, 4)]);
+    assert.deepStrictEqual([d1.status, d1.geohash4, d1.lat, d1.blockedGeo], ['active', encode(41.3, 69.2, 4), 41.3, undefined]);
     assert.strictEqual((await biz(b2)).status, 'blocked');
+    assert.deepStrictEqual((await biz(b2)).blockedGeo, { lat: BASE.lat, lng: BASE.lng }, 'alohida bloklashda joyi yo\'qolmagan');
     assert.deepStrictEqual([(await item('s_own')).status, (await item('s_own')).blockedByParent], ['active', undefined]);
     assert.strictEqual((await item('s_own9')).status, 'active');
     assert.deepStrictEqual([(await item('s_b2')).status, (await item('s_b2')).blockedByParent], ['blocked', `business:${b2}`]);

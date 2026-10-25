@@ -8,6 +8,7 @@ import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_form_screen.dart';
 import '../../business_map/screens/business_products_screen.dart';
 import '../my_shop_presence.dart';
+import '../widgets/shop_link_sheet.dart';
 import 'main_shop_screen.dart';
 
 /// «Менинг дўконим» — эганинг ВАЖДА БИТТА эмас, бир нечта дўкони:
@@ -24,7 +25,11 @@ class MyShopScreen extends StatefulWidget {
     this.canCreateShop = true,
     @visibleForTesting this.businesses,
     @visibleForTesting this.loadMainName,
+    @visibleForTesting this.loadLink,
   });
+
+  /// Тест учун: доимий ҳавола (`getMyShopLink`) ўрнига.
+  final Future<String> Function({String businessId})? loadLink;
 
   /// Каноник телефон (`canonicalPhoneId`) — чақирувчи 9+ рақам эканини текширади.
   final String phone;
@@ -111,11 +116,18 @@ class _MyShopScreenState extends State<MyShopScreen> {
                 future: _nameFuture,
                 builder: (context, nameSnap) {
                   final name = (nameSnap.data ?? '').trim();
+                  final title = name.isNotEmpty ? name : context.tr('my_shop_title');
                   return _ShopCard(
                     icon: Icons.storefront_rounded,
-                    title: name.isNotEmpty ? name : context.tr('my_shop_title'),
+                    title: title,
                     subtitle: context.tr('my_shop_main_sub'),
                     onTap: _openMain,
+                    trailing: IconButton(
+                      key: const ValueKey('my_shop_link_main'),
+                      tooltip: context.tr('shop_link_title'),
+                      icon: const Icon(Icons.qr_code_2_rounded),
+                      onPressed: () => showShopLinkSheet(context, title: title, loadLink: widget.loadLink),
+                    ),
                   );
                 },
               ),
@@ -134,10 +146,21 @@ class _MyShopScreenState extends State<MyShopScreen> {
                     title: b.name,
                     subtitle: b.online ? context.tr('bizmap_online_badge') : b.address,
                     onTap: () => _openProducts(b),
-                    trailing: IconButton(
-                      tooltip: context.tr('my_shop_rename'),
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _openForm(b),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          key: ValueKey('my_shop_link_${b.id}'),
+                          tooltip: context.tr('shop_link_title'),
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          onPressed: () => showShopLinkSheet(context, title: b.name, businessId: b.id, loadLink: widget.loadLink),
+                        ),
+                        IconButton(
+                          tooltip: context.tr('my_shop_rename'),
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => _openForm(b),
+                        ),
+                      ],
                     ),
                   ),
                 ),

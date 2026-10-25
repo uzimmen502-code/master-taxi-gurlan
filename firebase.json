@@ -38,6 +38,10 @@
           "function": "clipPage"
         },
         {
+          "source": "/s/**",
+          "function": "shopPage"
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }

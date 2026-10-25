@@ -1,0 +1,53 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import '../../core/l10n/l10n_extension.dart';
+import '../business_map/data/business_repository.dart';
+import '../tv_market/screens/tv_shop_public_screen.dart';
+
+/// Веб-ҳаволадан келган дўкон (`/?shop=<publicId>`, 5-босқич): `/s/<id>` саҳифасидаги «Дўконни очиш» тугмаси
+/// Flutter веб-иловани шу параметр билан очади. Ишга тушишда ушланади ([captureFromUrl]) ва бош саҳифа очилгач
+/// (логиндан кейин ҳам) бир марта ишлатилади ([openIfAny]). Блокланган/номаълум — «вақтинча мавжуд эмас».
+class PendingShopLink {
+  PendingShopLink._();
+
+  static final _idRe = RegExp(r'^[A-Za-z0-9]{10}$');
+  static String? _id;
+
+  /// [uri] — тест учун; бўлмаса вебда `Uri.base`. Мобил иловада ҳозирча ҳеч нарса қилмайди (App Links — APK).
+  static void captureFromUrl([Uri? uri]) {
+    if (uri == null && !kIsWeb) return;
+    final id = (uri ?? Uri.base).queryParameters['shop']?.trim() ?? '';
+    if (_idRe.hasMatch(id)) _id = id;
+  }
+
+  /// Бир марта олинади (қайта очилмасин).
+  static String? take() {
+    final v = _id;
+    _id = null;
+    return v;
+  }
+
+  static Future<void> openIfAny(
+    BuildContext context, {
+    Future<({String ownerPhone, String businessId})?> Function(String publicId)? resolve,
+    void Function(Widget screen)? push,
+  }) async {
+    final id = take();
+    if (id == null) return;
+    ({String ownerPhone, String businessId})? target;
+    try {
+      target = await (resolve ?? BusinessRepository().resolveShopLink)(id);
+    } catch (e) {
+      debugPrint('[PendingShopLink] resolve: $e');
+    }
+    if (!context.mounted) return;
+    if (target == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_unavailable'))));
+      return;
+    }
+    final screen = TvShopPublicScreen(ownerPhone: target.ownerPhone, businessId: target.businessId);
+    if (push != null) return push(screen);
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+  }
+}

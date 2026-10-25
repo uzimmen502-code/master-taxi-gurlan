@@ -160,11 +160,14 @@ function buildShopNotFoundHtml({ appUrl, altUrl, lang = 'uz' }) {
  */
 async function resolvePublicId(db, publicId) {
   if (!isPublicId(publicId)) return { available: false };
-  const [shopSnap, bizSnap, restSnap] = await Promise.all([
+  const [shopSnap, bizSnap] = await Promise.all([
     db.collection(SHOPS).where('publicId', '==', publicId).limit(1).get(),
     db.collection(BUSINESSES).where('publicId', '==', publicId).limit(1).get(),
-    db.collection(RESTAURANTS).where('publicId', '==', publicId).limit(1).get(),
   ]);
+  // Ресторан — фақат дўкон/йўналиш топилмаса (ID'лар уччала тўпламда ягона): дўкон ҳаволасига ортиқча ўқиш йўқ.
+  const restSnap = shopSnap.empty && bizSnap.empty
+    ? await db.collection(RESTAURANTS).where('publicId', '==', publicId).limit(1).get()
+    : { empty: true };
   if (!restSnap.empty) {
     // Ресторан: фақат тасдиқланган (тўхтатилган/ёпилган/рад этилган — «топилмади»).
     const r = restSnap.docs[0];
@@ -225,11 +228,19 @@ async function pageItems(db, resolved) {
   }));
 }
 
-/** Ресторан саҳифаси учун таомлар: сотувдаги (`available !== false`, нарх бутун > 0), `sort` бўйича, 12 та. */
-async function restaurantPageItems(db, restaurantId) {
-  const snap = await db.collection(RESTAURANTS).doc(restaurantId).collection('menu_items').limit(60).get();
+/// Ресторан саҳифаси учун ўқиладиган таомлар чегараси (`sort`сиз эски ҳужжатлар ҳам қолмасин — тартиб хотирада).
+const RESTAURANT_MENU_SCAN = 200;
+
+/**
+ * Ресторан саҳифаси учун таомлар: сотувдаги (`available !== false`, тўхтатилмаган — `stopUntil` ўтган ёки йўқ,
+ * `restaurant_orders.js` билан бир хил қоида), нарх бутун > 0, `sort` бўйича, 12 та.
+ */
+async function restaurantPageItems(db, restaurantId, nowMs = Date.now()) {
+  const snap = await db.collection(RESTAURANTS).doc(restaurantId).collection('menu_items')
+    .limit(RESTAURANT_MENU_SCAN).get();
+  const stopped = (x) => x.stopUntil && typeof x.stopUntil.toMillis === 'function' && x.stopUntil.toMillis() > nowMs;
   return snap.docs.map((d) => d.data() || {})
-    .filter((x) => x.available !== false && Number.isInteger(x.price) && x.price > 0 && str(x.name, 80))
+    .filter((x) => x.available !== false && !stopped(x) && Number.isInteger(x.price) && x.price > 0 && str(x.name, 80))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0))
     .slice(0, PAGE_ITEMS)
     .map((x) => ({ title: x.name, price: x.price, photoUrl: x.photoUrl || '' }));

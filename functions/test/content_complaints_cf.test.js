@@ -174,6 +174,14 @@ async function main() {
     assert.strictEqual(JSON.stringify(d).includes(REALTOR), false, 'egasining telefoni yozilmaydi');
   });
 
+  await check('C3b sarlavhasiz eski e\'lon — sarlavha ID, erkin matn (telefon bo\'lishi mumkin) olinmaydi', async () => {
+    await db.collection('realty_listings').doc('L_old').set({ ownerKey: 'key_realtor', text: 'Tel 901234567 qo\'ng\'iroq qiling', status: 'active', expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 86400000) });
+    const r = await call({ targetType: 'realty_listing', targetId: 'L_old', reason: 'spam' }, BUYER2);
+    const d = (await db.collection('reports').doc(r.reportId).get()).data();
+    assert.strictEqual(d.title, '#L_old');
+    assert.strictEqual(JSON.stringify(d).includes('901234567'), false);
+  });
+
   await check('C4 admin yopgach (adminResolveDatingReport) — qayta shikoyat YANGI hujjat; eskisi resolvedBy bilan tarixda', async () => {
     const ADMIN = '998913000099';
     await db.collection('users').doc(ADMIN).set({ role: 'admin' });

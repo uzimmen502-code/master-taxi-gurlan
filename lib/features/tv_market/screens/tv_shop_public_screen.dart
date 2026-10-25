@@ -11,6 +11,7 @@ import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_public_profiles_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../utils/tv_highlight_order.dart';
+import '../widgets/shop_unavailable_view.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_channel_header.dart';
 import '../widgets/tv_shop_item_grid_card.dart';
@@ -57,6 +58,9 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   bool _followBusy = false;
   bool _loading = true;
 
+  /// Админ бутун онлайн дўконни блоклаган (`tv_shops.status`): ҳеч қандай маълумот кўрсатилмайди.
+  bool _blocked = false;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +73,16 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   Future<void> _load() async {
     try {
       final shop = await _shopRepo.fetchShop(widget.ownerPhone);
+      if (shop?.isBlocked ?? false) {
+        if (mounted) {
+          setState(() {
+            _blocked = true;
+            _displayName = '';
+            _loading = false;
+          });
+        }
+        return;
+      }
       final items = await _shopRepo.fetchByOwner(widget.ownerPhone);
       final active = items.where((i) => i.isActive).toList();
       final sorted = tvOrderHighlightFirst(
@@ -208,6 +222,8 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _blocked
+          ? const ShopUnavailableView(textKey: 'shop_unavailable')
           : CustomScrollView(
               slivers: [
                 SliverPadding(
@@ -278,7 +294,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                   ),
               ],
             ),
-      bottomNavigationBar: TvChannelContactBar(onCall: _call),
+      bottomNavigationBar: _blocked ? null : TvChannelContactBar(onCall: _call),
     );
   }
 }

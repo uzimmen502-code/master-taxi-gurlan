@@ -84,7 +84,9 @@ class BusinessPinLoader {
     if (cells == null) {
       final wide = await Future.wait([
         guarded(BusinessSource.business, () async => [
-              for (final b in await _biz.fetchRecent(limit: _overviewBusinesses)) BusinessPin.fromBusiness(b),
+              // Блокланган объект (админ) харитада чизилмайди; `geohash4` йўқлиги уни катак сўровидан ҳам чиқаради.
+              for (final b in await _biz.fetchRecent(limit: _overviewBusinesses))
+                if (!b.isBlocked) BusinessPin.fromBusiness(b),
             ]),
         guarded(BusinessSource.restaurant, _restaurantsOverview),
         if (showEvStations) guarded(BusinessSource.evStation, _evOverview),
@@ -105,7 +107,7 @@ class BusinessPinLoader {
     final parts = await Future.wait([
       guarded(BusinessSource.business, () async {
         final rows = await _biz.fetchInCells(cells, limit: maxPins);
-        return [for (final b in rows) BusinessPin.fromBusiness(b)];
+        return [for (final b in rows) if (!b.isBlocked) BusinessPin.fromBusiness(b)];
       }),
       guarded(BusinessSource.restaurant, () => _restaurants(cells)),
       if (showEvStations) guarded(BusinessSource.evStation, () => _evStations(cells)),

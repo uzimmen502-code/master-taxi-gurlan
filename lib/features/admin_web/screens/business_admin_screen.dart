@@ -101,6 +101,29 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
     }
   }
 
+  /// Блоклаш/очиш (2026-10-25): блокланган объект харитадан йўқолади, маҳсулотлари блокланади; сабаб шарт.
+  Future<void> _toggleBlock(Business b) async {
+    final block = !b.isBlocked;
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => AdminReasonDialog(
+        title: block ? 'Объектни блоклаш' : 'Блокдан чиқариш',
+        body: block
+            ? '${b.name}\nЭга: ${b.ownerId}\n\nХаритадан йўқолади, барча фаол маҳсулотлари блокланади.'
+            : '${b.name}\nЭга: ${b.ownerId}\n\nХаритага қайтади, шу блок билан ёпилган маҳсулотлари очилади.',
+        confirm: block ? 'Блоклаш' : 'Очиш',
+      ),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      final n = await _repo.adminSetStatus(b.id, status: block ? 'blocked' : 'active', reason: reason);
+      _snack(block ? 'Блокланди (маҳсулот: $n)' : 'Очилди (маҳсулот: $n)');
+      await _load();
+    } catch (e) {
+      _snack(adminActionError(e, fallback: block ? 'Блоклаб бўлмади' : 'Очиб бўлмади'));
+    }
+  }
+
   Future<void> _delete(Business b) async {
     final text = await showDialog<String>(
       context: context,
@@ -199,9 +222,11 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
                       return Card(
                         margin: EdgeInsets.zero,
                         child: ListTile(
-                          leading: Icon(b.category.icon),
+                          leading: Icon(b.isBlocked ? Icons.block_rounded : b.category.icon,
+                              color: b.isBlocked ? Colors.red.shade700 : null),
                           title: Text(b.name),
                           subtitle: Text([
+                            if (b.isBlocked) 'БЛОКЛАНГАН',
                             _catLabel(b.category),
                             if (b.subtype.isNotEmpty) b.subtype,
                             if (b.address.isNotEmpty) b.address,
@@ -219,6 +244,12 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
                                   context: context,
                                   builder: (_) => BusinessProductsAdminDialog(business: b, repo: _repo),
                                 ),
+                              ),
+                              IconButton(
+                                key: ValueKey('biz_admin_block_${b.id}'),
+                                tooltip: b.isBlocked ? 'Блокдан чиқариш' : 'Блоклаш',
+                                icon: Icon(b.isBlocked ? Icons.lock_open_rounded : Icons.block_rounded),
+                                onPressed: () => _toggleBlock(b),
                               ),
                               IconButton(
                                 tooltip: 'Таҳрирлаш',
@@ -406,6 +437,7 @@ class _EditDialogState extends State<_EditDialog> {
       districtId: _districtId,
       openingHours: _hours.text.trim(),
       website: _website.text.trim(),
+      status: b?.status ?? 'active',
     );
     try {
       if (_isCreate) {

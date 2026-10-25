@@ -246,7 +246,7 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
 /// Админ панели матнлари Кирилл ёзувида қотирилган (бошқа админ экранлар каби) — иловадаги 3 тилли
 /// калитлар админга керак эмас.
 String _catLabel(BusinessCategory c) => switch (c) {
-      BusinessCategory.retail => 'Чакана савдо',
+      BusinessCategory.retail => 'Дўкон',
       BusinessCategory.wholesale => 'Улгуржи савдо',
       BusinessCategory.food => 'Кафе ва ресторанлар',
       BusinessCategory.auto => 'Авто хизматлар',

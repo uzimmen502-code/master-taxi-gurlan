@@ -644,6 +644,60 @@ async function main() {
     assert.deepStrictEqual([d.status, d.lat, d.geohash4, d.online, d.name], ['active', undefined, undefined, true, 'Yangi online']);
   });
 
+  // ───────── Филиаллар (branchOf) ─────────
+  const BR = '998914000030';
+  const BR2 = '998914000031';
+  const main = (await call('upsertMyBusiness', { ...BASE, name: 'Asosiy', clientRequestId: 'brn-00000001' }, BR)).businessId;
+  const alienMain = (await call('upsertMyBusiness', { ...BASE, name: 'Begona', clientRequestId: 'brn-00000002' }, BR2)).businessId;
+  let branch;
+  await check('F1 filial: o\'z yo\'nalishiga — qabul; begona, filialning filiali, o\'zi, online, yo\'q ota — rad; filiali bor obyekt filial bo\'lolmaydi', async () => {
+    const r = await call('upsertMyBusiness', { ...BASE, name: 'Filial 1', lat: 41.5, lng: 60.5, branchOf: main, clientRequestId: 'brn-00000003' }, BR);
+    branch = r.businessId;
+    assert.strictEqual((await biz(branch)).branchOf, main);
+    await expectCode(call('upsertMyBusiness', { ...BASE, branchOf: alienMain, clientRequestId: 'brn-00000004' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...BASE, branchOf: branch, clientRequestId: 'brn-00000005' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...BASE, branchOf: 'yoq_obyekt', clientRequestId: 'brn-00000006' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...NOLOC, online: true, branchOf: main, clientRequestId: 'brn-00000007' }, BR), 'BRANCH_INVALID');
+    await expectCode(call('upsertMyBusiness', { ...BASE, name: 'Filial 1', branchOf: branch, businessId: branch }, BR), 'BRANCH_INVALID');
+    const other = (await call('upsertMyBusiness', { ...BASE, name: 'Boshqa', clientRequestId: 'brn-00000008' }, BR)).businessId;
+    await expectCode(call('upsertMyBusiness', { ...BASE, name: 'Asosiy', branchOf: other, businessId: main }, BR), 'BRANCH_NESTED');
+    // filiallikdan chiqarish: branchOf o'chadi
+    const solo = (await call('upsertMyBusiness', { ...BASE, name: 'Vaqtincha', branchOf: main, clientRequestId: 'brn-00000009' }, BR)).businessId;
+    await call('upsertMyBusiness', { ...BASE, name: 'Vaqtincha', businessId: solo }, BR);
+    assert.strictEqual((await biz(solo)).branchOf, undefined);
+  });
+
+  await check('F2 ota bloklansa filial ham (xaritadan yo\'qoladi); ota blokda filialni alohida ochib bo\'lmaydi; ota ochilsa filial qaytadi', async () => {
+    const r = await call('adminSetBusinessStatus', { businessId: main, status: 'blocked', reason: 'sinov' }, ADMIN);
+    assert.ok(r.branches >= 1);
+    let f = await biz(branch);
+    assert.deepStrictEqual([f.status, f.blockedByParent, f.geohash4, f.lat], ['blocked', `business:${main}`, undefined, undefined]);
+    await expectCode(call('adminSetBusinessStatus', { businessId: branch, status: 'active', reason: 'sinov' }, ADMIN), 'PARENT_BLOCKED');
+    await call('adminSetBusinessStatus', { businessId: main, status: 'active', reason: 'sinov' }, ADMIN);
+    f = await biz(branch);
+    assert.deepStrictEqual([f.status, f.blockedByParent, f.lat, f.geohash4], ['active', undefined, 41.5, encode(41.5, 60.5, 4)]);
+  });
+
+  await check('F3 do\'kon blokida ota alohida bloklansa: do\'kon ochilganda filial ota belgisiga o\'tadi; ota ochilsa qaytadi', async () => {
+    await call('adminSetShopStatus', { ownerPhone: BR, status: 'blocked', reason: 'sinov' }, ADMIN);
+    assert.strictEqual((await biz(branch)).blockedByParent, 'shop');
+    await call('adminSetBusinessStatus', { businessId: main, status: 'blocked', reason: 'alohida' }, ADMIN);
+    await call('adminSetShopStatus', { ownerPhone: BR, status: 'active', reason: 'sinov' }, ADMIN);
+    let f = await biz(branch);
+    assert.deepStrictEqual([f.status, f.blockedByParent], ['blocked', `business:${main}`]);
+    await call('adminSetBusinessStatus', { businessId: main, status: 'active', reason: 'sinov' }, ADMIN);
+    f = await biz(branch);
+    assert.strictEqual(f.status, 'active');
+  });
+
+  await check('F4 ota o\'chirilsa filiallar mustaqil yo\'nalish bo\'ladi (branchOf olinadi)', async () => {
+    const snapLike = { data: () => ({ ownerId: BR }) };
+    await call('deleteMyBusiness', { businessId: main }, BR);
+    await fns.businessProductsCascade.run(snapLike, { params: { businessId: main } });
+    const f = await biz(branch);
+    assert.deepStrictEqual([f.branchOf, f.status], [undefined, 'active']);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

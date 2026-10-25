@@ -1,4 +1,5 @@
 import 'package:ava_gurlan/features/home/widgets/home_realty_section.dart';
+import 'package:ava_gurlan/features/realty/realty_tabs.dart';
 import 'package:ava_gurlan/features/realty/screens/realty_detail_screen.dart';
 import 'package:ava_gurlan/features/realty/widgets/realty_card.dart';
 import 'package:ava_gurlan/models/realty_listing.dart';
@@ -181,6 +182,77 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byKey(_homeLabel), findsOneWidget);
       expect(find.text('realty_tier_urgent'), findsOneWidget);
+    });
+
+    testWidgets(
+        'REGRESSION: 320 px, шрифт 130%, узун нарх + узун uz_Latn ном — қатордан чиқмайди',
+        (tester) async {
+      // Ҳақиқий матнлар: делегатсиз `context.tr` калитни қайтаради, шунинг
+      // учун «SHOSHILINCH» дан узун калит ('realty_tier_urgent', 18 белги)
+      // ўз-ўзидан оғирроқ ҳолат.
+      for (final w in [280.0, 320.0]) {
+        for (final until in [future, null]) {
+          await tester.pumpWidget(MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+              child: Scaffold(
+                body: Center(
+                  child: SizedBox(
+                    width: w,
+                    height: 19,
+                    child: HomeRealtyRow(
+                      listing: RealtyListing(
+                        id: 'L1',
+                        ownerKey: 'k',
+                        ownerName: 'E',
+                        deal: RealtyDeal.sale,
+                        tier: RealtyTier.urgent,
+                        title: 'Uch xonali uy, Gurlan markazi',
+                        text: 'x',
+                        priceText: "1 200 000 000 so'm",
+                        areaLat: 41.85,
+                        areaLng: 60.39,
+                        status: 'active',
+                        tierUntil: until,
+                      ),
+                      onTap: () {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ));
+          expect(tester.takeException(), isNull, reason: 'w=$w until=$until');
+          // Сарлавҳага ҳам жой қолади.
+          expect(
+            tester.getSize(find.textContaining('Uch xonali')).width,
+            greaterThan(w * 0.3),
+            reason: 'w=$w until=$until',
+          );
+        }
+      }
+    });
+
+    testWidgets('нуқта ва нарх ранги — displayTier (тугаган СРОЧНО = ОДДИЙ ранги)', (tester) async {
+      Color priceColor() =>
+          tester.widget<Text>(find.text('50 000 \$')).style!.color!;
+      await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: past));
+      expect(priceColor(), RealtyTabs.colorFor(RealtyTier.plain));
+      await pump(tester, _listing(tier: RealtyTier.urgent, tierUntil: future));
+      expect(priceColor(), RealtyTabs.colorFor(RealtyTier.urgent));
+    });
+
+    test('статик харита ранги: тугаган пуллик эълон рангни кўтармайди', () {
+      String url(List<RealtyListing> l) => realtyStaticMapUrl(
+          lat: 41.85, lng: 60.39, width: 400, height: 140, listings: l);
+      final plainHex = (RealtyTabs.colorFor(RealtyTier.plain).toARGB32() & 0xFFFFFF)
+          .toRadixString(16)
+          .padLeft(6, '0');
+      final urgentHex = (RealtyTabs.colorFor(RealtyTier.urgent).toARGB32() & 0xFFFFFF)
+          .toRadixString(16)
+          .padLeft(6, '0');
+      expect(url([_listing(tier: RealtyTier.urgent, tierUntil: past)]), contains('color=0x$plainHex'));
+      expect(url([_listing(tier: RealtyTier.urgent, tierUntil: future)]), contains('color=0x$urgentHex'));
     });
 
     testWidgets('муддати ўтган ёки ОДДИЙ — ном йўқ', (tester) async {

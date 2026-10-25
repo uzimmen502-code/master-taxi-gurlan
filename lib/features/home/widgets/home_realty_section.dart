@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/widgets/ava_ad_badge.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../../realty/realty_tabs.dart';
@@ -314,6 +315,12 @@ class _RealtyRow extends StatelessWidget {
               style: AvaText.feedRow.copyWith(color: c.inkRow),
             ),
           ),
+          // Пуллик РЕКЛАМА/СРОЧНО амалда — «Реклама». Қатор 14 px, шунинг
+          // учун қутисиз (inline) шакл: қутили белги қатордан чиқиб кетарди.
+          if (listing.isPromoted) ...[
+            const SizedBox(width: 8),
+            const AvaAdBadge(inline: true),
+          ],
           if (listing.priceText.isNotEmpty) ...[
             const SizedBox(width: 8),
             Text(

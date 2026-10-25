@@ -192,6 +192,24 @@ class RealtyListing {
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
 
+  /// Пуллик РЕКЛАМА/СРОЧНО жойлашуви [now] пайтида амалдами — харидорга
+  /// «Реклама» белгиси шу бўйича кўрсатилади.
+  ///
+  /// Иккала даража ҳам фақат `purchaseRealtyTier` (ҳамёндан тўлов) орқали
+  /// ёзилади; янги эълон доим [RealtyTier.plain]. Муддат — [tierUntil]:
+  /// у ўтган бўлса (эски ёзув, тозалаш иши кунига бир марта) ёки йўқ бўлса
+  /// белги кўрсатилмайди — тўланмаган/тугаган эълонни «Реклама» демаймиз.
+  ///
+  /// [adClipId] бу ерда ҲИСОБГА ОЛИНМАЙДИ: у эълонга уланган AVAGram
+  /// реклама КЛИПИ, эълоннинг ўзи учун тўлов эмас (клипнинг ўзи AVAGram'да
+  /// белгиланади).
+  bool isPromotedAt(DateTime now) {
+    final until = tierUntil;
+    return tier.isPaid && until != null && until.isAfter(now);
+  }
+
+  bool get isPromoted => isPromotedAt(DateTime.now());
+
   bool get hasVideo => avagramClipId.isNotEmpty || adClipId.isNotEmpty;
 
   /// Эълонга боғланган видео — аввал пуллик реклама, кейин AVAGram.

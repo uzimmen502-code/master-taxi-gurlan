@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../core/widgets/ava_ad_badge.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../../tv_market/services/tv_clip_link.dart';
@@ -147,6 +148,11 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
             children: [
               RealtyTierBadge(tier: r.tier),
               const SizedBox(width: 8),
+              // Пуллик жойлашув амалда — «Реклама» (лента картаси билан бир хил).
+              if (r.isPromoted) ...[
+                const AvaAdBadge(),
+                const SizedBox(width: 8),
+              ],
               Text(
                 context.tr(
                   r.deal == RealtyDeal.sale

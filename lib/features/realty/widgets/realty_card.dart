@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/ava_ad_badge.dart';
 import '../../../models/realty_listing.dart';
 import '../realty_tabs.dart';
 
@@ -90,6 +91,13 @@ class RealtyCard extends StatelessWidget {
                             )
                           else
                             const Spacer(),
+                          // Пуллик РЕКЛАМА/СРОЧНО амалда — харидорга очиқ
+                          // «Реклама» (муддати ўтган ёки бепул эълонда йўқ).
+                          if (listing.isPromoted)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 6),
+                              child: AvaAdBadge(compact: true),
+                            ),
                           if (listing.hasVideo)
                             Padding(
                               padding: const EdgeInsets.only(left: 6),

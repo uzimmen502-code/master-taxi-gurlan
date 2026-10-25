@@ -156,8 +156,15 @@ async function main() {
     assert.strictEqual(d.restaurantId, 'r_ok');
     assert.strictEqual(d.title, 'Palov');
     assert.strictEqual(d.comment, '');
-    // to'xtatilgan (available:false) taom menyuda ko'rinadi — shikoyat mumkin
-    await call({ targetType: 'restaurant_item', restaurantId: 'r_ok', targetId: 'dish_off', reason: 'spam' }, BUYER);
+    // Ega qarori 2026-10-25: sotuvda bo'lmagan taomga shikoyat YO'Q — available:false va stop-list (stopUntil kelajakda).
+    await expectCode(call({ targetType: 'restaurant_item', restaurantId: 'r_ok', targetId: 'dish_off', reason: 'spam' }, BUYER), 'COMPLAINT_TARGET_NOT_FOUND');
+    await db.collection('restaurants').doc('r_ok').collection('menu_items').doc('dish_stop').set({
+      name: 'Chuchvara', price: 20000, available: true, stopUntil: admin.firestore.Timestamp.fromMillis(Date.now() + 3600000) });
+    await expectCode(call({ targetType: 'restaurant_item', restaurantId: 'r_ok', targetId: 'dish_stop', reason: 'spam' }, BUYER), 'COMPLAINT_TARGET_NOT_FOUND');
+    // stop muddati o'tgan — yana sotuvda, shikoyat mumkin (chegara)
+    await db.collection('restaurants').doc('r_ok').collection('menu_items').doc('dish_back').set({
+      name: 'Lagmon', price: 30000, available: true, stopUntil: admin.firestore.Timestamp.fromMillis(Date.now() - 3600000) });
+    await call({ targetType: 'restaurant_item', restaurantId: 'r_ok', targetId: 'dish_back', reason: 'spam' }, BUYER);
     assert.strictEqual((await reportsOf(BUYER)).length, 3);
   });
 

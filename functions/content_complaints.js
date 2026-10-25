@@ -116,6 +116,14 @@ function attachContentComplaints(exportsObj, deps) {
     const r = rSnap.exists ? (rSnap.data() || {}) : null;
     if (!r || r.status !== 'approved') throw fail('not-found', 'COMPLAINT_TARGET_NOT_FOUND');
     if (itemSnap && !itemSnap.exists) throw fail('not-found', 'COMPLAINT_TARGET_NOT_FOUND');
+    // Сотувда бўлмаган таомга шикоят йўқ (эга қарори 2026-10-25): `available === false` ёки stop-list
+    // (`stopUntil` келажакда) — буюртма қабули билан бир хил қоида (restaurant_orders.js).
+    if (itemSnap) {
+      const it = itemSnap.data() || {};
+      if (it.available === false || tsMillis(it.stopUntil) > Date.now()) {
+        throw fail('not-found', 'COMPLAINT_TARGET_NOT_FOUND');
+      }
+    }
     if (canonicalUid(String(r.ownerUid || '')) === uid || memberSnap.exists) {
       throw fail('failed-precondition', 'COMPLAINT_OWN');
     }

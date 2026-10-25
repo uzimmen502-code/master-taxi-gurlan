@@ -51,6 +51,11 @@ function requestedNetworks(clip) {
   // Пуллик реклама — эга танловидан қатъи назар мажбурий 3 та тармоқ.
   if (clip.category === 'ad') return AD_FORCED_NETWORKS.slice();
   const raw = Array.isArray(clip.socialNetworks) ? clip.socialNetworks : [];
+  // Тармоқ танланган, лекин розилик белгиси йўқ — жойланмайди (7-босқич,
+  // 2026-10-25). Ҳар қандай илова (эски ҳам) тармоқ танланса
+  // `socialConsent: true` ёзади; `false` — ўзгартирилган клиент ёки эга
+  // розилигини қайтариб олган.
+  if (raw.length > 0 && clip.socialConsent !== true) return [];
   const picked = [];
   for (const id of ORDERED) {
     if (raw.map((x) => String(x).toLowerCase()).includes(id)) picked.push(id);
@@ -65,6 +70,26 @@ function requestedNetworks(clip) {
   if (raw.length > 0) return [];
   if (clip.socialConsent === true) return ORDERED.slice();
   return [];
+}
+
+/**
+ * Розилик асоси — биринчи жойлашда `socialPost.consent`га бир марта
+ * ёзилади (клиент `socialPost`га ёза олмайди, кейин ўзгармайди):
+ *   • `ad_terms` — пуллик реклама; `version` — тўловдан олдин кўрсатилган
+ *     огоҳлантириш версияси (эски иловада 0 — огоҳлантириш кўрилмаган);
+ *   • `explicit` — «Рухсат бераман» белгиси (`socialConsentVersion` ≥ 1,
+ *     вақти `socialConsentAt` — қоидада `request.time`га тенг);
+ *   • `legacy` — эски илова: тармоқ чипи танланган, алоҳида белги йўқ.
+ */
+function consentRecord(clip, networks) {
+  const ver = (v) => (Number.isInteger(v) && v > 0 && v < 100 ? v : 0);
+  const at = clip.socialConsentAt && typeof clip.socialConsentAt.toMillis === 'function'
+      ? clip.socialConsentAt : null;
+  if (clip.category === 'ad') {
+    return { basis: 'ad_terms', version: ver(clip.socialNoticeVersion), networks: networks.slice(), consentAt: null };
+  }
+  const v = ver(clip.socialConsentVersion);
+  return { basis: v ? 'explicit' : 'legacy', version: v, networks: networks.slice(), consentAt: v ? at : null };
 }
 
 function networkState(clip, net) {
@@ -433,10 +458,17 @@ function attachTvSocialPublish(exports, deps) {
       ) {
         return { skip: 'in_flight' };
       }
-      tx.update(ref, {
+      const upd = {
         'socialPost.status': 'posting',
         'socialPost.startedAt': admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      // Розилик асоси — фақат биринчи марта (қайта уриниш уни ўзгартирмайди).
+      if (!sp.consent || typeof sp.consent !== 'object') {
+        upd['socialPost.consent'] = Object.assign(consentRecord(d, nets), {
+          recordedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      tx.update(ref, upd);
       return { clip: Object.assign({ id: clipId }, d), nets: pending, allNets: nets };
     });
   }
@@ -609,4 +641,4 @@ function attachTvSocialPublish(exports, deps) {
 
 // `buildCaption` / `socialVideoUrl` — тоза функциялар, тест учун
 // очиқ (қаранг: test/tv_social_caption.test.js).
-module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl, requestedNetworks };
+module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl, requestedNetworks, consentRecord };

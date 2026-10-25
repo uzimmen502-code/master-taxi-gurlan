@@ -11,7 +11,7 @@
  */
 'use strict';
 const assert = require('assert');
-const { buildCaption, socialVideoUrl, requestedNetworks } = require('../tv_social_publish');
+const { buildCaption, socialVideoUrl, requestedNetworks, consentRecord } = require('../tv_social_publish');
 
 const results = [];
 function check(name, fn) {
@@ -145,6 +145,35 @@ check('requestedNetworks — pullik reklama — majburiy 3 tarmoq', () => {
   assert.deepStrictEqual(
     requestedNetworks({ category: 'ad', socialNetworks: ['tiktok'] }),
     ['instagram', 'facebook', 'telegram']);
+});
+
+// ── 7-bosqich (2026-10-25): rozilik belgisi va uning asosi ──
+check('requestedNetworks — tarmoq tanlangan, lekin socialConsent yo\'q/false → hech qayer', () => {
+  assert.deepStrictEqual(requestedNetworks({ socialNetworks: ['telegram'] }), []);
+  assert.deepStrictEqual(requestedNetworks({ socialNetworks: ['telegram'], socialConsent: false }), []);
+});
+check('requestedNetworks — eski ilova (chip + socialConsent:true, versiyasiz) — o\'zgarmagan', () => {
+  assert.deepStrictEqual(
+    requestedNetworks({ socialNetworks: ['youtube'], socialConsent: true }), ['youtube']);
+});
+const ts = { toMillis: () => 1761400000000 };
+check('consentRecord — «Рухсат бераман»: explicit, versiya, vaqt', () => {
+  const r = consentRecord({ socialConsent: true, socialConsentVersion: 1, socialConsentAt: ts }, ['telegram']);
+  assert.deepStrictEqual(r, { basis: 'explicit', version: 1, networks: ['telegram'], consentAt: ts });
+});
+check('consentRecord — eski ilova: legacy, vaqt yozilmaydi', () => {
+  const r = consentRecord({ socialConsent: true, socialConsentAt: ts }, ['instagram']);
+  assert.deepStrictEqual(r, { basis: 'legacy', version: 0, networks: ['instagram'], consentAt: null });
+});
+check('consentRecord — reklama: ad_terms + ogohlantirish versiyasi (eski ilovada 0)', () => {
+  assert.strictEqual(consentRecord({ category: 'ad', socialNoticeVersion: 1 }, ['facebook']).version, 1);
+  const old = consentRecord({ category: 'ad' }, ['facebook']);
+  assert.deepStrictEqual([old.basis, old.version], ['ad_terms', 0]);
+});
+check('consentRecord — noto\'g\'ri versiya (matn, 0, 500) → 0', () => {
+  for (const v of ['1', 0, 500, 1.5]) {
+    assert.strictEqual(consentRecord({ socialConsentVersion: v }, []).basis, 'legacy');
+  }
 });
 
 const failed = results.filter((r) => !r.pass).length;

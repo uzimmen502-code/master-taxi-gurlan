@@ -15057,6 +15057,11 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
     const searchTokens = Array.isArray(data.searchTokens)
       ? data.searchTokens.map((t) => String(t)).filter(Boolean)
       : [];
+    // Тўловдан олдин кўрсатилган «реклама AVA тармоқларига ҳам чиқади»
+    // огоҳлантириши версияси (7-босқич). Эски илова юбормайди — ёзилмайди.
+    const socialNoticeVersion = Number.isInteger(data.socialNoticeVersion) &&
+        data.socialNoticeVersion > 0 && data.socialNoticeVersion < 100 ?
+      data.socialNoticeVersion : 0;
 
     const uid = canonicalUid(callerPhone(context));
     if (!uid || uid.length < 9) {
@@ -15171,6 +15176,7 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
         ...(shopItemId ? {shopItemId} : {}),
         showPhone,
         socialConsent: false,
+        ...(socialNoticeVersion ? {socialNoticeVersion} : {}),
         processingStatus: 'ready',
         ...(searchTokens.length ? {searchTokens} : {}),
       });

@@ -101,6 +101,51 @@ function businessToSearchEntry(id, d) {
 }
 
 /**
+ * КАФЕ-РЕСТОРАН / УЙ ОШПАЗИ (2026-10-25, Agent C): `restaurants/{rid}` → `restaurant_<rid>` (тур `restaurant`,
+ * модул `restaurants`). Натижа очадиган ресторан — `sourceId` (манба ва очиладиган объект бир хил; дўкондаги каби
+ * филиал→ота алмашинуви йўқ, шунинг учун `target` ёзилмайди — `upsertSearchIndexEntry` ўзгармайди).
+ * Фақат `approved`, номли ва намуна ЭМАС (`isDemo` — намуна рўйхатда «бўш эмас» деб кўрсатилади, қидирувда эса
+ * мижозни алдамасин, PROPOSED) ресторан фаол; тўхтатилса/ёпилса — `active: false`; ўчирилса — ёзув ўчади.
+ * Манзил ва телефон индексга ЁЗИЛМАЙДИ (уй ошпазининг манзили — уйи, 40-банд).
+ */
+const RESTAURANT_KEYWORDS = Object.freeze(['кафе', 'kafe', 'ресторан', 'restoran', 'овқат', 'ovqat', 'таом', 'taom', 'меню', 'menyu']);
+const HOME_COOK_KEYWORDS = Object.freeze(['уй овқати', 'uy ovqati', 'ошпаз', 'oshpaz', 'овқат', 'ovqat', 'таом', 'taom']);
+
+function isHomeCookRestaurant(d) {
+  if (['home', 'cafe', 'restaurant', 'chaikhana'].includes(d.venueType)) return d.venueType === 'home';
+  return d.legalType === 'individual';
+}
+
+function restaurantToSearchEntry(id, d) {
+  const name = s(d.name, 160);
+  const home = isHomeCookRestaurant(d);
+  const tags = Array.isArray(d.cuisineTags) ? d.cuisineTags.map((x) => s(x, 30)).filter(Boolean).slice(0, 3) : [];
+  return {
+    type: 'restaurant',
+    moduleId: 'restaurants',
+    sourceCollection: 'restaurants',
+    sourceId: id,
+    title: name,
+    subtitle: home ? 'Уй ошпази' : 'Кафе-ресторан',
+    imageUrl: s(d.logoUrl || d.coverUrl, 500),
+    iconKey: 'restaurant',
+    keywords: [...(home ? HOME_COOK_KEYWORDS : RESTAURANT_KEYWORDS), ...tags],
+    priorityBoost: 1,
+    active: d.status === 'approved' && d.isDemo !== true && name.length >= 2,
+  };
+}
+
+/** Ресторан ҳужжатидан ИНДЕКСга таъсир қиладиган қисм (рейтинг, пауза, `publicId` ва ҳ.к. — кирмайди). */
+function restaurantSearchFingerprint(d) {
+  if (!d) return 'null';
+  const ts = d.searchIndexedAt && typeof d.searchIndexedAt.toMillis === 'function' ? d.searchIndexedAt.toMillis() : null;
+  return JSON.stringify([
+    d.status || '', d.name || '', d.logoUrl || '', d.coverUrl || '', d.venueType || '', d.legalType || '',
+    Array.isArray(d.cuisineTags) ? d.cuisineTags : [], d.isDemo === true, ts,
+  ]);
+}
+
+/**
  * Битта ҳужжатни индекслаш (триггер ва бир марталик тўлдириш учун бир хил). [apply] `false` — фақат ҳисоблаш.
  * Маҳсулотда `searchTokens` фақат фарқ қилса ёзилади (триггер ўзини чексиз чақирмайди).
  */
@@ -118,6 +163,15 @@ async function indexShopDoc(kind, id, data, deps, { apply = true } = {}) {
       await upsertSearchIndexEntry(entry);
     }
     return { entry, tokensUpdated };
+  }
+  if (kind === 'restaurant') {
+    if (!data) {
+      if (apply) await deleteSearchIndexEntry('restaurant', id);
+      return { entry: null, tokensUpdated: false };
+    }
+    const entry = restaurantToSearchEntry(id, data);
+    if (apply) await upsertSearchIndexEntry(entry);
+    return { entry, tokensUpdated: false };
   }
   if (!data) {
     if (apply) await deleteSearchIndexEntry('shop', id);
@@ -155,8 +209,26 @@ function attachShopSearchIndex(exportsObj, deps) {
   exportsObj.onSearchIndexBusinessWrite = onDocumentWritten(
     { document: 'businesses/{id}', region: 'europe-west1' }, handler('business', 'id'),
   );
+  // Ресторан: рейтинг/пауза/таймаут каби тез-тез ўзгарадиган майдонлар индексга таъсир қилмайди — фақат
+  // индексга кирадиган қисм ўзгарганда ёзилади (36, 37-банд).
+  const restaurantHandler = handler('restaurant', 'rid');
+  exportsObj.onSearchIndexRestaurantWrite = onDocumentWritten(
+    { document: 'restaurants/{rid}', region: 'europe-west1' },
+    async (event) => {
+      const b = event.data && event.data.before;
+      const a = event.data && event.data.after;
+      const before = b && b.exists ? (b.data() || {}) : null;
+      const after = a && a.exists ? (a.data() || {}) : null;
+      if (b && restaurantSearchFingerprint(before) === restaurantSearchFingerprint(after)) {
+        log({ action: 'index_restaurant', result: 'skipped' });
+        return;
+      }
+      await restaurantHandler(event);
+    },
+  );
 }
 
 module.exports = {
   attachShopSearchIndex, indexShopDoc, shopItemToSearchEntry, tvShopToSearchEntry, businessToSearchEntry, shopItemTokens,
+  restaurantToSearchEntry, restaurantSearchFingerprint,
 };

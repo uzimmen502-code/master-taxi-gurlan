@@ -15,6 +15,14 @@
  *  • Блокланган ёки номаълум — хавфсиз «топилмади» саҳифаси (бошқа дўкон эмас), `noindex`.
  *
  * Диагностика: SHOP_LINK_NOT_FOUND, SHOP_BLOCKED, BUSINESS_NOT_FOUND, BUSINESS_BLOCKED.
+ *
+ * КАФЕ-РЕСТОРАН / УЙ ОШПАЗИ (2026-10-25, Agent C): ўша `publicId` тизими ва ўша `/s/<id>` йўли
+ * (`restaurants/{rid}.publicId`, параллел тизим йўқ, 4-банд). Ҳаволани фақат рестораннинг а'зоси (эга/ходим —
+ * `members/{uid}`) олади ва фақат `approved` ресторанга. Саҳифа: ном, тури, бир нечта таом (расм, ном, нарх);
+ * телефон ва манзил ЙЎҚ (уй ошпазининг манзили — уйи, 40-банд). Тасдиқланмаган/номаълум — ўша «топилмади».
+ * `resolveShopLink` ресторан учун `{kind: 'restaurant', restaurantId}` қайтаради — `ownerPhone` йўқ, шунинг учун
+ * ЭСКИ илова уни «мавжуд эмас» деб кўрсатади (бошқа дўкон очилмайди).
+ * Диагностика: RESTAURANT_NOT_FOUND, RESTAURANT_NOT_APPROVED.
  */
 
 const crypto = require('crypto');
@@ -23,6 +31,8 @@ const page = require('./tv_clip_page');
 const SHOPS = 'tv_shops';
 const BUSINESSES = 'businesses';
 const ITEMS = 'tv_shop_items';
+const RESTAURANTS = 'restaurants';
+const RESTAURANT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const ID_ALPHABET = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // адаштирадиган 0/O, 1/l/I йўқ
 const ID_LEN = 10;
 const PUBLIC_ID_RE = /^[A-Za-z0-9]{10}$/;
@@ -50,6 +60,11 @@ const TEXTS = Object.freeze({
     nf_title: 'Дўкон топилмади',
     nf_desc: 'Бу дўкон мавжуд эмас ёки вақтинча ёпилган.',
     shop: 'Онлайн дўкон',
+    open_web_restaurant: '🌐 Менюни очиш',
+    dishes: 'Таомлар',
+    empty_dishes: 'Ҳозирча таом йўқ.',
+    restaurant: 'Кафе-ресторан',
+    home_cook: 'Уй ошпази',
   },
   ru: {
     open_web: '🌐 Открыть магазин',
@@ -60,6 +75,11 @@ const TEXTS = Object.freeze({
     nf_title: 'Магазин не найден',
     nf_desc: 'Этот магазин не существует или временно закрыт.',
     shop: 'Онлайн-магазин',
+    open_web_restaurant: '🌐 Открыть меню',
+    dishes: 'Блюда',
+    empty_dishes: 'Пока нет блюд.',
+    restaurant: 'Кафе-ресторан',
+    home_cook: 'Домашняя кухня',
   },
 });
 
@@ -69,13 +89,19 @@ function langOf(acceptLanguage) {
 
 /**
  * Дўкон ҳаволаси саҳифаси (соф функция — тест учун). [items] — фаол маҳсулотлар (title, price, photoUrl).
+ * [kind] `restaurant` — ўша саҳифа, матнлари таом/меню ҳақида; [coverUrl] — ресторан муқоваси/логотипи (OG расм).
  */
-function buildShopPageHtml({ shopName, directionName, items, pageUrl, webUrl, appUrl, altUrl, lang = 'uz' }) {
-  const t = TEXTS[lang] || TEXTS.uz;
+function buildShopPageHtml({
+  shopName, directionName, items, pageUrl, webUrl, appUrl, altUrl, lang = 'uz', kind = 'shop', coverUrl = '',
+}) {
+  const t0 = TEXTS[lang] || TEXTS.uz;
+  const t = kind === 'restaurant'
+    ? { ...t0, open_web: t0.open_web_restaurant, products: t0.dishes, empty: t0.empty_dishes, shop: t0.restaurant }
+    : t0;
   const name = page.escapeHtml(str(shopName, 160) || t.shop);
   const dir = page.escapeHtml(str(directionName, 160));
   const list = Array.isArray(items) ? items.slice(0, PAGE_ITEMS) : [];
-  const cover = list.map((i) => page.safeUrl(i.photoUrl)).find(Boolean) || '';
+  const cover = page.safeUrl(coverUrl) || list.map((i) => page.safeUrl(i.photoUrl)).find(Boolean) || '';
   const ogTitle = dir && dir !== name ? `${name} — ${dir}` : name;
   const ogDesc = page.escapeHtml(list.map((i) => str(i.title, 60)).filter(Boolean).slice(0, 6).join(' · ') || t.shop);
   const url = page.safeUrl(pageUrl);
@@ -134,10 +160,22 @@ function buildShopNotFoundHtml({ appUrl, altUrl, lang = 'uz' }) {
  */
 async function resolvePublicId(db, publicId) {
   if (!isPublicId(publicId)) return { available: false };
-  const [shopSnap, bizSnap] = await Promise.all([
+  const [shopSnap, bizSnap, restSnap] = await Promise.all([
     db.collection(SHOPS).where('publicId', '==', publicId).limit(1).get(),
     db.collection(BUSINESSES).where('publicId', '==', publicId).limit(1).get(),
+    db.collection(RESTAURANTS).where('publicId', '==', publicId).limit(1).get(),
   ]);
+  if (!restSnap.empty) {
+    // Ресторан: фақат тасдиқланган (тўхтатилган/ёпилган/рад этилган — «топилмади»).
+    const r = restSnap.docs[0];
+    const x = r.data() || {};
+    if (x.status !== 'approved') return { available: false };
+    const home = x.venueType === 'home' || (!x.venueType && x.legalType === 'individual');
+    return {
+      available: true, kind: 'restaurant', restaurantId: r.id, shopName: str(x.name, 160),
+      home, coverUrl: str(x.coverUrl || x.logoUrl, 500),
+    };
+  }
   if (!shopSnap.empty) {
     const d = shopSnap.docs[0];
     const x = d.data() || {};
@@ -187,6 +225,16 @@ async function pageItems(db, resolved) {
   }));
 }
 
+/** Ресторан саҳифаси учун таомлар: сотувдаги (`available !== false`, нарх бутун > 0), `sort` бўйича, 12 та. */
+async function restaurantPageItems(db, restaurantId) {
+  const snap = await db.collection(RESTAURANTS).doc(restaurantId).collection('menu_items').limit(60).get();
+  return snap.docs.map((d) => d.data() || {})
+    .filter((x) => x.available !== false && Number.isInteger(x.price) && x.price > 0 && str(x.name, 80))
+    .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0))
+    .slice(0, PAGE_ITEMS)
+    .map((x) => ({ title: x.name, price: x.price, photoUrl: x.photoUrl || '' }));
+}
+
 function attachShopLinks(exportsObj, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, publicBase, playUrl, apkUrl,
@@ -199,18 +247,39 @@ function attachShopLinks(exportsObj, deps) {
   async function uniqueId(t) {
     for (let i = 0; i < 5; i += 1) {
       const id = newPublicId();
-      const [a, b] = await Promise.all([
+      const [a, b, c] = await Promise.all([
         t.get(db.collection(SHOPS).where('publicId', '==', id).limit(1)),
         t.get(db.collection(BUSINESSES).where('publicId', '==', id).limit(1)),
+        t.get(db.collection(RESTAURANTS).where('publicId', '==', id).limit(1)),
       ]);
-      if (a.empty && b.empty) return id;
+      if (a.empty && b.empty && c.empty) return id;
     }
     throw fail('aborted', 'SHOP_LINK_RETRY', 'Қайта уриниб кўринг.');
   }
 
   /**
-   * data: { businessId? } → { ok, publicId, url }. Эганинг ўз онлайн дўкони ёки ўз йўналиши; ҳавола бир марта
-   * берилади (қайта чақирилса — ўша ҳавола, 21-банд). Блокланган дўкон/йўналишга ҳавола берилмайди.
+   * Ресторан ҳаволаси (транзакция ичида): фақат а'зо (эга/ходим), фақат `approved`. Бегона ёки йўқ ресторан —
+   * бир хил `RESTAURANT_NOT_FOUND` (мавжудлиги ошкор этилмайди).
+   */
+  async function restaurantLinkInTx(t, restaurantId, uid) {
+    if (!RESTAURANT_ID_RE.test(restaurantId)) throw fail('not-found', 'RESTAURANT_NOT_FOUND', 'Кафе топилмади.');
+    const ref = db.collection(RESTAURANTS).doc(restaurantId);
+    const [snap, member] = await Promise.all([t.get(ref), t.get(ref.collection('members').doc(uid))]);
+    if (!snap.exists || !member.exists) throw fail('not-found', 'RESTAURANT_NOT_FOUND', 'Кафе топилмади.');
+    const x = snap.data() || {};
+    if (x.status !== 'approved') {
+      throw fail('failed-precondition', 'RESTAURANT_NOT_APPROVED', 'Кафе ҳали тасдиқланмаган ёки вақтинча ёпилган.');
+    }
+    if (isPublicId(x.publicId)) return { publicId: x.publicId, created: false };
+    const id = await uniqueId(t);
+    t.update(ref, { publicId: id });
+    return { publicId: id, created: true };
+  }
+
+  /**
+   * data: { businessId? | restaurantId? } → { ok, publicId, url }. Эганинг ўз онлайн дўкони, ўз йўналиши ёки
+   * а'зоси бўлган кафе-ресторан; ҳавола бир марта берилади (қайта чақирилса — ўша ҳавола, 21-банд). Блокланган
+   * дўкон/йўналишга, тасдиқланмаган ресторанга ҳавола берилмайди.
    */
   exportsObj.getMyShopLink = functions.https.onCall(async (data, context) => {
     const started = Date.now();
@@ -218,6 +287,12 @@ function attachShopLinks(exportsObj, deps) {
     const uid = canonicalUid(callerPhone(context));
     if (!uid || uid.length < 12) throw new HttpsError('unauthenticated', 'Phone token required');
     const businessId = str(data && data.businessId, 128);
+    const restaurantId = str(data && data.restaurantId, 128);
+    if (restaurantId) {
+      const r = await db.runTransaction((t) => restaurantLinkInTx(t, restaurantId, uid));
+      log({ action: 'getMyShopLink', kind: 'restaurant', restaurantId, result: r.created ? 'created' : 'existing', durationMs: Date.now() - started });
+      return { ok: true, publicId: r.publicId, url: urlOf(r.publicId) };
+    }
     const out = await db.runTransaction(async (t) => {
       const shopRef = db.collection(SHOPS).doc(uid);
       const shopSnap = await t.get(shopRef);
@@ -251,9 +326,10 @@ function attachShopLinks(exportsObj, deps) {
   /** data: { publicId } → { ok, available, ownerPhone?, businessId? } (логинсиз; веб-ҳаволадан илова очилганда). */
   exportsObj.resolveShopLink = functions.https.onCall(async (data) => {
     const r = await resolvePublicId(db, str(data && data.publicId, 16));
-    return r.available
-      ? { ok: true, available: true, ownerPhone: r.ownerPhone, businessId: r.businessId }
-      : { ok: true, available: false };
+    if (!r.available) return { ok: true, available: false };
+    // Ресторан: `ownerPhone` атайлаб ЙЎҚ — эски илова буни «мавжуд эмас» деб кўрсатади (дўкон экрани очилмайди).
+    if (r.kind === 'restaurant') return { ok: true, available: true, kind: 'restaurant', restaurantId: r.restaurantId };
+    return { ok: true, available: true, ownerPhone: r.ownerPhone, businessId: r.businessId };
   });
 
   /** `/s/<publicId>` (hosting rewrite) — сервер HTML. */
@@ -275,16 +351,21 @@ function attachShopLinks(exportsObj, deps) {
           notFound();
           return;
         }
-        const items = await pageItems(db, r);
+        const isRest = r.kind === 'restaurant';
+        const items = isRest ? await restaurantPageItems(db, r.restaurantId) : await pageItems(db, r);
         // Манба (6-босқич статистикаси): QR ёки улашилган ҳавола — иловага шу белги билан ўтади.
         const src = req.query && req.query.src === 'qr' ? 'qr' : 'link';
         // Блок тез акс этсин: CDN кэши 5 дақиқа.
         res.set('Cache-Control', 'public, max-age=120, s-maxage=300');
+        const t = TEXTS[lang] || TEXTS.uz;
         res.status(200).send(buildShopPageHtml({
-          shopName: r.shopName, directionName: r.directionName, items, pageUrl: urlOf(id),
+          shopName: r.shopName,
+          directionName: isRest ? (r.home ? t.home_cook : t.restaurant) : r.directionName,
+          items, pageUrl: urlOf(id),
           webUrl: `${publicBase}/?shop=${id}&src=${src}`, appUrl: playUrl, altUrl: apkUrl, lang,
+          kind: isRest ? 'restaurant' : 'shop', coverUrl: isRest ? r.coverUrl : '',
         }));
-        log({ action: 'shopPage', result: 'ok', items: items.length, durationMs: Date.now() - started });
+        log({ action: 'shopPage', kind: isRest ? 'restaurant' : 'shop', result: 'ok', items: items.length, durationMs: Date.now() - started });
       } catch (e) {
         console.error(JSON.stringify({ module: 'shop_links', action: 'shopPage', result: 'error', errorCode: 'SHOP_PAGE_FAILED', message: String((e && e.message) || e).slice(0, 200) }));
         notFound();
@@ -294,4 +375,5 @@ function attachShopLinks(exportsObj, deps) {
 
 module.exports = {
   attachShopLinks, resolvePublicId, buildShopPageHtml, buildShopNotFoundHtml, newPublicId, isPublicId, langOf, pageItems,
+  restaurantPageItems,
 };

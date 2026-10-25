@@ -18,14 +18,31 @@
  *
  * Ташқи платформалардаги кўришлар (Telegram превьюси, CDN кэшидаги `/s/` саҳифаси) ИШОНЧЛИ ЎЛЧАНМАЙДИ — саналмайди;
  * фақат шу ҳаволадан иловага келган (link/qr) ташриф саналади.
+ *
+ * КАФЕ-РЕСТОРАН (2026-10-25, Agent C) — ўша callable, ўша санаш ва такрор қоидаси:
+ *   • `restaurant_view` — ресторан (меню) экрани очилди; `dish_view` — таом варағи очилди;
+ *   • қўшимча манбалар: list (рўйхат) | home (бош саҳифа бўлими) | section (таомлар лентаси/бўлими) |
+ *     restaurant (меню ичида);
+ *   • ресторан а'золари (эга ва ходимлар — `members/{uid}`) саналмайди; фақат `approved` ресторан ва унинг мавжуд,
+ *     сотувдаги таоми саналади;
+ *   • сақланиши — ресторан ИЧИДА (ўқиш ҳуқуқи телефонга эмас, а'золикка боғлиқ):
+ *     restaurants/{rid}/view_stats/{yyyymmdd} = { restaurantId, day, restaurantViews, dishViews,
+ *       src: {<manba>: n}, restaurantSrc: {...}, dishSrc: {...}, items: {<itemId>: n} }
  */
 
 const crypto = require('crypto');
 
 const STATS = 'shop_stats';
 const SEEN = 'shop_stats_seen';
-const KINDS = Object.freeze(['shop_view', 'product_view']);
-const SOURCES = Object.freeze(['market', 'video', 'map', 'link', 'qr', 'search', 'shop', 'product', 'other']);
+const RESTAURANTS = 'restaurants';
+const RESTAURANT_STATS = 'view_stats';
+const SHOP_KINDS = Object.freeze(['shop_view', 'product_view']);
+const RESTAURANT_KINDS = Object.freeze(['restaurant_view', 'dish_view']);
+const KINDS = Object.freeze([...SHOP_KINDS, ...RESTAURANT_KINDS]);
+const SOURCES = Object.freeze([
+  'market', 'video', 'map', 'link', 'qr', 'search', 'shop', 'product', 'other',
+  'list', 'home', 'section', 'restaurant',
+]);
 const SEEN_KEEP_DAYS = 3;
 const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -53,6 +70,58 @@ function attachShopStats(exportsObj, deps) {
   const FV = admin.firestore.FieldValue;
 
   /**
+   * Ресторан/таом кўриши (дўкон билан бир хил қоида): бир харидор × бир объект × бир кун = 1; а'зо саналмайди;
+   * фақат тасдиқланган ресторан ва унинг мавжуд, сотувдаги таоми.
+   */
+  async function recordRestaurantEvent(d, context, uid) {
+    const kind = d.kind;
+    const restaurantId = String(d.restaurantId || '').trim();
+    const itemId = String(d.itemId || '').trim();
+    if (!ID_RE.test(restaurantId) || (itemId && !ID_RE.test(itemId))) return { ok: false, counted: false, reason: 'id' };
+    if (kind === 'dish_view' && !itemId) return { ok: false, counted: false, reason: 'item' };
+    let viewer = '';
+    try { viewer = canonicalUid(callerPhone(context)) || ''; } catch (_) { viewer = ''; }
+    const source = sourceOf(d.source);
+    const day = dayKey();
+    const target = kind === 'dish_view' ? `r:${restaurantId}:${itemId}` : `r:${restaurantId}`;
+    const rRef = db.collection(RESTAURANTS).doc(restaurantId);
+    const seenRef = db.collection(SEEN).doc(seenId(day, uid, kind, target));
+    const statsRef = rRef.collection(RESTAURANT_STATS).doc(day);
+
+    const result = await db.runTransaction(async (t) => {
+      const reads = [t.get(seenRef), t.get(rRef)];
+      if (viewer.length === 12) reads.push(t.get(rRef.collection('members').doc(viewer)));
+      if (kind === 'dish_view') reads.push(t.get(rRef.collection('menu_items').doc(itemId)));
+      const [seen, r, ...rest] = await Promise.all(reads);
+      const member = viewer.length === 12 ? rest.shift() : null;
+      const item = kind === 'dish_view' ? rest.shift() : null;
+      if (member && member.exists) return 'own';
+      const rx = r.exists ? (r.data() || {}) : null;
+      if (!rx || rx.status !== 'approved') return 'unavailable';
+      if (viewer && canonical(rx.ownerUid) === canonical(viewer)) return 'own';
+      if (item && (!item.exists || (item.data() || {}).available === false)) return 'unavailable';
+      if (seen.exists) return 'seen';
+      t.create(seenRef, { day });
+      const inc = FV.increment(1);
+      // Ичма-ич объект (нуқтали калит эмас) — `set(merge)` уни чуқур бирлаштиради.
+      const patch = { restaurantId, day, updatedAt: FV.serverTimestamp(), src: { [source]: inc } };
+      if (kind === 'restaurant_view') {
+        patch.restaurantViews = inc;
+        patch.restaurantSrc = { [source]: inc };
+      } else {
+        patch.dishViews = inc;
+        patch.dishSrc = { [source]: inc };
+        patch.items = { [itemId]: inc };
+      }
+      t.set(statsRef, patch, { merge: true });
+      return 'counted';
+    });
+    const counted = result === 'counted';
+    if (counted) log({ action: 'recordShopEvent', kind, restaurantId, source, result: 'counted' });
+    return counted ? { ok: true, counted } : { ok: true, counted, reason: result };
+  }
+
+  /**
    * data: { kind, ownerPhone, businessId?, itemId?, source? } → { ok, counted }. Логинсиз — ҳисобга олинмайди
    * (такрорни аниқлаб бўлмайди). Хато ҳеч қачон харидорга кўрсатилмайди (клиент жим чақиради).
    */
@@ -62,6 +131,7 @@ function attachShopStats(exportsObj, deps) {
     if (!uid) return { ok: true, counted: false, reason: 'no_auth' };
     const kind = d.kind;
     if (!KINDS.includes(kind)) return { ok: false, counted: false, reason: 'kind' };
+    if (RESTAURANT_KINDS.includes(kind)) return recordRestaurantEvent(d, context, uid);
     const owner = canonical(d.ownerPhone);
     if (owner.length !== 12) return { ok: false, counted: false, reason: 'owner' };
     let viewer = '';
@@ -153,4 +223,4 @@ async function cleanupSeen(db, beforeDay) {
   return removed;
 }
 
-module.exports = { attachShopStats, dayKey, seenId, cleanupSeen, SOURCES, KINDS };
+module.exports = { attachShopStats, dayKey, seenId, cleanupSeen, SOURCES, KINDS, RESTAURANT_KINDS };

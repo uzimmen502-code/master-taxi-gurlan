@@ -6,9 +6,22 @@ import '../../business_map/domain/product_kind.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 
-/// Админ: объект маҳсулотлари — рўйхат, таҳрирлаш, блоклаш, ўчириш (эга қарори 2026-10-24: эга ўзи жойлайди,
-/// админ таҳрирлайди ва ўчиради). Ҳар ҳаракат серверда `admin_audit`га сабаби билан ёзилади (41-банд).
-/// Матнлар Кирилл ёзувида қотирилган — бошқа админ экранлар каби.
+/// Админ ҳаракати хатосининг тушунарли матни (сервер диагностика коди бўйича, 25-банд).
+String adminActionError(Object e, {String fallback = 'Сақлаб бўлмади'}) {
+  final code = BusinessRepository.errorCode(e);
+  return switch (code) {
+    'PARENT_BLOCKED' => 'Аввал дўкон ёки йўналишнинг блокини олинг',
+    'SHOP_BLOCKED' => 'Аввал онлайн дўконнинг блокини олинг',
+    'SHOP_NOT_FOUND' => 'Дўкон топилмади',
+    'PRODUCT_DELETED' => 'Маҳсулот ўчирилган',
+    _ => code.isEmpty ? fallback : '$fallback ($code)',
+  };
+}
+
+/// Админ: дўкон маҳсулотлари — рўйхат, таҳрирлаш, блоклаш, ўчириш (эга қарори 2026-10-24: эга ўзи жойлайди,
+/// админ таҳрирлайди ва ўчиради). [business] — харита объекти ёки эганинг ўз дўкони ([Business.ownShop],
+/// 2026-10-25: ягона омбор — Аҳоли бозорининг янги маҳсулотлари `businessId`сиз). Ҳар ҳаракат серверда
+/// `admin_audit`га сабаби билан ёзилади (41-банд). Матнлар Кирилл ёзувида қотирилган — бошқа админ экранлар каби.
 class BusinessProductsAdminDialog extends StatefulWidget {
   const BusinessProductsAdminDialog({
     super.key,
@@ -29,8 +42,11 @@ class _BusinessProductsAdminDialogState extends State<BusinessProductsAdminDialo
   late final TvShopRepository _shop = widget._shop ?? TvShopRepository();
   late Future<List<TvShopItem>> _future = _load();
 
-  /// Эга фильтри йўқ (`ownerPhone` бўш): админ барча (ўчирилмаган) ҳужжатларни кўради.
-  Future<List<TvShopItem>> _load() => _shop.fetchByBusiness(widget.business.id, onlyActive: false);
+  /// Объект: эга фильтри йўқ (`ownerPhone` бўш) — админ барча (ўчирилмаган) ҳужжатларни кўради.
+  /// Ўз дўкони: эганинг `businessId`сиз (ўчирилмаган) маҳсулотлари.
+  Future<List<TvShopItem>> _load() => widget.business.isOwnShop
+      ? _shop.fetchOwnShopItems(widget.business.ownerId)
+      : _shop.fetchByBusiness(widget.business.id, onlyActive: false);
 
   void _reload() => setState(() {
         _future = _load();
@@ -52,7 +68,7 @@ class _BusinessProductsAdminDialogState extends State<BusinessProductsAdminDialo
   Future<void> _delete(TvShopItem it) async {
     final reason = await showDialog<String>(
       context: context,
-      builder: (_) => _ReasonDialog(title: 'Маҳсулотни ўчириш', body: '${it.title}\nЭга: ${it.ownerPhone}', confirm: 'Ўчириш'),
+      builder: (_) => AdminReasonDialog(title: 'Маҳсулотни ўчириш', body: '${it.title}\nЭга: ${it.ownerPhone}', confirm: 'Ўчириш'),
     );
     if (reason == null || !mounted) return;
     try {
@@ -61,7 +77,7 @@ class _BusinessProductsAdminDialogState extends State<BusinessProductsAdminDialo
       _snack('Ўчирилди');
       _reload();
     } catch (e) {
-      if (mounted) _snack('Ўчириб бўлмади (${BusinessRepository.errorCode(e)})');
+      if (mounted) _snack(adminActionError(e, fallback: 'Ўчириб бўлмади'));
     }
   }
 
@@ -74,8 +90,9 @@ class _BusinessProductsAdminDialogState extends State<BusinessProductsAdminDialo
 
   @override
   Widget build(BuildContext context) {
+    final name = widget.business.name.trim().isEmpty ? widget.business.ownerId : widget.business.name;
     return AlertDialog(
-      title: Text('Маҳсулотлар · ${widget.business.name}'),
+      title: Text(widget.business.isOwnShop ? 'Маҳсулотлар · $name (асосий дўкон)' : 'Маҳсулотлар · $name'),
       content: SizedBox(
         width: 560,
         child: FutureBuilder<List<TvShopItem>>(
@@ -130,18 +147,19 @@ class _BusinessProductsAdminDialogState extends State<BusinessProductsAdminDialo
 }
 
 /// Сабаб (камида 3 белги) киритилмагунча тугма ўчиқ. Controller'ни диалогнинг ўзи бошқаради (`_DeleteDialog` каби).
-class _ReasonDialog extends StatefulWidget {
-  const _ReasonDialog({required this.title, required this.body, required this.confirm});
+/// Натижа — сабаб матни; бекор қилинса `null`. Блоклаш/очиш/ўчириш ойналарида умумий.
+class AdminReasonDialog extends StatefulWidget {
+  const AdminReasonDialog({super.key, required this.title, required this.body, required this.confirm});
 
   final String title;
   final String body;
   final String confirm;
 
   @override
-  State<_ReasonDialog> createState() => _ReasonDialogState();
+  State<AdminReasonDialog> createState() => _AdminReasonDialogState();
 }
 
-class _ReasonDialogState extends State<_ReasonDialog> {
+class _AdminReasonDialogState extends State<AdminReasonDialog> {
   final _reason = TextEditingController();
 
   @override
@@ -245,7 +263,7 @@ class _ProductEditDialogState extends State<_ProductEditDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = 'Сақлаб бўлмади (${BusinessRepository.errorCode(e)})';
+        _error = adminActionError(e);
       });
     }
   }

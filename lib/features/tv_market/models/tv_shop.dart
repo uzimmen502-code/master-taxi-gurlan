@@ -6,11 +6,17 @@ class TvShop {
     required this.ownerPhone,
     required this.name,
     this.createdAt,
+    this.status = 'active',
   });
 
   final String ownerPhone;
   final String name;
   final DateTime? createdAt;
+
+  /// `active` | `blocked` — фақат админ ўрнатади (`adminSetShopStatus`); эски ҳужжатларда йўқ (= `active`).
+  final String status;
+
+  bool get isBlocked => status == 'blocked';
 
   factory TvShop.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
@@ -18,6 +24,7 @@ class TvShop {
       ownerPhone: doc.id,
       name: (d['name'] ?? '') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      status: d['status'] == 'blocked' ? 'blocked' : 'active',
     );
   }
 
@@ -125,6 +132,7 @@ class TvShopItem {
   }
 
   bool get isActive => status == 'active';
+  bool get isBlocked => status == 'blocked';
   bool get hasVideo => clipIds.isNotEmpty;
   bool get hasPrice => price > 0;
   bool get isBoosted =>

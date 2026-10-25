@@ -24,7 +24,13 @@ class Business {
     this.website = '',
     this.createdAt,
     this.updatedAt,
+    this.status = 'active',
   });
+
+  /// `active` | `blocked` — фақат сервер (админ) ўрнатади; клиент [toCallable]да юбормайди.
+  final String status;
+
+  bool get isBlocked => status == 'blocked';
 
   final String id;
   final String ownerId;
@@ -64,9 +70,13 @@ class Business {
   static DateTime? _t(Object? v) => v is Timestamp ? v.toDate() : (v is DateTime ? v : null);
 
   /// Координатаси яроқсиз ҳужжат — `null` (харитада чизилмайди, синмайди).
+  /// Блокланган объектнинг координатаси сервер томонидан `blockedGeo`га олинган (эски иловалар уни чизмасин) —
+  /// эга ва админ рўйхатларида у шу ердан ўқилади; харита [isBlocked]ни ўзи чиқариб ташлайди.
   static Business? tryFromMap(String id, Map<String, dynamic> d) {
-    final lat = d['lat'];
-    final lng = d['lng'];
+    final hold = d['blockedGeo'];
+    final geo = d['lat'] is num ? d : (hold is Map ? hold : d);
+    final lat = geo['lat'];
+    final lng = geo['lng'];
     if (lat is! num || lng is! num) return null;
     return Business(
       id: id,
@@ -85,6 +95,7 @@ class Business {
       website: _s(d['website']),
       createdAt: _t(d['createdAt']),
       updatedAt: _t(d['updatedAt']),
+      status: d['status'] == 'blocked' ? 'blocked' : 'active',
     );
   }
 

@@ -43,14 +43,29 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
   late final TvShopRepository _repo = widget._repo ?? TvShopRepository();
   late Future<List<TvShopItem>> _future = _load();
 
+  /// Админ блоки (2026-10-25): йўналиш ([Business.isBlocked]) ёки бутун онлайн дўкон (`tv_shops.status`).
+  /// Блокда янги маҳсулот қўшиб бўлмайди (rules ҳам рад этади) — тугма яширилади, сабаб айтилади.
+  late bool _blocked = widget.business.isBlocked;
+
   Future<List<TvShopItem>> _load() => widget.business.isOwnShop
       ? _repo.fetchOwnShopItems(widget.business.ownerId)
       : _repo.fetchByBusiness(widget.business.id, ownerPhone: widget.business.ownerId, onlyActive: false);
 
+  Future<void> _checkShopBlock() async {
+    if (_blocked) return;
+    try {
+      final shop = await _repo.fetchShop(widget.business.ownerId);
+      if (mounted && (shop?.isBlocked ?? false)) setState(() => _blocked = true);
+    } catch (e) {
+      debugPrint('[BusinessProducts] shop status: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.openFormOnStart) {
+    _checkShopBlock();
+    if (widget.openFormOnStart && !_blocked) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _openForm();
       });
@@ -119,7 +134,34 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
                 maxLines: 1,
               ),
             ),
-      body: FutureBuilder<List<TvShopItem>>(
+      body: Column(
+        children: [
+          if (_blocked)
+            MaterialBanner(
+              key: const ValueKey('bizprod_blocked_banner'),
+              content: Text(context.tr('bizprod_blocked_banner')),
+              leading: Icon(Icons.block_rounded, color: Colors.red.shade700),
+              backgroundColor: Colors.red.shade50,
+              actions: const [SizedBox.shrink()],
+            ),
+          Expanded(child: _list()),
+        ],
+      ),
+      floatingActionButton: _blocked
+          ? null
+          : FloatingActionButton.extended(
+              key: const ValueKey('bizprod_fab'),
+              onPressed: () => _openForm(),
+              backgroundColor: AppColors.primaryDark,
+              foregroundColor: AppColors.onPrimary,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(context.tr('bizprod_add')),
+            ),
+    );
+  }
+
+  Widget _list() {
+    return FutureBuilder<List<TvShopItem>>(
         future: _future,
         builder: (context, snap) {
           if (snap.hasError) return Center(child: Text(context.tr('bizprod_err_generic')));
@@ -163,6 +205,7 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
                   title: Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                     [
+                      if (it.isBlocked) context.tr('bizprod_status_blocked'),
                       if (it.hasPrice) formatMoney(it.price),
                       context.tr(it.kind == 'service' ? 'bizprod_kind_service' : 'bizprod_kind_product'),
                       if (it.hasVideo) context.tr('bizprod_has_video'),
@@ -193,15 +236,6 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
             },
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const ValueKey('bizprod_fab'),
-        onPressed: () => _openForm(),
-        backgroundColor: AppColors.primaryDark,
-        foregroundColor: AppColors.onPrimary,
-        icon: const Icon(Icons.add_rounded),
-        label: Text(context.tr('bizprod_add')),
-      ),
-    );
+      );
   }
 }

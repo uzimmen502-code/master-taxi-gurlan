@@ -42,6 +42,13 @@ class BusinessRepository {
     return _parse(snap.docs);
   }
 
+  /// Админ: битта эганинг барча объектлари (бир марта ўқиш; [watchMine] сўрови билан бир хил).
+  Future<List<Business>> fetchByOwner(String ownerId) async {
+    if (ownerId.isEmpty) return const [];
+    final snap = await _col.where('ownerId', isEqualTo: ownerId).get();
+    return _parse(snap.docs);
+  }
+
   List<Business> _parse(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final out = <Business>[];
     for (final d in docs) {
@@ -122,6 +129,37 @@ class BusinessRepository {
       if (description != null) 'description': description,
       if (kind != null) 'kind': kind,
       if (status != null) 'status': status,
+    });
+  }
+
+  /// Йўналиш дўконини блоклаш/очиш (`adminSetBusinessStatus`): харитадан йўқолади, маҳсулотлари блокланади.
+  /// [status] — `active` | `blocked`. Блокланган маҳсулотлар сони қайтарилади.
+  Future<int> adminSetStatus(String businessId, {required String status, required String reason}) async {
+    final res = await _fns.httpsCallable('adminSetBusinessStatus').call<Object?>({
+      'businessId': businessId,
+      'status': status,
+      'reason': reason,
+    });
+    final n = (res.data as Map?)?['products'];
+    return n is int ? n : 0;
+  }
+
+  /// Бутун онлайн дўконни блоклаш/очиш (`adminSetShopStatus`): эганинг барча йўналишлари ва маҳсулотлари.
+  Future<void> adminSetShopStatus(String ownerPhone, {required String status, required String reason}) async {
+    await _fns.httpsCallable('adminSetShopStatus').call<Object?>({
+      'ownerPhone': ownerPhone,
+      'status': status,
+      'reason': reason,
+    });
+  }
+
+  /// Харидор шикояти (`submitShopComplaint`): [targetType] — `shop_item` (маҳсулот ID) ёки `shop` (сотувчи телефони).
+  /// Такрор юборилса сервер янги ёзув очмайди.
+  Future<void> submitComplaint({required String targetType, required String targetId, required String reason}) async {
+    await _fns.httpsCallable('submitShopComplaint').call<Object?>({
+      'targetType': targetType,
+      'targetId': targetId,
+      'reason': reason,
     });
   }
 

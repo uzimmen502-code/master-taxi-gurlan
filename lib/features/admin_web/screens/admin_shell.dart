@@ -39,6 +39,7 @@ import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'china_inquiries_admin_screen.dart';
 import 'business_admin_screen.dart';
+import 'shop_admin_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
@@ -349,6 +350,13 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.add_business_outlined,
       description: 'Эгалар қўшган объектлар — таҳрирлаш ва ўчириш',
     ),
+    // Эга қарори 2026-10-25: битта сотувчининг онлайн дўкони, йўналишлари ва маҳсулотлари — блоклаш/очиш бир жойда.
+    _AdminSection(
+      group: 'Бозорлар ва эълонлар',
+      label: 'Онлайн дўконлар',
+      icon: Icons.store_mall_directory_outlined,
+      description: 'Дўкон, йўналиш ва маҳсулотни блоклаш ёки очиш',
+    ),
     // «Сотиш аризалари» ёрлиғи яширилди (1-босқич, 2026-09-24): СОТИНГ
     // модулига фойдаланувчи томонидан кириш йўли ёпилди, янги ариза
     // келмайди. Экраннинг ўзи ва CF/rules тегилмаган — эски
@@ -637,6 +645,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Бизнес харитаси') {
       return const BusinessAdminScreen();
+    }
+    if (section.label == 'Онлайн дўконлар') {
+      return const ShopAdminScreen();
     }
     if (section.label == 'AVA Logistics') {
       return const LogisticsAdminScreen();

@@ -157,6 +157,13 @@ class TvShopRepository {
     return TvShopItem.fromFirestore(snap);
   }
 
+  /// Админ: энг янги маҳсулотлар — барча ҳолатда (фаол, кутилаётган, блокланган, ўчирилган). Битта майдонли
+  /// тартиб — автоматик индекс.
+  Future<List<TvShopItem>> fetchRecentAll({int limit = 100}) async {
+    final snap = await _items.orderBy('createdAt', descending: true).limit(limit).get();
+    return snap.docs.map(TvShopItem.fromFirestore).toList(growable: false);
+  }
+
   /// Аҳоли бозори лентаси: фаол товарлар (қоплама расм бор).
   Future<List<TvShopItem>> fetchForMarket({int limit = 80}) async {
     final snap = await _items

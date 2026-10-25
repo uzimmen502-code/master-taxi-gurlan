@@ -13,6 +13,17 @@ class TvSocial {
   static const telegram = 'telegram';
   static const ordered = [instagram, facebook, youtube, telegram];
 
+  /// Сотувчининг ЎЗ Telegram канали (2026-10-25, `functions/seller_tg_channel.js`) — AVA саҳифаси эмас,
+  /// шунинг учун [ordered]да йўқ (эски клипнинг «барча тармоқлар» маъноси ўзгармайди). Фақат каналини
+  /// улаган сотувчига, товар/хизмат видеосида, ўша «Рухсат бераман» билан.
+  static const sellerTelegram = 'seller_telegram';
+
+  /// Клипда сақланадиган барча тармоқ қийматлари (ўқишда шулар қолади).
+  static const known = [...ordered, sellerTelegram];
+
+  /// «Менинг каналим» танланганда розилик матни канални очиқ айтади — версия 2 (сервер қоидаси ≥ 2 талаб қилади).
+  static const sellerChannelConsentVersion = 2;
+
   /// Пуллик реклама (`category == 'ad'`) учун МАЖБУРИЙ тармоқлар — эга
   /// чекбокс танламайди, тўлов қилинган заҳоти шуларга чиқади. YouTube
   /// ад ичига кирмайди (алгоритм спам сифатида белгилаши хавфи).
@@ -34,7 +45,7 @@ class TvSocial {
     final out = <String>[];
     for (final e in raw) {
       final id = '$e'.trim().toLowerCase();
-      if (ordered.contains(id) && !out.contains(id)) out.add(id);
+      if (known.contains(id) && !out.contains(id)) out.add(id);
     }
     return out;
   }

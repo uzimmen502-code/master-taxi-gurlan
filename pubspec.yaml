@@ -43,6 +43,10 @@ dependencies:
   # Network & Utils
   http: ^1.2.0
   url_launcher: ^6.3.1
+  # Android App Links: `https://master-taxi-gurlan.web.app/s/<id>` иловада очилади (cold + warm).
+  # Flutter'нинг ўз deep linking'и ўчирилган (manifest `flutter_deeplinking_enabled=false`):
+  # у ҳаволани Navigator'га route қилиб берарди, MaterialApp эса фақат `home` билан қурилган.
+  app_links: ^6.4.1
   # Ilova o'z build raqamini bilishi uchun (minimal versiya darvozasi).
   package_info_plus: ^8.0.2
   connectivity_plus: ^6.0.3

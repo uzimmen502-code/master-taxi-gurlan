@@ -5,6 +5,7 @@ import '../../business_map/data/business_repository.dart';
 import '../../business_map/domain/business.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
+import '../widgets/shop_complaints_panel.dart';
 import 'business_products_admin_dialog.dart';
 
 /// Админ: онлайн дўконлар (эга қарори 2026-10-25: «админ назорати барча кириш йўлларида»).
@@ -14,12 +15,19 @@ import 'business_products_admin_dialog.dart';
 /// таҳрирлаш/блоклаш/ўчириш. Пастда — энг сўнгги маҳсулотлар (барча ҳолатда): шикоят келган маҳсулотни топиш учун.
 /// Ҳар ҳаракат серверда сабаби билан `admin_audit`га ёзилади (41-банд). Матнлар Кирилл ёзувида қотирилган.
 class ShopAdminScreen extends StatefulWidget {
-  const ShopAdminScreen({super.key, BusinessRepository? repository, TvShopRepository? shopRepository})
-      : _repo = repository,
+  const ShopAdminScreen({
+    super.key,
+    BusinessRepository? repository,
+    TvShopRepository? shopRepository,
+    this.complaints = const FirestoreShopComplaintsSource(),
+  })  : _repo = repository,
         _shop = shopRepository;
 
   final BusinessRepository? _repo;
   final TvShopRepository? _shop;
+
+  /// Харидор шикоятлари (маҳсулот/дўкон) — тест учун алмаштирилади.
+  final ShopComplaintsSource complaints;
 
   @override
   State<ShopAdminScreen> createState() => _ShopAdminScreenState();
@@ -304,6 +312,7 @@ class _ShopAdminScreenState extends State<ShopAdminScreen> {
               ],
             ),
           ),
+          ShopComplaintsPanel(source: widget.complaints, onOpenOwner: _openOwner),
           _ownerPanel(),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 4),

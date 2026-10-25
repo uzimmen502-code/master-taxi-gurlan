@@ -11,6 +11,7 @@ import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_public_profiles_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../utils/tv_highlight_order.dart';
+import '../widgets/shop_complaint_sheet.dart';
 import '../widgets/shop_unavailable_view.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_channel_header.dart';
@@ -206,6 +207,13 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
         actionsIconTheme: const IconThemeData(color: Colors.black87),
         elevation: 0.4,
         actions: [
+          if (!_loading && !_blocked)
+            IconButton(
+              key: const ValueKey('shop_report'),
+              tooltip: context.tr('ad_report_title'),
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () => showShopComplaintSheet(context, targetType: 'shop', targetId: widget.ownerPhone),
+            ),
           TextButton.icon(
             onPressed: () {
               Navigator.push(

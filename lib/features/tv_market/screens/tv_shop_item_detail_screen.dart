@@ -6,6 +6,7 @@ import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../widgets/shop_complaint_sheet.dart';
 import '../widgets/shop_unavailable_view.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_shop_item_card.dart';
@@ -21,6 +22,7 @@ class TvShopItemDetailScreen extends StatefulWidget {
     required this.item,
     this.onOpenShop,
     this.loadLatest,
+    this.submitComplaint,
   });
 
   final TvShopItem item;
@@ -28,6 +30,10 @@ class TvShopItemDetailScreen extends StatefulWidget {
 
   /// Тест учун алмаштирилади; бўлмаса `TvShopRepository().fetchItem` (битта ўқиш).
   final Future<TvShopItem?> Function(String itemId)? loadLatest;
+
+  /// Тест учун алмаштирилади; бўлмаса `submitShopComplaint` callable.
+  final Future<void> Function({required String targetType, required String targetId, required String reason})?
+      submitComplaint;
 
   @override
   State<TvShopItemDetailScreen> createState() => _TvShopItemDetailScreenState();
@@ -111,6 +117,18 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
               tooltip: context.tr('tv_shop_mine'),
               onPressed: widget.onOpenShop,
               icon: const Icon(Icons.storefront_outlined),
+            ),
+          if (_available)
+            IconButton(
+              key: const ValueKey('shop_item_report'),
+              tooltip: context.tr('ad_report_title'),
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () => showShopComplaintSheet(
+                context,
+                targetType: 'shop_item',
+                targetId: _item.id,
+                submit: widget.submitComplaint,
+              ),
             ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/admin_web/screens/business_admin_screen.dart';
 import 'package:ava_gurlan/features/admin_web/screens/business_products_admin_dialog.dart';
 import 'package:ava_gurlan/features/admin_web/screens/shop_admin_screen.dart';
+import 'package:ava_gurlan/features/admin_web/widgets/shop_complaints_panel.dart';
 import 'package:ava_gurlan/features/business_map/data/business_repository.dart';
 import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
@@ -79,6 +80,19 @@ class _FakeShop implements TvShopRepository {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
 
+class _FakeComplaints implements ShopComplaintsSource {
+  _FakeComplaints([this.list = const []]);
+
+  final List<ShopComplaint> list;
+  final resolved = <String>[];
+
+  @override
+  Stream<List<ShopComplaint>> watchOpen() => Stream.value(list);
+
+  @override
+  Future<void> resolve(BuildContext context, String reportId) async => resolved.add(reportId);
+}
+
 Business _biz(String id, String name, {String status = 'active'}) => Business(
       id: id,
       ownerId: _owner,
@@ -151,7 +165,7 @@ void main() {
   group('ShopAdminScreen', () {
     testWidgets('нотўғри телефон — хато, сервер чақирилмайди', (tester) async {
       final repo = _FakeRepo();
-      await _pump(tester, ShopAdminScreen(repository: repo, shopRepository: _FakeShop()));
+      await _pump(tester, ShopAdminScreen(complaints: _FakeComplaints(), repository: repo, shopRepository:_FakeShop()));
       await tester.enterText(find.byKey(const ValueKey('shop_admin_phone')), '12345');
       await tester.tap(find.byKey(const ValueKey('shop_admin_open')));
       await tester.pumpAndSettle();
@@ -165,7 +179,7 @@ void main() {
         shop: const TvShop(ownerPhone: _owner, name: 'Сидабилла'),
         recent: [_item('r1', 'Кўйлак', status: 'blocked')],
       );
-      await _pump(tester, ShopAdminScreen(repository: repo, shopRepository: shop));
+      await _pump(tester, ShopAdminScreen(complaints: _FakeComplaints(), repository: repo, shopRepository:shop));
       expect(find.textContaining('Блокланган · 5000 сўм · асосий дўкон'), findsOneWidget, reason: 'барча ҳолатдаги маҳсулот кўринади');
 
       await tester.tap(find.byKey(const ValueKey('shop_admin_recent_r1')));
@@ -189,7 +203,7 @@ void main() {
         shop: const TvShop(ownerPhone: _owner, name: 'Сидабилла', status: 'blocked'),
         items: [_item('a', 'Нон'), _item('b', 'Йўналишники', businessId: 'b1')],
       );
-      await _pump(tester, ShopAdminScreen(repository: repo, shopRepository: shop));
+      await _pump(tester, ShopAdminScreen(complaints: _FakeComplaints(), repository: repo, shopRepository:shop));
       await tester.enterText(find.byKey(const ValueKey('shop_admin_phone')), '+998 90 111-11-11');
       await tester.tap(find.byKey(const ValueKey('shop_admin_open')));
       await tester.pumpAndSettle();
@@ -211,13 +225,79 @@ void main() {
     testWidgets('сервер SHOP_BLOCKED қайтарса — тушунарли матн', (tester) async {
       final repo = _FakeRepo(mine: [_biz('b1', 'Кийим', status: 'blocked')])
         ..failWith = FirebaseFunctionsException(message: 'x', code: 'failed-precondition', details: {'code': 'SHOP_BLOCKED'});
-      await _pump(tester, ShopAdminScreen(repository: repo, shopRepository: _FakeShop()));
+      await _pump(tester, ShopAdminScreen(complaints: _FakeComplaints(), repository: repo, shopRepository:_FakeShop()));
       await tester.enterText(find.byKey(const ValueKey('shop_admin_phone')), _owner);
       await tester.tap(find.byKey(const ValueKey('shop_admin_open')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('shop_admin_biz_block_b1')));
       await _confirmReason(tester, 'текширилди', 'Очиш');
       expect(find.text('Аввал онлайн дўконнинг блокини олинг'), findsOneWidget);
+    });
+  });
+
+  group('ShopAdminScreen: харидор шикоятлари', () {
+    testWidgets('шикоят йўқ — панел йўқ', (tester) async {
+      await _pump(tester, ShopAdminScreen(complaints: _FakeComplaints(), repository: _FakeRepo(), shopRepository: _FakeShop()));
+      expect(find.byKey(const ValueKey('shop_complaints_panel')), findsNothing);
+    });
+
+    testWidgets('очиқ шикоят: «Дўконни очиш» шу сотувчини очади, «Ҳал қилинди» ёпади', (tester) async {
+      final complaints = _FakeComplaints([
+        const ShopComplaint(
+          id: 'r1', targetType: 'shop_item', targetId: 'i1', ownerPhone: _owner, title: 'Кўйлак',
+          reason: 'Алдамчи эълон', reporterId: '998909999999',
+        ),
+      ]);
+      final repo = _FakeRepo(mine: [_biz('b1', 'Кийим')]);
+      await _pump(tester, ShopAdminScreen(complaints: complaints, repository: repo, shopRepository: _FakeShop()));
+      expect(find.text('Очиқ шикоятлар: 1'), findsOneWidget);
+      expect(find.textContaining('Маҳсулот: Кўйлак'), findsOneWidget);
+      await tester.tap(find.text('Дўконни очиш'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, ['byOwner:$_owner']);
+      expect(find.text('Кийим'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('shop_complaint_resolve_r1')));
+      await tester.pumpAndSettle();
+      expect(complaints.resolved, ['r1']);
+    });
+  });
+
+  group('Харидор шикояти (маҳсулот экрани)', () {
+    Future<void> openAndPick(WidgetTester tester, Future<void> Function({required String targetType, required String targetId, required String reason}) submit) async {
+      await _pump(
+        tester,
+        TvShopItemDetailScreen(item: _item('a', 'Нон'), loadLatest: (_) async => _item('a', 'Нон'), submitComplaint: submit),
+      );
+      await tester.tap(find.byKey(const ValueKey('shop_item_report')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop_report_ad_report_reason_fraud')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('сабаб танланса — shop_item шикояти юборилади, «юборилди»', (tester) async {
+      final sent = <String>[];
+      await openAndPick(tester, ({required targetType, required targetId, required reason}) async => sent.add('$targetType:$targetId:$reason'));
+      expect(sent, ['shop_item:a:Алдамчи эълон']);
+      expect(find.text('ad_report_sent'), findsOneWidget);
+    });
+
+    testWidgets('ўзининг маҳсулоти (COMPLAINT_OWN) — тушунарли матн', (tester) async {
+      await openAndPick(tester, ({required targetType, required targetId, required reason}) async {
+        throw FirebaseFunctionsException(message: 'x', code: 'failed-precondition', details: {'code': 'COMPLAINT_OWN'});
+      });
+      expect(find.text('shop_report_own'), findsOneWidget);
+    });
+
+    testWidgets('логинсиз — «тизимга киринг»; бошқа хато — хом матн эмас', (tester) async {
+      await openAndPick(tester, ({required targetType, required targetId, required reason}) async {
+        throw FirebaseFunctionsException(message: 'x', code: 'unauthenticated');
+      });
+      expect(find.text('shop_report_need_login'), findsOneWidget);
+    });
+
+    testWidgets('блокланган маҳсулотда шикоят тугмаси йўқ', (tester) async {
+      await _pump(tester, TvShopItemDetailScreen(item: _item('a', 'Нон', status: 'blocked'), loadLatest: (_) async => null));
+      expect(find.byKey(const ValueKey('shop_item_report')), findsNothing);
     });
   });
 

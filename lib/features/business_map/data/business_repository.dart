@@ -153,6 +153,16 @@ class BusinessRepository {
     });
   }
 
+  /// Харидор шикояти (`submitShopComplaint`): [targetType] — `shop_item` (маҳсулот ID) ёки `shop` (сотувчи телефони).
+  /// Такрор юборилса сервер янги ёзув очмайди.
+  Future<void> submitComplaint({required String targetType, required String targetId, required String reason}) async {
+    await _fns.httpsCallable('submitShopComplaint').call<Object?>({
+      'targetType': targetType,
+      'targetId': targetId,
+      'reason': reason,
+    });
+  }
+
   /// Юмшоқ ўчириш (`status: deleted`), audit'да нусха сақланади.
   Future<void> adminDeleteProduct(String itemId, {required String reason}) async {
     await _fns.httpsCallable('adminDeleteBusinessProduct').call<Object?>({

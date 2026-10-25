@@ -4108,6 +4108,8 @@ service cloud.firestore {
                   && tvClipRealtyLinkOk(request.resource.data)));
       // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
       // joylardi — AVA sahifalariga takroriy post. Endi faqat admin/CF.
+      // `ownerPhone` (2026-10-26, review H1): egasi klipni boshqa sotuvchi nomiga o'tkaza olmaydi — aks holda
+      // `seller_telegram` posti o'sha sotuvchining Telegram kanaliga ketardi. Ilova bu maydonni yaratishdan keyin yozmaydi.
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
@@ -4116,7 +4118,7 @@ service cloud.firestore {
               && tvClipRealtyLinkUpdateOk()
               && tvClipSellerChannelUpdateOk()
               && !request.resource.data.diff(resource.data).affectedKeys()
-                  .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
+                  .hasAny(['ownerPhone', 'expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',
                            'socialPost', 'socialPostedAt', 'socialRetryAt',
                            'socialVideoUrl', 'socialConsentAt',
@@ -4243,6 +4245,10 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
     match /seller_tg_channel_chats/{chatId} {
+      allow read, write: if false;
+    }
+    // Prepare/Connect ҳисоблагичи (review M2) — фақат сервер.
+    match /seller_tg_rate_limits/{ownerPhone} {
       allow read, write: if false;
     }
 

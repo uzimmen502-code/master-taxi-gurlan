@@ -25,7 +25,14 @@
  * Callable'лар: sellerTgChannelStatus, sellerTgChannelPrepare, sellerTgChannelConnect, sellerTgChannelDisconnect.
  * Диагностика кодлари (`details.code`): TG_BOT_UNAVAILABLE, INVALID_USERNAME, PRIVATE_CHANNEL_UNSUPPORTED,
  * CHANNEL_NOT_FOUND, NOT_A_CHANNEL, CHANNEL_NOT_ALLOWED, BOT_NOT_ADMIN, BOT_NO_POST_RIGHT, CHANNEL_TAKEN,
- * SELLER_HAS_CHANNEL, SHOP_BLOCKED, NO_PENDING_CODE, CODE_EXPIRED, CODE_NOT_FOUND, CONNECT_STATE_CHANGED.
+ * SELLER_HAS_CHANNEL, SHOP_BLOCKED, NO_PENDING_CODE, CODE_EXPIRED, CODE_NOT_FOUND, CONNECT_STATE_CHANGED,
+ * SELLER_TG_RATE_LIMIT (Prepare/Connect: соатига RATE_MAX тадан — умумий ботни Telegram 429'га итармаслик учун),
+ * TG_TRY_LATER (Telegram 429/5xx/тармоқ — «кейинроқ уриниб кўринг», «топилмади/админ эмас» эмас).
+ *
+ * КАНАЛНИ ЎТКАЗИШ (review M3, 2026-10-26): индекс бошқа сотувчини кўрсатса ҳам, янги сотувчи ЎЗ кодини канал
+ * тавсифига ёза олса — бу ҲОЗИРГИ эгалик далили: индекс янги сотувчига ўтади, эскисининг ҳужжати `disconnected`
+ * (`lastErrorCode: CHANNEL_TRANSFERRED`) — бир транзакцияда. Кодсиз тиклаш (`needs_reconnect`) фақат индекс ҳали
+ * ўша сотувчини кўрсатса.
  */
 const axios = require('axios');
 const crypto = require('crypto');
@@ -35,6 +42,10 @@ const page = require('./tv_clip_page');
 const TELEGRAM_API = 'https://api.telegram.org';
 const CHANNELS = 'seller_tg_channels';
 const CHATS = 'seller_tg_channel_chats';
+/// Prepare/Connect чақирувлари ҳисоблагичи (фақат сервер; rules — ёпиқ).
+const RATE = 'seller_tg_rate_limits';
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const RATE_MAX = 10;
 /// `tv_clips.socialNetworks` ичидаги қиймат ва `socialPost.networks.<id>` калити.
 const NET = 'seller_telegram';
 const CODE_TTL_MS = 30 * 60 * 1000;
@@ -246,6 +257,33 @@ function attachSellerTgChannel(exportsObj, deps) {
     return uid;
   }
 
+  /** Сотувчи бўйича соатига RATE_MAX та чақирув (ҳар амал алоҳида; қатъий ойна, транзакция). */
+  async function rateLimit(uid, action) {
+    const ref = db.collection(RATE).doc(uid);
+    const ok = await db.runTransaction(async (t) => {
+      const s = await t.get(ref);
+      const r = ((s.exists ? s.data() : {}) || {})[action] || {};
+      const now = Date.now();
+      const start = Number(r.start) || 0;
+      const n = Number(r.n) || 0;
+      if (now - start >= RATE_WINDOW_MS) {
+        t.set(ref, { [action]: { start: now, n: 1 }, updatedAt: FV.serverTimestamp() }, { merge: true });
+        return true;
+      }
+      if (n >= RATE_MAX) return false;
+      t.set(ref, { [action]: { start, n: n + 1 }, updatedAt: FV.serverTimestamp() }, { merge: true });
+      return true;
+    });
+    if (!ok) {
+      log({ action, result: 'rate_limited', errorCode: 'SELLER_TG_RATE_LIMIT' });
+      throw fail('resource-exhausted', 'SELLER_TG_RATE_LIMIT', 'Жуда кўп уриниш. Бир соатдан кейин қайта уриниб кўринг.');
+    }
+  }
+
+  /** Telegram вақтинча ишламаяпти (429, 5xx, тармоқ узилиши) — «топилмади/админ эмас» деб адаштирмаслик учун. */
+  const transientTg = (e) => e instanceof TgError && (e.tgCode === 0 || e.tgCode === 429 || e.tgCode >= 500);
+  const tryLater = () => fail('unavailable', 'TG_TRY_LATER', 'Telegram ҳозир жавоб бермаяпти. Бироздан кейин уриниб кўринг.');
+
   async function requireBot() {
     let bot;
     try {
@@ -266,6 +304,7 @@ function attachSellerTgChannel(exportsObj, deps) {
     try {
       m = await tgCall(bot.token, 'getChatMember', { chat_id: chatId, user_id: bot.id });
     } catch (e) {
+      if (transientTg(e)) throw tryLater();
       throw fail('failed-precondition', 'BOT_NOT_ADMIN', 'AVA боти каналда администратор эмас.');
     }
     const status = String((m && m.status) || '');
@@ -281,6 +320,7 @@ function attachSellerTgChannel(exportsObj, deps) {
     try {
       return await tgCall(bot.token, 'getChat', { chat_id: chatId });
     } catch (e) {
+      if (transientTg(e)) throw tryLater();
       throw fail('not-found', 'CHANNEL_NOT_FOUND', 'Канал топилмади. Номини текширинг.');
     }
   }
@@ -328,6 +368,7 @@ function attachSellerTgChannel(exportsObj, deps) {
   exportsObj.sellerTgChannelPrepare = functions.https.onCall(async (data, context) => {
     const started = Date.now();
     const uid = requireUid(context);
+    await rateLimit(uid, 'prepare');
     const parsed = parseChannelInput(data && data.username);
     if (parsed.private) {
       throw fail('invalid-argument', 'PRIVATE_CHANNEL_UNSUPPORTED', 'Фақат ошкора (@номли) канал уланади.');
@@ -360,13 +401,14 @@ function attachSellerTgChannel(exportsObj, deps) {
     const out = await db.runTransaction(async (t) => {
       const [o, idx] = await Promise.all([t.get(ownRef), t.get(chatRef)]);
       const x = o.exists ? (o.data() || {}) : {};
-      if (idx.exists && (idx.data() || {}).ownerPhone !== uid) {
-        throw fail('already-exists', 'CHANNEL_TAKEN', 'Бу канал бошқа дўконга уланган.');
-      }
+      // Индекс бошқа сотувчида бўлса ҳам код берилади: уни канал тавсифига фақат ҲОЗИРГИ эгаси ёза олади (M3).
+      const indexMine = idx.exists && (idx.data() || {}).ownerPhone === uid;
       const base = { username: str(chat.username, 40), title: str(chat.title, 120), updatedAt: FV.serverTimestamp() };
-      if (ACTIVE.includes(x.status)) {
-        if (String(x.chatId) !== chatId) throw fail('failed-precondition', 'SELLER_HAS_CHANNEL', 'Аввал уланган канални узинг.');
-        if (!idx.exists) t.set(chatRef, { ownerPhone: uid, chatId, connectedAt: FV.serverTimestamp() });
+      if (ACTIVE.includes(x.status) && String(x.chatId) !== chatId) {
+        throw fail('failed-precondition', 'SELLER_HAS_CHANNEL', 'Аввал уланган канални узинг.');
+      }
+      // Кодсиз тиклаш — фақат индекс ҳали шу сотувчида (эгалик аввал исботланган ва бошқага ўтмаган).
+      if (ACTIVE.includes(x.status) && indexMine) {
         t.set(ownRef, {
           ...base, status: 'connected', verifiedAt: FV.serverTimestamp(), lastErrorCode: FV.delete(),
         }, { merge: true });
@@ -398,6 +440,7 @@ function attachSellerTgChannel(exportsObj, deps) {
   exportsObj.sellerTgChannelConnect = functions.https.onCall(async (data, context) => {
     const started = Date.now();
     const uid = requireUid(context);
+    await rateLimit(uid, 'connect');
     const ownRef = db.collection(CHANNELS).doc(uid);
     const own = await ownRef.get();
     const cur = own.exists ? (own.data() || {}) : {};
@@ -412,11 +455,6 @@ function attachSellerTgChannel(exportsObj, deps) {
     }
     const chatId = String(cur.chatId);
     const chatRef = db.collection(CHATS).doc(chatId);
-    // Код берилгандан кейин канални бошқа сотувчи улаб олган бўлса — Telegram'га бормасдан аниқ жавоб.
-    const taken = await chatRef.get();
-    if (taken.exists && (taken.data() || {}).ownerPhone !== uid) {
-      throw fail('already-exists', 'CHANNEL_TAKEN', 'Бу канал бошқа дўконга уланган.');
-    }
     const bot = await requireBot();
     const chat = await getChat(bot, chatId);
     if (!descriptionHasCode(chat && chat.description, cur.code)) {
@@ -432,8 +470,20 @@ function attachSellerTgChannel(exportsObj, deps) {
       if (x.status !== 'pending' || x.code !== cur.code || String(x.chatId) !== chatId) {
         throw fail('aborted', 'CONNECT_STATE_CHANGED', 'Қайта уриниб кўринг.');
       }
-      if (idx.exists && (idx.data() || {}).ownerPhone !== uid) {
-        throw fail('already-exists', 'CHANNEL_TAKEN', 'Бу канал бошқа дўконга уланган.');
+      // Индекс бошқа сотувчида — код ҲОЗИР тавсифда: эгалик ЎТАДИ (M3). Эскиси узилади (ҳужжати қолади).
+      const prevOwner = idx.exists ? str((idx.data() || {}).ownerPhone, 20) : '';
+      let transferred = '';
+      if (prevOwner && prevOwner !== uid) {
+        const prevRef = db.collection(CHANNELS).doc(prevOwner);
+        const prev = await t.get(prevRef);
+        const px = prev.exists ? (prev.data() || {}) : {};
+        if (prev.exists && String(px.chatId) === chatId && ACTIVE.includes(px.status)) {
+          t.set(prevRef, {
+            status: 'disconnected', lastErrorCode: 'CHANNEL_TRANSFERRED',
+            disconnectedAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp(),
+          }, { merge: true });
+        }
+        transferred = 'transferred';
       }
       t.set(chatRef, { ownerPhone: uid, chatId, connectedAt: FV.serverTimestamp() });
       const patch = {
@@ -448,7 +498,7 @@ function attachSellerTgChannel(exportsObj, deps) {
         lastErrorCode: FV.delete(),
       };
       t.set(ownRef, patch, { merge: true });
-      return { result: 'connected', x: { ...x, ...patch } };
+      return { result: transferred || 'connected', x: { ...x, ...patch } };
     });
     log({ action: 'connect', result: out.result, durationMs: Date.now() - started });
     return { ok: true, channel: { status: 'connected', username: str(out.x.username, 40), title: str(out.x.title, 120) } };
@@ -494,4 +544,6 @@ module.exports = {
   NET,
   CHANNELS,
   CHATS,
+  RATE,
+  RATE_MAX,
 };

@@ -108,6 +108,8 @@ const sellerTgKnownErrors = {
   'NO_PENDING_CODE',
   'CODE_EXPIRED',
   'CODE_NOT_FOUND',
+  'SELLER_TG_RATE_LIMIT',
+  'TG_TRY_LATER',
 };
 
 String sellerTgErrorKey(Object e) {

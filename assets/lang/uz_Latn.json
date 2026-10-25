@@ -4106,5 +4106,7 @@
   "seller_tg_err_SHOP_BLOCKED": "Do'koningiz vaqtincha bloklangan.",
   "seller_tg_err_NO_PENDING_CODE": "Avval «Kod olish»ni bosing.",
   "seller_tg_err_CODE_EXPIRED": "Kod muddati tugadi. Yangi kod oling.",
-  "seller_tg_err_CODE_NOT_FOUND": "Kod kanal tavsifida topilmadi. Tavsifni saqlaganingizni tekshiring."
+  "seller_tg_err_CODE_NOT_FOUND": "Kod kanal tavsifida topilmadi. Tavsifni saqlaganingizni tekshiring.",
+  "seller_tg_err_SELLER_TG_RATE_LIMIT": "Juda ko'p urinish bo'ldi. Bir soatdan keyin qayta urinib ko'ring.",
+  "seller_tg_err_TG_TRY_LATER": "Telegram hozir javob bermayapti. Birozdan keyin urinib ko'ring."
 }

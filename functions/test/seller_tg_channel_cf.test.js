@@ -50,6 +50,7 @@ function tgReset() {
     '-1009': { status: 'administrator', can_post_messages: true },
   };
   tg.sendFail = null;
+  tg.methodFail = {};
   tg.nextMessageId = 100;
 }
 const axiosErr = (status, description) => Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -66,6 +67,7 @@ axios.post = async (url, params) => {
   const [, token, method] = m;
   tg.calls.push({ method, params });
   if (token !== TOKEN) throw axiosErr(401, 'Unauthorized');
+  if (tg.methodFail[method]) throw axiosErr(...tg.methodFail[method]);
   if (method === 'getMe') return { data: { ok: true, result: tg.bot } };
   if (method === 'getChat') {
     const c = findChat(params.chat_id);
@@ -180,6 +182,19 @@ const clipData = async (id) => (await db.doc(`tv_clips/${id}`).get()).data();
     assert.deepStrictEqual(requestedNetworks(clip({ category: 'ad' })), ['instagram', 'facebook', 'telegram']);
     assert.deepStrictEqual(requestedNetworks(clip({ socialNetworks: [] })), ['instagram', 'facebook', 'youtube', 'telegram'], 'legacy');
   });
+  await check('U6 (M1) faqat aniq «seller_telegram» va rozilik v>=2: katta-kichik harf variantlari, v1, versiyasiz, matnli versiya — e\'tiborsiz', async () => {
+    for (const odd of ['SELLER_TELEGRAM', 'Seller_Telegram', ' seller_telegram']) {
+      assert.deepStrictEqual(requestedNetworks(clip({ socialNetworks: [odd] })), [], odd);
+      assert.deepStrictEqual(requestedNetworks(clip({ socialNetworks: [odd, 'telegram'] })), ['telegram'], odd);
+    }
+    assert.deepStrictEqual(requestedNetworks(clip({ socialConsentVersion: 1 })), []);
+    assert.deepStrictEqual(requestedNetworks(clip({ socialConsentVersion: '2' })), []);
+    const noVer = clip();
+    delete noVer.socialConsentVersion;
+    assert.deepStrictEqual(requestedNetworks(noVer), []);
+    assert.deepStrictEqual(requestedNetworks(clip({ socialConsentVersion: 1, socialNetworks: ['telegram', 'seller_telegram'] })), ['telegram'],
+      'AVA tarmog\'i v1 bilan avvalgidek');
+  });
 
   // ── Улаш ──
   await reset({ token: '' });
@@ -243,10 +258,13 @@ const clipData = async (id) => (await db.doc(`tv_clips/${id}`).get()).data();
     assert.strictEqual(again.channel.status, 'connected');
   });
 
-  await check('C4 egallash urinishi: boshqa sotuvchi ulangan kanalni — CHANNEL_TAKEN; o\'z kanali bor sotuvchi boshqasini — SELLER_HAS_CHANNEL', async () => {
-    await expectCode(call('sellerTgChannelPrepare', { username: '@non_shop' }, OTHER), 'CHANNEL_TAKEN');
+  await check('C4 egallash urinishi: boshqa sotuvchi ulangan kanalga kod oladi, lekin kodni tavsifga yoza olmasa — ulanmaydi, egasi o\'zgarmaydi; o\'z kanali bor sotuvchi boshqasini — SELLER_HAS_CHANNEL', async () => {
+    const att = await call('sellerTgChannelPrepare', { username: '@non_shop' }, OTHER);
+    assert.strictEqual(att.channel.status, 'pending');
+    await expectCode(call('sellerTgChannelConnect', {}, OTHER), 'CODE_NOT_FOUND');
+    assert.strictEqual((await chatIdx('-1001')).data().ownerPhone, SELLER);
+    assert.strictEqual((await chanDoc(SELLER)).status, 'connected');
     await expectCode(call('sellerTgChannelPrepare', { username: '@alien_shop' }, SELLER), 'SELLER_HAS_CHANNEL');
-    assert.ok(!(await db.doc(`${tgMod.CHANNELS}/${OTHER}`).get()).exists);
   });
 
   await reset();
@@ -261,7 +279,8 @@ const clipData = async (id) => (await db.doc(`tv_clips/${id}`).get()).data();
     const ok = await call('sellerTgChannelConnect', {}, SELLER);
     assert.strictEqual(ok.channel.status, 'connected');
     assert.strictEqual((await chatIdx('-1002')).data().ownerPhone, SELLER);
-    await expectCode(call('sellerTgChannelConnect', {}, OTHER), 'CHANNEL_TAKEN');
+    await expectCode(call('sellerTgChannelConnect', {}, OTHER), 'CODE_NOT_FOUND');
+    assert.strictEqual((await chatIdx('-1002')).data().ownerPhone, SELLER);
   });
 
   await reset();
@@ -273,14 +292,76 @@ const clipData = async (id) => (await db.doc(`tv_clips/${id}`).get()).data();
       call('sellerTgChannelConnect', {}, SELLER),
       call('sellerTgChannelConnect', {}, OTHER),
     ]);
-    const won = out.filter((x) => x.status === 'fulfilled');
-    const lost = out.filter((x) => x.status === 'rejected');
-    assert.strictEqual(won.length, 1, JSON.stringify(out.map((x) => x.status)));
-    assert.strictEqual(lost[0].reason.details.code, 'CHANNEL_TAKEN');
+    // Ikkalasi ham hozirgi egalikni isbotladi (M3: keyingisi o'tkazib oladi) — lekin oxirida BITTA ulangan, indeks unga.
+    for (const x of out) if (x.status === 'rejected') throw x.reason;
     const owner = (await chatIdx('-1001')).data().ownerPhone;
-    const statuses = [(await chanDoc(SELLER)).status, (await chanDoc(OTHER)).status].sort();
-    assert.deepStrictEqual(statuses, ['connected', 'pending']);
+    const loser = owner === SELLER ? OTHER : SELLER;
     assert.strictEqual((await chanDoc(owner)).status, 'connected');
+    const l = await chanDoc(loser);
+    assert.deepStrictEqual([l.status, l.lastErrorCode], ['disconnected', 'CHANNEL_TRANSFERRED']);
+  });
+
+  await reset();
+  await check('C10 (M3) eskirgan ulanish haqiqiy egani to\'smaydi: yangi sotuvchi kodni tavsifga yozsa — kanal unga o\'tadi, eskisi disconnected/CHANNEL_TRANSFERRED; eskisi kodsiz tiklay olmaydi, posti ketmaydi', async () => {
+    await connect(SELLER, '@non_shop', '-1001');
+    await db.doc(`${tgMod.CHANNELS}/${SELLER}`).update({ status: 'needs_reconnect' });
+    tg.chats['-1001'].description = 'Yangi egasi';
+    const r = await connect(OTHER, '@non_shop', '-1001');
+    assert.strictEqual(r.channel.status, 'connected');
+    assert.strictEqual((await chatIdx('-1001')).data().ownerPhone, OTHER);
+    const old = await chanDoc(SELLER);
+    assert.deepStrictEqual([old.status, old.lastErrorCode], ['disconnected', 'CHANNEL_TRANSFERRED']);
+    assert.strictEqual((await call('sellerTgChannelStatus', {}, SELLER)).channel.status, 'none');
+    // Eski sotuvchi «Qayta tekshirish» qilsa — kodsiz tiklash YO'Q, faqat yangi kod (isbot kerak).
+    const again = await call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER);
+    assert.strictEqual(again.channel.status, 'pending');
+    assert.strictEqual((await chatIdx('-1001')).data().ownerPhone, OTHER);
+    await db.doc('tv_clips/m3').set(clip());
+    const n = sends().length;
+    await publish('m3');
+    assert.strictEqual((await clipData('m3')).socialPost.networks.seller_telegram.error, 'SELLER_CHANNEL_NOT_CONNECTED');
+    assert.strictEqual(sends().length, n);
+  });
+
+  await reset();
+  await check('C11 (M3) needs_reconnect: indeks boshqaga o\'tgan bo\'lsa kodsiz tiklash ishlamaydi (holat qo\'lda buzilgan bo\'lsa ham)', async () => {
+    await connect(SELLER, '@non_shop', '-1001');
+    await db.doc(`${tgMod.CHANNELS}/${SELLER}`).update({ status: 'needs_reconnect' });
+    await db.doc(`${tgMod.CHATS}/-1001`).set({ ownerPhone: OTHER, chatId: '-1001' });
+    const r = await call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER);
+    assert.strictEqual(r.channel.status, 'pending');
+    assert.strictEqual((await chatIdx('-1001')).data().ownerPhone, OTHER);
+  });
+
+  await reset();
+  await check('C12 (M2) chastota: Prepare soatiga 10 tadan ortiq — SELLER_TG_RATE_LIMIT, Telegramga so\'rov yo\'q; Connect alohida hisob; boshqa sotuvchiga ta\'sir yo\'q', async () => {
+    assert.strictEqual(tgMod.RATE_MAX, 10);
+    for (let i = 0; i < 10; i += 1) {
+      await expectCode(call('sellerTgChannelPrepare', { username: 'a b' }, SELLER), 'INVALID_USERNAME');
+    }
+    const before = tg.calls.length;
+    await expectCode(call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER), 'SELLER_TG_RATE_LIMIT');
+    assert.strictEqual(tg.calls.length, before);
+    await expectCode(call('sellerTgChannelConnect', {}, SELLER), 'NO_PENDING_CODE');
+    const ok = await call('sellerTgChannelPrepare', { username: '@non_shop' }, OTHER);
+    assert.strictEqual(ok.channel.status, 'pending');
+    // Oyna o'tgach — yana ruxsat.
+    await db.doc(`${tgMod.RATE}/${SELLER}`).set({ prepare: { start: Date.now() - 61 * 60 * 1000, n: 10 } }, { merge: true });
+    assert.strictEqual((await call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER)).channel.status, 'pending');
+  });
+
+  await reset();
+  await check('C13 (LOW) Telegram 429/5xx/tarmoq — TG_TRY_LATER («topilmadi/admin emas» emas)', async () => {
+    tg.methodFail.getChat = [429, 'Too Many Requests: retry after 3'];
+    await expectCode(call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER), 'TG_TRY_LATER');
+    tg.methodFail = { getChatMember: [502, 'Bad Gateway'] };
+    await expectCode(call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER), 'TG_TRY_LATER');
+    tg.methodFail = {};
+    const a = await call('sellerTgChannelPrepare', { username: '@non_shop' }, SELLER);
+    tg.chats['-1001'].description = a.channel.code;
+    tg.methodFail.getChat = [500, 'Internal Server Error'];
+    await expectCode(call('sellerTgChannelConnect', {}, SELLER), 'TG_TRY_LATER');
+    assert.strictEqual((await chanDoc(SELLER)).status, 'pending');
   });
 
   await reset();
@@ -429,6 +510,23 @@ const clipData = async (id) => (await db.doc(`tv_clips/${id}`).get()).data();
     await publish('p7');
     assert.strictEqual((await clipData('p7')).socialPost.networks.seller_telegram.error, 'SELLER_CHANNEL_NOT_CONNECTED');
     assert.strictEqual(sends().length, n);
+  });
+
+  await reset();
+  await check('P8 (LOW) mahsulot belgisi faqat AVA tarmoqlaridan: kanal xatosi AVA joylashini «buzmaydi»; faqat kanal — belgi yo\'q; status/socialPostedAt — barcha tarmoqlardan (avvalgidek)', async () => {
+    await db.doc('tv_shop_items/i1').set({ ownerPhone: SELLER, title: 'Non', status: 'active' });
+    await db.doc('tv_shop_items/i2').set({ ownerPhone: SELLER, title: 'Non', status: 'active' });
+    await db.doc('tv_clips/p8a').set(clip({ socialNetworks: ['telegram', 'seller_telegram'], shopItemId: 'i1' }));
+    await publish('p8a'); // kanal ulanmagan — kanal xato, AVA Telegram posted
+    const a = await clipData('p8a');
+    assert.deepStrictEqual([a.socialPost.status, a.socialPost.networks.telegram.status], ['partial', 'posted']);
+    assert.ok(!a.socialPostedAt, 'klip belgisi avvalgidek: hammasi chiqmaguncha yo\'q (admin qayta urinadi)');
+    assert.ok((await db.doc('tv_shop_items/i1').get()).data().socialPostedAt, 'mahsulot: AVA sahifalariga chiqdi');
+    await connect(SELLER, '@non_shop', '-1001');
+    await db.doc('tv_clips/p8b').set(clip({ shopItemId: 'i2' }));
+    await publish('p8b');
+    assert.strictEqual((await clipData('p8b')).socialPost.status, 'posted');
+    assert.ok(!(await db.doc('tv_shop_items/i2').get()).data().socialPostedAt, 'faqat kanal — AVA belgisi yo\'q');
   });
 
   await check('X1 bot tokeni hech qayerga yozilmaydi (sotuvchi hujjati, klip)', async () => {

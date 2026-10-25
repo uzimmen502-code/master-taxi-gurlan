@@ -155,11 +155,24 @@ class _ShopComplaintsPanelState extends State<ShopComplaintsPanel> {
 
   Future<void> _resolve(ShopComplaint c) => _run(c, () => widget.source.resolve(context, c.id));
 
+  /// Охирги кўрсатилган очиқ шикоятлар — амалдан кейин ШУ объектга келган бошқа шикоятлар ҳам ёпилади.
+  List<ShopComplaint> _latest = const [];
+
   Future<void> _act(ShopComplaint c, ComplaintAction a) => _run(c, () async {
         await a.run(context, c);
         if (!mounted) return;
+        // Амал объектга тегишли (масалан эълон блокланди): унга келган БАРЧА очиқ шикоятлар ёпилади,
+        // фақат босилгани эмас — бошқалари рўйхатда «очиқ» бўлиб қолмасин.
+        final sameTarget = [
+          c,
+          for (final o in _latest)
+            if (o.id != c.id && o.targetType == c.targetType && o.targetId == c.targetId) o,
+        ];
         try {
-          await widget.source.resolve(context, c.id);
+          for (final o in sameTarget) {
+            if (!mounted) return;
+            await widget.source.resolve(context, o.id);
+          }
         } catch (e) {
           // Амал БАЖАРИЛДИ (масалан эълон блокланди) — фақат шикоят ёпилмади: админ буни аниқ билсин.
           debugPrint('[ShopComplaints] ${c.id} resolve after action: $e');
@@ -187,6 +200,7 @@ class _ShopComplaintsPanelState extends State<ShopComplaintsPanel> {
       stream: _stream,
       builder: (context, snap) {
         final list = snap.data ?? const <ShopComplaint>[];
+        _latest = list;
         if (snap.hasError || list.isEmpty) return const SizedBox.shrink();
         final tiles = [for (final c in list) _tile(c, onOpenOwner, action)];
         final maxH = widget.maxListHeight;

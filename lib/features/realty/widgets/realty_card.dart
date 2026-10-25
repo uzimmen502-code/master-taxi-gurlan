@@ -18,7 +18,7 @@ class RealtyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final tierColor = RealtyTabs.colorFor(listing.tier);
+    final tierColor = RealtyTabs.colorFor(listing.displayTier);
     final specs = listing.specsLabel;
     return InkWell(
       onTap: onTap,

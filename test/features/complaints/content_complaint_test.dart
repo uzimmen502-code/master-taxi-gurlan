@@ -362,6 +362,25 @@ void main() {
       expect(src.resolved, ['L']);
     });
 
+    testWidgets('кўчмас мулк: «Блоклаш» шу эълонга келган БАРЧА очиқ шикоятларни ёпади, бошқа эълонникини эмас', (t) async {
+      final src = _FakeComplaints([
+        const ShopComplaint(id: 'a', targetType: 'realty_listing', targetId: 'L1', ownerPhone: '', title: 'Uy', reason: 'spam', reporterId: '998900000003'),
+        const ShopComplaint(id: 'b', targetType: 'realty_listing', targetId: 'L1', ownerPhone: '', title: 'Uy', reason: 'fraud', reporterId: '998900000004'),
+        const ShopComplaint(id: 'c', targetType: 'realty_listing', targetId: 'L2', ownerPhone: '', title: 'Hovli', reason: 'spam', reporterId: '998900000005'),
+      ]);
+      final blocked = <String>[];
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: ShopComplaintsPanel(
+        source: src,
+        maxListHeight: 400,
+        action: (label: 'Блоклаш', run: (_, c) async => blocked.add(c.targetId)),
+      ))));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('shop_complaint_action_a')));
+      await t.pumpAndSettle();
+      expect(blocked, ['L1'], reason: 'амал бир марта');
+      expect(src.resolved, ['a', 'b']);
+    });
+
     testWidgets('кўчмас мулк: блок ўтди, ёпиш хато — «бажарилди, шикоят ёпилмади», умумий «бажариб бўлмади» эмас', (t) async {
       final src = _FakeComplaints([
         const ShopComplaint(id: 'L', targetType: 'realty_listing', targetId: 'L1', ownerPhone: '', title: 'Uy', reason: 'spam', reporterId: '998900000003'),

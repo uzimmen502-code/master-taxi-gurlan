@@ -162,6 +162,21 @@ void main() {
       expect(find.text('tv_ad_label'), findsNothing);
       expect(find.text('realty_tier_promo'), findsNothing);
     });
+
+    testWidgets('REGRESSION: ранг тасмаси — displayTier (тугаган РЕКЛАМА = ОДДИЙ ранги, амалдаги — пуллик ранги)', (tester) async {
+      Color stripe() => tester
+          .widgetList<Container>(find.byType(Container))
+          .firstWhere((w) => w.constraints?.maxWidth == 4 && w.color != null)
+          .color!;
+      Future<void> pumpCard(RealtyListing l) => tester.pumpWidget(MaterialApp(
+            key: UniqueKey(),
+            home: Scaffold(body: RealtyCard(listing: l, onTap: () {})),
+          ));
+      await pumpCard(_listing(tier: RealtyTier.promo, tierUntil: past));
+      expect(stripe(), RealtyTabs.colorFor(RealtyTier.plain));
+      await pumpCard(_listing(tier: RealtyTier.promo, tierUntil: future));
+      expect(stripe(), RealtyTabs.colorFor(RealtyTier.promo));
+    });
   });
 
   group('HomeRealtyRow — бош саҳифа қатори (ранг изоҳи йўқ жой)', () {

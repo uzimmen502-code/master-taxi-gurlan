@@ -2623,8 +2623,15 @@ service cloud.firestore {
       allow create: if isAuth()
           && request.resource.data.get('type', '') != 'dating_profile'
           && request.resource.data.get('type', '') != 'market_ad'
-          && request.resource.data.get('type', '') != 'shop_content';
+          && request.resource.data.get('type', '') != 'shop_content'
+          // restaurant_content / realty_content — faqat submitContentComplaint (sabab ro'yxatdan, takrorga qarshi tranzaksiya), 2026-10-25.
+          && request.resource.data.get('type', '') != 'restaurant_content'
+          && request.resource.data.get('type', '') != 'realty_content';
       allow read, update, delete: if isAdmin();
+    }
+    // submitContentComplaint qulfi (shikoyatchi × obyekt → ochiq shikoyat ID) — faqat CF.
+    match /report_open_keys/{keyId} {
+      allow read, write: if false;
     }
 
     // ── Tanishuv (Dating) ──────────────────────────────────────────

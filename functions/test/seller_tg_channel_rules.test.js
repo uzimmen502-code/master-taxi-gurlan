@@ -21,6 +21,7 @@ const [HOST, PORT] = EMULATOR_HOST.split(':');
 
 const OWNER = '998905556677';
 const OTHER = '998904445566';
+const ADMIN = '998901112233';
 
 function clip(extra = {}) {
   return {
@@ -81,6 +82,8 @@ async function main() {
     await assertFails(as(OTHER).doc('seller_tg_channel_chats/-1001').set({ ownerPhone: OTHER }));
     await assertFails(as(OTHER).doc('seller_tg_channel_chats/-1001').delete());
     await assertFails(as(OWNER).collection('seller_tg_channel_chats').get());
+    await assertFails(as(OWNER).doc(`seller_tg_rate_limits/${OWNER}`).get());
+    await assertFails(as(OWNER).doc(`seller_tg_rate_limits/${OWNER}`).set({ prepare: { start: 0, n: 0 } }));
   });
 
   await check('R4 klip yaratish: «Менинг каналим» + «Рухсат бераман» v2 — ruxsat; AVA tarmoqlari bilan birga ham', async () => {
@@ -127,6 +130,18 @@ async function main() {
     await assertFails(as(OWNER).doc('tv_clips/withOwn').update({ 'socialPost.networks.seller_telegram': { status: 'posted' } }));
     await assertFails(as(OWNER).doc('tv_clips/withOwn').update({ socialConsentVersion: 3 }));
     await assertFails(as(OWNER).doc('tv_clips/withOwn').update({ socialRetryAt: Date.now() }));
+  });
+
+  await reset();
+  await check('R11 (H1) ega klipni boshqa sotuvchi nomiga o\'tkaza olmaydi; o\'zgarmagan ownerPhone bilan to\'liq yozuv — OK; admin — avvalgidek', async () => {
+    await testEnv.withSecurityRulesDisabled((ctx) => ctx.firestore().doc(`users/${ADMIN}`).set({ role: 'admin' }));
+    await assertFails(as(OWNER).doc('tv_clips/withOwn').update({ ownerPhone: OTHER }));
+    await assertFails(as(OWNER).doc('tv_clips/plain').update({ ownerPhone: OTHER, title: 'X' }));
+    await assertFails(as(OWNER).doc('tv_clips/plain').update({ ownerPhone: OWNER.slice(3) }), '9 xonali shakl ham o\'zgarish');
+    await assertSucceeds(as(OWNER).doc('tv_clips/plain').update({ ownerPhone: OWNER, title: 'Y' }));
+    const full = (await as(OWNER).doc('tv_clips/plain').get()).data();
+    await assertSucceeds(as(OWNER).doc('tv_clips/plain').set({ ...full, title: 'Z' }));
+    await assertSucceeds(as(ADMIN).doc('tv_clips/plain').update({ ownerPhone: OTHER }));
   });
 
   await testEnv.cleanup();

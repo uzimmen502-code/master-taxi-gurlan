@@ -4171,6 +4171,17 @@ service cloud.firestore {
               && resource.data.get('status', 'active') != 'blocked');
     }
 
+    // Sotuvchi statistikasi (2026-10-25, 6-bosqich): faqat EGASI o'z kunlik hujjatini o'qiydi (get, hujjat ID bilan);
+    // ro'yxat va yozish yopiq — faqat recordShopEvent (Cloud Function) yozadi. Takror belgilari — faqat server.
+    match /shop_stats/{docId} {
+      allow get: if isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.get('ownerPhone', ''));
+      allow list, create, update, delete: if false;
+    }
+    match /shop_stats_seen/{docId} {
+      allow read, write: if false;
+    }
+
     match /tv_shop_items/{itemId} {
       allow read: if true;
       // 2026-10-24 (ega: "qoidani qattiqroq qil"): mijoz boostUntil/viewCount/socialPostedAt ni o'zi qo'ya olmaydi,

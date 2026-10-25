@@ -236,6 +236,21 @@ async function main() {
     await assertSucceeds(ref.update({ name: 'Yangi nom' }));
   });
 
+  await check('C8 shop_stats: egasi o\'z kunini o\'qiydi; begona, ro\'yxat, yozish — yo\'q; shop_stats_seen — yopiq', async () => {
+    await seed(async (db) => {
+      await db.doc(`shop_stats/${SELLER}_20261025`).set({ ownerPhone: SELLER, day: '20261025', shopViews: 3 });
+      await db.doc('shop_stats_seen/20261025_abc').set({ day: '20261025' });
+    });
+    await assertSucceeds(as(SELLER).doc(`shop_stats/${SELLER}_20261025`).get());
+    await assertFails(as(OTHER).doc(`shop_stats/${SELLER}_20261025`).get());
+    await assertFails(anon().doc(`shop_stats/${SELLER}_20261025`).get());
+    await assertFails(as(SELLER).collection('shop_stats').where('ownerPhone', '==', SELLER).get());
+    await assertFails(as(SELLER).doc(`shop_stats/${SELLER}_20261025`).update({ shopViews: 999 }));
+    await assertFails(as(SELLER).doc(`shop_stats/${SELLER}_20261026`).set({ ownerPhone: SELLER, shopViews: 999 }));
+    await assertFails(as(SELLER).doc('shop_stats_seen/20261025_abc').get());
+    await assertFails(as(SELLER).doc('shop_stats_seen/20261025_x').set({ day: '20261025' }));
+  });
+
   await check('C5 admin tv_shops va mahsulotni bevosita yozishi buzilmagan', async () => {
     await assertSucceeds(as(ADMIN).doc(`tv_shops/${SELLER2}`).update({ status: 'active' }));
     await reset('m3', { status: 'blocked', blockedByParent: 'shop' });

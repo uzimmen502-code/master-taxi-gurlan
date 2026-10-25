@@ -32,6 +32,7 @@ import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
 import '../utils/tv_news_detector.dart';
 import '../widgets/tv_ad_tier_picker.dart';
+import '../widgets/tv_social_withdraw_card.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../../../core/theme/ava_tokens.dart';
 
@@ -985,6 +986,13 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 label: _districtShown(context),
                 showHint: !_isEdit,
               ),
+              if (_isEdit && tvSocialTargets(widget.editClip!).isNotEmpty) ...[
+                const SizedBox(height: 12),
+                TvSocialWithdrawCard(
+                  clip: widget.editClip!,
+                  onWithdraw: () => TvClipsRepository().withdrawSocialConsent(widget.editClip!.id),
+                ),
+              ],
               const SizedBox(height: 20),
               // Тур танлаш ва унга боғлиқ созламалар (тариф пикери ёки
               // дўкон/ижтимоий тармоқлар) энг охирида — «Тасдиқлаш»дан

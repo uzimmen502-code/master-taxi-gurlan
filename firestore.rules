@@ -4174,8 +4174,10 @@ service cloud.firestore {
     // Sotuvchi statistikasi (2026-10-25, 6-bosqich): faqat EGASI o'z kunlik hujjatini o'qiydi (get, hujjat ID bilan);
     // ro'yxat va yozish yopiq — faqat recordShopEvent (Cloud Function) yozadi. Takror belgilari — faqat server.
     match /shop_stats/{docId} {
+      // ID = <egasining telefoni>_<yyyymmdd>: hali yo'q kun ham o'qiladi (0), begona kun — yo'q.
       allow get: if isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.get('ownerPhone', ''));
+          && userDocIdFromPhoneToken().size() == 12
+          && docId.matches(userDocIdFromPhoneToken() + '_[0-9]{8}');
       allow list, create, update, delete: if false;
     }
     match /shop_stats_seen/{docId} {

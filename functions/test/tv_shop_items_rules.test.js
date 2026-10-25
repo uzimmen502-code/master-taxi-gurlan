@@ -242,7 +242,10 @@ async function main() {
       await db.doc('shop_stats_seen/20261025_abc').set({ day: '20261025' });
     });
     await assertSucceeds(as(SELLER).doc(`shop_stats/${SELLER}_20261025`).get());
+    await assertSucceeds(as(SELLER).doc(`shop_stats/${SELLER}_20261020`).get(), 'hali yo\'q kun ham o\'qiladi (0)');
     await assertFails(as(OTHER).doc(`shop_stats/${SELLER}_20261025`).get());
+    await assertFails(as(OTHER).doc(`shop_stats/${SELLER}_20261020`).get(), 'begona yo\'q kun ham — yo\'q');
+    await assertFails(as(SELLER).doc(`shop_stats/${SELLER}_x`).get());
     await assertFails(anon().doc(`shop_stats/${SELLER}_20261025`).get());
     await assertFails(as(SELLER).collection('shop_stats').where('ownerPhone', '==', SELLER).get());
     await assertFails(as(SELLER).doc(`shop_stats/${SELLER}_20261025`).update({ shopViews: 999 }));

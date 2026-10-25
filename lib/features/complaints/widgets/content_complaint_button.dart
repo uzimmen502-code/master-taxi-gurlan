@@ -41,6 +41,7 @@ class ContentComplaintButton extends StatefulWidget {
     this.restaurantId = '',
     required this.isMine,
     this.closeSheetFirst = false,
+    this.reserveSpace = false,
     this.submit,
   });
 
@@ -49,6 +50,7 @@ class ContentComplaintButton extends StatefulWidget {
     Key? key,
     required Restaurant restaurant,
     bool closeSheetFirst = false,
+    bool reserveSpace = false,
     Future<bool> Function()? isMine,
     ContentComplaintSubmit? submit,
   }) =>
@@ -59,6 +61,7 @@ class ContentComplaintButton extends StatefulWidget {
         restaurantId: restaurant.id,
         isMine: isMine ?? () => restaurantIsMine(restaurant),
         closeSheetFirst: closeSheetFirst,
+        reserveSpace: reserveSpace,
         submit: submit,
       );
 
@@ -100,6 +103,9 @@ class ContentComplaintButton extends StatefulWidget {
   final String restaurantId;
   final Future<bool> Function() isMine;
   final bool closeSheetFirst;
+
+  /// Эгалик аниқлангунча 48 dp жой банд қилинади ва тугма секин пайдо бўлади (варақ «сакрамайди»).
+  final bool reserveSpace;
   final ContentComplaintSubmit? submit;
 
   /// Жорий фойдаланувчи (Firebase йўқ/логинсиз — бўш).
@@ -215,9 +221,10 @@ class _ContentComplaintButtonState extends State<ContentComplaintButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (_mine == null && widget.reserveSpace) return const SizedBox(height: 48);
     if (_mine != false) return const SizedBox.shrink();
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Align(
+    final button = Align(
       alignment: AlignmentDirectional.centerStart,
       child: TextButton.icon(
         key: const ValueKey('content_report_entry'),
@@ -226,6 +233,13 @@ class _ContentComplaintButtonState extends State<ContentComplaintButton> {
         icon: const Icon(Icons.flag_outlined, size: 18),
         label: Text(context.tr('content_report_entry')),
       ),
+    );
+    if (!widget.reserveSpace) return button;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 150),
+      builder: (_, v, child) => Opacity(opacity: v, child: child),
+      child: button,
     );
   }
 }

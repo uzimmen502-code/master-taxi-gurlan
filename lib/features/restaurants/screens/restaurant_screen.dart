@@ -464,7 +464,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       context: context,
       showDragHandle: true,
       backgroundColor: c.surface,
-      builder: (ctx) => Padding(
+      // Кичик экран / катта шрифт / узун тавсиф: мазмун варақ ичида айланади (ортиб кетмайди).
+      builder: (ctx) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -501,7 +502,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 ),
               ),
             ],
-            ContentComplaintButton.restaurant(restaurant: _r, closeSheetFirst: true),
+            ContentComplaintButton.restaurant(restaurant: _r, closeSheetFirst: true, reserveSpace: true),
           ],
         ),
       ),

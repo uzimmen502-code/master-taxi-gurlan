@@ -47,8 +47,10 @@ class _Submit {
 }
 
 class _MenuRepo implements RestaurantsRepository {
+  _MenuRepo([this.restaurant = _rest]);
+  final Restaurant restaurant;
   @override
-  Stream<Restaurant?> watchRestaurant(String id) => Stream.value(_rest);
+  Stream<Restaurant?> watchRestaurant(String id) => Stream.value(restaurant);
   @override
   Stream<List<MenuCategory>> watchCategories(String restaurantId) =>
       Stream.value(const [MenuCategory(id: 'c1', name: 'Asosiy', sort: 1)]);
@@ -233,6 +235,58 @@ void main() {
       expect(find.text(tr('content_report_reason_wrong_info')), findsOneWidget);
     });
 
+    testWidgets('ресторан маълумот варағи: 320 dp, шрифт 1.3, узун тавсиф — ортиб кетмайди, тугмагача айланади', (t) async {
+      t.view.physicalSize = const Size(320, 640);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final long = Restaurant(
+        id: 'r1', name: 'Gurlan osh markazi — uy taomlari', status: 'approved', ownerUid: _owner,
+        description: List.filled(40, 'Palov, manti, somsa va boshqa milliy taomlar.').join(' '),
+        address: 'Gurlan tumani, Navoiy ko\'chasi 5-uy', contactPhone: '+998901234567',
+      );
+      await t.pumpWidget(l10nApp(
+        textScale: 1.3,
+        home: RestaurantScreen(
+          restaurant: long,
+          repository: _MenuRepo(long),
+          cart: RestaurantCart(),
+          itemClipsLoader: (_) async => const {},
+          restaurantVideoLoader: () async => null,
+          dishStatsLoader: (_) async => const {},
+        ),
+      ));
+      await t.pumpAndSettle();
+      await t.tap(find.byIcon(Icons.info_outline_rounded));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull, reason: 'RenderFlex overflow йўқ');
+      await t.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).last);
+      expect(entry, findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('reserveSpace: эгалик аниқлангунча 48 dp банд (варақ сакрамайди), кейин тугма', (t) async {
+      // Маълумот варағидагидек: Column ичида (баландлик чекланмаган).
+      await t.pumpWidget(l10nApp(
+        home: Scaffold(
+          body: Column(children: [
+            ContentComplaintButton.restaurant(
+              restaurant: _rest,
+              reserveSpace: true,
+              isMine: () => Future.delayed(const Duration(seconds: 1), () => false),
+            ),
+          ]),
+        ),
+      ));
+      await t.pump();
+      final box = find.byKey(const ValueKey('content_report_restaurant'));
+      expect(entry, findsNothing);
+      expect(t.getSize(box).height, 48);
+      await t.pump(const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(entry, findsOneWidget);
+      expect(t.getSize(box).height, 48);
+    });
+
     testWidgets('таом варағи: тугма бор; босилса варақ ёпилиб, сабаб варағи очилади', (t) async {
       late BuildContext ctx;
       await t.pumpWidget(l10nApp(home: Scaffold(body: Builder(builder: (c) {
@@ -307,15 +361,37 @@ void main() {
       expect(blocked, ['L1']);
       expect(src.resolved, ['L']);
     });
+
+    testWidgets('кўчмас мулк: блок ўтди, ёпиш хато — «бажарилди, шикоят ёпилмади», умумий «бажариб бўлмади» эмас', (t) async {
+      final src = _FakeComplaints([
+        const ShopComplaint(id: 'L', targetType: 'realty_listing', targetId: 'L1', ownerPhone: '', title: 'Uy', reason: 'spam', reporterId: '998900000003'),
+      ], resolveFails: true);
+      final blocked = <String>[];
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: ShopComplaintsPanel(
+        source: src,
+        action: (label: 'Блоклаш', run: (_, c) async => blocked.add(c.targetId)),
+      ))));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('shop_complaint_action_L')));
+      await t.pumpAndSettle();
+      expect(blocked, ['L1']);
+      expect(find.text('«Блоклаш» бажарилди, лекин шикоят ёпилмади. «Ҳал қилинди»ни қайта босинг.'), findsOneWidget);
+      expect(find.textContaining('Бажариб бўлмади'), findsNothing);
+      expect(find.textContaining('network'), findsNothing);
+    });
   });
 }
 
 class _FakeComplaints implements ShopComplaintsSource {
-  _FakeComplaints(this.list);
+  _FakeComplaints(this.list, {this.resolveFails = false});
   final List<ShopComplaint> list;
+  final bool resolveFails;
   final resolved = <String>[];
   @override
   Stream<List<ShopComplaint>> watchOpen() => Stream.value(list);
   @override
-  Future<void> resolve(BuildContext context, String reportId) async => resolved.add(reportId);
+  Future<void> resolve(BuildContext context, String reportId) async {
+    if (resolveFails) throw StateError('network down');
+    resolved.add(reportId);
+  }
 }

@@ -157,7 +157,18 @@ class _ShopComplaintsPanelState extends State<ShopComplaintsPanel> {
 
   Future<void> _act(ShopComplaint c, ComplaintAction a) => _run(c, () async {
         await a.run(context, c);
-        if (mounted) await widget.source.resolve(context, c.id);
+        if (!mounted) return;
+        try {
+          await widget.source.resolve(context, c.id);
+        } catch (e) {
+          // Амал БАЖАРИЛДИ (масалан эълон блокланди) — фақат шикоят ёпилмади: админ буни аниқ билсин.
+          debugPrint('[ShopComplaints] ${c.id} resolve after action: $e');
+          if (mounted) {
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+              content: Text('«${a.label}» бажарилди, лекин шикоят ёпилмади. «Ҳал қилинди»ни қайта босинг.'),
+            ));
+          }
+        }
       });
 
   IconData _icon(String t) => switch (t) {

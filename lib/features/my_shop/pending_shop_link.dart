@@ -14,12 +14,22 @@ class PendingShopLink {
   static final _idRe = RegExp(r'^[A-Za-z0-9]{10}$');
   static String? _id;
 
+  /// Статистика манбаи: QR-коддан (`qr`) ёки улашилган ҳаволадан (`link`).
+  static String _source = 'link';
+
   /// [uri] — тест учун; бўлмаса вебда `Uri.base`. Мобил иловада ҳозирча ҳеч нарса қилмайди (App Links — APK).
   static void captureFromUrl([Uri? uri]) {
     if (uri == null && !kIsWeb) return;
-    final id = (uri ?? Uri.base).queryParameters['shop']?.trim() ?? '';
-    if (_idRe.hasMatch(id)) _id = id;
+    final q = (uri ?? Uri.base).queryParameters;
+    final id = q['shop']?.trim() ?? '';
+    if (_idRe.hasMatch(id)) {
+      _id = id;
+      _source = q['src'] == 'qr' ? 'qr' : 'link';
+    }
   }
+
+  @visibleForTesting
+  static String get source => _source;
 
   /// Бир марта олинади (қайта очилмасин).
   static String? take() {
@@ -46,7 +56,7 @@ class PendingShopLink {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_unavailable'))));
       return;
     }
-    final screen = TvShopPublicScreen(ownerPhone: target.ownerPhone, businessId: target.businessId);
+    final screen = TvShopPublicScreen(ownerPhone: target.ownerPhone, businessId: target.businessId, source: _source);
     if (push != null) return push(screen);
     await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }

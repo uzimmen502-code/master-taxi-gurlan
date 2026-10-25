@@ -534,6 +534,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                                       item: item,
                                       showShopButton: true,
                                       similarPool: _shopItems,
+                                      source: CatalogSearch.normalize(_query).isEmpty ? 'market' : 'search',
                                     ),
                                   ),
                                 );
@@ -589,7 +590,7 @@ class _ShopHitsStrip extends StatelessWidget {
               child: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId),
+              builder: (_) => TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId, source: 'search'),
             )),
           );
         },

@@ -1119,6 +1119,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
               ownerDisplayName: displayName,
               districtLabel: district,
               districtId: clip.districtId,
+              source: 'video',
             )
           : TvChannelScreen(
               ownerPhone: clip.ownerPhone,
@@ -1197,7 +1198,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: valid, showShopButton: true)),
+      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: valid, showShopButton: true, source: 'video')),
     );
     if (mounted && tvCanPlay) tvOnPlaybackAllowed();
   }

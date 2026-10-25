@@ -7,6 +7,7 @@ import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/shop_stats_recorder.dart';
 import '../widgets/shop_complaint_sheet.dart';
 import '../widgets/shop_unavailable_view.dart';
 import '../widgets/tv_channel_contact_bar.dart';
@@ -28,7 +29,11 @@ class TvShopItemDetailScreen extends StatefulWidget {
     this.similarPool = const [],
     this.loadLatest,
     this.submitComplaint,
+    this.source = 'other',
   });
+
+  /// Статистика манбаи (`ShopStatsRecorder.sources`).
+  final String source;
 
   final TvShopItem item;
 
@@ -74,6 +79,10 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
           _available = fresh.isActive;
         }
       });
+      // Статистика (6-босқич): сервер тасдиқлаган фаол маҳсулот кўриши.
+      if (fresh != null && fresh.isActive) {
+        ShopStatsRecorder.productView(ownerPhone: fresh.ownerPhone, itemId: fresh.id, source: widget.source);
+      }
     } catch (e) {
       // Тармоқ хатоси: қўлдаги нусха кўрсатилади (рўйхатлар ҳам фақат фаолини беради).
       debugPrint('[TvShopItemDetail] refresh: $e');
@@ -121,6 +130,7 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
               ownerPhone: item.ownerPhone,
               businessId: item.businessId,
               highlightItemId: item.id,
+              source: 'product',
               ownerDisplayName: item.ownerName,
               districtLabel: item.districtLabel,
               districtId: item.districtId,
@@ -137,6 +147,7 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
           item: other,
           showShopButton: widget.showShopButton || widget.onOpenShop != null,
           similarPool: widget.similarPool,
+          source: widget.source,
         ),
       ),
     );

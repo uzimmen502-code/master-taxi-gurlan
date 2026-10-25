@@ -118,7 +118,7 @@ class BusinessDetailSheet extends StatelessWidget {
                       Navigator.of(context).pop();
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => TvShopPublicScreen(ownerPhone: origin.ownerId, businessId: origin.id),
+                          builder: (_) => TvShopPublicScreen(ownerPhone: origin.ownerId, businessId: origin.id, source: 'map'),
                         ),
                       );
                     },
@@ -207,7 +207,7 @@ class _ProductsStripState extends State<_ProductsStrip> {
                     return InkWell(
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => TvShopItemDetailScreen(item: it, showShopButton: true, similarPool: items),
+                          builder: (_) => TvShopItemDetailScreen(item: it, showShopButton: true, similarPool: items, source: 'map'),
                         ),
                       ),
                       child: SizedBox(

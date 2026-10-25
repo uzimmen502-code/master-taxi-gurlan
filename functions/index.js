@@ -12415,6 +12415,13 @@ exports.clipPage = functions
     }
   });
 
+// Дўконнинг доимий ҳаволаси ва QR — `/s/{publicId}` (hosting rewrite), getMyShopLink, resolveShopLink
+// (2026-10-25, 5-босқич; functions/shop_links.js).
+require('./shop_links').attachShopLinks(exports, {
+  functions, db, admin, callerPhone, canonicalUid,
+  publicBase: AVA_PUBLIC_BASE, playUrl: AVA_PLAY_URL, apkUrl: AVA_APP_DOWNLOAD_PAGE,
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EV XARITASI — Maps Static API proksisi
 // ═══════════════════════════════════════════════════════════════════════════

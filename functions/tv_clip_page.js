@@ -195,4 +195,7 @@ module.exports = {
   formatMoneyUz,
   buildClipPageHtml,
   buildClipNotFoundHtml,
+  // Дўкон ҳаволаси саҳифаси ҳам шу қобиқни ишлатади (`shop_links.js`, 2026-10-25).
+  pageShell,
+  ctaBlock,
 };

@@ -3969,6 +3969,18 @@ service cloud.firestore {
           && request.resource.data.everPublished == true;
     }
 
+    // AVA расмий тармоқларига жойлаш розилиги (7-босқич, 2026-10-25):
+    // «Рухсат бераман» вақти — фақат сервер вақти (`serverTimestamp`),
+    // версия — 1..99. Эски илова иккисини ҳам ёзмайди (ўтади). Кейин
+    // ўзгартириб бўлмайди (update рўйхатида қулф).
+    function tvClipSocialConsentOk(d) {
+      return (!('socialConsentAt' in d) || d.socialConsentAt == request.time)
+          && (!('socialConsentVersion' in d)
+              || (d.socialConsentVersion is int
+                  && d.socialConsentVersion > 0
+                  && d.socialConsentVersion < 100));
+    }
+
     // Ресторан видеоси (`linkKind == 'restaurant'`, `linkId` = ресторан id)
     // фақат ШУ рестораннинг а'золари (эга ёки ходим — `members`) томонидан
     // боғланади. Аввал боғлаш клип ҳужжатида эркин эди ва ҳимоя фақат
@@ -4056,7 +4068,8 @@ service cloud.firestore {
                           && tvAutoApproveOn()))
                   && !request.resource.data.keys().hasAny([
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
-                      'socialVideoUrl'])
+                      'socialVideoUrl', 'socialNoticeVersion'])
+                  && tvClipSocialConsentOk(request.resource.data)
                   && tvClipRestaurantLinkOk(request.resource.data)
                   && tvClipRealtyLinkOk(request.resource.data)));
       // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
@@ -4071,7 +4084,8 @@ service cloud.firestore {
                   .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',
                            'socialPost', 'socialPostedAt', 'socialRetryAt',
-                           'socialVideoUrl']))
+                           'socialVideoUrl', 'socialConsentAt',
+                           'socialConsentVersion', 'socialNoticeVersion']))
           || tvClipLikeCountOnly()
           || tvClipViewCountOnly()
           || tvClipCommentCountOnly()

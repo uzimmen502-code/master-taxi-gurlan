@@ -23,6 +23,7 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
+const {serverTimestamp} = require('firebase/firestore');
 
 const RULES_PATH = process.env.RULES_FILE || path.join(__dirname, '..', '..', 'firestore.rules');
 const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
@@ -278,6 +279,34 @@ async function main() {
       () => assertSucceeds(as(ADMIN).collection('tv_clips').add(clip({status: 'active'}))));
   await check('tv_clips: admin socialRetryAt qo\'yadi («Соцсетга жойлаш»)',
       () => assertSucceeds(as(ADMIN).collection('tv_clips').doc('c1').update({socialRetryAt: 1000})));
+
+  // 7-bosqich (2026-10-25): AVA rasmiy tarmoqlariga joylash roziligi.
+  const consented = (extra = {}) => clip({
+    socialConsent: true, socialNetworks: ['telegram'],
+    socialConsentAt: serverTimestamp(), socialConsentVersion: 1, ...extra,
+  });
+  await check('rozilik: «Рухсат бераман» (server vaqti + versiya 1) bilan yaratadi',
+      () => assertSucceeds(as(OWNER).collection('tv_clips').add(consented())));
+  await check('rozilik: eski ilova (vaqt/versiyasiz) — o\'tadi',
+      () => assertSucceeds(as(OWNER).collection('tv_clips').add(
+          clip({socialConsent: true, socialNetworks: ['instagram']}))));
+  await check('rozilik: o\'ylab topilgan vaqt (server vaqti emas) — rad',
+      () => assertFails(as(OWNER).collection('tv_clips').add(
+          consented({socialConsentAt: new Date(Date.now() - 86400000)}))));
+  await check('rozilik: versiya 0 / matn — rad', async () => {
+    await assertFails(as(OWNER).collection('tv_clips').add(consented({socialConsentVersion: 0})));
+    await assertFails(as(OWNER).collection('tv_clips').add(consented({socialConsentVersion: '1'})));
+  });
+  await check('rozilik: socialNoticeVersion (reklama, faqat CF) klientdan — rad',
+      () => assertFails(as(OWNER).collection('tv_clips').add(clip({socialNoticeVersion: 1}))));
+  await check('rozilik: keyin vaqt/versiyani o\'zgartira olmaydi', async () => {
+    await assertFails(as(OWNER).collection('tv_clips').doc('c1').update({socialConsentAt: serverTimestamp()}));
+    await assertFails(as(OWNER).collection('tv_clips').doc('c1').update({socialConsentVersion: 2}));
+    await assertFails(as(OWNER).collection('tv_clips').doc('c1').update({socialNoticeVersion: 1}));
+  });
+  await check('rozilik: egasi tarmoqlarni olib tashlaydi (qaytarib olish) — o\'tadi',
+      () => assertSucceeds(as(OWNER).collection('tv_clips').doc('c1').update(
+          {socialConsent: false, socialNetworks: []})));
 
   // ── settings/wallet_bot, settings/anomaly_settings ──────────────────
   const settings = (db, id) => db.collection('settings').doc(id);

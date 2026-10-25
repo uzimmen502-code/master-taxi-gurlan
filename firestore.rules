@@ -694,7 +694,9 @@ service cloud.firestore {
       return tvShopSame('status')
           && tvShopSame('blockedAt')
           && tvShopSame('blockedBy')
-          && tvShopSame('blockReason');
+          && tvShopSame('blockReason')
+          // Doimiy havola ID'si (getMyShopLink) — faqat server; egasi boshqa do'konning havolasini egallay olmasin.
+          && tvShopSame('publicId');
     }
     // Vitrina hujjati o'lchami/qiymati (yaratish va eganing tahriri uchun umumiy). Joriy ilova yozadigan hamma
     // shakl o'tadi: title<=200, description<=2000, price butun 0..999999999, photoUrls<=7, clipIds<=50, tur product|service.
@@ -4158,7 +4160,7 @@ service cloud.firestore {
       // (adminSetShopStatus); bloklangan do'konni egasi o'chirib, qayta ocha olmaydi.
       allow create: if isAuth()
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
-          && !request.resource.data.keys().hasAny(['status', 'blockedAt', 'blockedBy', 'blockReason']);
+          && !request.resource.data.keys().hasAny(['status', 'blockedAt', 'blockedBy', 'blockReason', 'publicId']);
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)

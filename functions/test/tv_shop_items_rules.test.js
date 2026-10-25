@@ -225,6 +225,17 @@ async function main() {
     await assertSucceeds(as(SELLER).collection('reports').add({ type: 'tv_clip', targetId: 'c1', reporterId: SELLER, reason: 'spam' }));
   });
 
+  await check('C7 doimiy havola ID (publicId): egasi yaratishda yozolmaydi, o\'zgartira/o\'chira olmaydi; nomni o\'zgartirish ishlaydi', async () => {
+    const S3 = '998911000004';
+    await seed(async (db) => db.doc(`users/${S3}`).set({ role: 'user' }));
+    await assertFails(as(S3).doc(`tv_shops/${S3}`).set({ name: 'X', ownerPhone: S3, publicId: 'AbCdEfGh23' }));
+    await seed((db) => db.doc(`tv_shops/${S3}`).set({ name: 'Do\'kon', ownerPhone: S3, publicId: 'AbCdEfGh23' }));
+    const ref = as(S3).doc(`tv_shops/${S3}`);
+    await assertFails(ref.update({ publicId: 'ZzZzZzZz99' }));
+    await assertFails(ref.update({ publicId: deleteField() }));
+    await assertSucceeds(ref.update({ name: 'Yangi nom' }));
+  });
+
   await check('C5 admin tv_shops va mahsulotni bevosita yozishi buzilmagan', async () => {
     await assertSucceeds(as(ADMIN).doc(`tv_shops/${SELLER2}`).update({ status: 'active' }));
     await reset('m3', { status: 'blocked', blockedByParent: 'shop' });

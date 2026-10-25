@@ -668,11 +668,33 @@ service cloud.firestore {
               && request.resource.data.photoUrl.size() <= 500);
     }
 
+    // 2026-10-25 (ega: admin nazorati barcha kirish yo'llarida): qat'iy taqqoslash — maydonni O'CHIRISH ham o'zgarish.
+    function tvShopSame(field) {
+      return request.resource.data.get(field, null) == resource.data.get(field, null);
+    }
+
     function tvShopOwnerFieldsLocked() {
       return notChanged('boostUntil')
           && notChanged('socialPostedAt')
           && notChanged('ownerPhone')
-          && notChanged('viewCount');
+          && notChanged('viewCount')
+          && tvShopSame('blockedByParent');
+    }
+
+    // Admin bloklagan onlayn do'kon (tv_shops/{phone}.status == 'blocked') egasi yangi mahsulot qo'sha olmaydi.
+    function tvShopOwnerShopOpen() {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && (!exists(/databases/$(database)/documents/tv_shops/$(uid))
+              || get(/databases/$(database)/documents/tv_shops/$(uid)).data.get('status', 'active') != 'blocked');
+    }
+
+    // tv_shops blok maydonlarini faqat admin (Cloud Function) yozadi.
+    function tvShopBlockFieldsLocked() {
+      return tvShopSame('status')
+          && tvShopSame('blockedAt')
+          && tvShopSame('blockedBy')
+          && tvShopSame('blockReason');
     }
     // Vitrina hujjati o'lchami/qiymati (yaratish va eganing tahriri uchun umumiy). Joriy ilova yozadigan hamma
     // shakl o'tadi: title<=200, description<=2000, price butun 0..999999999, photoUrls<=7, clipIds<=50, tur product|service.
@@ -694,7 +716,8 @@ service cloud.firestore {
               && exists(/databases/$(database)/documents/businesses/$(d.businessId))
               && phoneDocIdsMatch(
                   userDocIdFromPhoneToken(),
-                  get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('ownerId', '')));
+                  get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('ownerId', ''))
+              && get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('status', 'active') != 'blocked');
     }
 
     function tvShopItemCreateOk() {
@@ -704,8 +727,10 @@ service cloud.firestore {
           && d.get('viewCount', 0) == 0
           && d.get('status', 'active') in ['active', 'pending']
           && d.get('clipIds', []) is list && d.get('clipIds', []).size() == 0
+          && !('blockedByParent' in d)
           && tvShopItemShapeOk(d)
-          && tvShopBusinessLinkOk(d);
+          && tvShopBusinessLinkOk(d)
+          && tvShopOwnerShopOpen();
     }
 
     function tvShopOwnerUpdateOk() {
@@ -4127,11 +4152,19 @@ service cloud.firestore {
 
     match /tv_shops/{ownerPhone} {
       allow read: if true;
+      // 2026-10-25: blok maydonlari (status/blockedAt/blockedBy/blockReason) faqat admin callable'ida
+      // (adminSetShopStatus); bloklangan do'konni egasi o'chirib, qayta ocha olmaydi.
       allow create: if isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone);
-      allow update, delete: if isAdmin()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+          && !request.resource.data.keys().hasAny(['status', 'blockedAt', 'blockedBy', 'blockReason']);
+      allow update: if isAdmin()
           || (isAuth()
-              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone));
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+              && tvShopBlockFieldsLocked());
+      allow delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+              && resource.data.get('status', 'active') != 'blocked');
     }
 
     match /tv_shop_items/{itemId} {

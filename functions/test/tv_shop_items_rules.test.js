@@ -14,7 +14,7 @@
 const path = require('path');
 const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { serverTimestamp, arrayUnion, arrayRemove, Timestamp } = require('firebase/firestore');
+const { serverTimestamp, arrayUnion, arrayRemove, Timestamp, deleteField } = require('firebase/firestore');
 
 const RULES_PATH = process.env.RULES_FILE || path.join(__dirname, '..', '..', 'firestore.rules');
 const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:18080').split(':');
@@ -170,6 +170,60 @@ async function main() {
   await check('B delete: boshqa eganing hujjatini o\'chirib bo\'lmaydi', async () => {
     await reset('d1', {});
     await assertFails(as(OTHER).doc('tv_shop_items/d1').delete());
+  });
+
+  // ───────── C. Bloklash (ega qarori 2026-10-25: admin nazorati barcha kirish yo'llarida) ─────────
+  const BIZ_BLOCKED = 'biz_blocked';
+  const SELLER2 = '998911000003';
+  await seed(async (db) => {
+    await db.doc(`businesses/${BIZ_BLOCKED}`).set({ ownerId: SELLER, name: 'Bloklangan', category: 'retail', status: 'blocked' });
+    await db.doc(`users/${SELLER2}`).set({ role: 'user' });
+  });
+
+  await check('C1 mavjud oqimlar: tv_shops yaratish/nomini o\'zgartirish (ensureShop/saveName shakli), status active obyektga mahsulot', async () => {
+    await assertSucceeds(as(SELLER).doc(`tv_shops/${SELLER}`).set({ name: 'Sidabilla', ownerPhone: SELLER, createdAt: serverTimestamp() }));
+    await assertSucceeds(as(SELLER).doc(`tv_shops/${SELLER}`).update({ name: 'Sidabilla Market' }));
+    await seed((db) => db.doc(`businesses/${BIZ_MINE}`).update({ status: 'active' }));
+    await assertSucceeds(as(SELLER).collection('tv_shop_items').add(appItem({ businessId: BIZ_MINE })));
+  });
+
+  await createFails('bloklangan yo\'nalishga (businesses.status blocked) mahsulot', { businessId: BIZ_BLOCKED });
+  await createFails('blockedByParent belgisini o\'zi yozadi', { blockedByParent: 'business:biz_mine' });
+
+  await check('C2 egasi tv_shops blok maydonlarini yozolmaydi: yaratishda, o\'zgartirishda, o\'chirib tashlashda', async () => {
+    await assertFails(as(SELLER2).doc(`tv_shops/${SELLER2}`).set({ name: 'X', ownerPhone: SELLER2, status: 'active' }));
+    await assertFails(as(SELLER2).doc(`tv_shops/${SELLER2}`).set({ name: 'X', ownerPhone: SELLER2, blockReason: 'yo\'q' }));
+    await seed((db) => db.doc(`tv_shops/${SELLER2}`).set({ name: 'Blok', ownerPhone: SELLER2, status: 'blocked', blockReason: 'firibgarlik' }));
+    const ref = as(SELLER2).doc(`tv_shops/${SELLER2}`);
+    await assertFails(ref.update({ status: 'active' }));
+    await assertFails(ref.update({ status: deleteField() }));
+    await assertFails(ref.update({ blockReason: deleteField() }));
+    await assertFails(ref.set({ name: 'Yangi', ownerPhone: SELLER2 })); // to'liq qayta yozish statusni o'chiradi
+    await assertFails(ref.delete());
+    await assertSucceeds(ref.update({ name: 'Blokda ham nom' })); // nom — egasining o'zi (blok holati o'zgarmaydi)
+  });
+
+  await check('C3 do\'koni bloklangan egasi yangi mahsulot qo\'sha olmaydi (o\'z do\'koni ham, yo\'nalish ham); bloklanmagan egaga ta\'sir yo\'q', async () => {
+    await seed((db) => db.doc(`businesses/biz_s2`).set({ ownerId: SELLER2, name: 'S2', category: 'retail', status: 'active' }));
+    await assertFails(as(SELLER2).collection('tv_shop_items').add(appItem({ ownerPhone: SELLER2 })));
+    await assertFails(as(SELLER2).collection('tv_shop_items').add(appItem({ ownerPhone: SELLER2, businessId: 'biz_s2' })));
+    await assertSucceeds(as(SELLER).collection('tv_shop_items').add(appItem()));
+  });
+
+  await check('C4 egasi ota-blok belgisini o\'chira/o\'zgartira olmaydi; boshqa maydonlarini tahrirlay oladi', async () => {
+    await reset('m1', { status: 'blocked', blockedByParent: 'shop' });
+    const ref = as(SELLER).doc('tv_shop_items/m1');
+    await assertFails(ref.update({ blockedByParent: deleteField() }));
+    await assertFails(ref.update({ blockedByParent: 'business:x' }));
+    await reset('m2', { status: 'blocked' });
+    await assertFails(as(SELLER).doc('tv_shop_items/m2').update({ blockedByParent: 'shop' }));
+    await assertSucceeds(ref.update({ title: 'Tahrirlandi' }));
+  });
+
+  await check('C5 admin tv_shops va mahsulotni bevosita yozishi buzilmagan', async () => {
+    await assertSucceeds(as(ADMIN).doc(`tv_shops/${SELLER2}`).update({ status: 'active' }));
+    await reset('m3', { status: 'blocked', blockedByParent: 'shop' });
+    await assertSucceeds(as(ADMIN).doc('tv_shop_items/m3').update({ status: 'active', blockedByParent: deleteField() }));
   });
 
   await testEnv.cleanup();

@@ -6,7 +6,6 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/ava_ad_badge.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
@@ -471,11 +470,6 @@ class _StripCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (listing.isPromoted)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4, right: 4),
-                            child: AvaAdBadge(compact: true),
-                          ),
                         if (!unlocked)
                           Icon(Icons.lock_outline, size: 14, color: c.ink3),
                       ],
@@ -572,11 +566,6 @@ class _ApproxPinSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (listing.isPromoted)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8, top: 2),
-                    child: AvaAdBadge(compact: true),
-                  ),
               ],
             ),
             const SizedBox(height: 10),

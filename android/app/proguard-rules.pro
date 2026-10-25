@@ -19,6 +19,10 @@
 -keepattributes *Annotation*, InnerClasses, Signature, SourceFile, LineNumberTable
 -keep class kotlin.Metadata { *; }
 
+# Google Play Install Referrer — AIDL interfeysi (Play xizmatiga bind) R8'da
+# kesilmasin/nomi o'zgarmasin (deferred deep link, MainActivity.kt).
+-keep class com.google.android.finsky.externalreferrer.** { *; }
+
 # Native metodlar va Parcelable — umumiy xavfsizlik qoidalari.
 -keepclasseswithmembernames class * {
     native <methods>;

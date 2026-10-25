@@ -56,10 +56,67 @@ class PendingShopLink {
     return (id: id, source: uri.queryParameters['src'] == 'qr' ? 'qr' : 'link');
   }
 
+  /// Шу ишга тушишда ҳақиқий App Link келдими (Install Referrer'дан устун).
+  static bool _appLinkSeen = false;
+
+  /// Install Referrer'дан навбатга қўйилган ID ва вақти: бир хил App Link [_dedupWindow] ичида келса — иккинчи марта
+  /// очилмайди (кейинроқ атайлаб босилса — очилади).
+  static String? _referrerId;
+  static DateTime? _referrerAt;
+  static const _dedupWindow = Duration(minutes: 2);
+
+  /// Google Play Install Referrer (deferred deep link): `ava_shop=<publicId>&src=<qr|link>` (сервер `shopPage`
+  /// Play ҳаволасига қўяди). Органик/номаълум/нотўғри ID — `null`. ID текшируви ва манба — [parseAppLink] билан бир хил.
+  static ({String id, String source})? parseInstallReferrer(String? referrer) {
+    var s = (referrer ?? '').trim();
+    if (s.isEmpty || s.length > 512) return null;
+    try {
+      // Play одатда бир марта декод қилиб беради; тўлиқ кодланган ҳолда келса — бир марта очамиз.
+      if (!s.contains('=') && s.contains('%')) s = Uri.decodeComponent(s);
+      final q = Uri.splitQueryString(s);
+      final id = q['ava_shop']?.trim() ?? '';
+      if (!_idRe.hasMatch(id)) return null;
+      return (id: id, source: q['src'] == 'qr' ? 'qr' : 'link');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Install Referrer'дан келган дўкон. Ҳақиқий App Link шу ишга тушишда келган бўлса ёки навбатда бошқа ҳавола
+  /// турган бўлса — эътиборсиз (`false`).
+  static bool captureInstallReferrer(String? referrer) {
+    final link = parseInstallReferrer(referrer);
+    if (link == null || _appLinkSeen || _id != null || _broken) return false;
+    _id = link.id;
+    _referrerId = link.id;
+    _referrerAt = DateTime.now();
+    _source = link.source;
+    debugPrint('[PendingShopLink] install referrer: ok src=${link.source}');
+    arrivals.value++;
+    return true;
+  }
+
+  @visibleForTesting
+  static void resetForTest() {
+    _id = null;
+    _broken = false;
+    _appLinkSeen = false;
+    _referrerId = null;
+    _referrerAt = null;
+    _source = 'link';
+  }
+
   /// App Link'ни навбатга қўяди ва [arrivals]ни оширади. `false` — бизнинг ҳавола эмас.
   static bool captureAppLink(Uri uri) {
     final link = parseAppLink(uri);
     if (link == null) return false;
+    _appLinkSeen = true;
+    // Install Referrer шу дўконни аллақачон навбатга қўйган/очган — иккинчи марта очилмайди.
+    final at = _referrerAt;
+    if (link.id != null && link.id == _referrerId && at != null && DateTime.now().difference(at) < _dedupWindow) {
+      _referrerId = null;
+      return true;
+    }
     _id = link.id;
     _broken = link.id == null;
     _source = link.source;

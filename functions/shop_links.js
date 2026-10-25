@@ -83,6 +83,20 @@ const TEXTS = Object.freeze({
   },
 });
 
+/**
+ * Deferred deep link (2026-10-25, Agent E): иловаси йўқ харидор «AVA иловасида очиш» → Play'дан ўрнатади → илова
+ * биринчи очилишда Install Referrer'дан `ava_shop=<publicId>&src=<qr|link>` ни ўқиб, ШУ дўкон/ресторанни очади
+ * (lib/features/my_shop/install_referrer_link.dart). Play URL форматы: `…details?id=…&referrer=<url-encoded>`.
+ * Фақат publicId ва манба — телефон/шахсий маълумот ЙЎҚ (40-банд). ID нотўғри бўлса — оддий Play ҳаволаси.
+ */
+function playUrlWithReferrer(playUrl, publicId, src) {
+  const base = String(playUrl == null ? '' : playUrl).trim();
+  if (!base || !isPublicId(publicId)) return base;
+  const source = src === 'qr' ? 'qr' : 'link';
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}referrer=${encodeURIComponent(`ava_shop=${publicId}&src=${source}`)}`;
+}
+
 function langOf(acceptLanguage) {
   return /^\s*ru\b/i.test(String(acceptLanguage || '')) ? 'ru' : 'uz';
 }
@@ -373,7 +387,7 @@ function attachShopLinks(exportsObj, deps) {
           shopName: r.shopName,
           directionName: isRest ? (r.home ? t.home_cook : t.restaurant) : r.directionName,
           items, pageUrl: urlOf(id),
-          webUrl: `${publicBase}/?shop=${id}&src=${src}`, appUrl: playUrl, altUrl: apkUrl, lang,
+          webUrl: `${publicBase}/?shop=${id}&src=${src}`, appUrl: playUrlWithReferrer(playUrl, id, src), altUrl: apkUrl, lang,
           kind: isRest ? 'restaurant' : 'shop', coverUrl: isRest ? r.coverUrl : '',
         }));
         log({ action: 'shopPage', kind: isRest ? 'restaurant' : 'shop', result: 'ok', items: items.length, durationMs: Date.now() - started });
@@ -386,5 +400,6 @@ function attachShopLinks(exportsObj, deps) {
 
 module.exports = {
   attachShopLinks, resolvePublicId, buildShopPageHtml, buildShopNotFoundHtml, newPublicId, isPublicId, langOf, pageItems,
+  playUrlWithReferrer,
   restaurantPageItems,
 };

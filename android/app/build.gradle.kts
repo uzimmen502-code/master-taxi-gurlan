@@ -64,5 +64,9 @@ flutter {
 // ── dependencies android {} ТАШҚАРИСИДА ──
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    // Google Play Install Referrer (rasmiy kutubxona) — deferred deep link: MainActivity.kt
+    // `uz.ava.gurlan/install_referrer` kanali. Plagin emas: play_install_referrer 0.6.0 Dart 3.12
+    // talab qiladi (bizda 3.11.5), 0.5.0 esa binder chaqiruvini asosiy oqimda qiladi (ANR xavfi).
+    implementation("com.android.installreferrer:installreferrer:2.2")
 }
 

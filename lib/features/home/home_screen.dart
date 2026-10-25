@@ -102,6 +102,7 @@ import 'widgets/wallet_card.dart';
 import '../realty/screens/realty_detail_screen.dart';
 import '../realty/screens/realty_map_screen.dart';
 import '../realty/screens/realty_screen.dart';
+import '../my_shop/pending_shop_link.dart';
 import '../tv_market/repositories/tv_shop_repository.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import '../tv_market/screens/tv_shop_item_detail_screen.dart';
@@ -238,6 +239,8 @@ class _HomeViewState extends State<_HomeView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ServiceConfigHolder.bootstrap());
+      // Веб: дўкон ҳаволаси (`/?shop=<id>`) билан очилган бўлса — шу дўкон (5-босқич).
+      unawaited(PendingShopLink.openIfAny(context));
       // Фаол буюртма топилганда АВТОМАТИК кузатиш экранига ўтиш олиб
       // ташланди (эга қарори) — энди `ActiveOrderCard` кўринади ва ўтиш
       // фойдаланувчи босганда бўлади. Push орқали келган «сафар қабул

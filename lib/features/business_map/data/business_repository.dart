@@ -153,6 +153,26 @@ class BusinessRepository {
     });
   }
 
+  /// Эганинг онлайн дўкони ёки йўналиши [businessId] доимий ҳаволаси (`getMyShopLink`): бир марта берилади,
+  /// ўзгармайди; телефон йўқ. Қайтаради: `https://…/s/<publicId>`.
+  Future<String> getMyShopLink({String businessId = ''}) async {
+    final res = await _fns.httpsCallable('getMyShopLink').call<Object?>({
+      if (businessId.isNotEmpty) 'businessId': businessId,
+    });
+    return '${(res.data as Map)['url']}';
+  }
+
+  /// Веб-ҳаволадаги ID → қайси онлайн дўкон ва йўналиш (`resolveShopLink`, логинсиз). Блокланган/номаълум —
+  /// `null` (бошқа дўкон очилмайди).
+  Future<({String ownerPhone, String businessId})?> resolveShopLink(String publicId) async {
+    final res = await _fns.httpsCallable('resolveShopLink').call<Object?>({'publicId': publicId});
+    final d = res.data as Map;
+    if (d['available'] != true) return null;
+    final owner = '${d['ownerPhone'] ?? ''}';
+    if (owner.isEmpty) return null;
+    return (ownerPhone: owner, businessId: '${d['businessId'] ?? ''}');
+  }
+
   /// Харидор шикояти (`submitShopComplaint`): [targetType] — `shop_item` (маҳсулот ID) ёки `shop` (сотувчи телефони).
   /// Такрор юборилса сервер янги ёзув очмайди.
   Future<void> submitComplaint({required String targetType, required String targetId, required String reason}) async {

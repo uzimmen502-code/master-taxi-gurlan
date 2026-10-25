@@ -74,9 +74,12 @@ import 'core/widgets/app_version_gate_view.dart';
 import 'core/utils/firestore_crash_guard.dart';
 import 'services/deferred_settlement_queue.dart';
 import 'utils/locale_utils.dart';
+import 'features/my_shop/pending_shop_link.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Дўкон ҳаволаси (`/?shop=<id>`) — бош саҳифа очилгач шу дўкон очилади (5-босқич, фақат веб).
+  PendingShopLink.captureFromUrl();
   // Firestore veb SDK "Unexpected state" bug'idan avto-tiklash (faqat web).
   installFirestoreCrashGuard();
 

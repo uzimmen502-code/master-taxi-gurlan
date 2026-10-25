@@ -142,6 +142,9 @@ const LINKABLE = ['facebook', 'youtube', 'telegram'];
 /// гапни тармоққа қараб мана шу ер қўшади.
 const IG_LINK_HINT = '🔗 Юклаб олиш ҳаволаси — профилда';
 
+/// Пуллик реклама постининг биринчи қатори.
+const AD_CAPTION_MARK = 'Реклама';
+
 /**
  * Тармоққа мосланган подпись.
  *
@@ -156,6 +159,9 @@ function buildCaption(clip, prefix, net, playUrl) {
   const max = CAPTION_MAX[net] || 2100;
 
   const head = [];
+  // Пуллик реклама AVA саҳифаларида ҳам очиқ белгиланади (8-босқич,
+  // 2026-10-25): биринчи қатор — «Реклама», лимитда ҳам кесилмайди.
+  if (clip.category === 'ad') head.push(AD_CAPTION_MARK);
   if (str(prefix, 200)) head.push(str(prefix, 200));
   if (str(clip.title, 180)) head.push(str(clip.title, 180));
 

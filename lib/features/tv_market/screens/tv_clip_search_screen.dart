@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
+import '../widgets/tv_ad_label.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../../../core/theme/ava_tokens.dart';
 
@@ -327,7 +328,16 @@ class _TvClipSearchScreenState extends State<TvClipSearchScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: TvClipPoster(url: clip.posterUrl)),
+                  Expanded(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        TvClipPoster(url: clip.posterUrl),
+                        if (clip.isAd)
+                          Positioned(left: 6, top: 6, child: TvAdLabel(clip: clip, compact: true)),
+                      ],
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
                     child: Column(

@@ -11,6 +11,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
+import '../../tv_market/widgets/tv_ad_label.dart';
 import '../../tv_market/widgets/tv_clip_poster.dart';
 import 'ava_section.dart';
 
@@ -180,6 +181,8 @@ class _ClipCover extends StatelessWidget {
                   children: [
                     ColoredBox(color: c.surface2),
                     TvClipPoster(url: clip.posterUrl),
+                    if (clip.isAd)
+                      Positioned(left: 6, top: 6, child: TvAdLabel(clip: clip, compact: true)),
                     // Видео эканини билдирувчи белги — автоматик
                     // ўйнатиш ўрнига.
                     Positioned(

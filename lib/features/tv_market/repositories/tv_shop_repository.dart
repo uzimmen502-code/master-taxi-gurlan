@@ -3,6 +3,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 
+/// [TvShopRepository.fetchOwnerPage] натижаси.
+class ShopItemsPage {
+  const ShopItemsPage({required this.items, required this.cursor, required this.hasMore});
+
+  final List<TvShopItem> items;
+  final DocumentSnapshot<Map<String, dynamic>>? cursor;
+  final bool hasMore;
+}
+
 class TvShopRepository {
   TvShopRepository({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -97,6 +106,25 @@ class TvShopRepository {
         .limit(limit)
         .get();
     return snap.docs.map(TvShopItem.fromFirestore).toList();
+  }
+
+  /// Дўкон саҳифаси: эганинг маҳсулотлари саҳифалаб (энг янгиси биринчи; [fetchByOwner] билан бир хил индекс).
+  /// [after] — олдинги саҳифанинг [ShopItemsPage.cursor]и. Юзлаб маҳсулотли дўкон бир сўровда юкланмайди (36-банд).
+  Future<ShopItemsPage> fetchOwnerPage(
+    String ownerPhone, {
+    int limit = 100,
+    DocumentSnapshot<Map<String, dynamic>>? after,
+  }) async {
+    final id = canonicalPhoneId(ownerPhone);
+    if (id.isEmpty) return const ShopItemsPage(items: [], cursor: null, hasMore: false);
+    var q = _items.where('ownerPhone', isEqualTo: id).orderBy('createdAt', descending: true).limit(limit);
+    if (after != null) q = q.startAfterDocument(after);
+    final snap = await q.get();
+    return ShopItemsPage(
+      items: snap.docs.map(TvShopItem.fromFirestore).toList(growable: false),
+      cursor: snap.docs.isEmpty ? after : snap.docs.last,
+      hasMore: snap.docs.length >= limit,
+    );
   }
 
   /// Эганинг ЎЗ дўкони маҳсулотлари: `businessId`и бўш (Бизнес харитаси объектига боғланмаган),

@@ -14,6 +14,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/geo_area.dart';
 import '../../../repositories/service_config_repository.dart';
+import '../../business_map/data/business_repository.dart';
 import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/screens/restaurant_screen.dart';
@@ -1101,7 +1102,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (owner) {
       await _openOwnShop();
     } else {
-      final hasShop = await _shopRepo.hasShop(clip.ownerPhone);
+      // Дўкон саҳифаси (2026-10-25): `tv_shops` ҳужжати бўлмаса ҳам — видео маҳсулотга боғланган ёки сотувчининг
+      // йўналиш дўкони (`businesses`) бор бўлса — умумий канал эмас, шу онлайн дўкон очилади.
+      var hasShop = await _shopRepo.hasShop(clip.ownerPhone);
+      if (!hasShop) hasShop = clip.shopItemId.isNotEmpty || await _ownerHasBusinesses(clip.ownerPhone);
       if (!mounted) return;
       final displayName = _overlayName(clip);
       final district = clip.districtLabel.trim();
@@ -1136,6 +1140,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       } catch (_) {}
     }
     if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+  }
+
+  /// Сотувчининг йўналиш дўкони борми (меҳмон ўқий олмайди — `false`, канал очилади).
+  Future<bool> _ownerHasBusinesses(String ownerPhone) async {
+    try {
+      return (await BusinessRepository().fetchByOwner(canonicalPhoneId(ownerPhone))).any((b) => !b.isBlocked);
+    } catch (e) {
+      debugPrint('[TvFeed] businesses: $e');
+      return false;
+    }
   }
 
   /// Эганинг ўз видеосидаги «Дўкон» тугмаси — «＋» менюсидаги билан БИР ХИЛ

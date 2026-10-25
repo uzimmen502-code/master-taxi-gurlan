@@ -158,6 +158,7 @@ const { attachRealtyAlerts } = require('./realty_alerts');
 attachRealtyAlerts(exports, {
   functions, db, admin, callerPhone, canonicalUid,
 });
+require('./content_complaints').attachContentComplaints(exports, { functions, db, admin, callerPhone, canonicalUid }); // ресторан/таом/кўчмас мулк шикояти (2026-10-25)
 
 const DEVICE_BINDING_MAX_FAILED = 5;
 /** Soft cooldown (Faza 1) — 24 soat hard block o‘rniga. */

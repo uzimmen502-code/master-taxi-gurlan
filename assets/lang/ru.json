@@ -3984,7 +3984,7 @@
   "bizmap_err_field": "Текст слишком длинный. Сократите.",
   "bizmap_err_limit": "Достигнут предел количества объектов.",
   "bizmap_err_generic": "Не удалось выполнить. Повторите попытку.",
-  "business_cat_retail": "Розничная торговля",
+  "business_cat_retail": "Магазин",
   "business_cat_wholesale": "Оптовая торговля",
   "business_cat_food": "Кафе и рестораны",
   "business_cat_auto": "Автоуслуги",

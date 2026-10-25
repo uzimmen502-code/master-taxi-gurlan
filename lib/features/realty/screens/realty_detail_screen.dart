@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../../complaints/widgets/content_complaint_button.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 import '../realty_tabs.dart';
@@ -277,6 +278,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
             )
           else
             _LockedPanel(unlocksLeft: _repo.watchUnlocksLeft()),
+          ContentComplaintButton.realty(listing: r, ownerKeyLoader: _repo.myOwnerKey),
         ],
       ),
       bottomNavigationBar: SafeArea(

@@ -17,6 +17,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../home/widgets/ava_chip.dart';
+import '../../complaints/widgets/content_complaint_button.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/bookings.dart';
@@ -500,6 +501,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 ),
               ),
             ],
+            ContentComplaintButton.restaurant(restaurant: _r, closeSheetFirst: true),
           ],
         ),
       ),

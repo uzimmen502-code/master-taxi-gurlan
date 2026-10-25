@@ -6,6 +6,7 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_realty_service.dart';
+import '../widgets/shop_complaints_panel.dart';
 import 'realty_settings_admin_panel.dart';
 
 /// 🏠 Кўчмас мулк модерацияси.
@@ -66,6 +67,20 @@ class _ModerationTabState extends State<_ModerationTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Харидор шикоятлари (`realty_content`): «Блоклаш» — `adminSetRealtyStatus` + шикоят ёпилади.
+        ShopComplaintsPanel(
+          source: const FirestoreShopComplaintsSource(type: 'realty_content'),
+          maxListHeight: 240,
+          action: (
+            label: 'Блоклаш',
+            run: (ctx, c) => AdminRealtyService().setStatus(
+                  adminPhone: ctx.read<AdminAuthService>().phoneDigits ?? '',
+                  listingId: c.targetId,
+                  status: 'blocked',
+                  adminNote: 'Шикоят: ${c.reasonLabel}',
+                ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: Wrap(

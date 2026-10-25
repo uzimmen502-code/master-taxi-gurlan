@@ -116,19 +116,26 @@ async function main() {
     const tool = require('../tools/backfill_shop_search_index');
     await db.collection('tv_shop_items').doc('old1').set({ ownerPhone: OWNER, title: 'Eski non', status: 'active' });
     await db.collection('tv_shop_items').doc('ok1').set({ ownerPhone: OWNER, title: 'Tayyor', status: 'active', searchTokens: shopItemTokens({ title: 'Tayyor' }) });
+    // OWNER do'koni T3 da trigger orqali indekslangan; OLD — indeks yozuvi yo'q eski do'kon.
+    const OLD = '998900000777';
+    await db.collection('tv_shops').doc(OLD).set({ name: 'Eski do\'kon', ownerPhone: OLD });
     const steps = await tool.plan(db);
     const ids = steps.map((s) => `${s.col}/${s.id}`);
     assert.ok(ids.includes('tv_shop_items/old1'));
     assert.ok(!ids.includes('tv_shop_items/ok1'), 'tokeni to\'g\'ri — tegilmaydi');
-    assert.ok(ids.includes(`tv_shops/${OWNER}`));
+    assert.ok(ids.includes(`tv_shops/${OLD}`), 'indekssiz do\'kon rejada bor');
+    assert.ok(!ids.includes(`tv_shops/${OWNER}`), 'REGRESSION: indekslangan do\'kon rejaga tushmaydi');
     await tool.applyPlan(db, admin, steps);
     assert.deepStrictEqual((await db.collection('tv_shop_items').doc('old1').get()).data().searchTokens, shopItemTokens({ title: 'Eski non' }));
-    assert.ok((await db.collection('tv_shops').doc(OWNER).get()).data().searchIndexedAt);
+    assert.ok((await db.collection('tv_shops').doc(OLD).get()).data().searchIndexedAt);
     assert.strictEqual((await tool.plan(db)).filter((s) => s.col === 'tv_shop_items').length, 0);
+    // Trigger OLD ni indekslagach (bu yerda qo'lda) — reja bo'sh: dry-run «bajarildi»ni ko'rsatadi.
+    await fire('onSearchIndexTvShopWrite', 'tv_shops', OLD, 'phone');
+    assert.strictEqual((await tool.plan(db)).filter((s) => s.col === 'tv_shops').length, 0);
     await tool.rollback(db, admin, JSON.parse(JSON.stringify(steps)));
     assert.strictEqual((await db.collection('tv_shop_items').doc('old1').get()).data().searchTokens, undefined);
-    assert.strictEqual((await db.collection('tv_shops').doc(OWNER).get()).data().searchIndexedAt, undefined);
-    assert.strictEqual((await db.collection('tv_shops').doc(OWNER).get()).data().name, 'Sidabilla Market', 'boshqa maydon tegilmagan');
+    assert.strictEqual((await db.collection('tv_shops').doc(OLD).get()).data().searchIndexedAt, undefined);
+    assert.strictEqual((await db.collection('tv_shops').doc(OLD).get()).data().name, 'Eski do\'kon', 'boshqa maydon tegilmagan');
   });
 
   const failed = results.filter((r) => !r).length;

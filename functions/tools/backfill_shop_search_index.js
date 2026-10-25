@@ -39,9 +39,13 @@ async function plan(db) {
       out.push({ col: 'tv_shop_items', id: d.id, field: 'searchTokens', before: x.searchTokens === undefined ? null : x.searchTokens, value: tokens });
     }
   });
+  // Дўкон/йўналиш — фақат индекс ёзуви (`search_index/shop_<id>`) ҲАЛИ ЙЎҚ бўлса (аввал ҳар доим рўйхатга
+  // тушарди: dry-run «бажарилди»ни кўрсата олмасди, қайта ишга туширилса ортиқча ёзув).
   for (const col of ['tv_shops', 'businesses']) {
     const snap = await db.collection(col).get();
-    snap.docs.forEach((d) => {
+    const entries = snap.empty ? [] : await db.getAll(...snap.docs.map((d) => db.collection('search_index').doc(`shop_${d.id}`)));
+    snap.docs.forEach((d, i) => {
+      if (entries[i] && entries[i].exists) return;
       const x = d.data() || {};
       out.push({ col, id: d.id, field: 'searchIndexedAt', before: x.searchIndexedAt === undefined ? null : x.searchIndexedAt, value: '__server_time__' });
     });

@@ -8153,33 +8153,8 @@ function marketTsToIso(v) {
 const MARKET_SEARCH_MAX_TOKENS = 48;
 const MARKET_SEARCH_MIN_LEN = 2;
 
-function marketToLatin(s) {
-  const map = {
-    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z',
-    и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
-    с: 's', т: 't', у: 'u', ф: 'f', х: 'x', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sh',
-    ъ: '', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya', ҳ: 'h', қ: 'q', ғ: "g'",
-    ў: "o'", ң: 'ng',
-  };
-  return String(s || '').toLowerCase().split('').map((c) => map[c] || c).join('');
-}
-
-function marketToCyrillic(s) {
-  let result = String(s || '').toLowerCase();
-  const digraphs = {
-    sh: 'ш', ch: 'ч', yo: 'ё', yu: 'ю', ya: 'я', ts: 'ц', ng: 'ң',
-    "o'": 'ў', "g'": 'ғ',
-  };
-  for (const [k, v] of Object.entries(digraphs)) {
-    result = result.split(k).join(v);
-  }
-  const singles = {
-    q: 'қ', h: 'ҳ', a: 'а', b: 'б', v: 'в', g: 'г', d: 'д', e: 'е', j: 'ж',
-    z: 'з', i: 'и', y: 'й', k: 'к', l: 'л', m: 'м', n: 'н', o: 'о', p: 'п',
-    r: 'р', s: 'с', t: 'т', u: 'у', f: 'ф', x: 'х',
-  };
-  return result.split('').map((c) => singles[c] || c).join('');
-}
+// Транслитерация — ягона модулда (2026-10-25: кўчирилди, алгоритм ўзгармади; онлайн дўкон индекси ҳам ишлатади).
+const { marketToLatin, marketToCyrillic, buildSearchIndexTokens, SEARCH_INDEX_MAX_TOKENS } = require('./search_tokens');
 
 /** Title+description → searchTokens (кирилл + лотин). */
 function buildMarketSearchTokens(title, description) {
@@ -17051,29 +17026,11 @@ exports.adminSetPlatformDeliveryFeePercent = functions.https.onCall(async (data,
 // GLOBAL SEARCH INDEX (`search_index`)
 // ══════════════════════════════════════
 
-const SEARCH_INDEX_MAX_TOKENS = 64;
-
 function searchIndexDocId(type, sourceId) {
   const sid = String(sourceId || '').trim().replace(/[/\\]/g, '_');
   return `${type}_${sid}`.slice(0, 700);
 }
 
-function buildSearchIndexTokens(...parts) {
-  const text = parts.filter(Boolean).join(' ').toLowerCase();
-  const words = text.split(/[^0-9a-zа-яёўқғҳʻʼ']+/i).filter(
-    (w) => w && w.length >= 2,
-  );
-  const out = new Set();
-  for (const w of words) {
-    out.add(w);
-    const latin = marketToLatin(w);
-    const cyrl = marketToCyrillic(w);
-    if (latin.length >= 2) out.add(latin);
-    if (cyrl.length >= 2) out.add(cyrl);
-    if (out.size >= SEARCH_INDEX_MAX_TOKENS) break;
-  }
-  return Array.from(out).slice(0, SEARCH_INDEX_MAX_TOKENS);
-}
 
 async function upsertSearchIndexEntry(entry) {
   const type = String(entry.type || '').trim();
@@ -17115,6 +17072,13 @@ async function upsertSearchIndexEntry(entry) {
     if (entry.geo.to) geo.to = String(entry.geo.to).trim();
     if (entry.geo.districtId) geo.districtId = String(entry.geo.districtId).trim();
     if (Object.keys(geo).length) payload.geo = geo;
+  }
+  // Онлайн дўкон (2026-10-25): натижа босилганда АЙНАН қайси дўкон/йўналиш очилиши (`shop_search_index.js`).
+  if (entry.target && typeof entry.target === 'object') {
+    payload.target = {
+      ownerPhone: String(entry.target.ownerPhone || '').replace(/\D/g, '').slice(0, 15),
+      businessId: String(entry.target.businessId || '').trim().slice(0, 128),
+    };
   }
   await db.collection('search_index').doc(id).set(payload, { merge: true });
 }
@@ -17288,6 +17252,12 @@ exports.onSearchIndexBreadProductWrite = onDocumentWritten(
     );
   },
 );
+
+// Онлайн дўкон: маҳсулот (`tv_shop_items`), онлайн дўкон (`tv_shops`), йўналиш (`businesses`) → search_index
+// (2026-10-25, 4-босқич; functions/shop_search_index.js).
+require('./shop_search_index').attachShopSearchIndex(exports, {
+  db, onDocumentWritten, upsertSearchIndexEntry, deleteSearchIndexEntry,
+});
 
 // onSearchIndexYukListingWrite — yuk_listings/{id} → search_index (yuk_intercity.js)
 yukIntercity.attachSearchIndex(exports, {

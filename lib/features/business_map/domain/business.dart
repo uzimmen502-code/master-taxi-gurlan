@@ -26,10 +26,17 @@ class Business {
     this.updatedAt,
     this.status = 'active',
     this.online = false,
+    this.branchOf = '',
   });
 
   /// Фақат онлайн йўналиш (жисмоний жойи йўқ): координатасиз, харитада чизилмайди ([lat]/[lng] = 0).
   final bool online;
+
+  /// Филиал: шу эганинг қайси йўналишининг яна бир жисмоний нуқтаси (`businesses/{id}`); бўш — алоҳида йўналиш.
+  /// Филиалнинг ўз каталоги йўқ — харидор отанинг дўконига тушади (сервер ота/эгани текширади).
+  final String branchOf;
+
+  bool get isBranch => branchOf.isNotEmpty;
 
   /// `active` | `blocked` — фақат сервер (админ) ўрнатади; клиент [toCallable]да юбормайди.
   final String status;
@@ -102,6 +109,7 @@ class Business {
       updatedAt: _t(d['updatedAt']),
       status: d['status'] == 'blocked' ? 'blocked' : 'active',
       online: online,
+      branchOf: _s(d['branchOf']),
     );
   }
 
@@ -114,6 +122,7 @@ class Business {
         'phone': phone,
         'address': address,
         if (online) 'online': true else ...{'lat': lat, 'lng': lng},
+        if (branchOf.isNotEmpty) 'branchOf': branchOf,
         'regionId': regionId,
         'districtId': districtId,
         'openingHours': openingHours,

@@ -72,6 +72,9 @@ class _MyShopScreenState extends State<MyShopScreen> {
         MaterialPageRoute(builder: (_) => BusinessProductsScreen(business: b)),
       );
 
+  /// Ҳозирги дўконлар рўйхати — формадаги филиал танлови учун.
+  List<Business> _shops = const [];
+
   Future<void> _openForm([Business? b]) => Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => BusinessFormScreen(
@@ -79,6 +82,7 @@ class _MyShopScreenState extends State<MyShopScreen> {
             initialCategory: BusinessCategory.retail,
             // Дўконда «чакана/улгуржи» танлови йўқ — одамни чалкаштиради (эга, 2026-10-24).
             lockCategory: true,
+            branchParents: _shops,
           ),
         ),
       );
@@ -95,6 +99,11 @@ class _MyShopScreenState extends State<MyShopScreen> {
           final shops = (snap.data ?? const <Business>[])
               .where(MyShopPresence.isShopCategory)
               .toList(growable: false);
+          _shops = shops;
+          // Филиал отасининг остида (каталоги отаники — босилса отанинг маҳсулотлари очилади).
+          final byId = {for (final s in shops) s.id: s};
+          final mains = [for (final s in shops) if (!s.isBranch || !byId.containsKey(s.branchOf)) s];
+          List<Business> branchesOf(Business p) => [for (final s in shops) if (s.isBranch && s.branchOf == p.id) s];
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
             children: [
@@ -117,13 +126,13 @@ class _MyShopScreenState extends State<MyShopScreen> {
                 ),
               // Битта рўйхат: «асосий/бошқа», «чакана/улгуржи» ёрлиқларисиз — фақат
               // дўкон номи ва манзили.
-              for (final b in shops)
+              for (final b in mains) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: _ShopCard(
                     icon: Icons.storefront_outlined,
                     title: b.name,
-                    subtitle: b.address,
+                    subtitle: b.online ? context.tr('bizmap_online_badge') : b.address,
                     onTap: () => _openProducts(b),
                     trailing: IconButton(
                       tooltip: context.tr('my_shop_rename'),
@@ -132,6 +141,23 @@ class _MyShopScreenState extends State<MyShopScreen> {
                     ),
                   ),
                 ),
+                for (final br in branchesOf(b))
+                  Padding(
+                    key: ValueKey('my_shop_branch_${br.id}'),
+                    padding: const EdgeInsets.only(top: 6, left: 24),
+                    child: _ShopCard(
+                      icon: Icons.store_mall_directory_outlined,
+                      title: br.name,
+                      subtitle: '${context.tr('my_shop_branch_label')} · ${br.address}',
+                      onTap: () => _openProducts(b),
+                      trailing: IconButton(
+                        tooltip: context.tr('my_shop_rename'),
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () => _openForm(br),
+                      ),
+                    ),
+                  ),
+              ],
             ],
           );
         },

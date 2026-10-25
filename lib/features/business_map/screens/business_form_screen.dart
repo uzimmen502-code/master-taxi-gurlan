@@ -15,10 +15,20 @@ import '../domain/website_link.dart';
 /// Эга ўз объектини қўшади/таҳрирлайди (B-1). Жойни мавжуд [MapPickerScreen] билан белгилайди (B-5).
 /// Ҳамма текширув серверда (`upsertMyBusiness`); бу ерда фақат тез инкор ва тушунарли хато матни.
 class BusinessFormScreen extends StatefulWidget {
-  const BusinessFormScreen({super.key, this.existing, this.initialCategory, this.lockCategory = false, BusinessRepository? repository})
-      : _repo = repository;
+  const BusinessFormScreen({
+    super.key,
+    this.existing,
+    this.initialCategory,
+    this.lockCategory = false,
+    this.branchParents = const [],
+    BusinessRepository? repository,
+  }) : _repo = repository;
 
   final Business? existing;
+
+  /// Филиал танлови («Менинг дўконим»): эганинг филиал бўла олмайдиган (ўзи филиал эмас) йўналишлари.
+  /// Бўш — танлов кўрсатилмайди. Сервер ота ва эгани текширади (`BRANCH_INVALID` / `BRANCH_NESTED`).
+  final List<Business> branchParents;
 
   /// Янги объектда олдиндан танланган тур («Менинг дўконим» → «Янги дўкон» — чакана).
   /// Таҳрирда [existing]нинг тури устун.
@@ -48,6 +58,9 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
 
   /// Фақат онлайн (2026-10-25): жойи сўралмайди, харитага тушмайди (уй манзили мажбуран нуқта бўлмасин).
   bool _online = false;
+
+  /// Филиал бўлса — ота йўналиш ID'си; бўш — алоҳида дўкон.
+  String _branchOf = '';
   double? _lat;
   double? _lng;
   String _regionId = '';
@@ -59,6 +72,12 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
   final String _requestId = 'b${DateTime.now().microsecondsSinceEpoch}';
 
   bool get _isEdit => widget.existing != null;
+
+  /// Ота бўла оладиганлар: ўзи эмас, ўзи филиал эмас, онлайн эмас.
+  List<Business> get _parentChoices => [
+        for (final p in widget.branchParents)
+          if (p.id.isNotEmpty && p.id != widget.existing?.id && !p.isBranch && !p.isBlocked) p,
+      ];
 
   /// Янги объектда телефон эганинг рақамидан бошланади (ўзгартириш мумкин). Firebase тайёр бўлмаса — бўш.
   static String _ownPhone() {
@@ -82,6 +101,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
     _website = TextEditingController(text: b?.website ?? '');
     _category = b?.category ?? widget.initialCategory;
     _online = b?.online ?? false;
+    _branchOf = b?.branchOf ?? '';
     _lat = (b == null || b.online) ? null : b.lat;
     _lng = (b == null || b.online) ? null : b.lng;
     _regionId = b?.regionId ?? '';
@@ -132,6 +152,9 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
         return context.tr('bizmap_err_field');
       case 'BUSINESS_LIMIT_REACHED':
         return context.tr('bizmap_err_limit');
+      case 'BRANCH_INVALID':
+      case 'BRANCH_NESTED':
+        return context.tr('my_shop_branch_err');
       default:
         return context.tr('bizmap_err_generic');
     }
@@ -166,6 +189,7 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
         lat: _online ? 0 : lat!,
         lng: _online ? 0 : lng!,
         online: _online,
+        branchOf: _online ? '' : _branchOf,
         regionId: _regionId,
         districtId: _districtId,
         openingHours: _hours.text.trim(),
@@ -260,6 +284,21 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
             title: Text(context.tr('bizmap_f_online')),
             subtitle: Text(context.tr('bizmap_f_online_hint')),
           ),
+          if (!_online && _parentChoices.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('biz_branch_of'),
+              initialValue: _parentChoices.any((p) => p.id == _branchOf) ? _branchOf : '',
+              isExpanded: true,
+              decoration: _dec('my_shop_branch_of'),
+              items: [
+                DropdownMenuItem(value: '', child: Text(context.tr('my_shop_branch_none'))),
+                for (final p in _parentChoices)
+                  DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: _busy ? null : (v) => setState(() => _branchOf = v ?? ''),
+            ),
+          ],
           if (!_online) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(

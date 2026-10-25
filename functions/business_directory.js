@@ -16,7 +16,15 @@
  *
  * Диагностика кодлари: BUSINESS_NAME_INVALID, BUSINESS_CATEGORY_INVALID, BUSINESS_LOCATION_INVALID,
  * BUSINESS_PHONE_INVALID, BUSINESS_FIELD_INVALID, BUSINESS_LIMIT_REACHED, BUSINESS_NOT_FOUND,
- * BUSINESS_NOT_OWNER, BUSINESS_OWNER_INVALID, REQUEST_ID_INVALID, GEO_DISTRICT_INVALID, REASON_REQUIRED.
+ * BUSINESS_NOT_OWNER, BUSINESS_OWNER_INVALID, REQUEST_ID_INVALID, GEO_DISTRICT_INVALID, REASON_REQUIRED,
+ * BUSINESS_STATUS_INVALID, BUSINESS_BLOCKED, SHOP_BLOCKED, SHOP_OWNER_INVALID, SHOP_NOT_FOUND, PARENT_BLOCKED.
+ *
+ * БЛОКЛАШ (эга қарори 2026-10-25: «админ назорати барча кириш йўлларида»):
+ *   • онлайн дўкон `tv_shops/{phone}` ва йўналиш дўкони `businesses/{id}` — `status: active | blocked`;
+ *   • блокланганда фарзанд ёзувлар ҳам блокланади ва `blockedByParent` белгиси олади (`shop` ёки
+ *     `business:<id>`) — блок олинганда ФАҚАТ шу белгили ёзувлар қайтади; админ алоҳида блоклагани қолади;
+ *   • блокланган объект харитадан `geohash`/`geohash4`ни олиб ташлаш орқали йўқолади — харита сўрови
+ *     (`geohash4 in`) уни эски APK'ларда ҳам топмайди; блок олинганда координатадан қайта ҳисобланади.
  */
 'use strict';
 
@@ -26,6 +34,12 @@ const COLLECTION = 'businesses';
 const GEO_DISTRICTS = 'geo_districts';
 const ADMIN_AUDIT = 'admin_audit';
 const ITEMS = 'tv_shop_items';
+const SHOPS = 'tv_shops';
+/** Онлайн дўкон ва йўналиш дўкони ҳолатлари (админ ўрнатади). */
+const BLOCK_STATUSES = Object.freeze(['active', 'blocked']);
+/** `blockedByParent` белгиси: дўкон блоки ёки муайян йўналиш блоки. */
+const PARENT_SHOP = 'shop';
+const parentOfBusiness = (businessId) => `business:${businessId}`;
 const PRODUCT_KINDS = Object.freeze(['product', 'service']);
 /** Админ маҳсулотни фақат фаол ёки блокланган қила олади (кутилаётган/ўчирилган ҳолатларни ўрнатмайди). */
 const PRODUCT_ADMIN_STATUSES = Object.freeze(['active', 'blocked']);
@@ -130,6 +144,15 @@ function changedKeys(cur, next) {
   return EDITABLE.filter((k) => cur[k] !== next[k]);
 }
 
+const isBlocked = (snap) => !!snap && snap.exists && (snap.data() || {}).status === 'blocked';
+
+/** Блокланган объект таҳрирланса ҳам харитага қайтмайди: `geohash`лар ёзилмайди (блок олинганда тикланади). */
+function visibleFields(cur, fields) {
+  if (!cur || cur.status !== 'blocked') return fields;
+  const { geohash, geohash4, ...rest } = fields; // eslint-disable-line no-unused-vars
+  return rest;
+}
+
 const CASCADE_BATCH = 400;
 const digitsOf = (v) => String(v == null ? '' : v).replace(/\D/g, '');
 
@@ -170,6 +193,114 @@ async function cascadeBusinessProducts(db, admin, businessId, ownerId) {
     if (snap.size < CASCADE_BATCH) break;
   }
   return { scanned, updated };
+}
+
+/**
+ * Сўров натижасини ҳужжат ID тартибида саҳифалаб юради; `patchOf(data)` патч қайтарса — ёзади, `null` бўлса ўтказади.
+ * Идемпотент: патч фақат ҳолат мос келганда қайтарилади, қайта чақирув ярим қолган ишни тугатади (21-банд).
+ */
+async function patchPaged(db, admin, query, patchOf) {
+  const { FieldPath } = admin.firestore;
+  let last = null;
+  let scanned = 0;
+  let updated = 0;
+  for (;;) {
+    let q = query.orderBy(FieldPath.documentId()).limit(CASCADE_BATCH);
+    if (last) q = q.startAfter(last);
+    const snap = await q.get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    let n = 0;
+    snap.docs.forEach((d) => {
+      scanned += 1;
+      const patch = patchOf(d.data() || {}, d.id);
+      if (!patch) return;
+      batch.update(d.ref, patch);
+      n += 1;
+    });
+    if (n > 0) {
+      await batch.commit();
+      updated += n;
+    }
+    last = snap.docs[snap.docs.length - 1];
+    if (snap.size < CASCADE_BATCH) break;
+  }
+  return { scanned, updated };
+}
+
+/** Эга телефонининг Firestore'да учрайдиган ёзувлари (`998…`, 9 рақам, `+998…`) — `in` сўрови учун. */
+function phoneVariants(phone12) {
+  return [phone12, phone12.slice(3), `+${phone12}`];
+}
+
+/** Объект харитадан йўқолиши учун: `geohash`лар ўчирилади (харита сўрови `geohash4 in`). */
+function businessBlockPatch(FieldValue, extra) {
+  return {
+    status: 'blocked', geohash: FieldValue.delete(), geohash4: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp(), ...extra,
+  };
+}
+
+/** Блок олинганда: `geohash`лар координатадан қайта ҳисобланади, блок майдонлари тозаланади. */
+function businessUnblockPatch(FieldValue, cur, extra) {
+  const geo = typeof cur.lat === 'number' && typeof cur.lng === 'number' ? geohashPair(cur.lat, cur.lng) : {};
+  return {
+    status: 'active',
+    ...geo,
+    blockedByParent: FieldValue.delete(),
+    blockedAt: FieldValue.delete(),
+    blockedBy: FieldValue.delete(),
+    blockReason: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+    ...extra,
+  };
+}
+
+/**
+ * Йўналиш дўкони блокланса/очилса — унинг маҳсулотлари. Блок: эганинг ФАОЛ маҳсулотлари → `blocked` +
+ * `blockedByParent: business:<id>`. Очиш: фақат шу белгили `blocked` маҳсулотлар → `active` (админ алоҳида
+ * блоклагани ёки дўкон блоки белгисидагилари қолади). Бегона эга ёзиб қўйган «ёт» ҳужжатга тегилмайди.
+ */
+async function cascadeBusinessBlock(db, admin, businessId, ownerId, block) {
+  const owner = digitsOf(ownerId);
+  if (owner.length < 12 || !businessId) return { scanned: 0, updated: 0 };
+  const { FieldValue } = admin.firestore;
+  const marker = parentOfBusiness(businessId);
+  return patchPaged(db, admin, db.collection(ITEMS).where('businessId', '==', businessId), (x) => {
+    if (digitsOf(x.ownerPhone).slice(-9) !== owner.slice(-9)) return null;
+    if (block) {
+      return x.status === 'active' ? { status: 'blocked', blockedByParent: marker, updatedAt: FieldValue.serverTimestamp() } : null;
+    }
+    return x.status === 'blocked' && x.blockedByParent === marker
+      ? { status: 'active', blockedByParent: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }
+      : null;
+  });
+}
+
+/**
+ * Онлайн дўкон блокланса/очилса — эганинг БАРЧА йўналишлари ва маҳсулотлари (`blockedByParent: shop`).
+ * Очишда: йўналиши ҳалиям алоҳида блокланган маҳсулот очилмайди — белгиси `business:<id>` га ўтади ва
+ * шу йўналиш очилганда қайтади.
+ */
+async function cascadeShopBlock(db, admin, phone12, block) {
+  const { FieldValue } = admin.firestore;
+  const ts = FieldValue.serverTimestamp();
+  const businesses = await patchPaged(db, admin, db.collection(COLLECTION).where('ownerId', '==', phone12), (x) => {
+    if (block) return x.status === 'blocked' ? null : businessBlockPatch(FieldValue, { blockedByParent: PARENT_SHOP });
+    return x.status === 'blocked' && x.blockedByParent === PARENT_SHOP ? businessUnblockPatch(FieldValue, x) : null;
+  });
+  let stillBlocked = new Set();
+  if (!block) {
+    const snap = await db.collection(COLLECTION).where('ownerId', '==', phone12).get();
+    stillBlocked = new Set(snap.docs.filter((d) => (d.data() || {}).status === 'blocked').map((d) => d.id));
+  }
+  const items = await patchPaged(db, admin, db.collection(ITEMS).where('ownerPhone', 'in', phoneVariants(phone12)), (x) => {
+    if (block) return x.status === 'active' ? { status: 'blocked', blockedByParent: PARENT_SHOP, updatedAt: ts } : null;
+    if (x.status !== 'blocked' || x.blockedByParent !== PARENT_SHOP) return null;
+    const biz = str(x.businessId, 128);
+    if (biz && stillBlocked.has(biz)) return { blockedByParent: parentOfBusiness(biz), updatedAt: ts };
+    return { status: 'active', blockedByParent: FieldValue.delete(), updatedAt: ts };
+  });
+  return { businesses: businesses.updated, products: items.updated };
 }
 
 function attachBusinessDirectory(exportsObj, deps) {
@@ -233,7 +364,7 @@ function attachBusinessDirectory(exportsObj, deps) {
         const cur = snap.data();
         if (cur.ownerId !== uid) throw fail('permission-denied', 'BUSINESS_NOT_OWNER', 'Объект топилмади.');
         if (changedKeys(cur, fields).length === 0) return { changed: false };
-        t.update(ref, { ...fields, updatedAt: ts() });
+        t.update(ref, { ...visibleFields(cur, fields), updatedAt: ts() });
         return { changed: true };
       });
       log({ action: 'upsertMyBusiness', userId: uid, businessId: ref.id, result: out.changed ? 'updated' : 'noop', durationMs: Date.now() - started });
@@ -244,11 +375,13 @@ function attachBusinessDirectory(exportsObj, deps) {
     if (!ID_RE.test(clientRequestId)) throw fail('invalid-argument', 'REQUEST_ID_INVALID', 'Қайта уриниб кўринг.');
     const ref = db.collection(COLLECTION).doc(`${uid}_${clientRequestId}`);
     const out = await db.runTransaction(async (t) => {
-      const [snap, ownSnap] = await Promise.all([
+      const [snap, ownSnap, shopSnap] = await Promise.all([
         t.get(ref),
         t.get(db.collection(COLLECTION).where('ownerId', '==', uid).limit(LIMITS.maxPerOwner)),
+        t.get(db.collection(SHOPS).doc(uid)),
       ]);
       if (snap.exists) return { duplicate: true };
+      if (isBlocked(shopSnap)) throw fail('permission-denied', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
       if (ownSnap.size >= LIMITS.maxPerOwner) {
         throw fail('resource-exhausted', 'BUSINESS_LIMIT_REACHED',
           `Бир эгада ${LIMITS.maxPerOwner} тадан ортиқ объект бўлмайди.`);
@@ -271,6 +404,8 @@ function attachBusinessDirectory(exportsObj, deps) {
       const snap = await t.get(ref);
       if (!snap.exists) return { deleted: false };
       if (snap.data().ownerId !== uid) throw fail('permission-denied', 'BUSINESS_NOT_OWNER', 'Объект топилмади.');
+      // Блокдан қочиш йўли ёпилади: ўчириб, қайта очиб бўлмайди (админ ўзи ўчиради).
+      if (isBlocked(snap)) throw fail('failed-precondition', 'BUSINESS_BLOCKED', 'Объект вақтинча блокланган.');
       t.delete(ref);
       return { deleted: true };
     });
@@ -297,7 +432,7 @@ function attachBusinessDirectory(exportsObj, deps) {
       if (!snap.exists) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
       const keys = changedKeys(snap.data(), fields);
       if (keys.length === 0) return { changed: false };
-      t.update(ref, { ...fields, updatedAt: ts(), updatedBy: actor });
+      t.update(ref, { ...visibleFields(snap.data(), fields), updatedAt: ts(), updatedBy: actor });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: 'business_update', actor, target: ref.id, reason, changedKeys: keys, at: ts(),
       });
@@ -365,6 +500,95 @@ function attachBusinessDirectory(exportsObj, deps) {
     return { ok: true, ...out };
   });
 
+  function statusOf(data) {
+    const s = data && data.status;
+    if (!BLOCK_STATUSES.includes(s)) throw fail('invalid-argument', 'BUSINESS_STATUS_INVALID', 'Ҳолат нотўғри.');
+    return s;
+  }
+
+  /**
+   * data: { businessId, status: 'active' | 'blocked', reason } → { ok, changed, products }.
+   * Йўналиш дўконини блоклайди/очади: харитадан йўқолади (`geohash`лар олинади), маҳсулотлари блокланади.
+   * Эгасининг онлайн дўкони блокланган бўлса, йўналишни очиб бўлмайди (`SHOP_BLOCKED`). Каскад ҳар чақирувда
+   * юради — тармоқ узилиб қайта чақирилса ярим қолган иш тугайди; audit фақат ҳолат ўзгарганда (21-банд).
+   */
+  exportsObj.adminSetBusinessStatus = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireAdmin(context);
+    const reason = reasonOf(data);
+    const status = statusOf(data);
+    const ref = db.collection(COLLECTION).doc(docId(data && data.businessId, 'BUSINESS_NOT_FOUND'));
+    const { FieldValue } = admin.firestore;
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      if (!snap.exists) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
+      const cur = snap.data() || {};
+      const owner = digitsOf(cur.ownerId);
+      if (status === 'active' && owner.length === 12 && isBlocked(await t.get(db.collection(SHOPS).doc(owner)))) {
+        throw fail('failed-precondition', 'SHOP_BLOCKED', 'Аввал онлайн дўконнинг блокини олинг.');
+      }
+      const was = cur.status === 'blocked' ? 'blocked' : 'active';
+      // Дўкон блоки остидаги йўналишни админ алоҳида блокласа — белги олинади: дўкон очилганда ҳам блокланган қолади.
+      const explicitOverParent = status === 'blocked' && was === 'blocked' && !!cur.blockedByParent;
+      if (was === status && !explicitOverParent) return { changed: false, ownerId: cur.ownerId };
+      const meta = { blockedAt: ts(), blockedBy: actor, blockReason: reason, blockedByParent: FieldValue.delete() };
+      t.update(ref, status === 'blocked'
+        ? businessBlockPatch(FieldValue, { ...meta, updatedBy: actor })
+        : businessUnblockPatch(FieldValue, cur, { updatedBy: actor }));
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: status === 'blocked' ? 'business_block' : 'business_unblock', actor, target: ref.id, ownerId: cur.ownerId || '', reason, at: ts(),
+      });
+      return { changed: true, ownerId: cur.ownerId };
+    });
+    const cascade = await cascadeBusinessBlock(db, admin, ref.id, out.ownerId, status === 'blocked');
+    log({
+      action: 'adminSetBusinessStatus', userId: actor, businessId: ref.id, result: out.changed ? status : 'noop',
+      products: cascade.updated, durationMs: Date.now() - started,
+    });
+    return { ok: true, changed: out.changed, products: cascade.updated };
+  });
+
+  /**
+   * data: { ownerPhone, status: 'active' | 'blocked', reason } → { ok, changed, businesses, products }.
+   * Бутун онлайн дўкон (`tv_shops/{phone}`): эганинг барча йўналишлари ва маҳсулотлари блокланади/очилади.
+   * `tv_shops` ҳужжати бўлмаса блоклашда яратилади (фақат йўналишлари бор эгага ҳам ишлайди). Каскад идемпотент.
+   */
+  exportsObj.adminSetShopStatus = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireAdmin(context);
+    const reason = reasonOf(data);
+    const status = statusOf(data);
+    const phone = canonicalUid(String((data && data.ownerPhone) || ''));
+    if (!/^\d{12}$/.test(phone)) throw fail('invalid-argument', 'SHOP_OWNER_INVALID', 'Эга телефони нотўғри.');
+    const ref = db.collection(SHOPS).doc(phone);
+    const { FieldValue } = admin.firestore;
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const was = isBlocked(snap) ? 'blocked' : 'active';
+      if (status === 'active' && !snap.exists) throw fail('not-found', 'SHOP_NOT_FOUND', 'Дўкон топилмади.');
+      if (was === status) return { changed: false };
+      if (status === 'blocked') {
+        t.set(ref, {
+          ownerPhone: phone, status: 'blocked', blockedAt: ts(), blockedBy: actor, blockReason: reason, updatedAt: ts(),
+        }, { merge: true });
+      } else {
+        t.update(ref, {
+          status: 'active', blockedAt: FieldValue.delete(), blockedBy: FieldValue.delete(), blockReason: FieldValue.delete(), updatedAt: ts(),
+        });
+      }
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: status === 'blocked' ? 'shop_block' : 'shop_unblock', actor, target: phone, reason, at: ts(),
+      });
+      return { changed: true };
+    });
+    const cascade = await cascadeShopBlock(db, admin, phone, status === 'blocked');
+    log({
+      action: 'adminSetShopStatus', userId: actor, ownerPhoneTail: phone.slice(-4), result: out.changed ? status : 'noop',
+      ...cascade, durationMs: Date.now() - started,
+    });
+    return { ok: true, changed: out.changed, ...cascade };
+  });
+
   /**
    * Объект ҳужжати ўчирилганда (эга ёки админ) — унинг маҳсулотлари юмшоқ ўчади. Триггер: ўчириш қайси йўл билан
    * бўлмасин бир хил ишлайди ва чақирув ичидаги ярим ишдан ҳимояланган. Хато — `BUSINESS_CASCADE_FAILED` логда.
@@ -386,18 +610,31 @@ function attachBusinessDirectory(exportsObj, deps) {
       return null;
     });
 
-  // ───────────────── Объект маҳсулотлари (эга қарори, 2026-10-24) ─────────────────
-  // Маҳсулот — АВАГрам витрина ҳужжати `tv_shop_items/{id}` + `businessId`. Эга уни ўзи жойлайди (модерациясиз);
-  // админ фақат шу ҳужжатларни ТАҲРИРЛАЙДИ/ЎЧИРАДИ ва ҳар бир ҳаракат `admin_audit`га сабаби билан тушади (41-банд).
+  // ───────────────── Маҳсулотлар (эга қарори, 2026-10-24 / 2026-10-25) ─────────────────
+  // Маҳсулот — ягона омбор `tv_shop_items/{id}`: эганинг ўз дўкони (`businessId` йўқ) ёки йўналиш дўкони
+  // (`businessId`). Эга уни ўзи жойлайди (модерациясиз); админ ИСТАЛГАН маҳсулотни таҳрирлайди/блоклайди/ўчиради
+  // (2026-10-25: аввал фақат `businessId`лилари эди — Аҳоли бозорининг янги маҳсулотлари назоратсиз қоларди).
+  // Ҳар бир ҳаракат `admin_audit`га сабаби билан тушади (41-банд).
 
   function itemRefOf(data) {
     return db.collection(ITEMS).doc(docId(data && data.itemId, 'PRODUCT_NOT_FOUND'));
   }
 
-  /** Фақат Бизнес харитаси маҳсулоти (businessId бор) — умумий витрина ҳужжатига бу йўл орқали тегилмайди. */
-  function assertBusinessProduct(snap) {
-    if (!snap.exists || !str((snap.data() || {}).businessId, 128)) {
-      throw fail('not-found', 'PRODUCT_NOT_FOUND', 'Маҳсулот топилмади.');
+  function assertProduct(snap) {
+    if (!snap.exists) throw fail('not-found', 'PRODUCT_NOT_FOUND', 'Маҳсулот топилмади.');
+  }
+
+  /** Маҳсулотни очиш мумкинми: унинг йўналиши ва онлайн дўкони блокланмаган бўлиши шарт (транзакция ичида). */
+  async function assertParentsOpen(t, cur) {
+    const biz = str(cur.businessId, 128);
+    const reads = [];
+    if (biz && DOC_ID_RE.test(biz)) reads.push(t.get(db.collection(COLLECTION).doc(biz)));
+    const owner = digitsOf(cur.ownerPhone);
+    const phone = owner.length === 9 ? `998${owner}` : owner;
+    if (phone.length === 12) reads.push(t.get(db.collection(SHOPS).doc(phone)));
+    const snaps = await Promise.all(reads);
+    if (snaps.some(isBlocked)) {
+      throw fail('failed-precondition', 'PARENT_BLOCKED', 'Аввал дўкон ёки йўналишнинг блокини олинг.');
     }
   }
 
@@ -443,18 +680,24 @@ function attachBusinessDirectory(exportsObj, deps) {
     if (Object.keys(patch).length === 0) throw fail('invalid-argument', 'PRODUCT_NOTHING_TO_UPDATE', 'Ўзгариш йўқ.');
 
     const ref = itemRefOf(d);
+    const { FieldValue } = admin.firestore;
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
-      assertBusinessProduct(snap);
+      assertProduct(snap);
       const cur = snap.data();
       if (cur.status === 'deleted') throw fail('failed-precondition', 'PRODUCT_DELETED', 'Маҳсулот ўчирилган.');
+      if (patch.status === 'active' && cur.status !== 'active') await assertParentsOpen(t, cur);
       const keys = Object.keys(patch).filter((k) => cur[k] !== patch[k]);
-      if (keys.length === 0) return { changed: false, changedKeys: [] };
+      // Ота блоки остидаги маҳсулотни админ алоҳида блокласа — белги олинади (ота очилганда ҳам блокланган қолади).
+      const dropMarker = !!cur.blockedByParent && patch.status !== undefined;
+      if (keys.length === 0 && !dropMarker) return { changed: false, changedKeys: [] };
       const next = {};
       keys.forEach((k) => { next[k] = patch[k]; });
+      if (dropMarker) next.blockedByParent = FieldValue.delete();
       t.update(ref, { ...next, updatedAt: ts(), updatedBy: actor });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: 'business_product_update', actor, target: ref.id, businessId: cur.businessId, reason, changedKeys: keys, at: ts(),
+        kind: 'business_product_update', actor, target: ref.id, businessId: cur.businessId || '', reason,
+        changedKeys: dropMarker && !keys.includes('status') ? [...keys, 'status'] : keys, at: ts(),
       });
       return { changed: true, changedKeys: keys };
     });
@@ -470,12 +713,12 @@ function attachBusinessDirectory(exportsObj, deps) {
     const ref = itemRefOf(data);
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
-      assertBusinessProduct(snap);
+      assertProduct(snap);
       const cur = snap.data();
       if (cur.status === 'deleted') return { deleted: false };
       t.update(ref, { status: 'deleted', deletedAt: ts(), deletedBy: actor, updatedAt: ts() });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: 'business_product_delete', actor, target: ref.id, businessId: cur.businessId, reason,
+        kind: 'business_product_delete', actor, target: ref.id, businessId: cur.businessId || '', reason,
         snapshot: { title: cur.title || '', ownerPhone: cur.ownerPhone || '', price: cur.price || 0, status: cur.status || '' },
         at: ts(),
       });
@@ -488,5 +731,5 @@ function attachBusinessDirectory(exportsObj, deps) {
 
 module.exports = {
   attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LIMITS, BOUNDS, EDITABLE, PRODUCT_LIMITS,
-  cascadeBusinessProducts,
+  cascadeBusinessProducts, cascadeBusinessBlock, cascadeShopBlock, visibleFields, PARENT_SHOP, parentOfBusiness,
 };

@@ -6,6 +6,7 @@ import 'package:ava_gurlan/features/business_map/domain/business_pin.dart';
 import 'package:ava_gurlan/features/business_map/screens/business_form_screen.dart';
 import 'package:ava_gurlan/features/business_map/widgets/business_detail_sheet.dart';
 import 'package:ava_gurlan/features/tv_market/domain/clip_product_link.dart';
+import 'package:ava_gurlan/features/tv_market/domain/shop_directions.dart';
 import 'package:ava_gurlan/features/tv_market/domain/similar_items.dart';
 import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
 import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
@@ -191,6 +192,62 @@ void main() {
       expect(find.byKey(const ValueKey('biz_open_shop')), findsNothing);
       await _pump(tester, Scaffold(body: BusinessDetailSheet(pin: BusinessPin.fromBusiness(_biz(status: 'blocked')), shopRepository: _FakeShop(const []))));
       expect(find.byKey(const ValueKey('biz_open_shop')), findsNothing);
+    });
+  });
+
+  group('Филиаллар', () {
+    Business b(String id, String name, {String branchOf = '', String status = 'active', int day = 1}) => Business(
+          id: id,
+          ownerId: _owner,
+          name: name,
+          category: BusinessCategory.retail,
+          phone: '998905550000',
+          lat: 41.3,
+          lng: 69.2,
+          address: 'Манзил $id',
+          branchOf: branchOf,
+          status: status,
+          createdAt: DateTime(2026, 10, day),
+        );
+
+    test('филиал алоҳида тугма эмас; филиал нуқтасидан келинса — отанинг йўналиши; филиалга боғланган маҳсулот — отада', () {
+      final d = ShopDirections.build(ownerPhone: _owner, shopName: 'С', businesses: [
+        b('m1', 'Кийим', day: 1),
+        b('f1', 'Кийим (Урганч)', branchOf: 'm1', day: 2),
+        b('f9', 'Етим филиал', branchOf: 'yoq_ota', day: 3),
+      ]);
+      expect([for (final x in d.directions) x.businessId], ['', 'm1', 'f9'], reason: 'отаси йўқ филиал — алоҳида');
+      expect([for (final x in d.branchesOf('m1')) x.id], ['f1']);
+      expect(d.initial(businessId: 'f1'), const ShopSelection.direction('m1'));
+      final items = [_item('k1', 'Кўйлак', biz: 'm1'), _item('k2', 'Шим', biz: 'f1'), _item('o1', 'Нон')];
+      expect([for (final i in d.itemsFor(const ShopSelection.direction('m1'), items, ownerPhone: _owner)) i.id], ['k1', 'k2']);
+    });
+
+    testWidgets('форма: оталар рўйхатидан филиал танланади ва branchOf сақланади', (tester) async {
+      final repo = _FakeBiz();
+      await _pump(tester, BusinessFormScreen(repository: repo, lockCategory: true, initialCategory: BusinessCategory.retail, branchParents: [
+        b('m1', 'Кийим'),
+        b('f1', 'Филиал ўзи', branchOf: 'm1'),
+      ]));
+      await tester.tap(find.byKey(const ValueKey('biz_branch_of')));
+      await tester.pumpAndSettle();
+      expect(find.text('Филиал ўзи'), findsNothing, reason: 'филиалнинг филиали бўлмайди');
+      await tester.tap(find.text('Кийим').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Кийим (Урганч)');
+      await tester.enterText(find.widgetWithText(TextField, 'bizmap_f_phone'), '998901112233');
+      // Жой танлаш харита экранини талаб қилади (тестда йўқ) — бу ерда танлов ҳолати текширилади.
+      final dd = tester.widget<DropdownButtonFormField<String>>(find.byKey(const ValueKey('biz_branch_of')));
+      expect(dd.initialValue, 'm1', reason: 'танланган ота формада');
+      expect(find.text('Кийим'), findsOneWidget, reason: 'танланган ота кўринади');
+    });
+
+    testWidgets('онлайн ёқилса филиал танлови йўқолади (онлайн филиал бўлмайди)', (tester) async {
+      await _pump(tester, BusinessFormScreen(repository: _FakeBiz(), lockCategory: true, branchParents: [b('m1', 'Кийим')]));
+      expect(find.byKey(const ValueKey('biz_branch_of')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('biz_online_switch')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('biz_branch_of')), findsNothing);
     });
   });
 

@@ -437,6 +437,33 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                   label: Text(context.tr('bizmap_route')),
                 ),
               ),
+            // Филиаллар — шу йўналишнинг бошқа жисмоний нуқталари (каталог битта).
+            for (final br in _directions?.branchesOf(b.id) ?? const <Business>[])
+              Padding(
+                key: ValueKey('shop_branch_${br.id}'),
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.store_mall_directory_outlined, size: 18, color: Colors.grey.shade600),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        [
+                          context.tr('my_shop_branch_label'),
+                          if (br.address.isNotEmpty) br.address else br.name,
+                          if (br.openingHours.isNotEmpty) br.openingHours,
+                        ].join(' · '),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: context.tr('bizmap_route'),
+                      icon: const Icon(Icons.directions_rounded, size: 20),
+                      onPressed: () => openMapsNavigation(lat: br.lat, lng: br.lng, label: br.name),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

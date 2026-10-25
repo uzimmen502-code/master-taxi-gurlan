@@ -228,6 +228,7 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
                           subtitle: Text([
                             if (b.isBlocked) 'БЛОКЛАНГАН',
                             if (b.online) 'фақат онлайн',
+                            if (b.isBranch) 'филиал: ${b.branchOf}',
                             _catLabel(b.category),
                             if (b.subtype.isNotEmpty) b.subtype,
                             if (b.address.isNotEmpty) b.address,
@@ -443,6 +444,8 @@ class _EditDialogState extends State<_EditDialog> {
       website: _website.text.trim(),
       status: b?.status ?? 'active',
       online: _online,
+      // Филиаллик эга томонидан белгиланади — админ таҳрири уни сақлайди (юборилмаса сервер ўчириб юборарди).
+      branchOf: b?.branchOf ?? '',
     );
     try {
       if (_isCreate) {

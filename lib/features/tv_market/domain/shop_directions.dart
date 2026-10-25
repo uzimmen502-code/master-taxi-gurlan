@@ -43,9 +43,25 @@ class ShopSelection {
 
 /// Дўкон саҳифаси мантиғи (соф — тест учун; Firebase'сиз).
 class ShopDirections {
-  ShopDirections._(this.directions, this.businessesKnown);
+  ShopDirections._(this.directions, this.businessesKnown, [Map<String, List<Business>> branches = const {}])
+      : _branches = branches,
+        _dirOf = {
+          '': '',
+          for (final d in directions) d.businessId: d.businessId,
+          for (final e in branches.entries)
+            for (final b in e.value) b.id: e.key,
+        };
 
   final List<ShopDirection> directions;
+
+  /// Филиаллар: ота йўналиш ID'си → унинг жисмоний нуқталари (алоҳида тугма эмас — шу йўналиш карточкасида).
+  final Map<String, List<Business>> _branches;
+
+  /// Ҳар бир маълум объект (йўналиш ёки филиал) → у тегишли йўналиш ID'си.
+  final Map<String, String> _dirOf;
+
+  /// Йўналишнинг филиаллари (энг эскиси биринчи).
+  List<Business> branchesOf(String directionId) => _branches[directionId] ?? const [];
 
   /// `false` — йўналишлар ўқилмади (меҳмон: `businesses` фақат телефон билан кирганларга, rules). Унда йўналиш
   /// тугмалари йўқ, барча фаол маҳсулот «Барчаси»да кўринади (блокланганлари барибир `status` бўйича чиқмайди).
@@ -68,18 +84,33 @@ class ShopDirections {
         .toList()
       ..sort((a, b) => (a.createdAt ?? epoch).compareTo(b.createdAt ?? epoch));
     if (!businessesKnown) return ShopDirections._([ShopDirection.own(shopName)], false);
+    // Филиал — отаси шу рўйхатда (эганинг, блокланмаган, ўзи филиал эмас) бўлса отага қўшилади; отаси йўқ бўлса
+    // (ўчирилган/блокланган) — алоҳида йўналиш каби кўринади (харидор барибир тўғри дўконга тушади).
+    final parentIds = {for (final b in own) if (!b.isBranch) b.id};
+    final branches = <String, List<Business>>{};
+    final mains = <Business>[];
+    for (final b in own) {
+      if (b.isBranch && parentIds.contains(b.branchOf)) {
+        (branches[b.branchOf] ??= []).add(b);
+      } else {
+        mains.add(b);
+      }
+    }
     return ShopDirections._([
-      if (hasOwnItems || own.isEmpty) ShopDirection.own(shopName),
-      for (final b in own) ShopDirection.business(b),
-    ], true);
+      if (hasOwnItems || mains.isEmpty) ShopDirection.own(shopName),
+      for (final b in mains) ShopDirection.business(b),
+    ], true, branches);
   }
 
   /// Йўналиш тугмалари керакми (битта бўлса — танлов йўқ).
   bool get hasChoice => directions.length > 1;
 
+  /// Йўналиш ёки унинг филиали ID'си бўйича — йўналиш (филиал нуқтасидан келинса ҳам отанинг дўкони).
   ShopDirection? byId(String businessId) {
+    final dirId = _dirOf[businessId];
+    if (dirId == null) return null;
     for (final d in directions) {
-      if (d.businessId == businessId) return d;
+      if (d.businessId == dirId) return d;
     }
     return null;
   }
@@ -91,9 +122,11 @@ class ShopDirections {
   /// Номаълум/блокланган йўналиш — хавфсиз: бутун дўкон очилади, бошқа дўкон эмас.
   ShopSelection initial({String businessId = '', String? highlightBusinessId}) {
     if (!businessesKnown) return const ShopSelection.all();
-    if (businessId.isNotEmpty && byId(businessId) != null) return ShopSelection.direction(businessId);
+    final byTarget = businessId.isNotEmpty ? byId(businessId) : null;
+    if (byTarget != null) return ShopSelection.direction(byTarget.businessId);
     final h = highlightBusinessId;
-    if (h != null && byId(h) != null) return ShopSelection.direction(h);
+    final byItem = h != null ? byId(h) : null;
+    if (byItem != null) return ShopSelection.direction(byItem.businessId);
     return hasChoice ? const ShopSelection.all() : ShopSelection.direction(directions.first.businessId);
   }
 
@@ -102,13 +135,12 @@ class ShopDirections {
   /// Ўз дўкони маҳсулоти ҳар доим маълум (тугмаси яширилган бўлса ҳам «Барчаси»да кўринади).
   List<TvShopItem> itemsFor(ShopSelection s, Iterable<TvShopItem> items, {required String ownerPhone}) {
     final owner = canonicalPhoneId(ownerPhone);
-    final known = {'', for (final d in directions) d.businessId};
     return [
       for (final i in items)
         if (i.isActive &&
             canonicalPhoneId(i.ownerPhone) == owner &&
-            (!businessesKnown || known.contains(i.businessId)) &&
-            (s.isAll || i.businessId == s.businessId))
+            (!businessesKnown || _dirOf.containsKey(i.businessId)) &&
+            (s.isAll || !businessesKnown || _dirOf[i.businessId] == s.businessId))
           i,
     ];
   }

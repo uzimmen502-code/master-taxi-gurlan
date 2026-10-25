@@ -28,9 +28,13 @@ class TvClipOverlay extends StatelessWidget {
     this.onOpenShop,
     this.onOpenWholesale,
     this.onOpenRestaurant,
+    this.onOpenProduct,
     this.filters,
     this.ownerName = '',
   });
+
+  /// Клип каталог маҳсулотига боғланган бўлса (`clip.shopItemId`) — маҳсулотнинг ўзини очиш (2026-10-25).
+  final VoidCallback? onOpenProduct;
 
   final TvClip clip;
 
@@ -158,6 +162,7 @@ class TvClipOverlay extends StatelessWidget {
             onOpenShop: onOpenShop,
             onOpenWholesale: onOpenWholesale,
             onOpenRestaurant: onOpenRestaurant,
+            onOpenProduct: onOpenProduct,
           ),
         ),
       ],
@@ -272,6 +277,7 @@ class _ActionButtons extends StatelessWidget {
     this.onOpenShop,
     this.onOpenWholesale,
     this.onOpenRestaurant,
+    this.onOpenProduct,
     this.showShop = false,
   });
 
@@ -286,6 +292,7 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback? onOpenShop;
   final VoidCallback? onOpenWholesale;
   final VoidCallback? onOpenRestaurant;
+  final VoidCallback? onOpenProduct;
   final bool showShop;
 
   @override
@@ -311,6 +318,15 @@ class _ActionButtons extends StatelessWidget {
           label: '',
           onTap: onShare,
         ),
+        if (onOpenProduct != null) ...[
+          const SizedBox(height: 12.8),
+          _ShopActionBtn(
+            key: const ValueKey('tv-open-product'),
+            label: context.tr('tv_market_product'),
+            icon: Icons.shopping_bag_rounded,
+            onTap: onOpenProduct!,
+          ),
+        ],
         if (showShop && onOpenShop != null) ...[
           const SizedBox(height: 12.8),
           _ShopActionBtn(

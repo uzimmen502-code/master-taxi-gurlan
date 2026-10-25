@@ -25,7 +25,11 @@ class Business {
     this.createdAt,
     this.updatedAt,
     this.status = 'active',
+    this.online = false,
   });
+
+  /// Фақат онлайн йўналиш (жисмоний жойи йўқ): координатасиз, харитада чизилмайди ([lat]/[lng] = 0).
+  final bool online;
 
   /// `active` | `blocked` — фақат сервер (админ) ўрнатади; клиент [toCallable]да юбормайди.
   final String status;
@@ -73,10 +77,11 @@ class Business {
   /// Блокланган объектнинг координатаси сервер томонидан `blockedGeo`га олинган (эски иловалар уни чизмасин) —
   /// эга ва админ рўйхатларида у шу ердан ўқилади; харита [isBlocked]ни ўзи чиқариб ташлайди.
   static Business? tryFromMap(String id, Map<String, dynamic> d) {
+    final online = d['online'] == true;
     final hold = d['blockedGeo'];
     final geo = d['lat'] is num ? d : (hold is Map ? hold : d);
-    final lat = geo['lat'];
-    final lng = geo['lng'];
+    final lat = online ? 0 : geo['lat'];
+    final lng = online ? 0 : geo['lng'];
     if (lat is! num || lng is! num) return null;
     return Business(
       id: id,
@@ -96,6 +101,7 @@ class Business {
       createdAt: _t(d['createdAt']),
       updatedAt: _t(d['updatedAt']),
       status: d['status'] == 'blocked' ? 'blocked' : 'active',
+      online: online,
     );
   }
 
@@ -107,8 +113,7 @@ class Business {
         'description': description,
         'phone': phone,
         'address': address,
-        'lat': lat,
-        'lng': lng,
+        if (online) 'online': true else ...{'lat': lat, 'lng': lng},
         'regionId': regionId,
         'districtId': districtId,
         'openingHours': openingHours,

@@ -306,7 +306,8 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   Future<void> _openItem(TvShopItem item) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: item)),
+      // Дўкон ичида: дўкон тугмаси керак эмас; ўхшашлар — шу дўконнинг юкланган каталогидан.
+      MaterialPageRoute(builder: (_) => TvShopItemDetailScreen(item: item, similarPool: _items)),
     );
   }
 
@@ -424,15 +425,18 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
             if (b.address.isNotEmpty) line(Icons.place_outlined, b.address),
             if (b.openingHours.isNotEmpty) line(Icons.schedule_rounded, b.openingHours),
             if (b.phone.isNotEmpty) line(Icons.phone_outlined, b.phone, onTap: _call),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                key: const ValueKey('shop_dir_route'),
-                onPressed: () => openMapsNavigation(lat: b.lat, lng: b.lng, label: b.name),
-                icon: const Icon(Icons.directions_rounded, size: 18),
-                label: Text(context.tr('bizmap_route')),
+            if (b.online)
+              line(Icons.language_rounded, context.tr('bizmap_online_badge'))
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('shop_dir_route'),
+                  onPressed: () => openMapsNavigation(lat: b.lat, lng: b.lng, label: b.name),
+                  icon: const Icon(Icons.directions_rounded, size: 18),
+                  label: Text(context.tr('bizmap_route')),
+                ),
               ),
-            ),
           ],
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../domain/similar_items.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
@@ -10,9 +11,11 @@ import '../widgets/shop_complaint_sheet.dart';
 import '../widgets/shop_unavailable_view.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_shop_item_card.dart';
+import '../widgets/tv_shop_item_grid_card.dart';
 import 'tv_market_feed_screen.dart';
+import 'tv_shop_public_screen.dart';
 
-/// Харидор товар детал: зум галерея + қўнғироқ. Ўхшаш товарлар йўқ.
+/// Харидор товар детал: зум галерея + қўнғироқ + «Ўхшаш маҳсулотлар» + сотувчи дўконига ўтиш.
 ///
 /// Очилганда маҳсулот ҳолати қайта ўқилади (эга қарори 2026-10-25: админ блоки барча кириш йўлларида): эски
 /// рўйхат, видео ёки ҳавола орқали келинганда ҳам блокланган/ўчирилган маҳсулот кўрсатилмайди.
@@ -21,12 +24,21 @@ class TvShopItemDetailScreen extends StatefulWidget {
     super.key,
     required this.item,
     this.onOpenShop,
+    this.showShopButton = false,
+    this.similarPool = const [],
     this.loadLatest,
     this.submitComplaint,
   });
 
   final TvShopItem item;
+
+  /// Ўз дўкон очиш амали (эски чақирувчилар учун). Бўлмаса ва [showShopButton] — ягона онлайн дўкон
+  /// маҳсулотнинг ЎЗ йўналиши билан очилади (`businessId`), бошқа йўналиш ёки умумий саҳифа эмас.
   final VoidCallback? onOpenShop;
+  final bool showShopButton;
+
+  /// «Ўхшаш маҳсулотлар» манбаи — чақирувчи экранда юкланган рўйхат (янги ўқиш йўқ). Бўш — қатор йўқ.
+  final Iterable<TvShopItem> similarPool;
 
   /// Тест учун алмаштирилади; бўлмаса `TvShopRepository().fetchItem` (битта ўқиш).
   final Future<TvShopItem?> Function(String itemId)? loadLatest;
@@ -98,9 +110,67 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
     );
   }
 
+  VoidCallback? get _openShop {
+    if (widget.onOpenShop != null) return widget.onOpenShop;
+    if (!widget.showShopButton) return null;
+    final item = _item;
+    return () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TvShopPublicScreen(
+              ownerPhone: item.ownerPhone,
+              businessId: item.businessId,
+              highlightItemId: item.id,
+              ownerDisplayName: item.ownerName,
+              districtLabel: item.districtLabel,
+              districtId: item.districtId,
+            ),
+          ),
+        );
+  }
+
+  void _openSimilar(TvShopItem other) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TvShopItemDetailScreen(
+          item: other,
+          showShopButton: widget.showShopButton || widget.onOpenShop != null,
+          similarPool: widget.similarPool,
+        ),
+      ),
+    );
+  }
+
+  Widget _similarStrip(List<TvShopItem> similar) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Text(context.tr('platform_store_similar'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 236,
+          child: ListView.separated(
+            key: const ValueKey('shop_item_similar'),
+            scrollDirection: Axis.horizontal,
+            itemCount: similar.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) => SizedBox(
+              width: 160,
+              child: TvShopItemGridCard(item: similar[i], onTap: () => _openSimilar(similar[i])),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = _item;
+    final openShop = _available ? _openShop : null;
+    final similar = _available ? similarItems(item, widget.similarPool) : const <TvShopItem>[];
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F9),
       appBar: AppBar(
@@ -112,10 +182,11 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
         actionsIconTheme: const IconThemeData(color: Colors.black87),
         elevation: 0.4,
         actions: [
-          if (_available && widget.onOpenShop != null)
+          if (openShop != null)
             IconButton(
+              key: const ValueKey('shop_item_open_shop'),
               tooltip: context.tr('tv_shop_mine'),
-              onPressed: widget.onOpenShop,
+              onPressed: openShop,
               icon: const Icon(Icons.storefront_outlined),
             ),
           if (_available)
@@ -141,6 +212,18 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
                   item: item,
                   onVideo: item.hasVideo ? () => _openClip(context) : null,
                 ),
+                if (openShop != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('shop_item_go_shop'),
+                      onPressed: openShop,
+                      icon: const Icon(Icons.storefront_rounded),
+                      label: Text(context.tr('shop_go_to_shop')),
+                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    ),
+                  ),
+                if (similar.isNotEmpty) _similarStrip(similar),
               ],
             ),
       bottomNavigationBar: _available ? TvChannelContactBar(onCall: () => _call(context)) : null,

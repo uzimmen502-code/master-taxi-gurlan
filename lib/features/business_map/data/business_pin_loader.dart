@@ -85,8 +85,9 @@ class BusinessPinLoader {
       final wide = await Future.wait([
         guarded(BusinessSource.business, () async => [
               // Блокланган объект (админ) харитада чизилмайди; `geohash4` йўқлиги уни катак сўровидан ҳам чиқаради.
+              // Фақат онлайн йўналиш — жойи йўқ, харитада чизилмайди (катак сўровига ҳам тушмайди: geohash йўқ).
               for (final b in await _biz.fetchRecent(limit: _overviewBusinesses))
-                if (!b.isBlocked) BusinessPin.fromBusiness(b),
+                if (!b.isBlocked && !b.online) BusinessPin.fromBusiness(b),
             ]),
         guarded(BusinessSource.restaurant, _restaurantsOverview),
         if (showEvStations) guarded(BusinessSource.evStation, _evOverview),
@@ -107,7 +108,7 @@ class BusinessPinLoader {
     final parts = await Future.wait([
       guarded(BusinessSource.business, () async {
         final rows = await _biz.fetchInCells(cells, limit: maxPins);
-        return [for (final b in rows) if (!b.isBlocked) BusinessPin.fromBusiness(b)];
+        return [for (final b in rows) if (!b.isBlocked && !b.online) BusinessPin.fromBusiness(b)];
       }),
       guarded(BusinessSource.restaurant, () => _restaurants(cells)),
       if (showEvStations) guarded(BusinessSource.evStation, () => _evStations(cells)),

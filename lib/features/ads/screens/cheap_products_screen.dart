@@ -17,7 +17,6 @@ import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
-import '../../tv_market/screens/tv_shop_public_screen.dart';
 import '../../tv_market/widgets/tv_shop_item_grid_card.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
@@ -460,22 +459,12 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
+                                    // Дўкон тугмаси маҳсулотнинг ЎЗ йўналишини очади; ўхшашлар — шу лентадан
+                                    // (янги ўқиш йўқ).
                                     builder: (_) => TvShopItemDetailScreen(
                                       item: item,
-                                      onOpenShop: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => TvShopPublicScreen(
-                                              ownerPhone: item.ownerPhone,
-                                              highlightItemId: item.id,
-                                              ownerDisplayName: item.ownerName,
-                                              districtLabel: item.districtLabel,
-                                              districtId: item.districtId,
-                                            ),
-                                          ),
-                                        );
-                                      },
+                                      showShopButton: true,
+                                      similarPool: _shopItems,
                                     ),
                                   ),
                                 );

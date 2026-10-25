@@ -18,7 +18,7 @@
  * BUSINESS_PHONE_INVALID, BUSINESS_FIELD_INVALID, BUSINESS_LIMIT_REACHED, BUSINESS_NOT_FOUND,
  * BUSINESS_NOT_OWNER, BUSINESS_OWNER_INVALID, REQUEST_ID_INVALID, GEO_DISTRICT_INVALID, REASON_REQUIRED,
  * BUSINESS_STATUS_INVALID, BUSINESS_BLOCKED, SHOP_BLOCKED, SHOP_OWNER_INVALID, SHOP_NOT_FOUND, PARENT_BLOCKED,
- * COMPLAINT_TARGET_INVALID, COMPLAINT_OWN, COMPLAINT_LIMIT.
+ * COMPLAINT_TARGET_INVALID, COMPLAINT_OWN, COMPLAINT_LIMIT, BRANCH_INVALID, BRANCH_NESTED.
  *
  * БЛОКЛАШ (эга қарори 2026-10-25: «админ назорати барча кириш йўлларида»):
  *   • онлайн дўкон `tv_shops/{phone}` ва йўналиш дўкони `businesses/{id}` — `status: active | blocked`;
@@ -125,6 +125,12 @@ function normalizeInput(input, fail) {
     || (!!regionId !== !!districtId)) {
     throw fail('invalid-argument', 'GEO_DISTRICT_INVALID', 'Ҳудудни қайта танланг.');
   }
+  // Филиал (2026-10-25, 3-босқич): шу эганинг бошқа йўналишининг яна бир жисмоний нуқтаси. Ота мавжудлиги, эгаси
+  // ва ичма-ич эмаслиги callable'да (`assertBranch`) текширилади; онлайн филиал бўлмайди.
+  const branchOf = str(d.branchOf, 129);
+  if (branchOf && (!DOC_ID_RE.test(branchOf) || online)) {
+    throw fail('invalid-argument', 'BRANCH_INVALID', 'Филиални қайта танланг.');
+  }
   return {
     name,
     category: d.category,
@@ -133,6 +139,7 @@ function normalizeInput(input, fail) {
     phone,
     address: str(d.address, LIMITS.addressMax),
     ...(online ? { online: true } : { lat, lng, ...geohashPair(lat, lng) }),
+    ...(branchOf ? { branchOf } : {}),
     regionId,
     districtId,
     openingHours: str(d.openingHours, LIMITS.hoursMax),
@@ -142,12 +149,15 @@ function normalizeInput(input, fail) {
 
 /** Ўзгарадиган (эга таҳрир қила оладиган) майдонлар — ўзгариш аниқлаш ва audit учун. */
 const EDITABLE = Object.freeze([
-  'name', 'category', 'subtype', 'description', 'phone', 'address', 'lat', 'lng', 'online',
+  'name', 'category', 'subtype', 'description', 'phone', 'address', 'lat', 'lng', 'online', 'branchOf',
   'regionId', 'districtId', 'openingHours', 'website',
 ]);
 
-/** Онлайн ↔ жисмоний ўтишда эски ҳужжатда қолиб кетадиган жой майдонлари (таҳрирда ўчирилади). */
-const PLACE_KEYS = Object.freeze(['lat', 'lng', 'geohash', 'geohash4', 'online']);
+/**
+ * Таҳрирда янги шаклда йўқ бўлса эски ҳужжатдан ўчириладиган майдонлар: онлайн ↔ жисмоний ўтишдаги жой
+ * майдонлари ва филиаллиги олинган `branchOf`.
+ */
+const PLACE_KEYS = Object.freeze(['lat', 'lng', 'geohash', 'geohash4', 'online', 'branchOf']);
 
 function changedKeys(cur, next) {
   return EDITABLE.filter((k) => cur[k] !== next[k]);
@@ -174,7 +184,7 @@ function visibleFields(cur, fields) {
 function editPatch(FieldValue, cur, fields, fail) {
   const wasOnline = cur.online === true;
   const nowOnline = fields.online === true;
-  if (cur.status === 'blocked' && wasOnline !== nowOnline) {
+  if (cur.status === 'blocked' && (wasOnline !== nowOnline || (cur.branchOf || '') !== (fields.branchOf || ''))) {
     throw fail('failed-precondition', 'BUSINESS_BLOCKED', 'Объект вақтинча блокланган.');
   }
   const next = visibleFields(cur, fields);
@@ -340,6 +350,20 @@ async function cascadeBusinessBlock(db, admin, businessId, ownerId, block) {
 }
 
 /**
+ * Йўналиш блокланса/очилса — унинг филиаллари (`branchOf`): блокда фаол филиал → `blocked` + `business:<ота>`,
+ * очишда фақат шу белгилилари қайтади (админ филиални алоҳида блоклагани қолади).
+ */
+async function cascadeBranchBlock(db, admin, parentId, block) {
+  if (!parentId) return { scanned: 0, updated: 0 };
+  const { FieldValue } = admin.firestore;
+  const marker = parentOfBusiness(parentId);
+  return patchPaged(db, admin, db.collection(COLLECTION).where('branchOf', '==', parentId), (x) => {
+    if (block) return x.status === 'blocked' ? null : businessBlockPatch(FieldValue, x, { blockedByParent: marker });
+    return x.status === 'blocked' && x.blockedByParent === marker ? businessUnblockPatch(FieldValue, x) : null;
+  });
+}
+
+/**
  * Онлайн дўкон блокланса/очилса — эганинг БАРЧА йўналишлари ва маҳсулотлари (`blockedByParent: shop`).
  * Очишда: йўналиши ҳалиям алоҳида блокланган маҳсулот очилмайди — белгиси `business:<id>` га ўтади ва
  * шу йўналиш очилганда қайтади.
@@ -347,9 +371,20 @@ async function cascadeBusinessBlock(db, admin, businessId, ownerId, block) {
 async function cascadeShopBlock(db, admin, phone12, block) {
   const { FieldValue } = admin.firestore;
   const ts = FieldValue.serverTimestamp();
+  // Очишда: дўкон блоки остидаги филиалнинг отаси АЛОҲИДА блокланган бўлса — филиал очилмайди, белгиси отага ўтади.
+  let explicit = new Set();
+  if (!block) {
+    const all = await db.collection(COLLECTION).where('ownerId', '==', phone12).get();
+    explicit = new Set(all.docs.filter((d) => {
+      const x = d.data() || {};
+      return x.status === 'blocked' && x.blockedByParent !== PARENT_SHOP;
+    }).map((d) => d.id));
+  }
   const businesses = await patchPaged(db, admin, db.collection(COLLECTION).where('ownerId', '==', phone12), (x) => {
     if (block) return x.status === 'blocked' ? null : businessBlockPatch(FieldValue, x, { blockedByParent: PARENT_SHOP });
-    return x.status === 'blocked' && x.blockedByParent === PARENT_SHOP ? businessUnblockPatch(FieldValue, x) : null;
+    if (x.status !== 'blocked' || x.blockedByParent !== PARENT_SHOP) return null;
+    if (x.branchOf && explicit.has(x.branchOf)) return { blockedByParent: parentOfBusiness(x.branchOf), updatedAt: ts };
+    return businessUnblockPatch(FieldValue, x);
   });
   let stillBlocked = new Set();
   if (!block) {
@@ -405,6 +440,23 @@ function attachBusinessDirectory(exportsObj, deps) {
     }
   }
 
+  /**
+   * Филиал отаси (транзакция ичида, ёзишдан олдин): мавжуд, ШУ эганики, ўзи филиал эмас (ичма-ич йўқ), ўзи эмас;
+   * ўзининг филиаллари бор объект филиал бўлолмайди (`BRANCH_NESTED`). Клиентга ишонилмайди (18-банд).
+   */
+  async function assertBranch(t, ownerId, fields, selfId) {
+    const parentId = fields.branchOf;
+    if (!parentId) return;
+    if (parentId === selfId) throw fail('invalid-argument', 'BRANCH_INVALID', 'Филиални қайта танланг.');
+    const p = await t.get(db.collection(COLLECTION).doc(parentId));
+    const x = p.exists ? (p.data() || {}) : null;
+    if (!x || x.ownerId !== ownerId || x.branchOf) throw fail('invalid-argument', 'BRANCH_INVALID', 'Филиални қайта танланг.');
+    if (selfId) {
+      const kids = await t.get(db.collection(COLLECTION).where('branchOf', '==', selfId).limit(1));
+      if (!kids.empty) throw fail('failed-precondition', 'BRANCH_NESTED', 'Бу дўконнинг ўз филиаллари бор.');
+    }
+  }
+
   // ───────────────────────── Эга ─────────────────────────
 
   /**
@@ -427,6 +479,7 @@ function attachBusinessDirectory(exportsObj, deps) {
         const cur = snap.data();
         if (cur.ownerId !== uid) throw fail('permission-denied', 'BUSINESS_NOT_OWNER', 'Объект топилмади.');
         if (changedKeys(effective(cur), fields).length === 0) return { changed: false };
+        if ((fields.branchOf || '') !== (cur.branchOf || '')) await assertBranch(t, uid, fields, ref.id);
         t.update(ref, { ...editPatch(admin.firestore.FieldValue, cur, fields, fail), updatedAt: ts() });
         return { changed: true };
       });
@@ -449,6 +502,7 @@ function attachBusinessDirectory(exportsObj, deps) {
         throw fail('resource-exhausted', 'BUSINESS_LIMIT_REACHED',
           `Бир эгада ${LIMITS.maxPerOwner} тадан ортиқ объект бўлмайди.`);
       }
+      await assertBranch(t, uid, fields, '');
       t.create(ref, {
         ownerId: uid, ...fields, status: 'active', createdAt: ts(), updatedAt: ts(),
       });
@@ -495,7 +549,9 @@ function attachBusinessDirectory(exportsObj, deps) {
       if (!snap.exists) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
       const keys = changedKeys(effective(snap.data()), fields);
       if (keys.length === 0) return { changed: false };
-      t.update(ref, { ...editPatch(admin.firestore.FieldValue, snap.data(), fields, fail), updatedAt: ts(), updatedBy: actor });
+      const cur = snap.data() || {};
+      if ((fields.branchOf || '') !== (cur.branchOf || '')) await assertBranch(t, cur.ownerId, fields, ref.id);
+      t.update(ref, { ...editPatch(admin.firestore.FieldValue, cur, fields, fail), updatedAt: ts(), updatedBy: actor });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: 'business_update', actor, target: ref.id, reason, changedKeys: keys, at: ts(),
       });
@@ -532,6 +588,7 @@ function attachBusinessDirectory(exportsObj, deps) {
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       if (snap.exists) return { duplicate: true };
+      await assertBranch(t, ownerId, fields, '');
       t.create(ref, {
         ownerId, ...fields, status: 'active', source: 'admin', createdBy: actor, createdAt: ts(), updatedAt: ts(),
       });
@@ -590,6 +647,11 @@ function attachBusinessDirectory(exportsObj, deps) {
       if (status === 'active' && owner.length === 12 && isBlocked(await t.get(db.collection(SHOPS).doc(owner)))) {
         throw fail('failed-precondition', 'SHOP_BLOCKED', 'Аввал онлайн дўконнинг блокини олинг.');
       }
+      // Филиални отаси блокда турганда алоҳида очиб бўлмайди.
+      if (status === 'active' && cur.branchOf && DOC_ID_RE.test(cur.branchOf)
+        && isBlocked(await t.get(db.collection(COLLECTION).doc(cur.branchOf)))) {
+        throw fail('failed-precondition', 'PARENT_BLOCKED', 'Аввал асосий йўналишнинг блокини олинг.');
+      }
       const was = cur.status === 'blocked' ? 'blocked' : 'active';
       // Дўкон блоки остидаги йўналишни админ алоҳида блокласа — белги олинади: дўкон очилганда ҳам блокланган қолади.
       const explicitOverParent = status === 'blocked' && was === 'blocked' && !!cur.blockedByParent;
@@ -604,11 +666,12 @@ function attachBusinessDirectory(exportsObj, deps) {
       return { changed: true, ownerId: cur.ownerId };
     });
     const cascade = await cascadeBusinessBlock(db, admin, ref.id, out.ownerId, status === 'blocked');
+    const branches = await cascadeBranchBlock(db, admin, ref.id, status === 'blocked');
     log({
       action: 'adminSetBusinessStatus', userId: actor, businessId: ref.id, result: out.changed ? status : 'noop',
-      products: cascade.updated, durationMs: Date.now() - started,
+      products: cascade.updated, branches: branches.updated, durationMs: Date.now() - started,
     });
-    return { ok: true, changed: out.changed, products: cascade.updated };
+    return { ok: true, changed: out.changed, products: cascade.updated, branches: branches.updated };
   });
 
   /**
@@ -663,6 +726,11 @@ function attachBusinessDirectory(exportsObj, deps) {
       const businessId = context.params.businessId;
       try {
         const out = await cascadeBusinessProducts(db, admin, businessId, (snap.data() || {}).ownerId);
+        // Отаси ўчирилган филиаллар — мустақил йўналиш бўлади (етим `branchOf` қолмасин).
+        const FV = admin.firestore.FieldValue;
+        const orphans = await patchPaged(db, admin, db.collection(COLLECTION).where('branchOf', '==', businessId),
+          () => ({ branchOf: FV.delete(), updatedAt: FV.serverTimestamp() }));
+        out.branchesDetached = orphans.updated;
         log({ action: 'businessProductsCascade', businessId, result: out.updated ? 'deleted_products' : 'noop', ...out, durationMs: Date.now() - t0 });
       } catch (e) {
         console.error(JSON.stringify({

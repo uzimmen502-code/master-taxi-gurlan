@@ -607,6 +607,43 @@ async function main() {
     await expectCode(call('submitShopComplaint', { targetType: 'shop', targetId: '998915000099', reason: 'spam' }, BUYER), 'COMPLAINT_LIMIT');
   });
 
+  // ───────── Фақат онлайн йўналиш (жисмоний жойи йўқ) ─────────
+  const ONL = '998914000020';
+  const { lat: _l, lng: _g, ...NOLOC } = BASE; // eslint-disable-line no-unused-vars
+  await check('O1 online:true — koordinatasiz yaratiladi; lat/lng/geohash YO\'Q (xaritaga tushmaydi); yuborilgan koordinata e\'tiborsiz', async () => {
+    const r = await call('upsertMyBusiness', { ...NOLOC, online: true, clientRequestId: 'onl-00000001' }, ONL);
+    const d = await biz(r.businessId);
+    assert.deepStrictEqual([d.online, d.lat, d.lng, d.geohash, d.geohash4, d.status], [true, undefined, undefined, undefined, undefined, 'active']);
+    const r2 = await call('upsertMyBusiness', { ...BASE, online: true, clientRequestId: 'onl-00000002' }, ONL);
+    assert.strictEqual((await biz(r2.businessId)).lat, undefined, 'online — uy manzili nuqta bo\'lib qolmaydi');
+    await expectCode(call('upsertMyBusiness', { ...NOLOC, clientRequestId: 'onl-00000003' }, ONL), 'BUSINESS_LOCATION_INVALID');
+  });
+
+  await check('O2 online -> jismoniy: koordinata va geohash yoziladi, online o\'chadi; qaytib online: joy maydonlari o\'chadi', async () => {
+    const id = `${ONL}_onl-00000001`;
+    const same = await call('upsertMyBusiness', { ...NOLOC, online: true, businessId: id }, ONL);
+    assert.strictEqual(same.changed, false, 'o\'zgarishsiz');
+    await call('upsertMyBusiness', { ...BASE, businessId: id }, ONL);
+    let d = await biz(id);
+    assert.deepStrictEqual([d.online, d.lat, d.geohash4], [undefined, BASE.lat, encode(BASE.lat, BASE.lng, 4)]);
+    await call('upsertMyBusiness', { ...NOLOC, online: true, businessId: id }, ONL);
+    d = await biz(id);
+    assert.deepStrictEqual([d.online, d.lat, d.lng, d.geohash, d.geohash4], [true, undefined, undefined, undefined, undefined]);
+  });
+
+  await check('O3 online yo\'nalish bloklanadi/ochiladi (koordinatasiz ham); blokda online<->jismoniy almashmaydi', async () => {
+    const id = `${ONL}_onl-00000001`;
+    await call('adminSetBusinessStatus', { businessId: id, status: 'blocked', reason: 'sinov' }, ADMIN);
+    let d = await biz(id);
+    assert.deepStrictEqual([d.status, d.blockedGeo, d.online], ['blocked', undefined, true]);
+    const e = await call('upsertMyBusiness', { ...NOLOC, online: true, businessId: id, name: 'Yangi online' }, ONL);
+    assert.strictEqual(e.changed, true);
+    await expectCode(call('upsertMyBusiness', { ...BASE, businessId: id }, ONL), 'BUSINESS_BLOCKED');
+    await call('adminSetBusinessStatus', { businessId: id, status: 'active', reason: 'sinov' }, ADMIN);
+    d = await biz(id);
+    assert.deepStrictEqual([d.status, d.lat, d.geohash4, d.online, d.name], ['active', undefined, undefined, true, 'Yangi online']);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

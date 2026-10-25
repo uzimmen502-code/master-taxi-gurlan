@@ -100,10 +100,13 @@ function normalizeInput(input, fail) {
   if (!CATEGORIES.includes(d.category)) {
     throw fail('invalid-argument', 'BUSINESS_CATEGORY_INVALID', 'Фаолият турини танланг.');
   }
+  // Фақат онлайн йўналиш (2026-10-25, 3-босқич): жисмоний жойи йўқ — координата олинмайди ва сақланмайди, харитага
+  // тушмайди (уй манзили мажбуран нуқта бўлмасин, 40-банд). Юборилган координата ҳам эътиборсиз.
+  const online = d.online === true;
   const lat = d.lat;
   const lng = d.lng;
-  if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)
-    || lat < BOUNDS.latMin || lat > BOUNDS.latMax || lng < BOUNDS.lngMin || lng > BOUNDS.lngMax) {
+  if (!online && (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)
+    || lat < BOUNDS.latMin || lat > BOUNDS.latMax || lng < BOUNDS.lngMin || lng > BOUNDS.lngMax)) {
     throw fail('invalid-argument', 'BUSINESS_LOCATION_INVALID', 'Жойлашувни харитада белгиланг.');
   }
   const phone = String(d.phone == null ? '' : d.phone).replace(/\D/g, '');
@@ -129,9 +132,7 @@ function normalizeInput(input, fail) {
     description: str(d.description, LIMITS.descriptionMax),
     phone,
     address: str(d.address, LIMITS.addressMax),
-    lat,
-    lng,
-    ...geohashPair(lat, lng),
+    ...(online ? { online: true } : { lat, lng, ...geohashPair(lat, lng) }),
     regionId,
     districtId,
     openingHours: str(d.openingHours, LIMITS.hoursMax),
@@ -141,9 +142,12 @@ function normalizeInput(input, fail) {
 
 /** Ўзгарадиган (эга таҳрир қила оладиган) майдонлар — ўзгариш аниқлаш ва audit учун. */
 const EDITABLE = Object.freeze([
-  'name', 'category', 'subtype', 'description', 'phone', 'address', 'lat', 'lng',
+  'name', 'category', 'subtype', 'description', 'phone', 'address', 'lat', 'lng', 'online',
   'regionId', 'districtId', 'openingHours', 'website',
 ]);
+
+/** Онлайн ↔ жисмоний ўтишда эски ҳужжатда қолиб кетадиган жой майдонлари (таҳрирда ўчирилади). */
+const PLACE_KEYS = Object.freeze(['lat', 'lng', 'geohash', 'geohash4', 'online']);
 
 function changedKeys(cur, next) {
   return EDITABLE.filter((k) => cur[k] !== next[k]);
@@ -160,7 +164,27 @@ function visibleFields(cur, fields) {
   const {
     geohash, geohash4, lat, lng, ...rest // eslint-disable-line no-unused-vars
   } = fields;
-  return { ...rest, blockedGeo: { lat, lng } };
+  return typeof lat === 'number' && typeof lng === 'number' ? { ...rest, blockedGeo: { lat, lng } } : rest;
+}
+
+/**
+ * Таҳрир патчи: [fields] + жорий ҳужжатда бор-у, янги шаклда йўқ жой майдонларини ўчириш (онлайн ↔ жисмоний).
+ * Блокланган объектнинг онлайн/жисмоний тури ўзгармайди (`BUSINESS_BLOCKED`) — `blockedGeo` адашмасин.
+ */
+function editPatch(FieldValue, cur, fields, fail) {
+  const wasOnline = cur.online === true;
+  const nowOnline = fields.online === true;
+  if (cur.status === 'blocked' && wasOnline !== nowOnline) {
+    throw fail('failed-precondition', 'BUSINESS_BLOCKED', 'Объект вақтинча блокланган.');
+  }
+  const next = visibleFields(cur, fields);
+  const out = { ...next };
+  if (cur.status !== 'blocked') {
+    PLACE_KEYS.forEach((k) => {
+      if (cur[k] !== undefined && next[k] === undefined) out[k] = FieldValue.delete();
+    });
+  }
+  return out;
 }
 
 const CASCADE_BATCH = 400;
@@ -403,7 +427,7 @@ function attachBusinessDirectory(exportsObj, deps) {
         const cur = snap.data();
         if (cur.ownerId !== uid) throw fail('permission-denied', 'BUSINESS_NOT_OWNER', 'Объект топилмади.');
         if (changedKeys(effective(cur), fields).length === 0) return { changed: false };
-        t.update(ref, { ...visibleFields(cur, fields), updatedAt: ts() });
+        t.update(ref, { ...editPatch(admin.firestore.FieldValue, cur, fields, fail), updatedAt: ts() });
         return { changed: true };
       });
       log({ action: 'upsertMyBusiness', userId: uid, businessId: ref.id, result: out.changed ? 'updated' : 'noop', durationMs: Date.now() - started });
@@ -471,7 +495,7 @@ function attachBusinessDirectory(exportsObj, deps) {
       if (!snap.exists) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
       const keys = changedKeys(effective(snap.data()), fields);
       if (keys.length === 0) return { changed: false };
-      t.update(ref, { ...visibleFields(snap.data(), fields), updatedAt: ts(), updatedBy: actor });
+      t.update(ref, { ...editPatch(admin.firestore.FieldValue, snap.data(), fields, fail), updatedAt: ts(), updatedBy: actor });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
         kind: 'business_update', actor, target: ref.id, reason, changedKeys: keys, at: ts(),
       });

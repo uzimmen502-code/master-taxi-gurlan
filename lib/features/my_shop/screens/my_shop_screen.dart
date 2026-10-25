@@ -8,6 +8,8 @@ import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_form_screen.dart';
 import '../../business_map/screens/business_products_screen.dart';
 import '../my_shop_presence.dart';
+import '../seller_tg_channel.dart';
+import '../widgets/seller_tg_channel_card.dart';
 import '../widgets/shop_link_sheet.dart';
 import 'main_shop_screen.dart';
 import 'shop_stats_screen.dart';
@@ -28,7 +30,11 @@ class MyShopScreen extends StatefulWidget {
     @visibleForTesting this.loadMainName,
     @visibleForTesting this.loadLink,
     @visibleForTesting this.statsScreen,
+    @visibleForTesting this.tgChannelApi,
   });
+
+  /// Тест учун: «Менинг Telegram каналим» callable'лари ўрнига.
+  final SellerTgChannelApi? tgChannelApi;
 
   /// Тест учун: статистика экрани (Firebase'сиз).
   final Widget Function()? statsScreen;
@@ -198,6 +204,11 @@ class _MyShopScreenState extends State<MyShopScreen> {
                     ),
                   ),
               ],
+              // Сотувчининг ўз Telegram канали (2026-10-25): видеолар каналга ҳам чиқади.
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: SellerTgChannelCard(api: widget.tgChannelApi),
+              ),
             ],
           );
         },

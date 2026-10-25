@@ -42,7 +42,7 @@ void main() {
       })));
       PendingShopLink.captureFromUrl(Uri.parse('https://x.app/?shop=AbCdEfGh23'));
       await PendingShopLink.openIfAny(ctx,
-          resolve: (_) async => (ownerPhone: '998901111111', businessId: 'm1'), push: (w) => pushed = w);
+          resolve: (_) async => (ownerPhone: '998901111111', businessId: 'm1', restaurantId: ''), push: (w) => pushed = w);
       expect(pushed, isA<TvShopPublicScreen>());
       expect([(pushed! as TvShopPublicScreen).ownerPhone, (pushed! as TvShopPublicScreen).businessId], ['998901111111', 'm1']);
 

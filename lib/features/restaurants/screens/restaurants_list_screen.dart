@@ -23,6 +23,7 @@ import '../domain/dish_stats.dart';
 import '../domain/seasons.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
+import '../../tv_market/services/shop_stats_recorder.dart';
 import '../../tv_market/services/tv_clip_link.dart';
 import 'my_bookings_screen.dart';
 import 'restaurant_screen.dart';
@@ -402,6 +403,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
       _open(restaurant, focusItemId: d.itemId);
       return;
     }
+    ShopStatsRecorder.dishView(restaurantId: restaurant.id, itemId: item.id, source: 'section');
     await showDishDetailSheet(
       context,
       item: item,
@@ -432,6 +434,7 @@ class _RestaurantsListScreenState extends State<RestaurantsListScreen> {
   }
 
   void _open(Restaurant r, {String? focusItemId, bool openCartOnStart = false}) {
+    ShopStatsRecorder.restaurantView(restaurantId: r.id, source: focusItemId != null || openCartOnStart ? 'section' : 'list');
     final hook = widget.onOpenRestaurant;
     if (hook != null) {
       hook(r);

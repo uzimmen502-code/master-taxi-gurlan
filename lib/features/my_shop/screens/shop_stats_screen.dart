@@ -6,9 +6,47 @@ import '../../tv_market/repositories/tv_public_profiles_repository.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../shop_stats.dart';
 
+/// Статистика экранининг матн калитлари. [showVideoTotal] — АВАГрам жами кўришлари (эга телефони бўйича; ресторанда
+/// бир неча а'зо бўлгани учун кўрсатилмайди — ўлчанмаган рақам кўрсатилмасин).
+class ShopStatsLabels {
+  const ShopStatsLabels({
+    required this.mainViews,
+    required this.itemViews,
+    required this.topItems,
+    required this.rules,
+    required this.since,
+    this.showVideoTotal = true,
+  });
+
+  final String mainViews;
+  final String itemViews;
+  final String topItems;
+  final String rules;
+  final String since;
+  final bool showVideoTotal;
+
+  static const shop = ShopStatsLabels(
+    mainViews: 'stats_shop_views',
+    itemViews: 'stats_product_views',
+    topItems: 'stats_top_products',
+    rules: 'stats_rules',
+    since: 'stats_since',
+  );
+
+  static const restaurant = ShopStatsLabels(
+    mainViews: 'stats_restaurant_views',
+    itemViews: 'stats_dish_views',
+    topItems: 'stats_top_dishes',
+    rules: 'stats_rules_restaurant',
+    since: 'stats_since_restaurant',
+    showVideoTotal: false,
+  );
+}
+
 /// Сотувчи статистикаси (эга қарори 2026-10-25, 6-босқич). Фақат ЎЛЧАНГАН рақамлар: дўкон ва маҳсулот кўришлари
 /// (бир харидор бир кунда бир марта, эгасининг ўзи саналмайди), қаердан келишгани, энг кўп кўрилган маҳсулотлар;
 /// АВАГрам видео кўришлари — мавжуд ҳисоблагичдан (жами). Тахминий ёки ўлчанмаган рақам кўрсатилмайди.
+/// Кафе-ресторан ҳам шу экранни ишлатади ([ShopStatsLabels.restaurant], 2026-10-25).
 class ShopStatsScreen extends StatefulWidget {
   const ShopStatsScreen({
     super.key,
@@ -16,9 +54,13 @@ class ShopStatsScreen extends StatefulWidget {
     this.loadSummary,
     this.loadTitles,
     this.loadVideoViews,
+    this.labels = ShopStatsLabels.shop,
   });
 
   final String phone;
+
+  /// Матн калитлари: дўкон (стандарт) ёки кафе-ресторан ([ShopStatsLabels.restaurant]) — экран ва ҳисоб бир хил.
+  final ShopStatsLabels labels;
 
   /// Тест учун алмаштирилади.
   final Future<ShopStatsSummary> Function(int days)? loadSummary;
@@ -35,7 +77,9 @@ class _ShopStatsScreenState extends State<ShopStatsScreen> {
   late final Future<Map<String, String>> _titles = _loadTitles();
   late final Future<int> _videoViews = _loadVideo();
 
-  static const _sourceKeys = ['market', 'search', 'video', 'map', 'product', 'link', 'qr', 'shop', 'other'];
+  static const _sourceKeys = [
+    'market', 'list', 'home', 'search', 'video', 'map', 'section', 'restaurant', 'product', 'link', 'qr', 'shop', 'other',
+  ];
 
   Future<ShopStatsSummary> _load() =>
       (widget.loadSummary ?? (d) => ShopStatsRepository().fetch(widget.phone, days: d))(_days);
@@ -114,23 +158,25 @@ class _ShopStatsScreenState extends State<ShopStatsScreen> {
               else ...[
                 _body(snap.data!),
               ],
-              const SizedBox(height: 12),
-              FutureBuilder<int>(
-                future: _videoViews,
-                builder: (context, v) => Card(
-                  key: const ValueKey('stats_video_total'),
-                  margin: EdgeInsets.zero,
-                  child: ListTile(
-                    leading: const Icon(Icons.play_circle_outline_rounded, color: AppColors.primaryDark),
-                    title: Text(context.tr('stats_video_total')),
-                    trailing: Text('${v.data ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              if (widget.labels.showVideoTotal) ...[
+                const SizedBox(height: 12),
+                FutureBuilder<int>(
+                  future: _videoViews,
+                  builder: (context, v) => Card(
+                    key: const ValueKey('stats_video_total'),
+                    margin: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: const Icon(Icons.play_circle_outline_rounded, color: AppColors.primaryDark),
+                      title: Text(context.tr('stats_video_total')),
+                      trailing: Text('${v.data ?? 0}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    ),
                   ),
                 ),
-              ),
+              ],
               const SizedBox(height: 14),
-              Text(context.tr('stats_rules'), style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+              Text(context.tr(widget.labels.rules), style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
               const SizedBox(height: 6),
-              Text(context.tr('stats_since'), style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+              Text(context.tr(widget.labels.since), style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
             ],
           );
         },
@@ -144,9 +190,9 @@ class _ShopStatsScreenState extends State<ShopStatsScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children: [
-          _tile('stats_shop_views', s.shopViews, Icons.storefront_rounded, key: const ValueKey('stats_shop_views')),
+          _tile(widget.labels.mainViews, s.shopViews, Icons.storefront_rounded, key: const ValueKey('stats_shop_views')),
           const SizedBox(width: 10),
-          _tile('stats_product_views', s.productViews, Icons.inventory_2_outlined, key: const ValueKey('stats_product_views')),
+          _tile(widget.labels.itemViews, s.productViews, Icons.inventory_2_outlined, key: const ValueKey('stats_product_views')),
         ]),
         const SizedBox(height: 16),
         Text(context.tr('stats_sources'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
@@ -164,7 +210,7 @@ class _ShopStatsScreenState extends State<ShopStatsScreen> {
             ),
         if (s.topItems().isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text(context.tr('stats_top_products'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+          Text(context.tr(widget.labels.topItems), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           FutureBuilder<Map<String, String>>(
             future: _titles,
             builder: (context, t) => Column(

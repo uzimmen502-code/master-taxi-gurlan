@@ -18,6 +18,7 @@ import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/domain/restaurants_access.dart';
 import '../../restaurants/widgets/restaurant_row.dart';
+import '../../tv_market/services/shop_stats_recorder.dart';
 import 'ava_section.dart';
 
 class HomeRestaurantsSection extends StatefulWidget {
@@ -195,7 +196,10 @@ class _HomeRestaurantsSectionState extends State<HomeRestaurantsSection> {
                   _RestaurantTextRow(
                     restaurant: r,
                     distanceKm: r.distanceKmFrom(_lat, _lng),
-                    onTap: () => widget.onOpenRestaurant(r),
+                    onTap: () {
+                      ShopStatsRecorder.restaurantView(restaurantId: r.id, source: 'home');
+                      widget.onOpenRestaurant(r);
+                    },
                   ),
               ],
             ),

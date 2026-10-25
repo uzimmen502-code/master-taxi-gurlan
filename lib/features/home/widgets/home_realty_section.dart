@@ -50,9 +50,10 @@ String realtyStaticMapUrl({
 }
 
 String _markerColorParam(List<RealtyListing> listings) {
-  final tier = listings.any((r) => r.tier == RealtyTier.urgent)
+  // `displayTier` — пуллик муддати тугаган эълон рангни кўтармасин.
+  final tier = listings.any((r) => r.displayTier == RealtyTier.urgent)
       ? RealtyTier.urgent
-      : listings.any((r) => r.tier == RealtyTier.promo)
+      : listings.any((r) => r.displayTier == RealtyTier.promo)
           ? RealtyTier.promo
           : RealtyTier.plain;
   final v = RealtyTabs.colorFor(tier).toARGB32() & 0xFFFFFF;
@@ -172,7 +173,7 @@ class _HomeRealtySectionState extends State<HomeRealtySection> {
               onOpenModule: widget.onOpenAll,
               rows: [
                 for (final r in _items)
-                  _RealtyRow(
+                  HomeRealtyRow(
                     listing: r,
                     onTap: () => widget.onOpenListing(r),
                   ),
@@ -282,50 +283,99 @@ class _Badge extends StatelessWidget {
 }
 
 /// Битта объект қатори — даража рангидаги нуқта + сарлавҳа + нарх.
-class _RealtyRow extends StatelessWidget {
-  const _RealtyRow({required this.listing, required this.onTap});
+@visibleForTesting
+class HomeRealtyRow extends StatelessWidget {
+  const HomeRealtyRow({super.key, required this.listing, required this.onTap});
 
   final RealtyListing listing;
   final VoidCallback onTap;
 
+  /// Ўнг томон (даража номи + нарх) қатор кенглигининг кўпи билан шу
+  /// улушини олади — қолгани сарлавҳага. Аввал нарх қатъий кенгликда эди
+  /// ва узун нарх («1 200 000 000 so'm») + «SHOSHILINCH» + 130% шрифтда
+  /// тор экранда қатор ташқарисига чиқарди.
+  static const double _trailingMaxShare = 0.55;
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
+    // Битта қоида: нуқта, ном ва нарх ранги — харидорга кўринадиган даража
+    // (пуллик муддат тугаган бўлса ОДДИЙ).
+    final tier = listing.displayTier;
+    final tierColor = RealtyTabs.colorFor(tier);
+    final strong = AvaText.feedRow.copyWith(
+      color: tierColor,
+      fontWeight: FontWeight.w700,
+    );
     return InkWell(
       onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.only(top: 6),
-            decoration: BoxDecoration(
-              color: RealtyTabs.colorFor(listing.tier),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              listing.titleOrText,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AvaText.feedRow.copyWith(color: c.inkRow),
-            ),
-          ),
-          if (listing.priceText.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              listing.priceText,
-              maxLines: 1,
-              style: AvaText.feedRow.copyWith(
-                color: RealtyTabs.colorFor(listing.tier),
-                fontWeight: FontWeight.w700,
+      child: LayoutBuilder(
+        builder: (context, box) => Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: tierColor,
+                shape: BoxShape.circle,
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                listing.titleOrText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AvaText.feedRow.copyWith(color: c.inkRow),
+              ),
+            ),
+            if (listing.isPromoted || listing.priceText.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: box.maxWidth.isFinite
+                      ? box.maxWidth * _trailingMaxShare
+                      : double.infinity,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Бош саҳифада ранг изоҳи (лента табы ёки харита
+                    // легендаси) йўқ — пуллик даража амалда бўлса унинг
+                    // МАВЖУД номи ёзилади («РЕКЛАМА»/«СРОЧНО»,
+                    // `RealtyTabs.labelKey`). `RealtyTierBadge` қутиси 14 px
+                    // қаторга сиғмайди, шунинг учун матн шаклида.
+                    if (listing.isPromoted) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          context.tr(RealtyTabs.labelKey(tier)),
+                          key: const ValueKey('home_realty_tier_label'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: strong,
+                        ),
+                      ),
+                    ],
+                    if (listing.priceText.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        flex: 2,
+                        child: Text(
+                          listing.priceText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: strong,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
           ],
-        ],
+        ),
       ),
     );
   }

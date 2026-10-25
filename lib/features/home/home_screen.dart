@@ -71,6 +71,7 @@ import '../demand_offer/ui_adapters/demand_ui_adapter.dart' show IntentResult;
 import 'home_intent_router.dart';
 import '../book/screens/ava_book_screen.dart';
 import '../restaurants/merchant/restaurant_entry_flow.dart';
+import '../restaurants/open_restaurant_checked.dart';
 import '../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../repositories/driver_repository.dart';
 import '../intercity_taxi/driver/intercity_driver_onboarding.dart';
@@ -676,6 +677,10 @@ class _HomeViewState extends State<_HomeView> {
     // экрани (ҳолати қайта текширилади, дўкон тугмаси ўз йўналишини очади). Топилмаса — Аҳоли бозори.
     if (e.type == SearchIndexEntry.typeShop && e.targetOwner.isNotEmpty) {
       await _push(TvShopPublicScreen(ownerPhone: e.targetOwner, businessId: e.targetBusinessId, source: 'search'));
+      return;
+    }
+    if (e.type == SearchIndexEntry.typeRestaurant && e.sourceId.isNotEmpty) {
+      await openRestaurantChecked(context, e.sourceId, source: 'search', push: _push);
       return;
     }
     if (e.type == SearchIndexEntry.typeShopItem && e.sourceId.isNotEmpty) {

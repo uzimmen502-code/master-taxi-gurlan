@@ -573,7 +573,7 @@ class _Header extends StatelessWidget {
             Expanded(
               child: SectionTitleText(
                 title: sectionTitleWithColon(title),
-                style: AvaText.sectionTitle.copyWith(color: c.ink),
+                style: AvaText.homeSectionTitle.copyWith(color: c.ink),
               ),
             ),
             if (onSeeAll != null) ...[
@@ -608,7 +608,7 @@ class SectionTitleText extends StatelessWidget {
   final String title;
   final TextStyle style;
 
-  /// Кичрайтириш ЙЎҚ (1.0): ҳамма бўлим сарлавҳаси БИР ХИЛ шрифтда (16/600, «Кўчмас мулк кластери» каби) —
+  /// Кичрайтириш ЙЎҚ (1.0): ҳамма бўлим сарлавҳаси БИР ХИЛ шрифтда (14/600 — [AvaText.homeSectionTitle], 2026-10-26 гача 16/600; «Кўчмас мулк кластери» каби) —
   /// сиғмаса 2 қаторга ўтади (эга, 2026-10-19: «бўлим сарлавҳалари шрифтлари бир хил бўлсин»). Аввал 0.8 эди ва
   /// узун сарлавҳалар («Яқиндаги Кафе-Ресторанлар:») бошқаларидан кичик чиқарди.
   static const minScale = 1.0;

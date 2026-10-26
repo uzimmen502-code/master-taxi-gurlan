@@ -109,7 +109,7 @@ class _HomeServicesOlxRowState extends State<HomeServicesOlxRow> {
                 children: [
                   Text(
                     context.tr('home_services_spotlight_title'),
-                    style: AvaText.sectionTitle.copyWith(color: c.ink),
+                    style: AvaText.homeSectionTitle.copyWith(color: c.ink),
                   ),
                   Icon(Icons.chevron_right_rounded, size: 22, color: c.ink),
                 ],

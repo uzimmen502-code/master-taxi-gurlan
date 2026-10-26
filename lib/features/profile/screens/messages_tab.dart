@@ -9,6 +9,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/message_thread_group.dart';
 import '../../../models/news_item.dart';
 import '../../../models/news_read_state.dart';
+import '../inbox_hide_keys.dart';
 import '../widgets/news_delete_button.dart';
 import '../../../repositories/chat_repository.dart';
 import '../../../repositories/driver_repository.dart';
@@ -93,6 +94,12 @@ class _MessagesTabState extends State<MessagesTab>
     await context.read<NewsRepository>().dismissNews(_uid, ids);
   }
 
+  /// Ҳайдовчи аризаси картасини яшириш (ариза ҳолати ўзгарса яна чиқади) — [InboxHideKeys.driverRequest].
+  Future<void> _hideKey(String key) async {
+    setState(() => _hidden = {..._hidden, key});
+    await context.read<NewsRepository>().dismissNews(_uid, [key]);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -124,17 +131,19 @@ class _MessagesTabState extends State<MessagesTab>
                     .where((n) => !_hidden.contains(n.id))
                     .toList();
                 final groups = MessageThreadGroup.fromDialogNews(shownNews);
-                final driverGroup = MessageThreadGroup.fromDriverRequest(
-                  driverSnap.data,
-                  uid,
-                );
+                final driverData = driverSnap.data;
+                final driverKey =
+                    driverData == null ? '' : InboxHideKeys.driverRequest(driverData);
+                final driverGroup = driverData == null || _hidden.contains(driverKey)
+                    ? null
+                    : MessageThreadGroup.fromDriverRequest(driverData, uid);
 
                 final rows = <_InboxRow>[];
                 rows.add(
                   _InboxRow.supportChat(unread: chatUnread),
                 );
                 if (driverGroup != null) {
-                  rows.add(_InboxRow.driver(driverGroup));
+                  rows.add(_InboxRow.driver(driverGroup, hideKey: driverKey));
                 }
                 for (final g in groups) {
                   rows.add(_InboxRow.dialog(g));
@@ -143,7 +152,7 @@ class _MessagesTabState extends State<MessagesTab>
                 if (rows.length == 1 &&
                     !chatUnread &&
                     shownNews.isEmpty &&
-                    driverSnap.data == null) {
+                    driverGroup == null) {
                   return _emptyState();
                 }
 
@@ -193,7 +202,7 @@ class _MessagesTabState extends State<MessagesTab>
       case _InboxRowKind.supportChat:
         return _supportChatCard(context, uid, row.unread);
       case _InboxRowKind.driver:
-        return _driverCard(context, row.group!);
+        return _driverCard(context, row.group!, row.hideKey);
       case _InboxRowKind.dialog:
         return _dialogCard(context, row.group!);
     }
@@ -263,6 +272,15 @@ class _MessagesTabState extends State<MessagesTab>
                     shape: BoxShape.circle,
                   ),
                 ),
+              // Ўчириш (эга, 2026-10-26) = ёзишмалар тарихини ўз рўйхатидан тозалаш. Қаторнинг ЎЗИ қолади:
+              // у админга ёзишнинг ягона йўли (бошқа кириш фақат push орқали).
+              NewsDeleteButton(
+                key: const ValueKey('support-chat-clear'),
+                titleKey: 'chat_clear_title',
+                bodyKey: 'chat_clear_body',
+                doneKey: 'chat_cleared_snack',
+                onDelete: () => _hideKey(InboxHideKeys.supportChatCleared(DateTime.now())),
+              ),
               const Icon(Icons.chevron_right, color: Colors.grey),
             ],
           ),
@@ -271,7 +289,7 @@ class _MessagesTabState extends State<MessagesTab>
     );
   }
 
-  Widget _driverCard(BuildContext context, MessageThreadGroup g) {
+  Widget _driverCard(BuildContext context, MessageThreadGroup g, String hideKey) {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
@@ -294,9 +312,19 @@ class _MessagesTabState extends State<MessagesTab>
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: Text(
-          _shortDate(g.lastUpdate),
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _shortDate(g.lastUpdate),
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+            // Ўчириш (эга, 2026-10-26): карта яширилади, ариза ҳолати ўзгарса яна чиқади.
+            NewsDeleteButton(
+              key: const ValueKey('driver-card-delete'),
+              onDelete: () => _hideKey(hideKey),
+            ),
+          ],
         ),
       ),
     );
@@ -398,6 +426,7 @@ class _InboxRow {
     this.group,
     this.unread = false,
     required this.sortTime,
+    this.hideKey = '',
   });
 
   factory _InboxRow.supportChat({required bool unread}) => _InboxRow._(
@@ -407,10 +436,11 @@ class _InboxRow {
             unread ? DateTime.now() : DateTime.fromMillisecondsSinceEpoch(0),
       );
 
-  factory _InboxRow.driver(MessageThreadGroup g) => _InboxRow._(
+  factory _InboxRow.driver(MessageThreadGroup g, {required String hideKey}) => _InboxRow._(
         kind: _InboxRowKind.driver,
         group: g,
         sortTime: g.lastUpdate,
+        hideKey: hideKey,
       );
 
   factory _InboxRow.dialog(MessageThreadGroup g) => _InboxRow._(
@@ -423,4 +453,7 @@ class _InboxRow {
   final MessageThreadGroup? group;
   final bool unread;
   final DateTime sortTime;
+
+  /// Ҳайдовчи аризаси картасини яшириш калити ([InboxHideKeys.driverRequest]).
+  final String hideKey;
 }

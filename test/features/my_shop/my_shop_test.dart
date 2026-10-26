@@ -234,9 +234,86 @@ void main() {
       expect(find.text('raw'), findsNothing);
     });
 
-    testWidgets('асосий дўконда ўчириш менюси йўқ (у бу ерда ўчирилмайди)', (tester) async {
-      await openWithDelete(tester);
-      expect(find.byType(PopupMenuButton<String>), findsOneWidget, reason: 'фақат қўшимча дўконда');
+    // Янги дўкондан кейин маҳсулотлар экрани дарров (эга, 2026-10-26: «маъқул», «ҳа»).
+    Future<void> openWithForm(WidgetTester tester, Object? formResult) async {
+      _bigView(tester);
+      await tester.pumpWidget(_app(MyShopScreen(
+        key: UniqueKey(),
+        phone: _phone,
+        businesses: Stream.value([_biz('n1', 'Yangi do‘kon', BusinessCategory.retail)]),
+        loadMainName: () async => 'Asosiy',
+        openForm: (context, existing) async => formResult,
+        productsScreen: (shop) => Scaffold(body: Text('PRODUCTS ${shop.id}')),
+      )));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('my_shop_new_shop'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('янги дўкон сақланди (ID қайтди) — шу дўконнинг маҳсулотлар экрани дарров очилади', (tester) async {
+      await openWithForm(tester, 'n1');
+      expect(find.text('PRODUCTS n1'), findsOneWidget);
+    });
+
+    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани очилмайди', (tester) async {
+      await openWithForm(tester, true);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      await openWithForm(tester, null);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+    });
+
+    // Асосий дўконни ўчириш (эга, 2026-10-26: «аввал ичидаги дўконлар ўчирилсин хабари билан ўчирилсин»).
+    Future<List<String>> openMain(WidgetTester tester, {List<Business> shops = const [], Object? error}) async {
+      _bigView(tester);
+      final calls = <String>[];
+      await tester.pumpWidget(_app(MyShopScreen(
+        key: UniqueKey(),
+        phone: _phone,
+        businesses: Stream.value(shops),
+        loadMainName: () async => 'Asosiy',
+        deleteMainShop: () async {
+          calls.add('deleteMain');
+          if (error != null) throw error;
+        },
+      )));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('my_shop_menu_main')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('bizmap_delete'));
+      await tester.pumpAndSettle();
+      return calls;
+    }
+
+    testWidgets('асосий дўкон: ичида дўкон бор — «аввал ичидаги дўконларни ўчиринг», сервер чақирилмайди', (tester) async {
+      final calls = await openMain(tester, shops: [_biz('b1', 'Ichki', BusinessCategory.retail)]);
+      expect(find.byKey(const ValueKey('my_shop_main_has_inner')), findsOneWidget);
+      expect(calls, isEmpty);
+    });
+
+    testWidgets('асосий дўкон: ичида дўкон йўқ — тасдиқдан кейин ўчирилади', (tester) async {
+      final calls = await openMain(tester);
+      expect(find.text('my_shop_main_delete_body'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('my_shop_main_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(calls, ['deleteMain']);
+      expect(find.text('my_shop_main_deleted'), findsOneWidget);
+    });
+
+    testWidgets('асосий дўкон: сервер SHOP_HAS_INNER_SHOPS қайтарса ҳам — ўша хабар', (tester) async {
+      await openMain(tester, error: FirebaseFunctionsException(
+          code: 'failed-precondition', message: 'raw', details: {'code': 'SHOP_HAS_INNER_SHOPS'}));
+      await tester.tap(find.byKey(const ValueKey('my_shop_main_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('my_shop_main_has_inner')), findsOneWidget);
+    });
+
+    testWidgets('асосий дўкон: блокланган — тушунарли матн, хом хато йўқ', (tester) async {
+      await openMain(tester, error: FirebaseFunctionsException(
+          code: 'failed-precondition', message: 'raw', details: {'code': 'SHOP_BLOCKED'}));
+      await tester.tap(find.byKey(const ValueKey('my_shop_main_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('my_shop_delete_blocked'), findsOneWidget);
+      expect(find.text('raw'), findsNothing);
     });
   });
 

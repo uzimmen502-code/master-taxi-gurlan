@@ -78,6 +78,12 @@ class BusinessRepository {
     await _fns.httpsCallable('deleteMyBusiness').call<Object?>({'businessId': businessId});
   }
 
+  /// Асосий онлайн дўконни ўчириш (`deleteMyMainShop`): ичида дўкон бўлса — `SHOP_HAS_INNER_SHOPS`, блокланган —
+  /// `SHOP_BLOCKED` ([errorCode]). Дўкон номи ва ўз маҳсулотлари ўчади; улгуржи/Аҳоли эълонлари қолади.
+  Future<void> deleteMainShop() async {
+    await _fns.httpsCallable('deleteMyMainShop').call<Object?>(const {});
+  }
+
   /// Админ ЯНГИ объект қўшади (эга қарори 2026-10-23). [ownerPhone] берилса — ёзув шу фойдаланувчиники;
   /// берилмаса — эгасиз (фақат админ таҳрирлайди). [clientRequestId] такрор босишда битта ёзув беради.
   Future<String> adminCreate(

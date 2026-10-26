@@ -284,9 +284,24 @@ void main() {
       return calls;
     }
 
-    testWidgets('асосий дўкон: ичида дўкон бор — «аввал ичидаги дўконларни ўчиринг», сервер чақирилмайди', (tester) async {
+    testWidgets('асосий дўкон: ичида дўконлар бор — огоҳлантиришда сони, тасдиқдан кейин БАРЧАСИ ўчади (эга, 2026-10-26)', (tester) async {
+      final calls = await openMain(tester, shops: [
+        _biz('b1', 'Ichki', BusinessCategory.retail),
+        _biz('b2', 'Ombor', BusinessCategory.wholesale),
+      ]);
+      expect(find.byKey(const ValueKey('my_shop_main_has_inner')), findsNothing, reason: 'аввалги тўсиқ йўқ');
+      final body = tester.widget<Text>(find.byKey(const ValueKey('my_shop_main_delete_body')));
+      expect(body.data, 'my_shop_main_delete_body_all', reason: 'сони билан огоҳлантириш (тест локализациясиз — калит)');
+      await tester.tap(find.byKey(const ValueKey('my_shop_main_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(calls, ['deleteMain']);
+      expect(find.text('my_shop_main_deleted'), findsOneWidget);
+    });
+
+    testWidgets('асосий дўкон: огоҳлантиришда бекор — ҳеч нарса ўчмайди', (tester) async {
       final calls = await openMain(tester, shops: [_biz('b1', 'Ichki', BusinessCategory.retail)]);
-      expect(find.byKey(const ValueKey('my_shop_main_has_inner')), findsOneWidget);
+      await tester.tap(find.text('cancel'));
+      await tester.pumpAndSettle();
       expect(calls, isEmpty);
     });
 

@@ -178,9 +178,11 @@ class _MyShopScreenState extends State<MyShopScreen> {
     }
   }
 
-  /// Асосий онлайн дўконни ўчириш (эга, 2026-10-26: «аввал ичидаги дўконлар ўчирилсин хабари билан ўчирилсин»;
-  /// танлов — «фақат онлайн дўкон»). Ичида дўкон бор — хабар, сервер чақирилмайди (сервер ҳам ўзи текширади).
+  /// «Менинг онлайн дўконим»ни БУТУНЛАЙ ўчириш (эга, 2026-10-26: «ўчирганда барчаси огоҳлантириш билан ўчиб
+  /// кетсин»): ичида дўконлар бўлса — огоҳлантиришда сони айтилади, асосий дўкон билан бирга ўчади (сервер
+  /// `deleteMyMainShop`). Танлов «фақат онлайн дўкон»: улгуржи сотувчи, Аҳоли эълонлари, кафе/хизматлар қолади.
   Future<void> _deleteMain() async {
+    // Эски сервер (ичида дўкон бўлса рад этарди) жавоби учун — тушунарли хабар.
     Future<void> innerFirst() => showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -189,12 +191,17 @@ class _MyShopScreenState extends State<MyShopScreen> {
             actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(context.tr('ok')))],
           ),
         );
-    if (_shops.isNotEmpty) return innerFirst();
+    final inner = _shops.length;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(context.tr('my_shop_main_delete_title')),
-        content: Text(context.tr('my_shop_main_delete_body')),
+        content: Text(
+          inner > 0
+              ? context.tr('my_shop_main_delete_body_all').replaceAll('{count}', '$inner')
+              : context.tr('my_shop_main_delete_body'),
+          key: const ValueKey('my_shop_main_delete_body'),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('cancel'))),
           TextButton(

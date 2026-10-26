@@ -61,8 +61,16 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   late final TextEditingController _price = TextEditingController(
       text: (widget.existing?.price ?? 0) > 0 ? '${widget.existing!.price}' : '');
   late final TextEditingController _desc = TextEditingController(text: widget.existing?.description ?? '');
-  late String _kind = widget.existing?.kind ?? defaultProductKind(widget.business.category);
+  late String _kind = widget.existing?.kind ??
+      (sellsOnlyProducts(widget.business) ? 'product' : defaultProductKind(widget.business.category));
+
+  /// Дўконда «Хизмат» танлови йўқ ([sellsOnlyProducts]). Аввал хизмат деб сақланган эски дўкон ёзуви — танлов
+  /// кўринади, эга уни маҳсулотга ўтказа олсин.
+  late final bool _showKindChoice = !sellsOnlyProducts(widget.business) || widget.existing?.kind == 'service';
   final List<String> _photos = [];
+
+  /// Янги маҳсулот: «Видео (ихтиёрий)» белгиланган — сақлангандан кейин видео экрани дарров очилади.
+  bool _wantVideo = false;
   bool _busy = false;
   String? _error;
 
@@ -145,7 +153,8 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
       // Ҳужжат ёзилди: спиннер тўхтайди (видео сўрови очиқ турганда ҳам «банд» кўринмасин).
       setState(() => _busy = false);
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('bizprod_saved'))));
-      if (!_isEdit) await _offerVideo(itemId);
+      // Видео формадаги ягона жойда танланади (эга, 2026-10-26) — аввалги «Видео қўшасизми?» ойнаси йўқ.
+      if (!_isEdit && _wantVideo) await (widget.addVideo ?? _defaultAddVideo)(context, itemId);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -158,19 +167,62 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     }
   }
 
-  Future<void> _offerVideo(String itemId) async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(context.tr('bizprod_video_ask_title')),
-        content: Text(context.tr('bizprod_video_ask_body')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('bizprod_video_later'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(context.tr('bizprod_video_add'))),
-        ],
-      ),
+  /// Видео — расмлардан кейин, ЯГОНА жойда (эга, 2026-10-26: «расм ва видео жойлаштириш битта жойда бўлгани
+  /// яхши», «дубликат бўлмасин»). Янги маҳсулотда — белгилаш (ҳужжат ҳали йўқ, видео сақлангандан кейин уланади);
+  /// таҳрирда — видео экрани дарров очилади. Аввалги «Видео қўшасизми?» ойнаси ва алоҳида тугма олиб ташланди.
+  Widget _videoSection() {
+    final hasVideo = widget.existing?.hasVideo ?? false;
+    final selected = !_isEdit && _wantVideo;
+    final c = AppColors.primaryDark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(context.tr('bizprod_video_label'), style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        if (hasVideo)
+          Row(children: [
+            Icon(Icons.check_circle_rounded, color: c, size: 20),
+            const SizedBox(width: 6),
+            Text(context.tr('bizprod_has_video')),
+          ])
+        else
+          InkWell(
+            key: const ValueKey('bizprod_video_tile'),
+            onTap: _busy
+                ? null
+                : () => _isEdit
+                    ? (widget.addVideo ?? _defaultAddVideo)(context, widget.existing!.id)
+                    : setState(() => _wantVideo = !_wantVideo),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                border: Border.all(color: selected ? c : Colors.grey.shade400, width: selected ? 2 : 1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(selected ? Icons.check_circle_rounded : Icons.videocam_outlined, color: selected ? c : null),
+                  const SizedBox(height: 4),
+                  Text(context.tr('bizprod_video_add'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+                ],
+              ),
+            ),
+          ),
+        if (selected)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.tr('bizprod_video_after_save'),
+              key: const ValueKey('bizprod_video_after_save'),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ),
+      ],
     );
-    if (yes == true && mounted) await (widget.addVideo ?? _defaultAddVideo)(context, itemId);
   }
 
   Widget _thumb(String path) {
@@ -184,20 +236,24 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr(_isEdit ? 'bizprod_edit' : 'bizprod_new'))),
+      appBar: AppBar(
+        title: Text(context.tr(_isEdit ? 'bizprod_edit' : (_showKindChoice ? 'bizprod_new' : 'bizprod_new_product'))),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SegmentedButton<String>(
-            key: const ValueKey('bizprod_kind'),
-            segments: [
-              ButtonSegment(value: 'product', label: Text(context.tr('bizprod_kind_product'))),
-              ButtonSegment(value: 'service', label: Text(context.tr('bizprod_kind_service'))),
-            ],
-            selected: {_kind},
-            onSelectionChanged: _busy ? null : (s) => setState(() => _kind = s.first),
-          ),
-          const SizedBox(height: 12),
+          if (_showKindChoice) ...[
+            SegmentedButton<String>(
+              key: const ValueKey('bizprod_kind'),
+              segments: [
+                ButtonSegment(value: 'product', label: Text(context.tr('bizprod_kind_product'))),
+                ButtonSegment(value: 'service', label: Text(context.tr('bizprod_kind_service'))),
+              ],
+              selected: {_kind},
+              onSelectionChanged: _busy ? null : (s) => setState(() => _kind = s.first),
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             key: const ValueKey('bizprod_name'),
             controller: _name,
@@ -236,18 +292,6 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
               label: Text(context.tr('bizprod_edit_photos')),
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             ),
-            if (!widget.existing!.hasVideo) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                key: const ValueKey('bizprod_add_video'),
-                onPressed: _busy
-                    ? null
-                    : () => (widget.addVideo ?? _defaultAddVideo)(context, widget.existing!.id),
-                icon: const Icon(Icons.videocam_outlined),
-                label: Text(context.tr('bizprod_video_add')),
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              ),
-            ],
           ] else ...[
             Text('${context.tr('bizprod_photos')} ${_photos.length}/${TvShopItem.maxPhotos}',
                 style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -306,6 +350,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
               ],
             ),
           ],
+          _videoSection(),
           const SizedBox(height: 12),
           if (_error != null)
             Padding(

@@ -32,7 +32,15 @@ class MyShopScreen extends StatefulWidget {
     @visibleForTesting this.statsScreen,
     @visibleForTesting this.tgChannelApi,
     @visibleForTesting this.deleteShop,
+    @visibleForTesting this.openForm,
+    @visibleForTesting this.productsScreen,
   });
+
+  /// Тест учун: дўкон формаси ўрнига (натижа — [BusinessFormScreen] каби: янги дўкон ID'си ёки `true`).
+  final Future<Object?> Function(BuildContext context, Business? existing)? openForm;
+
+  /// Тест учун: маҳсулотлар экрани ўрнига.
+  final Widget Function(Business shop)? productsScreen;
 
   /// Тест учун: `deleteMyBusiness` callable ўрнига.
   final Future<void> Function(String businessId)? deleteShop;
@@ -89,23 +97,49 @@ class _MyShopScreenState extends State<MyShopScreen> {
   }
 
   Future<void> _openProducts(Business b) => Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => BusinessProductsScreen(business: b)),
+        MaterialPageRoute(builder: (_) => widget.productsScreen?.call(b) ?? BusinessProductsScreen(business: b)),
       );
 
   /// Ҳозирги дўконлар рўйхати — формадаги филиал танлови учун.
   List<Business> _shops = const [];
 
-  Future<void> _openForm([Business? b]) => Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => BusinessFormScreen(
-            existing: b,
-            initialCategory: BusinessCategory.retail,
-            // Дўконда «чакана/улгуржи» танлови йўқ — одамни чалкаштиради (эга, 2026-10-24).
-            lockCategory: true,
-            branchParents: _shops,
+  Future<void> _openForm([Business? b]) async {
+    final result = await (widget.openForm?.call(context, b) ??
+        Navigator.of(context).push<Object?>(
+          MaterialPageRoute(
+            builder: (_) => BusinessFormScreen(
+              existing: b,
+              initialCategory: BusinessCategory.retail,
+              // Дўконда «чакана/улгуржи» танлови йўқ — одамни чалкаштиради (эга, 2026-10-24).
+              lockCategory: true,
+              branchParents: _shops,
+            ),
           ),
-        ),
-      );
+        ));
+    // Янги дўкон (филиал эмас) сақланди — унинг маҳсулотлар экрани дарров очилади (эга, 2026-10-26: «маъқул», «ҳа»).
+    if (b != null || result is! String || result.isEmpty || !mounted) return;
+    final created = await _findShop(result);
+    if (created != null && mounted) await _openProducts(created);
+  }
+
+  /// Янги дўкон рўйхатга (Firestore обунаси) тушгунча кутади: аввал жорий рўйхат, бўлмаса янги обуна (8 с).
+  /// Топилмаса — ҳеч нарса очилмайди, дўкон рўйхатда кўринади (эга қўлда очади).
+  Future<Business?> _findShop(String id) async {
+    for (final s in _shops) {
+      if (s.id == id) return s;
+    }
+    if (widget.businesses != null) return null; // тест манбаи қайта тингланмайди
+    try {
+      final list = await BusinessRepository()
+          .watchMine(widget.phone)
+          .firstWhere((l) => l.any((s) => s.id == id))
+          .timeout(const Duration(seconds: 8));
+      return list.firstWhere((s) => s.id == id);
+    } catch (e) {
+      debugPrint('[MyShop] new shop $id not visible yet: $e');
+      return null;
+    }
+  }
 
   /// Дўконни (Бизнес харитаси объекти ёки филиал) ўчириш (эга, 2026-10-26: «Дўконни ўчириш йўқ, тузат»).
   /// Мавжуд `deleteMyBusiness` (эгаси текширилади, блокланган — рад); маҳсулотлар `businessProductsCascade`

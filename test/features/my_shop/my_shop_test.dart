@@ -234,6 +234,34 @@ void main() {
       expect(find.text('raw'), findsNothing);
     });
 
+    // Янги дўкондан кейин маҳсулотлар экрани дарров (эга, 2026-10-26: «маъқул», «ҳа»).
+    Future<void> openWithForm(WidgetTester tester, Object? formResult) async {
+      _bigView(tester);
+      await tester.pumpWidget(_app(MyShopScreen(
+        key: UniqueKey(),
+        phone: _phone,
+        businesses: Stream.value([_biz('n1', 'Yangi do‘kon', BusinessCategory.retail)]),
+        loadMainName: () async => 'Asosiy',
+        openForm: (context, existing) async => formResult,
+        productsScreen: (shop) => Scaffold(body: Text('PRODUCTS ${shop.id}')),
+      )));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('my_shop_new_shop'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('янги дўкон сақланди (ID қайтди) — шу дўконнинг маҳсулотлар экрани дарров очилади', (tester) async {
+      await openWithForm(tester, 'n1');
+      expect(find.text('PRODUCTS n1'), findsOneWidget);
+    });
+
+    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани очилмайди', (tester) async {
+      await openWithForm(tester, true);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      await openWithForm(tester, null);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+    });
+
     testWidgets('асосий дўконда ўчириш менюси йўқ (у бу ерда ўчирилмайди)', (tester) async {
       await openWithDelete(tester);
       expect(find.byType(PopupMenuButton<String>), findsOneWidget, reason: 'фақат қўшимча дўконда');

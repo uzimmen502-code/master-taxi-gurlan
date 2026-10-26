@@ -195,11 +195,14 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
         openingHours: _hours.text.trim(),
         website: _website.text.trim(),
       );
-      await _repo.upsertMine(draft, businessId: widget.existing?.id, clientRequestId: _requestId);
+      final id = await _repo.upsertMine(draft, businessId: widget.existing?.id, clientRequestId: _requestId);
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)
           ?.showSnackBar(SnackBar(content: Text(context.tr('bizmap_saved'))));
-      Navigator.of(context).pop(true);
+      // Янги объект (филиал эмас) — чақирувчи унинг ID'си билан маҳсулотлар экранини очиши мумкин (эга, 2026-10-26:
+      // «янги дўкон қўшгандан кейин шу ернинг ўзида маҳсулот қўшиш»). Таҳрир ва филиал — аввалгидек `true`.
+      final isNewMain = widget.existing == null && draft.branchOf.isEmpty && id.isNotEmpty;
+      Navigator.of(context).pop(isNewMain ? id : true);
     } catch (e) {
       if (!mounted) return;
       setState(() {

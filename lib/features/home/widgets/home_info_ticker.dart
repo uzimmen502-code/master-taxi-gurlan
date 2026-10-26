@@ -13,9 +13,23 @@ import '../../../models/home_ticker_ad.dart';
 /// 12px shriftda ham sig'adi: 4 × 12 × 1.1 = 52.8).
 /// Savol-javob matnlari — hammasi qalin (bold) va BOSH HARFLARDA.
 class HomeInfoTicker extends StatefulWidget {
-  const HomeInfoTicker({super.key, required this.ads});
+  const HomeInfoTicker({super.key, required this.ads, this.random});
 
   final List<HomeTickerAd> ads;
+
+  /// Тенг устуворликдаги матнларни аралаштириш учун (тестда — seed билан).
+  final math.Random? random;
+
+  /// Кўрсатиш тартиби (эга, 2026-10-26: «Устуворлик» ишласин): юқори устуворлик аввал; тенглари ўзаро аралаш.
+  /// Ҳамма матн 0 бўлса — аввалгидек тўлиқ аралаш.
+  static List<HomeTickerAd> displayOrder(List<HomeTickerAd> ads, math.Random random) {
+    final byPriority = <int, List<HomeTickerAd>>{};
+    for (final a in ads) {
+      byPriority.putIfAbsent(a.priority, () => []).add(a);
+    }
+    final levels = byPriority.keys.toList()..sort((a, b) => b.compareTo(a));
+    return [for (final p in levels) ...(byPriority[p]!..shuffle(random))];
+  }
 
   static const _fill     = Color(0xFFFFFF00); // neon sariq
   static const _question = Color(0xFF2C2C2A);
@@ -28,29 +42,44 @@ class HomeInfoTicker extends StatefulWidget {
 class _HomeInfoTickerState extends State<HomeInfoTicker> {
   int _index = 0;
   Timer? _timer;
+  late final math.Random _random = widget.random ?? math.Random();
+
+  /// Тартиб фақат матнлар тўплами ёки устуворлиги ўзгарганда қайта ҳисобланади — ота виджет қайта
+  /// чизилганда баннер бошқа матнга сакраб кетмайди (аввал home_screen ҳар build'да аралаштирарди).
+  List<HomeTickerAd> _ordered = const [];
+
+  static String _signature(List<HomeTickerAd> ads) =>
+      (ads.map((a) => '${a.id}:${a.priority}').toList()..sort()).join('|');
 
   @override
   void initState() {
     super.initState();
+    _ordered = HomeInfoTicker.displayOrder(widget.ads, _random);
     _schedule();
   }
 
   @override
   void didUpdateWidget(covariant HomeInfoTicker old) {
     super.didUpdateWidget(old);
-    if (old.ads.length != widget.ads.length) {
-      _index = 0;
-      _schedule();
+    if (identical(old.ads, widget.ads)) return;
+    if (_signature(old.ads) == _signature(widget.ads)) {
+      // Ўша матнлар (масалан, фақат матн таҳрирланди) — тартиб ва жорий ўрин сақланади.
+      final byId = {for (final a in widget.ads) a.id: a};
+      _ordered = [for (final a in _ordered) byId[a.id] ?? a];
+      return;
     }
+    _ordered = HomeInfoTicker.displayOrder(widget.ads, _random);
+    _index = 0;
+    _schedule();
   }
 
   void _schedule() {
     _timer?.cancel();
-    if (widget.ads.length < 2) return;
+    if (_ordered.length < 2) return;
     // Хар бир матн 3 с → 3D flip → кейингиси.
     _timer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
-      setState(() => _index = (_index + 1) % widget.ads.length);
+      setState(() => _index = (_index + 1) % _ordered.length);
       _schedule();
     });
   }
@@ -170,9 +199,9 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.ads.isEmpty) return const SizedBox.shrink();
+    if (_ordered.isEmpty) return const SizedBox.shrink();
     // Илова тилидаги матн (uz_Cyrl / uz_Latn / ru; бўш тиллар учун — HomeTickerAd.textFor).
-    final text = widget.ads[_index].textFor(context.contentLang);
+    final text = _ordered[_index].textFor(context.contentLang);
     final upper = text.toUpperCase();
 
     return SizedBox(

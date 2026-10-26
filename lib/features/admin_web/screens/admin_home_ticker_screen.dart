@@ -583,6 +583,11 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 8),
+              Text(
+                'Устуворлиги юқори матн баннерда аввал кўрсатилади; тенглари аралаш тартибда.',
+                key: const ValueKey('ticker_priority_note'),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
               _sliderRow(
                 label: 'Устуворлик',
                 value: _priority.toDouble().clamp(0, 100),

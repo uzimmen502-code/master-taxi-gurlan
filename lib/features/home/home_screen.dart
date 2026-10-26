@@ -257,7 +257,8 @@ class _HomeViewState extends State<_HomeView> {
 
   void _armWalletHideTimer() {
     _walletHideTimer?.cancel();
-    _walletHideTimer = Timer(const Duration(seconds: 11), () {
+    // Ҳамён картаси бош экранда 12 с кўринади (эга, 2026-10-26: «12 сонияга ўзгартир»; аввал 11 с).
+    _walletHideTimer = Timer(const Duration(seconds: 12), () {
       if (!mounted) return;
       setState(() => _walletVisible = false);
     });

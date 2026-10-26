@@ -133,14 +133,19 @@ class TvStorageService {
     return ref.getDownloadURL();
   }
 
-  /// 1–5 та дўкон расми. Тартиб сақланади.
+  /// Танланган расм байтлари — вебда ҳам (расм танлагич `blob:` манзил қайтаради) ишлайди.
+  /// Аввал `File(path).readAsBytes()` эди (`dart:io`) — вебда истисно ташлар ва «Янги маҳсулот» формаси
+  /// ҳар доим «Сақлаб бўлмади» берарди (эга, 2026-10-26, скриншот). Бошқа модуллар ҳам `XFile` ишлатади.
+  static Future<Uint8List> readPickedPhotoBytes(String path) => XFile(path).readAsBytes();
+
+  /// 1–7 та дўкон расми. Тартиб сақланади.
   Future<List<String>> uploadShopPhotos({
     required String ownerPhone,
     required List<String> filePaths,
   }) async {
     final urls = <String>[];
     for (final path in filePaths.take(TvShopItem.maxPhotos)) {
-      var bytes = await File(path).readAsBytes();
+      var bytes = await readPickedPhotoBytes(path);
       bytes = await compressShopPhoto(bytes);
       urls.add(await uploadShopPhoto(ownerPhone: ownerPhone, bytes: bytes));
     }

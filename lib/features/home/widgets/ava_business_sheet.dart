@@ -273,7 +273,8 @@ class _BusinessSheet extends StatelessWidget {
           _Item(
             AvaCreateAction.shopOnline,
             Icons.storefront_rounded,
-            hasShop ? 'my_shop_title' : 'home_create_shop_online',
+            // «Менинг онлайн дўконим» (эга, 2026-10-26) — фақат «＋» да; дўкон экрани сарлавҳаси `my_shop_title`.
+            hasShop ? 'home_my_shop_online' : 'home_create_shop_online',
             hasShop ? 'my_shop_row_sub' : 'home_create_shop_online_hint',
           ),
         ]),

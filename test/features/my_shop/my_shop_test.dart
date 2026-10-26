@@ -283,9 +283,10 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('дўкони бор эга — «Менинг дўконим»', (tester) async {
+    testWidgets('дўкони бор эга — «Менинг онлайн дўконим» (эга, 2026-10-26)', (tester) async {
       await openCreate(tester, hasShop: true);
-      expect(find.text('my_shop_title'), findsOneWidget);
+      expect(find.text('home_my_shop_online'), findsOneWidget);
+      expect(find.text('my_shop_title'), findsNothing);
       expect(find.text('my_shop_row_sub'), findsOneWidget);
       expect(find.text('home_create_shop_online'), findsNothing);
     });

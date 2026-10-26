@@ -138,7 +138,8 @@ double _homeUiScale(BuildContext context) {
   return 1.0;
 }
 
-/// Ҳамён картаси билан бош экран баннери (HomeInfoTicker) орасидаги масофа, px (эга, 2026-10-26).
+/// Бош экран баннери (HomeInfoTicker) устидаги масофа, px (эга, 2026-10-26): ҳамён картаси остида ҳам,
+/// ҳамён ёпилгандан кейин юқори қатор остида ҳам.
 const double kHomeWalletTickerGap = 2;
 
 /// Bo‘limlar orasidagi vertikal masofa — ekran balandligi/kengligiga qarab.
@@ -169,7 +170,7 @@ String _todayText(BuildContext context) {
 /// Бош саҳифа — янги дизайн тизими.
 ///
 /// Тартиби: юқори қатор (AVA + ҳудуд) · фаол буюртма карточкаси ·
-/// ҳамён банери (11 с) · сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
+/// ҳамён банери (12 с) · сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
 /// пастки меню. Ҳар бўлим `AvaSection` устига қурилган, шунинг учун
 /// юкланиш / бўш / хатолик ҳолатлари бир хил.
 class HomeScreen extends StatelessWidget {
@@ -1380,7 +1381,12 @@ class _HomeViewState extends State<_HomeView> {
                             // Бўш бўлса ёки сервер жавобермаса — жой эгалламайди.
                             const CustomerConfirmBanner(),
                             _ActiveOrderSlot(onOpen: _openActiveOrder),
-                            SizedBox(height: _sectionGap(context, base: 10)),
+                            // Ҳамён ёпилгандан кейин баннер устидаги масофа 2 px (эга, 2026-10-26; аввал _sectionGap 6–10 px).
+                            // Ҳамён очиқ бўлса, унинг устидаги масофа ўзгармайди: 2 + (_sectionGap − 2).
+                            const SizedBox(
+                              key: ValueKey('home_ticker_top_gap'),
+                              height: kHomeWalletTickerGap,
+                            ),
                             AnimatedSize(
                               duration: const Duration(milliseconds: 280),
                               curve: Curves.easeInOut,
@@ -1392,6 +1398,10 @@ class _HomeViewState extends State<_HomeView> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
+                                        SizedBox(
+                                          height: _sectionGap(context, base: 10) -
+                                              kHomeWalletTickerGap,
+                                        ),
                                         WalletCard(
                                           balanceAmount: formatPrice(
                                               user?.bonusBalance ?? 0),

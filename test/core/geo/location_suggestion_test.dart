@@ -13,27 +13,37 @@ void main() {
   final now = DateTime(2026, 10, 12, 12);
 
   group('shouldSuggestLocation', () {
-    test('бошқа туманда — таклиф', () {
-      expect(shouldSuggestLocation(detected: chilonzor, active: gurlan, dismissedAt: null, now: now), isTrue);
+    // Олдинги аниқлаш Гурланда эди — энди Чилонзорда: жой ҲАҚИҚАТАН ўзгарган.
+    bool moved({GeoArea? detected = chilonzor, GeoArea active = gurlan, DateTime? dismissedAt, String? prev = 'gurlan'}) =>
+        shouldSuggestLocation(
+          detected: detected, active: active, dismissedAt: dismissedAt, now: now, previousDetectedDistrictId: prev);
+
+    test('бошқа туманга кўчди — таклиф', () {
+      expect(moved(), isTrue);
     });
-    test('фаол ҳудудда — таклиф йўқ', () {
-      expect(shouldSuggestLocation(detected: gurlan, active: gurlan, dismissedAt: null, now: now), isFalse);
+    test('эга қарори: жойидан жилмаган (олдинги аниқлаш ҳам шу туман) — таклиф ЙЎҚ, танланган ҳудуд бошқа бўлса ҳам', () {
+      expect(moved(prev: 'chilonzor'), isFalse);
+    });
+    test('биринчи аниқлаш (олдингиси йўқ) — фақат бошланғич нуқта, таклиф йўқ', () {
+      expect(moved(prev: null), isFalse);
+    });
+    test('фаол ҳудудга кўчди — таклиф йўқ', () {
+      expect(moved(detected: gurlan, active: gurlan, prev: 'chilonzor'), isFalse);
     });
     test('аниқланмади — таклиф йўқ', () {
-      expect(shouldSuggestLocation(detected: null, active: gurlan, dismissedAt: null, now: now), isFalse);
+      expect(moved(detected: null), isFalse);
     });
     test('«Йўқ» дейилганидан 23 соат ўтди — сўралмайди; 24 соат — яна сўралади', () {
-      expect(
-        shouldSuggestLocation(
-            detected: chilonzor, active: gurlan, dismissedAt: now.subtract(const Duration(hours: 23)), now: now),
-        isFalse,
-      );
-      expect(
-        shouldSuggestLocation(
-            detected: chilonzor, active: gurlan, dismissedAt: now.subtract(const Duration(hours: 24)), now: now),
-        isTrue,
-      );
+      expect(moved(dismissedAt: now.subtract(const Duration(hours: 23))), isFalse);
+      expect(moved(dismissedAt: now.subtract(const Duration(hours: 24))), isTrue);
     });
+  });
+
+  test('олдинги аниқланган туман сақланади', () async {
+    SharedPreferences.setMockInitialValues({});
+    expect(await lastDetectedDistrict(), isNull);
+    await rememberDetectedDistrict('gurlan');
+    expect(await lastDetectedDistrict(), 'gurlan');
   });
 
   test('«Йўқ» вақти туман бўйича сақланади', () async {

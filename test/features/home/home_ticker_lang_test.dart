@@ -73,6 +73,7 @@ void main() {
       await _pump(t, const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Cyrl'), ad);
       final box = t.widget<Container>(find.descendant(of: find.byType(HomeInfoTicker), matching: find.byType(Container)).first);
       expect(box.padding, const EdgeInsets.all(1));
+      expect(t.getSize(find.byType(HomeInfoTicker)).height, 75, reason: 'эга, 2026-10-26: 53 → 75 px');
       final rt = t.widget<RichText>(find.descendant(of: find.byType(HomeInfoTicker), matching: find.byType(RichText)));
       expect(rt.maxLines, 4);
     });
@@ -93,7 +94,7 @@ void main() {
       return (paragraph(t).size.height / (fs! * 1.1)).round();
     }
 
-    testWidgets('ўртача матн 2 қатордан кўп ишлатади (аввал кўпи билан 2 эди), баландлик ≤ 51 px', (t) async {
+    testWidgets('ўртача матн 2 қатордан кўп ишлатади (аввал кўпи билан 2 эди), баландлик ≤ 73 px', (t) async {
       await t.pumpWidget(MaterialApp(
         home: Scaffold(body: SizedBox(width: 320, child: HomeInfoTicker(ads: [_ad(text: 'А' * 60)]))),
       ));
@@ -101,7 +102,7 @@ void main() {
       final p = paragraph(t);
       expect(lines(t), greaterThan(2));
       expect(lines(t), lessThanOrEqualTo(4));
-      expect(p.size.height, lessThanOrEqualTo(51.0));
+      expect(p.size.height, lessThanOrEqualTo(73.0));
       expect(t.takeException(), isNull);
     });
 
@@ -111,7 +112,7 @@ void main() {
       ));
       await t.pump();
       expect(lines(t), lessThanOrEqualTo(4));
-      expect(paragraph(t).size.height, lessThanOrEqualTo(51.0));
+      expect(paragraph(t).size.height, lessThanOrEqualTo(73.0));
       expect(t.takeException(), isNull);
     });
 

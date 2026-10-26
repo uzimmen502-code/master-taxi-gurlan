@@ -380,15 +380,21 @@ class _HomeViewState extends State<_HomeView> {
     if (!mounted) return;
     final dismissed =
         area == null ? null : await suggestionDismissedAt(area.districtId);
+    final previous = await lastDetectedDistrict();
+    if (area != null) await rememberDetectedDistrict(area.districtId);
     if (!mounted) return;
     setState(() {
       _locationArea = area;
-      _suggestArea = shouldSuggestLocation(
-        detected: area,
-        active: GeoContext.active,
-        dismissedAt: dismissed,
-        now: DateTime.now(),
-      )
+      final keep = _suggestArea != null && area != null && _suggestArea!.districtId == area.districtId;
+      // Жавоб берилмаган таклиф — кейинги текширувда (10 дақиқа) ҳам ўша туманда бўлса қолади.
+      _suggestArea = keep ||
+              shouldSuggestLocation(
+                detected: area,
+                active: GeoContext.active,
+                dismissedAt: dismissed,
+                now: DateTime.now(),
+                previousDetectedDistrictId: previous,
+              )
           ? area
           : null;
     });

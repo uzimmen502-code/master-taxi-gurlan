@@ -124,12 +124,10 @@ void main() {
       expect(find.byKey(kSeeAllArrowKey), findsNothing);
     });
 
-    testWidgets('босиш майдони камида 32', (tester) async {
-      // 44 → 32 (эга қарори, 2026-09-27: сарлавҳа билан майдон
-      // орасидаги масофа қисқартирилсин). Айнан шу қиймат сарлавҳа
-      // ҚАТОРИНИНГ баландлигини белгилар эди — сарлавҳа матни 20px,
-      // қолгани бўш жой. Тугманинг ЭНИ ўзгармади (матн + стрелка +
-      // чекинма), шунинг учун тегиш қийинлашмайди.
+    testWidgets('босиш майдони камида 24, сарлавҳа қатори 24 px', (tester) async {
+      // 44 → 32 (эга қарори, 2026-09-27), 32 → 24 (эга, 2026-10-26: «Вариант А» — бўлимлар зичроқ).
+      // Айнан шу қиймат сарлавҳа ҚАТОРИНИНГ баландлигини белгилайди — сарлавҳа матни 17.5px
+      // (14 × 1.25), бўлим белгиси 24px. Тугманинг ЭНИ ўзгармади (матн + стрелка + чекинма).
       await _pump(
         tester,
         AvaSection(
@@ -145,7 +143,10 @@ void main() {
           matching: find.byType(ConstrainedBox),
         ).first,
       );
-      expect(box.height, greaterThanOrEqualTo(32.0));
+      expect(box.height, greaterThanOrEqualTo(24.0));
+      expect(box.height, lessThan(32.0), reason: 'эга, 2026-10-26: 32 → 24');
+      final row = tester.getSize(find.ancestor(of: find.byKey(kSeeAllArrowKey), matching: find.byType(Row)).last);
+      expect(row.height, 24.0, reason: 'сарлавҳа қатори = max(матн 17.5, белги 24, тугма 24)');
     });
 
     testWidgets('стрелка чизилган — статик иконка эмас', (tester) async {

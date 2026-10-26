@@ -7,6 +7,7 @@ import 'package:ava_gurlan/features/my_shop/open_my_shop.dart';
 import 'package:ava_gurlan/features/my_shop/screens/main_shop_screen.dart';
 import 'package:ava_gurlan/features/my_shop/screens/my_shop_screen.dart';
 import 'package:ava_gurlan/features/my_shop/widgets/shop_name_dialog.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -177,6 +178,65 @@ void main() {
       expect(find.text('my_shop_new_shop'), findsOneWidget);
       await open(tester, canCreate: false);
       expect(find.text('my_shop_new_shop'), findsNothing);
+    });
+
+    // Дўконни ўчириш (эга, 2026-10-26: «Дўконни ўчириш йўқ, тузат»).
+    Future<List<String>> openWithDelete(WidgetTester tester, {Object? error}) async {
+      _bigView(tester);
+      final deleted = <String>[];
+      await tester.pumpWidget(_app(MyShopScreen(
+        key: UniqueKey(),
+        phone: _phone,
+        businesses: Stream.value([_biz('b1', 'Kiyim do‘koni', BusinessCategory.retail, address: 'Gurlan')]),
+        loadMainName: () async => 'Asosiy',
+        deleteShop: (id) async {
+          if (error != null) throw error;
+          deleted.add(id);
+        },
+      )));
+      await tester.pumpAndSettle();
+      return deleted;
+    }
+
+    Future<void> chooseDelete(WidgetTester tester) async {
+      await tester.tap(find.byKey(const ValueKey('my_shop_menu_b1')));
+      await tester.pumpAndSettle();
+      expect(find.text('my_shop_rename'), findsOneWidget, reason: '«⋮» ичида таҳрир ҳам бор');
+      await tester.tap(find.text('bizmap_delete'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('қўшимча дўкон: «⋮» → Ўчириш → тасдиқ → deleteMyBusiness шу ID билан', (tester) async {
+      final deleted = await openWithDelete(tester);
+      await chooseDelete(tester);
+      expect(find.text('my_shop_delete_title'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('my_shop_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(deleted, ['b1']);
+      expect(find.text('bizmap_deleted'), findsOneWidget);
+    });
+
+    testWidgets('бекор қилинса — ҳеч нарса ўчирилмайди', (tester) async {
+      final deleted = await openWithDelete(tester);
+      await chooseDelete(tester);
+      await tester.tap(find.text('cancel'));
+      await tester.pumpAndSettle();
+      expect(deleted, isEmpty);
+    });
+
+    testWidgets('блокланган дўкон — тушунарли хабар, хом хато йўқ', (tester) async {
+      await openWithDelete(tester, error: FirebaseFunctionsException(
+        code: 'failed-precondition', message: 'raw', details: {'code': 'BUSINESS_BLOCKED'}));
+      await chooseDelete(tester);
+      await tester.tap(find.byKey(const ValueKey('my_shop_delete_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('my_shop_delete_blocked'), findsOneWidget);
+      expect(find.text('raw'), findsNothing);
+    });
+
+    testWidgets('асосий дўконда ўчириш менюси йўқ (у бу ерда ўчирилмайди)', (tester) async {
+      await openWithDelete(tester);
+      expect(find.byType(PopupMenuButton<String>), findsOneWidget, reason: 'фақат қўшимча дўконда');
     });
   });
 

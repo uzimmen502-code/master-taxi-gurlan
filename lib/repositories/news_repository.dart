@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/utils/formatters.dart';
+import '../core/utils/lazy_broadcast.dart';
 import '../models/news_item.dart';
 import '../models/user_model.dart';
 
@@ -118,39 +119,46 @@ class NewsRepository {
     int limit = 50,
   }) {
     final uid = canonicalPhoneId(userId);
-    final controller = StreamController<List<NewsItem>>.broadcast();
-    List<NewsItem>? global;
-    List<NewsItem>? personal;
-    var personalReady = uid.length < 9;
+    // Firestore тингловчилари фақат обуначи пайдо бўлганда очилади — [lazyBroadcastStream] (аудит X-01:
+    // аввал оқим яратилган заҳоти очилар ва биринчи жавоб йўқолиб, экран абадий «загрузка»да қоларди).
+    return lazyBroadcastStream<List<NewsItem>>((controller) {
+      List<NewsItem>? global;
+      List<NewsItem>? personal;
+      var personalReady = uid.length < 9;
 
-    void emit() {
-      if (global == null) return;
-      if (!personalReady) return;
-      final merged = _mergeDedupe(
-        _filterForUser(global!, audiences: audiences, userId: uid, feed: feed),
-        personal != null
-            ? _filterForUser(personal!,
-                audiences: audiences, userId: uid, feed: feed)
-            : const [],
-      );
-      if (!controller.isClosed) controller.add(merged.take(limit).toList());
-    }
+      void emit() {
+        if (global == null) return;
+        if (!personalReady) return;
+        final merged = _mergeDedupe(
+          _filterForUser(global!, audiences: audiences, userId: uid, feed: feed),
+          personal != null
+              ? _filterForUser(personal!,
+                  audiences: audiences, userId: uid, feed: feed)
+              : const [],
+        );
+        if (!controller.isClosed) controller.add(merged.take(limit).toList());
+      }
 
-    final subGlobal = _broadcastCol
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .listen((snap) {
-      global = snap.docs.map(NewsItem.fromDoc).toList(growable: false);
-      emit();
-    }, onError: controller.addError);
+      final subGlobal = _broadcastCol
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .listen((snap) {
+        global = snap.docs.map(NewsItem.fromDoc).toList(growable: false);
+        emit();
+      }, onError: controller.addError);
 
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subPersonal;
-    if (uid.length >= 9) {
+      if (uid.length < 9) {
+        personal = const [];
+        personalReady = true;
+        emit();
+        return [subGlobal];
+      }
+
       final aliases = phoneAliases(uid);
       final queryAliases =
           aliases.length > 10 ? aliases.sublist(0, 10) : aliases;
-      subPersonal = _col
+      final subPersonal = _col
           .where('targetUserId', whereIn: queryAliases)
           .orderBy('createdAt', descending: true)
           .limit(30)
@@ -171,18 +179,8 @@ class NewsRepository {
         }
         if (!controller.isClosed) controller.addError(e);
       });
-    } else {
-      personal = const [];
-      personalReady = true;
-      emit();
-    }
-
-    controller.onCancel = () async {
-      await subGlobal.cancel();
-      await subPersonal?.cancel();
-    };
-
-    return controller.stream;
+      return [subGlobal, subPersonal];
+    });
   }
 
   /// Админ broadcast янгиликлар (шахсий/буюртма эмас).
@@ -384,95 +382,88 @@ class NewsRepository {
     final uid = canonicalPhoneId(userId);
     if (uid.length < 9) return Stream.value(0);
 
-    final controller = StreamController<int>.broadcast();
-    UserModel? user;
-    List<NewsItem> items = const [];
-    var supportChatUnread = false;
     final docIds = _userDocIdsForNews(userId);
     final primaryId = docIds.isNotEmpty ? docIds.first : uid;
     final fallbackId = docIds.length > 1 ? docIds[1] : null;
 
-    void emit() {
-      if (controller.isClosed) return;
-      final lastRead = switch (feed) {
-        NewsFeedKind.broadcast => user?.lastNewsReadAt,
-        NewsFeedKind.dialog => user?.lastMessagesReadAt,
-        NewsFeedKind.order => user?.lastOrderNewsReadAt,
-      };
-      var n = countUnreadInList(items, lastRead);
-      if (feed == NewsFeedKind.dialog) {
-        n += chatUnreadExtra;
-        if (supportChatUnread) n += 1;
+    // Тингловчилар фақат обуначи бўлганда очилади — [lazyBroadcastStream] (аудит X-01).
+    return lazyBroadcastStream<int>((controller) {
+      UserModel? user;
+      List<NewsItem> items = const [];
+      var supportChatUnread = false;
+      DocumentSnapshot<Map<String, dynamic>>? primarySnap;
+      DocumentSnapshot<Map<String, dynamic>>? fallbackSnap;
+
+      void emit() {
+        if (controller.isClosed) return;
+        final lastRead = switch (feed) {
+          NewsFeedKind.broadcast => user?.lastNewsReadAt,
+          NewsFeedKind.dialog => user?.lastMessagesReadAt,
+          NewsFeedKind.order => user?.lastOrderNewsReadAt,
+        };
+        var n = countUnreadInList(items, lastRead);
+        if (feed == NewsFeedKind.dialog) {
+          n += chatUnreadExtra;
+          if (supportChatUnread) n += 1;
+        }
+        controller.add(n);
       }
-      controller.add(n);
-    }
 
-    DocumentSnapshot<Map<String, dynamic>>? primarySnap;
-    DocumentSnapshot<Map<String, dynamic>>? fallbackSnap;
-
-    void emitUser() {
-      user = _userFromSnapshots(primarySnap, fallbackSnap);
-      emit();
-    }
-
-    final subUser = _db.collection('users').doc(primaryId).snapshots().listen(
-      (snap) {
-        primarySnap = snap;
-        emitUser();
-      },
-      onError: controller.addError,
-    );
-
-    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? subUserAlt;
-    if (fallbackId != null) {
-      subUserAlt = _db.collection('users').doc(fallbackId).snapshots().listen(
-        (snap) {
-          fallbackSnap = snap;
-          emitUser();
-        },
-        onError: controller.addError,
-      );
-    }
-
-    final newsStream = switch (feed) {
-      NewsFeedKind.broadcast => watchBroadcastNews(
-          audiences: audiences,
-          userId: uid,
-          limit: limit,
-        ),
-      NewsFeedKind.dialog => watchDialogNews(userId: uid, limit: limit),
-      NewsFeedKind.order => watchOrderNews(userId: uid, limit: limit),
-    };
-    final subNews = newsStream.listen(
-      (list) {
-        items = list;
+      void emitUser() {
+        user = _userFromSnapshots(primarySnap, fallbackSnap);
         emit();
-      },
-      onError: controller.addError,
-    );
+      }
 
-    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? subSupportChat;
-    if (feed == NewsFeedKind.dialog) {
-      subSupportChat =
-          _db.collection('support_chats').doc(uid).snapshots().listen(
-        (snap) {
-          final d = snap.data();
-          supportChatUnread =
-              d != null && (d['lastFromAdmin'] ?? false) == true;
+      final subs = <StreamSubscription<dynamic>>[
+        _db.collection('users').doc(primaryId).snapshots().listen(
+          (snap) {
+            primarySnap = snap;
+            emitUser();
+          },
+          onError: controller.addError,
+        ),
+      ];
+
+      if (fallbackId != null) {
+        subs.add(_db.collection('users').doc(fallbackId).snapshots().listen(
+          (snap) {
+            fallbackSnap = snap;
+            emitUser();
+          },
+          onError: controller.addError,
+        ));
+      }
+
+      final newsStream = switch (feed) {
+        NewsFeedKind.broadcast => watchBroadcastNews(
+            audiences: audiences,
+            userId: uid,
+            limit: limit,
+          ),
+        NewsFeedKind.dialog => watchDialogNews(userId: uid, limit: limit),
+        NewsFeedKind.order => watchOrderNews(userId: uid, limit: limit),
+      };
+      subs.add(newsStream.listen(
+        (list) {
+          items = list;
           emit();
         },
         onError: controller.addError,
-      );
-    }
+      ));
 
-    controller.onCancel = () async {
-      await subUser.cancel();
-      await subUserAlt?.cancel();
-      await subNews.cancel();
-      await subSupportChat?.cancel();
-    };
-
-    return controller.stream;
+      if (feed == NewsFeedKind.dialog) {
+        subs.add(_db.collection('support_chats').doc(uid).snapshots().listen(
+          (snap) {
+            final d = snap.data();
+            supportChatUnread =
+                d != null && (d['lastFromAdmin'] ?? false) == true;
+            emit();
+          },
+          onError: controller.addError,
+        ));
+      }
+      return subs;
+    });
   }
 
   Future<int> _countUnreadFiltered({

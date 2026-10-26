@@ -138,6 +138,9 @@ double _homeUiScale(BuildContext context) {
   return 1.0;
 }
 
+/// Ҳамён картаси билан бош экран баннери (HomeInfoTicker) орасидаги масофа, px (эга, 2026-10-26).
+const double kHomeWalletTickerGap = 2;
+
 /// Bo‘limlar orasidagi vertikal masofa — ekran balandligi/kengligiga qarab.
 double _sectionGap(BuildContext context, {required double base}) {
   final h = MediaQuery.sizeOf(context).height;
@@ -1407,9 +1410,11 @@ class _HomeViewState extends State<_HomeView> {
                                             }
                                           },
                                         ),
-                                        SizedBox(
-                                          height: _sectionGap(context,
-                                              base: 10),
+                                        // Ҳамён картаси → баннер оралиғи (эга, 2026-10-26: «2 рх га камайтир»;
+                                        // аввал _sectionGap 6–10 px). Ҳамён сояси (blur 10, y 3) баннер четига тушади.
+                                        const SizedBox(
+                                          key: ValueKey('home_wallet_ticker_gap'),
+                                          height: kHomeWalletTickerGap,
                                         ),
                                       ],
                                     )

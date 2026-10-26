@@ -198,7 +198,7 @@ function editPatch(FieldValue, cur, fields, fail) {
 }
 
 const CASCADE_BATCH = 400;
-/** Асосий дўкон «ичидаги» дўконлар: чакана/улгуржи объектлар (илова: `isShopCategory`). Бор бўлса — асосий ўчмайди. */
+/** «Менинг онлайн дўконим» ичидаги дўконлар: чакана/улгуржи объектлар (илова: `isShopCategory`) — асосий билан бирга ўчади. */
 const MAIN_SHOP_INNER_CATEGORIES = new Set(['retail', 'wholesale']);
 const digitsOf = (v) => String(v == null ? '' : v).replace(/\D/g, '');
 
@@ -533,14 +533,15 @@ function attachBusinessDirectory(exportsObj, deps) {
   });
 
   /**
-   * data: {} → { ok, deleted, products }. Эганинг АСОСИЙ онлайн дўкони (эга, 2026-10-26: «аввал ичидаги дўконлар
-   * ўчирилсин хабари билан ўчирилсин»; танлов — «фақат онлайн дўкон»):
-   *  • ичида дўкон (чакана/улгуржи объект ёки филиал) бор — SHOP_HAS_INNER_SHOPS (аввал уларни ўчириш керак);
-   *  • дўкон блокланган — SHOP_BLOCKED (ўчириб, қайта очиб блокдан қочиш йўли ёпиқ, `deleteMyBusiness` каби);
-   *  • `tv_shops/{телефон}` ўчади (номи; қидирув ёзуви `shop_search_index` триггерида олинади), дўконнинг ЎЗ
-   *    маҳсулотлари (`businessId`сиз) юмшоқ ўчади (`status: deleted`). Улгуржи сотувчи ҳисоби ва эски Аҳоли
-   *    эълонлари ТЕГИЛМАЙДИ (ўз модуллари, ўз ўчириши бор).
-   * Идемпотент: қайта чақириш зарарсиз (deleted:false, products:0).
+   * data: {} → { ok, deleted, innerShops, products }. Эганинг «Менинг онлайн дўконим»и БУТУНЛАЙ (эга, 2026-10-26:
+   * «ўчирганда барчаси огоҳлантириш билан ўчиб кетсин»; аввалги «аввал ичидаги дўконларни ўчиринг» тўсиғи бекор):
+   *  • асосий дўкон ёки ичидаги бирор дўкон блокланган — SHOP_BLOCKED, ҲЕЧ НАРСА ўчмайди (блокдан қочиш йўли ёпиқ);
+   *  • ичидаги дўконлар (чакана/улгуржи объектлар, филиаллар ҳам) ўчади — маҳсулотлари `businessProductsCascade`
+   *    триггерида юмшоқ ўчади (ўчиришнинг ҳар қандай йўлида бир хил);
+   *  • `tv_shops/{телефон}` ўчади (қидирув ёзуви `shop_search_index` триггерида), асосий дўконнинг ЎЗ маҳсулотлари
+   *    (`businessId`сиз) юмшоқ ўчади.
+   * Тегилмайди: дўкон бўлмаган объектлар («Менинг бизнесим» — кафе, хизмат…), улгуржи сотувчи ҳисоби, эски Аҳоли
+   * эълонлари (танлов «фақат онлайн дўкон», 2026-10-26). Идемпотент: қайта чақириш зарарсиз.
    */
   exportsObj.deleteMyMainShop = functions.https.onCall(async (data, context) => {
     const started = Date.now();
@@ -549,19 +550,19 @@ function attachBusinessDirectory(exportsObj, deps) {
     const out = await db.runTransaction(async (t) => {
       const [snap, own] = await Promise.all([
         t.get(ref),
-        t.get(db.collection(COLLECTION).where('ownerId', '==', uid).limit(LIMITS.maxPerOwner)),
+        // 200: эга лимити 20, админ ундан ортиқ қўша олади; транзакция ёзувлари 500 дан анча кам.
+        t.get(db.collection(COLLECTION).where('ownerId', '==', uid).limit(200)),
       ]);
-      const inner = own.docs.filter((d) => MAIN_SHOP_INNER_CATEGORIES.has((d.data() || {}).category)).length;
-      if (inner > 0) {
-        throw fail('failed-precondition', 'SHOP_HAS_INNER_SHOPS', 'Аввал ичидаги дўконларни ўчиринг.');
+      const inner = own.docs.filter((d) => MAIN_SHOP_INNER_CATEGORIES.has((d.data() || {}).category));
+      if (isBlocked(snap) || inner.some((d) => isBlocked(d))) {
+        throw fail('failed-precondition', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
       }
-      if (isBlocked(snap)) throw fail('failed-precondition', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
-      if (!snap.exists) return { deleted: false };
-      t.delete(ref);
-      return { deleted: true };
+      inner.forEach((d) => t.delete(d.ref));
+      if (snap.exists) t.delete(ref);
+      return { deleted: snap.exists || inner.length > 0, innerShops: inner.length };
     });
-    // Ўз маҳсулотлари — транзакциядан ташқари, саҳифалаб (сони чекланмаган), идемпотент. Йўналиш маҳсулотлари
-    // (`businessId` бор) бу ерга тушмайди — уларнинг дўконлари юқорида текширилди (йўқ).
+    // Асосий дўконнинг ўз маҳсулотлари — транзакциядан ташқари, саҳифалаб (сони чекланмаган), идемпотент.
+    // Ичидаги дўконлар маҳсулотлари (`businessId` бор) — уларнинг ўчиши `businessProductsCascade` триггерида.
     const { FieldValue } = admin.firestore;
     const items = await patchPaged(db, admin, db.collection(ITEMS).where('ownerPhone', 'in', phoneVariants(uid)), (x) => {
       if (x.status === 'deleted' || str(x.businessId, 128)) return null;
@@ -570,10 +571,10 @@ function attachBusinessDirectory(exportsObj, deps) {
       };
     });
     log({
-      action: 'deleteMyMainShop', userId: uid, result: out.deleted ? 'deleted' : 'noop', products: items.updated,
-      durationMs: Date.now() - started,
+      action: 'deleteMyMainShop', userId: uid, result: out.deleted ? 'deleted' : 'noop', innerShops: out.innerShops,
+      products: items.updated, durationMs: Date.now() - started,
     });
-    return { ok: true, deleted: out.deleted, products: items.updated };
+    return { ok: true, deleted: out.deleted, innerShops: out.innerShops, products: items.updated };
   });
 
   // ───────────────────────── Админ ─────────────────────────

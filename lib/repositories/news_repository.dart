@@ -228,6 +228,14 @@ class NewsRepository {
     return items.where((n) => n.createdAt.isAfter(lastReadAt)).length;
   }
 
+  /// `FieldValue.serverTimestamp()` ёзилиб, сервер ҳали тасдиқламаган: маҳаллий нусхада майдон БОР, қиймати `null`
+  /// (жонли оқимда «баҳолаш» созламаси йўқ — у фақат `GetOptions`да). Бу «ҳозиргина ўқилди» деганидир — `now`.
+  /// Аввал `null` «ҳаммаси ўқилмаган» деб саналар ва таб босилганда белги бир лаҳза ёниб ўчарди
+  /// (эга, 2026-10-26: «сарлавҳа устида белги ёниб ўчиб кетаяпти»).
+  @visibleForTesting
+  static DateTime? pendingServerTimeEstimate(Map<String, dynamic>? data, String field, {DateTime? now}) =>
+      data != null && data.containsKey(field) && data[field] == null ? (now ?? DateTime.now()) : null;
+
   static UserModel? _userFromSnapshots(
     DocumentSnapshot<Map<String, dynamic>>? primary,
     DocumentSnapshot<Map<String, dynamic>>? fallback,
@@ -396,11 +404,18 @@ class NewsRepository {
 
       void emit() {
         if (controller.isClosed) return;
-        final lastRead = switch (feed) {
-          NewsFeedKind.broadcast => user?.lastNewsReadAt,
-          NewsFeedKind.dialog => user?.lastMessagesReadAt,
-          NewsFeedKind.order => user?.lastOrderNewsReadAt,
+        final readField = switch (feed) {
+          NewsFeedKind.broadcast => 'lastNewsReadAt',
+          NewsFeedKind.dialog => 'lastMessagesReadAt',
+          NewsFeedKind.order => 'lastOrderNewsReadAt',
         };
+        final lastRead = switch (feed) {
+              NewsFeedKind.broadcast => user?.lastNewsReadAt,
+              NewsFeedKind.dialog => user?.lastMessagesReadAt,
+              NewsFeedKind.order => user?.lastOrderNewsReadAt,
+            } ??
+            pendingServerTimeEstimate(primarySnap?.data(), readField) ??
+            pendingServerTimeEstimate(fallbackSnap?.data(), readField);
         var n = countUnreadInList(items, lastRead);
         if (feed == NewsFeedKind.dialog) {
           n += chatUnreadExtra;

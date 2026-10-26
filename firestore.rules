@@ -2174,6 +2174,23 @@ service cloud.firestore {
               && request.resource.data.text.size() <= 500
             )
           )
+          // Лотин / рус матни (2026-10-26) — ихтиёрий; бўлса матн, 1..500 (бўш — майдон ўчирилади).
+          && (
+            !('textLatn' in request.resource.data)
+            || (
+              request.resource.data.textLatn is string
+              && request.resource.data.textLatn.size() > 0
+              && request.resource.data.textLatn.size() <= 500
+            )
+          )
+          && (
+            !('textRu' in request.resource.data)
+            || (
+              request.resource.data.textRu is string
+              && request.resource.data.textRu.size() > 0
+              && request.resource.data.textRu.size() <= 500
+            )
+          )
           && (
             !('audience' in request.resource.data)
             || request.resource.data.audience in

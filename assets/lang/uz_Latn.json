@@ -4754,6 +4754,7 @@
   "my_shop_delete_blocked": "Do‘kon vaqtincha bloklangan — o‘chirib bo‘lmaydi. Adminga murojaat qiling.",
   "my_shop_main_delete_title": "Asosiy do‘konni o‘chirasizmi?",
   "my_shop_main_delete_body": "Do‘kon nomi, havolasi va do‘konning o‘z mahsulotlari o‘chiriladi. Ulgurji bozordagi mahsulotlar va Aholi bozoridagi e’lonlar qoladi. Buni qaytarib bo‘lmaydi.",
+  "my_shop_main_delete_body_all": "Asosiy do‘kon va ichidagi {count} ta do‘kon (filiallari bilan), ularning barcha mahsulotlari o‘chiriladi. «Mening biznesim»dagi boshqa obyektlar, ulgurji bozordagi mahsulotlar va Aholi e’lonlari qoladi. Buni qaytarib bo‘lmaydi.",
   "my_shop_main_delete_has_inner": "Avval ichidagi do‘konlarni o‘chiring. Asosiy do‘kon ichida do‘konlar turganda uni o‘chirib bo‘lmaydi.",
   "my_shop_main_deleted": "Asosiy do‘kon o‘chirildi",
   "my_shop_continue": "Davom etish",

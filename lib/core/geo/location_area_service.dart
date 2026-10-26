@@ -23,13 +23,20 @@ List<String> _names(List<String> all) =>
 const kGeoSuggestQuiet = Duration(hours: 24);
 
 /// Таклиф кўрсатиладими (тоза функция — тест учун).
+///
+/// Эга, 2026-10-26: «фойдаланувчининг геолокацияси аниқ ўзгаргандагина таклиф қилинсин». Шунинг учун
+/// [previousDetectedDistrictId] — олдинги аниқлашдаги туман: `null` (биринчи аниқлаш — бошланғич нуқта)
+/// ёки ҳозиргиси билан бир хил бўлса (жойидан жилмаган) — таклиф ЙЎҚ. Аввал танланган ҳудуддан фарқ
+/// қилишнинг ўзи етарли эди — жойидан жилмаган одамга ҳам қайта-қайта чиқарди.
 bool shouldSuggestLocation({
   required GeoArea? detected,
   required GeoArea active,
   required DateTime? dismissedAt,
   required DateTime now,
+  required String? previousDetectedDistrictId,
 }) {
   if (detected == null || detected.isEmpty) return false;
+  if (previousDetectedDistrictId == null || previousDetectedDistrictId == detected.districtId) return false;
   if (detected.sameAs(active)) return false;
   if (dismissedAt != null && now.difference(dismissedAt) < kGeoSuggestQuiet) return false;
   return true;
@@ -51,6 +58,25 @@ Future<void> dismissSuggestion(String districtId, DateTime now) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_dismissKey(districtId), now.millisecondsSinceEpoch);
+  } catch (_) {}
+}
+
+const _lastDetectedKey = 'geo_last_detected_district';
+
+/// Олдинги аниқлашдаги туман (`shouldSuggestLocation.previousDetectedDistrictId` учун).
+Future<String?> lastDetectedDistrict() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastDetectedKey);
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> rememberDetectedDistrict(String districtId) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastDetectedKey, districtId);
   } catch (_) {}
 }
 
@@ -76,13 +102,14 @@ class LocationAreaService {
       final perm = await Geolocator.checkPermission();
       if (perm != LocationPermission.always && perm != LocationPermission.whileInUse) return null;
       if (!await Geolocator.isLocationServiceEnabled()) return null;
-      final pos = await Geolocator.getLastKnownPosition() ??
-          await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.medium,
-              timeLimit: Duration(seconds: 8),
-            ),
-          );
+      // Фақат ҲОЗИРГИ жойлашув (эга, 2026-10-26: «аниқ ўзгарганда»): `getLastKnownPosition` кечаги ёки
+      // бошқа жойдаги нуқтани бериши мумкин эди — жилмаган одамга нотўғри таклиф. Олиб бўлмаса — `null`.
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
       return await _areaFor(pos.latitude, pos.longitude);
     } catch (e) {
       debugPrint('LocationAreaService.detect: $e');

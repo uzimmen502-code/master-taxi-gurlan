@@ -7,10 +7,10 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/home_ticker_ad.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Maydon doim 53px. Matn uzunligiga qarab shrift 11–28px oralig'ida, ko'pi bilan
+/// Maydon doim 75px (ega, 2026-10-26: «53 рх дан 75 рх га»). Matn uzunligiga qarab shrift 12–28px oralig'ida, ko'pi bilan
 /// [maxLines] qatorda maydonga maksimal sig'diriladi. Matn atrofida 1px (ega, 2026-10-26:
-/// «чап-ўнгда 1 px, юқори-пастда 1 px», «кўпи билан 4 қатор»; 4 qator 51px ga faqat
-/// 11.5px dan kichik shriftda sig'adi — shuning uchun minimum 12 → 11).
+/// «чап-ўнгда 1 px, юқори-пастда 1 px», «кўпи билан 4 қатор»; matn joyi 73px — 4 qator
+/// 12px shriftda ham sig'adi: 4 × 12 × 1.1 = 52.8).
 /// Savol-javob matnlari — hammasi qalin (bold) va BOSH HARFLARDA.
 class HomeInfoTicker extends StatefulWidget {
   const HomeInfoTicker({super.key, required this.ads});
@@ -104,7 +104,10 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
 
   // Maydonga sig'adigan maksimal shrift (qisqa matn kattaroq).
   static const _maxFont = 28.0;
-  static const _minFont = 11.0;
+  static const _minFont = 12.0;
+
+  /// Maydon balandligi.
+  static const _height = 75.0;
 
   /// Ko'pi bilan qatorlar soni.
   static const maxLines = 4;
@@ -173,7 +176,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     final upper = text.toUpperCase();
 
     return SizedBox(
-      height: 53,
+      height: _height,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 550),
         switchInCurve: Curves.easeOutCubic,
@@ -185,7 +188,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         ),
         child: Container(
           key: ValueKey(_index),
-          height: 53,
+          height: _height,
           decoration: BoxDecoration(
             color: HomeInfoTicker._fill,
             borderRadius: BorderRadius.circular(8),

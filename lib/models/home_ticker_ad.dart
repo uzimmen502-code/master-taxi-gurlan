@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../features/ads/utils/ad_search_text.dart';
 import 'home_ticker_animation_style.dart';
 
 /// Bosh ekran — duo ostidagi begushchaya reklama qatori.
@@ -15,6 +16,8 @@ class HomeTickerAd {
     required this.priority,
     required this.active,
     this.module = 'home_search',
+    this.textLatn = '',
+    this.textRu = '',
     this.activeFrom,
     this.activeTo,
     this.createdAt,
@@ -22,7 +25,14 @@ class HomeTickerAd {
   });
 
   final String id;
+
+  /// Кирилл (uz_Cyrl) матн — асосий, мажбурий; эски иловалар фақат шуни ўқийди.
   final String text;
+
+  /// Лотин (uz_Latn) ва рус матни — ихтиёрий (2026-10-26, эга: «фақат (2) тузат»). Бўш бўлса [textFor]
+  /// ўрнини тўлдиради: лотинга кирилл матн автоматик ўгирилади, русчада кирилл матн кўрсатилади.
+  final String textLatn;
+  final String textRu;
   /// `all` | `user` | `driver` | `courier` | `admin`
   final String audience;
   /// Qaysi ekranda ko'rsatiladi: `home_search` (bosh ekran ma'lumot maydoni).
@@ -50,6 +60,8 @@ class HomeTickerAd {
     return HomeTickerAd(
       id: doc.id,
       text: (d['text'] ?? '').toString().trim(),
+      textLatn: (d['textLatn'] ?? '').toString().trim(),
+      textRu: (d['textRu'] ?? '').toString().trim(),
       audience: (d['audience'] ?? 'all').toString(),
       module: (d['module'] ?? 'home_search').toString(),
       durationSec: ((d['durationSec'] as num?)?.toInt() ?? defaultDurationSec)
@@ -73,6 +85,8 @@ class HomeTickerAd {
   HomeTickerAd copyWith({
     String? id,
     String? text,
+    String? textLatn,
+    String? textRu,
     String? audience,
     String? module,
     int? durationSec,
@@ -91,6 +105,8 @@ class HomeTickerAd {
     return HomeTickerAd(
       id: id ?? this.id,
       text: text ?? this.text,
+      textLatn: textLatn ?? this.textLatn,
+      textRu: textRu ?? this.textRu,
       audience: audience ?? this.audience,
       module: module ?? this.module,
       durationSec: durationSec ?? this.durationSec,
@@ -109,6 +125,8 @@ class HomeTickerAd {
   Map<String, dynamic> toCreateMap() {
     return {
       'text': text,
+      if (textLatn.isNotEmpty) 'textLatn': textLatn,
+      if (textRu.isNotEmpty) 'textRu': textRu,
       'audience': audience,
       'module': module,
       'active': active,
@@ -128,6 +146,8 @@ class HomeTickerAd {
   Map<String, dynamic> toUpdateMap() {
     return {
       'text': text,
+      'textLatn': textLatn.isNotEmpty ? textLatn : FieldValue.delete(),
+      'textRu': textRu.isNotEmpty ? textRu : FieldValue.delete(),
       'audience': audience,
       'module': module,
       'active': active,
@@ -147,6 +167,19 @@ class HomeTickerAd {
         'activeTo': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
+  }
+
+  /// Илова тилидаги матн (`context.contentLang`): `uz_Latn` — [textLatn] ёки кирилл матндан автоматик ўгирилгани
+  /// (баннер катта ҳарфда кўрсатади, ўгирувчининг кичик ҳарфи муҳим эмас); `ru` — [textRu] ёки кирилл; бошқаси — [text].
+  String textFor(String lang) {
+    switch (lang) {
+      case 'uz_Latn':
+        return textLatn.isNotEmpty ? textLatn : AdSearchText.toLatin(text);
+      case 'ru':
+        return textRu.isNotEmpty ? textRu : text;
+      default:
+        return text;
+    }
   }
 
   bool isVisibleForRole(String role) {

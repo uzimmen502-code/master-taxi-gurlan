@@ -34,7 +34,11 @@ class MyShopScreen extends StatefulWidget {
     @visibleForTesting this.deleteShop,
     @visibleForTesting this.openForm,
     @visibleForTesting this.productsScreen,
+    @visibleForTesting this.deleteMainShop,
   });
+
+  /// Тест учун: `deleteMyMainShop` callable ўрнига.
+  final Future<void> Function()? deleteMainShop;
 
   /// Тест учун: дўкон формаси ўрнига (натижа — [BusinessFormScreen] каби: янги дўкон ID'си ёки `true`).
   final Future<Object?> Function(BuildContext context, Business? existing)? openForm;
@@ -174,6 +178,49 @@ class _MyShopScreenState extends State<MyShopScreen> {
     }
   }
 
+  /// Асосий онлайн дўконни ўчириш (эга, 2026-10-26: «аввал ичидаги дўконлар ўчирилсин хабари билан ўчирилсин»;
+  /// танлов — «фақат онлайн дўкон»). Ичида дўкон бор — хабар, сервер чақирилмайди (сервер ҳам ўзи текширади).
+  Future<void> _deleteMain() async {
+    Future<void> innerFirst() => showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(context.tr('my_shop_main_delete_title')),
+            content: Text(context.tr('my_shop_main_delete_has_inner'), key: const ValueKey('my_shop_main_has_inner')),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(context.tr('ok')))],
+          ),
+        );
+    if (_shops.isNotEmpty) return innerFirst();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('my_shop_main_delete_title')),
+        content: Text(context.tr('my_shop_main_delete_body')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('cancel'))),
+          TextButton(
+            key: const ValueKey('my_shop_main_delete_confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await (widget.deleteMainShop ?? BusinessRepository().deleteMainShop)();
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('my_shop_main_deleted'))));
+      setState(() => _nameFuture = _loadName());
+    } catch (e) {
+      final code = BusinessRepository.errorCode(e);
+      if (!mounted) return;
+      if (code == 'SHOP_HAS_INNER_SHOPS') return innerFirst();
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(context.tr(code == 'SHOP_BLOCKED' ? 'my_shop_delete_blocked' : 'bizmap_err_generic')),
+      ));
+    }
+  }
+
   /// «⋮»: номини ўзгартириш ва ўчириш (қаторда учинчи тугма тор экранда номни сиқарди).
   Widget _menu(Business b) => PopupMenuButton<String>(
         key: ValueKey('my_shop_menu_${b.id}'),
@@ -241,11 +288,32 @@ class _MyShopScreenState extends State<MyShopScreen> {
                     title: title,
                     subtitle: context.tr('my_shop_main_sub'),
                     onTap: _openMain,
-                    trailing: IconButton(
-                      key: const ValueKey('my_shop_link_main'),
-                      tooltip: context.tr('shop_link_title'),
-                      icon: const Icon(Icons.qr_code_2_rounded),
-                      onPressed: () => showShopLinkSheet(context, title: title, loadLink: widget.loadLink),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          key: const ValueKey('my_shop_link_main'),
+                          tooltip: context.tr('shop_link_title'),
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          onPressed: () => showShopLinkSheet(context, title: title, loadLink: widget.loadLink),
+                        ),
+                        // Асосий дўкон: фақат «Ўчириш» (номи асосий дўкон экранида ўзгартирилади).
+                        PopupMenuButton<String>(
+                          key: const ValueKey('my_shop_menu_main'),
+                          tooltip: context.tr('my_shop_actions'),
+                          onSelected: (_) => _deleteMain(),
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+                                title: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   );
                 },

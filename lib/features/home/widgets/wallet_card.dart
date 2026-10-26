@@ -45,8 +45,6 @@ class _WalletCardState extends State<WalletCard>
   static const _badgeText = Color(0xFF1A3A00);
   static const _debitTint = Color(0xFFFFCDD2);
 
-  static const _goldLight = Color(0xFFFFF4C2);
-  static const _goldDark = Color(0xFFC9A000);
   static const _outerRadius = 19.0;
   static const _innerRadius = 16.0;
   static const _borderWidth = 2.5;
@@ -176,30 +174,18 @@ class _WalletCardState extends State<WalletCard>
                       ),
                       const SizedBox(width: 10),
                       Flexible(
-                        child: ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [_goldLight, _gold, _goldDark],
-                            stops: [0.0, 0.5, 1.0],
-                          ).createShader(bounds),
-                          child: Text(
-                            widget.displayName.toUpperCase(),
-                            textAlign: TextAlign.right,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(
-                                  offset: Offset(0, 1),
-                                  blurRadius: 1,
-                                  color: Color(0x66000000),
-                                ),
-                              ],
-                            ),
+                        // Исм — баланс билан бир хил тўқ ранг (эга, 2026-10-26: 3-вариант #171717).
+                        // Аввалги олтин градиент #FFA500 фонда 1.2–1.8 : 1 контраст берарди; энди 9.1 : 1.
+                        child: Text(
+                          widget.displayName.toUpperCase(),
+                          key: const ValueKey('wallet_display_name'),
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.onPrimary,
                           ),
                         ),
                       ),

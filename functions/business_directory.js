@@ -198,6 +198,8 @@ function editPatch(FieldValue, cur, fields, fail) {
 }
 
 const CASCADE_BATCH = 400;
+/** Асосий дўкон «ичидаги» дўконлар: чакана/улгуржи объектлар (илова: `isShopCategory`). Бор бўлса — асосий ўчмайди. */
+const MAIN_SHOP_INNER_CATEGORIES = new Set(['retail', 'wholesale']);
 const digitsOf = (v) => String(v == null ? '' : v).replace(/\D/g, '');
 
 /**
@@ -528,6 +530,50 @@ function attachBusinessDirectory(exportsObj, deps) {
     });
     log({ action: 'deleteMyBusiness', userId: uid, businessId: ref.id, result: out.deleted ? 'deleted' : 'noop', durationMs: Date.now() - started });
     return { ok: true, ...out };
+  });
+
+  /**
+   * data: {} → { ok, deleted, products }. Эганинг АСОСИЙ онлайн дўкони (эга, 2026-10-26: «аввал ичидаги дўконлар
+   * ўчирилсин хабари билан ўчирилсин»; танлов — «фақат онлайн дўкон»):
+   *  • ичида дўкон (чакана/улгуржи объект ёки филиал) бор — SHOP_HAS_INNER_SHOPS (аввал уларни ўчириш керак);
+   *  • дўкон блокланган — SHOP_BLOCKED (ўчириб, қайта очиб блокдан қочиш йўли ёпиқ, `deleteMyBusiness` каби);
+   *  • `tv_shops/{телефон}` ўчади (номи; қидирув ёзуви `shop_search_index` триггерида олинади), дўконнинг ЎЗ
+   *    маҳсулотлари (`businessId`сиз) юмшоқ ўчади (`status: deleted`). Улгуржи сотувчи ҳисоби ва эски Аҳоли
+   *    эълонлари ТЕГИЛМАЙДИ (ўз модуллари, ўз ўчириши бор).
+   * Идемпотент: қайта чақириш зарарсиз (deleted:false, products:0).
+   */
+  exportsObj.deleteMyMainShop = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const uid = requireUser(context);
+    const ref = db.collection(SHOPS).doc(uid);
+    const out = await db.runTransaction(async (t) => {
+      const [snap, own] = await Promise.all([
+        t.get(ref),
+        t.get(db.collection(COLLECTION).where('ownerId', '==', uid).limit(LIMITS.maxPerOwner)),
+      ]);
+      const inner = own.docs.filter((d) => MAIN_SHOP_INNER_CATEGORIES.has((d.data() || {}).category)).length;
+      if (inner > 0) {
+        throw fail('failed-precondition', 'SHOP_HAS_INNER_SHOPS', 'Аввал ичидаги дўконларни ўчиринг.');
+      }
+      if (isBlocked(snap)) throw fail('failed-precondition', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
+      if (!snap.exists) return { deleted: false };
+      t.delete(ref);
+      return { deleted: true };
+    });
+    // Ўз маҳсулотлари — транзакциядан ташқари, саҳифалаб (сони чекланмаган), идемпотент. Йўналиш маҳсулотлари
+    // (`businessId` бор) бу ерга тушмайди — уларнинг дўконлари юқорида текширилди (йўқ).
+    const { FieldValue } = admin.firestore;
+    const items = await patchPaged(db, admin, db.collection(ITEMS).where('ownerPhone', 'in', phoneVariants(uid)), (x) => {
+      if (x.status === 'deleted' || str(x.businessId, 128)) return null;
+      return {
+        status: 'deleted', deletedAt: FieldValue.serverTimestamp(), deletedBy: 'system:main_shop_deleted', updatedAt: FieldValue.serverTimestamp(),
+      };
+    });
+    log({
+      action: 'deleteMyMainShop', userId: uid, result: out.deleted ? 'deleted' : 'noop', products: items.updated,
+      durationMs: Date.now() - started,
+    });
+    return { ok: true, deleted: out.deleted, products: items.updated };
   });
 
   // ───────────────────────── Админ ─────────────────────────

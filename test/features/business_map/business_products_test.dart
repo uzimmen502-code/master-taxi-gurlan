@@ -214,13 +214,11 @@ void main() {
       expect(c.photoUrls.length, 7);
       expect(shop.calls, containsAllInOrder(['ensureShop:998901111111:Мой Дўкон', 'create']));
 
-      expect(find.text('bizprod_video_ask_title'), findsOneWidget);
-      await tester.tap(find.text('bizprod_video_later'));
-      await tester.pumpAndSettle();
-      expect(videoFor, isEmpty, reason: '«кейин» — видео нашри очилмайди');
+      expect(find.byType(AlertDialog), findsNothing, reason: '«Видео қўшасизми?» ойнаси йўқ (видео формада)');
+      expect(videoFor, isEmpty, reason: 'видео белгиланмаган — видео нашри очилмайди');
     });
 
-    testWidgets('яратиш: «Видео қўшиш» — яратилган маҳсулот id си билан чақирилади', (tester) async {
+    testWidgets('яратиш: формада «Видео қўшиш» белгиланса — сақлангач яратилган маҳсулот id си билан очилади', (tester) async {
       final shop = _FakeShop();
       var videoFor = '';
       await _pump(
@@ -237,11 +235,58 @@ void main() {
       await tester.enterText(find.byKey(const ValueKey('bizprod_name')), 'Нон');
       await tester.tap(find.byKey(const ValueKey('bizprod_add_photos')));
       await tester.pumpAndSettle();
+      // Видео — расмлардан кейинги ЯГОНА жой.
+      await tester.tap(find.byKey(const ValueKey('bizprod_video_tile')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('bizprod_video_after_save')), findsOneWidget);
+      expect(videoFor, isEmpty, reason: 'ҳужжат ҳали йўқ — видео сақлангандан кейин');
       await tester.tap(find.byKey(const ValueKey('bizprod_save')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('bizprod_video_add'));
-      await tester.pumpAndSettle();
       expect(videoFor, 'item1');
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('видео танлови қайта босилса бекор бўлади', (tester) async {
+      var videoFor = '';
+      await _pump(
+        tester,
+        BusinessProductFormScreen(
+          business: _biz(),
+          repository: _FakeShop(),
+          ownerPhone: '998901111111',
+          pickPhotos: (room) async => ['a.jpg'],
+          uploadPhotos: (phone, paths) async => ['https://cdn/a.jpg'],
+          addVideo: (ctx, id) async => videoFor = id,
+        ),
+      );
+      await tester.enterText(find.byKey(const ValueKey('bizprod_name')), 'Нон');
+      await tester.tap(find.byKey(const ValueKey('bizprod_add_photos')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('bizprod_video_tile')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('bizprod_video_tile')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('bizprod_video_after_save')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('bizprod_save')));
+      await tester.pumpAndSettle();
+      expect(videoFor, isEmpty);
+    });
+
+    testWidgets('таҳрир: видео йўқ — ўша катак видео экранини дарров очади; видео бор — «Видео бор», катак йўқ', (tester) async {
+      var videoFor = '';
+      await _pump(tester, BusinessProductFormScreen(
+          business: _biz(), existing: _item('i9'), repository: _FakeShop(), ownerPhone: '998901111111',
+          addVideo: (ctx, id) async => videoFor = id));
+      expect(find.byKey(const ValueKey('bizprod_add_video')), findsNothing, reason: 'эски алоҳида тугма йўқ');
+      await tester.tap(find.byKey(const ValueKey('bizprod_video_tile')));
+      await tester.pumpAndSettle();
+      expect(videoFor, 'i9');
+
+      await _pump(tester, BusinessProductFormScreen(
+          key: UniqueKey(), business: _biz(), existing: _item('v1', clips: const ['c1']), repository: _FakeShop(),
+          ownerPhone: '998901111111'));
+      expect(find.byKey(const ValueKey('bizprod_video_tile')), findsNothing);
+      expect(find.text('bizprod_has_video'), findsOneWidget);
     });
 
     testWidgets('юклаш йиқилса — хато кўрсатилади, ҳужжат яратилмайди', (tester) async {
@@ -386,10 +431,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('bizprod_save')));
       await tester.pumpAndSettle();
-      if (find.text('bizprod_video_later').evaluate().isNotEmpty) {
-        await tester.tap(find.text('bizprod_video_later'));
-        await tester.pumpAndSettle();
-      }
       expect(shop.created?.kind, 'product');
     });
 

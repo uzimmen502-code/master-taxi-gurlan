@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../ads/repositories/ads_repository.dart';
 import '../business_map/data/business_repository.dart';
 import '../business_map/domain/business.dart';
-import '../business_map/domain/business_category.dart';
+import '../business_map/domain/product_kind.dart' as product_kind;
 import '../tv_market/repositories/tv_shop_repository.dart';
 import '../wholesale/repositories/wholesale_sellers_repository.dart';
 
@@ -93,9 +93,7 @@ class MyShopPresence {
   }
 
   /// «Дўкон» деб ҳисобланадиган объект турлари: чакана ва улгуржи.
-  static bool isShopCategory(Business b) =>
-      b.category == BusinessCategory.retail ||
-      b.category == BusinessCategory.wholesale;
+  static bool isShopCategory(Business b) => product_kind.isShopCategory(b.category);
 
   @override
   bool operator ==(Object other) =>

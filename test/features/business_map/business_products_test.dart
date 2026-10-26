@@ -77,6 +77,7 @@ TvShopItem _item(
   DateTime? at,
   List<String> clips = const [],
   String businessId = 'b1',
+  String kind = 'product',
 }) =>
     TvShopItem(
       id: id,
@@ -86,7 +87,7 @@ TvShopItem _item(
       price: price,
       photoUrl: 'https://x/$id.jpg',
       photoUrls: ['https://x/$id.jpg'],
-      kind: 'product',
+      kind: kind,
       districtId: 'gurlan',
       districtLabel: '',
       status: status,
@@ -346,11 +347,64 @@ void main() {
       expect(find.text('Нон'), findsNothing);
       expect(find.text('bizprod_empty'), findsOneWidget);
     });
-    testWidgets('қўшиш тугмаси форма экранини очади', (tester) async {
+    testWidgets('қўшиш тугмаси форма экранини очади (дўкон — «Янги маҳсулот»)', (tester) async {
       await _pump(tester, BusinessProductsScreen(business: _biz(), repository: _FakeShop()));
       await tester.tap(find.byKey(const ValueKey('bizprod_fab')));
       await tester.pumpAndSettle();
+      expect(find.text('bizprod_new_product'), findsOneWidget);
+    });
+  });
+
+  // Дўконда «Хизмат» йўқ (эга, 2026-10-26: «дўкон ичида қанақа хизмат бўлиши мумкин»).
+  group('Дўконда фақат маҳсулот', () {
+    test('sellsOnlyProducts: асосий дўкон, чакана, улгуржи — ҳа; хизмат кўрсатувчи — йўқ', () {
+      expect(sellsOnlyProducts(_biz()), isTrue);
+      expect(sellsOnlyProducts(_biz(c: BusinessCategory.wholesale)), isTrue);
+      expect(sellsOnlyProducts(Business.ownShop(ownerId: '998901111111', name: 'Asosiy')), isTrue);
+      expect(sellsOnlyProducts(_biz(c: BusinessCategory.personal)), isFalse);
+      expect(sellsOnlyProducts(_biz(c: BusinessCategory.food)), isFalse, reason: 'кафе — объект, дўкон эмас');
+    });
+
+    testWidgets('чакана дўкон: «Маҳсулот/Хизмат» танлови йўқ, сарлавҳа «Янги маҳсулот», сақланган тур — маҳсулот', (tester) async {
+      final shop = _FakeShop();
+      await _pump(
+        tester,
+        BusinessProductFormScreen(
+          business: _biz(),
+          repository: shop,
+          ownerPhone: '998901111111',
+          pickPhotos: (room) async => ['/p1.jpg'],
+          uploadPhotos: (phone, paths) async => ['https://x/1.jpg'],
+          addVideo: (_, __) async {},
+        ),
+      );
+      expect(find.byKey(const ValueKey('bizprod_kind')), findsNothing);
+      expect(find.text('bizprod_kind_service'), findsNothing);
+      expect(find.text('bizprod_new_product'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('bizprod_name')), 'Tilla');
+      await tester.tap(find.byKey(const ValueKey('bizprod_add_photos')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('bizprod_save')));
+      await tester.pumpAndSettle();
+      if (find.text('bizprod_video_later').evaluate().isNotEmpty) {
+        await tester.tap(find.text('bizprod_video_later'));
+        await tester.pumpAndSettle();
+      }
+      expect(shop.created?.kind, 'product');
+    });
+
+    testWidgets('хизмат кўрсатувчи объект: танлов қолади', (tester) async {
+      await _pump(tester, BusinessProductFormScreen(
+          business: _biz(c: BusinessCategory.personal), repository: _FakeShop(), ownerPhone: '998901111111'));
+      expect(find.byKey(const ValueKey('bizprod_kind')), findsOneWidget);
       expect(find.text('bizprod_new'), findsOneWidget);
+    });
+
+    testWidgets('дўкондаги эски «хизмат» ёзуви таҳрирда — танлов кўринади (маҳсулотга ўтказиш учун)', (tester) async {
+      final asService = _item('s1', kind: 'service');
+      await _pump(tester, BusinessProductFormScreen(
+          business: _biz(), existing: asService, repository: _FakeShop(), ownerPhone: '998901111111'));
+      expect(find.byKey(const ValueKey('bizprod_kind')), findsOneWidget);
     });
   });
 

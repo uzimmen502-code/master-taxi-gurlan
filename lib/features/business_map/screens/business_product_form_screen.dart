@@ -61,7 +61,12 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   late final TextEditingController _price = TextEditingController(
       text: (widget.existing?.price ?? 0) > 0 ? '${widget.existing!.price}' : '');
   late final TextEditingController _desc = TextEditingController(text: widget.existing?.description ?? '');
-  late String _kind = widget.existing?.kind ?? defaultProductKind(widget.business.category);
+  late String _kind = widget.existing?.kind ??
+      (sellsOnlyProducts(widget.business) ? 'product' : defaultProductKind(widget.business.category));
+
+  /// Дўконда «Хизмат» танлови йўқ ([sellsOnlyProducts]). Аввал хизмат деб сақланган эски дўкон ёзуви — танлов
+  /// кўринади, эга уни маҳсулотга ўтказа олсин.
+  late final bool _showKindChoice = !sellsOnlyProducts(widget.business) || widget.existing?.kind == 'service';
   final List<String> _photos = [];
   bool _busy = false;
   String? _error;
@@ -184,20 +189,24 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr(_isEdit ? 'bizprod_edit' : 'bizprod_new'))),
+      appBar: AppBar(
+        title: Text(context.tr(_isEdit ? 'bizprod_edit' : (_showKindChoice ? 'bizprod_new' : 'bizprod_new_product'))),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SegmentedButton<String>(
-            key: const ValueKey('bizprod_kind'),
-            segments: [
-              ButtonSegment(value: 'product', label: Text(context.tr('bizprod_kind_product'))),
-              ButtonSegment(value: 'service', label: Text(context.tr('bizprod_kind_service'))),
-            ],
-            selected: {_kind},
-            onSelectionChanged: _busy ? null : (s) => setState(() => _kind = s.first),
-          ),
-          const SizedBox(height: 12),
+          if (_showKindChoice) ...[
+            SegmentedButton<String>(
+              key: const ValueKey('bizprod_kind'),
+              segments: [
+                ButtonSegment(value: 'product', label: Text(context.tr('bizprod_kind_product'))),
+                ButtonSegment(value: 'service', label: Text(context.tr('bizprod_kind_service'))),
+              ],
+              selected: {_kind},
+              onSelectionChanged: _busy ? null : (s) => setState(() => _kind = s.first),
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             key: const ValueKey('bizprod_name'),
             controller: _name,

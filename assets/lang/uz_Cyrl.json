@@ -3958,6 +3958,8 @@
   "bizprod_add": "Қўшиш",
   "bizprod_empty": "Ҳали маҳсулот йўқ. Қўшинг — улар Аҳоли бозорида кўринади, видео қўшсангиз AVAGram’да ҳам чиқади.",
   "bizprod_new": "Янги маҳсулот ёки хизмат",
+  "bizprod_new_product": "Янги маҳсулот",
+  "bizprod_title_products": "Маҳсулотлар",
   "bizprod_edit": "Таҳрирлаш",
   "bizprod_f_name": "Номи",
   "bizprod_f_price": "Нарх, сўм (ихтиёрий)",

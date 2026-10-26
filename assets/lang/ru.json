@@ -3958,6 +3958,8 @@
   "bizprod_add": "Добавить",
   "bizprod_empty": "Товаров пока нет. Добавьте — они появятся на рынке Аҳоли, а с видео — и в AVAGram.",
   "bizprod_new": "Новый товар или услуга",
+  "bizprod_new_product": "Новый товар",
+  "bizprod_title_products": "Товары",
   "bizprod_edit": "Редактирование",
   "bizprod_f_name": "Название",
   "bizprod_f_price": "Цена, сум (необязательно)",

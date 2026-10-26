@@ -3958,6 +3958,8 @@
   "bizprod_add": "Qo'shish",
   "bizprod_empty": "Hali mahsulot yo'q. Qo'shing — ular Aholi bozorida ko'rinadi, video qo'shsangiz AVAGram’da ham chiqadi.",
   "bizprod_new": "Yangi mahsulot yoki xizmat",
+  "bizprod_new_product": "Yangi mahsulot",
+  "bizprod_title_products": "Mahsulotlar",
   "bizprod_edit": "Tahrirlash",
   "bizprod_f_name": "Nomi",
   "bizprod_f_price": "Narx, so'm (ixtiyoriy)",

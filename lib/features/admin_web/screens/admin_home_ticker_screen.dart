@@ -578,7 +578,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
               const SizedBox(height: 12),
               // Анимация, давомийлик, шрифт ва тезлик майдонлари олиб ташланди (эга, 2026-10-26) — баннер уларни ишлатмайди.
               Text(
-                'Баннер: ҳар матн 3 сония кўринади, кейин ағдарилиб алмашади; шрифт матн узунлигига қараб автоматик (кўпи билан 4 қатор).',
+                'Баннер: ҳар матн 5 сония кўринади, кейин ағдарилиб алмашади; шрифт матн узунлигига қараб автоматик (кўпи билан 4 қатор).',
                 key: const ValueKey('ticker_fixed_behaviour_note'),
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),

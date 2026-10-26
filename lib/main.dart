@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
@@ -74,12 +75,18 @@ import 'core/widgets/app_version_gate_view.dart';
 import 'core/utils/firestore_crash_guard.dart';
 import 'services/deferred_settlement_queue.dart';
 import 'utils/locale_utils.dart';
+import 'features/my_shop/install_referrer_link.dart';
 import 'features/my_shop/pending_shop_link.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Дўкон ҳаволаси (`/?shop=<id>`) — бош саҳифа очилгач шу дўкон очилади (5-босқич, фақат веб).
   PendingShopLink.captureFromUrl();
+  // Android App Links: `https://master-taxi-gurlan.web.app/s/<id>` иловани очса (cold start ҳам, ишлаб турганда
+  // ҳам) — ўша навбатга тушади. Оқим бошланғич ҳаволани ҳам беради. Вебда чақирилмайди (веб — юқоридаги қатор).
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    PendingShopLink.listenAppLinks(AppLinks().uriLinkStream);
+  }
   // Firestore veb SDK "Unexpected state" bug'idan avto-tiklash (faqat web).
   installFirestoreCrashGuard();
 
@@ -118,6 +125,15 @@ void main() async {
         unawaited(FirebaseCrashlytics.instance.setUserIdentifier(crashId));
       }
     }
+
+  // Deferred deep link: Play'дан дўкон ҳаволаси билан ўрнатилган бўлса — биринчи очилишда ўша дўкон
+  // (Install Referrer, бир марта, async + timeout — бошланишни кутдирмайди). Фақат Android.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    unawaited(InstallReferrerLink.checkOnce(
+      prefs: prefs,
+      freshInstall: !languageSelected && !isReturningUser,
+    ));
+  }
 
   // Sessiya yo'qolsa (APK yangilash) — kod bilan qayta tasdiqlash kerak.
   if (isReturningUser && !hasFirebaseAuth) {

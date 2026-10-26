@@ -132,36 +132,6 @@ class HomeTickerRepository {
     await _col.doc(id).delete();
   }
 
-  /// Berilgan modulning BARCHA matnlari uchun `durationSec` ni bittada
-  /// o'rnatadi. Qaytaradi: yangilangan hujjatlar soni.
-  Future<int> setDurationForModule(String module, int durationSec) async {
-    final snap = await _col.where('module', isEqualTo: module).get();
-    if (snap.docs.isEmpty) return 0;
-    final batch = _db.batch();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'durationSec': durationSec,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
-    return snap.docs.length;
-  }
-
-  /// Berilgan modulning BARCHA matnlari uchun `animationStyle` ni bittada
-  /// o'rnatadi. Qaytaradi: yangilangan hujjatlar soni.
-  Future<int> setAnimationStyleForModule(
-      String module, String animationStyle) async {
-    final snap = await _col.where('module', isEqualTo: module).get();
-    if (snap.docs.isEmpty) return 0;
-    final batch = _db.batch();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'animationStyle': animationStyle,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
-    return snap.docs.length;
-  }
+  // setDurationForModule / setAnimationStyleForModule олиб ташланди (эга, 2026-10-26): админдаги «барча матнларга»
+  // тугмалари йўқ — бош экран баннери durationSec/animationStyle ни ишлатмайди.
 }

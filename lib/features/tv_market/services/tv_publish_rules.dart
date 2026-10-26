@@ -1,3 +1,5 @@
+import 'tv_social.dart';
+
 /// Видео жойлаш экрани ([TvPublishScreen]) қоидалари — СОФ мантиқ (тестланади).
 /// Экран шу қоидаларни чақиради, ўзи такрор ёзмайди (7-қоида).
 abstract final class TvPublishRules {
@@ -52,4 +54,18 @@ abstract final class TvPublishRules {
       networks.isEmpty
           ? const {}
           : {'socialConsentAt': serverTime, 'socialConsentVersion': version};
+
+  /// «Менинг каналим» (сотувчининг ўз Telegram канали, 2026-10-25) таклиф қилинадими: канал уланган ва видео
+  /// товар/хизмат (янгилик ва пуллик рекламада йўқ — сервер ҳам фақат шуларни жойлайди).
+  static bool sellerChannelOffered({required String category, required bool channelConnected}) =>
+      channelConnected && (category == 'product' || category == 'service');
+
+  /// Клипга ёзиладиган тармоқлар: «Менинг каналим» таклиф қилинмаса (тур ўзгарди ёки канал узилган) — олиб ташланади.
+  static Set<String> effectiveSocialNetworks(Set<String> picked, {required bool sellerChannelOffered}) =>
+      sellerChannelOffered ? {...picked} : {for (final id in picked) if (id != TvSocial.sellerTelegram) id};
+
+  /// Розилик матни версияси: «Менинг каналим» танланса матн канални айтади — 2, акс ҳолда 1.
+  static int socialConsentVersion(Set<String> networks) => networks.contains(TvSocial.sellerTelegram)
+      ? TvSocial.sellerChannelConsentVersion
+      : TvSocial.consentVersion;
 }

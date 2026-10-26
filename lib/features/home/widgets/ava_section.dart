@@ -573,7 +573,7 @@ class _Header extends StatelessWidget {
             Expanded(
               child: SectionTitleText(
                 title: sectionTitleWithColon(title),
-                style: AvaText.sectionTitle.copyWith(color: c.ink),
+                style: AvaText.homeSectionTitle.copyWith(color: c.ink),
               ),
             ),
             if (onSeeAll != null) ...[
@@ -608,7 +608,7 @@ class SectionTitleText extends StatelessWidget {
   final String title;
   final TextStyle style;
 
-  /// Кичрайтириш ЙЎҚ (1.0): ҳамма бўлим сарлавҳаси БИР ХИЛ шрифтда (16/600, «Кўчмас мулк кластери» каби) —
+  /// Кичрайтириш ЙЎҚ (1.0): ҳамма бўлим сарлавҳаси БИР ХИЛ шрифтда (14/600 — [AvaText.homeSectionTitle], 2026-10-26 гача 16/600; «Кўчмас мулк кластери» каби) —
   /// сиғмаса 2 қаторга ўтади (эга, 2026-10-19: «бўлим сарлавҳалари шрифтлари бир хил бўлсин»). Аввал 0.8 эди ва
   /// узун сарлавҳалар («Яқиндаги Кафе-Ресторанлар:») бошқаларидан кичик чиқарди.
   static const minScale = 1.0;
@@ -687,6 +687,7 @@ class _SeeAllButton extends StatelessWidget {
           // ҚАТОРИНИНГ баландлигини белгилар эди: сарлавҳа матни 20px,
           // қолган 24px эса тепа-пастга бўш жой бўлиб тарқаларди. Энди
           // қатор 32px — сарлавҳа тагидаги бўшлиқ 12px дан 6px га тушди.
+          // 2026-10-26: 32 → 24 (эга, «Вариант А») — бўшлиқ ≈3px.
           //
           // Босиш майдони ЁНИГА кенг қолади (матн + стрелка + чекинма),
           // шунинг учун тегиш қийинлашмайди — фақат бўйи пасайди.
@@ -725,7 +726,9 @@ class _SeeAllButton extends StatelessWidget {
 }
 
 /// «Барчаси» тугмасининг баландлиги — қаранг: [_SeeAllButton] изоҳи.
-const double _seeAllMinHeight = 32;
+/// 32 → 24 (эга, 2026-10-26: «Вариант А» — бўлимлар зичроқ; 24 = бўлим белгиси [ServiceCircleBadge] баландлиги,
+/// WCAG 2.2 энг кичик босиш майдони 24×24).
+const double _seeAllMinHeight = 24;
 
 /// «Барчаси» стрелкасининг тест калити.
 ///

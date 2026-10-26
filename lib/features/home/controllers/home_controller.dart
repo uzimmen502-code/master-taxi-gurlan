@@ -68,6 +68,10 @@ class HomeController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// «📢 Янгилик» агро-промо ойнаси ВАҚТИНЧА ўчиқ (эга, 2026-10-26: «вақтинчалик қўздан яшир»).
+  /// Қайта ёқиш — `true`. Ўчиқ пайтда ҳеч нарса ёзилмайди (кунлик белги ҳам), қайта ёқилганда аввалгидек ишлайди.
+  static const agroPromoEnabled = false;
+
   /// Биринчи ўрнатишдан 3 кун ичида, кунига бир марта.
   Future<void> _maybeFireAgroPromo() async {
     final prefs = await SharedPreferences.getInstance();
@@ -75,6 +79,8 @@ class HomeController extends ChangeNotifier {
     final installMs =
         prefs.getInt('first_install_ms') ?? now.millisecondsSinceEpoch;
     await prefs.setInt('first_install_ms', installMs);
+    // Ўрнатиш санаси ёзилгандан КЕЙИН: қайта ёқилганда эски фойдаланувчи «янги» бўлиб қолмасин.
+    if (!agroPromoEnabled) return;
     final first = DateTime.fromMillisecondsSinceEpoch(installMs);
     final dayDiff =
         now.difference(DateTime(first.year, first.month, first.day)).inDays;

@@ -54,10 +54,29 @@
             <meta-data
                 android:name="io.flutter.embedding.android.ImpellerBackend"
                 android:value="opengles"/>
+            <!-- Flutter'нинг ўз deep linking'и ЎЧИҚ: ҳаволани `app_links` пакети беради
+                 (lib/features/my_shop/pending_shop_link.dart). Ёқиқ бўлса `/s/<id>`
+                 Navigator'га номаълум route бўлиб тушарди (MaterialApp фақат `home`). -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false"/>
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Android App Links: дўкон/ресторан доимий ҳаволаси иловада очилади.
+                 Текширув: https://master-taxi-gurlan.web.app/.well-known/assetlinks.json
+                 (web/.well-known/assetlinks.json; сертификат SHA-256 мос бўлмаса — браузер). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="master-taxi-gurlan.web.app"
+                    android:pathPrefix="/s/"/>
             </intent-filter>
 
         </activity>

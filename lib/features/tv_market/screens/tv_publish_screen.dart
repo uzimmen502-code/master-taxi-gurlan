@@ -32,7 +32,9 @@ import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
 import '../utils/tv_news_detector.dart';
 import '../widgets/tv_ad_tier_picker.dart';
+import '../widgets/tv_social_picker.dart';
 import '../widgets/tv_social_withdraw_card.dart';
+import '../../my_shop/seller_tg_channel.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../../../core/theme/ava_tokens.dart';
 
@@ -127,6 +129,26 @@ class _TvPublishScreenState extends State<TvPublishScreen>
 
   /// «Рухсат бераман» (7-босқич): тармоқ танланган бўлса шарт; янги тармоқ қўшилса қайта сўралади.
   bool _socialConsentChecked = false;
+
+  /// Сотувчининг уланган Telegram канали (`@nom`, 2026-10-25) — бўлса «Менинг каналим» чипи; бўш — йўқ.
+  String _sellerChannel = '';
+
+  bool get _sellerChannelOffered => TvPublishRules.sellerChannelOffered(
+        category: _category,
+        channelConnected: _sellerChannel.isNotEmpty,
+      );
+
+  /// Клипга ёзиладиган тармоқлар (тур «Янгилик»ка ўтса «Менинг каналим» тушиб қолади).
+  Set<String> get _effectiveSocialNetworks => TvPublishRules.effectiveSocialNetworks(
+        _socialNetworks,
+        sellerChannelOffered: _sellerChannelOffered,
+      );
+
+  /// Белги қайси тармоқлар кўрсатилганда қўйилган. Тур алмашиб «Менинг каналим» қайта пайдо бўлса (белги уни
+  /// айтмаган матнга қўйилган) — белги яроқсиз, қайта сўралади. Тармоқ олиб ташланса — белги қолади.
+  Set<String> _consentNets = const {};
+
+  bool get _consentValid => _socialConsentChecked && _consentNets.containsAll(_effectiveSocialNetworks);
   String _attachItemId = '';
   final _productPhotos = <XFile>[];
   List<TvShopItem> _myItems = const [];
@@ -189,6 +211,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     _descCtrl.addListener(_suggestCategoryFromText);
     unawaited(_loadShop());
     unawaited(_loadAdContext());
+    unawaited(_loadSellerChannel());
+  }
+
+  /// «Менинг каналим» чипи учун: эганинг уланган Telegram канали (хато — чип кўринмайди, жойлаш тўхтамайди).
+  Future<void> _loadSellerChannel() async {
+    if (_isEdit) return;
+    final prefs = await SharedPreferences.getInstance();
+    final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    final handle = await loadConnectedSellerChannel(phone);
+    if (mounted && handle.isNotEmpty) setState(() => _sellerChannel = handle);
   }
 
   /// Сарлавҳа/тавсифда янгилик калит сўзи топилса — сегментни «Янгилик»га
@@ -675,8 +707,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     }
     if (TvPublishRules.socialConsentMissing(
       category: _category,
-      networks: _socialNetworks,
-      consentChecked: _socialConsentChecked,
+      networks: _effectiveSocialNetworks,
+      consentChecked: _consentValid,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_social_consent_required'))),
@@ -811,6 +843,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final autoApprove = settingsSnap.data()?['tvAutoApprove'] == true;
 
       String shopItemId = _attachItemId;
+      // Розилик ва тармоқлар — экранда кўрсатилганлар (тур «Янгилик» бўлса «Менинг каналим»сиз).
+      final socialNets = _effectiveSocialNetworks;
       var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;
       if (!mounted) return;
 
@@ -839,7 +873,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               districtId: districtId,
               districtLabel: districtLabel,
               description: description,
-              socialConsent: _socialNetworks.isNotEmpty,
+              socialConsent: socialNets.isNotEmpty,
               status: autoApprove ? 'active' : 'pending',
             ),
           );
@@ -872,8 +906,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         linkKind: widget.linkKind,
         linkId: widget.linkId,
         linkItemId: widget.linkItemId,
-        socialConsent: _socialNetworks.isNotEmpty,
-        socialNetworks: _socialNetworks.toList(),
+        socialConsent: socialNets.isNotEmpty,
+        socialNetworks: socialNets.toList(),
         searchTokens: TvClipSearch.buildTokens(
           title: title,
           description: description,
@@ -888,8 +922,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           .add({
         ...clip.toMap(),
         ...TvPublishRules.socialConsentFields(
-          networks: _socialNetworks,
-          version: TvSocial.consentVersion,
+          networks: socialNets,
+          version: TvPublishRules.socialConsentVersion(socialNets),
           serverTime: FieldValue.serverTimestamp(),
         ),
       });
@@ -909,7 +943,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       if (isNews) {
         lines.add(context.tr('tv_publish_marked_news'));
       }
-      if (_socialNetworks.isNotEmpty) {
+      if (socialNets.isNotEmpty) {
         lines.add(context.tr('tv_social_queued'));
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1031,9 +1065,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 // ўзи ўчади, витринага боғланмайди).
                 if (_category != 'news' && !widget.hideShopOption)
                   ..._shopSection(context),
-                _SocialPicker(
-                  selected: _socialNetworks,
-                  consent: _socialConsentChecked,
+                TvSocialPicker(
+                  selected: _effectiveSocialNetworks,
+                  sellerChannel: _sellerChannelOffered ? _sellerChannel : '',
+                  consent: _consentValid,
                   onToggle: (id, on) => setState(() {
                     if (on) {
                       _socialNetworks.add(id);
@@ -1043,7 +1078,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                       _socialNetworks.remove(id);
                     }
                   }),
-                  onConsent: (v) => setState(() => _socialConsentChecked = v),
+                  onConsent: (v) => setState(() {
+                    _socialConsentChecked = v;
+                    _consentNets = {..._effectiveSocialNetworks};
+                  }),
                 ),
               ],
               const SizedBox(height: 8),
@@ -1497,76 +1535,6 @@ class _AdSocialNotice extends StatelessWidget {
             style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// Роликни AVA расмий ижтимоий тармоқларига ҳам юбориш танлови.
-/// Тармоқ танланса — «Рухсат бераман» белгиси (7-босқич): нима ва қаерга очиқ
-/// жойланиши аниқ ёзилади; белгиланмаса жойлаш тўхтатилади.
-class _SocialPicker extends StatelessWidget {
-  const _SocialPicker({
-    required this.selected,
-    required this.onToggle,
-    required this.consent,
-    required this.onConsent,
-  });
-
-  final Set<String> selected;
-  final void Function(String id, bool on) onToggle;
-  final bool consent;
-  final ValueChanged<bool> onConsent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          context.tr('tv_social_title'),
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          context.tr('tv_social_hint'),
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final id in TvSocial.ordered)
-              FilterChip(
-                label: Text(context.tr(TvSocial.labelKey(id))),
-                selected: selected.contains(id),
-                onSelected: (on) => onToggle(id, on),
-              ),
-          ],
-        ),
-        if (selected.isNotEmpty)
-          CheckboxListTile(
-            key: const ValueKey('tv_social_consent'),
-            value: consent,
-            onChanged: (v) => onConsent(v ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              context.tr('tv_social_consent_check').replaceAll(
-                    '{networks}',
-                    [
-                      for (final id in TvSocial.ordered)
-                        if (selected.contains(id)) context.tr(TvSocial.labelKey(id)),
-                    ].join(', '),
-                  ),
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
       ],
     );
   }

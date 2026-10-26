@@ -3,16 +3,38 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/home_ticker_ad.dart';
+import 'home_flip_switcher.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Maydon doim 53px. Matn uzunligiga qarab shrift 12–28px oralig'ida
-/// maydonga maksimal sig'diriladi.
+/// Maydon doim [height] = 86px. Matn uzunligiga qarab shrift 12–28px oralig'ida, ko'pi bilan
+/// [maxLines] qatorda maydonga maksimal sig'diriladi. Matn atrofida 1px (ega, 2026-10-26:
+/// «чап-ўнгда 1 px, юқори-пастда 1 px», «кўпи билан 4 қатор»; matn joyi 84px — 4 qator
+/// 12px shriftda ham sig'adi: 4 × 12 × 1.1 = 52.8).
 /// Savol-javob matnlari — hammasi qalin (bold) va BOSH HARFLARDA.
 class HomeInfoTicker extends StatefulWidget {
-  const HomeInfoTicker({super.key, required this.ads});
+  const HomeInfoTicker({super.key, required this.ads, this.random});
 
   final List<HomeTickerAd> ads;
+
+  /// Тенг устуворликдаги матнларни аралаштириш учун (тестда — seed билан).
+  final math.Random? random;
+
+  /// Кўрсатиш тартиби (эга, 2026-10-26: «Устуворлик» ишласин): юқори устуворлик аввал; тенглари ўзаро аралаш.
+  /// Ҳамма матн 0 бўлса — аввалгидек тўлиқ аралаш.
+  static List<HomeTickerAd> displayOrder(List<HomeTickerAd> ads, math.Random random) {
+    final byPriority = <int, List<HomeTickerAd>>{};
+    for (final a in ads) {
+      byPriority.putIfAbsent(a.priority, () => []).add(a);
+    }
+    final levels = byPriority.keys.toList()..sort((a, b) => b.compareTo(a));
+    return [for (final p in levels) ...(byPriority[p]!..shuffle(random))];
+  }
+
+  /// Maydon balandligi: 53 → 75 (эга, 2026-10-26) → 86 px (эга, 2026-10-26: «Баннер 86 px бўлсин» — ҳамён картаси
+  /// билан бир хил, иккаласи битта жойда ағдарилиб алмашади, пастдаги мазмун қимирламайди).
+  static const height = 86.0;
 
   static const _fill     = Color(0xFFFFFF00); // neon sariq
   static const _question = Color(0xFF2C2C2A);
@@ -25,29 +47,44 @@ class HomeInfoTicker extends StatefulWidget {
 class _HomeInfoTickerState extends State<HomeInfoTicker> {
   int _index = 0;
   Timer? _timer;
+  late final math.Random _random = widget.random ?? math.Random();
+
+  /// Тартиб фақат матнлар тўплами ёки устуворлиги ўзгарганда қайта ҳисобланади — ота виджет қайта
+  /// чизилганда баннер бошқа матнга сакраб кетмайди (аввал home_screen ҳар build'да аралаштирарди).
+  List<HomeTickerAd> _ordered = const [];
+
+  static String _signature(List<HomeTickerAd> ads) =>
+      (ads.map((a) => '${a.id}:${a.priority}').toList()..sort()).join('|');
 
   @override
   void initState() {
     super.initState();
+    _ordered = HomeInfoTicker.displayOrder(widget.ads, _random);
     _schedule();
   }
 
   @override
   void didUpdateWidget(covariant HomeInfoTicker old) {
     super.didUpdateWidget(old);
-    if (old.ads.length != widget.ads.length) {
-      _index = 0;
-      _schedule();
+    if (identical(old.ads, widget.ads)) return;
+    if (_signature(old.ads) == _signature(widget.ads)) {
+      // Ўша матнлар (масалан, фақат матн таҳрирланди) — тартиб ва жорий ўрин сақланади.
+      final byId = {for (final a in widget.ads) a.id: a};
+      _ordered = [for (final a in _ordered) byId[a.id] ?? a];
+      return;
     }
+    _ordered = HomeInfoTicker.displayOrder(widget.ads, _random);
+    _index = 0;
+    _schedule();
   }
 
   void _schedule() {
     _timer?.cancel();
-    if (widget.ads.length < 2) return;
+    if (_ordered.length < 2) return;
     // Хар бир матн 3 с → 3D flip → кейингиси.
     _timer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
-      setState(() => _index = (_index + 1) % widget.ads.length);
+      setState(() => _index = (_index + 1) % _ordered.length);
       _schedule();
     });
   }
@@ -58,50 +95,19 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     super.dispose();
   }
 
-  /// Matnlar almashganda "tepadan pastga ag'darilish" (3D flip) effekti.
-  /// AnimatedSwitcher chiquvchi bolaning animatsiyasini teskari aylantiradi:
-  /// kiruvchi uchun value 0→1, chiquvchi uchun 1→0. Ikki matn bir vaqtda
-  /// ko'rinmasligi uchun effekt ketma-ket: birinchi yarmida eski matn pastga
-  /// ag'darilib yo'qoladi, ikkinchi yarmida yangisi tepadan ag'darilib kiradi.
-  Widget _flipTransition(Widget child, Animation<double> animation) {
-    final isIncoming = (child.key as ValueKey?)?.value == _index;
-    return AnimatedBuilder(
-      animation: animation,
-      child: child,
-      builder: (context, child) {
-        final v = animation.value;
-        double angle;
-        bool visible;
-        if (isIncoming) {
-          // Ikkinchi yarmda tepadan (-90°) 0° ga keladi.
-          visible = v >= 0.5;
-          final t = ((v - 0.5) / 0.5).clamp(0.0, 1.0);
-          angle = (1 - t) * (-math.pi / 2);
-        } else {
-          // Birinchi yarmda 0° dan pastga (+90°) ag'darilib yo'qoladi.
-          final p = 1 - v; // 0→1 progress
-          visible = p <= 0.5;
-          final t = (p / 0.5).clamp(0.0, 1.0);
-          angle = t * (math.pi / 2);
-        }
-        final transform = Matrix4.identity()
-          ..setEntry(3, 2, 0.0012)
-          ..rotateX(angle);
-        return Opacity(
-          opacity: visible ? 1 : 0,
-          child: Transform(
-            alignment: Alignment.center,
-            transform: transform,
-            child: child,
-          ),
-        );
-      },
-    );
-  }
+  // Matnlar almashganda 3D ag'darilish — [HomeFlipSwitcher] (ҳамён → баннер жойи ҳам шуни ишлатади).
 
   // Maydonga sig'adigan maksimal shrift (qisqa matn kattaroq).
   static const _maxFont = 28.0;
   static const _minFont = 12.0;
+
+  static const _height = HomeInfoTicker.height;
+
+  /// Ko'pi bilan qatorlar soni.
+  static const maxLines = 4;
+
+  /// Matn bilan maydon cheti orasidagi masofa (har tomonda).
+  static const padding = EdgeInsets.all(1);
 
   double _fitFontSize(String text, double maxWidth, double maxHeight) {
     final upper = text.toUpperCase();
@@ -110,7 +116,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         text: TextSpan(children: [_buildSpan(upper, fs)]),
         textDirection: TextDirection.ltr,
         textAlign: TextAlign.center,
-        maxLines: 2,
+        maxLines: maxLines,
       )..layout(maxWidth: maxWidth);
       if (!painter.didExceedMaxLines && painter.height <= maxHeight) {
         return fs;
@@ -158,29 +164,22 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.ads.isEmpty) return const SizedBox.shrink();
-    final text = widget.ads[_index].text;
+    if (_ordered.isEmpty) return const SizedBox.shrink();
+    // Илова тилидаги матн (uz_Cyrl / uz_Latn / ru; бўш тиллар учун — HomeTickerAd.textFor).
+    final text = _ordered[_index].textFor(context.contentLang);
     final upper = text.toUpperCase();
 
     return SizedBox(
-      height: 53,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 550),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: _flipTransition,
-        layoutBuilder: (current, previous) => Stack(
-          alignment: Alignment.center,
-          children: [...previous, if (current != null) current],
-        ),
+      height: _height,
+      child: HomeFlipSwitcher(
         child: Container(
           key: ValueKey(_index),
-          height: 53,
+          height: _height,
           decoration: BoxDecoration(
             color: HomeInfoTicker._fill,
             borderRadius: BorderRadius.circular(8),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          padding: padding,
           clipBehavior: Clip.antiAlias,
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -192,7 +191,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
               return Align(
                 alignment: Alignment.center,
                 child: RichText(
-                  maxLines: 2,
+                  maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   text: TextSpan(children: [_buildSpan(upper, fs)]),

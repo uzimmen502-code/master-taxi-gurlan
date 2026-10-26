@@ -1,6 +1,11 @@
 package uz.ava.gurlan
 
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import com.android.installreferrer.api.InstallReferrerClient
+import com.android.installreferrer.api.InstallReferrerStateListener
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -59,6 +64,65 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // Deferred deep link (do'kon QR -> Play -> o'rnatish -> ilova o'sha do'konni ochadi):
+        // Google Play Install Referrer. Dart tomoni (install_referrer_link.dart) faqat birinchi
+        // ishga tushishda bir marta chaqiradi va o'z timeout'iga ega. Javob: referrer satri yoki null
+        // (xizmat yo'q / xato — jim, logcat'da kod).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, INSTALL_REFERRER_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method == "getInstallReferrer") {
+                    readInstallReferrer(result)
+                } else {
+                    result.notImplemented()
+                }
+            }
+    }
+
+    /// Install Referrer'ni o'qiydi. Binder chaqiruvi (`installReferrer`) asosiy oqimda EMAS
+    /// (Play sekin bo'lsa ANR bo'lmasin); javob bir marta va asosiy oqimda yuboriladi.
+    private fun readInstallReferrer(result: MethodChannel.Result) {
+        val main = Handler(Looper.getMainLooper())
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        val client = InstallReferrerClient.newBuilder(applicationContext).build()
+        val finish: (String?) -> Unit = { value ->
+            if (done.compareAndSet(false, true)) {
+                try {
+                    client.endConnection()
+                } catch (e: Exception) {
+                    Log.w(REFERRER_TAG, "endConnection: ${e.javaClass.simpleName}")
+                }
+                main.post { result.success(value) }
+            }
+        }
+        try {
+            client.startConnection(object : InstallReferrerStateListener {
+                override fun onInstallReferrerSetupFinished(responseCode: Int) {
+                    if (responseCode != InstallReferrerClient.InstallReferrerResponse.OK) {
+                        Log.w(REFERRER_TAG, "setup code=$responseCode")
+                        finish(null)
+                        return
+                    }
+                    Thread {
+                        val referrer = try {
+                            client.installReferrer.installReferrer
+                        } catch (e: Exception) {
+                            Log.w(REFERRER_TAG, "read: ${e.javaClass.simpleName}")
+                            null
+                        }
+                        finish(referrer)
+                    }.start()
+                }
+
+                override fun onInstallReferrerServiceDisconnected() {
+                    Log.w(REFERRER_TAG, "service disconnected")
+                    finish(null)
+                }
+            })
+        } catch (e: Exception) {
+            Log.w(REFERRER_TAG, "startConnection: ${e.javaClass.simpleName}")
+            finish(null)
+        }
     }
 
     /// Paketning launcher activity'si. `null` — ilova o'rnatilmagan
@@ -77,5 +141,7 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val CHANNEL = "uz.ava.gurlan/external_app"
         const val MEDIA_CACHE_CHANNEL = "uz.ava.gurlan/tv_media_cache"
+        const val INSTALL_REFERRER_CHANNEL = "uz.ava.gurlan/install_referrer"
+        const val REFERRER_TAG = "AvaInstallReferrer"
     }
 }

@@ -1440,9 +1440,8 @@ class _HomeViewState extends State<_HomeView> {
                                 if (ads.isEmpty) {
                                   return const SizedBox.shrink();
                                 }
-                                final shuffled = List<HomeTickerAd>.of(ads)
-                                  ..shuffle();
-                                return HomeInfoTicker(ads: shuffled);
+                                // Тартиб (устуворлик + аралаш) виджет ичида, фақат маълумот ўзгарганда.
+                                return HomeInfoTicker(ads: ads);
                               },
                             ),
                             // Карусель ва «Барча хизматлар» сарлавҳаси орасидаги масофа 2 px (эга, 2026-10-15).

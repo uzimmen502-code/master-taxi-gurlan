@@ -698,6 +698,51 @@ async function main() {
     assert.deepStrictEqual([f.branchOf, f.status], [undefined, 'active']);
   });
 
+  // ── Асосий дўконни ўчириш (эга, 2026-10-26: «аввал ичидаги дўконлар ўчирилсин хабари билан ўчирилсин») ──
+  const MS = '998912000077';
+  await db.collection('users').doc(MS).set({ role: 'user' });
+  const msItem = (id, over = {}) => db.collection('tv_shop_items').doc(id).set({
+    ownerPhone: MS, title: id, status: 'active', price: 0, ...over,
+  });
+  await db.collection('tv_shops').doc(MS).set({ ownerPhone: MS, name: 'Asosiy' });
+  await msItem('ms_own1');
+  await msItem('ms_own2', { ownerPhone: MS.slice(3) }); // эски 9 рақамли ёзув ҳам эганики
+  await msItem('ms_biz', { businessId: 'some_biz' });
+  await msItem('ms_other', { ownerPhone: OTHER });
+  const msShop = (await call('upsertMyBusiness', { ...BASE, category: 'retail', name: 'Ichki do‘kon', clientRequestId: 'ms-req-1' }, MS)).businessId;
+
+  await check('M1 ichida do\'kon bor — SHOP_HAS_INNER_SHOPS, hech narsa o\'chmaydi', async () => {
+    await expectCode(call('deleteMyMainShop', {}, MS), 'SHOP_HAS_INNER_SHOPS');
+    assert.ok((await db.collection('tv_shops').doc(MS).get()).exists);
+    assert.strictEqual((await db.collection('tv_shop_items').doc('ms_own1').get()).data().status, 'active');
+  });
+
+  await check('M2 ichki do\'kon o\'chirilgach — asosiy do\'kon o\'chadi, faqat O\'Z mahsulotlari yumshoq o\'chadi', async () => {
+    await call('deleteMyBusiness', { businessId: msShop }, MS);
+    const r = await call('deleteMyMainShop', {}, MS);
+    assert.deepStrictEqual([r.ok, r.deleted, r.products], [true, true, 2]);
+    assert.strictEqual((await db.collection('tv_shops').doc(MS).get()).exists, false);
+    const st = async (id) => (await db.collection('tv_shop_items').doc(id).get()).data();
+    assert.deepStrictEqual([(await st('ms_own1')).status, (await st('ms_own1')).deletedBy], ['deleted', 'system:main_shop_deleted']);
+    assert.strictEqual((await st('ms_own2')).status, 'deleted');
+    assert.strictEqual((await st('ms_biz')).status, 'active', 'yo\'nalish mahsuloti tegilmaydi');
+    assert.strictEqual((await st('ms_other')).status, 'active', 'begona mahsulot tegilmaydi');
+  });
+
+  await check('M3 qayta chaqirish — zararsiz (idempotent)', async () => {
+    const r = await call('deleteMyMainShop', {}, MS);
+    assert.deepStrictEqual([r.deleted, r.products], [false, 0]);
+  });
+
+  await check('M4 bloklangan do\'kon — SHOP_BLOCKED, o\'chmaydi; telefonsiz — unauthenticated', async () => {
+    const BL = '998912000078';
+    await db.collection('users').doc(BL).set({ role: 'user' });
+    await db.collection('tv_shops').doc(BL).set({ ownerPhone: BL, name: 'Blok', status: 'blocked' });
+    await expectCode(call('deleteMyMainShop', {}, BL), 'SHOP_BLOCKED');
+    assert.ok((await db.collection('tv_shops').doc(BL).get()).exists);
+    await assert.rejects(fns.deleteMyMainShop.run({}, { auth: null }), /Authentication required/);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

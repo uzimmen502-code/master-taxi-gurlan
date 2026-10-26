@@ -26,7 +26,7 @@ import '../../repositories/news_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import '../customer_confirm/widgets/customer_confirm_banner.dart';
-import 'widgets/home_info_ticker.dart';
+import 'widgets/home_wallet_ticker_slot.dart';
 import '../../core/widgets/zone_gate.dart';
 import '../ads/models/ad_model.dart';
 import '../ads/screens/ad_details_route.dart';
@@ -130,31 +130,9 @@ import 'widgets/home_yuk_local_section.dart';
 // токенлардан фойдаланади.
 const _bg = AvaLight.bg;
 
-/// Kichik ekranlar uchun matn/shrift masshtabini moslashtirish.
-double _homeUiScale(BuildContext context) {
-  final w = MediaQuery.sizeOf(context).width;
-  if (w < 340) return 0.86;
-  if (w < 380) return 0.92;
-  return 1.0;
-}
-
-/// Бош экран баннери (HomeInfoTicker) устидаги масофа, px (эга, 2026-10-26): ҳамён картаси остида ҳам,
-/// ҳамён ёпилгандан кейин юқори қатор остида ҳам.
+/// Юқори қатор → «ҳамён / сариқ баннер» жойи орасидаги масофа, px (эга, 2026-10-26).
+/// Аввалги экранга мослашувчи `_sectionGap` (6–10 px) ва `_homeUiScale` фақат шу ерда ишлатиларди — олиб ташланди.
 const double kHomeWalletTickerGap = 2;
-
-/// Bo‘limlar orasidagi vertikal masofa — ekran balandligi/kengligiga qarab.
-double _sectionGap(BuildContext context, {required double base}) {
-  final h = MediaQuery.sizeOf(context).height;
-  final scale = _homeUiScale(context);
-  final heightFactor = h < 640
-      ? 0.72
-      : h < 720
-          ? 0.82
-          : h < 800
-              ? 0.9
-              : 1.0;
-  return (base * scale * heightFactor).clamp(6.0, base);
-}
 
 String _todayText(BuildContext context) {
   final now = DateTime.now();
@@ -170,7 +148,7 @@ String _todayText(BuildContext context) {
 /// Бош саҳифа — янги дизайн тизими.
 ///
 /// Тартиби: юқори қатор (AVA + ҳудуд) · фаол буюртма карточкаси ·
-/// ҳамён банери (12 с) · сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
+/// ҳамён банери (12 с), кейин шу жойда сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
 /// пастки меню. Ҳар бўлим `AvaSection` устига қурилган, шунинг учун
 /// юкланиш / бўш / хатолик ҳолатлари бир хил.
 class HomeScreen extends StatelessWidget {
@@ -216,7 +194,6 @@ class _HomeViewState extends State<_HomeView> {
 
   /// Ҳамён банери: очилганда кўринади, 11 с дан кейин йиғилади. Профилдан
   /// қайтганда яна 11 с кўринади (хизматдан қайтганда — йўқ).
-  int _walletRevealEpoch = 0;
   bool _walletVisible = true;
   Timer? _walletHideTimer;
 
@@ -271,10 +248,7 @@ class _HomeViewState extends State<_HomeView> {
   void _onHomeResurface({bool revealWallet = false}) {
     if (!mounted) return;
     if (revealWallet) {
-      setState(() {
-        _walletRevealEpoch++;
-        _walletVisible = true;
-      });
+      setState(() => _walletVisible = true);
       _armWalletHideTimer();
     }
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
@@ -1381,68 +1355,37 @@ class _HomeViewState extends State<_HomeView> {
                             // Бўш бўлса ёки сервер жавобермаса — жой эгалламайди.
                             const CustomerConfirmBanner(),
                             _ActiveOrderSlot(onOpen: _openActiveOrder),
-                            // Ҳамён ёпилгандан кейин баннер устидаги масофа 2 px (эга, 2026-10-26; аввал _sectionGap 6–10 px).
-                            // Ҳамён очиқ бўлса, унинг устидаги масофа ўзгармайди: 2 + (_sectionGap − 2).
+                            // Ҳамён ва сариқ баннер БИТТА 86 px жойда (эга, 2026-10-26): ҳамён 12 с, кейин шу жойда баннер ағдарилиб
+                            // чиқади — пастдаги мазмун қимирламайди. Юқори қатордан жойгача доим 2 px (ҳамён ҳам; аввал 6–10 px эди —
+                            // акс ҳолда алмашганда юқори чет 4–8 px сурилар эди). Ҳамён → баннер оралиғи (2 px) энди йўқ — улар устма-уст эмас.
                             const SizedBox(
                               key: ValueKey('home_ticker_top_gap'),
                               height: kHomeWalletTickerGap,
-                            ),
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 280),
-                              curve: Curves.easeInOut,
-                              alignment: Alignment.topCenter,
-                              child: _walletVisible
-                                  ? Column(
-                                      key: ValueKey(_walletRevealEpoch),
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        SizedBox(
-                                          height: _sectionGap(context, base: 10) -
-                                              kHomeWalletTickerGap,
-                                        ),
-                                        WalletCard(
-                                          balanceAmount: formatPrice(
-                                              user?.bonusBalance ?? 0),
-                                          balanceCurrency: kCurrencySum,
-                                          lastTxAmount: '—',
-                                          displayName: _displayName(
-                                              context, user, home),
-                                          dateText: _todayText(context),
-                                          locationText: ServiceConfigHolder
-                                              .districtLabel,
-                                          lastTxIsCredit: null,
-                                          onHistoryTap: () async {
-                                            await openWalletScreen(context);
-                                            if (mounted) {
-                                              _onHomeResurface(
-                                                  revealWallet: true);
-                                            }
-                                          },
-                                        ),
-                                        // Ҳамён картаси → баннер оралиғи (эга, 2026-10-26: «2 рх га камайтир»;
-                                        // аввал _sectionGap 6–10 px). Ҳамён сояси (blur 10, y 3) баннер четига тушади.
-                                        const SizedBox(
-                                          key: ValueKey('home_wallet_ticker_gap'),
-                                          height: kHomeWalletTickerGap,
-                                        ),
-                                      ],
-                                    )
-                                  : const SizedBox.shrink(),
                             ),
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
                                   .read<HomeTickerRepository>()
                                   .watchForModuleCurrentRole('home_search'),
-                              builder: (context, snap) {
-                                final ads = snap.data ?? const <HomeTickerAd>[];
-                                if (ads.isEmpty) {
-                                  return const SizedBox.shrink();
-                                }
-                                // Тартиб (устуворлик + аралаш) виджет ичида, фақат маълумот ўзгарганда.
-                                return HomeInfoTicker(ads: ads);
-                              },
+                              // Тартиб (устуворлик + аралаш) баннер ичида, фақат маълумот ўзгарганда.
+                              builder: (context, snap) => HomeWalletTickerSlot(
+                                showWallet: _walletVisible,
+                                tickerAds: snap.data ?? const <HomeTickerAd>[],
+                                wallet: WalletCard(
+                                  balanceAmount: formatPrice(user?.bonusBalance ?? 0),
+                                  balanceCurrency: kCurrencySum,
+                                  lastTxAmount: '—',
+                                  displayName: _displayName(context, user, home),
+                                  dateText: _todayText(context),
+                                  locationText: ServiceConfigHolder.districtLabel,
+                                  lastTxIsCredit: null,
+                                  onHistoryTap: () async {
+                                    await openWalletScreen(context);
+                                    if (mounted) {
+                                      _onHomeResurface(revealWallet: true);
+                                    }
+                                  },
+                                ),
+                              ),
                             ),
                             // Карусель ва «Барча хизматлар» сарлавҳаси орасидаги масофа 2 px (эга, 2026-10-15).
                             const SizedBox(height: 2),

@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/home_ticker_ad.dart';
+import 'home_flip_switcher.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Maydon doim 75px (ega, 2026-10-26: «53 рх дан 75 рх га»). Matn uzunligiga qarab shrift 12–28px oralig'ida, ko'pi bilan
+/// Maydon doim [height] = 86px. Matn uzunligiga qarab shrift 12–28px oralig'ida, ko'pi bilan
 /// [maxLines] qatorda maydonga maksimal sig'diriladi. Matn atrofida 1px (ega, 2026-10-26:
-/// «чап-ўнгда 1 px, юқори-пастда 1 px», «кўпи билан 4 қатор»; matn joyi 73px — 4 qator
+/// «чап-ўнгда 1 px, юқори-пастда 1 px», «кўпи билан 4 қатор»; matn joyi 84px — 4 qator
 /// 12px shriftda ham sig'adi: 4 × 12 × 1.1 = 52.8).
 /// Savol-javob matnlari — hammasi qalin (bold) va BOSH HARFLARDA.
 class HomeInfoTicker extends StatefulWidget {
@@ -30,6 +31,10 @@ class HomeInfoTicker extends StatefulWidget {
     final levels = byPriority.keys.toList()..sort((a, b) => b.compareTo(a));
     return [for (final p in levels) ...(byPriority[p]!..shuffle(random))];
   }
+
+  /// Maydon balandligi: 53 → 75 (эга, 2026-10-26) → 86 px (эга, 2026-10-26: «Баннер 86 px бўлсин» — ҳамён картаси
+  /// билан бир хил, иккаласи битта жойда ағдарилиб алмашади, пастдаги мазмун қимирламайди).
+  static const height = 86.0;
 
   static const _fill     = Color(0xFFFFFF00); // neon sariq
   static const _question = Color(0xFF2C2C2A);
@@ -90,53 +95,13 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     super.dispose();
   }
 
-  /// Matnlar almashganda "tepadan pastga ag'darilish" (3D flip) effekti.
-  /// AnimatedSwitcher chiquvchi bolaning animatsiyasini teskari aylantiradi:
-  /// kiruvchi uchun value 0→1, chiquvchi uchun 1→0. Ikki matn bir vaqtda
-  /// ko'rinmasligi uchun effekt ketma-ket: birinchi yarmida eski matn pastga
-  /// ag'darilib yo'qoladi, ikkinchi yarmida yangisi tepadan ag'darilib kiradi.
-  Widget _flipTransition(Widget child, Animation<double> animation) {
-    final isIncoming = (child.key as ValueKey?)?.value == _index;
-    return AnimatedBuilder(
-      animation: animation,
-      child: child,
-      builder: (context, child) {
-        final v = animation.value;
-        double angle;
-        bool visible;
-        if (isIncoming) {
-          // Ikkinchi yarmda tepadan (-90°) 0° ga keladi.
-          visible = v >= 0.5;
-          final t = ((v - 0.5) / 0.5).clamp(0.0, 1.0);
-          angle = (1 - t) * (-math.pi / 2);
-        } else {
-          // Birinchi yarmda 0° dan pastga (+90°) ag'darilib yo'qoladi.
-          final p = 1 - v; // 0→1 progress
-          visible = p <= 0.5;
-          final t = (p / 0.5).clamp(0.0, 1.0);
-          angle = t * (math.pi / 2);
-        }
-        final transform = Matrix4.identity()
-          ..setEntry(3, 2, 0.0012)
-          ..rotateX(angle);
-        return Opacity(
-          opacity: visible ? 1 : 0,
-          child: Transform(
-            alignment: Alignment.center,
-            transform: transform,
-            child: child,
-          ),
-        );
-      },
-    );
-  }
+  // Matnlar almashganda 3D ag'darilish — [HomeFlipSwitcher] (ҳамён → баннер жойи ҳам шуни ишлатади).
 
   // Maydonga sig'adigan maksimal shrift (qisqa matn kattaroq).
   static const _maxFont = 28.0;
   static const _minFont = 12.0;
 
-  /// Maydon balandligi.
-  static const _height = 75.0;
+  static const _height = HomeInfoTicker.height;
 
   /// Ko'pi bilan qatorlar soni.
   static const maxLines = 4;
@@ -206,15 +171,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
 
     return SizedBox(
       height: _height,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 550),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: _flipTransition,
-        layoutBuilder: (current, previous) => Stack(
-          alignment: Alignment.center,
-          children: [...previous, if (current != null) current],
-        ),
+      child: HomeFlipSwitcher(
         child: Container(
           key: ValueKey(_index),
           height: _height,

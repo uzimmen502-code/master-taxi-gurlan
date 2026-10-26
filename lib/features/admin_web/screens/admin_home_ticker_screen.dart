@@ -607,6 +607,8 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
   static const _maxText = 500;
 
   late final TextEditingController _textCtrl;
+  late final TextEditingController _textLatnCtrl;
+  late final TextEditingController _textRuCtrl;
   late String _audience;
   late String _module;
   late int _priority;
@@ -626,6 +628,8 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
     super.initState();
     final e = widget.existing;
     _textCtrl = TextEditingController(text: e?.text ?? '');
+    _textLatnCtrl = TextEditingController(text: e?.textLatn ?? '');
+    _textRuCtrl = TextEditingController(text: e?.textRu ?? '');
     _audience = e?.audience ?? 'all';
     _module = 'home_search';
     _priority = e?.priority ?? 0;
@@ -642,6 +646,8 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
   @override
   void dispose() {
     _textCtrl.dispose();
+    _textLatnCtrl.dispose();
+    _textRuCtrl.dispose();
     super.dispose();
   }
 
@@ -677,7 +683,9 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
       setState(() => _err = 'Матн мажбурий');
       return;
     }
-    if (text.length > _maxText) {
+    final textLatn = _textLatnCtrl.text.trim();
+    final textRu = _textRuCtrl.text.trim();
+    if (text.length > _maxText || textLatn.length > _maxText || textRu.length > _maxText) {
       setState(() => _err = 'Матн $_maxText белгидан ошмасин');
       return;
     }
@@ -697,6 +705,8 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
     final ad = HomeTickerAd(
       id: widget.existing?.id ?? '',
       text: text,
+      textLatn: textLatn,
+      textRu: textRu,
       audience: _audience,
       module: _module,
       durationSec: _durationSec,
@@ -744,8 +754,32 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                 maxLines: 3,
                 maxLength: _maxText,
                 decoration: const InputDecoration(
-                  labelText: 'Матн *',
+                  labelText: 'Матн (кирилл) *',
                   hintText: 'Масалан: Маршрут такси — янги маршрутлар!',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const ValueKey('ticker_text_latn'),
+                controller: _textLatnCtrl,
+                maxLines: 3,
+                maxLength: _maxText,
+                decoration: const InputDecoration(
+                  labelText: 'Матн (лотин)',
+                  hintText: 'Бўш қолса — кирилл матн лотинга автоматик ўгирилади',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const ValueKey('ticker_text_ru'),
+                controller: _textRuCtrl,
+                maxLines: 3,
+                maxLength: _maxText,
+                decoration: const InputDecoration(
+                  labelText: 'Матн (рус)',
+                  hintText: 'Бўш қолса — рус тилида кирилл матн кўринади',
                   border: OutlineInputBorder(),
                 ),
               ),

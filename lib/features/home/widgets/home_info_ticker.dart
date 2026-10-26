@@ -3,11 +3,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/home_ticker_ad.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Maydon doim 53px. Matn uzunligiga qarab shrift 12–28px oralig'ida
-/// maydonga maksimal sig'diriladi.
+/// Maydon doim 53px. Matn uzunligiga qarab shrift 11–28px oralig'ida, ko'pi bilan
+/// [maxLines] qatorda maydonga maksimal sig'diriladi. Matn atrofida 1px (ega, 2026-10-26:
+/// «чап-ўнгда 1 px, юқори-пастда 1 px», «кўпи билан 4 қатор»; 4 qator 51px ga faqat
+/// 11.5px dan kichik shriftda sig'adi — shuning uchun minimum 12 → 11).
 /// Savol-javob matnlari — hammasi qalin (bold) va BOSH HARFLARDA.
 class HomeInfoTicker extends StatefulWidget {
   const HomeInfoTicker({super.key, required this.ads});
@@ -101,7 +104,13 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
 
   // Maydonga sig'adigan maksimal shrift (qisqa matn kattaroq).
   static const _maxFont = 28.0;
-  static const _minFont = 12.0;
+  static const _minFont = 11.0;
+
+  /// Ko'pi bilan qatorlar soni.
+  static const maxLines = 4;
+
+  /// Matn bilan maydon cheti orasidagi masofa (har tomonda).
+  static const padding = EdgeInsets.all(1);
 
   double _fitFontSize(String text, double maxWidth, double maxHeight) {
     final upper = text.toUpperCase();
@@ -110,7 +119,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         text: TextSpan(children: [_buildSpan(upper, fs)]),
         textDirection: TextDirection.ltr,
         textAlign: TextAlign.center,
-        maxLines: 2,
+        maxLines: maxLines,
       )..layout(maxWidth: maxWidth);
       if (!painter.didExceedMaxLines && painter.height <= maxHeight) {
         return fs;
@@ -159,7 +168,8 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   @override
   Widget build(BuildContext context) {
     if (widget.ads.isEmpty) return const SizedBox.shrink();
-    final text = widget.ads[_index].text;
+    // Илова тилидаги матн (uz_Cyrl / uz_Latn / ru; бўш тиллар учун — HomeTickerAd.textFor).
+    final text = widget.ads[_index].textFor(context.contentLang);
     final upper = text.toUpperCase();
 
     return SizedBox(
@@ -180,7 +190,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
             color: HomeInfoTicker._fill,
             borderRadius: BorderRadius.circular(8),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          padding: padding,
           clipBehavior: Clip.antiAlias,
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -192,7 +202,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
               return Align(
                 alignment: Alignment.center,
                 child: RichText(
-                  maxLines: 2,
+                  maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   text: TextSpan(children: [_buildSpan(upper, fs)]),

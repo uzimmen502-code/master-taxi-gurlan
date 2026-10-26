@@ -36,6 +36,9 @@ class HomeInfoTicker extends StatefulWidget {
   /// билан бир хил, иккаласи битта жойда ағдарилиб алмашади, пастдаги мазмун қимирламайди).
   static const height = 86.0;
 
+  /// Ҳар бир матн шунча туради (ағдарилиш 0.55 с шу вақт ичида): 3 → 5 с (эга, 2026-10-26: «5 сонияга ўзгартир»).
+  static const textInterval = Duration(seconds: 5);
+
   static const _fill     = Color(0xFFFFFF00); // neon sariq
   static const _question = Color(0xFF2C2C2A);
   static const _answer   = Color(0xFF412402);
@@ -81,8 +84,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   void _schedule() {
     _timer?.cancel();
     if (_ordered.length < 2) return;
-    // Хар бир матн 3 с → 3D flip → кейингиси.
-    _timer = Timer(const Duration(seconds: 3), () {
+    _timer = Timer(HomeInfoTicker.textInterval, () {
       if (!mounted) return;
       setState(() => _index = (_index + 1) % _ordered.length);
       _schedule();

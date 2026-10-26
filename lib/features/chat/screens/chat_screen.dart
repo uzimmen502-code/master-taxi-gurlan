@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +8,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
 import '../../../repositories/chat_repository.dart';
+import '../../../repositories/news_repository.dart';
+import '../../profile/inbox_hide_keys.dart';
 import '../controllers/chat_controller.dart';
 import '../widgets/message_bubble.dart';
 
@@ -13,25 +17,40 @@ class ChatScreen extends StatelessWidget {
   const ChatScreen({
     super.key,
     required this.targetPhone,
+    @visibleForTesting this.dismissedIds,
   });
 
   final String targetPhone;
 
+  /// Тест учун: «яширилди» белгилари (`users/{uid}/dismissed_news`) ўрнига.
+  final Stream<Set<String>>? dismissedIds;
+
   @override
   Widget build(BuildContext context) {
+    final chatId = phoneDigits(targetPhone);
+    // «Тарихни тозалаш» белгиси (эга, 2026-10-26: «Админ билан чат» қаторида ўчириш) — тозаланишдан олдинги
+    // хабарлар кўринмайди. Провайдер йўқ бўлса (бошқа илова қисми) — тарих тўлиқ.
+    Stream<Set<String>> dismissed = const Stream.empty();
+    try {
+      dismissed = dismissedIds ?? context.read<NewsRepository>().watchDismissedIds(chatId);
+    } on ProviderNotFoundException {
+      dismissed = const Stream.empty();
+    }
     return ChangeNotifierProvider<ChatController>(
       create: (ctx) => ChatController(
         repo: ctx.read<ChatRepository>(),
-        chatId: phoneDigits(targetPhone),
+        chatId: chatId,
         isAdmin: false, // Мобил: ҳар доим false. Admin web — chat_support_screen.dart
       ),
-      child: const _ChatView(),
+      child: _ChatView(dismissedIds: dismissed),
     );
   }
 }
 
 class _ChatView extends StatefulWidget {
-  const _ChatView();
+  const _ChatView({required this.dismissedIds});
+
+  final Stream<Set<String>> dismissedIds;
 
   @override
   State<_ChatView> createState() => _ChatViewState();
@@ -42,10 +61,16 @@ class _ChatViewState extends State<_ChatView> {
 
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  DateTime? _clearedAt;
+  StreamSubscription<Set<String>>? _dismissedSub;
 
   @override
   void initState() {
     super.initState();
+    _dismissedSub = widget.dismissedIds.listen((ids) {
+      final at = InboxHideKeys.supportChatClearedAt(ids);
+      if (mounted && at != _clearedAt) setState(() => _clearedAt = at);
+    }, onError: (Object _) {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final ctrl = context.read<ChatController>();
@@ -57,6 +82,7 @@ class _ChatViewState extends State<_ChatView> {
 
   @override
   void dispose() {
+    _dismissedSub?.cancel();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -99,7 +125,9 @@ class _ChatViewState extends State<_ChatView> {
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final messages = snap.data!;
+                final messages = snap.data!
+                    .where((m) => InboxHideKeys.visibleAfterClear(m.createdAt, _clearedAt))
+                    .toList();
                 if (messages.isEmpty) {
                   return Center(child: Text(context.tr('chat_empty')));
                 }

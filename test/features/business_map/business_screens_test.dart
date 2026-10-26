@@ -270,6 +270,56 @@ void main() {
       expect(repo.calls.single, startsWith('upsert:7:Мой Дўкон:retail:'));
     });
 
+    // Янги дўкондан кейин маҳсулотлар экрани (эга, 2026-10-26): форма янги объект ID'сини қайтаради.
+    Future<Object?> saveViaRoute(WidgetTester tester, Widget form, Future<void> Function() fill) async {
+      Object? result = 'not-popped';
+      tester.view.physicalSize = const Size(1200 * 2, 1800 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () async => result = await Navigator.of(context).push<Object?>(MaterialPageRoute(builder: (_) => form)),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await fill();
+      await tester.ensureVisible(find.text('bizmap_save'));
+      await tester.tap(find.text('bizmap_save'));
+      await tester.pumpAndSettle();
+      return result;
+    }
+
+    testWidgets('янги (онлайн) дўкон сақланса — форма янги ID ни қайтаради', (tester) async {
+      final repo = _FakeRepo([]);
+      final result = await saveViaRoute(
+        tester,
+        BusinessFormScreen(repository: repo, initialCategory: BusinessCategory.retail, lockCategory: true),
+        () async {
+          await tester.enterText(find.widgetWithText(TextField, 'bizmap_f_name'), 'Yangi do‘kon');
+          await tester.enterText(find.widgetWithText(TextField, 'bizmap_f_phone'), '998901234567');
+          await tester.ensureVisible(find.byKey(const ValueKey('biz_online_switch')));
+          await tester.tap(find.byKey(const ValueKey('biz_online_switch')));
+          await tester.pump();
+        },
+      );
+      expect(repo.calls.single, startsWith('upsert:new:Yangi do‘kon:retail:'));
+      expect(result, 'id1');
+    });
+
+    testWidgets('таҳрир сақланса — форма `true` қайтаради (маҳсулотлар экрани очилмайди)', (tester) async {
+      final repo = _FakeRepo([]);
+      final result = await saveViaRoute(
+          tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)), () async {});
+      expect(result, true);
+    });
+
     testWidgets('сервер BUSINESS_LIMIT_REACHED қайтарса — тушунарли хато, ёпилмайди', (tester) async {
       final repo = _FakeRepo([])..failWith = StateError('x');
       await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));

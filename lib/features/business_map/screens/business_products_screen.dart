@@ -8,6 +8,7 @@ import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_publish_screen.dart';
 import '../domain/business.dart';
+import '../domain/product_kind.dart';
 import 'business_product_form_screen.dart';
 
 /// Эганинг объекти маҳсулотлари: рўйхат, қўшиш, таҳрирлаш, ўчириш (юмшоқ ўчириш — `status: deleted`).
@@ -130,7 +131,9 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
               title: Text(
                 widget.business.isOwnShop
                     ? widget.business.name
-                    : '${context.tr('bizprod_title')} · ${widget.business.name}',
+                    // Дўконда — «Маҳсулотлар» («хизмат» йўқ; эга, 2026-10-26).
+                    : '${context.tr(sellsOnlyProducts(widget.business) ? 'bizprod_title_products' : 'bizprod_title')} · '
+                        '${widget.business.name}',
                 maxLines: 1,
               ),
             ),

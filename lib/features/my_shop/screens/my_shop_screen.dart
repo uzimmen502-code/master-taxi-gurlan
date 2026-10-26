@@ -31,7 +31,23 @@ class MyShopScreen extends StatefulWidget {
     @visibleForTesting this.loadLink,
     @visibleForTesting this.statsScreen,
     @visibleForTesting this.tgChannelApi,
+    @visibleForTesting this.deleteShop,
+    @visibleForTesting this.openForm,
+    @visibleForTesting this.productsScreen,
+    @visibleForTesting this.deleteMainShop,
   });
+
+  /// Тест учун: `deleteMyMainShop` callable ўрнига.
+  final Future<void> Function()? deleteMainShop;
+
+  /// Тест учун: дўкон формаси ўрнига (натижа — [BusinessFormScreen] каби: янги дўкон ID'си ёки `true`).
+  final Future<Object?> Function(BuildContext context, Business? existing)? openForm;
+
+  /// Тест учун: маҳсулотлар экрани ўрнига.
+  final Widget Function(Business shop)? productsScreen;
+
+  /// Тест учун: `deleteMyBusiness` callable ўрнига.
+  final Future<void> Function(String businessId)? deleteShop;
 
   /// Тест учун: «Менинг Telegram каналим» callable'лари ўрнига.
   final SellerTgChannelApi? tgChannelApi;
@@ -85,22 +101,149 @@ class _MyShopScreenState extends State<MyShopScreen> {
   }
 
   Future<void> _openProducts(Business b) => Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => BusinessProductsScreen(business: b)),
+        MaterialPageRoute(builder: (_) => widget.productsScreen?.call(b) ?? BusinessProductsScreen(business: b)),
       );
 
   /// Ҳозирги дўконлар рўйхати — формадаги филиал танлови учун.
   List<Business> _shops = const [];
 
-  Future<void> _openForm([Business? b]) => Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => BusinessFormScreen(
-            existing: b,
-            initialCategory: BusinessCategory.retail,
-            // Дўконда «чакана/улгуржи» танлови йўқ — одамни чалкаштиради (эга, 2026-10-24).
-            lockCategory: true,
-            branchParents: _shops,
+  Future<void> _openForm([Business? b]) async {
+    final result = await (widget.openForm?.call(context, b) ??
+        Navigator.of(context).push<Object?>(
+          MaterialPageRoute(
+            builder: (_) => BusinessFormScreen(
+              existing: b,
+              initialCategory: BusinessCategory.retail,
+              // Дўконда «чакана/улгуржи» танлови йўқ — одамни чалкаштиради (эга, 2026-10-24).
+              lockCategory: true,
+              branchParents: _shops,
+            ),
           ),
-        ),
+        ));
+    // Янги дўкон (филиал эмас) сақланди — унинг маҳсулотлар экрани дарров очилади (эга, 2026-10-26: «маъқул», «ҳа»).
+    if (b != null || result is! String || result.isEmpty || !mounted) return;
+    final created = await _findShop(result);
+    if (created != null && mounted) await _openProducts(created);
+  }
+
+  /// Янги дўкон рўйхатга (Firestore обунаси) тушгунча кутади: аввал жорий рўйхат, бўлмаса янги обуна (8 с).
+  /// Топилмаса — ҳеч нарса очилмайди, дўкон рўйхатда кўринади (эга қўлда очади).
+  Future<Business?> _findShop(String id) async {
+    for (final s in _shops) {
+      if (s.id == id) return s;
+    }
+    if (widget.businesses != null) return null; // тест манбаи қайта тингланмайди
+    try {
+      final list = await BusinessRepository()
+          .watchMine(widget.phone)
+          .firstWhere((l) => l.any((s) => s.id == id))
+          .timeout(const Duration(seconds: 8));
+      return list.firstWhere((s) => s.id == id);
+    } catch (e) {
+      debugPrint('[MyShop] new shop $id not visible yet: $e');
+      return null;
+    }
+  }
+
+  /// Дўконни (Бизнес харитаси объекти ёки филиал) ўчириш (эга, 2026-10-26: «Дўконни ўчириш йўқ, тузат»).
+  /// Мавжуд `deleteMyBusiness` (эгаси текширилади, блокланган — рад); маҳсулотлар `businessProductsCascade`
+  /// триггерида юмшоқ ўчади, филиаллар мустақил бўлади. Асосий дўкон бу ерда ўчирилмайди.
+  Future<void> _delete(Business b) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('my_shop_delete_title')),
+        content: Text(context.tr('my_shop_delete_body').replaceAll('{name}', b.name)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('cancel'))),
+          TextButton(
+            key: const ValueKey('my_shop_delete_confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await (widget.deleteShop ?? BusinessRepository().deleteMine)(b.id);
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('bizmap_deleted'))));
+    } catch (e) {
+      final code = BusinessRepository.errorCode(e);
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(context.tr(code == 'BUSINESS_BLOCKED' ? 'my_shop_delete_blocked' : 'bizmap_err_generic')),
+      ));
+    }
+  }
+
+  /// Асосий онлайн дўконни ўчириш (эга, 2026-10-26: «аввал ичидаги дўконлар ўчирилсин хабари билан ўчирилсин»;
+  /// танлов — «фақат онлайн дўкон»). Ичида дўкон бор — хабар, сервер чақирилмайди (сервер ҳам ўзи текширади).
+  Future<void> _deleteMain() async {
+    Future<void> innerFirst() => showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(context.tr('my_shop_main_delete_title')),
+            content: Text(context.tr('my_shop_main_delete_has_inner'), key: const ValueKey('my_shop_main_has_inner')),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(context.tr('ok')))],
+          ),
+        );
+    if (_shops.isNotEmpty) return innerFirst();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('my_shop_main_delete_title')),
+        content: Text(context.tr('my_shop_main_delete_body')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('cancel'))),
+          TextButton(
+            key: const ValueKey('my_shop_main_delete_confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await (widget.deleteMainShop ?? BusinessRepository().deleteMainShop)();
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('my_shop_main_deleted'))));
+      setState(() => _nameFuture = _loadName());
+    } catch (e) {
+      final code = BusinessRepository.errorCode(e);
+      if (!mounted) return;
+      if (code == 'SHOP_HAS_INNER_SHOPS') return innerFirst();
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(context.tr(code == 'SHOP_BLOCKED' ? 'my_shop_delete_blocked' : 'bizmap_err_generic')),
+      ));
+    }
+  }
+
+  /// «⋮»: номини ўзгартириш ва ўчириш (қаторда учинчи тугма тор экранда номни сиқарди).
+  Widget _menu(Business b) => PopupMenuButton<String>(
+        key: ValueKey('my_shop_menu_${b.id}'),
+        tooltip: context.tr('my_shop_actions'),
+        onSelected: (v) => v == 'delete' ? _delete(b) : _openForm(b),
+        itemBuilder: (ctx) => [
+          PopupMenuItem(
+            value: 'edit',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(context.tr('my_shop_rename')),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+              title: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+            ),
+          ),
+        ],
       );
 
   @override
@@ -145,11 +288,32 @@ class _MyShopScreenState extends State<MyShopScreen> {
                     title: title,
                     subtitle: context.tr('my_shop_main_sub'),
                     onTap: _openMain,
-                    trailing: IconButton(
-                      key: const ValueKey('my_shop_link_main'),
-                      tooltip: context.tr('shop_link_title'),
-                      icon: const Icon(Icons.qr_code_2_rounded),
-                      onPressed: () => showShopLinkSheet(context, title: title, loadLink: widget.loadLink),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          key: const ValueKey('my_shop_link_main'),
+                          tooltip: context.tr('shop_link_title'),
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          onPressed: () => showShopLinkSheet(context, title: title, loadLink: widget.loadLink),
+                        ),
+                        // Асосий дўкон: фақат «Ўчириш» (номи асосий дўкон экранида ўзгартирилади).
+                        PopupMenuButton<String>(
+                          key: const ValueKey('my_shop_menu_main'),
+                          tooltip: context.tr('my_shop_actions'),
+                          onSelected: (_) => _deleteMain(),
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+                                title: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -178,11 +342,7 @@ class _MyShopScreenState extends State<MyShopScreen> {
                           icon: const Icon(Icons.qr_code_2_rounded),
                           onPressed: () => showShopLinkSheet(context, title: b.name, businessId: b.id, loadLink: widget.loadLink),
                         ),
-                        IconButton(
-                          tooltip: context.tr('my_shop_rename'),
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => _openForm(b),
-                        ),
+                        _menu(b),
                       ],
                     ),
                   ),
@@ -196,11 +356,7 @@ class _MyShopScreenState extends State<MyShopScreen> {
                       title: br.name,
                       subtitle: '${context.tr('my_shop_branch_label')} · ${br.address}',
                       onTap: () => _openProducts(b),
-                      trailing: IconButton(
-                        tooltip: context.tr('my_shop_rename'),
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _openForm(br),
-                      ),
+                      trailing: _menu(br),
                     ),
                   ),
               ],

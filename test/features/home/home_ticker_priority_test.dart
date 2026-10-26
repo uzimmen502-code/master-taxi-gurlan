@@ -41,13 +41,26 @@ void main() {
     });
   });
 
+  testWidgets('ҳар матн 5 сония (эга, 2026-10-26): 3 сонияда ҳали алмашмайди, 5 сонияда алмашади', (t) async {
+    expect(HomeInfoTicker.textInterval, const Duration(seconds: 5));
+    await t.pumpWidget(_app([_ad('a', 90, 'Биринчи'), _ad('b', 0, 'Иккинчи')]));
+    expect(_shown(t), 'БИРИНЧИ');
+    await t.pump(const Duration(seconds: 3));
+    await t.pumpAndSettle();
+    expect(_shown(t), 'БИРИНЧИ', reason: 'аввал 3 сонияда алмашарди');
+    await t.pump(const Duration(seconds: 2));
+    await t.pumpAndSettle();
+    expect(_shown(t), 'ИККИНЧИ');
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('биринчи кўрсатиладиган — энг юқори устуворлик; кейин навбат билан', (t) async {
     await t.pumpWidget(_app([_ad('a', 0, 'Паст'), _ad('b', 90, 'Юқори'), _ad('c', 40, 'Ўрта')]));
     expect(_shown(t), 'ЮҚОРИ');
-    await t.pump(const Duration(seconds: 3));
+    await t.pump(HomeInfoTicker.textInterval);
     await t.pumpAndSettle();
     expect(_shown(t), 'ЎРТА');
-    await t.pump(const Duration(seconds: 3));
+    await t.pump(HomeInfoTicker.textInterval);
     await t.pumpAndSettle();
     expect(_shown(t), 'ПАСТ');
   });
@@ -55,7 +68,7 @@ void main() {
   testWidgets('ота виджет янги рўйхат объекти билан қайта чизса (ўша матнлар) — кўрсатилаётган матн сакрамайди', (t) async {
     final ads = [for (var i = 0; i < 8; i++) _ad('x$i', 0, 'Матн $i')];
     await t.pumpWidget(_app(ads));
-    await t.pump(const Duration(seconds: 3));
+    await t.pump(HomeInfoTicker.textInterval);
     await t.pumpAndSettle();
     final before = _shown(t);
     await t.pumpWidget(_app(List.of(ads.reversed)));

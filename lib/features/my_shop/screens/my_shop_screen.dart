@@ -31,7 +31,11 @@ class MyShopScreen extends StatefulWidget {
     @visibleForTesting this.loadLink,
     @visibleForTesting this.statsScreen,
     @visibleForTesting this.tgChannelApi,
+    @visibleForTesting this.deleteShop,
   });
+
+  /// Тест учун: `deleteMyBusiness` callable ўрнига.
+  final Future<void> Function(String businessId)? deleteShop;
 
   /// Тест учун: «Менинг Telegram каналим» callable'лари ўрнига.
   final SellerTgChannelApi? tgChannelApi;
@@ -101,6 +105,64 @@ class _MyShopScreenState extends State<MyShopScreen> {
             branchParents: _shops,
           ),
         ),
+      );
+
+  /// Дўконни (Бизнес харитаси объекти ёки филиал) ўчириш (эга, 2026-10-26: «Дўконни ўчириш йўқ, тузат»).
+  /// Мавжуд `deleteMyBusiness` (эгаси текширилади, блокланган — рад); маҳсулотлар `businessProductsCascade`
+  /// триггерида юмшоқ ўчади, филиаллар мустақил бўлади. Асосий дўкон бу ерда ўчирилмайди.
+  Future<void> _delete(Business b) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('my_shop_delete_title')),
+        content: Text(context.tr('my_shop_delete_body').replaceAll('{name}', b.name)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.tr('cancel'))),
+          TextButton(
+            key: const ValueKey('my_shop_delete_confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await (widget.deleteShop ?? BusinessRepository().deleteMine)(b.id);
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('bizmap_deleted'))));
+    } catch (e) {
+      final code = BusinessRepository.errorCode(e);
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(context.tr(code == 'BUSINESS_BLOCKED' ? 'my_shop_delete_blocked' : 'bizmap_err_generic')),
+      ));
+    }
+  }
+
+  /// «⋮»: номини ўзгартириш ва ўчириш (қаторда учинчи тугма тор экранда номни сиқарди).
+  Widget _menu(Business b) => PopupMenuButton<String>(
+        key: ValueKey('my_shop_menu_${b.id}'),
+        tooltip: context.tr('my_shop_actions'),
+        onSelected: (v) => v == 'delete' ? _delete(b) : _openForm(b),
+        itemBuilder: (ctx) => [
+          PopupMenuItem(
+            value: 'edit',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(context.tr('my_shop_rename')),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+              title: Text(context.tr('bizmap_delete'), style: TextStyle(color: Colors.red.shade700)),
+            ),
+          ),
+        ],
       );
 
   @override
@@ -178,11 +240,7 @@ class _MyShopScreenState extends State<MyShopScreen> {
                           icon: const Icon(Icons.qr_code_2_rounded),
                           onPressed: () => showShopLinkSheet(context, title: b.name, businessId: b.id, loadLink: widget.loadLink),
                         ),
-                        IconButton(
-                          tooltip: context.tr('my_shop_rename'),
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => _openForm(b),
-                        ),
+                        _menu(b),
                       ],
                     ),
                   ),
@@ -196,11 +254,7 @@ class _MyShopScreenState extends State<MyShopScreen> {
                       title: br.name,
                       subtitle: '${context.tr('my_shop_branch_label')} · ${br.address}',
                       onTap: () => _openProducts(b),
-                      trailing: IconButton(
-                        tooltip: context.tr('my_shop_rename'),
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _openForm(br),
-                      ),
+                      trailing: _menu(br),
                     ),
                   ),
               ],

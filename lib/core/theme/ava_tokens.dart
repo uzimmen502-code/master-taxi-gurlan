@@ -471,6 +471,14 @@ abstract final class AvaText {
     height: 1.25,
   );
 
+  /// Бош экран бўлим сарлавҳалари («Барча хизматлар», «Яқиндаги эълонлар:» …) — 14/600
+  /// (эга, 2026-10-26: «14 рх га камайтир»; аввал [sectionTitle] 16). Бошқа экранлар [sectionTitle] да қолади.
+  static const homeSectionTitle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    height: 1.25,
+  );
+
   /// Маҳсулот номи — 13/400 (фото биринчи, матн иккинчи даражали).
   static const productName = TextStyle(
     fontSize: 13,

@@ -47,6 +47,22 @@ void main() {
       expect(find.text('МАЗМУН'), findsOneWidget);
     });
 
+    testWidgets('бош экран бўлим сарлавҳаси 14/600 (эга, 2026-10-26: 16 → 14 px)', (tester) async {
+      await _pump(
+        tester,
+        const AvaSection(
+          title: 'Яқиндаги эълонлар',
+          status: AvaSectionStatus.ready,
+          child: Text('МАЗМУН'),
+        ),
+      );
+      final title = tester.widget<Text>(find.text('Яқиндаги эълонлар:'));
+      expect(title.style?.fontSize, 14);
+      expect(title.style?.fontWeight, FontWeight.w600);
+      expect(AvaText.homeSectionTitle.fontSize, 14);
+      expect(AvaText.sectionTitle.fontSize, 16, reason: 'бошқа экранлар (ресторан, ҳайдовчи кабинети) ўзгармайди');
+    });
+
     testWidgets('empty — бўлим ўз ўрнида қолади, сарлавҳа кўринади',
         (tester) async {
       await _pump(

@@ -58,174 +58,6 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
     return code;
   }
 
-  Future<void> _openBulkAnimation() async {
-    String value = HomeTickerAnimationStyle.auto;
-    final repo = context.read<HomeTickerRepository>();
-    final applied = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Барча матнлар анимацияси'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Бош экран маълумот майдони (home_search) барча '
-                'матнлари учун анимация услуби:',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: value,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: [
-                  for (final s in HomeTickerAnimationStyle.all)
-                    DropdownMenuItem(
-                      value: s,
-                      child: Text(
-                        HomeTickerAnimationStyle.label(s),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: (v) =>
-                    setLocal(() => value = v ?? HomeTickerAnimationStyle.auto),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                HomeTickerAnimationStyle.description(value),
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Бекор'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Ҳаммасига қўллаш'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (applied != true || !mounted) return;
-    try {
-      final count =
-          await repo.setAnimationStyleForModule('home_search', value);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.button,
-          content: Text(
-              '✅ $count та матн "${HomeTickerAnimationStyle.label(value)}" услубига ўрнатилди',
-              style: const TextStyle(color: AppColors.onPrimary)),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Хатолик: $e')),
-      );
-    }
-  }
-
-  // Чегара — rules (`durationSec` 5…120) ва битта матн муҳаррири билан бир
-  // хил. Аввал 3…12 (стандарт 4) эди: 3–4 сония rules'да рад бўлиб, бутун
-  // batch йиқиларди.
-  static const _minDurationSec = 5;
-  static const _maxDurationSec = 120;
-
-  Future<void> _openBulkDuration() async {
-    int value = HomeTickerAd.defaultDurationSec;
-    final repo = context.read<HomeTickerRepository>();
-    final applied = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Барча матнлар давомийлиги'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Бош экран маълумот майдони (home_search) барча '
-                'матнлари учун кўрсатилиш вақти (сония):',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: value > _minDurationSec
-                        ? () => setLocal(() => value--)
-                        : null,
-                  ),
-                  Container(
-                    width: 56,
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$value',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline),
-                    onPressed: value < _maxDurationSec
-                        ? () => setLocal(() => value++)
-                        : null,
-                  ),
-                ],
-              ),
-              const Text('($_minDurationSec–$_maxDurationSec сония)',
-                  style: TextStyle(fontSize: 11, color: Colors.grey)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Бекор'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Ҳаммасига қўллаш'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (applied != true || !mounted) return;
-    try {
-      final count = await repo.setDurationForModule('home_search', value);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.button,
-          content: Text('✅ $count та матн $value сонияга ўрнатилди',
-              style: const TextStyle(color: AppColors.onPrimary)),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Хатолик: $e')),
-      );
-    }
-  }
-
   Future<void> _openEditor({HomeTickerAd? existing}) async {
     final saved = await showDialog<bool>(
       context: context,
@@ -351,26 +183,8 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Янги матн'),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _openBulkDuration,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.onPrimary,
-                    side: BorderSide(color: AppColors.onPrimary.withValues(alpha: 0.7)),
-                  ),
-                  icon: const Icon(Icons.timer_outlined, size: 18),
-                  label: const Text('Давомийлик'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _openBulkAnimation,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.onPrimary,
-                    side: BorderSide(color: AppColors.onPrimary.withValues(alpha: 0.7)),
-                  ),
-                  icon: const Icon(Icons.animation, size: 18),
-                  label: const Text('Анимация'),
-                ),
+                // «Давомийлик» ва «Анимация» (барча матнларга) тугмалари олиб ташланди (эга, 2026-10-26):
+                // бош экран баннери уларни ишлатмайди — ҳар матн 3 с, ағдарилиш, шрифт автоматик.
               ],
             ),
           ),
@@ -510,40 +324,6 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                                   ),
                                   visualDensity: VisualDensity.compact,
                                 ),
-                                Chip(
-                                  label: Text(
-                                    'Давомийлик: ${ad.durationSec} с',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                Chip(
-                                  label: Text(
-                                    HomeTickerAnimationStyle.label(
-                                      ad.animationStyle,
-                                    ),
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                Chip(
-                                  label: Text(
-                                    'Шрифт: ${ad.fontSize}',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                Chip(
-                                  label: Text(
-                                    HomeTickerAnimationStyle.usesScrollPxPerSec(
-                                      ad.animationStyle,
-                                    )
-                                        ? 'Тезлик: ${ad.scrollSpeed} px/с'
-                                        : 'Тезлик: ${ad.scrollSpeed}',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
                               ],
                             ),
                             if (schedule.isNotEmpty) ...[
@@ -612,10 +392,6 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
   late String _audience;
   late String _module;
   late int _priority;
-  late int _durationSec;
-  late int _scrollSpeed;
-  late int _fontSize;
-  late String _animationStyle;
   late bool _active;
   DateTime? _activeFrom;
   DateTime? _activeTo;
@@ -633,10 +409,6 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
     _audience = e?.audience ?? 'all';
     _module = 'home_search';
     _priority = e?.priority ?? 0;
-    _durationSec = e?.durationSec ?? HomeTickerAd.defaultDurationSec;
-    _scrollSpeed = e?.scrollSpeed ?? HomeTickerAd.defaultScrollSpeed;
-    _fontSize = e?.fontSize ?? HomeTickerAd.defaultFontSize;
-    _animationStyle = e?.animationStyle ?? HomeTickerAnimationStyle.auto;
     _active = e?.active ?? true;
     _activeFrom = e?.activeFrom;
     _activeTo = e?.activeTo;
@@ -709,10 +481,11 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
       textRu: textRu,
       audience: _audience,
       module: _module,
-      durationSec: _durationSec,
-      scrollSpeed: _scrollSpeed,
-      animationStyle: _animationStyle,
-      fontSize: _fontSize,
+      // Баннер бу тўрттасини ишлатмайди (админда майдони йўқ): мавжуд қиймат ўзгармайди, янги матнга — стандарт.
+      durationSec: widget.existing?.durationSec ?? HomeTickerAd.defaultDurationSec,
+      scrollSpeed: widget.existing?.scrollSpeed ?? HomeTickerAd.defaultScrollSpeed,
+      animationStyle: widget.existing?.animationStyle ?? HomeTickerAnimationStyle.auto,
+      fontSize: widget.existing?.fontSize ?? HomeTickerAd.defaultFontSize,
       priority: _priority,
       active: _active,
       activeFrom: _useSchedule ? _activeFrom : null,
@@ -802,120 +575,14 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                   if (v != null) setState(() => _audience = v);
                 },
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Анимация услуби',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              ...HomeTickerAnimationStyle.all.map((style) {
-                final selected = _animationStyle == style;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: InkWell(
-                    onTap: () => setState(() => _animationStyle = style),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFFE3F2FD)
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected
-                              ? AppColors.primaryText
-                              : Colors.grey.shade300,
-                          width: selected ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            selected
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            size: 18,
-                            color: selected
-                                ? AppColors.primaryText
-                                : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  HomeTickerAnimationStyle.label(style),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                    color: selected
-                                        ? AppColors.primaryText
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                Text(
-                                  HomeTickerAnimationStyle.description(style),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
               const SizedBox(height: 12),
-              const Text(
-                'Созламалар',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              // Анимация, давомийлик, шрифт ва тезлик майдонлари олиб ташланди (эга, 2026-10-26) — баннер уларни ишлатмайди.
+              Text(
+                'Баннер: ҳар матн 3 сония кўринади, кейин ағдарилиб алмашади; шрифт матн узунлигига қараб автоматик (кўпи билан 4 қатор).',
+                key: const ValueKey('ticker_fixed_behaviour_note'),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 8),
-              _sliderRow(
-                label: 'Шрифт ўлчами',
-                value: _fontSize.toDouble(),
-                min: 10,
-                max: 24,
-                divisions: 14,
-                suffix: '$_fontSize',
-                onChanged: (v) => setState(() => _fontSize = v.round()),
-              ),
-              _sliderRow(
-                label: 'Давомийлик (бир матн)',
-                value: _durationSec.toDouble(),
-                min: 5,
-                max: 120,
-                divisions: 23,
-                suffix: '$_durationSec с',
-                onChanged: (v) => setState(() => _durationSec = v.round()),
-              ),
-              _sliderRow(
-                label: HomeTickerAnimationStyle.usesScrollPxPerSec(
-                  _animationStyle,
-                )
-                    ? 'Югуриш тезлиги (px/с)'
-                    : 'Ҳарф / анимация тезлиги',
-                value: _scrollSpeed.toDouble(),
-                min: 15,
-                max: 120,
-                divisions: 21,
-                suffix: HomeTickerAnimationStyle.usesScrollPxPerSec(
-                  _animationStyle,
-                )
-                    ? '$_scrollSpeed px/с'
-                    : '$_scrollSpeed',
-                onChanged: (v) => setState(() => _scrollSpeed = v.round()),
-              ),
               _sliderRow(
                 label: 'Устуворлик',
                 value: _priority.toDouble().clamp(0, 100),

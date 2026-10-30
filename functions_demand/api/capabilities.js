@@ -130,7 +130,7 @@ function makeRequestCapability(deps) {
     // Allaqachon ishlayotgan / navbatdagi (`applied`) arizaga qayta bosish tegilmaydi (pastda,
     // o'zgarishsiz javoblardan KEYIN tekshiriladi). Konfig o'qilmasa — fail-open (module_gate.js).
     const gate = service === 'courier'
-      ? await moduleGate.moduleOpenFor(db, COURIER_MODULE, callerId)
+      ? await moduleGate.moduleOpenFor(db, COURIER_MODULE, callerId, { activeDistrictId: data && data.geoDistrictId })
       : null;
 
     return db.runTransaction(async (tx) => {

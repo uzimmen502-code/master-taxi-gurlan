@@ -498,7 +498,7 @@ function attachBusinessDirectory(exportsObj, deps) {
     const ref = db.collection(COLLECTION).doc(`${uid}_${clientRequestId}`);
     // MEDIUM-4: модул ёпиқ бўлса ЯНГИ объект яратилмайди. Таҳрир (`businessId` шохи) ва ўша
     // `clientRequestId` билан қайта юбориш (дубликат — аввалги натижа) тўсилмайди.
-    const gate = await moduleGate.moduleOpenFor(db, GATE_MODULE, uid);
+    const gate = await moduleGate.moduleOpenFor(db, GATE_MODULE, uid, { activeDistrictId: d.geoDistrictId });
     const out = await db.runTransaction(async (t) => {
       const [snap, ownSnap, shopSnap] = await Promise.all([
         t.get(ref),

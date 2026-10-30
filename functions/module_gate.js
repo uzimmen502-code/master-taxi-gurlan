@@ -161,6 +161,18 @@ function warn(fields) {
  * @returns {Promise<{open: boolean, status: string, reason: string|null}>}
  *   reason: null (очиқ), 'MODULE_CLOSED', 'CONFIG_MISSING', 'CONFIG_READ_FAILED'.
  */
+/**
+ * Клиент юборган ФАОЛ туман (бош экран тепасида танланган ҳудуд, `data.geoDistrictId`).
+ * Эга қарори (2026-10-31, «А вариант»): хизматлар танланган ҳудуд бўйича — клиент
+ * `ServiceConfigHolder.applyActiveDistrict` билан бир хил. Нотўғри шакл — эътиборсиз (профил туман).
+ * Хавфсизлик: бу маҳсулот мавжудлиги қоидаси; фойдаланувчи тепада исталган туманни танлай олади,
+ * шунинг учун уни юбориш ортиқча ҳуқуқ бермайди.
+ */
+function activeDistrictFrom(raw) {
+  const id = String(raw == null ? '' : raw).trim();
+  return /^[a-z0-9_]{1,64}$/.test(id) ? id : '';
+}
+
 async function moduleOpenFor(db, moduleId, userId, opts = {}) {
   const nowMs = typeof opts.nowMs === 'number' ? opts.nowMs : Date.now();
   try {
@@ -170,10 +182,16 @@ async function moduleOpenFor(db, moduleId, userId, opts = {}) {
     }
     const geo = await userGeo(db, userId);
     let districtId = geo.districtId;
-    const areaId = geo.serviceAreaId;
+    let areaId = geo.serviceAreaId;
     if (!districtId && areaId && ID_RE.test(areaId)) {
       const areaDoc = await cachedDoc(db, 'service_areas', areaId, nowMs);
       districtId = String((areaDoc && areaDoc.districtId) || '').trim();
+    }
+    // Фаол туман яшаш жойидан бошқа — ўша туман override'и; МФЙ override'и яшаш жойиники, қўлланмайди.
+    const active = activeDistrictFrom(opts.activeDistrictId);
+    if (active && active !== districtId) {
+      districtId = active;
+      areaId = '';
     }
     const [districtDoc, areaModulesDoc] = await Promise.all([
       districtId && ID_RE.test(districtId)
@@ -205,6 +223,7 @@ module.exports = {
   configFromMap,
   overrideFromDoc,
   computeModuleStatus,
+  activeDistrictFrom,
   moduleOpenFor,
   resetCache,
 };

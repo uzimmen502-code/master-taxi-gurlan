@@ -7689,7 +7689,7 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
 
   // MEDIUM-4: admin «Ҳудудлар ва хизматлар» — `jobs` модули ёпиқ бўлса ЯНГИ эълон йўқ
   // (дубликат юқорида аввалги натижани олади; таҳрир/ўчириш бу ерга келмайди).
-  const gate = await moduleGate.moduleOpenFor(db, 'jobs', uid);
+  const gate = await moduleGate.moduleOpenFor(db, 'jobs', uid, { activeDistrictId: data && data.geoDistrictId });
   if (!gate.open) {
     throw fail('failed-precondition', moduleGate.MODULE_CLOSED, moduleGate.MODULE_CLOSED,
       { type, moduleStatus: gate.status });
@@ -8479,7 +8479,7 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   }
 
   // MEDIUM-4: `cheap_products_home` модули ёпиқ бўлса ЯНГИ эълон йўқ (таҳрир/ўчириш бу ерга келмайди).
-  const gate = await moduleGate.moduleOpenFor(db, 'cheap_products_home', uid);
+  const gate = await moduleGate.moduleOpenFor(db, 'cheap_products_home', uid, { activeDistrictId: data && data.geoDistrictId });
   if (!gate.open) {
     console.log(JSON.stringify({
       module: 'market', action: 'submitMarketAd', result: 'error',

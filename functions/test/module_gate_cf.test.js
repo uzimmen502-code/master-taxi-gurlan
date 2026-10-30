@@ -205,6 +205,26 @@ async function main() {
     assert.strictEqual((await gateMod.moduleOpenFor(db, 'jobs', U_OTHER, { nowMs: t0 + gateMod.CACHE_TTL_MS })).open, false);
   });
 
+  await check('G10 «А вариант»: faol tuman (geoDistrictId) yashash joyidan boshqa — o\'sha tuman qoidasi', async () => {
+    await setDefaults({ jobs: 'hidden' });
+    await setDistrict('gurlan', { jobs: 'enabled' });
+    // xivalik (profil) tepada Gurlan tanlagan → ochiq; tanlamagan → yopiq
+    assert.strictEqual((await gateMod.moduleOpenFor(db, 'jobs', U_OTHER, { activeDistrictId: 'gurlan' })).open, true);
+    assert.strictEqual((await gateMod.moduleOpenFor(db, 'jobs', U_OTHER)).open, false);
+    // gurlanlik boshqa (yopiq) tumanni tanlagan → yopiq (aksi)
+    assert.strictEqual((await gateMod.moduleOpenFor(db, 'jobs', U_GURLAN, { activeDistrictId: 'xiva' })).open, false);
+  });
+  await check('G11 faol tuman = yashash joyi (chegara) — MFY override saqlanadi; noto\'g\'ri shakl — e\'tiborsiz', async () => {
+    await db.doc('service_area_modules/area_g').set({ modules: { jobs: { status: 'hidden' } }, manualModules: ['jobs'] });
+    gateMod.resetCache();
+    assert.strictEqual((await gateMod.moduleOpenFor(db, 'jobs', U_AREA, { activeDistrictId: 'gurlan' })).open, false, 'yashash joyi = gurlan → MFY hidden ishlaydi');
+    assert.strictEqual((await gateMod.moduleOpenFor(db, 'jobs', U_OTHER, { activeDistrictId: '../gurlan' })).open, false, 'yaroqsiz ID → profil (xiva)');
+    assert.strictEqual(gateMod.activeDistrictFrom('Gurlan'), '');
+    assert.strictEqual(gateMod.activeDistrictFrom('urganch_shahri'), 'urganch_shahri');
+    await db.doc('service_area_modules/area_g').delete();
+    gateMod.resetCache();
+  });
+
   // ── B: upsertMyBusiness ──────────────────────────────────────────────
   await reset();
   await check('B1 business_map enabled → yaratiladi', async () => {
@@ -233,6 +253,9 @@ async function main() {
     const r = await call('upsertMyBusiness', { ...BIZ, clientRequestId: 'gate-0000004' }, U_GURLAN);
     assert.strictEqual(r.duplicate, false);
     await expectCode(call('upsertMyBusiness', { ...BIZ, clientRequestId: 'gate-0000005' }, U_OTHER), 'MODULE_CLOSED');
+    // «А вариант» (2026-10-31): xivalik tepada Gurlanni tanlagan — Gurlan qoidasi ishlaydi.
+    const viaActive = await call('upsertMyBusiness', { ...BIZ, clientRequestId: 'gate-0000006', geoDistrictId: 'gurlan' }, U_OTHER);
+    assert.strictEqual(viaActive.duplicate, false);
   });
 
   // ── J: submitJobAd ───────────────────────────────────────────────────

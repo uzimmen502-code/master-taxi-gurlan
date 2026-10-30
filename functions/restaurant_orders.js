@@ -612,7 +612,7 @@ function attachRestaurantOrders(exportsObj, deps) {
     }
     // MEDIUM-4: admin «Ҳудудлар ва хизматлар» — `restaurants` moduli shu foydalanuvchi hududida ochiq bo'lishi
     // shart (yuqoridagi `requireModule` bosqich darvozasiga QO'SHIMCHA). Konfig o'qilmasa — fail-open.
-    const gate = await moduleGate.moduleOpenFor(db, MODULE_ID, uid);
+    const gate = await moduleGate.moduleOpenFor(db, MODULE_ID, uid, { activeDistrictId: data && data.geoDistrictId });
     if (!gate.open) {
       log('register', { userId: uid, result: 'error', errorCode: moduleGate.MODULE_CLOSED, moduleStatus: gate.status });
       throw fail('failed-precondition', moduleGate.MODULE_CLOSED, { moduleId: MODULE_ID, status: gate.status });

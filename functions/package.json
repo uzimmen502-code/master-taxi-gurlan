@@ -64,6 +64,7 @@
     "test:module-config-rules": "firebase emulators:exec --only firestore --project demo-module-config-rules \"node test/module_config_rules.test.js\"",
     "test:admin-market-list": "firebase emulators:exec --only firestore --project demo-market-list \"node test/admin_market_list.test.js\"",
     "test:wholesale-rules": "firebase emulators:exec --only firestore --project demo-wholesale-rules \"node test/wholesale_products_rules.test.js\"",
+    "test:wholesale-orders": "firebase emulators:exec --only firestore --project demo-wholesale-orders \"node test/wholesale_orders.test.js\"",
     "test:realty": "node test/realty_expiry.test.js",
     "test:wallet-topup-support": "node test/wallet_topup_support.test.js",
     "test:wallet-topup-cf": "firebase emulators:exec --only firestore --project demo-wallet-topup \"node test/wallet_topup_cf.test.js\"",

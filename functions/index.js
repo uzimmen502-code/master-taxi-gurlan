@@ -68,6 +68,13 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
+// Ulgurji buyurtma zanjiri, 2-bosqich (docs/ulgurji_buyurtma_zanjiri_uz.md): pul ushlash
+// (escrow:wholesale:{id}) + qoldiq −N bitta tranzaksiyada; rad/bekor → qaytarish + qoldiq +N.
+// Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
+const { attachWholesaleOrders } = require('./wholesale_orders');
+attachWholesaleOrders(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+});
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
 // `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.

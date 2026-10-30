@@ -5,7 +5,7 @@ import 'price_tier.dart';
 /// Платформа дўкони товари (`platform_products`).
 ///
 /// `totalStock <= 0` → лимитсиз. Қолдиқ = totalStock − soldToday.
-/// Расмлар: `imageUrls` (1–5). `imageUrl` — қоплама (биринчи расм, back-compat).
+/// Расмлар: `imageUrls` (1–7; эга, 2026-10-31 — барча маҳсулотларда 7 та). `imageUrl` — қоплама (биринчи расм, back-compat).
 /// `goodsKind`: `food` | `non_food` | '' (белгиланмаган).
 class PlatformProduct {
   const PlatformProduct({
@@ -29,7 +29,7 @@ class PlatformProduct {
     this.createdAt,
   });
 
-  static const maxImages = 5;
+  static const maxImages = 7;
   static const kindFood = 'food';
   static const kindNonFood = 'non_food';
 

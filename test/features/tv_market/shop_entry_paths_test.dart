@@ -171,7 +171,10 @@ void main() {
         TvShopItemDetailScreen(item: pool.first, showShopButton: true, similarPool: pool, loadLatest: (_) async => pool.first),
       );
       expect(find.byKey(const ValueKey('shop_item_go_shop')), findsOneWidget);
-      expect(find.byKey(const ValueKey('shop_item_open_shop')), findsOneWidget);
+      // Тепадаги дўкон иконкаси олиб ташланди (2026-10-31) — сотувчи карточкаси.
+      expect(find.byKey(const ValueKey('shop_item_open_shop')), findsNothing);
+      expect(find.byKey(const ValueKey('shop_item_seller_name')), findsOneWidget);
+      expect(find.text('shop_item_seller_all'), findsOneWidget);
       expect(find.byKey(const ValueKey('shop_item_similar')), findsOneWidget);
       expect(find.text('Кўк кўйлак'), findsOneWidget);
     });

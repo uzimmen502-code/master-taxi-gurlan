@@ -640,6 +640,53 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
   return out;
 }
 
+/**
+ * `getWholesaleDeliveryCode({orderId})` — FAQAT xaridor (`order.buyerId`). Jo'natmaning
+ * `private/secrets.qrSecret` dan YETKAZISH kodi — relay `getShipmentSecrets` bilan AYNI
+ * hosila (`core/logistics.deliveryCodeFor`; `confirmDelivery` shu bilan tekshiradi).
+ * QR/topshirish kodi BERILMAYDI (u jo'natuvchi — sotuvchi ishi). Jo'natma shu buyurtmaniki
+ * (`wholesaleOrderId`, `recipientId`) bo'lishi shart. Yakunlangan jo'natma — `shipment_closed`
+ * (relay qoidasi bilan bir xil). Log — kodsiz, telefonsiz.
+ */
+function makeGetWholesaleDeliveryCode(deps) {
+  const { db } = deps;
+  return async function getWholesaleDeliveryCode(data, context) {
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const orderId = String((data || {}).orderId || '').trim();
+    if (!ID_RE.test(orderId)) throw fail('invalid-argument', 'Buyurtma tanlanmagan', 'order_required');
+    try {
+      const oSnap = await db.collection(ORDERS).doc(orderId).get();
+      if (!oSnap.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
+      const o = oSnap.data() || {};
+      if (!sameUser(o.buyerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+      const shipmentId = String((o.shipment || {}).shipmentId || '');
+      if (!shipmentId) throw fail('failed-precondition', 'Yetkazish hali ochilmagan', 'shipment_not_ready');
+      const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
+      const [sSnap, secSnap] = await Promise.all([shipRef.get(), shipRef.collection('private').doc('secrets').get()]);
+      if (!sSnap.exists || !secSnap.exists) throw fail('not-found', 'Jo\'natma topilmadi', 'shipment_missing');
+      const ship = sSnap.data() || {};
+      if (ship.wholesaleOrderId !== orderId || !sameUser(ship.recipientId, callerId)) {
+        throw fail('permission-denied', 'Ruxsat yo\'q', 'not_recipient');
+      }
+      if ([L.SHIPMENT_STATUS.DELIVERED, L.SHIPMENT_STATUS.CLOSED, L.SHIPMENT_STATUS.CANCELLED].includes(ship.status)) {
+        throw fail('failed-precondition', 'Jo\'natma yakunlangan', 'shipment_closed');
+      }
+      const qrSecret = (secSnap.data() || {}).qrSecret;
+      log('getDeliveryCode', { result: 'ok', orderId, shipmentId });
+      return {
+        orderId,
+        shipmentId,
+        trackingNumber: ship.trackingNumber || '',
+        deliveryCode: L.deliveryCodeFor(shipmentId, qrSecret),
+      };
+    } catch (e) {
+      log('getDeliveryCode', { result: 'denied', orderId, errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN' });
+      throw e;
+    }
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // ADMIN — AVA ulushi (Q-4: admin tahrirlaydi, versiyali, audit)
 // ═══════════════════════════════════════════════════════════════════════
@@ -719,4 +766,5 @@ module.exports = {
   ensureWholesaleShipment,
   onWholesaleOrderCreated,
   reconcileWholesaleShipments,
+  makeGetWholesaleDeliveryCode,
 };

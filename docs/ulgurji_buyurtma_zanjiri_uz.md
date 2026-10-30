@@ -75,4 +75,14 @@ APK — фақат эга рухсати билан.
 - Тариф матрицаси тўлдирилмаса — квота `zone_not_found` / `tariff_extra_price_missing` → харидорга
   «етказиш нархи ҳали белгиланмаган», буюртма йўқ.
 - Курьерга тўлов ҳозир қўлда (`supplier_payable`) — relay каби.
+- **3-босқич relay guard'лари ҲАЛИ ЖОНЛИДА ЙЎҚ** (`feat/ulg-relay-guards` бранчи, 2026-10-31): жонли
+  relay функциялари (`getShipmentSecrets`, `cancelLogisticsOrder`, `cancelDemand`, `acceptOffer`,
+  `fundShipmentEscrow`, `onLogisticsShipmentUpdate`, `onLogisticsCustodyEvent`) lineage'дан фарқ қилади —
+  бошқа сессияларнинг тасдиқланмаган ўзгаришлари туфайли қайта deploy қилинмади. Шу пайтгача Ulgurji
+  жўнатмасининг эгаси (сотувчи) API орқали: жўнатмани бекор қилиши (`cancelLogisticsOrder`), LEG'ни
+  бекор қилиши (`cancelDemand`), ўзи тўлаши (`fundShipmentEscrow` → SHIP_FUND аномалия), **етказиш
+  кодини олиши** (`getShipmentSecrets` эгага беради → курьер билан келишиб харидорсиз «етказилди»)
+  мумкин; relay REFUND етказиш ҳақини **сотувчи ҳамёнига** қайтаради. Тестларда қулфланган.
+  **`module_config/wholesale_orders_all` дарвозаси guard'лар live-merge билан deploy бўлгунча ЁПИҚ турсин.**
+  Харидор коди — алоҳида `getWholesaleDeliveryCode`; товар пули — алоҳида `onWholesaleCustodyEvent`.
 - Firestore rules ҳажми чегарада (262 031 / 262 144) — янги қоидадан олдин изоҳлар қисқартирилади.

@@ -143,7 +143,6 @@
     "loss_not_settled",
     "nothing_outstanding",
     "op_id_reused",
-    "wholesale_managed",
     "idempotency_key",
     "owner_required",
     "recipient_required",

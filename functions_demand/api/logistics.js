@@ -1611,12 +1611,6 @@ function makeCancelLogisticsOrder(deps) {
       if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
       const order = orderSnap.data() || {};
       if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
-      // Ulgurji buyurtmasi jo'natmasi: egasi = sotuvchi, u bekor QILA OLMAYDI (ega,
-      // 2026-10-31: sotuvchi buyurtmaga aralashmaydi). Bekor — xaridor/admin, Ulgurji
-      // buyurtmasining o'z oqimi orqali.
-      if (order.source === 'wholesale') {
-        throw fail('permission-denied', 'Bu jo\'natmani bekor qilib bo\'lmaydi', 'wholesale_managed');
-      }
 
       const shipSnap = await tx.get(db.collection(L.SHIPMENTS).where('orderId', '==', orderId));
       const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
@@ -1689,34 +1683,19 @@ function makeGetShipmentSecrets(deps) {
     const isOwner = ship.ownerId === callerId;
     const cur = ship.currentCustodian || {};
     const isCustodian = cur.kind === L.CUSTODIAN_KIND.PROVIDER && cur.id === callerId;
-    // `recipientId` — qabul qiluvchi AVA foydalanuvchisi (ichki yaratish, masalan
-    // Ulgurji xaridori). Oddiy jo'natmada maydon YO'Q — xulq o'zgarmagan.
-    const recipientId = typeof ship.recipientId === 'string' && ship.recipientId ? ship.recipientId : null;
-    const isRecipient = recipientId !== null && recipientId === callerId;
-    if (!isOwner && !isCustodian && !isRecipient) throw fail('permission-denied', 'Ruxsat yo\'q');
+    if (!isOwner && !isCustodian) throw fail('permission-denied', 'Ruxsat yo\'q');
     if ([L.SHIPMENT_STATUS.DELIVERED, L.SHIPMENT_STATUS.CLOSED, L.SHIPMENT_STATUS.CANCELLED].includes(ship.status)) {
       throw fail('failed-precondition', 'Jo\'natma yakunlangan', 'shipment_closed');
     }
 
-    // Qabul qiluvchi faqat YETKAZISH kodini oladi (QR/topshirish kodi — jo'natuvchi
-    // va custodian ishi; u bilan posilkani boshqa birov olib ketolmasin).
-    if (isRecipient && !isOwner && !isCustodian) {
-      return {
-        shipmentId,
-        trackingNumber: ship.trackingNumber,
-        deliveryCode: L.deliveryCodeFor(shipmentId, qrSecret),
-      };
-    }
     const out = {
       shipmentId,
       trackingNumber: ship.trackingNumber,
       qrPayload: L.qrPayloadFor(shipmentId, qrSecret),
       handoverCode: L.handoverCodeFor(shipmentId, qrSecret),
     };
-    // Yetkazish kodi: `recipientId` bo'lsa — FAQAT qabul qiluvchiga (jo'natuvchi =
-    // sotuvchi uni bilmasin: pul shu kod bilan yechiladi, Q-5); aks holda — egasiga
-    // (u qabul qiluvchiga yetkazadi).
-    if (recipientId ? isRecipient : isOwner) out.deliveryCode = L.deliveryCodeFor(shipmentId, qrSecret);
+    // Yetkazish kodi — FAQAT egasiga (u qabul qiluvchiga yetkazadi).
+    if (isOwner) out.deliveryCode = L.deliveryCodeFor(shipmentId, qrSecret);
     return out;
   };
 }

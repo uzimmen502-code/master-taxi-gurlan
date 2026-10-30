@@ -690,8 +690,9 @@ function attachWholesaleOrders(exportsObj, deps) {
   }
 
   /**
-   * Relay custody triggeridan (`relay_escrow.onCustodyEvent`, `deliversShipment`):
-   * jo'natma Ulgurji buyurtmasiniki bo'lsa — tovar puli. Oddiy jo'natma — tegmaydi.
+   * Jo'natma yetkazilgan (`deliversShipment` custody hodisasi) va Ulgurji buyurtmasiniki
+   * bo'lsa — tovar puli. Oddiy jo'natma — tegmaydi. Relay o'z RELEASE'ini o'zining
+   * `onLogisticsCustodyEvent` triggerida qiladi (bu yerdan mustaqil, boshqa eskrou).
    */
   async function onShipmentDelivered(shipmentId) {
     const s = await db.collection(SHIPMENTS).doc(String(shipmentId || '')).get();
@@ -701,6 +702,25 @@ function attachWholesaleOrders(exportsObj, deps) {
     if (!orderId) return { skipped: 'not_wholesale' };
     if (!isShipmentDelivered(ship)) return { skipped: `shipment_${ship.status || 'none'}` };
     return releaseGoods(orderId);
+  }
+
+  /**
+   * `custody_events/{id}` onCreate (alohida trigger — relay `onLogisticsCustodyEvent`
+   * O'ZGARMAYDI). Faqat `deliversShipment === true`; qolgan hodisalar o'qishsiz o'tadi.
+   * Yiqilsa — `wholesaleOrdersReconcile` qayta urinadi (idempotent `wholesaleRelease:{id}`).
+   */
+  async function onCustodyEvent(event) {
+    const ev = event || {};
+    if (ev.deliversShipment !== true || !ev.shipmentId) return { skipped: 'not_delivery' };
+    try {
+      return await onShipmentDelivered(String(ev.shipmentId));
+    } catch (e) {
+      logError('release', {
+        shipmentId: String(ev.shipmentId), errorCode: 'WHOLESALE_RELEASE_FAILED',
+        message: String((e && e.message) || e).slice(0, 200),
+      });
+      return { skipped: 'failed' };
+    }
   }
 
   /**
@@ -807,12 +827,15 @@ function attachWholesaleOrders(exportsObj, deps) {
       await onStatusChange(change.before.data() || {}, change.after.data() || {}, context.params.orderId);
       return null;
     });
+  exportsObj.onWholesaleCustodyEvent = functions.firestore
+    .document('custody_events/{eventId}')
+    .onCreate(async (snap) => { await onCustodyEvent(snap.data() || {}); return null; });
   exportsObj.wholesaleOrdersReconcile = functions.pubsub
     .schedule('every 15 minutes')
     .onRun(async () => { await reconcile(); return null; });
 
   return {
-    place, refundOrder, onStatusChange, reconcile, shipFund, releaseGoods, onShipmentDelivered,
+    place, refundOrder, onStatusChange, reconcile, shipFund, releaseGoods, onShipmentDelivered, onCustodyEvent,
   };
 }
 

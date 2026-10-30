@@ -221,10 +221,7 @@ exports.confirmDelivery = fn.https.onCall(wrapCallable(logisticsApi.makeConfirmD
 /** Custody boshlanmagan bo'lsa — bekor; eskrou → refund_pending. */
 exports.cancelLogisticsOrder = fn.https.onCall(wrapCallable(logisticsApi.makeCancelLogisticsOrder({ db })));
 
-/**
- * QR payload va kodlar — egasi (hammasi) / joriy custodian (yetkazish kodisiz).
- * `recipientId` li jo'natma (Ulgurji): yetkazish kodi FAQAT qabul qiluvchiga.
- */
+/** QR payload va kodlar — egasi (hammasi) / joriy custodian (yetkazish kodisiz). */
 exports.getShipmentSecrets = fn.https.onCall(wrapCallable(logisticsApi.makeGetShipmentSecrets({ db })));
 
 /** ADMIN — tarif qoralamasi; faol/eski versiya o'zgarmas (9-band). */
@@ -323,6 +320,14 @@ exports.onWholesaleOrderCreated = fn.firestore
     }
     return null;
   });
+
+/**
+ * Xaridor (faqat `order.buyerId`) — Ulgurji jo'natmasining YETKAZISH kodi (Q-5: kuryer
+ * shu kodni kiritganda pul sotuvchiga). Relay `getShipmentSecrets`ga tegilmaydi.
+ */
+exports.getWholesaleDeliveryCode = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeGetWholesaleDeliveryCode({ db }),
+));
 
 /** Yiqilgan/o'tkazib yuborilgan jo'natma yaratish — qayta urinish (eng ko'pi 5, keyin admin). */
 exports.wholesaleShipmentReconcile = fn.pubsub

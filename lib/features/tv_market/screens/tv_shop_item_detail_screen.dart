@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../core/widgets/edge_swipe_pager.dart';
 import '../domain/similar_items.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
@@ -15,6 +16,9 @@ import '../widgets/tv_shop_item_card.dart';
 import '../widgets/tv_shop_item_grid_card.dart';
 import 'tv_market_feed_screen.dart';
 import 'tv_shop_public_screen.dart';
+
+/// Тафсилот фони — свайп қобиғи ([TvShopItemSwipeScreen]) ҳам шу рангда.
+const Color kTvShopItemDetailBg = Color(0xFFF6F7F9);
 
 /// Харидор товар детал: зум галерея + қўнғироқ + «Ўхшаш маҳсулотлар» + сотувчи дўконига ўтиш.
 ///
@@ -183,7 +187,7 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
     final openShop = _available ? _openShop : null;
     final similar = _available ? similarItems(item, widget.similarPool) : const <TvShopItem>[];
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7F9),
+      backgroundColor: kTvShopItemDetailBg,
       appBar: AppBar(
         leading: const BackButton(color: Colors.black87),
         title: Text(_available ? item.title : '', maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -216,7 +220,13 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
       ),
       body: !_available
           ? const ShopUnavailableView(textKey: 'product_unavailable')
-          : ListView(
+          // Android 12+ «чўзилиш» эффекти ўчирилган (эга, 2026-10-31: ўхшашлар
+          // бўлса саҳифа охирида чўзилиб қоларди). Свайп қобиғида ҳам
+          // [kEdgeSwipePhysics] керак — контент қисқа бўлса ҳам кейингига ўтилсин.
+          : ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+              child: ListView(
+              physics: kEdgeSwipePhysics,
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
               children: [
                 TvShopItemCard(
@@ -236,6 +246,7 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
                   ),
                 if (similar.isNotEmpty) _similarStrip(similar),
               ],
+            ),
             ),
       bottomNavigationBar: _available ? TvChannelContactBar(onCall: () => _call(context)) : null,
     );

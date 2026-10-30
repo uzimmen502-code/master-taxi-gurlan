@@ -474,7 +474,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                       },
                     ),
                   ],
-                  const SizedBox(height: 80),
+                  // Аввал 80: ўхшашлар бўлса охиригача суриш узайиб, кейинги
+                  // эълонга ўтиш «чўзилиб» қоларди (эга, 2026-10-31).
+                  const SizedBox(height: 24),
                 ],
               ),
             ),

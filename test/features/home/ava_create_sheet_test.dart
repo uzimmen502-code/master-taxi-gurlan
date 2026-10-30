@@ -1,6 +1,7 @@
 import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/home/widgets/ava_bottom_nav.dart';
 import 'package:ava_gurlan/models/driver_roles.dart';
+import 'package:ava_gurlan/models/service_module_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,6 +14,7 @@ Future<AvaCreateAction?> _open(
   String? tapKey,
   DriverRoles roles = DriverRoles.none,
   Set<AvaCreateAction> hidden = const {},
+  Map<AvaCreateAction, AvaRowLock> locked = const {},
 }) async {
   tester.view.physicalSize = const Size(400 * 2, 2000 * 2);
   tester.view.devicePixelRatio = 2;
@@ -29,6 +31,7 @@ Future<AvaCreateAction?> _open(
                 context,
                 driverRoles: roles,
                 hidden: hidden,
+                locked: locked,
               ),
               child: const Text('open'),
             ),
@@ -63,7 +66,84 @@ const _allKeys = [
 ];
 
 void main() {
-  testWidgets('сарлавҳа «Менинг бизнесим» ва 11 банд гуруҳлар бўйича тартибда', (tester) async {
+  group('AvaCreateGates.compute (эга, 2026-10-30: Q-1 кўринсин-у босилмасин, Q-2 вебда видео — иловада)', () {
+    ModuleStatus Function(String) only(Map<String, ModuleStatus> m) =>
+        (id) => m[id] ?? ModuleStatus.enabled;
+
+    test('ҳаммаси очиқ (мобил) — яширин ҳам, ёпиқ ҳам йўқ', () {
+      final g = AvaCreateGates.compute(statusOf: only({}), isWeb: false);
+      expect(g.hidden, isEmpty);
+      expect(g.locked, isEmpty);
+    });
+
+    test('«Тез кунда»/«Ҳамкорлик» — кўринади, лекин ёпиқ; модул ID хабар учун сақланади', () {
+      final g = AvaCreateGates.compute(
+        statusOf: only({'restaurants': ModuleStatus.soon, 'jobs': ModuleStatus.comingSoon}),
+        isWeb: false,
+      );
+      expect(g.hidden, isEmpty);
+      expect(g.locked[AvaCreateAction.cafe], AvaRowLock.soon);
+      expect(g.locked[AvaCreateAction.homeCook], AvaRowLock.soon);
+      expect(g.locked[AvaCreateAction.ad], AvaRowLock.soon);
+      expect(g.locked[AvaCreateAction.service], AvaRowLock.soon);
+      expect(g.blockedModule[AvaCreateAction.cafe], 'restaurants');
+    });
+
+    test('админда ёпиқ (hidden) — банд умуман йўқ; аввал дарвозасиз бўлган видео/эълон/AI ҳам', () {
+      final g = AvaCreateGates.compute(
+        statusOf: only({'tv_market': ModuleStatus.hidden, 'jobs': ModuleStatus.hidden, 'chatgpt': ModuleStatus.hidden}),
+        isWeb: false,
+      );
+      expect(g.hidden, containsAll([AvaCreateAction.video, AvaCreateAction.ad, AvaCreateAction.service, AvaCreateAction.assistant]));
+      expect(g.locked, isEmpty);
+    });
+
+    test('ҳайдовчи ва китоб — дарвозасиз (ҳеч қачон яширилмайди)', () {
+      final g = AvaCreateGates.compute(statusOf: (_) => ModuleStatus.hidden, isWeb: false);
+      expect(g.hidden, isNot(contains(AvaCreateAction.driver)));
+      expect(g.hidden, isNot(contains(AvaCreateAction.book)));
+    });
+
+    test('дўкон: бозорлардан бири очиқ бўлса очиқ; иккаласи «Тез кунда» — ёпиқ; эгасида дўкон бор — доим очиқ', () {
+      expect(
+        AvaCreateGates.compute(statusOf: only({'cheap_products_home': ModuleStatus.hidden}), isWeb: false)
+            .locked
+            .containsKey(AvaCreateAction.shopOnline),
+        isFalse,
+      );
+      final both = only({'cheap_products_home': ModuleStatus.soon, 'wholesale_market': ModuleStatus.hidden});
+      expect(AvaCreateGates.compute(statusOf: both, isWeb: false).locked[AvaCreateAction.shopOnline], AvaRowLock.soon);
+      expect(AvaCreateGates.compute(statusOf: both, isWeb: false).blockedModule[AvaCreateAction.shopOnline], 'cheap_products_home');
+      expect(AvaCreateGates.compute(statusOf: both, isWeb: false, hasShop: true).locked, isEmpty);
+    });
+
+    test('вебда видео — «иловада»; модул ёпиқ бўлса яширинлиги устун', () {
+      expect(AvaCreateGates.compute(statusOf: only({}), isWeb: true).locked, {AvaCreateAction.video: AvaRowLock.appOnly});
+      final hiddenTv = AvaCreateGates.compute(statusOf: only({'tv_market': ModuleStatus.hidden}), isWeb: true);
+      expect(hiddenTv.hidden, contains(AvaCreateAction.video));
+      expect(hiddenTv.locked, isEmpty);
+    });
+  });
+
+  testWidgets('ёпиқ банд кўринади, белги чиқади, «›» йўқ; босилса амал қайтади (чақирувчи очмайди)', (tester) async {
+    final picked = await _open(
+      tester,
+      tapKey: 'restaurants_m_open_cafe',
+      locked: {AvaCreateAction.cafe: AvaRowLock.soon, AvaCreateAction.video: AvaRowLock.appOnly},
+    );
+    expect(picked, AvaCreateAction.cafe);
+  });
+
+  testWidgets('ёпиқ бандлар белгиси: «Тез кунда» ва «Иловада» матнлари', (tester) async {
+    await _open(
+      tester,
+      locked: {AvaCreateAction.cafe: AvaRowLock.soon, AvaCreateAction.video: AvaRowLock.appOnly},
+    );
+    expect(find.text('home_create_pill_soon'), findsOneWidget);
+    expect(find.text('home_create_pill_app_only'), findsOneWidget);
+  });
+
+  testWidgets('сарлавҳа «Менинг бизнесим» ва 12 банд гуруҳлар бўйича тартибда', (tester) async {
     await _open(tester);
     expect(find.text('home_create_title'), findsOneWidget);
     expect(find.text('home_create_subtitle'), findsOneWidget);

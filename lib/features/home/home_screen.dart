@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -910,8 +911,8 @@ class _HomeViewState extends State<_HomeView> {
     });
   }
 
-  /// «＋» — «Менинг бизнесим»: видео · эълон · хизмат · онлайн дўкон · дўкон ·
-  /// ҳайдовчи · курьер · уй ошпази · кафе · юк ташувчи · китоб · AVA AI.
+  /// «＋» — «Менинг бизнесим»: харита · видео · эълон · хизмат · онлайн дўкон ·
+  /// ҳайдовчи · курьер · юк ташувчи · уй ошпази · кафе · китоб · AVA AI.
   Future<void> _openCreateSheet() async {
     // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — ҳолат ҳали юкланмаган
     // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз.
@@ -926,22 +927,35 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(_refreshDriverRoles());
       unawaited(_refreshShopPresence());
     }
+    // Модул дарвозаси — каталог билан бир манба (эга, 2026-10-30): админда ёпиқ — йўқ;
+    // «Тез кунда»/«Ҳамкорлик» — кўринади-ю очилмайди (Q-1); вебда видео — «фақат иловада» (Q-2).
+    final gates = AvaCreateGates.compute(
+      statusOf: ServiceConfigHolder.statusOf,
+      isWeb: kIsWeb,
+      hasShop: _shop.any,
+    );
     final action = await showAvaCreateSheet(
       context,
       driverRoles: _driverRoles,
       hasShop: _shop.any,
-      // Кафе-ресторан модули яширин бўлса — «Уй ошпази» ва «Кафе» ҳам йўқ.
-      hidden: {
-        if (!ServiceConfigHolder.isVisible('restaurants')) ...{
-          AvaCreateAction.homeCook,
-          AvaCreateAction.cafe,
-        },
-        if (!ServiceConfigHolder.isVisible('yuk_local')) AvaCreateAction.cargo,
-        if (!ServiceConfigHolder.isVisible('business_map'))
-          AvaCreateAction.businessMap,
-      },
+      hidden: gates.hidden,
+      locked: gates.locked,
     );
     if (action == null || !mounted) return;
+
+    switch (gates.locked[action]) {
+      case AvaRowLock.appOnly:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(context.tr('home_create_video_app_only')),
+          duration: const Duration(seconds: 3),
+        ));
+        return;
+      case AvaRowLock.soon:
+        HomeModuleGate.onTapBlocked(context, gates.blockedModule[action] ?? '');
+        return;
+      case null:
+        break;
+    }
 
     // Китоб ва AVA AI телефонсиз ҳам очилади (AI ўзи рўйхатдан ўтишни таклиф қилади).
     if (action == AvaCreateAction.book) {
@@ -989,7 +1003,8 @@ class _HomeViewState extends State<_HomeView> {
         );
         // Қайтганда ҳолат янгиланади: маҳсулот қўшилган бўлса қатор энди
         // «Менинг дўконим».
-        if (mounted) unawaited(_refreshShopPresence());      case AvaCreateAction.businessMap:
+        if (mounted) unawaited(_refreshShopPresence());
+      case AvaCreateAction.businessMap:
         await _push(const MyBusinessesScreen());
       case AvaCreateAction.driver:
         await _openWork();

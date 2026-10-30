@@ -12,6 +12,7 @@ import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/theme/app_theme.dart' show AppColors;
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../models/geo_area.dart';
 import '../../../repositories/service_config_repository.dart';
 import '../../business_map/data/business_repository.dart';
@@ -40,6 +41,7 @@ import '../utils/tv_news_unread.dart';
 import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_comment_sheet.dart';
+import '../widgets/tv_feed_empty_view.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
 import 'tv_channel_screen.dart';
@@ -78,6 +80,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   static const _pageSize = 40;
   final _clips = <TvClip>[];
   bool _loading = true;
+
+  /// Сўнгги юклаш хатоси (l10n калити). Аввал хато фақат log'га ёзилиб,
+  /// экранда «Ҳозирча видеолар йўқ» чиқарди — тармоқ узилишини «бу
+  /// ҳудудда видео йўқ» деб тушуниш мумкин эди.
+  String? _loadErrorKey;
+
+  /// Ҳудуд/таб тез алмаштирилганда эски сўровнинг жавоби (ёки хатоси)
+  /// янгисини босиб кетмаслиги учун — фақат сўнгги [_loadClips] ёзади.
+  int _loadGen = 0;
   // T-5 fix: feedda ~40-41 tadan keyin pastga svayp qilinmay qolgan edi —
   // `_loadClips()` faqat bitta qattiq `limit: 40`li so'rov yuborardi va
   // oxiriga yetganda yangi sahifa yuklovchi hech qanday mexanizm yo'q edi.
@@ -435,15 +446,17 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   Future<void> _loadClips() async {
+    final gen = ++_loadGen;
     _cursor = null;
     _regionPerDistrictLimit = _pageSize;
     _hasMore = true;
     _feedFromCdn = false;
     _cdnPage = 1;
+    _loadErrorKey = null;
     try {
       final categories = _categoriesForTab(_tabController.index);
       final batch = await _fetchPage(categories: categories, cursor: null);
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       final list = <TvClip>[];
       if (!_firstLoadDone && widget.initialClip != null) {
         list.add(widget.initialClip!);
@@ -456,7 +469,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       // у аллақачон энг сўнгги ҳолатни беради.
       if (_feedFromCdn) {
         final mine = await _myFreshClips(categories);
-        if (!mounted) return;
+        if (!mounted || gen != _loadGen) return;
         final missing =
             mine.where((m) => list.every((c) => c.id != m.id)).toList();
         list.insertAll(0, missing);
@@ -480,9 +493,30 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       unawaited(_hydratePublisherNames());
     } catch (e) {
       debugPrint('[TvMarketFeed] load error: $e');
-      if (mounted) setState(() => _loading = false);
+      if (!mounted || gen != _loadGen) return;
+      // Эски ҳудуднинг клиплари янги ҳудуд номи остида қолмасин —
+      // ижро тўхтайди, экранда хато ва «Қайта уриниш» чиқади.
+      tvOnPlaybackBlocked();
+      setState(() {
+        _clips.clear();
+        _currentIndex = 0;
+        _loading = false;
+        _loadErrorKey = userErrorKey(e, fallbackKey: 'err_load_failed');
+      });
     }
   }
+
+  void _retryLoad() {
+    setState(() {
+      _loading = true;
+      _loadErrorKey = null;
+    });
+    unawaited(_loadClips());
+  }
+
+  /// Бўш/хато ҳолатдаги «Орқага»: push қилинган экранни ёпади, пастки
+  /// менюдаги таб бўлса `AvaTabShell`нинг PopScope'и «Бош»га қайтаради.
+  void _goBack() => unawaited(Navigator.maybePop(context));
 
   /// Лента охирига яқинлашганда (қаранг: [_onPageChanged]) кейинги
   /// саҳифани юклайди — бўлмаса ~40 тадан кейин пастга свайп қилиб
@@ -1528,7 +1562,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _clips.isEmpty
-              ? _EmptyFeed(onPublish: _openPublish)
+              // Ҳудуд тугмалари одатда клип ичида чизилади — бўш/хато
+              // ҳолатда ҳам кўринсин, акс ҳолда видеоси йўқ ҳудуд
+              // танланса, бошқасига қайтиб бўлмасди (танлов сақланади).
+              ? TvFeedEmptyView(
+                  errorKey: _loadErrorKey,
+                  onPublish: _openPublish,
+                  onRetry: _retryLoad,
+                  onBack: _goBack,
+                  filters: _areaFilters(),
+                )
               : PageView.builder(
                   controller: _pageCtrl,
                   scrollDirection: Axis.vertical,
@@ -1772,66 +1815,4 @@ class _ThickRightArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _EmptyFeed extends StatelessWidget {
-  const _EmptyFeed({required this.onPublish});
-  final VoidCallback onPublish;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.videocam_outlined,
-                color: Colors.white70,
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              context.tr('tv_market_empty'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 22),
-            FilledButton.icon(
-              onPressed: onPublish,
-              icon: const Icon(Icons.videocam_rounded, size: 20),
-              label: Text(
-                context.tr('tv_publish_fab'),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: AvaLight.ok,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 14,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

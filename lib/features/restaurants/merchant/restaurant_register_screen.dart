@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../data/restaurants_repository.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'restaurant_form_fields.dart';
@@ -38,6 +39,10 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   bool _sending = false;
   bool _phoneLoaded = false;
 
+  /// Бир форма = бир калит (C-2): таймаутдан кейин «Юбориш» қайта босилса ҳам
+  /// сервер иккинчи ресторан очмайди — биринчи натижани қайтаради.
+  final String _requestId = newRequestId();
+
   /// Охирги муваффақиятсиз юборишдаги хато калитлари: майдон остида кўрсатилади,
   /// эга тузатган сайин камаяди.
   Set<String> _errors = const {};
@@ -64,6 +69,7 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   }
 
   Future<void> _submit() async {
+    if (_sending) return;
     final errs = _data.validate();
     if (errs.isNotEmpty) {
       setState(() => _errors = errs.toSet());
@@ -84,7 +90,7 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
     }
     setState(() => _sending = true);
     try {
-      final res = await _repo.register(_data.toRegisterPayload());
+      final res = await _repo.register(_data.toRegisterPayload(), requestId: _requestId);
       if (!mounted) return;
       final rid = (res['restaurantId'] ?? '') as String;
       final status = (res['status'] ?? 'applied') as String;

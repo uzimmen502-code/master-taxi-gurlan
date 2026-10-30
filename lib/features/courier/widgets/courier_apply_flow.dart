@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../../../repositories/courier_capability_repository.dart';
 
 /// «Курьер бўлиш» аризасининг натижаси.
@@ -25,10 +26,15 @@ class CourierApplyResult {
 ///
 /// Мануал режимда `applied` (админ тасдиғини кутади), авто режимда дарҳол
 /// ишлаш ҳолати (D-15.3, D-15.5).
+///
+/// Икки марта юбориш ҳимояси (C-2): сўров кетаётганда оқим қайта очилмайди
+/// ([_courierApplyInFlight]); `requestId` муваффақиятгача бир хил — таймаутдан
+/// кейин қайта уриниш ўша аризани сўрайди ([_courierApplyKeys]).
 Future<CourierApplyResult> runCourierApplyFlow(
   BuildContext context, {
   CourierCapabilityRepository? repository,
 }) async {
+  if (_courierApplyInFlight) return const CourierApplyResult.cancelled();
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -47,10 +53,14 @@ Future<CourierApplyResult> runCourierApplyFlow(
     ),
   );
   if (ok != true || !context.mounted) return const CourierApplyResult.cancelled();
+  // Тасдиқ ойнаси очиқ турганда бошқа нусха юбориб улгурган бўлса.
+  if (_courierApplyInFlight) return const CourierApplyResult.cancelled();
 
   final repo = repository ?? CourierCapabilityRepository();
+  _courierApplyInFlight = true;
   try {
-    final status = await repo.apply();
+    final status = await repo.apply(requestId: _courierApplyKeys.keyFor(_courierScope));
+    _courierApplyKeys.settled(_courierScope);
     if (!context.mounted) return CourierApplyResult.done(status);
     _snack(
       context,
@@ -78,8 +88,17 @@ Future<CourierApplyResult> runCourierApplyFlow(
       _snack(context, context.tr('courier_apply_failed'), isError: true);
     }
     return const CourierApplyResult.failed();
+  } finally {
+    _courierApplyInFlight = false;
   }
 }
+
+/// Илова бўйича битта ариза сўрови (профил ва «＋» бир хил оқимни чақиради).
+bool _courierApplyInFlight = false;
+
+/// Хатода калит сақланади (жавоб йўқолган бўлиши мумкин), муваффақиятда тозаланади.
+final IdempotencyKeys _courierApplyKeys = IdempotencyKeys(generator: newRequestId);
+const String _courierScope = 'courier';
 
 void _snack(BuildContext context, String msg, {bool isError = false}) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(

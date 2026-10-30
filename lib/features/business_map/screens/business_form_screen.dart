@@ -161,6 +161,8 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
   }
 
   Future<void> _save() async {
+    // Қайта кириш ҳимояси (C-2); дубликатдан асосий ҳимоя — серверда `clientRequestId`.
+    if (_busy) return;
     final name = _name.text.trim();
     if (name.length < 2) return setState(() => _error = context.tr('bizmap_err_name'));
     final category = _category;

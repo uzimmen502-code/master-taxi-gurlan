@@ -107,6 +107,8 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TvPublishScreen(attachItemId: itemId)));
 
   Future<void> _save() async {
+    // Қайта кириш ҳимояси (C-2): бир кадр ичидаги иккинчи босиш иккинчи маҳсулот ёзмасин.
+    if (_busy) return;
     final name = _name.text.trim();
     if (name.length < 2) return setState(() => _error = context.tr('bizprod_err_name'));
     final price = parseProductPrice(_price.text);

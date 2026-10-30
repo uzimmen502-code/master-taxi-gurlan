@@ -77,6 +77,14 @@ class ServiceConfigHolder {
   static const _cacheKeyActiveDistrict = 'svc_active_district_v1';
   static const _cacheKeyActiveDistrictModules = 'svc_active_district_modules_v1';
 
+  /// Сервер модул дарвозаси учун (эга, 2026-10-31: «серверни ҳам мослаштир»): яратиш
+  /// callable'ларига қўшиладиган майдон — модуллар ҳисобланаётган туман. Бўш бўлса — йўқ
+  /// (сервер профил туманини олади, эски APK'лар каби).
+  static Map<String, String> get moduleGeoField {
+    final id = _away ? _activeDistrictId : _districtId;
+    return id.isEmpty ? const {} : {'geoDistrictId': id};
+  }
+
   /// Модуллар фаол туман бўйича ҳисобланяптими (яшаш жойидан бошқа туман танланган).
   static bool get _away =>
       _activeDistrictId.isNotEmpty && _activeDistrictId != _districtId;

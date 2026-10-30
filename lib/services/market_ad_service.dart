@@ -1,3 +1,4 @@
+import '../core/service_config_holder.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 /// Onlayn BOZOR — CF-only яратиш / шикоят.
@@ -18,6 +19,7 @@ class MarketAdService {
     String requestId = '',
   }) async {
     final res = await _fn.httpsCallable('submitMarketAd').call({
+      ...ServiceConfigHolder.moduleGeoField,
       'title': title,
       'description': description,
       'price': price,

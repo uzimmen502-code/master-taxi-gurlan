@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/service_config_holder.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../core/utils/formatters.dart';
@@ -71,6 +72,7 @@ class CourierCapabilityRepository {
         _functions ?? FirebaseFunctions.instanceFor(region: kDemandCoreRegion);
     final res = await fns.httpsCallable('requestCapability').call<Object?>({
       'service': 'courier',
+      ...ServiceConfigHolder.moduleGeoField,
       if (requestId.isNotEmpty) 'requestId': requestId,
     });
     final d = res.data is Map ? (res.data as Map) : const {};

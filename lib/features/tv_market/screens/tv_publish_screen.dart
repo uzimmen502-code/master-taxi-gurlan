@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -988,6 +989,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Вебда янги видео юклаб бўлмайди (`dart:io File`, `VideoPlayerController.file`, `putFile`) —
+    // эга, 2026-10-30, Q-2: «фақат иловада». Таҳрир (файлсиз) вебда ҳам ишлайди.
+    if (kIsWeb && !_isEdit) return const _TvPublishAppOnly();
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -1667,6 +1671,45 @@ class _SubmitButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
           ),
           elevation: 2,
+        ),
+      ),
+    );
+  }
+}
+
+/// Вебда янги видео жойлаш ўрнига (эга, 2026-10-30, Q-2): сабаб ва орқага қайтиш.
+class _TvPublishAppOnly extends StatelessWidget {
+  const _TvPublishAppOnly();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Scaffold(
+      backgroundColor: c.bg,
+      appBar: AppBar(title: Text(context.tr('tv_publish_title'))),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AvaSpace.screen),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.phone_android_rounded, size: 48, color: c.brandText),
+                const SizedBox(height: 12),
+                Text(
+                  context.tr('home_create_video_app_only'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, height: 1.4, color: c.ink),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(120, 48)),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: Text(context.tr('back')),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

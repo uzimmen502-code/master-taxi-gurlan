@@ -71,6 +71,10 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
   bool _loading = true;
   bool _busy = false;
 
+  /// Охирги юклаш хато билан тугади. Бўш панел (янги фойдаланувчига
+  /// ўхшаб) ЭМАС — хато ва «Қайта уриниш» кўрсатилади.
+  bool _failed = false;
+
   @override
   void initState() {
     super.initState();
@@ -86,10 +90,27 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
         _roles = roles;
         _car = car;
         _loading = false;
+        _failed = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      // Хом хато матни фойдаланувчига чиқмайди — фақат debug log'га.
+      debugPrint('DRIVER_HUB_LOAD_FAILED: ${e.runtimeType}');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+      }
     }
+  }
+
+  /// «Қайта уриниш»: спиннер кўрсатиб, ҳолатни қайта ўқийди.
+  void _retry() {
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    _reload();
   }
 
   /// Смена тугатиш: фақат онлайн бўла оладиган турлар (маҳаллий, маршрут);
@@ -132,6 +153,8 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
       appBar: AppBar(title: Text(context.tr('hub_title'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _failed
+          ? _errorBody(context)
           : RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
@@ -139,7 +162,9 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
                 children: [
                   _verificationCard(context),
                   _carCard(context),
-                  _sectionTitle(context, 'hub_types_title'),
+                  // Тур йўқ бўлса сарлавҳа ҳам йўқ (тагида бўш сарлавҳа қолмасин).
+                  if (widget.choices.isNotEmpty)
+                    _sectionTitle(context, 'hub_types_title'),
                   for (final choice in widget.choices) _typeCard(context, choice),
                   const SizedBox(height: 8),
                   ListTile(
@@ -172,6 +197,56 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
         child: Text(context.tr(key),
             style: AvaText.sectionTitle.copyWith(color: context.ava.ink)),
       );
+
+  /// Хато ҳолати. Тортиб янгилаш бу ерда ҳам ишлайди — айланувчи рўйхат.
+  Widget _errorBody(BuildContext context) => RefreshIndicator(
+        onRefresh: _reload,
+        child: LayoutBuilder(
+          builder: (context, box) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: _loadError(context),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  /// Юклаш хатоси: тушунарли матн + «Қайта уриниш» (≥ 48 dp). Кўриниши
+  /// умумий `LoadErrorView` (F-04) билан бир хил ва калитлари ҳам ўша
+  /// (`err_load_failed`, `err_retry`); у бу шохда ҳали йўқ — келганда шу
+  /// метод ўша виджет билан алмаштирилади.
+  Widget _loadError(BuildContext context) {
+    final c = context.ava;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: Icon(Icons.cloud_off_outlined, size: 44, color: c.ink2),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              context.tr('err_load_failed'),
+              textAlign: TextAlign.center,
+              style: AvaText.body.copyWith(color: c.ink2),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              key: const ValueKey('hub-retry'),
+              onPressed: _retry,
+              style: OutlinedButton.styleFrom(minimumSize: const Size(160, 48)),
+              child: Text(context.tr('err_retry')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _card(BuildContext context, {required Widget child, Color? color}) {
     final c = context.ava;
@@ -317,6 +392,8 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
       case WorkChoice.local:
         return 'hub_action_go_work';
       case WorkChoice.marshrut:
+      // Курьер панелга келмайди (алоҳида банд, эга 2026-10-16); case фақат
+      // enum switch тўлиқ бўлиши учун.
       case WorkChoice.courier:
         return 'hub_action_open';
     }
@@ -340,21 +417,14 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                choice == WorkChoice.courier
-                    ? Icons.delivery_dining
-                    : Icons.local_taxi_outlined,
-                color: c.brand,
-              ),
+              Icon(Icons.local_taxi_outlined, color: c.brand),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      context.tr(choice == WorkChoice.courier
-                          ? 'work_type_courier'
-                          : 'role_type_${choice.name}'),
+                      context.tr('role_type_${choice.name}'),
                       style: AvaText.sectionTitle.copyWith(color: c.ink),
                     ),
                     Text(context.tr(st.key),
@@ -371,7 +441,6 @@ class _DriverHubScreenState extends State<DriverHubScreen> {
             child: Text(context.tr(joined ? _actionKey(choice) : 'work_state_join')),
           ),
           if (joined &&
-              choice != WorkChoice.courier &&
               widget.onLeaveType != null &&
               !_roles.isActive(choice.name))
             TextButton(

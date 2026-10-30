@@ -4,7 +4,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
+import '../features/home/home_module_gate.dart';
 import '../features/chat/screens/chat_screen.dart';
 import '../features/courier/screens/courier_screen.dart';
 import '../features/customer_confirm/customer_confirm_controller.dart';
@@ -304,6 +306,7 @@ class PushNavigation {
     if (screen == 'jobs' ||
         type == 'ad_published' ||
         type == 'ad_moderation') {
+      if (!_moduleOpen(nav, 'jobs')) return;
       await nav.push(
         MaterialPageRoute(builder: (_) => const JobsScreen()),
       );
@@ -435,6 +438,7 @@ class PushNavigation {
     }
 
     if (screen == 'yuk_local') {
+      if (!_moduleOpen(nav, 'yuk_local')) return;
       await nav.push(
         MaterialPageRoute(builder: (_) => const YukLocalScreen()),
       );
@@ -550,6 +554,16 @@ class PushNavigation {
         builder: (_) => NewsHubScreen(initialTabIndex: newsTab),
       ),
     );
+  }
+
+  /// Push'дан очиладиган модул ҳам «＋» ва каталог билан бир қоида (кенгаш P9):
+  /// ёпиқ ёки «Тез кунда» бўлса экран очилмайди, сабаби айтилади.
+  /// Курьер/ресторан буюртма push'лари бунга кирмайди — улар ишдаги кишининг жорий иши.
+  static bool _moduleOpen(NavigatorState nav, String moduleId) {
+    if (ServiceConfigHolder.isOpenable(moduleId)) return true;
+    final ctx = nav.context;
+    if (ctx.mounted) HomeModuleGate.onTapBlocked(ctx, moduleId);
+    return false;
   }
 
   static void _showPassiveSnack(NavigatorState nav, String key) {

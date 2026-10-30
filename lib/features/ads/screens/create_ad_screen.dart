@@ -13,6 +13,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/idempotency_keys.dart';
 import '../../onboarding/screens/phone_reverify_screen.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
@@ -47,6 +48,10 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   final List<XFile> _newImages = [];
   bool _loading = false;
   bool _checkedLimit = false;
+
+  /// Бир форма = бир калит (C-2): таймаутдан кейин қайта юборишда сервер
+  /// иккинчи эълон очмайди.
+  final String _requestId = newRequestId();
 
   /// Эълондан кейин видео жойлаш (ихтиёрий, [TvClipLink]).
   bool _withVideo = false;
@@ -222,9 +227,14 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       return;
     }
 
+    // Қайта кириш ҳимояси (C-2): `_loading` биринчи `await` ДАН ОЛДИН қўйилади —
+    // аввал телефон ўқилгунча иккинчи босиш ҳам ўтиб, иккита эълон юборарди.
+    if (_loading) return;
+    setState(() => _loading = true);
     final ownerId = await _ownerId();
     if (phoneDigits(ownerId).length < 9) {
       if (!mounted) return;
+      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('create_ad_err_phone'))),
       );
@@ -232,7 +242,6 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     }
 
     if (!mounted) return;
-    setState(() => _loading = true);
     final limitFullMsg = context.tr('create_ad_err_limit_full');
     final repo = context.read<AdsRepository>();
     final storage = context.read<AdsStorageService>();
@@ -258,6 +267,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         imageUrls: uploaded,
         districtId: _district.districtId,
         regionId: _district.regionId,
+        requestId: _requestId,
       );
       // Муваффақиятли — энди расмлар ҳужжатга тегишли, тозаланмайди.
       uploaded = const [];

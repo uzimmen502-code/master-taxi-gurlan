@@ -41,4 +41,12 @@ void main() {
     final key = IdempotencyKeys().keyFor('x');
     expect(RegExp(r'^[A-Za-z0-9_-]{8,64}$').hasMatch(key), isTrue);
   });
+
+  test('C-2: newRequestId — 32 hex, сервер қолипига мос, ҳар чақирувда янги', () {
+    final a = newRequestId();
+    final b = newRequestId();
+    expect(RegExp(r'^[0-9a-f]{32}$').hasMatch(a), isTrue, reason: a);
+    expect(RegExp(r'^[A-Za-z0-9_-]{8,64}$').hasMatch(a), isTrue);
+    expect(a, isNot(b));
+  });
 }

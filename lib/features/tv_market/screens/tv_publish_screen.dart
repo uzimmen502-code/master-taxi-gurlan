@@ -687,6 +687,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   }
 
   Future<void> _publish() async {
+    // Қайта кириш ҳимояси (C-2): тугма `_publishing` да ўчади, лекин бир кадр ичидаги
+    // иккинчи босиш эски `onPressed` орқали келиши мумкин — иккинчи клип ёзилмасин.
+    if (_publishing) return;
     if (widget.editClip != null) {
       await _saveEdit();
       return;
@@ -877,6 +880,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               status: autoApprove ? 'active' : 'pending',
             ),
           );
+          // Товар яратилди — клип ёзиш кейин йиқилса, қайта уриниш ИККИНЧИ товар
+          // яратмасин: шу товарга боғланади (аудит C-2, такрорий юборишга қарши).
+          _attachItemId = shopItemId;
         } else {
           final existing = await _shopRepo.fetchItem(_attachItemId);
           if (existing != null && existing.price > 0) {

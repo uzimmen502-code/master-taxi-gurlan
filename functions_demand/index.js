@@ -221,7 +221,10 @@ exports.confirmDelivery = fn.https.onCall(wrapCallable(logisticsApi.makeConfirmD
 /** Custody boshlanmagan bo'lsa — bekor; eskrou → refund_pending. */
 exports.cancelLogisticsOrder = fn.https.onCall(wrapCallable(logisticsApi.makeCancelLogisticsOrder({ db })));
 
-/** QR payload va kodlar — egasi (hammasi) / joriy custodian (yetkazish kodisiz). */
+/**
+ * QR payload va kodlar — egasi (hammasi) / joriy custodian (yetkazish kodisiz).
+ * `recipientId` li jo'natma (Ulgurji): yetkazish kodi FAQAT qabul qiluvchiga.
+ */
 exports.getShipmentSecrets = fn.https.onCall(wrapCallable(logisticsApi.makeGetShipmentSecrets({ db })));
 
 /** ADMIN — tarif qoralamasi; faol/eski versiya o'zgarmas (9-band). */
@@ -296,6 +299,39 @@ exports.cancelWholesaleOrder = fn.https.onCall(wrapCallable(
 exports.setWholesaleOrderSettings = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeSetWholesaleOrderSettings({ db }),
 ));
+
+/**
+ * Ulgurji buyurtma, 3-bosqich: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
+ * (sotuvchi qabul/rad qilmaydi, ega 2026-10-31). Narx — kvotada muhrlangan;
+ * idempotent (`demand_idempotency/wholesale_ship_{orderId}`). Holat o'zgarmaydi —
+ * `in_delivery` ga default codebase o'tkazadi (yetkazish haqi eskrouga o'tganda).
+ * Logistika jo'natuvchi darvozasi bu yerda YO'Q (Ulgurji darvozasi kvotada); LEG
+ * ochilishi/matching/push — `module_config/logistics_all` ga bo'ysunadi.
+ */
+exports.onWholesaleOrderCreated = fn.firestore
+  .document('wholesale_orders/{orderId}')
+  .onCreate(async (snap, context) => {
+    try {
+      await wholesaleOrdersApi.onWholesaleOrderCreated({ db }, snap.data() || {}, context.params.orderId);
+    } catch (e) {
+      // `ensureWholesaleShipment` xatoni o'zi yozadi; bu yer — kutilmagan holat. Reconcile qayta urinadi.
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'onWholesaleOrderCreated', result: 'failed',
+        orderId: context.params.orderId, errorCode: 'WHOLESALE_SHIPMENT_TRIGGER_FAILED',
+        message: String((e && e.message) || e).slice(0, 200),
+      }));
+    }
+    return null;
+  });
+
+/** Yiqilgan/o'tkazib yuborilgan jo'natma yaratish — qayta urinish (eng ko'pi 5, keyin admin). */
+exports.wholesaleShipmentReconcile = fn.pubsub
+  .schedule('every 10 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleOrdersApi.reconcileWholesaleShipments({ db });
+    return null;
+  });
 
 /**
  * Eskrou tushdi (default codebase yozadi) → LEG-1 ochiladi + matching.

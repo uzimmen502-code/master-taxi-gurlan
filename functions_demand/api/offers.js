@@ -37,6 +37,17 @@ function fail(code, message, reason) {
   return e;
 }
 
+/**
+ * Ulgurji buyurtmasi jo'natmasining LEG'i (`attributes.wholesaleOrderId`): LEG egasi
+ * = sotuvchi, u LEG'ni bekor qila / taklif qabul qila OLMAYDI (ega, 2026-10-31:
+ * sotuvchi buyurtmaga aralashmaydi). Oddiy talab va oddiy relay LEG'i o'zgarmagan.
+ */
+function assertNotWholesaleLeg(demand) {
+  if (demand && demand.module === 'logistics' && (demand.attributes || {}).wholesaleOrderId) {
+    throw fail('permission-denied', 'Bu jo\'natmani o\'zgartirib bo\'lmaydi', 'wholesale_managed');
+  }
+}
+
 /** Taklifchi shu talabni ko'rish huquqiga egami. */
 async function assertIsMatched(db, demandId, providerId) {
   const snap = await db.collection(MATCHES).doc(`${demandId}_${providerId}`).get();
@@ -227,6 +238,7 @@ function makeAcceptOffer(deps) {
       if (demand.ownerId !== ownerId) {
         throw fail('permission-denied', 'Bu so\'rov sizga tegishli emas');
       }
+      assertNotWholesaleLeg(demand);
       // Muddat o'tgan talabda taklif QABUL QILINMAYDI (ega qarori 2026-10-11).
       // SERVER vaqti, AYNI tranzaksiyada o'qilgan talab bo'yicha: sweeper
       // hali yopmagan bo'lsa ham. Avval bu tekshiruv yo'q edi va sweeper
@@ -375,6 +387,7 @@ function makeCancelDemand(deps) {
       if (demand.ownerId !== ownerId) {
         throw fail('permission-denied', 'Bu so\'rov sizga tegishli emas');
       }
+      assertNotWholesaleLeg(demand);
       sm.assertTransition(demand.status, sm.STATUS.CANCELLED, 'cancelDemand');
 
       tx.update(demandRef, {

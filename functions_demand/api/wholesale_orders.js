@@ -14,6 +14,8 @@
  *                              yozadi; pulni qaytarish va qoldiqni tiklash —
  *                              default trigger `onWholesaleOrderStatusChange`.
  *   setWholesaleOrderSettings  admin: AVA ulushi (bps) — versiya + audit.
+ *   onWholesaleOrderCreated    (3-bosqich, trigger) relay jo'natmasi avtomatik
+ *   reconcileWholesaleShipments (3-bosqich, har 10 daqiqa) yiqilgan yaratishni qayta urinadi
  *
  * NEGA SOZLAMA SHU CODEBASE'DA: ulush birinchi bo'lib KVOTADA (shu yerda)
  * muhrlanadi; admin tekshiruvi (`assertStrictAdmin`) va audit naqshi
@@ -31,7 +33,9 @@ const L = require('../core/logistics');
 const WO = require('../core/wholesale_orders');
 const { packIdsOf, STOCK, MAX_QTY, DEFAULT_PACK } = require('./wholesale_stock');
 const { marketOf } = require('./wholesale_admin');
-const { quoteParcelForPoints } = require('./logistics');
+const {
+  quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx,
+} = require('./logistics');
 const { assertStrictAdmin } = require('../analytics/access');
 
 const PRODUCTS = 'wholesale_products';
@@ -400,6 +404,11 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         // 21-band: takror chaqiruv (tarmoq qayta urinishi) — xato emas, ikkinchi yozuv yo'q.
         if (from === to) return { idempotent: true, from };
         WO.assertTransition(actor, from, to);
+        // 3-bosqich: yetkazish hali TO'LANMAGAN jo'natma ochilgan bo'lsa — u ham bekor
+        // (LEG kuryerga chiqmasin). O'QISH — yozuvdan oldin. To'langan bo'lsa buyurtma
+        // allaqachon `in_delivery` (xaridor bekor qila olmaydi — yuqoridagi tekshiruv).
+        const shipmentId = to === WO.STATUS.CANCELLED ? String((o.shipment || {}).shipmentId || '') : '';
+        const cancelShipment = shipmentId ? await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) : null;
         const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
         const patch = {
           status: to,
@@ -415,7 +424,9 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         tx.update(ref, patch);
         tx.set(ref.collection(HISTORY).doc(String(seq)), {
           seq, from, to, actor, actorId: callerId, reason, at: now,
+          ...(cancelShipment ? { meta: { shipmentCancelled: shipmentId } } : {}),
         });
+        if (cancelShipment) cancelShipment(now, `wholesale_${actor}`);
         return { idempotent: false, from };
       });
       log(action, {
@@ -435,6 +446,198 @@ function makeCancelWholesaleOrder(deps) {
   return makeOrderTransition(deps, {
     actor: WO.ACTOR.BUYER, to: WO.STATUS.CANCELLED, action: 'cancelWholesaleOrder',
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3-BOSQICH: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Sotuvchi qabul/rad QILMAYDI (ega, 2026-10-31). `wholesale_orders` onCreate
+// (`placed`) → `createShipmentInternal` (egasi/jo'natuvchi = sotuvchi, LEG-1 olish
+// kontakti = sotuvchi; qabul qiluvchi = xaridor, `recipientId`), narx — kvotada
+// MUHRLANGAN (`order.delivery`, qayta hisoblanmaydi). Keyin tranzaksiyada
+// `order.shipment = {shipmentId, orderId, trackingNumber, createdAt}`; HOLAT
+// O'ZGARMAYDI — `placed → in_delivery` yetkazish haqi eskrouga o'tganda (default
+// codebase, `wholesaleShipFund:{orderId}`), shu paytda relay `onShipmentFunded` LEG'ni ochadi.
+// Xato: `order.shipmentError = {code, at, attempts, final}` (PII yo'q); reconcile
+// (har 10 daqiqa) `placed` + shipment yo'q + 2 daqiqadan eski buyurtmalarni qayta
+// urinadi, `SHIPMENT_MAX_ATTEMPTS` dan keyin `final: true` — admin (5-bosqich).
+
+const SHIPMENT_MAX_ATTEMPTS = 5;
+const SHIPMENT_RECONCILE_MIN_AGE_MS = 2 * 60 * 1000;
+const SHIPMENT_RECONCILE_LIMIT = 100;
+
+function msOf(v) {
+  if (v == null) return null;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  return null;
+}
+
+/** Xaridor ismi — `users` hujjatidan (repo naqshi `name || fullName || displayName`); yo'q bo'lsa bo'sh (o'ylab topilmaydi). */
+async function buyerDisplayName(db, o) {
+  for (const id of [o.buyerWalletUid, o.buyerId]) {
+    if (!id || typeof id !== 'string') continue;
+    const s = await db.collection('users').doc(id).get();
+    if (s.exists) {
+      const u = s.data() || {};
+      return String(u.name || u.fullName || u.displayName || '').trim().slice(0, 80);
+    }
+  }
+  return '';
+}
+
+/**
+ * Buyurtma → `createShipmentInternal` kirishi. Hamma qiymat BUYURTMADAGI muhrdan
+ * (kvota yozgan, default codebase ko'chirgan): narx surati, tarif versiyasi,
+ * vazn, o'lcham (bo'lmasligi mumkin), e'lon qilingan qiymat = tovar summasi.
+ */
+function shipmentInputFromOrder(orderId, o, recipientName) {
+  const d = o.delivery && typeof o.delivery === 'object' ? o.delivery : {};
+  const snap = d.priceSnapshot && typeof d.priceSnapshot === 'object' ? d.priceSnapshot : null;
+  if (!snap) throw fail('failed-precondition', 'Yetkazish narxi muhri yo\'q', 'delivery_snapshot_missing');
+  if (!isPosInt(o.deliveryFee) || snap.customerPrice !== o.deliveryFee) {
+    throw fail('failed-precondition', 'Yetkazish narxi muhrga mos emas', 'delivery_price_mismatch');
+  }
+  if (!isPosInt(d.tariffVersion) || snap.tariffVersion !== d.tariffVersion) {
+    throw fail('failed-precondition', 'Tarif versiyasi muhrga mos emas', 'tariff_version_mismatch');
+  }
+  if (!isPosInt(d.actualWeightG)) throw fail('failed-precondition', 'Vazn yo\'q', 'parcel_weight_missing');
+  if (!isPosInt(o.goodsTotal)) throw fail('failed-precondition', 'Tovar summasi yo\'q', 'goods_total_invalid');
+  const dims = d.dims ? validDims(d.dims) : null;
+  if (d.dims && !dims) throw fail('failed-precondition', 'O\'lcham yaroqsiz', 'parcel_dims_invalid');
+  const title = String(o.productTitle || '').trim();
+  const pack = String(o.packLabel || '').trim();
+  return {
+    idempotencyKey: `wholesale_ship_${orderId}`,
+    ownerId: o.sellerId,
+    recipientId: o.buyerId,
+    recipient: { name: recipientName },
+    origin: o.origin,
+    destination: o.destination,
+    parcel: {
+      actualWeightG: d.actualWeightG,
+      lengthCm: dims ? dims.l : null,
+      widthCm: dims ? dims.w : null,
+      heightCm: dims ? dims.h : null,
+      declaredValue: o.goodsTotal,
+      description: `${title}${pack ? ` (${pack})` : ''} × ${o.qty}`.slice(0, 200),
+      fragile: false,
+    },
+    priceSnapshot: snap,
+    pricedAt: o.createdAt || null,
+    source: 'wholesale',
+    extra: { wholesaleOrderId: orderId },
+  };
+}
+
+/**
+ * Buyurtma uchun jo'natma (bor bo'lsa — o'sha). Idempotent: trigger takrori,
+ * reconcile va parallel chaqiruv — bitta jo'natma (`createShipmentInternal`
+ * kaliti `wholesale_ship_{orderId}`) va bitta bog'lanish (tranzaksiya).
+ */
+async function ensureWholesaleShipment(deps, orderId) {
+  const { db, now: nowFn } = deps;
+  const started = Date.now();
+  const ref = db.collection(ORDERS).doc(orderId);
+  const snap = await ref.get();
+  if (!snap.exists) return { skipped: 'order_missing' };
+  const o0 = snap.data() || {};
+  if (o0.shipment && o0.shipment.shipmentId) return { skipped: 'already_linked', shipmentId: o0.shipment.shipmentId };
+  if (o0.status !== WO.STATUS.PLACED) return { skipped: `status_${o0.status || 'none'}` };
+  try {
+    const name = await buyerDisplayName(db, o0);
+    const r = await createShipmentInternal(deps, shipmentInputFromOrder(orderId, o0, name));
+    const now = nowFn ? nowFn() : new Date();
+    const out = await db.runTransaction(async (tx) => {
+      const s = await tx.get(ref);
+      const o = s.data() || {};
+      if (o.shipment && o.shipment.shipmentId) return { already: true, shipmentId: o.shipment.shipmentId };
+      // Orada xaridor bekor qilgan bo'lsa — jo'natma ham bekor (pul tegmagan).
+      const cancel = o.status !== WO.STATUS.PLACED
+        ? await prepareCancelUnpaidShipmentInTx(tx, db, r.shipmentId) : null;
+      const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+      tx.update(ref, {
+        shipment: {
+          shipmentId: r.shipmentId, orderId: r.orderId, trackingNumber: r.trackingNumber, createdAt: now,
+        },
+        shipmentError: null,
+        historySeq: seq,
+        updatedAt: now,
+      });
+      tx.set(ref.collection(HISTORY).doc(String(seq)), {
+        seq, from: o.status, to: o.status, event: 'shipment_created', actor: WO.ACTOR.SYSTEM, actorId: null,
+        reason: '', meta: { shipmentId: r.shipmentId, trackingNumber: r.trackingNumber, cancelled: !!cancel }, at: now,
+      });
+      if (cancel) cancel(now, 'wholesale_order_cancelled');
+      return { already: false, shipmentId: r.shipmentId, cancelled: !!cancel };
+    });
+    log('ensureShipment', {
+      result: out.already ? 'already' : 'ok', orderId, shipmentId: out.shipmentId,
+      duplicateShipment: r.duplicate, cancelled: !!out.cancelled, durationMs: Date.now() - started,
+    });
+    return { linked: !out.already, shipmentId: out.shipmentId, trackingNumber: r.trackingNumber, cancelled: !!out.cancelled };
+  } catch (e) {
+    const code = String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64);
+    const now = nowFn ? nowFn() : new Date();
+    let rec = null;
+    try {
+      rec = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref);
+        const o = s.data() || {};
+        if (o.shipment && o.shipment.shipmentId) return null;
+        const prev = o.shipmentError && isInt(o.shipmentError.attempts) ? o.shipmentError.attempts : 0;
+        const attempts = prev + 1;
+        const err = { code, at: now, attempts, final: attempts >= SHIPMENT_MAX_ATTEMPTS };
+        tx.update(ref, { shipmentError: err, updatedAt: now });
+        return err;
+      });
+    } catch (e2) {
+      rec = null;
+    }
+    console.error(JSON.stringify({
+      module: 'wholesale_orders', action: 'ensureShipment', result: 'failed', orderId,
+      errorCode: code, attempts: rec ? rec.attempts : null, final: rec ? rec.final : null,
+      message: String((e && e.message) || e).slice(0, 200), durationMs: Date.now() - started,
+    }));
+    return { failed: true, code, attempts: rec ? rec.attempts : null, final: rec ? rec.final : null };
+  }
+}
+
+/** Trigger: `wholesale_orders/{id}` onCreate. */
+async function onWholesaleOrderCreated(deps, data, orderId) {
+  if ((data || {}).status !== WO.STATUS.PLACED) return { skipped: 'not_placed' };
+  return ensureWholesaleShipment(deps, orderId);
+}
+
+/**
+ * Reconcile: `placed` + `shipment == null` (ikki tenglik filtri — yangi kompozit
+ * indeks kerak emas) + 2 daqiqadan eski + `final` emas. Har chaqiruv idempotent.
+ */
+async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LIMIT, minAgeMs = SHIPMENT_RECONCILE_MIN_AGE_MS } = {}) {
+  const { db, now: nowFn } = deps;
+  const nowMs = (nowFn ? nowFn() : new Date()).getTime();
+  const out = {
+    checked: 0, linked: 0, failed: 0, final: 0, young: 0,
+  };
+  const snap = await db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null).limit(limit).get();
+  for (const d of snap.docs) {
+    const o = d.data() || {};
+    const err = o.shipmentError || null;
+    if (err && (err.final === true || (isInt(err.attempts) && err.attempts >= SHIPMENT_MAX_ATTEMPTS))) {
+      out.final += 1;
+      continue;
+    }
+    const at = msOf(o.createdAt) || 0;
+    if (nowMs - at < minAgeMs) { out.young += 1; continue; } // trigger hali ishlayotgan bo'lishi mumkin
+    out.checked += 1;
+    const r = await ensureWholesaleShipment(deps, d.id);
+    if (r.linked) out.linked += 1;
+    else if (r.failed) out.failed += 1;
+  }
+  log('reconcileShipments', { result: 'ok', ...out });
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -510,4 +713,10 @@ module.exports = {
   makeQuoteWholesaleOrder,
   makeCancelWholesaleOrder,
   makeSetWholesaleOrderSettings,
+  SHIPMENT_MAX_ATTEMPTS,
+  SHIPMENT_RECONCILE_MIN_AGE_MS,
+  shipmentInputFromOrder,
+  ensureWholesaleShipment,
+  onWholesaleOrderCreated,
+  reconcileWholesaleShipments,
 };

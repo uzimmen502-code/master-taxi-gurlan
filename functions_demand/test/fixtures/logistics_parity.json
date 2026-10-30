@@ -142,7 +142,18 @@
     "incident_missing",
     "loss_not_settled",
     "nothing_outstanding",
-    "op_id_reused"
+    "op_id_reused",
+    "wholesale_managed",
+    "idempotency_key",
+    "owner_required",
+    "recipient_required",
+    "recipient_is_owner",
+    "source_required",
+    "points_missing",
+    "price_snapshot_invalid",
+    "price_snapshot_mismatch",
+    "tariff_version_missing",
+    "tariff_version_mismatch"
   ],
   "docs": {
     "createResult": {

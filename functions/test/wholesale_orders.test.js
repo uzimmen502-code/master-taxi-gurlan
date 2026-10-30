@@ -14,6 +14,10 @@
  *   - REFUND (trigger): pul + qoldiq BIR MARTA (takror va parallel chaqiruvda ham)
  *   - reconcile: 10 daqiqadan eski `pending` qaytariladi, yangisi kutadi
  *   - Σdr == Σcr, aktiv == passiv, passenger_credit == bonusBalance
+ *   - 3-bosqich: SHIP_FUND (escrow:wholesale → escrow:{shipment}, placed → in_delivery) →
+ *     custody delivery → relay RELEASE + tovar RELEASE (sotuvchi + AVA ulushi), eskroular 0;
+ *     takror/parallel hodisa — bir marta; narx mos emas — anomaliya; haq o'tgach to'liq qaytarish
+ *     yo'q; reconcile; sotuvchi relay FUND qila olmaydi; relay REFUND → escrow:wholesale
  */
 'use strict';
 const assert = require('assert');
@@ -45,6 +49,19 @@ const api = W.attachWholesaleOrders({}, {
   now: () => clock,
 });
 const ctx = (phone) => ({ auth: { token: { phone_number: `+${phone}` } } });
+// 3-bosqich: relay eskrou HAQIQIY modul bilan (custody triggeri tovar pulini chaqiradi).
+const relay = require('../relay_escrow');
+const relayApi = relay.attachRelayEscrow({}, {
+  functions, db, admin,
+  callerPhone: (c) => digits(c.auth.token.phone_number),
+  canonicalUid: (v) => { const d = digits(v); return d.length === 9 ? `998${d}` : d; },
+  settlementLedger,
+  notifyUserInApp: async () => {},
+  requireCallerRoles: async () => { throw new Error('not used'); },
+  now: () => clock,
+  wholesaleOrders: api,
+});
+const K1 = '998902220002';
 
 const results = [];
 const check = async (name, fn) => {
@@ -395,6 +412,261 @@ async function demandFlip(orderId, to) {
     assert.strictEqual(await bal(pcOf(BUYER)), 600000);
     assert.strictEqual((await stockOf()).packs.p1, 100);
     await assertLedgerSound();
+  });
+
+  // ── 3-BOSQICH: SHIP_FUND → (custody delivery) → relay RELEASE + tovar RELEASE ──
+  const SHIP = 'S1';
+  const shipOf = async (id = SHIP) => (await db.collection('shipments').doc(id).get()).data();
+  /** Demand `createShipmentInternal` yozadigan jo'natma (narx — muhr: 60 000, ichki: 12 000 + 48 000). */
+  async function seedShipment(orderId, { price = 60000, id = SHIP } = {}) {
+    await db.collection('shipments').doc(id).set({
+      orderId: `lo_${orderId}`, ownerId: SELLER, recipientId: BUYER, source: 'wholesale', wholesaleOrderId: orderId,
+      trackingNumber: 'AVA-26-1031-000001', status: 'awaiting_payment', paymentStatus: 'pending',
+      priceSnapshot: { customerPrice: price, tariffVersion: 3, declaredValue: 140000 }, legIds: ['leg0'], legCount: 1,
+      createdAt: clock, updatedAt: clock,
+    });
+    await db.collection('shipments').doc(id).collection('private').doc('internal').set({
+      platformShare: 12000, providerPool: 48000, legPayouts: [{ index: 0, kind: 'direct', amount: 48000 }], tariffVersion: 3,
+    });
+  }
+  /** Demand `onWholesaleOrderCreated` bog'lanishi → default onUpdate triggeri. */
+  async function link(orderId, id = SHIP) {
+    const ref = db.collection('wholesale_orders').doc(orderId);
+    const before = (await ref.get()).data();
+    await ref.update({ shipment: { shipmentId: id, orderId: `lo_${orderId}`, trackingNumber: 'AVA-26-1031-000001', createdAt: clock }, historySeq: 2 });
+    return { before, after: (await ref.get()).data() };
+  }
+  /** Demand `confirmDelivery` yozadigan holat + custody hodisasi. */
+  async function deliver(id = SHIP) {
+    await db.collection('shipments').doc(id).update({ status: 'delivered', deliveredAt: clock, updatedAt: clock });
+    return {
+      shipmentId: id, legId: 'leg0', orderId: `lo_x`, ownerId: SELLER, trackingNumber: 'AVA-26-1031-000001', kind: 'delivery',
+      completesLegId: 'leg0', completedLegProviderId: K1, completedLegPayout: 48000, legIndex: 0, legCount: 1, deliversShipment: true,
+    };
+  }
+  const historyOf = async (id) => (await db.collection('wholesale_orders').doc(id).collection('history').get()).docs.map((d) => d.data());
+
+  await check('paritet (3-bosqich): in_delivery/delivered nomlari demand jadvali bilan bir xil; hisob turlari', async () => {
+    assert.strictEqual(W.STATUS.IN_DELIVERY, WO.STATUS.IN_DELIVERY);
+    assert.strictEqual(W.STATUS.DELIVERED, WO.STATUS.DELIVERED);
+    assert.ok(WO.canActorTransition('system', WO.STATUS.PLACED, WO.STATUS.IN_DELIVERY));
+    assert.ok(WO.canActorTransition('system', WO.STATUS.IN_DELIVERY, WO.STATUS.DELIVERED));
+    assert.ok(!WO.canActorTransition('buyer', WO.STATUS.IN_DELIVERY, WO.STATUS.CANCELLED), 'yetkazish ochilgach xaridor bekor qilmaydi');
+    assert.strictEqual(W.shipmentEscrowAccount('S'), relay.escrowAccount('S'), 'relay eskrou nomi bilan bir xil');
+    assert.strictEqual(settlementLedger.accountTypeOf(W.AVA_FEE_ACCOUNT), 'liability');
+  });
+
+  await check('TO\'LIQ OQIM: place → SHIP_FUND → custody delivery → relay RELEASE + tovar RELEASE; balanslar, eskroular 0', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    const { before, after } = await link(id);
+    const r1 = await api.onStatusChange(before, after, id);
+    assert.strictEqual(r1.funded, 60000, JSON.stringify(r1));
+    assert.strictEqual(await bal(W.escrowAccount(id)), 140000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 60000);
+    const s1 = await shipOf();
+    assert.deepStrictEqual([s1.paymentStatus, s1.status, s1.escrowAmount, s1.escrowEntryId], ['escrow_funded', 'ready', 60000, W.shipFundKey(id)]);
+    let o = await orderOf(id);
+    assert.strictEqual(o.status, 'in_delivery');
+    assert.strictEqual(o.payment.deliveryFunded, true);
+    assert.strictEqual(o.payment.status, 'held');
+    const j = (await db.collection(settlementLedger.COL_JOURNAL).doc(W.shipFundKey(id)).get()).data();
+    // postEntry oyoqlarni normallashtiradi ({account, dr, cr}).
+    assert.deepStrictEqual(j.legs, [
+      { account: W.escrowAccount(id), dr: 60000, cr: 0 }, { account: relay.escrowAccount(SHIP), dr: 0, cr: 60000 },
+    ]);
+    // takror trigger / to'g'ridan-to'g'ri chaqiruv — ikkinchi o'tkazma YO'Q
+    assert.strictEqual((await api.onStatusChange(before, after, id)).skipped, 'already_funded');
+    assert.strictEqual((await api.shipFund(id)).skipped, 'already_funded');
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 60000);
+
+    const ev = await deliver();
+    const out = await relayApi.onCustodyEvent(ev);
+    assert.strictEqual(out.release.released, 60000);
+    assert.strictEqual(out.wholesale.released, 140000, JSON.stringify(out.wholesale));
+    // Yakuniy balanslar
+    assert.strictEqual(await bal(pcOf(BUYER)), 100000, 'xaridor −total');
+    assert.strictEqual(await bonusOf(BUYER), 100000);
+    assert.strictEqual(await bal(pcOf(SELLER)), 136500, 'sotuvchi +sellerPayout');
+    assert.strictEqual(await bonusOf(SELLER), 136500, 'sotuvchi hamyoni ko\'zgusi');
+    assert.strictEqual(await bal(W.AVA_FEE_ACCOUNT), 3500, 'AVA ulushi');
+    assert.strictEqual(await bal(W.escrowAccount(id)), 0, 'escrow:wholesale AYNAN 0');
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0, 'escrow:{shipment} 0 (relay RELEASE)');
+    assert.strictEqual(await bal(relay.PLATFORM_FEE_ACCOUNT), 12000);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000);
+    assert.strictEqual(await bal(relay.ACCRUAL_ACCOUNT), 0);
+    o = await orderOf(id);
+    assert.strictEqual(o.status, 'delivered');
+    assert.strictEqual(o.payment.status, 'released');
+    assert.strictEqual(o.payment.releaseEntryId, W.releaseKey(id));
+    assert.strictEqual((await shipOf()).paymentStatus, 'settled');
+    const jr = (await db.collection(settlementLedger.COL_JOURNAL).doc(W.releaseKey(id)).get()).data();
+    assert.deepStrictEqual(jr.legs, [
+      { account: W.escrowAccount(id), dr: 140000, cr: 0 },
+      { account: pcOf(SELLER), dr: 0, cr: 136500 },
+      { account: W.AVA_FEE_ACCOUNT, dr: 0, cr: 3500 },
+    ]);
+    const wl = (await db.collection('users').doc(SELLER).collection('wallet_ledger').where('type', '==', 'wholesale_payout').get()).docs.map((d) => d.data());
+    assert.strictEqual(wl.length, 1);
+    assert.strictEqual(wl[0].amount, 136500);
+    const h = await historyOf(id);
+    assert.deepStrictEqual(h.filter((x) => x.event).map((x) => x.event).sort(), ['goods_released', 'ship_funded']);
+    assert.ok(h.some((x) => x.from === 'in_delivery' && x.to === 'delivered' && x.actor === 'system'));
+    // TAKROR hodisa (at-least-once) va reconcile — ikki marta to'lanmaydi
+    const out2 = await relayApi.onCustodyEvent(ev);
+    assert.strictEqual(out2.wholesale.skipped, 'already_released');
+    assert.strictEqual((await api.releaseGoods(id)).skipped, 'already_released');
+    clock = new Date(T0.getTime() + 60 * 60 * 1000);
+    const rc = await api.reconcile();
+    assert.deepStrictEqual([rc.shipFunded, rc.released], [0, 0]);
+    assert.strictEqual(await bal(pcOf(SELLER)), 136500);
+    assert.strictEqual(await bal(W.AVA_FEE_ACCOUNT), 3500);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 0);
+    await assertLedgerSound();
+  });
+
+  await check('parallel tovar RELEASE ×3 — bitta to\'lov', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await link(id);
+    assert.strictEqual((await api.shipFund(id)).funded, 60000);
+    await deliver();
+    const rs = await Promise.allSettled([api.releaseGoods(id), api.releaseGoods(id), api.releaseGoods(id)]);
+    const paid = rs.filter((x) => x.status === 'fulfilled' && x.value.released && !x.value.idempotent).length;
+    assert.strictEqual(paid, 1, JSON.stringify(rs.map((x) => x.value || x.reason.message)));
+    assert.strictEqual(await bal(pcOf(SELLER)), 136500);
+    assert.strictEqual(await bonusOf(SELLER), 136500);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 0);
+    await assertLedgerSound();
+  });
+
+  await check('deliveryFee ≠ customerPrice → anomaliya, pul YO\'Q; trigger qayta aylanmaydi', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id, { price: 59999 });
+    const { before, after } = await link(id);
+    const r = await api.onStatusChange(before, after, id);
+    assert.deepStrictEqual([r.skipped, r.anomaly], ['delivery_fee_mismatch', true]);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 200000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    assert.strictEqual((await db.collection(settlementLedger.COL_JOURNAL).doc(W.shipFundKey(id)).get()).exists, false);
+    const o = await orderOf(id);
+    assert.strictEqual(o.status, 'placed');
+    assert.strictEqual(o.shipFundAnomaly.code, 'delivery_fee_mismatch');
+    const s = await shipOf();
+    assert.deepStrictEqual([s.status, s.paymentStatus], ['awaiting_payment', 'pending']);
+    // Belgi yozuvi triggerni yana chaqiradi — u qayta urinmaydi (reconcile urinadi).
+    assert.strictEqual((await api.onStatusChange(after, o, id)).skipped, 'no_refund_needed');
+    await assertLedgerSound();
+  });
+
+  await check('himoya: yetkazish haqi o\'tgan buyurtmada to\'liq qaytarish ISHLAMAYDI (pul ikki marta qaytmaydi)', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await link(id);
+    await api.shipFund(id);
+    // Admin oqimi (5-bosqich) hali yo'q — kimdir holatni majburan o'zgartirgan holat.
+    await db.collection('wholesale_orders').doc(id).update({ status: 'cancelled', refundStatus: 'pending', statusUpdatedAt: clock });
+    const r = await api.refundOrder(id);
+    assert.deepStrictEqual([r.skipped, r.anomaly], ['delivery_funded', true]);
+    const r2 = await api.onStatusChange({}, await orderOf(id), id);
+    assert.strictEqual(r2.skipped, 'delivery_funded');
+    assert.strictEqual(await bal(pcOf(BUYER)), 100000, 'xaridorga qaytmadi');
+    assert.strictEqual(await bal(W.escrowAccount(id)), 140000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 60000);
+    assert.strictEqual((await orderOf(id)).refundStatus, 'pending');
+    await assertLedgerSound();
+  });
+
+  await check('xaridor haq o\'tmasdan bekor qilsa — SHIP_FUND o\'tkazilmaydi, qaytarish to\'liq', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await link(id);
+    const after = await demandFlip(id, 'cancelled');
+    assert.strictEqual((await api.shipFund(id)).skipped, 'status_cancelled');
+    const r = await api.onStatusChange({}, after, id);
+    assert.strictEqual(r.refunded, 200000);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 0);
+    await assertLedgerSound();
+  });
+
+  await check('reconcile: qotgan SHIP_FUND (>10 daq) va qotgan RELEASE (>10 daq) qayta urinadi; yoshlari kutadi', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await link(id); // trigger «yiqilgan» — chaqirilmaydi
+    clock = new Date(T0.getTime() + 5 * 60 * 1000);
+    let r = await api.reconcile();
+    assert.deepStrictEqual([r.shipFundChecked, r.shipFunded], [0, 0]);
+    clock = new Date(T0.getTime() + 11 * 60 * 1000);
+    r = await api.reconcile();
+    assert.deepStrictEqual([r.shipFundChecked, r.shipFunded], [1, 1]);
+    assert.strictEqual((await orderOf(id)).status, 'in_delivery');
+    await deliver(); // deliveredAt = T0+11; custody triggeri «yiqilgan»
+    await relayApi.releaseEscrow(SHIP);
+    clock = new Date(T0.getTime() + 15 * 60 * 1000);
+    r = await api.reconcile();
+    assert.deepStrictEqual([r.releaseChecked, r.released], [0, 0]);
+    clock = new Date(T0.getTime() + 22 * 60 * 1000);
+    r = await api.reconcile();
+    assert.deepStrictEqual([r.releaseChecked, r.released, r.failed], [1, 1, 0]);
+    r = await api.reconcile();
+    assert.deepStrictEqual([r.releaseChecked, r.released], [0, 0]);
+    assert.strictEqual((await orderOf(id)).status, 'delivered');
+    assert.strictEqual(await bal(pcOf(SELLER)), 136500);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 0);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    await assertLedgerSound();
+  });
+
+  await check('relay: sotuvchi fundShipmentEscrow bilan to\'lay olmaydi; refund_pending — pul escrow:wholesale ga qaytadi (sotuvchiga emas)', async () => {
+    await seed();
+    await topup(SELLER, 100000);
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    const e = await expectErr(relayApi.fund({ shipmentId: SHIP }, ctx(SELLER)), 'permission-denied');
+    assert.strictEqual(e.details.reason, 'wholesale_managed');
+    assert.strictEqual(await bal(pcOf(SELLER)), 100000);
+    await link(id);
+    await api.shipFund(id);
+    await db.collection('shipments').doc(SHIP).update({ paymentStatus: 'refund_pending', status: 'cancelled' });
+    const rr = await relayApi.refundEscrow(SHIP);
+    assert.strictEqual(rr.refunded, 60000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 200000, 'xaridorning buyurtma eskrousiga qaytdi');
+    assert.strictEqual(await bal(pcOf(SELLER)), 100000, 'sotuvchi hamyoniga TUSHMADI');
+    assert.strictEqual(await bonusOf(SELLER), 100000);
+    await assertLedgerSound();
+  });
+
+  await check('tovar RELEASE: jo\'natma yetkazilmagan — kutadi; sotuvchi hamyoni yo\'q — anomaliya, pul YO\'Q', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await link(id);
+    await api.shipFund(id);
+    assert.strictEqual((await api.releaseGoods(id)).skipped, 'shipment_ready');
+    // Yo'qolgan posilka `lost → closed` (deliveredAt yo'q, loss_settled) — tovar puli sotuvchiga KETMAYDI.
+    await db.collection('shipments').doc(SHIP).update({ status: 'closed', paymentStatus: 'loss_settled', updatedAt: clock });
+    assert.strictEqual((await api.releaseGoods(id)).skipped, 'shipment_closed');
+    assert.strictEqual((await api.onShipmentDelivered(SHIP)).skipped, 'shipment_closed');
+    clock = new Date(T0.getTime() + 60 * 60 * 1000);
+    assert.strictEqual((await api.reconcile()).releaseChecked, 0);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 140000);
+    await db.collection('shipments').doc(SHIP).update({ status: 'in_transit', paymentStatus: 'escrow_funded' });
+    await deliver();
+    await db.collection('users').doc(SELLER).delete();
+    const r = await api.releaseGoods(id);
+    assert.deepStrictEqual([r.skipped, r.anomaly], ['seller_wallet_missing', true]);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 140000);
+    assert.strictEqual((await orderOf(id)).releaseAnomaly.code, 'seller_wallet_missing');
+    assert.strictEqual((await orderOf(id)).status, 'in_delivery');
   });
 
   const failed = results.filter((r) => !r.pass).length;

@@ -63,16 +63,19 @@ const { attachModuleConfig } = require('./module_config');
 attachModuleConfig(exports, { functions, db, admin, callerPhone, canonicalUid });
 // AVA Logistics eskrou (D-11): pul faqat ledger orqali — u shu yerda;
 // ORDER/SHIPMENT/LEG/custody `functions_demand` da (relay hujjati 7.6).
+// Ulgurji buyurtma zanjiri (docs/ulgurji_buyurtma_zanjiri_uz.md): 2-bosqich — pul ushlash
+// (escrow:wholesale:{id}) + qoldiq −N bitta tranzaksiyada; bekor → qaytarish + qoldiq +N.
+// 3-bosqich — yetkazish haqi → relay eskrou (wholesaleShipFund), yetkazilganda tovar puli
+// sotuvchiga (wholesaleRelease, relay custody triggeri orqali — shuning uchun relay'dan OLDIN).
+// Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
+const { attachWholesaleOrders } = require('./wholesale_orders');
+const wholesaleOrders = attachWholesaleOrders(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+});
 const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
-});
-// Ulgurji buyurtma zanjiri, 2-bosqich (docs/ulgurji_buyurtma_zanjiri_uz.md): pul ushlash
-// (escrow:wholesale:{id}) + qoldiq −N bitta tranzaksiyada; rad/bekor → qaytarish + qoldiq +N.
-// Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
-const { attachWholesaleOrders } = require('./wholesale_orders');
-attachWholesaleOrders(exports, {
-  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+  wholesaleOrders,
 });
 // Mijoz tasdig'i — «Oldim» / «Berdim» (D2/D7, ega qarori 2026-10-16): AVA kuryeri
 // oqimlarida kuryer qadamini mijoz O'Z qurilmasida tasdiqlaydi. Sozlama faqat server:

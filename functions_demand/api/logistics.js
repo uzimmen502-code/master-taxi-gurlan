@@ -123,7 +123,7 @@ async function validatePoint(db, raw, name) {
  * Yangi qoida FAQAT shu yerda (quote ham, create ham shu validatsiyadan o'tadi);
  * `quoteParcel` toza hisob funksiyasi bo'lib qoladi (paritet fixturasi 0 ni ishlatadi).
  */
-function validateParcel(raw, i) {
+function validateParcel(raw, i, opts = {}) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = {
     actualWeightG: p.actualWeightG,
@@ -134,7 +134,18 @@ function validateParcel(raw, i) {
     description: String(p.description || '').slice(0, 200),
     fragile: p.fragile === true,
   };
-  for (const k of ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
+  // `dimsOptional` — FAQAT ichki yordamchi (`createShipmentInternal`, Ulgurji buyurtmasi):
+  // ko'p donali qadoqning umumiy o'lchami noma'lum (`tariff.quoteParcel` izohi). Uchala
+  // o'lcham ham yo'q bo'lsa — null; qisman berilsa odatdagidek tekshiriladi. Klient
+  // callable'lari (`createLogisticsOrder`, kotirovka) bu bayroqsiz — o'lcham MAJBURIY.
+  const noDims = opts.dimsOptional === true
+    && [out.lengthCm, out.widthCm, out.heightCm].every((x) => x === undefined || x === null);
+  if (noDims) {
+    out.lengthCm = null;
+    out.widthCm = null;
+    out.heightCm = null;
+  }
+  for (const k of noDims ? ['actualWeightG'] : ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
     if (!isPosInt(out[k])) throw fail('invalid-argument', `parcels[${i}].${k} musbat butun son bo'lishi kerak`, 'parcel_invalid');
   }
   if (out.declaredValue === undefined || out.declaredValue === null || out.declaredValue === '') {
@@ -153,7 +164,8 @@ function validateParcels(raw) {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_PARCELS) {
     throw fail('invalid-argument', `parcels 1..${MAX_PARCELS}`, 'parcels_count');
   }
-  return raw.map(validateParcel);
+  // Lambda ATAYLAB: `map` uchinchi argument (massiv) beradi — u `opts` bo'lib qolmasin.
+  return raw.map((p, i) => validateParcel(p, i));
 }
 
 function validateRecipient(raw) {
@@ -315,6 +327,9 @@ function buildLegDemand({
         heightCm: snap.heightCm,
         fragile: parcel.fragile === true,
       },
+      // Ulgurji buyurtmasi jo'natmasi (3-bosqich): LEG egasi (sotuvchi) uni
+      // `cancelDemand`/`acceptOffer` bilan boshqara olmasin. Oddiy jo'natmada YO'Q.
+      ...(shipment.wholesaleOrderId ? { wholesaleOrderId: shipment.wholesaleOrderId } : {}),
     },
     payerSide: 'sender',
     termsAcceptedAt: order.termsAcceptedAt || null,
@@ -355,6 +370,80 @@ async function reserveTrackingSeq(db, now, count) {
     tx.set(ref, { seq: cur + count, updatedAt: now }, { merge: true });
     return cur + 1;
   });
+}
+
+/**
+ * BITTA SHIPMENT yozuvlari — `createLogisticsOrder` va `createShipmentInternal`
+ * uchun YAGONA manba (nusxa yo'q, CLAUDE.md 4/7): shipment + private/secrets +
+ * private/internal (ichki ulush, 14-band) + route_plans v1 + LEG(draft) + LEG stats.
+ * `shipmentExtra` faqat berilganda qo'shiladi — oddiy jo'natma shakli o'zgarmaydi
+ * (paritet fixturasi). `write` — batch (set).
+ */
+function addShipmentWrites(write, {
+  db, now, order, ownerId, tariff, origin, destination, recipientName, parcel, priceSnapshot,
+  trackingNumber, adapter, ttl, shipmentExtra,
+}) {
+  const shipmentRef = db.collection(L.SHIPMENTS).doc();
+  const legRef = db.collection(DEMANDS).doc();
+  const qrSecret = L.newQrSecret();
+  const shipment = {
+    orderId: order.id,
+    ownerId,
+    trackingNumber,
+    status: L.SHIPMENT_STATUS.AWAITING_PAYMENT,
+    paymentStatus: L.PAYMENT_STATUS.PENDING,
+    origin,
+    destination,
+    recipientName,
+    parcel,
+    /** D-8: narx muhrlangan — tarif keyin o'zgarsa bu o'zgarmaydi. */
+    priceSnapshot,
+    currentCustodian: { kind: L.CUSTODIAN_KIND.SENDER, id: ownerId, since: now },
+    currentLegId: null,
+    routePlanVersion: 1,
+    legIds: [legRef.id],
+    legCount: 1,
+    assignedProviderIds: [],
+    custodyCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    ...(shipmentExtra || {}),
+  };
+  const route = buildRoute({
+    tariff, shipment, version: 1,
+    points: [{ from: origin, to: destination }],
+  });
+  const leg = route.legs[0];
+
+  write.set(shipmentRef, shipment);
+  write.set(shipmentRef.collection('private').doc('secrets'), { qrSecret, createdAt: now });
+  // ICHKI qatlam — mijoz o'qimaydi (qoida: private/* yopiq).
+  write.set(shipmentRef.collection('private').doc('internal'), {
+    platformShare: route.split.platformShare,
+    providerPool: route.split.providerPool,
+    legPayouts: route.split.legPayouts,
+    tariffVersion: tariff.version,
+    updatedAt: now,
+  });
+  write.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id), {
+    shipmentId: shipmentRef.id, currentVersion: 1, updatedAt: now,
+  });
+  write.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id).collection('versions').doc('1'), {
+    version: 1,
+    legs: route.legs.map((l) => ({ ...l, legId: legRef.id })),
+    reason: 'initial',
+    createdBy: 'system',
+    createdAt: now,
+    supersededAt: null,
+  });
+  write.set(legRef, buildLegDemand({
+    ownerId, order, shipment, shipmentId: shipmentRef.id, leg,
+    legIndex: 0, legCount: 1, legIds: [legRef.id], adapter, now, ttlMinutes: ttl,
+  }));
+  write.set(legRef.collection('private').doc('stats'), {
+    matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
+  });
+  return { shipmentId: shipmentRef.id, legId: legRef.id, split: route.split };
 }
 
 function makeCreateLogisticsOrder(deps) {
@@ -398,67 +487,23 @@ function makeCreateLogisticsOrder(deps) {
     };
 
     for (let i = 0; i < q.parcels.length; i += 1) {
-      const shipmentRef = db.collection(L.SHIPMENTS).doc();
-      const legRef = db.collection(DEMANDS).doc();
       const trackingNumber = L.formatTrackingNumber(now, seqStart + i);
-      const qrSecret = L.newQrSecret();
-      const shipment = {
-        orderId: orderRef.id,
+      const w = addShipmentWrites(batch, {
+        db,
+        now,
+        order,
         ownerId,
-        trackingNumber,
-        status: L.SHIPMENT_STATUS.AWAITING_PAYMENT,
-        paymentStatus: L.PAYMENT_STATUS.PENDING,
+        tariff: q.tariff,
         origin: q.origin,
         destination: q.destination,
         recipientName: recipient.name,
         parcel: q.parcels[i],
-        /** D-8: narx muhrlangan — tarif keyin o'zgarsa bu o'zgarmaydi. */
         priceSnapshot: { ...q.quotes[i], calculatedAt: now },
-        currentCustodian: { kind: L.CUSTODIAN_KIND.SENDER, id: ownerId, since: now },
-        currentLegId: null,
-        routePlanVersion: 1,
-        legIds: [legRef.id],
-        legCount: 1,
-        assignedProviderIds: [],
-        custodyCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const route = buildRoute({
-        tariff: q.tariff, shipment, version: 1,
-        points: [{ from: q.origin, to: q.destination }],
+        trackingNumber,
+        adapter,
+        ttl,
       });
-      const leg = route.legs[0];
-
-      batch.set(shipmentRef, shipment);
-      batch.set(shipmentRef.collection('private').doc('secrets'), { qrSecret, createdAt: now });
-      // ICHKI qatlam — mijoz o'qimaydi (qoida: private/* yopiq).
-      batch.set(shipmentRef.collection('private').doc('internal'), {
-        platformShare: route.split.platformShare,
-        providerPool: route.split.providerPool,
-        legPayouts: route.split.legPayouts,
-        tariffVersion: q.tariff.version,
-        updatedAt: now,
-      });
-      batch.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id), {
-        shipmentId: shipmentRef.id, currentVersion: 1, updatedAt: now,
-      });
-      batch.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id).collection('versions').doc('1'), {
-        version: 1,
-        legs: route.legs.map((l) => ({ ...l, legId: legRef.id })),
-        reason: 'initial',
-        createdBy: 'system',
-        createdAt: now,
-        supersededAt: null,
-      });
-      batch.set(legRef, buildLegDemand({
-        ownerId, order, shipment, shipmentId: shipmentRef.id, leg,
-        legIndex: 0, legCount: 1, legIds: [legRef.id], adapter, now, ttlMinutes: ttl,
-      }));
-      batch.set(legRef.collection('private').doc('stats'), {
-        matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
-      });
-      shipmentIds.push(shipmentRef.id);
+      shipmentIds.push(w.shipmentId);
       trackingNumbers.push(trackingNumber);
     }
 
@@ -511,6 +556,169 @@ function makeCreateLogisticsOrder(deps) {
       paymentStatus: L.PAYMENT_STATUS.PENDING,
       duplicate: false,
     };
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ICHKI YARATISH — boshqa modul (Ulgurji buyurtmasi, 3-bosqich) uchun
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Callable EMAS (server triggeri chaqiradi). `createLogisticsOrder` bilan BITTA
+ * yozuv manbasi (`addShipmentWrites`), farqlari:
+ *   - narx QAYTA HISOBLANMAYDI: chaqiruvchi modul muhrlagan `priceSnapshot`
+ *     (D-8, 9-band); ichki ulush (platformShare/pool/legPayouts) — o'sha
+ *     muhrlangan `tariffVersion` hujjatidan (`adminPlanShipmentRoute` naqshi).
+ *     Versiya hujjati yo'q — `tariff_version_missing` (taxmin yo'q);
+ *   - logistika jo'natuvchi darvozasi (`requireEnabled`) YO'Q: chaqiruvchi
+ *     modul o'z darvozasini o'tkazgan (Ulgurji — kvotada). LEG ochilishi,
+ *     matching va push esa `module_config/logistics_all` ga BO'YSUNADI
+ *     (`activateLeg`: enabled/matchingEnabled/pushEnabled, ijrochi bosqichi);
+ *   - o'lchamsiz posilka mumkin (`validateParcel` `dimsOptional`);
+ *   - `recipientId` (qabul qiluvchi AVA foydalanuvchisi — `getShipmentSecrets`
+ *     yetkazish kodini UNGA beradi), `source`, `extra` — shipment va ORDER'da.
+ * Idempotent: `demand_idempotency/{idempotencyKey}` AYNI batch'da `create()` —
+ * trigger qayta ishlasa / parallel chaqirilsa ham BITTA jo'natma (yutqazgan
+ * chaqiruv g'olib natijasini oladi; tracking raqamida tirqish bo'lishi mumkin).
+ * Pul YO'Q: `paymentStatus: pending` (eskrouni default codebase yozadi).
+ */
+async function createShipmentInternal(deps, input) {
+  const { db, now: nowFn } = deps;
+  const now = nowFn ? nowFn() : new Date();
+  const p = input || {};
+  const key = String(p.idempotencyKey || '');
+  if (!/^[A-Za-z0-9_-]{8,200}$/.test(key)) throw fail('invalid-argument', 'idempotencyKey', 'idempotency_key');
+  const idemRef = db.collection(IDEMPOTENCY).doc(key);
+  const dup = (d) => ({
+    orderId: d.orderId, shipmentId: (d.shipmentIds || [])[0] || null,
+    trackingNumber: (d.trackingNumbers || [])[0] || null, duplicate: true,
+  });
+  const idem = await idemRef.get();
+  if (idem.exists) return dup(idem.data() || {});
+
+  const ownerId = toCanonicalId(p.ownerId || '');
+  if (!ownerId) throw fail('invalid-argument', 'Jo\'natuvchi', 'owner_required');
+  const recipientId = toCanonicalId(p.recipientId || '');
+  if (!recipientId) throw fail('invalid-argument', 'Qabul qiluvchi', 'recipient_required');
+  if (recipientId === ownerId) throw fail('invalid-argument', 'Jo\'natuvchi = qabul qiluvchi', 'recipient_is_owner');
+  const recipient = { name: String((p.recipient || {}).name || '').trim().slice(0, 80), phone: recipientId };
+  const source = String(p.source || '');
+  if (!/^[a-z_]{2,32}$/.test(source)) throw fail('invalid-argument', 'source', 'source_required');
+  const origin = p.origin;
+  const destination = p.destination;
+  if (!origin || !GEO_ID_RE.test(String(origin.regionId || ''))
+    || !destination || !GEO_ID_RE.test(String(destination.regionId || ''))) {
+    throw fail('failed-precondition', 'Manzil yo\'q', 'points_missing');
+  }
+  const parcel = validateParcel(p.parcel, 0, { dimsOptional: true });
+  const snap = p.priceSnapshot && typeof p.priceSnapshot === 'object' ? p.priceSnapshot : {};
+  if (!isPosInt(snap.customerPrice) || !isPosInt(snap.tariffVersion)) {
+    throw fail('failed-precondition', 'Muhrlangan narx yo\'q', 'price_snapshot_invalid');
+  }
+  // Muhr posilkaga mos (vazn/qiymat) — boshqa posilkaning narxi bilan jo'natma ochilmasin.
+  if (snap.actualWeightG !== parcel.actualWeightG || (snap.declaredValue || 0) !== parcel.declaredValue) {
+    throw fail('failed-precondition', 'Muhrlangan narx posilkaga mos emas', 'price_snapshot_mismatch');
+  }
+  const tSnap = await db.collection(tariffCore.COLLECTION).doc(tariffCore.versionDocId(snap.tariffVersion)).get();
+  if (!tSnap.exists) throw fail('failed-precondition', 'Muhrlangan tarif versiyasi topilmadi', 'tariff_version_missing');
+  const tariff = tSnap.data() || {};
+  if (Number(tariff.version) !== snap.tariffVersion) {
+    throw fail('failed-precondition', 'Tarif versiyasi mos emas', 'tariff_version_mismatch');
+  }
+  const adapter = getAdapter(L.MODULE);
+  if (!adapter) throw fail('unimplemented', 'logistics adapteri ulanmagan');
+  const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
+  const ttl = Number((config.logistics || {}).legTtlMinutes) || 3 * 24 * 60;
+  const extra = p.extra && typeof p.extra === 'object' ? p.extra : {};
+  const pricedAt = p.pricedAt || now;
+
+  const seqStart = await reserveTrackingSeq(db, now, 1);
+  const trackingNumber = L.formatTrackingNumber(now, seqStart);
+  const orderRef = db.collection(L.ORDERS).doc();
+  const order = { id: orderRef.id, ownerId, termsAcceptedAt: null };
+  const batch = db.batch();
+  const w = addShipmentWrites(batch, {
+    db,
+    now,
+    order,
+    ownerId,
+    tariff,
+    origin,
+    destination,
+    recipientName: recipient.name,
+    parcel,
+    priceSnapshot: { ...snap, calculatedAt: pricedAt },
+    trackingNumber,
+    adapter,
+    ttl,
+    shipmentExtra: { recipientId, source, ...extra },
+  });
+  batch.set(orderRef, {
+    ownerId,
+    status: L.deriveOrderStatus([L.SHIPMENT_STATUS.AWAITING_PAYMENT]),
+    shipmentIds: [w.shipmentId],
+    trackingNumbers: [trackingNumber],
+    origin,
+    destination,
+    /** Qabul qiluvchi telefoni FAQAT shu yerda (egasi o'qiydi) — 40-band. */
+    recipient,
+    recipientId,
+    source,
+    ...extra,
+    note: '',
+    customerPriceTotal: snap.customerPrice,
+    currency: 'UZS',
+    tariffVersion: snap.tariffVersion,
+    consolidation: { count: 1, discountApplied: false, tariffVersion: snap.tariffVersion },
+    termsAcceptedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.create(idemRef, {
+    ownerId, kind: 'internal_shipment', source, orderId: orderRef.id,
+    shipmentIds: [w.shipmentId], trackingNumbers: [trackingNumber], createdAt: now,
+  });
+  try {
+    await batch.commit();
+  } catch (e) {
+    if (e && (e.code === 6 || e.code === 'already-exists')) {
+      const won = await idemRef.get();
+      if (won.exists) return dup(won.data() || {});
+    }
+    throw e;
+  }
+  return {
+    orderId: orderRef.id, shipmentId: w.shipmentId, trackingNumber, duplicate: false,
+  };
+}
+
+/**
+ * To'lanmagan (awaiting_payment + pending) jo'natmani va uning draft/active
+ * LEG'larini bekor qilish — chaqiruvchining TRANZAKSIYASIDA. Ikki bosqich
+ * (`prepareLegCancelInTx` naqshi): bu funksiya faqat O'QIYDI, qaytargan
+ * `commit(now, by)` YOZADI. Pul harakati boshlangan / yo'q jo'natma → null.
+ */
+async function prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) {
+  if (!shipmentId) return null;
+  const shipRef = db.collection(L.SHIPMENTS).doc(String(shipmentId));
+  const s = await tx.get(shipRef);
+  if (!s.exists) return null;
+  const ship = s.data() || {};
+  if (ship.status !== L.SHIPMENT_STATUS.AWAITING_PAYMENT || ship.paymentStatus !== L.PAYMENT_STATUS.PENDING) return null;
+  const legSnaps = await Promise.all((ship.legIds || []).map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+  return (now, by) => {
+    tx.update(shipRef, {
+      status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelUnpaidShipment'),
+      cancelledAt: now, cancelledBy: by, updatedAt: now,
+    });
+    for (const ls of legSnaps) {
+      if (ls.exists && sm.canTransition((ls.data() || {}).status, sm.STATUS.CANCELLED)) {
+        tx.update(ls.ref, { status: sm.STATUS.CANCELLED, cancelledBy: by, cancelledAt: now, updatedAt: now });
+      }
+    }
+    if (ship.orderId) {
+      tx.update(db.collection(L.ORDERS).doc(String(ship.orderId)), { status: 'cancelled', cancelledAt: now, updatedAt: now });
+    }
   };
 }
 
@@ -1403,6 +1611,12 @@ function makeCancelLogisticsOrder(deps) {
       if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
       const order = orderSnap.data() || {};
       if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
+      // Ulgurji buyurtmasi jo'natmasi: egasi = sotuvchi, u bekor QILA OLMAYDI (ega,
+      // 2026-10-31: sotuvchi buyurtmaga aralashmaydi). Bekor — xaridor/admin, Ulgurji
+      // buyurtmasining o'z oqimi orqali.
+      if (order.source === 'wholesale') {
+        throw fail('permission-denied', 'Bu jo\'natmani bekor qilib bo\'lmaydi', 'wholesale_managed');
+      }
 
       const shipSnap = await tx.get(db.collection(L.SHIPMENTS).where('orderId', '==', orderId));
       const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
@@ -1475,19 +1689,34 @@ function makeGetShipmentSecrets(deps) {
     const isOwner = ship.ownerId === callerId;
     const cur = ship.currentCustodian || {};
     const isCustodian = cur.kind === L.CUSTODIAN_KIND.PROVIDER && cur.id === callerId;
-    if (!isOwner && !isCustodian) throw fail('permission-denied', 'Ruxsat yo\'q');
+    // `recipientId` — qabul qiluvchi AVA foydalanuvchisi (ichki yaratish, masalan
+    // Ulgurji xaridori). Oddiy jo'natmada maydon YO'Q — xulq o'zgarmagan.
+    const recipientId = typeof ship.recipientId === 'string' && ship.recipientId ? ship.recipientId : null;
+    const isRecipient = recipientId !== null && recipientId === callerId;
+    if (!isOwner && !isCustodian && !isRecipient) throw fail('permission-denied', 'Ruxsat yo\'q');
     if ([L.SHIPMENT_STATUS.DELIVERED, L.SHIPMENT_STATUS.CLOSED, L.SHIPMENT_STATUS.CANCELLED].includes(ship.status)) {
       throw fail('failed-precondition', 'Jo\'natma yakunlangan', 'shipment_closed');
     }
 
+    // Qabul qiluvchi faqat YETKAZISH kodini oladi (QR/topshirish kodi — jo'natuvchi
+    // va custodian ishi; u bilan posilkani boshqa birov olib ketolmasin).
+    if (isRecipient && !isOwner && !isCustodian) {
+      return {
+        shipmentId,
+        trackingNumber: ship.trackingNumber,
+        deliveryCode: L.deliveryCodeFor(shipmentId, qrSecret),
+      };
+    }
     const out = {
       shipmentId,
       trackingNumber: ship.trackingNumber,
       qrPayload: L.qrPayloadFor(shipmentId, qrSecret),
       handoverCode: L.handoverCodeFor(shipmentId, qrSecret),
     };
-    // Yetkazish kodi — FAQAT egasiga (u qabul qiluvchiga yetkazadi).
-    if (isOwner) out.deliveryCode = L.deliveryCodeFor(shipmentId, qrSecret);
+    // Yetkazish kodi: `recipientId` bo'lsa — FAQAT qabul qiluvchiga (jo'natuvchi =
+    // sotuvchi uni bilmasin: pul shu kod bilan yechiladi, Q-5); aks holda — egasiga
+    // (u qabul qiluvchiga yetkazadi).
+    if (recipientId ? isRecipient : isOwner) out.deliveryCode = L.deliveryCodeFor(shipmentId, qrSecret);
     return out;
   };
 }
@@ -2097,8 +2326,11 @@ module.exports = {
   CONFIG_REGION,
   validatePoint,
   quoteParcelForPoints,
+  validateParcel,
   validateParcels,
   validateRecipient,
+  createShipmentInternal,
+  prepareCancelUnpaidShipmentInTx,
   buildLegDemand,
   buildRoute,
   activateLeg,

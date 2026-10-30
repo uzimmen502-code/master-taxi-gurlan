@@ -73,6 +73,8 @@ function attachRelayEscrow(exports, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
     now: nowFn,
+    /** Ixtiyoriy (3-bosqich): `attachWholesaleOrders` natijasi — `onShipmentDelivered(shipmentId)`. */
+    wholesaleOrders = null,
   } = deps;
   const now = () => (nowFn ? nowFn() : new Date());
   const err = (code, msg, extra) => new functions.https.HttpsError(code, msg, extra);
@@ -102,6 +104,12 @@ function attachRelayEscrow(exports, deps) {
     if (!pre0.exists) throw err('not-found', 'Jo\'natma topilmadi');
     const ship0 = pre0.data() || {};
     if (ship0.ownerId !== phone) throw err('permission-denied', 'Bu jo\'natma sizniki emas');
+    // Ulgurji buyurtmasi jo'natmasi (egasi = sotuvchi): yetkazish haqini xaridor kvotada
+    // to'lagan, eskrouni `wholesale_orders.js` (wholesaleShipFund) o'tkazadi. Sotuvchi
+    // o'z hamyonidan to'lab, buyurtma zanjirini buzmasin.
+    if (ship0.source === 'wholesale') {
+      throw err('permission-denied', 'Bu jo\'natma to\'langan', { reason: 'wholesale_managed' });
+    }
     const me = await resolveCaller(context);
     const amount = Number((ship0.priceSnapshot || {}).customerPrice);
     if (!Number.isInteger(amount) || amount <= 0) throw err('failed-precondition', 'Narx yo\'q', { reason: 'no_price' });
@@ -133,6 +141,7 @@ function attachRelayEscrow(exports, deps) {
           const d = s.exists ? (s.data() || {}) : null;
           if (!d) throw Object.assign(new Error('shipment_missing'), { reason: 'shipment_missing' });
           if (d.ownerId !== me.phone) throw Object.assign(new Error('not_owner'), { reason: 'not_owner' });
+          if (d.source === 'wholesale') throw Object.assign(new Error('wholesale_managed'), { reason: 'wholesale_managed' });
           if (d.status !== 'awaiting_payment' || d.paymentStatus !== 'pending') {
             throw Object.assign(new Error('not_payable'), { reason: 'not_payable', status: d.status, paymentStatus: d.paymentStatus });
           }
@@ -269,7 +278,14 @@ function attachRelayEscrow(exports, deps) {
     if (ship.paymentStatus !== 'refund_pending') return { skipped: `payment_${ship.paymentStatus}` };
     const amount = Number(ship.escrowAmount || (ship.priceSnapshot || {}).customerPrice) || 0;
     if (amount <= 0) return { skipped: 'no_amount' };
-    const usersDocId = await customerWalletId(ship);
+    // Ulgurji buyurtmasi jo'natmasi: eskrou xaridorning `escrow:wholesale:{order}` idan
+    // to'ldirilgan (egasi = sotuvchi EMAS to'lagan) — qaytarish O'SHA eskrouga (keyin
+    // buyurtma bekor oqimi xaridorga qaytaradi, 5-bosqich). Sotuvchi hamyoniga tushmaydi.
+    const wholesaleOrderId = ship.source === 'wholesale' && typeof ship.wholesaleOrderId === 'string'
+      ? ship.wholesaleOrderId : '';
+    const creditAccount = wholesaleOrderId
+      ? `escrow:wholesale:${wholesaleOrderId}`
+      : settlementLedger.passengerCreditAccount(await customerWalletId(ship));
     const when = now();
     const res = await settlementLedger.postEntry(db, {
       idempotencyKey: `relayRefund:${shipmentId}`,
@@ -280,11 +296,11 @@ function attachRelayEscrow(exports, deps) {
       postedRole: 'system',
       legs: [
         { account: escrowAccount(shipmentId), dr: amount },
-        { account: settlementLedger.passengerCreditAccount(usersDocId), cr: amount },
+        { account: creditAccount, cr: amount },
       ],
     }, {
-      mirrorBonus: true,
-      walletLedgerType: 'logistics_refund',
+      mirrorBonus: !wholesaleOrderId,
+      walletLedgerType: wholesaleOrderId ? null : 'logistics_refund',
       meta: { shipmentId, trackingNumber: ship.trackingNumber || '' },
       precheck: async (tx) => {
         const s = await tx.get(shipRef);
@@ -749,6 +765,19 @@ function attachRelayEscrow(exports, deps) {
         out.release = await releaseEscrow(String(event.shipmentId));
       } catch (e) {
         if (!(e && e.reason === 'not_funded')) console.error(`relay RELEASE xato (${event.shipmentId}): ${e.message}`);
+      }
+      // Ulgurji buyurtmasi (3-bosqich): tovar puli sotuvchiga — alohida eskrou
+      // (`escrow:wholesale:{order}`), relay RELEASE'dan mustaqil; oddiy jo'natmada no-op.
+      // Yiqilsa — `wholesaleOrdersReconcile` qayta urinadi (idempotent).
+      if (wholesaleOrders && typeof wholesaleOrders.onShipmentDelivered === 'function') {
+        try {
+          out.wholesale = await wholesaleOrders.onShipmentDelivered(String(event.shipmentId));
+        } catch (e) {
+          console.error(JSON.stringify({
+            action: 'wholesaleRelease', shipmentId: event.shipmentId, result: 'failed',
+            errorCode: 'WHOLESALE_RELEASE_FAILED', message: String((e && e.message) || e).slice(0, 200),
+          }));
+        }
       }
       if (notifyUserInApp && out.release && out.release.released) {
         const s = await db.collection(SHIPMENTS).doc(String(event.shipmentId)).get();

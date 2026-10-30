@@ -42,6 +42,14 @@ const tariff = require('./restaurant_delivery_tariff');
 const localTaxi = require('./local_taxi');
 const qtyTiers = require('./restaurant_qty_tiers');
 const preorder = require('./restaurant_preorder');
+const moduleGate = require('./module_gate');
+
+/** `restaurantRegister` idempotentligi (C-2): mijoz kaliti va deterministik restoran id. */
+const REGISTER_REQUEST_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+function restaurantIdFor(uid, requestId) {
+  const h = crypto.createHash('sha256').update(`restaurantRegister:${uid}:${requestId}`).digest('hex');
+  return `rst_${h.slice(0, 28)}`;
+}
 
 const RESTAURANTS = 'restaurants';
 const MEMBERS = 'members';
@@ -584,6 +592,31 @@ function attachRestaurantOrders(exportsObj, deps) {
     const t0 = Date.now();
     const uid = requirePhoneUid(context);
     await requireModule(uid);
+    // C-2 IDEMPOTENT (21-qoida): ixtiyoriy `requestId` → deterministik hujjat id (`submitJobAd` namunasi).
+    // Shu chaqiruvchi + shu `requestId` qayta kelsa — BIRINCHI natija qaytadi, ikkinchi restoran yaratilmaydi.
+    // `requestId` yo'q/yaroqsiz (eski ilova) — avvalgi xatti-harakat (avto-id).
+    const requestId = str(data && data.requestId, 64);
+    const rRefFixed = REGISTER_REQUEST_ID_RE.test(requestId)
+      ? db.collection(RESTAURANTS).doc(restaurantIdFor(uid, requestId)) : null;
+    const duplicateOf = (snap) => {
+      const x = snap.data() || {};
+      log('register', { restaurantId: snap.id, userId: uid, result: 'duplicate', durationMs: Date.now() - t0 });
+      return { ok: true, restaurantId: snap.id, status: String(x.status || RESTAURANT_STATUS.applied), duplicate: true };
+    };
+    if (rRefFixed) {
+      const existing = await rRefFixed.get();
+      if (existing.exists) {
+        if (existing.data().ownerUid !== uid) throw fail('failed-precondition', 'REQUEST_ID_CONFLICT');
+        return duplicateOf(existing);
+      }
+    }
+    // MEDIUM-4: admin «Ҳудудлар ва хизматлар» — `restaurants` moduli shu foydalanuvchi hududida ochiq bo'lishi
+    // shart (yuqoridagi `requireModule` bosqich darvozasiga QO'SHIMCHA). Konfig o'qilmasa — fail-open.
+    const gate = await moduleGate.moduleOpenFor(db, MODULE_ID, uid);
+    if (!gate.open) {
+      log('register', { userId: uid, result: 'error', errorCode: moduleGate.MODULE_CLOSED, moduleStatus: gate.status });
+      throw fail('failed-precondition', moduleGate.MODULE_CLOSED, { moduleId: MODULE_ID, status: gate.status });
+    }
     const user = await findUserRef(uid);
     if (!user) throw fail('failed-precondition', 'USER_NOT_FOUND');
     const d = data || {};
@@ -614,9 +647,10 @@ function attachRestaurantOrders(exportsObj, deps) {
     // Bir foydalanuvchi bir nechta kafe-restoran yuritadi (menejerlik,
     // D-REST-15, ega 2026-10-10): egaga son chegarasi YO'Q — tarmoq
     // (set) bo'lishi mumkin. Suiiste'mol admin tasdig'i orqali nazorat qilinadi.
-    const rRef = db.collection(RESTAURANTS).doc();
+    const rRef = rRefFixed || db.collection(RESTAURANTS).doc();
     const batch = db.batch();
-    batch.set(rRef, {
+    // `create` — hujjat allaqachon bo'lsa (parallel ikki chaqiruv) butun batch rad etiladi (a'zo/private ham yozilmaydi).
+    batch.create(rRef, {
       name,
       legalType,
       ...(venueType ? { venueType } : {}),
@@ -663,7 +697,16 @@ function attachRestaurantOrders(exportsObj, deps) {
         updatedAt: ts(),
       });
     }
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (e) {
+      // Poyga: shu `requestId` bilan parallel chaqiruv birinchi yaratdi — o'shani qaytaramiz.
+      if (rRefFixed && e && (e.code === 6 || /ALREADY_EXISTS/i.test(String(e.message || '')))) {
+        const again = await rRefFixed.get();
+        if (again.exists && again.data().ownerUid === uid) return duplicateOf(again);
+      }
+      throw e;
+    }
     log('register', { restaurantId: rRef.id, userId: uid, result: 'ok', status: autoApprove ? 'approved' : 'applied', durationMs: Date.now() - t0 });
     return { ok: true, restaurantId: rRef.id, status: autoApprove ? 'approved' : 'applied' };
   });

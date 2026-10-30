@@ -30,6 +30,10 @@
 'use strict';
 
 const { encode: geohashEncode } = require('./geo_hash');
+const moduleGate = require('./module_gate');
+
+/** Admin «Ҳудудлар ва хизматлар» модул id'си (Dart `kKnownModuleIds`): фақат ЯНГИ объект яратиш тўсилади. */
+const GATE_MODULE = 'business_map';
 
 const COLLECTION = 'businesses';
 const GEO_DISTRICTS = 'geo_districts';
@@ -492,6 +496,9 @@ function attachBusinessDirectory(exportsObj, deps) {
     const clientRequestId = str(d.clientRequestId, 64);
     if (!ID_RE.test(clientRequestId)) throw fail('invalid-argument', 'REQUEST_ID_INVALID', 'Қайта уриниб кўринг.');
     const ref = db.collection(COLLECTION).doc(`${uid}_${clientRequestId}`);
+    // MEDIUM-4: модул ёпиқ бўлса ЯНГИ объект яратилмайди. Таҳрир (`businessId` шохи) ва ўша
+    // `clientRequestId` билан қайта юбориш (дубликат — аввалги натижа) тўсилмайди.
+    const gate = await moduleGate.moduleOpenFor(db, GATE_MODULE, uid);
     const out = await db.runTransaction(async (t) => {
       const [snap, ownSnap, shopSnap] = await Promise.all([
         t.get(ref),
@@ -499,6 +506,11 @@ function attachBusinessDirectory(exportsObj, deps) {
         t.get(db.collection(SHOPS).doc(uid)),
       ]);
       if (snap.exists) return { duplicate: true };
+      if (!gate.open) {
+        log({ action: 'upsertMyBusiness', userId: uid, result: 'error', errorCode: moduleGate.MODULE_CLOSED, moduleStatus: gate.status });
+        throw new HttpsError('failed-precondition', moduleGate.MODULE_CLOSED,
+          { code: moduleGate.MODULE_CLOSED, moduleId: GATE_MODULE, status: gate.status });
+      }
       if (isBlocked(shopSnap)) throw fail('permission-denied', 'SHOP_BLOCKED', 'Дўконингиз вақтинча блокланган.');
       if (ownSnap.size >= LIMITS.maxPerOwner) {
         throw fail('resource-exhausted', 'BUSINESS_LIMIT_REACHED',

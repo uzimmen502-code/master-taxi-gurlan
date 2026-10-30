@@ -38,6 +38,8 @@ const { makeProcurementCatalog } = require('./procurement_catalog');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
 const marketImages = require('./market_images');
+// MEDIUM-4 (аудит 2026-10-31): модул дарвозаси серверда ҳам (клиент `ServiceConfigHolder` нусхаси).
+const moduleGate = require('./module_gate');
 // Admin «Аҳоли бозори» рўйхати — саҳифалар ва «Яна юклаш» (2026-10-08).
 const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
@@ -1363,6 +1365,29 @@ exports.onAdUpdate = functions.firestore
           (k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null));
       const moderatedChanged = tsChanged(before.moderatedAt, after.moderatedAt);
       if (contentChanged && !moderatedChanged && !(await isJobsAutoApproveEnabled())) {
+        await change.after.ref.update({
+          status: 'pending',
+          moderationReason: 'owner_edit',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return null;
+      }
+    }
+
+    // ОНЛАЙН БОЗОР (аудит 2026-10-31, MEDIUM-2/5): юқоридаги иш эълони шохининг айни нусхаси.
+    // Эга ТАСДИҚЛАНГАН эълоннинг ном/тавсиф/расм/нархини ўзгартирса (rules
+    // `cheapProductOwnerUpdateOk` `active`ни сақлаб таҳрирлашга рухсат беради) ва бозор
+    // авто-тасдиғи ўчиқ бўлса — `pending` (submitMarketAd ҚЎЛДА режимда ёзадиган қиймат).
+    // Админ таҳрири (`adminUpdateMarketAd`) `moderatedAt`ни ўзгартиради — тегилмайди.
+    // Ҳисоблагич (`views`) ва бошқа майдонлар — content калитлари эмас, тегилмайди.
+    // Кейинги триггер `active → pending` ўтишини кўриб `expiresAt`ни янгилайди (пастда).
+    if (String(after.type || '') === 'cheap_product'
+        && before.status === 'active' && after.status === 'active') {
+      const contentKeys = ['title', 'description', 'imageUrls', 'price'];
+      const contentChanged = contentKeys.some(
+          (k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null));
+      const moderatedChanged = tsChanged(before.moderatedAt, after.moderatedAt);
+      if (contentChanged && !moderatedChanged && !(await isMarketAutoApproveEnabled())) {
         await change.after.ref.update({
           status: 'pending',
           moderationReason: 'owner_edit',
@@ -7655,6 +7680,14 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     }
   }
 
+  // MEDIUM-4: admin «Ҳудудлар ва хизматлар» — `jobs` модули ёпиқ бўлса ЯНГИ эълон йўқ
+  // (дубликат юқорида аввалги натижани олади; таҳрир/ўчириш бу ерга келмайди).
+  const gate = await moduleGate.moduleOpenFor(db, 'jobs', uid);
+  if (!gate.open) {
+    throw fail('failed-precondition', moduleGate.MODULE_CLOSED, moduleGate.MODULE_CLOSED,
+      { type, moduleStatus: gate.status });
+  }
+
   const dayStart = tashkentDayStart();
   // Янги ёзувлар canonical; эски 9-рақамли ҳам санаш.
   const phoneVariants = [...new Set([
@@ -8386,6 +8419,12 @@ function marketImageUrlsOk(urls, uid) {
   return marketImages.marketImageUrlsOk(urls, markers);
 }
 
+/** Бозор эълони: бир хил (uid, requestId) → доим бир хил ҳужжат id (`jobAdIdFor` намунаси, бошқа префикс). */
+function marketAdIdFor(uid, requestId) {
+  const h = crypto.createHash('sha256').update(`market:${uid}:${requestId}`).digest('hex');
+  return `mad_${h.slice(0, 28)}`;
+}
+
 /** Mijoz: Onlayn BOZOR эълон (CF-only, auth + canonical phone + лимитлар). */
 exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -8415,6 +8454,32 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError(
       'invalid-argument',
       `imageUrls ${marketImages.MARKET_MIN_IMAGES}..${marketImages.MARKET_MAX_IMAGES} under ads/{uid}/`);
+  }
+
+  // C-2 IDEMPOTENT (21-банд): ихтиёрий `requestId` → детерминистик ҳужжат id (`submitJobAd` намунаси).
+  // Ўша чақирувчи + ўша `requestId` қайта келса — БИРИНЧИ натижа, иккинчи эълон йўқ ва лимитга
+  // ҳисобланмайди. `requestId` йўқ/яроқсиз (эски APK) — аввалги хулқ (авто-id).
+  const clientRequestId = String((data && data.requestId) || '').trim();
+  const adRef = JOB_AD_REQUEST_ID_RE.test(clientRequestId)
+    ? db.collection('ads').doc(marketAdIdFor(uid, clientRequestId)) : null;
+  if (adRef) {
+    const existing = await adRef.get();
+    if (existing.exists) {
+      return {
+        ok: true, adId: adRef.id, status: String((existing.data() || {}).status || 'pending'), duplicate: true,
+      };
+    }
+  }
+
+  // MEDIUM-4: `cheap_products_home` модули ёпиқ бўлса ЯНГИ эълон йўқ (таҳрир/ўчириш бу ерга келмайди).
+  const gate = await moduleGate.moduleOpenFor(db, 'cheap_products_home', uid);
+  if (!gate.open) {
+    console.log(JSON.stringify({
+      module: 'market', action: 'submitMarketAd', result: 'error',
+      errorCode: moduleGate.MODULE_CLOSED, moduleStatus: gate.status,
+    }));
+    throw new functions.https.HttpsError('failed-precondition', moduleGate.MODULE_CLOSED,
+      { code: moduleGate.MODULE_CLOSED, moduleId: 'cheap_products_home', status: gate.status });
   }
 
   const phoneVariants = marketPhoneVariants(uid);
@@ -8510,6 +8575,19 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
     payload.moderatedAt = admin.firestore.FieldValue.serverTimestamp();
   }
 
+  if (adRef) {
+    try {
+      await adRef.create(payload);
+    } catch (e) {
+      // Пойга: ўша `requestId` билан параллел чақирув биринчи яратди — ўшани қайтарамиз.
+      if (e && (e.code === 6 || /ALREADY_EXISTS/i.test(String(e.message || '')))) {
+        const ex = (await adRef.get()).data() || {};
+        return { ok: true, adId: adRef.id, status: String(ex.status || payload.status), duplicate: true };
+      }
+      throw e;
+    }
+    return { ok: true, adId: adRef.id, status: payload.status };
+  }
   const ref = await db.collection('ads').add(payload);
   return { ok: true, adId: ref.id, status: payload.status };
 });
@@ -13707,7 +13785,7 @@ async function packageTvClipHls(clipId, output, mp4ByQuality, runId) {
 // ёзилиши ва қаердан ўчирилиши — `tv_clip_output.js` да (Firebase
 // Storage ёки Cloudflare R2). Иккаласи ҳам Storage'сиз тестланади.
 const {tvClipRunId} = require('./tv_clip_runs');
-const {tvClipBecameApproved} = require('./tv_clip_moderation');
+const {tvClipBecameApproved, tvClipContentEdited} = require('./tv_clip_moderation');
 const {
   FirebaseStorageOutput,
   R2Output,
@@ -14270,6 +14348,25 @@ exports.onTvClipVideoReplacedV2 = onDocumentUpdated(
       if (!event.data) return;
       const before = event.data.before.data() || {};
       const after = event.data.after.data() || {};
+      // Аудит 2026-10-31 (MEDIUM-2/5): видео ўзгармаган, лекин тасдиқланган клипнинг
+      // ном/тавсиф/муқоваси эга томонидан ўзгарди — ҚЎЛДА режимда қайта модерация
+      // (пастдаги `video_replaced` шохининг айни нусхаси; transcode керак эмас).
+      if (tvClipContentEdited(before, after)) {
+        try {
+          const s = await db.collection('settings').doc('app').get();
+          if ((s.data() || {}).tvAutoApprove !== true) {
+            await event.data.after.ref.update({
+              status: 'pending',
+              moderationReason: 'content_edited',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          console.error('onTvClipVideoReplacedV2 content re-moderation:',
+              event.params.clipId, e.message || e);
+        }
+        return;
+      }
       if (!after.videoUrl || before.videoUrl === after.videoUrl) return;
       // Тасдиқланган клип видеосини эгаси алмаштирса (`updateOwnClip`) —
       // ҚЎЛДА режимда клип қайта модерацияга тушади. Аввал у `active`

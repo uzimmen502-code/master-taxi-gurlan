@@ -23,7 +23,10 @@ class WholesaleProductStrip extends StatelessWidget {
   final List<WholesaleProduct> items;
   final ValueChanged<WholesaleProduct> onTap;
 
-  static const double _tileWidth = 136;
+  /// Ўхшаш маҳсулотлар асосий расмдан урғуни олмасин (эга, 2026-10-31):
+  /// 136 → 108 px, баландлик 226 → 178 px.
+  static const double _tileWidth = 108;
+  static const double _stripHeight = 178;
 
   @override
   Widget build(BuildContext context) {
@@ -32,18 +35,19 @@ class WholesaleProductStrip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 6),
           child: Text(
             title,
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: 13,
+              height: 1.2,
               fontWeight: FontWeight.w600,
               color: PdDark.ink,
             ),
           ),
         ),
         SizedBox(
-          height: 226,
+          height: _stripHeight,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
@@ -111,7 +115,7 @@ class _Tile extends StatelessWidget {
                       ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -121,28 +125,31 @@ class _Tile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
+                        height: 1.15,
                         fontWeight: FontWeight.w600,
                         color: PdDark.ink,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
                       wholesalePriceLine(context, product),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
+                        height: 1.15,
                         fontWeight: FontWeight.w600,
                         color: PdDark.brand,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
                       moq,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(fontSize: 12, color: PdDark.muted),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        height: 1.15,
+                        color: PdDark.muted,
+                      ),
                     ),
                     if (district.isNotEmpty)
                       Text(
@@ -150,7 +157,8 @@ class _Tile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
+                          height: 1.15,
                           color: PdDark.muted,
                         ),
                       ),

@@ -302,31 +302,38 @@ function declaredValueFee(t, declaredValue) {
  * @param {{actualWeightG:number,lengthCm:number,widthCm:number,heightCm:number,declaredValue?:number}} parcel
  * @param {{regionId:string,districtId?:string}} origin
  * @param {{regionId:string,districtId?:string}} dest
+ * @param {{dimsOptional?:boolean}} [opts] `dimsOptional` — FAQAT Ulgurji buyurtmasi
+ *   (`api/wholesale_orders.js`): bir nechta dona bitta jo'natmada, umumiy o'lcham
+ *   noma'lum — o'lcham BERILMASA hajmiy vazn 0, pullik vazn = haqiqiy vazn
+ *   (PROPOSED, hujjat §2). O'lcham berilsa — odatdagidek tekshiriladi.
+ *   Standart (relay) chaqiruvlar o'zgarmagan: o'lcham MAJBURIY.
  * @returns {object} PriceSnapshot — SAQLANADIGAN shakl
  */
-function quoteParcel(t, parcel, origin, dest) {
+function quoteParcel(t, parcel, origin, dest, opts = {}) {
   if (!t || t.status !== STATUS.ACTIVE) {
     throw typedError('failed-precondition', 'Logistika tarifi hali faol emas', 'tariff_not_active');
   }
   const p = parcel || {};
   const actual = p.actualWeightG;
-  const dims = [p.lengthCm, p.widthCm, p.heightCm];
+  const noDims = opts.dimsOptional === true
+    && [p.lengthCm, p.widthCm, p.heightCm].every((x) => x === undefined || x === null);
+  const dims = noDims ? [null, null, null] : [p.lengthCm, p.widthCm, p.heightCm];
   if (!isPosInt(actual)) throw typedError('invalid-argument', 'actualWeightG musbat butun gramm', 'bad_weight');
-  if (!dims.every(isPosInt)) throw typedError('invalid-argument', 'o\'lchamlar musbat butun sm', 'bad_dimensions');
+  if (!noDims && !dims.every(isPosInt)) throw typedError('invalid-argument', 'o\'lchamlar musbat butun sm', 'bad_dimensions');
   const declared = p.declaredValue === undefined || p.declaredValue === null ? 0 : p.declaredValue;
   if (!isNonNegInt(declared)) throw typedError('invalid-argument', 'declaredValue butun so\'m', 'bad_declared_value');
 
   const lim = t.limits || {};
   if (lim.maxWeightG && actual > lim.maxWeightG) throw typedError('failed-precondition', 'Vazn chegaradan oshdi', 'over_weight');
-  if (lim.maxDimCm && dims.some((x) => x > lim.maxDimCm)) throw typedError('failed-precondition', 'O\'lcham chegaradan oshdi', 'over_dimension');
-  if (lim.maxSumDimCm && dims[0] + dims[1] + dims[2] > lim.maxSumDimCm) throw typedError('failed-precondition', 'O\'lchamlar yig\'indisi chegaradan oshdi', 'over_dimension_sum');
+  if (!noDims && lim.maxDimCm && dims.some((x) => x > lim.maxDimCm)) throw typedError('failed-precondition', 'O\'lcham chegaradan oshdi', 'over_dimension');
+  if (!noDims && lim.maxSumDimCm && dims[0] + dims[1] + dims[2] > lim.maxSumDimCm) throw typedError('failed-precondition', 'O\'lchamlar yig\'indisi chegaradan oshdi', 'over_dimension_sum');
   const dvMax = (t.declaredValue || {}).maxValue;
   if (dvMax && declared > dvMax) throw typedError('failed-precondition', 'E\'lon qilingan qiymat chegaradan oshdi', 'over_declared_value');
 
   const zone = resolveZone(t, origin, dest);
   if (!zone) throw typedError('failed-precondition', 'Bu yo\'nalish uchun tarif zonasi yo\'q', 'zone_not_found');
 
-  const volumetric = volumetricWeightG(dims[0], dims[1], dims[2], t.volumetricDivisor);
+  const volumetric = noDims ? 0 : volumetricWeightG(dims[0], dims[1], dims[2], t.volumetricDivisor);
   const chargeable = chargeableWeightG(actual, volumetric);
   const base = basePriceFor(t, zone, chargeable);
   const dvFee = declaredValueFee(t, declared);

@@ -205,6 +205,22 @@ async function quoteOrderInternal(db, data, callerId) {
   return { tariff: t, origin, destination, parcels, quotes, total };
 }
 
+/**
+ * BITTA posilka narxi — boshqa modul (Ulgurji buyurtmasi) uchun relay
+ * tarifining O'ZI (tarif hisobi nusxalanmaydi, CLAUDE.md 7). Nuqtalar shu
+ * yerdagi `validatePoint` bilan tekshiriladi, tarif — faol versiya.
+ * Logistika DARVOZASI bu yerda YO'Q: chaqiruvchi modul o'z darvozasini
+ * tekshiradi (`module_config/wholesale_orders_all`). `opts.dimsOptional` —
+ * `tariff.quoteParcel` izohiga qarang.
+ */
+async function quoteParcelForPoints(db, originRaw, destinationRaw, parcel, opts = {}) {
+  const origin = await validatePoint(db, originRaw, 'origin');
+  const destination = await validatePoint(db, destinationRaw, 'destination');
+  const t = await requireActiveTariff(db);
+  const quote = tariffCore.quoteParcel(t, parcel, origin, destination, opts);
+  return { tariff: t, origin, destination, quote };
+}
+
 function makeQuoteLogisticsOrder(deps) {
   const { db } = deps;
   return async function quoteLogisticsOrder(data, context) {
@@ -2080,6 +2096,7 @@ module.exports = {
   STAGE_TESTERS_MAX,
   CONFIG_REGION,
   validatePoint,
+  quoteParcelForPoints,
   validateParcels,
   validateRecipient,
   buildLegDemand,

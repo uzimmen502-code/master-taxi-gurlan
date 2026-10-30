@@ -67,6 +67,13 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
 });
+// Ulgurji buyurtma zanjiri, 2-bosqich (docs/ulgurji_buyurtma_zanjiri_uz.md): pul ushlash
+// (escrow:wholesale:{id}) + qoldiq −N bitta tranzaksiyada; rad/bekor → qaytarish + qoldiq +N.
+// Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
+const { attachWholesaleOrders } = require('./wholesale_orders');
+attachWholesaleOrders(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+});
 // Mijoz tasdig'i — «Oldim» / «Berdim» (D2/D7, ega qarori 2026-10-16): AVA kuryeri
 // oqimlarida kuryer qadamini mijoz O'Z qurilmasida tasdiqlaydi. Sozlama faqat server:
 // `server_config/customer_confirm` (standart OFF). Modul yadrolari `registerHandler`

@@ -13507,10 +13507,7 @@ const {tvClipMaxSecondsFor} = require('./tv_clip_limits');
 // `TvMarketFeedScreen._prefetchHealthyAhead`.
 const TV_CLIP_HLS_SEGMENT_SECONDS = 3;
 
-function tvClipStoragePathFromUrl(url) {
-  const match = /\/o\/([^?]+)/.exec(url || '');
-  return match ? decodeURIComponent(match[1]) : null;
-}
+const {tvClipOwnedStoragePath} = require('./tv_clip_media_path');
 
 // Битта клип икки марта transcode қилинмаслиги учун атомар «банд
 // қилиш». 1→2-авлод миграцияси даврида эски (v1) ва янги (V2)
@@ -13873,9 +13870,13 @@ async function purgeTvClipOutputs(clipId, data) {
 
 async function transcodeTvClipVideo(clipId, videoUrl) {
   const clipRef = db.collection('tv_clips').doc(clipId);
-  const srcPath = tvClipStoragePathFromUrl(videoUrl);
+  // Манба ФАҚАТ эганинг `tv_clips/<телефон>/` папкасидан (аудит HIGH-1: бегона ёки ёпиқ
+  // файлни очиқ вариантга чиқармаслик учун) — `tv_clip_media_path.js`.
+  const ownerSnap = await clipRef.get();
+  const owner = ownerSnap.exists ? (ownerSnap.data() || {}).ownerPhone : '';
+  const srcPath = tvClipOwnedStoragePath(videoUrl, owner);
   if (!srcPath) {
-    console.error('transcodeTvClipVideo: bad videoUrl for', clipId);
+    console.error('transcodeTvClipVideo: videoUrl not in owner folder (TV_CLIP_FOREIGN_PATH) for', clipId);
     return;
   }
 
@@ -14678,9 +14679,11 @@ async function deleteTvClipMedia(clipId, data) {
         'master-taxi-gurlan.firebasestorage.app');
     // Асл юклама ва постер ДОИМ Firebase Storage'да — юклаш йўли
     // ўзгармаган (қаранг: [buildTvClipOutput] устидаги изоҳ).
+    // Фақат эганинг папкасидаги файллар (аудит HIGH-1: аввал URL'даги ҲАР ҚАНДАЙ йўл
+    // ўчириларди — бегона файлни ўчириш мумкин эди).
     const paths = [
-      tvClipStoragePathFromUrl(data.videoUrl),
-      tvClipStoragePathFromUrl(data.posterUrl),
+      tvClipOwnedStoragePath(data.videoUrl, data.ownerPhone),
+      tvClipOwnedStoragePath(data.posterUrl, data.ownerPhone),
     ].filter(Boolean);
     await Promise.all(paths.map((p) =>
       bucket.file(p).delete().catch(() => {})));

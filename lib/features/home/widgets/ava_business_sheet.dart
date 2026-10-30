@@ -6,6 +6,7 @@ import '../../../models/driver_roles.dart';
 import '../../../models/service_module_config.dart';
 import '../../../repositories/courier_capability_repository.dart';
 import '../../my_shop/widgets/shop_name_dialog.dart';
+import 'work_roles_sheet.dart';
 
 /// «＋» — «Менинг бизнесим»: фойдаланувчи ўз ишини шу ердан бошлайди.
 ///
@@ -99,6 +100,29 @@ class AvaCreateGates {
   }
 }
 
+/// Телефонсиз ҳам очиладиган бандлар (китоб ўқиш, AI ўзи рўйхатдан ўтишни таклиф қилади).
+const Set<AvaCreateAction> kAvaCreateNoPhone = {AvaCreateAction.book, AvaCreateAction.assistant};
+
+/// Танланган банд билан нима қилинади — соф қарор (тест учун; `home_screen` шунга қараб очади).
+enum AvaCreateRoute { appOnly, soon, needPhone, open }
+
+AvaCreateRoute avaCreateRoute(
+  AvaCreateAction action,
+  AvaCreateGates gates, {
+  required bool hasPhone,
+}) {
+  switch (gates.locked[action]) {
+    case AvaRowLock.appOnly:
+      return AvaCreateRoute.appOnly;
+    case AvaRowLock.soon:
+      return AvaCreateRoute.soon;
+    case null:
+      break;
+  }
+  if (!hasPhone && !kAvaCreateNoPhone.contains(action)) return AvaCreateRoute.needPhone;
+  return AvaCreateRoute.open;
+}
+
 /// Танланган амални қайтаради; бекор қилинса `null`.
 ///
 /// [driverRoles] — ҳайдовчи/курьер бўлса «…бўлиш» ўрнига «…панели» ва фаол
@@ -112,6 +136,7 @@ Future<AvaCreateAction?> showAvaCreateSheet(
   Set<AvaCreateAction> hidden = const {},
   Map<AvaCreateAction, AvaRowLock> locked = const {},
   bool hasShop = false,
+  bool needsPhone = false,
 }) {
   return showModalBottomSheet<AvaCreateAction>(
     context: context,
@@ -127,6 +152,7 @@ Future<AvaCreateAction?> showAvaCreateSheet(
         hidden: hidden,
         locked: locked,
         hasShop: hasShop,
+        needsPhone: needsPhone,
       ),
     ),
   );
@@ -302,11 +328,18 @@ class _BusinessSheet extends StatelessWidget {
     this.hidden = const {},
     this.locked = const {},
     this.hasShop = false,
+    this.needsPhone = false,
   });
 
   final DriverRoles driverRoles;
   final Set<AvaCreateAction> hidden;
   final Map<AvaCreateAction, AvaRowLock> locked;
+
+  /// Телефон рақами йўқ: тепада эслатма, телефон талаб қиладиган бандларда қулф
+  /// (аввал сабаби фақат босгандан кейин SnackBar'да чиқарди — аудит У-2).
+  final bool needsPhone;
+
+  static const _noPhone = kAvaCreateNoPhone;
 
   /// Эгада Аҳоли/Улгуржи маҳсулоти бор: «Онлайн Дўкон очиш» ўрнига «Менинг дўконим».
   final bool hasShop;
@@ -374,7 +407,12 @@ class _BusinessSheet extends StatelessWidget {
             _courierHasPanel
                 ? 'home_create_courier_open'
                 : 'home_create_courier',
-            'home_create_courier_sub',
+            // Ариза кутилмоқда / тўхтатилган — изоҳ ўрнида ҳолат (Иш панели билан бир манба:
+            // `workRowState`); аввал варақ «Курьер бўлиш» деб ҳолатни яширарди (аудит Н-7/У-5).
+            switch (workRowState(WorkChoice.courier, driverRoles)) {
+              (key: final k, tone: WorkTone.pending || WorkTone.blocked) => k,
+              _ => 'home_create_courier_sub',
+            },
             active: driverRoles.courierOnline,
           ),
           const _Item(AvaCreateAction.cargo, Icons.local_shipping_rounded,
@@ -424,6 +462,7 @@ class _BusinessSheet extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(
                     AvaSpace.screen, 4, AvaSpace.screen, 20),
                 children: [
+                  if (needsPhone) const _PhoneNotice(),
                   for (final g in groups) ...[
                     if (g.$1.isNotEmpty) _GroupTitle(context.tr(g.$1)),
                     _Card(
@@ -435,6 +474,7 @@ class _BusinessSheet extends StatelessWidget {
                             subtitle: context.tr(it.subKey),
                             active: it.active,
                             lock: locked[it.action],
+                            phoneLocked: needsPhone && !_noPhone.contains(it.action),
                             onTap: () => pick(it.action),
                           ),
                       ],
@@ -582,7 +622,11 @@ class _RowTile extends StatelessWidget {
     this.subtitle,
     this.active = false,
     this.lock,
+    this.phoneLocked = false,
   });
+
+  /// Телефон керак — «›» ўрнида кичик қулф (босилса профилга йўналтирилади).
+  final bool phoneLocked;
 
   final IconData icon;
   final String label;
@@ -665,11 +709,47 @@ class _RowTile extends StatelessWidget {
                   _LockPill(text: lockText),
                 ] else ...[
                   const SizedBox(width: 4),
-                  Icon(Icons.chevron_right_rounded, size: 22, color: c.ink3),
+                  Icon(
+                    phoneLocked ? Icons.lock_outline_rounded : Icons.chevron_right_rounded,
+                    size: phoneLocked ? 20 : 22,
+                    color: c.ink3,
+                  ),
                 ],
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Телефонсиз фойдаланувчига варақ тепасида: нега қулф турибди (мавжуд `need_phone_profile` матни).
+class _PhoneNotice extends StatelessWidget {
+  const _PhoneNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: c.warnSoft,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 20, color: c.ink2),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.tr('need_phone_profile'),
+                style: TextStyle(fontSize: 13.5, height: 1.3, color: c.ink),
+              ),
+            ),
+          ],
         ),
       ),
     );

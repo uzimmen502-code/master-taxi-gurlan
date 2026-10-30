@@ -7,6 +7,7 @@ import '../../business_map/domain/business.dart';
 import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_form_screen.dart';
 import '../../business_map/screens/business_products_screen.dart';
+import '../../business_map/screens/my_businesses_screen.dart' show waitForMyBusiness;
 import '../my_shop_presence.dart';
 import '../seller_tg_channel.dart';
 import '../widgets/seller_tg_channel_card.dart';
@@ -14,7 +15,7 @@ import '../widgets/shop_link_sheet.dart';
 import 'main_shop_screen.dart';
 import 'shop_stats_screen.dart';
 
-/// «Менинг дўконим» — эганинг ВАЖДА БИТТА эмас, бир нечта дўкони:
+/// «Менинг дўконим» — эганинг битта эмас, бир нечта дўкони:
 ///  · «Асосий дўкон» — Аҳоли, Улгуржи ва AVAGram маҳсулотлари ([MainShopScreen]);
 ///  · «Бошқа дўконлар» — Бизнес харитасидаги чакана/улгуржи объектлар: ҳар
 ///    бирининг ўз номи ва ўз маҳсулотлари (сони чекланмаган), мавжуд
@@ -126,24 +127,13 @@ class _MyShopScreenState extends State<MyShopScreen> {
     if (created != null && mounted) await _openProducts(created);
   }
 
-  /// Янги дўкон рўйхатга (Firestore обунаси) тушгунча кутади: аввал жорий рўйхат, бўлмаса янги обуна (8 с).
-  /// Топилмаса — ҳеч нарса очилмайди, дўкон рўйхатда кўринади (эга қўлда очади).
-  Future<Business?> _findShop(String id) async {
-    for (final s in _shops) {
-      if (s.id == id) return s;
-    }
-    if (widget.businesses != null) return null; // тест манбаи қайта тингланмайди
-    try {
-      final list = await BusinessRepository()
-          .watchMine(widget.phone)
-          .firstWhere((l) => l.any((s) => s.id == id))
-          .timeout(const Duration(seconds: 8));
-      return list.firstWhere((s) => s.id == id);
-    } catch (e) {
-      debugPrint('[MyShop] new shop $id not visible yet: $e');
-      return null;
-    }
-  }
+  /// Янги дўкон рўйхатга тушгунча кутади — умумий [waitForMyBusiness] (аввал жорий рўйхат, бўлмаса янги обуна).
+  Future<Business?> _findShop(String id) => waitForMyBusiness(
+        id,
+        current: _shops,
+        // Тест манбаи қайта тингланмайди.
+        watch: widget.businesses != null ? null : BusinessRepository().watchMine(widget.phone),
+      );
 
   /// Дўконни (Бизнес харитаси объекти ёки филиал) ўчириш (эга, 2026-10-26: «Дўконни ўчириш йўқ, тузат»).
   /// Мавжуд `deleteMyBusiness` (эгаси текширилади, блокланган — рад); маҳсулотлар `businessProductsCascade`
@@ -325,6 +315,15 @@ class _MyShopScreenState extends State<MyShopScreen> {
                   );
                 },
               ),
+              // Қолган дўконлар ҳали ўқилмоқда — рўйхат ўрнида кичик индикатор.
+              if (!snap.hasData && !snap.hasError)
+                const Padding(
+                  key: ValueKey('my_shop_list_loading'),
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                  ),
+                ),
               if (snap.hasError)
                 Padding(
                   padding: const EdgeInsets.all(12),
@@ -375,7 +374,8 @@ class _MyShopScreenState extends State<MyShopScreen> {
             ],
           );
         },
-      ),      floatingActionButton: widget.canCreateShop
+      ),
+      floatingActionButton: widget.canCreateShop
           ? FloatingActionButton.extended(
               onPressed: _openForm,
               backgroundColor: AppColors.primaryDark,

@@ -789,6 +789,11 @@ class _HomeViewState extends State<_HomeView> {
         await _openDating();
         return;
       case 'jobs':
+        // Бошқа модуллар каби дарвоза (аудит A-3: қидирувдан ёпиқ модул ҳам очиларди).
+        if (!ServiceConfigHolder.isOpenable('jobs')) {
+          HomeModuleGate.onTapBlocked(context, 'jobs');
+          return;
+        }
         await _push(
           JobsScreen(
             kind: e.type == SearchIndexEntry.typeService
@@ -872,7 +877,18 @@ class _HomeViewState extends State<_HomeView> {
   bool _driverRolesLoaded = false;
   bool _driverRolesLoading = false;
 
-  Future<void> _refreshDriverRoles() async {
+  /// Бир вақтда фақат битта ўқиш (single-flight): build, resume ва «＋» бир пайтда
+  /// чақирса ҳам Firestore'га битта сўров кетади (аудит К-5, кенгаш P3).
+  Future<void>? _rolesInFlight;
+  DateTime? _rolesAt;
+
+  Future<void> _refreshDriverRoles() =>
+      _rolesInFlight ??= _loadDriverRoles().whenComplete(() {
+        _rolesInFlight = null;
+        _rolesAt = DateTime.now();
+      });
+
+  Future<void> _loadDriverRoles() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
     if (uid.length < 9) return;
     final roles = await context.read<DriverRepository>().driverRoles(uid);
@@ -894,7 +910,26 @@ class _HomeViewState extends State<_HomeView> {
   MyShopPresence _shop = MyShopPresence.none;
   bool _shopLoaded = false;
 
-  Future<void> _refreshShopPresence() async {
+  Future<void>? _shopInFlight;
+  DateTime? _shopAt;
+
+  Future<void> _refreshShopPresence() =>
+      _shopInFlight ??= _loadShopPresence().whenComplete(() {
+        _shopInFlight = null;
+        _shopAt = DateTime.now();
+      });
+
+  /// «＋» очилганда ҳолат шундан эски бўлса қайта ўқилади. Иш/дўкон оқимидан
+  /// қайтганда эса доим янгиланади (воқеага асосланган, кенгаш P3).
+  static const _createStateTtl = Duration(seconds: 60);
+
+  bool _stale(DateTime? at) =>
+      at == null || DateTime.now().difference(at) > _createStateTtl;
+
+  /// «＋» иккинчи марта босилса — иккинчи варақ очилмайди.
+  bool _createSheetBusy = false;
+
+  Future<void> _loadShopPresence() async {
     final phone = canonicalPhoneId(context.read<HomeController>().phone);
     if (phoneDigits(phone).length < 9) return;
     final presence = await MyShopPresence.load(phone);
@@ -908,9 +943,21 @@ class _HomeViewState extends State<_HomeView> {
   /// «＋» — «Менинг бизнесим»: харита · видео · эълон · хизмат · онлайн дўкон ·
   /// ҳайдовчи · курьер · юк ташувчи · уй ошпази · кафе · китоб · AVA AI.
   Future<void> _openCreateSheet() async {
+    if (_createSheetBusy) return;
+    _createSheetBusy = true;
+    try {
+      await _openCreateSheetInner();
+    } finally {
+      _createSheetBusy = false;
+    }
+  }
+
+  Future<void> _openCreateSheetInner() async {
+    final hasPhone = phoneDigits(context.read<HomeController>().phone).length >= 9;
     // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — ҳолат ҳали юкланмаган
-    // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз.
-    if (!_driverRolesLoaded || !_shopLoaded) {
+    // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз. Телефонсиз — кутиш
+    // маъносиз (ўқиш бўлмайди), варақ дарҳол очилади.
+    if (hasPhone && (!_driverRolesLoaded || !_shopLoaded)) {
       await Future.wait<void>([
         if (!_driverRolesLoaded) _refreshDriverRoles(),
         if (!_shopLoaded) _refreshShopPresence(),
@@ -918,8 +965,8 @@ class _HomeViewState extends State<_HomeView> {
           onTimeout: () => const <void>[]);
       if (!mounted) return;
     } else {
-      unawaited(_refreshDriverRoles());
-      unawaited(_refreshShopPresence());
+      if (_stale(_rolesAt)) unawaited(_refreshDriverRoles());
+      if (_stale(_shopAt)) unawaited(_refreshShopPresence());
     }
     // Модул дарвозаси — каталог билан бир манба (эга, 2026-10-30): админда ёпиқ — йўқ;
     // «Тез кунда»/«Ҳамкорлик» — кўринади-ю очилмайди (Q-1); вебда видео — «фақат иловада» (Q-2).
@@ -934,20 +981,24 @@ class _HomeViewState extends State<_HomeView> {
       hasShop: _shop.any,
       hidden: gates.hidden,
       locked: gates.locked,
+      needsPhone: !hasPhone,
     );
     if (action == null || !mounted) return;
 
-    switch (gates.locked[action]) {
-      case AvaRowLock.appOnly:
+    switch (avaCreateRoute(action, gates, hasPhone: hasPhone)) {
+      case AvaCreateRoute.appOnly:
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(context.tr('home_create_video_app_only')),
           duration: const Duration(seconds: 3),
         ));
         return;
-      case AvaRowLock.soon:
+      case AvaCreateRoute.soon:
         HomeModuleGate.onTapBlocked(context, gates.blockedModule[action] ?? '');
         return;
-      case null:
+      case AvaCreateRoute.needPhone:
+        needPhoneForAction(context);
+        return;
+      case AvaCreateRoute.open:
         break;
     }
 
@@ -965,12 +1016,8 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
 
+    // Қолган барча йўллар эгалик телефонига боғланган (телефон юқорида текширилди).
     final phone = canonicalPhoneId(context.read<HomeController>().phone);
-    // Қолган барча йўллар эгалик телефонига боғланган.
-    if (phoneDigits(phone).length < 9) {
-      needPhoneForAction(context);
-      return;
-    }
 
     switch (action) {
       case AvaCreateAction.video:
@@ -999,7 +1046,9 @@ class _HomeViewState extends State<_HomeView> {
         // «Менинг дўконим».
         if (mounted) unawaited(_refreshShopPresence());
       case AvaCreateAction.businessMap:
-        await _push(const MyBusinessesScreen());
+        // Эга — HomeController телефони (бошқа оқимлар билан бир хил; аввал экран
+        // FirebaseAuth.phoneNumber'ни ўқирди ва у бўш бўлса рўйхат бўш чиқарди — А-7).
+        await _push(MyBusinessesScreen(ownerId: phone));
       case AvaCreateAction.driver:
         await _openWork();
       case AvaCreateAction.courier:
@@ -1093,9 +1142,38 @@ class _HomeViewState extends State<_HomeView> {
     if (mounted) unawaited(_refreshDriverRoles());
   }
 
+  /// Бош саҳифа бўлими тугмаси: модул «Тез кунда»/«Ҳамкорлик» бўлса бўлим кўринади-ю,
+  /// очилмайди — сабаби айтилади («＋» билан бир хил қоида, эга 2026-10-30 Q-1).
+  Future<void> _openGated(String moduleId, Widget screen) async {
+    if (!HomeModuleGate.canOpen(moduleId)) {
+      HomeModuleGate.onTapBlocked(context, moduleId);
+      return;
+    }
+    await _push(screen);
+  }
+
+  /// «Менинг бизнесларим» бош саҳифа бўлимидан: дарвоза + телефон + эга = HomeController телефони.
+  Future<void> _openMyBusinesses() async {
+    final phone = canonicalPhoneId(context.read<HomeController>().phone);
+    if (phoneDigits(phone).length < 9) {
+      needPhoneForAction(context);
+      return;
+    }
+    await _openGated('business_map', MyBusinessesScreen(ownerId: phone));
+  }
+
   /// Курьер: панели бор — панел; ариза кўриб чиқилмоқда — хабар; акс ҳолда
-  /// профилдаги билан БИР ХИЛ ариза оқими ([runCourierApplyFlow]).
+  /// ариза оқими ([runCourierApplyFlow] — ягона жойи шу; профилда энди йўқ).
+  /// Қайтганда ҳолат янгиланади: ариза юборилса варақда «кўриб чиқилмоқда» чиқади.
   Future<void> _openCourierWork() async {
+    try {
+      await _openCourierWorkInner();
+    } finally {
+      if (mounted) unawaited(_refreshDriverRoles());
+    }
+  }
+
+  Future<void> _openCourierWorkInner() async {
     var status = _driverRoles.courierStatus;
     if (status.isEmpty) {
       final uid = phoneDigits(context.read<HomeController>().phone);
@@ -1449,12 +1527,14 @@ class _HomeViewState extends State<_HomeView> {
                                     'ads_ad_${GeoContext.scopeFor('jobs').key}'),
                                 adType: 'ad',
                                 titleKey: 'home_section_ads',
-                                onOpenAll: () => _push(
+                                onOpenAll: () => _openGated(
+                                  'jobs',
                                   const JobsScreen(kind: AdKind.ad),
                                 ),
                                 // АЙНАН босилган эълон тепага чиқади ва
                                 // ажратиб кўрсатилади.
-                                onOpenAd: (ad) => _push(
+                                onOpenAd: (ad) => _openGated(
+                                  'jobs',
                                   JobsScreen(
                                     kind: AdKind.ad,
                                     highlightAdId: ad.id,
@@ -1467,10 +1547,12 @@ class _HomeViewState extends State<_HomeView> {
                                     'ads_service_${GeoContext.scopeFor('jobs').key}'),
                                 adType: 'service',
                                 titleKey: 'home_section_services',
-                                onOpenAll: () => _push(
+                                onOpenAll: () => _openGated(
+                                  'jobs',
                                   const JobsScreen(kind: AdKind.service),
                                 ),
-                                onOpenAd: (ad) => _push(
+                                onOpenAd: (ad) => _openGated(
+                                  'jobs',
                                   JobsScreen(
                                     kind: AdKind.service,
                                     highlightAdId: ad.id,
@@ -1613,9 +1695,9 @@ class _HomeViewState extends State<_HomeView> {
                               HomeBusinessSection(
                                 key: _sectionKey('business_map'),
                                 // GPS бўлса шу жой, бўлмаса бутун мамлакат (эга, 2026-10-23) — профил манзили ишлатилмайди.
-                                onOpenMap: () => _push(const BusinessMapScreen()),
-                                onAddMine: () =>
-                                    _push(const MyBusinessesScreen()),
+                                onOpenMap: () => _openGated(
+                                    'business_map', const BusinessMapScreen()),
+                                onAddMine: () => _openMyBusinesses(),
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('tv_market')) ...[

@@ -8,6 +8,7 @@ import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/business_map/screens/business_form_screen.dart';
 import 'package:ava_gurlan/features/business_map/screens/my_businesses_screen.dart';
 import 'package:ava_gurlan/features/home/widgets/home_business_section.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -36,8 +37,13 @@ class _FakeRepo extends BusinessRepository {
     return 'id1';
   }
 
+  Object? deleteFailsWith;
+
   @override
-  Future<void> deleteMine(String businessId) async => calls.add('delete:$businessId');
+  Future<void> deleteMine(String businessId) async {
+    if (deleteFailsWith != null) throw deleteFailsWith!;
+    calls.add('delete:$businessId');
+  }
 
   @override
   Future<String> adminCreate(
@@ -59,6 +65,16 @@ class _FakeRepo extends BusinessRepository {
       calls.add('adminDelete:$businessId:$reason');
 }
 
+/// Обуна кейинроқ янгиланади (янги объект бирданига рўйхатга тушмайди).
+class _LateRepo extends _FakeRepo {
+  _LateRepo() : super([]);
+
+  final live = StreamController<List<Business>>.broadcast();
+
+  @override
+  Stream<List<Business>> watchMine(String ownerId) => live.stream;
+}
+
 Business _b(String id, String name, BusinessCategory c, {String owner = '998901111111'}) => Business(
       id: id,
       ownerId: owner,
@@ -76,6 +92,14 @@ Future<void> _pump(WidgetTester tester, Widget home) async {
   addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: home));
   await tester.pumpAndSettle();
+}
+
+/// Обуна маълумот бермагунча спиннер айланади — `pumpAndSettle`сиз.
+Future<void> _pumpNoSettle(WidgetTester tester, Widget home) async {
+  tester.view.physicalSize = const Size(1200 * 2, 1800 * 2);
+  tester.view.devicePixelRatio = 2;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: home));
 }
 
 void main() {
@@ -191,11 +215,147 @@ void main() {
   });
 
   group('MyBusinessesScreen', () {
-    testWidgets('бўш рўйхат — тушунтириш матни ва «қўшиш» тугмаси', (tester) async {
+    testWidgets('бўш рўйхат — тушунтириш матни, FAB ва бўш ҳолатдаги «қўшиш» тугмаси форма очади', (tester) async {
       final empty = _FakeRepo([]);
-      await _pump(tester, MyBusinessesScreen(repository: empty, ownerId: '998901111111'));
+      final opened = <Business?>[];
+      await _pump(
+        tester,
+        MyBusinessesScreen(
+          repository: empty,
+          ownerId: '998901111111',
+          openForm: (context, existing) async {
+            opened.add(existing);
+            return null;
+          },
+        ),
+      );
       expect(find.text('bizmap_my_empty'), findsOneWidget);
-      expect(find.text('bizmap_add_mine'), findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
+      final emptyAdd = find.byKey(const ValueKey('my_biz_empty_add'));
+      expect(emptyAdd, findsOneWidget);
+      expect(find.descendant(of: emptyAdd, matching: find.text('bizmap_add_mine')), findsOneWidget);
+      await tester.tap(emptyAdd);
+      await tester.pumpAndSettle();
+      expect(opened, [null], reason: 'FAB каби — янги объект формаси');
+    });
+
+    testWidgets('рўйхат бор бўлса — бўш ҳолат тугмаси йўқ', (tester) async {
+      final one = _FakeRepo([_b('1', 'Мой Дўкон', BusinessCategory.retail)]);
+      await _pump(tester, MyBusinessesScreen(repository: one, ownerId: '998901111111'));
+      expect(find.byKey(const ValueKey('my_biz_empty_add')), findsNothing);
+    });
+
+    testWidgets('телефон йўқ (бўш ownerId) — сўров юборилмайди, «профилда телефон» ҳолати', (tester) async {
+      final repo = _FakeRepo([_b('1', 'Бегона', BusinessCategory.retail, owner: '')]);
+      await _pump(tester, MyBusinessesScreen(repository: repo, ownerId: ''));
+      expect(find.byKey(const ValueKey('my_biz_need_phone')), findsOneWidget);
+      expect(find.text('need_phone_profile'), findsOneWidget);
+      expect(find.text('Бегона'), findsNothing);
+      expect(find.byType(FloatingActionButton), findsNothing);
+    });
+
+    // Янги объектдан кейин: маҳсулот сотадиган тур — маҳсулотлар экрани дарров; бошқа тур — рўйхатда қолади.
+    Future<void> createVia(WidgetTester tester, List<Business> rows, Object? formResult) async {
+      await _pump(
+        tester,
+        MyBusinessesScreen(
+          key: UniqueKey(),
+          repository: _FakeRepo(rows),
+          ownerId: '998901111111',
+          openForm: (context, existing) async => formResult,
+          productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
+        ),
+      );
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('янги чакана объект (ID қайтди) — маҳсулотлар экрани очилади', (tester) async {
+      await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], 'n1');
+      expect(find.text('PRODUCTS n1'), findsOneWidget);
+    });
+
+    testWidgets('янги улгуржи объект — маҳсулотлар экрани очилади', (tester) async {
+      await createVia(tester, [_b('w1', 'Омбор', BusinessCategory.wholesale)], 'w1');
+      expect(find.text('PRODUCTS w1'), findsOneWidget);
+    });
+
+    testWidgets('янги кафе (food) — маҳсулотлар экрани очилмайди, рўйхатда қолади', (tester) async {
+      await createVia(tester, [_b('f1', 'Ошхона', BusinessCategory.food)], 'f1');
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(find.text('Ошхона'), findsOneWidget);
+    });
+
+    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани очилмайди', (tester) async {
+      await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], true);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], null);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+    });
+
+    testWidgets('янги объект кечикиб рўйхатга тушади — обуна орқали топилиб очилади', (tester) async {
+      final repo = _LateRepo();
+      await _pumpNoSettle(
+        tester,
+        MyBusinessesScreen(
+          repository: repo,
+          ownerId: '998901111111',
+          openForm: (context, existing) async => 'late1',
+          productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
+        ),
+      );
+      repo.live.add([_b('old', 'Эски', BusinessCategory.auto)]);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pump();
+      expect(find.textContaining('PRODUCTS'), findsNothing, reason: 'ҳали рўйхатда йўқ');
+      repo.live.add([_b('late1', 'Кечиккан', BusinessCategory.retail), _b('old', 'Эски', BusinessCategory.auto)]);
+      await tester.pumpAndSettle();
+      expect(find.text('PRODUCTS late1'), findsOneWidget);
+    });
+
+    testWidgets('янги объект муддат ичида рўйхатга тушмаса — ҳеч нарса очилмайди, рўйхатда қолади', (tester) async {
+      final repo = _LateRepo();
+      await _pumpNoSettle(
+        tester,
+        MyBusinessesScreen(
+          repository: repo,
+          ownerId: '998901111111',
+          openForm: (context, existing) async => 'never',
+          productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
+        ),
+      );
+      repo.live.add([_b('old', 'Эски', BusinessCategory.auto)]);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(find.text('Эски'), findsOneWidget);
+    });
+
+    testWidgets('ўчириш: блокланган объект — аниқ сабаб, хом хато йўқ', (tester) async {
+      final repo = _FakeRepo([_b('1', 'Мой Дўкон', BusinessCategory.retail)])
+        ..deleteFailsWith = FirebaseFunctionsException(
+            code: 'failed-precondition', message: 'raw', details: {'code': 'BUSINESS_BLOCKED'});
+      await _pump(tester, MyBusinessesScreen(repository: repo, ownerId: '998901111111'));
+      await tester.tap(find.byTooltip('bizmap_delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'bizmap_delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('bizmap_delete_blocked'), findsOneWidget);
+      expect(find.text('raw'), findsNothing);
+    });
+
+    testWidgets('ўчириш: бошқа хато — умумий хабар', (tester) async {
+      final repo = _FakeRepo([_b('1', 'Мой Дўкон', BusinessCategory.retail)])..deleteFailsWith = StateError('boom');
+      await _pump(tester, MyBusinessesScreen(repository: repo, ownerId: '998901111111'));
+      await tester.tap(find.byTooltip('bizmap_delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'bizmap_delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('bizmap_err_generic'), findsOneWidget);
+      expect(find.text('bizmap_delete_blocked'), findsNothing);
     });
 
     testWidgets('объект бор — карточка (ном, тур)', (tester) async {

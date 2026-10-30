@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/ava_tokens.dart';
 import '../../../models/driver_roles.dart';
 import '../../../repositories/courier_capability_repository.dart';
 
-/// «＋» → «Ҳайдовчи / Курьер» ойнасида танланадиган иш тури.
+/// Иш панели ([DriverHubScreen]) ва «＋» курьер ҳолатидаги иш тури.
 enum WorkChoice { intercity, local, marshrut, courier }
 
 /// Курьер ҳолати бўйича ёрлиқ рангининг тоифаси.
@@ -41,78 +40,6 @@ enum WorkTone { join, active, inactive, pending, blocked }
           ? (key: 'driver_chip_active', tone: WorkTone.active)
           : (key: 'driver_chip_inactive', tone: WorkTone.inactive);
   }
-}
-
-String _labelKey(WorkChoice c) =>
-    c == WorkChoice.courier ? 'work_type_courier' : 'role_type_${c.name}';
-
-/// Тўрт йўналиш ва уларнинг ҳолати: ҳайдовчилик турлари + курьер.
-Future<WorkChoice?> showWorkRolesSheet(
-  BuildContext context, {
-  required DriverRoles roles,
-  List<WorkChoice> choices = WorkChoice.values,
-}) {
-  return showModalBottomSheet<WorkChoice>(
-    context: context,
-    showDragHandle: true,
-    builder: (ctx) {
-      final c = ctx.ava;
-      Color toneColor(WorkTone t) {
-        switch (t) {
-          case WorkTone.active:
-            return c.ok;
-          case WorkTone.inactive:
-            return c.ink2;
-          case WorkTone.pending:
-            return c.warn;
-          case WorkTone.blocked:
-            return c.danger;
-          case WorkTone.join:
-            // Матн ранги: `brand` оқда 1.97:1 — `brandText` 5.6:1.
-            return c.brandText;
-        }
-      }
-
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AvaSpace.screen, 0, AvaSpace.screen, 8),
-              child: Text(
-                ctx.tr('work_sheet_title'),
-                style: AvaText.sectionTitle.copyWith(color: c.ink),
-              ),
-            ),
-            for (final choice in choices)
-              Builder(builder: (_) {
-                final st = workRowState(choice, roles);
-                final color = toneColor(st.tone);
-                return ListTile(
-                  leading: Icon(
-                    choice == WorkChoice.courier
-                        ? Icons.delivery_dining
-                        : Icons.local_taxi_outlined,
-                    color: c.brand,
-                  ),
-                  title: Text(ctx.tr(_labelKey(choice))),
-                  trailing: Text(
-                    ctx.tr(st.key),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: color,
-                    ),
-                  ),
-                  onTap: () => Navigator.of(ctx).pop(choice),
-                );
-              }),
-          ],
-        ),
-      );
-    },
-  );
 }
 
 /// Янги ҳайдовчи сифатида рўйхатдан ўтишдан олдин тасдиқ. Тур танланиши

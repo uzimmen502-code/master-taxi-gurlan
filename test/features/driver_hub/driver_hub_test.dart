@@ -26,11 +26,11 @@ Widget _host({
       theme: AppTheme.light,
       home: DriverHubScreen(
         key: UniqueKey(), // қайта pump'да ҳолат қайта юклансин
+        // Ишлаб чиқаришдаги каби: курьер панелга келмайди (home_screen._openWork).
         choices: const [
           WorkChoice.intercity,
           WorkChoice.local,
           WorkChoice.marshrut,
-          WorkChoice.courier,
         ],
         loadRoles: () async => roles,
         loadCar: () async => car,
@@ -90,7 +90,7 @@ void main() {
   });
 
   group('DriverHubScreen', () {
-    testWidgets('автомобиль, 4 тур ва ҳамён кўринади', (t) async {
+    testWidgets('автомобиль, 3 тур ва ҳамён кўринади', (t) async {
       // Узун рўйхат: ListView экрандан ташқарини қурмайди — баланд экран.
       t.view.physicalSize = const Size(400 * 2, 2400 * 2);
       t.view.devicePixelRatio = 2;
@@ -105,7 +105,9 @@ void main() {
       expect(find.text('role_type_intercity'), findsOneWidget);
       expect(find.text('role_type_local'), findsOneWidget);
       expect(find.text('role_type_marshrut'), findsOneWidget);
-      expect(find.text('work_type_courier'), findsOneWidget);
+      expect(find.text('hub_types_title'), findsOneWidget);
+      expect(find.text('hub_wallet'), findsOneWidget);
+      expect(find.byKey(const ValueKey('hub-retry')), findsNothing);
       expect(find.text('hub_action_publish'), findsOneWidget); // шаҳарлараро — рўйхатдан ўтган
       expect(find.text('work_state_join'), findsWidgets); // қолганлари — «Бўлиш»
     });
@@ -267,6 +269,92 @@ void main() {
       await t.tap(find.text('hub_car_add'));
       await t.pumpAndSettle();
       expect(loads, 2);
+    });
+
+    Widget failingHost({
+      required Future<DriverRoles> Function() loadRoles,
+      List<WorkChoice> choices = const [WorkChoice.local],
+    }) =>
+        MaterialApp(
+          theme: AppTheme.light,
+          home: DriverHubScreen(
+            choices: choices,
+            loadRoles: loadRoles,
+            loadCar: () async => null,
+            onAction: (_, __) async {},
+            onEditCar: () async {},
+            onSubmitVerification: () async => HubSubmitResult.sent,
+            onOpenWallet: () async {},
+          ),
+        );
+
+    testWidgets('юклаш хатоси — бўш панел ЭМАС, хато ва «Қайта уриниш»; босилса қайта юкланади',
+        (t) async {
+      var loads = 0;
+      var fail = true;
+      await t.pumpWidget(failingHost(loadRoles: () async {
+        loads++;
+        if (fail) throw Exception('offline');
+        return DriverRoles.none;
+      }));
+      await t.pumpAndSettle();
+      expect(loads, 1);
+      expect(find.text('err_load_failed'), findsOneWidget);
+      expect(find.byKey(const ValueKey('hub-retry')), findsOneWidget);
+      // Янги фойдаланувчи панели кўринмайди.
+      expect(find.text('hub_car_title'), findsNothing);
+      expect(find.text('hub_wallet'), findsNothing);
+      expect(find.text('hub_types_title'), findsNothing);
+
+      fail = false;
+      await t.tap(find.byKey(const ValueKey('hub-retry')));
+      await t.pumpAndSettle();
+      expect(loads, 2);
+      expect(find.text('err_load_failed'), findsNothing);
+      expect(find.text('hub_car_title'), findsOneWidget);
+      expect(find.text('role_type_local'), findsOneWidget);
+    });
+
+    testWidgets('хато ҳолатида ҳам тортиб янгилаш ишлайди', (t) async {
+      var loads = 0;
+      var fail = true;
+      await t.pumpWidget(failingHost(loadRoles: () async {
+        loads++;
+        if (fail) throw Exception('offline');
+        return DriverRoles.none;
+      }));
+      await t.pumpAndSettle();
+      expect(find.text('err_load_failed'), findsOneWidget);
+
+      fail = false;
+      await t.fling(find.text('err_load_failed'), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+      expect(loads, 2);
+      expect(find.text('hub_car_title'), findsOneWidget);
+    });
+
+    testWidgets('қайта уриниш ҳам хато берса — хато ҳолати қолади', (t) async {
+      var loads = 0;
+      await t.pumpWidget(failingHost(loadRoles: () async {
+        loads++;
+        throw Exception('offline');
+      }));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('hub-retry')));
+      await t.pumpAndSettle();
+      expect(loads, 2);
+      expect(find.byKey(const ValueKey('hub-retry')), findsOneWidget);
+    });
+
+    testWidgets('тур йўқ — «Иш турлари» сарлавҳаси ҳам йўқ', (t) async {
+      await t.pumpWidget(failingHost(
+        choices: const [],
+        loadRoles: () async => DriverRoles.none,
+      ));
+      await t.pumpAndSettle();
+      expect(find.text('hub_types_title'), findsNothing);
+      expect(find.text('hub_car_title'), findsOneWidget);
+      expect(find.text('hub_wallet'), findsOneWidget);
     });
   });
 }

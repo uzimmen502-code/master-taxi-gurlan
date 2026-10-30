@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
@@ -171,6 +173,37 @@ void main() {
       expect(find.text('Gurlan'), findsOneWidget);
       expect(find.text('Ulgurji ombor'), findsOneWidget);
       expect(find.text('Oshxona'), findsNothing);
+    });
+
+    testWidgets('дўконлар рўйхати ўқилмоқда — асосий карточка ва кичик индикатор; келгач индикатор йўқолади', (tester) async {
+      _bigView(tester);
+      final ctrl = StreamController<List<Business>>();
+      addTearDown(ctrl.close);
+      await tester.pumpWidget(_app(MyShopScreen(
+        phone: _phone,
+        businesses: ctrl.stream,
+        loadMainName: () async => 'Asosiy',
+      )));
+      await tester.pump();
+      expect(find.text('Asosiy'), findsOneWidget, reason: 'асосий дўкон барибир кўринади');
+      expect(find.byKey(const ValueKey('my_shop_list_loading')), findsOneWidget);
+
+      ctrl.add([_biz('b1', 'Kiyim do‘koni', BusinessCategory.retail)]);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('my_shop_list_loading')), findsNothing);
+      expect(find.text('Kiyim do‘koni'), findsOneWidget);
+    });
+
+    testWidgets('рўйхат хатоси — индикатор эмас, хато матни', (tester) async {
+      _bigView(tester);
+      await tester.pumpWidget(_app(MyShopScreen(
+        phone: _phone,
+        businesses: Stream<List<Business>>.error(StateError('x')),
+        loadMainName: () async => 'Asosiy',
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('my_shop_list_loading')), findsNothing);
+      expect(find.text('bizmap_err_generic'), findsOneWidget);
     });
 
     testWidgets('«Янги дўкон» тугмаси фақат Бизнес харитаси очиқ бўлса', (tester) async {

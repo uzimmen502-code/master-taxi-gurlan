@@ -125,6 +125,71 @@ void main() {
     });
   });
 
+  group('avaCreateRoute (соф қарор: нима очилади)', () {
+    const open = AvaCreateGates();
+    final lockedGates = AvaCreateGates(
+      locked: const {AvaCreateAction.cafe: AvaRowLock.soon, AvaCreateAction.video: AvaRowLock.appOnly},
+    );
+    test('очиқ банд ва телефон бор — очилади', () {
+      expect(avaCreateRoute(AvaCreateAction.ad, open, hasPhone: true), AvaCreateRoute.open);
+    });
+    test('телефонсиз — китоб ва AI очилади, қолганлари телефон сўрайди', () {
+      expect(avaCreateRoute(AvaCreateAction.book, open, hasPhone: false), AvaCreateRoute.open);
+      expect(avaCreateRoute(AvaCreateAction.assistant, open, hasPhone: false), AvaCreateRoute.open);
+      for (final a in AvaCreateAction.values.where((a) => !kAvaCreateNoPhone.contains(a))) {
+        expect(avaCreateRoute(a, open, hasPhone: false), AvaCreateRoute.needPhone, reason: a.name);
+      }
+    });
+    test('ёпиқ банд — телефондан олдин сабаби айтилади (телефон сўралмайди)', () {
+      expect(avaCreateRoute(AvaCreateAction.cafe, lockedGates, hasPhone: false), AvaCreateRoute.soon);
+      expect(avaCreateRoute(AvaCreateAction.video, lockedGates, hasPhone: true), AvaCreateRoute.appOnly);
+    });
+  });
+
+  testWidgets('телефонсиз: тепада эслатма, телефон керак бандларда қулф; китоб/AI да қулф йўқ', (tester) async {
+    tester.view.physicalSize = const Size(400 * 2, 2400 * 2);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: ElevatedButton(
+            onPressed: () => showAvaCreateSheet(context, needsPhone: true),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('need_phone_profile'), findsOneWidget);
+    // Эслатмадаги қулф + 10 та телефон талаб қиладиган банд (12 − китоб − AI).
+    expect(find.byIcon(Icons.lock_outline_rounded), findsNWidgets(11));
+  });
+
+  testWidgets('телефон бор: эслатма ва қулф йўқ', (tester) async {
+    await _open(tester);
+    expect(find.text('need_phone_profile'), findsNothing);
+    expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
+  });
+
+  testWidgets('курьер аризаси кутилмоқда — изоҳ ўрнида ҳолат; тўхтатилган — «Тўхтатилган»', (tester) async {
+    await _open(tester, roles: const DriverRoles(courierStatus: 'applied'));
+    expect(find.text('work_state_pending'), findsOneWidget);
+    expect(find.text('home_create_courier_sub'), findsNothing);
+  });
+
+  testWidgets('курьер тўхтатилган — «Тўхтатилган» изоҳи', (tester) async {
+    await _open(tester, roles: const DriverRoles(courierStatus: 'suspended'));
+    expect(find.text('work_state_suspended'), findsOneWidget);
+  });
+
+  testWidgets('курьер оддий ҳолатда — одатий изоҳ', (tester) async {
+    await _open(tester);
+    expect(find.text('home_create_courier_sub'), findsOneWidget);
+  });
+
   testWidgets('ёпиқ банд кўринади, белги чиқади, «›» йўқ; босилса амал қайтади (чақирувчи очмайди)', (tester) async {
     final picked = await _open(
       tester,

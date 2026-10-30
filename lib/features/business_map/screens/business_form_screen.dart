@@ -35,7 +35,7 @@ class BusinessFormScreen extends StatefulWidget {
   final BusinessCategory? initialCategory;
 
   /// «Менинг дўконим»: тур танлови яширилади (тур [initialCategory] ёки [existing]дан). Харита
-  /// рўйхатидаги умумий форма (alse) аввалгидек тур танлайди.
+  /// рўйхатидаги умумий форма (`false`) аввалгидек тур танлайди.
   final bool lockCategory;
   final BusinessRepository? _repo;
 

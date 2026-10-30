@@ -31,8 +31,9 @@ class YukLocalNearbyPanel extends StatefulWidget {
     this.openPublishOnStart = false,
   });
 
-  /// «＋» → «Юк ташувчи»: экран очилиши билан янги эълон варағи (эга, 2026-10-19 —
+  /// «＋» → «Юк ташувчи»: экран очилиши билан эълон варағи (эга, 2026-10-19 —
   /// экрандаги алоҳида «Эълон бериш» тугмаси олиб ташланди, функцияси «＋» га кўчган).
+  /// Доим янги эълон (бир нечта эълон рухсат); GPS рухсат диалогидан кейин очилади.
   final bool openPublishOnStart;
 
   final String ownerId;
@@ -60,6 +61,10 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
 
   /// Ўз эълонлари — бир рақам остида бир нечта.
   List<YukLocalDriver> _mine = const [];
+
+  /// Биринчи GPS рухсат сўрови тугади (рухсат берилди/рад этилди/хато) —
+  /// «＋» варағи тизим диалоги устига очилмаслиги учун.
+  final _gpsPromptDone = Completer<void>();
   double? _userLat;
   double? _userLng;
   bool _loadingGps = true;
@@ -109,22 +114,32 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     // GPS рухсати диалоги рўйхат юкланишини блокламаслиги керак.
     unawaited(ensureGps());
     _subscribeCatalog();
+    if (widget.ownerId.isNotEmpty) {
+      _mineSub = _repo.watchMine(widget.ownerId).listen(
+        (list) {
+          if (!mounted) return;
+          setState(() {
+            _mine = list;
+            _recompute();
+          });
+        },
+        // Ўз эълонлари ўқилмаса ҳам оқим «unhandled» хато бермасин (рўйхат бўш қолади).
+        onError: (Object e, StackTrace st) {
+          debugPrint('[YukLocal] mine: $e');
+        },
+      );
+    } else {
+      _loadingList = false;
+    }
     if (widget.openPublishOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_openPublish());
       });
     }
-    if (widget.ownerId.isNotEmpty) {
-      _mineSub = _repo.watchMine(widget.ownerId).listen((list) {
-        if (!mounted) return;
-        setState(() {
-          _mine = list;
-          _recompute();
-        });
-      });
-    } else {
-      _loadingList = false;
-    }
+  }
+
+  void _markGpsPromptDone() {
+    if (!_gpsPromptDone.isCompleted) _gpsPromptDone.complete();
   }
 
   /// Каталог оқими — [_queryScope] ўзгарганда (даража тугмаси ёки GPS
@@ -193,6 +208,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
+      // Рухсат диалоги ёпилди — координатани кутмасдан «＋» варағига йўл.
+      _markGpsPromptDone();
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever) {
         if (!mounted) return;
@@ -242,6 +259,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
         _recompute();
       });
     } finally {
+      // Хизмат ўчиқ / хато — диалог бўлмади, варақ кутиб қолмасин.
+      _markGpsPromptDone();
       // GPS пайдо бўлди/йўқолди — сўров доираси ўзгариши мумкин.
       if (mounted) _subscribeCatalog();
     }
@@ -355,9 +374,22 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     return tokens.every((t) => hay.contains(t));
   }
 
-  /// «Эълон бериш» — ҲАР ДОИМ ЯНГИ эълон. Эски эълонлар ўчмайди
-  /// (шаҳарлараро эълонлар билан бир хил мантиқ).
-  Future<void> _openPublish() => _openDriverSheet(null);
+  /// «＋» → «Юк ташувчи»: ҲАР ДОИМ янги эълон (бир рақамда бир нечта эълон рухсат,
+  /// янги эълон очишнинг ягона йўли — «＋»; мавжудлари рўйхатда таҳрирланади).
+  /// GPS рухсат диалоги тугашини (вақт чегараси билан) кутади — тизим диалоги
+  /// варақ устига тушмасин.
+  Future<void> _openPublish() async {
+    try {
+      await _gpsPromptDone.future.timeout(_gpsPromptTimeout);
+    } catch (_) {
+      // Вақт тугади ёки хато — барибир варақ очилади (аввалги хатти-ҳаракат).
+    }
+    if (!mounted) return;
+    await _openDriverSheet(null);
+  }
+
+  /// Фойдаланувчи GPS рухсат диалогида ўйлаб туриши мумкин.
+  static const _gpsPromptTimeout = Duration(seconds: 30);
 
   /// Мавжуд эълонни таҳрирлаш (фақат шу эълон ўзгаради).
   Future<void> _editAd(YukLocalDriver driver) => _openDriverSheet(driver);

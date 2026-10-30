@@ -77,7 +77,8 @@ function film(extra = {}) {
 
 function clip(extra = {}) {
   return {
-    videoUrl: 'https://example.com/v.mp4',
+    // Эганинг `tv_clips/<ownerPhone>/` папкаси (аудит 2026-10-31 HIGH-1 қоидаси).
+    videoUrl: `https://firebasestorage.googleapis.com/v0/b/master-taxi-gurlan.firebasestorage.app/o/tv_clips%2F${OWNER}%2Fv.mp4?alt=media`,
     posterUrl: '',
     title: 'Non',
     price: 0,

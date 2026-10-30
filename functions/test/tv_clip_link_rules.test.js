@@ -53,10 +53,14 @@ async function main() {
   const owner = () => testEnv.authenticatedContext('uOwner', { phone_number: `+${OWNER}` }).firestore();
   const other = () => testEnv.authenticatedContext('uOther', { phone_number: `+${OTHER}` }).firestore();
 
-  const newClip = (extra = {}) => ({
-    ownerPhone: OWNER, ownerName: 'Али', title: 'Обзор', videoUrl: 'https://x/v.mp4',
-    category: 'product', status: 'pending', ...extra,
-  });
+  // videoUrl — эганинг `tv_clips/<ownerPhone>/` папкасидан (аудит 2026-10-31 HIGH-1 қоидаси).
+  const newClip = (extra = {}) => {
+    const d = { ownerPhone: OWNER, ownerName: 'Али', title: 'Обзор', category: 'product', status: 'pending', ...extra };
+    if (!('videoUrl' in extra)) {
+      d.videoUrl = `https://firebasestorage.googleapis.com/v0/b/master-taxi-gurlan.firebasestorage.app/o/tv_clips%2F${d.ownerPhone}%2Fv.mp4?alt=media`;
+    }
+    return d;
+  };
 
   await reset();
   await check('A эгаси боғлашли оддий клип яратади (pending)', () =>

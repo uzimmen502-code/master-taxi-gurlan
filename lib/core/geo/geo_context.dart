@@ -120,10 +120,12 @@ enum GeoAreaSource { home, location, manual }
 /// Фойдаланувчининг ҳудуд контексти (D-GEO-1, 1-такомиллаштириш):
 ///
 /// - **Яшаш жойи** ([home]) — профилдан (`ServiceConfigHolder`), фақат
-///   Профилда ўзгаради. Модул дарвозаси (ёқилган/ёпиқ) ҳам шунга қарайди.
+///   Профилда ўзгаради.
 /// - **Фаол ҳудуд** ([active]) — бош саҳифа тугмаси ёки локация таклифи
 ///   (D-GEO-12) билан танланади; профилни ЎЗГАРТИРМАЙДИ. Танланмаган
-///   бўлса — яшаш жойига эргашади.
+///   бўлса — яшаш жойига эргашади. Модул дарвозаси (ёқилган/ёпиқ) ШУНГА
+///   қарайди (эга, 2026-10-31, «А вариант»: тепада нима ёзилган бўлса, шу ишлайди) —
+///   [ServiceConfigHolder.applyActiveDistrict].
 /// - **Модулдаги танлов** ([scopeFor]) — даража ва ҳудуд; қоида
 ///   [kModuleGeoPolicies]да (сақланади ёки йўқ).
 class GeoContext {
@@ -187,6 +189,8 @@ class GeoContext {
       debugPrint('GeoContext.load: $e');
     }
     revision.value++;
+    // Модул дарвозаси фаол туман бўйича (кешдагиси билан бир хил бўлса — тармоқ ўқиши ҳам кешни янгилайди).
+    await ServiceConfigHolder.applyActiveDistrict(_active?.districtId ?? '');
   }
 
   /// Фаол ҳудудни белгилаш. Яшаш жойи билан бир хил бўлса — «яшаш жойига
@@ -199,6 +203,8 @@ class GeoContext {
       _activeSource = source;
     }
     revision.value++;
+    // Хизматлар танланган ҳудуд бўйича (эга, 2026-10-31, «А вариант»).
+    await ServiceConfigHolder.applyActiveDistrict(_active?.districtId ?? '');
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_active == null) {

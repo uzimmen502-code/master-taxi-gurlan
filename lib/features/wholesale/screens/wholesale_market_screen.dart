@@ -910,10 +910,13 @@ class _MyProductsView extends StatelessWidget {
                         itemBuilder: (_) => [
                           PopupMenuItem(
                               value: 'edit', child: Text(context.tr('edit'))),
-                          PopupMenuItem(
-                            value: 'add_video',
-                            child: Text(context.tr('wholesale_menu_add_video')),
-                          ),
+                          // Ҳар маҳсулотга битта ихтиёрий видео (эга,
+                          // 2026-10-31): бор бўлса яна қўшиш таклиф қилинмайди.
+                          if (p.videoClipIds.isEmpty)
+                            PopupMenuItem(
+                              value: 'add_video',
+                              child: Text(context.tr('wholesale_menu_add_video')),
+                            ),
                           if (p.videoClipIds.isNotEmpty)
                             PopupMenuItem(
                               value: 'view_video',

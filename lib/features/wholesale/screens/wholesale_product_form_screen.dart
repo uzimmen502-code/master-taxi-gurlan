@@ -7,26 +7,13 @@ import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
+import '../repositories/wholesale_stock_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart' show kWholesaleDefaultUnit;
 import '../widgets/wholesale_field_error.dart';
+import '../widgets/wholesale_pack_editor.dart';
 import '../widgets/wholesale_tier_picker.dart' show kWholesaleTapSize;
-
-/// Тайёр нарх поғонаси — қатъий МОҚ чегараси (1 / 10 / 50) ва кўринадиган
-/// диапазон ёрлиғи. Нарх тўлдириш ихтиёрий (эга қарори, 2026-09-24):
-/// фақат тўлдирилган поғоналар сақланади.
-class _FixedTier {
-  const _FixedTier(this.minQty, this.rangeLabel);
-  final int minQty;
-  final String rangeLabel;
-}
-
-const _kFixedTiers = <_FixedTier>[
-  _FixedTier(1, '1–9'),
-  _FixedTier(10, '10–49'),
-  _FixedTier(50, '50+'),
-];
 
 /// Хитой бозори учун валюта танлови. Бўш қиймат — сўм (модел `currency`
 /// бўш бўлса сўм деб қарайди), шунинг учун "сўм" чипи бўш сақланади.
@@ -87,14 +74,10 @@ class _WholesaleProductFormScreenState
   /// Хитой бозори: нарх валютаси (бўш — сўм).
   String _currency = '';
 
-  /// Етказиш учун (У1): бир дона вазни (кг матни) ва ўлчами (см).
-  late final TextEditingController _weightCtrl;
-  late final TextEditingController _dimLCtrl;
-  late final TextEditingController _dimWCtrl;
-  late final TextEditingController _dimHCtrl;
-
-  /// Ҳар бир тайёр поғона учун нарх контроллери (тартиби [_kFixedTiers]га мос).
-  late final List<TextEditingController> _priceCtrls;
+  /// Қадоқлар (эга, 2026-10-31): ҳар бирининг нархи, вазни/ўлчами, қолдиғи
+  /// ва ихтиёрий расми. Битта НОМСИЗ қадоқ — оддий (қадоқсиз) маҳсулот.
+  final List<WholesalePackDraft> _packs = [];
+  final _stockRepo = WholesaleStockRepository();
 
   final List<String> _existingImageUrls = [];
   final List<XFile> _newImages = [];
@@ -132,22 +115,56 @@ class _WholesaleProductFormScreenState
       text: (e?.deliveryDays ?? 0) > 0 ? '${e!.deliveryDays}' : '',
     );
     _currency = e?.currency.trim() ?? '';
-    _weightCtrl = TextEditingController(text: weightKgFieldText(e?.unitWeightG ?? 0));
-    _dimLCtrl = TextEditingController(text: e?.unitDims == null ? '' : '${e!.unitDims!.l}');
-    _dimWCtrl = TextEditingController(text: e?.unitDims == null ? '' : '${e!.unitDims!.w}');
-    _dimHCtrl = TextEditingController(text: e?.unitDims == null ? '' : '${e!.unitDims!.h}');
-    _priceCtrls =
-        List.generate(_kFixedTiers.length, (_) => TextEditingController());
     if (e != null) {
-      // Мавжуд поғоналарни уч тайёр майдонга жойлаш: МОҚ чегарасига қараб
-      // энг мос майдонга (1..9 → 0, 10..49 → 1, 50+ → 2). Эски ностандарт
-      // маълумот бўлса ҳам йиқилмайди — энг яқин майдонга тушади.
-      for (final t in e.priceTiers) {
-        final idx = t.minQty >= 50 ? 2 : (t.minQty >= 10 ? 1 : 0);
-        _priceCtrls[idx].text = '${t.price}';
-      }
+      // Эски (қадоқсиз) маҳсулот — битта номсиз қадоқ: поғоналар МОҚ
+      // чегарасига қараб энг мос майдонга тушади (1..9 / 10..49 / 50+).
+      _packs.addAll(e.effectivePacks.map(WholesalePackDraft.fromPack));
       _existingImageUrls.addAll(e.imageUrls);
+      _loadStock(e);
+    } else {
+      _packs.add(WholesalePackDraft(id: 'p1'));
     }
+  }
+
+  /// Таҳрирда сақланган қолдиқни майдонларга қўяди (фақат бўш майдонга —
+  /// сотувчи ёзиб улгурган бўлса тегилмайди).
+  Future<void> _loadStock(WholesaleProduct e) async {
+    try {
+      final s = await _stockRepo.fetch(e.id);
+      if (!mounted) return;
+      setState(() {
+        for (final (i, p) in e.effectivePacks.indexed) {
+          final q = s.of(p.id);
+          if (q != null && i < _packs.length && _packs[i].stock.text.isEmpty) {
+            _packs[i].stock.text = '$q';
+          }
+        }
+      });
+    } catch (err) {
+      debugPrint('[Wholesale] load stock failed: $err');
+    }
+  }
+
+  /// Битта номсиз қадоқ — оддий маҳсулот (эски кўриниш, `packs` йўқ).
+  bool get _isSimple => _packs.length == 1 && _packs.first.label.text.trim().isEmpty;
+
+  void _addPack() {
+    if (_packs.length >= WholesalePack.maxPacks) return;
+    setState(() => _packs.add(WholesalePackDraft(id: WholesalePack.nextId(_packs.map((p) => p.id)))));
+  }
+
+  void _removePack(int index) {
+    if (_packs.length <= 1) return;
+    setState(() => _packs.removeAt(index).dispose());
+  }
+
+  Future<void> _pickPackPhoto(WholesalePackDraft d) async {
+    final x = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (x == null || !mounted) return;
+    setState(() {
+      d.newPhoto = x;
+      d.removePhoto = false;
+    });
   }
 
   @override
@@ -156,70 +173,19 @@ class _WholesaleProductFormScreenState
     _descCtrl.dispose();
     _unitCtrl.dispose();
     _deliveryCtrl.dispose();
-    _weightCtrl.dispose();
-    _dimLCtrl.dispose();
-    _dimWCtrl.dispose();
-    _dimHCtrl.dispose();
-    for (final c in _priceCtrls) {
-      c.dispose();
+    for (final p in _packs) {
+      p.dispose();
     }
     super.dispose();
-  }
-
-  /// Вазн/ўлчам майдонларини ўқийди. Қайтаради: (`weightG`, `dims`) ёки
-  /// хато калити. Иккаласи ҳам ихтиёрий; ўлчам — учаласи бирга ёки бўш;
-  /// ўлчам бор, вазн йўқ — мумкин эмас (ҳажмий вазн ёлғиз маъносиз).
-  ({int? weightG, ShippingDims? dims, String? error}) _collectShipping() {
-    final wRaw = _weightCtrl.text.trim();
-    int? weightG;
-    if (wRaw.isNotEmpty) {
-      weightG = parseWeightKgToGrams(wRaw);
-      if (weightG == null) return (weightG: null, dims: null, error: 'wholesale_err_weight_invalid');
-    }
-    final raws = [_dimLCtrl.text.trim(), _dimWCtrl.text.trim(), _dimHCtrl.text.trim()];
-    final filled = raws.where((s) => s.isNotEmpty).length;
-    ShippingDims? dims;
-    if (filled == 3) {
-      final l = int.tryParse(raws[0]);
-      final w = int.tryParse(raws[1]);
-      final h = int.tryParse(raws[2]);
-      if (l == null || w == null || h == null) {
-        return (weightG: null, dims: null, error: 'wholesale_err_dims_invalid');
-      }
-      dims = ShippingDims(l: l, w: w, h: h);
-      if (!dims.isValid) return (weightG: null, dims: null, error: 'wholesale_err_dims_invalid');
-    } else if (filled != 0) {
-      return (weightG: null, dims: null, error: 'wholesale_err_dims_invalid');
-    }
-    if (dims != null && weightG == null) {
-      return (weightG: null, dims: null, error: 'wholesale_err_weight_invalid');
-    }
-    return (weightG: weightG, dims: dims, error: null);
-  }
-
-  /// Тўлдирилган поғоналарни йиғади (тўлдириш ихтиёрий). Бўш майдон ўтказиб
-  /// юборилади; ҳеч бири тўлдирилмаса — бўш рўйхат (сақлаш блокланади).
-  List<WholesalePriceTier> _collectTiers() {
-    final tiers = <WholesalePriceTier>[];
-    for (var i = 0; i < _kFixedTiers.length; i++) {
-      final raw = _priceCtrls[i].text.trim();
-      if (raw.isEmpty) continue;
-      final price = int.tryParse(raw);
-      if (price == null || price <= 0) continue;
-      tiers.add(WholesalePriceTier(minQty: _kFixedTiers[i].minQty, price: price));
-    }
-    return sortWholesalePriceTiers(tiers);
   }
 
   int get _totalImageCount => _existingImageUrls.length + _newImages.length;
 
   /// Бўлим остидаги хатолар ва скролл учун калитлар.
-  bool _tiersErr = false;
   bool _imagesErr = false;
   final _imagesKey = GlobalKey();
   final _titleKey = GlobalKey();
   final _tiersKey = GlobalKey();
-  final _shippingKey = GlobalKey();
 
   Future<void> _pickImages() async {
     final remaining = _maxImages - _totalImageCount;
@@ -240,22 +206,65 @@ class _WholesaleProductFormScreenState
     setState(() => _newImages.removeAt(index));
   }
 
+  /// Ҳар бир қадоқни текширади ва хатоларни карточкага ёзади. Қайтаради:
+  /// ҳаммаси тўғрими.
+  bool _validatePacks() {
+    final simple = _isSimple;
+    var ok = true;
+    for (final d in _packs) {
+      d.labelErr = !simple && d.label.text.trim().isEmpty;
+      d.tiersErr = d.collectTiers().isEmpty;
+      d.stockErrKey = d.collectStock().error;
+      if (d.labelErr || d.tiersErr || d.stockErrKey != null || d.collectShipping().error != null) {
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  /// Қадоқ расмлари: янгиси юкланади, олиб ташлангани/алмашгани — Storage'дан ўчирилади.
+  Future<({List<WholesalePack> packs, List<String> orphanPhotos})> _buildPacks() async {
+    final out = <WholesalePack>[];
+    final orphans = <String>[];
+    for (final d in _packs) {
+      var photo = d.removePhoto ? '' : d.existingPhotoUrl;
+      if (d.newPhoto != null) {
+        final up = await _storage.uploadImages(sellerId: widget.seller.phone, images: [d.newPhoto!]);
+        if (up.isNotEmpty) photo = up.first;
+      }
+      if (d.existingPhotoUrl.isNotEmpty && photo != d.existingPhotoUrl) orphans.add(d.existingPhotoUrl);
+      final s = d.collectShipping();
+      out.add(WholesalePack(
+        id: d.id,
+        label: d.label.text.trim(),
+        priceTiers: d.collectTiers(),
+        unitWeightG: s.weightG,
+        unitDims: s.dims,
+        photoUrl: photo,
+      ));
+    }
+    return (packs: out, orphanPhotos: orphans);
+  }
+
+  /// Киритилган қолдиқлар `{packId: qty}`. Оддий маҳсулотда — `default`.
+  Map<String, int> _stockMap(bool simple) {
+    final m = <String, int>{};
+    for (final d in _packs) {
+      final q = d.collectStock().qty;
+      if (q != null) m[simple ? WholesalePack.defaultId : d.id] = q;
+    }
+    return m;
+  }
+
   Future<void> _save() async {
     // Хатолар майдон/бўлим ёнида (SnackBar эмас): барчаси бирданига кўрсатилади
     // ва биринчи хатога скролл қилинади.
     final formOk = _formKey.currentState!.validate();
-    final tiers = _collectTiers();
-    final shipping = _collectShipping();
-    final tiersBad = tiers.isEmpty;
+    final packsOk = _validatePacks();
     final imagesBad = _totalImageCount == 0;
-    if (!formOk || tiersBad || imagesBad || shipping.error != null) {
-      setState(() {
-        _tiersErr = tiersBad;
-        _imagesErr = imagesBad;
-      });
-      final first = imagesBad
-          ? _imagesKey
-          : (!formOk ? _titleKey : (tiersBad ? _tiersKey : _shippingKey));
+    if (!formOk || !packsOk || imagesBad) {
+      setState(() => _imagesErr = imagesBad);
+      final first = imagesBad ? _imagesKey : (!formOk ? _titleKey : _tiersKey);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final c = first.currentContext;
         if (c != null) {
@@ -265,6 +274,7 @@ class _WholesaleProductFormScreenState
       });
       return;
     }
+    final simple = _isSimple;
     setState(() => _saving = true);
     try {
       final uploaded = _newImages.isEmpty
@@ -274,6 +284,8 @@ class _WholesaleProductFormScreenState
               images: _newImages,
             );
       final imageUrls = [..._existingImageUrls, ...uploaded];
+      final built = await _buildPacks();
+      final first = built.packs.first;
       final days = int.tryParse(_deliveryCtrl.text.trim());
       final product = WholesaleProduct(
         id: widget.existing?.id ?? '',
@@ -282,7 +294,9 @@ class _WholesaleProductFormScreenState
         title: _titleCtrl.text.trim(),
         titleLower: _titleCtrl.text.trim().toLowerCase(),
         description: _descCtrl.text.trim(),
-        priceTiers: tiers,
+        // Оддий маҳсулот — ягона қадоқ маҳсулот майдонларига; қадоқлида
+        // модел энг арзон қадоқдан нусха олади (орқага мослик).
+        priceTiers: first.priceTiers,
         unit: _unitCtrl.text.trim().isEmpty
             ? kWholesaleDefaultUnit
             : _unitCtrl.text.trim(),
@@ -292,8 +306,9 @@ class _WholesaleProductFormScreenState
         // нарх ҳамиша сўмда, шунинг учун бўш қолдирилади.
         currency: _isChina ? _currency.trim() : '',
         deliveryDays: _isChina && days != null && days > 0 ? days : null,
-        unitWeightG: shipping.weightG,
-        unitDims: shipping.dims,
+        unitWeightG: first.unitWeightG,
+        unitDims: first.unitDims,
+        packs: simple ? const [] : built.packs,
       );
       String productId;
       if (_isEdit) {
@@ -301,24 +316,44 @@ class _WholesaleProductFormScreenState
         await _repo.ownerUpdate(productId, product);
         // Эга олиб ташлаган расмлар Storage'да эгасиз қолмасин
         // (2026-09-29). Аввал улар у ерда абадий қолиб кетар эди.
-        final removed = widget.existing!.imageUrls
-            .where((u) => !_existingImageUrls.contains(u))
-            .toList(growable: false);
+        final removed = [
+          ...widget.existing!.imageUrls.where((u) => !_existingImageUrls.contains(u)),
+          ...built.orphanPhotos,
+        ];
         if (removed.isNotEmpty) {
           await _storage.deleteImages(removed);
         }
       } else {
         productId = await _repo.create(product);
       }
+      // Қолдиқ — алоҳида, серверда (маҳсулот сақлангандан КЕЙИН: сервер
+      // қадоқ ID'ларини маҳсулот ҳужжатидан текширади). Хато бўлса маҳсулот
+      // сақланган бўлиб қолади — сотувчига алоҳида айтилади.
+      var stockFailed = false;
+      final stock = _stockMap(simple);
+      if (stock.isNotEmpty) {
+        try {
+          await _stockRepo.setStock(productId, stock);
+        } catch (e) {
+          debugPrint('[Wholesale] set stock failed: $e');
+          stockFailed = true;
+        }
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: stockFailed ? AppColors.error : null,
           content: Text(context.tr(
-            _isEdit ? 'wholesale_saved_updated' : 'wholesale_saved_sent',
+            stockFailed
+                ? 'wholesale_stock_save_failed'
+                : (_isEdit ? 'wholesale_saved_updated' : 'wholesale_saved_sent'),
           )),
         ),
       );
-      await _offerVideo(productId);
+      // Битта ихтиёрий видео (эга, 2026-10-31): видео бор бўлса таклиф йўқ.
+      if ((widget.existing?.videoClipIds ?? const []).isEmpty) {
+        await _offerVideo(productId);
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -447,9 +482,7 @@ class _WholesaleProductFormScreenState
               _chinaSection(),
             ],
             const SizedBox(height: 16),
-            KeyedSubtree(key: _tiersKey, child: _tiersSection()),
-            const SizedBox(height: 16),
-            KeyedSubtree(key: _shippingKey, child: _shippingSection()),
+            KeyedSubtree(key: _tiersKey, child: _packsSection()),
             const SizedBox(height: 12),
             TextFormField(
               controller: _unitCtrl,
@@ -513,128 +546,47 @@ class _WholesaleProductFormScreenState
     );
   }
 
-  /// Етказиш учун вазн/ўлчам (У1). Пулли вазн жонли кўрсатилади — сотувчи
-  /// катта қути учун ҳажмий вазн ҳақиқийдан ошишини кўради.
-  Widget _shippingSection() {
+  /// Қадоқлар (эга, 2026-10-31): 1..5 карточка. Битта номсиз карточка —
+  /// оддий маҳсулот (сотувчи учун форма аввалгидек содда қолади).
+  Widget _packsSection() {
     final unit = _unitText;
-    final s = _collectShipping();
-    String? preview;
-    if (s.error == null && s.weightG != null) {
-      final vol = s.dims?.volumetricWeightG() ?? 0;
-      preview = context
-          .tr('wholesale_chargeable_weight')
-          .replaceAll('{weight}', formatWeightG(chargeableWeightG(s.weightG!, s.dims)))
-          .replaceAll('{vol}', s.dims == null ? '—' : formatWeightG(vol));
-    }
-    InputDecoration deco(String label) => InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        );
+    final showLabels = _packs.length > 1 || !_isSimple;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(context.tr('wholesale_shipping_section'),
+        Text(context.tr('wholesale_packs_title'),
             style: const TextStyle(
                 fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Text(
-          context.tr('wholesale_shipping_help'),
+          context.tr('wholesale_packs_help'),
           style: TextStyle(fontSize: AppText.bodySmall, color: AppColors.sectionMuted),
         ),
         const SizedBox(height: 10),
-        TextFormField(
-          controller: _weightCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-          onChanged: (_) => setState(() {}),
-          decoration: deco(context.tr('wholesale_field_weight_kg').replaceAll('{unit}', unit)),
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          for (final (ctrl, key) in [
-            (_dimLCtrl, 'wholesale_field_dim_l'),
-            (_dimWCtrl, 'wholesale_field_dim_w'),
-            (_dimHCtrl, 'wholesale_field_dim_h'),
-          ]) ...[
-            Expanded(
-              child: TextFormField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-                onChanged: (_) => setState(() {}),
-                decoration: deco(context.tr(key)),
-              ),
-            ),
-            if (key != 'wholesale_field_dim_h') const SizedBox(width: 8),
-          ],
-        ]),
-        if (preview != null) ...[
-          const SizedBox(height: 6),
-          Text(preview, style: TextStyle(fontSize: AppText.bodySmall, color: AppColors.primaryText)),
-        ] else if (s.error != null) ...[
-          const SizedBox(height: 6),
-          WholesaleFieldError(textKey: s.error!),
-        ],
+        for (final (i, d) in _packs.indexed)
+          WholesalePackCard(
+            draft: d,
+            index: i,
+            unitLabel: unit,
+            currencyLabel: _currencyLabel,
+            showLabel: showLabels,
+            onChanged: () => setState(() {}),
+            onPickPhoto: () => _pickPackPhoto(d),
+            onRemove: _packs.length > 1 ? () => _removePack(i) : null,
+          ),
+        if (_packs.length < WholesalePack.maxPacks)
+          OutlinedButton.icon(
+            key: const ValueKey('wholesale-pack-add'),
+            onPressed: _addPack,
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(kWholesaleTapSize)),
+            icon: const Icon(Icons.add),
+            label: Text(context.tr('wholesale_pack_add')
+                .replaceAll('{n}', '${_packs.length}')
+                .replaceAll('{max}', '${WholesalePack.maxPacks}')),
+          ),
       ],
     );
   }
-
-  Widget _tiersSection() {
-    final unit = _unitText;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(context.tr('wholesale_price_tiers'),
-            style: const TextStyle(
-                fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        Text(
-          context.tr('wholesale_tiers_help'),
-          style: TextStyle(fontSize: AppText.bodySmall, color: AppColors.sectionMuted),
-        ),
-        const SizedBox(height: 10),
-        for (var i = 0; i < _kFixedTiers.length; i++) _tierRow(i, unit),
-        if (_tiersErr) const WholesaleFieldError(textKey: 'wholesale_err_tier_required'),
-      ],
-    );
-  }
-
-  Widget _tierRow(int index, String unit) {
-    final tier = _kFixedTiers[index];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(children: [
-        SizedBox(
-          width: 96,
-          child: Text(
-            '${tier.rangeLabel} $unit',
-            style: const TextStyle(
-                fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextFormField(
-            controller: _priceCtrls[index],
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (_) {
-              if (_tiersErr) setState(() => _tiersErr = false);
-            },
-            decoration: InputDecoration(
-              labelText: context
-                  .tr('wholesale_field_tier_price')
-                  .replaceAll('{currency}', _currencyLabel),
-              border: const OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-        ),
-      ]),
-    );
-  }
-
   Widget _imagesSection() {
     return Column(
       key: _imagesKey,

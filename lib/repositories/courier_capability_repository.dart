@@ -63,12 +63,16 @@ class CourierCapabilityRepository {
   /// Сервер қарор қилади (D-15.3, D-15.5): Мануал — `applied` (админ
   /// тасдиғигача иш йўқ), Авто — дарҳол `approved`. Қайта босиш
   /// idempotent. Қайтаради: серверда ёзилган ҳолат.
-  Future<String> apply() async {
+  ///
+  /// [requestId] — битта ариза ниятининг калити (C-2); бўш бўлса юборилмайди
+  /// (эски сервер номаълум майдонни эътиборсиз қолдиради).
+  Future<String> apply({String requestId = ''}) async {
     final fns =
         _functions ?? FirebaseFunctions.instanceFor(region: kDemandCoreRegion);
-    final res = await fns
-        .httpsCallable('requestCapability')
-        .call<Object?>({'service': 'courier'});
+    final res = await fns.httpsCallable('requestCapability').call<Object?>({
+      'service': 'courier',
+      if (requestId.isNotEmpty) 'requestId': requestId,
+    });
     final d = res.data is Map ? (res.data as Map) : const {};
     return (d['status'] ?? '').toString();
   }

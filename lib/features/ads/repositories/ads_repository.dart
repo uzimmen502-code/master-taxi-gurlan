@@ -55,6 +55,7 @@ class AdsRepository {
     required List<String> imageUrls,
     String districtId = '',
     String regionId = '',
+    String requestId = '',
   }) {
     return MarketAdService.submitAd(
       title: title,
@@ -64,6 +65,7 @@ class AdsRepository {
       imageUrls: imageUrls,
       districtId: districtId,
       regionId: regionId,
+      requestId: requestId,
     );
   }
 

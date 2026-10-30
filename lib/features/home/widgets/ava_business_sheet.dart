@@ -31,6 +31,19 @@ enum AvaCreateAction {
 /// «Онлайн Дўкон очиш» ичидаги танлов: маҳсулот қаерга қўшилади.
 enum AvaShopTarget { retail, wholesale }
 
+/// Ҳар бозорнинг модули — `kAvaCreateModules[shopOnline]` билан бир хил ID'лар.
+const Map<AvaShopTarget, String> kAvaShopTargetModules = {
+  AvaShopTarget.retail: 'cheap_products_home',
+  AvaShopTarget.wholesale: 'wholesale_market',
+};
+
+/// Биринчи дўкон варағида танлаш мумкин бўлган бозорлар (аудит Н-4): фақат
+/// модули ОЧИЛАДИГАН бозор. [canOpen] — `HomeModuleGate.canOpen` (тестда — соф функция).
+Set<AvaShopTarget> avaOpenableShopTargets(bool Function(String moduleId) canOpen) => {
+      for (final e in kAvaShopTargetModules.entries)
+        if (canOpen(e.value)) e.key,
+    };
+
 /// Банд кўринади, лекин очилмайди (эга, 2026-10-30, Q-1: «кўринсин-у босилмасин»).
 enum AvaRowLock {
   /// Модул «Тез кунда» / «Ҳамкорлик» — хабари `HomeModuleGate.onTapBlocked`.
@@ -186,7 +199,15 @@ class AvaFirstShop {
   final AvaShopTarget target;
 }
 
-Future<AvaFirstShop?> showAvaFirstShopSheet(BuildContext context) {
+/// [allowed] — модули очиладиган бозорлар ([avaOpenableShopTargets]; чақирувчи
+/// ҳисоблайди). Иккаласи — танлов; биттаси — танлов кўрсатилмайди, шу бозор
+/// олдиндан танланган (ёпиқ сегмент «нега босилмайди?» деган савол туғдиради, аудит Н-4);
+/// бўш — варақ очилмайди (`null`; «＋» қатори аслида `AvaCreateGates` да қулф).
+Future<AvaFirstShop?> showAvaFirstShopSheet(
+  BuildContext context, {
+  Set<AvaShopTarget> allowed = const {AvaShopTarget.retail, AvaShopTarget.wholesale},
+}) async {
+  if (allowed.isEmpty) return null;
   return showModalBottomSheet<AvaFirstShop>(
     context: context,
     showDragHandle: true,
@@ -195,12 +216,14 @@ Future<AvaFirstShop?> showAvaFirstShopSheet(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => _Scaled(child: const _FirstShopSheet()),
+    builder: (ctx) => _Scaled(child: _FirstShopSheet(allowed: allowed)),
   );
 }
 
 class _FirstShopSheet extends StatefulWidget {
-  const _FirstShopSheet();
+  const _FirstShopSheet({required this.allowed});
+
+  final Set<AvaShopTarget> allowed;
 
   @override
   State<_FirstShopSheet> createState() => _FirstShopSheetState();
@@ -208,7 +231,10 @@ class _FirstShopSheet extends StatefulWidget {
 
 class _FirstShopSheetState extends State<_FirstShopSheet> {
   final _name = TextEditingController();
-  AvaShopTarget _target = AvaShopTarget.retail;
+  // Аҳоли очиқ бўлса — у (аввалги одатий танлов), акс ҳолда ягона очиқ бозор.
+  late AvaShopTarget _target = widget.allowed.contains(AvaShopTarget.retail)
+      ? AvaShopTarget.retail
+      : widget.allowed.first;
   String? _error;
 
   @override
@@ -268,33 +294,36 @@ class _FirstShopSheetState extends State<_FirstShopSheet> {
                   border: const OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Text(
-                  context.tr('home_create_shop_where'),
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: c.ink,
+              // Танлов фақат иккала бозор ҳам очиқ бўлса (аудит Н-4).
+              if (widget.allowed.length > 1) ...[
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                  child: Text(
+                    context.tr('home_create_shop_where'),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: c.ink,
+                    ),
                   ),
                 ),
-              ),
-              SegmentedButton<AvaShopTarget>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(
-                    value: AvaShopTarget.retail,
-                    label: Text(context.tr('tv_shop_to_market')),
-                  ),
-                  ButtonSegment(
-                    value: AvaShopTarget.wholesale,
-                    label: Text(context.tr('home_module_wholesale')),
-                  ),
-                ],
-                selected: {_target},
-                onSelectionChanged: (s) => setState(() => _target = s.first),
-              ),
+                SegmentedButton<AvaShopTarget>(
+                  showSelectedIcon: false,
+                  segments: [
+                    ButtonSegment(
+                      value: AvaShopTarget.retail,
+                      label: Text(context.tr('tv_shop_to_market')),
+                    ),
+                    ButtonSegment(
+                      value: AvaShopTarget.wholesale,
+                      label: Text(context.tr('home_module_wholesale')),
+                    ),
+                  ],
+                  selected: {_target},
+                  onSelectionChanged: (s) => setState(() => _target = s.first),
+                ),
+              ],
               const SizedBox(height: 16),
               FilledButton(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),

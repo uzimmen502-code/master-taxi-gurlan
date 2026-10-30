@@ -489,5 +489,40 @@ void main() {
       expect(find.text('bizmap_err_generic'), findsOneWidget);
       expect(find.text('bizmap_form_edit'), findsOneWidget);
     });
+
+    // C-2: икки марта босиш / таймаутдан кейин қайта уриниш — битта калит, битта сўров.
+    testWidgets('C-2: бир кадрда икки босиш — битта upsert; хатодан кейин қайта уриниш ўша clientRequestId билан', (tester) async {
+      final repo = _GatedRepo();
+      await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));
+      await tester.ensureVisible(find.text('bizmap_save'));
+      final save = find.text('bizmap_save');
+      await tester.tap(save);
+      await tester.tap(save, warnIfMissed: false); // қайта қурилишдан олдин — эски onPressed
+      await tester.pump();
+      expect(repo.calls, hasLength(1), reason: 'иккинчи босиш иккинчи сўров юбормайди');
+      expect(find.text('bizmap_save'), findsNothing, reason: 'юбориш пайтида тугма спиннер');
+
+      repo.gate.completeError(StateError('timeout'));
+      await tester.pumpAndSettle();
+      repo.gate = Completer<String>()..complete('id1');
+      await tester.tap(find.text('bizmap_save'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, hasLength(2));
+      String key(String call) => call.split(':').last;
+      expect(key(repo.calls[1]), key(repo.calls[0]), reason: 'бир форма — бир калит');
+    });
   });
+}
+
+/// Сервер жавоби тест бошқарганда келади ([gate]).
+class _GatedRepo extends _FakeRepo {
+  _GatedRepo() : super([]);
+
+  Completer<String> gate = Completer<String>();
+
+  @override
+  Future<String> upsertMine(Business b, {String? businessId, required String clientRequestId}) {
+    calls.add('upsert:${businessId ?? 'new'}:$clientRequestId');
+    return gate.future;
+  }
 }

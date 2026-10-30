@@ -786,8 +786,16 @@ class RestaurantsRepository {
 
   // ── Ресторан (а'зо) ────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> register(Map<String, dynamic> payload) =>
-      _call('restaurantRegister', payload);
+  /// [requestId] — бир форма учун бир калит (C-2): қайта юборишда иккинчи ресторан
+  /// яратилмайди. Бўш — юборилмайди (эски сервер номаълум майдонни эътиборсиз қолдиради).
+  Future<Map<String, dynamic>> register(
+    Map<String, dynamic> payload, {
+    String requestId = '',
+  }) =>
+      _call('restaurantRegister', {
+        ...payload,
+        if (requestId.isNotEmpty) 'requestId': requestId,
+      });
 
   Future<Map<String, dynamic>> accept(String orderId, {int? prepTimeMin}) =>
       _call('restaurantAcceptOrder', {

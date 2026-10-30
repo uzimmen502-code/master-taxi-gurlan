@@ -70,6 +70,10 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
   bool _busy = false;
   String? _error;
 
+  /// Бир форма = бир ҳужжат (C-2): таҳрирда — мавжуд ID, янги эълонда — форма
+  /// очилганда бир марта олинган ID. Хатодан кейин қайта юбориш дубликат ясамайди.
+  late final String _docId = widget.initial?.id ?? _repo.newListingId();
+
   @override
   void initState() {
     super.initState();
@@ -163,6 +167,8 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
   }
 
   Future<void> _submit() async {
+    // Қайта кириш ҳимояси (C-2): юбориш давом этаётганда иккинчи босиш ҳеч нима қилмайди.
+    if (_busy) return;
     if (widget.ownerId.isEmpty) {
       setState(() => _error = context.tr('yuk_need_phone'));
       return;
@@ -189,7 +195,7 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
         label = (addr ?? '').trim();
       }
       await _repo.publishListing(
-        docId: widget.initial?.id,
+        docId: _docId,
         ownerId: widget.ownerId,
         ownerName: widget.ownerName,
         phone: widget.ownerPhone,

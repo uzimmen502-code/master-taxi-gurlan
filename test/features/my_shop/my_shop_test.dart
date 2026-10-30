@@ -560,6 +560,8 @@ void main() {
       bool preferMain = false,
       AvaFirstShop? first,
       bool saveFails = false,
+      Set<AvaShopTarget> targets = const {AvaShopTarget.retail, AvaShopTarget.wholesale},
+      List<Set<AvaShopTarget>>? asked,
     }) async {
       _bigView(tester);
       final pushed = <Widget>[];
@@ -575,7 +577,11 @@ void main() {
                 canCreateShop: canCreate,
                 preferMain: preferMain,
                 push: (w) async => pushed.add(w),
-                askFirstShop: (_) async => first,
+                shopTargets: targets,
+                askFirstShop: (_, allowed) async {
+                  asked?.add(allowed);
+                  return first;
+                },
                 saveName: (phone, name) async {
                   if (saveFails) throw StateError('permission-denied');
                   saved.add('$phone|$name');
@@ -677,6 +683,109 @@ void main() {
       expect(find.text('my_shop_name_save_failed'), findsOneWidget);
       expect(find.text('permission-denied'), findsNothing);
       expect(r.pushed.single, isA<MainShopScreen>());
+    });
+
+    testWidgets('Н-4: вараққа фақат очиқ бозорлар узатилади', (tester) async {
+      final asked = <Set<AvaShopTarget>>[];
+      final r = await run(
+        tester,
+        presence: MyShopPresence.none,
+        targets: const {AvaShopTarget.wholesale},
+        asked: asked,
+        first: const AvaFirstShop(name: '', target: AvaShopTarget.wholesale),
+      );
+      expect(asked.single, {AvaShopTarget.wholesale});
+      expect((r.pushed.single as MainShopScreen).initialSegment, 1);
+    });
+
+    testWidgets('Н-4: ҳеч бир бозор очиқ эмас — варақ очилмайди, ҳеч нарса push қилинмайди', (tester) async {
+      final asked = <Set<AvaShopTarget>>[];
+      final r = await run(
+        tester,
+        presence: MyShopPresence.none,
+        targets: const {},
+        asked: asked,
+        first: const AvaFirstShop(name: 'Barakat', target: AvaShopTarget.retail),
+      );
+      expect(asked, isEmpty);
+      expect(r.pushed, isEmpty);
+      expect(r.saved, isEmpty);
+    });
+
+    testWidgets('Н-4: рухсат этилмаган бозор қайтса — очилмайди', (tester) async {
+      final r = await run(
+        tester,
+        presence: MyShopPresence.none,
+        targets: const {AvaShopTarget.wholesale},
+        first: const AvaFirstShop(name: '', target: AvaShopTarget.retail),
+      );
+      expect(r.pushed, isEmpty);
+    });
+  });
+
+  group('Н-4: биринчи дўкон варағи — фақат очиқ бозорлар', () {
+    test('avaOpenableShopTargets — модул ҳолатидан', () {
+      expect(avaOpenableShopTargets((_) => true),
+          {AvaShopTarget.retail, AvaShopTarget.wholesale});
+      expect(avaOpenableShopTargets((id) => id == 'wholesale_market'),
+          {AvaShopTarget.wholesale});
+      expect(avaOpenableShopTargets((id) => id == 'cheap_products_home'),
+          {AvaShopTarget.retail});
+      expect(avaOpenableShopTargets((_) => false), isEmpty);
+    });
+
+    Future<({AvaFirstShop? Function() result})> pumpSheet(
+        WidgetTester tester, Set<AvaShopTarget> allowed) async {
+      AvaFirstShop? result;
+      _bigView(tester);
+      await tester.pumpWidget(_app(Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              onPressed: () async =>
+                  result = await showAvaFirstShopSheet(context, allowed: allowed),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      )));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return (result: () => result);
+    }
+
+    testWidgets('иккаласи очиқ — танлов кўринади, Аҳоли олдиндан танланган', (tester) async {
+      final s = await pumpSheet(tester, {AvaShopTarget.retail, AvaShopTarget.wholesale});
+      expect(find.byType(SegmentedButton<AvaShopTarget>), findsOneWidget);
+      expect(find.text('home_create_shop_where'), findsOneWidget);
+      await tester.tap(find.text('my_shop_continue'));
+      await tester.pumpAndSettle();
+      expect(s.result()!.target, AvaShopTarget.retail);
+    });
+
+    testWidgets('фақат Улгуржи очиқ — танлов йўқ, Улгуржи танланган', (tester) async {
+      final s = await pumpSheet(tester, {AvaShopTarget.wholesale});
+      expect(find.byType(SegmentedButton<AvaShopTarget>), findsNothing);
+      expect(find.text('home_create_shop_where'), findsNothing);
+      expect(find.text('tv_shop_to_market'), findsNothing);
+      await tester.tap(find.text('my_shop_continue'));
+      await tester.pumpAndSettle();
+      expect(s.result()!.target, AvaShopTarget.wholesale);
+    });
+
+    testWidgets('фақат Аҳоли очиқ — танлов йўқ, Аҳоли танланган', (tester) async {
+      final s = await pumpSheet(tester, {AvaShopTarget.retail});
+      expect(find.byType(SegmentedButton<AvaShopTarget>), findsNothing);
+      expect(find.text('home_module_wholesale'), findsNothing);
+      await tester.tap(find.text('my_shop_continue'));
+      await tester.pumpAndSettle();
+      expect(s.result()!.target, AvaShopTarget.retail);
+    });
+
+    testWidgets('ҳеч бири очиқ эмас — варақ очилмайди, null', (tester) async {
+      final s = await pumpSheet(tester, const {});
+      expect(find.text('my_shop_continue'), findsNothing);
+      expect(s.result(), isNull);
     });
   });
 }

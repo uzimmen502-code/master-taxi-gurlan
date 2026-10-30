@@ -1,3 +1,4 @@
+import '../../../core/service_config_holder.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -69,6 +70,8 @@ class BusinessRepository {
       ...b.toCallable(),
       if (businessId != null && businessId.isNotEmpty) 'businessId': businessId,
       'clientRequestId': clientRequestId,
+      // Сервер модул дарвозаси тепада танланган туман бўйича (эга, 2026-10-31).
+      ...ServiceConfigHolder.moduleGeoField,
     });
     final d = res.data as Map;
     return '${d['businessId']}';

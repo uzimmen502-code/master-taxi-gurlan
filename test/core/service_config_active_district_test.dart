@@ -65,6 +65,17 @@ void main() {
     expect(ServiceConfigHolder.isOpenable('local_taxi'), isFalse);
   });
 
+  test('moduleGeoField (серверга): сафарда — танланган туман, уйда — яшаш жойи, ҳеч бири — майдон йўқ', () {
+    ServiceConfigHolder.setForTest(districtId: 'yashnobod', activeDistrictId: 'gurlan');
+    expect(ServiceConfigHolder.moduleGeoField, {'geoDistrictId': 'gurlan'});
+    ServiceConfigHolder.setForTest(districtId: 'yashnobod');
+    expect(ServiceConfigHolder.moduleGeoField, {'geoDistrictId': 'yashnobod'});
+    ServiceConfigHolder.setForTest(districtId: 'gurlan', activeDistrictId: 'gurlan');
+    expect(ServiceConfigHolder.moduleGeoField, {'geoDistrictId': 'gurlan'});
+    ServiceConfigHolder.setForTest();
+    expect(ServiceConfigHolder.moduleGeoField, isEmpty);
+  });
+
   test('applyActiveDistrict: бўш ёки яшаш жойи — сафар режими ўчади', () async {
     ServiceConfigHolder.setForTest(
       defaults: defaults,

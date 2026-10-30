@@ -1,3 +1,4 @@
+import '../core/service_config_holder.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 /// Иш топ — CF-only яратиш / шикоят.
@@ -21,6 +22,7 @@ class JobAdService {
     String requestId = '',
   }) async {
     final res = await _fn.httpsCallable('submitJobAd').call({
+      ...ServiceConfigHolder.moduleGeoField,
       'type': type,
       'text': text,
       'title': title,

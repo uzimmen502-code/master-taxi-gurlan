@@ -1182,7 +1182,7 @@ class _EditDialogState extends State<_EditDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.orange,
-            content: Text('Энг кўпи 5 та расм'),
+            content: Text('Энг кўпи ${PlatformProduct.maxImages} та расм'),
           ),
         );
       }
@@ -1233,7 +1233,7 @@ class _EditDialogState extends State<_EditDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.orange,
-          content: Text('Энг кўпи 5 та расм'),
+          content: Text('Энг кўпи ${PlatformProduct.maxImages} та расм'),
         ),
       );
       return;
@@ -1480,7 +1480,7 @@ class _EditDialogState extends State<_EditDialog> {
               const Padding(
                 padding: EdgeInsets.only(top: 4, bottom: 8),
                 child: Text(
-                  '1–5 та расм. Файл ёки Ctrl+V. Катта расм авто сиқилади.',
+                  '1–${PlatformProduct.maxImages} та расм. Файл ёки Ctrl+V. Катта расм авто сиқилади.',
                   style: TextStyle(fontSize: 11.5, color: Colors.black54),
                 ),
               ),

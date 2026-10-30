@@ -10,9 +10,11 @@ import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../ads/widgets/ad_image_slider.dart';
 import '../models/wholesale_product.dart';
 import '../repositories/wholesale_products_repository.dart';
+import '../repositories/wholesale_stock_repository.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
+import '../widgets/wholesale_pack_chips.dart';
 import '../widgets/wholesale_product_strip.dart';
 import '../widgets/wholesale_tier_picker.dart';
 
@@ -204,7 +206,24 @@ class _WholesaleProductDetailViewState
   /// қайта ошмасин.
   static final Set<String> _countedThisSession = <String>{};
 
-  late int _qty = widget.product.moq;
+  /// Танланган қадоқ (эга, 2026-10-31). Қадоқсиз маҳсулот — `default`.
+  late String _packId = widget.product.effectivePacks.first.id;
+  WholesalePack get _pack => widget.product.packById(_packId);
+
+  late int _qty = _pack.moq;
+
+  /// Қолдиқ — битта ҳужжат тинглагичи, экран ёпилганда ёпилади.
+  late final Stream<WholesaleStock> _stock =
+      WholesaleStockRepository().watch(widget.product.id);
+
+  void _selectPack(String id) {
+    if (id == _packId) return;
+    setState(() {
+      _packId = id;
+      _qty = _pack.moq;
+    });
+  }
+
   late final List<WholesaleProduct> _similar =
       similarWholesale(widget.product, widget.catalog);
   late final List<WholesaleProduct> _sellerOthers =
@@ -255,8 +274,14 @@ class _WholesaleProductDetailViewState
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final price = p.priceForQty(_qty);
+    final pack = _pack;
+    final price = pack.priceForQty(_qty);
     final total = price * _qty;
+    // Қадоқ расми бўлса — асосий расм ўрнига биринчи бўлиб (эга, 2026-10-31).
+    final images = pack.hasPhoto
+        ? [pack.photoUrl, ...p.imageUrls.where((u) => u != pack.photoUrl)]
+        : p.imageUrls;
+    final unitLabel = wholesaleUnitLabel(context, p.unit);
     // Асосий урғу — маҳсулот расми (эга, 2026-10-31): экран кенглигига тенг
     // квадрат, лекин баланд экранда ҳам пастдаги нарх/поғона кўриниши учун
     // экран баландлигининг 55% идан ошмайди (аввал қатъий 280 px эди).
@@ -274,7 +299,9 @@ class _WholesaleProductDetailViewState
             Stack(
               children: [
                 AdImageSlider(
-                  imageUrls: p.imageUrls,
+                  // Қадоқ алмашса слайдер бошидан (қадоқ расми) кўрсатсин.
+                  key: ValueKey('wholesale-images-${pack.id}'),
+                  imageUrls: images,
                   height: imageHeight,
                   backgroundColor: PdDark.surface2,
                 ),
@@ -311,11 +338,19 @@ class _WholesaleProductDetailViewState
                         : p.sellerCompanyName,
                     style: meta,
                   ),
+                  if (p.hasPacks) ...[
+                    const SizedBox(height: 6),
+                    WholesalePackChips(
+                      product: p,
+                      selectedId: pack.id,
+                      onSelected: _selectPack,
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   // Танланган миқдордаги ҳақиқий бир дона нархи: поғона
                   // босилса ёки миқдор ўзгарса шу ердаги нарх ҳам ўзгаради.
                   Text(
-                    '${formatPrice(price)} ${p.currencyLabel} / ${wholesaleUnitLabel(context, p.unit)}',
+                    '${formatPrice(price)} ${p.currencyLabel} / $unitLabel',
                     style: const TextStyle(
                       fontSize: 18,
                       height: 1.2,
@@ -337,15 +372,15 @@ class _WholesaleProductDetailViewState
                   // Етказиш маълумоти (У1): вазн/ўлчам бўлса — кўрсатилади,
                   // бўлмаса харидор буни билсин (ҳақ ҳисобланмайди).
                   const SizedBox(height: 2),
-                  if (p.hasShippingData)
+                  if (pack.hasShippingData)
                     Text(
                       [
                         context.tr('wholesale_weight_line').replaceAll(
-                            '{weight}', formatWeightG(p.unitWeightG!)),
-                        if (p.unitDims != null)
+                            '{weight}', formatWeightG(pack.unitWeightG!)),
+                        if (pack.unitDims != null)
                           context
                               .tr('wholesale_dims_line')
-                              .replaceAll('{dims}', p.unitDims!.label),
+                              .replaceAll('{dims}', pack.unitDims!.label),
                       ].join(' · '),
                       style: meta,
                     )
@@ -354,9 +389,19 @@ class _WholesaleProductDetailViewState
                       context.tr('wholesale_no_shipping_data'),
                       style: meta.copyWith(color: const Color(0xFFF0A868)),
                     ),
+                  StreamBuilder<WholesaleStock>(
+                    stream: _stock,
+                    builder: (context, snap) => WholesaleStockLine(
+                      qty: snap.data?.of(pack.id),
+                      unitLabel: unitLabel,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   WholesaleTierPicker(
+                    // Қадоқ алмашса миқдор майдони ҳам янгидан.
+                    key: ValueKey('wholesale-tiers-${pack.id}'),
                     product: p,
+                    pack: p.hasPacks ? pack : null,
                     qty: _qty,
                     onQtyChanged: (q) => setState(() => _qty = q),
                   ),

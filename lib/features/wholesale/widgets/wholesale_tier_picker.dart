@@ -38,11 +38,16 @@ class WholesaleTierPicker extends StatefulWidget {
     required this.product,
     required this.qty,
     required this.onQtyChanged,
+    this.pack,
   });
 
   final WholesaleProduct product;
   final int qty;
   final ValueChanged<int> onQtyChanged;
+
+  /// Танланган қадоқ (эга, 2026-10-31) — нарх поғоналари ва МОҚ шундан.
+  /// `null` — маҳсулотнинг ўз поғоналари (қадоқсиз маҳсулот).
+  final WholesalePack? pack;
 
   @override
   State<WholesaleTierPicker> createState() => _WholesaleTierPickerState();
@@ -78,7 +83,9 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
     super.dispose();
   }
 
-  int get _moq => widget.product.moq;
+  int get _moq => widget.pack?.moq ?? widget.product.moq;
+
+  List<PriceTier> get _tiers => widget.pack?.priceTiers ?? widget.product.priceTiers;
 
   void _set(int v) {
     final q = clampWholesaleQty(v, _moq);
@@ -91,7 +98,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final tiers = p.priceTiers;
+    final tiers = _tiers;
     if (tiers.isEmpty) return const SizedBox.shrink();
     final qty = widget.qty;
     final active = activeTierIndex(tiers, qty);
@@ -119,7 +126,8 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
             children: [
               for (final (i, t) in tiers.indexed)
                 _TierChip(
-                  label: _tierLabel(p, i, unitLabel),
+                  // «1–9 кг», «10–49 кг», «50+ кг» (`tierRangeText`).
+                  label: '${tierRangeText(tiers, i)} $unitLabel',
                   price: formatPrice(t.price),
                   active: i == active,
                   onTap: () => _set(t.minQty),
@@ -255,9 +263,6 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
     );
   }
 
-  /// «1–9 кг», «10–49 кг», «50+ кг» (`tierRangeText`).
-  static String _tierLabel(WholesaleProduct p, int i, String unit) =>
-      '${tierRangeText(p.priceTiers, i)} $unit';
 }
 
 class _TierChip extends StatelessWidget {

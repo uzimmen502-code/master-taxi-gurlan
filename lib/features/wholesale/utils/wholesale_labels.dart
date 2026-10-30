@@ -26,7 +26,8 @@ String wholesaleUnitLabel(BuildContext context, String unit) =>
 /// [WholesaleProduct.priceLine] нинг кўриниши билан бир хил, фақат матнлар
 /// тилга мослаштирилган.
 String wholesalePriceLine(BuildContext context, WholesaleProduct p) {
-  final from = p.priceTiers.length > 1
+  // Бир нечта қадоқ ёки поғона — «дан» (нарх энг арзон қадоқдан, 2026-10-31).
+  final from = p.priceTiers.length > 1 || p.packs.length > 1
       ? '${_trOr(context, 'home_price_from', 'дан')} '
       : '';
   return '$from${formatPrice(p.basePrice)} ${p.currencyLabel}'

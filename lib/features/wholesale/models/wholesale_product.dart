@@ -190,7 +190,7 @@ class WholesaleProduct implements AdSearchable {
 
   /// «дан 9 000 $ / дона» — карточка ва тафсилотдаги ягона нарх сатри.
   String get priceLine =>
-      '${priceTiers.length > 1 ? 'дан ' : ''}'
+      '${priceTiers.length > 1 || packs.length > 1 ? 'дан ' : ''}'
       '${formatPrice(basePrice)} $currencyLabel / $unit';
 
   bool get isPending => status == statusPending;

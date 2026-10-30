@@ -46,6 +46,7 @@ const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
 const wholesaleStockApi = require('./api/wholesale_stock');
 const wholesaleOrdersApi = require('./api/wholesale_orders');
+const wholesaleOrdersAdminApi = require('./api/wholesale_orders_admin');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -295,6 +296,15 @@ exports.cancelWholesaleOrder = fn.https.onCall(wrapCallable(
 ));
 exports.setWholesaleOrderSettings = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeSetWholesaleOrderSettings({ db }),
+));
+
+// Ulgurji buyurtma, 5-bosqich (admin): darvoza `module_config/wholesale_orders_all`
+// {enabled, stage, testerIds} — faqat admin/superadmin, tranzaksiya, admin_audit.
+exports.adminGetWholesaleOrdersStage = fn.https.onCall(wrapCallable(
+  wholesaleOrdersAdminApi.makeAdminGetWholesaleOrdersStage({ db }),
+));
+exports.adminSetWholesaleOrdersStage = fn.https.onCall(wrapCallable(
+  wholesaleOrdersAdminApi.makeAdminSetWholesaleOrdersStage({ db }),
 ));
 
 /**

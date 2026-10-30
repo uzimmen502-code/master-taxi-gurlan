@@ -290,9 +290,6 @@ exports.setWholesaleStock = fn.https.onCall(wrapCallable(
 exports.quoteWholesaleOrder = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeQuoteWholesaleOrder({ db }),
 ));
-exports.rejectWholesaleOrder = fn.https.onCall(wrapCallable(
-  wholesaleOrdersApi.makeRejectWholesaleOrder({ db }),
-));
 exports.cancelWholesaleOrder = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeCancelWholesaleOrder({ db }),
 ));

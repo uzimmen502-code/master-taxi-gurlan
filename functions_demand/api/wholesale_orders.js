@@ -8,9 +8,9 @@
  *                              tarifi bo'yicha yetkazish; `wholesale_quotes/{id}`
  *                              ga MUHRLANADI (15 daqiqa). Pul ushlash — default
  *                              codebase `placeWholesaleOrder` (ledger o'sha yerda).
- *   rejectWholesaleOrder       sotuvchi: placed → rejected
- *   cancelWholesaleOrder       xaridor:  placed → cancelled
- *                              Ikkalasi FAQAT holatni + `refundStatus: 'pending'`
+ *   cancelWholesaleOrder       xaridor:  placed → cancelled. Sotuvchi qabul/rad
+ *                              QILMAYDI (ega, 2026-10-31) — zanjir avtomatik.
+ *                              FAQAT holatni + `refundStatus: 'pending'`
  *                              yozadi; pulni qaytarish va qoldiqni tiklash —
  *                              default trigger `onWholesaleOrderStatusChange`.
  *   setWholesaleOrderSettings  admin: AVA ulushi (bps) — versiya + audit.
@@ -373,7 +373,7 @@ function makeQuoteWholesaleOrder(deps) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// RAD / BEKOR — faqat holat (pul — default trigger)
+// BEKOR — faqat holat (pul — default trigger)
 // ═══════════════════════════════════════════════════════════════════════
 
 function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
@@ -392,8 +392,8 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         const snap = await tx.get(ref);
         if (!snap.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
         const o = snap.data() || {};
-        const partyId = actor === WO.ACTOR.SELLER ? o.sellerId : o.buyerId;
-        if (!sameUser(partyId, callerId)) {
+        // Faqat xaridor (sotuvchi buyurtmaga aralashmaydi, ega 2026-10-31).
+        if (!sameUser(o.buyerId, callerId)) {
           throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
         }
         const from = String(o.status || '');
@@ -408,10 +408,7 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
           historySeq: seq,
         };
         if (WO.needsRefund(to)) patch.refundStatus = WO.REFUND_STATUS.PENDING;
-        if (to === WO.STATUS.REJECTED) {
-          patch.rejectedAt = now;
-          patch.rejectReason = reason;
-        } else if (to === WO.STATUS.CANCELLED) {
+        if (to === WO.STATUS.CANCELLED) {
           patch.cancelledAt = now;
           patch.cancelledBy = actor;
         }
@@ -432,12 +429,6 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
       throw e;
     }
   };
-}
-
-function makeRejectWholesaleOrder(deps) {
-  return makeOrderTransition(deps, {
-    actor: WO.ACTOR.SELLER, to: WO.STATUS.REJECTED, action: 'rejectWholesaleOrder',
-  });
 }
 
 function makeCancelWholesaleOrder(deps) {
@@ -517,7 +508,6 @@ module.exports = {
   readFeeSettings,
   requireOrdersGate,
   makeQuoteWholesaleOrder,
-  makeRejectWholesaleOrder,
   makeCancelWholesaleOrder,
   makeSetWholesaleOrderSettings,
 };

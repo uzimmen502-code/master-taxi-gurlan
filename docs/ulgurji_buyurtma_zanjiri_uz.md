@@ -26,13 +26,13 @@
         └─ placeWholesaleOrder (default) ─► 1 транзакция: квота текшируви, қолдиқ −N,
                                             ҳамён Dr passenger_credit / Cr escrow:wholesale:{order},
                                             wholesale_orders/{id} = placed
-сотувчи ── acceptWholesaleOrder (demand) ─► relay shipment (эга = сотувчи, олувчи = харидор),
+default триггер (wholesale_orders onCreate, `placed`) ─► relay shipment АВТОМАТИК (эга = сотувчи, олувчи = харидор),
                                             1 direct LEG (вилоятлараро — икки ҳудудни қамраган
                                             курьер/юк; бўлиш — admin `adminPlanShipmentRoute`)
-        └─ rejectWholesaleOrder (demand)  ─► order = rejected
+         (сотувчи қабул/рад ҚИЛМАЙДИ — эга, 2026-10-31; буюртма дарҳол етказишга ўтади)
 default триггер (wholesale_orders onUpdate):
-   accepted → етказиш ҳақи escrow:wholesale → escrow:{shipmentId} (relay релизи шундан тўлайди)
-   rejected/cancelled → харидорга тўлиқ қайтариш + қолдиқ +N (идемпотент)
+   placed → in_delivery (shipment очилганда) → етказиш ҳақи escrow:wholesale → escrow:{shipmentId}
+   cancelled → харидорга тўлиқ қайтариш + қолдиқ +N (идемпотент)
 default триггер (custody delivery, мавжуд onLogisticsCustodyEvent):
    wholesaleOrderId бор → товар пули: сотувчига (товар − AVA улуши), AVA улуши earnings:ava_wholesale_fee
 ```
@@ -51,17 +51,17 @@ default триггер (custody delivery, мавжуд onLogisticsCustodyEvent):
 
 ### Буюртма ҳолатлари (сервер state machine)
 
-`placed → accepted → in_delivery → delivered`; `placed → rejected | cancelled`;
-`accepted → cancelled` (фақат курьер ҳали олмаган бўлса, admin); ҳар ўтиш — `history` (immutable).
+`placed → in_delivery → delivered`; `placed → cancelled` (харидор, етказиш очилмагунча);
+`placed | in_delivery → cancelled` (admin, курьер ҳали олмаган бўлса); ҳар ўтиш — `history` (immutable). **Сотувчи буюртмага аралашмайди** (қабул/рад йўқ, эга 2026-10-31).
 
 ## 3. Босқичлар
 
 | # | Нима | Ҳолат |
 |---|---|---|
 | 1 | Қадоқ, қолдиқ (`setWholesaleStock`), битта видео | **LIVE** 2026-10-31 |
-| 2 | Сервер: квота, буюртма, ушлаш, қолдиқ −N, бекор/рад + қайтариш, дарвоза, AVA улуши созламаси | **LIVE** 2026-10-31 (ёпиқ: дарвоза ҳужжати йўқ) — 7 функция, rules c2dc93b7 |
-| 3 | Relay боғлаш: қабулда shipment, етказиш ҳақи escrow'га, етказилганда товар пули сотувчига | — |
-| 4 | Илова: сават, «Буюртма бериш», харидор буюртмалари + кузатув, сотувчи панели (қабул/рад) | — |
+| 2 | Сервер: квота, буюртма, ушлаш, қолдиқ −N, бекор + қайтариш, дарвоза, AVA улуши созламаси (сотувчи қабул/рад йўқ) | **LIVE** 2026-10-31 (ёпиқ: дарвоза ҳужжати йўқ), rules c2dc93b7 |
+| 3 | Relay боғлаш: буюртма берилиши билан shipment АВТОМАТИК, етказиш ҳақи escrow'га, етказилганда товар пули сотувчига | — |
+| 4 | Илова: «Буюртма бериш», харидор буюртмалари + кузатув; сотувчига фақат «янги буюртма — курьер олиб кетади» хабари ва рўйхат (қабул/рад тугмаси ЙЎҚ) | — |
 | 5 | Админ: буюртмалар, AVA улуши, вилоят матрицаси + 20 кг+ нархлар жадвали (бўш), тестчилар | — |
 | 6 | Аҳоли бозори қадоқлари | — |
 

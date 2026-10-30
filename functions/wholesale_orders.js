@@ -10,7 +10,7 @@
  * Ikkisi Firestore hujjatlari orqali bog'lanadi (relay `shipments.paymentStatus` naqshi):
  *
  *   demand  → wholesale_quotes/{id} (muhrlangan narx), wholesale_orders.status
- *             (placed → rejected|cancelled) + refundStatus: 'pending'
+ *             (placed → cancelled) + refundStatus: 'pending'
  *   default → wholesale_orders/{id} yaratadi (placed + pul ushlandi),
  *             refundStatus: 'done' (pul qaytdi + qoldiq tiklandi)
  *
@@ -19,7 +19,7 @@
  *   escrow:wholesale:{orderId}      xaridorning DEPONENTLANGAN puli (liability)
  *
  *   HOLD    Dr passenger_credit:{xaridor}     Cr escrow:wholesale:{id}   total   (placeWholesaleOrder)
- *   REFUND  Dr escrow:wholesale:{id}          Cr passenger_credit:{xaridor} total (rejected|cancelled)
+ *   REFUND  Dr escrow:wholesale:{id}          Cr passenger_credit:{xaridor} total (cancelled)
  *   (3-bosqich: SHIP_FUND escrow:wholesale → escrow:{shipmentId}; RELEASE — sotuvchiga
  *    goodsTotal − avaFee, AVA ulushi earnings:ava_wholesale_fee. Bu yerda YO'Q.)
  *
@@ -51,8 +51,9 @@ const GATE_DOC = ['module_config', 'wholesale_orders_all'];
  * Bu yerda faqat o'qiladi/boshlang'ich holat yoziladi; paritet testi:
  * functions/test/wholesale_orders.test.js.
  */
-const STATUS = Object.freeze({ PLACED: 'placed', REJECTED: 'rejected', CANCELLED: 'cancelled' });
-const REFUND_STATUSES = Object.freeze([STATUS.REJECTED, STATUS.CANCELLED]);
+// Sotuvchi qabul/rad QILMAYDI (ega, 2026-10-31) — 'rejected' holati yo'q.
+const STATUS = Object.freeze({ PLACED: 'placed', CANCELLED: 'cancelled' });
+const REFUND_STATUSES = Object.freeze([STATUS.CANCELLED]);
 const REFUND_STATUS = Object.freeze({ PENDING: 'pending', DONE: 'done' });
 
 /** Reconcile: shundan eski `pending` qaytarishlar qayta ishlanadi (topshiriq: 10 daqiqa). */
@@ -318,7 +319,7 @@ function attachWholesaleOrders(exportsObj, deps) {
     }
   }
 
-  // ── QAYTARISH: rejected|cancelled → hamyonga to'liq + qoldiq +N ────────
+  // ── QAYTARISH: cancelled → hamyonga to'liq + qoldiq +N ────────
   /**
    * Idempotent (holat tranzaksiya ichida): `refundStatus === 'done'` bo'lsa hech narsa
    * yozilmaydi. Jurnal yozuvi allaqachon bo'lsa (`jExists`) — pul qayta yozilmaydi.
@@ -415,7 +416,7 @@ function attachWholesaleOrders(exportsObj, deps) {
     return out;
   }
 
-  /** wholesale_orders onUpdate: rejected|cancelled + refundStatus=pending → qaytarish. */
+  /** wholesale_orders onUpdate: cancelled + refundStatus=pending → qaytarish. */
   async function onStatusChange(before, after, orderId) {
     const a = after || {};
     if (!REFUND_STATUSES.includes(a.status) || a.refundStatus !== REFUND_STATUS.PENDING) {

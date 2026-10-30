@@ -1,6 +1,6 @@
 /**
  * Ulgurji buyurtma zanjiri, 2-bosqich — demand codebase (2026-10-31):
- * `quoteWholesaleOrder`, `rejectWholesaleOrder`, `cancelWholesaleOrder`,
+ * `quoteWholesaleOrder`, `cancelWholesaleOrder` (sotuvchi aralashmaydi),
  * `setWholesaleOrderSettings`, holatlar jadvali, narx pog'onasi pariteti.
  *
  *   node functions_demand/test/wholesale_orders.test.js
@@ -125,7 +125,6 @@ function makeDb(seed = {}) {
 }
 
 const quote = (db) => api.makeQuoteWholesaleOrder({ db, now: () => NOW });
-const reject = (db) => api.makeRejectWholesaleOrder({ db, now: () => NOW });
 const cancel = (db) => api.makeCancelWholesaleOrder({ db, now: () => NOW });
 const settings = (db) => api.makeSetWholesaleOrderSettings({ db, now: () => NOW });
 const req = (extra = {}) => ({ productId: 'rice', packId: 'p1', qty: 10, destination: DEST, ...extra });
@@ -232,20 +231,24 @@ ok('parseQuoteRequest: noto\'g\'ri kirish RAD', () => {
 ok('holatlar jadvali: ruxsat etilgan va taqiqlangan o\'tishlar (aktor bo\'yicha)', () => {
   const { STATUS: S, ACTOR: A } = WO;
   assert.ok(WO.canActorTransition(A.BUYER, S.PLACED, S.CANCELLED));
-  assert.ok(WO.canActorTransition(A.SELLER, S.PLACED, S.REJECTED));
-  assert.ok(WO.canActorTransition(A.SELLER, S.PLACED, S.ACCEPTED));
-  assert.ok(WO.canActorTransition(A.ADMIN, S.ACCEPTED, S.CANCELLED));
-  assert.ok(WO.canActorTransition(A.SYSTEM, S.ACCEPTED, S.IN_DELIVERY));
+  assert.ok(WO.canActorTransition(A.SYSTEM, S.PLACED, S.IN_DELIVERY), 'zanjir avtomatik — sotuvchi qabulisiz');
   assert.ok(WO.canActorTransition(A.SYSTEM, S.IN_DELIVERY, S.DELIVERED));
-  assert.ok(!WO.canActorTransition(A.BUYER, S.ACCEPTED, S.CANCELLED), 'xaridor qabuldan keyin bekor qilmaydi');
-  assert.ok(!WO.canActorTransition(A.BUYER, S.PLACED, S.REJECTED));
-  assert.ok(!WO.canActorTransition(A.SELLER, S.PLACED, S.CANCELLED));
+  assert.ok(WO.canActorTransition(A.ADMIN, S.PLACED, S.CANCELLED));
+  assert.ok(WO.canActorTransition(A.ADMIN, S.IN_DELIVERY, S.CANCELLED));
+  assert.ok(!WO.canActorTransition(A.BUYER, S.IN_DELIVERY, S.CANCELLED), 'yetkazish ochilgach xaridor bekor qilmaydi');
+  assert.ok(!WO.canActorTransition(A.BUYER, S.PLACED, S.IN_DELIVERY));
+  // Sotuvchi buyurtmaga aralashmaydi (ega, 2026-10-31): na aktor, na holat.
+  assert.strictEqual(A.SELLER, undefined, 'seller aktori yo\'q');
+  assert.strictEqual(S.ACCEPTED, undefined, 'accepted holati yo\'q');
+  assert.strictEqual(S.REJECTED, undefined, 'rejected holati yo\'q');
+  assert.ok(!WO.canActorTransition('seller', S.PLACED, S.CANCELLED));
+  assert.ok(!WO.canActorTransition('seller', S.PLACED, 'rejected'));
   assert.ok(!WO.canTransition(S.PLACED, S.DELIVERED), 'placed → delivered to\'g\'ridan-to\'g\'ri yo\'q');
   assert.ok(!WO.canTransition(S.CANCELLED, S.PLACED));
   assert.ok(!WO.canTransition(S.DELIVERED, S.CANCELLED));
-  assert.ok(WO.isTerminal(S.REJECTED) && WO.isTerminal(S.CANCELLED) && WO.isTerminal(S.DELIVERED));
-  assert.deepStrictEqual([...WO.REFUND_STATUSES], ['rejected', 'cancelled']);
-  assert.throws(() => WO.assertTransition(A.SELLER, S.REJECTED, S.ACCEPTED), (e) => e.details.reason === 'invalid_transition');
+  assert.ok(WO.isTerminal(S.CANCELLED) && WO.isTerminal(S.DELIVERED));
+  assert.deepStrictEqual([...WO.REFUND_STATUSES], ['cancelled']);
+  assert.throws(() => WO.assertTransition(A.BUYER, S.DELIVERED, S.CANCELLED), (e) => e.details.reason === 'invalid_transition');
 });
 
 // ─── darvoza ─────────────────────────────────────────────────────────
@@ -481,24 +484,16 @@ const ORDER = {
   buyerId: BUYER, sellerId: SELLER, status: 'placed', historySeq: 1, refundStatus: null, total: 200000,
 };
 
-ok('sotuvchi rad etadi: placed → rejected, refundStatus=pending, history #2', async () => {
+ok('sotuvchi buyurtmaga aralashmaydi: rad callable yo\'q, bekor qila olmaydi', async () => {
   quiet();
   try {
+    assert.strictEqual(api.makeRejectWholesaleOrder, undefined, 'rejectWholesaleOrder olib tashlangan');
     const db = makeDb({ 'wholesale_orders/o1': ORDER });
-    const r = await reject(db)({ orderId: 'o1', reason: 'Tugadi' }, ctx(SELLER));
-    assert.strictEqual(r.status, 'rejected');
+    await rejects(cancel(db)({ orderId: 'o1' }, ctx(SELLER)), 'permission-denied', 'not_order_party');
     const o = db.dump('wholesale_orders').o1;
-    assert.strictEqual(o.status, 'rejected');
-    assert.strictEqual(o.refundStatus, 'pending');
-    assert.strictEqual(o.rejectReason, 'Tugadi');
-    assert.strictEqual(o.historySeq, 2);
-    const h = db.dump('wholesale_orders/o1/history');
-    assert.deepStrictEqual(Object.keys(h), ['2']);
-    assert.strictEqual(h['2'].from, 'placed');
-    assert.strictEqual(h['2'].to, 'rejected');
-    assert.strictEqual(h['2'].actor, 'seller');
-    // pul/qoldiqqa demand TEGMAYDI
-    assert.strictEqual(o.total, 200000);
+    assert.strictEqual(o.status, 'placed');
+    assert.strictEqual(o.refundStatus, null);
+    assert.deepStrictEqual(db.dump('wholesale_orders/o1/history'), {});
   } finally { loud(); }
 });
 
@@ -519,11 +514,10 @@ ok('xaridor bekor qiladi: placed → cancelled; takror — idempotent, yangi his
   } finally { loud(); }
 });
 
-ok('begona chaqiruvchi RAD: xaridor rad eta olmaydi, sotuvchi/boshqa bekor qila olmaydi', async () => {
+ok('begona chaqiruvchi RAD: sotuvchi/boshqa bekor qila olmaydi', async () => {
   quiet();
   try {
     const db = makeDb({ 'wholesale_orders/o1': ORDER });
-    await rejects(reject(db)({ orderId: 'o1' }, ctx(BUYER)), 'permission-denied', 'not_order_party');
     await rejects(cancel(db)({ orderId: 'o1' }, ctx(SELLER)), 'permission-denied', 'not_order_party');
     await rejects(cancel(db)({ orderId: 'o1' }, ctx('998907777777')), 'permission-denied', 'not_order_party');
     await rejects(cancel(db)({ orderId: 'o1' }, {}), 'unauthenticated');
@@ -533,20 +527,17 @@ ok('begona chaqiruvchi RAD: xaridor rad eta olmaydi, sotuvchi/boshqa bekor qila 
   } finally { loud(); }
 });
 
-ok('taqiqlangan o\'tishlar: qabuldan keyin xaridor bekori, bekordan keyin rad', async () => {
+ok('taqiqlangan o\'tishlar: yetkazish ochilgach va yakunda xaridor bekor qila olmaydi', async () => {
   quiet();
   try {
     const db = makeDb({
-      'wholesale_orders/acc': { ...ORDER, status: 'accepted' },
-      'wholesale_orders/can': { ...ORDER, status: 'cancelled' },
+      'wholesale_orders/inv': { ...ORDER, status: 'in_delivery' },
       'wholesale_orders/del': { ...ORDER, status: 'delivered' },
     });
-    await rejects(cancel(db)({ orderId: 'acc' }, ctx(BUYER)), 'failed-precondition', 'invalid_transition');
-    await rejects(reject(db)({ orderId: 'can' }, ctx(SELLER)), 'failed-precondition', 'invalid_transition');
-    await rejects(reject(db)({ orderId: 'del' }, ctx(SELLER)), 'failed-precondition', 'invalid_transition');
-    await rejects(reject(db)({ orderId: 'acc' }, ctx(SELLER)), 'failed-precondition', 'invalid_transition');
-    assert.strictEqual(db.dump('wholesale_orders').acc.status, 'accepted');
-    assert.strictEqual(db.dump('wholesale_orders').acc.refundStatus, null);
+    await rejects(cancel(db)({ orderId: 'inv' }, ctx(BUYER)), 'failed-precondition', 'invalid_transition');
+    await rejects(cancel(db)({ orderId: 'del' }, ctx(BUYER)), 'failed-precondition', 'invalid_transition');
+    assert.strictEqual(db.dump('wholesale_orders').inv.status, 'in_delivery');
+    assert.strictEqual(db.dump('wholesale_orders').inv.refundStatus, null);
   } finally { loud(); }
 });
 

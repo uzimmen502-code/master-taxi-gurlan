@@ -112,11 +112,11 @@ async function seed({ wallet = 300000, stock = 100, buyerDocId = BUYER } = {}) {
 }
 const place = (extra = {}, who = BUYER) => api.place({ quoteId: 'q1', clientRequestId: 'req-00000001', ...extra }, ctx(who));
 
-/** Demand `cancelWholesaleOrder` / `rejectWholesaleOrder` yozadigan holat. */
+/** Demand `cancelWholesaleOrder` (xaridor) yozadigan holat — sotuvchi aralashmaydi. */
 async function demandFlip(orderId, to) {
   const ref = db.collection('wholesale_orders').doc(orderId);
   await ref.update({ status: to, refundStatus: 'pending', statusUpdatedAt: clock, updatedAt: clock, historySeq: 2 });
-  await ref.collection('history').doc('2').set({ seq: 2, from: 'placed', to, actor: to === 'cancelled' ? 'buyer' : 'seller', at: clock });
+  await ref.collection('history').doc('2').set({ seq: 2, from: 'placed', to, actor: 'buyer', at: clock });
   const after = (await ref.get()).data();
   return after;
 }
@@ -124,7 +124,8 @@ async function demandFlip(orderId, to) {
 (async () => {
   await check('paritet: holat nomlari demand jadvali bilan bir xil; eskrou hisob turi', async () => {
     assert.strictEqual(W.STATUS.PLACED, WO.STATUS.PLACED);
-    assert.strictEqual(W.STATUS.REJECTED, WO.STATUS.REJECTED);
+    assert.strictEqual(W.STATUS.REJECTED, undefined, "rejected holati yo'q (sotuvchi aralashmaydi)");
+    assert.strictEqual(WO.STATUS.REJECTED, undefined);
     assert.strictEqual(W.STATUS.CANCELLED, WO.STATUS.CANCELLED);
     assert.deepStrictEqual([...W.REFUND_STATUSES], [...WO.REFUND_STATUSES]);
     assert.deepStrictEqual({ ...W.REFUND_STATUS }, { ...WO.REFUND_STATUS });
@@ -353,7 +354,7 @@ async function demandFlip(orderId, to) {
   await check('parallel qaytarish (trigger + reconcile bir vaqtda) — pul va qoldiq BIR MARTA', async () => {
     await seed();
     const { orderId: id } = await place();
-    await demandFlip(id, 'rejected');
+    await demandFlip(id, 'cancelled');
     const rs = await Promise.allSettled([api.refundOrder(id), api.refundOrder(id), api.refundOrder(id)]);
     const refunded = rs.filter((x) => x.status === 'fulfilled' && x.value.refunded).length;
     assert.strictEqual(refunded, 1, JSON.stringify(rs));
@@ -362,10 +363,10 @@ async function demandFlip(orderId, to) {
     await assertLedgerSound();
   });
 
-  await check('trigger: refund kerak bo\'lmagan holatlar (placed, accepted, pending yo\'q) — tegmaydi', async () => {
+  await check('trigger: refund kerak bo\'lmagan holatlar (placed, in_delivery, pending yo\'q) — tegmaydi', async () => {
     await seed();
     const { orderId: id } = await place();
-    assert.strictEqual((await api.onStatusChange({}, { status: 'accepted', refundStatus: null }, id)).skipped, 'no_refund_needed');
+    assert.strictEqual((await api.onStatusChange({}, { status: 'in_delivery', refundStatus: null }, id)).skipped, 'no_refund_needed');
     assert.strictEqual((await api.onStatusChange({}, { status: 'cancelled', refundStatus: null }, id)).skipped, 'no_refund_needed');
     // hujjatda pending yo'q — refundOrder ham tegmaydi
     assert.ok(String((await api.refundOrder(id)).skipped).startsWith('state_placed'));
@@ -380,7 +381,7 @@ async function demandFlip(orderId, to) {
     const { orderId: newId } = await place({ quoteId: 'q2', clientRequestId: 'req-00000002' });
     await demandFlip(oldId, 'cancelled'); // T0
     clock = new Date(T0.getTime() + 9 * 60 * 1000);
-    await demandFlip(newId, 'rejected'); // T0+9
+    await demandFlip(newId, 'cancelled'); // T0+9
     clock = new Date(T0.getTime() + 11 * 60 * 1000);
     const r = await api.reconcile();
     assert.deepStrictEqual([r.checked, r.refunded, r.failed], [1, 1, 0]);

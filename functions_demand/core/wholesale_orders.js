@@ -5,19 +5,21 @@
  *
  * Hujjat: docs/ulgurji_buyurtma_zanjiri_uz.md §2 «Буюртма ҳолатлари».
  *
- *   placed      → accepted | rejected | cancelled
- *   accepted    → in_delivery | cancelled
- *   in_delivery → delivered
- *   rejected, cancelled, delivered — oxirgi holat.
+ *   placed      → in_delivery | cancelled
+ *   in_delivery → delivered | cancelled
+ *   cancelled, delivered — oxirgi holat.
+ *
+ * SOTUVCHI QABUL/RAD QILMAYDI (ega, 2026-10-31): xaridor «Buyurtma berish»ni
+ * bosgach zanjir avtomatik — server yetkazishni o'zi ochadi (3-bosqich). Shu
+ * sababli `accepted`/`rejected` holatlari va sotuvchi o'tishlari YO'Q.
  *
  * Kim qaysi o'tishni qiladi (19-band: autentifikatsiya ≠ avtorizatsiya):
- *   buyer  : placed → cancelled           (faqat sotuvchi qabul qilmaguncha)
- *   seller : placed → accepted | rejected (accepted — 3-bosqich, relay bilan)
- *   admin  : accepted → cancelled         (kuryer hali olmagan bo'lsa — 3-bosqich)
- *   system : accepted → in_delivery → delivered (relay custody — 3-bosqich)
+ *   buyer  : placed → cancelled           (yetkazish hali ochilmagan bo'lsa)
+ *   admin  : placed | in_delivery → cancelled (kuryer hali olmagan bo'lsa — 3-bosqich)
+ *   system : placed → in_delivery → delivered (relay — 3-bosqich)
  *
  * Bu jadval FAQAT SHU YERDA. Default codebase (`functions/wholesale_orders.js`)
- * boshlang'ich `placed` ni yozadi va `rejected|cancelled` da pulni qaytaradi —
+ * boshlang'ich `placed` ni yozadi va `cancelled` da pulni qaytaradi —
  * u yerdagi nomlar shu fayl bilan paritet testida tekshiriladi
  * (`functions/test/wholesale_orders.test.js`).
  *
@@ -27,40 +29,37 @@
 
 const STATUS = Object.freeze({
   PLACED: 'placed',
-  ACCEPTED: 'accepted',
-  REJECTED: 'rejected',
   CANCELLED: 'cancelled',
   IN_DELIVERY: 'in_delivery',
   DELIVERED: 'delivered',
 });
 
 const ALLOWED = Object.freeze({
-  [STATUS.PLACED]: [STATUS.ACCEPTED, STATUS.REJECTED, STATUS.CANCELLED],
-  [STATUS.ACCEPTED]: [STATUS.IN_DELIVERY, STATUS.CANCELLED],
-  [STATUS.IN_DELIVERY]: [STATUS.DELIVERED],
-  [STATUS.REJECTED]: [],
+  [STATUS.PLACED]: [STATUS.IN_DELIVERY, STATUS.CANCELLED],
+  [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.CANCELLED],
   [STATUS.CANCELLED]: [],
   [STATUS.DELIVERED]: [],
 });
 
 const ACTOR = Object.freeze({
-  BUYER: 'buyer', SELLER: 'seller', ADMIN: 'admin', SYSTEM: 'system',
+  BUYER: 'buyer', ADMIN: 'admin', SYSTEM: 'system',
 });
 
 /** `actor` → `from` → ruxsat etilgan `to` lar. */
 const ACTOR_ALLOWED = Object.freeze({
   [ACTOR.BUYER]: { [STATUS.PLACED]: [STATUS.CANCELLED] },
-  [ACTOR.SELLER]: { [STATUS.PLACED]: [STATUS.ACCEPTED, STATUS.REJECTED] },
-  [ACTOR.ADMIN]: { [STATUS.ACCEPTED]: [STATUS.CANCELLED] },
+  [ACTOR.ADMIN]: {
+    [STATUS.PLACED]: [STATUS.CANCELLED],
+    [STATUS.IN_DELIVERY]: [STATUS.CANCELLED],
+  },
   [ACTOR.SYSTEM]: {
-    [STATUS.ACCEPTED]: [STATUS.IN_DELIVERY],
+    [STATUS.PLACED]: [STATUS.IN_DELIVERY],
     [STATUS.IN_DELIVERY]: [STATUS.DELIVERED],
   },
 });
 
 /** Shu holatga o'tilganda xaridorga pul to'liq qaytariladi (default trigger). */
-const REFUND_STATUSES = Object.freeze([STATUS.REJECTED, STATUS.CANCELLED]);
-
+const REFUND_STATUSES = Object.freeze([STATUS.CANCELLED]);
 const REFUND_STATUS = Object.freeze({ PENDING: 'pending', DONE: 'done' });
 
 function canTransition(from, to) {

@@ -20,11 +20,17 @@
  *
  *   HOLD    Dr passenger_credit:{xaridor}     Cr escrow:wholesale:{id}   total   (placeWholesaleOrder)
  *   REFUND  Dr escrow:wholesale:{id}          Cr passenger_credit:{xaridor} total (cancelled)
- *   (3-bosqich: SHIP_FUND escrow:wholesale → escrow:{shipmentId}; RELEASE — sotuvchiga
- *    goodsTotal − avaFee, AVA ulushi earnings:ava_wholesale_fee. Bu yerda YO'Q.)
+ *   SHIP_FUND (3-bosqich) Dr escrow:wholesale:{id}  Cr escrow:{shipmentId}   deliveryFee
+ *           → shipment `escrow_funded`/`ready` (relay FUND maydonlari) + buyurtma
+ *             placed → in_delivery; relay `onShipmentFunded` LEG'ni ochadi, yetkazilganda
+ *             relay RELEASE escrow:{shipmentId} ni kuryer/AVA ga odatdagidek yopadi.
+ *   RELEASE (3-bosqich, custody `deliversShipment`) Dr escrow:wholesale:{id}  goodsTotal
+ *           Cr passenger_credit:{sotuvchi} sellerPayout · Cr earnings:ava_wholesale_fee avaFee
+ *           → escrow:wholesale:{id} AYNAN 0; buyurtma in_delivery → delivered.
  *
- * Jurnal kalitlari (`journal_entries/bonus:{kalit}`, `prepareBonusInTx` naqshi):
- *   wholesaleHold:{orderId}, wholesaleRefund:{orderId}.
+ * Jurnal kalitlari: `journal_entries/bonus:{kalit}` (`prepareBonusInTx` naqshi) —
+ *   wholesaleHold:{orderId}, wholesaleRefund:{orderId}; `journal_entries/{kalit}`
+ *   (`postEntry`, 3+ oyoq) — wholesaleShipFund:{orderId}, wholesaleRelease:{orderId}.
  *
  * ── INVARIANTLAR ───────────────────────────────────────────────────────
  *   - Bitta tranzaksiya: kvota (used) + qoldiq −N + ledger HOLD + hamyon ko'zgusi
@@ -52,7 +58,10 @@ const GATE_DOC = ['module_config', 'wholesale_orders_all'];
  * functions/test/wholesale_orders.test.js.
  */
 // Sotuvchi qabul/rad QILMAYDI (ega, 2026-10-31) — 'rejected' holati yo'q.
-const STATUS = Object.freeze({ PLACED: 'placed', CANCELLED: 'cancelled' });
+// 3-bosqich: `in_delivery`, `delivered` — faqat SYSTEM o'tishlari (shu fayl yozadi).
+const STATUS = Object.freeze({
+  PLACED: 'placed', CANCELLED: 'cancelled', IN_DELIVERY: 'in_delivery', DELIVERED: 'delivered',
+});
 const REFUND_STATUSES = Object.freeze([STATUS.CANCELLED]);
 const REFUND_STATUS = Object.freeze({ PENDING: 'pending', DONE: 'done' });
 
@@ -60,9 +69,29 @@ const REFUND_STATUS = Object.freeze({ PENDING: 'pending', DONE: 'done' });
 const RECONCILE_MIN_AGE_MS = 10 * 60 * 1000;
 const RECONCILE_LIMIT = 100;
 
+/** relay `escrow:{shipmentId}` — `functions/relay_escrow.js` bilan BIR XIL nom. */
+const SHIPMENTS = 'shipments';
+const AVA_FEE_ACCOUNT = 'earnings:ava_wholesale_fee';
+const shipmentEscrowAccount = (shipmentId) => `escrow:${shipmentId}`;
+
 const escrowAccount = (orderId) => `escrow:wholesale:${orderId}`;
 const holdKey = (orderId) => `wholesaleHold:${orderId}`;
 const refundKey = (orderId) => `wholesaleRefund:${orderId}`;
+/** 3-bosqich jurnal kalitlari (`journal_entries/{kalit}`, `postEntry` — `bonus:` prefiksisiz). */
+const shipFundKey = (orderId) => `wholesaleShipFund:${orderId}`;
+const releaseKey = (orderId) => `wholesaleRelease:${orderId}`;
+/**
+ * Relay jo'natmasi qabul qiluvchiga HAQIQATAN topshirilganmi (tovar puli shundan keyin).
+ * `closed` yolg'iz yetmaydi: yo'qolgan posilka ham `lost → closed` bo'ladi — shuning uchun
+ * `deliveredAt` (faqat `confirmDelivery` yozadi) SHART, yo'qolish/nizo to'lov holatlari — YO'Q.
+ */
+const SHIPMENT_HOLD_PAYMENT = Object.freeze(['loss_pending', 'loss_settled', 'escrow_frozen']);
+function isShipmentDelivered(s) {
+  const d = s || {};
+  return (d.status === 'delivered' || d.status === 'closed')
+    && d.deliveredAt != null
+    && !SHIPMENT_HOLD_PAYMENT.includes(d.paymentStatus);
+}
 
 const isInt = (n) => typeof n === 'number' && Number.isInteger(n);
 const isPosInt = (n) => isInt(n) && n > 0;
@@ -342,6 +371,13 @@ function attachWholesaleOrders(exportsObj, deps) {
       if (pay.status !== 'held' || !isPosInt(amount) || !walletUid) {
         return { skipped: 'payment_invalid', anomaly: true };
       }
+      // 3-bosqich himoyasi: yetkazish haqi relay eskrouga O'TGAN bo'lsa — bu (to'liq
+      // `total`) qaytarish ISHLAMAYDI: pul ikki marta qaytib ketardi. Bunday bekor
+      // qilish — admin oqimi (5-bosqich). Belgi ham, jurnal yozuvi ham tekshiriladi.
+      const sfSnap = await t.get(db.collection(settlementLedger.COL_JOURNAL).doc(shipFundKey(orderId)));
+      if (sfSnap.exists || pay.deliveryFunded === true) {
+        return { skipped: 'delivery_funded', anomaly: true };
+      }
       const so = o.stock || {};
       const restore = so.decremented === true && so.restored !== true
         && isPosInt(so.qty) && typeof so.packId === 'string' && so.packId !== '';
@@ -406,7 +442,8 @@ function attachWholesaleOrders(exportsObj, deps) {
       return { refunded: amount, stockRestored: restore, ledgerExisted: ledger.jExists };
     });
     if (out.anomaly) {
-      logError('refund', { orderId, errorCode: out.skipped === 'escrow_short' ? 'WHOLESALE_ESCROW_SHORT' : 'WHOLESALE_PAYMENT_INVALID' });
+      const codes = { escrow_short: 'WHOLESALE_ESCROW_SHORT', delivery_funded: 'WHOLESALE_REFUND_AFTER_SHIP_FUND' };
+      logError('refund', { orderId, errorCode: codes[out.skipped] || 'WHOLESALE_PAYMENT_INVALID' });
     } else {
       log('refund', {
         orderId, result: out.refunded ? 'ok' : 'skipped', skipped: out.skipped || null,
@@ -416,9 +453,295 @@ function attachWholesaleOrders(exportsObj, deps) {
     return out;
   }
 
-  /** wholesale_orders onUpdate: cancelled + refundStatus=pending → qaytarish. */
+  // ── 3-BOSQICH: yetkazish haqi → relay eskrou; yetkazilganda tovar puli ──
+  /** Tranzaksiya ichidagi to'xtash: pul yozilmaydi. `skip` — kutilgan holat, `anomaly` — admin ko'rsin. */
+  const skipErr = (reason) => Object.assign(new Error(reason), { reason, wholesaleSkip: true });
+  const anomalyErr = (reason, extra) => Object.assign(new Error(reason), { reason, wholesaleAnomaly: true, extra: extra || {} });
+
+  /** Anomaliya belgisi buyurtmada (admin, 5-bosqich) — pul YO'Q, faqat kod va vaqt (PII yo'q). */
+  async function markAnomaly(orderId, field, code) {
+    try {
+      await db.collection(ORDERS).doc(orderId).update({ [field]: { code, at: now() } });
+    } catch (e) {
+      logError(field, { orderId, errorCode: 'WHOLESALE_ANOMALY_MARK_FAILED' });
+    }
+  }
+
+  /**
+   * SHIP_FUND: Dr escrow:wholesale:{id} / Cr escrow:{shipmentId} = deliveryFee, BITTA
+   * tranzaksiyada jo'natma `escrow_funded`+`ready` (relay FUND maydonlari:
+   * fundedAt, escrowEntryId, escrowAmount) va buyurtma placed → in_delivery (system,
+   * history). Shart: buyurtma `placed`, `payment.held`, jo'natma shu buyurtmaniki
+   * (`source: wholesale`), `awaiting_payment/pending`, deliveryFee ===
+   * customerPrice (aks holda anomaliya, pul YO'Q). Idempotent: `wholesaleShipFund:{id}`.
+   * Xaridor bekor qilish tranzaksiyasi ham buyurtmani o'qiydi — bittasi g'olib.
+   */
+  async function shipFund(orderId) {
+    const started = Date.now();
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const s0 = await orderRef.get();
+    if (!s0.exists) return { skipped: 'order_missing' };
+    const o0 = s0.data() || {};
+    const shipmentId = String((o0.shipment || {}).shipmentId || '');
+    if (!shipmentId) return { skipped: 'no_shipment' };
+    if ((o0.payment || {}).deliveryFunded === true) return { skipped: 'already_funded' };
+    if (o0.status !== STATUS.PLACED) return { skipped: `status_${o0.status || 'none'}` };
+    const amount = o0.deliveryFee;
+    if (!isPosInt(amount)) {
+      logError('shipFund', { orderId, shipmentId, errorCode: 'WHOLESALE_SHIP_FUND_FEE_INVALID' });
+      await markAnomaly(orderId, 'shipFundAnomaly', 'fee_invalid');
+      return { skipped: 'fee_invalid', anomaly: true };
+    }
+    const key = shipFundKey(orderId);
+    const shipRef = db.collection(SHIPMENTS).doc(shipmentId);
+    const when = now();
+    try {
+      const res = await settlementLedger.postEntry(db, {
+        idempotencyKey: key,
+        kind: 'wholesale_ship_fund',
+        refType: 'wholesale_order',
+        refId: orderId,
+        postedBy: 'system',
+        postedRole: 'system',
+        legs: [
+          { account: escrowAccount(orderId), dr: amount },
+          { account: shipmentEscrowAccount(shipmentId), cr: amount },
+        ],
+      }, {
+        mirrorBonus: false,
+        meta: { module: 'wholesale', shipmentId, deliveryFee: amount },
+        precheck: async (tx) => {
+          const [os, ss] = await Promise.all([tx.get(orderRef), tx.get(shipRef)]);
+          if (!os.exists) throw skipErr('order_missing');
+          const o = os.data() || {};
+          if (o.status !== STATUS.PLACED) throw skipErr(`status_${o.status || 'none'}`);
+          if (String((o.shipment || {}).shipmentId || '') !== shipmentId) throw anomalyErr('shipment_mismatch');
+          if ((o.payment || {}).status !== 'held') throw anomalyErr('payment_invalid');
+          if (!ss.exists) throw anomalyErr('shipment_missing');
+          const s = ss.data() || {};
+          if (s.source !== 'wholesale' || s.wholesaleOrderId !== orderId) throw anomalyErr('shipment_not_wholesale');
+          if (s.status !== 'awaiting_payment' || s.paymentStatus !== 'pending') {
+            throw anomalyErr('shipment_not_payable', { status: s.status || null, paymentStatus: s.paymentStatus || null });
+          }
+          const price = (s.priceSnapshot || {}).customerPrice;
+          if (o.deliveryFee !== amount || price !== amount) {
+            throw anomalyErr('delivery_fee_mismatch', { deliveryFee: o.deliveryFee, customerPrice: price === undefined ? null : price });
+          }
+          return { o };
+        },
+        assert: ({ accounts }) => {
+          const st = accounts.get(escrowAccount(orderId));
+          if (st && st.next < 0) throw anomalyErr('escrow_short', { escrow: st.prev });
+        },
+        onCommit: (tx, { pre }) => {
+          tx.update(shipRef, {
+            paymentStatus: 'escrow_funded', status: 'ready', fundedAt: when,
+            escrowEntryId: key, escrowAmount: amount, updatedAt: when,
+          });
+          const seq = (isInt(pre.o.historySeq) ? pre.o.historySeq : 0) + 1;
+          tx.update(orderRef, {
+            status: STATUS.IN_DELIVERY,
+            statusUpdatedAt: when,
+            updatedAt: when,
+            historySeq: seq,
+            'payment.deliveryFunded': true,
+            'payment.deliveryFundedAt': when,
+            'payment.shipFundEntryId': key,
+            shipFundAnomaly: null,
+          });
+          tx.set(orderRef.collection(HISTORY).doc(String(seq)), {
+            seq, from: STATUS.PLACED, to: STATUS.IN_DELIVERY, event: 'ship_funded', actor: 'system', actorId: null,
+            reason: '', meta: { shipmentId, amount }, at: when,
+          });
+        },
+      });
+      log('shipFund', {
+        orderId, shipmentId, result: res.idempotent ? 'already' : 'ok', amount, durationMs: Date.now() - started,
+      });
+      return { funded: amount, shipmentId, idempotent: res.idempotent === true };
+    } catch (e) {
+      if (e && e.wholesaleSkip) return { skipped: e.reason };
+      if (e && e.wholesaleAnomaly) {
+        logError('shipFund', {
+          orderId, shipmentId, errorCode: `WHOLESALE_SHIP_FUND_${e.reason.toUpperCase()}`, ...e.extra,
+        });
+        await markAnomaly(orderId, 'shipFundAnomaly', e.reason);
+        return { skipped: e.reason, anomaly: true };
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * RELEASE (tovar puli): relay jo'natmasi yetkazilgach (custody `deliversShipment`,
+   * Q-5) BITTA tranzaksiyada: Dr escrow:wholesale:{id} goodsTotal / Cr
+   * passenger_credit:{sotuvchi hamyoni} sellerPayout / Cr earnings:ava_wholesale_fee
+   * avaFee (muhr — `private/settlement`) + sotuvchi hamyoni ko'zgusi (`wholesale_payout`)
+   * + buyurtma in_delivery → delivered (system) + `payment.status: released`.
+   * Eskrou yozuvdan keyin AYNAN 0 bo'lmasa — anomaliya, pul YO'Q. Idempotent:
+   * `wholesaleRelease:{id}` (takror custody hodisasi / reconcile — bir marta).
+   */
+  async function releaseGoods(orderId) {
+    const started = Date.now();
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const settleRef = orderRef.collection(PRIVATE).doc('settlement');
+    const [s0, st0] = await Promise.all([orderRef.get(), settleRef.get()]);
+    if (!s0.exists) return { skipped: 'order_missing' };
+    const o0 = s0.data() || {};
+    if (o0.status === STATUS.DELIVERED) return { skipped: 'already_released' };
+    if (o0.status !== STATUS.IN_DELIVERY) return { skipped: `status_${o0.status || 'none'}` };
+    const shipmentId = String((o0.shipment || {}).shipmentId || '');
+    const fail0 = async (reason) => {
+      logError('release', { orderId, shipmentId, errorCode: `WHOLESALE_RELEASE_${reason.toUpperCase()}` });
+      await markAnomaly(orderId, 'releaseAnomaly', reason);
+      return { skipped: reason, anomaly: true };
+    };
+    if (!shipmentId) return fail0('no_shipment');
+    const st = st0.exists ? (st0.data() || {}) : {};
+    const { goodsTotal, avaFee, sellerPayout } = st;
+    if (!isPosInt(goodsTotal) || !isInt(avaFee) || avaFee < 0 || !isInt(sellerPayout) || sellerPayout < 0
+      || avaFee + sellerPayout !== goodsTotal || goodsTotal !== o0.goodsTotal) {
+      return fail0('settlement_invalid');
+    }
+    const sellerWalletUid = await walletUidOf(canonicalUid(o0.sellerId || ''));
+    if (!sellerWalletUid) return fail0('seller_wallet_missing');
+    const key = releaseKey(orderId);
+    const shipRef = db.collection(SHIPMENTS).doc(shipmentId);
+    const legs = [{ account: escrowAccount(orderId), dr: goodsTotal }];
+    if (sellerPayout > 0) legs.push({ account: settlementLedger.passengerCreditAccount(sellerWalletUid), cr: sellerPayout });
+    if (avaFee > 0) legs.push({ account: AVA_FEE_ACCOUNT, cr: avaFee });
+    const when = now();
+    try {
+      const res = await settlementLedger.postEntry(db, {
+        idempotencyKey: key,
+        kind: 'wholesale_release',
+        refType: 'wholesale_order',
+        refId: orderId,
+        postedBy: 'system',
+        postedRole: 'system',
+        legs,
+      }, {
+        mirrorBonus: false, // ko'zgu — `mirrorWallet` (wholesale wallet_ledger shakli) onCommit'da
+        meta: {
+          module: 'wholesale', shipmentId, goodsTotal, sellerPayout, avaFee,
+          avaFeeBps: isInt(st.avaFeeBps) ? st.avaFeeBps : null, feeVersion: isInt(st.feeVersion) ? st.feeVersion : null,
+        },
+        precheck: async (tx) => {
+          const [os, ss, sts] = await Promise.all([tx.get(orderRef), tx.get(shipRef), tx.get(settleRef)]);
+          if (!os.exists) throw skipErr('order_missing');
+          const o = os.data() || {};
+          if (o.status !== STATUS.IN_DELIVERY) throw skipErr(`status_${o.status || 'none'}`);
+          if (String((o.shipment || {}).shipmentId || '') !== shipmentId) throw anomalyErr('shipment_mismatch');
+          if ((o.payment || {}).deliveryFunded !== true) throw anomalyErr('delivery_not_funded');
+          const s = ss.exists ? (ss.data() || {}) : {};
+          if (s.wholesaleOrderId !== orderId) throw anomalyErr('shipment_not_wholesale');
+          if (!isShipmentDelivered(s)) throw skipErr(`shipment_${s.status || 'none'}`);
+          const cur = sts.exists ? (sts.data() || {}) : {};
+          if (cur.goodsTotal !== goodsTotal || cur.avaFee !== avaFee || cur.sellerPayout !== sellerPayout) {
+            throw anomalyErr('settlement_changed');
+          }
+          return { o };
+        },
+        assert: ({ accounts }) => {
+          const e = accounts.get(escrowAccount(orderId));
+          // Eskrou AYNAN 0 ga tushishi shart: ortiq/kam pul — anomaliya (o'ylab topilmaydi).
+          if (!e || e.next !== 0) throw anomalyErr('escrow_not_zero', { escrowBefore: e ? e.prev : null });
+        },
+        onCommit: (tx, { pre }) => {
+          if (sellerPayout > 0) {
+            mirrorWallet(tx, sellerWalletUid, sellerPayout, 'wholesale_payout', orderId, when, {
+              goodsTotal, avaFee, shipmentId,
+            });
+          }
+          const seq = (isInt(pre.o.historySeq) ? pre.o.historySeq : 0) + 1;
+          tx.update(orderRef, {
+            status: STATUS.DELIVERED,
+            deliveredAt: when,
+            statusUpdatedAt: when,
+            updatedAt: when,
+            historySeq: seq,
+            'payment.status': 'released',
+            'payment.releasedAt': when,
+            'payment.releaseEntryId': key,
+            releaseAnomaly: null,
+          });
+          tx.set(orderRef.collection(HISTORY).doc(String(seq)), {
+            seq, from: STATUS.IN_DELIVERY, to: STATUS.DELIVERED, event: 'goods_released', actor: 'system', actorId: null,
+            reason: '', meta: { shipmentId, sellerPayout, avaFee }, at: when,
+          });
+        },
+      });
+      log('release', {
+        orderId, shipmentId, result: res.idempotent ? 'already' : 'ok', amount: goodsTotal, sellerPayout, avaFee,
+        durationMs: Date.now() - started,
+      });
+      return {
+        released: goodsTotal, sellerPayout, avaFee, shipmentId, idempotent: res.idempotent === true,
+      };
+    } catch (e) {
+      if (e && e.wholesaleSkip) return { skipped: e.reason };
+      if (e && e.wholesaleAnomaly) {
+        logError('release', { orderId, shipmentId, errorCode: `WHOLESALE_RELEASE_${e.reason.toUpperCase()}`, ...e.extra });
+        await markAnomaly(orderId, 'releaseAnomaly', e.reason);
+        return { skipped: e.reason, anomaly: true };
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Jo'natma yetkazilgan (`deliversShipment` custody hodisasi) va Ulgurji buyurtmasiniki
+   * bo'lsa — tovar puli. Oddiy jo'natma — tegmaydi. Relay o'z RELEASE'ini o'zining
+   * `onLogisticsCustodyEvent` triggerida qiladi (bu yerdan mustaqil, boshqa eskrou).
+   */
+  async function onShipmentDelivered(shipmentId) {
+    const s = await db.collection(SHIPMENTS).doc(String(shipmentId || '')).get();
+    if (!s.exists) return { skipped: 'shipment_missing' };
+    const ship = s.data() || {};
+    const orderId = typeof ship.wholesaleOrderId === 'string' ? ship.wholesaleOrderId : '';
+    if (!orderId) return { skipped: 'not_wholesale' };
+    if (!isShipmentDelivered(ship)) return { skipped: `shipment_${ship.status || 'none'}` };
+    return releaseGoods(orderId);
+  }
+
+  /**
+   * `custody_events/{id}` onCreate (alohida trigger — relay `onLogisticsCustodyEvent`
+   * O'ZGARMAYDI). Faqat `deliversShipment === true`; qolgan hodisalar o'qishsiz o'tadi.
+   * Yiqilsa — `wholesaleOrdersReconcile` qayta urinadi (idempotent `wholesaleRelease:{id}`).
+   */
+  async function onCustodyEvent(event) {
+    const ev = event || {};
+    if (ev.deliversShipment !== true || !ev.shipmentId) return { skipped: 'not_delivery' };
+    try {
+      return await onShipmentDelivered(String(ev.shipmentId));
+    } catch (e) {
+      logError('release', {
+        shipmentId: String(ev.shipmentId), errorCode: 'WHOLESALE_RELEASE_FAILED',
+        message: String((e && e.message) || e).slice(0, 200),
+      });
+      return { skipped: 'failed' };
+    }
+  }
+
+  /**
+   * wholesale_orders onUpdate:
+   *   - `placed` + `shipment` bog'langan (demand triggeri yozadi) + haq hali o'tmagan → SHIP_FUND;
+   *   - cancelled + refundStatus=pending → qaytarish.
+   */
   async function onStatusChange(before, after, orderId) {
     const a = after || {};
+    // `shipFundAnomaly` bor bo'lsa trigger QAYTA urinmaydi (belgi yozuvi shu triggerni
+    // yana chaqiradi — cheksiz aylanish bo'lmasin); qayta urinish — reconcile.
+    if (a.status === STATUS.PLACED && a.shipment && a.shipment.shipmentId
+      && (a.payment || {}).deliveryFunded !== true && !a.shipFundAnomaly) {
+      try {
+        return await shipFund(orderId);
+      } catch (e) {
+        // Reconcile qayta urinadi; har qadam idempotent.
+        logError('shipFund', { orderId, errorCode: 'WHOLESALE_SHIP_FUND_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+        return { skipped: 'failed' };
+      }
+    }
     if (!REFUND_STATUSES.includes(a.status) || a.refundStatus !== REFUND_STATUS.PENDING) {
       return { skipped: 'no_refund_needed' };
     }
@@ -431,10 +754,19 @@ function attachWholesaleOrders(exportsObj, deps) {
     }
   }
 
-  /** Qotib qolgan `pending` qaytarishlar (trigger yiqilgan / o'tkazib yuborilgan). */
+  /**
+   * Qotib qolganlar (trigger yiqilgan / o'tkazib yuborilgan), har biri 10 daqiqadan eski:
+   *   A) `pending` qaytarishlar;
+   *   B) jo'natma bog'langan, lekin yetkazish haqi o'tmagan (`placed`) → SHIP_FUND;
+   *   C) jo'natma yetkazilgan, buyurtma hali `in_delivery` → RELEASE.
+   * Har yozuv idempotent — trigger bilan bir vaqtda ishlash xavfsiz. Tenglik
+   * filtrlari bitta maydonda (yangi indeks kerak emas).
+   */
   async function reconcile({ limit = RECONCILE_LIMIT, minAgeMs = RECONCILE_MIN_AGE_MS } = {}) {
     const nowMs = now().getTime();
-    const out = { checked: 0, refunded: 0, skipped: 0, failed: 0 };
+    const out = {
+      checked: 0, refunded: 0, skipped: 0, failed: 0, shipFundChecked: 0, shipFunded: 0, releaseChecked: 0, released: 0,
+    };
     const snap = await db.collection(ORDERS).where('refundStatus', '==', REFUND_STATUS.PENDING).limit(limit).get();
     for (const d of snap.docs) {
       const o = d.data() || {};
@@ -449,6 +781,41 @@ function attachWholesaleOrders(exportsObj, deps) {
         logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_FAILED', message: String((e && e.message) || e).slice(0, 200) });
       }
     }
+    // B) SHIP_FUND qotgan.
+    const placed = await db.collection(ORDERS).where('status', '==', STATUS.PLACED).limit(limit).get();
+    for (const d of placed.docs) {
+      const o = d.data() || {};
+      const sh = o.shipment || null;
+      if (!sh || !sh.shipmentId || (o.payment || {}).deliveryFunded === true) continue;
+      if (nowMs - (msOf(sh.createdAt) || msOf(o.updatedAt) || 0) < minAgeMs) continue;
+      out.shipFundChecked += 1;
+      try {
+        const r = await shipFund(d.id);
+        if (r && r.funded && !r.idempotent) out.shipFunded += 1;
+      } catch (e) {
+        out.failed += 1;
+        logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_SHIP_FUND_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+      }
+    }
+    // C) RELEASE qotgan (jo'natma yetkazilgan, buyurtma in_delivery).
+    const inDel = await db.collection(ORDERS).where('status', '==', STATUS.IN_DELIVERY).limit(limit).get();
+    for (const d of inDel.docs) {
+      const o = d.data() || {};
+      const shipmentId = String((o.shipment || {}).shipmentId || '');
+      if (!shipmentId) continue;
+      try {
+        const s = await db.collection(SHIPMENTS).doc(shipmentId).get();
+        const ship = s.exists ? (s.data() || {}) : {};
+        if (!isShipmentDelivered(ship)) continue;
+        if (nowMs - (msOf(ship.deliveredAt) || msOf(ship.updatedAt) || 0) < minAgeMs) continue;
+        out.releaseChecked += 1;
+        const r = await releaseGoods(d.id);
+        if (r && r.released && !r.idempotent) out.released += 1;
+      } catch (e) {
+        out.failed += 1;
+        logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_RELEASE_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+      }
+    }
     log('reconcile', { result: 'ok', ...out });
     return out;
   }
@@ -460,11 +827,16 @@ function attachWholesaleOrders(exportsObj, deps) {
       await onStatusChange(change.before.data() || {}, change.after.data() || {}, context.params.orderId);
       return null;
     });
+  exportsObj.onWholesaleCustodyEvent = functions.firestore
+    .document('custody_events/{eventId}')
+    .onCreate(async (snap) => { await onCustodyEvent(snap.data() || {}); return null; });
   exportsObj.wholesaleOrdersReconcile = functions.pubsub
     .schedule('every 15 minutes')
     .onRun(async () => { await reconcile(); return null; });
 
-  return { place, refundOrder, onStatusChange, reconcile };
+  return {
+    place, refundOrder, onStatusChange, reconcile, shipFund, releaseGoods, onShipmentDelivered, onCustodyEvent,
+  };
 }
 
 module.exports = {
@@ -473,9 +845,13 @@ module.exports = {
   STATUS,
   REFUND_STATUSES,
   REFUND_STATUS,
+  AVA_FEE_ACCOUNT,
   escrowAccount,
+  shipmentEscrowAccount,
   holdKey,
   refundKey,
+  shipFundKey,
+  releaseKey,
   quoteAmountsOk,
   attachWholesaleOrders,
 };

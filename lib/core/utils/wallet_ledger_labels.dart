@@ -38,6 +38,9 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
       return tr('wlt_l_payout_request');
     case 'payout_paid':
       return tr('wlt_l_payout_paid');
+    // AVA Logistics LEG ҳақи — сервер `courier_payout.js` (хизмат ҳақи ушланган).
+    case 'courier_payout':
+      return tr('wlt_l_courier_payout');
     case 'admin_adjust':
       return tr('wlt_l_admin_adjust');
     case 'birthday_bonus':
@@ -61,6 +64,13 @@ String walletLedgerSubtitle(WalletLedgerEntry e, WalletTr tr) {
   final cashPaid = (e.meta['cashPaid'] as num?)?.toInt();
   if (cashPaid != null && cashPaid > 0) {
     parts.add(tr('wlt_l_cash', {'amount': formatMoney(cashPaid)}));
+  }
+
+  if (e.type == 'courier_payout') {
+    final fee = (e.meta['fee'] as num?)?.toInt();
+    if (fee != null && fee > 0) {
+      parts.add(tr('wlt_l_courier_fee', {'amount': formatMoney(fee)}));
+    }
   }
 
   if (e.refId.isNotEmpty && e.refType == 'order') {

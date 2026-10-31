@@ -3700,6 +3700,8 @@
   "wlt_l_credit_mod": "{module} — кредит",
   "wlt_l_payout_request": "Заявка на вывод средств",
   "wlt_l_payout_paid": "Деньги выведены",
+  "wlt_l_courier_payout": "Оплата курьеру (доставка)",
+  "wlt_l_courier_fee": "Сервисный сбор: {amount}",
   "wlt_l_admin_adjust": "Корректировка администратора",
   "wlt_l_birthday": "Бонус ко дню рождения",
   "wlt_l_operation": "Операция",

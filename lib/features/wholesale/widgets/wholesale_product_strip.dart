@@ -130,6 +130,14 @@ class _Tile extends StatelessWidget {
                         color: PdDark.brand,
                       ),
                     ),
+                    // Ўхшашлар — бошқа сотувчилардан: ким сотаётгани кўринсин (эга, 2026-11-01).
+                    if (product.sellerCompanyName.trim().isNotEmpty)
+                      Text(
+                        product.sellerCompanyName.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, height: 1.15, color: PdDark.muted),
+                      ),
                   ],
                 ),
               ),

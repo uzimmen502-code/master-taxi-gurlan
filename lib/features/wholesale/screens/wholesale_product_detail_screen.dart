@@ -17,7 +17,7 @@ import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
 import '../widgets/wholesale_pack_chips.dart';
 import '../widgets/wholesale_product_strip.dart';
-import '../widgets/wholesale_seller_card.dart';
+import 'wholesale_seller_products_screen.dart';
 import '../widgets/wholesale_tier_picker.dart';
 
 /// Маҳсулот тафсилоти — қўнғироқ ҳамиша бор; буюртма дарвозаси очиқ
@@ -199,7 +199,15 @@ class _WholesaleProductDetailViewState
     const meta = TextStyle(fontSize: 12, height: 1.2, color: PdDark.muted);
     return ProductDetailDark(
       child: Scaffold(
-        appBar: AppBar(title: Text(p.title, maxLines: 1)),
+        // Ном фақат шу ерда (эга, 2026-11-01) — узун ном 2 қаторда тўлиқроқ кўринсин.
+        appBar: AppBar(
+          title: Text(
+            p.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
+          ),
+        ),
         body: ListView(
           // Контент қисқа бўлса ҳам охиридан ўтиб суриш сезилсин (свайп учун).
           physics: kEdgeSwipePhysics,
@@ -230,12 +238,8 @@ class _WholesaleProductDetailViewState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    p.sellerCompanyName.isEmpty
-                        ? context.tr('wholesale_seller_label')
-                        : p.sellerCompanyName,
-                    style: meta,
-                  ),
+                  // Сотувчи — битта жойда (эга, 2026-11-01): босилса унинг барча маҳсулотлари.
+                  _SellerLink(product: p),
                   if (p.hasPacks) ...[
                     const SizedBox(height: 6),
                     WholesalePackChips(
@@ -247,7 +251,9 @@ class _WholesaleProductDetailViewState
                   const SizedBox(height: 4),
                   // Танланган миқдордаги ҳақиқий бир дона нархи: поғона
                   // босилса ёки миқдор ўзгарса шу ердаги нарх ҳам ўзгаради.
+                  // Бир нечта поғона бўлса — «дан» (кўпроқ олса нарх келишилади; рўйхатдагидек).
                   Text(
+                    '${pack.priceTiers.length > 1 ? '${context.tr('home_price_from')} ' : ''}'
                     '${formatPrice(price)} ${p.currencyLabel} / $unitLabel',
                     style: const TextStyle(
                       fontSize: 18,
@@ -288,7 +294,12 @@ class _WholesaleProductDetailViewState
                       style: meta.copyWith(color: const Color(0xFFF0A868)),
                     ),
                   if (p.description.trim().isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+                    Text(
+                      context.tr('wholesale_description_title'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: PdDark.ink),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
                       p.description,
                       style: const TextStyle(
@@ -298,8 +309,6 @@ class _WholesaleProductDetailViewState
                       ),
                     ),
                   ],
-                  const SizedBox(height: 8),
-                  WholesaleSellerCard(product: p),
                   if (_similar.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     WholesaleProductStrip(
@@ -330,9 +339,10 @@ class _WholesaleProductDetailViewState
                 child: FilledButton.icon(
                   key: const ValueKey('wholesale-call'),
                   onPressed: _call,
+                  // Сутли (молочный) ранг (эга, 2026-11-01).
                   style: FilledButton.styleFrom(
-                    backgroundColor: PdDark.brand,
-                    foregroundColor: PdDark.brandInk,
+                    backgroundColor: _kMilk,
+                    foregroundColor: _kMilkInk,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -352,34 +362,83 @@ class _WholesaleProductDetailViewState
   }
 }
 
+/// Пастки тугманинг сутли ранги ва ёзуви (эга, 2026-11-01).
+const Color _kMilk = Color(0xFFF6EFE2);
+const Color _kMilkInk = Color(0xFF2A2118);
+
+/// Сотувчи номи — босилса «Сотувчининг барча маҳсулотлари» (алоҳида катта тугма ўрнига).
+class _SellerLink extends StatelessWidget {
+  const _SellerLink({required this.product});
+
+  final WholesaleProduct product;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = product;
+    final name = p.sellerCompanyName.trim().isEmpty
+        ? context.tr('wholesale_seller_label')
+        : p.sellerCompanyName.trim();
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.storefront_outlined, size: 16, color: PdDark.muted),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, height: 1.2, fontWeight: FontWeight.w600, color: PdDark.ink),
+          ),
+        ),
+        if (p.sellerId.isNotEmpty) const Icon(Icons.chevron_right, size: 18, color: PdDark.muted),
+      ],
+    );
+    if (p.sellerId.isEmpty) return row;
+    return Semantics(
+      button: true,
+      label: '$name — ${context.tr('shop_item_seller_all')}',
+      child: InkWell(
+        key: const ValueKey('wholesale_go_seller'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => WholesaleSellerProductsScreen(
+              sellerId: p.sellerId,
+              sellerName: p.sellerCompanyName,
+              market: p.isChina ? WholesaleProduct.marketChina : WholesaleProduct.marketWholesale,
+            ),
+          ),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 40),
+          child: Align(alignment: Alignment.centerLeft, child: row),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Кейинги маҳсулот учун юқорига суринг» — ихчам кулранг ёзув (эга, 2026-11-01).
 class _NextHint extends StatelessWidget {
   const _NextHint();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PdDark.line),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.keyboard_double_arrow_up_rounded,
-              color: PdDark.brand, size: 22),
-          const SizedBox(height: 2),
-          Text(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.keyboard_arrow_up_rounded, color: PdDark.muted, size: 18),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
             context.tr('product_swipe_next_up'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: PdDark.ink,
-            ),
+            style: const TextStyle(fontSize: 12, color: PdDark.muted),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
 import 'package:ava_gurlan/features/wholesale/repositories/wholesale_products_repository.dart';
 import 'package:ava_gurlan/features/wholesale/screens/wholesale_seller_products_screen.dart';
 import 'package:ava_gurlan/features/wholesale/widgets/wholesale_product_card.dart';
-import 'package:ava_gurlan/features/wholesale/widgets/wholesale_seller_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -73,27 +72,6 @@ void main() {
     test('бўш рўйхат — бўш', () {
       expect(WholesaleProductsRepository.sortActiveSellerProducts(const []),
           isEmpty);
-    });
-  });
-
-  group('WholesaleSellerCard', () {
-    Future<void> pump(WidgetTester t, WholesaleProduct p) => t.pumpWidget(
-          MaterialApp(home: Scaffold(body: WholesaleSellerCard(product: p))),
-        );
-
-    testWidgets('фақат «барча маҳсулотлари» тугмаси (ном ва ҳудуд йўқ, эга 2026-11-01)', (t) async {
-      await pump(t, _p('a'));
-      expect(find.text('Sunlight'), findsNothing);
-      final btn = find.byKey(const ValueKey('wholesale_go_seller'));
-      expect(btn, findsOneWidget);
-      expect(find.text('shop_item_seller_all'), findsOneWidget);
-      expect(t.getSize(btn).height, greaterThanOrEqualTo(48));
-    });
-
-    testWidgets('sellerId бўш — тугма чиқмайди', (t) async {
-      await pump(t, _p('a', sellerId: ''));
-      expect(find.byKey(const ValueKey('wholesale_go_seller')), findsNothing);
-      expect(find.text('Sunlight'), findsNothing);
     });
   });
 

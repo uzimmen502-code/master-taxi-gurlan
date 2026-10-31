@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'ad_image_gallery.dart';
 import '../../../core/theme/ava_tokens.dart';
 
-/// Full-width image pager with dot indicators.
+/// Full-width image pager (ҳисоблагич ва нуқтасиз, эга 2026-11-01).
 class AdImageSlider extends StatefulWidget {
   const AdImageSlider({
     super.key,
@@ -25,7 +25,6 @@ class AdImageSlider extends StatefulWidget {
 
 class _AdImageSliderState extends State<AdImageSlider> {
   final _pageController = PageController();
-  int _index = 0;
 
   @override
   void dispose() {
@@ -54,7 +53,6 @@ class _AdImageSliderState extends State<AdImageSlider> {
           PageView.builder(
             controller: _pageController,
             itemCount: urls.length,
-            onPageChanged: (i) => setState(() => _index = i),
             itemBuilder: (_, i) => GestureDetector(
               onTap: () => openAdImageGallery(
                 context,
@@ -77,53 +75,7 @@ class _AdImageSliderState extends State<AdImageSlider> {
               ),
             ),
           ),
-          // «2/5» — нуқталар кичик расмларда адаштиради; максимал 7 та расмда
-          // нечанчисида эканини рақам аниқ айтади. Пастда-ўнгда: тепада
-          // (SliverAppBar'нинг шикоят тугмаси остида) тугмалар билан тўқнашади.
-          if (urls.length > 1)
-            Positioned(
-              right: 10,
-              bottom: 8,
-              child: IgnorePointer(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${_index + 1}/${urls.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (urls.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(urls.length, (i) {
-                  final active = i == _index;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: active ? 8 : 6,
-                    height: active ? 8 : 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: active
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.5),
-                    ),
-                  );
-                }),
-              ),
-            ),
+          // Расм ҳисоблагичи («1/9») ва нуқталар олиб ташланди (эга, 2026-11-01).
         ],
       ),
     );

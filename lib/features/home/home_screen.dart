@@ -1618,13 +1618,18 @@ class _HomeViewState extends State<_HomeView> {
                               HomeYukLocalSection(
                                 key: _sectionKey(
                                     'yuk_local_${GeoContext.scopeFor('yuk_local').key}'),
+                                isGuest: uid.length < 9,
+                                onRegister: () =>
+                                    unawaited(openProfileScreen(context)),
                                 onOpenAll: () => _openYukModule(
                                   'yuk_local',
                                   const YukLocalScreen(),
                                 ),
-                                onOpenDriver: (_) => _openYukModule(
+                                // Аввал қатор босилса умумий рўйхат очиларди
+                                // (аудит P-5) — энди шу машина детали.
+                                onOpenDriver: (d) => _openYukModule(
                                   'yuk_local',
-                                  const YukLocalScreen(),
+                                  YukLocalScreen(highlightListingId: d.id),
                                 ),
                               ),
                             ],

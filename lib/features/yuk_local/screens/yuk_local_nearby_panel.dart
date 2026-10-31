@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -29,7 +32,15 @@ class YukLocalNearbyPanel extends StatefulWidget {
     required this.ownerName,
     required this.ownerPhone,
     this.openPublishOnStart = false,
+    this.highlightListingId,
+    this.onRegister,
   });
+
+  /// Пуш ёки бош саҳифа қатори: шу эълон юклангач детали бир марта очилади.
+  final String? highlightListingId;
+
+  /// Меҳмон (телефонсиз) «Кабинет»га ўтиш тугмаси. `null` — тугма йўқ.
+  final VoidCallback? onRegister;
 
   /// «＋» → «Юк ташувчи»: экран очилиши билан эълон варағи (эга, 2026-10-19 —
   /// экрандаги алоҳида «Эълон бериш» тугмаси олиб ташланди, функцияси «＋» га кўчган).
@@ -50,7 +61,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   static const _accent = Color(0xFFFACC15);
   static const _green = AvaLight.ok;
 
-  final _repo = YukLocalDriversRepository();
+  // `late` — меҳмон ҳолатида Firestore'га умуман мурожаат қилинмайди.
+  late final _repo = YukLocalDriversRepository();
   final _ranker = YukLocalRanking();
   final _searchCtrl = TextEditingController();
 
@@ -110,27 +122,40 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     }
   }
 
+  /// Меҳмон (телефонсиз): рўйхат ва рақамлар фақат рўйхатдан ўтганларга
+  /// (эга қарори 2026-10-31, O-7; rules ҳам шуни талаб қилади).
+  bool get _isGuest => widget.ownerId.isEmpty;
+
+  /// [YukLocalNearbyPanel.highlightListingId] детали бир марта очилсин.
+  bool _highlightDone = false;
+
   Future<void> _bootstrap() async {
+    if (_isGuest) {
+      _loadingList = false;
+      _loadingGps = false;
+      return;
+    }
     // GPS рухсати диалоги рўйхат юкланишини блокламаслиги керак.
     unawaited(ensureGps());
     _subscribeCatalog();
-    if (widget.ownerId.isNotEmpty) {
-      _mineSub = _repo.watchMine(widget.ownerId).listen(
-        (list) {
-          if (!mounted) return;
-          setState(() {
-            _mine = list;
-            _recompute();
-          });
-        },
-        // Ўз эълонлари ўқилмаса ҳам оқим «unhandled» хато бермасин (рўйхат бўш қолади).
-        onError: (Object e, StackTrace st) {
-          debugPrint('[YukLocal] mine: $e');
-        },
-      );
-    } else {
-      _loadingList = false;
-    }
+    _mineSub = _repo.watchMine(widget.ownerId).listen(
+      (list) {
+        if (!mounted) return;
+        setState(() {
+          _mine = list;
+          _recompute();
+        });
+        _maybeOpenHighlight();
+      },
+      // Ўз эълонлари ўқилмаса ҳам оқим «unhandled» хато бермасин (рўйхат бўш қолади).
+      onError: (Object e, StackTrace st) {
+        debugPrint(jsonEncode({
+          'action': 'yukLocalWatchMine',
+          'result': 'error',
+          'errorCode': 'YUK_LOCAL_MINE_${e is FirebaseException ? e.code : e.runtimeType}',
+        }));
+      },
+    );
     if (widget.openPublishOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_openPublish());
@@ -159,8 +184,14 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
           if (_error == 'yuk_load_error') _error = null;
           _recompute();
         });
+        _maybeOpenHighlight();
       },
-      onError: (_) {
+      onError: (Object e) {
+        debugPrint(jsonEncode({
+          'action': 'yukLocalWatchCatalog',
+          'result': 'error',
+          'errorCode': 'YUK_LOCAL_LIST_${e is FirebaseException ? e.code : e.runtimeType}',
+        }));
         if (!mounted) return;
         setState(() {
           _loadingList = false;
@@ -299,11 +330,32 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
         .where((r) => !phonesMatch(r.driver.ownerId, widget.ownerId))
         .toList();
 
-    final activeMine = _mine.where((d) => !d.isExpired()).toList();
+    // Эга ЎЗ эълонларининг ҲАММАСИНИ кўради — муддати ўтганини ҳам (30 кун
+    // ичида сервер ўчирмагунча): узайтириши ёки ўчириши учун (аудит O-3).
     _ranked = [
-      for (final mine in activeMine) _rankMine(mine, lat, lng),
+      for (final mine in _mine) _rankMine(mine, lat, lng),
       ...withoutMine,
     ];
+  }
+
+  /// [YukLocalNearbyPanel.highlightListingId]: эълон ўз рўйхатида ёки
+  /// каталогда пайдо бўлгач детали бир марта очилади.
+  void _maybeOpenHighlight() {
+    final id = (widget.highlightListingId ?? '').trim();
+    if (_highlightDone || id.isEmpty || !mounted) return;
+    YukLocalDriverRanked? row;
+    for (final r in _ranked) {
+      if (r.driver.id == id) {
+        row = r;
+        break;
+      }
+    }
+    if (row == null) return;
+    _highlightDone = true;
+    final found = row;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_openDetails(found));
+    });
   }
 
   YukLocalDriverRanked _rankMine(
@@ -407,8 +459,54 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
       initial: initial,
     );
     if (ok == true && mounted) {
+      // Аввал ҳеч қандай тасдиқ йўқ эди — иш вақтидан ташқари берилган эълон
+      // рўйхатда кўринмаса, эга «жойланмади» деб қайта берарди (аудит P-2).
+      _snack(context.tr(
+        initial == null ? 'yuk_local_published_ok' : 'yuk_local_saved_ok',
+      ));
       await ensureGps();
     }
+  }
+
+  /// «Узайтириш» (+30 кун, сервер ҳисоблайди).
+  Future<void> _renew(YukLocalDriver d) async {
+    try {
+      final until = await _repo.renewListing(d.id);
+      debugPrint(jsonEncode({
+        'action': 'yukLocalRenew',
+        'listingId': d.id,
+        'result': 'ok',
+      }));
+      if (!mounted) return;
+      _snack(until == null
+          ? context.tr('yuk_local_renewed_ok')
+          : context
+              .tr('yuk_local_renewed_until')
+              .replaceAll('{date}', _dateLabel(until)));
+    } catch (e) {
+      final code = e is FirebaseFunctionsException ? e.code : '${e.runtimeType}';
+      final reason = e is FirebaseFunctionsException && e.details is Map
+          ? '${(e.details as Map)['code'] ?? ''}'
+          : '';
+      debugPrint(jsonEncode({
+        'action': 'yukLocalRenew',
+        'listingId': d.id,
+        'result': 'error',
+        'errorCode': reason.isNotEmpty ? reason : 'YUK_LOCAL_RENEW_$code',
+      }));
+      if (!mounted) return;
+      _snack(context.tr(
+        reason == 'YUK_RENEW_TOO_EARLY'
+            ? 'yuk_local_renew_too_early'
+            : 'yuk_local_renew_fail',
+      ));
+    }
+  }
+
+  String _dateLabel(DateTime d) {
+    final l = d.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(l.day)}.${two(l.month)}.${l.year}';
   }
 
   Future<void> _deleteMine(YukLocalDriver mine) async {
@@ -445,9 +543,15 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
       await _repo.deleteMine(mine.id);
       if (!mounted) return;
       _snack(context.tr('yuk_local_deleted_ok'));
-    } catch (_) {
+    } catch (e) {
+      debugPrint(jsonEncode({
+        'action': 'yukLocalDelete',
+        'listingId': mine.id,
+        'result': 'error',
+        'errorCode': 'YUK_LOCAL_DELETE_${e is FirebaseException ? e.code : e.runtimeType}',
+      }));
       if (!mounted) return;
-      _snack(context.tr('yuk_local_publish_fail'));
+      _snack(context.tr('yuk_local_delete_fail'));
     }
   }
 
@@ -564,6 +668,17 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
                     ),
                   ),
                 const SizedBox(height: 8),
+                if (mine && YukLocalSchedule.canRenew(d.expiresAt)) ...[
+                  _MiniBtn(
+                    key: const ValueKey('yuk_local_renew_btn'),
+                    label: context.tr('yuk_local_renew'),
+                    fg: Colors.black,
+                    border: _accent,
+                    fill: _accent,
+                    onTap: () => run(() => _renew(d)),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (!mine)
                   _MiniBtn(
                     label: context.tr('yuk_call'),
@@ -651,6 +766,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   }
 
   String _expiresLabel(DateTime exp) {
+    if (exp.isBefore(DateTime.now())) return context.tr('yuk_local_expired');
     final days = exp.difference(DateTime.now()).inDays;
     if (days <= 0) return context.tr('yuk_local_expires_soon');
     return context.tr('yuk_days_left').replaceAll('{n}', '$days');
@@ -725,8 +841,72 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     );
   }
 
+  /// Меҳмон: рўйхат ўрнида «Кабинетда рўйхатдан ўтинг» (эга матни 2026-10-31).
+  Widget _guestGate(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.local_shipping_rounded, size: 56, color: _accent),
+            const SizedBox(height: 16),
+            Text(
+              context.tr('yuk_local_guest_message'),
+              key: const ValueKey('yuk_local_guest_message'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (widget.onRegister != null) ...[
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: widget.onRegister,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(context.tr('yuk_local_guest_cta')),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// «Эълон қўшиш» — экран очилганда доим кўринади (эга, 2026-10-31).
+  Widget _addButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          key: const ValueKey('yuk_local_add_btn'),
+          onPressed: () => _openDriverSheet(null),
+          icon: const Icon(Icons.add_rounded),
+          label: Text(context.tr('yuk_local_add')),
+          style: FilledButton.styleFrom(
+            backgroundColor: _accent,
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isGuest) return _guestGate(context);
     // GPS биринчи уриниши тугагунча кутамиз — рўйхат кейин қайта
     // сараланиб «сакрамасин».
     final loading = _loadingList || (_loadingGps && !_hasSearcherGps && _mine.isEmpty);
@@ -741,6 +921,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
             onChanged: _setScope,
           ),
         ),
+        SliverToBoxAdapter(child: _addButton(context)),
         SliverPersistentHeader(
           pinned: true,
           delegate: _StickySearchBar(
@@ -802,6 +983,10 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
                       onDetails: () => _openDetails(row),
                       onEdit: () => _editAd(row.driver),
                       onDelete: () => _deleteMine(row.driver),
+                      onRenew: _isMine(row.driver) &&
+                              YukLocalSchedule.canRenew(row.driver.expiresAt)
+                          ? () => _renew(row.driver)
+                          : null,
                     ),
                   );
                 },
@@ -960,10 +1145,14 @@ class _LocalTruckCard extends StatelessWidget {
     required this.onDetails,
     required this.onEdit,
     required this.onDelete,
+    this.onRenew,
   });
 
   final YukLocalDriverRanked row;
   final bool mine;
+
+  /// Ўз эълони, муддати ≤3 кун ёки ўтган — менюда «Узайтириш».
+  final VoidCallback? onRenew;
 
   /// «300 кг · 4.8 км · 11 дақ» — битта қаторда.
   final String facts;
@@ -1066,10 +1255,16 @@ class _LocalTruckCard extends StatelessWidget {
                           children: [
                             if (mine || d.isDemo) ...[
                               _MiniPill(
-                                text: mine
-                                    ? context.tr('yuk_mine')
-                                    : context.tr('yuk_demo_badge'),
-                                fg: mine ? _accent : _demo,
+                                text: !mine
+                                    ? context.tr('yuk_demo_badge')
+                                    : d.isExpired()
+                                        ? context.tr('yuk_local_expired')
+                                        : context.tr('yuk_mine'),
+                                fg: !mine
+                                    ? _demo
+                                    : d.isExpired()
+                                        ? _amber
+                                        : _accent,
                               ),
                               const SizedBox(width: 6),
                             ],
@@ -1099,9 +1294,19 @@ class _LocalTruckCard extends StatelessWidget {
                         onEdit();
                       } else if (value == 'delete') {
                         onDelete();
+                      } else if (value == 'renew') {
+                        onRenew?.call();
                       }
                     },
                     itemBuilder: (_) => [
+                      if (onRenew != null)
+                        PopupMenuItem(
+                          value: 'renew',
+                          child: Text(
+                            context.tr('yuk_local_renew'),
+                            style: const TextStyle(color: _accent),
+                          ),
+                        ),
                       PopupMenuItem(
                         value: 'edit',
                         child: Text(
@@ -1177,6 +1382,7 @@ class _MiniPill extends StatelessWidget {
 
 class _MiniBtn extends StatelessWidget {
   const _MiniBtn({
+    super.key,
     required this.label,
     required this.fg,
     required this.border,

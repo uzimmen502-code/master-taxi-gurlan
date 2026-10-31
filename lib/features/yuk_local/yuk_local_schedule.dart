@@ -8,6 +8,25 @@ class YukLocalSchedule {
   /// Кейинги эълонлар.
   static const Duration nextListingTtl = Duration(days: 10);
 
+  // Муддат ҚАРОРИ серверда (`functions/yuk_local.js`, эга 2026-10-31):
+  // яратилганда 60/10 кун, «Узайтириш» +30 кун, муддат тугашига ≤3 кун
+  // қолганда ёки ўтгач узайтирилади, ўтганидан 30 кун кейин ўчирилади.
+  // Қуйидагилар фақат UI учун (тугма кўрсатиш) — сервер барибир текширади.
+
+  /// «Узайтириш» тугмаси шундан кам қолганда кўринади.
+  static const Duration renewWindow = Duration(days: 3);
+
+  /// Муддати ўтган эълон шунча вақт эгада кўринади, кейин сервер ўчиради.
+  static const Duration expiredGrace = Duration(days: 30);
+
+  /// Эга узайтира оладими: муддати ≤3 кун қолган ёки ўтган (30 кун ичида).
+  static bool canRenew(DateTime? expiresAt, {DateTime? now}) {
+    if (expiresAt == null) return false;
+    final t = now ?? DateTime.now();
+    if (expiresAt.add(expiredGrace).isBefore(t)) return false;
+    return expiresAt.difference(t) <= renewWindow;
+  }
+
   /// Эски ёзувлар учун default иш вақти (бут кун).
   static const int defaultWorkStartMinutes = 0;
   static const int defaultWorkEndMinutes = 24 * 60;

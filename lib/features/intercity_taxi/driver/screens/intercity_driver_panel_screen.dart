@@ -19,8 +19,42 @@ import '../intercity_route_stops.dart';
 import '../widgets/intercity_booking_request_dialog.dart';
 import '../widgets/intercity_pickup_route_card.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/celebration_dialog.dart';
 import '../../../../utils/intercity_departure.dart';
 import '../../../../utils/intercity_places.dart';
+
+/// «Панел очилди» хабари (панел ёзуви муваффақиятли бўлгандан кейин чақирилади).
+///
+/// Эга, 2026-10-31: шу телефон учун БИРИНЧИ марта — табрик (конфетти,
+/// `intercity_panel_opened_<телефон>`), «Давом этиш» босилгунча; кейинги марталар —
+/// аввалги snack. Телефон номаълум бўлса — snack.
+///
+/// [snackIfRepeat] `false` — панелга КИРИШда (контроллер `init` панелни жимгина очади): фақат
+/// биринчи марта табрик, кейинги киришларда ҳеч нарса кўрсатилмайди.
+Future<void> showIntercityPanelOpenedFeedback(
+  BuildContext context, {
+  required String phone,
+  bool snackIfRepeat = true,
+}) async {
+  final id = canonicalPhoneId(phone);
+  final first =
+      id.length >= 9 && await CelebrationOnce.claim('intercity_panel_opened_$id');
+  if (!context.mounted) return;
+  if (!first && !snackIfRepeat) return;
+  if (first) {
+    await showCelebration(
+      context,
+      icon: Icons.phone_in_talk_rounded,
+      title: context.tr('intercity_open_panel_done_title'),
+      subtitle: context.tr('intercity_open_panel_done_sub'),
+      buttonLabel: context.tr('celebration_continue'),
+    );
+    return;
+  }
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(context.tr('intercity_open_panel_done'))),
+  );
+}
 
 class IntercityDriverPanelScreen extends StatelessWidget {
   const IntercityDriverPanelScreen({
@@ -70,6 +104,11 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
   String? _lastDialogId;
   bool _dialogOpen = false;
 
+  /// Биринчи киришдаги табрик бир марта текширилади (контроллер `init` панелни ўзи очади,
+  /// «Панел очилди» тугмаси эса фақат «Панелдан чиқиш»дан кейин кўринади).
+  bool _entryCelebrationChecked = false;
+  IntercityDriverPanelController? _ctrl;
+
   @override
   void initState() {
     super.initState();
@@ -77,7 +116,30 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_ctrl == null) {
+      _ctrl = context.read<IntercityDriverPanelController>();
+      _ctrl!.addListener(_maybeCelebrateEntry);
+    }
+  }
+
+  /// Панел ёзуви келиб, панел очиқ бўлса — шу телефон учун биринчи марта табрик.
+  void _maybeCelebrateEntry() {
+    final c = _ctrl;
+    if (_entryCelebrationChecked || c == null || !mounted) return;
+    if (c.tripData == null || !c.isOnPanel) return;
+    _entryCelebrationChecked = true;
+    c.removeListener(_maybeCelebrateEntry);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showIntercityPanelOpenedFeedback(context, phone: c.driverId, snackIfRepeat: false);
+    });
+  }
+
+  @override
   void dispose() {
+    _ctrl?.removeListener(_maybeCelebrateEntry);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -413,9 +475,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                 onPressed: () async {
                   await c.openPanel();
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(context.tr('intercity_open_panel_done'))),
-                  );
+                  await showIntercityPanelOpenedFeedback(context, phone: c.driverId);
                 },
                 icon: const Icon(Icons.phone_in_talk_outlined, size: 18),
                 label: Text(context.tr('intercity_open_panel_btn')),

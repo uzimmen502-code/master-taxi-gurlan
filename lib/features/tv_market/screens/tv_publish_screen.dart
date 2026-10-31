@@ -16,6 +16,7 @@ import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/user_error.dart';
+import '../../../shared/widgets/celebration_dialog.dart';
 import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../../../repositories/user_repository.dart';
 import '../models/tv_ad_prefill.dart';
@@ -38,6 +39,41 @@ import '../widgets/tv_social_withdraw_card.dart';
 import '../../my_shop/seller_tg_channel.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../../../core/theme/ava_tokens.dart';
+
+/// Биринчи AVAGram видеоси табриги (эга, 2026-10-31: «биринчи муваффақият» лаҳзаси, БИР МАРТА).
+///
+/// Фақат ЯНГИ видео дарҳол ФАОЛ бўлганда ([active]; текширувга кетгани — йўқ), шу қурилмада шу эга
+/// учун биринчи марта ([CelebrationOnce], `first_clip_<телефон>`) ВА серверда эганинг бошқа клипи
+/// йўқ бўлса ([ownerClipIds] да [clipId] дан бошқаси йўқ) — илова янгилангач эски муаллифга
+/// «Биринчи видеонгиз» деб нотўғри чиқмасин. Текширув йиқилса/кечикса ([timeout]) — табриксиз.
+/// Ҳеч қачон хато отмайди (жойлаш аллақачон муваффақиятли). `true` — ойна кўрсатилди ва ёпилди.
+Future<bool> maybeCelebrateFirstClip(
+  BuildContext context, {
+  required String ownerPhone,
+  required String clipId,
+  required bool active,
+  required Future<List<String>> Function() ownerClipIds,
+  Duration timeout = const Duration(seconds: 4),
+}) async {
+  try {
+    if (!active || ownerPhone.isEmpty || clipId.isEmpty) return false;
+    if (!await CelebrationOnce.claim('first_clip_$ownerPhone')) return false;
+    final ids = await ownerClipIds().timeout(timeout);
+    if (ids.any((id) => id != clipId)) return false;
+    if (!context.mounted) return false;
+    await showCelebration(
+      context,
+      icon: Icons.videocam_rounded,
+      title: context.tr('tv_first_clip_title'),
+      subtitle: context.tr('tv_first_clip_sub'),
+      buttonLabel: context.tr('tv_first_clip_continue'),
+    );
+    return true;
+  } catch (e) {
+    debugPrint('[TvPublish] first clip celebration $e');
+    return false;
+  }
+}
 
 /// TV Market — видео жойлаш экрани.
 class TvPublishScreen extends StatefulWidget {
@@ -956,6 +992,18 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(lines.join('\n'))),
       );
+      // Биринчи видео табриги (эга, 2026-10-31) — фақат дарҳол ФАОЛ бўлганда; текширувга
+      // кетган видеода одатдаги snack қолади. Ойна ёпилгач оқим ўзгармайди (превью → `pop(true)`).
+      await maybeCelebrateFirstClip(
+        context,
+        ownerPhone: phone,
+        clipId: clipRef.id,
+        active: autoApprove,
+        ownerClipIds: () async => [
+          for (final c in await TvClipsRepository().fetchByOwner(phone, limit: 2)) c.id,
+        ],
+      );
+      if (!mounted) return;
       await _showLocalPreview(uploaded.localPath);
       if (!mounted) return;
       await VideoCompress.deleteAllCache();

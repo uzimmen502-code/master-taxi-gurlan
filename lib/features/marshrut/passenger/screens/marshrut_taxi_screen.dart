@@ -206,18 +206,22 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     await UserRoleSync.forceSyncDriver();
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-        context.tr('driver_mode_activated'),
-        style: const TextStyle(color: AppColors.onPrimary),
-      ),
-      backgroundColor: AppColors.button,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
-
-    await Future.delayed(const Duration(milliseconds: 600));
+    // Эга, 2026-10-31: админ тасдиқлаган лаҳза — биринчи марта табрик (конфетти), кейин панел.
+    final celebrated = await showDriverApprovedCelebrationOnce(context, phone: uid, taxiType: 'marshrut');
+    if (!mounted) return;
+    if (!celebrated) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          context.tr('driver_mode_activated'),
+          style: const TextStyle(color: AppColors.onPrimary),
+        ),
+        backgroundColor: AppColors.button,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
     if (!mounted) return;
     await _pushMarshrutDriverPanel(canonicalPhoneId(uid));
   }
@@ -511,7 +515,12 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         if (submitResult.autoApproved) {
           await UserRoleSync.forceSyncDriver();
           if (!mounted) return;
-          _snack(context.tr('marshrut_driver_mode_activated'));
+          // Эга, 2026-10-31: биринчи марта — табрик (конфетти), кейин панел; кейинги марталар — snack.
+          if (!await showDriverApprovedCelebrationOnce(context, phone: phone, taxiType: 'marshrut')) {
+            if (!mounted) return;
+            _snack(context.tr('marshrut_driver_mode_activated'));
+          }
+          if (!mounted) return;
           await _pushMarshrutDriverPanel(userId);
         } else {
           await showDriverApplicationPendingFeedback(

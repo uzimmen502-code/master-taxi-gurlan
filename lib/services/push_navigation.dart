@@ -36,6 +36,7 @@ import '../features/realty/screens/my_realty_listings_screen.dart';
 import '../features/realty/screens/realty_alerts_screen.dart';
 import '../features/realty/screens/realty_detail_screen.dart';
 import '../repositories/realty_repository.dart';
+import '../shared/widgets/driver_application_feedback.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
 import '../features/wholesale/screens/wholesale_order_detail_screen.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
@@ -488,8 +489,18 @@ class PushNavigation {
     if (type == 'driver_request_approved') {
       final prefs = await SharedPreferences.getInstance();
       if (!UserAudience.taxiDriverFrom(prefs)) {
-        _showPassiveSnack(nav, 'driver_request_approved_snack');
         await prefs.remove('pending_driver_open');
+        // Эга, 2026-10-31: тасдиқ — табрик (шу телефон + тур учун БИР МАРТА). Кейинги
+        // марталар ёки ойна хавфсиз очилмаса (контекст/таржима йўқ) — аввалги snack.
+        final ctx = nav.context;
+        final celebrated = ctx.mounted &&
+            AppLocalizations.of(ctx) != null &&
+            await showDriverApprovedCelebrationOnce(
+              ctx,
+              phone: prefs.getString('user_phone') ?? '',
+              taxiType: data['taxiType'],
+            );
+        if (!celebrated) _showPassiveSnack(nav, 'driver_request_approved_snack');
         return;
       }
 

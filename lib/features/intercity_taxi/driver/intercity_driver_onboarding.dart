@@ -125,8 +125,13 @@ class IntercityDriverOnboarding {
     if (submitResult.autoApproved) {
       await UserAudience.saveTaxiDriver(true);
       if (!context.mounted) return;
-      _snack(context, context.tr('intercity_driver_mode_activated'),
-          IntercityColors.primary);
+      // Эга, 2026-10-31: биринчи марта — табрик (конфетти); кейинги марталар — snack.
+      if (!await showDriverApprovedCelebrationOnce(context, phone: phone, taxiType: 'intercity')) {
+        if (!context.mounted) return;
+        _snack(context, context.tr('intercity_driver_mode_activated'),
+            IntercityColors.primary);
+      }
+      if (!context.mounted) return;
       // Рўйхатдан ўтгач ҳайдовчи тугмани қайта босмасин — дарҳол рейс очади.
       await _openWorkspace(context, uid);
     } else {

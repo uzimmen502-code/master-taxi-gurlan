@@ -799,17 +799,6 @@ class _SettingsTabState extends State<_SettingsTab> {
     }
   }
 
-  Future<void> _setAuto(bool enabled) async {
-    setState(() => _busy = true);
-    try {
-      await widget.svc.setAutoApprove(enabled);
-    } catch (e) {
-      if (mounted) _snack(context, 'Хато: ${_errText(e)}', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -874,25 +863,15 @@ class _SettingsTabState extends State<_SettingsTab> {
         const SizedBox(height: 6),
         RestaurantFeeCard(svc: widget.svc),
         const SizedBox(height: 18),
-        const Text('Ресторан аризаси', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        const Text('Янги ресторан / уй ошпази', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('settings').doc('app').snapshots(),
-          builder: (context, snap) {
-            final auto = snap.data?.data()?['restaurantAutoApprove'] == true;
-            return _InfoBar(
-              icon: auto ? Icons.flash_on : Icons.admin_panel_settings,
-              color: auto ? AvaLight.ok : Colors.orange.shade800,
-              text: auto
-                  ? 'АВТО: янги ресторан дарҳол фаол (approved) бўлади.'
-                  : 'ҚЎЛДА: янги ресторан «Ариза» бўлиб туради, админ тасдиқлайди.',
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                OutlinedButton(onPressed: _busy || !auto ? null : () => _setAuto(false), child: const Text('ҚЎЛДА')),
-                const SizedBox(width: 8),
-                FilledButton(onPressed: _busy || auto ? null : () => _setAuto(true), child: const Text('АВТО')),
-              ]),
-            );
-          },
+        // Эга, 2026-10-31: «Ариза юбориш» занжири йўқ — «Тасдиқлайман» билан ДАРҲОЛ жонли (серверда доим).
+        // Аввалги ҚЎЛДА/АВТО тугмаси олиб ташланди: сервер `restaurantAutoApprove` ни энди ўқимайди.
+        const _InfoBar(
+          icon: Icons.flash_on,
+          color: AvaLight.ok,
+          text: 'Янги ресторан ва уй ошпази «Тасдиқлайман» босилиши билан дарҳол фаол бўлади (ариза йўқ). '
+              'Қоидага зид объектни «Ресторанлар» бўлимида «Тўхтатиш» мумкин.',
         ),
         const SizedBox(height: 18),
         const Text('Сервер қоидалари (кодда, ўзгартириш — деплой; AVA ҳақи — юқорида)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -971,12 +950,11 @@ Widget _kv(String k, String v) => RichText(
     );
 
 class _InfoBar extends StatelessWidget {
-  const _InfoBar({required this.icon, required this.color, required this.text, this.trailing});
+  const _InfoBar({required this.icon, required this.color, required this.text});
 
   final IconData icon;
   final Color color;
   final String text;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -992,7 +970,6 @@ class _InfoBar extends StatelessWidget {
         Icon(icon, color: color, size: 22),
         const SizedBox(width: 10),
         Expanded(child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color))),
-        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
       ]),
     );
   }

@@ -7,6 +7,7 @@ import '../home/widgets/ava_business_sheet.dart';
 import 'my_shop_presence.dart';
 import 'screens/main_shop_screen.dart';
 import 'screens/my_shop_screen.dart';
+import 'shop_opened_celebration.dart';
 
 /// Экранни очувчи (чақирувчининг ўз навигацияси: бош саҳифада `_push`, лентада
 /// `Navigator.push`).
@@ -20,8 +21,9 @@ typedef MyShopPush = Future<void> Function(Widget screen);
 /// қўшимча дўкон очиш ёпиқ ва бошқа дўкони йўқ бўлса — тўғридан-тўғри асосий
 /// дўконга. [preferMain] (видеодаги «Дўкон» тугмаси) — ҳар доим тўғридан-тўғри
 /// асосий дўконга (бошқа дўконлар рўйхатисиз). Дўкони йўқ эга — биринчи кириш: ном (ихтиёрий)
-/// + «қаерга қўшамиз?», кейин асосий дўкон (Аҳоли бозорида форма дарҳол
-/// очилади, ёпилгач рўйхат ва «Янги маҳсулот» тугмаси турибди).
+/// + «қаерга қўшамиз?», кейин асосий дўкон (Аҳоли бозорида аввал бир марталик
+/// «Дўконингиз очилди!» табриги, кейин форма дарҳол очилади, ёпилгач рўйхат ва
+/// «Янги маҳсулот» тугмаси турибди).
 ///
 /// [phone] — каноник телефон (9+ рақам); текширувни чақирувчи қилади.
 /// `canCreateShop`, `shopTargets`, `askFirstShop`, `saveName` — тест учун.
@@ -87,6 +89,13 @@ Future<void> openMyShop(
   }
   if (!context.mounted) return;
   final retail = first.target == AvaShopTarget.retail;
+  // Табрик (эга, 2026-10-31) — эга телефони бўйича бир марта, асосий дўкон очилишидан ОЛДИН («Маҳсулот
+  // қўшиш» → форма). Фақат Аҳоли бозори: Улгуржида аввал сотувчи рўйхатдан ўтади ва админ тасдиқлайди —
+  // «дўконингиз очилди» дейиш эрта.
+  if (retail) {
+    await celebrateShopOpenedOnce(context, phone);
+    if (!context.mounted) return;
+  }
   await push(MainShopScreen(
     phone: phone,
     initialSegment: retail ? 0 : 1,

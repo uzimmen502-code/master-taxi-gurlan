@@ -1,5 +1,5 @@
-// Рўйхатдан ўтиш (Б2.1, D-REST-7): форма → `restaurantRegister` → `applied`
-// (админ тасдиғи) ёки `approved` (`settings/app.restaurantAutoApprove`).
+// Рўйхатдан ўтиш (Б2.1, D-REST-7): форма → «Тасдиқлайман» → `restaurantRegister` → `approved`
+// (эга, 2026-10-31: ариза занжири йўқ, сервер доим дарҳол жонли) → табрик → панел.
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +9,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/idempotency_keys.dart';
 import '../data/restaurants_repository.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
+import 'opened_celebration.dart';
 import 'restaurant_form_fields.dart';
 import 'restaurant_panel_screen.dart';
 import 'restaurant_register_form.dart';
@@ -94,13 +95,16 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
       if (!mounted) return;
       final rid = (res['restaurantId'] ?? '') as String;
       final status = (res['status'] ?? 'applied') as String;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.tr(status == 'approved'
-              ? (widget.homeCook ? 'restaurants_m_submitted_approved_home_cook' : 'restaurants_m_submitted_approved')
-              : 'restaurants_m_submitted_pending')),
-        ),
-      );
+      if (status == 'approved') {
+        // Эга, 2026-10-31: очилиш — табрик (конфетти); «Панелга ўтиш» босилгач панел.
+        await showOpenedCelebration(context, homeCook: widget.homeCook);
+        if (!mounted) return;
+      } else {
+        // Эски сервер ёки қўлда тасдиқ (ҳозир сервер доим `approved`): аввалги хабар.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('restaurants_m_submitted_pending'))),
+        );
+      }
       final nav = Navigator.of(context);
       // `pushReplacement` панел ёпилгунча тугамайди — кутмаймиз.
       unawaited(nav.pushReplacement(

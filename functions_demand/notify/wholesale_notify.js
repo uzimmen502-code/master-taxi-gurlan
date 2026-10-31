@@ -54,6 +54,38 @@ const MESSAGES = {
     uz_Latn: { title: 'Xaridor to\'lamadi — tovar qaytariladi', body: '{product} × {qty}. Qaytarish yetkazish haqi hamyoningizdan ushlanadi, AVA ulushi qaytariladi.' },
     ru: { title: 'Покупатель не оплатил — товар возвращается', body: '{product} × {qty}. Стоимость обратной доставки списывается с вашего кошелька, комиссия AVA возвращается.' },
   },
+  // ── «Етказилмади» — харидор тасдиғи (ega, 2026-11-01; api/wholesale_failed.js). `{timeout}` —
+  // server_config/customer_confirm.failedTimeoutMin (`{minutes}` — чек низоси, бошқа муддат).
+  ws_df_buyer_confirm: {
+    uz_Cyrl: { title: 'Курьер: товар етказилмади', body: '{product}: курьер товарни етказиб бўлмади деб белгилади. Буюртма саҳифасида тасдиқланг ёки «Олмоқчиман» ни босинг. {timeout} дақиқада жавоб бўлмаса, сотувчи ҳал қилади.' },
+    uz_Latn: { title: 'Kuryer: tovar yetkazilmadi', body: '{product}: kuryer tovarni yetkazib bo\'lmadi deb belgiladi. Buyurtma sahifasida tasdiqlang yoki «Olmoqchiman» ni bosing. {timeout} daqiqada javob bo\'lmasa, sotuvchi hal qiladi.' },
+    ru: { title: 'Курьер: товар не доставлен', body: '{product}: по отметке курьера товар не удалось доставить. Подтвердите на странице заказа или нажмите «Хочу получить». Если не ответить за {timeout} минут, решит продавец.' },
+  },
+  ws_df_courier_wait: {
+    uz_Cyrl: { title: 'Харидор тасдиғи кутилмоқда', body: '{product}: харидор {timeout} дақиқа ичида жавоб беради, кейин сотувчи ҳал қилади. Посилкани ўзингизда сақланг.' },
+    uz_Latn: { title: 'Xaridor tasdig\'i kutilmoqda', body: '{product}: xaridor {timeout} daqiqa ichida javob beradi, keyin sotuvchi hal qiladi. Posilkani o\'zingizda saqlang.' },
+    ru: { title: 'Ожидаем подтверждения покупателя', body: '{product}: покупатель ответит в течение {timeout} минут, затем решит продавец. Посылку держите при себе.' },
+  },
+  ws_df_courier_continue: {
+    uz_Cyrl: { title: 'Етказишни давом эттиринг', body: '{product}: товар етказилсин деб қарор қилинди. Харидорга топширинг.' },
+    uz_Latn: { title: 'Yetkazishni davom ettiring', body: '{product}: tovar yetkazilsin deb qaror qilindi. Xaridorga topshiring.' },
+    ru: { title: 'Продолжайте доставку', body: '{product}: решено доставить товар. Передайте его покупателю.' },
+  },
+  ws_df_buyer_continue: {
+    uz_Cyrl: { title: 'Товар етказилади', body: '{product}: курьер етказишни давом эттиради.' },
+    uz_Latn: { title: 'Tovar yetkaziladi', body: '{product}: kuryer yetkazishni davom ettiradi.' },
+    ru: { title: 'Товар будет доставлен', body: '{product}: курьер продолжит доставку.' },
+  },
+  ws_df_decide_seller: {
+    uz_Cyrl: { title: 'Етказилмади — қарорингиз керак', body: '{product} × {qty}: харидор {timeout} дақиқада жавоб бермади. Буюртма саҳифасида «Етказилмади» ёки «Етказилсин» ни танланг.' },
+    uz_Latn: { title: 'Yetkazilmadi — qaroringiz kerak', body: '{product} × {qty}: xaridor {timeout} daqiqada javob bermadi. Buyurtma sahifasida «Yetkazilmadi» yoki «Yetkazilsin» ni tanlang.' },
+    ru: { title: 'Не доставлено — нужно ваше решение', body: '{product} × {qty}: ответа покупателя нет уже {timeout} минут. На странице заказа выберите «Не доставлено» или «Доставить».' },
+  },
+  ws_df_decide_admin: {
+    uz_Cyrl: { title: 'Улгуржи: етказилмади — қарор', body: 'Буюртма {orderId}: харидор жавоб бермади. Сотувчи ёки админ ҳал қилади («Етказилмади — қарор»).' },
+    uz_Latn: { title: 'Ulgurji: yetkazilmadi — qaror', body: 'Buyurtma {orderId}: xaridor javob bermadi. Sotuvchi yoki admin hal qiladi («Yetkazilmadi — qaror»).' },
+    ru: { title: 'Оптовый рынок: не доставлено — решение', body: 'Заказ {orderId}: ответа покупателя нет. Решает продавец или администратор («Не доставлено — решение»).' },
+  },
   ws_dispute_admin: {
     uz_Cyrl: { title: 'Улгуржи: тўлов низоси', body: 'Буюртма {orderId}: харидор чек юборган, сотувчи {minutes} дақиқада тасдиқламади. Админ панелида ҳал қилинг.' },
     uz_Latn: { title: 'Ulgurji: to\'lov nizosi', body: 'Buyurtma {orderId}: xaridor chek yuborgan, sotuvchi {minutes} daqiqada tasdiqlamadi. Admin panelida hal qiling.' },
@@ -117,13 +149,16 @@ const newsIdFor = (orderId, key, uid) => `wholesale_${orderId}_${key}_${uid}`;
  * Bitta foydalanuvchiga: inbox (create — takror bo'lsa jim) + push.
  * @returns {{sent: boolean, duplicate?: boolean, pushed?: number}}
  */
-async function notifyUser(deps, { uid, key, params, orderId }) {
+async function notifyUser(deps, { uid, key, params, orderId, idSuffix }) {
   const { db, messaging = null, now: nowFn } = deps;
   const id = toCanonicalId(uid);
   if (!id || !orderId) return { sent: false };
   const lang = await langOf(db, id);
   const text = render(key, lang, params);
-  const ref = db.collection(NEWS).doc(newsIdFor(orderId, key, id));
+  // `idSuffix` — bir buyurtmada takrorlanadigan hodisa (masalan «етказилмади» n-urinish): har urinishga
+  // bitta xabar, o'sha urinish qayta chaqirilsa — yo'q. Yo'q bo'lsa ID avvalgidek (eski xabarlar o'zgarmaydi).
+  const suffix = /^[A-Za-z0-9]{1,16}$/.test(String(idSuffix || '')) ? `_${idSuffix}` : '';
+  const ref = db.collection(NEWS).doc(`${newsIdFor(orderId, key, id)}${suffix}`);
   const batch = db.batch();
   batch.create(ref, {
     title: text.title,
@@ -179,12 +214,12 @@ async function adminIds(db) {
   return [...out];
 }
 
-async function notifyAdmins(deps, { key, params, orderId }) {
+async function notifyAdmins(deps, { key, params, orderId, idSuffix }) {
   const ids = await adminIds(deps.db);
   let sent = 0;
   for (const uid of ids) {
     try {
-      const r = await notifyUser(deps, { uid, key, params, orderId });
+      const r = await notifyUser(deps, { uid, key, params, orderId, idSuffix });
       if (r.sent) sent += 1;
     } catch (e) {
       console.error(JSON.stringify({ module: 'wholesale_orders', action: 'notifyAdmins', result: 'failed', orderId, key }));

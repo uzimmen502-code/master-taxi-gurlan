@@ -33,6 +33,7 @@ const relay = require('../relay_escrow');
 const WO = require('../../functions_demand/core/wholesale_orders');
 const DC = require('../../functions_demand/api/wholesale_card');
 const DW = require('../../functions_demand/api/wholesale_orders');
+const DF = require('../../functions_demand/api/wholesale_failed');
 
 const BUYER = '998901110001';
 const BUYER2 = '998901110002';
@@ -187,7 +188,14 @@ async function linkReturn(orderId, { fee = 40000, shipPrice = fee } = {}) {
 async function refuse(orderId) {
   const ref = db.collection('wholesale_orders').doc(orderId);
   const before = (await ref.get()).data();
-  const r = await quiet(() => DC.makeMarkWholesaleBuyerRefused(dDeps)({ orderId, reason: 'to\'lamadi' }, ctx(K1)));
+  // 2026-11-01: kuryer «етказилмади» — holat O'ZGARMAYDI (xaridor tasdig'i so'rovi); trigger hech narsa qilmaydi.
+  const m = await quiet(() => DC.makeMarkWholesaleBuyerRefused(dDeps)({ orderId, reason: 'to\'lamadi' }, ctx(K1)));
+  assert.deepStrictEqual([m.status, m.awaitingBuyer], ['in_delivery', true]);
+  const pending = (await ref.get()).data();
+  const noop = await quiet(() => api.onStatusChange(before, pending, orderId));
+  assert.ok(!noop || !noop.refunded, `so'rovda pul harakati YO'Q: ${JSON.stringify(noop)}`);
+  // Xaridor tasdiqlaydi → MAVJUD rad natijasi.
+  const r = await quiet(() => DF.makeRespondWholesaleDeliveryFailed(dDeps)({ orderId, decision: 'confirm' }, ctx(pending.buyerId)));
   assert.strictEqual(r.status, 'refused');
   const after = (await ref.get()).data();
   const refund = await quiet(() => api.onStatusChange(before, after, orderId));

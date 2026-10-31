@@ -450,6 +450,23 @@ ok('kuryer chek yuborilgan buyurtmani refused qila olmaydi — holatlar jadvali:
   assert.ok(!WO.canActorTransition('buyer', 'in_delivery', 'refused'));
 });
 
+ok('yo\'qolish: faqat system, faqat in_delivery | payment_dispute → lost; lost — oxirgi holat; boshqa aktyor/holat — yo\'q', () => {
+  assert.strictEqual(WO.STATUS.LOST, 'lost');
+  assert.deepStrictEqual([...WO.LOST_FROM_STATUSES], ['in_delivery', 'payment_dispute']);
+  for (const from of WO.LOST_FROM_STATUSES) assert.ok(WO.canActorTransition('system', from, 'lost'), from);
+  for (const actor of ['buyer', 'admin', 'courier', 'seller']) {
+    for (const from of WO.LOST_FROM_STATUSES) assert.ok(!WO.canActorTransition(actor, from, 'lost'), `${actor}:${from}`);
+  }
+  const into = Object.keys(WO.ALLOWED).filter((s) => WO.ALLOWED[s].includes('lost')).sort();
+  assert.deepStrictEqual(into, ['in_delivery', 'payment_dispute']);
+  for (const from of ['placed', 'cancelled', 'delivered', 'refused', 'returning', 'returned']) {
+    assert.ok(!WO.canTransition(from, 'lost'), from);
+  }
+  assert.ok(WO.isTerminal('lost'));
+  assert.ok(!WO.needsRefund('lost'), 'lost — REFUND_STATUSES oqimi emas (settleLost alohida)');
+  assert.deepStrictEqual({ ...WO.LOST_PAYMENT }, { REFUNDED: 'refunded_lost', REVIEW: 'lost_review' });
+});
+
 // ─── admin: nizoni hal qilish ────────────────────────────────────────
 ok('adminResolveWholesaleCardDispute: oddiy/dispatcher RAD; nizo yo\'q — not_in_dispute; confirm → in_delivery + confirmed + audit; takror idempotent; keyin reject — already_resolved', async () => {
   const db = makeDb({
@@ -513,6 +530,27 @@ ok('transitionNotifications: o\'tishlar matritsasi (chek, tasdiq, rad, nizo, qar
   assert.deepStrictEqual(keys({ ...ref, status: 'returning' }, { ...ref, status: 'returned' }), ['seller:ws_returned_seller']);
   // Hamyon buyurtmasida karta xabarlari yo'q.
   assert.deepStrictEqual(keys(ORDER_WALLET, { ...ORDER_WALLET, cardPayment: { status: 'confirmed' } }), []);
+});
+
+ok('transitionNotifications (yo\'qolish): hamyon / karta / karta-review kalitlari; takror lost → lost — bo\'sh; {refund} matnda', () => {
+  const keys = (b, a) => E.transitionNotifications(b, a).map((x) => `${x.to}:${x.key}`);
+  const w = { ...ORDER_WALLET, status: 'in_delivery' };
+  const wl = { ...w, status: 'lost', payment: { status: 'refunded_lost', lostRefund: 140000 } };
+  assert.deepStrictEqual(keys(w, wl), ['buyer:ws_lost_buyer_wallet', 'seller:ws_lost_seller']);
+  assert.deepStrictEqual(keys(wl, wl), []);
+  const c = { ...ORDER_CARD, status: 'in_delivery' };
+  assert.deepStrictEqual(keys(c, { ...c, status: 'lost', payment: { status: 'refunded_lost', lostRefund: 3500 } }),
+    ['buyer:ws_lost_buyer_card', 'seller:ws_lost_seller']);
+  const d = { ...ORDER_CARD, status: 'payment_dispute' };
+  assert.deepStrictEqual(keys(d, { ...d, status: 'lost', payment: { status: 'lost_review', lostRefund: 0 } }),
+    ['buyer:ws_lost_buyer_review', 'seller:ws_lost_seller', 'admins:ws_lost_review_admin']);
+  for (const k of ['ws_lost_buyer_wallet', 'ws_lost_buyer_card', 'ws_lost_buyer_review', 'ws_lost_seller', 'ws_lost_review_admin']) {
+    for (const lang of N.LANGS) {
+      const m = N.render(k, lang, { product: 'Гуруч', qty: 10, refund: 140000, orderId: 'o1' });
+      assert.ok(m.title && m.body && !/\{\w+\}/.test(m.title + m.body), `${k}/${lang}`);
+    }
+  }
+  assert.ok(N.render('ws_lost_buyer_wallet', 'uz_Latn', { refund: 140000 }).body.includes('140000'));
 });
 
 ok('xabar yetkazish: inbox (3 til, foydalanuvchi tili) + push; takror trigger — bitta xabar, bitta push; adminlar (admin+superadmin, dispatcher EMAS)', async () => {

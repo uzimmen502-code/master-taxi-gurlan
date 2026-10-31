@@ -84,6 +84,32 @@ const MESSAGES = {
     uz_Latn: { title: 'Tovar qaytib keldi', body: '{product} × {qty} — qoldiq tiklandi.' },
     ru: { title: 'Товар вернулся', body: '{product} × {qty} — остаток восстановлен.' },
   },
+  // ── Yo'qolgan posilka (ega, 2026-10-31) ──
+  ws_lost_buyer_wallet: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Товар пули {refund} сўм ҳамёнингизга қайтарилди.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Tovar puli {refund} so\'m hamyoningizga qaytarildi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Стоимость товара {refund} сум возвращена в ваш кошелёк.' },
+  },
+  ws_lost_buyer_card: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Буюртма ёпилди — сиз ҳеч нарса тўламайсиз.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Buyurtma yopildi — siz hech narsa to\'lamaysiz.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Заказ закрыт — вам ничего платить не нужно.' },
+  },
+  ws_lost_buyer_review: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Тўловингиз бўйича админ кўриб чиқади ва сиз билан боғланади.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. To\'lovingiz bo\'yicha admin ko\'rib chiqadi va siz bilan bog\'lanadi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Администратор рассмотрит вашу оплату и свяжется с вами.' },
+  },
+  ws_lost_seller: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди — буюртма ёпилди', body: '{product} × {qty}. Товар қийматини масъул курьер қоплайди (логистика хабарида батафсил). Қолдиқ тикланмайди.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi — buyurtma yopildi', body: '{product} × {qty}. Tovar qiymatini mas\'ul kuryer qoplaydi (logistika xabarida batafsil). Qoldiq tiklanmaydi.' },
+    ru: { title: 'Товар утерян при доставке — заказ закрыт', body: '{product} × {qty}. Стоимость товара возмещает ответственный курьер (подробности в уведомлении логистики). Остаток не восстанавливается.' },
+  },
+  ws_lost_review_admin: {
+    uz_Cyrl: { title: 'Улгуржи: йўқолган товар — тўловни кўриб чиқинг', body: 'Буюртма {orderId}: харидор картага тўловни билдирган, товар йўқолди. Сотувчи товар қийматини курьердан олади — харидорга қайтаришни ҳал қилинг.' },
+    uz_Latn: { title: 'Ulgurji: yo\'qolgan tovar — to\'lovni ko\'rib chiqing', body: 'Buyurtma {orderId}: xaridor kartaga to\'lovni bildirgan, tovar yo\'qoldi. Sotuvchi tovar qiymatini kuryerdan oladi — xaridorga qaytarishni hal qiling.' },
+    ru: { title: 'Оптовый рынок: утерянный товар — проверьте оплату', body: 'Заказ {orderId}: покупатель сообщил об оплате на карту, товар утерян. Продавец получает стоимость товара от курьера — решите возврат покупателю.' },
+  },
 };
 
 function render(key, lang, params) {

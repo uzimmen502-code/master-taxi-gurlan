@@ -29,6 +29,7 @@ import '../widgets/wholesale_product_card.dart';
 import '../widgets/wholesale_stream_builder.dart';
 import 'wholesale_product_detail_screen.dart';
 import 'wholesale_product_form_screen.dart';
+import '../wholesale_celebrations.dart';
 
 /// Улгуржи/кичик улгуржи бозор — умумий кириш нуқтаси.
 /// "Бозор" (ҳамма кўради) + "Мен сотувчиман" (рўйхатдан ўтиш → admin
@@ -321,6 +322,19 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
     return _sellerStream!;
   }
 
+  /// Тасдиқ табриги шу экранда бир марта текширилади (ҳар rebuild'да эмас).
+  bool _approvedCelebrationChecked = false;
+
+  /// Эга, 2026-10-31: сотувчи тасдиқланганда табрик («ҳа»). Тасдиқ шу экран
+  /// очиқлигида келса ҳам (stream), кейин кирганда ҳам — қурилмада бир марта.
+  void _maybeCelebrateApproved(WholesaleSeller seller) {
+    if (_approvedCelebrationChecked) return;
+    _approvedCelebrationChecked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) celebrateWholesaleSellerApprovedOnce(context, seller: seller);
+    });
+  }
+
   @override
   void dispose() {
     _companyCtrl.dispose();
@@ -448,6 +462,7 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
               ? _registerForm(rejected: seller)
               : _statusCard(seller);
         }
+        _maybeCelebrateApproved(seller);
         return _MyProductsView(seller: seller, market: widget.market);
       },
     );

@@ -38,7 +38,10 @@ import '../features/realty/screens/realty_detail_screen.dart';
 import '../repositories/realty_repository.dart';
 import '../shared/widgets/driver_application_feedback.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
+import '../features/wholesale/repositories/wholesale_orders_repository.dart';
 import '../features/wholesale/screens/wholesale_order_detail_screen.dart';
+import '../features/wholesale/wholesale_celebrations.dart';
+import '../shared/widgets/celebration_dialog.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../features/yuk_local/screens/yuk_local_screen.dart';
 import '../features/onboarding/screens/device_transfer_approve_screen.dart';
@@ -98,6 +101,26 @@ class PushNavigation {
     if (type != 'wholesale_order' && screen != 'wholesale_order') return null;
     final id = (data['orderId'] ?? '').trim();
     return RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id) ? id : null;
+  }
+
+  /// Сотувчига «янги буюртма» push'и (`functions_demand/notify/wholesale_notify.js`
+  /// `MESSAGES.ws_card_new_order`).
+  @visibleForTesting
+  static const wholesaleNewOrderEvent = 'ws_card_new_order';
+
+  /// Табрик аллақачон бўлган бўлса — Firestore ўқилмайди. Акс ҳолда сотувчи
+  /// буюртмаларидан 2 тасигача ўқилади (1 — биринчи; 2+ — белги қўйилади, табрик йўқ).
+  static Future<void> _celebrateWholesaleFirstOrder(NavigatorState nav, String phone) async {
+    try {
+      if (await CelebrationOnce.wasClaimed(wholesaleFirstOrderKey(phone))) return;
+      final orders = await WholesaleOrdersRepository().watchSellerOrders(phone, limit: 2).first;
+      final ctx = nav.context;
+      if (!ctx.mounted || AppLocalizations.of(ctx) == null) return;
+      await celebrateWholesaleFirstOrderOnce(ctx, sellerId: phone, orderCount: orders.length);
+    } catch (e) {
+      // Табрик — қўшимча: ўқиб бўлмаса ҳам буюртма тафсилоти очилади.
+      debugPrint('[PushNavigation] wholesale first-order check failed: $e');
+    }
   }
 
   static Future<void> handlePayload(String? payload) async {
@@ -380,6 +403,11 @@ class PushNavigation {
       final prefs = await SharedPreferences.getInstance();
       final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
       if (phone.length >= 12) {
+        // Эга, 2026-10-31: сотувчига биринчи буюртма — табрик, кейин тафсилот.
+        if ((data['event'] ?? '').trim() == wholesaleNewOrderEvent) {
+          await _celebrateWholesaleFirstOrder(nav, phone);
+          if (!nav.mounted) return;
+        }
         await nav.push(
           MaterialPageRoute(
             builder: (_) => WholesaleOrderDetailScreen(orderId: wholesaleOrderId, viewerId: phone),
@@ -492,17 +520,15 @@ class PushNavigation {
         await prefs.remove('pending_driver_open');
         // Эга, 2026-10-31: тасдиқ — табрик (шу телефон + тур учун БИР МАРТА). Кейинги
         // марталар ёки ойна хавфсиз очилмаса (контекст/таржима йўқ) — аввалги snack.
-        final ctx = nav.context;
-        final celebrated = ctx.mounted &&
-            AppLocalizations.of(ctx) != null &&
-            await showDriverApprovedCelebrationOnce(
-              ctx,
-              phone: prefs.getString('user_phone') ?? '',
-              taxiType: data['taxiType'],
-            );
+        final celebrated = await _celebrateDriverApproved(nav, prefs, data['taxiType']);
         if (!celebrated) _showPassiveSnack(nav, 'driver_request_approved_snack');
         return;
       }
+
+      // Эга, 2026-10-31: қурилма аллақачон ҳайдовчи деб билса ҳам — биринчи марта бўлса
+      // табрик (шу телефон + тур учун БИР МАРТА), кейин панел.
+      await _celebrateDriverApproved(nav, prefs, data['taxiType']);
+      if (!nav.mounted) return;
 
       final taxiType = (data['taxiType'] ?? 'local').trim();
       switch (taxiType) {
@@ -610,6 +636,25 @@ class PushNavigation {
     final ctx = nav.context;
     if (ctx.mounted) HomeModuleGate.onTapBlocked(ctx, moduleId);
     return false;
+  }
+
+  /// Ҳайдовчи тасдиғи табриги (телефон + тур учун БИР МАРТА). Ойна хавфсиз очилмаса
+  /// (контекст/таржима йўқ) ёки аввал кўрсатилган бўлса — `false`.
+  static Future<bool> _celebrateDriverApproved(
+    NavigatorState nav,
+    SharedPreferences prefs,
+    String? taxiType,
+  ) async {
+    final ctx = nav.context;
+    return ctx.mounted &&
+        AppLocalizations.of(ctx) != null &&
+        await showDriverApprovedCelebrationOnce(
+          ctx,
+          phone: prefs.getString('user_phone') ?? '',
+          // Тур келмаса — `local` (пастдаги switch'нинг default'и билан бир хил; маҳаллий
+          // авто-тасдиқ ҳам `local` калитини олади — икки марта табрик йўқ).
+          taxiType: (taxiType ?? '').trim().isEmpty ? 'local' : taxiType!.trim(),
+        );
   }
 
   static void _showPassiveSnack(NavigatorState nav, String key) {

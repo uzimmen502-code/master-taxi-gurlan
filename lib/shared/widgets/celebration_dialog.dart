@@ -62,6 +62,17 @@ class CelebrationOnce {
       return true;
     }
   }
+
+  /// Белги аввал қўйилганми (белгиламайди). Қўшимча серверни ўқишдан олдин текшириш учун:
+  /// табрик аллақачон бўлган бўлса — ўқиш шарт эмас. Хотира ўқилмаса — `false`.
+  static Future<bool> wasClaimed(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('$_prefix$key') == true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class _Celebration extends StatefulWidget {

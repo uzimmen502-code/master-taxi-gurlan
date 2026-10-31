@@ -13,6 +13,7 @@ import '../models/wholesale_order.dart';
 import '../repositories/wholesale_orders_repository.dart';
 import '../utils/wholesale_order_errors.dart';
 import '../widgets/wholesale_order_status.dart';
+import '../wholesale_celebrations.dart';
 import 'wholesale_order_detail_screen.dart';
 
 enum WholesaleOrdersRole { buyer, seller }
@@ -43,6 +44,21 @@ class _WholesaleOrdersScreenState extends State<WholesaleOrdersScreen> {
 
   Stream<List<WholesaleOrder>> _open() =>
       _seller ? _repo.watchSellerOrders(widget.userId) : _repo.watchBuyerOrders(widget.userId);
+
+  /// Биринчи буюртма табриги кўрсатилдими/текширилдими (шу экран ҳаётида).
+  bool _firstOrderDone = false;
+
+  /// Эга, 2026-10-31: сотувчига биринчи буюртма — табрик. Рўйхат бўш бўлса кутилади
+  /// (экран очиқлигида буюртма келса ҳам ишлайди); сони 2+ бўлса — табрик йўқ.
+  void _maybeCelebrateFirstOrder(List<WholesaleOrder> items) {
+    if (!_seller || _firstOrderDone || items.isEmpty) return;
+    _firstOrderDone = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        celebrateWholesaleFirstOrderOnce(context, sellerId: widget.userId, orderCount: items.length);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +95,7 @@ class _WholesaleOrdersScreenState extends State<WholesaleOrdersScreen> {
           }
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final items = snap.data!;
+          _maybeCelebrateFirstOrder(items);
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [

@@ -9,6 +9,10 @@
  *
  * QADAMLAR (modul -> qadam):
  *   restaurant -> received          (courierCompleteRestaurantDelivery, outcome 'delivered')
+ *                 delivery_failed   (courierCompleteRestaurantDelivery, outcome 'failed') — MAJBURIY,
+ *                                   modul bosqichiga bog'liq emas; mijoz 'confirm' yoki 'reject'
+ *                                   («Олмоқчиман»); `failedTimeoutMin` (standart 15) dan keyin
+ *                                   javob bo'lmasa qaror restoranga o'tadi (restaurant_orders.js).
  *   carpet     -> handover_pickup   (courierMarkCarpetPickedUp)
  *                 handover_return   (courierMarkCarpetDelivered)
  *   agro       -> handover_pickup   (courierMarkAgroPickedUp)
@@ -55,11 +59,25 @@ const STAGES = Object.freeze(['off', 'internal', 'public']);
 const CONFIG_DOC = Object.freeze(['server_config', 'customer_confirm']);
 const MARKER_DOC = Object.freeze(['module_config', 'customer_confirm']);
 const STEPS = Object.freeze({
-  restaurant: Object.freeze(['received']),
+  restaurant: Object.freeze(['received', 'delivery_failed']),
   carpet: Object.freeze(['handover_pickup', 'handover_return']),
   agro: Object.freeze(['handover_pickup']),
   collection: Object.freeze(['finalize']),
 });
+/**
+ * «Етказилмади» (ega qarori 2026-10-31, C-2): HAMMA mijoz uchun MAJBURIY — `server_config` dagi
+ * modul bosqichiga (off/internal/public) BOG'LIQ EMAS. Mijoz rad ham eta oladi («Олмоқчиман»).
+ * Hozircha kuryerning «yetkazilmadi» yo'li FAQAT restoranda bor (nonda, gilamda, agroda va
+ * yig'ishda bunday natija serverda yo'q) — boshqa modullarga qo'shish alohida qaror.
+ */
+const MANDATORY_STEPS = Object.freeze({ restaurant: Object.freeze(['delivery_failed']) });
+const REJECTABLE_STEPS = Object.freeze({ restaurant: Object.freeze(['delivery_failed']) });
+const DECISIONS = Object.freeze(['confirm', 'reject']);
+/** Mijoz javob bermasa — shuncha daqiqadan keyin qaror restoran/sotuvchiga o'tadi (ega: 15, admin o'zgartiradi). */
+const FAILED_TIMEOUT_MIN_DEFAULT = 15;
+const FAILED_TIMEOUT_MIN_MIN = 1;
+const FAILED_TIMEOUT_MIN_MAX = 240;
+const REJECTED_FIELD = 'customerRejected';
 const MARKER_FIELD = 'awaitingCustomerConfirm';
 const FLAG_FIELD = 'hasAwaitingCustomerConfirm';
 const DONE_FIELD = 'customerConfirmed';
@@ -104,7 +122,17 @@ function normalizeConfig(raw, canon) {
     if (TESTER_RE.test(c) && !testers.includes(c)) testers.push(c);
   }
   testers.sort();
-  return { modules, testerIds: testers };
+  return { modules, testerIds: testers, failedTimeoutMin: normalizeFailedTimeout(doc.failedTimeoutMin) };
+}
+
+/** Butun son [1..240] bo'lsa o'zi, aks holda standart 15 (noto'g'ri qiymat oqimni buzmasin). */
+function normalizeFailedTimeout(v) {
+  return Number.isInteger(v) && v >= FAILED_TIMEOUT_MIN_MIN && v <= FAILED_TIMEOUT_MIN_MAX
+    ? v : FAILED_TIMEOUT_MIN_DEFAULT;
+}
+
+function isMandatoryStep(moduleKey, step) {
+  return (MANDATORY_STEPS[moduleKey] || []).includes(step);
 }
 
 function stageOf(cfg, moduleKey) {
@@ -231,10 +259,11 @@ function createCustomerConfirm(deps) {
    * Tranzaksiya ichida: kutish belgisini yozadi. Shu qadam uchun belgi bor bo'lsa
    * yozmaydi (`created: false`) — takroriy kuryer chaqiruvi bir xil javob oladi.
    */
-  function requestInTx(t, ref, od, { step, courierId, extra }) {
+  function requestInTx(t, ref, od, { step, courierId, extra, patch }) {
     const m = od && od[MARKER_FIELD];
     if (m && m.step === step) return { created: false };
-    t.update(ref, markerPatch(step, courierId, extra));
+    // `patch` — shu hujjatga qo'shimcha maydonlar (bitta yozuvda; masalan «yetkazilmadi» muddati).
+    t.update(ref, { ...(patch || {}), ...markerPatch(step, courierId, extra) });
     return { created: true };
   }
 
@@ -291,11 +320,21 @@ function createCustomerConfirm(deps) {
     const moduleKey = str(data && data.module, 32);
     const id = str(data && data.id, 128);
     const step = str(data && data.step, 40);
-    if (!MODULES.includes(moduleKey) || !id || id.includes('/') || !STEPS[moduleKey].includes(step)) {
+    // `decision` yo'q (eski ilova) = 'confirm'. 'reject' faqat REJECTABLE_STEPS uchun.
+    const decisionRaw = data && data.decision;
+    const decision = decisionRaw === undefined || decisionRaw === null || decisionRaw === '' ? 'confirm' : decisionRaw;
+    if (!MODULES.includes(moduleKey) || !id || id.includes('/') || !STEPS[moduleKey].includes(step)
+        || !DECISIONS.includes(decision)
+        || (decision === 'reject' && !(REJECTABLE_STEPS[moduleKey] || []).includes(step))) {
       throw err('invalid-argument', 'CONFIRM_ARGS_INVALID');
     }
+    // Ixtiyoriy: mijoz ko'rgan so'rov vaqti — boshqa (yangiroq) so'rovga eski tugma ta'sir qilmasin.
+    const expectMs = Number.isInteger(data && data.requestedAtMs) ? data.requestedAtMs : null;
     const h = handlers.get(moduleKey);
     if (!h) throw new HttpsError('internal', 'CONFIRM_HANDLER_MISSING', { reason: 'CONFIRM_HANDLER_MISSING' });
+    if (decision === 'reject' && typeof h.reject !== 'function') {
+      throw new HttpsError('internal', 'CONFIRM_HANDLER_MISSING', { reason: 'CONFIRM_HANDLER_MISSING' });
+    }
     const ref = db.collection(h.collection).doc(id);
     let seenRequestedMs = null;
     try {
@@ -306,14 +345,20 @@ function createCustomerConfirm(deps) {
         if (canon(h.customerPhoneOf(od)) !== uid) throw err('permission-denied', 'NOT_YOUR_ORDER');
         const marker = od[MARKER_FIELD];
         if (!marker || marker.step !== step) {
-          const done = od[DONE_FIELD];
+          const doneField = decision === 'reject' ? REJECTED_FIELD : DONE_FIELD;
+          const done = od[doneField];
           if (done && typeof done === 'object' && done[step]) return { idempotent: true, status: h.statusOf(od) };
           throw err('failed-precondition', 'NOT_AWAITING');
         }
         seenRequestedMs = msOf(marker.requestedAt);
+        if (expectMs !== null && seenRequestedMs !== null && expectMs !== seenRequestedMs) {
+          throw err('failed-precondition', 'STATE_CHANGED');
+        }
         let r;
         try {
-          r = await h.confirm(t, { ref, id, od, marker, step });
+          r = decision === 'reject'
+            ? await h.reject(t, { ref, id, od, marker, step, customerId: uid })
+            : await h.confirm(t, { ref, id, od, marker, step });
         } catch (e) {
           if (e instanceof HttpsError && STATE_ERROR_CODES.includes(e.code)) {
             const s = new Error('STATE_CHANGED');
@@ -334,10 +379,10 @@ function createCustomerConfirm(deps) {
         }
       }
       log({
-        action: 'customerConfirmHandover', module: moduleKey, id, step,
+        action: 'customerConfirmHandover', module: moduleKey, id, step, decision,
         result: out.idempotent ? 'idempotent' : 'ok', status: out.status, durationMs: Date.now() - t0,
       });
-      return { ok: true, status: out.status, ...(out.idempotent ? { idempotent: true } : {}) };
+      return { ok: true, status: out.status, decision, ...(out.idempotent ? { idempotent: true } : {}) };
     } catch (e) {
       if (e && e.stateChanged) {
         const inner = e.cause || {};
@@ -364,8 +409,9 @@ function createCustomerConfirm(deps) {
         try {
           const s = await ref.get();
           const od = s.exists ? (s.data() || {}) : null;
+          const doneField = decision === 'reject' ? REJECTED_FIELD : DONE_FIELD;
           if (od && canon(h.customerPhoneOf(od)) === uid && !od[MARKER_FIELD]
-              && od[DONE_FIELD] && typeof od[DONE_FIELD] === 'object' && od[DONE_FIELD][step]) {
+              && od[doneField] && typeof od[doneField] === 'object' && od[doneField][step]) {
             log({ action: 'customerConfirmHandover', module: moduleKey, id, step, result: 'idempotent', note: 'contention_resolved', durationMs: Date.now() - t0 });
             return { ok: true, status: h.statusOf(od), idempotent: true };
           }
@@ -385,7 +431,9 @@ function createCustomerConfirm(deps) {
     const forms = uid.length === 12 && uid.startsWith('998') ? [uid, uid.slice(3)] : [uid];
     const perModule = await Promise.all(MODULES.map(async (moduleKey) => {
       const h = handlers.get(moduleKey);
-      if (!h || !isGatedBy(cfg, moduleKey, uid, canon)) return [];
+      const gated = isGatedBy(cfg, moduleKey, uid, canon);
+      // Majburiy qadamlar («yetkazilmadi») modul o'chiq bo'lsa ham ko'rsatiladi.
+      if (!h || (!gated && !(MANDATORY_STEPS[moduleKey] || []).length)) return [];
       // Faqat tenglik filtrlari (telefon shakllari x belgi) — kompozit indeks kerak emas.
       const snaps = await Promise.all(forms.map((f) => db.collection(h.collection)
         .where(h.phoneField, '==', f)
@@ -401,6 +449,7 @@ function createCustomerConfirm(deps) {
           const od = doc.data() || {};
           const marker = od[MARKER_FIELD];
           if (!marker || !STEPS[moduleKey].includes(marker.step)) continue;
+          if (!gated && !isMandatoryStep(moduleKey, marker.step)) continue;
           if (canon(h.customerPhoneOf(od)) !== uid) continue;
           const d = h.describe(od, marker);
           if (!d) continue;
@@ -412,6 +461,8 @@ function createCustomerConfirm(deps) {
             title: r.title,
             summary: r.body,
             requestedAtMs: msOf(marker.requestedAt),
+            // Yangi ilova uchun: shu qadamda «Олмоқчиман» (rad) tugmasi bormi.
+            ...((REJECTABLE_STEPS[moduleKey] || []).includes(marker.step) ? { canReject: true } : {}),
             ...(d.details ? { details: d.details } : {}),
           });
         }
@@ -451,10 +502,16 @@ function createCustomerConfirm(deps) {
       throw err('invalid-argument', 'CC_STAGE_INVALID', { allowed: [...STAGES] });
     }
     if (d.stage !== undefined && d.module === undefined) throw err('invalid-argument', 'CC_MODULE_REQUIRED');
+    if (d.failedTimeoutMin !== undefined && !(Number.isInteger(d.failedTimeoutMin)
+        && d.failedTimeoutMin >= FAILED_TIMEOUT_MIN_MIN && d.failedTimeoutMin <= FAILED_TIMEOUT_MIN_MAX)) {
+      throw err('invalid-argument', 'CC_FAILED_TIMEOUT_INVALID', { min: FAILED_TIMEOUT_MIN_MIN, max: FAILED_TIMEOUT_MIN_MAX });
+    }
     const add = parseTesterList(d.addTesterIds, 'addTesterIds');
     const remove = parseTesterList(d.removeTesterIds, 'removeTesterIds');
     if (add.some((x) => remove.includes(x))) throw err('invalid-argument', 'CC_TESTER_CONFLICT');
-    if (d.stage === undefined && add.length === 0 && remove.length === 0) throw err('invalid-argument', 'CC_NOTHING_TO_CHANGE');
+    if (d.stage === undefined && d.failedTimeoutMin === undefined && add.length === 0 && remove.length === 0) {
+      throw err('invalid-argument', 'CC_NOTHING_TO_CHANGE');
+    }
     const reason = str(d.reason, 300);
     if (reason.length < 3) throw err('invalid-argument', 'CC_REASON_REQUIRED');
 
@@ -464,15 +521,17 @@ function createCustomerConfirm(deps) {
       const [snap, mSnap] = await Promise.all([t.get(cfgRef), t.get(markerRef)]);
       const raw = snap.exists ? (snap.data() || {}) : null;
       const cur = normalizeConfig(raw, canon);
-      const next = { modules: { ...cur.modules }, testerIds: [...cur.testerIds] };
+      const next = { modules: { ...cur.modules }, testerIds: [...cur.testerIds], failedTimeoutMin: cur.failedTimeoutMin };
       if (d.stage !== undefined) next.modules[d.module] = d.stage;
+      if (d.failedTimeoutMin !== undefined) next.failedTimeoutMin = d.failedTimeoutMin;
       for (const x of add) if (!next.testerIds.includes(x)) next.testerIds.push(x);
       next.testerIds = next.testerIds.filter((x) => !remove.includes(x)).sort();
       if (next.testerIds.length > MAX_TESTERS) throw err('invalid-argument', 'CC_TESTERS_LIMIT', { max: MAX_TESTERS });
       const version = raw && Number.isInteger(raw.version) && raw.version >= 0 ? raw.version : 0;
       const enabled = markerEnabled(next);
       const same = MODULES.every((m) => next.modules[m] === cur.modules[m])
-        && next.testerIds.join(',') === cur.testerIds.join(',');
+        && next.testerIds.join(',') === cur.testerIds.join(',')
+        && next.failedTimeoutMin === cur.failedTimeoutMin;
       const markerOk = mSnap.exists && (mSnap.data() || {}).enabled === enabled;
       if (same) {
         // Sozlama o'zgarmadi (idempotent). Faqat ommaviy belgi sinxrondan chiqqan bo'lsa tuzatiladi.
@@ -482,7 +541,8 @@ function createCustomerConfirm(deps) {
       const modulesDoc = {};
       for (const m of MODULES) modulesDoc[m] = { stage: next.modules[m] };
       t.set(cfgRef, {
-        modules: modulesDoc, testerIds: next.testerIds, version: version + 1, reason, updatedAt: ts(), updatedBy: actor,
+        modules: modulesDoc, testerIds: next.testerIds, failedTimeoutMin: next.failedTimeoutMin,
+        version: version + 1, reason, updatedAt: ts(), updatedBy: actor,
       });
       t.set(markerRef, { enabled, updatedAt: ts(), updatedBy: actor });
       const realAdded = add.filter((x) => !cur.testerIds.includes(x));
@@ -500,6 +560,8 @@ function createCustomerConfirm(deps) {
           testersAfter: next.testerIds.length,
           addedMasked: realAdded.slice(0, 20).map(maskPhone),
           removedMasked: realRemoved.slice(0, 20).map(maskPhone),
+          failedTimeoutMinPrev: cur.failedTimeoutMin,
+          failedTimeoutMinNew: next.failedTimeoutMin,
           enabled,
           version: version + 1,
         },
@@ -514,7 +576,7 @@ function createCustomerConfirm(deps) {
     });
     return {
       ok: true, unchanged: out.unchanged, version: out.version, modules: out.cfg.modules,
-      testerCount: out.cfg.testerIds.length, enabled: out.enabled,
+      testerCount: out.cfg.testerIds.length, enabled: out.enabled, failedTimeoutMin: out.cfg.failedTimeoutMin,
     };
   }
 
@@ -530,6 +592,7 @@ function createCustomerConfirm(deps) {
       testerCount: cfg.testerIds.length,
       testersMasked: cfg.testerIds.map(maskPhone),
       enabled: markerEnabled(cfg),
+      failedTimeoutMin: cfg.failedTimeoutMin,
       updatedAtMs: raw ? msOf(raw.updatedAt) : null,
     };
   }
@@ -546,6 +609,8 @@ function createCustomerConfirm(deps) {
     registerHandler,
     isGated,
     getConfig: () => reader.get(),
+    /** «Yetkazilmadi»: mijoz javobi uchun daqiqa (admin sozlamasi; standart 15). */
+    getFailedTimeoutMin: async () => (await reader.get()).failedTimeoutMin,
     invalidateConfig: () => reader.invalidate(),
     awaitingResponse,
     markerPatch,
@@ -561,6 +626,15 @@ module.exports = {
   MODULES,
   STAGES,
   STEPS,
+  MANDATORY_STEPS,
+  REJECTABLE_STEPS,
+  DECISIONS,
+  REJECTED_FIELD,
+  FAILED_TIMEOUT_MIN_DEFAULT,
+  FAILED_TIMEOUT_MIN_MIN,
+  FAILED_TIMEOUT_MIN_MAX,
+  normalizeFailedTimeout,
+  isMandatoryStep,
   CONFIG_DOC,
   MARKER_DOC,
   MARKER_FIELD,

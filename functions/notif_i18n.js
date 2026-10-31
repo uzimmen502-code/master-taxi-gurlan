@@ -92,6 +92,42 @@ const MESSAGES = {
     uz_Latn: { title: 'Buyurtmani oldingizmi?', body: 'Kuryer buyurtmani yetkazdim deb belgiladi. Buyurtmani olganingizni tasdiqlang.' },
     ru: { title: 'Вы получили заказ?', body: 'Курьер отметил, что доставил заказ. Подтвердите, что вы его получили.' },
   },
+  // ── «Етказилмади» мижоз тасдиғи билан (эга, 2026-10-31). Матнлар PROPOSED — эга тасдиқлайди.
+  confirm_restaurant_delivery_failed: {
+    uz_Cyrl: { title: 'Курьер буюртмани етказа олмадими?', body: 'Курьер «етказиб бўлмади» деб белгилади. Буюртмани олмаган бўлсангиз, тасдиқланг. Олмоқчи бўлсангиз, «Олмоқчиман» тугмасини босинг.' },
+    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bo\'lmadi» deb belgiladi. Buyurtmani olmagan bo\'lsangiz, tasdiqlang. Olmoqchi bo\'lsangiz, «Olmoqchiman» tugmasini bosing.' },
+    ru: { title: 'Курьер не смог доставить заказ?', body: 'Курьер отметил, что не смог доставить заказ. Если вы не получили заказ, подтвердите. Если хотите получить его, нажмите «Хочу получить».' },
+  },
+  restaurant_delivery_failed_decide: {
+    uz_Cyrl: { title: 'Буюртма бўйича қарор керак', body: 'Курьер «етказиб бўлмади» деди, мижоз жавоб бермади. Буюртма етказилмадими ёки курьер етказишни давом эттирсинми — ҳал қилинг.' },
+    uz_Latn: { title: 'Buyurtma bo\'yicha qaror kerak', body: 'Kuryer «yetkazib bo\'lmadi» dedi, mijoz javob bermadi. Buyurtma yetkazilmadimi yoki kuryer yetkazishni davom ettirsinmi — hal qiling.' },
+    ru: { title: 'Нужно решение по заказу', body: 'Курьер сообщил, что не смог доставить заказ, а клиент не ответил. Решите: заказ не доставлен или курьер продолжает доставку.' },
+  },
+  restaurant_delivery_failed_final: {
+    uz_Cyrl: { title: 'Буюртма етказилмади', body: 'Буюртма «етказилмади» деб ёпилди.' },
+    uz_Latn: { title: 'Buyurtma yetkazilmadi', body: 'Buyurtma «yetkazilmadi» deb yopildi.' },
+    ru: { title: 'Заказ не доставлен', body: 'Заказ закрыт как недоставленный.' },
+  },
+  courier_delivery_failed_final: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '«Етказиб бўлмади» тасдиқланди. Кейинги буюртмага ўтишингиз мумкин.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '«Yetkazib bo\'lmadi» tasdiqlandi. Keyingi buyurtmaga o\'tishingiz mumkin.' },
+    ru: { title: 'Заказ закрыт', body: 'Недоставка подтверждена. Можно переходить к следующему заказу.' },
+  },
+  customer_delivery_failed_final: {
+    uz_Cyrl: { title: 'Буюртма етказилмади', body: 'Курьер буюртмани етказа олмади ва буюртма ёпилди.' },
+    uz_Latn: { title: 'Buyurtma yetkazilmadi', body: 'Kuryer buyurtmani yetkaza olmadi va buyurtma yopildi.' },
+    ru: { title: 'Заказ не доставлен', body: 'Курьер не смог доставить заказ, заказ закрыт.' },
+  },
+  courier_delivery_failed_continue: {
+    uz_Cyrl: { title: 'Буюртмани етказинг', body: '«Етказиб бўлмади» қабул қилинмади: буюртмани мижозга етказишни давом эттиринг.' },
+    uz_Latn: { title: 'Buyurtmani yetkazing', body: '«Yetkazib bo\'lmadi» qabul qilinmadi: buyurtmani mijozga yetkazishni davom ettiring.' },
+    ru: { title: 'Доставьте заказ', body: 'Недоставка не принята: продолжайте доставку заказа клиенту.' },
+  },
+  customer_delivery_failed_continue: {
+    uz_Cyrl: { title: 'Буюртма етказилади', body: 'Курьер буюртмангизни етказишни давом эттиради.' },
+    uz_Latn: { title: 'Buyurtma yetkaziladi', body: 'Kuryer buyurtmangizni yetkazishni davom ettiradi.' },
+    ru: { title: 'Заказ будет доставлен', body: 'Курьер продолжит доставку вашего заказа.' },
+  },
   confirm_carpet_pickup: {
     uz_Cyrl: { title: 'Гиламни курьерга бердингизми?', body: 'Курьер гиламни олдим деб белгилади. Гиламни курьерга берганингизни тасдиқланг.' },
     uz_Latn: { title: 'Gilamni kuryerga berdingizmi?', body: 'Kuryer gilamni oldim deb belgiladi. Gilamni kuryerga berganingizni tasdiqlang.' },

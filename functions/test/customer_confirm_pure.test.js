@@ -30,7 +30,7 @@ async function main() {
   await check('P1 sozlama yo\'q / bo\'sh / noto\'g\'ri tur -> hamma modul off, testerlar bo\'sh', () => {
     for (const raw of [null, undefined, {}, [], 'x', 5, { modules: null }, { modules: [] }, { modules: 'public' }]) {
       const c = cc.normalizeConfig(raw, canon);
-      assert.deepStrictEqual(c, { modules: { restaurant: 'off', carpet: 'off', agro: 'off', collection: 'off' }, testerIds: [] }, JSON.stringify(raw));
+      assert.deepStrictEqual(c, { modules: { restaurant: 'off', carpet: 'off', agro: 'off', collection: 'off' }, testerIds: [], failedTimeoutMin: 15 }, JSON.stringify(raw));
     }
   });
   await check('P2 noto\'g\'ri bosqich qiymatlari -> off (PUBLIC, 1, null, obyekt emas, ortiqcha bo\'shliq, matn)', () => {
@@ -73,7 +73,7 @@ async function main() {
   });
   await check('P6 qadamlar jadvali: har modulning qadamlari', () => {
     assert.deepStrictEqual(cc.STEPS, {
-      restaurant: ['received'], carpet: ['handover_pickup', 'handover_return'], agro: ['handover_pickup'], collection: ['finalize'],
+      restaurant: ['received', 'delivery_failed'], carpet: ['handover_pickup', 'handover_return'], agro: ['handover_pickup'], collection: ['finalize'],
     });
   });
 
@@ -147,6 +147,19 @@ async function main() {
     }
     const col = i18n.render('confirm_collection_finalize', 'uz_Latn', { summary: 'QAYD-77', amount: '12 345' }).body;
     assert.ok(col.includes('QAYD-77') && col.includes('12 345'), 'yig\'ib olish matnida miqdor va summa ko\'rinadi');
+  });
+
+  await check('P10 «yetkazilmadi» muddati: 1..240 butun son; boshqasi 15; majburiy va rad etiladigan qadamlar', () => {
+    assert.strictEqual(cc.normalizeFailedTimeout(1), 1);
+    assert.strictEqual(cc.normalizeFailedTimeout(240), 240);
+    for (const bad of [0, 241, -5, 1.5, '30', null, undefined, NaN, {}]) {
+      assert.strictEqual(cc.normalizeFailedTimeout(bad), 15, JSON.stringify(bad));
+    }
+    assert.strictEqual(cc.normalizeConfig({ failedTimeoutMin: 45 }, canon).failedTimeoutMin, 45);
+    assert.strictEqual(cc.isMandatoryStep('restaurant', 'delivery_failed'), true);
+    assert.strictEqual(cc.isMandatoryStep('restaurant', 'received'), false);
+    assert.strictEqual(cc.isMandatoryStep('carpet', 'delivery_failed'), false);
+    assert.deepStrictEqual(cc.REJECTABLE_STEPS, { restaurant: ['delivery_failed'] });
   });
 
   const passed = results.filter(Boolean).length;

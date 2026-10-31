@@ -826,8 +826,12 @@ async function main() {
       await call('restaurantMarkReady', { orderId: r.orderId }, OWNER);
       await call('courierPickupRestaurantOrder', { orderId: r.orderId, pickupCode: (await secret(r.orderId)).pickupCode }, COURIER_A);
       await call('courierArriveRestaurantOrder', { orderId: r.orderId }, COURIER_A);
-      const res = await call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'failed', failReason: 'customer_absent' }, COURIER_A);
-      assert.strictEqual(res.refundAmount, 1200);
+      // Ega qarori 2026-10-31: kuryer o'zi yakunlamaydi — mijoz tasdiqlaydi (C-2).
+      const pend = await call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'failed', failReason: 'customer_absent' }, COURIER_A);
+      assert.strictEqual(pend.awaitingCustomer, true);
+      assert.strictEqual(await pcBal(OWNER), o0, 'tasdiqgacha 2 % qaytmaydi');
+      const res = await call('customerConfirmHandover', { module: 'restaurant', id: r.orderId, step: 'delivery_failed' }, CUSTOMER2);
+      assert.strictEqual(res.status, 'delivery_failed');
       assert.strictEqual(await pcBal(OWNER), o0 + 1200);
       const od = await order(r.orderId);
       assert.strictEqual(od.restaurantStatus, 'delivery_failed');

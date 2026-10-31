@@ -620,17 +620,23 @@ async function main() {
   });
 
   // ═════════════ 5. Kuryer chetlab o'tolmaydi / restoran 'failed' ochiq ══
-  await check('restoran: kutish paytida kuryer \'failed\' desa o\'tadi (gate\'lanmaydi) va belgi tozalanadi; mijoz tasdig\'i NOT_AWAITING', async () => {
+  // Ega qarori 2026-10-31 (C-2): «yetkazilmadi» ham endi mijoz tasdig'i bilan (avval kuryer o'zi yakunlardi).
+  await check('restoran: kutish paytida kuryer \'failed\' desa YAKUNLANMAYDI — belgi delivery_failed ga almashadi; \'received\' NOT_AWAITING; mijoz tasdig\'i → delivery_failed', async () => {
     await setAll('public');
     const id = uniq('r_fail_');
     await FLOWS.restaurant.seed(id, C1);
     await FLOWS.restaurant.courier(id);
     const r = await call('courierCompleteRestaurantDelivery', { orderId: id, outcome: 'failed', failReason: 'customer_absent' }, A);
-    assert.strictEqual(r.outcome, 'failed');
-    const d = await docOf(FLOWS.restaurant, id);
+    assert.strictEqual(r.awaitingCustomer, true);
+    assert.strictEqual(r.step, 'delivery_failed');
+    let d = await docOf(FLOWS.restaurant, id);
+    assert.strictEqual(d.restaurantStatus, 'arrived');
+    assert.strictEqual(d.awaitingCustomerConfirm.step, 'delivery_failed');
+    await expectReason(confirm(FLOWS.restaurant, id, C1), 'NOT_AWAITING');
+    await confirm(FLOWS.restaurant, id, C1, 'delivery_failed');
+    d = await docOf(FLOWS.restaurant, id);
     assert.strictEqual(d.restaurantStatus, 'delivery_failed');
     assert.ok(!('awaitingCustomerConfirm' in d) && !('hasAwaitingCustomerConfirm' in d));
-    await expectReason(confirm(FLOWS.restaurant, id, C1), 'NOT_AWAITING');
   });
   await check('sozlama o\'chirilsa (off) kutayotgan vazifani kuryer qayta chaqirib yakunlaydi va belgi tozalanadi (kill-switch)', async () => {
     await setAll('public');

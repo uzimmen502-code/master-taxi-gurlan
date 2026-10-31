@@ -949,12 +949,15 @@ async function main() {
     assert.strictEqual(back.version, 3);
     assert.strictEqual(((await db.collection('restaurant_delivery_tariffs').doc('v3').get()).data()).previous.base, 6000);
   });
-  await check('AD2 avto-tasdiq: o\'chirilsa yangi restoran `applied`; audit; qayta yoqiladi', async () => {
+  await check('AD2 ega 2026-10-31: avto-tasdiq kaliti O\'CHIQ bo\'lsa ham yangi restoran DARHOL `approved`; eski admin callable ishlaydi (audit)', async () => {
     await expectCode(call('adminSetRestaurantAutoApprove', { enabled: false }, STRANGER), 'Admin role required', 'permission-denied');
     await call('adminSetRestaurantAutoApprove', { enabled: false }, ADMIN);
     assert.strictEqual((await db.collection('settings').doc('app').get()).data().restaurantAutoApprove, false);
     const r = await call('restaurantRegister', { name: 'Yangi kafe', address: 'x', ...R_LOC, delivery: { mode: 'none', pickup: true } }, CUSTOMER2);
-    assert.strictEqual((await db.collection('restaurants').doc(r.restaurantId).get()).data().status, 'applied');
+    assert.strictEqual(r.status, 'approved');
+    const doc = (await db.collection('restaurants').doc(r.restaurantId).get()).data();
+    assert.strictEqual(doc.status, 'approved');
+    assert.strictEqual(doc.approvedBy, 'auto');
     const audit = await db.collection('admin_audit').where('kind', '==', 'restaurant_auto_approve').get();
     assert.strictEqual(audit.size, 1);
     await call('adminSetRestaurantAutoApprove', { enabled: true }, ADMIN);

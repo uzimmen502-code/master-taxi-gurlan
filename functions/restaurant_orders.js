@@ -587,7 +587,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     return { allowed: a.allowed, stage: a.stage };
   });
 
-  /** D-REST-7: barcha ro'yxatdan o'tadi; tasdiq — admin (yoki autoApprove). */
+  /** D-REST-7: barcha ro'yxatdan o'tadi. Ega, 2026-10-31: «серверда доим дарҳол жонли бўлсин» — yangi obyekt
+   *  DOIM `approved` (avvalgi `settings/app.restaurantAutoApprove` kaliti endi o'qilmaydi; nazorat — admin bloki). */
   exportsObj.restaurantRegister = functions.https.onCall(async (data, context) => {
     const t0 = Date.now();
     const uid = requirePhoneUid(context);
@@ -641,8 +642,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     const pickup = delivery.pickup === true;
     if (mode === 'none' && !pickup) throw fail('invalid-argument', 'DELIVERY_OR_PICKUP_REQUIRED');
     const payment = d.payment && typeof d.payment === 'object' ? d.payment : {};
-    const appSnap = await db.collection(APP_SETTINGS[0]).doc(APP_SETTINGS[1]).get();
-    const autoApprove = appSnap.exists && (appSnap.data() || {}).restaurantAutoApprove === true;
+    // Ariza zanjiri yo'q (ega, 2026-10-31): yangi kafe/uy oshpazi darhol jonli.
+    const autoApprove = true;
 
     // Bir foydalanuvchi bir nechta kafe-restoran yuritadi (menejerlik,
     // D-REST-15, ega 2026-10-10): egaga son chegarasi YO'Q — tarmoq
@@ -840,7 +841,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     return { ok: true, version };
   });
 
-  /** Admin — `settings/app.restaurantAutoApprove` (D-REST-7: tasdiq admin yoki avto). */
+  /** Admin — `settings/app.restaurantAutoApprove`. ESKI admin panellar uchun qoldirildi: 2026-10-31 dan
+   *  `restaurantRegister` bu kalitni O'QIMAYDI (doim darhol jonli, ega qarori) — admin panelda tugma olib tashlandi. */
   exportsObj.adminSetRestaurantAutoApprove = functions.https.onCall(async (data, context) => {
     const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
     const enabled = !!(data && data.enabled === true);

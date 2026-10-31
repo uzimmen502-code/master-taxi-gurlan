@@ -30,6 +30,7 @@ const SUITES = [
   'courier_adapter.test.js',
   'tariff.test.js',
   'logistics_core.test.js',
+  'wholesale_stock.test.js',
   'logistics_api.test.js',
   'logistics_parity.test.js',
   'logistics_stage.test.js',

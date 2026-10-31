@@ -5,6 +5,7 @@
 // Firestore stream (ресторанлар, меню, буюртма). Қоидалар:
 // `restaurants` `status == approved` рўйхати ҳаммага; буюртма — эгасига.
 
+import '../../../core/service_config_holder.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -795,6 +796,7 @@ class RestaurantsRepository {
       _call('restaurantRegister', {
         ...payload,
         if (requestId.isNotEmpty) 'requestId': requestId,
+        ...ServiceConfigHolder.moduleGeoField,
       });
 
   Future<Map<String, dynamic>> accept(String orderId, {int? prepTimeMin}) =>

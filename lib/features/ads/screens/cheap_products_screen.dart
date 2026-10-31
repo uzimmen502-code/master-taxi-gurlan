@@ -20,7 +20,7 @@ import '../../../repositories/search_index_repository.dart';
 import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
-import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../../tv_market/screens/tv_shop_item_swipe_screen.dart';
 import '../../tv_market/screens/tv_shop_public_screen.dart';
 import '../../tv_market/widgets/tv_shop_item_grid_card.dart';
 import '../models/ad_model.dart';
@@ -485,6 +485,11 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 }
 
                 final entries = _mixedEntries(platform, ads, shop);
+                // Свайп шу дўкон маҳсулотлари орасида — экрандаги тартибда.
+                final shopInGrid = [
+                  for (final e in entries)
+                    if (e.shop != null) e.shop!,
+                ];
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -529,9 +534,10 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                                   context,
                                   MaterialPageRoute(
                                     // Дўкон тугмаси маҳсулотнинг ЎЗ йўналишини очади; ўхшашлар — шу лентадан
-                                    // (янги ўқиш йўқ).
-                                    builder: (_) => TvShopItemDetailScreen(
-                                      item: item,
+                                    // (янги ўқиш йўқ). Маҳсулотдан маҳсулотга свайп (эга, 2026-10-31).
+                                    builder: (_) => TvShopItemSwipeScreen(
+                                      items: shopInGrid,
+                                      initialIndex: shopInGrid.indexWhere((s) => s.id == item.id),
                                       showShopButton: true,
                                       similarPool: _shopItems,
                                       source: CatalogSearch.normalize(_query).isEmpty ? 'market' : 'search',

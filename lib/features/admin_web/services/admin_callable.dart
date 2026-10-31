@@ -63,6 +63,9 @@ String adminErrorText(Object error) {
     'testers_limit': 'Синовчилар сони чегарадан ошди',
     'module_config_missing': 'Логистика модули конфиги йўқ',
     'HOURS_INVALID': 'Соат 1..168 оралиғида бўлиши керак',
+    'FEE_BPS_INVALID': 'Хизмат ҳақи 0..50 % оралиғида бўлиши керак',
+    'REASON_REQUIRED': 'Сабабни ёзинг (камида 3 белги)',
+    'NOTHING_TO_CHANGE': 'Ўзгариш йўқ',
   };
   final mapped = byReason[error.reason];
   if (mapped != null) return mapped;

@@ -30,6 +30,7 @@ class WholesaleModerationScreen extends StatefulWidget {
     super.key,
     this.market = WholesaleProduct.marketWholesale,
     this.leadingTab,
+    this.trailingTab,
   });
 
   /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
@@ -39,6 +40,10 @@ class WholesaleModerationScreen extends StatefulWidget {
   /// каталоги (эга қарори 2026-10-06: AVA дўкони тўлиқ Улгуржига ўтди;
   /// админдаги алоҳида «AVA дўкони» бўлими 2026-10-07 да шу ерга кўчди).
   final ({String label, Widget child})? leadingTab;
+
+  /// Бўлим охиридаги қўшимча таб. «Улгуржи бозор»да — буюртма занжири админи
+  /// (5-босқич: буюртмалар, AVA улуши, дарвоза, вилоятлар матрицаси).
+  final ({String label, Widget child})? trailingTab;
 
   @override
   State<WholesaleModerationScreen> createState() =>
@@ -65,7 +70,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(
-      length: widget.leadingTab == null ? 2 : 3,
+      length: 2 + (widget.leadingTab == null ? 0 : 1) + (widget.trailingTab == null ? 0 : 1),
       vsync: this,
     );
     final query = _productsRepo.adminListQuery();
@@ -680,6 +685,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
   @override
   Widget build(BuildContext context) {
     final leading = widget.leadingTab;
+    final trailing = widget.trailingTab;
     return Column(children: [
       _header(),
       Container(
@@ -694,6 +700,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
               text: _isChina ? '📦 Маҳсулотлар' : '📦 Сотувчилар товарлари',
             ),
             const Tab(text: '🧾 Сотувчилар'),
+            if (trailing != null) Tab(text: trailing.label),
           ],
         ),
       ),
@@ -704,6 +711,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             if (leading != null) leading.child,
             _productsTab(),
             _sellersTab(),
+            if (trailing != null) trailing.child,
           ],
         ),
       ),

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -5,17 +8,24 @@ import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart' show walletPhoneId;
 import '../../ads/widgets/ad_image_slider.dart';
 import '../models/wholesale_product.dart';
+import '../repositories/wholesale_orders_repository.dart';
 import '../repositories/wholesale_products_repository.dart';
+import '../repositories/wholesale_stock_repository.dart';
+import '../widgets/wholesale_checkout_sheet.dart';
+import 'wholesale_order_detail_screen.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
+import '../widgets/wholesale_pack_chips.dart';
 import '../widgets/wholesale_product_strip.dart';
 import '../widgets/wholesale_tier_picker.dart';
 
-/// Маҳсулот тафсилоти — улгуржи битим телефон орқали келишилади,
-/// checkout/wallet йўқ (`yuk_local`даги "фақат қўнғироқ" андозаси).
+/// Маҳсулот тафсилоти — қўнғироқ ҳамиша бор; буюртма дарвозаси очиқ
+/// фойдаланувчига «Буюртма бериш» ҳам (4-босқич, [showWholesaleCheckoutSheet]:
+/// нарх фақат сервер квотасидан, ҳамён ёки 3b карта).
 ///
 /// Қора дизайн (эга қарори, 2026-10-17) ФАҚАТ шу тафсилот экранида.
 /// Нарх поғонаси босиб танланади, миқдорга қараб сумма жонли ҳисобланади
@@ -202,7 +212,24 @@ class _WholesaleProductDetailViewState
   /// қайта ошмасин.
   static final Set<String> _countedThisSession = <String>{};
 
-  late int _qty = widget.product.moq;
+  /// Танланган қадоқ (эга, 2026-10-31). Қадоқсиз маҳсулот — `default`.
+  late String _packId = widget.product.effectivePacks.first.id;
+  WholesalePack get _pack => widget.product.packById(_packId);
+
+  late int _qty = _pack.moq;
+
+  /// Қолдиқ — битта ҳужжат тинглагичи, экран ёпилганда ёпилади.
+  late final Stream<WholesaleStock> _stock =
+      WholesaleStockRepository().watch(widget.product.id);
+
+  void _selectPack(String id) {
+    if (id == _packId) return;
+    setState(() {
+      _packId = id;
+      _qty = _pack.moq;
+    });
+  }
+
   late final List<WholesaleProduct> _similar =
       similarWholesale(widget.product, widget.catalog);
   late final List<WholesaleProduct> _sellerOthers =
@@ -214,6 +241,59 @@ class _WholesaleProductDetailViewState
     if (_countedThisSession.add(widget.product.id)) {
       WholesaleProductsRepository().incrementViews(widget.product.id);
     }
+    unawaited(_checkCanOrder());
+  }
+
+  /// «Буюртма бериш» (4-босқич): Хитой бозори эмас, ўз товари эмас ва
+  /// дарвоза шу фойдаланувчини киритса кўринади. Ҳал қилувчи — сервер
+  /// (квота `module_disabled` берса тугма яширинади, қўнғироқ қолади).
+  final _ordersRepo = WholesaleOrdersRepository();
+  String _uid = '';
+  bool _canOrder = false;
+
+  Future<void> _checkCanOrder() async {
+    final p = widget.product;
+    if (p.isChina) return;
+    final uid = await walletPhoneId();
+    if (uid.isEmpty || canonicalPhoneId(p.sellerId) == uid) {
+      if (mounted && _canOrder) setState(() => _canOrder = false);
+      return;
+    }
+    final gate = await _ordersRepo.gate();
+    if (!mounted) return;
+    setState(() {
+      _uid = uid;
+      _canOrder = gate.allows(uid);
+    });
+  }
+
+  Future<void> _order() async {
+    final orderId = await showWholesaleCheckoutSheet(
+      context,
+      product: widget.product,
+      pack: _pack,
+      qty: _qty,
+      repository: _ordersRepo,
+    );
+    if (!mounted) return;
+    if (orderId == null) {
+      // Варақда дарвоза ёпиқ чиққан бўлса — тугма яширинсин.
+      unawaited(_checkCanOrder());
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('wholesale_order_placed'))),
+    );
+    unawaited(Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WholesaleOrderDetailScreen(
+          orderId: orderId,
+          viewerId: _uid,
+          repository: _ordersRepo,
+        ),
+      ),
+    ));
   }
 
   Future<void> _call() async {
@@ -253,8 +333,21 @@ class _WholesaleProductDetailViewState
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final price = p.priceForQty(_qty);
+    final pack = _pack;
+    final price = pack.priceForQty(_qty);
     final total = price * _qty;
+    // Қадоқ расми бўлса — асосий расм ўрнига биринчи бўлиб (эга, 2026-10-31).
+    final images = pack.hasPhoto
+        ? [pack.photoUrl, ...p.imageUrls.where((u) => u != pack.photoUrl)]
+        : p.imageUrls;
+    final unitLabel = wholesaleUnitLabel(context, p.unit);
+    // Асосий урғу — маҳсулот расми (эга, 2026-10-31): экран кенглигига тенг
+    // квадрат, лекин баланд экранда ҳам пастдаги нарх/поғона кўриниши учун
+    // экран баландлигининг 55% идан ошмайди (аввал қатъий 280 px эди).
+    final screen = MediaQuery.sizeOf(context);
+    final imageHeight =
+        math.max(220.0, math.min(screen.width, screen.height * 0.55));
+    const meta = TextStyle(fontSize: 12, height: 1.2, color: PdDark.muted);
     return ProductDetailDark(
       child: Scaffold(
         appBar: AppBar(title: Text(p.title, maxLines: 1)),
@@ -265,8 +358,10 @@ class _WholesaleProductDetailViewState
             Stack(
               children: [
                 AdImageSlider(
-                  imageUrls: p.imageUrls,
-                  height: 280,
+                  // Қадоқ алмашса слайдер бошидан (қадоқ расми) кўрсатсин.
+                  key: ValueKey('wholesale-images-${pack.id}'),
+                  imageUrls: images,
+                  height: imageHeight,
                   backgroundColor: PdDark.surface2,
                 ),
                 if (p.videoClipIds.isNotEmpty)
@@ -281,32 +376,43 @@ class _WholesaleProductDetailViewState
               ],
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              // Ёзувлар майда, қаторлар ораси минимал (эга, 2026-10-31).
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     p.title,
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 16,
+                      height: 1.2,
                       fontWeight: FontWeight.w700,
                       color: PdDark.ink,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     p.sellerCompanyName.isEmpty
                         ? context.tr('wholesale_seller_label')
                         : p.sellerCompanyName,
-                    style: const TextStyle(fontSize: 13, color: PdDark.muted),
+                    style: meta,
                   ),
-                  const SizedBox(height: 8),
+                  if (p.hasPacks) ...[
+                    const SizedBox(height: 6),
+                    WholesalePackChips(
+                      product: p,
+                      selectedId: pack.id,
+                      onSelected: _selectPack,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
                   // Танланган миқдордаги ҳақиқий бир дона нархи: поғона
                   // босилса ёки миқдор ўзгарса шу ердаги нарх ҳам ўзгаради.
                   Text(
-                    '${formatPrice(price)} ${p.currencyLabel} / ${wholesaleUnitLabel(context, p.unit)}',
+                    '${formatPrice(price)} ${p.currencyLabel} / $unitLabel',
                     style: const TextStyle(
-                      fontSize: 22,
+                      fontSize: 18,
+                      height: 1.2,
                       fontWeight: FontWeight.w700,
                       color: PdDark.brand,
                     ),
@@ -314,62 +420,72 @@ class _WholesaleProductDetailViewState
                   // Хитой бозорида етказиш муддати — асосий саволлардан
                   // бири; киритилмаган бўлса умуман кўрсатилмайди.
                   if (p.isChina && (p.deliveryDays ?? 0) > 0) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       context
                           .tr('wholesale_delivery_days')
                           .replaceAll('{days}', '${p.deliveryDays}'),
-                      style: const TextStyle(fontSize: 13, color: PdDark.muted),
+                      style: meta,
                     ),
                   ],
                   // Етказиш маълумоти (У1): вазн/ўлчам бўлса — кўрсатилади,
                   // бўлмаса харидор буни билсин (ҳақ ҳисобланмайди).
-                  const SizedBox(height: 4),
-                  if (p.hasShippingData)
+                  const SizedBox(height: 2),
+                  if (pack.hasShippingData)
                     Text(
                       [
                         context.tr('wholesale_weight_line').replaceAll(
-                            '{weight}', formatWeightG(p.unitWeightG!)),
-                        if (p.unitDims != null)
+                            '{weight}', formatWeightG(pack.unitWeightG!)),
+                        if (pack.unitDims != null)
                           context
                               .tr('wholesale_dims_line')
-                              .replaceAll('{dims}', p.unitDims!.label),
+                              .replaceAll('{dims}', pack.unitDims!.label),
                       ].join(' · '),
-                      style: const TextStyle(fontSize: 13, color: PdDark.muted),
+                      style: meta,
                     )
                   else
                     Text(
                       context.tr('wholesale_no_shipping_data'),
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFFF0A868)),
+                      style: meta.copyWith(color: const Color(0xFFF0A868)),
                     ),
-                  const SizedBox(height: 16),
+                  StreamBuilder<WholesaleStock>(
+                    stream: _stock,
+                    builder: (context, snap) => WholesaleStockLine(
+                      qty: snap.data?.of(pack.id),
+                      unitLabel: unitLabel,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   WholesaleTierPicker(
+                    // Қадоқ алмашса миқдор майдони ҳам янгидан.
+                    key: ValueKey('wholesale-tiers-${pack.id}'),
                     product: p,
+                    pack: p.hasPacks ? pack : null,
                     qty: _qty,
                     onQtyChanged: (q) => setState(() => _qty = q),
                   ),
                   if (p.description.trim().isNotEmpty) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     Text(
                       p.description,
                       style: const TextStyle(
-                        height: 1.4,
-                        fontSize: 14,
+                        height: 1.3,
+                        fontSize: 13,
                         color: PdDark.ink,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
                       color: PdDark.surface,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(children: [
                       const Icon(Icons.storefront_outlined,
-                          color: PdDark.brand),
+                          size: 18, color: PdDark.brand),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -377,6 +493,8 @@ class _WholesaleProductDetailViewState
                               ? context.tr('wholesale_seller_label')
                               : p.sellerCompanyName,
                           style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.2,
                             fontWeight: FontWeight.w600,
                             color: PdDark.ink,
                           ),
@@ -385,7 +503,7 @@ class _WholesaleProductDetailViewState
                     ]),
                   ),
                   if (_similar.isNotEmpty) ...[
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                     WholesaleProductStrip(
                       title: context.tr('platform_store_similar'),
                       items: _similar,
@@ -393,7 +511,7 @@ class _WholesaleProductDetailViewState
                     ),
                   ],
                   if (_sellerOthers.isNotEmpty) ...[
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                     WholesaleProductStrip(
                       title: context.tr('wholesale_seller_others'),
                       items: _sellerOthers,
@@ -402,7 +520,7 @@ class _WholesaleProductDetailViewState
                   ],
                   // Маълумот тугади — энди суриш кейинги маҳсулотга ўтади.
                   if (widget.showNextHint) ...[
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     const _NextHint(),
                   ],
                 ],
@@ -441,6 +559,54 @@ class _WholesaleProductDetailViewState
                     ],
                   ),
                   const SizedBox(width: 14),
+                  // Буюртма мумкин бўлса: қўнғироқ — ихчам (фақат белги,
+                  // 48 dp), «Буюртма бериш» — асосий тугма. Қўнғироқ ҳамиша қолади.
+                  if (_canOrder) ...[
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton.outlined(
+                        key: const ValueKey('wholesale-call-compact'),
+                        tooltip: context.tr('wholesale_call'),
+                        onPressed: _call,
+                        style: IconButton.styleFrom(
+                          foregroundColor: PdDark.brand,
+                          side: const BorderSide(color: PdDark.brand),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.call),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: FilledButton.icon(
+                          key: const ValueKey('wholesale-order-button'),
+                          onPressed: _order,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: PdDark.brand,
+                            foregroundColor: PdDark.brandInk,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.shopping_bag_outlined),
+                          label: Text(
+                            context.tr('wholesale_order_btn'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else
                   Expanded(
                     child: SizedBox(
                       height: 48,

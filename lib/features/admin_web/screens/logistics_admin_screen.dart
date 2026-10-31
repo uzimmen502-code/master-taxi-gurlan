@@ -19,11 +19,14 @@ import 'package:flutter/material.dart';
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
 import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
 import '../../logistics/domain/tariff_adjust.dart';
+import '../services/admin_courier_payout_service.dart';
 import '../services/admin_logistics_service.dart';
 import '../utils/logistics_tariff_inputs.dart';
 import '../widgets/logistics_loss_dialogs.dart';
 import '../widgets/logistics_loss_list.dart';
+import '../widgets/courier_service_fee_panel.dart';
 import '../widgets/logistics_stage_panel.dart';
+import '../widgets/region_zone_matrix_dialog.dart';
 
 class LogisticsAdminScreen extends StatefulWidget {
   const LogisticsAdminScreen({super.key});
@@ -33,10 +36,7 @@ class LogisticsAdminScreen extends StatefulWidget {
 }
 
 class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
-  static const _serverKeys = [
-    'status', 'updatedAt', 'updatedBy', 'createdAt',
-    'activatedAt', 'activatedBy', 'retiredAt', 'retiredBy',
-  ];
+  static const _serverKeys = kLogisticsTariffServerKeys;
   static const _shipmentFilters = <String, String>{
     '': 'Ҳаммаси',
     'awaiting_payment': 'Тўлов кутилмоқда',
@@ -52,6 +52,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
 
   final _db = FirebaseFirestore.instance;
   final _logistics = AdminLogisticsService();
+  final _courierPayout = AdminCourierPayoutService();
   int _tab = 0;
   String _filter = '';
   bool _busy = false;
@@ -144,6 +145,16 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     _snack(errs.isEmpty
         ? 'Сақланди: v${res['version']} (қоралама) — фаоллаштиришга тайёр'
         : 'Сақланди (қоралама). Фаоллаштириш учун етишмайди:\n${errs.join('\n')}');
+  }
+
+  /// Вилоятлар матрицаси (14×14, юқори учбурчак, кўзгу) — фақат қоралама.
+  Future<void> _editMatrix(Map<String, dynamic> t) async {
+    setState(() => _busy = true);
+    try {
+      await editTariffRegionMatrix(context, tariff: t, service: _logistics);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _activate(int version) async {
@@ -282,6 +293,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
                   ButtonSegment(value: 1, label: Text('Жўнатмалар'), icon: Icon(Icons.local_post_office_outlined)),
                   ButtonSegment(value: 2, label: Text('Йўқолганлар'), icon: Icon(Icons.report_gmailerrorred_outlined)),
                   ButtonSegment(value: 3, label: Text('Босқич'), icon: Icon(Icons.tune)),
+                  ButtonSegment(value: 4, label: Text('Курьер ҳақи'), icon: Icon(Icons.account_balance_wallet_outlined)),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -297,7 +309,8 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
             0 => _tariffTab(),
             1 => _shipmentsTab(),
             2 => LogisticsLossList(service: _logistics),
-            _ => LogisticsStagePanel(service: _logistics),
+            3 => LogisticsStagePanel(service: _logistics),
+            _ => CourierServiceFeePanel(service: _courierPayout),
           },
         ),
       ],
@@ -441,6 +454,13 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
               icon: const Icon(Icons.grid_on, size: 16),
               label: Text(isDraft ? 'Нархлар' : 'Нархлар → янги версия'),
             ),
+            // Вилоятлар матрицаси (Ulgurji Q-6): фақат қораламада; бўш катак — бўш.
+            if (isDraft)
+              FilledButton.tonalIcon(
+                onPressed: _busy ? null : () => _editMatrix(t),
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: const Text('Матрица'),
+              ),
             OutlinedButton.icon(
               onPressed: _busy
                   ? null

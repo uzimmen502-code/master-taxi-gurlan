@@ -68,12 +68,67 @@ class ServiceConfigHolder {
   static final ServiceModuleConfig _fallback =
       ServiceModuleConfig.allEnabled(kKnownModuleIds);
 
+  /// Фаол (бош экран тепасида танланган) туман — яшаш жойидан бошқа бўлса.
+  /// Эга қарори (2026-10-31, «А вариант»): хизматлар (модул дарвозаси) ТАНЛАНГАН ҳудуд бўйича —
+  /// гурланлик Тошкентга борса Тошкент хизматларини кўради; тепада нима ёзилган бўлса, шу ишлайди.
+  /// Яшаш жойи (профил) ўзгармайди: ёрлиқлар ва ҳисобот муҳри ([reportStamp]) ундан.
+  static String _activeDistrictId = '';
+  static ServiceModuleConfig _activeDistrictOverride = ServiceModuleConfig.empty;
+  static const _cacheKeyActiveDistrict = 'svc_active_district_v1';
+  static const _cacheKeyActiveDistrictModules = 'svc_active_district_modules_v1';
+
+  /// Сервер модул дарвозаси учун (эга, 2026-10-31: «серверни ҳам мослаштир»): яратиш
+  /// callable'ларига қўшиладиган майдон — модуллар ҳисобланаётган туман. Бўш бўлса — йўқ
+  /// (сервер профил туманини олади, эски APK'лар каби).
+  static Map<String, String> get moduleGeoField {
+    final id = _away ? _activeDistrictId : _districtId;
+    return id.isEmpty ? const {} : {'geoDistrictId': id};
+  }
+
+  /// Модуллар фаол туман бўйича ҳисобланяптими (яшаш жойидан бошқа туман танланган).
+  static bool get _away =>
+      _activeDistrictId.isNotEmpty && _activeDistrictId != _districtId;
+
   /// Joriy yakuniy konfig: Baseline → tuman override → MFY override.
+  /// Фаол туман яшаш жойидан бошқа бўлса — ўша туман override'и (МФЙ override'и яшаш
+  /// жойига тегишли, шунинг учун у ҳолда қўлланмайди).
   static ServiceModuleConfig get effective {
     final base = _defaults.modules.isEmpty
         ? (_enforce ? ServiceModuleConfig.empty : _fallback)
         : _defaults;
+    if (_away) return base.merge(_activeDistrictOverride);
     return base.merge(_districtOverride).merge(_areaOverride);
+  }
+
+  /// [GeoContext] фаол ҳудуди ўзгарганда чақирилади. Бўш ёки яшаш жойи билан бир хил —
+  /// модуллар яна яшаш жойи бўйича. Кеш: илова қайта очилганда тармоқсиз дарров тўғри.
+  static Future<void> applyActiveDistrict(String districtId) async {
+    final id = districtId.trim();
+    final before = _uiFingerprint();
+    if (id.isEmpty || id == _districtId) {
+      _activeDistrictId = '';
+      _activeDistrictOverride = ServiceModuleConfig.empty;
+    } else {
+      if (id != _activeDistrictId) _activeDistrictOverride = ServiceModuleConfig.empty;
+      _activeDistrictId = id;
+      try {
+        _activeDistrictOverride = await _repo.fetchDistrictModules(id);
+      } catch (e, st) {
+        // Ўқилмаса — охирги маълум (кешдаги) override қолади.
+        debugPrint('ServiceConfigHolder.applyActiveDistrict: $e\n$st');
+      }
+    }
+    await _saveActiveToCache();
+    if (_uiFingerprint() != before) _notifyRevision();
+  }
+
+  static Future<void> _saveActiveToCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKeyActiveDistrict, _activeDistrictId);
+      await prefs.setStringList(
+          _cacheKeyActiveDistrictModules, _encode(_activeDistrictOverride.toCacheMap()));
+    } catch (_) {}
   }
 
   /// Service Runtime Gate.
@@ -152,6 +207,14 @@ class ServiceConfigHolder {
     if (_districtId.isNotEmpty) {
       await _loadDistrictOverride(_districtId);
     }
+    if (_activeDistrictId.isNotEmpty && _activeDistrictId != _districtId) {
+      try {
+        _activeDistrictOverride = await _repo.fetchDistrictModules(_activeDistrictId);
+        await _saveActiveToCache();
+      } catch (e, st) {
+        debugPrint('ServiceConfigHolder.bootstrap(active): $e\n$st');
+      }
+    }
     if (_serviceAreaId.isNotEmpty) {
       try {
         _areaOverride = await _repo.fetchServiceAreaModules(_serviceAreaId);
@@ -176,6 +239,8 @@ class ServiceConfigHolder {
     final eff = effective;
     final b = StringBuffer()
       ..write(_enforce)
+      ..write('|')
+      ..write(_away ? _activeDistrictId : '')
       ..write('|')
       ..write(_serviceAreaId)
       ..write('|')
@@ -327,6 +392,10 @@ class ServiceConfigHolder {
       _districtLabel = prefs.getString(_cacheKeyDistrictLabel) ?? '';
       _regionLabel = prefs.getString(_cacheKeyRegionLabel) ?? '';
       _enforce = prefs.getBool(_cacheKeyEnforce) ?? false;
+      _activeDistrictId = prefs.getString(_cacheKeyActiveDistrict) ?? '';
+      _activeDistrictOverride = ServiceModuleConfig.fromCacheMap(
+        _decode(prefs.getStringList(_cacheKeyActiveDistrictModules)),
+      );
     } catch (_) {}
   }
 
@@ -380,7 +449,11 @@ class ServiceConfigHolder {
     String districtLabel = '',
     String regionLabel = '',
     bool enforce = false,
+    String activeDistrictId = '',
+    ServiceModuleConfig? activeDistrictOverride,
   }) {
+    _activeDistrictId = activeDistrictId;
+    _activeDistrictOverride = activeDistrictOverride ?? ServiceModuleConfig.empty;
     _defaults = defaults ?? ServiceModuleConfig.empty;
     _districtOverride = districtOverride ?? ServiceModuleConfig.empty;
     _areaOverride = areaOverride ?? ServiceModuleConfig.empty;
@@ -394,6 +467,8 @@ class ServiceConfigHolder {
 
   @visibleForTesting
   static void resetForTest() {
+    _activeDistrictId = '';
+    _activeDistrictOverride = ServiceModuleConfig.empty;
     _defaults = ServiceModuleConfig.empty;
     _districtOverride = ServiceModuleConfig.empty;
     _areaOverride = ServiceModuleConfig.empty;

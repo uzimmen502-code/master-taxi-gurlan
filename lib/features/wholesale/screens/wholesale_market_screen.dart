@@ -24,6 +24,7 @@ import '../utils/wholesale_labels.dart';
 import '../widgets/ship_from_fields.dart';
 import '../widgets/wholesale_empty_market.dart';
 import '../widgets/wholesale_field_error.dart';
+import '../widgets/wholesale_order_entries.dart';
 import '../widgets/wholesale_product_card.dart';
 import '../widgets/wholesale_stream_builder.dart';
 import 'wholesale_product_detail_screen.dart';
@@ -156,6 +157,10 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
         title: Text(
           context.tr(_isChina ? 'wholesale_title_china' : 'wholesale_title'),
         ),
+        // Харидор буюртмалари (4-босқич) — Хитой бозорида буюртма йўқ.
+        actions: [
+          if (!_isChina) WholesaleBuyerOrdersAction(userPhone: widget.userPhone),
+        ],
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: AvaLight.ink,
@@ -634,6 +639,11 @@ class _MyProductsView extends StatelessWidget {
       ),
       body: Column(
         children: [
+          // Келган буюртмалар + тўлов картаси (4-босқич; қабул/рад йўқ).
+          if (market != WholesaleProduct.marketChina) WholesaleSellerOrdersPanel(
+              sellerPhone: seller.phone,
+              cardLast4: seller.hasPayoutCard ? seller.cardLast4 : '',
+            ),
           // Эски сотувчи (У1 дан олдин рўйхатдан ўтган) — жўнатиш манзили
           // йўқ: етказиш ҳақи ҳисобланмайди, шунинг учун эслатиб турамиз.
           if (!seller.hasShipFrom)
@@ -910,10 +920,13 @@ class _MyProductsView extends StatelessWidget {
                         itemBuilder: (_) => [
                           PopupMenuItem(
                               value: 'edit', child: Text(context.tr('edit'))),
-                          PopupMenuItem(
-                            value: 'add_video',
-                            child: Text(context.tr('wholesale_menu_add_video')),
-                          ),
+                          // Ҳар маҳсулотга битта ихтиёрий видео (эга,
+                          // 2026-10-31): бор бўлса яна қўшиш таклиф қилинмайди.
+                          if (p.videoClipIds.isEmpty)
+                            PopupMenuItem(
+                              value: 'add_video',
+                              child: Text(context.tr('wholesale_menu_add_video')),
+                            ),
                           if (p.videoClipIds.isNotEmpty)
                             PopupMenuItem(
                               value: 'view_video',

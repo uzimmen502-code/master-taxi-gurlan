@@ -44,6 +44,7 @@ const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
 const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
+const wholesaleStockApi = require('./api/wholesale_stock');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -275,6 +276,11 @@ exports.adminSetWholesaleProductMarket = fn.https.onCall(wrapCallable(
     db,
     deleteField: () => admin.firestore.FieldValue.delete(),
   }),
+));
+
+// Ulgurji: qadoqlar bo'yicha qoldiq — faqat mahsulot egasi, tranzaksiya + history (2026-10-31).
+exports.setWholesaleStock = fn.https.onCall(wrapCallable(
+  wholesaleStockApi.makeSetWholesaleStock({ db }),
 ));
 
 /**

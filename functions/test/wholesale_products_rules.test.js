@@ -22,7 +22,8 @@ const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
 const { serverTimestamp, deleteField } = require('firebase/firestore');
 
-const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
+// RULES_FILE — жонли+патч rules устида ишлатиш учун (deploy kit).
+const RULES_PATH = process.env.RULES_FILE || path.join(__dirname, '..', '..', 'firestore.rules');
 const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
 
 const SELLER = '998901000001';

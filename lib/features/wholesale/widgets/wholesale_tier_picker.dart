@@ -38,11 +38,16 @@ class WholesaleTierPicker extends StatefulWidget {
     required this.product,
     required this.qty,
     required this.onQtyChanged,
+    this.pack,
   });
 
   final WholesaleProduct product;
   final int qty;
   final ValueChanged<int> onQtyChanged;
+
+  /// Танланган қадоқ (эга, 2026-10-31) — нарх поғоналари ва МОҚ шундан.
+  /// `null` — маҳсулотнинг ўз поғоналари (қадоқсиз маҳсулот).
+  final WholesalePack? pack;
 
   @override
   State<WholesaleTierPicker> createState() => _WholesaleTierPickerState();
@@ -78,7 +83,9 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
     super.dispose();
   }
 
-  int get _moq => widget.product.moq;
+  int get _moq => widget.pack?.moq ?? widget.product.moq;
+
+  List<PriceTier> get _tiers => widget.pack?.priceTiers ?? widget.product.priceTiers;
 
   void _set(int v) {
     final q = clampWholesaleQty(v, _moq);
@@ -91,7 +98,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final tiers = p.priceTiers;
+    final tiers = _tiers;
     if (tiers.isEmpty) return const SizedBox.shrink();
     final qty = widget.qty;
     final active = activeTierIndex(tiers, qty);
@@ -112,21 +119,22 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
             context.tr('wholesale_pick_tier'),
             style: const TextStyle(fontSize: 12, color: PdDark.muted),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 6,
-            runSpacing: 6,
+            runSpacing: 4,
             children: [
               for (final (i, t) in tiers.indexed)
                 _TierChip(
-                  label: _tierLabel(p, i, unitLabel),
+                  // «1–9 кг», «10–49 кг», «50+ кг» (`tierRangeText`).
+                  label: '${tierRangeText(tiers, i)} $unitLabel',
                   price: formatPrice(t.price),
                   active: i == active,
                   onTap: () => _set(t.minQty),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
         ],
         Row(
           children: [
@@ -183,10 +191,10 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: PdDark.surface,
             borderRadius: BorderRadius.circular(12),
@@ -206,7 +214,7 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
                   valueColor: PdDark.ok,
                 ),
               if (next != null) ...[
-                const Divider(height: 14, color: PdDark.line),
+                const Divider(height: 8, color: PdDark.line),
                 Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 8,
@@ -255,9 +263,6 @@ class _WholesaleTierPickerState extends State<WholesaleTierPicker> {
     );
   }
 
-  /// «1–9 кг», «10–49 кг», «50+ кг» (`tierRangeText`).
-  static String _tierLabel(WholesaleProduct p, int i, String unit) =>
-      '${tierRangeText(p.priceTiers, i)} $unit';
 }
 
 class _TierChip extends StatelessWidget {
@@ -286,8 +291,8 @@ class _TierChip extends StatelessWidget {
           onTap();
         },
         child: Container(
-          constraints: const BoxConstraints(minWidth: 92),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          constraints: const BoxConstraints(minWidth: 84),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: active ? PdDark.brandSoft : PdDark.surface,
             borderRadius: BorderRadius.circular(10),
@@ -300,12 +305,13 @@ class _TierChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(label,
-                  style: const TextStyle(fontSize: 12, color: PdDark.ink)),
-              const SizedBox(height: 2),
+                  style: const TextStyle(
+                      fontSize: 12, height: 1.15, color: PdDark.ink)),
               Text(
                 price,
                 style: TextStyle(
                   fontSize: 13,
+                  height: 1.15,
                   fontWeight: FontWeight.w600,
                   color: active ? PdDark.brand : PdDark.muted,
                 ),
@@ -367,7 +373,7 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         children: [
           Expanded(

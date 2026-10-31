@@ -73,7 +73,16 @@ class ShipFromFields extends StatefulWidget {
     this.geoRepository,
     this.locate,
     this.locationRequired = false,
+    this.titleKey = 'wholesale_ship_from_title',
+    this.helpKey = 'wholesale_ship_from_help',
+    this.addressLabelKey = 'wholesale_field_ship_address',
   });
+
+  /// Сарлавҳа/изоҳ/манзил ёрлиғи калитлари: харидорнинг ЕТКАЗИШ манзили ҳам
+  /// шу виджет билан олинади (4-босқич чекаути), фақат матн бошқа.
+  final String titleKey;
+  final String helpKey;
+  final String addressLabelKey;
 
   final ShipFromDraft value;
   final ValueChanged<ShipFromDraft> onChanged;
@@ -171,9 +180,9 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(context.tr('wholesale_ship_from_title'), style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(context.tr(widget.titleKey), style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        Text(context.tr('wholesale_ship_from_help'), style: TextStyle(fontSize: 12, color: AppColors.sectionMuted)),
+        Text(context.tr(widget.helpKey), style: TextStyle(fontSize: 12, color: AppColors.sectionMuted)),
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           key: ValueKey('ship-region-${_regions.length}-$regionValue'),
@@ -200,7 +209,7 @@ class _ShipFromFieldsState extends State<ShipFromFields> {
           initialValue: v.address,
           maxLength: 300,
           buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
-          decoration: deco('wholesale_field_ship_address'),
+          decoration: deco(widget.addressLabelKey),
           onChanged: (s) => widget.onChanged(v.copyWith(address: s)),
         ),
         const SizedBox(height: 8),

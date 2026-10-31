@@ -4,9 +4,11 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/price_tier.dart';
 import '../../ads/utils/ad_search_text.dart';
 import 'shipping_dims.dart';
+import 'wholesale_pack.dart';
 
 export '../../../models/price_tier.dart' show PriceTier;
 export 'shipping_dims.dart';
+export 'wholesale_pack.dart';
 
 /// Нарх поғонаси таърифи `lib/models/price_tier.dart` га кўчирилди
 /// (2026-09-29): энди AVA дўкони товари ҳам айнан шу поғоналар билан
@@ -52,6 +54,7 @@ class WholesaleProduct implements AdSearchable {
     this.unitWeightG,
     this.unitDims,
     this.districtId = '',
+    this.packs = const [],
   });
 
   /// Товар (сотувчи жўнатиш манзили) ҳудуди — ФАҚАТ сервер ёзади
@@ -59,6 +62,39 @@ class WholesaleProduct implements AdSearchable {
   /// ҳужжатларда бўлмаслиги мумкин (бўш). Ўхшаш карточкаларда «яқин
   /// сотувчи» кўрсатиш учун.
   final String districtId;
+
+  /// Қадоқлар (эга, 2026-10-31; ≤ [WholesalePack.maxPacks]). Бўш — эски
+  /// маҳсулот: [effectivePacks] уни битта `default` қадоқ қилиб беради.
+  ///
+  /// Орқага мослик: қадоқли маҳсулотда ҳам маҳсулот даражасидаги
+  /// `priceTiers`/`unitWeightG`/`unitDims` ЭНГ АРЗОН қадоқдан нусха —
+  /// эски илова ва Rules (`priceTiers` 1..5) ўзгаришсиз ишлайди.
+  final List<WholesalePack> packs;
+
+  bool get hasPacks => packs.isNotEmpty;
+
+  /// Ҳамиша камида битта қадоқ: эски маҳсулот — маҳсулот майдонларидан.
+  List<WholesalePack> get effectivePacks => hasPacks
+      ? packs
+      : [
+          WholesalePack(
+            id: WholesalePack.defaultId,
+            label: '',
+            priceTiers: priceTiers,
+            unitWeightG: unitWeightG,
+            unitDims: unitDims,
+          ),
+        ];
+
+  WholesalePack packById(String id) => effectivePacks.firstWhere(
+        (p) => p.id == id,
+        orElse: () => effectivePacks.first,
+      );
+
+  /// Энг арзон (бошланғич нархи энг паст) қадоқ — «дан ...» ва нусха учун.
+  WholesalePack get cheapestPack => effectivePacks.reduce(
+        (a, b) => b.basePrice < a.basePrice ? b : a,
+      );
 
   /// Улгуржи бозор (ички сотувчилар) — нархи сўмда.
   static const marketWholesale = 'wholesale';
@@ -154,7 +190,7 @@ class WholesaleProduct implements AdSearchable {
 
   /// «дан 9 000 $ / дона» — карточка ва тафсилотдаги ягона нарх сатри.
   String get priceLine =>
-      '${priceTiers.length > 1 ? 'дан ' : ''}'
+      '${priceTiers.length > 1 || packs.length > 1 ? 'дан ' : ''}'
       '${formatPrice(basePrice)} $currencyLabel / $unit';
 
   bool get isPending => status == statusPending;
@@ -227,8 +263,18 @@ class WholesaleProduct implements AdSearchable {
       districtId: d['districtId'] is String
           ? (d['districtId'] as String).trim()
           : '',
+      packs: WholesalePack.parseList(d['packs']),
     );
   }
+
+  /// Қадоқли маҳсулотда маҳсулот даражасидаги нарх/вазн — энг арзон
+  /// қадоқдан (орқага мослик, қаранг: [packs]).
+  List<WholesalePriceTier> get _mirrorTiers =>
+      hasPacks ? cheapestPack.priceTiers : priceTiers;
+
+  Map<String, dynamic> get _packsField => {
+        'packs': packs.take(WholesalePack.maxPacks).map((p) => p.toMap()).toList(),
+      };
 
   static int? _positiveInt(dynamic v) {
     final n = v is num ? v.toInt() : null;
@@ -237,22 +283,26 @@ class WholesaleProduct implements AdSearchable {
 
   /// Етказиш майдонлари — яратиш ва таҳрирда бир хил; йўқ бўлса ёзилмайди
   /// (таҳрирда ўчириш = `FieldValue.delete()`, Rules калитга рухсат беради).
-  Map<String, dynamic> _shippingFields({required bool forUpdate}) => {
-        if (unitWeightG != null)
-          'unitWeightG': unitWeightG
-        else if (forUpdate)
-          'unitWeightG': FieldValue.delete(),
-        if (unitDims != null)
-          'unitDims': unitDims!.toMap()
-        else if (forUpdate)
-          'unitDims': FieldValue.delete(),
-      };
+  Map<String, dynamic> _shippingFields({required bool forUpdate}) {
+    final w = hasPacks ? cheapestPack.unitWeightG : unitWeightG;
+    final dims = hasPacks ? cheapestPack.unitDims : unitDims;
+    return {
+      if (w != null)
+        'unitWeightG': w
+      else if (forUpdate)
+        'unitWeightG': FieldValue.delete(),
+      if (dims != null)
+        'unitDims': dims.toMap()
+      else if (forUpdate)
+        'unitDims': FieldValue.delete(),
+    };
+  }
 
   /// Яратиш учун — Firestore Rules текширади: `status` фақат `pending`,
   /// ёки [autoApproved] (`settings/app.wholesaleProductAutoApprove` ёқиқ
   /// бўлса) `active` бўлиши мумкин.
   Map<String, dynamic> toFirestoreCreate({bool autoApproved = false}) {
-    final tiers = sortWholesalePriceTiers(priceTiers);
+    final tiers = sortWholesalePriceTiers(_mirrorTiers);
     return {
       'sellerId': sellerId,
       'sellerCompanyName': sellerCompanyName,
@@ -270,6 +320,7 @@ class WholesaleProduct implements AdSearchable {
       if (currency.trim().isNotEmpty) 'currency': currency.trim(),
       if (deliveryDays != null) 'deliveryDays': deliveryDays,
       ..._shippingFields(forUpdate: false),
+      if (hasPacks) ..._packsField,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       if (autoApproved) 'publishedAt': FieldValue.serverTimestamp(),
@@ -281,7 +332,7 @@ class WholesaleProduct implements AdSearchable {
   /// Эга томонидан таҳрирлаш — контент майдонлари + `pending`га қайтариш.
   /// Rules эгага ҳеч қачон `active`га ўтишга рухсат бермайди.
   Map<String, dynamic> toFirestoreOwnerUpdate() {
-    final tiers = sortWholesalePriceTiers(priceTiers);
+    final tiers = sortWholesalePriceTiers(_mirrorTiers);
     return {
       'title': title,
       'titleLower': title.toLowerCase(),
@@ -299,6 +350,8 @@ class WholesaleProduct implements AdSearchable {
       if (isChina) 'currency': currency.trim(),
       if (isChina) 'deliveryDays': deliveryDays ?? FieldValue.delete(),
       ..._shippingFields(forUpdate: true),
+      // Қадоқлар олиб ташланса — майдон ҳам ўчади (эски маҳсулот кўриниши).
+      if (hasPacks) ..._packsField else 'packs': FieldValue.delete(),
     };
   }
 }

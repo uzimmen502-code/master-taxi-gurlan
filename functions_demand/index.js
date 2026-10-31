@@ -46,6 +46,8 @@ const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
 const wholesaleStockApi = require('./api/wholesale_stock');
 const wholesaleOrdersApi = require('./api/wholesale_orders');
+const wholesaleCardApi = require('./api/wholesale_card');
+const wholesaleEventsApi = require('./api/wholesale_events');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -309,7 +311,7 @@ exports.onWholesaleOrderCreated = fn.firestore
   .document('wholesale_orders/{orderId}')
   .onCreate(async (snap, context) => {
     try {
-      await wholesaleOrdersApi.onWholesaleOrderCreated({ db }, snap.data() || {}, context.params.orderId);
+      await wholesaleOrdersApi.onWholesaleOrderCreated({ db, messaging }, snap.data() || {}, context.params.orderId);
     } catch (e) {
       // `ensureWholesaleShipment` xatoni o'zi yozadi; bu yer — kutilmagan holat. Reconcile qayta urinadi.
       console.error(JSON.stringify({
@@ -328,6 +330,58 @@ exports.onWholesaleOrderCreated = fn.firestore
 exports.getWholesaleDeliveryCode = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeGetWholesaleDeliveryCode({ db }),
 ));
+
+// ── Ulgurji 3b: «yetkazilganda karta orqali» (ega, 2026-10-31; docs/ulgurji_buyurtma_zanjiri_uz.md).
+// Pul — default codebase (ledger). Bu yerda: karta, chek, «Pul tushdi», rad, nizo, qaytish jo'natmasi, xabarlar.
+exports.setWholesaleSellerCard = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeSetWholesaleSellerCard({ db }),
+));
+exports.getWholesaleCardPaymentInfo = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeGetWholesaleCardPaymentInfo({ db }),
+));
+exports.submitWholesaleCardReceipt = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeSubmitWholesaleCardReceipt({ db }),
+));
+exports.confirmWholesaleCardPayment = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeConfirmWholesaleCardPayment({ db }),
+));
+exports.markWholesaleBuyerRefused = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeMarkWholesaleBuyerRefused({ db }),
+));
+exports.adminResolveWholesaleCardDispute = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeAdminResolveWholesaleCardDispute({ db }),
+));
+exports.getWholesaleReturnHandoverCode = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeGetWholesaleReturnHandoverCode({ db }),
+));
+/** Chek RECEIPT_TIMEOUT_MS (30 daq) tasdiqlanmasa → payment_dispute (aynan bir marta). */
+exports.wholesaleCardDisputeSweeper = fn.pubsub
+  .schedule('every 5 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleCardApi.runWholesaleCardDisputeSweep({ db });
+    return null;
+  });
+/**
+ * `wholesale_orders` onUpdate: rad etilsa — qaytish jo'natmasi (LEG-1 posilka qo'lidagi
+ * kuryerga); holat/to'lov o'tishlari bo'yicha xabarlar (in-app + push, 3 til, idempotent).
+ */
+exports.onWholesaleOrderUpdated = fn.firestore
+  .document('wholesale_orders/{orderId}')
+  .onUpdate(async (change, context) => {
+    try {
+      await wholesaleEventsApi.onWholesaleOrderUpdated(
+        { db, messaging }, change.before.data() || {}, change.after.data() || {}, context.params.orderId,
+      );
+    } catch (e) {
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'onWholesaleOrderUpdated', result: 'failed',
+        orderId: context.params.orderId, errorCode: 'WHOLESALE_ORDER_UPDATE_TRIGGER_FAILED',
+        message: String((e && e.message) || e).slice(0, 200),
+      }));
+    }
+    return null;
+  });
 
 /** Yiqilgan/o'tkazib yuborilgan jo'natma yaratish — qayta urinish (eng ko'pi 5, keyin admin). */
 exports.wholesaleShipmentReconcile = fn.pubsub

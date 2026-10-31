@@ -61,6 +61,7 @@ default триггер (custody delivery, мавжуд onLogisticsCustodyEvent):
 | 1 | Қадоқ, қолдиқ (`setWholesaleStock`), битта видео | **LIVE** 2026-10-31 |
 | 2 | Сервер: квота, буюртма, ушлаш, қолдиқ −N, бекор + қайтариш, дарвоза, AVA улуши созламаси (сотувчи қабул/рад йўқ) | **LIVE** 2026-10-31 (ёпиқ: дарвоза ҳужжати йўқ), rules c2dc93b7 |
 | 3 | Relay боғлаш: буюртма берилиши билан shipment АВТОМАТИК, етказиш ҳақи escrow'га, етказилганда товар пули сотувчига | код + тест тайёр (`feat/ulg-orders`), **production'да ҲАЛИ йўқ** (deploy қилинмаган) |
+| 3b | «Етказилганда карта орқали» (сервер): сотувчи картаси, ушлаш сотувчи ҳамёнидан, чек + 30 дақ → низо → админ, рад → автоматик қайтиш (ҳақи сотувчидан, қарз/блок), хабарлар — §5 | код + тест (`feat/ulg-card`), **production'да ҲАЛИ йўқ** |
 | 4 | Илова: «Буюртма бериш», харидор буюртмалари + кузатув; сотувчига фақат «янги буюртма — курьер олиб кетади» хабари ва рўйхат (қабул/рад тугмаси ЙЎҚ) | — |
 | 5 | Админ: буюртмалар, AVA улуши, вилоят матрицаси + 20 кг+ нархлар жадвали (бўш), тестчилар | — |
 | 6 | Аҳоли бозори қадоқлари | — |
@@ -86,3 +87,68 @@ APK — фақат эга рухсати билан.
   **`module_config/wholesale_orders_all` дарвозаси guard'лар live-merge билан deploy бўлгунча ЁПИҚ турсин.**
   Харидор коди — алоҳида `getWholesaleDeliveryCode`; товар пули — алоҳида `onWholesaleCustodyEvent`.
 - Firestore rules ҳажми чегарада (262 031 / 262 144) — янги қоидадан олдин изоҳлар қисқартирилади.
+
+## 5. 3b-босқич — «Етказилганда карта орқали» (сервер)
+
+> Эга қарорлари — CONFIRMED (2026-10-31, якуний; 30 дақиқа — ўша куни 15 дан ўзгартирилган).
+
+| # | Қарор |
+|---|---|
+| K-1 | Харидор `paymentMethod: 'card_on_delivery'` танлаши мумкин (`wallet` — аввалгидек, стандарт). |
+| K-2 | Харидор ҲАММАСИНИ (товар + етказиш) эшик олдида **сотувчи картасига** ўтказади (эквайринг йўқ). |
+| K-3 | Сотувчининг ягона амали — «Пул тушди» (`confirmWholesaleCardPayment`). Буюртмани қабул/рад қилмайди. |
+| K-4 | Курьер ҳақи + AVA улуши буюртма пайтида **сотувчи ҳамёнидан** ушланади; етмаса — карта усули шу буюртмага ёпиқ. |
+| K-5 | Рад/тўламаслик → товар сотувчига қайтади; қайтиш **автоматик**, ҳақи **сотувчи ҳамёнидан** (жорий тариф); етмаса — манфийга тушмайди: `returnDebt` + сотувчининг карта усули ёпилади, ҳамён тўлдирилгач reconcile (10 дақ) тўлайди. |
+| K-6 | Қолдиқ **фақат** товар сотувчига қайтганда (`returned`) тикланади; чиқишдаги курьер ҳақи қайтарилмайди. |
+| K-7 | Харидор 2 марта рад этгач карта усули унга ёпилади (`CARD_REFUSAL_LIMIT = 2`). |
+| K-8 | Харидор чек юборади; сотувчи **30 дақиқада** (`RECEIPT_TIMEOUT_MS`, ягона константа) тасдиқламаса → `payment_dispute` → админ ҳал қилади (confirm → коди очилади; reject → рад + қайтиш). Чек юборилгач курьер «рад» белгилай олмайди. |
+| K-9 | Хабарлар (ички + push, 3 тил): сотувчига — янги карта буюртма, чек; харидорга — тўлов тасдиқланди, рад; админларга — низо, қайтиш қарзи; сотувчига — қарз, қайтмоқда, қайтди; қайтиш курьерига — иш бириктирилди. |
+| PROPOSED | Рад этилганда сотувчидан ушланган AVA улуши унга қайтарилади (сотув бўлмади). Админ reject ҳам харидор ҳисоблагичига +1. Хабар матнлари. |
+
+### Ҳолатлар (ягона жадвал — `functions_demand/core/wholesale_orders.js`)
+
+```
+placed ─► in_delivery ─► delivered
+  │            ├─► refused ──(қайтиш тўланди, system)──► returning ──(сотувчига етди, system)──► returned
+  │            ├─► payment_dispute ─(admin confirm)─► in_delivery
+  │            │                   └(admin reject)──► refused
+  └─► cancelled (buyer/admin)      └─► cancelled (admin)
+```
+Актёрлар: courier — `in_delivery → refused` (фақат охирги LEG ижрочиси, посилка қўлида, тўлов `awaiting`);
+system — `in_delivery → payment_dispute`, `refused → returning`, `returning → returned`; admin — низо.
+`order.cardPayment.status`: `awaiting → receipt_submitted → confirmed | disputed`. `order.returnStatus`:
+`pending_shipment → awaiting_payment → in_transit → returned`.
+
+### Пул (ledger — `functions/settlement_ledger.js`, бутун сўм)
+
+| Қадам | Ёзув | Калит (`journal_entries/…`) |
+|---|---|---|
+| Буюртма (карта) | Dr `passenger_credit:{сотувчи}` / Cr `escrow:wholesale:{id}` = deliveryFee + avaFee | `bonus:wholesaleHold:{id}` |
+| Етказиш эскрови | Dr `escrow:wholesale:{id}` / Cr `escrow:{shipmentId}` = deliveryFee (ўзгармаган) | `wholesaleShipFund:{id}` |
+| Етказилди | Dr `escrow:wholesale:{id}` / Cr `earnings:ava_wholesale_fee` = avaFee (сотувчига AVA орқали 0; avaFee=0 — ёзув йўқ) | `wholesaleRelease:{id}` |
+| Бекор (эскровдан олдин) | Dr `escrow:wholesale:{id}` / Cr `passenger_credit:{сотувчи}` = тўлиқ ушланма | `bonus:wholesaleRefund:{id}` |
+| Рад | Dr `escrow:wholesale:{id}` / Cr `passenger_credit:{сотувчи}` = avaFee (эскров 0); курьер ҳақи `escrow:{shipmentId}` да қолади | `bonus:wholesaleRefused:{id}` |
+| Қайтиш ушлаш | Dr `passenger_credit:{сотувчи}` / Cr `escrow:wholesale_return:{id}` = қайтиш нархи | `bonus:wholesaleReturnHold:{id}` |
+| Қайтиш эскрови | Dr `escrow:wholesale_return:{id}` / Cr `escrow:{returnShipmentId}` | `wholesaleReturnFund:{id}` |
+| Қайтиш етказилди | relay RELEASE (`escrow:{returnShipmentId}` → курьер/AVA), бизда пул йўқ; қолдиқ +N | — |
+
+### Сервер-only ҳужжатлар
+`wholesale_sellers/{tel}/private/payout` (тўлиқ карта; тарих `…/history/v{n}` — фақат last4),
+`wholesale_buyer_stats/{tel}.cardRefusals`, `wholesale_seller_stats/{tel}.{cardBlocked, debtOrderIds}`.
+Оммавий сотувчи ҳужжатида: `hasPayoutCard`, `cardLast4`.
+
+### Қайтиш жўнатмаси
+`refused` бўлиши билан demand триггери `onWholesaleOrderUpdated` жўнатма очади: origin = харидор манзили,
+destination = сотувчи, эгаси = олувчи = сотувчи, `source: 'wholesale_return'`, нарх — ўша пайтдаги фаол
+тариф (муҳрланади). LEG-1 посилкани ушлаб турган курьерга бириктирилган (`accepted` + match), relay
+matching ишламайди; курьер `getWholesaleReturnHandoverCode` коди билан relay `scanHandover`, сотувчи
+коди (relay `getShipmentSecrets`) билан relay `confirmDelivery`. Relay функцияларига тегилмаган.
+
+### Очиқ масалалар (UNKNOWN / эга)
+- Чиқиш жўнатмасининг `escrow:{shipmentId}` (курьер ҳақи) рад этилганда **етказилмагани учун relay
+  RELEASE бўлмайди** — пул эскровда қолади; ким ва қачон курьерга ёпади (админ / relay guards) — эга.
+- Чиқиш LEG'и `in_progress` ҳолатида қолади (relay'га тегилмади).
+- Бириктирилган курьер қайтишни олмаса — LEG'ни админ relay `adminPlanShipmentRoute` билан қайта режалайди.
+- `returnAnomaly` (масалан қайтиш нархи муҳрга мос эмас) — ушланма `escrow:wholesale_return` да туради, админ ҳал қилади.
+- Рад ҳисоблагичини камайтириш/ноллаш (админ) — қурилмаган.
+- Чек файли Storage'да борлиги серверда текширилмайди (фақат йўл шакли).

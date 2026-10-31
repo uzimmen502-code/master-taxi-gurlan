@@ -37,6 +37,10 @@ const {
   quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx,
 } = require('./logistics');
 const { assertStrictAdmin } = require('../analytics/access');
+// 3b: «yetkazilganda karta orqali» (ega, 2026-10-31).
+const { cardAvailability } = require('./wholesale_card');
+const { ensureWholesaleReturnShipment, RETURN_MAX_ATTEMPTS } = require('./wholesale_return');
+const { notifyNewCardOrder } = require('./wholesale_events');
 
 const PRODUCTS = 'wholesale_products';
 const SELLERS = 'wholesale_sellers';
@@ -160,10 +164,17 @@ function parseQuoteRequest(data) {
   if (!dest) throw fail('invalid-argument', 'Yetkazish manzili kerak', 'destination_required');
   const addressText = String(dest.addressText || '').trim();
   if (addressText.length < 3) throw fail('invalid-argument', 'Yetkazish manzilini yozing', 'address_required');
+  // 3b: to'lov usuli — yo'q/bo'sh = `wallet` (eski ilova), aks holda faqat ma'lum qiymat.
+  const pm = d.paymentMethod === undefined || d.paymentMethod === null || d.paymentMethod === ''
+    ? WO.PAYMENT_METHOD.WALLET : d.paymentMethod;
+  if (!WO.PAYMENT_METHODS.includes(pm)) {
+    throw fail('invalid-argument', 'To\'lov usuli noto\'g\'ri', 'payment_method_invalid', { allowed: [...WO.PAYMENT_METHODS] });
+  }
   return {
     productId,
     packId,
     qty,
+    paymentMethod: pm,
     destination: {
       regionId: dest.regionId, districtId: dest.districtId, lat: dest.lat, lng: dest.lng, addressText,
     },
@@ -312,6 +323,16 @@ function makeQuoteWholesaleOrder(deps) {
       const avaFee = avaFeeOf(goodsTotal, fee.avaFeeBps);
       const expiresAt = new Date(now.getTime() + QUOTE_TTL_MS);
 
+      // 3b: «yetkazilganda karta orqali» — sotuvchi hamyonidan ushlanadigan summa
+      // (kuryer haqi + AVA ulushi). Mavjudligi har kvotada hisoblanadi (ilova tanlov ko'rsatadi).
+      const cardHold = deliveryFee + avaFee;
+      const card = await cardAvailability(db, { sellerId, buyerId, sellerHold: cardHold });
+      if (req.paymentMethod === WO.PAYMENT_METHOD.CARD && !card.available) {
+        throw fail('failed-precondition', 'Bu buyurtmani karta orqali to\'lab bo\'lmaydi', 'card_unavailable', {
+          cardUnavailableReason: card.reason,
+        });
+      }
+
       const ref = db.collection(QUOTES).doc();
       const quoteDoc = {
         buyerId,
@@ -342,6 +363,8 @@ function makeQuoteWholesaleOrder(deps) {
         stockAtQuote: available,
         origin: rq.origin,
         destination: rq.destination,
+        paymentMethod: req.paymentMethod,
+        ...(req.paymentMethod === WO.PAYMENT_METHOD.CARD ? { cardHold } : {}),
         createdAt: now,
         expiresAt,
         used: false,
@@ -350,7 +373,8 @@ function makeQuoteWholesaleOrder(deps) {
 
       log('quote', {
         result: 'ok', quoteId: ref.id, productId: req.productId, packId: pack.id, qty: req.qty,
-        goodsTotal, deliveryFee, tariffVersion: rq.quote.tariffVersion, durationMs: Date.now() - started,
+        goodsTotal, deliveryFee, tariffVersion: rq.quote.tariffVersion, paymentMethod: req.paymentMethod,
+        cardAvailable: card.available, durationMs: Date.now() - started,
       });
       return {
         quoteId: ref.id,
@@ -365,6 +389,9 @@ function makeQuoteWholesaleOrder(deps) {
         total,
         currency: 'UZS',
         expiresAtMs: expiresAt.getTime(),
+        paymentMethod: req.paymentMethod,
+        paymentMethods: { wallet: true, card_on_delivery: card.available },
+        cardUnavailableReason: card.reason,
       };
     } catch (e) {
       log('quote', {
@@ -604,10 +631,18 @@ async function ensureWholesaleShipment(deps, orderId) {
   }
 }
 
-/** Trigger: `wholesale_orders/{id}` onCreate. */
+/** Trigger: `wholesale_orders/{id}` onCreate. 3b: karta buyurtmasi — sotuvchiga xabar. */
 async function onWholesaleOrderCreated(deps, data, orderId) {
   if ((data || {}).status !== WO.STATUS.PLACED) return { skipped: 'not_placed' };
-  return ensureWholesaleShipment(deps, orderId);
+  const r = await ensureWholesaleShipment(deps, orderId);
+  try {
+    await notifyNewCardOrder(deps, data, orderId);
+  } catch (e) {
+    console.error(JSON.stringify({
+      module: 'wholesale_orders', action: 'notifyNewCardOrder', result: 'failed', orderId, errorCode: 'NOTIFY_FAILED',
+    }));
+  }
+  return r;
 }
 
 /**
@@ -636,6 +671,24 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
     if (r.linked) out.linked += 1;
     else if (r.failed) out.failed += 1;
   }
+  // 3b: rad etilgan karta buyurtmalarining QAYTISH jo'natmasi (trigger yiqilgan / xato belgisi bor).
+  out.returnChecked = 0; out.returnLinked = 0; out.returnFailed = 0; out.returnFinal = 0;
+  const refused = await db.collection(ORDERS).where('status', '==', WO.STATUS.REFUSED).limit(limit).get();
+  for (const d of refused.docs) {
+    const o = d.data() || {};
+    if ((o.returnShipment || {}).shipmentId) continue;
+    const err = o.returnShipmentError || null;
+    if (err && (err.final === true || (isInt(err.attempts) && err.attempts >= RETURN_MAX_ATTEMPTS))) {
+      out.returnFinal += 1;
+      continue;
+    }
+    const at = msOf(o.statusUpdatedAt) || msOf(o.updatedAt) || 0;
+    if (nowMs - at < minAgeMs) continue;
+    out.returnChecked += 1;
+    const r = await ensureWholesaleReturnShipment(deps, d.id);
+    if (r.linked) out.returnLinked += 1;
+    else if (r.failed) out.returnFailed += 1;
+  }
   log('reconcileShipments', { result: 'ok', ...out });
   return out;
 }
@@ -660,6 +713,12 @@ function makeGetWholesaleDeliveryCode(deps) {
       if (!oSnap.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
       const o = oSnap.data() || {};
       if (!sameUser(o.buyerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+      // 3b: karta buyurtmasida kod FAQAT sotuvchi «Pul tushdi» (yoki admin nizoni tasdiqlagan)
+      // dan keyin — topshirish shu bilan bog'lanadi (relay `confirmDelivery` o'zgarmaydi).
+      if (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD
+        && (o.cardPayment || {}).status !== WO.CARD_PAYMENT.CONFIRMED) {
+        throw fail('failed-precondition', 'Sotuvchi to\'lovni hali tasdiqlamagan', 'card_payment_unconfirmed');
+      }
       const shipmentId = String((o.shipment || {}).shipmentId || '');
       if (!shipmentId) throw fail('failed-precondition', 'Yetkazish hali ochilmagan', 'shipment_not_ready');
       const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);

@@ -247,7 +247,8 @@ ok('holatlar jadvali: ruxsat etilgan va taqiqlangan o\'tishlar (aktor bo\'yicha)
   assert.ok(!WO.canTransition(S.CANCELLED, S.PLACED));
   assert.ok(!WO.canTransition(S.DELIVERED, S.CANCELLED));
   assert.ok(WO.isTerminal(S.CANCELLED) && WO.isTerminal(S.DELIVERED));
-  assert.deepStrictEqual([...WO.REFUND_STATUSES], ['cancelled']);
+  // 3b: `refused` ham to'lovchiga hisob-kitob (karta: AVA ulushi sotuvchiga) — `refundStatus: pending`.
+  assert.deepStrictEqual([...WO.REFUND_STATUSES], ['cancelled', 'refused']);
   assert.throws(() => WO.assertTransition(A.BUYER, S.DELIVERED, S.CANCELLED), (e) => e.details.reason === 'invalid_transition');
 });
 

@@ -249,18 +249,88 @@ async function main() {
     assert.strictEqual(await pcBal(A), a0 + sa, 'takror ikki marta to\'lamaydi');
   });
 
-  await check('yetkazildi (naqd): ulush qayd etiladi (cash_unsettled), hamyonlar o\'zgarmaydi', async () => {
-    const id = uniq('c_');
+  // Ega qarori 2026-10-31: naqdda oxirgi kuryer hammasini oladi, oldingi kuryer ulushi OXIRGI kuryer
+  // hamyonidan avtomatik o'tadi; hamyon yetmasa yakun to'xtamaydi — niyat qoladi, jadval qayta uradi.
+  const SHARES = db.collection('restaurant_courier_share_pending');
+  const shareJournal = (id) => db.collection(ledger.COL_JOURNAL).doc(`restCourierShare_${id}_${B}_${A}`).get();
+  async function cashHandoverOrder(prefix) {
+    const id = uniq(prefix);
     await seedOrder(id, { pay: 'cash' });
     const { code } = await start(id, 'courier');
     await accept(code, B);
+    await call('courierArriveRestaurantOrder', { orderId: id }, B);
+    return id;
+  }
+
+  await check('naqd + hamyon yetarli: A ulushi B hamyonidan darhol, aniq ulush; jurnal bitta; takror yakun — ikkinchi o\'tkazma yo\'q', async () => {
+    await resetAttempts();
+    const id = await cashHandoverOrder('c_');
+    await topUp(B, 10000, `b_${id}`);
     const a0 = await pcBal(A);
+    const b0 = await pcBal(B);
+    const r = await call('courierCompleteRestaurantDelivery', { orderId: id, outcome: 'delivered' }, B);
+    assert.strictEqual(r.payoutSettlement, 'cash_last_pays');
+    assert.strictEqual(r.cashCollected, 6000);
+    const d = await order(id);
+    const sa = d.payoutShares.find((x) => x.courierId === A).amount;
+    assert.ok(sa > 0 && sa < 6000);
+    assert.strictEqual(d.payoutShares.reduce((x, y) => x + y.amount, 0), 6000);
+    assert.strictEqual(await pcBal(A), a0 + sa, 'A ulushi tushdi');
+    assert.strictEqual(await pcBal(B), b0 - sa, 'B dan aniq ulush yechildi');
+    assert.strictEqual(await bonus(A), await pcBal(A), 'ko\'zgu A: bonusBalance == ledger');
+    assert.strictEqual(await bonus(B), await pcBal(B), 'ko\'zgu B');
+    assert.ok((await shareJournal(id)).exists);
+    assert.ok(!(await SHARES.doc(`${id}_${B}_${A}`).get()).exists, 'niyat o\'chdi');
+    const again = await call('courierCompleteRestaurantDelivery', { orderId: id, outcome: 'delivered' }, B);
+    assert.strictEqual(again.idempotent, true);
+    await fns.restaurantCourierSharePendingSweep.run({});
+    assert.strictEqual(await pcBal(A), a0 + sa, 'takror — ikki marta emas');
+    assert.strictEqual(await pcBal(B), b0 - sa);
+    await journalBalanced();
+  });
+
+  await check('naqd + B hamyoni yetmaydi: yakun O\'TADI, niyat insufficient_balance; jadval yetmaguncha kutadi, to\'ldirilgach bir marta o\'tkazadi', async () => {
+    await resetAttempts();
+    const id = await cashHandoverOrder('ci_');
+    const bStart = await pcBal(B);
+    if (bStart > 0) {
+      // Oldingi testlardan qolgan qoldiqni olib qo'yamiz (aniq yetishmovchilik holati).
+      await ledger.postEntry(db, { idempotencyKey: `drain:${id}`, kind: 'test_drain', legs: [{ account: ledger.passengerCreditAccount(B), dr: bStart }, { account: 'admin_clearing', cr: bStart }] });
+    }
+    const a0 = await pcBal(A);
+    const r = await call('courierCompleteRestaurantDelivery', { orderId: id, outcome: 'delivered' }, B);
+    assert.strictEqual(r.outcome, 'delivered', 'yakun to\'xtamadi');
+    assert.strictEqual((await order(id)).restaurantStatus, 'delivered');
+    const pend = await SHARES.doc(`${id}_${B}_${A}`).get();
+    assert.ok(pend.exists);
+    assert.strictEqual(pend.data().status, 'insufficient_balance');
+    assert.strictEqual(pend.data().attempts, 1);
+    assert.strictEqual(await pcBal(A), a0);
+    assert.strictEqual(await pcBal(B), 0, 'manfiyga tushmadi');
+    const sa = pend.data().amount;
+    await topUp(B, sa - 1, `b1_${id}`);
+    await fns.restaurantCourierSharePendingSweep.run({});
+    assert.strictEqual(await pcBal(A), a0, 'chegara: 1 so\'m yetmasa — o\'tmaydi');
+    assert.strictEqual((await SHARES.doc(`${id}_${B}_${A}`).get()).data().attempts, 2);
+    await topUp(B, 1, `b2_${id}`);
+    await Promise.all([fns.restaurantCourierSharePendingSweep.run({}), fns.restaurantCourierSharePendingSweep.run({})]);
+    assert.strictEqual(await pcBal(A), a0 + sa, 'parallel jadval — bir marta');
+    assert.strictEqual(await pcBal(B), 0);
+    assert.ok(!(await SHARES.doc(`${id}_${B}_${A}`).get()).exists);
+    assert.strictEqual(await bonus(B), await pcBal(B), 'ko\'zgu: bonusBalance == ledger');
+    await journalBalanced();
+  });
+
+  await check('naqd, A bo\'lagi 0 m (topshirish restoran oldida): A ulushi 0 → niyat yo\'q, hammasi B ga (single)', async () => {
+    await resetAttempts();
+    const id = uniq('cz_');
+    await seedOrder(id, { pay: 'cash' });
+    const { code } = await start(id, 'courier');
+    await accept(code, B, R_PT);
     await call('courierArriveRestaurantOrder', { orderId: id }, B);
     const r = await call('courierCompleteRestaurantDelivery', { orderId: id, outcome: 'delivered' }, B);
-    assert.strictEqual(r.payoutSettlement, 'cash_unsettled');
-    assert.strictEqual(r.cashCollected, 6000);
-    assert.strictEqual(await pcBal(A), a0);
-    assert.strictEqual((await order(id)).payoutShares.reduce((x, y) => x + y.amount, 0), 6000);
+    assert.strictEqual(r.payoutSettlement, 'single');
+    assert.ok(!(await SHARES.where('orderId', '==', id).get()).size);
   });
 
   await check('PARALLEL: B va C bir kod bilan → bitta g\'olib, bitta custody hodisasi', async () => {

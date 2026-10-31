@@ -206,6 +206,9 @@ const HANDOVER_TARGETS = ['courier', 'seller'];
 const HANDOVER_CODES = 'courier_handover_codes';
 const HANDOVER_ATTEMPTS = 'courier_handover_attempts';
 const CUSTODY = 'custody_events';
+/** Naqd ulush o'tkazmasi niyati (faqat server; rules'da match yo'q = klientga yopiq). */
+const SHARE_PENDING = 'restaurant_courier_share_pending';
+const cashShareId = (orderId, from, to) => `${orderId}_${from}_${to}`;
 
 /**
  * Kuryerlar ulushi (A-3): `legs` = [{ courierId, meters }] tartib bilan (oxirgisi — yetkazgan kuryer).
@@ -1940,10 +1943,21 @@ function attachRestaurantOrders(exportsObj, deps) {
           deliveryFeeFallback = 'insufficient_wallet';
         }
       }
-      // Naqd: oxirgi kuryer hammasini oladi; oldingilar ulushini kim/qanday to'lashi — ega qarori YO'Q (UNKNOWN).
+      // Naqd (ega qarori 2026-10-31): oxirgi kuryer hamma naqdni oladi; oldingi kuryer(lar) ulushi OXIRGI
+      // kuryerning AVA hamyonidan AVTOMATIK o'tkaziladi. Niyat shu tranzaksiyada yoziladi (yakun bilan
+      // bir marta), o'tkazma esa `settleCashShare` (darhol) / `restaurantCourierSharePendingSweep` (qayta).
+      const cashShares = to === RS.delivered && split && walletPaid !== fee
+        ? split.filter((s) => s.courierId !== courierId && s.amount > 0) : [];
+      const sharePendingIds = cashShares.map((s) => cashShareId(orderId, courierId, s.courierId));
+      cashShares.forEach((s, i) => {
+        t.set(db.collection(SHARE_PENDING).doc(sharePendingIds[i]), {
+          orderId, fromCourierId: courierId, toCourierId: s.courierId, amount: s.amount, meters: s.meters,
+          status: 'pending', attempts: 0, createdAt: ts(),
+        });
+      });
       const payoutSettlement = !shares ? null
         : !split ? 'single'
-          : walletPaid === fee ? 'wallet_split' : 'cash_unsettled';
+          : walletPaid === fee ? 'wallet_split' : 'cash_last_pays';
       const buyout = od.foodPaymentMethod === 'cash_buyout';
       const foodAmount = foodAmountOf(od);
       const cashCollected = to === RS.delivered
@@ -1992,8 +2006,94 @@ function attachRestaurantOrders(exportsObj, deps) {
         : evActor !== 'courier'
           ? { from, to, actor: evActor, actorId: evActorId, reason: `delivery_failed_decided:${failReason}`, meta: { refundAmount: refund.amount, courierId, failReason } }
           : { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
-      return { done: false, result, customerUid, restaurantId: od.restaurantId, courierId };
+      return { done: false, result, customerUid, restaurantId: od.restaurantId, courierId, sharePendingIds };
   }
+
+  /**
+   * Naqd ulush o'tkazmasi: oxirgi kuryer hamyoni → oldingi kuryer hamyoni (mavjud `settlementLedger.postEntry`,
+   * passenger_credit ↔ passenger_credit, butun so'm). Idempotentlik kaliti (jurnal hujjati id'si)
+   * `restCourierShare_{orderId}_{from}_{to}` — qayta urinish ikki marta o'tkazmaydi; niyat hujjati
+   * AYNI tranzaksiyada o'chadi. Hamyon yetmasa yakun TO'XTAMAYDI: niyat `insufficient_balance` bo'lib
+   * qoladi va jadval har 5 daqiqada qayta uradi (`courierCashPendingSweep` naqshi, R1).
+   * @returns {'posted'|'already'|'insufficient'|'failed'|'missing'}
+   */
+  async function settleCashShare(pendingId) {
+    const pRef = db.collection(SHARE_PENDING).doc(pendingId);
+    const snap = await pRef.get();
+    if (!snap.exists) return 'missing';
+    const p = snap.data() || {};
+    const from = canonicalUid(String(p.fromCourierId || ''));
+    const toC = canonicalUid(String(p.toCourierId || ''));
+    const amount = Number(p.amount);
+    if (!from || !toC || from === toC || !Number.isInteger(amount) || amount <= 0) {
+      await pRef.update({ status: 'invalid', updatedAt: ts() });
+      return 'failed';
+    }
+    const fromAcc = settlementLedger.passengerCreditAccount(from);
+    try {
+      const r = await settlementLedger.postEntry(db, {
+        idempotencyKey: `restCourierShare_${cashShareId(String(p.orderId || ''), from, toC)}`,
+        kind: 'restaurant_courier_share',
+        refType: 'order',
+        refId: String(p.orderId || ''),
+        postedBy: 'system',
+        postedRole: 'system',
+        legs: [{ account: fromAcc, dr: amount }, { account: settlementLedger.passengerCreditAccount(toC), cr: amount }],
+      }, {
+        walletLedgerType: 'restaurant_courier_share',
+        meta: { module: MODULE_ID, meters: Number(p.meters) || 0, fromTail: from.slice(-4), toTail: toC.slice(-4) },
+        assert: ({ accounts }) => {
+          const s = accounts.get(fromAcc);
+          if (s && s.next < 0) {
+            const e = new Error('COURIER_SHARE_INSUFFICIENT');
+            e.insufficient = true;
+            e.balance = s.prev;
+            throw e;
+          }
+        },
+        onCommit: (tx) => { tx.delete(pRef); },
+      });
+      if (r.idempotent) await pRef.delete();
+      log('courier_share', { orderId: p.orderId, result: r.idempotent ? 'already' : 'posted', amount });
+      return r.idempotent ? 'already' : 'posted';
+    } catch (e) {
+      const insufficient = !!(e && e.insufficient);
+      try {
+        await pRef.update({
+          status: insufficient ? 'insufficient_balance' : 'error', attempts: inc(1), lastAttemptAt: ts(),
+          lastError: insufficient ? 'COURIER_SHARE_INSUFFICIENT' : String((e && e.message) || e).slice(0, 160),
+        });
+      } catch (_) { /* niyat qoladi — jadval qayta uradi */ }
+      log('courier_share', {
+        orderId: p.orderId, result: insufficient ? 'insufficient' : 'failed',
+        errorCode: insufficient ? 'COURIER_SHARE_INSUFFICIENT' : 'COURIER_SHARE_FAILED', amount,
+      });
+      return insufficient ? 'insufficient' : 'failed';
+    }
+  }
+
+  async function settleCashShares(ids) {
+    for (const id of ids || []) await settleCashShare(id);
+  }
+
+  /** Jadval: o'tkazilmagan naqd ulushlar (hamyon yetmagan / xato) — har 5 daqiqa qayta. */
+  async function sweepCashShares() {
+    const snap = await db.collection(SHARE_PENDING).orderBy('createdAt').limit(200).get();
+    const out = { scanned: snap.size, posted: 0, insufficient: 0, failed: 0 };
+    for (const d of snap.docs) {
+      const r = await settleCashShare(d.id);
+      if (r === 'posted' || r === 'already') out.posted += 1;
+      else if (r === 'insufficient') out.insufficient += 1;
+      else out.failed += 1;
+    }
+    if (snap.size) log('courier_share_sweep', out);
+    return out;
+  }
+
+  exportsObj.restaurantCourierSharePendingSweep = functions.pubsub
+    .schedule('every 5 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => sweepCashShares());
 
   /**
    * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
@@ -2023,6 +2123,7 @@ function attachRestaurantOrders(exportsObj, deps) {
     if (out.done) return out.result;
     log('complete', { orderId, restaurantId: out.restaurantId, userId: courierId, result: outcome, walletPaid: out.result.walletPaid, durationMs: Date.now() - t0 });
     if (outcome === 'delivered') {
+      await settleCashShares(out.sharePendingIds);
       await notifyCustomer(out.customerUid, { title: '✅ Buyurtma yetkazildi', body: 'Yoqimli ishtaha!', orderId });
     } else {
       await notifyMembers(String(out.restaurantId), { title: 'Yetkazib bo\'lmadi', body: 'Kuryer buyurtmani yetkaza olmadi', orderId });
@@ -2078,7 +2179,8 @@ function attachRestaurantOrders(exportsObj, deps) {
           // Pul allaqachon yopilgan (idempotentlik hujjati bor), belgi esa qolib ketgan: tozalaymiz.
           t.update(ref, { ...customerConfirm.clearPatch(od), ...customerConfirm.confirmedPatch('received', marker.courierId) });
         }
-        return { status: RS.delivered };
+        const ids = out.done ? [] : (out.sharePendingIds || []);
+        return { status: RS.delivered, ...(ids.length ? { after: () => settleCashShares(ids) } : {}) };
       },
       // Mijoz «Олмоқчиман»: kuryer «yetkazilmadi» degan, mijoz esa olmoqchi — yetkazish davom etadi.
       reject: async (t, { ref, id, od, marker, step, customerId }) => {

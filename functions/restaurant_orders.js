@@ -2902,5 +2902,7 @@ module.exports = {
   ACCEPT_TIMEOUT_MIN, AUTO_PAUSE_AFTER_TIMEOUTS, AUTO_PAUSE_MIN,
   STRIKES_FOR_PREPAY_ONLY, PREPAY_ONLY_DAYS, PICKUP_CODE_ATTEMPTS,
   EARNINGS_ACCOUNT, MODULE_ID,
+  // «Yetkazilmadi» sabablari — boshqa modullar (delivery_failed.js) ham shuni ishlatadi (7-qoida).
+  FAIL_REASONS,
   computeCourierShares, HANDOVER_TTL_MIN, RETURN_SEARCH_MIN, HANDOVER_CODE_ATTEMPTS,
 };

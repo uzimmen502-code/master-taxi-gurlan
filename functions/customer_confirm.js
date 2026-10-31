@@ -17,6 +17,9 @@
  *                 handover_return   (courierMarkCarpetDelivered)
  *   agro       -> handover_pickup   (courierMarkAgroPickedUp)
  *   collection -> finalize          (courierFinalizeCollection)
+ *   carpet|agro|collection|order -> delivery_failed (courierReportDeliveryFailed, delivery_failed.js) —
+ *                                   MAJBURIY va rad etiladigan; `order` = non/bozor (`orders`, faqat shu qadam,
+ *                                   sozlama bosqichi yo'q). Javob bo'lmasa qaror sotuvchi/admin'ga (ega 2026-10-31).
  *
  * SOZLAMA (faqat server): `server_config/customer_confirm`
  *   { modules: { restaurant|carpet|agro|collection: { stage: 'off'|'internal'|'public' } },
@@ -55,23 +58,33 @@
 const i18n = require('./notif_i18n');
 
 const MODULES = Object.freeze(['restaurant', 'carpet', 'agro', 'collection']);
+/**
+ * Faqat MAJBURIY qadamli modullar (`server_config` bosqichi YO'Q, sozlama hujjatiga yozilmaydi):
+ *   order — non/bozor buyurtmasi (`orders`, type bread|platform) «yetkazilmadi» (ega qarori 2026-10-31,
+ *           delivery_failed.js). Bu modulda boshqa qadam yo'q.
+ */
+const MANDATORY_ONLY_MODULES = Object.freeze(['order']);
+const ALL_MODULES = Object.freeze([...MODULES, ...MANDATORY_ONLY_MODULES]);
 const STAGES = Object.freeze(['off', 'internal', 'public']);
 const CONFIG_DOC = Object.freeze(['server_config', 'customer_confirm']);
 const MARKER_DOC = Object.freeze(['module_config', 'customer_confirm']);
 const STEPS = Object.freeze({
   restaurant: Object.freeze(['received', 'delivery_failed']),
-  carpet: Object.freeze(['handover_pickup', 'handover_return']),
-  agro: Object.freeze(['handover_pickup']),
-  collection: Object.freeze(['finalize']),
+  // `delivery_failed` gilam/agro/yig'ish/non-bozorda — ega qarori 2026-10-31 (delivery_failed.js).
+  carpet: Object.freeze(['handover_pickup', 'handover_return', 'delivery_failed']),
+  agro: Object.freeze(['handover_pickup', 'delivery_failed']),
+  collection: Object.freeze(['finalize', 'delivery_failed']),
+  order: Object.freeze(['delivery_failed']),
 });
 /**
  * «Етказилмади» (ega qarori 2026-10-31, C-2): HAMMA mijoz uchun MAJBURIY — `server_config` dagi
  * modul bosqichiga (off/internal/public) BOG'LIQ EMAS. Mijoz rad ham eta oladi («Олмоқчиман»).
- * Hozircha kuryerning «yetkazilmadi» yo'li FAQAT restoranda bor (nonda, gilamda, agroda va
- * yig'ishda bunday natija serverda yo'q) — boshqa modullarga qo'shish alohida qaror.
+ * Restoran — restaurant_orders.js; non/bozor, gilam, agro, yig'ish — delivery_failed.js
+ * (ega «тавсияларга розиман», 2026-10-31).
  */
-const MANDATORY_STEPS = Object.freeze({ restaurant: Object.freeze(['delivery_failed']) });
-const REJECTABLE_STEPS = Object.freeze({ restaurant: Object.freeze(['delivery_failed']) });
+const DF = Object.freeze(['delivery_failed']);
+const MANDATORY_STEPS = Object.freeze({ restaurant: DF, carpet: DF, agro: DF, collection: DF, order: DF });
+const REJECTABLE_STEPS = Object.freeze({ restaurant: DF, carpet: DF, agro: DF, collection: DF, order: DF });
 const DECISIONS = Object.freeze(['confirm', 'reject']);
 /** Mijoz javob bermasa — shuncha daqiqadan keyin qaror restoran/sotuvchiga o'tadi (ega: 15, admin o'zgartiradi). */
 const FAILED_TIMEOUT_MIN_DEFAULT = 15;
@@ -223,12 +236,37 @@ function createCustomerConfirm(deps) {
    * }
    */
   function registerHandler(moduleKey, handler) {
-    if (!MODULES.includes(moduleKey)) throw new Error(`customer_confirm: unknown module ${moduleKey}`);
+    if (!ALL_MODULES.includes(moduleKey)) throw new Error(`customer_confirm: unknown module ${moduleKey}`);
     for (const k of ['collection', 'phoneField', 'customerPhoneOf', 'statusOf', 'describe', 'confirm']) {
       if (!handler || handler[k] === undefined) throw new Error(`customer_confirm: handler.${k} missing (${moduleKey})`);
     }
     handlers.set(moduleKey, handler);
   }
+
+  /**
+   * Bitta QADAM uchun alohida yadro (modulning asosiy yadrosi o'zgarmaydi):
+   * `{ describe(od, marker), confirm(t, …), reject?(t, …) }`. Masalan gilam/agro/yig'ishdagi
+   * «yetkazilmadi» — delivery_failed.js; mavjud `handover_*`/`finalize` yadrolari index.js da qoladi.
+   * Telefon/kolleksiya/holat — modulning asosiy yadrosidan.
+   */
+  const stepHandlers = new Map();
+  function registerStepHandler(moduleKey, step, handler) {
+    if (!ALL_MODULES.includes(moduleKey) || !(STEPS[moduleKey] || []).includes(step)) {
+      throw new Error(`customer_confirm: unknown step ${moduleKey}/${step}`);
+    }
+    for (const k of ['describe', 'confirm']) {
+      if (!handler || typeof handler[k] !== 'function') throw new Error(`customer_confirm: stepHandler.${k} missing (${moduleKey}/${step})`);
+    }
+    stepHandlers.set(`${moduleKey}/${step}`, handler);
+  }
+  /** Shu qadamning yadrosi: alohida qadam yadrosi bo'lsa o'sha, aks holda modulniki. */
+  const coreFor = (moduleKey, step) => stepHandlers.get(`${moduleKey}/${step}`) || handlers.get(moduleKey);
+  /**
+   * Belgida `module` bo'lsa (delivery_failed.js yozadi) — faqat o'sha modul uni ko'radi/tasdiqlaydi.
+   * Masalan non buyurtmasi ham `orders` da: restoran yadrosi uning belgisini «o'zimniki» deb olmasin.
+   * Restoran belgilarida `module` yo'q — avvalgi xatti-harakat o'zgarmaydi.
+   */
+  const markerOwnedBy = (marker, moduleKey) => !marker || !marker.module || marker.module === moduleKey;
 
   // ── Kuryer tomoni yordamchilari ────────────────────────────────────────
   async function isGated(moduleKey, customerPhone) {
@@ -296,8 +334,9 @@ function createCustomerConfirm(deps) {
     log({ action: 'customerConfirmRequest', module: moduleKey, id: String(id), step, result: created ? 'requested' : 'already_requested' });
     if (!created) return;
     const h = handlers.get(moduleKey);
+    const core = coreFor(moduleKey, step);
     let described = null;
-    try { described = h ? h.describe(od, { step, ...(markerLike || {}) }) : null; } catch (_) { described = null; }
+    try { described = core ? core.describe(od, { step, ...(markerLike || {}) }) : null; } catch (_) { described = null; }
     await notifyRequest(moduleKey, id, step, h ? h.customerPhoneOf(od) : '', described);
   }
 
@@ -323,7 +362,7 @@ function createCustomerConfirm(deps) {
     // `decision` yo'q (eski ilova) = 'confirm'. 'reject' faqat REJECTABLE_STEPS uchun.
     const decisionRaw = data && data.decision;
     const decision = decisionRaw === undefined || decisionRaw === null || decisionRaw === '' ? 'confirm' : decisionRaw;
-    if (!MODULES.includes(moduleKey) || !id || id.includes('/') || !STEPS[moduleKey].includes(step)
+    if (!ALL_MODULES.includes(moduleKey) || !id || id.includes('/') || !STEPS[moduleKey].includes(step)
         || !DECISIONS.includes(decision)
         || (decision === 'reject' && !(REJECTABLE_STEPS[moduleKey] || []).includes(step))) {
       throw err('invalid-argument', 'CONFIRM_ARGS_INVALID');
@@ -331,8 +370,9 @@ function createCustomerConfirm(deps) {
     // Ixtiyoriy: mijoz ko'rgan so'rov vaqti — boshqa (yangiroq) so'rovga eski tugma ta'sir qilmasin.
     const expectMs = Number.isInteger(data && data.requestedAtMs) ? data.requestedAtMs : null;
     const h = handlers.get(moduleKey);
-    if (!h) throw new HttpsError('internal', 'CONFIRM_HANDLER_MISSING', { reason: 'CONFIRM_HANDLER_MISSING' });
-    if (decision === 'reject' && typeof h.reject !== 'function') {
+    const core = coreFor(moduleKey, step);
+    if (!h || !core) throw new HttpsError('internal', 'CONFIRM_HANDLER_MISSING', { reason: 'CONFIRM_HANDLER_MISSING' });
+    if (decision === 'reject' && typeof core.reject !== 'function') {
       throw new HttpsError('internal', 'CONFIRM_HANDLER_MISSING', { reason: 'CONFIRM_HANDLER_MISSING' });
     }
     const ref = db.collection(h.collection).doc(id);
@@ -344,7 +384,7 @@ function createCustomerConfirm(deps) {
         const od = snap.data() || {};
         if (canon(h.customerPhoneOf(od)) !== uid) throw err('permission-denied', 'NOT_YOUR_ORDER');
         const marker = od[MARKER_FIELD];
-        if (!marker || marker.step !== step) {
+        if (!marker || marker.step !== step || !markerOwnedBy(marker, moduleKey)) {
           const doneField = decision === 'reject' ? REJECTED_FIELD : DONE_FIELD;
           const done = od[doneField];
           if (done && typeof done === 'object' && done[step]) return { idempotent: true, status: h.statusOf(od) };
@@ -357,8 +397,8 @@ function createCustomerConfirm(deps) {
         let r;
         try {
           r = decision === 'reject'
-            ? await h.reject(t, { ref, id, od, marker, step, customerId: uid })
-            : await h.confirm(t, { ref, id, od, marker, step });
+            ? await core.reject(t, { ref, id, od, marker, step, customerId: uid })
+            : await core.confirm(t, { ref, id, od, marker, step, customerId: uid });
         } catch (e) {
           if (e instanceof HttpsError && STATE_ERROR_CODES.includes(e.code)) {
             const s = new Error('STATE_CHANGED');
@@ -429,9 +469,9 @@ function createCustomerConfirm(deps) {
     const cfg = await reader.get();
     const lang = await i18n.langOfPhone(db, uid);
     const forms = uid.length === 12 && uid.startsWith('998') ? [uid, uid.slice(3)] : [uid];
-    const perModule = await Promise.all(MODULES.map(async (moduleKey) => {
+    const perModule = await Promise.all(ALL_MODULES.map(async (moduleKey) => {
       const h = handlers.get(moduleKey);
-      const gated = isGatedBy(cfg, moduleKey, uid, canon);
+      const gated = MODULES.includes(moduleKey) && isGatedBy(cfg, moduleKey, uid, canon);
       // Majburiy qadamlar («yetkazilmadi») modul o'chiq bo'lsa ham ko'rsatiladi.
       if (!h || (!gated && !(MANDATORY_STEPS[moduleKey] || []).length)) return [];
       // Faqat tenglik filtrlari (telefon shakllari x belgi) — kompozit indeks kerak emas.
@@ -448,10 +488,10 @@ function createCustomerConfirm(deps) {
           seen.add(doc.id);
           const od = doc.data() || {};
           const marker = od[MARKER_FIELD];
-          if (!marker || !STEPS[moduleKey].includes(marker.step)) continue;
+          if (!marker || !STEPS[moduleKey].includes(marker.step) || !markerOwnedBy(marker, moduleKey)) continue;
           if (!gated && !isMandatoryStep(moduleKey, marker.step)) continue;
           if (canon(h.customerPhoneOf(od)) !== uid) continue;
-          const d = h.describe(od, marker);
+          const d = coreFor(moduleKey, marker.step).describe(od, marker);
           if (!d) continue;
           const r = i18n.render(d.key, lang, d.params || {});
           out.push({
@@ -607,6 +647,7 @@ function createCustomerConfirm(deps) {
   return {
     attach,
     registerHandler,
+    registerStepHandler,
     isGated,
     getConfig: () => reader.get(),
     /** «Yetkazilmadi»: mijoz javobi uchun daqiqa (admin sozlamasi; standart 15). */
@@ -624,6 +665,8 @@ function createCustomerConfirm(deps) {
 
 module.exports = {
   MODULES,
+  MANDATORY_ONLY_MODULES,
+  ALL_MODULES,
   STAGES,
   STEPS,
   MANDATORY_STEPS,

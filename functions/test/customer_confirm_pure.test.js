@@ -73,7 +73,9 @@ async function main() {
   });
   await check('P6 qadamlar jadvali: har modulning qadamlari', () => {
     assert.deepStrictEqual(cc.STEPS, {
-      restaurant: ['received', 'delivery_failed'], carpet: ['handover_pickup', 'handover_return'], agro: ['handover_pickup'], collection: ['finalize'],
+      // «Етказилмади» gilam/sut/yig'ish/non-bozorda ham (ega qarorlari 2026-10-31, delivery_failed.js).
+      restaurant: ['received', 'delivery_failed'], carpet: ['handover_pickup', 'handover_return', 'delivery_failed'],
+      agro: ['handover_pickup', 'delivery_failed'], collection: ['finalize', 'delivery_failed'], order: ['delivery_failed'],
     });
   });
 
@@ -130,7 +132,11 @@ async function main() {
   });
 
   // ── Matnlar ───────────────────────────────────────────────────────────
-  const KEYS = ['confirm_restaurant_received', 'confirm_carpet_pickup', 'confirm_carpet_return', 'confirm_agro_pickup', 'confirm_collection_finalize'];
+  const KEYS = ['confirm_restaurant_received', 'confirm_carpet_pickup', 'confirm_carpet_return', 'confirm_agro_pickup', 'confirm_collection_finalize',
+    // «Етказилмади» — boshqa turlar (2026-10-31)
+    'confirm_order_delivery_failed', 'confirm_carpet_pickup_failed', 'confirm_carpet_return_failed', 'confirm_agro_pickup_failed',
+    'confirm_collection_failed', 'delivery_failed_decide', 'customer_order_delivery_failed_refund', 'customer_pickup_failed_final',
+    'customer_carpet_return_failed_final', 'customer_collection_failed_final'];
   await check('P9 matnlar: har kalit uch tilda, bo\'sh emas, ichki atamalarsiz, ўринбосарлар to\'ldirilganda { } qolmaydi', () => {
     for (const key of KEYS) {
       assert.ok(i18n.MESSAGES[key], `kalit yo'q: ${key}`);
@@ -158,8 +164,16 @@ async function main() {
     assert.strictEqual(cc.normalizeConfig({ failedTimeoutMin: 45 }, canon).failedTimeoutMin, 45);
     assert.strictEqual(cc.isMandatoryStep('restaurant', 'delivery_failed'), true);
     assert.strictEqual(cc.isMandatoryStep('restaurant', 'received'), false);
-    assert.strictEqual(cc.isMandatoryStep('carpet', 'delivery_failed'), false);
-    assert.deepStrictEqual(cc.REJECTABLE_STEPS, { restaurant: ['delivery_failed'] });
+    // Ega qarorlari 2026-10-31: «yetkazilmadi» hamma kuryer turida majburiy va rad etiladigan; boshqa qadamlar — yo'q.
+    for (const m of ['carpet', 'agro', 'collection', 'order']) {
+      assert.strictEqual(cc.isMandatoryStep(m, 'delivery_failed'), true, m);
+    }
+    assert.strictEqual(cc.isMandatoryStep('carpet', 'handover_pickup'), false);
+    assert.strictEqual(cc.isMandatoryStep('collection', 'finalize'), false);
+    const df = ['delivery_failed'];
+    assert.deepStrictEqual(cc.REJECTABLE_STEPS, { restaurant: df, carpet: df, agro: df, collection: df, order: df });
+    assert.deepStrictEqual(cc.MODULES, ['restaurant', 'carpet', 'agro', 'collection'], 'sozlama modullari o\'zgarmadi');
+    assert.deepStrictEqual(cc.MANDATORY_ONLY_MODULES, ['order']);
   });
 
   const passed = results.filter(Boolean).length;

@@ -93,6 +93,8 @@ const customerConfirm = createCustomerConfirm({
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
 });
 customerConfirm.attach(exports);
+// «Етказилмади» (нон/бозор, гилам, сут, йиғиш) — ulanish pastda (agro bo'limidan keyin: CARPET_RELEASE_EDGES).
+const deliveryFailedLib = require('./delivery_failed');
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
 // `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.
@@ -9011,7 +9013,16 @@ exports.adminCreateCollectionTask = functions.https.onCall(async (data, context)
     }
     const submission = submissionSnap.data() || {};
 
-    if (submission.collectionTaskId || submission.inCollection === true) {
+    // «Етказилмади» (эга, 2026-10-31): боғлиқ вазифа `failed` бўлса (inCollection ўчирилган) —
+    // шу ариза бўйича ЯНГИ вазифа очиш мумкин. Акс ҳолда аввалгидек рад.
+    const linkedTaskFailed = async (sub, getter) => {
+      const linkedId = String(sub.collectionTaskId || '').trim();
+      if (!linkedId || linkedId.includes('/') || sub.inCollection === true) return false;
+      const ls = await getter(db.collection('collection_tasks').doc(linkedId));
+      return ls.exists && String((ls.data() || {}).status || '') === 'failed';
+    };
+    if (submission.inCollection === true
+        || (submission.collectionTaskId && !(await linkedTaskFailed(submission, (r) => r.get())))) {
       throw new functions.https.HttpsError(
         'failed-precondition',
         'submission already in collection',
@@ -9067,7 +9078,8 @@ exports.adminCreateCollectionTask = functions.https.onCall(async (data, context)
         throw new functions.https.HttpsError('not-found', 'submission not found');
       }
       const fresh = freshSubmission.data() || {};
-      if (fresh.collectionTaskId || fresh.inCollection === true) {
+      if (fresh.inCollection === true
+          || (fresh.collectionTaskId && !(await linkedTaskFailed(fresh, (r) => t.get(r))))) {
         throw new functions.https.HttpsError(
           'failed-precondition',
           'submission already in collection',
@@ -9161,30 +9173,36 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
     }
 
     const taskRef = db.collection('collection_tasks').doc(taskId);
-    const taskSnap = await taskRef.get();
-    if (!taskSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'task not found');
-    }
-    const task = taskSnap.data() || {};
-
-    if (String(task.courierId || '') !== courierId) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your task');
-    }
-    if (!['assigned', 'collecting'].includes(String(task.status || ''))) {
-      throw new functions.https.HttpsError('failed-precondition', 'task not active');
-    }
-    if (task.arrivedAt) {
+    // Ўқиш → текширув → ёзув БИТТА транзакцияда (22-қоида): «етказилмади» якуни (`failed`,
+    // delivery_failed.js) ёки параллел иккинчи чақирув билан пойга бўлмасин. Текширувлар ва
+    // хато матнлари аввалгидек.
+    const outcome = await db.runTransaction(async (t) => {
+      const taskSnap = await t.get(taskRef);
+      if (!taskSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'task not found');
+      }
+      const cur = taskSnap.data() || {};
+      if (String(cur.courierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your task');
+      }
+      if (!['assigned', 'collecting'].includes(String(cur.status || ''))) {
+        throw new functions.https.HttpsError('failed-precondition', 'task not active');
+      }
+      if (cur.arrivedAt) return { idempotent: true, task: cur };
+      const patch = {
+        arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (String(cur.status || '') === 'assigned') {
+        patch.status = 'collecting';
+      }
+      t.update(taskRef, patch);
+      return { idempotent: false, task: cur };
+    });
+    if (outcome.idempotent) {
       return { ok: true, idempotent: true, taskId };
     }
-
-    const patch = {
-      arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    if (String(task.status || '') === 'assigned') {
-      patch.status = 'collecting';
-    }
-    await taskRef.update(patch);
+    const task = outcome.task;
 
     try {
       const customerPhone = task.customerPhone || task.customerUid || '';
@@ -20272,6 +20290,21 @@ async function listCourierServiceTasks(collection, specs, data, context) {
   };
 }
 
+/**
+ * «Етказилмади» кутиш ҳолати курьер рўйхатига (эга, 2026-10-31): курьер экрани «мижоз / админ жавобини
+ * кутяпмиз» блокини кўрсатади. Белги йўқ — ҳеч нарса қўшилмайди (эски жавоб шакли ўзгармайди).
+ */
+function deliveryFailedProjection(moduleKey, od) {
+  if (!deliveryFailedLib.isPending(moduleKey, od)) return {};
+  const m = od.awaitingCustomerConfirm || {};
+  return {
+    deliveryFailedPending: true,
+    deliveryFailedReason: strOrEmpty(m.failReason),
+    deliveryFailedEscalateAtMs: tsMillisOrNull(m.escalateAt),
+    deliveryFailedEscalated: od.deliveryFailedEscalatedAt != null,
+  };
+}
+
 const carpetCountOf = (od) => {
   const n = Number(od.carpetCount);
   return Number.isFinite(n) ? n : 0;
@@ -20299,6 +20332,7 @@ const CARPET_COURIER_LISTS = {
       customerPhone: strOrEmpty(od.customerPhone),
       pickupArrivedAtMs: tsMillisOrNull(od.pickupArrivedAt),
       returnArrivedAtMs: tsMillisOrNull(od.returnArrivedAt),
+      ...deliveryFailedProjection('carpet', od),
     }),
   },
 };
@@ -20766,6 +20800,7 @@ const AGRO_COURIER_LISTS = {
       customerPhone: strOrEmpty(od.customerPhone),
       note: strOrEmpty(od.note),
       arrivedAtMs: tsMillisOrNull(od.arrivedAt),
+      ...deliveryFailedProjection('agro', od),
     }),
   },
 };
@@ -20777,6 +20812,19 @@ const AGRO_COURIER_LISTS = {
  */
 exports.courierListAgroTasks = functions.https.onCall((data, context) =>
   listCourierServiceTasks('agro_pickup_orders', AGRO_COURIER_LISTS, data, context));
+
+// «Етказилмади» — нон/бозор, гилам, сут, йиғиш (эга қарорлари 2026-10-31; delivery_failed.js):
+// курьер хабари → мижоз тасдиғи/рад → муддатдан кейин сотувчи (нон) ёки админ қарори.
+// Бекор қилиш ядроси, гилам/сут release қирралари — шу ердаги ЯГОНА манбалардан (7-қоида).
+// Ресторан йўли (restaurant_orders.js) ўзгармайди.
+/** Сут: курьер вазифасини навбатга қайтариш қирраси (`adminSetAgroPickupStatus` B1 билан бир хил). */
+const AGRO_RELEASE_EDGE = Object.freeze({ to: 'accepted', courierField: 'pickupCourierId', arrivedField: 'arrivedAt' });
+deliveryFailedLib.attachDeliveryFailed(exports, {
+  functions, db, admin, callerPhone, canonicalUid, notifyUserInApp, customerConfirm, COURIER_AUTH_MODES,
+  get courierAuth() { return courierAuth; },
+  prepareOrderCancelInTx, commitOrderCancelInTx,
+  carpetReleaseEdges: CARPET_RELEASE_EDGES, agroReleaseEdge: AGRO_RELEASE_EDGE,
+});
 
 // --- Telegram Wallet Bot (Phase 0) -----------------------------
 const { attachTelegramWalletBot } = require('./telegram_wallet_bot');

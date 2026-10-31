@@ -67,6 +67,9 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'receipt_already_submitted': 'wholesale_order_err_receipt_already_submitted',
   'receipt_submitted': 'wholesale_order_err_receipt_submitted',
   'holder_name_invalid': 'wholesale_seller_card_err_holder',
+  'card_encryption_unavailable': 'wholesale_order_err_card_save_unavailable',
+  'card_decryption_unavailable': 'wholesale_order_err_card_read_unavailable',
+  'card_concurrent_update': 'wholesale_order_err_card_concurrent_update',
   'not_wholesale_seller': 'wholesale_order_err_not_wholesale_seller',
   'seller_not_approved': 'wholesale_order_err_seller_not_approved',
   // 3b курьер

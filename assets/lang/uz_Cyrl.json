@@ -4975,5 +4975,13 @@
   "wholesale_courier_refused_reason": "Сабаб (ихтиёрий)",
   "wholesale_courier_refused_done": "Қайд қилинди — қайтиш жўнатмаси очилади",
   "wholesale_courier_return_code_btn": "Қайтиш учун топшириш коди",
-  "wholesale_courier_return_code_hint": "Посилка сизда: шу кодни «Посилкани олдим» ойнасига киритинг."
+  "wholesale_courier_return_code_hint": "Посилка сизда: шу кодни «Посилкани олдим» ойнасига киритинг.",
+  "wholesale_order_status_lost": "Посилка йўқолди",
+  "wholesale_order_lost_refunded": "Посилка йўқолди — товар пули ҳамёнингизга қайтарилди: {amount}",
+  "wholesale_order_lost_card_unpaid": "Посилка йўқолди. Сиздан пул олинмайди.",
+  "wholesale_order_lost_review": "Посилка йўқолди — админ кўриб чиқмоқда",
+  "wholesale_order_lost_seller": "Посилка йўқолди — товар қиймати курьердан тўланади",
+  "wholesale_order_err_card_save_unavailable": "Картани ҳозир сақлаб бўлмади. Бироздан кейин қайта уриниб кўринг.",
+  "wholesale_order_err_card_read_unavailable": "Карта маълумотини ҳозир олиб бўлмади. Бироздан кейин қайта уриниб кўринг.",
+  "wholesale_order_err_card_concurrent_update": "Карта бир вақтда ўзгартирилди. Қайта уриниб кўринг."
 }

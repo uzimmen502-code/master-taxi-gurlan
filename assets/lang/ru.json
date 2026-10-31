@@ -4975,5 +4975,13 @@
   "wholesale_courier_refused_reason": "Причина (необязательно)",
   "wholesale_courier_refused_done": "Отмечено — будет создано возвратное отправление",
   "wholesale_courier_return_code_btn": "Код передачи для возврата",
-  "wholesale_courier_return_code_hint": "Посылка у вас: введите этот код в окне «Посылку забрал»."
+  "wholesale_courier_return_code_hint": "Посылка у вас: введите этот код в окне «Посылку забрал».",
+  "wholesale_order_status_lost": "Посылка утеряна",
+  "wholesale_order_lost_refunded": "Посылка утеряна — стоимость товара возвращена в ваш кошелёк: {amount}",
+  "wholesale_order_lost_card_unpaid": "Посылка утеряна. С вас деньги не взимаются.",
+  "wholesale_order_lost_review": "Посылка утеряна — рассматривает администратор",
+  "wholesale_order_lost_seller": "Посылка утеряна — стоимость товара возместит курьер",
+  "wholesale_order_err_card_save_unavailable": "Сейчас не удалось сохранить карту. Попробуйте чуть позже.",
+  "wholesale_order_err_card_read_unavailable": "Сейчас не удалось получить данные карты. Попробуйте чуть позже.",
+  "wholesale_order_err_card_concurrent_update": "Карта была изменена одновременно другим запросом. Попробуйте ещё раз."
 }

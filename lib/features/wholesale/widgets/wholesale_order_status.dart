@@ -16,7 +16,8 @@ class WholesaleOrderStatusChip extends StatelessWidget {
         WholesaleOrderStatus.placed => 'pending',
         WholesaleOrderStatus.inDelivery || WholesaleOrderStatus.returning => 'in_transit',
         WholesaleOrderStatus.delivered => 'delivered',
-        WholesaleOrderStatus.refused || WholesaleOrderStatus.paymentDispute => 'disputed',
+        WholesaleOrderStatus.refused || WholesaleOrderStatus.paymentDispute || WholesaleOrderStatus.lost =>
+          'disputed',
         _ => 'other',
       };
 
@@ -69,6 +70,7 @@ List<WholesaleTimelineStep> wholesaleTimelineSteps(String status) {
         st(WholesaleOrderStatus.returning, done),
         st(WholesaleOrderStatus.returned, done),
       ],
+    WholesaleOrderStatus.lost => [st(s, done), st(d, done), st(WholesaleOrderStatus.lost, bad)],
     WholesaleOrderStatus.paymentDispute => [
         st(s, done),
         st(d, done),

@@ -181,6 +181,9 @@ void main() {
         'seller_not_approved',
         'not_last_leg_courier',
         'parcel_not_in_hand',
+        'card_encryption_unavailable',
+        'card_decryption_unavailable',
+        'card_concurrent_update',
       ]) {
         final k = wholesaleOrderErrorKey(WholesaleOrderException('failed-precondition', r));
         expect(k, isNot('wholesale_order_err_generic'), reason: r);

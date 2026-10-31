@@ -8,7 +8,7 @@
  * эга қарорлари):
  *
  * - `onYukLocalDriverWrite` (триггер): янги эълон муддати — эганинг биринчи
- *   эълони 60 кун, кейингилари 10 кун (сервер вақтидан, клиент ёзгани
+ *   эълони 60 кун, кейингилари 30 кун (сервер вақтидан, клиент ёзгани
  *   устидан); `phone` = эга рақами; йўқ `districtId` → `''` (ҳудудсизлар
  *   аниқ сўров билан келади); ҳисоб `yuk_local_created_log` га (намуналарни
  *   ўчириш учун).
@@ -33,12 +33,15 @@ const DEMO_REFRESH_BEFORE_MS = 30 * DAY_MS;
 
 // Эга қарорлари, 2026-10-31 (CLAUDE.md 46-банд — docs/yuk_local_audit_fix_2026-10-31_uz.md).
 const FIRST_LISTING_TTL_MS = 60 * DAY_MS;
-const NEXT_LISTING_TTL_MS = 10 * DAY_MS;
+// Эга, 2026-10-31 (кейинроқ): кейинги эълонлар 10 → 30 кун.
+const NEXT_LISTING_TTL_MS = 30 * DAY_MS;
 const RENEW_TTL_MS = 30 * DAY_MS;
 const RENEW_WINDOW_MS = 3 * DAY_MS;
 const EXPIRED_DELETE_AFTER_MS = 30 * DAY_MS;
 const REMIND_DAYS = [3, 2, 1];
 const DEMO_DELETE_AFTER_REAL = 10;
+// Эга, 2026-10-31: бир рақамга 10 тагача ФАОЛ эълон (муддати ўтмаган, намуна эмас).
+const MAX_ACTIVE_LISTINGS = 10;
 
 const COL = 'yuk_local_drivers';
 /** Эски клиент белгиси (`everPublished`) — фақат тарихни аниқлаш учун ўқилади. */
@@ -70,6 +73,13 @@ function daysLeft(expiresMs, nowMs) {
   return Math.ceil((expiresMs - nowMs) / DAY_MS);
 }
 
+/** Фаол эълон: намуна эмас, муддати йўқ (эски) ёки ҳали ўтмаган. */
+function isActiveListing(v, nowMs) {
+  if (!v || v.isDemo === true) return false;
+  const e = ms(v.expiresAt);
+  return !e || e > nowMs;
+}
+
 function log(fields) {
   console.log(JSON.stringify({ module: 'yuk_local', ...fields }));
 }
@@ -99,6 +109,8 @@ function createYukLocal(deps) {
 
     let first = null;
     if (created && ownerId.length >= 9) {
+      const limit = await enforceActiveLimit(id, ownerId, d);
+      if (limit) return limit;
       const ref = db.collection(COL).doc(id);
       const createdMs = after.createTime && typeof after.createTime.toMillis === 'function'
         ? after.createTime.toMillis()
@@ -156,6 +168,42 @@ function createYukLocal(deps) {
     return { action: 'updated', patch };
   }
 
+  /**
+   * 10 та фаол эълон чегараси. Эганинг фаол эълонлари яратилган вақт бўйича
+   * тартибланади — шу эълон 11-ўринда ёки ундан кейин бўлса ўчирилади.
+   * Тартиб детерминистик: икки эълон бир вақтда берилса ҳам иккала триггер
+   * бир хил натижага келади (фақат кейингиси ўчади). Қабул қилинса — null.
+   */
+  async function enforceActiveLimit(id, ownerId, d, nowMs = Date.now()) {
+    const snap = await db.collection(COL).where('ownerId', '==', ownerId).get();
+    if (!snap.docs.some((x) => x.id === id)) {
+      return { action: 'gone' }; // retry: аввал ўчирилган
+    }
+    const active = snap.docs
+      .filter((x) => isActiveListing(x.data(), nowMs))
+      .sort((a, b) => (ms(a.createTime) - ms(b.createTime)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const idx = active.findIndex((x) => x.id === id);
+    if (idx < MAX_ACTIVE_LISTINGS) return null;
+    await db.collection(COL).doc(id).delete();
+    const plate = String(d.plateNumber || '').trim();
+    try {
+      // Ҳужжат ID'си эълонга боғлиқ — retry'да хабар такрорланмайди.
+      await db.collection('notifications').doc(`yuk_local_limit_${id}`).create({
+        targetPhone: ownerId,
+        title: 'Эълон жойланмади',
+        body: `«Туман ичида юк» эълонингиз${plate ? ` (${plate})` : ''} жойланмади: бир рақамга ${MAX_ACTIVE_LISTINGS} тагача фаол эълон рухсат этилади. Янгисини бериш учун эскисини ўчиринг ёки муддати тугашини кутинг.`,
+        sent: false,
+        type: 'yuk_local_limit',
+        screen: 'yuk_local',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      if (e.code !== 6 && !/ALREADY_EXISTS/i.test(String(e.message))) throw e;
+    }
+    log({ action: 'listingRejected', listingId: id, result: 'rejected', errorCode: 'YUK_ACTIVE_LIMIT', activeCount: active.length });
+    return { action: 'rejected_limit', code: 'YUK_ACTIVE_LIMIT', activeCount: active.length };
+  }
+
   /** 10 та ҳақиқий эълондан кейин намуналар ўчирилади (бир марта). */
   async function maybeDeleteDemos() {
     const stateRef = db.doc(DEMO_STATE_DOC);
@@ -204,6 +252,14 @@ function createYukLocal(deps) {
       if (exp && exp - nowMs > RENEW_WINDOW_MS) {
         // Аллақачон узайтирилган (қайта босилди) ёки ҳали эрта — ўзгариш йўқ.
         return { ok: false, code: 'YUK_RENEW_TOO_EARLY', expiresAtMs: exp };
+      }
+      // Муддати ўтганини узайтириш фаоллар сонини оширади — чегара (10).
+      if (exp && exp <= nowMs) {
+        const mine = await tx.get(db.collection(COL).where('ownerId', '==', canonicalId(d.ownerId)));
+        const activeOthers = mine.docs.filter((x) => x.id !== id && isActiveListing(x.data(), nowMs)).length;
+        if (activeOthers >= MAX_ACTIVE_LISTINGS) {
+          return { ok: false, code: 'YUK_ACTIVE_LIMIT', activeCount: activeOthers };
+        }
       }
       const until = nowMs + RENEW_TTL_MS;
       tx.update(ref, {
@@ -348,7 +404,7 @@ function attachYukLocal(exportsObj, deps) {
     if (r.ok) return { ok: true, expiresAtMs: r.expiresAtMs };
     const status = r.code === 'YUK_LISTING_NOT_FOUND' ? 'not-found'
       : r.code === 'YUK_RENEW_NOT_OWNER' ? 'permission-denied'
-        : r.code === 'YUK_RENEW_TOO_EARLY' ? 'failed-precondition'
+        : (r.code === 'YUK_RENEW_TOO_EARLY' || r.code === 'YUK_ACTIVE_LIMIT') ? 'failed-precondition'
           : 'invalid-argument';
     throw new functions.https.HttpsError(status, r.code, { code: r.code, expiresAtMs: r.expiresAtMs || 0 });
   });

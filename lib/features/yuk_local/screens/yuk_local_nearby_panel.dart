@@ -129,6 +129,14 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   /// [YukLocalNearbyPanel.highlightListingId] детали бир марта очилсин.
   bool _highlightDone = false;
 
+  /// Ўз эълонларининг биринчи жавоби келди (ёки хато) — 10 та фаол эълон
+  /// чегарасини текширишдан олдин кутилади («＋» экран очилиши билан варақ очади).
+  final _mineLoaded = Completer<void>();
+
+  void _markMineLoaded() {
+    if (!_mineLoaded.isCompleted) _mineLoaded.complete();
+  }
+
   Future<void> _bootstrap() async {
     if (_isGuest) {
       _loadingList = false;
@@ -145,10 +153,12 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
           _mine = list;
           _recompute();
         });
+        _markMineLoaded();
         _maybeOpenHighlight();
       },
       // Ўз эълонлари ўқилмаса ҳам оқим «unhandled» хато бермасин (рўйхат бўш қолади).
       onError: (Object e, StackTrace st) {
+        _markMineLoaded();
         debugPrint(jsonEncode({
           'action': 'yukLocalWatchMine',
           'result': 'error',
@@ -451,6 +461,21 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
       _snack(context.tr('yuk_need_phone'));
       return;
     }
+    if (initial == null) {
+      // 10 та фаол эълон чегараси (эга 2026-10-31). Сервер ҳам текширади —
+      // бу ерда форма тўлдирилгандан кейин эълон «йўқолиб» қолмаслиги учун.
+      try {
+        await _mineLoaded.future.timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Вақт тугади — сервер барибир текширади.
+      }
+      if (!mounted) return;
+      if (!YukLocalSchedule.canAddListing(_mine.map((d) => d.expiresAt))) {
+        _snack(context.tr('yuk_local_limit_reached').replaceAll(
+            '{n}', '${YukLocalSchedule.maxActiveListings}'));
+        return;
+      }
+    }
     final ok = await showYukLocalDriverSheet(
       context: context,
       ownerId: widget.ownerId,
@@ -495,11 +520,12 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
         'errorCode': reason.isNotEmpty ? reason : 'YUK_LOCAL_RENEW_$code',
       }));
       if (!mounted) return;
-      _snack(context.tr(
-        reason == 'YUK_RENEW_TOO_EARLY'
-            ? 'yuk_local_renew_too_early'
-            : 'yuk_local_renew_fail',
-      ));
+      _snack(switch (reason) {
+        'YUK_RENEW_TOO_EARLY' => context.tr('yuk_local_renew_too_early'),
+        'YUK_ACTIVE_LIMIT' => context.tr('yuk_local_limit_reached').replaceAll(
+            '{n}', '${YukLocalSchedule.maxActiveListings}'),
+        _ => context.tr('yuk_local_renew_fail'),
+      });
     }
   }
 

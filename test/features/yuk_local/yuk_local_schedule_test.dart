@@ -64,9 +64,32 @@ void main() {
       expect(YukLocalSchedule.timeOfDayToMinutes(8, 15), 495);
     });
 
-    test('TTL: биринчи эълон 60 кун, кейингилари 10 кун', () {
+    test('TTL: биринчи эълон 60 кун, кейингилари 30 кун (эга 2026-10-31)', () {
       expect(YukLocalSchedule.firstListingTtl, const Duration(days: 60));
-      expect(YukLocalSchedule.nextListingTtl, const Duration(days: 10));
+      expect(YukLocalSchedule.nextListingTtl, const Duration(days: 30));
+    });
+  });
+
+  group('YukLocalSchedule — 10 та фаол эълон чегараси (эга 2026-10-31)', () {
+    final now = DateTime(2026, 11, 1, 10);
+    List<DateTime?> active(int n) =>
+        List.generate(n, (_) => now.add(const Duration(days: 5)));
+
+    test('9 та фаол — яна бериш мумкин; 10 та — йўқ', () {
+      expect(YukLocalSchedule.canAddListing(active(9), now: now), isTrue);
+      expect(YukLocalSchedule.canAddListing(active(10), now: now), isFalse);
+    });
+    test('муддати ўтганлар саналмайди', () {
+      final list = [
+        ...active(9),
+        now.subtract(const Duration(days: 1)),
+        now.subtract(const Duration(minutes: 1)),
+      ];
+      expect(YukLocalSchedule.activeCount(list, now: now), 9);
+      expect(YukLocalSchedule.canAddListing(list, now: now), isTrue);
+    });
+    test('муддатсиз эски эълон фаол ҳисобланади', () {
+      expect(YukLocalSchedule.activeCount([...active(9), null], now: now), 10);
     });
   });
 

@@ -84,6 +84,10 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'decision_not_yet': 'wholesale_df_err_not_yet',
   'not_decider': 'wholesale_order_err_not_party',
   'reason_invalid': 'wholesale_order_err_generic',
+  // Ҳамён буюртмаси «етказилмади» (2026-11-01): аниқ сабаб шарт («бошқа» йўқ).
+  'reason_not_allowed_wallet': 'wholesale_courier_failed_err_reason',
+  'reason_required': 'wholesale_courier_failed_err_reason',
+  'wallet_payment_state': 'wholesale_df_err_state',
   'decision_invalid': 'wholesale_order_err_generic',
 };
 

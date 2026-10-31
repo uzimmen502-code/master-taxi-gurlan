@@ -264,6 +264,21 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             ),
           ),
         ],
+        if (o.walletRefundNoticeKey(widget.viewerId) != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('wholesale-wallet-refund-notice'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: c.okSoft, borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              context.trMsg(o.walletRefundNoticeKey(widget.viewerId)!, params: {
+                'refund': formatMoney(o.walletRefundGoods),
+                'fee': formatMoney(o.walletReturnFeeCharged),
+              }),
+              style: TextStyle(fontSize: 12, color: c.ok, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
         if (_showsReturn(o)) ...[
           const SizedBox(height: 10),
           _returnCard(context, o),
@@ -318,6 +333,16 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     if (!a.isBuyer) return const [];
     final c = context.ava;
     return [
+      if (a.showBuyerReturnDebt) ...[
+        Container(
+          key: const ValueKey('wholesale-buyer-return-debt'),
+          child: WalletInlineError(
+            text: context.trMsg('wholesale_order_return_debt_buyer', params: {'amount': formatMoney(_o.returnDebt)}),
+            onTopUp: () => openWalletTopUp(Navigator.of(context), suggestedAmount: _o.returnDebt),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
       if (a.showDeliveryCode) ...[
         _primary(context, 'wholesale_order_delivery_code_btn', Icons.pin_outlined, _showCode,
             key: const ValueKey('wholesale-delivery-code')),
@@ -405,9 +430,18 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
   }
 
+  /// Тасдиқ ойнаси матни: карта — аввалгидек; ҳамён (эга, 2026-11-01) — пул оқибати сабабга қараб
+  /// (харидор сабаби — қайтариш ҳақи қайтадиган суммадан; курьер сабаби — ҳақни курьер тўлайди).
+  String get _buyerConfirmDialogKey {
+    if (_o.isCardOrder) return 'wholesale_df_buyer_confirm_dialog';
+    return _o.deliveryFailed.reasonCode == 'courier_problem'
+        ? 'wholesale_df_buyer_confirm_dialog_wallet_courier'
+        : 'wholesale_df_buyer_confirm_dialog_wallet_buyer';
+  }
+
   /// Харидор: «Тасдиқлайман» (буюртма ёпилади — тасдиқ ойнаси) ёки «Олмоқчиман».
   Future<void> _answerFailed({required bool confirm}) async {
-    if (confirm && !await _confirm(context.tr('wholesale_df_buyer_confirm_dialog'))) return;
+    if (confirm && !await _confirm(context.tr(_buyerConfirmDialogKey))) return;
     await _run(() async {
       await widget.repository.respondDeliveryFailed(orderId: _o.id, confirm: confirm);
       _snack(confirm ? 'wholesale_df_done_failed' : 'customer_confirm_rejected_done');
@@ -417,7 +451,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   /// Сотувчи (муддат ўтгач): «Етказилмади» (тасдиқ ойнаси) ёки «Етказилсин».
   Future<void> _decideFailed({required bool failed}) async {
     if (failed &&
-        !await _confirm(context.tr('wholesale_df_seller_failed_dialog'),
+        !await _confirm(context.tr(_o.isCardOrder ? 'wholesale_df_seller_failed_dialog' : 'wholesale_df_seller_failed_dialog_wallet'),
             title: context.tr('delivery_failed_decide_failed_title'))) {
       return;
     }
@@ -509,7 +543,8 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
           if (a.answerDeliveryFailed) ...[
             const SizedBox(height: 4),
-            Text(context.tr('wholesale_df_buyer_body'), style: TextStyle(fontSize: 12.5, color: c.ink)),
+            Text(context.tr(_o.isCardOrder ? 'wholesale_df_buyer_body' : 'wholesale_df_buyer_body_wallet'),
+                key: const ValueKey('wholesale-df-buyer-body'), style: TextStyle(fontSize: 12.5, color: c.ink)),
           ],
           const SizedBox(height: 4),
           Text(
@@ -534,7 +569,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   Widget _returnCard(BuildContext context, WholesaleOrder o) {
     final c = context.ava;
-    final key = WholesaleReturnStatus.l10nKey(o.returnStatus) ??
+    final key = o.returnStatusKey() ??
         (o.status == WholesaleOrderStatus.returned
             ? 'wholesale_return_status_returned'
             : 'wholesale_return_status_pending_shipment');

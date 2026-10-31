@@ -5184,5 +5184,17 @@
   "wholesale_df_stage_awaiting_decision": "Xaridor javob bermadi — qaror kerak",
   "wholesale_df_err_state": "Holat o'zgargan — sahifani yangilang",
   "wholesale_df_err_not_yet": "Xaridor hali javob berishi mumkin — muddat tugagach hal qiling",
-  "wholesale_df_buyer_label": "Xaridor"
+  "wholesale_df_buyer_label": "Xaridor",
+  "wholesale_courier_failed_hint_all": "Xaridor tasdiqlasa (javob bermasa — sotuvchi hal qilsa), tovar sotuvchiga qaytariladi.",
+  "wholesale_courier_failed_wallet_note": "Xaridor hamyondan to'lagan: aniq sababni tanlang — qaytarish haqini kim to'lashi shunga bog'liq. «Kuryer muammosi» tanlansa, qaytarish haqi hamyoningizdan ushlanadi.",
+  "wholesale_courier_failed_err_reason": "Aniq sababni tanlang — bu buyurtmada «Boshqa sabab» mumkin emas",
+  "wholesale_df_buyer_body_wallet": "Kuryer tovarni yetkazib bo'lmadi deb belgiladi. Tasdiqlasangiz, buyurtma yopiladi: tovar summasi hamyoningizga qaytadi, yetkazish haqi qaytmaydi. Tovarni olmoqchi bo'lsangiz, «Olmoqchiman» ni bosing.",
+  "wholesale_df_buyer_confirm_dialog_wallet_buyer": "Buyurtma yopilsinmi? Tovar summasi hamyoningizga qaytadi, qaytarish yetkazish haqi undan ushlanadi. Yetkazish haqi qaytmaydi. Buni ortga qaytarib bo'lmaydi.",
+  "wholesale_df_buyer_confirm_dialog_wallet_courier": "Buyurtma yopilsinmi? Tovar summasi hamyoningizga qaytadi, qaytarish haqini kuryer to'laydi. Yetkazish haqi qaytmaydi. Buni ortga qaytarib bo'lmaydi.",
+  "wholesale_df_seller_failed_dialog_wallet": "Buyurtma «yetkazilmadi» deb yopiladi, tovar sizga qaytariladi. Xaridor hamyondan to'lagan: tovar puli xaridorga qaytadi, qaytarish haqini siz to'lamaysiz. Buni ortga qaytarib bo'lmaydi.",
+  "wholesale_order_wallet_refund": "Tovar summasi hamyoningizga qaytarildi: {refund}. Qaytarish haqi ushlandi: {fee}. Yetkazish haqi qaytarilmaydi.",
+  "wholesale_order_wallet_refund_courier": "Tovar summasi hamyoningizga qaytarildi: {refund}. Qaytarish haqini kuryer to'laydi, yetkazish haqi qaytarilmaydi.",
+  "wholesale_order_return_debt_buyer": "Qaytarish haqi uchun yana {amount} kerak. Hamyonni to'ldiring — tovar sotuvchiga shundan keyin qaytariladi.",
+  "wholesale_return_status_awaiting_payment_buyer": "Qaytarish haqi xaridor hamyonidan to'lanishini kutmoqda",
+  "wholesale_return_status_awaiting_payment_courier": "Qaytarish haqi kuryer hamyonidan to'lanishini kutmoqda"
 }

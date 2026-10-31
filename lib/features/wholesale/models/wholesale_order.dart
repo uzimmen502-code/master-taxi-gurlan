@@ -138,6 +138,8 @@ class WholesaleDeliveryFailedReport {
     this.stage = '',
     this.escalateAt,
     this.resolutionDecision = '',
+    this.paymentMethod = '',
+    this.allowedReasons = const [],
   });
 
   /// Буюртма ҳолати (`in_delivery`; эски сервер дарҳол `refused` қайтарарди).
@@ -149,19 +151,34 @@ class WholesaleDeliveryFailedReport {
   final DateTime? escalateAt;
   final String resolutionDecision;
 
+  /// 2026-11-01: `getWholesaleDeliveryFailedState` — тўлов усули ва курьер танлай оладиган сабаблар
+  /// (ҳамён буюртмасида «бошқа» йўқ). Эски серверда бўш — барча сабаблар кўрсатилади.
+  final String paymentMethod;
+  final List<String> allowedReasons;
+
   bool get awaitingDecision => pending && stage == 'awaiting_decision';
   bool get continued => !pending && resolutionDecision == 'continue';
+  bool get isWalletOrder => paymentMethod == WholesalePaymentMethod.wallet;
+
+  /// Курьер ойнасидаги сабаблар: сервер рўйхати (маълум кодлар тартибида), бўлмаса — ҳаммаси.
+  List<String> get reasons {
+    final known = wholesaleDeliveryFailedReasons.where(allowedReasons.contains).toList();
+    return known.isEmpty ? wholesaleDeliveryFailedReasons : known;
+  }
 
   factory WholesaleDeliveryFailedReport.fromMap(Map<String, dynamic> d) {
     final ms = d['escalateAtMs'];
     final res = d['resolution'] is Map ? d['resolution'] as Map : const {};
     final pending = d['pending'] == true || d['awaitingBuyer'] == true || d['stage'] == 'awaiting_decision';
+    final allowed = d['allowedReasons'];
     return WholesaleDeliveryFailedReport(
       status: d['status'] is String ? d['status'] as String : '',
       pending: pending,
       stage: d['stage'] is String ? d['stage'] as String : '',
       escalateAt: ms is num ? DateTime.fromMillisecondsSinceEpoch(ms.toInt()) : null,
       resolutionDecision: res['decision'] is String ? res['decision'] as String : '',
+      paymentMethod: d['paymentMethod'] is String ? d['paymentMethod'] as String : '',
+      allowedReasons: allowed is List ? allowed.whereType<String>().toList() : const [],
     );
   }
 }
@@ -270,6 +287,10 @@ class WholesaleOrder {
     this.lostRefundTo = '',
     this.lostReview = false,
     this.deliveryFailed = WholesaleDeliveryFailed.none,
+    this.returnDebtPayer = '',
+    this.walletRefusalFault = '',
+    this.walletRefundGoods = 0,
+    this.walletReturnFeeCharged = 0,
     this.createdAt,
   });
 
@@ -319,7 +340,32 @@ class WholesaleOrder {
 
   /// «Етказилмади» сўрови (2026-11-01).
   final WholesaleDeliveryFailed deliveryFailed;
+
+  /// Қайтариш қарзи кимда (`returnDebt.payer`): бўш/`seller` — карта буюртмаси сотувчиси (аввалгидек);
+  /// ҳамён буюртмасида — `buyer` ёки `courier` (эга, 2026-11-01).
+  final String returnDebtPayer;
+
+  /// Ҳамён буюртмаси рад этилгач (`walletRefusal`, сервер ҳисоблайди): айб (`buyer` | `courier`),
+  /// ҳамёнга қайтган товар суммаси ва ушланган қайтариш ҳақи (сўм).
+  final String walletRefusalFault;
+  final int walletRefundGoods;
+  final int walletReturnFeeCharged;
   final DateTime? createdAt;
+
+  /// Харидорга ҳамён қайтими изоҳи калити (соф): товар суммаси қайтди (+ ушланган ҳақ ёки «курьер тўлайди»).
+  String? walletRefundNoticeKey(String viewerId) {
+    if (isCardOrder || walletRefusalFault.isEmpty || walletRefundGoods <= 0 || !isBuyer(viewerId)) return null;
+    return walletRefusalFault == 'courier' ? 'wholesale_order_wallet_refund_courier' : 'wholesale_order_wallet_refund';
+  }
+
+  /// Қайтиш жараёни матни калити: ҳамён буюртмасида қайтариш ҳақи кимдан кутилаётгани ҳам.
+  String? returnStatusKey() {
+    if (returnStatus == WholesaleReturnStatus.awaitingPayment && !isCardOrder) {
+      final payer = returnDebtPayer.isNotEmpty ? returnDebtPayer : walletRefusalFault;
+      if (payer == 'buyer' || payer == 'courier') return 'wholesale_return_status_awaiting_payment_$payer';
+    }
+    return WholesaleReturnStatus.l10nKey(returnStatus);
+  }
 
   bool get isCardOrder => paymentMethod == WholesalePaymentMethod.cardOnDelivery;
   bool get cardConfirmed => cardPaymentStatus == WholesaleCardPaymentStatus.confirmed;
@@ -376,6 +422,7 @@ class WholesaleOrder {
     final ret = _map(d['returnShipment']);
     final pay = _map(d['payment']);
     final lost = _map(d['lost']);
+    final wr = _map(d['walletRefusal']);
     final method = _str(d['paymentMethod']);
     return WholesaleOrder(
       id: id,
@@ -407,6 +454,10 @@ class WholesaleOrder {
       lostRefundTo: _str(lost['refundTo']),
       lostReview: lost['review'] == true || _str(pay['status']) == 'lost_review',
       deliveryFailed: WholesaleDeliveryFailed.fromOrder(d),
+      returnDebtPayer: debt is Map ? _str(debt['payer']) : '',
+      walletRefusalFault: _str(wr['fault']),
+      walletRefundGoods: _int(wr['goodsRefunded']),
+      walletReturnFeeCharged: _int(wr['returnFeeCharged']),
       createdAt: _date(d['createdAt']),
     );
   }
@@ -430,6 +481,7 @@ class WholesaleOrderActions {
     required this.canConfirmCardPayment,
     required this.showReceipt,
     required this.showReturnDebt,
+    required this.showBuyerReturnDebt,
     required this.answerDeliveryFailed,
     required this.decideDeliveryFailed,
   });
@@ -462,8 +514,11 @@ class WholesaleOrderActions {
   /// Сотувчи: харидор юклаган чек расми.
   final bool showReceipt;
 
-  /// Сотувчи: қайтариш қарзи огоҳлантириши.
+  /// Сотувчи: қайтариш қарзи огоҳлантириши (фақат қарз сотувчида — карта буюртмаси).
   final bool showReturnDebt;
+
+  /// Харидор: ҳамён буюртмаси рад этилди, қайтариш ҳақига маблағ етмади (`returnDebt.payer == buyer`).
+  final bool showBuyerReturnDebt;
 
   /// Харидор: курьер «етказилмади» деди — «Тасдиқлайман» / «Олмоқчиман» (мажбурий).
   final bool answerDeliveryFailed;
@@ -489,7 +544,8 @@ class WholesaleOrderActions {
       canConfirmCardPayment: seller && cardOpen,
       // Сотувчида Storage ўқиш ҳуқуқи ЙЎҚ — фақат сервер ёзган `receiptUrl`.
       showReceipt: seller && o.isCardOrder && o.receiptUrl.isNotEmpty,
-      showReturnDebt: seller && o.returnDebt > 0,
+      showReturnDebt: seller && o.returnDebt > 0 && (o.returnDebtPayer.isEmpty || o.returnDebtPayer == 'seller'),
+      showBuyerReturnDebt: buyer && o.returnDebt > 0 && o.returnDebtPayer == 'buyer',
       answerDeliveryFailed: buyer && o.deliveryFailed.pending,
       decideDeliveryFailed: seller && o.deliveryFailed.pending,
     );

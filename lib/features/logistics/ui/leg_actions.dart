@@ -158,7 +158,7 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
             children.add(_secondary(context, 'wholesale_courier_failed_btn', _markRefused,
                 key: const ValueKey('wholesale-courier-refused'), danger: true));
             children.add(const SizedBox(height: 4));
-            children.add(_hint(context, 'wholesale_courier_failed_hint'));
+            children.add(_hint(context, 'wholesale_courier_failed_hint_all'));
           }
         }
       } else {
@@ -259,7 +259,11 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
   Future<void> _markRefused() async {
     final picked = await showDialog<(String, String)>(
       context: context,
-      builder: (_) => const _RefuseReasonDialog(),
+      // Ҳамён буюртмаси (2026-11-01): сервер «бошқа» ни рад этади — ойнада ҳам йўқ (эски сервер — ҳаммаси).
+      builder: (_) => _RefuseReasonDialog(
+        reasons: _df?.reasons ?? wholesaleDeliveryFailedReasons,
+        walletOrder: _df?.isWalletOrder ?? false,
+      ),
     );
     if (picked == null) return; // бекор қилинди
     await _runWholesale(() async {
@@ -746,7 +750,12 @@ class _ProofSheetState extends State<ProofSheet> {
 /// (сабаб коди, изоҳ) ёки `null` — бекор. Контроллер шу ойнанинг ўзида (ёпилиш
 /// анимацияси давомида ҳам тирик).
 class _RefuseReasonDialog extends StatefulWidget {
-  const _RefuseReasonDialog();
+  const _RefuseReasonDialog({required this.reasons, this.walletOrder = false});
+
+  final List<String> reasons;
+
+  /// Ҳамён орқали тўланган: қайтариш ҳақини ким тўлаши сабабга боғлиқ — курьерга огоҳлантириш.
+  final bool walletOrder;
 
   @override
   State<_RefuseReasonDialog> createState() => _RefuseReasonDialogState();
@@ -771,7 +780,7 @@ class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final code in wholesaleDeliveryFailedReasons)
+            for (final code in widget.reasons)
               ListTile(
                 key: ValueKey('wholesale-failed-reason-$code'),
                 dense: true,
@@ -788,6 +797,12 @@ class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
               decoration: InputDecoration(labelText: context.tr('wholesale_courier_failed_comment')),
             ),
             Text(context.tr('wholesale_courier_failed_note'), style: TextStyle(fontSize: 12, color: context.ava.ink2)),
+            if (widget.walletOrder) ...[
+              const SizedBox(height: 6),
+              Text(context.tr('wholesale_courier_failed_wallet_note'),
+                  key: const ValueKey('wholesale-failed-wallet-note'),
+                  style: TextStyle(fontSize: 12, color: context.ava.warn, fontWeight: FontWeight.w600)),
+            ],
           ],
         ),
       ),

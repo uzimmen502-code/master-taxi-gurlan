@@ -23,6 +23,12 @@ const api = require('../api/wholesale_orders');
 const C = require('../api/wholesale_card');
 const E = require('../api/wholesale_events');
 const N = require('../notify/wholesale_notify');
+const CC = require('../core/card_crypto');
+const { makeFakeKms } = require('./helpers/fake_kms');
+
+/** Soxta KMS (karta shifrlash — to'liq testlar: card_crypto.test.js). */
+const KMS = makeFakeKms();
+const cardCrypto = CC.createCardCrypto({ fetchImpl: KMS.fetchImpl, getAccessToken: KMS.getAccessToken });
 
 let passed = 0;
 const tests = [];
@@ -129,9 +135,15 @@ async function rejects(promise, code, reason) {
 }
 const origLog = console.log;
 const origErr = console.error;
+const origWarn = console.warn;
 let captured = [];
-const quiet = () => { captured = []; console.log = (...a) => captured.push(a.join(' ')); console.error = (...a) => captured.push(a.join(' ')); };
-const loud = () => { console.log = origLog; console.error = origErr; };
+const quiet = () => {
+  captured = [];
+  console.log = (...a) => captured.push(a.join(' '));
+  console.error = (...a) => captured.push(a.join(' '));
+  console.warn = (...a) => captured.push(a.join(' '));
+};
+const loud = () => { console.log = origLog; console.error = origErr; console.warn = origWarn; };
 async function q(fn) { quiet(); try { return await fn(); } finally { loud(); } }
 
 const quote = (db) => api.makeQuoteWholesaleOrder({ db, now: () => NOW });
@@ -196,7 +208,7 @@ ok('karta egasi: 2 va 60 belgi o\'tadi; 1, 61, raqam bilan boshlanish — RAD; b
 
 ok('setWholesaleSellerCard: auth; sotuvchi emas; tasdiqlanmagan — RAD, hech narsa yozilmaydi', async () => {
   const db = makeDb();
-  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW });
+  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW, cardCrypto });
   await q(async () => {
     await rejects(set({ cardNumber: CARD, holderName: 'Ali' }, {}), 'unauthenticated');
     await rejects(set({ cardNumber: CARD, holderName: 'Ali' }, ctx(STRANGER)), 'permission-denied', 'not_wholesale_seller');
@@ -208,14 +220,16 @@ ok('setWholesaleSellerCard: auth; sotuvchi emas; tasdiqlanmagan — RAD, hech na
   assert.strictEqual(db.docs.get(`wholesale_sellers/${SELLER}`).hasPayoutCard, undefined);
 });
 
-ok('setWholesaleSellerCard: private/payout (to\'liq) + ommaviy last4; takror — unchanged; almashtirish — v2 + tarix; log maskali', async () => {
+ok('setWholesaleSellerCard: private/payout (KMS shifrlangan, ochiq matn yo\'q) + ommaviy last4; takror — unchanged; almashtirish — v2 + tarix; log maskali', async () => {
   const db = makeDb();
-  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW });
+  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW, cardCrypto });
   const r1 = await q(() => set({ cardNumber: '4111 1111 1111 1111', holderName: 'Ali Valiyev' }, ctx(SELLER)));
   assert.deepStrictEqual([r1.ok, r1.last4, r1.unchanged], [true, '1111', false]);
   assert.ok(captured.every((l) => !l.includes(CARD)), 'logda to\'liq raqam yo\'q');
   const p = db.docs.get(`wholesale_sellers/${SELLER}/private/payout`);
-  assert.deepStrictEqual([p.cardNumber, p.holderName, p.last4, p.version, p.updatedBy], [CARD, 'Ali Valiyev', '1111', 1, SELLER]);
+  assert.deepStrictEqual([p.cardNumber, p.holderName, p.last4, p.version, p.updatedBy, p.encVersion], [undefined, undefined, '1111', 1, SELLER, 1]);
+  assert.strictEqual(await cardCrypto.decryptCard(p.cardNumberEnc, { sellerId: SELLER, field: 'cardNumber' }), CARD);
+  assert.strictEqual(await cardCrypto.decryptCard(p.holderNameEnc, { sellerId: SELLER, field: 'holderName' }), 'Ali Valiyev');
   const pub = db.docs.get(`wholesale_sellers/${SELLER}`);
   assert.deepStrictEqual([pub.hasPayoutCard, pub.cardLast4, pub.companyName], [true, '1111', 'Guruch savdo']);
   assert.ok(!JSON.stringify(pub).includes(CARD), 'ommaviy hujjatda to\'liq raqam yo\'q');
@@ -283,7 +297,7 @@ ok('getWholesaleCardPaymentInfo: xaridor — summa/karta/egasi/sotuvchi; begona,
     'wholesale_orders/w1': ORDER_WALLET,
     'wholesale_orders/p1': { ...ORDER_CARD, status: 'placed' },
   }));
-  const info = C.makeGetWholesaleCardPaymentInfo({ db });
+  const info = C.makeGetWholesaleCardPaymentInfo({ db, cardCrypto });
   const r = await q(() => info({ orderId: 'o1' }, ctx(BUYER)));
   assert.deepStrictEqual(r, { amount: 200000, cardNumber: CARD, holderName: 'ALI VALIYEV', sellerName: 'Guruch savdo' });
   assert.ok(captured.every((l) => !l.includes(CARD)));
@@ -436,6 +450,23 @@ ok('kuryer chek yuborilgan buyurtmani refused qila olmaydi — holatlar jadvali:
   assert.ok(!WO.canActorTransition('buyer', 'in_delivery', 'refused'));
 });
 
+ok('yo\'qolish: faqat system, faqat in_delivery | payment_dispute → lost; lost — oxirgi holat; boshqa aktyor/holat — yo\'q', () => {
+  assert.strictEqual(WO.STATUS.LOST, 'lost');
+  assert.deepStrictEqual([...WO.LOST_FROM_STATUSES], ['in_delivery', 'payment_dispute']);
+  for (const from of WO.LOST_FROM_STATUSES) assert.ok(WO.canActorTransition('system', from, 'lost'), from);
+  for (const actor of ['buyer', 'admin', 'courier', 'seller']) {
+    for (const from of WO.LOST_FROM_STATUSES) assert.ok(!WO.canActorTransition(actor, from, 'lost'), `${actor}:${from}`);
+  }
+  const into = Object.keys(WO.ALLOWED).filter((s) => WO.ALLOWED[s].includes('lost')).sort();
+  assert.deepStrictEqual(into, ['in_delivery', 'payment_dispute']);
+  for (const from of ['placed', 'cancelled', 'delivered', 'refused', 'returning', 'returned']) {
+    assert.ok(!WO.canTransition(from, 'lost'), from);
+  }
+  assert.ok(WO.isTerminal('lost'));
+  assert.ok(!WO.needsRefund('lost'), 'lost — REFUND_STATUSES oqimi emas (settleLost alohida)');
+  assert.deepStrictEqual({ ...WO.LOST_PAYMENT }, { REFUNDED: 'refunded_lost', REVIEW: 'lost_review' });
+});
+
 // ─── admin: nizoni hal qilish ────────────────────────────────────────
 ok('adminResolveWholesaleCardDispute: oddiy/dispatcher RAD; nizo yo\'q — not_in_dispute; confirm → in_delivery + confirmed + audit; takror idempotent; keyin reject — already_resolved', async () => {
   const db = makeDb({
@@ -499,6 +530,27 @@ ok('transitionNotifications: o\'tishlar matritsasi (chek, tasdiq, rad, nizo, qar
   assert.deepStrictEqual(keys({ ...ref, status: 'returning' }, { ...ref, status: 'returned' }), ['seller:ws_returned_seller']);
   // Hamyon buyurtmasida karta xabarlari yo'q.
   assert.deepStrictEqual(keys(ORDER_WALLET, { ...ORDER_WALLET, cardPayment: { status: 'confirmed' } }), []);
+});
+
+ok('transitionNotifications (yo\'qolish): hamyon / karta / karta-review kalitlari; takror lost → lost — bo\'sh; {refund} matnda', () => {
+  const keys = (b, a) => E.transitionNotifications(b, a).map((x) => `${x.to}:${x.key}`);
+  const w = { ...ORDER_WALLET, status: 'in_delivery' };
+  const wl = { ...w, status: 'lost', payment: { status: 'refunded_lost', lostRefund: 140000 } };
+  assert.deepStrictEqual(keys(w, wl), ['buyer:ws_lost_buyer_wallet', 'seller:ws_lost_seller']);
+  assert.deepStrictEqual(keys(wl, wl), []);
+  const c = { ...ORDER_CARD, status: 'in_delivery' };
+  assert.deepStrictEqual(keys(c, { ...c, status: 'lost', payment: { status: 'refunded_lost', lostRefund: 3500 } }),
+    ['buyer:ws_lost_buyer_card', 'seller:ws_lost_seller']);
+  const d = { ...ORDER_CARD, status: 'payment_dispute' };
+  assert.deepStrictEqual(keys(d, { ...d, status: 'lost', payment: { status: 'lost_review', lostRefund: 0 } }),
+    ['buyer:ws_lost_buyer_review', 'seller:ws_lost_seller', 'admins:ws_lost_review_admin']);
+  for (const k of ['ws_lost_buyer_wallet', 'ws_lost_buyer_card', 'ws_lost_buyer_review', 'ws_lost_seller', 'ws_lost_review_admin']) {
+    for (const lang of N.LANGS) {
+      const m = N.render(k, lang, { product: 'Гуруч', qty: 10, refund: 140000, orderId: 'o1' });
+      assert.ok(m.title && m.body && !/\{\w+\}/.test(m.title + m.body), `${k}/${lang}`);
+    }
+  }
+  assert.ok(N.render('ws_lost_buyer_wallet', 'uz_Latn', { refund: 140000 }).body.includes('140000'));
 });
 
 ok('xabar yetkazish: inbox (3 til, foydalanuvchi tili) + push; takror trigger — bitta xabar, bitta push; adminlar (admin+superadmin, dispatcher EMAS)', async () => {

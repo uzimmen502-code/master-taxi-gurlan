@@ -33,6 +33,8 @@ const relay = require('../relay_escrow');
 const WO = require('../../functions_demand/core/wholesale_orders');
 const DC = require('../../functions_demand/api/wholesale_card');
 const DW = require('../../functions_demand/api/wholesale_orders');
+const CC = require('../../functions_demand/core/card_crypto');
+const { makeFakeKms } = require('../../functions_demand/test/helpers/fake_kms');
 
 const BUYER = '998901110001';
 const BUYER2 = '998901110002';
@@ -265,6 +267,27 @@ async function refuse(orderId) {
     await db.collection('wholesale_buyer_stats').doc(BUYER).set({ cardRefusals: 1 });
     await place();
     assert.strictEqual(await bal(pcOf(SELLER)), 0, 'chegara: aynan hold');
+    await assertLedgerSound();
+  });
+
+  await check('KMS shifrlangan karta (demand setWholesaleSellerCard, soxta KMS, haqiqiy tranzaksiya): ochiq matn yozilmaydi; unchanged; default place «karta bor» deb ko\'radi; xaridor dekript qilingan kartani oladi', async () => {
+    await seed({ card: false });
+    const kms = makeFakeKms();
+    const cardCrypto = CC.createCardCrypto({ fetchImpl: kms.fetchImpl, getAccessToken: kms.getAccessToken });
+    const set = DC.makeSetWholesaleSellerCard({ ...dDeps, cardCrypto });
+    const r1 = await quiet(() => set({ cardNumber: '4111 1111 1111 1111', holderName: 'ALI VALIYEV' }, ctx(SELLER)));
+    assert.deepStrictEqual([r1.ok, r1.unchanged, r1.last4], [true, false, '1111']);
+    const p = (await db.collection('wholesale_sellers').doc(SELLER).collection('private').doc('payout').get()).data();
+    assert.ok(!('cardNumber' in p) && !('holderName' in p), 'ochiq maydonlar yo\'q');
+    assert.ok(p.cardNumberEnc.startsWith('kms:v1:') && p.holderNameEnc.startsWith('kms:v1:'));
+    assert.strictEqual(W.payoutDocHasCard(p), true, 'default');
+    assert.strictEqual(DC.payoutDocHasCard(p), true, 'demand');
+    assert.strictEqual((await quiet(() => set({ cardNumber: '4111111111111111', holderName: 'ALI VALIYEV' }, ctx(SELLER)))).unchanged, true);
+    const pl = await place();
+    assert.strictEqual(pl.paymentMethod, 'card_on_delivery');
+    await db.collection('wholesale_orders').doc(pl.orderId).update({ status: 'in_delivery' });
+    const info = await quiet(() => DC.makeGetWholesaleCardPaymentInfo({ db, cardCrypto })({ orderId: pl.orderId }, ctx(BUYER)));
+    assert.deepStrictEqual([info.cardNumber, info.holderName, info.amount], ['4111111111111111', 'ALI VALIYEV', 200000]);
     await assertLedgerSound();
   });
 

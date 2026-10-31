@@ -333,11 +333,14 @@ exports.getWholesaleDeliveryCode = fn.https.onCall(wrapCallable(
 
 // ── Ulgurji 3b: «yetkazilganda karta orqali» (ega, 2026-10-31; docs/ulgurji_buyurtma_zanjiri_uz.md).
 // Pul — default codebase (ledger). Bu yerda: karta, chek, «Pul tushdi», rad, nizo, qaytish jo'natmasi, xabarlar.
+// Sotuvchi kartasi Cloud KMS bilan shifrlanadi (ega, 2026-10-31): kalit — env
+// WHOLESALE_CARD_KMS_KEY yoki core/card_crypto.js DEFAULT_KEY_NAME; token/HTTP — kechiktirilgan.
+const wholesaleCardCrypto = require('./core/card_crypto').createCardCrypto();
 exports.setWholesaleSellerCard = fn.https.onCall(wrapCallable(
-  wholesaleCardApi.makeSetWholesaleSellerCard({ db }),
+  wholesaleCardApi.makeSetWholesaleSellerCard({ db, cardCrypto: wholesaleCardCrypto }),
 ));
 exports.getWholesaleCardPaymentInfo = fn.https.onCall(wrapCallable(
-  wholesaleCardApi.makeGetWholesaleCardPaymentInfo({ db }),
+  wholesaleCardApi.makeGetWholesaleCardPaymentInfo({ db, cardCrypto: wholesaleCardCrypto }),
 ));
 exports.submitWholesaleCardReceipt = fn.https.onCall(wrapCallable(
   // Standart bucket — loyiha konfiguratsiyasidan (FIREBASE_CONFIG.storageBucket), kechiktirilgan.

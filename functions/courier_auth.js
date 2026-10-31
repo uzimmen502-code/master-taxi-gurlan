@@ -32,6 +32,8 @@
  * qaraladi, natija doim kanon (12 xonali).
  */
 
+const scopes = require('./courier_scopes');
+
 const MODES = Object.freeze({ new: 'new', finish: 'finish' });
 const ACTIVE_ROUTE_STATUSES = ['ready', 'active'];
 
@@ -52,30 +54,45 @@ function makeCourierAuth(deps) {
     return /^998\d{9}$/.test(uid12) ? [uid12, uid12.slice(3)] : [uid12];
   };
 
-  /** `users/{tel}.accountId` → `provider_capabilities` → `status.courier`. */
-  async function capabilityStatus(phone) {
+  /** `users/{tel}.accountId` → `provider_capabilities` → { status.courier, hujjat }. */
+  async function capabilityInfo(phone) {
     for (const id of idForms(phone)) {
       const userDoc = await db.collection('users').doc(id).get();
       if (!userDoc.exists) continue;
       const accountId = String((userDoc.data() || {}).accountId || '');
       if (!accountId) break;
       const cap = await db.collection('provider_capabilities').doc(accountId).get();
-      return caps.statusOf(cap.exists ? (cap.data() || {}) : {}, 'courier');
+      const doc = cap.exists ? (cap.data() || {}) : {};
+      return { status: caps.statusOf(doc, 'courier'), doc };
     }
-    return caps.COMMON.notRegistered;
+    return { status: caps.COMMON.notRegistered, doc: {} };
+  }
+
+  async function capabilityStatus(phone) {
+    return (await capabilityInfo(phone)).status;
   }
 
   /**
+   * YANGI mahalliy ish uchun «Туман» toifasi faolmi (`courier_scopes.js`, ega qarori 2026-10-31).
+   * `courier.scopes` yo'q eski hujjat = ['district'] → avvalgi xatti-harakat saqlanadi.
+   */
+  const districtActive = (doc) => scopes.isScopeActive(doc, scopes.LOCAL_SCOPE);
+
+  /**
    * Kuryer huquqi rejim bo'yicha. Muvaffaqiyatda kanon ID qaytaradi.
-   * Noma'lum rejim — eng qattiq ('new') deb olinadi.
+   * Noma'lum rejim — eng qattiq ('new') deb olinadi. 'new' rejimda «Туман» toifasi ham
+   * shart (`COURIER_SCOPE_DISTRICT_OFF`); 'finish' — toifadan qat'i nazar (custody uzilmasin).
    */
   async function resolve(phone, mode = MODES.new) {
-    const status = await capabilityStatus(phone);
+    const { status, doc } = await capabilityInfo(phone);
     const allowed = mode === MODES.finish
       ? caps.canFinishActive({ status: { courier: status } }, 'courier')
       : caps.isWorking('courier', status);
     if (!allowed) {
       throw new HttpsError('permission-denied', 'Courier not authorized');
+    }
+    if (mode !== MODES.finish && !districtActive(doc)) {
+      throw new HttpsError('permission-denied', 'Courier scope off', { reason: 'COURIER_SCOPE_DISTRICT_OFF' });
     }
     return canonicalUid(phone);
   }
@@ -160,7 +177,8 @@ function makeCourierAuth(deps) {
    */
   async function isWorking(phone) {
     try {
-      return caps.isWorking('courier', await capabilityStatus(phone)) === true;
+      const { status, doc } = await capabilityInfo(phone);
+      return caps.isWorking('courier', status) === true && districtActive(doc);
     } catch (_) {
       return false;
     }

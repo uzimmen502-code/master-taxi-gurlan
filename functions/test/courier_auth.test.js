@@ -144,6 +144,43 @@ async function seed() {
     await assert.rejects(() => auth.assertCustomerOnActiveRoute(APPROVED, ''), denied('invalid-argument'));
   });
 
+  // ── Toifalar (courier_scopes.js, ega qarori 2026-10-31) ──
+  const SCOPE_REGION_ONLY = '998901110011';
+  const SCOPE_BOTH = '998901110012';
+  const SCOPE_EMPTY = '998901110013';
+  await Promise.all([
+    db.doc(`users/${SCOPE_REGION_ONLY}`).set({ accountId: 'accRO' }),
+    db.doc('provider_capabilities/accRO').set({ status: { courier: 'approved' }, courier: { scopes: ['region'] },
+      review: { courierScopes: { region: { status: 'approved' } } } }),
+    db.doc(`users/${SCOPE_BOTH}`).set({ accountId: 'accRB' }),
+    db.doc('provider_capabilities/accRB').set({ status: { courier: 'approved' },
+      courier: { scopes: ['district', 'region'] }, review: { courierScopes: { region: { status: 'pending' } } } }),
+    db.doc(`users/${SCOPE_EMPTY}`).set({ accountId: 'accRE' }),
+    db.doc('provider_capabilities/accRE').set({ status: { courier: 'approved' }, courier: { scopes: [] } }),
+  ]);
+
+  await check('toifa: scopes YO\'Q eski hujjat = «Туман» (orqaga moslik)', async () => {
+    assert.strictEqual(await auth.resolve(APPROVED, MODES.new), APPROVED);
+    assert.strictEqual(await auth.isWorking(APPROVED), true);
+  });
+
+  await check('toifa: faqat «Вилоят» — mahalliy YANGI ish YO\'Q, push yo\'q; qo\'ldagini tugatadi', async () => {
+    await assert.rejects(() => auth.resolve(SCOPE_REGION_ONLY, MODES.new),
+      (e) => denied('permission-denied')(e) && e.details && e.details.reason === 'COURIER_SCOPE_DISTRICT_OFF');
+    assert.strictEqual(await auth.isWorking(SCOPE_REGION_ONLY), false);
+    assert.strictEqual(await auth.resolve(SCOPE_REGION_ONLY, MODES.finish), SCOPE_REGION_ONLY);
+  });
+
+  await check('toifa: «Туман»+«Вилоят»(pending) — mahalliy ish bor', async () => {
+    assert.strictEqual(await auth.resolve(SCOPE_BOTH, MODES.new), SCOPE_BOTH);
+    assert.strictEqual(await auth.isWorking(SCOPE_BOTH), true);
+  });
+
+  await check('toifa: bo\'sh ro\'yxat — mahalliy ish yo\'q', async () => {
+    await assert.rejects(() => auth.resolve(SCOPE_EMPTY, MODES.new), denied('permission-denied'));
+    assert.strictEqual(await auth.isWorking(SCOPE_EMPTY), false);
+  });
+
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\n${results.length - failed}/${results.length} o'tdi.`);
   process.exit(failed ? 1 : 0);

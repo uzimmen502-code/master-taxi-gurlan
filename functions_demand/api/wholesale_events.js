@@ -55,10 +55,26 @@ function transitionNotifications(before, after) {
     if ((a.payment || {}).status === WO.LOST_PAYMENT.REVIEW) {
       out.push({ to: 'buyer', key: 'ws_lost_buyer_review' }, { to: 'seller', key: 'ws_lost_seller' },
         { to: 'admins', key: 'ws_lost_review_admin' });
+    } else if (WO.methodOf(a) === WO.PAYMENT_METHOD.CARD) {
+      out.push({ to: 'buyer', key: 'ws_lost_buyer_card' }, { to: 'seller', key: 'ws_lost_seller' });
     } else {
-      out.push({ to: 'buyer', key: WO.methodOf(a) === WO.PAYMENT_METHOD.CARD ? 'ws_lost_buyer_card' : 'ws_lost_buyer_wallet' },
-        { to: 'seller', key: 'ws_lost_seller' });
+      // Hamyon: yetkazish haqi ham qaytadi (ega, 2026-10-31). `lost.deliveryFeeRefunded` yo'q (eski server)
+      // yoki haq anomaliyasi — eski matn (faqat tovar puli); qoldiq bo'lsa — qisman matn + adminlarga.
+      const l = a.lost || {};
+      const outstanding = Number.isInteger(l.deliveryFeeOutstanding) ? l.deliveryFeeOutstanding : 0;
+      let key = 'ws_lost_buyer_wallet';
+      if (Number.isInteger(l.deliveryFeeRefunded) && !l.deliveryFeeAnomaly) {
+        key = outstanding > 0 ? 'ws_lost_buyer_wallet_partial' : 'ws_lost_buyer_wallet_full';
+      }
+      out.push({ to: 'buyer', key }, { to: 'seller', key: 'ws_lost_seller' });
+      if (outstanding > 0 || l.deliveryFeeAnomaly) out.push({ to: 'admins', key: 'ws_lost_fee_admin' });
     }
+  }
+  // Admin kuryer to'lovini yozib, yetkazish haqi qoldig'i 0 ga tushdi — xaridorga.
+  const feeLeft = (o) => (Number.isInteger(((o || {}).lost || {}).deliveryFeeOutstanding) ? o.lost.deliveryFeeOutstanding : 0);
+  if (b.status === WO.STATUS.LOST && a.status === WO.STATUS.LOST && feeLeft(b) > 0 && feeLeft(a) === 0
+    && Number.isInteger((a.lost || {}).deliveryFeeOutstanding)) {
+    out.push({ to: 'buyer', key: 'ws_lost_fee_done_buyer' });
   }
   return out;
 }
@@ -73,8 +89,12 @@ function paramsOf(o, orderId) {
     amount: Number.isInteger(o.goodsTotal) && Number.isInteger(o.deliveryFee) ? o.goodsTotal + o.deliveryFee : '',
     tracking: rs.trackingNumber || '',
     ...(Number.isInteger(debt.amount) ? { amount: debt.amount } : {}),
-    // Yo'qolish: xaridorga qaytgan summa (hamyon — goodsTotal); `{refund}` faqat lost xabarlarida.
-    refund: Number.isInteger((o.payment || {}).lostRefund) ? o.payment.lostRefund : '',
+    // Yo'qolish: xaridorga qaytgan summa (hamyon — goodsTotal + qaytgan yetkazish haqi); `{refund}`,
+    // `{left}` (haq qoldig'i), `{fee}` (yetkazish haqi) faqat lost xabarlarida.
+    refund: Number.isInteger((o.payment || {}).lostRefund)
+      ? o.payment.lostRefund + (Number.isInteger(o.payment.lostFeeRefund) ? o.payment.lostFeeRefund : 0) : '',
+    left: Number.isInteger((o.lost || {}).deliveryFeeOutstanding) ? o.lost.deliveryFeeOutstanding : '',
+    fee: Number.isInteger((o.lost || {}).deliveryFee) ? o.lost.deliveryFee : '',
   };
 }
 

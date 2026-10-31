@@ -73,7 +73,7 @@ attachRelayEscrow(exports, {
 // Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
 const { attachWholesaleOrders } = require('./wholesale_orders');
 attachWholesaleOrders(exports, {
-  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles,
 });
 // Relay kuryer haqi AVTOMATIK hamyonga (ega, 2026-10-31): EARNED → courierPayout:{s}:{l},
 // xizmat haqi % ushlanadi (settings/courier_service_fee). relay_escrow.js o'zgarmaydi.

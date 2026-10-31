@@ -23,6 +23,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../demand_offer/domain/demand_match.dart';
+import '../../wholesale/models/wholesale_order.dart'
+    show WholesaleDeliveryFailedReport, wholesaleDeliveryFailedReasonKey, wholesaleDeliveryFailedReasons;
 import '../../wholesale/models/wholesale_quote.dart' show WholesaleReturnHandoverCode;
 import '../../wholesale/repositories/wholesale_orders_repository.dart';
 import '../../wholesale/utils/wholesale_order_errors.dart';
@@ -88,9 +90,23 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     try {
       final s = await _repo.watchShipment(id).first;
       if (mounted) setState(() => _shipment = s);
+      if (_isWholesaleOutbound && match.status == MatchStatus.inProgress) await _loadDeliveryFailed();
     } catch (e) {
       // Ўқилмади — улгуржи амаллари кўрсатилмайди, асосий LEG оқими ишлайверади.
       debugPrint('[LegActions] shipment read failed: ${e.runtimeType}');
+    }
+  }
+
+  /// «Етказилмади» сўрови ҳолати (2026-11-01) — экран очилганда ва «Янгилаш»да (доимий тинглаш йўқ).
+  WholesaleDeliveryFailedReport? _df;
+
+  Future<void> _loadDeliveryFailed() async {
+    try {
+      final st = await _wholesale.deliveryFailedState(_wholesaleOrderId);
+      if (mounted) setState(() => _df = st);
+    } catch (e) {
+      // Эски сервер (callable йўқ) ёки тармоқ — тугма аввалгидек кўринади.
+      debugPrint('[LegActions] delivery-failed state read failed: ${e.runtimeType}');
     }
   }
 
@@ -127,14 +143,23 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     } else if (status == MatchStatus.inProgress) {
       if (isLast) {
         children.add(_primary(context, 'logistics_delivered_btn', () => _proof(delivery: true, leg: leg)));
-        // Улгуржи «етказилганда карта» буюртмаси: харидор тўламаса — курьер
-        // қайд қилади (сервер карта/тўлов ҳолатини текширади; ҳамён буюртмасида рад).
+        // Улгуржи «етказилганда карта» буюртмаси: «Етказилмади» (эга, 2026-11-01) — харидордан
+        // тасдиқ сўралади, жавоб бўлмаса сотувчи ҳал қилади (ҳаммаси серверда; ҳамён буюртмасида рад).
         if (_isWholesaleOutbound) {
           children.add(const SizedBox(height: 8));
-          children.add(_secondary(context, 'wholesale_courier_refused_btn', _markRefused,
-              key: const ValueKey('wholesale-courier-refused'), danger: true));
-          children.add(const SizedBox(height: 4));
-          children.add(_hint(context, 'wholesale_courier_refused_hint'));
+          final df = _df;
+          if (df != null && df.pending) {
+            children.add(_dfWaitBox(context, df));
+          } else {
+            if (df != null && df.continued) {
+              children.add(_hint(context, 'wholesale_courier_failed_continue'));
+              children.add(const SizedBox(height: 6));
+            }
+            children.add(_secondary(context, 'wholesale_courier_failed_btn', _markRefused,
+                key: const ValueKey('wholesale-courier-refused'), danger: true));
+            children.add(const SizedBox(height: 4));
+            children.add(_hint(context, 'wholesale_courier_failed_hint'));
+          }
         }
       } else {
         children.add(_primary(context, 'logistics_show_code_next', () => _showCodes(leg)));
@@ -232,15 +257,53 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
   // ── Улгуржи (3b) ───────────────────────────────────────────────────
 
   Future<void> _markRefused() async {
-    final reason = await showDialog<String>(
+    final picked = await showDialog<(String, String)>(
       context: context,
       builder: (_) => const _RefuseReasonDialog(),
     );
-    if (reason == null) return; // бекор қилинди
+    if (picked == null) return; // бекор қилинди
     await _runWholesale(() async {
-      await _wholesale.markBuyerRefused(orderId: _wholesaleOrderId, reason: reason);
-      _snack('wholesale_courier_refused_done');
+      final r = await _wholesale.reportDeliveryFailed(
+        orderId: _wholesaleOrderId,
+        reasonCode: picked.$1,
+        note: picked.$2,
+      );
+      if (mounted) setState(() => _df = r);
+      _snack('wholesale_courier_failed_sent');
     });
+  }
+
+  static String _hhmm(DateTime t) {
+    final l = t.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _dfWaitBox(BuildContext context, WholesaleDeliveryFailedReport df) {
+    final c = context.ava;
+    final at = df.escalateAt;
+    final waitingSeller = df.awaitingDecision || (at != null && !DateTime.now().isBefore(at));
+    final text = waitingSeller
+        ? context.tr('wholesale_courier_failed_wait_seller')
+        : at == null
+            ? context.tr('wholesale_courier_failed_sent')
+            : context.tr('wholesale_courier_failed_wait_until').replaceAll('{time}', _hhmm(at));
+    return Container(
+      key: const ValueKey('wholesale-courier-failed-wait'),
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Icon(Icons.hourglass_top_rounded, size: 18, color: c.warn),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 12.5, color: c.warn, fontWeight: FontWeight.w600))),
+          IconButton(
+            tooltip: context.tr('customer_confirm_refresh'),
+            onPressed: _busy ? null : () => _runWholesale(_loadDeliveryFailed),
+            icon: const Icon(Icons.refresh, size: 20),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showReturnCode() async {
@@ -679,8 +742,8 @@ class _ProofSheetState extends State<ProofSheet> {
   }
 }
 
-/// «Харидор тўламади» тасдиғи + ихтиёрий сабаб. Натижа: сабаб (бўш бўлиши
-/// мумкин) ёки `null` — бекор. Контроллер шу ойнанинг ўзида (ёпилиш
+/// «Етказилмади»: сабаб (мажбурий, 4 та сервер коди) + ихтиёрий изоҳ. Натижа:
+/// (сабаб коди, изоҳ) ёки `null` — бекор. Контроллер шу ойнанинг ўзида (ёпилиш
 /// анимацияси давомида ҳам тирик).
 class _RefuseReasonDialog extends StatefulWidget {
   const _RefuseReasonDialog();
@@ -690,37 +753,49 @@ class _RefuseReasonDialog extends StatefulWidget {
 }
 
 class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
-  final _reason = TextEditingController();
+  final _note = TextEditingController();
+  String? _code;
 
   @override
   void dispose() {
-    _reason.dispose();
+    _note.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(context.tr('wholesale_courier_refused_btn')),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(context.tr('wholesale_courier_refused_confirm')),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _reason,
-            maxLength: 300,
-            maxLines: 2,
-            decoration: InputDecoration(labelText: context.tr('wholesale_courier_refused_reason')),
-          ),
-        ],
+      title: Text(context.tr('restaurants_courier_fail_title')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final code in wholesaleDeliveryFailedReasons)
+              ListTile(
+                key: ValueKey('wholesale-failed-reason-$code'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(_code == code ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: _code == code ? context.ava.brand : context.ava.ink3),
+                title: Text(context.tr(wholesaleDeliveryFailedReasonKey(code))),
+                onTap: () => setState(() => _code = code),
+              ),
+            TextField(
+              controller: _note,
+              maxLength: 300,
+              maxLines: 2,
+              decoration: InputDecoration(labelText: context.tr('wholesale_courier_failed_comment')),
+            ),
+            Text(context.tr('wholesale_courier_failed_note'), style: TextStyle(fontSize: 12, color: context.ava.ink2)),
+          ],
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('consent_no'))),
         FilledButton(
           key: const ValueKey('wholesale-courier-refused-yes'),
-          onPressed: () => Navigator.of(context).pop(_reason.text),
+          onPressed: _code == null ? null : () => Navigator.of(context).pop((_code!, _note.text)),
           child: Text(context.tr('logistics_confirm')),
         ),
       ],

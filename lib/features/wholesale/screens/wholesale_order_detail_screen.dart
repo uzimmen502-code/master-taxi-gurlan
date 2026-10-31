@@ -82,12 +82,16 @@ class WholesaleOrderDetailView extends StatefulWidget {
     required this.viewerId,
     required this.repository,
     this.uploadReceipt,
+    this.now,
   });
 
   final WholesaleOrder order;
   final String viewerId;
   final WholesaleOrdersRepository repository;
   final WholesaleReceiptUploader? uploadReceipt;
+
+  /// Тест учун соат («етказилмади» муддати).
+  final DateTime Function()? now;
 
   @override
   State<WholesaleOrderDetailView> createState() => _WholesaleOrderDetailViewState();
@@ -238,6 +242,11 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         ),
         const SizedBox(height: 10),
         _card(context, WholesaleOrderTimeline(status: o.status)),
+        if (a.answerDeliveryFailed || a.decideDeliveryFailed) ...[
+          const SizedBox(height: 10),
+          _deliveryFailedCard(context, a),
+          if (_error != null) ...[const SizedBox(height: 8), WalletInlineError(text: _error!)],
+        ],
         if (o.status == WholesaleOrderStatus.paymentDispute) ...[
           const SizedBox(height: 10),
           _notice(context, 'wholesale_order_status_payment_dispute', warn: true,
@@ -296,7 +305,8 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
         ),
         const SizedBox(height: 12),
-        if (_error != null) WalletInlineError(text: _error!),
+        // «Етказилмади» картаси кўринса, хато шу карта остида (юқорида) — такрорланмасин.
+        if (_error != null && !a.answerDeliveryFailed && !a.decideDeliveryFailed) WalletInlineError(text: _error!),
         ..._buyerActions(context, a),
         ..._sellerActions(context, a),
         const SizedBox(height: 24),
@@ -386,6 +396,133 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             key: const ValueKey('wholesale-money-received')),
       if (o.isCardOrder && o.cardConfirmed) _notice(context, 'wholesale_order_card_confirmed', ok: true),
     ];
+  }
+
+  // ── «Етказилмади» (эга, 2026-11-01) ───────────────────────────────
+
+  static String _hhmm(DateTime t) {
+    final l = t.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Харидор: «Тасдиқлайман» (буюртма ёпилади — тасдиқ ойнаси) ёки «Олмоқчиман».
+  Future<void> _answerFailed({required bool confirm}) async {
+    if (confirm && !await _confirm(context.tr('wholesale_df_buyer_confirm_dialog'))) return;
+    await _run(() async {
+      await widget.repository.respondDeliveryFailed(orderId: _o.id, confirm: confirm);
+      _snack(confirm ? 'wholesale_df_done_failed' : 'customer_confirm_rejected_done');
+    });
+  }
+
+  /// Сотувчи (муддат ўтгач): «Етказилмади» (тасдиқ ойнаси) ёки «Етказилсин».
+  Future<void> _decideFailed({required bool failed}) async {
+    if (failed &&
+        !await _confirm(context.tr('wholesale_df_seller_failed_dialog'),
+            title: context.tr('delivery_failed_decide_failed_title'))) {
+      return;
+    }
+    await _run(() async {
+      await widget.repository.resolveDeliveryFailed(orderId: _o.id, failed: failed);
+      _snack(failed ? 'wholesale_df_done_failed' : 'wholesale_df_decided_deliver');
+    });
+  }
+
+  Widget _deliveryFailedCard(BuildContext context, WholesaleOrderActions a) {
+    final c = context.ava;
+    final df = _o.deliveryFailed;
+    final now = (widget.now ?? DateTime.now)();
+    final until = df.escalateAt;
+    final late = df.canDecide(now);
+    final String waitText;
+    if (a.answerDeliveryFailed) {
+      waitText = late || until == null
+          ? context.tr('wholesale_df_buyer_late')
+          : context.tr('wholesale_df_buyer_until').replaceAll('{time}', _hhmm(until));
+    } else {
+      waitText = late || until == null
+          ? context.tr('wholesale_df_seller_decide')
+          : context.tr('wholesale_df_seller_wait').replaceAll('{time}', _hhmm(until));
+    }
+    final List<Widget> buttons;
+    if (a.answerDeliveryFailed) {
+      buttons = [
+        Expanded(
+          child: OutlinedButton(
+            key: const ValueKey('wholesale-df-want-it'),
+            onPressed: _busy ? null : () => _answerFailed(confirm: false),
+            child: Text(context.tr('customer_confirm_btn_want_it'), textAlign: TextAlign.center),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FilledButton(
+            key: const ValueKey('wholesale-df-confirm'),
+            onPressed: _busy ? null : () => _answerFailed(confirm: true),
+            style: FilledButton.styleFrom(backgroundColor: c.danger),
+            child: Text(context.tr('customer_confirm_btn_confirm'), textAlign: TextAlign.center),
+          ),
+        ),
+      ];
+    } else {
+      final enabled = !_busy && late;
+      buttons = [
+        Expanded(
+          child: OutlinedButton(
+            key: const ValueKey('wholesale-df-deliver'),
+            onPressed: enabled ? () => _decideFailed(failed: false) : null,
+            child: Text(context.tr('wholesale_df_btn_deliver'), textAlign: TextAlign.center),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FilledButton(
+            key: const ValueKey('wholesale-df-failed'),
+            onPressed: enabled ? () => _decideFailed(failed: true) : null,
+            style: FilledButton.styleFrom(backgroundColor: c.danger),
+            child: Text(context.tr('delivery_failed_btn_failed'), textAlign: TextAlign.center),
+          ),
+        ),
+      ];
+    }
+    return Container(
+      key: const ValueKey('wholesale-delivery-failed-card'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.warn, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.report_problem_outlined, size: 18, color: c.warn),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  context.tr(a.answerDeliveryFailed ? 'wholesale_df_buyer_title' : 'wholesale_df_seller_title'),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink),
+                ),
+              ),
+            ],
+          ),
+          if (a.answerDeliveryFailed) ...[
+            const SizedBox(height: 4),
+            Text(context.tr('wholesale_df_buyer_body'), style: TextStyle(fontSize: 12.5, color: c.ink)),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            '${context.tr('customer_confirm_fail_reason')}: ${context.tr(wholesaleDeliveryFailedReasonKey(df.reasonCode))}',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.ink),
+          ),
+          const SizedBox(height: 2),
+          Text(waitText, key: const ValueKey('wholesale-df-wait'), style: TextStyle(fontSize: 12, color: c.warn)),
+          const SizedBox(height: 8),
+          Row(children: buttons),
+        ],
+      ),
+    );
   }
 
   /// Қайтиш жараёни (3b) — харидорга ҳам, сотувчига ҳам кўринади.

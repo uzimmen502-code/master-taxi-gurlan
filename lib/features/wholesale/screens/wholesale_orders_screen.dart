@@ -184,6 +184,23 @@ class WholesaleOrderTile extends StatelessWidget {
                           .join(' · '),
                       style: TextStyle(fontSize: 12, color: c.ink3),
                     ),
+                    // «Етказилмади» сўрови очиқ (харидор жавоби ёки сотувчи қарори керак).
+                    if (o.deliveryFailed.pending) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        key: const ValueKey('wholesale-df-badge'),
+                        children: [
+                          Icon(Icons.report_problem_outlined, size: 14, color: c.warn),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              context.tr('wholesale_df_badge'),
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: c.warn),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

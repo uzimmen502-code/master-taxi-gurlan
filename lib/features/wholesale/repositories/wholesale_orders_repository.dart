@@ -164,6 +164,45 @@ class WholesaleOrdersRepository {
         if (reason.trim().isNotEmpty) 'reason': reason.trim(),
       });
 
+  /// «Етказилмади» (эга, 2026-11-01): ўша `markWholesaleBuyerRefused` — энди сервер
+  /// буюртмани дарҳол ёпмайди, харидордан тасдиқ сўрайди. [reasonCode] — сервер
+  /// `REASONS` (customer_absent | customer_refused | courier_problem | other).
+  Future<WholesaleDeliveryFailedReport> reportDeliveryFailed({
+    required String orderId,
+    required String reasonCode,
+    String note = '',
+  }) async =>
+      WholesaleDeliveryFailedReport.fromMap(await _call(_demand, 'markWholesaleBuyerRefused', {
+        'orderId': orderId,
+        'reasonCode': reasonCode,
+        if (note.trim().isNotEmpty) 'reason': note.trim(),
+      }));
+
+  /// Курьер учун сўров ҳолати (курьер буюртма ҳужжатини ўқий олмайди).
+  Future<WholesaleDeliveryFailedReport> deliveryFailedState(String orderId) async =>
+      WholesaleDeliveryFailedReport.fromMap(
+          await _call(_demand, 'getWholesaleDeliveryFailedState', {'orderId': orderId}));
+
+  /// Харидор: [confirm] — «Тасдиқлайман» (буюртма ёпилади), aks holda «Олмоқчиман».
+  Future<void> respondDeliveryFailed({required String orderId, required bool confirm}) =>
+      _call(_demand, 'respondWholesaleDeliveryFailed', {
+        'orderId': orderId,
+        'decision': confirm ? 'confirm' : 'reject',
+      });
+
+  /// Сотувчи (ёки админ) муддат ўтгач: [failed] — «Етказилмади», aks holda «Етказилсин».
+  Future<void> resolveDeliveryFailed({required String orderId, required bool failed}) =>
+      _call(_demand, 'resolveWholesaleDeliveryFailed', {
+        'orderId': orderId,
+        'decision': failed ? 'failed' : 'deliver',
+      });
+
+  /// Админ: қарор кутаётган «етказилмади» сўровлари (телефонсиз).
+  Future<List<WholesaleDeliveryFailedItem>> listDeliveryFailedPending() async {
+    final d = await _call(_demand, 'listWholesaleDeliveryFailedPending', const {});
+    return WholesaleDeliveryFailedItem.listFrom(d['items']);
+  }
+
   /// Қайтиш жўнатмасини олиш учун ТОПШИРИШ коди (посилка қўлидаги курьерга).
   Future<WholesaleReturnHandoverCode> returnHandoverCode(String orderId) async =>
       WholesaleReturnHandoverCode.fromMap(

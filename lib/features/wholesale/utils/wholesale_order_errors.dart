@@ -78,6 +78,13 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'not_return_courier': 'wholesale_order_err_not_party',
   'not_return_shipment': 'wholesale_order_err_not_party',
   'return_not_ready': 'wholesale_order_err_return_not_ready',
+  // «Етказилмади» харидор тасдиғи билан (2026-11-01, wholesale_failed.js)
+  'df_not_pending': 'wholesale_df_err_state',
+  'df_state_changed': 'wholesale_df_err_state',
+  'decision_not_yet': 'wholesale_df_err_not_yet',
+  'not_decider': 'wholesale_order_err_not_party',
+  'reason_invalid': 'wholesale_order_err_generic',
+  'decision_invalid': 'wholesale_order_err_generic',
 };
 
 /// Квота/ўтказишда «буюртма бериш бу фойдаланувчига ёпиқ» маъносидаги

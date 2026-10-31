@@ -74,6 +74,169 @@ abstract final class WholesaleReturnStatus {
   static String? l10nKey(String s) => known.contains(s) ? 'wholesale_return_status_$s' : null;
 }
 
+/// «Етказилмади» харидор тасдиғи билан (эга қарори 2026-11-01; сервер
+/// `functions_demand/api/wholesale_failed.js`). Курьер белгилайди — ҳолат ва пул
+/// ЎЗГАРМАЙДИ; харидор тасдиқлайди ёки «Олмоқчиман» дейди; муддат ўтса сотувчи
+/// (захира — админ) ҳал қилади. Ҳаммаси серверда — бу ерда фақат кўрсатиш.
+class WholesaleDeliveryFailed {
+  const WholesaleDeliveryFailed({
+    this.pending = false,
+    this.seq = 0,
+    this.reasonCode = '',
+    this.escalateAt,
+    this.escalated = false,
+    this.resolutionBy = '',
+    this.resolutionDecision = '',
+  });
+
+  static const none = WholesaleDeliveryFailed();
+
+  /// Сўров очиқ (`deliveryFailed.open == true` ва буюртма етказилмоқда).
+  final bool pending;
+  final int seq;
+
+  /// customer_absent | customer_refused | courier_problem | other.
+  final String reasonCode;
+
+  /// Шу вақтгача харидор жавоб беради, кейин қарор сотувчи/админда.
+  final DateTime? escalateAt;
+
+  /// Муддат ўтди — сервер қарорни сотувчи/админга ўтказди.
+  final bool escalated;
+  final String resolutionBy;
+
+  /// failed | continue | superseded (бўш — ҳали қарор йўқ).
+  final String resolutionDecision;
+
+  /// Сотувчи/админ қарор қила оладими (сервер ҳам текширади: `decision_not_yet`).
+  bool canDecide(DateTime now) => pending && (escalated || (escalateAt != null && !now.isBefore(escalateAt!)));
+
+  factory WholesaleDeliveryFailed.fromOrder(Map<String, dynamic> d) {
+    final raw = d['deliveryFailed'];
+    if (raw is! Map) return none;
+    final m = raw.map((k, v) => MapEntry(k.toString(), v));
+    final res = m['resolution'] is Map ? (m['resolution'] as Map) : const {};
+    final esc = m['escalateAt'];
+    return WholesaleDeliveryFailed(
+      pending: m['open'] == true && d['status'] == WholesaleOrderStatus.inDelivery,
+      seq: m['seq'] is num ? (m['seq'] as num).toInt() : 0,
+      reasonCode: m['reasonCode'] is String ? m['reasonCode'] as String : '',
+      escalateAt: esc is Timestamp ? esc.toDate() : (esc is DateTime ? esc : null),
+      escalated: m['escalatedAt'] != null,
+      resolutionBy: res['by'] is String ? res['by'] as String : '',
+      resolutionDecision: res['decision'] is String ? res['decision'] as String : '',
+    );
+  }
+}
+
+/// Курьер «етказилмади» жавоби / ҳолати (`markWholesaleBuyerRefused`,
+/// `getWholesaleDeliveryFailedState`). Майдон йўқ (эски сервер) — кутиш йўқ.
+class WholesaleDeliveryFailedReport {
+  const WholesaleDeliveryFailedReport({
+    this.status = '',
+    this.pending = false,
+    this.stage = '',
+    this.escalateAt,
+    this.resolutionDecision = '',
+  });
+
+  /// Буюртма ҳолати (`in_delivery`; эски сервер дарҳол `refused` қайтарарди).
+  final String status;
+  final bool pending;
+
+  /// awaiting_buyer | awaiting_decision.
+  final String stage;
+  final DateTime? escalateAt;
+  final String resolutionDecision;
+
+  bool get awaitingDecision => pending && stage == 'awaiting_decision';
+  bool get continued => !pending && resolutionDecision == 'continue';
+
+  factory WholesaleDeliveryFailedReport.fromMap(Map<String, dynamic> d) {
+    final ms = d['escalateAtMs'];
+    final res = d['resolution'] is Map ? d['resolution'] as Map : const {};
+    final pending = d['pending'] == true || d['awaitingBuyer'] == true || d['stage'] == 'awaiting_decision';
+    return WholesaleDeliveryFailedReport(
+      status: d['status'] is String ? d['status'] as String : '',
+      pending: pending,
+      stage: d['stage'] is String ? d['stage'] as String : '',
+      escalateAt: ms is num ? DateTime.fromMillisecondsSinceEpoch(ms.toInt()) : null,
+      resolutionDecision: res['decision'] is String ? res['decision'] as String : '',
+    );
+  }
+}
+
+/// Админ рўйхати элементи (`listWholesaleDeliveryFailedPending`) — телефон йўқ, фақат охирги 4 рақам.
+class WholesaleDeliveryFailedItem {
+  const WholesaleDeliveryFailedItem({
+    required this.orderId,
+    this.productTitle = '',
+    this.qty,
+    this.total,
+    this.stage = '',
+    this.reasonCode = 'other',
+    this.escalateAt,
+    this.canDecide = false,
+    this.buyerTail = '',
+    this.sellerTail = '',
+    this.courierTail = '',
+  });
+
+  final String orderId;
+  final String productTitle;
+  final int? qty;
+  final int? total;
+  final String stage;
+  final String reasonCode;
+  final DateTime? escalateAt;
+  final bool canDecide;
+  final String buyerTail;
+  final String sellerTail;
+  final String courierTail;
+
+  static WholesaleDeliveryFailedItem? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    String s(String k) => raw[k] is String ? (raw[k] as String).trim() : '';
+    int? n(String k) => raw[k] is num ? (raw[k] as num).toInt() : null;
+    final id = s('orderId');
+    if (id.isEmpty) return null;
+    final ms = n('escalateAtMs');
+    return WholesaleDeliveryFailedItem(
+      orderId: id,
+      productTitle: s('productTitle'),
+      qty: n('qty'),
+      total: n('total'),
+      stage: s('stage'),
+      reasonCode: s('reasonCode').isEmpty ? 'other' : s('reasonCode'),
+      escalateAt: ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms),
+      canDecide: raw['canDecide'] == true,
+      buyerTail: s('buyerTail'),
+      sellerTail: s('sellerTail'),
+      courierTail: s('courierTail'),
+    );
+  }
+
+  static List<WholesaleDeliveryFailedItem> listFrom(Object? raw) {
+    if (raw is! List) return const [];
+    final seen = <String>{};
+    final out = <WholesaleDeliveryFailedItem>[];
+    for (final e in raw) {
+      final it = fromMap(e);
+      if (it != null && seen.add(it.orderId)) out.add(it);
+    }
+    return out;
+  }
+}
+
+/// Курьер сабаби → матн калити (курьер панелидаги мавжуд калитлар; номаълум — «бошқа»).
+String wholesaleDeliveryFailedReasonKey(String code) => switch (code) {
+      'customer_absent' || 'customer_refused' || 'courier_problem' => 'restaurants_courier_fail_$code',
+      _ => 'restaurants_courier_fail_other',
+    };
+
+/// Сервер сабаб кодлари (`functions_demand/api/wholesale_failed.js` REASONS).
+const wholesaleDeliveryFailedReasons = ['customer_absent', 'customer_refused', 'courier_problem', 'other'];
+
 /// `wholesale_orders/{id}` — фақат ўқиш (Rules: харидор/сотувчи/админ;
 /// клиент ёзолмайди). Эски/тўлиқсиз ҳужжатда майдон бўлмаса — хавфсиз
 /// стандарт қиймат (26-банд).
@@ -106,6 +269,7 @@ class WholesaleOrder {
     this.lostRefunded = 0,
     this.lostRefundTo = '',
     this.lostReview = false,
+    this.deliveryFailed = WholesaleDeliveryFailed.none,
     this.createdAt,
   });
 
@@ -152,6 +316,9 @@ class WholesaleOrder {
   final int lostRefunded;
   final String lostRefundTo;
   final bool lostReview;
+
+  /// «Етказилмади» сўрови (2026-11-01).
+  final WholesaleDeliveryFailed deliveryFailed;
   final DateTime? createdAt;
 
   bool get isCardOrder => paymentMethod == WholesalePaymentMethod.cardOnDelivery;
@@ -239,6 +406,7 @@ class WholesaleOrder {
       lostRefunded: _int(lost['refunded']),
       lostRefundTo: _str(lost['refundTo']),
       lostReview: lost['review'] == true || _str(pay['status']) == 'lost_review',
+      deliveryFailed: WholesaleDeliveryFailed.fromOrder(d),
       createdAt: _date(d['createdAt']),
     );
   }
@@ -262,6 +430,8 @@ class WholesaleOrderActions {
     required this.canConfirmCardPayment,
     required this.showReceipt,
     required this.showReturnDebt,
+    required this.answerDeliveryFailed,
+    required this.decideDeliveryFailed,
   });
 
   final bool isBuyer;
@@ -295,6 +465,12 @@ class WholesaleOrderActions {
   /// Сотувчи: қайтариш қарзи огоҳлантириши.
   final bool showReturnDebt;
 
+  /// Харидор: курьер «етказилмади» деди — «Тасдиқлайман» / «Олмоқчиман» (мажбурий).
+  final bool answerDeliveryFailed;
+
+  /// Сотувчи: «етказилмади» сўрови кўринади (тугмалар муддат ўтгач — [WholesaleDeliveryFailed.canDecide]).
+  final bool decideDeliveryFailed;
+
   factory WholesaleOrderActions.of(WholesaleOrder o, String viewerId) {
     final buyer = o.isBuyer(viewerId);
     final seller = !buyer && o.isSeller(viewerId);
@@ -314,6 +490,8 @@ class WholesaleOrderActions {
       // Сотувчида Storage ўқиш ҳуқуқи ЙЎҚ — фақат сервер ёзган `receiptUrl`.
       showReceipt: seller && o.isCardOrder && o.receiptUrl.isNotEmpty,
       showReturnDebt: seller && o.returnDebt > 0,
+      answerDeliveryFailed: buyer && o.deliveryFailed.pending,
+      decideDeliveryFailed: seller && o.deliveryFailed.pending,
     );
   }
 }

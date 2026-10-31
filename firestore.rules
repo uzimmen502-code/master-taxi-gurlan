@@ -89,6 +89,7 @@ service cloud.firestore {
           ? request.auth.token.phone_number.replace('\\+', '')
           : '';
     }
+    function adminNewsIsMine(t){let d=phoneFromToken();return d.size()==12&&d[0:3]=='998'?t in [d,'+'+d,d[3:12]]:d.size()==9?t in [d,'998'+d,'+998'+d]:false;}
 
     function phoneDigits(phone) {
       return phone is string ? phone.replace('\\+', '') : '';
@@ -1797,15 +1798,9 @@ service cloud.firestore {
     // «Push qayta yuborish» (`requestPushResend`); буюртма чеклари ва
     // ҳолат хабарлари — CF (Admin SDK, rules'дан ташқари).
     //
-    // ⚠ Ўқиш ҳали `if true`: CF шахсий чекларни (`targetUserId`, манзил,
-    // сумма) ҳам шу ерга ёзади. Ёпиш учун илова сўровини
-    // (`NewsRepository` — `orderBy createdAt limit 50`) аввал янги версияда
-    // ўзгартириш керак (ҳозирги сўров ёпиқ қоидада бутунлай рад бўлади).
-    //
     // Тест: functions/test/admin_panel_audit_rules.test.js
     match /admin_news/{newsId} {
-      // Ўқиш — барча фойдаланувчилар (фильтр client-side).
-      allow read: if true;
+      allow read: if isAdmin()||(isAuth()&&resource.data.targetUserId=='')||adminNewsIsMine(resource.data.targetUserId);
 
       // Яратиш — фақат админ; мажбурий майдонлар ва типлар тeкширилaди.
       // category ва audience aniq qiymatlardан bo'lsin.

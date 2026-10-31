@@ -75,6 +75,12 @@ const { attachWholesaleOrders } = require('./wholesale_orders');
 attachWholesaleOrders(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger,
 });
+// Relay kuryer haqi AVTOMATIK hamyonga (ega, 2026-10-31): EARNED → courierPayout:{s}:{l},
+// xizmat haqi % ushlanadi (settings/courier_service_fee). relay_escrow.js o'zgarmaydi.
+const { attachCourierPayout } = require('./courier_payout');
+attachCourierPayout(exports, {
+  functions, db, admin, canonicalUid, settlementLedger, requireCallerRoles,
+});
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
 // `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.

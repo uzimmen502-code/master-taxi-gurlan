@@ -1,8 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/geo/geo_names.dart';
-import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/product_detail_dark.dart';
 import '../models/wholesale_product.dart';
 import '../utils/wholesale_labels.dart';
@@ -71,15 +69,6 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moq = context
-        .tr('wholesale_moq_short')
-        .replaceAll('{qty}', '${product.moq}')
-        .replaceAll('{unit}', wholesaleUnitLabel(context, product.unit));
-    // Сотувчи қайси ҳудудда — харидорга яқини муҳим. Эски ҳужжатда
-    // `districtId` бўш: сатр умуман кўринмайди.
-    final district = product.districtId.isEmpty
-        ? ''
-        : GeoNames.district(product.districtId, context.contentLang);
     return SizedBox(
       width: WholesaleProductStrip._tileWidth,
       child: Material(
@@ -141,27 +130,6 @@ class _Tile extends StatelessWidget {
                         color: PdDark.brand,
                       ),
                     ),
-                    Text(
-                      moq,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        height: 1.15,
-                        color: PdDark.muted,
-                      ),
-                    ),
-                    if (district.isNotEmpty)
-                      Text(
-                        district,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          height: 1.15,
-                          color: PdDark.muted,
-                        ),
-                      ),
                   ],
                 ),
               ),

@@ -8,14 +8,10 @@ import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
-import '../../../shared/widgets/wallet_topup_ui.dart' show walletPhoneId;
 import '../../ads/widgets/ad_image_slider.dart';
 import '../models/wholesale_product.dart';
-import '../repositories/wholesale_orders_repository.dart';
 import '../repositories/wholesale_products_repository.dart';
-import '../repositories/wholesale_stock_repository.dart';
 import '../widgets/wholesale_checkout_sheet.dart';
-import 'wholesale_order_detail_screen.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
@@ -133,84 +129,19 @@ class _WholesaleProductDetailViewState
   late String _packId = widget.product.effectivePacks.first.id;
   WholesalePack get _pack => widget.product.packById(_packId);
 
-  late int _qty = _pack.moq;
-
-  /// Қолдиқ — битта ҳужжат тинглагичи, экран ёпилганда ёпилади.
-  late final Stream<WholesaleStock> _stock =
-      WholesaleStockRepository().watch(widget.product.id);
-
   void _selectPack(String id) {
     if (id == _packId) return;
-    setState(() {
-      _packId = id;
-      _qty = _pack.moq;
-    });
+    setState(() => _packId = id);
   }
 
   late final List<WholesaleProduct> _similar =
       similarWholesale(widget.product, widget.catalog);
-  late final List<WholesaleProduct> _sellerOthers =
-      sellerOthers(widget.product, widget.catalog);
-
   @override
   void initState() {
     super.initState();
     if (_countedThisSession.add(widget.product.id)) {
       WholesaleProductsRepository().incrementViews(widget.product.id);
     }
-    unawaited(_checkCanOrder());
-  }
-
-  /// «Буюртма бериш» (4-босқич): Хитой бозори эмас, ўз товари эмас ва
-  /// дарвоза шу фойдаланувчини киритса кўринади. Ҳал қилувчи — сервер
-  /// (квота `module_disabled` берса тугма яширинади, қўнғироқ қолади).
-  final _ordersRepo = WholesaleOrdersRepository();
-  String _uid = '';
-  bool _canOrder = false;
-
-  Future<void> _checkCanOrder() async {
-    final p = widget.product;
-    if (p.isChina) return;
-    final uid = await walletPhoneId();
-    if (uid.isEmpty || canonicalPhoneId(p.sellerId) == uid) {
-      if (mounted && _canOrder) setState(() => _canOrder = false);
-      return;
-    }
-    final gate = await _ordersRepo.gate();
-    if (!mounted) return;
-    setState(() {
-      _uid = uid;
-      _canOrder = gate.allows(uid);
-    });
-  }
-
-  Future<void> _order() async {
-    final orderId = await showWholesaleCheckoutSheet(
-      context,
-      product: widget.product,
-      pack: _pack,
-      qty: _qty,
-      repository: _ordersRepo,
-    );
-    if (!mounted) return;
-    if (orderId == null) {
-      // Варақда дарвоза ёпиқ чиққан бўлса — тугма яширинсин.
-      unawaited(_checkCanOrder());
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.tr('wholesale_order_placed'))),
-    );
-    unawaited(Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => WholesaleOrderDetailScreen(
-          orderId: orderId,
-          viewerId: _uid,
-          repository: _ordersRepo,
-        ),
-      ),
-    ));
   }
 
   Future<void> _call() async {
@@ -251,8 +182,9 @@ class _WholesaleProductDetailViewState
   Widget build(BuildContext context) {
     final p = widget.product;
     final pack = _pack;
-    final price = pack.priceForQty(_qty);
-    final total = price * _qty;
+    // Миқдор экранда танланмайди (эга, 2026-11-01: чат ёки телефонда
+    // келишилади) — минимал миқдордаги бир дона нархи.
+    final price = pack.priceForQty(pack.moq);
     // Қадоқ расми бўлса — асосий расм ўрнига биринчи бўлиб (эга, 2026-10-31).
     final images = pack.hasPhoto
         ? [pack.photoUrl, ...p.imageUrls.where((u) => u != pack.photoUrl)]
@@ -298,16 +230,6 @@ class _WholesaleProductDetailViewState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    p.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: PdDark.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
                   Text(
                     p.sellerCompanyName.isEmpty
                         ? context.tr('wholesale_seller_label')
@@ -365,22 +287,6 @@ class _WholesaleProductDetailViewState
                       context.tr('wholesale_no_shipping_data'),
                       style: meta.copyWith(color: const Color(0xFFF0A868)),
                     ),
-                  StreamBuilder<WholesaleStock>(
-                    stream: _stock,
-                    builder: (context, snap) => WholesaleStockLine(
-                      qty: snap.data?.of(pack.id),
-                      unitLabel: unitLabel,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  WholesaleTierPicker(
-                    // Қадоқ алмашса миқдор майдони ҳам янгидан.
-                    key: ValueKey('wholesale-tiers-${pack.id}'),
-                    product: p,
-                    pack: p.hasPacks ? pack : null,
-                    qty: _qty,
-                    onQtyChanged: (q) => setState(() => _qty = q),
-                  ),
                   if (p.description.trim().isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -402,14 +308,6 @@ class _WholesaleProductDetailViewState
                       onTap: _openProduct,
                     ),
                   ],
-                  if (_sellerOthers.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    WholesaleProductStrip(
-                      title: context.tr('wholesale_seller_others'),
-                      items: _sellerOthers,
-                      onTap: _openProduct,
-                    ),
-                  ],
                   // Маълумот тугади — энди суриш кейинги маҳсулотга ўтади.
                   if (widget.showNextHint) ...[
                     const SizedBox(height: 16),
@@ -427,102 +325,24 @@ class _WholesaleProductDetailViewState
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: Row(
-                children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        // «Тахминий»: нарх сотувчи билан келишилади, бу
-                        // буюртма суммаси эмас (чекаут йўқ, фақат қўнғироқ).
-                        context.tr('wholesale_total_approx'),
-                        style:
-                            const TextStyle(fontSize: 12, color: PdDark.muted),
-                      ),
-                      Text(
-                        '${formatPrice(total)} ${p.currencyLabel}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: PdDark.ink,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 14),
-                  // Буюртма мумкин бўлса: қўнғироқ — ихчам (фақат белги,
-                  // 48 dp), «Буюртма бериш» — асосий тугма. Қўнғироқ ҳамиша қолади.
-                  if (_canOrder) ...[
-                    SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: IconButton.outlined(
-                        key: const ValueKey('wholesale-call-compact'),
-                        tooltip: context.tr('wholesale_call'),
-                        onPressed: _call,
-                        style: IconButton.styleFrom(
-                          foregroundColor: PdDark.brand,
-                          side: const BorderSide(color: PdDark.brand),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        icon: const Icon(Icons.call),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SizedBox(
-                        height: 48,
-                        child: FilledButton.icon(
-                          key: const ValueKey('wholesale-order-button'),
-                          onPressed: _order,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: PdDark.brand,
-                            foregroundColor: PdDark.brandInk,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          icon: const Icon(Icons.shopping_bag_outlined),
-                          label: Text(
-                            context.tr('wholesale_order_btn'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ] else
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton.icon(
-                        onPressed: _call,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: PdDark.brand,
-                          foregroundColor: PdDark.brandInk,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        icon: const Icon(Icons.call),
-                        label: Text(
-                          context.tr('wholesale_call'),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
+              child: SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  key: const ValueKey('wholesale-call'),
+                  onPressed: _call,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: PdDark.brand,
+                    foregroundColor: PdDark.brandInk,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                ],
+                  icon: const Icon(Icons.call),
+                  label: Text(
+                    context.tr('wholesale_call'),
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
               ),
             ),
           ),

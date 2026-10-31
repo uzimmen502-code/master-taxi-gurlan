@@ -81,9 +81,9 @@ void main() {
           MaterialApp(home: Scaffold(body: WholesaleSellerCard(product: p))),
         );
 
-    testWidgets('сотувчи номи ва «барча маҳсулотлари» тугмаси бор', (t) async {
+    testWidgets('фақат «барча маҳсулотлари» тугмаси (ном ва ҳудуд йўқ, эга 2026-11-01)', (t) async {
       await pump(t, _p('a'));
-      expect(find.text('Sunlight'), findsOneWidget);
+      expect(find.text('Sunlight'), findsNothing);
       final btn = find.byKey(const ValueKey('wholesale_go_seller'));
       expect(btn, findsOneWidget);
       expect(find.text('shop_item_seller_all'), findsOneWidget);
@@ -93,7 +93,7 @@ void main() {
     testWidgets('sellerId бўш — тугма чиқмайди', (t) async {
       await pump(t, _p('a', sellerId: ''));
       expect(find.byKey(const ValueKey('wholesale_go_seller')), findsNothing);
-      expect(find.text('Sunlight'), findsOneWidget);
+      expect(find.text('Sunlight'), findsNothing);
     });
   });
 

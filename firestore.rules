@@ -2100,7 +2100,7 @@ service cloud.firestore {
 
     match /settings/courier {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     // Moy almashtirish — punktlar va bronlar

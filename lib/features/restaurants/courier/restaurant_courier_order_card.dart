@@ -220,7 +220,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: Text(ctx.tr('restaurants_courier_fail_note'), style: TextStyle(fontSize: 12, color: ctx.ava.ink2)),
+              child: Text(ctx.tr('restaurants_courier_fail_note_confirm'), style: TextStyle(fontSize: 12, color: ctx.ava.ink2)),
             ),
           ],
         ),
@@ -233,7 +233,11 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
     });
     if (!ok || !mounted) return;
     if (res?.awaitingCustomer == true) {
-      setState(() => _awaitingStatus = o.restaurantStatus);
+      // Эга қарори 2026-10-31: «етказилмади»ни мижоз тасдиқлайди (жавоб бермаса —
+      // ресторан). Кутиш ҳолати буюртма ҳужжатидан жонли кўринади
+      // ([OrderModel.isDeliveryFailedPending]); «Топширдим» ёқиқ қолади — мижоз
+      // чиқиб келса курьер барибир топшира олади.
+      _snack(context.tr('restaurants_courier_failed_sent'));
       return;
     }
     _snack(context.tr('restaurants_courier_failed_ok'));
@@ -281,8 +285,11 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
     // Мижоз тасдиғи (D2/D7): кутиш давомида «Топширдим» ўчиқ; мижоз тасдиқлаб
     // буюртма якунланса — «Кейинги буюртма».
     final waiting = courierIsAwaitingCustomer(o, _awaitingStatus);
-    final showNext = widget.needsFinalize ||
-        (widget.isCurrent && courierAwaitingFinished(o, _awaitingStatus));
+    final showNext = courierShowNext(
+      needsFinalize: widget.needsFinalize,
+      isCurrent: widget.isCurrent,
+      order: o,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -458,6 +465,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
       case CourierRestaurantStage.toCustomer:
         return [
           const SizedBox(height: 8),
+          ..._failedPendingNotice(context, o),
           contactRow,
           const SizedBox(height: 8),
           _BigBtn(label: context.tr('restaurants_courier_arrive_btn'), busy: _busy, onTap: () => _run(widget.onArrive)),
@@ -472,6 +480,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
             const CourierAwaitingNotice(),
             const SizedBox(height: 8),
           ],
+          ..._failedPendingNotice(context, o),
           contactRow,
           const SizedBox(height: 8),
           // Кутишда тугма ўчиқ: бир хил амални қайта босиш хато каби кўринмасин.
@@ -486,6 +495,27 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
       case CourierRestaurantStage.cancelled:
         return const [];
     }
+  }
+
+  /// «Етказилмади» юборилган: мижоз (муддат ўтгач — ресторан) жавобини кутамиз.
+  List<Widget> _failedPendingNotice(BuildContext context, OrderModel o) {
+    if (!o.isDeliveryFailedPending) return const [];
+    final c = context.ava;
+    final d = o.deliveryFailedDeadline;
+    final text = o.deliveryFailedEscalated
+        ? context.tr('restaurants_courier_failed_wait_restaurant')
+        : d == null
+            ? context.tr('restaurants_courier_failed_wait_customer')
+            : context.tr('restaurants_courier_failed_wait_until').replaceAll('{time}', _hhmm(d));
+    return [
+      _Notice(icon: Icons.hourglass_top_rounded, text: text, color: c.warn, bg: c.warnSoft),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  static String _hhmm(DateTime t) {
+    final l = t.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _failLink(BuildContext context, OrderModel o) {

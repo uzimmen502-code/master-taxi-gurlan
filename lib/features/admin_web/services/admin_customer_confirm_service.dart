@@ -34,4 +34,17 @@ class AdminCustomerConfirmService {
     });
     return CustomerConfirmSetResult.fromMap(res);
   }
+
+  /// «Етказилмади»: мижоз шунча дақиқада жавоб бермаса қарор ресторанга ўтади
+  /// (эга, 2026-10-31; стандарт 15). Сервер 1..240 дан ташқарисини рад этади.
+  Future<CustomerConfirmSetResult> setFailedTimeout({
+    required int minutes,
+    required String reason,
+  }) async {
+    final res = await _call.call('adminSetCustomerConfirmation', {
+      'failedTimeoutMin': minutes,
+      'reason': reason.trim(),
+    });
+    return CustomerConfirmSetResult.fromMap(res);
+  }
 }

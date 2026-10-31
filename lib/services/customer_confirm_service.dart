@@ -25,15 +25,27 @@ class CustomerConfirmService {
   }
 
   /// Мижоз ўз қурилмасида тасдиқлайди. Қайта чақирув хавфсиз (`idempotent`).
+  ///
+  /// [reject] — «Олмоқчиман» (фақат сервер `canReject` берган қадамда, масалан
+  /// «етказилмади»). [requestedAt] берилса — сервер бошқа (янгироқ) сўровга бу
+  /// тугма таъсир қилишига йўл қўймайди (`STATE_CHANGED`).
   Future<CustomerConfirmResult> confirm({
     required String module,
     required String id,
     required String step,
+    bool reject = false,
+    DateTime? requestedAt,
   }) async {
     try {
       final result = await _functions
           .httpsCallable('customerConfirmHandover')
-          .call(<String, dynamic>{'module': module, 'id': id, 'step': step});
+          .call(<String, dynamic>{
+        'module': module,
+        'id': id,
+        'step': step,
+        if (reject) 'decision': 'reject',
+        if (requestedAt != null) 'requestedAtMs': requestedAt.millisecondsSinceEpoch,
+      });
       return CustomerConfirmResult.fromResponse(result.data);
     } on FirebaseFunctionsException catch (e) {
       throw _toException(e);

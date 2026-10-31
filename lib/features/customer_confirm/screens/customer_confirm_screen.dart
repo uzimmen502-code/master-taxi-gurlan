@@ -45,11 +45,11 @@ class _CustomerConfirmScreenState extends State<CustomerConfirmScreen> {
 
   void _onSignal() => _ctrl.load();
 
-  Future<void> _confirm(CustomerConfirmation item) async {
-    final errKey = await _ctrl.confirm(item);
+  Future<void> _confirm(CustomerConfirmation item, {bool reject = false}) async {
+    final errKey = await (reject ? _ctrl.reject(item) : _ctrl.confirm(item));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr(errKey ?? 'customer_confirm_done')),
+      content: Text(context.tr(errKey ?? (reject ? 'customer_confirm_rejected_done' : 'customer_confirm_done'))),
       backgroundColor: errKey == null ? null : Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
     ));
@@ -112,6 +112,7 @@ class _CustomerConfirmScreenState extends State<CustomerConfirmScreen> {
         item: items[i],
         busy: _ctrl.isBusy(items[i]),
         onConfirm: () => _confirm(items[i]),
+        onReject: () => _confirm(items[i], reject: true),
       ),
     );
   }

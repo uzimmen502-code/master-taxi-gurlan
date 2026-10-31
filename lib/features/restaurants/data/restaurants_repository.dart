@@ -817,6 +817,15 @@ class RestaurantsRepository {
   Future<void> markDelivered(String orderId) =>
       _call('restaurantMarkDelivered', {'orderId': orderId});
 
+  /// «Етказилмади» бўйича ресторан қарори (мижоз муддатида жавоб бермаганда):
+  /// [failed] `true` — етказилмади деб ёпилади, `false` — курьер етказишни давом эттиради.
+  /// Сервер муддат ўтмаган бўлса `DECISION_NOT_YET` қайтаради.
+  Future<void> resolveDeliveryFailed(String orderId, {required bool failed}) =>
+      _call('restaurantResolveDeliveryFailed', {
+        'orderId': orderId,
+        'decision': failed ? 'failed' : 'continue',
+      });
+
   // ── Курьер ─────────────────────────────────────────────────────────
 
   Future<List<NearbyRestaurantOrder>> listNearby({double? lat, double? lng, int? radiusKm}) async {

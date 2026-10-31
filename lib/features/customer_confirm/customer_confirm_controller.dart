@@ -94,12 +94,28 @@ class CustomerConfirmController extends ChangeNotifier {
   /// Тасдиқлайди. Муваффақият → `null`. Хато → мижозга кўрсатиладиган матн
   /// калити (`customer_confirm_err_*`). Бир элементга параллел босиш — иккинчиси
   /// рад (икки марта юборилмайди; сервер ҳам идемпотент).
-  Future<String?> confirm(CustomerConfirmation c) async {
+  Future<String?> confirm(CustomerConfirmation c) => _decide(c, reject: false);
+
+  /// «Олмоқчиман» — фақат [CustomerConfirmation.canReject] бўлса (масалан,
+  /// курьер «етказиб бўлмади» деган, мижоз эса буюртмани олмоқчи). Натижа
+  /// [confirm] каби: `null` — муваффақият, акс ҳолда хато матни калити.
+  Future<String?> reject(CustomerConfirmation c) {
+    if (!c.canReject) return Future.value(customerConfirmErrorKey(''));
+    return _decide(c, reject: true);
+  }
+
+  Future<String?> _decide(CustomerConfirmation c, {required bool reject}) async {
     if (_busy.contains(c.key)) return null;
     _busy.add(c.key);
     _notify();
     try {
-      await _service.confirm(module: c.module, id: c.id, step: c.step);
+      await _service.confirm(
+        module: c.module,
+        id: c.id,
+        step: c.step,
+        reject: reject,
+        requestedAt: c.requestedAt,
+      );
       _items = [
         for (final i in _items)
           if (i.key != c.key) i,

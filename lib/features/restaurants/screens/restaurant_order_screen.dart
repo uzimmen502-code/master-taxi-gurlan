@@ -9,6 +9,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/order_model.dart';
+import '../../customer_confirm/widgets/delivery_failed_order_card.dart';
 import '../../home/widgets/ava_section.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/courier_tracking.dart';
@@ -106,6 +107,11 @@ class _RestaurantOrderScreenState extends State<RestaurantOrderScreen> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
             children: [
               _StatusCard(order: o),
+              // Курьер «етказиб бўлмади» деди — мижоз тасдиғи ёки «Олмоқчиман» (эга, 2026-10-31).
+              if (o.isDeliveryFailedPending) ...[
+                const SizedBox(height: 10),
+                DeliveryFailedOrderCard(key: ValueKey('df-${o.id}'), order: o),
+              ],
               // Курьер тайинланди: исми, қўнғироқ ва харитада жонли кузатиш (S6).
               if (CourierTracking.canTrack(o)) ...[
                 const SizedBox(height: 10),

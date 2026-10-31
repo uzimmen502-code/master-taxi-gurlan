@@ -38,11 +38,26 @@ String? parseCustomerConfirmStage(Object? v) {
   return kCustomerConfirmStages.contains(s) ? s : null;
 }
 
+/// «Етказилмади»: мижоз жавоби учун дақиқа — сервер чегараси билан бир хил (1..240).
+const kFailedTimeoutMin = 1;
+const kFailedTimeoutMax = 240;
+
+/// Админ киритган матн → дақиқа (`null` — нотўғри; сервер ҳам рад этади).
+int? parseFailedTimeoutInput(String raw) {
+  final n = int.tryParse(raw.trim());
+  if (n == null || n < kFailedTimeoutMin || n > kFailedTimeoutMax) return null;
+  return n;
+}
+
 class CustomerConfirmState {
   const CustomerConfirmState({
     this.stages = const {},
     this.testerCount,
+    this.failedTimeoutMin,
   });
+
+  /// «Етказилмади»: мижоз жавоби учун дақиқа (эски сервер бермаса `null`).
+  final int? failedTimeoutMin;
 
   /// Модул → босқич (`null` = сервер бермаган / номаълум).
   final Map<String, String?> stages;
@@ -60,7 +75,12 @@ class CustomerConfirmState {
       stages[k] = e is Map ? parseCustomerConfirmStage(e['stage']) : null;
     }
     final tc = m['testerCount'];
-    return CustomerConfirmState(stages: stages, testerCount: tc is num ? tc.toInt() : null);
+    final ft = m['failedTimeoutMin'];
+    return CustomerConfirmState(
+      stages: stages,
+      testerCount: tc is num ? tc.toInt() : null,
+      failedTimeoutMin: ft is int ? ft : null,
+    );
   }
 }
 

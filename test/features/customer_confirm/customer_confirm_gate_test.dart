@@ -30,6 +30,8 @@ class _CountingService implements CustomerConfirmService {
     required String module,
     required String id,
     required String step,
+    bool reject = false,
+    DateTime? requestedAt,
   }) async =>
       const CustomerConfirmResult();
 }

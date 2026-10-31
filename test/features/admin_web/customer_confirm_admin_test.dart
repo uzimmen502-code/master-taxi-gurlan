@@ -46,6 +46,9 @@ Future<void> _pump(WidgetTester tester, _FakeCallable fake) async {
   await tester.pumpAndSettle();
 }
 
+/// Sinovchi telefoni maydoni (ekranda «yetkazilmadi» muddati maydoni ham bor).
+final _phoneField = find.widgetWithText(TextField, 'Телефон (9 рақам ёки 998…)');
+
 Future<void> _confirmReason(WidgetTester tester, String reason) async {
   await tester.enterText(find.byType(TextField).last, reason);
   await tester.pump();
@@ -170,7 +173,7 @@ void main() {
         return _state();
       });
       await _pump(tester, fake);
-      await tester.enterText(find.byType(TextField), '+998 (90) 111-22-33');
+      await tester.enterText(_phoneField, '+998 (90) 111-22-33');
       await tester.tap(find.byKey(const ValueKey('tester_add')));
       await tester.pumpAndSettle();
       await _confirmReason(tester, 'sinov');
@@ -191,18 +194,58 @@ void main() {
       });
       await _pump(tester, fake);
 
-      await tester.enterText(find.byType(TextField), '12345');
+      await tester.enterText(_phoneField, '12345');
       await tester.tap(find.byKey(const ValueKey('tester_remove')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Телефон: 9 рақам'), findsOneWidget);
       expect(fake.calls.where((c) => c.$1 == 'adminSetCustomerConfirmation'), isEmpty);
 
-      await tester.enterText(find.byType(TextField), '901112233');
+      await tester.enterText(_phoneField, '901112233');
       await tester.tap(find.byKey(const ValueKey('tester_remove')));
       await tester.pumpAndSettle();
       await _confirmReason(tester, 'olish');
       final set = fake.calls.firstWhere((c) => c.$1 == 'adminSetCustomerConfirmation');
       expect(set.$2, {'module': 'restaurant', 'removeTesterIds': ['901112233'], 'reason': 'olish'});
+    });
+
+    testWidgets('«yetkazilmadi» muddati: serverdagi qiymat; noto\'g\'ri (0, 241, matn) ketmaydi; 30 → payload, audit sababi', (tester) async {
+      var minutes = 15;
+      final fake = _FakeCallable((n, p) async {
+        if (n == 'adminSetCustomerConfirmation') {
+          minutes = p['failedTimeoutMin'] as int;
+          return {'ok': true, 'unchanged': false, 'failedTimeoutMin': minutes, 'testerCount': 2};
+        }
+        return {..._state(), 'failedTimeoutMin': minutes};
+      });
+      await _pump(tester, fake);
+      expect(find.textContaining('Серверда: 15 дақиқа'), findsOneWidget);
+      final field = find.byKey(const ValueKey('failed_timeout'));
+      expect(tester.widget<TextField>(field).controller!.text, '15');
+
+      for (final bad in ['0', '241', 'abc', '1.5']) {
+        await tester.enterText(field, bad);
+        await tester.tap(find.byKey(const ValueKey('failed_timeout_save')));
+        await tester.pumpAndSettle();
+      }
+      expect(fake.calls.where((c) => c.$1 == 'adminSetCustomerConfirmation'), isEmpty);
+
+      await tester.enterText(field, '30');
+      await tester.tap(find.byKey(const ValueKey('failed_timeout_save')));
+      await tester.pumpAndSettle();
+      await _confirmReason(tester, 'ega qarori');
+      final set = fake.calls.firstWhere((c) => c.$1 == 'adminSetCustomerConfirmation');
+      expect(set.$2, {'failedTimeoutMin': 30, 'reason': 'ega qarori'});
+      expect(find.textContaining('Серверда: 30 дақиқа'), findsOneWidget);
+    });
+
+    test('parseFailedTimeoutInput: chegaralar', () {
+      expect(parseFailedTimeoutInput('1'), 1);
+      expect(parseFailedTimeoutInput(' 240 '), 240);
+      expect(parseFailedTimeoutInput('0'), isNull);
+      expect(parseFailedTimeoutInput('241'), isNull);
+      expect(parseFailedTimeoutInput(''), isNull);
+      expect(CustomerConfirmState.fromMap({'failedTimeoutMin': 20}).failedTimeoutMin, 20);
+      expect(CustomerConfirmState.fromMap({'failedTimeoutMin': '20'}).failedTimeoutMin, isNull);
     });
 
     testWidgets('yuklash xatosi — matn va "Qayta"', (tester) async {

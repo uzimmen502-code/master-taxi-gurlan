@@ -43,6 +43,7 @@ class CustomerConfirmAdminBody extends StatefulWidget {
 
 class _CustomerConfirmAdminBodyState extends State<CustomerConfirmAdminBody> {
   final _phone = TextEditingController();
+  final _timeout = TextEditingController();
   CustomerConfirmState _cur = const CustomerConfirmState();
   final Map<String, String> _picked = {}; // модул → ҳали сақланмаган танлов
   String _testerModule = kCustomerConfirmModules.keys.first;
@@ -60,6 +61,7 @@ class _CustomerConfirmAdminBodyState extends State<CustomerConfirmAdminBody> {
   @override
   void dispose() {
     _phone.dispose();
+    _timeout.dispose();
     super.dispose();
   }
 
@@ -74,6 +76,7 @@ class _CustomerConfirmAdminBodyState extends State<CustomerConfirmAdminBody> {
         setState(() {
           _cur = s;
           _picked.clear();
+          _timeout.text = s.failedTimeoutMin?.toString() ?? '';
         });
       }
     } catch (e) {
@@ -152,6 +155,65 @@ class _CustomerConfirmAdminBodyState extends State<CustomerConfirmAdminBody> {
     });
   }
 
+  Future<void> _saveTimeout() async {
+    final n = parseFailedTimeoutInput(_timeout.text);
+    if (n == null) {
+      _snack('Дақиқа: $kFailedTimeoutMin…$kFailedTimeoutMax оралиғида бутун сон', error: true);
+      return;
+    }
+    final reason = await showAdminReasonDialog(
+      context,
+      title: '«Етказилмади»: $n дақиқа',
+      message: 'Курьер «етказиб бўлмади» деса, мижоз $n дақиқа ичида жавоб бермаса қарор ресторанга ўтади. '
+          'Янги сўровларга таъсир қилади.',
+    );
+    if (reason == null || !mounted) return;
+    await _run(() => widget.svc.setFailedTimeout(minutes: n, reason: reason));
+  }
+
+  Widget _failedTimeoutCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('«Етказилмади» — мижоз жавоби учун вақт', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(
+              'Ҳамма мижоз учун мажбурий (юқоридаги босқичларга боғлиқ эмас). Мижоз шу вақт ичида жавоб бермаса, '
+              'қарорни ресторан қилади. Серверда: ${_cur.failedTimeoutMin?.toString() ?? '—'} дақиқа.',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: TextField(
+                    key: const ValueKey('failed_timeout'),
+                    controller: _timeout,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Дақиқа', border: OutlineInputBorder(), isDense: true),
+                  ),
+                ),
+                FilledButton(
+                  key: const ValueKey('failed_timeout_save'),
+                  onPressed: _busy ? null : _saveTimeout,
+                  child: const Text('Сақлаш'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading && !_loadedOnce) return const Center(child: CircularProgressIndicator());
@@ -191,6 +253,8 @@ class _CustomerConfirmAdminBodyState extends State<CustomerConfirmAdminBody> {
         ),
         const SizedBox(height: 8),
         for (final e in kCustomerConfirmModules.entries) _stageRow(e.key, e.value),
+        const SizedBox(height: 14),
+        _failedTimeoutCard(),
         const SizedBox(height: 14),
         const Text('Синовчилар (INTERNAL)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),

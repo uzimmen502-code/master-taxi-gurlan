@@ -78,10 +78,22 @@ bool courierIsAwaitingCustomer(OrderModel o, String? awaitingStatus) =>
 bool courierAwaitingFinished(OrderModel o, String? awaitingStatus) =>
     awaitingStatus != null && isRestaurantOrderFinalized(o);
 
-/// «Етказиб бўлмади» фақат қўлдаги буюртмада (`picked`/`arrived`).
+/// «Етказиб бўлмади» фақат қўлдаги буюртмада (`picked`/`arrived`) ва ҳали
+/// сўралмаган бўлса (сўралгани мижоз ёки ресторан қарорини кутади).
 bool courierCanFail(OrderModel o) =>
-    o.restaurantStatus == RestaurantOrderStatus.picked ||
-    o.restaurantStatus == RestaurantOrderStatus.arrived;
+    (o.restaurantStatus == RestaurantOrderStatus.picked ||
+        o.restaurantStatus == RestaurantOrderStatus.arrived) &&
+    !o.isDeliveryFailedPending;
+
+/// «Кейинги буюртма» тугмаси: маршрут snapshot'и буюртмани якунланган деб билади
+/// ([needsFinalize]) ёки жонли ҳолат якунланган (мижоз тасдиқлади, ресторан
+/// «етказилмади» деди ёки бекор бўлди) — курьер карточкада қотиб қолмасин.
+bool courierShowNext({
+  required bool needsFinalize,
+  required bool isCurrent,
+  required OrderModel order,
+}) =>
+    needsFinalize || (isCurrent && isRestaurantOrderFinalized(order));
 
 /// Навигация нишони: олгунча — ресторан, кейин — мижоз. Координата
 /// бўлмаса `null`.

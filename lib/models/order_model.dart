@@ -97,6 +97,34 @@ class OrderModel {
 
   bool get isPreorder => scheduledFor != null;
 
+  /// Мижоз тасдиғи кутилаётган қадам (`awaitingCustomerConfirm.step`, фақат сервер ёзади); йўқ — бўш.
+  final String awaitingConfirmStep;
+
+  /// «Етказилмади» (эга, 2026-10-31): курьер белгилаган сабаб (`awaitingCustomerConfirm.failReason`).
+  final String deliveryFailedReason;
+
+  /// «Етказилмади»: шу вақтгача мижоз жавоб беради, кейин ресторан ҳал қилади
+  /// (`awaitingCustomerConfirm.escalateAt`).
+  final DateTime? deliveryFailedDeadline;
+
+  /// «Етказилмади»: мижоз жавоб бермади, қарор ресторанга ўтди (`deliveryFailedEscalatedAt`).
+  final bool deliveryFailedEscalated;
+
+  /// Курьер «етказиб бўлмади» деди — мижоз ёки ресторан қарорини кутяпти.
+  bool get isDeliveryFailedPending =>
+      isRestaurant &&
+      awaitingConfirmStep == 'delivery_failed' &&
+      (restaurantStatus == 'picked' || restaurantStatus == 'arrived');
+
+  /// Ресторан (ёки админ) «етказилмади» бўйича қарор қила оладими: мижоз муддати ўтган ёки
+  /// сервер эскалация қилган. Қоида серверда (`restaurantResolveDeliveryFailed`), бу — фақат кўрсатиш.
+  bool deliveryFailedDecisionOpen(DateTime now) {
+    if (!isDeliveryFailedPending) return false;
+    if (deliveryFailedEscalated) return true;
+    final d = deliveryFailedDeadline;
+    return d != null && !now.isBefore(d);
+  }
+
   /// Ресторан буюртмаси етказилган вақт (`deliveredAt`, эскиларда `statusUpdatedAt`) — баҳолаш
   /// муддати шундан ҳисобланади.
   final DateTime? deliveredAt;
@@ -155,6 +183,10 @@ class OrderModel {
     this.deliveredAt,
     this.scheduledFor,
     this.courierName = '',
+    this.awaitingConfirmStep = '',
+    this.deliveryFailedReason = '',
+    this.deliveryFailedDeadline,
+    this.deliveryFailedEscalated = false,
   });
 
   bool get isRestaurant => type == 'restaurant';
@@ -359,7 +391,21 @@ class OrderModel {
       deliveredAt: _parseDate(d['deliveredAt']) ?? _parseDate(d['statusUpdatedAt']),
       scheduledFor: _parseDate(d['scheduledFor']),
       courierName: (d['courierName'] ?? '') as String,
+      awaitingConfirmStep: awaitingField(d, 'step'),
+      deliveryFailedReason: awaitingField(d, 'failReason'),
+      deliveryFailedDeadline: d['awaitingCustomerConfirm'] is Map
+          ? _parseDate((d['awaitingCustomerConfirm'] as Map)['escalateAt'])
+          : null,
+      deliveryFailedEscalated: d['deliveryFailedEscalatedAt'] != null,
     );
+  }
+
+  /// `awaitingCustomerConfirm.{key}` матни; йўқ ёки бошқа тур — бўш.
+  static String awaitingField(Map<String, dynamic> d, String key) {
+    final m = d['awaitingCustomerConfirm'];
+    if (m is! Map) return '';
+    final v = m[key];
+    return v is String ? v : '';
   }
 }
 

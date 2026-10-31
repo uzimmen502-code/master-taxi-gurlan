@@ -59,6 +59,23 @@ abstract final class CustomerConfirmStep {
 
   /// Йиғиш: курьер киритган миқдор/сумма («Тасдиқлайман»).
   static const finalize = 'finalize';
+
+  /// Курьер «етказиб бўлмади» деди — мижоз тасдиқлайди ёки «Олмоқчиман» дейди
+  /// (эга, 2026-10-31; ҳамма мижоз учун мажбурий).
+  static const deliveryFailed = 'delivery_failed';
+}
+
+/// Курьер «етказиб бўлмади» сабаби → матн калити (сервер `FAIL_REASONS`
+/// билан бир хил; номаълум — «бошқа»). Курьер панелидаги калитлар қайта ишлатилади.
+String customerConfirmFailReasonKey(String reason) {
+  switch (reason) {
+    case 'customer_absent':
+    case 'customer_refused':
+    case 'courier_problem':
+      return 'restaurants_courier_fail_$reason';
+    default:
+      return 'restaurants_courier_fail_other';
+  }
 }
 
 /// Тасдиқ тугмаси матни калити — қадамга қараб. Номаълум қадам (сервер
@@ -70,6 +87,8 @@ String customerConfirmButtonKey(String step) {
     case CustomerConfirmStep.handoverReturn:
     case CustomerConfirmStep.received:
       return 'customer_confirm_btn_received';
+    case CustomerConfirmStep.deliveryFailed:
+      return 'customer_confirm_btn_not_received';
     default:
       return 'customer_confirm_btn_confirm';
   }
@@ -86,6 +105,8 @@ String customerConfirmHintKey(String step) {
       return 'customer_confirm_hint_received';
     case CustomerConfirmStep.finalize:
       return 'customer_confirm_hint_finalize';
+    case CustomerConfirmStep.deliveryFailed:
+      return 'customer_confirm_hint_delivery_failed';
     default:
       return 'customer_confirm_hint_generic';
   }
@@ -171,6 +192,8 @@ class CustomerConfirmation {
     this.summary = '',
     this.requestedAt,
     this.details,
+    this.canReject = false,
+    this.failReason = '',
   });
 
   final String module;
@@ -180,6 +203,12 @@ class CustomerConfirmation {
   final String summary;
   final DateTime? requestedAt;
   final CustomerConfirmDetails? details;
+
+  /// Сервер «Олмоқчиман» (рад) тугмасига рухсат берган (`canReject: true`).
+  final bool canReject;
+
+  /// «Етказилмади» сабаби (`details.failReason`); бошқа қадамда бўш.
+  final String failReason;
 
   /// Рўйхатда ва «банд» белгисида ягона калит (бир буюртмада икки қадам бўлиши мумкин).
   String get key => '$module/$id/$step';
@@ -202,6 +231,10 @@ class CustomerConfirmation {
       requestedAt:
           ms is num ? DateTime.fromMillisecondsSinceEpoch(ms.toInt()) : null,
       details: CustomerConfirmDetails.fromMap(raw['details']),
+      canReject: raw['canReject'] == true,
+      failReason: raw['details'] is Map && (raw['details'] as Map)['failReason'] is String
+          ? (raw['details'] as Map)['failReason'] as String
+          : '',
     );
   }
 

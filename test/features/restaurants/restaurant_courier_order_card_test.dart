@@ -28,8 +28,16 @@ OrderModel _o({
   String food = 'prepay',
   String pay = 'cash',
   String paymentStatus = 'unpaid',
+  String awaitingStep = '',
+  String failReason = '',
+  DateTime? failDeadline,
+  bool failEscalated = false,
 }) =>
     OrderModel(
+      awaitingConfirmStep: awaitingStep,
+      deliveryFailedReason: failReason,
+      deliveryFailedDeadline: failDeadline,
+      deliveryFailedEscalated: failEscalated,
       id: 'o1',
       type: 'restaurant',
       total: 69000,
@@ -280,6 +288,51 @@ void main() {
     await tester.tap(find.text('ok'));
     await tester.pumpAndSettle();
     expect(calls.finalizes, 1);
+  });
+
+  testWidgets('«yetkazilmadi» mijoz tasdig\'i bilan (ega 2026-10-31): so\'rov → xabar; hujjatdan kutish bloki (muddat), '
+      'qayta «yetkazib bo\'lmadi» YO\'Q, «topshirdim» ochiq; eskalatsiya matni; yakunlansa «keyingi buyurtma»', (tester) async {
+    final repo = _FakeRepo();
+    final calls = await _pump(tester, _o(rs: 'arrived'), repo: repo);
+    calls.completeResult = const {'ok': true, 'awaitingCustomer': true, 'step': 'delivery_failed'};
+    expect(find.text('restaurants_courier_fail_btn'), findsOneWidget);
+
+    await tester.tap(find.text('restaurants_courier_fail_btn'));
+    await tester.pumpAndSettle();
+    expect(find.text('restaurants_courier_fail_note_confirm'), findsOneWidget);
+    await tester.tap(find.text('restaurants_courier_fail_customer_absent'));
+    await tester.pumpAndSettle();
+    expect(calls.completes, [(delivered: false, failReason: 'customer_absent')]);
+    expect(find.text('restaurants_courier_failed_sent'), findsOneWidget);
+    expect(find.text('restaurants_courier_failed_ok'), findsNothing);
+    expect(calls.finalizes, 0);
+
+    // Server belgisi jonli oqimda keladi.
+    repo.live.add(_o(rs: 'arrived', awaitingStep: 'delivery_failed', failReason: 'customer_absent',
+        failDeadline: DateTime(2026, 10, 31, 18, 5)));
+    await tester.pumpAndSettle();
+    expect(find.text('restaurants_courier_failed_wait_until'), findsOneWidget);
+    expect(find.text('restaurants_courier_fail_btn'), findsNothing, reason: 'ikkinchi marta so\'ralmaydi');
+    expect(find.widgetWithText(FilledButton, 'restaurants_courier_deliver_btn'), findsOneWidget,
+        reason: 'mijoz chiqib kelsa kuryer baribir topshiradi');
+
+    repo.live.add(_o(rs: 'arrived', awaitingStep: 'delivery_failed', failEscalated: true));
+    await tester.pumpAndSettle();
+    expect(find.text('restaurants_courier_failed_wait_restaurant'), findsOneWidget);
+
+    // Mijoz yoki restoran «yetkazilmadi» dedi → yakun → «keyingi buyurtma».
+    repo.live.add(_o(rs: 'delivery_failed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('courier_next_order'));
+    await tester.pumpAndSettle();
+    expect(calls.finalizes, 1);
+  });
+
+  testWidgets('picked holatda ham «yetkazilmadi» kutish bloki ko\'rinadi', (tester) async {
+    final repo = _FakeRepo();
+    await _pump(tester, _o(rs: 'picked', awaitingStep: 'delivery_failed'), repo: repo);
+    expect(find.text('restaurants_courier_failed_wait_customer'), findsOneWidget);
+    expect(find.text('restaurants_courier_fail_btn'), findsNothing);
   });
 
   testWidgets('navbatdagi (joriy emas) buyurtma — tugmalarsiz', (tester) async {

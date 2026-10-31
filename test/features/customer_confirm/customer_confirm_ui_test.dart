@@ -38,8 +38,10 @@ class _FakeService implements CustomerConfirmService {
     required String module,
     required String id,
     required String step,
+    bool reject = false,
+    DateTime? requestedAt,
   }) async {
-    confirms.add('$module/$id/$step');
+    confirms.add('$module/$id/$step${reject ? '/reject' : ''}');
     final e = confirmError;
     if (e != null) throw e;
     return const CustomerConfirmResult();
@@ -129,6 +131,71 @@ void main() {
       expect(taps, 0);
     });
 
+    testWidgets('«yetkazilmadi»: sabab, «Ha, olmadim» va «Olmoqchiman» (canReject); ikkala tugma o\'z callback\'i',
+        (tester) async {
+      var confirms = 0;
+      var rejects = 0;
+      await tester.pumpWidget(_app(CustomerConfirmCard(
+        item: const CustomerConfirmation(
+          module: 'restaurant',
+          id: 'o1',
+          step: CustomerConfirmStep.deliveryFailed,
+          canReject: true,
+          failReason: 'customer_absent',
+        ),
+        busy: false,
+        onConfirm: () => confirms++,
+        onReject: () => rejects++,
+      )));
+      expect(find.text('customer_confirm_hint_delivery_failed'), findsOneWidget);
+      expect(find.textContaining('restaurants_courier_fail_customer_absent'), findsOneWidget);
+      await tester.tap(find.text('customer_confirm_btn_not_received'));
+      await tester.tap(find.text('customer_confirm_btn_want_it'));
+      expect(confirms, 1);
+      expect(rejects, 1);
+    });
+
+    testWidgets('canReject yo\'q (eski server) — «Olmoqchiman» ko\'rinmaydi', (tester) async {
+      await tester.pumpWidget(_app(CustomerConfirmCard(
+        item: _c('restaurant', 'o1', CustomerConfirmStep.received),
+        busy: false,
+        onConfirm: () {},
+        onReject: () {},
+      )));
+      expect(find.text('customer_confirm_btn_want_it'), findsNothing);
+    });
+
+    testWidgets('band holatda «Olmoqchiman» ham bosilmaydi', (tester) async {
+      var rejects = 0;
+      await tester.pumpWidget(_app(CustomerConfirmCard(
+        item: const CustomerConfirmation(
+            module: 'restaurant', id: 'o1', step: CustomerConfirmStep.deliveryFailed, canReject: true),
+        busy: true,
+        onConfirm: () {},
+        onReject: () => rejects++,
+      )));
+      await tester.tap(find.text('customer_confirm_btn_want_it'));
+      expect(rejects, 0);
+    });
+
+    test('model: canReject va details.failReason o\'qiladi; noto\'g\'ri tur — bo\'sh', () {
+      final c = CustomerConfirmation.fromMap({
+        'module': 'restaurant', 'id': 'o1', 'step': 'delivery_failed', 'canReject': true,
+        'details': {'failReason': 'customer_refused', 'escalateAtMs': 1},
+      })!;
+      expect(c.canReject, isTrue);
+      expect(c.failReason, 'customer_refused');
+      expect(c.details, isNull, reason: 'miqdor/summa yo\'q — tafsilot kartasi chiqmaydi');
+      final d = CustomerConfirmation.fromMap({
+        'module': 'restaurant', 'id': 'o1', 'step': 'delivery_failed', 'canReject': 'true',
+        'details': {'failReason': 5},
+      })!;
+      expect(d.canReject, isFalse);
+      expect(d.failReason, '');
+      expect(customerConfirmFailReasonKey('xyz'), 'restaurants_courier_fail_other');
+      expect(customerConfirmButtonKey(CustomerConfirmStep.deliveryFailed), 'customer_confirm_btn_not_received');
+    });
+
     test('miqdor matni: butun va kasr', () {
       expect(customerConfirmQtyText(12), '12');
       expect(customerConfirmQtyText(12.0), '12');
@@ -198,6 +265,24 @@ void main() {
       expect(err, 'customer_confirm_err_generic');
       expect(ctrl.items, hasLength(1));
       expect(svc.listCalls, 1);
+      ctrl.dispose();
+    });
+
+    test('reject: faqat canReject bo\'lsa serverga ketadi (decision reject); aks holda umumiy xato', () async {
+      const failed = CustomerConfirmation(
+          module: 'restaurant', id: 'o1', step: CustomerConfirmStep.deliveryFailed, canReject: true);
+      final svc = _FakeService([
+        [failed],
+        <CustomerConfirmation>[],
+      ]);
+      final ctrl = CustomerConfirmController(service: svc);
+      await ctrl.load();
+      expect(await ctrl.reject(failed), isNull);
+      expect(svc.confirms, ['restaurant/o1/delivery_failed/reject']);
+      expect(ctrl.items, isEmpty);
+      final noReject = _c('restaurant', 'o2', CustomerConfirmStep.received);
+      expect(await ctrl.reject(noReject), 'customer_confirm_err_generic');
+      expect(svc.confirms, hasLength(1), reason: 'canReject yo\'q — serverga ketmaydi');
       ctrl.dispose();
     });
 

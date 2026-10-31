@@ -73,12 +73,12 @@ class _CustomerConfirmBannerState extends State<CustomerConfirmBanner>
     if (state == AppLifecycleState.resumed) _ctrl.loadIfStale();
   }
 
-  Future<void> _confirm(CustomerConfirmation item) async {
-    final errKey = await _ctrl.confirm(item);
+  Future<void> _confirm(CustomerConfirmation item, {bool reject = false}) async {
+    final errKey = await (reject ? _ctrl.reject(item) : _ctrl.confirm(item));
     if (!mounted) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     messenger?.showSnackBar(SnackBar(
-      content: Text(context.tr(errKey ?? 'customer_confirm_done')),
+      content: Text(context.tr(errKey ?? (reject ? 'customer_confirm_rejected_done' : 'customer_confirm_done'))),
       backgroundColor: errKey == null ? null : Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
     ));
@@ -130,6 +130,7 @@ class _CustomerConfirmBannerState extends State<CustomerConfirmBanner>
                 item: item,
                 busy: _ctrl.isBusy(item),
                 onConfirm: () => _confirm(item),
+                onReject: () => _confirm(item, reject: true),
               ),
               const SizedBox(height: 8),
             ],

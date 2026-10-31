@@ -243,6 +243,27 @@ class _MerchantOrdersTabState extends State<MerchantOrdersTab> {
     }
   }
 
+  /// «Етказилмади» бўйича қарор (эга, 2026-10-31): мижоз муддатида жавоб бермаган.
+  Future<void> _decideFailed(OrderModel o, {required bool failed}) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr(failed ? 'restaurants_m_failed_confirm_btn' : 'restaurants_m_failed_continue_btn')),
+        content: Text(ctx.tr(failed ? 'restaurants_m_failed_confirm_q' : 'restaurants_m_failed_continue_q')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('ok'))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _run(
+      o,
+      () => widget.repository.resolveDeliveryFailed(o.id, failed: failed),
+      okKey: 'restaurants_m_failed_decided_ok',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
@@ -294,12 +315,84 @@ class _MerchantOrdersTabState extends State<MerchantOrdersTab> {
                         busy: _busyId == list[i].id,
                         repository: widget.repository,
                         onAction: (a) => _do(list[i], a),
+                        onFailedDecision: (failed) => _decideFailed(list[i], failed: failed),
                       ),
                     ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Курьер «етказиб бўлмади» деди: мижоз муддатигача — кутиш изоҳи; муддат ўтгач
+/// (ёки сервер эскалация қилгач) — ресторан қарори тугмалари. Рухсат ва муддат —
+/// серверда (`restaurantResolveDeliveryFailed`); бу ерда фақат кўрсатиш.
+class MerchantDeliveryFailedPanel extends StatelessWidget {
+  const MerchantDeliveryFailedPanel({
+    super.key,
+    required this.order,
+    required this.now,
+    required this.busy,
+    required this.onDecision,
+  });
+
+  final OrderModel order;
+  final DateTime now;
+  final bool busy;
+  final void Function(bool failed) onDecision;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    final o = order;
+    final open = o.deliveryFailedDecisionOpen(now);
+    final d = o.deliveryFailedDeadline?.toLocal();
+    final until = d == null ? '' : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final reasonKey = switch (o.deliveryFailedReason) {
+      'customer_absent' || 'customer_refused' || 'courier_problem' => 'restaurants_courier_fail_${o.deliveryFailedReason}',
+      _ => 'restaurants_courier_fail_other',
+    };
+    return Container(
+      key: ValueKey('failed-panel-${o.id}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(context.tr('restaurants_m_failed_title'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: c.warn)),
+          const SizedBox(height: 4),
+          Text('${context.tr('customer_confirm_fail_reason')}: ${context.tr(reasonKey)}', style: TextStyle(fontSize: 12.5, color: c.ink)),
+          const SizedBox(height: 4),
+          Text(
+            open
+                ? context.tr('restaurants_m_failed_decide_now')
+                : context.tr('restaurants_m_failed_wait_customer').replaceAll('{time}', until),
+            style: TextStyle(fontSize: 12.5, color: c.ink2),
+          ),
+          if (open) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                FilledButton(
+                  onPressed: busy ? null : () => onDecision(false),
+                  style: FilledButton.styleFrom(backgroundColor: c.brand, foregroundColor: c.brandInk),
+                  child: Text(context.tr('restaurants_m_failed_continue_btn')),
+                ),
+                OutlinedButton(
+                  onPressed: busy ? null : () => onDecision(true),
+                  style: OutlinedButton.styleFrom(foregroundColor: c.danger, side: BorderSide(color: c.danger)),
+                  child: Text(context.tr('restaurants_m_failed_confirm_btn')),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -311,6 +404,7 @@ class _MerchantOrderCard extends StatelessWidget {
     required this.busy,
     required this.repository,
     required this.onAction,
+    required this.onFailedDecision,
   });
 
   final OrderModel order;
@@ -318,6 +412,9 @@ class _MerchantOrderCard extends StatelessWidget {
   final bool busy;
   final RestaurantsRepository repository;
   final void Function(MerchantAction) onAction;
+
+  /// «Етказилмади» қарори: `true` — етказилмади, `false` — курьер давом эттирсин.
+  final void Function(bool failed) onFailedDecision;
 
   String _label(BuildContext context, MerchantAction a) => switch (a) {
         MerchantAction.accept => context.tr('restaurants_m_accept'),
@@ -486,6 +583,10 @@ class _MerchantOrderCard extends StatelessWidget {
                 );
               },
             ),
+          if (o.isDeliveryFailedPending) ...[
+            const SizedBox(height: 10),
+            MerchantDeliveryFailedPanel(order: o, now: now, busy: busy, onDecision: onFailedDecision),
+          ],
           if (actions.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(

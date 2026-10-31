@@ -21,11 +21,15 @@ class CustomerConfirmCard extends StatelessWidget {
     required this.item,
     required this.busy,
     required this.onConfirm,
+    this.onReject,
   });
 
   final CustomerConfirmation item;
   final bool busy;
   final VoidCallback onConfirm;
+
+  /// «Олмоқчиман» — фақат сервер `canReject` берса кўрсатилади.
+  final VoidCallback? onReject;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +74,13 @@ class CustomerConfirmCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(summary, style: TextStyle(fontSize: 12.5, color: c.ink2)),
+          if (item.failReason.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${context.tr('customer_confirm_fail_reason')}: ${context.tr(customerConfirmFailReasonKey(item.failReason))}',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
+            ),
+          ],
           if (d != null) ...[
             const SizedBox(height: 8),
             Container(
@@ -137,6 +148,23 @@ class CustomerConfirmCard extends StatelessWidget {
                     ),
             ),
           ),
+          if (item.canReject && onReject != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: busy ? null : onReject,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 46),
+                  textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                child: Text(
+                  context.tr('customer_confirm_btn_want_it'),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

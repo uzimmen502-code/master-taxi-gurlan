@@ -243,6 +243,18 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           _notice(context, 'wholesale_order_status_payment_dispute', warn: true,
               key: const ValueKey('wholesale-dispute-banner')),
         ],
+        if (o.lostNoticeKey(widget.viewerId) != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('wholesale-lost-notice'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              context.trMsg(o.lostNoticeKey(widget.viewerId)!, params: {'amount': formatMoney(o.lostRefunded)}),
+              style: TextStyle(fontSize: 12, color: c.warn, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
         if (_showsReturn(o)) ...[
           const SizedBox(height: 10),
           _returnCard(context, o),

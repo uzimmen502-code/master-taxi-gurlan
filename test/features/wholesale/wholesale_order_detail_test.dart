@@ -335,6 +335,59 @@ void main() {
     expect(find.byKey(_upload), findsNothing);
     expect(find.byKey(_cancel), findsOneWidget);
   });
+  group('йўқолган посилка (lost)', () {
+    WholesaleOrder lost({String method = 'wallet', Map<String, dynamic>? lostDoc, String payStatus = 'refunded_lost'}) =>
+        WholesaleOrder.fromMap('o1', {
+          'buyerId': _buyer,
+          'sellerId': _seller,
+          'productTitle': 'Гуруч',
+          'qty': 2,
+          'goodsTotal': 640000,
+          'total': 685000,
+          'status': 'lost',
+          'paymentMethod': method,
+          'payment': {'status': payStatus},
+          'lost': lostDoc ?? {'refundTo': 'buyer', 'refunded': 640000, 'review': false},
+        });
+
+    test('изоҳ калити: харидор ҳамён / карта тўланмаган / кўриб чиқиш; сотувчи; бегона', () {
+      expect(lost().lostNoticeKey(_buyer), 'wholesale_order_lost_refunded');
+      expect(lost().lostRefunded, 640000);
+      expect(
+        lost(method: 'card_on_delivery', lostDoc: {'refundTo': 'seller', 'refunded': 20000, 'review': false})
+            .lostNoticeKey(_buyer),
+        'wholesale_order_lost_card_unpaid',
+      );
+      expect(
+        lost(method: 'card_on_delivery', lostDoc: {'refundTo': null, 'refunded': 0, 'review': true}, payStatus: 'lost_review')
+            .lostNoticeKey(_buyer),
+        'wholesale_order_lost_review',
+      );
+      expect(lost(lostDoc: {}, payStatus: 'lost_review').lostNoticeKey(_buyer), 'wholesale_order_lost_review',
+          reason: 'payment.status ҳам ҳисобга олинади');
+      expect(lost().lostNoticeKey(_seller), 'wholesale_order_lost_seller');
+      expect(lost().lostNoticeKey('998909999999'), isNull);
+      expect(_order(status: WholesaleOrderStatus.delivered).lostNoticeKey(_buyer), isNull);
+    });
+
+    testWidgets('харидор ва сотувчига изоҳ, амал тугмаси йўқ', (tester) async {
+      await _pump(tester, lost(), _buyer);
+      expect(find.byKey(const ValueKey('wholesale-lost-notice')), findsOneWidget);
+      expect(find.text('wholesale_order_lost_refunded'), findsOneWidget);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+      await _pump(tester, lost(), _seller);
+      expect(find.text('wholesale_order_lost_seller'), findsOneWidget);
+    });
+
+    test('қадамлар: ... → lost (failed)', () {
+      final st = wholesaleTimelineSteps('lost');
+      expect(st.map((x) => x.status), ['placed', 'in_delivery', 'lost']);
+      expect(st.last.state, WholesaleStepState.failed);
+      expect(WholesaleOrderStatus.l10nKey('lost'), 'wholesale_order_status_lost');
+    });
+  });
+
   testWidgets('бегона (на харидор, на сотувчи) — ҳеч қандай амал йўқ', (tester) async {
     await _pump(
       tester,

@@ -22,6 +22,10 @@ abstract final class WholesaleOrderStatus {
   /// 3b: карта тўлови бўйича низо — админ кўриб чиқади (5-босқич).
   static const paymentDispute = 'payment_dispute';
 
+  /// Якуний: чиқиш посилкаси йўқолди (курьер сотувчига тўлайди; ҳамён буюртмасида
+  /// товар пули харидорга автоматик қайтади).
+  static const lost = 'lost';
+
   static const known = {
     placed,
     inDelivery,
@@ -31,6 +35,7 @@ abstract final class WholesaleOrderStatus {
     returning,
     returned,
     paymentDispute,
+    lost,
   };
 
   /// Ҳолат матни калити (3 тилда). Номаълум ҳолат — умумий «янгиланмоқда».
@@ -97,6 +102,10 @@ class WholesaleOrder {
     this.returnDebt = 0,
     this.returnStatus = '',
     this.returnTrackingNumber = '',
+    this.paymentStatus = '',
+    this.lostRefunded = 0,
+    this.lostRefundTo = '',
+    this.lostReview = false,
     this.createdAt,
   });
 
@@ -134,6 +143,15 @@ class WholesaleOrder {
   /// 3b: `returnStatus` ([WholesaleReturnStatus]) ва қайтиш жўнатмаси рақами.
   final String returnStatus;
   final String returnTrackingNumber;
+
+  /// `payment.status` (held | released | refunded_lost | lost_review ...).
+  final String paymentStatus;
+
+  /// Йўқолган посилка (`lost{refundTo, refunded, review}`): қайтарилган сумма,
+  /// кимга (buyer | seller | бўш) ва админ кўриб чиқадими (`payment.status: lost_review`).
+  final int lostRefunded;
+  final String lostRefundTo;
+  final bool lostReview;
   final DateTime? createdAt;
 
   bool get isCardOrder => paymentMethod == WholesalePaymentMethod.cardOnDelivery;
@@ -147,6 +165,21 @@ class WholesaleOrder {
       (cardPaymentStatus == WholesaleCardPaymentStatus.awaiting ||
           cardPaymentStatus == WholesaleCardPaymentStatus.receiptSubmitted ||
           cardPaymentStatus.isEmpty);
+
+  /// Йўқолган посилка изоҳи калити (соф): сотувчига — «курьердан тўланади»;
+  /// харидорга — қайтарилди (сумма [lostRefunded]) / картада пул олинмайди /
+  /// админ кўриб чиқмоқда. Йўқолмаган ёки бегона — `null`.
+  String? lostNoticeKey(String viewerId) {
+    if (status != WholesaleOrderStatus.lost) return null;
+    if (isBuyer(viewerId)) {
+      if (lostReview) return 'wholesale_order_lost_review';
+      if (lostRefundTo == 'buyer' && lostRefunded > 0) return 'wholesale_order_lost_refunded';
+      if (isCardOrder) return 'wholesale_order_lost_card_unpaid';
+      return 'wholesale_order_status_lost';
+    }
+    if (isSeller(viewerId)) return 'wholesale_order_lost_seller';
+    return null;
+  }
 
   bool isBuyer(String viewerId) => _same(buyerId, viewerId);
   bool isSeller(String viewerId) => _same(sellerId, viewerId);
@@ -174,6 +207,8 @@ class WholesaleOrder {
     final dest = _map(d['destination']);
     final debt = d['returnDebt'];
     final ret = _map(d['returnShipment']);
+    final pay = _map(d['payment']);
+    final lost = _map(d['lost']);
     final method = _str(d['paymentMethod']);
     return WholesaleOrder(
       id: id,
@@ -200,6 +235,10 @@ class WholesaleOrder {
       returnDebt: debt is Map ? _int(debt['amount']) : _int(debt),
       returnStatus: _str(d['returnStatus']),
       returnTrackingNumber: _str(ret['trackingNumber']),
+      paymentStatus: _str(pay['status']),
+      lostRefunded: _int(lost['refunded']),
+      lostRefundTo: _str(lost['refundTo']),
+      lostReview: lost['review'] == true || _str(pay['status']) == 'lost_review',
       createdAt: _date(d['createdAt']),
     );
   }

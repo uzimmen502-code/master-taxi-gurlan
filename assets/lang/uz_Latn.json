@@ -4973,5 +4973,13 @@
   "wholesale_courier_refused_reason": "Sabab (ixtiyoriy)",
   "wholesale_courier_refused_done": "Qayd qilindi — qaytish jo'natmasi ochiladi",
   "wholesale_courier_return_code_btn": "Qaytish uchun topshirish kodi",
-  "wholesale_courier_return_code_hint": "Posilka sizda: shu kodni «Posilkani oldim» oynasiga kiriting."
+  "wholesale_courier_return_code_hint": "Posilka sizda: shu kodni «Posilkani oldim» oynasiga kiriting.",
+  "wholesale_order_status_lost": "Posilka yo'qoldi",
+  "wholesale_order_lost_refunded": "Posilka yo'qoldi — tovar puli hamyoningizga qaytarildi: {amount}",
+  "wholesale_order_lost_card_unpaid": "Posilka yo'qoldi. Sizdan pul olinmaydi.",
+  "wholesale_order_lost_review": "Posilka yo'qoldi — admin ko'rib chiqmoqda",
+  "wholesale_order_lost_seller": "Posilka yo'qoldi — tovar qiymati kuryerdan to'lanadi",
+  "wholesale_order_err_card_save_unavailable": "Kartani hozir saqlab bo'lmadi. Birozdan keyin qayta urinib ko'ring.",
+  "wholesale_order_err_card_read_unavailable": "Karta ma'lumotini hozir olib bo'lmadi. Birozdan keyin qayta urinib ko'ring.",
+  "wholesale_order_err_card_concurrent_update": "Karta bir vaqtda o'zgartirildi. Qayta urinib ko'ring."
 }

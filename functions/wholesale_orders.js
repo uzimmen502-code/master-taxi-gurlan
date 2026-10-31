@@ -97,8 +97,11 @@
  *            `wholesale_return_hold`), take = min(F, xaridor hamyoni refunddan keyin) — MANFIYGA TUSHMAYDI; F > take
  *            bo'lsa (tovar summasi + hamyon yetmadi) — `returnDebt {payer: 'buyer'}`, qolgan qism keyin
  *            (`bonus:wholesaleReturnHoldRest:{id}`, faqat to'liq, reconcile har aylanishda — karta sotuvchi qarzi naqshi).
- *   RETURN HOLD (kuryer) refund darhol (F kutilmaydi); F — kuryer hamyonidan (`fundReturn`): avval take = min(F, balans)
- *            (`wholesaleReturnHold`), qolgani — `returnDebt {payer: 'courier'}` + `…HoldRest` (to'liq, reconcile).
+ *   RETURN HOLD (kuryer) refund darhol (F kutilmaydi); F — kuryer hamyonidan (`fundReturn`): take = min(F, balans)
+ *            (`wholesaleReturnHold`); qolgani (ega, 2026-11-01) — KURYER QARZI `provider_capabilities/{accountId}.debt.logistics`
+ *            (+= qoldiq, yo'qolish precedenti; accountId — `users/{12|9}.accountId`) va AVA VAQTINCHA qoplaydi:
+ *            Dr admin_clearing / Cr escrow:wholesale_return:{id} (`wholesaleReturnAvaCover:{id}`) — qaytish DARHOL.
+ *            Buyurtmada `courierReturnDebt`, history `return_fee_courier_debt` + `return_fee_ava_covered`, `logistics_audit`.
  *   RETURN FUND / RETURNED — karta bilan AYNAN bir xil (`wholesaleReturnFund`, `completeReturn`, qoldiq +N).
  * Sotuvchiga pul YO'Q (sotuv bo'lmadi; avaFee olinmaydi — eskrou AYNAN goodsTotal, hammasi xaridorga).
  */
@@ -178,6 +181,13 @@ const returnFundKey = (orderId) => `wholesaleReturnFund:${orderId}`;
 const returnEscrowAccount = (orderId) => `escrow:wholesale_return:${orderId}`;
 /** Hamyon rad: qaytish haqining qolgan qismi (birinchi ushlanma `returnHoldKey` qisman bo'lgan bo'lsa). */
 const returnHoldRestKey = (orderId) => `wholesaleReturnHoldRest:${orderId}`;
+/**
+ * Hamyon rad, kuryer aybi (ega, 2026-11-01): kuryer hamyoni yetmasa qolgan qaytish haqini AVA VAQTINCHA qoplaydi
+ * (qaytish darhol boshlanadi), qarz — `provider_capabilities/{accountId}.debt.logistics` (yo'qolish precedenti).
+ * Hisob — `admin_clearing` (`prepareBonusInTx` standart moliyalash hisobi, kompaniya puli; yangi tur YO'Q).
+ */
+const returnAvaCoverKey = (orderId) => `wholesaleReturnAvaCover:${orderId}`;
+const AVA_COVER_ACCOUNT = 'admin_clearing';
 /**
  * Hamyon buyurtmasi rad etilganda AYB (ega, 2026-11-01) — sabab kodi → kim qaytish haqini to'laydi.
  * Kalitlar — demand `api/wholesale_failed.js` WALLET_REASONS bilan AYNAN bir xil (paritet testi:
@@ -1526,7 +1536,10 @@ function attachWholesaleOrders(exportsObj, deps) {
       payerWalletUid = /^998\d{9}$/.test(courierId) ? ((await walletUidOf(courierId)) || '') : '';
     }
     if (!payerWalletUid) return { anomaly: fault === 'courier' ? 'courier_wallet_missing' : 'buyer_wallet_missing' };
-    return db.runTransaction(async (t) => {
+    // Kuryer qarzi hisobi (ega, 2026-11-01): yo'qolish precedenti bilan AYNI manba — `users/{12|9}.accountId`
+    // (demand `adminMarkShipmentLost` shu yerdan oladi) → `provider_capabilities/{accountId}.debt.logistics`.
+    const courierAccountId = fault === 'courier' ? await courierAccountIdOf(courierId) : '';
+    const r = await db.runTransaction(async (t) => {
       const os = await t.get(orderRef);
       const o = os.data() || {};
       if (o.status !== STATUS.REFUSED) return { skip: `status_${o.status || 'none'}` };
@@ -1534,6 +1547,8 @@ function attachWholesaleOrders(exportsObj, deps) {
       const rp = o.returnPayment || {};
       if (rp.status === 'held' || rp.status === 'funded') return { held: true, already: true };
       if (rp.amount != null && rp.amount !== fee) return { anomaly: 'return_fee_changed' };
+      // Kuryer ulushi va qarz allaqachon yozilgan — faqat AVA qoplamasi qolgan (yiqilgandan keyin davom).
+      if (rp.avaCoverStatus === 'pending') return { cover: rp.avaCover, held: rp.held };
       const held = isInt(rp.held) && rp.held > 0 ? rp.held : 0;
       const need = fee - held;
       if (need <= 0) return { anomaly: 'return_hold_inconsistent' };
@@ -1543,7 +1558,11 @@ function attachWholesaleOrders(exportsObj, deps) {
       if (ledger.jExists) return { anomaly: 'return_hold_journal_exists' };
       if (ledger.fundPrev !== held) return { anomaly: 'return_escrow_mismatch' };
       const avail = Math.max(0, ledger.pcPrev);
-      const take = held > 0 ? (avail >= need ? need : 0) : Math.min(need, avail);
+      // Kuryer (ega, 2026-11-01): borini oladi (qisman ham), qolgani — kuryer qarzi + AVA vaqtincha qoplaydi.
+      // Xaridor: birinchisi qisman, keyingisi faqat to'liq (o'zgarmagan).
+      const take = held > 0 && fault !== 'courier' ? (avail >= need ? need : 0) : Math.min(need, avail);
+      const gap = fault === 'courier' ? need - take : 0;
+      if (gap > 0 && !courierAccountId) return { anomaly: 'courier_account_missing' };
       if (take > 0) {
         settlementLedger.commitBonusInTx(t, ledger, {
           delta: -take,
@@ -1577,6 +1596,34 @@ function attachWholesaleOrders(exportsObj, deps) {
         'walletRefusal.returnFeeOutstanding': outstanding,
         updatedAt: when,
       };
+      if (gap > 0) {
+        // Qarz — relay `writeLossFinalize` / `settleLost` bilan AYNI maydon (increment; holat shu tranzaksiyada
+        // tekshirilgan — takror ishga tushishda ikkinchi marta qo'shilmaydi). Qaytish KUTMAYDI: AVA qoplaydi.
+        t.set(db.collection(PROVIDER_CAPS).doc(courierAccountId), { debt: { logistics: inc(gap) }, updatedAt: when }, { merge: true });
+        const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+        t.update(orderRef, {
+          ...patch,
+          returnPayment: {
+            ...patch.returnPayment, avaCover: gap, avaCoverStatus: 'pending', courierAccountId,
+          },
+          'walletRefusal.returnFeeOutstanding': 0,
+          'walletRefusal.returnFeeCourierDebt': gap,
+          'walletRefusal.returnFeeAvaCovered': gap,
+          courierReturnDebt: {
+            amount: gap, courierId, accountId: courierAccountId, coveredBy: 'ava', returnFee: fee, chargedFromWallet: newHeld, at: when,
+          },
+          returnDebt: null,
+          historySeq: seq,
+        });
+        t.set(orderRef.collection(HISTORY).doc(String(seq)), {
+          seq, from: o.status, to: o.status, event: 'return_fee_courier_debt', actor: 'system', actorId: null, reason: '',
+          meta: {
+            returnShipmentId, fee, chargedFromWallet: newHeld, courierDebt: gap, courierAccountId, coveredBy: 'ava',
+          },
+          at: when,
+        });
+        return { cover: gap, held: newHeld };
+      }
       if (outstanding > 0) {
         const prev = o.returnDebt || null;
         const attempts = (prev && isInt(prev.attempts) ? prev.attempts : 0) + 1;
@@ -1592,6 +1639,80 @@ function attachWholesaleOrders(exportsObj, deps) {
       t.update(orderRef, patch);
       return { held: true };
     });
+    if (r.cover > 0) return coverReturnByAva(orderId, { amount: r.cover, fee, holdEsc, when });
+    return r;
+  }
+
+  /** `users/{12|9}.accountId` (yo'q — bo'sh). Demand `adminMarkShipmentLost` bilan AYNI manba. */
+  async function courierAccountIdOf(uid12) {
+    if (!/^998\d{9}$/.test(String(uid12 || ''))) return '';
+    for (const id of [uid12, uid12.slice(3)]) {
+      const s = await db.collection('users').doc(id).get();
+      const a = s.exists ? (s.data() || {}).accountId : null;
+      if (typeof a === 'string' && a.trim()) return a.trim();
+    }
+    return '';
+  }
+
+  /**
+   * AVA kuryer qarzini VAQTINCHA qoplaydi (ega, 2026-11-01): Dr admin_clearing / Cr escrow:wholesale_return:{id}
+   * (`prepareBonusInTx` standart moliyalash hisobi — kompaniya puli; yangi hisob turi YO'Q), kalit
+   * `wholesaleReturnAvaCover:{id}`. Eskrou AYNAN qaytish narxiga yetishi shart (aks holda anomaliya, pul yo'q).
+   * Kim nimani qopladi — history `return_fee_ava_covered` + `logistics_audit` (AYNI tranzaksiya).
+   */
+  async function coverReturnByAva(orderId, { amount, fee, holdEsc, when }) {
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const key = returnAvaCoverKey(orderId);
+    try {
+      await settlementLedger.postEntry(db, {
+        idempotencyKey: key,
+        kind: 'wholesale_return_ava_cover',
+        refType: 'wholesale_order',
+        refId: orderId,
+        postedBy: 'system',
+        postedRole: 'system',
+        legs: [{ account: AVA_COVER_ACCOUNT, dr: amount }, { account: holdEsc, cr: amount }],
+      }, {
+        mirrorBonus: false,
+        meta: { module: 'wholesale', reason: 'courier_return_fee_shortfall', amount, fee },
+        precheck: async (tx) => {
+          const s = await tx.get(orderRef);
+          const o = s.data() || {};
+          const rp = o.returnPayment || {};
+          if (o.status !== STATUS.REFUSED) throw skipErr(`status_${o.status || 'none'}`);
+          if (rp.avaCoverStatus !== 'pending' || rp.avaCover !== amount || rp.amount !== fee) throw anomalyErr('ava_cover_state');
+          return { o, rp };
+        },
+        assert: ({ accounts }) => {
+          const e = accounts.get(holdEsc);
+          if (!e || e.next !== fee) throw anomalyErr('return_escrow_not_exact', { escrow: e ? e.prev : null });
+        },
+        onCommit: (tx, { pre }) => {
+          const seq = (isInt(pre.o.historySeq) ? pre.o.historySeq : 0) + 1;
+          tx.update(orderRef, {
+            'returnPayment.status': 'held',
+            'returnPayment.avaCoverStatus': 'posted',
+            'returnPayment.avaCoverEntryId': key,
+            'returnPayment.avaCoveredAt': when,
+            historySeq: seq,
+            updatedAt: when,
+          });
+          tx.set(orderRef.collection(HISTORY).doc(String(seq)), {
+            seq, from: pre.o.status, to: pre.o.status, event: 'return_fee_ava_covered', actor: 'system', actorId: null, reason: '',
+            meta: { amount, fee, entryId: key, courierAccountId: pre.rp.courierAccountId || null },
+            at: when,
+          });
+          tx.set(db.collection(LOGISTICS_AUDIT).doc(`wholesale_return_ava_cover_${orderId}`), {
+            kind: 'wholesale_return_ava_cover', orderId, amount, fee, courierAccountId: pre.rp.courierAccountId || null, entryId: key, by: 'system', at: when,
+          });
+        },
+      });
+      return { held: true };
+    } catch (e) {
+      if (e && e.wholesaleSkip) return { skip: e.reason };
+      if (e && e.wholesaleAnomaly) return { anomaly: e.reason };
+      throw e;
+    }
   }
 
   /** Karta rad: qaytish haqi SOTUVCHI hamyonidan (yetmasa — qarz + karta bloki). O'zgarmagan mantiq. */
@@ -2438,6 +2559,8 @@ module.exports = {
   returnFundKey,
   returnEscrowAccount,
   returnHoldRestKey,
+  returnAvaCoverKey,
+  AVA_COVER_ACCOUNT,
   WALLET_REFUSAL_FAULT,
   lostKey,
   lostFeeKey,

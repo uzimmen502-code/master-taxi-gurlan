@@ -108,11 +108,14 @@ function quoteDoc(extra = {}) {
     ...extra,
   };
 }
-async function seed({ buyerExtra = 0, courierWallet = 0 } = {}) {
+const K1_ACC = 'acc_k1';
+const capsDebt = async () => ((((await db.collection('provider_capabilities').doc(K1_ACC).get()).data() || {}).debt) || {}).logistics || 0;
+async function seed({ buyerExtra = 0, courierWallet = 0, courierAccount = true } = {}) {
   clock = T0;
   await resetAll();
   await db.collection('module_config').doc('wholesale_orders_all').set({ enabled: true, stage: 'internal', testerIds: [BUYER] });
   for (const u of [BUYER, SELLER, K1]) await db.collection('users').doc(u).set({ bonusBalance: 0 });
+  if (courierAccount) await db.collection('users').doc(K1).set({ accountId: K1_ACC }, { merge: true });
   await db.collection('wholesale_products').doc('rice').set({ sellerId: SELLER, status: 'active', market: 'wholesale' });
   await db.collection('wholesale_stock').doc('rice').set({ productId: 'rice', sellerId: SELLER, packs: { p1: 100 }, version: 1 });
   await db.collection('wholesale_sellers').doc(SELLER).set({ phone: SELLER, companyName: 'Guruch savdo', approvalStatus: 'approved' });
@@ -328,24 +331,99 @@ async function deliverReturn() {
     await assertLedgerSound();
   });
 
-  await check('KURYER AYBI, hamyon yetmaydi (15 000 < 40 000): qisman 15 000 + 25 000 qarz (courierId), manfiy YO\'Q; 24 999 qo\'shilsa — HALI yo\'q (faqat to\'liq); +1 → returning', async () => {
+  await check('KURYER AYBI, hamyon yetmaydi (15 000 < 40 000) — ega 2026-11-01: 15 000 kuryerdan, 25 000 KURYER QARZI (debt.logistics) + AVA qoplaydi (admin_clearing), qaytish DARHOL returning; manfiy YO\'Q; tarix + audit', async () => {
     await seed({ courierWallet: 15000 });
     const id = await placeAndFund();
     await refuse(id, 'courier_problem');
     await linkReturn(id, 40000);
-    let o = await orderOf(id);
-    assert.deepStrictEqual([o.status, o.returnPayment.status, o.returnPayment.held, o.returnDebt.amount, o.returnDebt.payer, o.returnDebt.courierId],
-      ['refused', 'partial', 15000, 25000, 'courier', K1]);
+    const o = await orderOf(id);
+    assert.deepStrictEqual([o.status, o.returnStatus, o.returnPayment.status, o.returnPayment.held, o.returnPayment.avaCover, o.returnPayment.avaCoverStatus, o.returnDebt || null],
+      ['returning', 'in_transit', 'funded', 15000, 25000, 'posted', null]);
+    assert.deepStrictEqual([o.courierReturnDebt.amount, o.courierReturnDebt.accountId, o.courierReturnDebt.courierId, o.courierReturnDebt.coveredBy], [25000, K1_ACC, K1, 'ava']);
+    assert.deepStrictEqual([o.walletRefusal.returnFeeCharged, o.walletRefusal.returnFeeCourierDebt, o.walletRefusal.returnFeeAvaCovered, o.walletRefusal.returnFeeOutstanding], [15000, 25000, 25000, 0]);
+    assert.strictEqual(await bal(pcOf(K1)), 0, 'manfiyga tushmadi');
+    assert.strictEqual(await bonusOf(K1), 0);
+    assert.strictEqual(await capsDebt(), 25000, 'yo\'qolish precedenti bilan AYNI qarz maydoni');
+    assert.strictEqual(await bal(relay.escrowAccount('R1')), 40000, 'qaytish to\'liq to\'landi');
+    assert.strictEqual(await bal(W.returnEscrowAccount(id)), 0);
+    assert.deepStrictEqual((await journal(W.returnAvaCoverKey(id))).legs,
+      [{ account: 'admin_clearing', dr: 25000, cr: 0 }, { account: W.returnEscrowAccount(id), dr: 0, cr: 25000 }]);
+    const h = (await db.collection('wholesale_orders').doc(id).collection('history').get()).docs.map((d) => d.data().event).filter(Boolean);
+    for (const ev of ['return_fee_courier_debt', 'return_fee_ava_covered', 'return_funded']) assert.ok(h.includes(ev), ev);
+    const au = (await db.collection('logistics_audit').doc(`wholesale_return_ava_cover_${id}`).get()).data();
+    assert.deepStrictEqual([au.amount, au.courierAccountId, au.entryId], [25000, K1_ACC, W.returnAvaCoverKey(id)]);
+    // Takror: fundReturn ×2 parallel + reconcile — qarz va AVA qoplamasi BIR marta.
+    const before = await journalCount(id);
+    await quiet(() => Promise.allSettled([api.fundReturn(id), api.fundReturn(id)]));
+    await quiet(() => api.reconcile());
+    assert.strictEqual(await journalCount(id), before);
+    assert.strictEqual(await capsDebt(), 25000);
+    await assertLedgerSound();
+  });
+
+  await check('KURYER AYBI, hamyon 0: hammasi (40 000) qarz + AVA; fundReturn ×2 PARALLEL — qarz +40 000 BIR marta, jurnal bitta', async () => {
+    await seed();
+    const id = await placeAndFund();
+    await refuse(id, 'courier_problem');
+    // Trigger'siz bog'lab, ikki yo'l bir vaqtda.
+    await db.collection('shipments').doc('R1').set({
+      ownerId: SELLER, recipientId: SELLER, source: 'wholesale_return', wholesaleOrderId: id, status: 'awaiting_payment', paymentStatus: 'pending',
+      priceSnapshot: { customerPrice: 40000 }, legIds: ['rleg0'], legCount: 1, createdAt: clock, updatedAt: clock,
+    });
+    await db.collection('wholesale_orders').doc(id).update({ returnShipment: { shipmentId: 'R1', fee: 40000, createdAt: clock }, returnStatus: 'awaiting_payment' });
+    const rs = await quiet(() => Promise.allSettled([api.fundReturn(id), api.fundReturn(id)]));
+    assert.ok(rs.every((x) => x.status === 'fulfilled'), JSON.stringify(rs.map((x) => (x.reason || {}).message)));
+    const o = await orderOf(id);
+    assert.deepStrictEqual([o.status, o.returnPayment.held, o.returnPayment.avaCover, o.courierReturnDebt.amount], ['returning', 0, 40000, 40000]);
+    assert.strictEqual(await capsDebt(), 40000);
     assert.strictEqual(await bal(pcOf(K1)), 0);
-    await topup(K1, 24999);
-    let rc = await quiet(() => api.reconcile());
-    assert.deepStrictEqual([rc.returnFunded, rc.returnDebts], [0, 1]);
-    assert.strictEqual(await bal(pcOf(K1)), 24999, 'qolgan qism faqat to\'liq');
-    await topup(K1, 1);
-    rc = await quiet(() => api.reconcile());
-    assert.strictEqual(rc.returnFunded, 1);
-    o = await orderOf(id);
-    assert.deepStrictEqual([o.status, o.returnDebt, o.walletRefusal.returnFeeCharged, o.walletRefusal.returnFeeOutstanding], ['returning', null, 40000, 0]);
+    assert.strictEqual(await bal(relay.escrowAccount('R1')), 40000);
+    assert.strictEqual((await db.collection(settlementLedger.COL_JOURNAL).where('kind', '==', 'wholesale_return_ava_cover').get()).size, 1);
+    await assertLedgerSound();
+  });
+
+  await check('KURYER AYBI: accountId yo\'q → anomaliya (pul YO\'Q, qarz yo\'q, qaytish to\'lanmaydi); hamyoni yetsa — accountId kerak emas', async () => {
+    await seed({ courierWallet: 1000, courierAccount: false });
+    const id = await placeAndFund();
+    await refuse(id, 'courier_problem');
+    await linkReturn(id, 40000);
+    const o = await orderOf(id);
+    assert.deepStrictEqual([o.status, (o.returnAnomaly || {}).code], ['refused', 'courier_account_missing']);
+    assert.strictEqual(await bal(pcOf(K1)), 1000, 'kuryerdan ham yechilmadi');
+    assert.strictEqual(await bal(W.returnEscrowAccount(id)), 0);
+    assert.strictEqual(await bal(relay.escrowAccount('R1')), 0);
+    await seed({ courierWallet: 50000, courierAccount: false });
+    const id2 = await placeAndFund();
+    await refuse(id2, 'courier_problem');
+    await linkReturn(id2, 40000);
+    assert.strictEqual((await orderOf(id2)).status, 'returning');
+    await assertLedgerSound();
+  });
+
+  await check('ESKI holat (55542134 yozgan): kuryer qisman + returnDebt{payer:courier} → reconcile qolganini qarz + AVA bilan yopadi, returning', async () => {
+    await seed({ courierWallet: 15000 });
+    const id = await placeAndFund();
+    await refuse(id, 'courier_problem');
+    // Eski kod natijasini qo'lda: 15 000 ushlangan (wholesaleReturnHold), 25 000 returnDebt.
+    await db.collection('shipments').doc('R1').set({
+      ownerId: SELLER, recipientId: SELLER, source: 'wholesale_return', wholesaleOrderId: id, status: 'awaiting_payment', paymentStatus: 'pending',
+      priceSnapshot: { customerPrice: 40000 }, legIds: ['rleg0'], legCount: 1, createdAt: clock, updatedAt: clock,
+    });
+    await settlementLedger.postEntry(db, {
+      idempotencyKey: `bonus:${W.returnHoldKey(id)}`, kind: 'wholesale_return_hold', refType: 'wholesale_order', refId: id,
+      legs: [{ account: pcOf(K1), dr: 15000 }, { account: W.returnEscrowAccount(id), cr: 15000 }],
+    });
+    await db.collection('wholesale_orders').doc(id).update({
+      returnShipment: { shipmentId: 'R1', fee: 40000, createdAt: clock },
+      returnStatus: 'awaiting_payment',
+      returnPayment: { status: 'partial', amount: 40000, held: 15000, payer: 'courier', payerWalletUid: K1 },
+      returnDebt: { amount: 25000, payer: 'courier', courierId: K1, attempts: 1 },
+    });
+    const rc = await quiet(() => api.reconcile());
+    assert.strictEqual(rc.returnFunded, 1, JSON.stringify(rc));
+    const o = await orderOf(id);
+    assert.deepStrictEqual([o.status, o.returnDebt, o.returnPayment.avaCover, o.courierReturnDebt.amount], ['returning', null, 25000, 25000]);
+    assert.strictEqual(await capsDebt(), 25000);
     assert.strictEqual(await bal(pcOf(K1)), 0);
     await assertLedgerSound();
   });

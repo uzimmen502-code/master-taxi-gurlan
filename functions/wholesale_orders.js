@@ -82,6 +82,25 @@
  *   KARTA   (chek/tasdiq/nizo — xaridor to'lagan bo'lishi mumkin) pul YO'Q, `lost_review` (admin)
  *   → buyurtma `lost`, eskrou 0 (review'dan tashqari), qoldiq TIKLANMAYDI. Sotuvchiga tovar puli
  *   escrow:wholesale dan HECH QACHON berilmaydi (uni kuryer kompensatsiyasi qoplaydi).
+ *
+ * ── HAMYON BUYURTMASI «ЕТКАЗИЛМАДИ» (ega, 2026-11-01: «тавсияларга розиман») ───
+ * Demand (`wholesale_failed.js`) — xaridor tasdig'i / sotuvchi-admin qarori, sabab kodi
+ * `order.refusal.reasonCode` (hamyonda `other` YO'Q — demand rad etadi). Pul — SHU fayl, mavjud kalitlar:
+ *   AYB  customer_absent | customer_refused → xaridor; courier_problem → mas'ul kuryer (`refusal.by` —
+ *        «етказилмади» ni bosgan oxirgi LEG kuryeri; yo'qolish precedenti «yetkazish haqi mas'ul kuryerdan»)
+ *   REFUND   Dr escrow:wholesale:{id} goodsTotal / Cr passenger_credit:{xaridor} (`bonus:wholesaleRefused:{id}`,
+ *            wallet_ledger `wholesale_refusal_refund`). Yetkazish haqi QAYTARILMAYDI (SHIP_FUND da relay eskrouga
+ *            o'tgan → kuryer/AVA; chiqish jo'natmasi `settleOutboundOnRefusal` bilan yopiladi — o'zgarmagan qoida).
+ *            Xaridor aybida — qaytish narxi F ma'lum bo'lgach (demand qaytish jo'natmasini bog'laydi), AYNI
+ *            tranzaksiyada qaytish haqi ushlanadi:
+ *   RETURN HOLD (xaridor) Dr passenger_credit:{xaridor} take / Cr escrow:wholesale_return:{id} (`bonus:wholesaleReturnHold:{id}`,
+ *            `wholesale_return_hold`), take = min(F, xaridor hamyoni refunddan keyin) — MANFIYGA TUSHMAYDI; F > take
+ *            bo'lsa (tovar summasi + hamyon yetmadi) — `returnDebt {payer: 'buyer'}`, qolgan qism keyin
+ *            (`bonus:wholesaleReturnHoldRest:{id}`, faqat to'liq, reconcile har aylanishda — karta sotuvchi qarzi naqshi).
+ *   RETURN HOLD (kuryer) refund darhol (F kutilmaydi); F — kuryer hamyonidan (`fundReturn`): avval take = min(F, balans)
+ *            (`wholesaleReturnHold`), qolgani — `returnDebt {payer: 'courier'}` + `…HoldRest` (to'liq, reconcile).
+ *   RETURN FUND / RETURNED — karta bilan AYNAN bir xil (`wholesaleReturnFund`, `completeReturn`, qoldiq +N).
+ * Sotuvchiga pul YO'Q (sotuv bo'lmadi; avaFee olinmaydi — eskrou AYNAN goodsTotal, hammasi xaridorga).
  */
 
 const ORDERS = 'wholesale_orders';
@@ -157,6 +176,16 @@ const refusedKey = (orderId) => `wholesaleRefused:${orderId}`;
 const returnHoldKey = (orderId) => `wholesaleReturnHold:${orderId}`;
 const returnFundKey = (orderId) => `wholesaleReturnFund:${orderId}`;
 const returnEscrowAccount = (orderId) => `escrow:wholesale_return:${orderId}`;
+/** Hamyon rad: qaytish haqining qolgan qismi (birinchi ushlanma `returnHoldKey` qisman bo'lgan bo'lsa). */
+const returnHoldRestKey = (orderId) => `wholesaleReturnHoldRest:${orderId}`;
+/**
+ * Hamyon buyurtmasi rad etilganda AYB (ega, 2026-11-01) — sabab kodi → kim qaytish haqini to'laydi.
+ * Kalitlar — demand `api/wholesale_failed.js` WALLET_REASONS bilan AYNAN bir xil (paritet testi:
+ * functions_demand/test/wholesale_failed.test.js). `other` yo'q — demand hamyonda rad etadi.
+ */
+const WALLET_REFUSAL_FAULT = Object.freeze({
+  customer_absent: 'buyer', customer_refused: 'buyer', courier_problem: 'courier',
+});
 /** Yo'qolish: `bonus:` prefiksli (prepareBonusInTx) — eskrou qoldig'i to'lovchiga. */
 const lostKey = (orderId) => `wholesaleLost:${orderId}`;
 /**
@@ -629,6 +658,125 @@ function attachWholesaleOrders(exportsObj, deps) {
     return { refunded: amount, refusal: true, stockRestored: false, ledgerExisted: ledger.jExists };
   }
 
+  /**
+   * HAMYON REFUSED (ega, 2026-11-01) — tepadagi «HAMYON BUYURTMASI «ЕТКАЗИЛМАДИ»» bo'limi. Tranzaksiya
+   * `refundOrder` niki (holat `refundStatus: pending` ichida tekshirilgan). Xaridor aybida qaytish narxi
+   * (`order.returnShipment.fee`, demand yozadi) hali yo'q bo'lsa — PUL YO'Q, `awaiting_return_fee` (anomaliya
+   * EMAS): demand bog'lagach buyurtma yangilanadi → trigger qayta keladi (yoki reconcile A).
+   * Eskrou AYNAN goodsTotal bo'lishi shart (aks holda anomaliya, pul yo'q).
+   */
+  async function settleWalletRefusalInTx(t, orderRef, o, orderId, when) {
+    const pay = o.payment || {};
+    const buyerWalletUid = String(o.buyerWalletUid || '');
+    const G = o.goodsTotal;
+    if (pay.status !== 'held' || !buyerWalletUid || !isPosInt(G) || !isPosInt(pay.amount) || pay.amount !== G + o.deliveryFee) {
+      return { skipped: 'wallet_refusal_payment_invalid', anomaly: true };
+    }
+    if (pay.deliveryFunded !== true) return { skipped: 'refusal_not_funded', anomaly: true };
+    const reasonCode = String((o.refusal || {}).reasonCode || '');
+    const fault = WALLET_REFUSAL_FAULT[reasonCode];
+    if (!fault) return { skipped: 'wallet_refusal_reason_invalid', anomaly: true };
+    const rs = o.returnShipment || {};
+    let fee = null;
+    if (fault === 'buyer') {
+      if (!rs.shipmentId) return { skipped: 'awaiting_return_fee' };
+      if (!isPosInt(rs.fee)) return { skipped: 'return_fee_invalid', anomaly: true };
+      fee = rs.fee;
+    }
+    // ── READ fazasi ──
+    const refund = await settlementLedger.prepareBonusInTx(t, db, buyerWalletUid, {
+      fundingAccount: escrowAccount(orderId), idempotencyKey: refusedKey(orderId),
+    });
+    const hold = fault === 'buyer'
+      ? await settlementLedger.prepareBonusInTx(t, db, buyerWalletUid, {
+        fundingAccount: returnEscrowAccount(orderId), idempotencyKey: returnHoldKey(orderId),
+      })
+      : null;
+    // Jurnal bor, holat esa hali pending — bitta tranzaksiyada yoziladi, demak bo'lishi mumkin emas: anomaliya, pul YO'Q.
+    if (refund.jExists || (hold && hold.jExists)) return { skipped: 'wallet_refusal_journal_exists', anomaly: true };
+    if (refund.fundPrev !== G) return { skipped: 'escrow_mismatch', anomaly: true, escrow: refund.fundPrev };
+    if (hold && hold.fundPrev !== 0) return { skipped: 'return_escrow_not_empty', anomaly: true, escrow: hold.fundPrev };
+
+    // ── WRITE fazasi ──
+    const c1 = settlementLedger.commitBonusInTx(t, refund, {
+      delta: G,
+      kind: 'wholesale_refusal_refund',
+      refType: 'wholesale_order',
+      refId: orderId,
+      meta: { module: 'wholesale', status: o.status, paymentMethod: PAYMENT_METHOD.WALLET, payee: 'buyer', reasonCode, fault },
+      postedBy: 'system',
+      postedRole: 'system',
+    });
+    mirrorWallet(t, buyerWalletUid, G, 'wholesale_refusal_refund', orderId, when, { reasonCode, fault });
+    let take = 0;
+    if (hold) {
+      // Xaridor hisobi shu tranzaksiyada ikkinchi marta: refunddan keyingi balansdan (settleLost naqshi).
+      hold.pcPrev = c1.pcBalance;
+      take = Math.min(fee, Math.max(0, hold.pcPrev));
+      if (take > 0) {
+        settlementLedger.commitBonusInTx(t, hold, {
+          delta: -take,
+          kind: 'wholesale_return_hold',
+          refType: 'wholesale_order',
+          refId: orderId,
+          meta: { module: 'wholesale', returnShipmentId: String(rs.shipmentId), payer: 'buyer', fee, reasonCode },
+          postedBy: 'system',
+          postedRole: 'system',
+        });
+        mirrorWallet(t, buyerWalletUid, -take, 'wholesale_return_hold', orderId, when, { returnShipmentId: String(rs.shipmentId), fee });
+      }
+    }
+    const outstanding = fee === null ? null : fee - take;
+    const patch = {
+      refundStatus: REFUND_STATUS.DONE,
+      refundedAt: when,
+      'payment.status': 'refusal_refunded',
+      'payment.refusalRefund': G,
+      'payment.refusalEntryId': `bonus:${refusedKey(orderId)}`,
+      'payment.refundedAt': when,
+      walletRefusal: {
+        reasonCode,
+        fault,
+        goodsRefunded: G,
+        deliveryFeeRefunded: 0,
+        returnFee: fee,
+        returnFeeCharged: fee === null ? null : take,
+        returnFeeOutstanding: outstanding,
+        returnFeePayer: fault,
+        at: when,
+      },
+      updatedAt: when,
+    };
+    if (hold) {
+      patch.returnPayment = {
+        status: outstanding === 0 ? 'held' : 'partial',
+        amount: fee,
+        held: take,
+        payer: 'buyer',
+        payerWalletUid: buyerWalletUid,
+        heldAt: when,
+        escrowAccount: returnEscrowAccount(orderId),
+        holdEntryId: take > 0 ? `bonus:${returnHoldKey(orderId)}` : null,
+      };
+      if (outstanding > 0) {
+        patch.returnDebt = { amount: outstanding, payer: 'buyer', at: when, attempts: 1, lastTriedAt: when };
+        patch.returnStatus = RETURN_STATUS.AWAITING_PAYMENT;
+      }
+    }
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    t.update(orderRef, { ...patch, historySeq: seq });
+    t.set(orderRef.collection(HISTORY).doc(String(seq)), {
+      seq, from: o.status, to: o.status, event: 'refusal_settled', actor: 'system', actorId: null, reason: '',
+      meta: {
+        paymentMethod: PAYMENT_METHOD.WALLET, reasonCode, fault, goodsRefunded: G, returnFee: fee, returnFeeCharged: fee === null ? null : take, returnFeeOutstanding: outstanding,
+      },
+      at: when,
+    });
+    return {
+      refunded: G, refusal: true, wallet: true, fault, returnFeeCharged: take, returnFeeOutstanding: outstanding, stockRestored: false, ledgerExisted: false,
+    };
+  }
+
   // ── QAYTARISH: cancelled → to'lovchiga to'liq + qoldiq +N; refused → AVA ulushi sotuvchiga ──
   /**
    * Idempotent (holat tranzaksiya ichida): `refundStatus === 'done'` bo'lsa hech narsa
@@ -648,7 +796,11 @@ function attachWholesaleOrders(exportsObj, deps) {
       if (o.refundStatus !== REFUND_STATUS.PENDING || !REFUND_STATUSES.includes(o.status)) {
         return { skipped: `state_${o.status || 'none'}_${o.refundStatus || 'none'}` };
       }
-      if (o.status === STATUS.REFUSED) return settleRefusalInTx(t, orderRef, o, orderId, when);
+      if (o.status === STATUS.REFUSED) {
+        return methodOf(o) === PAYMENT_METHOD.WALLET
+          ? settleWalletRefusalInTx(t, orderRef, o, orderId, when)
+          : settleRefusalInTx(t, orderRef, o, orderId, when);
+      }
       const pay = o.payment || {};
       const amount = pay.amount;
       const isCard = methodOf(o) === PAYMENT_METHOD.CARD;
@@ -715,6 +867,11 @@ function attachWholesaleOrders(exportsObj, deps) {
         refusal_not_funded: 'WHOLESALE_REFUSAL_NOT_FUNDED',
         refusal_payment_invalid: 'WHOLESALE_REFUSAL_PAYMENT_INVALID',
         refusal_amount_invalid: 'WHOLESALE_REFUSAL_AMOUNT_INVALID',
+        wallet_refusal_payment_invalid: 'WHOLESALE_WALLET_REFUSAL_PAYMENT_INVALID',
+        wallet_refusal_reason_invalid: 'WHOLESALE_WALLET_REFUSAL_REASON_INVALID',
+        wallet_refusal_journal_exists: 'WHOLESALE_WALLET_REFUSAL_JOURNAL_EXISTS',
+        return_fee_invalid: 'WHOLESALE_WALLET_REFUSAL_RETURN_FEE_INVALID',
+        return_escrow_not_empty: 'WHOLESALE_WALLET_REFUSAL_RETURN_ESCROW_NOT_EMPTY',
       };
       logError('refund', { orderId, errorCode: codes[out.skipped] || 'WHOLESALE_PAYMENT_INVALID' });
     } else {
@@ -1096,7 +1253,9 @@ function attachWholesaleOrders(exportsObj, deps) {
     if (!s0.exists) return { skipped: 'order_missing' };
     const o0 = s0.data() || {};
     if (!OUTBOUND_SETTLE_STATUSES.includes(o0.status)) return { skipped: `status_${o0.status || 'none'}` };
-    if (methodOf(o0) !== PAYMENT_METHOD.CARD) return { skipped: 'not_card' };
+    // Hamyon buyurtmasi ham (ega, 2026-11-01): kuryer haqi — AYNAN shu qoida (ishlangan LEG kuryerga).
+    // Ishlanmagan LEG ulushi — yetkazish haqini TO'LAGANga: karta — sotuvchi, hamyon — xaridor.
+    const isWallet = methodOf(o0) === PAYMENT_METHOD.WALLET;
     if ((o0.outboundSettlement || {}).status === 'settled') return { skipped: 'already_settled' };
     const shipmentId = String((o0.shipment || {}).shipmentId || '');
     const anomaly0 = async (reason, extra) => {
@@ -1156,8 +1315,9 @@ function attachWholesaleOrders(exportsObj, deps) {
     }
     const earnedSum = earned.reduce((s, e) => s + e.amount, 0);
     if (earnedSum + unearned !== providerPool) return anomaly0('leg_payouts_mismatch', { earnedSum, unearned, providerPool });
-    const sellerWalletUid = String((o0.payment || {}).payerWalletUid || '');
-    if (unearned > 0 && !sellerWalletUid) return anomaly0('seller_wallet_missing');
+    // `sellerWalletUid` — ishlanmagan ulush oluvchisi (nomi tarixiy: karta — sotuvchi; hamyon — xaridor).
+    const sellerWalletUid = isWallet ? String(o0.buyerWalletUid || '') : String((o0.payment || {}).payerWalletUid || '');
+    if (unearned > 0 && !sellerWalletUid) return anomaly0(isWallet ? 'buyer_wallet_missing' : 'seller_wallet_missing');
 
     try {
       // a) EARNED — relay `postEarned` bilan AYNI yozuv/kalit.
@@ -1240,7 +1400,9 @@ function attachWholesaleOrders(exportsObj, deps) {
             }
           });
           if (unearned > 0) {
-            mirrorWallet(tx, sellerWalletUid, unearned, 'wholesale_unearned_delivery_refund', orderId, when, { shipmentId });
+            mirrorWallet(tx, sellerWalletUid, unearned, 'wholesale_unearned_delivery_refund', orderId, when, {
+              shipmentId, ...(isWallet ? { payee: 'buyer' } : {}),
+            });
           }
           const seq = (isInt(pre.o.historySeq) ? pre.o.historySeq : 0) + 1;
           tx.update(orderRef, {
@@ -1294,7 +1456,7 @@ function attachWholesaleOrders(exportsObj, deps) {
     if (!s0.exists) return { skipped: 'order_missing' };
     const o0 = s0.data() || {};
     if (o0.status !== STATUS.REFUSED) return { skipped: `status_${o0.status || 'none'}` };
-    if (methodOf(o0) !== PAYMENT_METHOD.CARD) return { skipped: 'not_card' };
+    const isWallet = methodOf(o0) === PAYMENT_METHOD.WALLET;
     if (o0.refundStatus !== REFUND_STATUS.DONE) return { skipped: 'refund_pending' };
     const rs = o0.returnShipment || {};
     const returnShipmentId = String(rs.shipmentId || '');
@@ -1308,15 +1470,136 @@ function attachWholesaleOrders(exportsObj, deps) {
     };
     if (!isPosInt(fee)) return anomaly0('fee_invalid');
     const sellerKey = canonicalUid(o0.sellerId || '');
-    const sellerWalletUid = /^998\d{9}$/.test(sellerKey) ? await walletUidOf(sellerKey) : null;
-    if (!sellerWalletUid) return anomaly0('seller_wallet_missing');
-    const statsRef = db.collection(SELLER_STATS).doc(sellerKey);
+    const statsRef = db.collection(SELLER_STATS).doc(/^998\d{9}$/.test(sellerKey) ? sellerKey : '_');
     const shipRef = db.collection(SHIPMENTS).doc(returnShipmentId);
     const holdEsc = returnEscrowAccount(orderId);
     const when = now();
 
-    // 1) HOLD (yoki qarz).
-    const h = await db.runTransaction(async (t) => {
+    // 1) HOLD (yoki qarz). Hamyon buyurtmasi — to'lovchi xaridor yoki mas'ul kuryer (`holdReturnWallet`).
+    let h;
+    if (isWallet) {
+      h = await holdReturnWallet(orderId, o0, { returnShipmentId, fee, holdEsc, when });
+      if (h.anomaly) return anomaly0(h.anomaly);
+    } else {
+      const sellerWalletUid = /^998\d{9}$/.test(sellerKey) ? await walletUidOf(sellerKey) : null;
+      if (!sellerWalletUid) return anomaly0('seller_wallet_missing');
+      h = await holdReturnCard(orderId, { sellerKey, sellerWalletUid, statsRef, returnShipmentId, fee, holdEsc, when });
+    }
+    if (h.skip) return { skipped: h.skip };
+    if (h.debt) {
+      const amount = isWallet ? h.amount : fee;
+      log('returnFund', {
+        orderId, returnShipmentId, result: 'debt', amount, attempts: h.attempts, ...(isWallet ? { payer: h.payer } : {}), durationMs: Date.now() - started,
+      });
+      if (h.first) {
+        logError('returnFund', {
+          orderId, returnShipmentId, errorCode: isWallet ? `WHOLESALE_RETURN_${String(h.payer).toUpperCase()}_DEBT` : 'WHOLESALE_RETURN_SELLER_DEBT', amount,
+        });
+      }
+      return isWallet ? {
+        debt: true, amount, attempts: h.attempts, payer: h.payer,
+      } : { debt: true, amount: fee, attempts: h.attempts };
+    }
+    return fundReturnEscrow(orderId, {
+      returnShipmentId, fee, holdEsc, statsRef, shipRef, sellerKey, when, started, card: !isWallet,
+    });
+  }
+
+  /**
+   * Hamyon rad: qaytish haqi ushlanmasi (tepadagi bo'lim). To'lovchi: `walletRefusal.fault` — xaridor
+   * (`buyerWalletUid`) yoki mas'ul kuryer (`refusal.by` → hamyon hujjati). Birinchi ushlanma QISMAN bo'lishi
+   * mumkin (min(qolgan, balans), `wholesaleReturnHold`), keyingisi — FAQAT to'liq qolgan qism
+   * (`wholesaleReturnHoldRest`). Balans manfiyga TUSHMAYDI; yetmasa — `returnDebt {payer}` (reconcile qayta urinadi).
+   * @returns {{held?:true, debt?:true, amount?:number, attempts?:number, first?:boolean, payer?:string, skip?:string, anomaly?:string}}
+   */
+  async function holdReturnWallet(orderId, o0, { returnShipmentId, fee, holdEsc, when }) {
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const wr = o0.walletRefusal || {};
+    const fault = wr.fault;
+    if (fault !== 'buyer' && fault !== 'courier') return { anomaly: 'wallet_refusal_invalid' };
+    let payerWalletUid = '';
+    let courierId = null;
+    if (fault === 'buyer') {
+      payerWalletUid = String(o0.buyerWalletUid || '');
+    } else {
+      courierId = canonicalUid(String((o0.refusal || {}).by || ''));
+      payerWalletUid = /^998\d{9}$/.test(courierId) ? ((await walletUidOf(courierId)) || '') : '';
+    }
+    if (!payerWalletUid) return { anomaly: fault === 'courier' ? 'courier_wallet_missing' : 'buyer_wallet_missing' };
+    return db.runTransaction(async (t) => {
+      const os = await t.get(orderRef);
+      const o = os.data() || {};
+      if (o.status !== STATUS.REFUSED) return { skip: `status_${o.status || 'none'}` };
+      if (String((o.returnShipment || {}).shipmentId || '') !== returnShipmentId) return { skip: 'return_shipment_changed' };
+      const rp = o.returnPayment || {};
+      if (rp.status === 'held' || rp.status === 'funded') return { held: true, already: true };
+      if (rp.amount != null && rp.amount !== fee) return { anomaly: 'return_fee_changed' };
+      const held = isInt(rp.held) && rp.held > 0 ? rp.held : 0;
+      const need = fee - held;
+      if (need <= 0) return { anomaly: 'return_hold_inconsistent' };
+      const key = held > 0 ? returnHoldRestKey(orderId) : returnHoldKey(orderId);
+      const ledger = await settlementLedger.prepareBonusInTx(t, db, payerWalletUid, { fundingAccount: holdEsc, idempotencyKey: key });
+      // Jurnal va buyurtma belgisi bitta tranzaksiyada — jurnal bor, belgi yo'q bo'lishi mumkin emas.
+      if (ledger.jExists) return { anomaly: 'return_hold_journal_exists' };
+      if (ledger.fundPrev !== held) return { anomaly: 'return_escrow_mismatch' };
+      const avail = Math.max(0, ledger.pcPrev);
+      const take = held > 0 ? (avail >= need ? need : 0) : Math.min(need, avail);
+      if (take > 0) {
+        settlementLedger.commitBonusInTx(t, ledger, {
+          delta: -take,
+          kind: 'wholesale_return_hold',
+          refType: 'wholesale_order',
+          refId: orderId,
+          meta: {
+            module: 'wholesale', returnShipmentId, payer: fault, fee, part: held > 0 ? 'rest' : 'first', reasonCode: wr.reasonCode || null,
+          },
+          postedBy: 'system',
+          postedRole: 'system',
+        });
+        mirrorWallet(t, payerWalletUid, -take, 'wholesale_return_hold', orderId, when, { returnShipmentId, fee, payer: fault });
+      }
+      const newHeld = held + take;
+      const outstanding = fee - newHeld;
+      const patch = {
+        returnPayment: {
+          status: outstanding === 0 ? 'held' : 'partial',
+          amount: fee,
+          held: newHeld,
+          payer: fault,
+          payerWalletUid,
+          heldAt: rp.heldAt || when,
+          escrowAccount: holdEsc,
+          holdEntryId: rp.holdEntryId || (held === 0 && take > 0 ? `bonus:${returnHoldKey(orderId)}` : null),
+          restEntryId: held > 0 && take > 0 ? `bonus:${returnHoldRestKey(orderId)}` : (rp.restEntryId || null),
+        },
+        'walletRefusal.returnFee': fee,
+        'walletRefusal.returnFeeCharged': newHeld,
+        'walletRefusal.returnFeeOutstanding': outstanding,
+        updatedAt: when,
+      };
+      if (outstanding > 0) {
+        const prev = o.returnDebt || null;
+        const attempts = (prev && isInt(prev.attempts) ? prev.attempts : 0) + 1;
+        patch.returnDebt = {
+          amount: outstanding, payer: fault, ...(courierId ? { courierId } : {}), at: (prev && prev.at) || when, attempts, lastTriedAt: when,
+        };
+        patch.returnStatus = RETURN_STATUS.AWAITING_PAYMENT;
+        t.update(orderRef, patch);
+        return {
+          debt: true, amount: outstanding, attempts, first: !prev, payer: fault,
+        };
+      }
+      t.update(orderRef, patch);
+      return { held: true };
+    });
+  }
+
+  /** Karta rad: qaytish haqi SOTUVCHI hamyonidan (yetmasa — qarz + karta bloki). O'zgarmagan mantiq. */
+  async function holdReturnCard(orderId, {
+    sellerKey, sellerWalletUid, statsRef, returnShipmentId, fee, holdEsc, when,
+  }) {
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    return db.runTransaction(async (t) => {
       const [os, ss] = await Promise.all([t.get(orderRef), t.get(statsRef)]);
       const o = os.data() || {};
       if (o.status !== STATUS.REFUSED) return { skip: `status_${o.status || 'none'}` };
@@ -1367,14 +1650,13 @@ function attachWholesaleOrders(exportsObj, deps) {
       });
       return { held: true };
     });
-    if (h.skip) return { skipped: h.skip };
-    if (h.debt) {
-      log('returnFund', { orderId, returnShipmentId, result: 'debt', amount: fee, attempts: h.attempts, durationMs: Date.now() - started });
-      if (h.first) logError('returnFund', { orderId, returnShipmentId, errorCode: 'WHOLESALE_RETURN_SELLER_DEBT', amount: fee });
-      return { debt: true, amount: fee, attempts: h.attempts };
-    }
+  }
 
-    // 2) FUND → relay eskrou + jo'natma to'landi + refused → returning.
+  /** 2) FUND → relay eskrou + jo'natma to'landi + refused → returning (karta va hamyon uchun BIR XIL). */
+  async function fundReturnEscrow(orderId, {
+    returnShipmentId, fee, holdEsc, statsRef, shipRef, sellerKey, when, started, card,
+  }) {
+    const orderRef = db.collection(ORDERS).doc(orderId);
     const key = returnFundKey(orderId);
     try {
       const res = await settlementLedger.postEntry(db, {
@@ -1431,7 +1713,8 @@ function attachWholesaleOrders(exportsObj, deps) {
             reason: '', meta: { returnShipmentId, fee, debtSettled: hadDebt }, at: when,
           });
           const ids = Array.isArray(pre.stats.debtOrderIds) ? pre.stats.debtOrderIds : [];
-          if (ids.includes(orderId) || pre.stats.cardBlocked === true) {
+          // Sotuvchi karta bloki — faqat karta buyurtmasining qarzi (hamyon rad qarzi sotuvchiniki emas).
+          if (ids.includes(orderId) || (card && pre.stats.cardBlocked === true)) {
             const rest = ids.filter((x) => x !== orderId);
             tx.set(statsRef, {
               sellerId: sellerKey, debtOrderIds: rest, cardBlocked: rest.length > 0, updatedAt: when,
@@ -1918,8 +2201,10 @@ function attachWholesaleOrders(exportsObj, deps) {
     }
     // 3b: rad etilgan karta buyurtmasi — AVA ulushi qaytgach, CHIQISH jo'natmasini relay kalitlari bilan
     // yopish (kuryer haqi kuryerlarga). Anomaliya belgisi bo'lsa trigger qayta urinmaydi (reconcile).
-    if (OUTBOUND_SETTLE_STATUSES.includes(a.status) && methodOf(a) === PAYMENT_METHOD.CARD
-      && a.refundStatus === REFUND_STATUS.DONE && (a.shipment || {}).shipmentId
+    // Hamyon buyurtmasi (ega, 2026-11-01) — o'sha qoida; xaridor qaytarishini (qaytish narxini) KUTMAYDI:
+    // kuryer haqi qaytish jo'natmasiga bog'liq bo'lmasin.
+    if (OUTBOUND_SETTLE_STATUSES.includes(a.status)
+      && (methodOf(a) === PAYMENT_METHOD.WALLET || a.refundStatus === REFUND_STATUS.DONE) && (a.shipment || {}).shipmentId
       && (a.outboundSettlement || {}).status !== 'settled' && !a.outboundAnomaly) {
       try {
         return await settleOutboundOnRefusal(orderId);
@@ -2052,9 +2337,9 @@ function attachWholesaleOrders(exportsObj, deps) {
     out.returnFundChecked = 0; out.returnFunded = 0; out.returnDebts = 0;
     out.outboundChecked = 0; out.outboundSettled = 0;
     // Chiqish jo'natmasi yopilmagan rad etilgan / qaytayotgan buyurtmalar (trigger yiqilgan).
-    const needOutbound = (o) => methodOf(o) === PAYMENT_METHOD.CARD && o.refundStatus === REFUND_STATUS.DONE
+    const needOutbound = (o) => (methodOf(o) === PAYMENT_METHOD.WALLET || o.refundStatus === REFUND_STATUS.DONE)
       && (o.shipment || {}).shipmentId && (o.outboundSettlement || {}).status !== 'settled' && !o.outboundAnomaly
-      && nowMs - (msOf(o.refundedAt) || msOf(o.updatedAt) || 0) >= minAgeMs;
+      && nowMs - (msOf(o.refundedAt) || msOf(o.statusUpdatedAt) || msOf(o.updatedAt) || 0) >= minAgeMs;
     const settleOut = async (d) => {
       out.outboundChecked += 1;
       try {
@@ -2152,6 +2437,8 @@ module.exports = {
   returnHoldKey,
   returnFundKey,
   returnEscrowAccount,
+  returnHoldRestKey,
+  WALLET_REFUSAL_FAULT,
   lostKey,
   lostFeeKey,
   lostFeePaymentKey,

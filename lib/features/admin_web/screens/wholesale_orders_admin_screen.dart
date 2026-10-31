@@ -11,6 +11,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../services/admin_callable.dart' show adminInt;
 import '../services/admin_logistics_service.dart';
 import '../services/admin_wholesale_orders_service.dart';
 import '../utils/admin_paged_list.dart';
@@ -20,6 +21,7 @@ import '../widgets/admin_load_more_bar.dart';
 import '../widgets/region_zone_matrix_dialog.dart';
 import '../widgets/wholesale_dispute_dialog.dart';
 import '../widgets/wholesale_fee_card.dart';
+import '../widgets/wholesale_lost_fee_dialog.dart';
 import '../widgets/wholesale_stage_panel.dart';
 
 class WholesaleOrdersAdminScreen extends StatefulWidget {
@@ -102,7 +104,7 @@ class _WholesaleOrdersListState extends State<_WholesaleOrdersList> {
   Future<void> _open(WholesaleOrderAdminView o) async {
     await showDialog<void>(
       context: context,
-      builder: (_) => _OrderDetailDialog(order: o, svc: widget.svc),
+      builder: (_) => WholesaleOrderDetailDialog(order: o, svc: widget.svc),
     );
   }
 
@@ -191,14 +193,33 @@ String _fmt(DateTime? d) {
   return '${two(l.day)}.${two(l.month)}.${l.year} ${two(l.hour)}:${two(l.minute)}';
 }
 
-class _OrderDetailDialog extends StatelessWidget {
-  const _OrderDetailDialog({required this.order, required this.svc});
+/// Буюртма ҳужжатини қайта ўқиш (тўловдан кейин янгилаш). Тестда алмаштирилади.
+typedef WholesaleOrderLoader = Future<WholesaleOrderAdminView?> Function(String orderId);
+
+Future<WholesaleOrderAdminView?> _loadOrderFromFirestore(String orderId) async {
+  final s = await FirebaseFirestore.instance.collection('wholesale_orders').doc(orderId).get();
+  final d = s.data();
+  return d == null ? null : WholesaleOrderAdminView.fromMap(s.id, d);
+}
+
+class WholesaleOrderDetailDialog extends StatefulWidget {
+  const WholesaleOrderDetailDialog({super.key, required this.order, required this.svc, this.loadOrder});
 
   final WholesaleOrderAdminView order;
   final AdminWholesaleOrdersService svc;
+  final WholesaleOrderLoader? loadOrder;
+
+  @override
+  State<WholesaleOrderDetailDialog> createState() => _WholesaleOrderDetailDialogState();
+}
+
+class _WholesaleOrderDetailDialogState extends State<WholesaleOrderDetailDialog> {
+  late WholesaleOrderAdminView _order = widget.order;
+
+  AdminWholesaleOrdersService get svc => widget.svc;
 
   Future<void> _dispute(BuildContext context) async {
-    final res = await showWholesaleDisputeDialog(context, svc: svc, order: order);
+    final res = await showWholesaleDisputeDialog(context, svc: svc, order: _order);
     if (res == null || !context.mounted) return;
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -207,9 +228,28 @@ class _OrderDetailDialog extends StatelessWidget {
     ));
   }
 
+  /// Курьер етказиш пули қарзини тўлади → сервер ёзади → буюртма қайта ўқилади.
+  Future<void> _payLostFee() async {
+    final res = await showWholesaleLostFeePaymentDialog(context, svc: svc, order: _order);
+    if (res == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final left = adminInt(res['outstanding']);
+    messenger.showSnackBar(SnackBar(
+      content: Text('Тўлов ёзилди: ${wholesaleMoney(adminInt(res['amount']) ?? 0)} сўм'
+          '${left != null ? ' · қолган қарз: ${wholesaleMoney(left)} сўм' : ''}'
+          '${res['idempotent'] == true ? ' (аввал ёзилган)' : ''}'),
+    ));
+    try {
+      final fresh = await (widget.loadOrder ?? _loadOrderFromFirestore)(_order.id);
+      if (fresh != null && mounted) setState(() => _order = fresh);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Буюртма янгиланмади: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final o = order;
+    final o = _order;
     String money(int? v) => v == null ? '—' : '${wholesaleMoney(v)} сўм';
     String jsonish(Map<String, dynamic>? m) => m == null
         ? '—'
@@ -251,6 +291,7 @@ class _OrderDetailDialog extends StatelessWidget {
               row('Қайтариш (refundStatus)', o.refundStatus.isEmpty ? '—' : o.refundStatus),
               if (o.isCard) row('Карта тўлови', jsonish(o.cardPayment)),
               if (o.returnDebt != null) row('Қайтариш қарзи', jsonish(o.returnDebt)),
+              WholesaleLostFeeSection(order: o, onRecordPayment: _payLostFee),
               row('Харидор', o.buyerId),
               row('Сотувчи', o.sellerId),
               row('Тариф / зона', '${o.tariffVersion != null ? 'v${o.tariffVersion}' : '—'} · ${o.zone.isEmpty ? '—' : o.zone}'),

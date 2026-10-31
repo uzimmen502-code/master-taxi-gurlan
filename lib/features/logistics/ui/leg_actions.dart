@@ -23,6 +23,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../demand_offer/domain/demand_match.dart';
+import '../../wholesale/models/wholesale_quote.dart' show WholesaleReturnHandoverCode;
+import '../../wholesale/repositories/wholesale_orders_repository.dart';
+import '../../wholesale/utils/wholesale_order_errors.dart';
 import '../data/logistics_repository.dart';
 import '../domain/logistics_models.dart';
 import '../services/logistics_photo_storage.dart';
@@ -36,12 +39,16 @@ class LogisticsLegActions extends StatefulWidget {
     required this.providerId,
     this.repository,
     this.photos,
+    this.wholesaleRepository,
   });
 
   final DemandMatch match;
   final String providerId;
   final LogisticsRepository? repository;
   final LogisticsPhotoStorage? photos;
+
+  /// Улгуржи (3b) курьер амаллари: «Харидор тўламади», қайтиш топшириш коди.
+  final WholesaleOrdersRepository? wholesaleRepository;
 
   @override
   State<LogisticsLegActions> createState() => _LogisticsLegActionsState();
@@ -54,7 +61,42 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
   bool _busy = false;
   String? _error;
 
+  /// Улгуржи (3b): LEG проекциясида буюртма ID'си йўқ — у жўнатма ҳужжатида
+  /// (`shipments/{id}.wholesaleOrderId`, `source`; тайинланган ижрочи ўқийди).
+  /// Оддий жўнатмада бўш қолади ва ҳеч нарса қўшилмайди.
+  Shipment? _shipment;
+  String _shipmentLoadedFor = '';
+
   DemandMatch get match => widget.match;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadShipment();
+  }
+
+  @override
+  void didUpdateWidget(covariant LogisticsLegActions old) {
+    super.didUpdateWidget(old);
+    _loadShipment();
+  }
+
+  Future<void> _loadShipment() async {
+    final id = LegProjection.fromAttributes(match.projection.attributes).shipmentId;
+    if (id.isEmpty || id == _shipmentLoadedFor) return;
+    _shipmentLoadedFor = id;
+    try {
+      final s = await _repo.watchShipment(id).first;
+      if (mounted) setState(() => _shipment = s);
+    } catch (e) {
+      // Ўқилмади — улгуржи амаллари кўрсатилмайди, асосий LEG оқими ишлайверади.
+      debugPrint('[LegActions] shipment read failed: ${e.runtimeType}');
+    }
+  }
+
+  String get _wholesaleOrderId => _shipment?.wholesaleOrderId ?? '';
+  bool get _isWholesaleOutbound => _wholesaleOrderId.isNotEmpty && _shipment?.source == 'wholesale';
+  bool get _isWholesaleReturn => _wholesaleOrderId.isNotEmpty && _shipment?.source == 'wholesale_return';
 
   @override
   Widget build(BuildContext context) {
@@ -72,12 +114,28 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     if (status.canOffer) {
       children.add(_primary(context, 'logistics_leg_take', () => _take(leg)));
     } else if (status == MatchStatus.accepted) {
+      // Улгуржи қайтиш LEG'и: «жўнатувчи» — посилка қўлидаги курьернинг ўзи,
+      // топшириш кодини сервердан олади ва «Посилкани олдим» га киритади.
+      if (_isWholesaleReturn) {
+        children.add(_secondary(context, 'wholesale_courier_return_code_btn', _showReturnCode,
+            key: const ValueKey('wholesale-courier-return-code')));
+        children.add(const SizedBox(height: 8));
+      }
       children.add(_primary(context, 'logistics_picked_up_btn', () => _proof(delivery: false, leg: leg)));
       children.add(const SizedBox(height: 6));
       children.add(_hint(context, 'logistics_code_hint'));
     } else if (status == MatchStatus.inProgress) {
       if (isLast) {
         children.add(_primary(context, 'logistics_delivered_btn', () => _proof(delivery: true, leg: leg)));
+        // Улгуржи «етказилганда карта» буюртмаси: харидор тўламаса — курьер
+        // қайд қилади (сервер карта/тўлов ҳолатини текширади; ҳамён буюртмасида рад).
+        if (_isWholesaleOutbound) {
+          children.add(const SizedBox(height: 8));
+          children.add(_secondary(context, 'wholesale_courier_refused_btn', _markRefused,
+              key: const ValueKey('wholesale-courier-refused'), danger: true));
+          children.add(const SizedBox(height: 4));
+          children.add(_hint(context, 'wholesale_courier_refused_hint'));
+        }
       } else {
         children.add(_primary(context, 'logistics_show_code_next', () => _showCodes(leg)));
         children.add(const SizedBox(height: 6));
@@ -171,6 +229,64 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     });
   }
 
+  // ── Улгуржи (3b) ───────────────────────────────────────────────────
+
+  Future<void> _markRefused() async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _RefuseReasonDialog(),
+    );
+    if (reason == null) return; // бекор қилинди
+    await _runWholesale(() async {
+      await _wholesale.markBuyerRefused(orderId: _wholesaleOrderId, reason: reason);
+      _snack('wholesale_courier_refused_done');
+    });
+  }
+
+  Future<void> _showReturnCode() async {
+    WholesaleReturnHandoverCode? code;
+    await _runWholesale(() async => code = await _wholesale.returnHandoverCode(_wholesaleOrderId));
+    final c = code;
+    if (c == null || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('wholesale_courier_return_code_btn')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SelectableText(
+              c.handoverCode,
+              key: const ValueKey('wholesale-courier-return-code-value'),
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: 6),
+            ),
+            const SizedBox(height: 8),
+            Text(ctx.tr('wholesale_courier_return_code_hint'), textAlign: TextAlign.center),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(ctx.tr('close')))],
+      ),
+    );
+  }
+
+  late final WholesaleOrdersRepository _wholesale = widget.wholesaleRepository ?? WholesaleOrdersRepository();
+
+  /// Улгуржи callable хатолари — ўз матн харитаси (`wholesale_order_err_*`).
+  Future<void> _runWholesale(Future<void> Function() body) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await body();
+    } catch (e) {
+      if (mounted) setState(() => _error = wholesaleOrderErrorText(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _run(Future<void> Function() body) async {
     if (_busy) return;
     setState(() {
@@ -209,6 +325,21 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
               context.tr(key),
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
+    );
+  }
+
+  Widget _secondary(BuildContext context, String textKey, VoidCallback onTap, {Key? key, bool danger = false}) {
+    final c = context.ava;
+    return OutlinedButton(
+      key: key,
+      onPressed: _busy ? null : onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: danger ? c.danger : c.brand,
+        side: BorderSide(color: danger ? c.danger : c.line),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: Text(context.tr(textKey), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -544,6 +675,55 @@ class _ProofSheetState extends State<ProofSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// «Харидор тўламади» тасдиғи + ихтиёрий сабаб. Натижа: сабаб (бўш бўлиши
+/// мумкин) ёки `null` — бекор. Контроллер шу ойнанинг ўзида (ёпилиш
+/// анимацияси давомида ҳам тирик).
+class _RefuseReasonDialog extends StatefulWidget {
+  const _RefuseReasonDialog();
+
+  @override
+  State<_RefuseReasonDialog> createState() => _RefuseReasonDialogState();
+}
+
+class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.tr('wholesale_courier_refused_btn')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(context.tr('wholesale_courier_refused_confirm')),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _reason,
+            maxLength: 300,
+            maxLines: 2,
+            decoration: InputDecoration(labelText: context.tr('wholesale_courier_refused_reason')),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('consent_no'))),
+        FilledButton(
+          key: const ValueKey('wholesale-courier-refused-yes'),
+          onPressed: () => Navigator.of(context).pop(_reason.text),
+          child: Text(context.tr('logistics_confirm')),
+        ),
+      ],
     );
   }
 }

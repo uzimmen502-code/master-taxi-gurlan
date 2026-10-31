@@ -20,6 +20,8 @@ class WholesaleSeller {
     this.address = '',
     this.lat,
     this.lng,
+    this.hasPayoutCard = false,
+    this.cardLast4 = '',
   });
 
   static const statusPending = 'pending';
@@ -85,6 +87,11 @@ class WholesaleSeller {
   final double? lat;
   final double? lng;
 
+  /// 3b: тўлов қабул қилиш картаси (сервер ёзади; тўлиқ рақам `private/payout` да,
+  /// клиентга ёпиқ). Фақат охирги 4 рақам кўрсатилади.
+  final bool hasPayoutCard;
+  final String cardLast4;
+
   /// Етказиш ҳақини ҳисоблаш учун манзил етарлими (вилоят + туман).
   bool get hasShipFrom => regionId.isNotEmpty && districtId.isNotEmpty;
 
@@ -118,6 +125,8 @@ class WholesaleSeller {
       address: (d['address'] as String?)?.trim() ?? '',
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),
+      hasPayoutCard: d['hasPayoutCard'] == true,
+      cardLast4: (d['cardLast4'] as String?)?.trim() ?? '',
     );
   }
 

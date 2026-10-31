@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,10 +8,14 @@ import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
+import '../../../shared/widgets/wallet_topup_ui.dart' show walletPhoneId;
 import '../../ads/widgets/ad_image_slider.dart';
 import '../models/wholesale_product.dart';
+import '../repositories/wholesale_orders_repository.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../repositories/wholesale_stock_repository.dart';
+import '../widgets/wholesale_checkout_sheet.dart';
+import 'wholesale_order_detail_screen.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
@@ -18,8 +23,9 @@ import '../widgets/wholesale_pack_chips.dart';
 import '../widgets/wholesale_product_strip.dart';
 import '../widgets/wholesale_tier_picker.dart';
 
-/// Маҳсулот тафсилоти — улгуржи битим телефон орқали келишилади,
-/// checkout/wallet йўқ (`yuk_local`даги "фақат қўнғироқ" андозаси).
+/// Маҳсулот тафсилоти — қўнғироқ ҳамиша бор; буюртма дарвозаси очиқ
+/// фойдаланувчига «Буюртма бериш» ҳам (4-босқич, [showWholesaleCheckoutSheet]:
+/// нарх фақат сервер квотасидан, ҳамён ёки 3b карта).
 ///
 /// Қора дизайн (эга қарори, 2026-10-17) ФАҚАТ шу тафсилот экранида.
 /// Нарх поғонаси босиб танланади, миқдорга қараб сумма жонли ҳисобланади
@@ -235,6 +241,59 @@ class _WholesaleProductDetailViewState
     if (_countedThisSession.add(widget.product.id)) {
       WholesaleProductsRepository().incrementViews(widget.product.id);
     }
+    unawaited(_checkCanOrder());
+  }
+
+  /// «Буюртма бериш» (4-босқич): Хитой бозори эмас, ўз товари эмас ва
+  /// дарвоза шу фойдаланувчини киритса кўринади. Ҳал қилувчи — сервер
+  /// (квота `module_disabled` берса тугма яширинади, қўнғироқ қолади).
+  final _ordersRepo = WholesaleOrdersRepository();
+  String _uid = '';
+  bool _canOrder = false;
+
+  Future<void> _checkCanOrder() async {
+    final p = widget.product;
+    if (p.isChina) return;
+    final uid = await walletPhoneId();
+    if (uid.isEmpty || canonicalPhoneId(p.sellerId) == uid) {
+      if (mounted && _canOrder) setState(() => _canOrder = false);
+      return;
+    }
+    final gate = await _ordersRepo.gate();
+    if (!mounted) return;
+    setState(() {
+      _uid = uid;
+      _canOrder = gate.allows(uid);
+    });
+  }
+
+  Future<void> _order() async {
+    final orderId = await showWholesaleCheckoutSheet(
+      context,
+      product: widget.product,
+      pack: _pack,
+      qty: _qty,
+      repository: _ordersRepo,
+    );
+    if (!mounted) return;
+    if (orderId == null) {
+      // Варақда дарвоза ёпиқ чиққан бўлса — тугма яширинсин.
+      unawaited(_checkCanOrder());
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('wholesale_order_placed'))),
+    );
+    unawaited(Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WholesaleOrderDetailScreen(
+          orderId: orderId,
+          viewerId: _uid,
+          repository: _ordersRepo,
+        ),
+      ),
+    ));
   }
 
   Future<void> _call() async {
@@ -500,6 +559,54 @@ class _WholesaleProductDetailViewState
                     ],
                   ),
                   const SizedBox(width: 14),
+                  // Буюртма мумкин бўлса: қўнғироқ — ихчам (фақат белги,
+                  // 48 dp), «Буюртма бериш» — асосий тугма. Қўнғироқ ҳамиша қолади.
+                  if (_canOrder) ...[
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton.outlined(
+                        key: const ValueKey('wholesale-call-compact'),
+                        tooltip: context.tr('wholesale_call'),
+                        onPressed: _call,
+                        style: IconButton.styleFrom(
+                          foregroundColor: PdDark.brand,
+                          side: const BorderSide(color: PdDark.brand),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.call),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: FilledButton.icon(
+                          key: const ValueKey('wholesale-order-button'),
+                          onPressed: _order,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: PdDark.brand,
+                            foregroundColor: PdDark.brandInk,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.shopping_bag_outlined),
+                          label: Text(
+                            context.tr('wholesale_order_btn'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else
                   Expanded(
                     child: SizedBox(
                       height: 48,

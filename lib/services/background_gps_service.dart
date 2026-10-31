@@ -28,6 +28,11 @@ class BackgroundGpsService {
       androidConfiguration: AndroidConfiguration(
         onStart:         onStart,
         autoStart:       false,
+        // Plagin standarti `true`: telefon yoqilganda / ilova yangilanganda
+        // GPS xizmatini O'ZI ishga tushirardi — Android 12+ da
+        // ForegroundServiceStartNotAllowedException (Crashlytics, BootReceiver)
+        // va smenada bo'lmagan haydovchida ham GPS. Faqat ilovadan yoqiladi.
+        autoStartOnBoot: false,
         isForegroundMode: true,
         notificationChannelId: 'gps_channel',
         initialNotificationTitle: 'AVA',

@@ -71,6 +71,7 @@ import 'core/passenger_cancel_rules_holder.dart';
 import 'core/app_version_gate.dart';
 import 'core/service_config_holder.dart';
 import 'core/widgets/app_version_gate_view.dart';
+import 'core/utils/crash_report.dart';
 import 'core/utils/firestore_crash_guard.dart';
 import 'services/deferred_settlement_queue.dart';
 import 'utils/locale_utils.dart';
@@ -86,9 +87,25 @@ void main() async {
   );
 
   if (!kIsWeb) {
-    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    FlutterError.onError = (details) {
+      // Rasm yuklanmadi (tarmoq yo'q, 402/404) — ilova yiqilmaydi, faqat
+      // rasm o'rni bo'sh qoladi. Avval bular «fatal» yozilib (Crashlytics
+      // 6823bac6, 350+ hodisa) crash-free ko'rsatkichini buzardi.
+      if (details.library == 'image resource service') {
+        FirebaseCrashlytics.instance.recordFlutterError(details);
+        return;
+      }
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
     PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      // Vaqtinchalik tarmoq xatolari (Crashlytics 86b5023e: deadline-exceeded,
+      // unavailable) — ilova yiqilmaydi; non-fatal. Qolganlari (masalan
+      // permission-denied — haqiqiy bug) fatal bo'lib qoladi.
+      FirebaseCrashlytics.instance.recordError(
+        error,
+        stack,
+        fatal: !isTransientNetworkError(error),
+      );
       return true;
     };
   }

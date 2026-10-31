@@ -35,6 +35,22 @@ class WholesaleStorageService {
     return urls;
   }
 
+  /// 3b: карта буюртмасида харидорнинг ўтказма чеки —
+  /// `wholesale_receipts/{buyerPhone}/{file}`. URL эмас, Storage ЙЎЛИ
+  /// қайтади: у `submitWholesaleCardReceipt` га берилади (сервер йўл
+  /// харидорники эканини текширади).
+  Future<String> uploadReceipt({required String buyerId, required XFile image}) async {
+    if (buyerId.isEmpty) throw ArgumentError('buyerId is required');
+    final bytes = await _compress(image);
+    final name = '${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}.jpg';
+    final ref = _storage.ref().child('wholesale_receipts').child(buyerId).child(name);
+    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    return ref.fullPath;
+  }
+
+  /// Чек расмини кўрсатиш учун URL (Storage rules сотувчига ўқишни бериши шарт).
+  Future<String> downloadUrlForPath(String path) => _storage.ref(path).getDownloadURL();
+
   Future<void> deleteImages(List<String> imageUrls) async {
     for (final url in imageUrls) {
       try {

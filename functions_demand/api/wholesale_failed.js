@@ -405,6 +405,8 @@ function makeReportWholesaleDeliveryFailed(deps) {
         stage: st.stage,
         escalateAtMs: st.escalateAtMs,
         idempotent: !out.created,
+        paymentMethod: WO.methodOf(out.o),
+        allowedReasons: allowedReasonsOf(out.o),
       };
     } catch (e) {
       denied('report', orderId, e);

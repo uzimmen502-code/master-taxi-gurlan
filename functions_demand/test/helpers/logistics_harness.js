@@ -80,9 +80,14 @@ function seed(extra = {}) {
     [`users/${K1}`]: { accountId: `acc${K1}` },
     [`users/${K2}`]: { accountId: `acc${K2}` },
     [`users/${F1}`]: { accountId: `acc${F1}` },
-    [`provider_capabilities/acc${K1}`]: capDoc(K1, 'courier', {
-      active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
-    }, 'approved'),
+    // K1 — «Туман» + тасдиқланган «Вилоят» (Gurlan → Urganch LEG вилоят тоифаси, 2026-10-31).
+    [`provider_capabilities/acc${K1}`]: {
+      ...capDoc(K1, 'courier', {
+        active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
+        scopes: ['district', 'region'],
+      }, 'approved'),
+      review: { courierScopes: { region: { status: 'approved' } } },
+    },
     [`provider_capabilities/acc${K2}`]: capDoc(K2, 'courier', {
       active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: false,
     }, 'approved'),

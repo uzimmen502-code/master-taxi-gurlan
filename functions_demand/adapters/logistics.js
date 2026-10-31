@@ -21,6 +21,7 @@ const logisticsCandidates = require('../sources/logistics_candidates');
 const { defaultProjection } = require('../matching/orchestrator');
 const { buildPushText } = require('../notify/policy');
 const L = require('../core/logistics');
+const courierScopes = require('../core/courier_scopes');
 
 /** @type {import('../core/types').DemandModuleAdapter} */
 const logisticsAdapter = {
@@ -45,6 +46,12 @@ const logisticsAdapter = {
       || (!!p.regionId && regions.includes(p.regionId));
 
     if (!inArea(loc)) return 'out_of_area';
+    // Kuryer toifasi (ega qarori 2026-10-31): LEG yo'nalishi toifasi kuryerda FAOL bo'lishi shart.
+    // Yuk tashuvchi (`freight`) bu qoidaga kirmaydi.
+    if (candidate.viaService === 'courier') {
+      const capLike = { courier: candidate.raw || {}, review: { courierScopes: candidate.courierScopeReview || {} } };
+      if (!courierScopes.isScopeActive(capLike, courierScopes.legScope(loc, dest))) return 'courier_scope';
+    }
     const crossesRegion = !!dest.regionId && dest.regionId !== loc.regionId;
     if (crossesRegion && candidate.viaService !== 'freight' && !inArea(dest)) {
       return 'destination_out_of_area';

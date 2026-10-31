@@ -36,6 +36,7 @@ const SUITES = [
   'logistics_admin_stage.test.js',
   'logistics_audit.test.js',
   'logistics_loss.test.js',
+  'courier_scopes_leg.test.js',
   'maintenance.test.js',
   'offers.test.js',
   'parity.test.js',

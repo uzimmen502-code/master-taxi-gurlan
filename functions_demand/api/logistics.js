@@ -757,6 +757,9 @@ async function loadAcceptCandidates(db, providerId) {
       districtIds: svc.districtIds || [],
       acceptsParcels: svc.acceptsParcels === true,
       capabilityStatus: caps.statusOf(doc, service),
+      // Kuryer toifasi (2026-10-31): adapter LEG toifasini shu ikkisidan tekshiradi (matcher bilan bir xil).
+      raw: svc,
+      courierScopeReview: service === 'courier' ? ((doc.review || {}).courierScopes || {}) : null,
     });
   }
   await attachStats(db, out);
@@ -817,6 +820,7 @@ function makeAcceptLeg(deps) {
       }
       assertModuleEnabled(flags);
       assertStillEligible(legId, leg, acceptCandidates, flags.config);
+
 
       const a = leg.attributes || {};
       const shipmentRef = db.collection(L.SHIPMENTS).doc(String(a.shipmentId || ''));

@@ -1,6 +1,7 @@
 // Админ — AVA Logistics callable'лари (йўқолган посилка D1, босқич D8).
 //
-//   demand codebase (europe-west1):  adminMarkShipmentLost, adminSetLogisticsStage
+//   demand codebase (europe-west1):  adminMarkShipmentLost, adminSetLogisticsStage,
+//                                    adminUpsertLogisticsTariff (вилоятлар матрицаси)
 //   default codebase (us-central1):  adminRecordLostParcelPayment, adminListLossIncidents
 //
 // Ҳамма ёзув ва пул ҳисоби СЕРВЕРДА (idempotent, audit). `opId` — битта
@@ -84,6 +85,12 @@ class AdminLogisticsService {
     final res = await _main.call('adminListLossIncidents', {if (limit != null) 'limit': limit});
     return LossIncident.parseList(res['items']);
   }
+
+  /// Тариф қораламасини сақлаш (`adminUpsertLogisticsTariff({tariff})` — сервер тўлиқ
+  /// ҳужжатни ёзади, фаол/эски версияни рад этади). Жавоб: `{version, status,
+  /// activationErrors}`; валидация хатолари — `AdminCallableException.details['errors']`.
+  Future<Map<String, dynamic>> upsertTariff(Map<String, dynamic> tariff) =>
+      _demand.call('adminUpsertLogisticsTariff', {'tariff': tariff});
 
   /// Босқич ва/ёки синовчилар. Фақат берилган майдонлар юборилади.
   Future<StageChangeResult> setStage({

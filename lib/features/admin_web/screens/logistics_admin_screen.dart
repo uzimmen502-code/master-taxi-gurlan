@@ -24,6 +24,7 @@ import '../utils/logistics_tariff_inputs.dart';
 import '../widgets/logistics_loss_dialogs.dart';
 import '../widgets/logistics_loss_list.dart';
 import '../widgets/logistics_stage_panel.dart';
+import '../widgets/region_zone_matrix_dialog.dart';
 
 class LogisticsAdminScreen extends StatefulWidget {
   const LogisticsAdminScreen({super.key});
@@ -33,10 +34,7 @@ class LogisticsAdminScreen extends StatefulWidget {
 }
 
 class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
-  static const _serverKeys = [
-    'status', 'updatedAt', 'updatedBy', 'createdAt',
-    'activatedAt', 'activatedBy', 'retiredAt', 'retiredBy',
-  ];
+  static const _serverKeys = kLogisticsTariffServerKeys;
   static const _shipmentFilters = <String, String>{
     '': 'Ҳаммаси',
     'awaiting_payment': 'Тўлов кутилмоқда',
@@ -144,6 +142,16 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     _snack(errs.isEmpty
         ? 'Сақланди: v${res['version']} (қоралама) — фаоллаштиришга тайёр'
         : 'Сақланди (қоралама). Фаоллаштириш учун етишмайди:\n${errs.join('\n')}');
+  }
+
+  /// Вилоятлар матрицаси (14×14, юқори учбурчак, кўзгу) — фақат қоралама.
+  Future<void> _editMatrix(Map<String, dynamic> t) async {
+    setState(() => _busy = true);
+    try {
+      await editTariffRegionMatrix(context, tariff: t, service: _logistics);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _activate(int version) async {
@@ -441,6 +449,13 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
               icon: const Icon(Icons.grid_on, size: 16),
               label: Text(isDraft ? 'Нархлар' : 'Нархлар → янги версия'),
             ),
+            // Вилоятлар матрицаси (Ulgurji Q-6): фақат қораламада; бўш катак — бўш.
+            if (isDraft)
+              FilledButton.tonalIcon(
+                onPressed: _busy ? null : () => _editMatrix(t),
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: const Text('Матрица'),
+              ),
             OutlinedButton.icon(
               onPressed: _busy
                   ? null

@@ -37,6 +37,7 @@ import 'logistics_admin_screen.dart';
 import 'restaurants_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
+import 'wholesale_orders_admin_screen.dart';
 import 'china_inquiries_admin_screen.dart';
 import 'business_admin_screen.dart';
 import 'shop_admin_screen.dart';
@@ -625,6 +626,10 @@ class _AdminShellState extends State<AdminShell> {
         leadingTab: (
           label: '🏬 AVA товарлари',
           child: PlatformProductsAdminScreen(),
+        ),
+        trailingTab: (
+          label: '🧮 Буюртмалар',
+          child: WholesaleOrdersAdminScreen(),
         ),
       );
     }

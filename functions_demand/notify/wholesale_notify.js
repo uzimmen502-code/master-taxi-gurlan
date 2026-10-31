@@ -49,6 +49,70 @@ const MESSAGES = {
     uz_Latn: { title: 'Buyurtma bekor bo\'ldi', body: '{product}: to\'lov amalga oshmagani uchun tovar sotuvchiga qaytariladi.' },
     ru: { title: 'Заказ отменён', body: '{product}: оплата не состоялась, товар возвращается продавцу.' },
   },
+  // ── Рад этилгач харидорга — САБАБГА қараб (ega, 2026-11-01). `ws_refused_buyer` (тўлов амалга ошмади) —
+  // фақат админ низони рад этганда (карта) ва сабаб коди йўқ эски ёзувда.
+  ws_refused_buyer_absent: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '{product}: курьер сизни топа олмади, буюртма «етказилмади» деб ёпилди. Товар сотувчига қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '{product}: kuryer sizni topa olmadi, buyurtma «yetkazilmadi» deb yopildi. Tovar sotuvchiga qaytariladi.' },
+    ru: { title: 'Заказ закрыт', body: '{product}: курьеру не удалось вас застать, заказ закрыт как «не доставлен». Товар возвращается продавцу.' },
+  },
+  ws_refused_buyer_refused: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '{product}: товар қабул қилинмади, буюртма «етказилмади» деб ёпилди. Товар сотувчига қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '{product}: tovar qabul qilinmadi, buyurtma «yetkazilmadi» deb yopildi. Tovar sotuvchiga qaytariladi.' },
+    ru: { title: 'Заказ закрыт', body: '{product}: получение товара не состоялось, заказ закрыт как «не доставлен». Товар возвращается продавцу.' },
+  },
+  ws_refused_buyer_courier: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '{product}: курьер сабабли товар етказилмади. Буюртма ёпилди, товар сотувчига қайтарилади. Сиздан пул олинмайди.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '{product}: kuryer sababli tovar yetkazilmadi. Buyurtma yopildi, tovar sotuvchiga qaytariladi. Sizdan pul olinmaydi.' },
+    ru: { title: 'Заказ закрыт', body: '{product}: товар не доставлен по причине со стороны курьера. Заказ закрыт, товар возвращается продавцу. Деньги с вас не списываются.' },
+  },
+  ws_refused_buyer_other: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '{product}: товар етказилмади, буюртма ёпилди. Товар сотувчига қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '{product}: tovar yetkazilmadi, buyurtma yopildi. Tovar sotuvchiga qaytariladi.' },
+    ru: { title: 'Заказ закрыт', body: '{product}: товар не доставлен, заказ закрыт. Товар возвращается продавцу.' },
+  },
+  // Ҳамён буюртмаси — пул ҳисоблангач (default `settleWalletRefusalInTx`, `refundStatus: done`):
+  // {refund} — қайтган товар суммаси, {returnFee} — ушланган қайтариш ҳақи.
+  ws_refused_buyer_wallet: {
+    uz_Cyrl: { title: 'Буюртма ёпилди — пул ҳамёнингизда', body: '{product}: товар етказилмади. Товар суммаси {refund} сўм ҳамёнингизга қайтарилди, қайтариш етказиш ҳақи {returnFee} сўм ушланди. Етказиш ҳақи қайтарилмайди.' },
+    uz_Latn: { title: 'Buyurtma yopildi — pul hamyoningizda', body: '{product}: tovar yetkazilmadi. Tovar summasi {refund} so\'m hamyoningizga qaytarildi, qaytarish yetkazish haqi {returnFee} so\'m ushlandi. Yetkazish haqi qaytarilmaydi.' },
+    ru: { title: 'Заказ закрыт — деньги в кошельке', body: '{product}: товар не доставлен. На ваш кошелёк возвращено {refund} сум за товар, удержано {returnFee} сум за обратную доставку. Стоимость доставки не возвращается.' },
+  },
+  ws_refused_buyer_wallet_courier: {
+    uz_Cyrl: { title: 'Буюртма ёпилди — пул ҳамёнингизда', body: '{product}: курьер сабабли товар етказилмади. Товар суммаси {refund} сўм ҳамёнингизга қайтарилди. Қайтариш ҳақини курьер тўлайди, етказиш ҳақи қайтарилмайди.' },
+    uz_Latn: { title: 'Buyurtma yopildi — pul hamyoningizda', body: '{product}: kuryer sababli tovar yetkazilmadi. Tovar summasi {refund} so\'m hamyoningizga qaytarildi. Qaytarish haqini kuryer to\'laydi, yetkazish haqi qaytarilmaydi.' },
+    ru: { title: 'Заказ закрыт — деньги в кошельке', body: '{product}: товар не доставлен по причине со стороны курьера. На ваш кошелёк возвращено {refund} сум за товар. Обратную доставку оплачивает курьер, стоимость доставки не возвращается.' },
+  },
+  ws_refused_seller_wallet: {
+    uz_Cyrl: { title: 'Товар етказилмади — сизга қайтарилади', body: '{product} × {qty}. Харидор ҳамёндан тўлаган буюртма: товар пули харидорга қайтарилади, қайтариш ҳақини сиз тўламайсиз.' },
+    uz_Latn: { title: 'Tovar yetkazilmadi — sizga qaytariladi', body: '{product} × {qty}. Xaridor hamyondan to\'lagan buyurtma: tovar puli xaridorga qaytariladi, qaytarish haqini siz to\'lamaysiz.' },
+    ru: { title: 'Товар не доставлен — возвращается к вам', body: '{product} × {qty}. Заказ оплачен из кошелька покупателя: деньги за товар возвращаются покупателю, обратную доставку вы не оплачиваете.' },
+  },
+  ws_return_fee_courier: {
+    uz_Cyrl: { title: 'Қайтариш ҳақи ушланди', body: '{product}: «етказилмади» сабаби — курьер. Қайтариш етказиш ҳақи {returnFee} сўм ҳамёнингиздан ушланди.' },
+    uz_Latn: { title: 'Qaytarish haqi ushlandi', body: '{product}: «yetkazilmadi» sababi — kuryer. Qaytarish yetkazish haqi {returnFee} so\'m hamyoningizdan ushlandi.' },
+    ru: { title: 'Списана стоимость обратной доставки', body: '{product}: причина «не доставлено» — курьер. С вашего кошелька списано {returnFee} сум за обратную доставку.' },
+  },
+  ws_return_debt_buyer: {
+    uz_Cyrl: { title: 'Қайтариш ҳақи учун маблағ етмади', body: '{product}: яна {amount} сўм керак. Ҳамённи тўлдиринг — товар сотувчига шундан кейин қайтарилади.' },
+    uz_Latn: { title: 'Qaytarish haqi uchun mablag\' yetmadi', body: '{product}: yana {amount} so\'m kerak. Hamyonni to\'ldiring — tovar sotuvchiga shundan keyin qaytariladi.' },
+    ru: { title: 'Не хватает средств на обратную доставку', body: '{product}: нужно ещё {amount} сум. Пополните кошелёк — после этого товар вернётся продавцу.' },
+  },
+  ws_return_debt_courier: {
+    uz_Cyrl: { title: 'Қайтариш ҳақи учун ҳамёнда маблағ етмади', body: '{product}: «етказилмади» сабаби — курьер. Яна {amount} сўм керак — ҳамённи тўлдиринг, товар сотувчига шундан кейин қайтарилади.' },
+    uz_Latn: { title: 'Qaytarish haqi uchun hamyonda mablag\' yetmadi', body: '{product}: «yetkazilmadi» sababi — kuryer. Yana {amount} so\'m kerak — hamyonni to\'ldiring, tovar sotuvchiga shundan keyin qaytariladi.' },
+    ru: { title: 'Не хватает средств на обратную доставку', body: '{product}: причина «не доставлено» — курьер. Нужно ещё {amount} сум — пополните кошелёк, после этого товар вернётся продавцу.' },
+  },
+  ws_return_debt_admin_buyer: {
+    uz_Cyrl: { title: 'Улгуржи: харидорда қайтариш қарзи', body: 'Буюртма {orderId} (ҳамён): қайтариш учун харидорда {amount} сўм етишмаяпти.' },
+    uz_Latn: { title: 'Ulgurji: xaridorda qaytarish qarzi', body: 'Buyurtma {orderId} (hamyon): qaytarish uchun xaridorda {amount} so\'m yetishmayapti.' },
+    ru: { title: 'Оптовый рынок: долг покупателя за возврат', body: 'Заказ {orderId} (кошелёк): у покупателя не хватает {amount} сум на возврат.' },
+  },
+  ws_return_debt_admin_courier: {
+    uz_Cyrl: { title: 'Улгуржи: курьерда қайтариш қарзи', body: 'Буюртма {orderId} (ҳамён): қайтариш учун курьерда {amount} сўм етишмаяпти.' },
+    uz_Latn: { title: 'Ulgurji: kuryerda qaytarish qarzi', body: 'Buyurtma {orderId} (hamyon): qaytarish uchun kuryerda {amount} so\'m yetishmayapti.' },
+    ru: { title: 'Оптовый рынок: долг курьера за возврат', body: 'Заказ {orderId} (кошелёк): у курьера не хватает {amount} сум на возврат.' },
+  },
   ws_refused_seller: {
     uz_Cyrl: { title: 'Харидор тўламади — товар қайтарилади', body: '{product} × {qty}. Қайтариш етказиш ҳақи ҳамёнингиздан ушланади, AVA улуши қайтарилади.' },
     uz_Latn: { title: 'Xaridor to\'lamadi — tovar qaytariladi', body: '{product} × {qty}. Qaytarish yetkazish haqi hamyoningizdan ushlanadi, AVA ulushi qaytariladi.' },

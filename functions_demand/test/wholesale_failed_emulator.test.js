@@ -47,10 +47,12 @@ const report = (data = { reasonCode: 'customer_refused' }) => C.makeMarkWholesal
 const respond = (decision, now = at(0)) => F.makeRespondWholesaleDeliveryFailed({ db, now })({ orderId: ORDER_ID, decision }, ctx(BUYER));
 const resolve = (decision, who, now) => F.makeResolveWholesaleDeliveryFailed({ db, now })({ orderId: ORDER_ID, decision }, ctx(who));
 
-async function fresh() {
+async function fresh(extraOrder = {}) {
   await resetEmulator(db, seedW());
-  return q(() => flow(db));
+  return q(() => flow(db, { extraOrder }));
 }
+/** Hamyon buyurtmasi (ega, 2026-11-01): pul eskrouda (`held`), karta maydonlari yo'q. */
+const WALLET = { paymentMethod: 'wallet', cardPayment: null, payment: { status: 'held', payer: 'buyer' } };
 
 (async () => {
   await check('to\'liq oqim haqiqiy tranzaksiyada: so\'rov (holat o\'zgarmaydi) → xaridor tasdig\'i → refused (+returnStatus, refusal, hisoblagich, tarix)', async () => {
@@ -137,6 +139,41 @@ async function fresh() {
     assert.deepStrictEqual([o.deliveryFailed.stage, o.deliveryFailedDueAt], ['awaiting_decision', null]);
     const again = await q(() => F.runWholesaleDeliveryFailedSweep({ db, now: at(30 * MIN) }));
     assert.strictEqual(again.scanned, 0, 'null muddat — real so\'rovda yo\'q');
+  });
+
+  await check('HAMYON: xaridor tasdig\'i ↔ sotuvchi «Етказилмади» (muddat o\'tgan) parallel — BITTA rad (refusal.reasonCode), bitta rad tarixi, pul maydonlari tegilmagan', async () => {
+    await fresh(WALLET);
+    await q(() => report({ reasonCode: 'customer_absent' }));
+    const before = await order();
+    const rs = await settle([respond('confirm', at(16 * MIN)), resolve('failed', SELLER, at(16 * MIN))]);
+    const won = rs.filter((x) => x.status === 'fulfilled');
+    // Ikkalasi «failed» — g'olibdan keyin ikkinchisi df_not_pending (boshqa tomon) — faqat BITTA rad.
+    assert.strictEqual(won.length, 1, JSON.stringify(reasons(rs)));
+    assert.deepStrictEqual(reasons(rs), ['df_not_pending']);
+    const o = await order();
+    assert.deepStrictEqual([o.status, o.refundStatus, o.returnStatus, o.refusal.reasonCode, o.refusal.by], ['refused', 'pending', 'pending_shipment', 'customer_absent', K1]);
+    assert.deepStrictEqual(o.payment, before.payment, 'pul — default codebase (refundOrder)');
+    assert.strictEqual((await history()).filter((x) => x.to === 'refused').length, 1);
+    assert.strictEqual((await db.collection('wholesale_buyer_stats').doc(BUYER).get()).data().cardRefusals, 1);
+  });
+
+  await check('HAMYON: ikki parallel xaridor tasdig\'i (courier_problem) — BITTA rad, hisoblagich YO\'Q', async () => {
+    await fresh(WALLET);
+    await q(() => report({ reasonCode: 'courier_problem' }));
+    const rs = await settle([respond('confirm'), respond('confirm')]);
+    assert.ok(rs.every((x) => x.status === 'fulfilled'), JSON.stringify(reasons(rs)));
+    assert.deepStrictEqual(rs.map((x) => x.value.idempotent).sort(), [false, true]);
+    const o = await order();
+    assert.deepStrictEqual([o.status, o.refusal.reasonCode], ['refused', 'courier_problem']);
+    assert.strictEqual((await history()).filter((x) => x.to === 'refused').length, 1);
+    assert.strictEqual((await db.collection('wholesale_buyer_stats').doc(BUYER).get()).exists, false);
+  });
+
+  await check('HAMYON: «бошқа» — reason_not_allowed_wallet, so\'rov YO\'Q (haqiqiy tranzaksiya)', async () => {
+    await fresh(WALLET);
+    const rs = await settle([report({ reasonCode: 'other' })]);
+    assert.deepStrictEqual(reasons(rs), ['reason_not_allowed_wallet']);
+    assert.strictEqual((await order()).deliveryFailed, undefined);
   });
 
   const failed = results.filter((r) => !r.pass).length;

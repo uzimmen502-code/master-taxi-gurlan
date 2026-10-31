@@ -179,14 +179,15 @@ ok('markWholesaleBuyerRefused: begona / sotuvchi / xaridor — not_last_leg_cour
   assert.strictEqual(a.db.docs.get(`wholesale_buyer_stats/${BUYER}`), undefined);
 });
 
-ok('markWholesaleBuyerRefused: chek yuborilgan — receipt_submitted; tasdiqlangan — card_payment_confirmed; hamyon — not_card_order', async () => {
+ok('markWholesaleBuyerRefused: chek yuborilgan — receipt_submitted; tasdiqlangan — card_payment_confirmed; hamyon, eski APK (sababsiz) — reason_required (2026-11-01)', async () => {
   const mark = (db) => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW });
   let f = await flow({ extraOrder: { cardPayment: { status: 'receipt_submitted', receiptPath: 'p', submittedAt: NOW } } });
   await q(() => rejects(mark(f.db)({ orderId: ORDER_ID }, ctx(K1)), 'failed-precondition', 'receipt_submitted'));
   f = await flow({ extraOrder: { cardPayment: { status: 'confirmed' } } });
   await q(() => rejects(mark(f.db)({ orderId: ORDER_ID }, ctx(K1)), 'failed-precondition', 'card_payment_confirmed'));
   f = await flow({ extraOrder: { paymentMethod: 'wallet', cardPayment: null, payment: { status: 'held' } } });
-  await q(() => rejects(mark(f.db)({ orderId: ORDER_ID }, ctx(K1)), 'failed-precondition', 'not_card_order'));
+  // Hamyon «етказилмади» ochiq (ega, 2026-11-01), lekin pul sababga bog'liq — sababsiz eski APK rad etiladi.
+  await q(() => rejects(mark(f.db)({ orderId: ORDER_ID }, ctx(K1)), 'invalid-argument', 'reason_required'));
   // Nizoda kuryer RAD (faqat admin).
   f = await flow({ extraOrder: { cardPayment: { status: 'disputed' } } });
   await f.db.collection('wholesale_orders').doc(ORDER_ID).update({ status: 'payment_dispute' });

@@ -79,10 +79,24 @@ async function orderDoc(db, extra = {}) {
   };
 }
 
+// Parallel / ichma-ich chaqiruvda ham console ASL holiga qaytadi: asl funksiyalar faqat birinchi
+// (tashqi) chaqiruvda saqlanadi, oxirgisi tugaganda tiklanadi (avval ikkinchi chaqiruv «jim»ni asl
+// deb saqlab, console.log'ni butunlay yutib yuborardi).
+let quietDepth = 0;
+let savedConsole = null;
 const quiet = async (fn) => {
-  const e = console.error; const l = console.log;
-  console.error = () => {}; console.log = () => {};
-  try { return await fn(); } finally { console.error = e; console.log = l; }
+  if (quietDepth === 0) {
+    savedConsole = { error: console.error, log: console.log };
+    console.error = () => {}; console.log = () => {};
+  }
+  quietDepth += 1;
+  try { return await fn(); } finally {
+    quietDepth -= 1;
+    if (quietDepth === 0 && savedConsole) {
+      console.error = savedConsole.error; console.log = savedConsole.log;
+      savedConsole = null;
+    }
+  }
 };
 
 /** `db` allaqachon `seedW()` bilan to'ldirilgan. Qaytaradi {shipmentId, legId}. */

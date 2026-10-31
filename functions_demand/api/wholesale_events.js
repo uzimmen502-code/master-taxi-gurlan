@@ -21,6 +21,23 @@ const { ensureWholesaleReturnShipment } = require('./wholesale_return');
 
 const cpStatus = (o) => ((o || {}).cardPayment || {}).status || null;
 const changedTo = (b, a, v) => (b || {}).status !== v && (a || {}).status === v;
+const AFTER_REFUSAL = [WO.STATUS.REFUSED, WO.STATUS.RETURNING, WO.STATUS.RETURNED];
+
+/**
+ * Karta buyurtmasi rad etilganda xaridor xabari — SABABGA qarab (ega, 2026-11-01). Admin nizoni rad etgan
+ * (`via: admin_dispute`) yoki sabab kodi yo'q eski yozuv — avvalgi `ws_refused_buyer` («тўлов амалга ошмади»).
+ */
+function refusedBuyerKey(o) {
+  const r = (o || {}).refusal || {};
+  // Eski kuryer APK («Харидор тўламади» tugmasi, sabab kodi yo'q → `deliveryFailed.legacyClient`) — avvalgi ma'no.
+  const legacy = ((o || {}).deliveryFailed || {}).legacyClient === true;
+  if (r.via === 'admin_dispute' || !r.reasonCode || legacy) return 'ws_refused_buyer';
+  return {
+    customer_absent: 'ws_refused_buyer_absent',
+    customer_refused: 'ws_refused_buyer_refused',
+    courier_problem: 'ws_refused_buyer_courier',
+  }[r.reasonCode] || 'ws_refused_buyer_other';
+}
 
 /**
  * Qaysi xabarlar yuborilishi kerak (before → after). Qabul qiluvchi: seller | buyer | admins | courier.
@@ -38,12 +55,27 @@ function transitionNotifications(before, after) {
       out.push({ to: 'buyer', key: 'ws_card_confirmed' });
     }
   }
+  const isWallet = WO.methodOf(a) === WO.PAYMENT_METHOD.WALLET;
   if (changedTo(b, a, WO.STATUS.REFUSED)) {
-    out.push({ to: 'buyer', key: 'ws_refused_buyer' }, { to: 'seller', key: 'ws_refused_seller' });
+    // Hamyon: xaridorga xabar pul hisoblangach (summalar bilan, pastda); sotuvchi qaytish haqini to'lamaydi.
+    if (isWallet) out.push({ to: 'seller', key: 'ws_refused_seller_wallet' });
+    else out.push({ to: 'buyer', key: refusedBuyerKey(a) }, { to: 'seller', key: 'ws_refused_seller' });
+  }
+  if (isWallet && b.refundStatus !== WO.REFUND_STATUS.DONE && a.refundStatus === WO.REFUND_STATUS.DONE
+    && AFTER_REFUSAL.includes(a.status) && a.walletRefusal) {
+    out.push({ to: 'buyer', key: a.walletRefusal.fault === 'courier' ? 'ws_refused_buyer_wallet_courier' : 'ws_refused_buyer_wallet' });
+  }
+  if (isWallet && ((b.returnPayment || {}).status !== 'funded') && (a.returnPayment || {}).status === 'funded'
+    && (a.returnPayment || {}).payer === 'courier') {
+    out.push({ to: 'refusal_courier', key: 'ws_return_fee_courier' });
   }
   if (changedTo(b, a, WO.STATUS.PAYMENT_DISPUTE)) out.push({ to: 'admins', key: 'ws_dispute_admin' });
   if (!b.returnDebt && a.returnDebt) {
-    out.push({ to: 'seller', key: 'ws_return_debt_seller' }, { to: 'admins', key: 'ws_return_debt_admin' });
+    // Qarzdor: karta — sotuvchi (avvalgidek); hamyon — xaridor yoki mas'ul kuryer (`returnDebt.payer`).
+    const payer = (a.returnDebt || {}).payer;
+    if (payer === 'buyer') out.push({ to: 'buyer', key: 'ws_return_debt_buyer' }, { to: 'admins', key: 'ws_return_debt_admin_buyer' });
+    else if (payer === 'courier') out.push({ to: 'refusal_courier', key: 'ws_return_debt_courier' }, { to: 'admins', key: 'ws_return_debt_admin_courier' });
+    else out.push({ to: 'seller', key: 'ws_return_debt_seller' }, { to: 'admins', key: 'ws_return_debt_admin' });
   }
   if (!((b.returnShipment || {}).shipmentId) && (a.returnShipment || {}).courierId) {
     out.push({ to: 'courier', key: 'ws_return_courier' });
@@ -56,6 +88,7 @@ function transitionNotifications(before, after) {
 function paramsOf(o, orderId) {
   const rs = o.returnShipment || {};
   const debt = o.returnDebt || {};
+  const wr = o.walletRefusal || {};
   return {
     orderId,
     product: String(o.productTitle || '').slice(0, 60),
@@ -63,6 +96,9 @@ function paramsOf(o, orderId) {
     amount: Number.isInteger(o.goodsTotal) && Number.isInteger(o.deliveryFee) ? o.goodsTotal + o.deliveryFee : '',
     tracking: rs.trackingNumber || '',
     ...(Number.isInteger(debt.amount) ? { amount: debt.amount } : {}),
+    // Hamyon rad (default yozadi): qaytgan tovar summasi va ushlangan qaytish haqi.
+    refund: Number.isInteger(wr.goodsRefunded) ? wr.goodsRefunded : '',
+    returnFee: Number.isInteger(wr.returnFeeCharged) ? wr.returnFeeCharged : '',
   };
 }
 
@@ -76,7 +112,9 @@ async function deliver(deps, orderId, o, items) {
       else {
         const uid = it.to === 'seller' ? o.sellerId
           : it.to === 'buyer' ? o.buyerId
-            : (o.returnShipment || {}).courierId;
+            // Hamyon rad, kuryer aybi: «етказилмади» ni bosgan (mas'ul) kuryer — default `refusal.by` dan to'lovchi.
+            : it.to === 'refusal_courier' ? (o.refusal || {}).by
+              : (o.returnShipment || {}).courierId;
         r = await notify.notifyUser(deps, { uid, key: it.key, params, orderId });
       }
       res.push({ ...it, ...r });
@@ -112,4 +150,6 @@ async function notifyNewCardOrder(deps, data, orderId) {
   return deliver(deps, orderId, o, [{ to: 'seller', key: 'ws_card_new_order' }]);
 }
 
-module.exports = { transitionNotifications, onWholesaleOrderUpdated, notifyNewCardOrder };
+module.exports = {
+  transitionNotifications, refusedBuyerKey, onWholesaleOrderUpdated, notifyNewCardOrder,
+};

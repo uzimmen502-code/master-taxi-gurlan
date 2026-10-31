@@ -190,7 +190,22 @@ Relay `adminMarkShipmentLost` → `settleLoss` (жонли, ЎЗГАРМАГАН
 **Why `loss_settled`, `loss_pending` эмас:** relay пули (LEG ҳақи, эскроу, курьер компенсацияси) ёпилгач
 ишлайди; `loss_pending → loss_settled` ягона ўтиш (қайтмайди).
 
-**Очиқ (эга):** харидорга етказиш ҳақи ҳам қайтадими (PROPOSED: йўқ — relay LEG/AVA'га тақсимлаган);
+**Етказиш ҳақи (эга қарори, 2026-10-31):** харидор тўлаганини ТЎЛИҚ олади — ҳамён буюртмасида товар пули
+ВА етказиш ҳақи; ҳақни **масъул курьер** (relay incident `courier`) тўлайди. Ўша `settleLost` транзакциясида,
+калит `bonus:wholesaleLostFee:{orderId}`: Dr `passenger_credit:{курьер}` take / Cr `passenger_credit:{харидор}`
+take, take = min(deliveryFee, курьер ҳамёни) (манфий бўлмайди; wallet_ledger `wholesale_lost_fee_charge` /
+`wholesale_lost_fee_refund`). Қолгани — relay қарз механизми `provider_capabilities/{accountId}.debt.logistics`
+(+қолдиқ) ва `lost.deliveryFeeOutstanding`; админга `ws_lost_fee_admin`. Курьер тўлагач админ
+`adminRecordWholesaleLostFeePayment({orderId, amount, opId})` (relay `adminRecordLostParcelPayment` нусхаси,
+калит `wholesaleLostFeePayment:{orderId}:{opId}`): нақд → харидор ҳамёни, қарз ва қолдиқ бир транзакцияда
+камаяди, history `lost_fee_payment`, `logistics_audit`; қолдиқ 0 — харидорга `ws_lost_fee_done_buyer`.
+Карта буюртмаси — ҳақ қайтмайди (харидор AVA орқали тўламаган); курьер = харидор — пул йўқ
+(`lost.deliveryFeeAnomaly: fee_same_account`). Буюртма майдонлари: `lost.deliveryFee`, `deliveryFeeRefunded`,
+`deliveryFeeOutstanding`, `deliveryFeePaidTotal`, `deliveryFeeEntryId`, `deliveryFeeAnomaly`, `courierAccountId`;
+`payment.lostFeeRefund`. Хабарлар: `ws_lost_buyer_wallet_full|partial` (эски сервер майдонлари бўлмаса —
+`ws_lost_buyer_wallet`).
+
+**Очиқ (эга):** `adminRecordWholesaleLostFeePayment` учун админ панел UI йўқ (фақат callable);
 `lost_review` ни ҳал қилувчи админ воситаси йўқ; курьер = сотувчи бўлса relay `LOSS_SAME_ACCOUNT` да
 тўхтайди (`loss_pending` қолади, харидорга қайтариш бўлмайди); қайтиш жўнатмаси (`wholesale_return`)
 йўқолса — қамралмаган.

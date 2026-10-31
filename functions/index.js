@@ -72,7 +72,7 @@ attachRelayEscrow(exports, {
 // Kvota va holatlar jadvali — `functions_demand` (api/core wholesale_orders.js).
 const { attachWholesaleOrders } = require('./wholesale_orders');
 attachWholesaleOrders(exports, {
-  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles,
 });
 // Mijoz tasdig'i — «Oldim» / «Berdim» (D2/D7, ega qarori 2026-10-16): AVA kuryeri
 // oqimlarida kuryer qadamini mijoz O'Z qurilmasida tasdiqlaydi. Sozlama faqat server:

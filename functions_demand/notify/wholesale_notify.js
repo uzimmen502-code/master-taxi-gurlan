@@ -90,6 +90,27 @@ const MESSAGES = {
     uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Tovar puli {refund} so\'m hamyoningizga qaytarildi.' },
     ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Стоимость товара {refund} сум возвращена в ваш кошелёк.' },
   },
+  // Yetkazish haqi ham qaytdi (ega, 2026-10-31) — `{refund}` = tovar puli + qaytgan yetkazish haqi.
+  ws_lost_buyer_wallet_full: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Тўлаганингиз тўлиқ — товар пули ва етказиш ҳақи, жами {refund} сўм — ҳамёнингизга қайтарилди.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. To\'laganingiz to\'liq — tovar puli va yetkazish haqi, jami {refund} so\'m — hamyoningizga qaytarildi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Вся оплата — стоимость товара и доставки, всего {refund} сум — возвращена в ваш кошелёк.' },
+  },
+  ws_lost_buyer_wallet_partial: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Ҳамёнингизга {refund} сўм қайтарилди. Етказиш ҳақининг қолган {left} сўми масъул курьер тўлагач қайтарилади.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Hamyoningizga {refund} so\'m qaytarildi. Yetkazish haqining qolgan {left} so\'mi mas\'ul kuryer to\'lagach qaytariladi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. В ваш кошелёк возвращено {refund} сум. Оставшиеся {left} сум за доставку вернутся, когда ответственный курьер их оплатит.' },
+  },
+  ws_lost_fee_done_buyer: {
+    uz_Cyrl: { title: 'Етказиш ҳақи тўлиқ қайтарилди', body: '{product} × {qty}. Йўқолган товар бўйича етказиш ҳақи ({fee} сўм) тўлиқ ҳамёнингизга қайтарилди.' },
+    uz_Latn: { title: 'Yetkazish haqi to\'liq qaytarildi', body: '{product} × {qty}. Yo\'qolgan tovar bo\'yicha yetkazish haqi ({fee} so\'m) to\'liq hamyoningizga qaytarildi.' },
+    ru: { title: 'Стоимость доставки возвращена полностью', body: '{product} × {qty}. Стоимость доставки утерянного товара ({fee} сум) полностью возвращена в ваш кошелёк.' },
+  },
+  ws_lost_fee_admin: {
+    uz_Cyrl: { title: 'Улгуржи: йўқолган товар — етказиш ҳақи қолдиғи', body: 'Буюртма {orderId}: харидорга етказиш ҳақидан {left} сўм қайтарилмади (курьер ҳамёни етмади ёки текширув керак). Курьер тўлагач, тўловни ёзинг.' },
+    uz_Latn: { title: 'Ulgurji: yo\'qolgan tovar — yetkazish haqi qoldig\'i', body: 'Buyurtma {orderId}: xaridorga yetkazish haqidan {left} so\'m qaytarilmadi (kuryer hamyoni yetmadi yoki tekshiruv kerak). Kuryer to\'lagach, to\'lovni yozing.' },
+    ru: { title: 'Оптовый рынок: утерянный товар — остаток за доставку', body: 'Заказ {orderId}: покупателю не возвращено {left} сум за доставку (не хватило средств курьера или нужна проверка). Когда курьер оплатит, внесите платёж.' },
+  },
   ws_lost_buyer_card: {
     uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Буюртма ёпилди — сиз ҳеч нарса тўламайсиз.' },
     uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Buyurtma yopildi — siz hech narsa to\'lamaysiz.' },

@@ -553,6 +553,47 @@ ok('transitionNotifications (yo\'qolish): hamyon / karta / karta-review kalitlar
   assert.ok(N.render('ws_lost_buyer_wallet', 'uz_Latn', { refund: 140000 }).body.includes('140000'));
 });
 
+ok('transitionNotifications (yo\'qolish, yetkazish haqi — ega 2026-10-31): to\'liq / qisman + admin / anomaliya / qoldiq 0 → xaridorga; {refund}=tovar+haq', () => {
+  const keys = (b, a) => E.transitionNotifications(b, a).map((x) => `${x.to}:${x.key}`);
+  const w = { ...ORDER_WALLET, status: 'in_delivery' };
+  const lostOf = (lost, feeRefund) => ({
+    ...w, status: 'lost', payment: { status: 'refunded_lost', lostRefund: 140000, lostFeeRefund: feeRefund }, lost,
+  });
+  const full = lostOf({ deliveryFee: 60000, deliveryFeeRefunded: 60000, deliveryFeeOutstanding: 0, deliveryFeeAnomaly: null }, 60000);
+  assert.deepStrictEqual(keys(w, full), ['buyer:ws_lost_buyer_wallet_full', 'seller:ws_lost_seller']);
+  const part = lostOf({ deliveryFee: 60000, deliveryFeeRefunded: 20000, deliveryFeeOutstanding: 40000, deliveryFeeAnomaly: null }, 20000);
+  assert.deepStrictEqual(keys(w, part), ['buyer:ws_lost_buyer_wallet_partial', 'seller:ws_lost_seller', 'admins:ws_lost_fee_admin']);
+  const anom = lostOf({ deliveryFee: 60000, deliveryFeeRefunded: 0, deliveryFeeOutstanding: 60000, deliveryFeeAnomaly: 'fee_incident_invalid' }, 0);
+  assert.deepStrictEqual(keys(w, anom), ['buyer:ws_lost_buyer_wallet', 'seller:ws_lost_seller', 'admins:ws_lost_fee_admin']);
+  const same = lostOf({ deliveryFee: 60000, deliveryFeeRefunded: 0, deliveryFeeOutstanding: 0, deliveryFeeAnomaly: 'fee_same_account' }, 0);
+  assert.deepStrictEqual(keys(w, same), ['buyer:ws_lost_buyer_wallet', 'seller:ws_lost_seller', 'admins:ws_lost_fee_admin']);
+  // Admin to'lovi: qoldiq 40 000 → 10 000 — xabar yo'q; 10 000 → 0 — xaridorga bir marta.
+  const mid = { ...part, lost: { ...part.lost, deliveryFeeOutstanding: 10000 } };
+  assert.deepStrictEqual(keys(part, mid), []);
+  const done = { ...part, lost: { ...part.lost, deliveryFeeOutstanding: 0 } };
+  assert.deepStrictEqual(keys(mid, done), ['buyer:ws_lost_fee_done_buyer']);
+  assert.deepStrictEqual(keys(done, done), []);
+  for (const k of ['ws_lost_buyer_wallet_full', 'ws_lost_buyer_wallet_partial', 'ws_lost_fee_done_buyer', 'ws_lost_fee_admin']) {
+    for (const lang of N.LANGS) {
+      const m = N.render(k, lang, { product: 'Гуруч', qty: 10, refund: 200000, left: 40000, fee: 60000, orderId: 'o1' });
+      assert.ok(m.title && m.body && !/\{\w+\}/.test(m.title + m.body), `${k}/${lang}`);
+    }
+  }
+});
+
+ok('yo\'qolish xabari (haqiqiy yetkazish): qisman — xaridor matnida {refund}=160000 (tovar+haq), {left}=40000', async () => {
+  const w = { ...ORDER_WALLET, status: 'in_delivery' };
+  const part = {
+    ...w, status: 'lost', payment: { status: 'refunded_lost', lostRefund: 140000, lostFeeRefund: 20000 },
+    lost: { deliveryFee: 60000, deliveryFeeRefunded: 20000, deliveryFeeOutstanding: 40000, deliveryFeeAnomaly: null },
+  };
+  const db = makeDb({ 'wholesale_orders/o1': part });
+  await q(() => E.onWholesaleOrderUpdated({ db, now: () => NOW }, w, part, 'o1'));
+  const news = Object.values(db.dump('admin_news')).filter((n) => n.dataType === 'ws_lost_buyer_wallet_partial');
+  assert.strictEqual(news.length, 1);
+  assert.ok(news[0].body.includes('160000') && news[0].body.includes('40000'), news[0].body);
+});
+
 ok('xabar yetkazish: inbox (3 til, foydalanuvchi tili) + push; takror trigger — bitta xabar, bitta push; adminlar (admin+superadmin, dispatcher EMAS)', async () => {
   const db = makeDb({ 'wholesale_orders/o1': ORDER_CARD });
   const messaging = fakeMessaging();

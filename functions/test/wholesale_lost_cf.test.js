@@ -16,6 +16,13 @@
  *   - eskrou mos emas — anomaliya, pul YO'Q, reconcile qayta urinmaydi
  *   - yetkazilgan buyurtma / boshqa jo'natma / loss_settled emas — tegilmaydi
  *   - Σdr == Σcr, aktiv == passiv, passenger_credit == bonusBalance
+ *   YETKAZISH HAQI (ega, 2026-10-31 — xaridor to'laganini to'liq oladi, haqni mas'ul kuryer to'laydi):
+ *   - kuryer boy: xaridorga tovar + haq; kuryer −G (relay) −haq; `bonus:wholesaleLostFee:{id}`, wallet_ledger
+ *     `wholesale_lost_fee_charge/_refund`; qarz yo'q
+ *   - kuryer qisman / bo'sh: take = min(haq, hamyon), qolgani `provider_capabilities.debt.logistics` (relay
+ *     qarziga QO'SHILADI) + `lost.deliveryFeeOutstanding`; admin to'lovni yozadi → xaridorga, qarz kamayadi
+ *   - karta (to'lanmagan) — haq qaytarilmaydi; kuryer = xaridor — pul yo'q (anomaliya)
+ *   - takror trigger / reconcile — ikkinchi haq yo'q
  */
 'use strict';
 const assert = require('assert');
@@ -44,9 +51,16 @@ const canon = (v) => { const d = digits(v); return d.length === 9 ? `998${d}` : 
 const depsCommon = {
   functions, db, admin, callerPhone: (c) => digits(c.auth.token.phone_number), canonicalUid: canon, settlementLedger, now: () => clock,
 };
-const api = W.attachWholesaleOrders({}, depsCommon);
+/** Admin tekshiruvi (index.js `requireCallerRoles` o'rnida): `users/{tel}.role` ro'yxatda bo'lsin. */
+const requireCallerRoles = async (c, roles, msg) => {
+  const uid = canon(c && c.auth && c.auth.token && c.auth.token.phone_number);
+  const role = ((await db.collection('users').doc(uid).get()).data() || {}).role;
+  if (!roles.includes(role)) throw new functions.https.HttpsError('permission-denied', msg);
+  return uid;
+};
+const api = W.attachWholesaleOrders({}, { ...depsCommon, requireCallerRoles });
 const relayApi = relay.attachRelayEscrow({}, {
-  ...depsCommon, notifyUserInApp: async () => {}, requireCallerRoles: async () => { throw new Error('not used'); },
+  ...depsCommon, notifyUserInApp: async () => {}, requireCallerRoles,
 });
 const markLost = DL.makeAdminMarkShipmentLost({ db, now: () => clock });
 const ctx = (phone) => ({ auth: { token: { phone_number: `+${phone}` } } });
@@ -83,10 +97,17 @@ const topup = (uid, amount) => settlementLedger.postEntry(db, {
   idempotencyKey: `topupL:${uid}:${topupSeq += 1}`, kind: 'test_topup',
   legs: [{ account: 'admin_clearing', dr: amount }, { account: pcOf(uid), cr: amount }],
 }, { mirrorBonus: true, walletLedgerType: 'test_topup' });
+// Parallel `quiet()` (Promise.all) xavfsiz: chuqurlik hisoblagichi — oxirgisi tugaganda asl console qaytadi
+// (aks holda no-op saqlanib qolib, keyingi PASS/FAIL qatorlari va yakuniy natija yutilardi).
+const realConsole = { log: console.log, error: console.error, warn: console.warn };
+let quietDepth = 0;
 const quiet = async (fn) => {
-  const l = console.log; const e = console.error; const w = console.warn;
+  quietDepth += 1;
   console.log = () => {}; console.error = () => {}; console.warn = () => {};
-  try { return await fn(); } finally { console.log = l; console.error = e; console.warn = w; }
+  try { return await fn(); } finally {
+    quietDepth -= 1;
+    if (quietDepth === 0) Object.assign(console, realConsole);
+  }
 };
 
 // 10 × 14 000 = 140 000 (G = declaredValue); yetkazish 60 000; AVA 3 500. Karta: sotuvchi ushlanmasi 63 500.
@@ -104,11 +125,13 @@ function quoteDoc(card) {
     createdAt: clock, expiresAt: new Date(clock.getTime() + 15 * 60 * 1000), used: false,
   };
 }
-async function seed({ card = false, courierWallet = 200000 } = {}) {
+async function seed({ card = false, courierWallet = 250000 } = {}) {
   clock = T0;
   await resetAll();
   await db.collection('module_config').doc('wholesale_orders_all').set({ enabled: true, stage: 'internal', testerIds: [BUYER] });
-  for (const u of [BUYER, SELLER]) await db.collection('users').doc(u).set({ bonusBalance: 0 });
+  // Xaridorda ham accountId (kuryer = xaridor anomaliyasi testi uchun; boshqa testlarda ishlatilmaydi).
+  await db.collection('users').doc(BUYER).set({ bonusBalance: 0, accountId: 'acc_buyer' });
+  await db.collection('users').doc(SELLER).set({ bonusBalance: 0 });
   await db.collection('users').doc(K1).set({ bonusBalance: 0, accountId: 'acc_k1' });
   await db.collection('users').doc(ADMIN).set({ bonusBalance: 0, role: 'admin' });
   await db.collection('wholesale_products').doc('rice').set({ sellerId: SELLER, status: 'active', market: 'wholesale' });
@@ -128,7 +151,7 @@ const place = () => quiet(() => api.place({ quoteId: 'q1', clientRequestId: 'req
 
 const SHIP = 'S1';
 /** Demand `ensureWholesaleShipment` + default SHIP_FUND + relay acceptLeg/scanHandover maydonlari. */
-async function shipAndFund(orderId) {
+async function shipAndFund(orderId, courier = K1) {
   await db.collection('shipments').doc(SHIP).set({
     orderId: `lo_${orderId}`, ownerId: SELLER, recipientId: BUYER, source: 'wholesale', wholesaleOrderId: orderId,
     trackingNumber: 'AVA-26-1031-000001', status: 'awaiting_payment', paymentStatus: 'pending',
@@ -144,10 +167,12 @@ async function shipAndFund(orderId) {
   const r = await quiet(async () => api.onStatusChange(before, (await ref.get()).data(), orderId));
   assert.strictEqual(r.funded, FEE, JSON.stringify(r));
   await db.collection('shipments').doc(SHIP).update({
-    status: 'in_transit', legAssignments: { leg0: K1 }, currentLegId: 'leg0', currentCustodian: { kind: 'provider', id: K1, since: clock },
+    status: 'in_transit', legAssignments: { leg0: courier }, currentLegId: 'leg0', currentCustodian: { kind: 'provider', id: courier, since: clock },
   });
-  await db.collection('demands').doc('leg0').set({ module: 'logistics', status: 'in_progress', assignment: { providerId: K1 }, attributes: { shipmentId: SHIP } });
+  await db.collection('demands').doc('leg0').set({ module: 'logistics', status: 'in_progress', assignment: { providerId: courier }, attributes: { shipmentId: SHIP } });
 }
+const debtOf = async (acc = 'acc_k1') => Number(((((await db.collection('provider_capabilities').doc(acc).get()).data() || {}).debt) || {}).logistics) || 0;
+const feeJournal = (id) => journal(`bonus:${W.lostFeeKey(id)}`);
 /** Admin yo'qolgan deb belgilaydi (demand, haqiqiy callable) → `loss_pending` + incident. */
 async function adminMarksLost() {
   const r = await quiet(() => markLost({ shipmentId: SHIP, reason: 'kuryer yo\'qotdi', opId: 'op-lost-001' }, ctx(ADMIN)));
@@ -192,17 +217,38 @@ const lossTrigger = (before, after) => quiet(() => api.onShipmentLossUpdate(befo
     await assertLedgerSound();
   });
 
-  await check('hamyon: relay loss_settled (sotuvchiga kuryerdan G) → parallel trigger ×2 + settleLost → xaridorga 140 000 BIR MARTA; eskrou 0; lost; qoldiq 90', async () => {
+  await check('hamyon, kuryer BOY: relay loss_settled (sotuvchiga kuryerdan G) → parallel trigger ×2 + settleLost → xaridorga 140 000 + haq 60 000 BIR MARTA; kuryer −G −haq; qarz yo\'q; eskrou 0; lost; qoldiq 90', async () => {
     const before = await shipOf();
     const rel = await relaySettles();
     assert.deepStrictEqual([rel.taken, rel.outstanding], [GOODS, 0]);
     assert.strictEqual(await bal(pcOf(SELLER)), GOODS, 'sotuvchi — FAQAT kuryer kompensatsiyasi');
-    assert.strictEqual(await bal(pcOf(K1)), 200000 - GOODS);
+    assert.strictEqual(await bal(pcOf(K1)), 250000 - GOODS);
     const after = await shipOf();
     const outs = await Promise.all([lossTrigger(before, after), lossTrigger(before, after), quiet(() => api.settleLost(orderId))]);
     assert.strictEqual(outs.filter((r) => r.lost === true).length, 1, JSON.stringify(outs));
-    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - (GOODS + FEE) + GOODS, 'xaridor: tovar puli qaytdi, yetkazish haqi — yo\'q');
-    assert.strictEqual(await bonusOf(BUYER), 300000 - FEE);
+    const won = outs.find((r) => r.lost === true);
+    assert.deepStrictEqual([won.feeRefunded, won.feeOutstanding, won.feeDebt, won.feeAnomaly], [FEE, 0, 0, null]);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000, 'xaridor: to\'lagani TO\'LIQ qaytdi (tovar + yetkazish haqi)');
+    assert.strictEqual(await bonusOf(BUYER), 300000);
+    assert.strictEqual(await bal(pcOf(K1)), 250000 - GOODS - FEE, 'kuryer: relay G + yetkazish haqi');
+    assert.strictEqual(await bonusOf(K1), 250000 - GOODS - FEE);
+    assert.strictEqual(await debtOf(), 0, 'qarz yozilmadi');
+    const fj = (await feeJournal(orderId)).data();
+    assert.strictEqual(fj.kind, 'wholesale_lost_fee_refund');
+    assert.deepStrictEqual(fj.legs, [{ account: pcOf(K1), dr: FEE }, { account: pcOf(BUYER), cr: FEE }]);
+    assert.deepStrictEqual([fj.meta.courierAccountId, fj.meta.deliveryFee, fj.meta.outstanding], ['acc_k1', FEE, 0]);
+    const wlr = await walletLedger(BUYER, 'wholesale_lost_fee_refund');
+    assert.deepStrictEqual([wlr.length, wlr[0].amount, wlr[0].refId], [1, FEE, orderId]);
+    const wlc = await walletLedger(K1, 'wholesale_lost_fee_charge');
+    assert.deepStrictEqual([wlc.length, wlc[0].amount, wlc[0].refId], [1, -FEE, orderId]);
+    const of = await orderOf(orderId);
+    assert.deepStrictEqual(
+      [of.lost.deliveryFee, of.lost.deliveryFeeRefunded, of.lost.deliveryFeeOutstanding, of.lost.deliveryFeePaidTotal,
+        of.lost.deliveryFeeEntryId, of.lost.deliveryFeeAnomaly, of.lost.courierAccountId, of.payment.lostFeeRefund],
+      [FEE, FEE, 0, 0, `bonus:${W.lostFeeKey(orderId)}`, null, 'acc_k1', FEE],
+    );
+    const hf = (await historyOf(orderId)).find((x) => x.event === 'lost_settled');
+    assert.deepStrictEqual([hf.meta.deliveryFeeRefunded, hf.meta.deliveryFeeOutstanding, hf.meta.deliveryFeeAnomaly], [FEE, 0, null]);
     assert.strictEqual(await bal(W.escrowAccount(orderId)), 0, 'eskrou AYNAN 0');
     assert.strictEqual(await bal(W.shipmentEscrowAccount(SHIP)), 0, 'relay eskrou 0 (relay yopgan)');
     const j = (await journal(`bonus:${W.lostKey(orderId)}`)).data();
@@ -229,7 +275,11 @@ const lossTrigger = (before, after) => quiet(() => api.onShipmentLossUpdate(befo
     const rec = await quiet(() => api.reconcile());
     assert.deepStrictEqual([rec.lostChecked, rec.lostSettled, rec.released, rec.failed], [0, 0, 0, 0]);
     assert.deepStrictEqual(await quiet(() => api.releaseGoods(orderId)), { skipped: 'status_lost' });
-    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - FEE);
+    assert.deepStrictEqual(await quiet(() => api.settleLost(orderId)), { skipped: 'already_lost' });
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000);
+    assert.strictEqual(await bal(pcOf(K1)), 250000 - GOODS - FEE, 'kuryerdan haq ikkinchi marta olinmadi');
+    assert.strictEqual((await walletLedger(K1, 'wholesale_lost_fee_charge')).length, 1);
+    assert.strictEqual(await debtOf(), 0);
     assert.strictEqual(await bal(pcOf(SELLER)), GOODS);
     assert.strictEqual(await accExists(W.AVA_FEE_ACCOUNT), false, 'AVA ulgurji ulushi olinmadi (sotuv bo\'lmadi)');
     assert.strictEqual(await bal(W.escrowAccount(orderId)), 0);
@@ -253,10 +303,135 @@ const lossTrigger = (before, after) => quiet(() => api.onShipmentLossUpdate(befo
     assert.deepStrictEqual([rec.lostChecked, rec.lostSettled, rec.failed], [1, 1, 0]);
     rec = await quiet(() => api.reconcile());
     assert.deepStrictEqual([rec.lostChecked, rec.lostSettled], [0, 0], 'lost — endi in_delivery so\'rovida yo\'q');
-    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - FEE);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - FEE, 'tovar puli qaytdi; haq — kuryer qarzi');
     assert.strictEqual(await bal(W.escrowAccount(orderId)), 0);
-    assert.strictEqual((await orderOf(orderId)).status, 'lost');
+    const o = await orderOf(orderId);
+    assert.strictEqual(o.status, 'lost');
+    assert.deepStrictEqual([o.lost.deliveryFeeRefunded, o.lost.deliveryFeeOutstanding, o.lost.deliveryFeeEntryId, o.payment.lostFeeRefund],
+      [0, FEE, null, 0]);
+    assert.strictEqual(await debtOf(), GOODS + FEE, 'relay qarzi G + haq qoldig\'i (bitta debt.logistics)');
+    assert.strictEqual((await feeJournal(orderId)).exists, false);
+    assert.strictEqual(await accExists(pcOf(K1)), false, 'bo\'sh kuryer hisobiga yozuv yo\'q');
     assert.strictEqual((await stockOf()).packs.p1, 90);
+    await assertLedgerSound();
+  });
+
+  await check('hamyon, kuryer QISMAN (G + 20 000): relay G oladi; haqdan 20 000 xaridorga, 40 000 — qarz + deliveryFeeOutstanding; kuryer hamyoni 0 (manfiy emas)', async () => {
+    await seed({ courierWallet: GOODS + 20000 });
+    orderId = (await place()).orderId;
+    await shipAndFund(orderId);
+    await adminMarksLost();
+    const before = await shipOf();
+    const rel = await relaySettles();
+    assert.deepStrictEqual([rel.taken, rel.outstanding], [GOODS, 0]);
+    const r = await lossTrigger(before, await shipOf());
+    assert.deepStrictEqual([r.lost, r.refunded, r.feeRefunded, r.feeOutstanding, r.feeDebt], [true, GOODS, 20000, 40000, 40000]);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - 40000);
+    assert.strictEqual(await bonusOf(BUYER), 300000 - 40000);
+    assert.strictEqual(await bal(pcOf(K1)), 0, 'kuryer hamyoni AYNAN 0');
+    assert.strictEqual(await bonusOf(K1), 0);
+    assert.strictEqual(await debtOf(), 40000, 'qarz faqat haq qoldig\'i (relay G to\'liq olingan)');
+    const fj = (await feeJournal(orderId)).data();
+    assert.deepStrictEqual(fj.legs, [{ account: pcOf(K1), dr: 20000 }, { account: pcOf(BUYER), cr: 20000 }]);
+    const o = await orderOf(orderId);
+    assert.deepStrictEqual([o.lost.deliveryFeeRefunded, o.lost.deliveryFeeOutstanding, o.lost.courierAccountId, o.payment.lostFeeRefund],
+      [20000, 40000, 'acc_k1', 20000]);
+    // Takror trigger / reconcile — qarz va pul ikkilanmaydi.
+    assert.deepStrictEqual(await lossTrigger(before, await shipOf()), { skipped: 'already_lost' });
+    clock = new Date(T0.getTime() + 11 * 60 * 1000);
+    await quiet(() => api.reconcile());
+    assert.strictEqual(await debtOf(), 40000);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - 40000);
+    await assertLedgerSound();
+  });
+
+  await check('admin kuryer to\'lovini yozadi (adminRecordWholesaleLostFeePayment): 15 000 + 25 000 → xaridor to\'liq, qarz 0; idempotent opId; rad holatlari', async () => {
+    const call = (d, who = ADMIN) => quiet(() => api.recordLostFeePayment(d, ctx(who)));
+    const reason = async (p) => { try { await p; return 'ok'; } catch (e) { return (e.details && e.details.reason) || e.code || e.message; } };
+    assert.strictEqual(await reason(call({ orderId, amount: 1000, opId: 'op-fee-0001' }, BUYER)), 'permission-denied', 'oddiy foydalanuvchi — RAD');
+    assert.strictEqual(await reason(call({ orderId, amount: 40001, opId: 'op-fee-0001' })), 'exceeds_outstanding');
+    assert.strictEqual(await reason(call({ orderId, amount: 1.5, opId: 'op-fee-0001' })), 'bad_amount');
+    assert.strictEqual(await reason(call({ orderId, amount: 1000, opId: 'x' })), 'bad_op_id');
+    const r1 = await call({ orderId, amount: 15000, opId: 'op-fee-0001', note: 'naqd' });
+    assert.deepStrictEqual([r1.ok, r1.idempotent, r1.outstanding, r1.paidTotal], [true, false, 25000, 15000]);
+    const r1b = await call({ orderId, amount: 15000, opId: 'op-fee-0001' });
+    assert.deepStrictEqual([r1b.idempotent, r1b.outstanding], [true, 25000], 'takror — ikkinchi pul yo\'q');
+    assert.strictEqual(await reason(call({ orderId, amount: 14000, opId: 'op-fee-0001' })), 'op_id_reused');
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - 25000);
+    assert.strictEqual(await debtOf(), 25000);
+    const r2 = await call({ orderId, amount: 25000, opId: 'op-fee-0002' });
+    assert.deepStrictEqual([r2.outstanding, r2.paidTotal], [0, 40000]);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000, 'xaridor to\'lagani to\'liq qaytdi');
+    assert.strictEqual(await bonusOf(BUYER), 300000);
+    assert.strictEqual(await debtOf(), 0);
+    assert.strictEqual(await reason(call({ orderId, amount: 1, opId: 'op-fee-0003' })), 'nothing_outstanding');
+    const o = await orderOf(orderId);
+    assert.deepStrictEqual([o.status, o.lost.deliveryFeeOutstanding, o.lost.deliveryFeePaidTotal, o.payment.lostFeeRefund], ['lost', 0, 40000, FEE]);
+    const pays = (await historyOf(orderId)).filter((x) => x.event === 'lost_fee_payment');
+    assert.deepStrictEqual(pays.map((x) => [x.meta.amount, x.meta.outstandingAfter, x.actor, x.actorId]).sort((a, b) => b[1] - a[1]),
+      [[15000, 25000, 'admin', ADMIN], [25000, 0, 'admin', ADMIN]]);
+    const j = (await journal(W.lostFeePaymentKey(orderId, 'op-fee-0002'))).data();
+    assert.deepStrictEqual([j.kind, j.postedRole, j.meta.amount], ['wholesale_lost_fee_payment', 'admin', 25000]);
+    assert.strictEqual((await db.collection('logistics_audit').doc(`wholesale_lost_fee_payment_${orderId}_op-fee-0002`).get()).exists, true);
+    await assertLedgerSound();
+  });
+
+  await check('kuryer bo\'sh: relay G-to\'lovi (adminRecordLostParcelPayment) va Ulgurji haq to\'lovi BIR qarzdan — ikkalasi ishlaydi, qarz 0', async () => {
+    await seed({ courierWallet: 0 });
+    orderId = (await place()).orderId;
+    await shipAndFund(orderId);
+    await adminMarksLost();
+    const before = await shipOf();
+    await relaySettles();
+    await lossTrigger(before, await shipOf());
+    assert.strictEqual(await debtOf(), GOODS + FEE);
+    const g = await quiet(() => relayApi.recordLostPayment({ shipmentId: SHIP, amount: GOODS, opId: 'op-goods-01' }, ctx(ADMIN)));
+    assert.strictEqual(g.outstanding, 0);
+    assert.strictEqual(await debtOf(), FEE, 'relay faqat G ni kamaytirdi');
+    assert.strictEqual(await bal(pcOf(SELLER)), GOODS);
+    const f = await quiet(() => api.recordLostFeePayment({ orderId, amount: FEE, opId: 'op-fee-01' }, ctx(ADMIN)));
+    assert.strictEqual(f.outstanding, 0);
+    assert.strictEqual(await debtOf(), 0);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000);
+    await assertLedgerSound();
+  });
+
+  await check('kuryer = xaridor (o\'zi yo\'qotgan): haq pulsiz — anomaliya fee_same_account, qarz yo\'q; tovar puli baribir qaytadi', async () => {
+    await seed({ courierWallet: 0 });
+    orderId = (await place()).orderId;
+    await shipAndFund(orderId, BUYER);
+    await adminMarksLost();
+    const before = await shipOf();
+    const rel = await relaySettles();
+    assert.deepStrictEqual([rel.taken, rel.outstanding], [100000, GOODS - 100000], 'relay: xaridor-kuryer hamyonidan (100 000) sotuvchiga');
+    const r = await lossTrigger(before, await shipOf());
+    assert.deepStrictEqual([r.lost, r.refunded, r.feeRefunded, r.feeOutstanding, r.feeDebt, r.feeAnomaly], [true, GOODS, 0, 0, 0, 'fee_same_account']);
+    assert.strictEqual(await bal(pcOf(BUYER)), GOODS, '0 + tovar puli 140 000; haq o\'zidan o\'ziga — yo\'q');
+    assert.strictEqual(await debtOf('acc_buyer'), GOODS - 100000, 'faqat relay qarzi');
+    assert.strictEqual((await feeJournal(orderId)).exists, false);
+    const o = await orderOf(orderId);
+    assert.deepStrictEqual([o.lost.deliveryFeeAnomaly, o.lost.deliveryFeeRefunded, o.lost.deliveryFeeOutstanding], ['fee_same_account', 0, 0]);
+    await assertLedgerSound();
+  });
+
+  await check('incident yo\'q (relay settle\'dan keyin buzilgan): tovar puli qaytadi; haq — anomaliya, qoldiq ko\'rinadi, qarz yozilmaydi; admin to\'lovi RAD', async () => {
+    await seed();
+    orderId = (await place()).orderId;
+    await shipAndFund(orderId);
+    await adminMarksLost();
+    const before = await shipOf();
+    await relaySettles();
+    await db.collection('logistics_incidents').doc(SHIP).update({ courier: admin.firestore.FieldValue.delete() });
+    const r = await lossTrigger(before, await shipOf());
+    assert.deepStrictEqual([r.lost, r.refunded, r.feeRefunded, r.feeOutstanding, r.feeDebt, r.feeAnomaly], [true, GOODS, 0, FEE, 0, 'fee_incident_invalid']);
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - FEE);
+    assert.strictEqual(await bal(pcOf(K1)), 250000 - GOODS);
+    assert.strictEqual(await debtOf(), 0);
+    const o = await orderOf(orderId);
+    assert.deepStrictEqual([o.lost.deliveryFeeAnomaly, o.lost.deliveryFeeOutstanding, o.lost.courierAccountId], ['fee_incident_invalid', FEE, null]);
+    let reasonCode = 'ok';
+    try { await quiet(() => api.recordLostFeePayment({ orderId, amount: 1000, opId: 'op-fee-0009' }, ctx(ADMIN))); } catch (e) { reasonCode = e.details.reason; }
+    assert.strictEqual(reasonCode, 'fee_debt_not_recorded');
     await assertLedgerSound();
   });
 
@@ -279,6 +454,12 @@ const lossTrigger = (before, after) => quiet(() => api.onShipmentLossUpdate(befo
     assert.deepStrictEqual(j.legs, [{ account: W.escrowAccount(orderId), dr: AVA }, { account: pcOf(SELLER), cr: AVA }]);
     const o = await orderOf(orderId);
     assert.deepStrictEqual([o.status, o.payment.status, o.lost.refundTo, o.cardPayment.status], ['lost', 'refunded_lost', 'seller', 'awaiting']);
+    // Xaridor hech narsa to'lamagan — yetkazish haqi qaytarilmaydi, kuryerdan faqat relay G.
+    assert.deepStrictEqual([r.feeRefunded, r.feeOutstanding, o.lost.deliveryFeeRefunded, o.lost.deliveryFeeOutstanding, o.payment.lostFeeRefund],
+      [0, 0, 0, 0, 0]);
+    assert.strictEqual((await feeJournal(orderId)).exists, false);
+    assert.strictEqual(await bal(pcOf(K1)), 250000 - GOODS);
+    assert.strictEqual(await debtOf(), 0);
     assert.strictEqual((await stockOf()).packs.p1, 90);
     assert.deepStrictEqual(await lossTrigger(before, await shipOf()), { skipped: 'already_lost' });
     assert.strictEqual(await bal(pcOf(SELLER)), 100000 - FEE + GOODS);
@@ -302,6 +483,8 @@ const lossTrigger = (before, after) => quiet(() => api.onShipmentLossUpdate(befo
       assert.strictEqual(await bal(W.escrowAccount(orderId)), AVA, 'eskrou admin qaroriga qadar qoladi');
       assert.strictEqual(await bal(pcOf(SELLER)), sellerBefore);
       assert.strictEqual((await journal(`bonus:${W.lostKey(orderId)}`)).exists, false);
+      assert.strictEqual((await feeJournal(orderId)).exists, false);
+      assert.deepStrictEqual([o.lost.deliveryFeeRefunded, o.lost.deliveryFeeOutstanding], [null, null], 'review — admin hal qiladi');
       const h = (await historyOf(orderId)).find((x) => x.event === 'lost_settled');
       assert.deepStrictEqual([h.from, h.meta.review, h.meta.cardPaymentStatus], [variant.status, true, variant.cp]);
       assert.deepStrictEqual(await quiet(() => api.settleLost(orderId)), { skipped: 'already_lost' });
@@ -326,6 +509,9 @@ const lossTrigger = (before, after) => quiet(() => api.onShipmentLossUpdate(befo
     assert.deepStrictEqual([o.status, o.payment.status, o.lostAnomaly.code], ['in_delivery', 'held', 'escrow_mismatch']);
     assert.strictEqual(await bal(W.escrowAccount(orderId)), GOODS + 1);
     assert.strictEqual(await bal(pcOf(BUYER)), 300000 - (GOODS + FEE));
+    assert.strictEqual((await feeJournal(orderId)).exists, false, 'anomaliya — haq ham olinmadi');
+    assert.strictEqual(await bal(pcOf(K1)), 250000 - GOODS);
+    assert.strictEqual(await debtOf(), 0);
     clock = new Date(T0.getTime() + 30 * 60 * 1000);
     const rec = await quiet(() => api.reconcile());
     assert.deepStrictEqual([rec.lostChecked, rec.lostSettled], [0, 0]);

@@ -67,7 +67,16 @@
  * Shundan KEYIN shu fayl (`settleLost`, trigger `onWholesaleShipmentLoss` + reconcile), BITTA
  * tranzaksiya, kalit `bonus:wholesaleLost:{id}`:
  *   HAMYON  Dr escrow:wholesale:{id} goodsTotal / Cr passenger_credit:{xaridor} (wallet_ledger
- *           `wholesale_lost_refund`); yetkazish haqi relay'da taqsimlangan — TEGILMAYDI
+ *           `wholesale_lost_refund`); relay eskrousidagi yetkazish haqi kuryer/AVA ga taqsimlangan — TEGILMAYDI
+ *   HAMYON, YETKAZISH HAQI (ega, 2026-10-31: xaridor to'laganini to'liq oladi; haqni MAS'UL KURYER to'laydi —
+ *           relay incident `courier`): AYNI tranzaksiyada, kalit `bonus:wholesaleLostFee:{id}`:
+ *           Dr passenger_credit:{kuryer} take / Cr passenger_credit:{xaridor} take, take = min(deliveryFee,
+ *           kuryer hamyoni) (manfiyga TUSHMAYDI; wallet_ledger `wholesale_lost_fee_charge` / `_refund`);
+ *           qolgani — relay qarz mexanizmi `provider_capabilities/{accountId}.debt.logistics += qoldiq` +
+ *           `order.lost.deliveryFeeOutstanding`. Kuryer to'laganda admin `adminRecordWholesaleLostFeePayment`
+ *           (relay `adminRecordLostParcelPayment` nusxasi) → xaridor hamyoni, qarz va qoldiq kamayadi.
+ *           Kuryer = xaridor — pul yo'q (`fee_same_account`). Karta buyurtmasi — haq qaytarilmaydi (xaridor
+ *           AVA orqali to'lamagan).
  *   KARTA   (xaridor to'lamagan, `cardPayment.awaiting`) Dr escrow:wholesale:{id} avaFee /
  *           Cr passenger_credit:{sotuvchi} (rad mantiqi bilan bir xil)
  *   KARTA   (chek/tasdiq/nizo — xaridor to'lagan bo'lishi mumkin) pul YO'Q, `lost_review` (admin)
@@ -151,6 +160,16 @@ const returnEscrowAccount = (orderId) => `escrow:wholesale_return:${orderId}`;
 /** Yo'qolish: `bonus:` prefiksli (prepareBonusInTx) — eskrou qoldig'i to'lovchiga. */
 const lostKey = (orderId) => `wholesaleLost:${orderId}`;
 /**
+ * Yo'qolish, yetkazish haqi (ega, 2026-10-31): `bonus:` prefiksli (prepareBonusInTx) — mas'ul kuryer
+ * hamyonidan xaridorga; admin yozgan kuryer to'lovi — `postEntry` (relay `relayLostPayment:{id}:{opId}` naqshi).
+ */
+const lostFeeKey = (orderId) => `wholesaleLostFee:${orderId}`;
+const lostFeePaymentKey = (orderId, opId) => `wholesaleLostFeePayment:${orderId}:${opId}`;
+/** Relay yo'qolish hujjatlari — `functions/relay_escrow.js` bilan AYNAN bir xil nomlar (o'sha fayl O'ZGARMAYDI). */
+const LOSS_INCIDENTS = 'logistics_incidents';
+const PROVIDER_CAPS = 'provider_capabilities';
+const LOGISTICS_AUDIT = 'logistics_audit';
+/**
  * Relay hisob/kalitlari — `functions/relay_escrow.js` bilan AYNAN bir xil (o'sha fayl O'ZGARMAYDI;
  * paritet + «ikki yo'l bir vaqtda» testi: functions/test/wholesale_card_cf.test.js). Rad etilgan karta
  * buyurtmasining CHIQISH jo'natmasi shu kalitlar bilan yopiladi — relay keyinroq o'z EARNED/RELEASE'ini
@@ -222,7 +241,7 @@ function quoteAmountsOk(q) {
 
 function attachWholesaleOrders(exportsObj, deps) {
   const {
-    functions, db, admin, callerPhone, canonicalUid, settlementLedger, now: nowFn,
+    functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles, now: nowFn,
   } = deps;
   const now = () => (nowFn ? nowFn() : new Date());
   const HttpsError = functions.https.HttpsError;
@@ -1505,6 +1524,19 @@ function attachWholesaleOrders(exportsObj, deps) {
     const ship0 = ss0.exists ? (ss0.data() || {}) : {};
     if (ship0.paymentStatus !== SHIPMENT_LOSS_SETTLED) return { skipped: `shipment_${ship0.paymentStatus || 'none'}` };
     const when = now();
+    // Yetkazish haqi (ega, 2026-10-31): faqat HAMYON buyurtmasi (xaridor haqni AVA orqali to'lagan). To'lovchi —
+    // mas'ul kuryer: relay incident `logistics_incidents/{shipmentId}.courier` (relay `settleLoss` bilan bir xil
+    // manba); hamyon ID — `users/{12}`, bo'lmasa `users/{9}`, bo'lmasa kanon (relay `usersDocIdOf` qoidasi).
+    let feeSrc = null;
+    if (methodOf(o0) === PAYMENT_METHOD.WALLET && isPosInt(o0.deliveryFee)) {
+      const incSnap = await db.collection(LOSS_INCIDENTS).doc(shipmentId).get();
+      const c = (incSnap.exists ? (incSnap.data() || {}) : {}).courier || {};
+      const accountId = String(c.accountId || '');
+      const courierUid = canonicalUid(c.uid || '');
+      feeSrc = !incSnap.exists || !accountId || !courierUid
+        ? { problem: 'fee_incident_invalid' }
+        : { accountId, courierWalletUid: (await walletUidOf(courierUid)) || courierUid };
+    }
 
     const out = await db.runTransaction(async (t) => {
       // ── READ fazasi ──
@@ -1541,12 +1573,37 @@ function attachWholesaleOrders(exportsObj, deps) {
           return { skipped: 'escrow_mismatch', anomaly: true, escrow: ledger.fundPrev };
         }
       }
+      // Yetkazish haqi (faqat hamyon): take = min(haq, kuryer hamyoni) — balans SHU tranzaksiyada o'qiladi
+      // (manfiyga tushmaydi, parallel yechim bilan poyga yo'q); qolgani — kuryer qarzi (relay mexanizmi).
+      let fee = null;
+      if (!review && !isCard && feeSrc) {
+        const feeAmount = o.deliveryFee;
+        if (feeSrc.problem) {
+          fee = { amount: feeAmount, take: 0, outstanding: feeAmount, debt: 0, anomaly: feeSrc.problem };
+        } else if (settlementLedger.passengerCreditAccount(feeSrc.courierWalletUid)
+          === settlementLedger.passengerCreditAccount(payeeWalletUid)) {
+          // Kuryer = xaridor: o'zidan o'ziga pul yo'q (relay `LOSS_SAME_ACCOUNT` bilan bir xil).
+          fee = { amount: feeAmount, take: 0, outstanding: 0, debt: 0, anomaly: 'fee_same_account' };
+        } else {
+          const fctx = await settlementLedger.prepareBonusInTx(t, db, payeeWalletUid, {
+            fundingAccount: settlementLedger.passengerCreditAccount(feeSrc.courierWalletUid),
+            idempotencyKey: lostFeeKey(orderId),
+          });
+          // Jurnal bor, buyurtma esa hali lost emas — bitta tranzaksiyada bo'lishi mumkin emas: anomaliya, pul YO'Q.
+          if (fctx.jExists) return { skipped: 'fee_journal_exists', anomaly: true };
+          const take = Math.min(feeAmount, Math.max(0, fctx.fundPrev));
+          fee = {
+            amount: feeAmount, take, outstanding: feeAmount - take, debt: feeAmount - take, anomaly: null, ctx: fctx,
+          };
+        }
+      }
 
       // ── WRITE fazasi ──
       const refundTo = review || amount === 0 ? null : (isCard ? 'seller' : 'buyer');
       const posted = !review && amount > 0;
+      let goodsCommit = null;
       if (posted && !ledger.jExists) {
-        settlementLedger.commitBonusInTx(t, ledger, {
+        goodsCommit = settlementLedger.commitBonusInTx(t, ledger, {
           delta: amount,
           kind: 'wholesale_lost_refund',
           refType: 'wholesale_order',
@@ -1561,6 +1618,43 @@ function attachWholesaleOrders(exportsObj, deps) {
         mirrorWallet(t, payeeWalletUid, amount, 'wholesale_lost_refund', orderId, when, { shipmentId, payee: refundTo });
       }
       const incidentId = String(s.lossIncidentId || shipmentId);
+      if (fee && fee.take > 0) {
+        // Xaridor hisobi shu tranzaksiyada ikkinchi marta: oldingi yozuvdan keyingi balansdan davom etadi.
+        if (goodsCommit) fee.ctx.pcPrev = goodsCommit.pcBalance;
+        settlementLedger.commitBonusInTx(t, fee.ctx, {
+          delta: fee.take,
+          kind: 'wholesale_lost_fee_refund',
+          refType: 'wholesale_order',
+          refId: orderId,
+          meta: {
+            module: 'wholesale', shipmentId, incidentId, courierAccountId: feeSrc.accountId,
+            deliveryFee: fee.amount, outstanding: fee.outstanding,
+          },
+          postedBy: 'system',
+          postedRole: 'system',
+        });
+        mirrorWallet(t, payeeWalletUid, fee.take, 'wholesale_lost_fee_refund', orderId, when, { shipmentId, deliveryFee: fee.amount });
+        mirrorWallet(t, feeSrc.courierWalletUid, -fee.take, 'wholesale_lost_fee_charge', orderId, when, { shipmentId, deliveryFee: fee.amount });
+      }
+      if (fee && fee.debt > 0) {
+        // Relay `writeLossFinalize` bilan AYNAN bir xil qarz maydoni (server kaliti, increment — holat
+        // tekshiruvi shu tranzaksiyada, takror ishga tushishda ikkinchi marta qo'shilmaydi).
+        t.set(db.collection(PROVIDER_CAPS).doc(feeSrc.accountId), {
+          debt: { logistics: inc(fee.debt) }, updatedAt: when,
+        }, { merge: true });
+      }
+      // Buyurtmadagi haq holati: karta (xaridor AVA orqali to'lamagan) / haq 0 — 0; review — admin hal qiladi (null).
+      const feeFields = review
+        ? { deliveryFeeRefunded: null, deliveryFeeOutstanding: null }
+        : {
+          deliveryFee: fee ? fee.amount : 0,
+          deliveryFeeRefunded: fee ? fee.take : 0,
+          deliveryFeeOutstanding: fee ? fee.outstanding : 0,
+          deliveryFeePaidTotal: 0,
+          deliveryFeeEntryId: fee && fee.take > 0 ? `bonus:${lostFeeKey(orderId)}` : null,
+          deliveryFeeAnomaly: fee ? fee.anomaly : null,
+          courierAccountId: fee && feeSrc && feeSrc.accountId ? feeSrc.accountId : null,
+        };
       const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
       t.update(orderRef, {
         status: STATUS.LOST,
@@ -1576,10 +1670,12 @@ function attachWholesaleOrders(exportsObj, deps) {
           review,
           shipmentLostAt: s.lostAt || null,
           lossSettledAt: s.lossSettledAt || null,
+          ...feeFields,
         },
         'payment.status': review ? LOST_PAYMENT.REVIEW : LOST_PAYMENT.REFUNDED,
         'payment.lostRefund': amount,
         'payment.lostRefundEntryId': posted ? `bonus:${lostKey(orderId)}` : null,
+        'payment.lostFeeRefund': fee ? fee.take : 0,
         ...(review ? {} : { 'payment.refundedAt': when, refundStatus: REFUND_STATUS.DONE, refundedAt: when }),
       });
       t.set(orderRef.collection(HISTORY).doc(String(seq)), {
@@ -1587,11 +1683,15 @@ function attachWholesaleOrders(exportsObj, deps) {
         meta: {
           shipmentId, incidentId, paymentMethod: methodOf(o), refundTo, refunded: amount, review,
           cardPaymentStatus: isCard ? ((o.cardPayment || {}).status || null) : null, stockRestored: false,
+          deliveryFeeRefunded: feeFields.deliveryFeeRefunded, deliveryFeeOutstanding: feeFields.deliveryFeeOutstanding,
+          deliveryFeeAnomaly: feeFields.deliveryFeeAnomaly || null,
         },
         at: when,
       });
       return {
         lost: true, refunded: amount, refundTo, review, ledgerExisted: !!(ledger && ledger.jExists), from: o.status,
+        feeRefunded: fee ? fee.take : 0, feeOutstanding: fee ? fee.outstanding : 0, feeDebt: fee ? fee.debt : 0,
+        feeAnomaly: fee ? fee.anomaly : null,
       };
     });
     if (out.anomaly) {
@@ -1603,10 +1703,142 @@ function attachWholesaleOrders(exportsObj, deps) {
     } else {
       log('lost', {
         orderId, shipmentId, result: out.lost ? 'ok' : 'skipped', skipped: out.skipped || null, from: out.from || null,
-        amount: out.refunded || 0, refundTo: out.refundTo || null, review: !!out.review, durationMs: Date.now() - started,
+        amount: out.refunded || 0, refundTo: out.refundTo || null, review: !!out.review,
+        feeRefunded: out.feeRefunded || 0, feeOutstanding: out.feeOutstanding || 0, durationMs: Date.now() - started,
       });
+      if (out.lost && out.feeAnomaly) {
+        // Pul yo'q (yoki faqat qisman) — admin ko'radi (demand xabari `ws_lost_fee_admin`); PII yo'q.
+        logError('lostFee', { orderId, shipmentId, errorCode: `WHOLESALE_LOST_${String(out.feeAnomaly).toUpperCase()}` });
+      }
     }
     return out;
+  }
+
+  /**
+   * `adminRecordWholesaleLostFeePayment({ orderId, amount, opId, note? })` — faqat admin/superadmin.
+   * Relay `adminRecordLostParcelPayment` naqshining AYNAN nusxasi (o'sha callable jo'natma EGASIGA —
+   * Ulgurjida sotuvchiga — va faqat tovar qiymati G gacha yozadi, shuning uchun yetkazish haqi qoldig'i
+   * uchun alohida): kuryer qarzni O'ZI to'laydi, admin olingan summani yozadi:
+   *   Dr admin_cash / Cr admin_clearing  +  Dr admin_clearing / Cr passenger_credit:{xaridor}
+   * bitta ATOMAR yozuvda; buyurtma `lost.deliveryFeeOutstanding` va kuryer qarzi `debt.logistics` AYNI
+   * tranzaksiyada kamayadi; history + `logistics_audit`. Idempotent (opId), qoldiqdan oshmaydi.
+   */
+  async function recordLostFeePayment(data, context) {
+    if (typeof requireCallerRoles !== 'function') throw fail('internal', 'Server sozlanmagan', 'roles_unavailable');
+    const adminUid = await requireCallerRoles(context, ['admin', 'superadmin'], 'Faqat admin yoki superadmin');
+    const d = data || {};
+    const orderId = String(d.orderId || '').trim();
+    const amount = d.amount;
+    const opId = String(d.opId || '').trim();
+    const note = String(d.note || '').trim().slice(0, 300);
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(orderId)) throw fail('invalid-argument', 'orderId majburiy', 'order_required');
+    if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0) {
+      throw fail('invalid-argument', 'amount musbat butun so\'m bo\'lishi kerak', 'bad_amount');
+    }
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(opId)) {
+      throw fail('invalid-argument', 'opId (6-64 belgi: harf, raqam, _ -)', 'bad_op_id');
+    }
+    const key = lostFeePaymentKey(orderId, opId);
+    const orderRef = db.collection(ORDERS).doc(orderId);
+
+    // Idempotent qayta chaqiruv HOLAT tekshiruvidan OLDIN (to'liq to'langandan keyin ham shu opId rad etilmasin).
+    const prior = await db.collection(settlementLedger.COL_JOURNAL).doc(key).get();
+    if (prior.exists) {
+      if (Number(((prior.data() || {}).meta || {}).amount) !== amount) {
+        throw fail('failed-precondition', 'Bu opId boshqa summa bilan ishlatilgan', 'op_id_reused');
+      }
+      const l0 = ((await orderRef.get()).data() || {}).lost || {};
+      return { ok: true, idempotent: true, orderId, amount, outstanding: l0.deliveryFeeOutstanding, paidTotal: l0.deliveryFeePaidTotal };
+    }
+
+    const s0 = await orderRef.get();
+    if (!s0.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_missing');
+    const o0 = s0.data() || {};
+    const l0 = o0.lost || {};
+    if (o0.status !== STATUS.LOST) throw fail('failed-precondition', 'Buyurtma yo\'qolgan holatda emas', 'not_lost');
+    const out0 = isInt(l0.deliveryFeeOutstanding) ? l0.deliveryFeeOutstanding : 0;
+    if (out0 <= 0) throw fail('failed-precondition', 'To\'lanadigan qarz qolmagan', 'nothing_outstanding');
+    if (amount > out0) throw fail('failed-precondition', 'Summa qarzdan oshib ketdi', 'exceeds_outstanding', { outstanding: out0 });
+    const accountId = String(l0.courierAccountId || '');
+    const buyerWalletUid = String(o0.buyerWalletUid || '');
+    if (!accountId || l0.deliveryFeeAnomaly || !buyerWalletUid) {
+      throw fail('failed-precondition', 'Kuryer qarzi yozilmagan', 'fee_debt_not_recorded');
+    }
+    const pcBuyer = settlementLedger.passengerCreditAccount(buyerWalletUid);
+    const capRef = db.collection(PROVIDER_CAPS).doc(accountId);
+    const when = now();
+
+    try {
+      const res = await settlementLedger.postEntry(db, {
+        idempotencyKey: key,
+        kind: 'wholesale_lost_fee_payment',
+        refType: 'wholesale_order',
+        refId: orderId,
+        postedBy: adminUid,
+        postedRole: 'admin',
+        legs: [
+          { account: 'admin_cash', dr: amount },
+          { account: 'admin_clearing', cr: amount },
+          { account: 'admin_clearing', dr: amount },
+          { account: pcBuyer, cr: amount },
+        ],
+      }, {
+        mirrorBonus: true,
+        walletLedgerType: 'wholesale_lost_fee_payment',
+        meta: { module: 'wholesale', orderId, opId, amount, courierAccountId: accountId },
+        // READ fazasi — holat tranzaksiya ichida QAYTA tekshiriladi (parallel to'lovlar).
+        precheck: async (tx) => {
+          const [os, c] = await Promise.all([tx.get(orderRef), tx.get(capRef)]);
+          const o = os.exists ? (os.data() || {}) : {};
+          const l = o.lost || {};
+          const why = (reason, extra) => Object.assign(new Error(reason), { reason, ...(extra || {}) });
+          if (o.status !== STATUS.LOST) throw why('not_lost');
+          const outstanding = isInt(l.deliveryFeeOutstanding) ? l.deliveryFeeOutstanding : 0;
+          if (outstanding <= 0) throw why('nothing_outstanding');
+          if (amount > outstanding) throw why('exceeds_outstanding', { outstanding });
+          const debt = Number((((c.data() || {}).debt) || {}).logistics) || 0;
+          if (debt < amount) throw why('debt_mismatch', { debt });
+          return {
+            outstanding, paidTotal: isInt(l.deliveryFeePaidTotal) ? l.deliveryFeePaidTotal : 0, debt,
+            refundedNow: isInt(l.deliveryFeeRefunded) ? l.deliveryFeeRefunded : 0,
+            seq: (isInt(o.historySeq) ? o.historySeq : 0) + 1,
+          };
+        },
+        onCommit: (tx, { pre }) => {
+          const left = pre.outstanding - amount;
+          tx.update(orderRef, {
+            'lost.deliveryFeeOutstanding': left,
+            'lost.deliveryFeePaidTotal': pre.paidTotal + amount,
+            'lost.deliveryFeeLastPaymentAt': when,
+            // Xaridorga qaytgan yetkazish haqi jami = settleLost dagi take + admin yozgan to'lovlar.
+            'payment.lostFeeRefund': pre.refundedNow + pre.paidTotal + amount,
+            historySeq: pre.seq,
+            updatedAt: when,
+          });
+          tx.set(orderRef.collection(HISTORY).doc(String(pre.seq)), {
+            seq: pre.seq, from: STATUS.LOST, to: STATUS.LOST, event: 'lost_fee_payment', actor: 'admin', actorId: adminUid,
+            reason: note, meta: { amount, opId, entryId: key, outstandingAfter: left, courierAccountId: accountId }, at: when,
+          });
+          tx.set(capRef, { debt: { logistics: pre.debt - amount }, updatedAt: when }, { merge: true });
+          tx.set(db.collection(LOGISTICS_AUDIT).doc(`wholesale_lost_fee_payment_${orderId}_${opId}`), {
+            kind: 'wholesale_lost_fee_payment', orderId, shipmentId: l0.shipmentId || null, amount, opId, by: adminUid, note, at: when,
+          });
+        },
+      });
+      if (res.idempotent) {
+        const l1 = ((await orderRef.get()).data() || {}).lost || {};
+        return { ok: true, idempotent: true, orderId, amount, outstanding: l1.deliveryFeeOutstanding, paidTotal: l1.deliveryFeePaidTotal };
+      }
+      const left = res.pre.outstanding - amount;
+      log('lostFeePayment', { orderId, result: 'ok', accountId, amount, outstanding: left });
+      return { ok: true, idempotent: false, orderId, amount, outstanding: left, paidTotal: res.pre.paidTotal + amount };
+    } catch (e) {
+      if (e && e.reason) {
+        logError('lostFeePayment', { orderId, errorCode: e.reason });
+        throw fail('failed-precondition', 'To\'lovni yozib bo\'lmadi', e.reason, { outstanding: e.outstanding, debt: e.debt });
+      }
+      throw e;
+    }
   }
 
   /**
@@ -1890,6 +2122,8 @@ function attachWholesaleOrders(exportsObj, deps) {
   exportsObj.onWholesaleShipmentLoss = functions.firestore
     .document(`${SHIPMENTS}/{shipmentId}`)
     .onUpdate(async (change) => { await onShipmentLossUpdate(change.before.data() || {}, change.after.data() || {}); return null; });
+  // Yo'qolish, yetkazish haqi qoldig'i (ega, 2026-10-31): kuryer to'lagan summani admin yozadi → xaridor hamyoni.
+  exportsObj.adminRecordWholesaleLostFeePayment = functions.https.onCall(recordLostFeePayment);
   // 3b: har 10 daqiqa (ega, 2026-10-31: qaytish qarzi hamyon to'ldirilgach 10 daqiqada yopilsin).
   exportsObj.wholesaleOrdersReconcile = functions.pubsub
     .schedule('every 10 minutes')
@@ -1897,7 +2131,7 @@ function attachWholesaleOrders(exportsObj, deps) {
 
   return {
     place, refundOrder, onStatusChange, reconcile, shipFund, releaseGoods, onShipmentDelivered, onCustodyEvent,
-    fundReturn, completeReturn, settleOutboundOnRefusal, settleLost, onShipmentLossUpdate,
+    fundReturn, completeReturn, settleOutboundOnRefusal, settleLost, onShipmentLossUpdate, recordLostFeePayment,
   };
 }
 
@@ -1919,6 +2153,10 @@ module.exports = {
   returnFundKey,
   returnEscrowAccount,
   lostKey,
+  lostFeeKey,
+  lostFeePaymentKey,
+  LOSS_INCIDENTS,
+  PROVIDER_CAPS,
   LOST_FROM_STATUSES,
   LOST_PAYMENT,
   SHIPMENT_LOSS_SETTLED,

@@ -21,6 +21,7 @@ const kWholesaleOrderStatusLabels = <String, String>{
   'payment_dispute': 'Тўлов низоси',
   'returning': 'Сотувчига қайтмоқда',
   'returned': 'Сотувчига қайтди',
+  'lost': 'Йўқолди (посилка)',
 };
 
 /// Филтр калитлари: '' — ҳаммаси, `problem` — муаммоли, қолгани — ҳолат.
@@ -35,6 +36,7 @@ const kWholesaleOrderFilters = <String, String>{
   'refused': 'Рад этилди',
   'returning': 'Қайтмоқда',
   'returned': 'Қайтди',
+  'lost': 'Йўқолди',
 };
 
 /// To'lov usuli (`order.paymentMethod`; yo'q = hamyon — server `methodOf` bilan bir xil).
@@ -63,7 +65,7 @@ DateTime? wholesaleTimeOf(Object? v) {
 class WholesaleOrderProblem {
   const WholesaleOrderProblem(this.kind, this.text);
 
-  /// `ship_fund` | `release` | `shipment` | `dispute` | `return_debt`.
+  /// `ship_fund` | `release` | `shipment` | `dispute` | `return_debt` | `lost_fee`.
   final String kind;
   final String text;
 }
@@ -96,6 +98,7 @@ class WholesaleOrderAdminView {
     required this.releaseAnomaly,
     required this.shipmentError,
     required this.historySeq,
+    this.lost,
   });
 
   final String id;
@@ -132,6 +135,26 @@ class WholesaleOrderAdminView {
   /// `{code, at, attempts, final}` ёки `null`.
   final Map<String, dynamic>? shipmentError;
   final int? historySeq;
+
+  /// Йўқолган посилка (`status: lost`) — сервер `settleLost` ёзади: `{shipmentId, refundTo,
+  /// refunded, review, deliveryFee, deliveryFeeRefunded, deliveryFeeOutstanding,
+  /// deliveryFeePaidTotal, deliveryFeeAnomaly, courierAccountId, …}`; бошқа ҳолатда `null`.
+  final Map<String, dynamic>? lost;
+
+  /// Масъул курьердан ҳали ундирилмаган етказиш пули (бутун сўм). `review` / карта — `null` ёки 0.
+  int? get lostFeeOutstanding => _int(lost?['deliveryFeeOutstanding']);
+  int? get lostFeeRefunded => _int(lost?['deliveryFeeRefunded']);
+  int? get lostFeePaidTotal => _int(lost?['deliveryFeePaidTotal']);
+  String get lostCourierAccountId => _str(lost?['courierAccountId']);
+  String get lostFeeAnomaly => _str(lost?['deliveryFeeAnomaly']);
+
+  /// «Курьер қарзини тўлади» тугмаси кўринадими: `lost` + қолган қарз > 0.
+  bool get hasLostFeeOutstanding => status == 'lost' && (lostFeeOutstanding ?? 0) > 0;
+
+  /// Сервер `adminRecordWholesaleLostFeePayment` шартлари (`courierAccountId` бор, аномалия йўқ):
+  /// бўлмаса сервер `fee_debt_not_recorded` билан рад этади — тугма ўчиқ, сабаби ёзилади.
+  bool get canRecordLostFeePayment =>
+      hasLostFeeOutstanding && lostCourierAccountId.isNotEmpty && lostFeeAnomaly.isEmpty;
 
   bool get isCard => paymentMethod == kWholesaleCardMethod;
   String get statusLabel => kWholesaleOrderStatusLabels[status] ?? status;
@@ -175,6 +198,7 @@ class WholesaleOrderAdminView {
       releaseAnomaly: _map(d['releaseAnomaly']),
       shipmentError: _map(d['shipmentError']),
       historySeq: _int(d['historySeq']),
+      lost: _map(d['lost']),
     );
   }
 
@@ -199,6 +223,14 @@ class WholesaleOrderAdminView {
     final debt = returnDebtAmount;
     if (returnDebt != null && (debt == null || debt > 0)) {
       out.add(WholesaleOrderProblem('return_debt', 'Қайтариш қарзи (сотувчи): ${debt == null ? '?' : wholesaleMoney(debt)} сўм'));
+    }
+    if (status == 'lost' && lostFeeAnomaly.isNotEmpty) {
+      out.add(WholesaleOrderProblem('lost_fee', 'Йўқолган посилка: етказиш пули аномалияси — $lostFeeAnomaly'));
+    } else if (hasLostFeeOutstanding) {
+      out.add(WholesaleOrderProblem(
+        'lost_fee',
+        'Йўқолган посилка: курьер қарзи (етказиш пули) ${wholesaleMoney(lostFeeOutstanding!)} сўм',
+      ));
     }
     return out;
   }

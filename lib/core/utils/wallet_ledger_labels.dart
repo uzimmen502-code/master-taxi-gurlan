@@ -41,6 +41,24 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
     // AVA Logistics LEG ҳақи — сервер `courier_payout.js` (хизмат ҳақи ушланган).
     case 'courier_payout':
       return tr('wlt_l_courier_payout');
+    // Улгуржи буюртма занжири — сервер `functions/wholesale_orders.js` (`mirrorWallet`
+    // ва `walletLedgerType`), feat/ulg-card 2fec8ce8. Калит = `wlt_l_` + тур номи.
+    case 'wholesale_hold':
+    case 'wholesale_card_hold':
+    case 'wholesale_refund':
+    case 'wholesale_refusal_refund':
+    case 'wholesale_payout':
+    case 'wholesale_unearned_delivery_refund':
+    case 'wholesale_return_hold':
+    case 'wholesale_lost_refund':
+    case 'wholesale_lost_fee_refund':
+    case 'wholesale_lost_fee_charge':
+    case 'wholesale_lost_fee_payment':
+      return tr('wlt_l_${e.type}');
+    // Relay `functions/relay_escrow.js` (`mirrorBonus`): бир хил тур ИККИ ҳамёнга
+    // ёзилади — мижоз (+, қоплама) ва масъул курьер (−, ундирилди).
+    case 'logistics_lost_refund':
+      return tr(e.amount < 0 ? 'wlt_l_logistics_lost_charge' : 'wlt_l_logistics_lost_refund');
     case 'admin_adjust':
       return tr('wlt_l_admin_adjust');
     case 'birthday_bonus':

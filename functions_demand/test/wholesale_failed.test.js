@@ -348,6 +348,7 @@ ok('HAMYON: customer_absent → so\'rov (holat/pul o\'zgarmaydi) → xaridor tas
   const before = orderOf(db);
   const r = await report(db, { reasonCode: 'customer_absent' });
   assert.deepStrictEqual([r.status, r.awaitingBuyer], ['in_delivery', true]);
+  assert.deepStrictEqual([r.paymentMethod, r.allowedReasons], ['wallet', [...F.WALLET_REASONS]], 'javobda ham (UI ro\'yxatni saqlaydi)');
   assert.deepStrictEqual(orderOf(db).payment, before.payment);
   assert.ok(news(db).includes(`wholesale_${ORDER_ID}_ws_df_buyer_confirm_${BUYER}_df1`));
   st = await get();

@@ -220,6 +220,19 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     return deficit < bal ? deficit : bal;
   }
 
+  /// Эга (2026-10-31): курьер ортиқча нақд/картани мижоз ҳамёнига қайтим қила олмайди —
+  /// қайтим НАҚД берилади. Нақд/карта қолган қарздан (маҳсулот ва ҳамёндан кейин) ошса,
+  /// ортиқчаси шу ерда (сервер ҳам `CASH_OVERPAY` билан рад этади). Маҳсулот ортиқчаси
+  /// ҳамёнга қайтим бўлиши ўзгармаган.
+  int get _cashCardOverpay {
+    final entered = (_mode == 'cash' || _mode == 'card')
+        ? _enteredCashOrCard()
+        : _walletCashCardEntered;
+    if (entered <= 0) return 0;
+    final over = entered - _remainingDue;
+    return over > 1 ? over : 0;
+  }
+
   bool get _walletModeUnavailable =>
       _mode == 'wallet' &&
       !_balanceLoading &&
@@ -376,6 +389,18 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
         Text(
           _l('courier_pay_complete'),
           style: TextStyle(color: Colors.grey.shade700),
+        ),
+      );
+    }
+    if (_cashCardOverpay > 0) {
+      return Text(
+        _l('courier_pay_cash_overpay', {
+          'amount': formatPrice(_remainingDue),
+          'currency': _cur,
+        }),
+        style: TextStyle(
+          color: Colors.red.shade700,
+          fontWeight: FontWeight.w600,
         ),
       );
     }
@@ -1169,7 +1194,10 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
             ],
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: (_busy || _walletModeUnavailable) ? null : _submit,
+              onPressed:
+                  (_busy || _walletModeUnavailable || _cashCardOverpay > 0)
+                      ? null
+                      : _submit,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
                 padding: const EdgeInsets.symmetric(vertical: 21),

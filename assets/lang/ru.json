@@ -315,6 +315,7 @@
   "courier_pay_card_emoji": "💳 Карта",
   "courier_pay_cash_emoji": "💵 Наличные",
   "courier_pay_change_wallet": "Сдача: {amount} {currency} → кошелёк",
+  "courier_pay_cash_overpay": "Лишние наличные не зачисляются в кошелёк. Отдайте сдачу клиенту наличными и введите {amount} {currency}.",
   "courier_pay_change_wallet_mode": "Сдача: {amount} {currency} (излишек нал/карты в кошелёк)",
   "courier_pay_complete": "✅ Полностью",
   "courier_pay_deficit": "Недостача",

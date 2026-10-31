@@ -315,6 +315,7 @@
   "courier_pay_card_emoji": "💳 Karta",
   "courier_pay_cash_emoji": "💵 Naqd",
   "courier_pay_change_wallet": "Qaytim: {amount} {currency} → hamyon",
+  "courier_pay_cash_overpay": "Ortiqcha naqd hamyonga o'tkazilmaydi. Qaytimni mijozga naqd bering va {amount} {currency} kiriting.",
   "courier_pay_change_wallet_mode": "Qaytim: {amount} {currency} (naqd/karta ortiqchasi hamyonga)",
   "courier_pay_complete": "✅ To'liq",
   "courier_pay_deficit": "Kamomad",

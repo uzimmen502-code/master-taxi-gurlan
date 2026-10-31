@@ -117,6 +117,67 @@ async function testNormalize() {
   check('намуна эълонига триггер тегмайди', d.action === 'demo');
 }
 
+/** Эга 2026-10-31: бир рақамга 10 тагача ФАОЛ эълон (намуна ва муддати ўтганлар саналмайди). */
+async function testActiveLimit() {
+  await Promise.all(['yuk_local_drivers', 'yuk_local_owner_state', 'yuk_local_created_log', 'notifications'].map(wipe));
+  const now = Date.now();
+  const P = '998905550000';
+  const exp = (days) => Timestamp.fromMillis(now + days * DAY);
+  // 9 та фаол + 3 та муддати ўтган (саналмайди).
+  for (let i = 0; i < 9; i += 1) await db.doc(`yuk_local_drivers/act${i}`).set(listing(P, { expiresAt: exp(20) }));
+  for (let i = 0; i < 3; i += 1) await db.doc(`yuk_local_drivers/old${i}`).set(listing(P, { expiresAt: exp(-2) }));
+  const r10 = await createListing('new10', listing(P, { expiresAt: exp(30) }));
+  check('10-фаол эълон (9 фаол + 3 ўтган) — қабул қилинди', r10.action === 'created'
+    && (await db.doc('yuk_local_drivers/new10').get()).exists, JSON.stringify(r10.action));
+  const r11 = await createListing('new11', listing(P, { expiresAt: exp(30) }));
+  const n11 = await db.doc('yuk_local_drivers/new11').get();
+  const notes = (await db.collection('notifications').get()).docs.map((x) => x.data());
+  check('11-фаол эълон — ўчирилди, YUK_ACTIVE_LIMIT', r11.action === 'rejected_limit' && !n11.exists, JSON.stringify(r11));
+  check('эгасига хабар: type yuk_local_limit, screen yuk_local, матнда 10',
+    notes.length === 1 && notes[0].type === 'yuk_local_limit' && notes[0].targetPhone === P
+      && notes[0].screen === 'yuk_local' && notes[0].body.includes('10'));
+  const log11 = await db.doc('yuk_local_created_log/new11').get();
+  check('рад этилган эълон намуна ҳисобига ва эга тарихига кирмайди', !log11.exists);
+  // Retry: ўша event қайта келди — хабар такрорланмайди.
+  await yuk.onListingWrite('new11', null, n11.exists ? n11 : { exists: true, data: () => listing(P), createTime: Timestamp.now() });
+  const notes2 = await db.collection('notifications').get();
+  check('retry: хабар такрорланмайди', notes2.size === 1, `${notes2.size}`);
+  // Бошқа эга — чегарага таъсир йўқ.
+  const other = await createListing('otherOwner', listing(OTHER, { expiresAt: exp(30) }));
+  check('бошқа эга — таъсирсиз', other.action === 'created');
+
+  // Бир вақтда 2 та эълон (9 фаол бор эди): фақат кейинги (createTime) ўчади.
+  await Promise.all(['yuk_local_drivers', 'notifications'].map(wipe));
+  const Q = '998905550001';
+  for (let i = 0; i < 9; i += 1) await db.doc(`yuk_local_drivers/q${i}`).set(listing(Q, { expiresAt: exp(20) }));
+  const ra = db.collection('yuk_local_drivers').doc('raceA');
+  const rb = db.collection('yuk_local_drivers').doc('raceB');
+  await ra.set(listing(Q, { expiresAt: exp(30) }));
+  await rb.set(listing(Q, { expiresAt: exp(30) }));
+  const [sa, sb] = await Promise.all([ra.get(), rb.get()]);
+  const [xa, xb] = await Promise.all([yuk.onListingWrite('raceA', null, sa), yuk.onListingWrite('raceB', null, sb)]);
+  const [ea, eb] = await Promise.all([ra.get(), rb.get()]);
+  check('пойга: аввалгиси қолди, кейингиси ўчди (фақат битта ғолиб)',
+    ea.exists && !eb.exists && xa.action === 'created' && xb.action === 'rejected_limit', `${xa.action}/${xb.action}`);
+}
+
+async function testRenewLimit() {
+  await wipe('yuk_local_drivers');
+  const now = Date.now();
+  const P = '998905550002';
+  for (let i = 0; i < 10; i += 1) {
+    await db.doc(`yuk_local_drivers/a${i}`).set(listing(P, { expiresAt: Timestamp.fromMillis(now + (i === 0 ? 2 : 20) * DAY) }));
+  }
+  await db.doc('yuk_local_drivers/expired1').set(listing(P, { expiresAt: Timestamp.fromMillis(now - 3 * DAY) }));
+  const blocked = await yuk.renew(P, 'expired1', now);
+  check('10 та фаол бор — муддати ўтганни узайтириш YUK_ACTIVE_LIMIT', !blocked.ok && blocked.code === 'YUK_ACTIVE_LIMIT', JSON.stringify(blocked));
+  const ok = await yuk.renew(P, 'a0', now);
+  check('10 та фаол бор — фаол (2 кун қолган) эълонни узайтириш мумкин', ok.ok === true);
+  await db.doc('yuk_local_drivers/a5').delete();
+  const after = await yuk.renew(P, 'expired1', now);
+  check('биттаси ўчирилгач — узайтириш мумкин', after.ok === true);
+}
+
 async function testRenew() {
   const now = Date.now();
   await db.doc('yuk_local_drivers/r1').set(listing(OWNER, { expiresAt: Timestamp.fromMillis(now + 2 * DAY), expiryPushDays: [3, 2] }));
@@ -219,6 +280,8 @@ async function testDemoRefresh() {
 async function main() {
   await testTtl();
   await testLegacyOwners();
+  await testActiveLimit();
+  await testRenewLimit();
   await testNormalize();
   await testRenew();
   await testDaily();

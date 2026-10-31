@@ -2481,6 +2481,7 @@
   "yuk_local_renew_fail": "Uzaytirib bo'lmadi. Qayta urinib ko'ring.",
   "yuk_local_guest_message": "Foydalanish uchun Kabinetda ro'yxatdan o'ting",
   "yuk_local_guest_cta": "Kabinetga o'tish",
+  "yuk_local_limit_reached": "Bir raqamga {n} tagacha faol e'lon berish mumkin. Yangisini berish uchun eskisini o'chiring yoki muddati tugashini kuting.",
   "yuk_local_need_truck": "Raqam va yuk ko'tarishini kiriting",
   "yuk_local_need_gps": "GPS joylashuvi kerak",
   "yuk_local_gps_timeout": "GPS signali topilmadi. Ochiq joyga chiqib «Qayta urinish»ni bosing.",

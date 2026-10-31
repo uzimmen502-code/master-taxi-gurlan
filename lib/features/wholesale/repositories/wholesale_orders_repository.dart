@@ -133,8 +133,7 @@ class WholesaleOrdersRepository {
   Future<WholesaleDeliveryCode> deliveryCode(String orderId) async =>
       WholesaleDeliveryCode.fromMap(await _call(_demand, 'getWholesaleDeliveryCode', {'orderId': orderId}));
 
-  /// 3b. Регион: europe-west1 (ҳамкор сессия контракти: `submitWholesaleCardReceipt`
-  /// europe-west1; қолган карта callable'лари ҳам шу ерда деб олинди — UNKNOWN).
+  /// 3b карта callable'лари — ҳаммаси europe-west1 (`functions_demand`, жонли).
   Future<WholesaleCardInfo> cardPaymentInfo(String orderId) async =>
       WholesaleCardInfo.fromMap(await _call(_demand, 'getWholesaleCardPaymentInfo', {'orderId': orderId}));
 
@@ -147,12 +146,28 @@ class WholesaleOrdersRepository {
   Future<void> confirmCardPayment(String orderId) =>
       _call(_demand, 'confirmWholesaleCardPayment', {'orderId': orderId});
 
-  /// 3b: тўлов қабул қилиш картаси.
-  Future<void> setSellerCard({required String cardNumber, required String holderName}) =>
-      _call(_demand, 'setWholesaleSellerCard', {
-        'cardNumber': cardNumber.replaceAll(RegExp(r'\D'), ''),
-        'holderName': holderName.trim(),
+  /// 3b: тўлов қабул қилиш картаси → `{ok, last4, unchanged}`; охирги 4 рақам қайтади.
+  Future<String> setSellerCard({required String cardNumber, required String holderName}) async {
+    final d = await _call(_demand, 'setWholesaleSellerCard', {
+      'cardNumber': cardNumber.replaceAll(RegExp(r'\D'), ''),
+      'holderName': holderName.trim(),
+    });
+    return '${d['last4'] ?? ''}'.trim();
+  }
+
+  // ── Курьер (3b) ───────────────────────────────────────────────────
+
+  /// Охирги LEG курьери: «Харидор тўламади» (карта буюртмаси, тўлов `awaiting`).
+  Future<void> markBuyerRefused({required String orderId, String reason = ''}) =>
+      _call(_demand, 'markWholesaleBuyerRefused', {
+        'orderId': orderId,
+        if (reason.trim().isNotEmpty) 'reason': reason.trim(),
       });
+
+  /// Қайтиш жўнатмасини олиш учун ТОПШИРИШ коди (посилка қўлидаги курьерга).
+  Future<WholesaleReturnHandoverCode> returnHandoverCode(String orderId) async =>
+      WholesaleReturnHandoverCode.fromMap(
+          await _call(_demand, 'getWholesaleReturnHandoverCode', {'orderId': orderId}));
 
   // ── Жонли ўқиш ────────────────────────────────────────────────────
   //

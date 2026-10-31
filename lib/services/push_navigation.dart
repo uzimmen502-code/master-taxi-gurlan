@@ -37,6 +37,7 @@ import '../features/realty/screens/realty_alerts_screen.dart';
 import '../features/realty/screens/realty_detail_screen.dart';
 import '../repositories/realty_repository.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
+import '../features/wholesale/screens/wholesale_order_detail_screen.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../features/yuk_local/screens/yuk_local_screen.dart';
 import '../features/onboarding/screens/device_transfer_approve_screen.dart';
@@ -87,6 +88,16 @@ class PushNavigation {
   /// кетадиган навбат хабари (`screen: 'news'`) бунга кирмайди.
   @visibleForTesting
   static bool opensWallet(String screen) => screen == 'wallet';
+
+  /// Улгуржи буюртма push'и бўлса — `orderId` (Firestore ID шакли), акс ҳолда `null`.
+  @visibleForTesting
+  static String? wholesaleOrderIdFromPush(Map<String, String> data) {
+    final type = (data['type'] ?? '').trim();
+    final screen = (data['screen'] ?? '').trim();
+    if (type != 'wholesale_order' && screen != 'wholesale_order') return null;
+    final id = (data['orderId'] ?? '').trim();
+    return RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id) ? id : null;
+  }
 
   static Future<void> handlePayload(String? payload) async {
     await handleData(decodePayload(payload));
@@ -354,6 +365,24 @@ class PushNavigation {
       if (phone.length >= 12) {
         await nav.push(
           MaterialPageRoute(builder: (_) => ChinaInquiriesScreen(phone: phone)),
+        );
+        return;
+      }
+    }
+
+    // ── Улгуржи буюртма (functions_demand/notify/wholesale_notify.js) ──
+    // `{type: 'wholesale_order', event, orderId, screen: 'wholesale_order'}` →
+    // буюртма тафсилоти. Push'даги маълумотга ишонилмайди: экран ҳужжатни
+    // Firestore'дан ўқийди (Rules: фақат харидор/сотувчи/админ).
+    final wholesaleOrderId = wholesaleOrderIdFromPush(data);
+    if (wholesaleOrderId != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (phone.length >= 12) {
+        await nav.push(
+          MaterialPageRoute(
+            builder: (_) => WholesaleOrderDetailScreen(orderId: wholesaleOrderId, viewerId: phone),
+          ),
         );
         return;
       }

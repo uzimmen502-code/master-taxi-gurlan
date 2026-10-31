@@ -3,7 +3,9 @@
 import 'package:ava_gurlan/features/wholesale/models/wholesale_order.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_quote.dart';
 import 'package:ava_gurlan/features/wholesale/repositories/wholesale_orders_repository.dart';
+import 'package:ava_gurlan/features/wholesale/services/wholesale_storage_service.dart' show ReceiptTooLargeException;
 import 'package:ava_gurlan/features/wholesale/utils/wholesale_order_errors.dart';
+import 'package:ava_gurlan/services/push_navigation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,7 +95,7 @@ void main() {
       final code = await repo.deliveryCode('o1');
       final card = await repo.cardPaymentInfo('o1');
       await repo.confirmCardPayment('o1');
-      await repo.submitCardReceipt(orderId: 'o1', receiptPath: 'wholesale_receipts/998900000001/a.jpg');
+      await repo.submitCardReceipt(orderId: 'o1', receiptPath: 'wholesale_receipts/998900000001/o1/a.jpg');
       await repo.setSellerCard(cardNumber: '8600 1234 5678 9012', holderName: ' ALI V ');
 
       expect(demand.calls.map((c) => c.$1), [
@@ -107,7 +109,7 @@ void main() {
       expect(wallet.calls, isEmpty);
       expect(code.deliveryCode, '482913');
       expect(card.cardNumberGrouped, '8600 1234 5678 9012');
-      expect(demand.calls[4].$2, {'orderId': 'o1', 'receiptPath': 'wholesale_receipts/998900000001/a.jpg'});
+      expect(demand.calls[4].$2, {'orderId': 'o1', 'receiptPath': 'wholesale_receipts/998900000001/o1/a.jpg'});
       expect(demand.calls[5].$2, {'cardNumber': '8600123456789012', 'holderName': 'ALI V'});
     });
 
@@ -132,6 +134,98 @@ void main() {
     });
   });
 
+  group('3b жонли контракт', () {
+    test('setSellerCard → last4; курьер callable\'лари europe-west1', () async {
+      demand.handlers['setWholesaleSellerCard'] = (_) => {'ok': true, 'last4': '9012', 'unchanged': false};
+      demand.handlers['markWholesaleBuyerRefused'] = (_) => {'ok': true, 'status': 'refused'};
+      demand.handlers['getWholesaleReturnHandoverCode'] =
+          (_) => {'orderId': 'o1', 'shipmentId': 'rs1', 'trackingNumber': 'AVA-R1', 'handoverCode': '731905'};
+      expect(await repo.setSellerCard(cardNumber: '8600123456789012', holderName: 'ALI'), '9012');
+      await repo.markBuyerRefused(orderId: 'o1', reason: '  тўламади ');
+      await repo.markBuyerRefused(orderId: 'o2');
+      final code = await repo.returnHandoverCode('o1');
+      expect(demand.calls[1].$2, {'orderId': 'o1', 'reason': 'тўламади'});
+      expect(demand.calls[2].$2, {'orderId': 'o2'}, reason: 'бўш сабаб юборилмайди');
+      expect(demand.calls[3].$1, 'getWholesaleReturnHandoverCode');
+      expect(code.handoverCode, '731905');
+      expect(code.trackingNumber, 'AVA-R1');
+      expect(wallet.calls, isEmpty);
+    });
+
+    test('details билан аниқлашадиган сабаблар', () {
+      WholesaleOrderException e(String reason, Map<String, dynamic> d) =>
+          WholesaleOrderException('failed-precondition', reason, details: d);
+      expect(wholesaleOrderErrorKey(e('card_unavailable', {'cardUnavailableReason': 'buyer_limited'})),
+          'wholesale_pay_card_unavailable_buyer_limited');
+      expect(wholesaleOrderErrorKey(e('card_unavailable', {'cardUnavailableReason': 'seller_no_card'})),
+          'wholesale_pay_card_unavailable_seller_no_card');
+      expect(wholesaleOrderErrorKey(e('card_unavailable', {})), 'wholesale_pay_card_unavailable');
+      expect(wholesaleOrderErrorKey(e('card_number_invalid', {'check': 'luhn'})), 'wholesale_order_err_card_luhn');
+      expect(wholesaleOrderErrorKey(e('card_number_invalid', {'check': 'format'})), 'wholesale_seller_card_err_number');
+    });
+
+    test('янги сабаблар — ҳаммаси матнга (умумий эмас)', () {
+      for (final r in [
+        'receipt_not_found',
+        'receipt_not_image',
+        'receipt_path_invalid',
+        'receipt_already_submitted',
+        'card_payment_confirmed',
+        'payment_disputed',
+        'payment_method_invalid',
+        'seller_balance_insufficient',
+        'not_card_order',
+        'order_not_in_delivery',
+        'holder_name_invalid',
+        'not_wholesale_seller',
+        'seller_not_approved',
+        'not_last_leg_courier',
+        'parcel_not_in_hand',
+      ]) {
+        final k = wholesaleOrderErrorKey(WholesaleOrderException('failed-precondition', r));
+        expect(k, isNot('wholesale_order_err_generic'), reason: r);
+        expect(k, isNot('err_conflict'), reason: r);
+      }
+    });
+
+    test('чек ҳажми ошса — алоҳида матн', () {
+      expect(wholesaleOrderErrorKey(const ReceiptTooLargeException()), 'wholesale_order_err_receipt_too_large');
+    });
+
+    test('order: returnStatus / returnShipment / returnDebt{amount,at,attempts}; disputed — карта ёпиқ', () {
+      final o = WholesaleOrder.fromMap('o1', {
+        'buyerId': '998900000001',
+        'status': 'returning',
+        'paymentMethod': 'card_on_delivery',
+        'returnStatus': 'awaiting_payment',
+        'returnShipment': {'shipmentId': 'rs1', 'trackingNumber': 'AVA-R1'},
+        'returnDebt': {'amount': 45000, 'at': 1, 'attempts': 2},
+      });
+      expect(o.returnStatus, 'awaiting_payment');
+      expect(o.returnTrackingNumber, 'AVA-R1');
+      expect(o.returnDebt, 45000);
+      expect(WholesaleReturnStatus.l10nKey(o.returnStatus), 'wholesale_return_status_awaiting_payment');
+      expect(WholesaleReturnStatus.l10nKey('x'), isNull);
+      final d = WholesaleOrder.fromMap('o2', {
+        'status': 'in_delivery',
+        'paymentMethod': 'card_on_delivery',
+        'cardPayment': {'status': 'disputed'},
+      });
+      expect(d.cardPaymentOpen, isFalse);
+    });
+
+    test('push: wholesale_order → orderId; бошқа тур ёки нотўғри ID — null', () {
+      expect(
+        PushNavigation.wholesaleOrderIdFromPush(
+            {'type': 'wholesale_order', 'event': 'card_receipt', 'orderId': 'AbC123_-x', 'screen': 'wholesale_order'}),
+        'AbC123_-x',
+      );
+      expect(PushNavigation.wholesaleOrderIdFromPush({'screen': 'wholesale_order', 'orderId': 'o1'}), 'o1');
+      expect(PushNavigation.wholesaleOrderIdFromPush({'type': 'wholesale_order', 'orderId': ''}), isNull);
+      expect(PushNavigation.wholesaleOrderIdFromPush({'type': 'wholesale_order', 'orderId': '../x'}), isNull);
+      expect(PushNavigation.wholesaleOrderIdFromPush({'type': 'order', 'orderId': 'o1'}), isNull);
+    });
+  });
   test('clientRequestId: сервер шакли ^[A-Za-z0-9_-]{8,80}\$ ва ҳар сафар янги', () {
     final a = repo.newRequestId();
     final b = repo.newRequestId();

@@ -58,11 +58,10 @@ Future<_H> _pump(WidgetTester tester, WholesaleOrder o, String viewer, {_H? h}) 
         order: o,
         viewerId: viewer,
         repository: hh.repo,
-        uploadReceipt: (buyerId) async {
-          hh.uploads.add(buyerId);
-          return 'wholesale_receipts/$buyerId/r.jpg';
+        uploadReceipt: (buyerId, orderId) async {
+          hh.uploads.add('$buyerId/$orderId');
+          return 'wholesale_receipts/$buyerId/$orderId/r.jpg';
         },
-        resolveReceiptUrl: (_) async => throw StateError('no network in test'),
       ),
     ),
   ));
@@ -167,9 +166,9 @@ void main() {
 
       await tester.tap(find.byKey(_upload));
       await tester.pumpAndSettle();
-      expect(h.uploads, [_buyer]);
+      expect(h.uploads, ['$_buyer/o1'], reason: 'йўл: wholesale_receipts/{харидор}/{буюртма}/{файл}');
       expect(h.demand.calls.single.$1, 'submitWholesaleCardReceipt');
-      expect(h.demand.calls.single.$2, {'orderId': 'o1', 'receiptPath': 'wholesale_receipts/$_buyer/r.jpg'});
+      expect(h.demand.calls.single.$2, {'orderId': 'o1', 'receiptPath': 'wholesale_receipts/$_buyer/o1/r.jpg'});
     });
 
     testWidgets('чек юборилган: «Сотувчи тасдиқлашини кутяпмиз», қайта юклаш йўқ', (tester) async {
@@ -193,7 +192,7 @@ void main() {
           (_) => {'amount': 640000, 'cardNumber': '8600123456789012', 'holderName': 'ALI V', 'sellerName': 'Ali'};
       await _pump(
         tester,
-        _order(method: 'card_on_delivery', card: {'status': 'awaiting'}),
+        _order(status: WholesaleOrderStatus.inDelivery, method: 'card_on_delivery', card: {'status': 'awaiting'}),
         _buyer,
         h: h,
       );
@@ -254,12 +253,15 @@ void main() {
         _order(
           status: WholesaleOrderStatus.inDelivery,
           method: 'card_on_delivery',
-          card: {'status': 'receipt_submitted', 'receiptPath': 'wholesale_receipts/x/r.jpg'},
+          card: {
+            'status': 'receipt_submitted',
+            'receiptPath': 'wholesale_receipts/x/o1/r.jpg',
+            'receiptUrl': 'https://example.invalid/receipt.jpg',
+          },
         ),
         _seller,
       );
       expect(find.byKey(const ValueKey('wholesale-receipt')), findsOneWidget);
-      expect(find.text('wholesale_order_receipt_load_failed'), findsOneWidget);
       expect(find.text('wholesale_order_receipt_window'), findsOneWidget);
       expect(find.byKey(_money), findsOneWidget);
     });
@@ -290,6 +292,49 @@ void main() {
     });
   });
 
+  testWidgets('сотувчи: receiptUrl йўқ (фақат йўл) — чек бўлими кўрсатилмайди (Storage ўқиш йўқ)', (tester) async {
+    await _pump(
+      tester,
+      _order(
+        status: WholesaleOrderStatus.inDelivery,
+        method: 'card_on_delivery',
+        card: {'status': 'receipt_submitted', 'receiptPath': 'wholesale_receipts/x/o1/r.jpg'},
+      ),
+      _seller,
+    );
+    expect(find.byKey(const ValueKey('wholesale-receipt')), findsNothing);
+    expect(find.byKey(_money), findsOneWidget);
+  });
+
+  testWidgets('қайтиш жараёни иккала томонга кўринади', (tester) async {
+    for (final viewer in [_buyer, _seller]) {
+      await _pump(
+        tester,
+        WholesaleOrder.fromMap('o1', {
+          'buyerId': _buyer,
+          'sellerId': _seller,
+          'productTitle': 'Гуруч',
+          'qty': 1,
+          'total': 100,
+          'status': 'returning',
+          'paymentMethod': 'card_on_delivery',
+          'returnStatus': 'in_transit',
+          'returnShipment': {'shipmentId': 'rs1', 'trackingNumber': 'AVA-R1'},
+        }),
+        viewer,
+      );
+      expect(find.byKey(const ValueKey('wholesale-return-progress')), findsOneWidget, reason: viewer);
+      expect(find.text('wholesale_return_status_in_transit'), findsOneWidget, reason: viewer);
+      expect(find.byType(FilledButton), findsNothing);
+    }
+  });
+
+  testWidgets('карта буюртмаси placed: харидорда карта амаллари ҳали йўқ (фақат in_delivery да)', (tester) async {
+    await _pump(tester, _order(method: 'card_on_delivery', card: {'status': 'awaiting'}), _buyer);
+    expect(find.byKey(_cardInfo), findsNothing);
+    expect(find.byKey(_upload), findsNothing);
+    expect(find.byKey(_cancel), findsOneWidget);
+  });
   testWidgets('бегона (на харидор, на сотувчи) — ҳеч қандай амал йўқ', (tester) async {
     await _pump(
       tester,

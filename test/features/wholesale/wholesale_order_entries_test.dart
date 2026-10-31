@@ -41,12 +41,13 @@ void main() {
   testWidgets('сотувчи: дарвоза ёқилган бўлса (синовчи бўлмаса ҳам) — «Келган буюртмалар»', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: WholesaleSellerOrdersPanel(sellerPhone: '998901111111', repository: _GateRepo(tester1)),
+        body: WholesaleSellerOrdersPanel(sellerPhone: '998901111111', cardLast4: '1234', repository: _GateRepo(tester1)),
       ),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('wholesale-incoming-orders')), findsOneWidget);
     expect(find.byKey(const ValueKey('wholesale-seller-card')), findsOneWidget);
+    expect(find.text('wholesale_seller_card_current'), findsOneWidget, reason: '•••• 1234');
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -61,15 +62,17 @@ void main() {
   group('сотувчи картаси — локал текширув', () {
     test('мусбат / манфий / чегара', () {
       expect(WholesaleSellerCardSheet.validate('8600123456789012', 'ALI VALIYEV'), isNull);
-      expect(WholesaleSellerCardSheet.validate('8600 1234 5678 9012', 'ALI'), isNull, reason: '3 ҳарф — чегара');
+      expect(WholesaleSellerCardSheet.validate('8600 1234 5678 9012', 'AL'), isNull, reason: '2 ҳарф — чегара (сервер 2–60)');
+      expect(WholesaleSellerCardSheet.validate('8600123456789013', 'ALI'), 'wholesale_order_err_card_luhn');
+      expect(WholesaleSellerCardSheet.validate('8600123456789012', 'A' * 61), 'wholesale_seller_card_err_holder');
       expect(WholesaleSellerCardSheet.validate('860012345678901', 'ALI'), 'wholesale_seller_card_err_number');
       expect(WholesaleSellerCardSheet.validate('86001234567890123', 'ALI'), 'wholesale_seller_card_err_number');
-      expect(WholesaleSellerCardSheet.validate('8600123456789012', ' AL '), 'wholesale_seller_card_err_holder');
+      expect(WholesaleSellerCardSheet.validate('8600123456789012', ' A '), 'wholesale_seller_card_err_holder');
     });
 
     testWidgets('сақлаш: callable рақамлар билан, варақ ёпилади', (tester) async {
       final demand = FakeFunctions('demand');
-      demand.handlers['setWholesaleSellerCard'] = (_) => {'ok': true};
+      demand.handlers['setWholesaleSellerCard'] = (_) => {'ok': true, 'last4': '9012', 'unchanged': false};
       final repo = _GateRepo(tester1, demandFunctions: demand);
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -89,7 +92,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(demand.calls.single.$1, 'setWholesaleSellerCard');
       expect(demand.calls.single.$2, {'cardNumber': '8600123456789012', 'holderName': 'ALI VALIYEV'});
-      expect(find.text('wholesale_seller_card_saved'), findsOneWidget);
+      expect(find.text('wholesale_seller_card_saved_last4'), findsOneWidget);
     });
   });
 }

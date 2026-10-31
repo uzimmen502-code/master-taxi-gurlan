@@ -162,3 +162,22 @@ class WholesaleCardInfo {
         sellerName: _str(d['sellerName']),
       );
 }
+
+/// 3b `getWholesaleReturnHandoverCode` — қайтиш LEG-1 ни олиш коди.
+class WholesaleReturnHandoverCode {
+  const WholesaleReturnHandoverCode({
+    required this.handoverCode,
+    required this.trackingNumber,
+    required this.shipmentId,
+  });
+
+  final String handoverCode;
+  final String trackingNumber;
+  final String shipmentId;
+
+  factory WholesaleReturnHandoverCode.fromMap(Map<String, dynamic> d) => WholesaleReturnHandoverCode(
+        handoverCode: '${d['handoverCode'] ?? ''}'.trim(),
+        trackingNumber: _str(d['trackingNumber']),
+        shipmentId: _str(d['shipmentId']),
+      );
+}

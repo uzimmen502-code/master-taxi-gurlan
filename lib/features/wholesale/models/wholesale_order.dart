@@ -51,6 +51,22 @@ abstract final class WholesaleCardPaymentStatus {
   static const awaiting = 'awaiting';
   static const receiptSubmitted = 'receipt_submitted';
   static const confirmed = 'confirmed';
+
+  /// Чек 30 дақиқада тасдиқланмади — буюртма payment_dispute да (админ ҳал қилади).
+  static const disputed = 'disputed';
+}
+
+/// 3b: рад этилган буюртманинг қайтиш жараёни (order.returnStatus).
+abstract final class WholesaleReturnStatus {
+  static const pendingShipment = 'pending_shipment';
+  static const awaitingPayment = 'awaiting_payment';
+  static const inTransit = 'in_transit';
+  static const returned = 'returned';
+
+  static const known = {pendingShipment, awaitingPayment, inTransit, returned};
+
+  /// Матн калити; номаълум/бўш — `null` (кўрсатилмайди).
+  static String? l10nKey(String s) => known.contains(s) ? 'wholesale_return_status_$s' : null;
 }
 
 /// `wholesale_orders/{id}` — фақат ўқиш (Rules: харидор/сотувчи/админ;
@@ -79,6 +95,8 @@ class WholesaleOrder {
     this.shipmentId = '',
     this.destinationText = '',
     this.returnDebt = 0,
+    this.returnStatus = '',
+    this.returnTrackingNumber = '',
     this.createdAt,
   });
 
@@ -109,19 +127,26 @@ class WholesaleOrder {
   final String shipmentId;
   final String destinationText;
 
-  /// 3b: рад этилган карта буюртмасида сотувчининг қайтариш қарзи (сўм).
-  /// Майдон шакли UNKNOWN — сон ёки `{amount}` қабул қилинади.
+  /// 3b: сотувчининг қайтариш қарзи (сўм) — `returnDebt: {amount, at, attempts}`;
+  /// тўлангач сервер `null` қилади (0).
   final int returnDebt;
+
+  /// 3b: `returnStatus` ([WholesaleReturnStatus]) ва қайтиш жўнатмаси рақами.
+  final String returnStatus;
+  final String returnTrackingNumber;
   final DateTime? createdAt;
 
   bool get isCardOrder => paymentMethod == WholesalePaymentMethod.cardOnDelivery;
   bool get cardConfirmed => cardPaymentStatus == WholesaleCardPaymentStatus.confirmed;
 
-  /// Карта тўлови ҳали очиқ (сотувчи «Пул тушди» босмаган) ва буюртма тирик.
+  /// Карта тўлови ҳали очиқ: сотувчи «Пул тушди» босмаган, низо йўқ ва буюртма
+  /// ЕТКАЗИЛМОҚДА (сервер карта callable'ларини фақат `in_delivery` да қабул қилади).
   bool get cardPaymentOpen =>
       isCardOrder &&
-      !cardConfirmed &&
-      (status == WholesaleOrderStatus.placed || status == WholesaleOrderStatus.inDelivery);
+      status == WholesaleOrderStatus.inDelivery &&
+      (cardPaymentStatus == WholesaleCardPaymentStatus.awaiting ||
+          cardPaymentStatus == WholesaleCardPaymentStatus.receiptSubmitted ||
+          cardPaymentStatus.isEmpty);
 
   bool isBuyer(String viewerId) => _same(buyerId, viewerId);
   bool isSeller(String viewerId) => _same(sellerId, viewerId);
@@ -148,6 +173,7 @@ class WholesaleOrder {
     final card = _map(d['cardPayment']);
     final dest = _map(d['destination']);
     final debt = d['returnDebt'];
+    final ret = _map(d['returnShipment']);
     final method = _str(d['paymentMethod']);
     return WholesaleOrder(
       id: id,
@@ -172,6 +198,8 @@ class WholesaleOrder {
       shipmentId: _str(shipment['shipmentId']),
       destinationText: _str(dest['addressText']),
       returnDebt: debt is Map ? _int(debt['amount']) : _int(debt),
+      returnStatus: _str(d['returnStatus']),
+      returnTrackingNumber: _str(ret['trackingNumber']),
       createdAt: _date(d['createdAt']),
     );
   }
@@ -244,7 +272,8 @@ class WholesaleOrderActions {
       waitingSeller: buyer && cardOpen && submitted,
       codeAfterCardConfirm: buyer && inDelivery && o.isCardOrder && !o.cardConfirmed,
       canConfirmCardPayment: seller && cardOpen,
-      showReceipt: seller && o.isCardOrder && (o.receiptPath.isNotEmpty || o.receiptUrl.isNotEmpty),
+      // Сотувчида Storage ўқиш ҳуқуқи ЙЎҚ — фақат сервер ёзган `receiptUrl`.
+      showReceipt: seller && o.isCardOrder && o.receiptUrl.isNotEmpty,
       showReturnDebt: seller && o.returnDebt > 0,
     );
   }

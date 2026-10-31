@@ -421,6 +421,8 @@ class Shipment {
     this.assignedProviderIds = const [],
     this.createdAt,
     this.deliveredAt,
+    this.source = '',
+    this.wholesaleOrderId = '',
   });
 
   final String id;
@@ -441,6 +443,11 @@ class Shipment {
   final List<String> assignedProviderIds;
   final DateTime? createdAt;
   final DateTime? deliveredAt;
+
+  /// Улгуржи (3b): `wholesale` — буюртма жўнатмаси, `wholesale_return` — қайтиш;
+  /// оддий жўнатмада бўш. `wholesaleOrderId` — тегишли буюртма.
+  final String source;
+  final String wholesaleOrderId;
 
   bool get needsPayment =>
       status == ShipmentStatus.awaitingPayment && paymentStatus == PaymentStatus.pending;
@@ -469,6 +476,8 @@ class Shipment {
       assignedProviderIds: demandStringList(m['assignedProviderIds']),
       createdAt: parseDemandDate(m['createdAt']),
       deliveredAt: parseDemandDate(m['deliveredAt']),
+      source: (m['source'] ?? '').toString(),
+      wholesaleOrderId: (m['wholesaleOrderId'] ?? '').toString(),
     );
   }
 }

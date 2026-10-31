@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/user_error.dart';
 import '../repositories/wholesale_orders_repository.dart';
+import '../services/wholesale_storage_service.dart' show ReceiptTooLargeException;
 
 /// Сервер `details.reason` → фойдаланувчи матни калити (25-банд: ички код
 /// кўрсатилмайди). Бир нечта сабаб битта тушунарли матнга йиғилади.
@@ -49,9 +50,31 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'shipment_not_ready': 'wholesale_order_err_shipment_not_ready',
   'shipment_missing': 'wholesale_order_err_shipment_not_ready',
   'shipment_closed': 'wholesale_order_err_shipment_closed',
-  // 3b карта
+  // 3b карта (жонли контракт, 2026-10-31)
   'card_payment_unconfirmed': 'wholesale_order_err_card_payment_unconfirmed',
   'card_invalid': 'wholesale_order_err_card_invalid',
+  'card_payment_state': 'wholesale_order_err_invalid_transition',
+  'card_payment_confirmed': 'wholesale_order_err_card_payment_confirmed',
+  'payment_disputed': 'wholesale_order_status_payment_dispute',
+  'payment_method_invalid': 'wholesale_order_err_payment_method_invalid',
+  'seller_balance_insufficient': 'wholesale_pay_card_unavailable_seller_balance',
+  'seller_no_card': 'wholesale_pay_card_unavailable_seller_no_card',
+  'not_card_order': 'wholesale_order_err_not_card_order',
+  'order_not_in_delivery': 'wholesale_order_err_order_not_in_delivery',
+  'receipt_not_found': 'wholesale_order_err_receipt_not_found',
+  'receipt_not_image': 'wholesale_order_err_receipt_not_image',
+  'receipt_path_invalid': 'wholesale_order_err_receipt_path_invalid',
+  'receipt_already_submitted': 'wholesale_order_err_receipt_already_submitted',
+  'receipt_submitted': 'wholesale_order_err_receipt_submitted',
+  'holder_name_invalid': 'wholesale_seller_card_err_holder',
+  'not_wholesale_seller': 'wholesale_order_err_not_wholesale_seller',
+  'seller_not_approved': 'wholesale_order_err_seller_not_approved',
+  // 3b курьер
+  'not_last_leg_courier': 'wholesale_order_err_not_last_leg_courier',
+  'parcel_not_in_hand': 'wholesale_order_err_parcel_not_in_hand',
+  'not_return_courier': 'wholesale_order_err_not_party',
+  'not_return_shipment': 'wholesale_order_err_not_party',
+  'return_not_ready': 'wholesale_order_err_return_not_ready',
 };
 
 /// Квота/ўтказишда «буюртма бериш бу фойдаланувчига ёпиқ» маъносидаги
@@ -63,11 +86,19 @@ bool isWholesaleOrdersClosed(Object error) =>
 /// Хато → матн калити (соф, тестланади).
 String wholesaleOrderErrorKey(Object error) {
   if (error is WholesaleOrderException) {
+    // Сабаби `details` да аниқлашадиган хатолар.
+    if (error.reason == 'card_unavailable') {
+      return wholesaleCardUnavailableKey('${error.details['cardUnavailableReason'] ?? ''}');
+    }
+    if (error.reason == 'card_number_invalid') {
+      return error.details['check'] == 'luhn' ? 'wholesale_order_err_card_luhn' : 'wholesale_seller_card_err_number';
+    }
     final byReason = kWholesaleOrderReasonKeys[error.reason];
     if (byReason != null) return byReason;
     // Сабаби йўқ (тармоқ, вақт, рухсат) — умумий код харитаси.
     return userErrorKeyFromCode(error.code, fallbackKey: 'wholesale_order_err_generic');
   }
+  if (error is ReceiptTooLargeException) return 'wholesale_order_err_receipt_too_large';
   return userErrorKey(error, fallbackKey: 'wholesale_order_err_generic');
 }
 
@@ -80,6 +111,9 @@ String wholesaleOrderErrorText(BuildContext context, Object error) {
 /// Карта тўлови ёпиқлигининг сабаби (квота `cardUnavailableReason`) → матн.
 /// Маълум сабаб матни бўлмаса — умумий «бу буюртмада карта мавжуд эмас».
 String wholesaleCardUnavailableKey(String reason) => switch (reason) {
+      'seller_no_card' => 'wholesale_pay_card_unavailable_seller_no_card',
       'seller_debt' => 'wholesale_pay_card_unavailable_seller_debt',
+      'buyer_limited' => 'wholesale_pay_card_unavailable_buyer_limited',
+      'seller_balance' => 'wholesale_pay_card_unavailable_seller_balance',
       _ => 'wholesale_pay_card_unavailable',
     };

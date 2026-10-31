@@ -50,9 +50,12 @@ class WholesaleBuyerOrdersAction extends StatelessWidget {
 }
 
 class WholesaleSellerOrdersPanel extends StatelessWidget {
-  const WholesaleSellerOrdersPanel({super.key, required this.sellerPhone, this.repository});
+  const WholesaleSellerOrdersPanel({super.key, required this.sellerPhone, this.cardLast4 = '', this.repository});
 
   final String sellerPhone;
+
+  /// Жорий тўлов картасининг охирги 4 рақами (`wholesale_sellers.cardLast4`); бўш — йўқ.
+  final String cardLast4;
   final WholesaleOrdersRepository? repository;
 
   @override
@@ -88,6 +91,12 @@ class WholesaleSellerOrdersPanel extends StatelessWidget {
                 key: const ValueKey('wholesale-seller-card'),
                 leading: const Icon(Icons.credit_card),
                 title: Text(context.tr('wholesale_seller_card_title')),
+                subtitle: Text(
+                  cardLast4.isEmpty
+                      ? context.tr('wholesale_seller_card_none')
+                      : context.trMsg('wholesale_seller_card_current', params: {'last4': cardLast4}),
+                  key: const ValueKey('wholesale-seller-card-current'),
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => showWholesaleSellerCardSheet(context, repository: repo),
               ),
@@ -105,15 +114,19 @@ Future<void> showWholesaleSellerCardSheet(
   BuildContext context, {
   WholesaleOrdersRepository? repository,
 }) async {
-  final saved = await showModalBottomSheet<bool>(
+  final last4 = await showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (_) => WholesaleSellerCardSheet(repository: repository ?? WholesaleOrdersRepository()),
   );
-  if (saved == true && context.mounted) {
+  if (last4 != null && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.tr('wholesale_seller_card_saved'))),
+      SnackBar(
+        content: Text(last4.isEmpty
+            ? context.tr('wholesale_seller_card_saved')
+            : context.trMsg('wholesale_seller_card_saved_last4', params: {'last4': last4})),
+      ),
     );
   }
 }
@@ -123,11 +136,31 @@ class WholesaleSellerCardSheet extends StatefulWidget {
 
   final WholesaleOrdersRepository repository;
 
-  /// Локал текширув (соф): 16 рақам; ўзгача — хато калити. Ҳал қилувчи — сервер.
+  /// Локал текширув (соф, сервер қоидаси билан бир хил): 16 рақам + Luhn, исм 2–60.
+  /// Ҳал қилувчи — сервер (`card_number_invalid` / `holder_name_invalid`).
   static String? validate(String number, String holder) {
-    if (number.replaceAll(RegExp(r'\D'), '').length != 16) return 'wholesale_seller_card_err_number';
-    if (holder.trim().length < 3) return 'wholesale_seller_card_err_holder';
+    final d = number.replaceAll(RegExp(r'\D'), '');
+    if (d.length != 16) return 'wholesale_seller_card_err_number';
+    if (!luhnOk(d)) return 'wholesale_order_err_card_luhn';
+    final h = holder.trim();
+    if (h.length < 2 || h.length > 60) return 'wholesale_seller_card_err_holder';
     return null;
+  }
+
+  static bool luhnOk(String digits) {
+    var sum = 0;
+    var dbl = false;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      var n = digits.codeUnitAt(i) - 48;
+      if (n < 0 || n > 9) return false;
+      if (dbl) {
+        n *= 2;
+        if (n > 9) n -= 9;
+      }
+      sum += n;
+      dbl = !dbl;
+    }
+    return sum % 10 == 0;
   }
 
   @override
@@ -158,8 +191,8 @@ class _WholesaleSellerCardSheetState extends State<WholesaleSellerCardSheet> {
       _error = null;
     });
     try {
-      await widget.repository.setSellerCard(cardNumber: _number.text, holderName: _holder.text);
-      if (mounted) Navigator.of(context).pop(true);
+      final last4 = await widget.repository.setSellerCard(cardNumber: _number.text, holderName: _holder.text);
+      if (mounted) Navigator.of(context).pop(last4);
     } catch (e) {
       if (mounted) setState(() => _error = wholesaleOrderErrorText(context, e));
     } finally {

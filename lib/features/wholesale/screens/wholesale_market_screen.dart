@@ -640,7 +640,10 @@ class _MyProductsView extends StatelessWidget {
       body: Column(
         children: [
           // Келган буюртмалар + тўлов картаси (4-босқич; қабул/рад йўқ).
-          if (market != WholesaleProduct.marketChina) WholesaleSellerOrdersPanel(sellerPhone: seller.phone),
+          if (market != WholesaleProduct.marketChina) WholesaleSellerOrdersPanel(
+              sellerPhone: seller.phone,
+              cardLast4: seller.hasPayoutCard ? seller.cardLast4 : '',
+            ),
           // Эски сотувчи (У1 дан олдин рўйхатдан ўтган) — жўнатиш манзили
           // йўқ: етказиш ҳақи ҳисобланмайди, шунинг учун эслатиб турамиз.
           if (!seller.hasShipFrom)

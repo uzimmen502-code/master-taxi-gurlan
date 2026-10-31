@@ -23,10 +23,7 @@ import '../utils/wholesale_order_errors.dart';
 import '../widgets/wholesale_order_status.dart';
 
 /// Чек расмини танлаб юклайди, Storage йўлини қайтаради (бекор — `null`).
-typedef WholesaleReceiptUploader = Future<String?> Function(String buyerId);
-
-/// Чек йўлидан кўрсатиш URL'и.
-typedef WholesaleReceiptUrlResolver = Future<String> Function(String path);
+typedef WholesaleReceiptUploader = Future<String?> Function(String buyerId, String orderId);
 
 class WholesaleOrderDetailScreen extends StatelessWidget {
   const WholesaleOrderDetailScreen({
@@ -85,14 +82,12 @@ class WholesaleOrderDetailView extends StatefulWidget {
     required this.viewerId,
     required this.repository,
     this.uploadReceipt,
-    this.resolveReceiptUrl,
   });
 
   final WholesaleOrder order;
   final String viewerId;
   final WholesaleOrdersRepository repository;
   final WholesaleReceiptUploader? uploadReceipt;
-  final WholesaleReceiptUrlResolver? resolveReceiptUrl;
 
   @override
   State<WholesaleOrderDetailView> createState() => _WholesaleOrderDetailViewState();
@@ -179,16 +174,17 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   Future<void> _uploadReceipt() => _run(() async {
         final upload = widget.uploadReceipt ?? _defaultUpload;
-        final path = await upload(canonicalPhoneId(widget.viewerId));
+        final path = await upload(canonicalPhoneId(widget.viewerId), _o.id);
         if (path == null || path.isEmpty) return;
         await widget.repository.submitCardReceipt(orderId: _o.id, receiptPath: path);
         _snack('wholesale_order_receipt_sent');
       });
 
-  static Future<String?> _defaultUpload(String buyerId) async {
-    final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 90);
+  /// Фақат РАСМ (Storage қоидаси PDF'ни қабул қилмайди), сиқилган JPEG < 8 МБ.
+  static Future<String?> _defaultUpload(String buyerId, String orderId) async {
+    final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85, maxWidth: 2000);
     if (file == null) return null;
-    return WholesaleStorageService().uploadReceipt(buyerId: buyerId, image: file);
+    return WholesaleStorageService().uploadReceipt(buyerId: buyerId, orderId: orderId, image: file);
   }
 
   Future<void> _confirmMoney() async {
@@ -246,6 +242,10 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           const SizedBox(height: 10),
           _notice(context, 'wholesale_order_status_payment_dispute', warn: true,
               key: const ValueKey('wholesale-dispute-banner')),
+        ],
+        if (_showsReturn(o)) ...[
+          const SizedBox(height: 10),
+          _returnCard(context, o),
         ],
         const SizedBox(height: 10),
         _card(
@@ -366,11 +366,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         const SizedBox(height: 8),
       ],
       if (a.showReceipt) ...[
-        _ReceiptImage(
-          url: o.receiptUrl,
-          path: o.receiptPath,
-          resolve: widget.resolveReceiptUrl ?? WholesaleStorageService().downloadUrlForPath,
-        ),
+        _ReceiptImage(url: o.receiptUrl),
         const SizedBox(height: 8),
       ],
       if (a.canConfirmCardPayment)
@@ -378,6 +374,45 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             key: const ValueKey('wholesale-money-received')),
       if (o.isCardOrder && o.cardConfirmed) _notice(context, 'wholesale_order_card_confirmed', ok: true),
     ];
+  }
+
+  /// Қайтиш жараёни (3b) — харидорга ҳам, сотувчига ҳам кўринади.
+  static bool _showsReturn(WholesaleOrder o) =>
+      o.returnStatus.isNotEmpty ||
+      o.status == WholesaleOrderStatus.refused ||
+      o.status == WholesaleOrderStatus.returning ||
+      o.status == WholesaleOrderStatus.returned;
+
+  Widget _returnCard(BuildContext context, WholesaleOrder o) {
+    final c = context.ava;
+    final key = WholesaleReturnStatus.l10nKey(o.returnStatus) ??
+        (o.status == WholesaleOrderStatus.returned
+            ? 'wholesale_return_status_returned'
+            : 'wholesale_return_status_pending_shipment');
+    return _card(
+      context,
+      Column(
+        key: const ValueKey('wholesale-return-progress'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.assignment_return_outlined, size: 18, color: c.brand),
+              const SizedBox(width: 6),
+              Text(context.tr('wholesale_return_title'),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(context.tr(key), style: TextStyle(fontSize: 12, color: c.ink2)),
+          if (o.returnTrackingNumber.isNotEmpty)
+            SelectableText(
+              context.trMsg('wholesale_order_tracking', params: {'number': o.returnTrackingNumber}),
+              style: TextStyle(fontSize: 11, color: c.ink3),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _card(BuildContext context, Widget child) {
@@ -554,20 +589,12 @@ class _CardInfoSheet extends StatelessWidget {
   }
 }
 
-class _ReceiptImage extends StatefulWidget {
-  const _ReceiptImage({required this.url, required this.path, required this.resolve});
+/// Харидор юборган чек — сервер ёзган токенли URL (`cardPayment.receiptUrl`).
+/// Сотувчида Storage ўқиш ҳуқуқи йўқ, шунинг учун йўлдан URL олинмайди.
+class _ReceiptImage extends StatelessWidget {
+  const _ReceiptImage({required this.url});
 
   final String url;
-  final String path;
-  final WholesaleReceiptUrlResolver resolve;
-
-  @override
-  State<_ReceiptImage> createState() => _ReceiptImageState();
-}
-
-class _ReceiptImageState extends State<_ReceiptImage> {
-  late final Future<String> _url =
-      widget.url.isNotEmpty ? Future.value(widget.url) : widget.resolve(widget.path);
 
   @override
   Widget build(BuildContext context) {
@@ -579,28 +606,21 @@ class _ReceiptImageState extends State<_ReceiptImage> {
         Text(context.tr('wholesale_order_receipt_title'),
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink)),
         const SizedBox(height: 6),
-        FutureBuilder<String>(
-          future: _url,
-          builder: (context, snap) {
-            if (snap.hasError) {
-              return Text(context.tr('wholesale_order_receipt_load_failed'),
-                  style: TextStyle(fontSize: 12, color: c.danger));
-            }
-            if (!snap.hasData) {
-              return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
-            }
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: CachedNetworkImage(
-                imageUrl: snap.data!,
-                height: 260,
-                width: double.infinity,
-                fit: BoxFit.contain,
-                errorWidget: (_, __, ___) => Text(context.tr('wholesale_order_receipt_load_failed'),
-                    style: TextStyle(fontSize: 12, color: c.danger)),
-              ),
-            );
-          },
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: CachedNetworkImage(
+            imageUrl: url,
+            height: 260,
+            width: double.infinity,
+            fit: BoxFit.contain,
+            // Статик ўринбосар (чексиз анимациясиз).
+            placeholder: (_, __) => SizedBox(
+              height: 120,
+              child: Center(child: Icon(Icons.receipt_long_outlined, size: 40, color: c.ink3)),
+            ),
+            errorWidget: (_, __, ___) => Text(context.tr('wholesale_order_receipt_load_failed'),
+                style: TextStyle(fontSize: 12, color: c.danger)),
+          ),
         ),
       ],
     );

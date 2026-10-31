@@ -195,6 +195,15 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
       });
     } catch (e) {
       if (!mounted || seq != _seq) return;
+      // Сервер карта усулини рад этди (`card_unavailable`) — ҳамёнга қайтиб,
+      // нархни қайта сўраймиз; сабаби ҳамён квотасидаги `cardUnavailableReason` да.
+      if (e is WholesaleOrderException &&
+          e.reason == 'card_unavailable' &&
+          _method == WholesalePaymentMethod.cardOnDelivery) {
+        setState(() => _method = WholesalePaymentMethod.wallet);
+        unawaited(_requote());
+        return;
+      }
       setState(() {
         _quote = null;
         _quoting = false;
@@ -235,7 +244,12 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
             _placeTopUp = true;
             _shortfall = need != null && have != null && need > have ? need - have : null;
           });
-        case 'quote_expired' || 'quote_used' || 'quote_not_found' || 'quote_invalid':
+        case 'quote_expired' ||
+              'quote_used' ||
+              'quote_not_found' ||
+              'quote_invalid' ||
+              'card_unavailable' ||
+              'seller_balance_insufficient':
           // Янги квота — янги калит (эски калит эски квотага боғланган).
           await _requote();
           if (mounted) setState(() => _placeError = text);

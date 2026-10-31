@@ -127,7 +127,9 @@ system — `in_delivery → payment_dispute`, `refused → returning`, `returnin
 | Етказиш эскрови | Dr `escrow:wholesale:{id}` / Cr `escrow:{shipmentId}` = deliveryFee (ўзгармаган) | `wholesaleShipFund:{id}` |
 | Етказилди | Dr `escrow:wholesale:{id}` / Cr `earnings:ava_wholesale_fee` = avaFee (сотувчига AVA орқали 0; avaFee=0 — ёзув йўқ) | `wholesaleRelease:{id}` |
 | Бекор (эскровдан олдин) | Dr `escrow:wholesale:{id}` / Cr `passenger_credit:{сотувчи}` = тўлиқ ушланма | `bonus:wholesaleRefund:{id}` |
-| Рад | Dr `escrow:wholesale:{id}` / Cr `passenger_credit:{сотувчи}` = avaFee (эскров 0); курьер ҳақи `escrow:{shipmentId}` да қолади | `bonus:wholesaleRefused:{id}` |
+| Рад | Dr `escrow:wholesale:{id}` / Cr `passenger_credit:{сотувчи}` = avaFee (эскров 0) | `bonus:wholesaleRefused:{id}` |
+| Рад — чиқиш EARNED (ҳар ишланган LEG) | Dr `platform_accrual` / Cr `supplier_payable:{курьер}` = legPayout (relay ёзуви, курьер тўлови триггери кўради) | `relayEarned:{shipmentId}:{legId}` |
+| Рад — чиқиш RELEASE | Dr `escrow:{shipmentId}` = customerPrice / Cr `platform_accrual` Σишланган / Cr `earnings:ava_logistics_fee` platformShare / Cr `passenger_credit:{сотувчи}` Σишланмаган (PROPOSED); эскров 0; жўнатма `paymentStatus: settled` + `wholesaleOutcome: 'refused'` (`status` ўзгармайди — relay машинасида «рад» йўқ), жорий LEG `completed` (`outcome: 'buyer_refused'`), посилка етмаган LEG'лар `cancelled` | `relayRelease:{shipmentId}` |
 | Қайтиш ушлаш | Dr `passenger_credit:{сотувчи}` / Cr `escrow:wholesale_return:{id}` = қайтиш нархи | `bonus:wholesaleReturnHold:{id}` |
 | Қайтиш эскрови | Dr `escrow:wholesale_return:{id}` / Cr `escrow:{returnShipmentId}` | `wholesaleReturnFund:{id}` |
 | Қайтиш етказилди | relay RELEASE (`escrow:{returnShipmentId}` → курьер/AVA), бизда пул йўқ; қолдиқ +N | — |
@@ -145,10 +147,8 @@ matching ишламайди; курьер `getWholesaleReturnHandoverCode` ко�
 коди (relay `getShipmentSecrets`) билан relay `confirmDelivery`. Relay функцияларига тегилмаган.
 
 ### Очиқ масалалар (UNKNOWN / эга)
-- Чиқиш жўнатмасининг `escrow:{shipmentId}` (курьер ҳақи) рад этилганда **етказилмагани учун relay
-  RELEASE бўлмайди** — пул эскровда қолади; ким ва қачон курьерга ёпади (админ / relay guards) — эга.
-- Чиқиш LEG'и `in_progress` ҳолатида қолади (relay'га тегилмади).
+- Рад этилганда чиқиш жўнатмаси relay'нинг ўша калитлари (`relayEarned`/`relayRelease`) билан ёпилади — relay кейин ўзи юрса ҳам иккинчи тўлов йўқ (тест билан исботланган). «Ишланган LEG» = индекси ≤ `currentLegId`; посилка етмаган LEG улуши сотувчига — PROPOSED.
 - Бириктирилган курьер қайтишни олмаса — LEG'ни админ relay `adminPlanShipmentRoute` билан қайта режалайди.
 - `returnAnomaly` (масалан қайтиш нархи муҳрга мос эмас) — ушланма `escrow:wholesale_return` да туради, админ ҳал қилади.
 - Рад ҳисоблагичини камайтириш/ноллаш (админ) — қурилмаган.
-- Чек файли Storage'да борлиги серверда текширилмайди (фақат йўл шакли).
+- Чек: файл Storage'да борлиги сервер томонидан текширилади (`receipt_not_found`), сотувчи чекни `cardPayment.receiptUrl` (Firebase token ҳавола) орқали кўради — Storage'га сотувчи рухсати ЙЎҚ (IAM берилмаган). Storage қоидаси: харидор ўз йўлига ёзади/ўқийди (image/*, <8MB), админ — `isCatalogAdmin()`.

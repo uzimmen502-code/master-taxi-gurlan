@@ -145,6 +145,26 @@ const ORDER_CARD = {
 const ORDER_WALLET = { ...ORDER_CARD, paymentMethod: 'wallet', cardPayment: undefined };
 delete ORDER_WALLET.cardPayment;
 const order = (db, id = 'o1') => db.docs.get(`wholesale_orders/${id}`);
+/** Soxta Storage bucket (Admin SDK `bucket.file(p).exists/getMetadata/setMetadata` shakli). */
+function fakeBucket(files) {
+  const b = {
+    name: 'demo-ulgcard.firebasestorage.app',
+    files,
+    setCalls: [],
+    file(p) {
+      return {
+        exists: async () => [Object.prototype.hasOwnProperty.call(b.files, p)],
+        getMetadata: async () => [b.files[p]],
+        setMetadata: async (m) => {
+          b.setCalls.push(p);
+          b.files[p] = { ...b.files[p], metadata: { ...((b.files[p] || {}).metadata || {}), ...(m.metadata || {}) } };
+          return [b.files[p]];
+        },
+      };
+    },
+  };
+  return b;
+}
 const fakeMessaging = () => {
   const sent = [];
   return { sent, sendEach: async (msgs) => { sent.push(...msgs); return { responses: msgs.map(() => ({ success: true })) }; } };
@@ -296,16 +316,28 @@ ok('submitWholesaleCardReceipt: xaridor → receipt_submitted (+submittedAt, his
     'wholesale_orders/c1': { ...ORDER_CARD, cardPayment: { status: 'confirmed' } },
     'wholesale_orders/w1': ORDER_WALLET,
   });
-  const sub = C.makeSubmitWholesaleCardReceipt({ db, now: () => NOW });
   const path = `wholesale_receipts/${BUYER}/o1/chek.jpg`;
+  const bucket = fakeBucket({});
+  const sub = C.makeSubmitWholesaleCardReceipt({ db, now: () => NOW, getBucket: () => bucket });
+  // Fayl Storage'da yo'q — receipt_not_found, buyurtma o'zgarmaydi.
+  await q(() => rejects(sub({ orderId: 'o1', receiptPath: path }, ctx(BUYER)), 'failed-precondition', 'receipt_not_found'));
+  assert.strictEqual(order(db).cardPayment.status, 'awaiting');
+  bucket.files[path] = { contentType: 'image/jpeg', metadata: {} };
   const r1 = await q(() => sub({ orderId: 'o1', receiptPath: path }, ctx(BUYER)));
   assert.deepStrictEqual([r1.cardPaymentStatus, r1.idempotent], ['receipt_submitted', false]);
   const o = order(db);
   assert.deepStrictEqual([o.cardPayment.status, o.cardPayment.receiptPath, o.cardPayment.submittedAt.getTime()], ['receipt_submitted', path, NOW.getTime()]);
+  // Token yo'q edi — tasodifiy token yozildi; havola standart Firebase token shaklida (sotuvchi shuni ko'radi).
+  const tok = bucket.files[path].metadata.firebaseStorageDownloadTokens;
+  assert.ok(/^[0-9a-f-]{36}$/.test(tok), tok);
+  assert.strictEqual(o.cardPayment.receiptUrl,
+    `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${tok}`);
+  assert.deepStrictEqual(bucket.setCalls, [path]);
   assert.strictEqual(o.status, 'in_delivery');
   assert.strictEqual(db.docs.get('wholesale_orders/o1/history/4').event, 'card_receipt_submitted');
   assert.strictEqual((await q(() => sub({ orderId: 'o1', receiptPath: path }, ctx(BUYER)))).idempotent, true);
   assert.strictEqual(order(db).historySeq, 4);
+  assert.deepStrictEqual(bucket.setCalls, [path], 'takror — Storage\'ga qayta yozilmaydi');
   await q(async () => {
     await rejects(sub({ orderId: 'o1', receiptPath: `wholesale_receipts/${BUYER}/o1/b.jpg` }, ctx(BUYER)), 'failed-precondition', 'receipt_already_submitted');
     await rejects(sub({ orderId: 'o1', receiptPath: path }, ctx(SELLER)), 'permission-denied', 'not_order_party');
@@ -313,6 +345,17 @@ ok('submitWholesaleCardReceipt: xaridor → receipt_submitted (+submittedAt, his
     await rejects(sub({ orderId: 'w1', receiptPath: `wholesale_receipts/${BUYER}/w1/a.jpg` }, ctx(BUYER)), 'failed-precondition', 'not_card_order');
     await rejects(sub({ orderId: 'o1', receiptPath: `wholesale_receipts/${STRANGER}/o1/a.jpg` }, ctx(BUYER)), 'invalid-argument', 'receipt_path_invalid');
   });
+});
+
+ok('receiptDownloadUrl: mavjud token qayta ishlatiladi (setMetadata yo\'q); rasm emas — receipt_not_image; bucket berilmagan — storage_unavailable', async () => {
+  const p = `wholesale_receipts/${BUYER}/o1/a b+c.jpg`;
+  const b = fakeBucket({ [p]: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: 'tok1,tok2' } } });
+  const url = await C.receiptDownloadUrl(() => b, p);
+  assert.strictEqual(url, `https://firebasestorage.googleapis.com/v0/b/${b.name}/o/wholesale_receipts%2F${BUYER}%2Fo1%2Fa%20b%2Bc.jpg?alt=media&token=tok1`);
+  assert.deepStrictEqual(b.setCalls, []);
+  b.files.x = { contentType: 'application/pdf' };
+  await rejects(C.receiptDownloadUrl(() => b, 'x'), 'invalid-argument', 'receipt_not_image');
+  await rejects(C.receiptDownloadUrl(undefined, p), 'internal', 'storage_unavailable');
 });
 
 // ─── sotuvchi: «Pul tushdi» ──────────────────────────────────────────

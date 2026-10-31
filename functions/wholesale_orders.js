@@ -128,6 +128,18 @@ const returnHoldKey = (orderId) => `wholesaleReturnHold:${orderId}`;
 const returnFundKey = (orderId) => `wholesaleReturnFund:${orderId}`;
 const returnEscrowAccount = (orderId) => `escrow:wholesale_return:${orderId}`;
 /**
+ * Relay hisob/kalitlari — `functions/relay_escrow.js` bilan AYNAN bir xil (o'sha fayl O'ZGARMAYDI;
+ * paritet + «ikki yo'l bir vaqtda» testi: functions/test/wholesale_card_cf.test.js). Rad etilgan karta
+ * buyurtmasining CHIQISH jo'natmasi shu kalitlar bilan yopiladi — relay keyinroq o'z EARNED/RELEASE'ini
+ * yursa ham ledger idempotentligi ikkinchi to'lovni bermaydi; kuryer to'lovi triggeri
+ * `relayEarned:*` yozuvlarini ko'radi.
+ */
+const RELAY_ACCRUAL_ACCOUNT = 'platform_accrual';
+const RELAY_FEE_ACCOUNT = 'earnings:ava_logistics_fee';
+const relayEarnedKey = (shipmentId, legId) => `relayEarned:${shipmentId}:${legId}`;
+const relayReleaseKey = (shipmentId) => `relayRelease:${shipmentId}`;
+const OUTBOUND_SETTLE_STATUSES = Object.freeze([STATUS.REFUSED, STATUS.RETURNING, STATUS.RETURNED]);
+/**
  * Relay jo'natmasi qabul qiluvchiga HAQIQATAN topshirilganmi (tovar puli shundan keyin).
  * `closed` yolg'iz yetmaydi: yo'qolgan posilka ham `lost → closed` bo'ladi — shuning uchun
  * `deliveredAt` (faqat `confirmDelivery` yozadi) SHART, yo'qolish/nizo to'lov holatlari — YO'Q.
@@ -994,6 +1006,213 @@ function attachWholesaleOrders(exportsObj, deps) {
     }
   }
 
+  // ── 3b: RAD — CHIQISH jo'natmasini relay yetkazilgandagidek yopish (kuryer haqi kuryerlarga) ──
+  /**
+   * Ega qarori: rad etilganda kuryer haqi QAYTARILMAYDI = kuryerlarniki. Relay o'z EARNED/RELEASE'ini
+   * faqat yetkazishda (custody `deliversShipment`) qiladi — rad etilgan jo'natmada pul abadiy
+   * escrow:{shipmentId} da qolardi. Shu sabab Ulgurji moduli relay'ning AYNAN o'sha yozuvlarini
+   * AYNAN o'sha kalitlar bilan yozadi (relay fayliga tegilmaydi):
+   *   EARNED  (har ishlangan LEG) Dr platform_accrual / Cr supplier_payable:{ijrochi} = legPayout
+   *           `relayEarned:{shipmentId}:{legId}` (kind `logistics_leg_earned`)
+   *   RELEASE Dr escrow:{shipmentId} = customerPrice / Cr platform_accrual Σ ishlangan /
+   *           Cr earnings:ava_logistics_fee platformShare / Cr passenger_credit:{sotuvchi} Σ ishlanmagan
+   *           `relayRelease:{shipmentId}` (kind `logistics_escrow_release`) — eskrou AYNAN 0.
+   * «Ishlangan LEG» = indeksi ≤ joriy LEG (`currentLegId`, posilka shu yerga yetgan) va ijrochisi bor.
+   * Undan keyingi (posilka yetmagan) yoki ijrochisiz LEG ulushi — to'lovchiga (sotuvchiga) qaytadi
+   * (PROPOSED). Holat (AYNI RELEASE tranzaksiyasida): jo'natma `paymentStatus: settled` (relay RELEASE
+   * yozadigan qiymat) + `wholesaleOutcome: 'refused'` — `in_transit` dan relay mashinasida «rad» holati
+   * YO'Q, shuning uchun `status` o'zgarmaydi; joriy LEG `in_progress → completed` (`outcome:
+   * 'buyer_refused'`), posilka yetmagan LEG'lar `→ cancelled`; ijrochi match'idan kontakt (PII) olinadi.
+   * Idempotent: relay kalitlari; `relayRelease` allaqachon bo'lsa (relay o'zi yopgan) — pul yozilmaydi.
+   */
+  async function settleOutboundOnRefusal(orderId) {
+    const started = Date.now();
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const s0 = await orderRef.get();
+    if (!s0.exists) return { skipped: 'order_missing' };
+    const o0 = s0.data() || {};
+    if (!OUTBOUND_SETTLE_STATUSES.includes(o0.status)) return { skipped: `status_${o0.status || 'none'}` };
+    if (methodOf(o0) !== PAYMENT_METHOD.CARD) return { skipped: 'not_card' };
+    if ((o0.outboundSettlement || {}).status === 'settled') return { skipped: 'already_settled' };
+    const shipmentId = String((o0.shipment || {}).shipmentId || '');
+    const anomaly0 = async (reason, extra) => {
+      logError('outboundSettle', { orderId, shipmentId, errorCode: `WHOLESALE_OUTBOUND_${reason.toUpperCase()}`, ...(extra || {}) });
+      await markAnomaly(orderId, 'outboundAnomaly', reason);
+      return { skipped: reason, anomaly: true };
+    };
+    if (!shipmentId) return anomaly0('no_shipment');
+    const shipRef = db.collection(SHIPMENTS).doc(shipmentId);
+    const releaseKey0 = relayReleaseKey(shipmentId);
+    const when = now();
+    const markSettled = async (patch) => {
+      await db.runTransaction(async (t) => {
+        const s = await t.get(orderRef);
+        const o = s.data() || {};
+        if ((o.outboundSettlement || {}).status === 'settled') return;
+        const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+        t.update(orderRef, {
+          outboundSettlement: { status: 'settled', shipmentId, at: when, ...patch }, outboundAnomaly: null, historySeq: seq, updatedAt: when,
+        });
+        t.set(orderRef.collection(HISTORY).doc(String(seq)), {
+          seq, from: o.status, to: o.status, event: 'outbound_settled', actor: 'system', actorId: null, reason: '', meta: { shipmentId, ...patch }, at: when,
+        });
+      });
+    };
+    // Relay o'zi yopgan (masalan keyin baribir «yetkazildi») — pul yozuvi yo'q, faqat belgi.
+    if ((await db.collection(settlementLedger.COL_JOURNAL).doc(releaseKey0).get()).exists) {
+      await markSettled({ byRelay: true, releaseEntryId: releaseKey0 });
+      log('outboundSettle', { orderId, shipmentId, result: 'already_released' });
+      return { skipped: 'relay_already_released' };
+    }
+    const [ss, is] = await Promise.all([shipRef.get(), shipRef.collection(PRIVATE).doc('internal').get()]);
+    if (!ss.exists) return anomaly0('shipment_missing');
+    const ship = ss.data() || {};
+    if (ship.wholesaleOrderId !== orderId || ship.source !== 'wholesale') return anomaly0('shipment_not_wholesale');
+    if (ship.paymentStatus !== 'escrow_funded') return anomaly0('outbound_not_funded', { paymentStatus: ship.paymentStatus || null });
+    const internal = is.exists ? (is.data() || {}) : {};
+    const amount = (ship.priceSnapshot || {}).customerPrice;
+    const { platformShare, providerPool } = internal;
+    const payouts = Array.isArray(internal.legPayouts) ? internal.legPayouts : [];
+    const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
+    if (!isPosInt(amount) || !isInt(platformShare) || platformShare < 0 || !isInt(providerPool) || providerPool < 0
+      || platformShare + providerPool !== amount || !legIds.length) {
+      return anomaly0('internal_invalid');
+    }
+    const legSnaps = await Promise.all(legIds.map((id) => db.collection('demands').doc(id).get()));
+    const curIdx = legIds.indexOf(ship.currentLegId);
+    const earned = [];
+    let unearned = 0;
+    for (let i = 0; i < legIds.length; i += 1) {
+      const p = payouts.find((x) => x && x.index === i) || payouts[i] || {};
+      if (!isInt(p.amount) || p.amount < 0) return anomaly0('leg_payout_invalid');
+      const leg = legSnaps[i].exists ? (legSnaps[i].data() || {}) : {};
+      const provider = canonicalUid((ship.legAssignments || {})[legIds[i]] || (leg.assignment || {}).providerId || '');
+      if (i <= curIdx && /^998\d{9}$/.test(provider)) earned.push({ legId: legIds[i], index: i, providerId: provider, amount: p.amount });
+      else unearned += p.amount;
+    }
+    const earnedSum = earned.reduce((s, e) => s + e.amount, 0);
+    if (earnedSum + unearned !== providerPool) return anomaly0('leg_payouts_mismatch', { earnedSum, unearned, providerPool });
+    const sellerWalletUid = String((o0.payment || {}).payerWalletUid || '');
+    if (unearned > 0 && !sellerWalletUid) return anomaly0('seller_wallet_missing');
+
+    try {
+      // a) EARNED — relay `postEarned` bilan AYNI yozuv/kalit.
+      for (const e of earned) {
+        if (e.amount <= 0) continue;
+        await settlementLedger.postEntry(db, {
+          idempotencyKey: relayEarnedKey(shipmentId, e.legId),
+          kind: 'logistics_leg_earned',
+          refType: 'shipment',
+          refId: shipmentId,
+          postedBy: 'system',
+          postedRole: 'system',
+          legs: [
+            { account: RELAY_ACCRUAL_ACCOUNT, dr: e.amount },
+            { account: settlementLedger.supplierPayableAccount(e.providerId), cr: e.amount },
+          ],
+        }, {
+          mirrorBonus: false,
+          meta: {
+            shipmentId, legId: e.legId, providerId: e.providerId, legIndex: e.index, source: 'wholesale_refused', wholesaleOrderId: orderId,
+          },
+        });
+      }
+      // b) RELEASE — relay `releaseEscrow` kaliti; eskrou AYNAN 0.
+      const legs = [{ account: shipmentEscrowAccount(shipmentId), dr: amount }];
+      if (earnedSum > 0) legs.push({ account: RELAY_ACCRUAL_ACCOUNT, cr: earnedSum });
+      if (platformShare > 0) legs.push({ account: RELAY_FEE_ACCOUNT, cr: platformShare });
+      if (unearned > 0) legs.push({ account: settlementLedger.passengerCreditAccount(sellerWalletUid), cr: unearned });
+      const legRefs = legIds.map((id) => db.collection('demands').doc(id));
+      const res = await settlementLedger.postEntry(db, {
+        idempotencyKey: releaseKey0,
+        kind: 'logistics_escrow_release',
+        refType: 'shipment',
+        refId: shipmentId,
+        postedBy: 'system',
+        postedRole: 'system',
+        legs,
+      }, {
+        mirrorBonus: false, // sotuvchi ko'zgusi — `mirrorWallet` onCommit'da
+        meta: {
+          shipmentId, platformShare, providerPool, earned: earnedSum, unearnedRefund: unearned, outcome: 'wholesale_refused', wholesaleOrderId: orderId,
+        },
+        precheck: async (tx) => {
+          const reads = await Promise.all([tx.get(orderRef), tx.get(shipRef), ...legRefs.map((r) => tx.get(r))]);
+          const o = reads[0].data() || {};
+          const s = reads[1].exists ? (reads[1].data() || {}) : {};
+          if (!OUTBOUND_SETTLE_STATUSES.includes(o.status)) throw skipErr(`status_${o.status || 'none'}`);
+          if ((o.outboundSettlement || {}).status === 'settled') throw skipErr('already_settled');
+          if (String((o.shipment || {}).shipmentId || '') !== shipmentId) throw anomalyErr('shipment_mismatch');
+          if (s.paymentStatus !== 'escrow_funded') throw anomalyErr('outbound_not_funded', { paymentStatus: s.paymentStatus || null });
+          if (s.currentLegId !== ship.currentLegId) throw skipErr('custody_changed');
+          return { o, legs: reads.slice(2).map((x) => (x.exists ? (x.data() || {}) : null)) };
+        },
+        assert: ({ accounts }) => {
+          const e = accounts.get(shipmentEscrowAccount(shipmentId));
+          if (!e || e.next !== 0) throw anomalyErr('outbound_escrow_not_zero', { escrowBefore: e ? e.prev : null });
+        },
+        onCommit: (tx, { pre }) => {
+          tx.update(shipRef, {
+            paymentStatus: 'settled', settledAt: when, releaseEntryId: releaseKey0,
+            wholesaleOutcome: 'refused', wholesaleOutcomeAt: when, updatedAt: when,
+          });
+          pre.legs.forEach((leg, i) => {
+            if (!leg) return;
+            const pid = (leg.assignment || {}).providerId || null;
+            if (i === curIdx && leg.status === 'in_progress') {
+              tx.update(legRefs[i], { status: 'completed', completedAt: when, outcome: 'buyer_refused', updatedAt: when });
+              if (pid) {
+                tx.set(db.collection('demand_matches').doc(`${legIds[i]}_${pid}`), {
+                  status: 'completed', closedAt: when, contactUnlocked: null, outcome: 'buyer_refused',
+                }, { merge: true });
+              }
+            } else if (i > curIdx && ['draft', 'active', 'accepted'].includes(leg.status)) {
+              tx.update(legRefs[i], { status: 'cancelled', cancelledBy: 'wholesale_refused', cancelledAt: when, updatedAt: when });
+              if (pid) {
+                tx.set(db.collection('demand_matches').doc(`${legIds[i]}_${pid}`), {
+                  status: 'cancelled', closedAt: when, contactUnlocked: null,
+                }, { merge: true });
+              }
+            }
+          });
+          if (unearned > 0) {
+            mirrorWallet(tx, sellerWalletUid, unearned, 'wholesale_unearned_delivery_refund', orderId, when, { shipmentId });
+          }
+          const seq = (isInt(pre.o.historySeq) ? pre.o.historySeq : 0) + 1;
+          tx.update(orderRef, {
+            outboundSettlement: {
+              status: 'settled', shipmentId, earned: earnedSum, platformShare, unearnedRefund: unearned,
+              earnedLegs: earned.map((e) => ({ legId: e.legId, providerId: e.providerId, amount: e.amount })),
+              releaseEntryId: releaseKey0, at: when,
+            },
+            outboundAnomaly: null,
+            historySeq: seq,
+            updatedAt: when,
+          });
+          tx.set(orderRef.collection(HISTORY).doc(String(seq)), {
+            seq, from: pre.o.status, to: pre.o.status, event: 'outbound_settled', actor: 'system', actorId: null, reason: '',
+            meta: {
+              shipmentId, earned: earnedSum, platformShare, unearnedRefund: unearned,
+            },
+            at: when,
+          });
+        },
+      });
+      if (res.idempotent) await markSettled({ byRelay: true, releaseEntryId: releaseKey0 });
+      log('outboundSettle', {
+        orderId, shipmentId, result: res.idempotent ? 'already' : 'ok', earned: earnedSum, platformShare, unearnedRefund: unearned,
+        legs: earned.length, durationMs: Date.now() - started,
+      });
+      return {
+        settled: true, earned: earnedSum, platformShare, unearnedRefund: unearned, idempotent: res.idempotent === true,
+      };
+    } catch (e) {
+      if (e && e.wholesaleSkip) return { skipped: e.reason };
+      if (e && e.wholesaleAnomaly) return anomaly0(e.reason, e.extra);
+      throw e;
+    }
+  }
+
   // ── 3b: QAYTISH — sotuvchi hamyonidan haq (yetmasa qarz), jo'natma to'lanadi, yetganda qoldiq ──
   /**
    * `refused` (AVA ulushi allaqachon qaytarilgan: `refundStatus === done`) + qaytish jo'natmasi
@@ -1272,6 +1491,18 @@ function attachWholesaleOrders(exportsObj, deps) {
         return { skipped: 'failed' };
       }
     }
+    // 3b: rad etilgan karta buyurtmasi — AVA ulushi qaytgach, CHIQISH jo'natmasini relay kalitlari bilan
+    // yopish (kuryer haqi kuryerlarga). Anomaliya belgisi bo'lsa trigger qayta urinmaydi (reconcile).
+    if (OUTBOUND_SETTLE_STATUSES.includes(a.status) && methodOf(a) === PAYMENT_METHOD.CARD
+      && a.refundStatus === REFUND_STATUS.DONE && (a.shipment || {}).shipmentId
+      && (a.outboundSettlement || {}).status !== 'settled' && !a.outboundAnomaly) {
+      try {
+        return await settleOutboundOnRefusal(orderId);
+      } catch (e) {
+        logError('outboundSettle', { orderId, errorCode: 'WHOLESALE_OUTBOUND_SETTLE_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+        return { skipped: 'failed' };
+      }
+    }
     // 3b: rad etilgan karta buyurtmasi — AVA ulushi qaytgach + qaytish jo'natmasi bog'langach →
     // sotuvchi hamyonidan qaytish haqi. `returnDebt` / `returnAnomaly` bo'lsa trigger qayta
     // URINMAYDI (belgi yozuvi triggerni yana chaqiradi — aylanish bo'lmasin); qayta urinish — reconcile.
@@ -1362,9 +1593,25 @@ function attachWholesaleOrders(exportsObj, deps) {
     // D) 3b: rad etilgan karta buyurtmasi — qaytish haqi (qarz bo'lsa HAR aylanishda, ya'ni
     //    sotuvchi hamyonni to'ldirgach; aks holda trigger yiqilgan bo'lsa, 10 daqiqadan keyin).
     out.returnFundChecked = 0; out.returnFunded = 0; out.returnDebts = 0;
+    out.outboundChecked = 0; out.outboundSettled = 0;
+    // Chiqish jo'natmasi yopilmagan rad etilgan / qaytayotgan buyurtmalar (trigger yiqilgan).
+    const needOutbound = (o) => methodOf(o) === PAYMENT_METHOD.CARD && o.refundStatus === REFUND_STATUS.DONE
+      && (o.shipment || {}).shipmentId && (o.outboundSettlement || {}).status !== 'settled' && !o.outboundAnomaly
+      && nowMs - (msOf(o.refundedAt) || msOf(o.updatedAt) || 0) >= minAgeMs;
+    const settleOut = async (d) => {
+      out.outboundChecked += 1;
+      try {
+        const r = await settleOutboundOnRefusal(d.id);
+        if (r && r.settled && !r.idempotent) out.outboundSettled += 1;
+      } catch (e) {
+        out.failed += 1;
+        logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_OUTBOUND_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+      }
+    };
     const refused = await db.collection(ORDERS).where('status', '==', STATUS.REFUSED).limit(limit).get();
     for (const d of refused.docs) {
       const o = d.data() || {};
+      if (needOutbound(o)) await settleOut(d);
       const rs = o.returnShipment || {};
       if (o.refundStatus !== REFUND_STATUS.DONE || !rs.shipmentId || (o.returnPayment || {}).status === 'funded') continue;
       if (o.returnAnomaly) continue; // admin ko'radi (pul o'ylab topilmaydi)
@@ -1384,6 +1631,7 @@ function attachWholesaleOrders(exportsObj, deps) {
     const returning = await db.collection(ORDERS).where('status', '==', STATUS.RETURNING).limit(limit).get();
     for (const d of returning.docs) {
       const o = d.data() || {};
+      if (needOutbound(o)) await settleOut(d);
       const rsId = String((o.returnShipment || {}).shipmentId || '');
       if (!rsId) continue;
       try {
@@ -1420,7 +1668,7 @@ function attachWholesaleOrders(exportsObj, deps) {
 
   return {
     place, refundOrder, onStatusChange, reconcile, shipFund, releaseGoods, onShipmentDelivered, onCustodyEvent,
-    fundReturn, completeReturn,
+    fundReturn, completeReturn, settleOutboundOnRefusal,
   };
 }
 
@@ -1441,6 +1689,10 @@ module.exports = {
   returnHoldKey,
   returnFundKey,
   returnEscrowAccount,
+  relayEarnedKey,
+  relayReleaseKey,
+  RELAY_ACCRUAL_ACCOUNT,
+  RELAY_FEE_ACCOUNT,
   PAYMENT_METHOD,
   CARD_PAYMENT,
   CARD_REFUSAL_LIMIT,

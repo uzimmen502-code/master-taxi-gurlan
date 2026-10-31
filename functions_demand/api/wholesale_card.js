@@ -23,6 +23,7 @@
  * Log — karta raqami FAQAT oxirgi 4 raqam, telefon/manzil yo'q (24, 40-band).
  */
 
+const crypto = require('crypto');
 const {
   callerIdFrom, sameUser, candidateIdsFor, toCanonicalId,
 } = require('../core/ids');
@@ -305,39 +306,84 @@ function makeGetWholesaleCardPaymentInfo(deps) {
 }
 
 /**
+ * Chek fayli Storage'da BORMI (Admin SDK, standart bucket) va uning yuklab olish havolasi.
+ * Sotuvchining Storage'ga ruxsati YO'Q (qoida Firestore'ni o'qimaydi — IAM ruxsati berilmagan),
+ * shuning uchun u chekni `order.cardPayment.receiptUrl` (Firebase token havolasi) orqali ko'radi;
+ * buyurtmani esa Firestore qoidasi xaridor/sotuvchi/adminga beradi. Token yo'q bo'lsa — tasodifiy
+ * token metadata'ga yoziladi (IAM signBlob kerak emas). Faqat rasm (Storage qoidasi bilan bir xil).
+ */
+async function receiptDownloadUrl(getBucket, path) {
+  if (typeof getBucket !== 'function') throw fail('internal', 'Chekni tekshirib bo\'lmadi', 'storage_unavailable');
+  const bucket = getBucket();
+  const file = bucket.file(path);
+  const [exists] = await file.exists();
+  if (!exists) throw fail('failed-precondition', 'Chek fayli topilmadi. Qayta yuklang', 'receipt_not_found');
+  const [meta] = await file.getMetadata();
+  const m = meta || {};
+  if (m.contentType && !String(m.contentType).startsWith('image/')) {
+    throw fail('invalid-argument', 'Chek rasm bo\'lishi kerak', 'receipt_not_image');
+  }
+  let token = String((m.metadata || {}).firebaseStorageDownloadTokens || '').split(',')[0].trim();
+  if (!token) {
+    token = crypto.randomUUID();
+    await file.setMetadata({ metadata: { firebaseStorageDownloadTokens: token } });
+  }
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+}
+
+/**
  * `submitWholesaleCardReceipt({orderId, receiptPath})` — xaridor, karta, `in_delivery`,
  * to'lov `awaiting`. Yo'l: `wholesale_receipts/{xaridorTel}/{orderId}/{fayl}` (server
- * tekshiradi; faylning o'zi — Storage qoidasi). `submittedAt` — nizo soati (RECEIPT_TIMEOUT_MS).
+ * tekshiradi); fayl Storage'da BO'LISHI shart (`receipt_not_found`), order'ga `receiptUrl`
+ * (sotuvchi ko'radigan token havola) yoziladi. `submittedAt` — nizo soati (RECEIPT_TIMEOUT_MS).
  * Bir xil yo'l bilan takror — idempotent; boshqa yo'l — `receipt_already_submitted`.
+ * `deps.getBucket()` — Admin SDK standart bucket'i (testda soxta).
  */
 function makeSubmitWholesaleCardReceipt(deps) {
-  const { db, now: nowFn } = deps;
+  const { db, now: nowFn, getBucket } = deps;
+  /** Holat tekshiruvi — tranzaksiyadan oldin (Storage'ga bormasdan) va ichida AYNAN bir xil. */
+  const checkState = (o, callerId, orderId, raw) => {
+    if (!sameUser(o.buyerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+    if (WO.methodOf(o) !== WO.PAYMENT_METHOD.CARD) throw fail('failed-precondition', 'Buyurtma karta orqali emas', 'not_card_order');
+    const receiptPath = parseReceiptPath(raw, o.buyerId, orderId);
+    const cp = o.cardPayment || {};
+    if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED && cp.receiptPath === receiptPath) return { receiptPath, idempotent: true };
+    if (o.status !== WO.STATUS.IN_DELIVERY) throw fail('failed-precondition', 'Buyurtma hozir yetkazilmoqda emas', 'order_not_in_delivery');
+    if (cp.status === WO.CARD_PAYMENT.CONFIRMED) throw fail('failed-precondition', 'To\'lov allaqachon tasdiqlangan', 'card_payment_confirmed');
+    if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) throw fail('failed-precondition', 'Chek allaqachon yuborilgan', 'receipt_already_submitted');
+    if (cp.status !== WO.CARD_PAYMENT.AWAITING) throw fail('failed-precondition', 'To\'lov holati mos emas', 'card_payment_state');
+    return { receiptPath, idempotent: false };
+  };
   return async function submitWholesaleCardReceipt(data, context) {
     const callerId = callerIdFrom(context);
     if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
     const orderId = requireOrderId(data);
     const ref = db.collection(ORDERS).doc(orderId);
+    const raw = (data || {}).receiptPath;
     try {
+      const s0 = await ref.get();
+      if (!s0.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
+      const c0 = checkState(s0.data() || {}, callerId, orderId, raw);
+      if (c0.idempotent) {
+        log('submitCardReceipt', { result: 'already', orderId });
+        return { ok: true, orderId, cardPaymentStatus: WO.CARD_PAYMENT.RECEIPT_SUBMITTED, idempotent: true };
+      }
+      // Storage — tranzaksiyadan TASHQARIDA (tarmoq chaqiruvi tranzaksiyani cho'zmasin).
+      const receiptUrl = await receiptDownloadUrl(getBucket, c0.receiptPath);
       const now = nowFn ? nowFn() : new Date();
       const out = await db.runTransaction(async (tx) => {
         const s = await tx.get(ref);
         if (!s.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
         const o = s.data() || {};
-        if (!sameUser(o.buyerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
-        if (WO.methodOf(o) !== WO.PAYMENT_METHOD.CARD) throw fail('failed-precondition', 'Buyurtma karta orqali emas', 'not_card_order');
-        const receiptPath = parseReceiptPath((data || {}).receiptPath, o.buyerId, orderId);
-        const cp = o.cardPayment || {};
-        if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED && cp.receiptPath === receiptPath) return { idempotent: true };
-        if (o.status !== WO.STATUS.IN_DELIVERY) throw fail('failed-precondition', 'Buyurtma hozir yetkazilmoqda emas', 'order_not_in_delivery');
-        if (cp.status === WO.CARD_PAYMENT.CONFIRMED) throw fail('failed-precondition', 'To\'lov allaqachon tasdiqlangan', 'card_payment_confirmed');
-        if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) throw fail('failed-precondition', 'Chek allaqachon yuborilgan', 'receipt_already_submitted');
-        if (cp.status !== WO.CARD_PAYMENT.AWAITING) throw fail('failed-precondition', 'To\'lov holati mos emas', 'card_payment_state');
+        const c = checkState(o, callerId, orderId, raw);
+        if (c.idempotent) return { idempotent: true };
         const seq = historyWrite(tx, ref, o, {
           from: o.status, to: o.status, event: 'card_receipt_submitted', actor: WO.ACTOR.BUYER, actorId: callerId,
         }, now);
         tx.update(ref, {
           'cardPayment.status': WO.CARD_PAYMENT.RECEIPT_SUBMITTED,
-          'cardPayment.receiptPath': receiptPath,
+          'cardPayment.receiptPath': c.receiptPath,
+          'cardPayment.receiptUrl': receiptUrl,
           'cardPayment.submittedAt': now,
           historySeq: seq,
           updatedAt: now,
@@ -717,6 +763,7 @@ module.exports = {
   parseCardNumber,
   parseHolderName,
   parseReceiptPath,
+  receiptDownloadUrl,
   last4Of,
   findSellerDoc,
   readPayoutCard,

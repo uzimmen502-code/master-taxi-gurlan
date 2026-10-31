@@ -150,6 +150,8 @@ async function linkAndFund(orderId) {
   await db.collection('shipments').doc(SHIP).update({
     status: 'in_transit', legAssignments: { leg0: K1 }, currentLegId: 'leg0', currentCustodian: { kind: 'provider', id: K1, since: clock },
   });
+  await db.collection('demands').doc('leg0').set({ module: 'logistics', status: 'in_progress', assignment: { providerId: K1 }, attributes: { shipmentId: SHIP } });
+  await db.collection('demand_matches').doc(`leg0_${K1}`).set({ status: 'in_progress', providerId: K1, contactUnlocked: { recipientPhone: BUYER } });
 }
 async function deliverEvent(id) {
   await db.collection('shipments').doc(id).update({ status: 'delivered', deliveredAt: clock, updatedAt: clock });
@@ -188,7 +190,11 @@ async function refuse(orderId) {
   const r = await quiet(() => DC.makeMarkWholesaleBuyerRefused(dDeps)({ orderId, reason: 'to\'lamadi' }, ctx(K1)));
   assert.strictEqual(r.status, 'refused');
   const after = (await ref.get()).data();
-  return quiet(() => api.onStatusChange(before, after, orderId));
+  const refund = await quiet(() => api.onStatusChange(before, after, orderId));
+  // Qaytarish yozuvi triggerni yana chaqiradi → chiqish jo'natmasi relay kalitlari bilan yopiladi.
+  const after2 = (await ref.get()).data();
+  const outbound = await quiet(() => api.onStatusChange(after, after2, orderId));
+  return { ...refund, refund, outbound };
 }
 
 (async () => {
@@ -336,7 +342,7 @@ async function refuse(orderId) {
     await assertLedgerSound();
   });
 
-  await check('RAD + QAYTISH: avaFee sotuvchiga, kuryer haqi relay eskrouda; qoldiq HALI emas → qaytish haqi sotuvchidan → returning → yetkazildi → returned + qoldiq +10', async () => {
+  await check('RAD + QAYTISH: avaFee sotuvchiga, kuryer haqi kuryerga (chiqish eskrousi yopiladi); qoldiq HALI emas → qaytish haqi sotuvchidan → returning → yetkazildi → returned + qoldiq +10', async () => {
     await seed({ sellerWallet: 200000 });
     const { orderId: id } = await place();
     await seedShipment(id);
@@ -347,7 +353,9 @@ async function refuse(orderId) {
     assert.deepStrictEqual([o.status, o.refundStatus, o.payment.status, o.payment.refusalRefund], ['refused', 'done', 'refusal_settled', 3500]);
     assert.strictEqual(await bal(W.escrowAccount(id)), 0);
     assert.strictEqual(await bal(pcOf(SELLER)), 200000 - HOLD + 3500);
-    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 60000, 'kuryer haqi qaytarilmaydi (relay eskrouda)');
+    assert.strictEqual(r.outbound.settled, true, JSON.stringify(r.outbound));
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0, 'chiqish eskrousi yopildi');
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000, 'kuryer haqi kuryerga (qaytarilmaydi)');
     assert.strictEqual((await stockOf()).packs.p1, 90, 'qoldiq rad paytida tiklanmaydi');
     assert.strictEqual((await db.collection('wholesale_buyer_stats').doc(BUYER).get()).data().cardRefusals, 1);
     const jr = await journal(`bonus:${W.refusedKey(id)}`);
@@ -377,12 +385,12 @@ async function refuse(orderId) {
     assert.deepStrictEqual([o.status, o.returnStatus, o.stock.restored], ['returned', 'returned', true]);
     assert.strictEqual((await stockOf()).packs.p1, 100);
     assert.strictEqual(await bal(relay.escrowAccount('R1')), 0);
-    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 32000);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000 + 32000, 'chiqish + qaytish');
     const out2 = await custodyTriggers(await deliverEvent('R1'));
     assert.strictEqual(out2.wholesale.skipped, 'already_returned');
     assert.strictEqual((await stockOf()).packs.p1, 100, 'qoldiq bir marta');
     const h = (await db.collection('wholesale_orders').doc(id).collection('history').get()).docs.map((d) => d.data().event).filter(Boolean);
-    for (const ev of ['ship_funded', 'refusal_settled', 'return_funded', 'goods_returned']) assert.ok(h.includes(ev), ev);
+    for (const ev of ['ship_funded', 'refusal_settled', 'outbound_settled', 'return_funded', 'goods_returned']) assert.ok(h.includes(ev), ev);
     await assertLedgerSound();
   });
 
@@ -442,6 +450,135 @@ async function refuse(orderId) {
     clock = new Date(T0.getTime() + 60 * 60 * 1000);
     assert.strictEqual((await quiet(() => api.reconcile())).returnFundChecked, 0, 'anomaliya — reconcile ham urinmaydi');
     await assertLedgerSound();
+  });
+
+  await check('RAD → CHIQISH jo\'natmasi relay kalitlari bilan: EARNED K1 48 000 + RELEASE (AVA 12 000), eskrou 0, accrual 0; LEG completed/buyer_refused, kontakt yopiq; jo\'natma settled + wholesaleOutcome', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await linkAndFund(id);
+    const r = await refuse(id);
+    assert.deepStrictEqual([r.outbound.earned, r.outbound.platformShare, r.outbound.unearnedRefund], [48000, 12000, 0]);
+    const je = await journal(W.relayEarnedKey(SHIP, 'leg0'));
+    assert.strictEqual(W.relayEarnedKey(SHIP, 'leg0'), `relayEarned:${SHIP}:leg0`);
+    assert.deepStrictEqual([je.kind, je.refType, je.refId], ['logistics_leg_earned', 'shipment', SHIP]);
+    assert.deepStrictEqual(je.legs, [
+      { account: relay.ACCRUAL_ACCOUNT, dr: 48000, cr: 0 }, { account: settlementLedger.supplierPayableAccount(K1), dr: 0, cr: 48000 },
+    ]);
+    const jr = await journal(`relayRelease:${SHIP}`);
+    assert.strictEqual(jr.kind, 'logistics_escrow_release');
+    assert.deepStrictEqual(jr.legs, [
+      { account: relay.escrowAccount(SHIP), dr: 60000, cr: 0 },
+      { account: relay.ACCRUAL_ACCOUNT, dr: 0, cr: 48000 },
+      { account: relay.PLATFORM_FEE_ACCOUNT, dr: 0, cr: 12000 },
+    ]);
+    assert.strictEqual(W.RELAY_ACCRUAL_ACCOUNT, relay.ACCRUAL_ACCOUNT);
+    assert.strictEqual(W.RELAY_FEE_ACCOUNT, relay.PLATFORM_FEE_ACCOUNT);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    assert.strictEqual(await bal(relay.ACCRUAL_ACCOUNT), 0);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000);
+    assert.strictEqual(await bal(relay.PLATFORM_FEE_ACCOUNT), 12000);
+    const s = (await db.collection('shipments').doc(SHIP).get()).data();
+    assert.deepStrictEqual([s.status, s.paymentStatus, s.wholesaleOutcome, s.releaseEntryId], ['in_transit', 'settled', 'refused', `relayRelease:${SHIP}`]);
+    const leg = (await db.collection('demands').doc('leg0').get()).data();
+    assert.deepStrictEqual([leg.status, leg.outcome], ['completed', 'buyer_refused']);
+    const m = (await db.collection('demand_matches').doc(`leg0_${K1}`).get()).data();
+    assert.deepStrictEqual([m.status, m.contactUnlocked], ['completed', null]);
+    const o = await orderOf(id);
+    assert.deepStrictEqual([o.outboundSettlement.status, o.outboundSettlement.earned, o.outboundSettlement.earnedLegs[0].providerId], ['settled', 48000, K1]);
+    // Takror: trigger / to'g'ridan-to'g'ri / reconcile — ikkinchi to'lov YO'Q.
+    assert.strictEqual((await quiet(() => api.settleOutboundOnRefusal(id))).skipped, 'already_settled');
+    assert.strictEqual((await quiet(() => api.onStatusChange(o, o, id))).skipped, 'no_refund_needed');
+    clock = new Date(T0.getTime() + 60 * 60 * 1000);
+    assert.strictEqual((await quiet(() => api.reconcile())).outboundChecked, 0);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000);
+    await assertLedgerSound();
+  });
+
+  await check('IKKI YO\'L: rad yopilgandan keyin relay o\'z EARNED/RELEASE\'ini yursa ham (hatto holat qaytarilsa) — ikkinchi to\'lov YO\'Q; relay avval yopgan bo\'lsa — bizniki pul yozmaydi', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await linkAndFund(id);
+    await refuse(id);
+    // Keyin baribir «yetkazildi» hodisasi (relay ikkala bosqichi): EARNED kaliti bor, RELEASE — settled.
+    const ev = await deliverEvent(SHIP);
+    const ro = await quiet(() => relayApi.onCustodyEvent(ev));
+    assert.ok(JSON.stringify(ro).includes('idempotent') || ro.release, JSON.stringify(ro));
+    // Eng yomon holat: kimdir paymentStatus'ni qaytargan — relay RELEASE kalit idempotentligida to'xtaydi.
+    await db.collection('shipments').doc(SHIP).update({ paymentStatus: 'escrow_funded' });
+    const rr = await quiet(() => relayApi.releaseEscrow(SHIP));
+    assert.strictEqual(rr.idempotent, true);
+    const re = await quiet(() => relayApi.postEarned(ev));
+    assert.strictEqual(re.idempotent, true);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000, 'bir marta');
+    assert.strictEqual(await bal(relay.PLATFORM_FEE_ACCOUNT), 12000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    await assertLedgerSound();
+    // Teskari tartib: relay avval yopgan → bizning yopish faqat belgi qo'yadi.
+    await seed();
+    const { orderId: id2 } = await place();
+    await seedShipment(id2);
+    await linkAndFund(id2);
+    const ev2 = await deliverEvent(SHIP);
+    await quiet(() => relayApi.onCustodyEvent(ev2));
+    await db.collection('shipments').doc(SHIP).update({ status: 'in_transit', deliveredAt: null });
+    const r2 = await refuse(id2);
+    assert.strictEqual(r2.outbound.skipped, 'relay_already_released');
+    assert.deepStrictEqual([(await orderOf(id2)).outboundSettlement.status, (await orderOf(id2)).outboundSettlement.byRelay], ['settled', true]);
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 48000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    await assertLedgerSound();
+  });
+
+  await check('2 LEG: posilka LEG-1 da (K1), LEG-2 K2 olgan lekin posilka yetmagan → K1 24 000, LEG-2 ulushi 24 000 SOTUVCHIGA (PROPOSED), LEG-2 cancelled, K2 ga 0; eskrou 0', async () => {
+    const K2 = '998903330003';
+    await seed();
+    await db.collection('users').doc(K2).set({ bonusBalance: 0 });
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await db.collection('shipments').doc(SHIP).update({ legIds: ['leg0', 'leg1'], legCount: 2 });
+    await db.collection('shipments').doc(SHIP).collection('private').doc('internal').set({
+      platformShare: 12000, providerPool: 48000, legPayouts: [{ index: 0, kind: 'first_mile', amount: 24000 }, { index: 1, kind: 'last_mile', amount: 24000 }], tariffVersion: 3,
+    });
+    await linkAndFund(id);
+    await db.collection('shipments').doc(SHIP).update({ legAssignments: { leg0: K1, leg1: K2 } });
+    await db.collection('demands').doc('leg1').set({ module: 'logistics', status: 'accepted', assignment: { providerId: K2 }, attributes: { shipmentId: SHIP } });
+    await db.collection('demand_matches').doc(`leg1_${K2}`).set({ status: 'accepted', providerId: K2, contactUnlocked: { ownerPhone: K1 } });
+    // Rad — faqat oxirgi LEG kuryeri; bu yerda posilka LEG-1 da: admin nizoni rad etgan holat simulyatsiyasi.
+    const ref = db.collection('wholesale_orders').doc(id);
+    await ref.update({ status: 'refused', refundStatus: 'pending', refusal: { via: 'admin_dispute' }, statusUpdatedAt: clock });
+    let o = (await ref.get()).data();
+    await quiet(() => api.onStatusChange({}, o, id));
+    o = (await ref.get()).data();
+    const r = await quiet(() => api.onStatusChange({}, o, id));
+    assert.deepStrictEqual([r.earned, r.unearnedRefund, r.platformShare], [24000, 24000, 12000], JSON.stringify(r));
+    assert.strictEqual(await bal(settlementLedger.supplierPayableAccount(K1)), 24000);
+    assert.strictEqual(await accExists(settlementLedger.supplierPayableAccount(K2)), false);
+    assert.strictEqual((await journal(`relayEarned:${SHIP}:leg1`)), undefined, 'yetmagan LEG uchun EARNED yo\'q');
+    assert.strictEqual(await bal(pcOf(SELLER)), 100000 - HOLD + 3500 + 24000);
+    assert.strictEqual(await bonusOf(SELLER), 100000 - HOLD + 3500 + 24000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    assert.strictEqual(await bal(relay.ACCRUAL_ACCOUNT), 0);
+    assert.deepStrictEqual([(await db.collection('demands').doc('leg0').get()).data().status, (await db.collection('demands').doc('leg1').get()).data().status], ['completed', 'cancelled']);
+    assert.strictEqual((await db.collection('demand_matches').doc(`leg1_${K2}`).get()).data().contactUnlocked, null);
+    await assertLedgerSound();
+  });
+
+  await check('chiqish eskrousi to\'lanmagan (masalan relay REFUND qilingan) → anomaliya, pul YO\'Q, trigger/reconcile aylanmaydi', async () => {
+    await seed();
+    const { orderId: id } = await place();
+    await seedShipment(id);
+    await linkAndFund(id);
+    await db.collection('shipments').doc(SHIP).update({ paymentStatus: 'refunded' });
+    const r = await refuse(id);
+    assert.deepStrictEqual([r.outbound.skipped, r.outbound.anomaly], ['outbound_not_funded', true]);
+    const o = await orderOf(id);
+    assert.strictEqual(o.outboundAnomaly.code, 'outbound_not_funded');
+    assert.strictEqual((await quiet(() => api.onStatusChange(o, o, id))).skipped, 'no_refund_needed');
+    clock = new Date(T0.getTime() + 60 * 60 * 1000);
+    assert.strictEqual((await quiet(() => api.reconcile())).outboundChecked, 0);
+    assert.strictEqual(await accExists(settlementLedger.supplierPayableAccount(K1)), false);
   });
 
   const failed = results.filter((r) => !r.pass).length;

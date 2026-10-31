@@ -340,7 +340,8 @@ exports.getWholesaleCardPaymentInfo = fn.https.onCall(wrapCallable(
   wholesaleCardApi.makeGetWholesaleCardPaymentInfo({ db }),
 ));
 exports.submitWholesaleCardReceipt = fn.https.onCall(wrapCallable(
-  wholesaleCardApi.makeSubmitWholesaleCardReceipt({ db }),
+  // Standart bucket — loyiha konfiguratsiyasidan (FIREBASE_CONFIG.storageBucket), kechiktirilgan.
+  wholesaleCardApi.makeSubmitWholesaleCardReceipt({ db, getBucket: () => admin.storage().bucket() }),
 ));
 exports.confirmWholesaleCardPayment = fn.https.onCall(wrapCallable(
   wholesaleCardApi.makeConfirmWholesaleCardPayment({ db }),

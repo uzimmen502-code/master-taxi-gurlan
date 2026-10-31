@@ -5121,5 +5121,7 @@
   "restaurants_err_HANDOVER_SAME_COURIER": "O'z buyurtmangizni o'zingizga topshira olmaysiz.",
   "restaurants_err_HANDOVER_NOT_ALLOWED": "Bu holatda topshirib bo'lmaydi.",
   "restaurants_err_HANDOVER_EXPIRED": "Kod muddati o'tgan. Kuryerdan yangi kod so'rang.",
-  "restaurants_err_HANDOVER_NOT_PENDING": "Bu buyurtma qaytarilmayapti."
+  "restaurants_err_HANDOVER_NOT_PENDING": "Bu buyurtma qaytarilmayapti.",
+  "restaurants_handover_cash_note": "Naqd to'lovda yetkazgan kuryer hamma naqdni oladi, sizning ulushingiz esa uning AVA hamyonidan sizning hamyoningizga avtomatik o'tkaziladi.",
+  "restaurants_handover_accept_cash_note": "Naqd buyurtmada oldingi kuryer ulushi yetkazgandan keyin AVA hamyoningizdan avtomatik yechiladi."
 }

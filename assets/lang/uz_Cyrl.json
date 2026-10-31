@@ -5121,5 +5121,7 @@
   "restaurants_err_HANDOVER_SAME_COURIER": "Ўз буюртмангизни ўзингизга топшира олмайсиз.",
   "restaurants_err_HANDOVER_NOT_ALLOWED": "Бу ҳолатда топшириб бўлмайди.",
   "restaurants_err_HANDOVER_EXPIRED": "Код муддати ўтган. Курьердан янги код сўранг.",
-  "restaurants_err_HANDOVER_NOT_PENDING": "Бу буюртма қайтарилмаяпти."
+  "restaurants_err_HANDOVER_NOT_PENDING": "Бу буюртма қайтарилмаяпти.",
+  "restaurants_handover_cash_note": "Нақд тўловда етказган курьер ҳамма нақдни олади, сизнинг улушингиз эса унинг AVA ҳамёнидан сизнинг ҳамёнингизга автоматик ўтказилади.",
+  "restaurants_handover_accept_cash_note": "Нақд буюртмада олдинги курьер улуши етказгандан кейин AVA ҳамёнингиздан автоматик ечилади."
 }

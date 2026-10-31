@@ -124,6 +124,7 @@ void main() {
       await tester.tap(find.text('restaurants_handover_btn'));
       await tester.pumpAndSettle();
       expect(find.text('restaurants_handover_title'), findsOneWidget);
+      expect(find.byKey(const ValueKey('handover-cash-note')), findsOneWidget, reason: 'naqd buyurtma — ulush izohi');
       await tester.tap(find.byKey(const ValueKey('handover-to-courier')));
       await tester.pumpAndSettle();
       expect(repo.starts, ['o1/courier/41.85']);

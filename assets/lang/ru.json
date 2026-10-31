@@ -5121,5 +5121,7 @@
   "restaurants_err_HANDOVER_SAME_COURIER": "Нельзя передать заказ самому себе.",
   "restaurants_err_HANDOVER_NOT_ALLOWED": "В этом статусе передать нельзя.",
   "restaurants_err_HANDOVER_EXPIRED": "Срок кода истёк. Попросите у курьера новый код.",
-  "restaurants_err_HANDOVER_NOT_PENDING": "Этот заказ не возвращается."
+  "restaurants_err_HANDOVER_NOT_PENDING": "Этот заказ не возвращается.",
+  "restaurants_handover_cash_note": "При оплате наличными доставивший курьер получает все наличные, а ваша доля автоматически переводится из его кошелька AVA в ваш.",
+  "restaurants_handover_accept_cash_note": "Для заказа с оплатой наличными доля предыдущего курьера автоматически списывается с вашего кошелька AVA после доставки."
 }

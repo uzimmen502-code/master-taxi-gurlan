@@ -85,6 +85,13 @@ Future<void> showCourierHandoverFlow(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
             child: Text(ctx.tr('restaurants_handover_note'), style: TextStyle(fontSize: 12, color: ctx.ava.ink2)),
           ),
+          // Нақд (эга, 2026-10-31): охирги курьер ҳамма нақдни олади, сизнинг улушингиз унинг ҳамёнидан.
+          if (order.deliveryPaymentMethod == 'cash')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Text(ctx.tr('restaurants_handover_cash_note'),
+                  key: const ValueKey('handover-cash-note'), style: TextStyle(fontSize: 12, color: ctx.ava.ink2)),
+            ),
         ],
       ),
     ),
@@ -222,6 +229,8 @@ class _AcceptHandoverDialogState extends State<AcceptHandoverDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(context.tr('restaurants_handover_accept_hint'), style: TextStyle(fontSize: 12, color: context.ava.ink2)),
+          const SizedBox(height: 4),
+          Text(context.tr('restaurants_handover_accept_cash_note'), style: TextStyle(fontSize: 12, color: context.ava.ink2)),
           const SizedBox(height: 10),
           TextField(
             key: const ValueKey('handover-accept-code'),

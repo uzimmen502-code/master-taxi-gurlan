@@ -26,7 +26,7 @@ const tariffCore = require('../core/tariff');
 const {
   OWNER, K1, ADMIN, ctx, seed, orderPayload, deps, fund, photoFor, DECLARED_VALUE,
 } = require('./helpers/logistics_harness');
-const { resetEmulator } = require('./helpers/emulator_hooks');
+const { resetEmulator, retryOnEmulatorClosedTx } = require('./helpers/emulator_hooks');
 
 const results = [];
 const check = async (name, fn) => {
@@ -42,8 +42,10 @@ const reset = async () => {
 };
 const ship = async (id) => (await db.collection('shipments').doc(id).get()).data();
 const col = async (name) => (await db.collection(name).get()).docs;
-const lost = (shipmentId, opId, who = ADMIN) => api.makeAdminMarkShipmentLost(deps(db))(
-  { shipmentId, reason: 'Kuryer yo\'qotdi', note: '', opId }, ctx(who));
+// Poyga: emulator deadlock'da yutqazganni `INVALID_ARGUMENT: Transaction is invalid or closed` bilan
+// yopadi (SDK qayta urmaydi) — chaqiruv qayta bosilgandek takrorlanadi (helpers/emulator_hooks.js).
+const lost = (shipmentId, opId, who = ADMIN) => retryOnEmulatorClosedTx(() => api.makeAdminMarkShipmentLost(deps(db))(
+  { shipmentId, reason: 'Kuryer yo\'qotdi', note: '', opId }, ctx(who)));
 
 async function inTransit() {
   const r = await api.makeCreateLogisticsOrder(deps(db))(orderPayload(), ctx(OWNER));
@@ -103,16 +105,19 @@ async function inTransit() {
       const { shipmentId, legId, sec } = await inTransit();
       const [lostRes, delRes] = await Promise.all([
         lost(shipmentId, `lost-op-r${round}x`).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e })),
-        api.makeConfirmDelivery(deps(db))(
+        retryOnEmulatorClosedTx(() => api.makeConfirmDelivery(deps(db))(
           { legId, deliveryCode: sec.deliveryCode, photoUrls: photoFor(K1) }, ctx(K1),
-        ).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e })),
+        )).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e })),
       ]);
       const s = await ship(shipmentId);
       const incidents = await col('logistics_incidents');
       const delivery = (await col('custody_events')).filter((d) => d.data().kind === 'delivery');
+      const legStatus = (await db.collection('demands').doc(legId).get()).data().status;
       if (s.status === 'lost') {
         assert.strictEqual(lostRes.ok, true);
         assert.strictEqual(delRes.ok, false, 'yo\'qolgan jo\'natma yetkazilmaydi');
+        assert.strictEqual(delRes.e.details.reason, 'leg_not_in_progress');
+        assert.strictEqual(legStatus, 'disputed');
         assert.strictEqual(delivery.length, 0);
         assert.strictEqual(incidents.length, 1);
         assert.strictEqual(s.paymentStatus, 'loss_pending');
@@ -121,6 +126,7 @@ async function inTransit() {
         assert.strictEqual(delRes.ok, true);
         assert.strictEqual(lostRes.ok, false, 'yetkazilgan jo\'natma yo\'qolgan deb belgilanmaydi');
         assert.strictEqual(lostRes.e.details.reason, 'shipment_not_lossable');
+        assert.strictEqual(legStatus, 'completed');
         assert.strictEqual(incidents.length, 0);
         assert.strictEqual(delivery.length, 1);
         assert.strictEqual(s.paymentStatus, 'escrow_funded', 'yetkazildi: pul eskrouda (RELEASE default codebase\'da)');

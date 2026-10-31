@@ -19,10 +19,12 @@ import 'package:flutter/material.dart';
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
 import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
 import '../../logistics/domain/tariff_adjust.dart';
+import '../services/admin_courier_payout_service.dart';
 import '../services/admin_logistics_service.dart';
 import '../utils/logistics_tariff_inputs.dart';
 import '../widgets/logistics_loss_dialogs.dart';
 import '../widgets/logistics_loss_list.dart';
+import '../widgets/courier_service_fee_panel.dart';
 import '../widgets/logistics_stage_panel.dart';
 
 class LogisticsAdminScreen extends StatefulWidget {
@@ -52,6 +54,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
 
   final _db = FirebaseFirestore.instance;
   final _logistics = AdminLogisticsService();
+  final _courierPayout = AdminCourierPayoutService();
   int _tab = 0;
   String _filter = '';
   bool _busy = false;
@@ -282,6 +285,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
                   ButtonSegment(value: 1, label: Text('Жўнатмалар'), icon: Icon(Icons.local_post_office_outlined)),
                   ButtonSegment(value: 2, label: Text('Йўқолганлар'), icon: Icon(Icons.report_gmailerrorred_outlined)),
                   ButtonSegment(value: 3, label: Text('Босқич'), icon: Icon(Icons.tune)),
+                  ButtonSegment(value: 4, label: Text('Курьер ҳақи'), icon: Icon(Icons.account_balance_wallet_outlined)),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -297,7 +301,8 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
             0 => _tariffTab(),
             1 => _shipmentsTab(),
             2 => LogisticsLossList(service: _logistics),
-            _ => LogisticsStagePanel(service: _logistics),
+            3 => LogisticsStagePanel(service: _logistics),
+            _ => CourierServiceFeePanel(service: _courierPayout),
           },
         ),
       ],

@@ -3700,6 +3700,8 @@
   "wlt_l_credit_mod": "{module} — kredit",
   "wlt_l_payout_request": "Pul yechish arizasi",
   "wlt_l_payout_paid": "Pul yechildi",
+  "wlt_l_courier_payout": "Kuryer haqi (jo'natma)",
+  "wlt_l_courier_fee": "Xizmat haqi: {amount}",
   "wlt_l_admin_adjust": "Admin tuzatishi",
   "wlt_l_birthday": "Tug'ilgan kun bonusi",
   "wlt_l_operation": "Operatsiya",

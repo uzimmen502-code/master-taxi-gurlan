@@ -3700,6 +3700,8 @@
   "wlt_l_credit_mod": "{module} — кредит",
   "wlt_l_payout_request": "Пул ечиш аризаси",
   "wlt_l_payout_paid": "Пул ечилди",
+  "wlt_l_courier_payout": "Курьер ҳақи (жўнатма)",
+  "wlt_l_courier_fee": "Хизмат ҳақи: {amount}",
   "wlt_l_admin_adjust": "Админ тузатиши",
   "wlt_l_birthday": "Туғилган кун бонуси",
   "wlt_l_operation": "Операция",

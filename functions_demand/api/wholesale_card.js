@@ -15,7 +15,8 @@
  *   getWholesaleCardPaymentInfo       xaridor, karta buyurtma `in_delivery`: summa + karta
  *   submitWholesaleCardReceipt        xaridor: chek rasmi yo'li (Storage) → `receipt_submitted`
  *   confirmWholesaleCardPayment       sotuvchi: «Pul tushdi» (awaiting | receipt_submitted)
- *   markWholesaleBuyerRefused         oxirgi LEG kuryeri (posilka qo'lida): in_delivery → refused
+ *   markWholesaleBuyerRefused         oxirgi LEG kuryeri (posilka qo'lida): «етказилмади» — xaridor
+ *                                      tasdig'i so'rovi (2026-11-01; wholesale_failed.js), keyin → refused
  *   adminResolveWholesaleCardDispute  qat'iy admin: payment_dispute → in_delivery | refused (+audit)
  *   wholesaleCardDisputeSweeper       har 5 daq: chek ≥ RECEIPT_TIMEOUT_MS tasdiqlanmagan → payment_dispute
  *   getWholesaleReturnHandoverCode    qaytish LEG-1 kuryeri: qaytish jo'natmasining TOPSHIRISH kodi
@@ -625,12 +626,18 @@ function makeConfirmWholesaleCardPayment(deps) {
  * `returnStatus: pending_shipment` (demand triggeri qaytish jo'natmasini ochadi), history,
  * `wholesale_buyer_stats/{xaridor}.cardRefusals + 1` (server-only). O'qishlar chaqiruvchida.
  */
-function writeRefusal(tx, db, { ref, o, from, actor, actorId, via, reason, shipmentId, legId, statsSnap, now }) {
+function writeRefusal(tx, db, {
+  ref, o, from, actor, actorId, via, reason, shipmentId, legId, statsSnap, now,
+  // «Етказилмади» (ega, 2026-11-01; wholesale_failed.js): rad — kuryer xabari + xaridor/sotuvchi/admin
+  // tasdig'i. `refusalBy` — kuryer (eski idempotentlik shu maydonga qaraydi), hisoblagich faqat
+  // xaridor sababli bo'lsa (`countRefusal`), qo'shimcha maydonlar — `refusalExtra`/`metaExtra`.
+  refusalBy, countRefusal = true, refusalExtra, metaExtra,
+}) {
   const buyerId = toCanonicalId(o.buyerId);
   const prev = statsSnap && statsSnap.exists && isInt((statsSnap.data() || {}).cardRefusals)
     ? (statsSnap.data() || {}).cardRefusals : 0;
   const seq = historyWrite(tx, ref, o, {
-    from, to: WO.STATUS.REFUSED, actor, actorId, reason, meta: { via, shipmentId: shipmentId || null },
+    from, to: WO.STATUS.REFUSED, actor, actorId, reason, meta: { via, shipmentId: shipmentId || null, ...(metaExtra || {}) },
   }, now);
   tx.update(ref, {
     status: WO.STATUS.REFUSED,
@@ -640,10 +647,11 @@ function writeRefusal(tx, db, { ref, o, from, actor, actorId, via, reason, shipm
     updatedAt: now,
     historySeq: seq,
     refusal: {
-      by: actorId, via, reason, at: now, shipmentId: shipmentId || null, legId: legId || null,
+      by: refusalBy || actorId, via, reason, at: now, shipmentId: shipmentId || null, legId: legId || null, ...(refusalExtra || {}),
     },
     returnStatus: WO.RETURN_STATUS.PENDING_SHIPMENT,
   });
+  if (!countRefusal) return prev;
   if (buyerId) {
     tx.set(db.collection(BUYER_STATS).doc(buyerId), {
       buyerId, cardRefusals: prev + 1, lastRefusalAt: now, lastRefusalOrderId: ref.id, updatedAt: now,
@@ -653,67 +661,16 @@ function writeRefusal(tx, db, { ref, o, from, actor, actorId, via, reason, shipm
 }
 
 /**
- * `markWholesaleBuyerRefused({orderId, reason})` — chaqiruvchi = buyurtma jo'natmasining
- * OXIRGI LEG'iga tayinlangan ijrochi (`shipment.legAssignments[legIds[-1]]`) VA posilka
- * hozir uning qo'lida (`currentLegId` = oxirgi LEG, `currentCustodian` = u). Faqat karta,
- * `in_delivery`, to'lov `awaiting` (chek yuborilgan bo'lsa — kuryer emas, nizo/admin).
- * Relay funksiyalariga TEGILMAYDI: jo'natma o'zgarmaydi (qaytish — alohida jo'natma).
+ * `markWholesaleBuyerRefused({orderId, reason, reasonCode?})` — ESKI NOM SAQLANADI (eski kuryer APK
+ * shuni chaqiradi). Ega qarori (2026-11-01): «етказилмади» HAMMA tur uchun xaridor tasdig'i bilan —
+ * endi bu chaqiruv buyurtmani DARHOL `refused` qilmaydi, balki xaridor tasdig'i so'rovini ochadi
+ * (`wholesale_failed.js` `makeReportWholesaleDeliveryFailed`, YAGONA implementatsiya). Rad etish
+ * natijasi (pul/qaytish) — o'zgarmagan `writeRefusal` (pastda).
  */
 function makeMarkWholesaleBuyerRefused(deps) {
-  const { db, now: nowFn } = deps;
-  return async function markWholesaleBuyerRefused(data, context) {
-    const callerId = callerIdFrom(context);
-    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
-    const orderId = requireOrderId(data);
-    const reason = String((data || {}).reason || '').trim().slice(0, 300);
-    const ref = db.collection(ORDERS).doc(orderId);
-    try {
-      const pre = await ref.get();
-      if (!pre.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
-      const shipmentId = String(((pre.data() || {}).shipment || {}).shipmentId || '');
-      if (!shipmentId) throw fail('permission-denied', 'Ruxsat yo\'q', 'not_last_leg_courier');
-      const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
-      const now = nowFn ? nowFn() : new Date();
-      const out = await db.runTransaction(async (tx) => {
-        const [s, ss] = await Promise.all([tx.get(ref), tx.get(shipRef)]);
-        const o = s.data() || {};
-        const ship = ss.exists ? (ss.data() || {}) : {};
-        if (String((o.shipment || {}).shipmentId || '') !== shipmentId || ship.wholesaleOrderId !== orderId) {
-          throw fail('permission-denied', 'Ruxsat yo\'q', 'not_last_leg_courier');
-        }
-        const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
-        const lastLeg = legIds.length ? legIds[legIds.length - 1] : '';
-        const assigned = lastLeg ? (ship.legAssignments || {})[lastLeg] : null;
-        // 19-band: avval «kim» (oxirgi LEG ijrochisi), keyin «ruxsat» (holat).
-        if (!assigned || !sameUser(assigned, callerId)) throw fail('permission-denied', 'Ruxsat yo\'q', 'not_last_leg_courier');
-        if (o.status === WO.STATUS.REFUSED && sameUser((o.refusal || {}).by, callerId)) return { idempotent: true };
-        if (WO.methodOf(o) !== WO.PAYMENT_METHOD.CARD) throw fail('failed-precondition', 'Buyurtma karta orqali emas', 'not_card_order');
-        const cur = ship.currentCustodian || {};
-        if (ship.currentLegId !== lastLeg || cur.kind !== L.CUSTODIAN_KIND.PROVIDER || !sameUser(cur.id, callerId)) {
-          throw fail('failed-precondition', 'Posilka sizda emas', 'parcel_not_in_hand');
-        }
-        const cp = o.cardPayment || {};
-        if (o.status === WO.STATUS.IN_DELIVERY) {
-          if (cp.status === WO.CARD_PAYMENT.CONFIRMED) throw fail('failed-precondition', 'To\'lov tasdiqlangan', 'card_payment_confirmed');
-          if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) {
-            throw fail('failed-precondition', 'Xaridor chek yuborgan — sotuvchi yoki admin hal qiladi', 'receipt_submitted');
-          }
-          if (cp.status !== WO.CARD_PAYMENT.AWAITING) throw fail('failed-precondition', 'To\'lov holati mos emas', 'card_payment_state');
-        }
-        WO.assertTransition(WO.ACTOR.COURIER, o.status, WO.STATUS.REFUSED);
-        const statsSnap = await tx.get(db.collection(BUYER_STATS).doc(toCanonicalId(o.buyerId) || '_'));
-        writeRefusal(tx, db, {
-          ref, o, from: o.status, actor: WO.ACTOR.COURIER, actorId: callerId, via: 'courier', reason, shipmentId, legId: lastLeg, statsSnap, now,
-        });
-        return { idempotent: false };
-      });
-      log('markBuyerRefused', { result: out.idempotent ? 'already' : 'ok', orderId, shipmentId });
-      return { ok: true, orderId, status: WO.STATUS.REFUSED, idempotent: out.idempotent };
-    } catch (e) {
-      denied('markBuyerRefused', orderId, e);
-      throw e;
-    }
-  };
+  // Kechiktirilgan require: wholesale_failed.js shu fayldan `writeRefusal`/`historyWrite`ni oladi.
+  // eslint-disable-next-line global-require
+  return require('./wholesale_failed').makeReportWholesaleDeliveryFailed(deps);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -941,6 +898,9 @@ module.exports = {
   makeSubmitWholesaleCardReceipt,
   makeConfirmWholesaleCardPayment,
   makeMarkWholesaleBuyerRefused,
+  historyWrite,
+  writeRefusal,
+  requireOrderId,
   runWholesaleCardDisputeSweep,
   makeAdminResolveWholesaleCardDispute,
   makeGetWholesaleReturnHandoverCode,

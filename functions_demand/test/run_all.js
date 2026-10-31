@@ -36,6 +36,7 @@ const SUITES = [
   'wholesale_card.test.js',
   'card_crypto.test.js',
   'wholesale_return.test.js',
+  'wholesale_failed.test.js',
   'logistics_api.test.js',
   'logistics_parity.test.js',
   'logistics_stage.test.js',

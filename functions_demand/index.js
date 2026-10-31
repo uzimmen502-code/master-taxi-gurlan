@@ -48,6 +48,7 @@ const wholesaleStockApi = require('./api/wholesale_stock');
 const wholesaleOrdersApi = require('./api/wholesale_orders');
 const wholesaleCardApi = require('./api/wholesale_card');
 const wholesaleEventsApi = require('./api/wholesale_events');
+const wholesaleFailedApi = require('./api/wholesale_failed');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -349,9 +350,31 @@ exports.submitWholesaleCardReceipt = fn.https.onCall(wrapCallable(
 exports.confirmWholesaleCardPayment = fn.https.onCall(wrapCallable(
   wholesaleCardApi.makeConfirmWholesaleCardPayment({ db }),
 ));
+// «Етказилмади» харидор тасдиғи билан (ega, 2026-11-01; api/wholesale_failed.js): эски ном —
+// эски курьер APK шуни чақиради; энди дарҳол rad ЭМАС, харидор тасдиғи сўрови.
 exports.markWholesaleBuyerRefused = fn.https.onCall(wrapCallable(
-  wholesaleCardApi.makeMarkWholesaleBuyerRefused({ db }),
+  wholesaleCardApi.makeMarkWholesaleBuyerRefused({ db, messaging }),
 ));
+exports.respondWholesaleDeliveryFailed = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeRespondWholesaleDeliveryFailed({ db, messaging }),
+));
+exports.resolveWholesaleDeliveryFailed = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeResolveWholesaleDeliveryFailed({ db, messaging }),
+));
+exports.listWholesaleDeliveryFailedPending = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeListWholesaleDeliveryFailedPending({ db }),
+));
+exports.getWholesaleDeliveryFailedState = fn.https.onCall(wrapCallable(
+  wholesaleFailedApi.makeGetWholesaleDeliveryFailedState({ db }),
+));
+/** Харидор `failedTimeoutMin` (стандарт 15) ичида жавоб бермаса — қарор сотувчи/админга (ҳар дақиқа). */
+exports.wholesaleDeliveryFailedSweeper = fn.pubsub
+  .schedule('every 1 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleFailedApi.runWholesaleDeliveryFailedSweep({ db, messaging });
+    return null;
+  });
 exports.adminResolveWholesaleCardDispute = fn.https.onCall(wrapCallable(
   wholesaleCardApi.makeAdminResolveWholesaleCardDispute({ db }),
 ));

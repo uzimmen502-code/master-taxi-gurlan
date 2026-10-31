@@ -20,6 +20,7 @@ const api = require('../api/logistics');
 const L = require('../core/logistics');
 const W = require('../api/wholesale_orders');
 const C = require('../api/wholesale_card');
+const F = require('../api/wholesale_failed');
 const R = require('../api/wholesale_return');
 const E = require('../api/wholesale_events');
 const tariffCore = require('../core/tariff');
@@ -140,6 +141,15 @@ async function flow({ scan = true, extraSeed = {}, extraOrder = {} } = {}) {
   return { db, d, shipmentId, legId };
 }
 
+/**
+ * «Етказилмади» (ega, 2026-11-01): kuryer xabari endi xaridor tasdig'ini so'raydi; rad natijasi —
+ * xaridor tasdiqlagach (o'sha writeRefusal). Qaytish testlari uchun ikkalasi ketma-ket.
+ */
+async function refuse(db, reason) {
+  await q(() => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW })({ orderId: ORDER_ID, ...(reason ? { reason } : {}) }, ctx(K1)));
+  return q(() => F.makeRespondWholesaleDeliveryFailed({ db, now: () => NOW })({ orderId: ORDER_ID, decision: 'confirm' }, ctx(BUYER)));
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 ok('getWholesaleDeliveryCode (karta): tasdiqdan oldin card_payment_unconfirmed; sotuvchi tasdiqlagach — kod (relay hosilasi)', async () => {
   const { db, shipmentId } = await flow();
@@ -196,15 +206,23 @@ ok('TO\'LIQ QAYTISH: K1 refused → qaytish jo\'natmasi (hozirgi tarif v8, sotuv
   const messaging = fakeMessaging();
   const d = { ...deps(db), messaging };
   const before = orderOf(db);
-  const r = await q(() => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW })({ orderId: ORDER_ID, reason: 'pul yo\'q dedi' }, ctx(K1)));
+  // 2026-11-01: kuryer xabari — holat O'ZGARMAYDI (xaridor tasdig'i so'rovi), tasdiqdan keyin rad.
+  const rep = await q(() => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW })({ orderId: ORDER_ID, reason: 'pul yo\'q dedi' }, ctx(K1)));
+  assert.deepStrictEqual([rep.status, rep.awaitingBuyer, rep.idempotent], ['in_delivery', true, false]);
+  assert.strictEqual(orderOf(db).status, 'in_delivery');
+  assert.strictEqual(db.docs.get(`wholesale_buyer_stats/${BUYER}`).cardRefusals, 1, 'so\'rovda hisoblagich o\'zgarmaydi');
+  const r = await q(() => F.makeRespondWholesaleDeliveryFailed({ db, now: () => NOW })({ orderId: ORDER_ID, decision: 'confirm' }, ctx(BUYER)));
   assert.deepStrictEqual([r.status, r.idempotent], ['refused', false]);
   let o = orderOf(db);
   assert.deepStrictEqual([o.status, o.refundStatus, o.returnStatus, o.refusal.by, o.refusal.via, o.refusal.legId, o.refusal.reason],
     ['refused', 'pending', 'pending_shipment', K1, 'courier', f.legId, 'pul yo\'q dedi']);
+  assert.deepStrictEqual([o.refusal.confirmedBy, o.refusal.confirmedById, o.refusal.reasonCode], ['buyer', BUYER, 'customer_refused']);
   assert.deepStrictEqual(o.stock, { packId: 'p1', qty: 10, decremented: true, restored: false }, 'qoldiq rad paytida TIKLANMAYDI');
   assert.strictEqual(db.docs.get(`wholesale_buyer_stats/${BUYER}`).cardRefusals, 2);
-  const h = db.docs.get(`wholesale_orders/${ORDER_ID}/history/4`);
-  assert.deepStrictEqual([h.from, h.to, h.actor, h.actorId], ['in_delivery', 'refused', 'courier', K1]);
+  const h4 = db.docs.get(`wholesale_orders/${ORDER_ID}/history/4`);
+  assert.deepStrictEqual([h4.from, h4.to, h4.event, h4.actor, h4.actorId], ['in_delivery', 'in_delivery', 'delivery_failed_requested', 'courier', K1]);
+  const h = db.docs.get(`wholesale_orders/${ORDER_ID}/history/5`);
+  assert.deepStrictEqual([h.from, h.to, h.actor, h.actorId, h.meta.reportedBy], ['in_delivery', 'refused', 'buyer', BUYER, K1]);
   assert.strictEqual((await q(() => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW })({ orderId: ORDER_ID }, ctx(K1)))).idempotent, true);
   assert.strictEqual(db.docs.get(`wholesale_buyer_stats/${BUYER}`).cardRefusals, 2, 'takror — hisoblagich +1 emas');
   // Asl jo'natmaga tegilmagan (relay o'zgarmaydi).
@@ -287,7 +305,7 @@ ok('PARITET: qaytish jo\'natmasi / LEG / ichki / sirlar / ORDER shakli `createSh
   // Toza ichki jo'natma (o'sha helper) — taqqoslash uchun.
   await db.collection('wholesale_orders').doc('wo2').set(orderDoc(db));
   const fresh = await q(() => W.ensureWholesaleShipment(deps(db), 'wo2'));
-  await q(() => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW })({ orderId: ORDER_ID }, ctx(K1)));
+  await refuse(db);
   const rr = await q(() => R.ensureWholesaleReturnShipment(deps(db), ORDER_ID));
   const keys = (o) => Object.keys(o).sort();
   const a = db.docs.get(`shipments/${fresh.shipmentId}`);
@@ -329,7 +347,7 @@ ok('custodian kuryer bo\'lmasa (posilka jo\'natuvchida) — qaytish LEG\'i draft
 ok('reconcile: rad etilgan, jo\'natmasiz, 2 daqiqadan eski — bog\'lanadi; xato belgisi bilan trigger aylanmaydi; final — tegilmaydi', async () => {
   const f = await flow();
   const { db } = f;
-  await q(() => C.makeMarkWholesaleBuyerRefused({ db, now: () => NOW })({ orderId: ORDER_ID }, ctx(K1)));
+  await refuse(db);
   // Trigger «yiqilgan»: xato belgisi bor → trigger qayta urinmaydi.
   await db.collection('wholesale_orders').doc(ORDER_ID).update({ returnShipmentError: { code: 'x', attempts: 1, final: false } });
   const t = await q(() => E.onWholesaleOrderUpdated(deps(db), orderOf(db), orderOf(db), ORDER_ID));
@@ -353,7 +371,7 @@ ok('reconcile: rad etilgan, jo\'natmasiz, 2 daqiqadan eski — bog\'lanadi; xato
 
 ok('qaytish narxi hisoblanmasa (faol tarif yo\'q) — returnShipmentError, jo\'natma yo\'q, PII yo\'q', async () => {
   const f = await flow();
-  await q(() => C.makeMarkWholesaleBuyerRefused({ db: f.db, now: () => NOW })({ orderId: ORDER_ID }, ctx(K1)));
+  await refuse(f.db);
   f.db.docs.delete('module_tariffs/logistics_v7');
   f.db.docs.set('module_tariffs/logistics', { activeVersion: 0 });
   tariffCore.clearCache();

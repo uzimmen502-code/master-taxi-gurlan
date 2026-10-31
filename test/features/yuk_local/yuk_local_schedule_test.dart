@@ -69,4 +69,29 @@ void main() {
       expect(YukLocalSchedule.nextListingTtl, const Duration(days: 10));
     });
   });
+
+  group('YukLocalSchedule.canRenew (эга 2026-10-31: ≤3 кун ёки ўтган, 30 кун ичида)', () {
+    final now = DateTime(2026, 11, 1, 10);
+    bool can(Duration left) =>
+        YukLocalSchedule.canRenew(now.add(left), now: now);
+
+    test('муддат йўқ — йўқ', () {
+      expect(YukLocalSchedule.canRenew(null, now: now), isFalse);
+    });
+    test('4 кун қолган — ҳали эрта', () {
+      expect(can(const Duration(days: 4)), isFalse);
+    });
+    test('чегара: роппа-роса 3 кун — мумкин; 3 кун + 1 дақиқа — йўқ', () {
+      expect(can(const Duration(days: 3)), isTrue);
+      expect(can(const Duration(days: 3, minutes: 1)), isFalse);
+    });
+    test('1 соат қолган ва 5 кун олдин ўтган — мумкин', () {
+      expect(can(const Duration(hours: 1)), isTrue);
+      expect(can(const Duration(days: -5)), isTrue);
+    });
+    test('30 кундан кўп олдин ўтган (сервер ўчиради) — йўқ', () {
+      expect(can(const Duration(days: -30)), isTrue);
+      expect(can(const Duration(days: -30, minutes: -1)), isFalse);
+    });
+  });
 }

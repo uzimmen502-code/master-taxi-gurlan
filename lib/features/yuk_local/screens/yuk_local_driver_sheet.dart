@@ -1,6 +1,13 @@
+import 'dart:convert';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
+import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/location_area_service.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../services/location_service.dart';
 import '../models/yuk_local_driver.dart';
@@ -70,6 +77,28 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
   bool _busy = false;
   String? _error;
 
+  /// «Бўш» / «Банд» (аудит P-3: аввал ҳар сақлашда «Бўш» ёзиларди).
+  YukLocalLoadStatus _loadStatus = YukLocalLoadStatus.empty;
+
+  /// Таҳрирда жойлашув фақат эга сўраса янгиланади — аввал ҳар таҳрир машинани
+  /// эга турган жойга «кўчирарди» (аудит P-3). Янги эълонда доим GPS.
+  bool _updateLocation = true;
+
+  /// GPS олинмади — варақ ичида созламаларга ўтиш тугмаси (аудит P-6).
+  bool _gpsFailed = false;
+
+  Future<void> _openGpsSettings() async {
+    try {
+      if (await Geolocator.isLocationServiceEnabled()) {
+        await Geolocator.openAppSettings();
+      } else {
+        await Geolocator.openLocationSettings();
+      }
+    } catch (e) {
+      _log('error', errorCode: 'YUK_LOCAL_GPS_SETTINGS_${e.runtimeType}');
+    }
+  }
+
   /// Бир форма = бир ҳужжат (C-2): таҳрирда — мавжуд ID, янги эълонда — форма
   /// очилганда бир марта олинган ID. Хатодан кейин қайта юбориш дубликат ясамайди.
   late final String _docId = widget.initial?.id ?? _repo.newListingId();
@@ -91,6 +120,11 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
       _location.text = i.locationLabel;
       _workStart = i.workStartMinutes;
       _workEnd = i.workEndMinutes;
+      _loadStatus = i.loadStatus == YukLocalLoadStatus.busy
+          ? YukLocalLoadStatus.busy
+          : YukLocalLoadStatus.empty;
+      // Координатаси йўқ эски эълонда барибир GPS олинади.
+      _updateLocation = !i.hasGps;
     }
   }
 
@@ -166,6 +200,43 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
     });
   }
 
+  /// Форма текшируви (аудит P-1): рақам ва сиғим мажбурий; кузов ўлчами
+  /// ихтиёрий, лекин киритилган бўлса мусбат сон бўлсин. Хато калити ёки null.
+  String? _validate() {
+    if (_plate.text.trim().isEmpty) return 'yuk_local_err_plate';
+    if (_num(_capacity) <= 0) return 'yuk_local_err_capacity';
+    for (final c in [_len, _width, _height]) {
+      if (c.text.trim().isEmpty) continue;
+      final v = double.tryParse(c.text.trim().replaceAll(',', '.'));
+      if (v == null || v <= 0) return 'yuk_local_err_body';
+    }
+    return null;
+  }
+
+  /// Эълон тумани — GPS нуқтасидан (эга қарори 2026-10-31). Телефон
+  /// geocoder'и аниқламаса (вебда geocoder йўқ) — тепадаги танланган ҳудуд;
+  /// у ҳам бўш бўлса репозиторий профил муҳрини қолдиради.
+  Future<({String districtId, String regionId})> _areaOf(
+    double lat,
+    double lng,
+  ) async {
+    final area = await LocationAreaService().areaAt(lat, lng);
+    if (area != null && area.districtId.isNotEmpty) {
+      return (districtId: area.districtId, regionId: area.regionId);
+    }
+    final active = GeoContext.active;
+    return (districtId: active.districtId, regionId: active.regionId);
+  }
+
+  void _log(String result, {String errorCode = ''}) {
+    debugPrint(jsonEncode({
+      'action': widget.initial == null ? 'yukLocalPublish' : 'yukLocalEdit',
+      'listingId': _docId,
+      'result': result,
+      if (errorCode.isNotEmpty) 'errorCode': errorCode,
+    }));
+  }
+
   Future<void> _submit() async {
     // Қайта кириш ҳимояси (C-2): юбориш давом этаётганда иккинчи босиш ҳеч нима қилмайди.
     if (_busy) return;
@@ -173,25 +244,53 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
       setState(() => _error = context.tr('yuk_need_phone'));
       return;
     }
+    final invalid = _validate();
+    if (invalid != null) {
+      setState(() => _error = context.tr(invalid));
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
+      _gpsFailed = false;
     });
     try {
-      LocationCoords coords;
-      try {
-        coords = await const LocationService().getCurrentCoords();
-      } catch (_) {
-        setState(() {
-          _busy = false;
-          _error = context.tr('yuk_local_need_gps');
-        });
-        return;
+      final initial = widget.initial;
+      final keepLocation =
+          initial != null && initial.hasGps && !_updateLocation;
+      double lat;
+      double lng;
+      String districtId;
+      String regionId;
+      if (keepLocation) {
+        lat = initial.lat!;
+        lng = initial.lng!;
+        // Жой ўзгармади — тумани ҳам ўзгармайди (профил муҳри устидан ёзилмасин).
+        districtId = initial.districtId;
+        regionId = initial.regionId;
+      } else {
+        LocationCoords coords;
+        try {
+          coords = await const LocationService().getCurrentCoords();
+        } catch (e) {
+          _log('error', errorCode: 'YUK_LOCAL_GPS_UNAVAILABLE');
+          if (!mounted) return;
+          setState(() {
+            _busy = false;
+            _gpsFailed = true;
+            _error = context.tr('yuk_local_need_gps');
+          });
+          return;
+        }
+        lat = coords.lat;
+        lng = coords.lng;
+        final area = await _areaOf(lat, lng);
+        districtId = area.districtId;
+        regionId = area.regionId;
       }
       String label = _location.text.trim();
-      if (label.isEmpty) {
-        final addr = await const LocationService()
-            .addressFromCoords(coords.lat, coords.lng);
+      if (label.isEmpty && !keepLocation) {
+        final addr = await const LocationService().addressFromCoords(lat, lng);
         label = (addr ?? '').trim();
       }
       await _repo.publishListing(
@@ -206,16 +305,24 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
         bodyWidthM: _num(_width),
         bodyHeightM: _num(_height),
         acceptRadiusKm: _radiusKm,
-        loadStatus: YukLocalLoadStatus.empty,
-        lat: coords.lat,
-        lng: coords.lng,
+        loadStatus: _loadStatus,
+        lat: lat,
+        lng: lng,
         locationLabel: label,
         workStartMinutes: _workStart,
         workEndMinutes: _workEnd,
+        districtId: districtId,
+        regionId: regionId,
       );
+      _log('ok');
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (_) {
+    } catch (e) {
+      // Ички код — логда; фойдаланувчига умумий матн (25-банд).
+      _log('error',
+          errorCode: e is FirebaseException
+              ? 'YUK_LOCAL_SAVE_${e.code}'
+              : 'YUK_LOCAL_SAVE_${e.runtimeType}');
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -338,6 +445,42 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                         },
                       ),
                       const SizedBox(height: 10),
+                      Text(
+                        context.tr('yuk_local_status_title'),
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final s in const [
+                            YukLocalLoadStatus.empty,
+                            YukLocalLoadStatus.busy,
+                          ])
+                            ChoiceChip(
+                              key: ValueKey('yuk_local_status_${s.wire}'),
+                              label: Text(context.tr(
+                                s == YukLocalLoadStatus.busy
+                                    ? 'yuk_local_status_busy'
+                                    : 'yuk_local_status_empty',
+                              )),
+                              selected: _loadStatus == s,
+                              selectedColor: _accent.withValues(alpha: 0.25),
+                              labelStyle: TextStyle(
+                                color: _loadStatus == s ? _accent : _muted,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                              side: BorderSide(
+                                color: _loadStatus == s ? _accent : _border,
+                              ),
+                              backgroundColor: const Color(0xFF0B0E14),
+                              onSelected: (_) =>
+                                  setState(() => _loadStatus = s),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       TextField(
                         controller: _plate,
                         style: const TextStyle(color: Colors.white),
@@ -398,6 +541,24 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                         decoration:
                             _deco(context.tr('yuk_local_location_hint')),
                       ),
+                      if (widget.initial != null &&
+                          widget.initial!.hasGps) ...[
+                        const SizedBox(height: 4),
+                        SwitchListTile(
+                          key: const ValueKey('yuk_local_update_location'),
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          activeThumbColor: _accent,
+                          value: _updateLocation,
+                          onChanged: (v) =>
+                              setState(() => _updateLocation = v),
+                          title: Text(
+                            context.tr('yuk_local_update_location'),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 13),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       Text(
                         context.tr('yuk_local_work_hours'),
@@ -466,6 +627,18 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                           style: const TextStyle(
                               color: Color(0xFFFCA5A5), fontSize: 13),
                         ),
+                        if (_gpsFailed && !kIsWeb)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              key: const ValueKey('yuk_local_sheet_gps_settings'),
+                              onPressed: _openGpsSettings,
+                              child: Text(
+                                context.tr('yuk_local_open_gps_settings'),
+                                style: const TextStyle(color: _accent),
+                              ),
+                            ),
+                          ),
                       ],
                     ],
                   ),

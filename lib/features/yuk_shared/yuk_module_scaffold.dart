@@ -31,11 +31,24 @@ class YukModuleScaffold extends StatefulWidget {
 class _YukModuleScaffoldState extends State<YukModuleScaffold> {
   YukOwner _owner = YukOwner.empty;
 
+  /// Эга юкланмагунча [builder] чақирилмайди: аввал бўш эга билан қурилган
+  /// панел `initState`да ўз обуналарини бўш ID билан очиб қўярди ва State
+  /// кейин қайта яратилмасди (аудит Y-1, 2026-10-31).
+  bool _loaded = false;
+
   @override
   void initState() {
     super.initState();
     YukOwner.load().then((o) {
-      if (mounted) setState(() => _owner = o);
+      if (mounted) {
+        setState(() {
+          _owner = o;
+          _loaded = true;
+        });
+      }
+    }, onError: (Object e) {
+      debugPrint('[YukModuleScaffold] owner load: $e');
+      if (mounted) setState(() => _loaded = true);
     });
   }
 
@@ -58,7 +71,13 @@ class _YukModuleScaffoldState extends State<YukModuleScaffold> {
           foregroundColor: Colors.white,
           title: Text(context.tr(widget.titleKey)),
         ),
-        body: widget.builder(context, _owner, name),
+        body: _loaded
+            ? widget.builder(context, _owner, name)
+            : const Center(
+                child: CircularProgressIndicator(
+                  color: YukModuleScaffold.accent,
+                ),
+              ),
       ),
     );
   }

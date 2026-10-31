@@ -35,10 +35,17 @@ class HomeYukLocalSection extends StatefulWidget {
     super.key,
     required this.onOpenAll,
     required this.onOpenDriver,
+    this.isGuest = false,
+    this.onRegister,
   });
 
   final VoidCallback onOpenAll;
   final void Function(YukLocalDriver driver) onOpenDriver;
+
+  /// Телефонсиз меҳмон: рўйхат ўқилмайди (rules ҳам рад этади), ўрнида
+  /// «Фойдаланиш учун Кабинетда рўйхатдан ўтинг» (эга, 2026-10-31).
+  final bool isGuest;
+  final VoidCallback? onRegister;
 
   /// Ойнада 5 таси кўринади, қолгани скролл ([AvaRowViewport]) — шунинг
   /// учун 5 эмас, 10 та юкланади. Бу бўлимда намунавий қатор йўқ.
@@ -49,7 +56,8 @@ class HomeYukLocalSection extends StatefulWidget {
 }
 
 class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
-  final _repo = YukLocalDriversRepository();
+  // `late` — меҳмон ҳолатида Firestore'га мурожаат йўқ.
+  late final _repo = YukLocalDriversRepository();
   final Random _rnd = sessionRandom();
   StreamSubscription<List<YukLocalDriver>>? _sub;
 
@@ -64,6 +72,7 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
 
   void _listen() {
     _sub?.cancel();
+    if (widget.isGuest) return;
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     // Модул экрани билан бир хил доира (D-GEO-6: туман ёки вилоят).
     _sub = _repo
@@ -112,7 +121,31 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
   }
 
   @override
+  void didUpdateWidget(covariant HomeYukLocalSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Меҳмон рўйхатдан ўтди (ёки аксинча) — оқимни қайта улаймиз.
+    if (oldWidget.isGuest != widget.isGuest) _listen();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (widget.isGuest) {
+      return AvaSection(
+        moduleId: 'yuk_local',
+        title: context.tr('home_section_yuk_local'),
+        status: AvaSectionStatus.ready,
+        child: AvaNoticeRow(
+          key: const ValueKey('home_yuk_local_guest'),
+          text: context.tr('yuk_local_guest_message'),
+          icon: Icons.lock_outline_rounded,
+          color: context.ava.ink3,
+          actionLabel: widget.onRegister == null
+              ? null
+              : context.tr('yuk_local_guest_cta'),
+          onAction: widget.onRegister,
+        ),
+      );
+    }
     return AvaSection(
       moduleId: 'yuk_local',
       title: context.tr('home_section_yuk_local'),
@@ -139,8 +172,10 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
   String _titleOf(BuildContext context, YukLocalDriver driver, String place) {
     final vehicle = context.tr(yukVehicleLabelKey(driver.vehicleType));
     final capacity = formatYukCapacity(context, driver.capacityKg);
-    // «Лабо · 500 кг · Гурлан» — бўш қисмлар тушиб қолади.
+    // «Лабо · 500 кг · Гурлан» — бўш қисмлар тушиб қолади. Намуна эълон
+    // ҳақиқийдан ажралиб турсин (аудит O-4: бош саҳифада белгиси йўқ эди).
     final parts = <String>[
+      if (driver.isDemo) context.tr('yuk_demo_badge'),
       vehicle,
       if (capacity.isNotEmpty) capacity,
       if (place.trim().isNotEmpty) place.trim(),

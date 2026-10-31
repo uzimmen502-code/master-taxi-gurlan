@@ -110,6 +110,12 @@ async function main() {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const fdb = ctx.firestore();
     await fdb.collection('intercity_drivers').doc(DRIVER).set(driverDoc());
+    // intercityBillingTripOk: yoqish faqat to'langan (`published`) va
+    // o'zining reysi bilan — server `taxi_trips`ga driverUid = kanonik telefon.
+    await fdb.collection('taxi_trips').doc('trip_test_01')
+        .set({driverUid: DRIVER, status: 'published'});
+    await fdb.collection('taxi_trips').doc('trip_unpaid')
+        .set({driverUid: DRIVER, status: 'pending_payment'});
     await fdb.collection('intercity_bookings').doc('bkA').set(bookingData());
     await fdb.collection('intercity_bookings').doc('bkB').set(bookingData());
     await fdb.collection('intercity_bookings').doc('bkC').set(bookingData());
@@ -199,6 +205,16 @@ async function main() {
     assertFails(
       dbD.collection('intercity_drivers').doc(DRIVER)
         .set(driverDoc(), {merge: true}),
+    ));
+  await check('HARD GATE: to\'lanmagan reys (status != published) bilan yoqib bo\'lmaydi', () =>
+    assertFails(
+      dbD.collection('intercity_drivers').doc(DRIVER)
+        .set(driverDoc({billingTripId: 'trip_unpaid'}), {merge: true}),
+    ));
+  await check('HARD GATE: mavjud bo\'lmagan billingTripId bilan yoqib bo\'lmaydi', () =>
+    assertFails(
+      dbD.collection('intercity_drivers').doc(DRIVER)
+        .set(driverDoc({billingTripId: 'trip_fake'}), {merge: true}),
     ));
   await check('REGRESSION: driver (owner) can create own listing WITH billingTripId', () =>
     assertSucceeds(

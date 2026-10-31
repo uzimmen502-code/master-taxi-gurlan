@@ -172,6 +172,18 @@ async function main() {
       'kuryer currentIndex\'ni suradi (advanceIndex)',
       () => assertSucceeds(doc(mine, ACTIVE_ROUTE).update({currentIndex: 1})));
 
+  // C5/F11: `completed` faqat currentIndex >= orders.size() bo'lganda
+  // (courier_controller: avval advanceIndex(oxirgi+1), keyin completeRoute).
+  await check(
+      'kuryer reysni barcha buyurtma yetkazilmasdan tugata olmaydi (1/2)',
+      () => assertFails(doc(mine, ACTIVE_ROUTE).update({
+        status: 'completed', completedAt: new Date(),
+      })));
+
+  await check(
+      'kuryer oxirgi buyurtmadan keyin indeksni suradi (advanceIndex 2)',
+      () => assertSucceeds(doc(mine, ACTIVE_ROUTE).update({currentIndex: 2})));
+
   await check(
       'kuryer reysni tugatadi (completeRoute)',
       () => assertSucceeds(doc(mine, ACTIVE_ROUTE).update({

@@ -53,10 +53,18 @@ async function main() {
   const owner = () => testEnv.authenticatedContext('uOwner', { phone_number: `+${OWNER}` }).firestore();
   const other = () => testEnv.authenticatedContext('uOther', { phone_number: `+${OTHER}` }).firestore();
 
-  const newClip = (extra = {}) => ({
-    ownerPhone: OWNER, ownerName: 'Али', title: 'Обзор', videoUrl: 'https://x/v.mp4',
-    category: 'product', status: 'pending', ...extra,
-  });
+  // Ilova klipni `tv_clips/<ownerPhone>/<fayl>` ga yuklaydi; rules (HIGH-1,
+  // 2026-10-31) faqat egasining o'z papkasini qabul qiladi — URL ownerPhone'dan.
+  const ownClipUrl = (owner) =>
+    'https://firebasestorage.googleapis.com/v0/b/master-taxi-gurlan.firebasestorage.app/o/tv_clips%2F' +
+    owner + '%2Fv.mp4?alt=media&token=t';
+  const newClip = (extra = {}) => {
+    const ownerPhone = extra.ownerPhone || OWNER;
+    return {
+      ownerPhone, ownerName: 'Али', title: 'Обзор', videoUrl: ownClipUrl(ownerPhone),
+      category: 'product', status: 'pending', ...extra,
+    };
+  };
 
   await reset();
   await check('A эгаси боғлашли оддий клип яратади (pending)', () =>

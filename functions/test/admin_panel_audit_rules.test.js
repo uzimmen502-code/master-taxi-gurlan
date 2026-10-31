@@ -75,9 +75,17 @@ function film(extra = {}) {
   };
 }
 
+// Ilova klipni `tv_clips/<ownerPhone>/<fayl>` ga yuklaydi
+// (tv_storage_service.dart); rules (HIGH-1, 2026-10-31) faqat shu papkani
+// qabul qiladi — test ham haqiqiy shakldagi URL bilan yozadi.
+function ownClipUrl(owner, file = 'v.mp4') {
+  return 'https://firebasestorage.googleapis.com/v0/b/master-taxi-gurlan.firebasestorage.app/o/tv_clips%2F' +
+      owner + '%2F' + file + '?alt=media&token=t';
+}
+
 function clip(extra = {}) {
   return {
-    videoUrl: 'https://example.com/v.mp4',
+    videoUrl: ownClipUrl(OWNER),
     posterUrl: '',
     title: 'Non',
     price: 0,
@@ -132,7 +140,8 @@ async function main() {
       await db.collection('users').doc(STRANGER).set({role: 'user', phone: '+' + STRANGER});
       await db.collection('settings').doc('app').set({tvAutoApprove});
       await db.collection('risk_events').doc('r1').set(riskEvent(OWNER));
-      await db.collection('admin_news').doc('n1').set(news());
+      // Umumiy xabar: targetUserId '' (2f8fb406 semantikasi).
+      await db.collection('admin_news').doc('n1').set(news({targetUserId: ''}));
       await db.collection('entertainment_catalog').doc('f1').set(film());
       await db.collection('intercity_drivers').doc(DRIVER).set({
         isActive: false, entertainmentAllowed: false, seats: 4,
@@ -182,8 +191,12 @@ async function main() {
       }, {merge: true})));
 
   // ── admin_news ──────────────────────────────────────────────────────
-  await check('admin_news: o\'qish hamon ochiq (ilova lentasi buzilmaydi)',
-      () => assertSucceeds(unauth().collection('admin_news').doc('n1').get()));
+  // 2026-11-01 (ega roziligi, rules b49e51f1): o'qish endi kirgan sessiyaga
+  // (umumiy xabar) yoki egasiga; kirmagan — yopiq.
+  await check('admin_news: kirgan foydalanuvchi umumiy xabarni o\'qiydi (lenta buzilmaydi)',
+      () => assertSucceeds(as(OWNER).collection('admin_news').doc('n1').get()));
+  await check('admin_news: kirmagan o\'qiy olmaydi',
+      () => assertFails(unauth().collection('admin_news').doc('n1').get()));
   await check('admin_news: kirmagan yarata olmaydi (hammaga push)',
       () => assertFails(unauth().collection('admin_news').add(news())));
   await check('admin_news: oddiy foydalanuvchi yarata olmaydi',

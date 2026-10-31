@@ -431,6 +431,32 @@ ok('xabar yetkazish: hamyon refund → xaridorga summa bilan (uz_Latn); kuryer q
   assert.ok(nk && nk.body.includes('25000') && /Нужно/.test(nk.body), JSON.stringify(nk));
 });
 
+ok('kuryer qarzi (ega, 2026-11-01): courierReturnDebt paydo bo\'lsa — kuryerga + adminlarga (bir marta); to\'langan qaytishda «ҳамёндан ушланди» o\'rniga shu; 3 til matni summalar bilan', async () => {
+  const E = require('../api/wholesale_events');
+  const keys = (b, a) => E.transitionNotifications(b, a).map((x) => `${x.to}:${x.key}`).sort();
+  const base = {
+    paymentMethod: 'wallet', status: 'refused', refundStatus: 'done', refusal: { by: K1, reasonCode: 'courier_problem' },
+    walletRefusal: { fault: 'courier', goodsRefunded: 140000, returnFeeCharged: 15000 }, returnPayment: { status: 'partial', payer: 'courier' },
+  };
+  const debt = { ...base, courierReturnDebt: { amount: 25000, returnFee: 40000, accountId: 'acc', courierId: K1 } };
+  assert.deepStrictEqual(keys(base, debt), ['admins:ws_return_courier_debt_admin', 'refusal_courier:ws_return_courier_debt']);
+  assert.deepStrictEqual(keys(debt, debt), [], 'takror — yo\'q');
+  const funded = { ...debt, status: 'returning', returnPayment: { status: 'funded', payer: 'courier' } };
+  assert.deepStrictEqual(keys(debt, funded), ['seller:ws_returning_seller'], 'qarzli holatda ws_return_fee_courier YO\'Q');
+  const db = makeDb(seedW());
+  await q(() => E.onWholesaleOrderUpdated({ db, now: at(0) }, { ...base, productTitle: 'Guruch', returnShipment: { shipmentId: 'R1' } },
+    { ...debt, productTitle: 'Guruch', returnShipment: { shipmentId: 'R1' } }, ORDER_ID));
+  const nk = db.docs.get(`admin_news/wholesale_${ORDER_ID}_ws_return_courier_debt_${K1}`);
+  assert.ok(nk && nk.body.includes('40000') && nk.body.includes('15000') && nk.body.includes('25000') && !/\{\w+\}/.test(nk.title + nk.body), JSON.stringify(nk));
+  for (const k of ['ws_return_courier_debt', 'ws_return_courier_debt_admin']) {
+    for (const lang of N.LANGS) {
+      const m = N.render(k, lang, { product: 'Гуруч', orderId: 'o1', returnFeeTotal: 40000, returnFee: 15000, courierDebt: 25000 });
+      assert.ok(m.title && m.body && !/\{\w+\}/.test(m.title + m.body) && m.body.includes('25000'), `${k}/${lang}`);
+      assert.ok(!/"|Недоставк|Принял|оплатил/.test(m.body), `${k}/${lang}: matn qoidasi`);
+    }
+  }
+});
+
 ok('xabar matnlari (rad, hamyon, qarz): 12 yangi kalit × 3 til — bo\'sh emas, o\'rinbosar qolmaydi, «» qo\'shtirnoq, «Недоставк»/«Принял» yo\'q', () => {
   const keys = ['ws_refused_buyer_absent', 'ws_refused_buyer_refused', 'ws_refused_buyer_courier', 'ws_refused_buyer_other', 'ws_refused_buyer_wallet',
     'ws_refused_buyer_wallet_courier', 'ws_refused_seller_wallet', 'ws_return_fee_courier', 'ws_return_debt_buyer', 'ws_return_debt_courier',

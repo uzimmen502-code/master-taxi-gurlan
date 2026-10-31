@@ -66,8 +66,12 @@ function transitionNotifications(before, after) {
     out.push({ to: 'buyer', key: a.walletRefusal.fault === 'courier' ? 'ws_refused_buyer_wallet_courier' : 'ws_refused_buyer_wallet' });
   }
   if (isWallet && ((b.returnPayment || {}).status !== 'funded') && (a.returnPayment || {}).status === 'funded'
-    && (a.returnPayment || {}).payer === 'courier') {
+    && (a.returnPayment || {}).payer === 'courier' && !a.courierReturnDebt) {
     out.push({ to: 'refusal_courier', key: 'ws_return_fee_courier' });
+  }
+  // Kuryer hamyoni yetmadi (ega, 2026-11-01): qolgani kuryer qarziga yozildi, AVA vaqtincha to'ladi, qaytish darhol.
+  if (isWallet && !b.courierReturnDebt && a.courierReturnDebt) {
+    out.push({ to: 'refusal_courier', key: 'ws_return_courier_debt' }, { to: 'admins', key: 'ws_return_courier_debt_admin' });
   }
   if (changedTo(b, a, WO.STATUS.PAYMENT_DISPUTE)) out.push({ to: 'admins', key: 'ws_dispute_admin' });
   if (!b.returnDebt && a.returnDebt) {
@@ -115,6 +119,7 @@ function paramsOf(o, orderId) {
   const rs = o.returnShipment || {};
   const debt = o.returnDebt || {};
   const wr = o.walletRefusal || {};
+  const cd = o.courierReturnDebt || {};
   return {
     orderId,
     product: String(o.productTitle || '').slice(0, 60),
@@ -130,6 +135,9 @@ function paramsOf(o, orderId) {
     left: Number.isInteger((o.lost || {}).deliveryFeeOutstanding) ? o.lost.deliveryFeeOutstanding : '',
     fee: Number.isInteger((o.lost || {}).deliveryFee) ? o.lost.deliveryFee : '',
     returnFee: Number.isInteger(wr.returnFeeCharged) ? wr.returnFeeCharged : '',
+    // Kuryer qarzi (default `courierReturnDebt`): qaytish narxi jami va qarzga yozilgan qism.
+    returnFeeTotal: Number.isInteger(cd.returnFee) ? cd.returnFee : '',
+    courierDebt: Number.isInteger(cd.amount) ? cd.amount : '',
   };
 }
 

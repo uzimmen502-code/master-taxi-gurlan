@@ -93,6 +93,18 @@ const MESSAGES = {
     uz_Latn: { title: 'Qaytarish haqi ushlandi', body: '{product}: «yetkazilmadi» sababi — kuryer. Qaytarish yetkazish haqi {returnFee} so\'m hamyoningizdan ushlandi.' },
     ru: { title: 'Списана стоимость обратной доставки', body: '{product}: причина «не доставлено» — курьер. С вашего кошелька списано {returnFee} сум за обратную доставку.' },
   },
+  // Ҳамён рад, курьер айби, ҳамён етмади (ega, 2026-11-01): қолгани курьер қарзига, AVA вақтинча тўлади,
+  // товар дарҳол қайтарилади. {returnFeeTotal} — қайтариш нархи, {returnFee} — ҳамёндан, {courierDebt} — қарз.
+  ws_return_courier_debt: {
+    uz_Cyrl: { title: 'Қайтариш ҳақи қарзингизга ёзилди', body: '{product}: «етказилмади» сабаби — курьер. Қайтариш етказиш ҳақи {returnFeeTotal} сўм: ҳамёнингиздан {returnFee} сўм ушланди, қолган {courierDebt} сўм қарзингизга ёзилди (AVA вақтинча тўлади).' },
+    uz_Latn: { title: 'Qaytarish haqi qarzingizga yozildi', body: '{product}: «yetkazilmadi» sababi — kuryer. Qaytarish yetkazish haqi {returnFeeTotal} so\'m: hamyoningizdan {returnFee} so\'m ushlandi, qolgan {courierDebt} so\'m qarzingizga yozildi (AVA vaqtincha to\'ladi).' },
+    ru: { title: 'Стоимость возврата записана в ваш долг', body: '{product}: причина «не доставлено» — курьер. Обратная доставка — {returnFeeTotal} сум: с кошелька списано {returnFee} сум, остаток {courierDebt} сум записан в ваш долг (временно оплачивается AVA).' },
+  },
+  ws_return_courier_debt_admin: {
+    uz_Cyrl: { title: 'Улгуржи: курьер қарзи (қайтариш ҳақи)', body: 'Буюртма {orderId} (ҳамён): курьерда {courierDebt} сўм етмади — қарзига ёзилди, AVA вақтинча тўлади, товар қайтарилмоқда.' },
+    uz_Latn: { title: 'Ulgurji: kuryer qarzi (qaytarish haqi)', body: 'Buyurtma {orderId} (hamyon): kuryerda {courierDebt} so\'m yetmadi — qarziga yozildi, AVA vaqtincha to\'ladi, tovar qaytarilmoqda.' },
+    ru: { title: 'Оптовый рынок: долг курьера (возврат)', body: 'Заказ {orderId} (кошелёк): у курьера не хватило {courierDebt} сум — записано в долг, временно оплачивается AVA, товар возвращается.' },
+  },
   ws_return_debt_buyer: {
     uz_Cyrl: { title: 'Қайтариш ҳақи учун маблағ етмади', body: '{product}: яна {amount} сўм керак. Ҳамённи тўлдиринг — товар сотувчига шундан кейин қайтарилади.' },
     uz_Latn: { title: 'Qaytarish haqi uchun mablag\' yetmadi', body: '{product}: yana {amount} so\'m kerak. Hamyonni to\'ldiring — tovar sotuvchiga shundan keyin qaytariladi.' },

@@ -117,6 +117,7 @@ import 'widgets/home_market_section.dart';
 import 'widgets/home_realty_section.dart';
 import 'widgets/home_wholesale_section.dart';
 import 'widgets/home_yuk_local_section.dart';
+import 'home_market_nav.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 // Эски пастки меню ранглари (`_headerBorder`, `_brandGreen`,
@@ -452,6 +453,17 @@ class _HomeViewState extends State<_HomeView> {
       ),
     );
     // Home яна кўринганда spotlight авто қайта.
+    if (mounted) _onHomeResurface();
+  }
+
+  /// Бўлимдаги маҳсулотни очиш: тафсилот остида ТЕГИШЛИ БОЗОР экрани
+  /// туради (Аҳоли / Улгуржи / Хитой бозори) — қаранг: [pushDetailOverMarket].
+  Future<void> _pushOverMarket(
+    Widget market,
+    Future<void> Function() openDetail,
+  ) async {
+    if (!mounted) return;
+    await pushDetailOverMarket(context, market: market, openDetail: openDetail);
     if (mounted) _onHomeResurface();
   }
 
@@ -1136,12 +1148,7 @@ class _HomeViewState extends State<_HomeView> {
       _showTezKundaSnack();
       return;
     }
-    await _push(
-      WholesaleMarketScreen(
-        userPhone: canonicalPhoneId(context.read<HomeController>().phone),
-        market: market,
-      ),
-    );
+    await _push(_wholesaleMarketScreen(market));
   }
 
   /// Аҳоли бозори бўлимидаги қатор — АЙНАН ўша эълоннинг тафсилоти.
@@ -1155,7 +1162,11 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
     // Бўлимдаги эълонлар орасида суриб ўтиш мумкин (эга талаби 2026-10-21).
-    await _push(adDetailsFor(ad, shelf));
+    // Орқага — Аҳоли бозорига (2026-10-31).
+    await _pushOverMarket(
+      const CheapProductsScreen(),
+      () => _push(adDetailsFor(ad, shelf)),
+    );
   }
 
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
@@ -1168,8 +1179,19 @@ class _HomeViewState extends State<_HomeView> {
       _showTezKundaSnack();
       return;
     }
-    await _push(WholesaleProductDetailScreen(product: product, catalog: shelf));
+    // Орқага — шу маҳсулот бозорига (Улгуржи / Хитой), асосий экранга эмас.
+    await _pushOverMarket(
+      _wholesaleMarketScreen(product.market),
+      () => _push(
+        WholesaleProductDetailScreen(product: product, catalog: shelf),
+      ),
+    );
   }
+
+  Widget _wholesaleMarketScreen(String market) => WholesaleMarketScreen(
+        userPhone: canonicalPhoneId(context.read<HomeController>().phone),
+        market: market,
+      );
 
   /// AVA товари — Улгуржи бозорнинг бир қисми, шунинг учун Улгуржи
   /// дарвозаси (алоҳида «AVA дўкони» модули 2026-10-07 дан йўқ).
@@ -1182,7 +1204,11 @@ class _HomeViewState extends State<_HomeView> {
       _showTezKundaSnack();
       return;
     }
-    await openPlatformProductDetail(context, product, shelf);
+    // AVA товари Улгуржи бозорнинг бир қисми — орқага шу бозорга.
+    await _pushOverMarket(
+      _wholesaleMarketScreen(WholesaleProduct.marketWholesale),
+      () => openPlatformProductDetail(context, product, shelf),
+    );
   }
 
   /// Юқори қатордаги ҳудуд тугмаси (D-GEO-1, 1-такомиллаштириш): ФАОЛ

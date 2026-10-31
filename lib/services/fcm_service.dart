@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/l10n/user_lang_sync.dart';
+import '../core/utils/crash_report.dart';
 import '../core/utils/formatters.dart';
 import '../firebase_options.dart';
 import '../utils/locale_utils.dart';
@@ -84,7 +85,14 @@ class FCMService {
     _userPhone = prefs.getString('user_phone') ?? '';
     if (_userPhone.isEmpty) return;
 
-    final aliases = phoneAliases(_userPhone);
+    // Faqat raqamli shakllar (998XXXXXXXXX / 9 xonali): rules `isOwner`
+    // `+998…` va bo'shliqli shaklni rad etadi, yozuvchilar esa
+    // `notificationTargetPhone()` bilan faqat raqam yozadi. Avval `+` alias
+    // tinglovchisi har ishga tushishda permission-denied → fatal edi
+    // (Crashlytics 0d969bb7).
+    final aliases = phoneAliases(_userPhone)
+        .where((a) => RegExp(r'^\d{9,}$').hasMatch(a))
+        .toList();
     if (aliases.isEmpty) return;
 
     stopListeners();
@@ -135,6 +143,12 @@ class FCMService {
             await change.doc.reference.update({'sent': true});
           } catch (_) {}
         }
+      }, onError: (Object e, StackTrace st) {
+        unawaited(CrashReport.nonFatal(
+          e,
+          st,
+          reason: 'FCM_NOTIFICATIONS_LISTEN_FAILED',
+        ));
       });
       _notifSubs.add(sub);
     }

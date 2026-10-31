@@ -155,6 +155,16 @@ async function main() {
           .where('targetPhone', '==', TARGET9)
           .where('sent', '==', false).get()));
 
+  // Crashlytics 0d969bb7: `phoneAliases()` `+998…` shaklni ham beradi, rules
+  // uni rad etadi → har ishga tushishda fatal. Shuning uchun fcm_service
+  // endi faqat raqamli alias'larni tinglaydi; bu holat qoida shu shaklni
+  // HAQIQATAN rad etishini qayd etadi.
+  await check(
+      '`+998…` alias so\'rovi rad etiladi (fcm_service uni tinglamasligi kerak)',
+      () => assertFails(col(target)
+          .where('targetPhone', '==', '+' + TARGET)
+          .where('sent', '==', false).get()));
+
   await check(
       'qabul qiluvchi o\'z xabarini sent qiladi',
       () => assertSucceeds(doc(target, N_FOR_TARGET).update({sent: true})));

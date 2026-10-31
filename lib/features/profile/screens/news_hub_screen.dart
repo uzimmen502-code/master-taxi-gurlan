@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
+import '../../../core/utils/crash_report.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/news_read_state.dart';
 import '../../../repositories/news_repository.dart';
@@ -146,7 +147,9 @@ class _NewsHubScreenState extends State<NewsHubScreen>
     _broadcastUnreadSub?.cancel();
     _messagesUnreadSub?.cancel();
     _orderUnreadSub?.cancel();
-    if (_uid.length < 9) return;
+    // `_markReadForTab` → `_loadUnread` await'лардан кейин чақиради: экран
+    // шу орада ёпилган бўлса `context` null (Crashlytics c79a8e46, fatal).
+    if (!mounted || _uid.length < 9) return;
 
     final newsRepo = context.read<NewsRepository>();
     final audiences = ['all', _role];
@@ -191,16 +194,24 @@ class _NewsHubScreenState extends State<NewsHubScreen>
     // 3 — «Талаб» (радар): ўқилган белгиси йўқ (мослик `seen` бўлиши тўлиқ
     // экранда), шунинг учун ҳабдаги хабар оқимлари бекорга қайта уланмайди.
     if (index > 2) return;
-    if (_uid.length < 9) return;
+    if (!mounted || _uid.length < 9) return;
     final userRepo = context.read<UserRepository>();
-    switch (index) {
-      case 0:
-        await userRepo.markNewsRead(_uid);
-      case 1:
-        await userRepo.markMessagesRead(_uid);
-      case 2:
-        await userRepo.markOrderNewsRead(_uid);
+    try {
+      switch (index) {
+        case 0:
+          await userRepo.markNewsRead(_uid);
+        case 1:
+          await userRepo.markMessagesRead(_uid);
+        case 2:
+          await userRepo.markOrderNewsRead(_uid);
+      }
+    } catch (e, st) {
+      // «Ўқилди» белгиси best-effort; рад этилса (сессия телефони ≠ сақланган
+      // рақам) экран ишлайверади — аввал ушланмаган хато fatal эди
+      // (Crashlytics b764dcd8).
+      unawaited(CrashReport.nonFatal(e, st, reason: 'NEWS_MARK_READ_FAILED'));
     }
+    if (!mounted) return;
     await _loadUnread();
   }
 

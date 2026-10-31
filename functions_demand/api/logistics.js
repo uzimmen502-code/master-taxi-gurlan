@@ -24,7 +24,9 @@
  * (`submitOffer`) LEG uchun ishlatilmaydi — narx tarifdan (D-8).
  */
 
-const { callerIdFrom, toCanonicalId } = require('../core/ids');
+const { callerIdFrom, toCanonicalId, candidateIdsFor } = require('../core/ids');
+const capabilitiesCore = require('../core/capabilities');
+const courierScopes = require('../core/courier_scopes');
 const { resolveFlags, getModuleConfig } = require('../core/config');
 const sm = require('../core/state_machine');
 const tariffCore = require('../core/tariff');
@@ -622,6 +624,19 @@ async function recomputeOrderStatus(db, orderId, now) {
 // IJROCHI: LEG'ni OLISH (birinchi qabul g'olib)
 // ═══════════════════════════════════════════════════════════════════════
 
+/** Tranzaksiya ichida: telefon → `users.accountId` → `provider_capabilities` (yo'q bo'lsa null). */
+async function readCallerCapability(db, tx, providerId) {
+  for (const id of candidateIdsFor(providerId)) {
+    const u = await tx.get(db.collection('users').doc(id));
+    if (!u.exists) continue;
+    const accountId = String((u.data() || {}).accountId || '');
+    if (!accountId) return null;
+    const cap = await tx.get(db.collection('provider_capabilities').doc(accountId));
+    return cap.exists ? (cap.data() || {}) : null;
+  }
+  return null;
+}
+
 function makeAcceptLeg(deps) {
   const { db, now: nowFn } = deps;
 
@@ -647,6 +662,15 @@ function makeAcceptLeg(deps) {
       sm.assertTransition(leg.status, sm.STATUS.ACCEPTED, 'acceptLeg');
       if (sm.isPastExpiry((leg.timeWindow || {}).expiresAt, now)) {
         throw fail('failed-precondition', 'LEG muddati tugagan', 'expired');
+      }
+
+      // Kuryer toifasi (ega qarori 2026-10-31): match yaratilgandan keyin toifa olib tashlangan/rad etilgan
+      // bo'lishi mumkin — shuning uchun olish paytida QAYTA tekshiriladi. Yuk tashuvchi (`freight` ishlaydigan)
+      // bu qoidaga kirmaydi. Capability topilmasa — match bergan filtrga ishonamiz (o'zgarish yo'q).
+      const capDoc = await readCallerCapability(db, tx, providerId);
+      if (capDoc && !capabilitiesCore.isEligible(capDoc, 'freight')
+        && !courierScopes.isScopeActive(capDoc, courierScopes.legScope(leg.location, leg.destination))) {
+        throw fail('permission-denied', 'Bu yo\'nalish sizning ish hududingizga kirmaydi', 'courier_scope');
       }
 
       const a = leg.attributes || {};

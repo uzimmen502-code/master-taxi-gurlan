@@ -73,9 +73,14 @@ function seed(extra = {}) {
     'module_tariffs/logistics_v7': fixture.tariff,
     [`users/${OWNER}`]: { regionId: 'xorazm', districtId: 'gurlan' },
     [`users/${ADMIN}`]: { role: 'admin' },
-    [`provider_capabilities/acc${K1}`]: capDoc(K1, 'courier', {
-      active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
-    }, 'approved'),
+    // K1 — «Туман» + тасдиқланган «Вилоят» (Gurlan → Urganch LEG вилоят тоифаси, 2026-10-31).
+    [`provider_capabilities/acc${K1}`]: {
+      ...capDoc(K1, 'courier', {
+        active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: true,
+        scopes: ['district', 'region'],
+      }, 'approved'),
+      review: { courierScopes: { region: { status: 'approved' } } },
+    },
     [`provider_capabilities/acc${K2}`]: capDoc(K2, 'courier', {
       active: true, regionIds: ['xorazm'], districtIds: ['gurlan'], acceptsParcels: false,
     }, 'approved'),

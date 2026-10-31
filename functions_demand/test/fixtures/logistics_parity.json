@@ -70,6 +70,7 @@
     "not_logistics",
     "not_matched",
     "self",
+    "courier_scope",
     "expired",
     "shipment_missing",
     "shipment_not_ready",

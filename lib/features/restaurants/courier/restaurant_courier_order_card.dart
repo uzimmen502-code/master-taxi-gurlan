@@ -17,10 +17,12 @@ import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
 import '../../home/widgets/ava_chip.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/courier_tracking.dart';
+import '../domain/handover.dart';
 import '../domain/restaurant_models.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'courier_live_publisher.dart';
 import 'restaurant_courier_logic.dart';
+import 'restaurant_handover_widgets.dart';
 
 typedef RestaurantCompleteFn = Future<CourierCompletionSummary> Function({
   required bool delivered,
@@ -41,7 +43,11 @@ class RestaurantCourierOrderCard extends StatefulWidget {
     required this.onComplete,
     required this.onFinalizeRoute,
     this.livePositions,
+    this.handoverLocation,
   });
+
+  /// Топшириш нуқтаси учун курьернинг жорий GPS'и (бўлмаса `null`).
+  final HandoverLocation? handoverLocation;
 
   /// Тест учун жойлашув манбаи (S6); бўш бўлса ҳақиқий GPS.
   final Stream<LivePosition> Function()? livePositions;
@@ -445,6 +451,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
           ),
           const SizedBox(height: 8),
           contactRow,
+          _handoverRow(context, o),
         ];
       case CourierRestaurantStage.pickup:
         return [
@@ -461,6 +468,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
           contactRow,
           const SizedBox(height: 8),
           _BigBtn(label: context.tr('restaurants_courier_pickup_btn'), busy: _busy, onTap: () => _pickup(o)),
+          _handoverRow(context, o),
         ];
       case CourierRestaurantStage.toCustomer:
         return [
@@ -470,6 +478,7 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
           const SizedBox(height: 8),
           _BigBtn(label: context.tr('restaurants_courier_arrive_btn'), busy: _busy, onTap: () => _run(widget.onArrive)),
           _failLink(context, o),
+          _handoverRow(context, o),
         ];
       case CourierRestaurantStage.handover:
         return [
@@ -490,11 +499,79 @@ class _RestaurantCourierOrderCardState extends State<RestaurantCourierOrderCard>
             onTap: waiting ? null : () => _deliver(o),
           ),
           _failLink(context, o),
+          if (!waiting) _handoverRow(context, o),
         ];
       case CourierRestaurantStage.done:
       case CourierRestaurantStage.cancelled:
         return const [];
     }
+  }
+
+  /// Кутилаётган топшириш коди (сервер идемпотент: ўша кодни қайтаради).
+  Future<void> _showPendingCode(OrderModel o) async {
+    HandoverStart? res;
+    final ok = await _run(() async {
+      final loc = widget.handoverLocation?.call();
+      res = await widget.repository.startHandover(o.id, target: o.handoverTarget, lat: loc?.lat, lng: loc?.lng);
+    });
+    final r = res;
+    if (!ok || r == null || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => HandoverCodeDialog(
+        code: r.code,
+        target: o.handoverTarget,
+        expiresAt: r.expiresAt,
+        onCancel: () => widget.repository.cancelHandover(o.id),
+      ),
+    );
+  }
+
+  /// «Топшириш» (эга, 2026-10-31): бошқа курьерга ёки ресторанга. Кутилаётган
+  /// топширишда — кодни қайта кўрсатиш (сервер ўша кодни қайтаради).
+  Widget _handoverRow(BuildContext context, OrderModel o) {
+    if (!courierCanHandover(o)) return const SizedBox.shrink();
+    final c = context.ava;
+    if (o.isHandoverPending) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Notice(
+              icon: Icons.swap_horiz_rounded,
+              text: context.tr(o.handoverTarget == 'seller' ? 'restaurants_handover_pending_seller' : 'restaurants_handover_pending_courier'),
+              color: c.warn,
+              bg: c.warnSoft,
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: ValueKey('handover-show-${o.id}'),
+                onPressed: _busy ? null : () => _showPendingCode(o),
+                child: Text(context.tr('restaurants_handover_show_code'), style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton.icon(
+        key: ValueKey('handover-${o.id}'),
+        onPressed: _busy
+            ? null
+            : () => showCourierHandoverFlow(
+                  context,
+                  repository: widget.repository,
+                  order: o,
+                  location: widget.handoverLocation,
+                ),
+        icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+        label: Text(context.tr('restaurants_handover_btn'), style: const TextStyle(fontSize: 12)),
+      ),
+    );
   }
 
   /// «Етказилмади» юборилган: мижоз (муддат ўтгач — ресторан) жавобини кутамиз.

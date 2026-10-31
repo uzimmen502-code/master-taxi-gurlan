@@ -116,6 +116,21 @@ class OrderModel {
       awaitingConfirmStep == 'delivery_failed' &&
       (restaurantStatus == 'picked' || restaurantStatus == 'arrived');
 
+  /// Топшириш (эга, 2026-10-31): курьер бошлаган топшириш (`handover.status == 'pending'`).
+  final String handoverStatus;
+
+  /// `courier` — бошқа курьерга, `seller` — ресторанга қайтариш.
+  final String handoverTarget;
+  final DateTime? handoverExpiresAt;
+
+  /// Ресторанга қайтарилган / қўйиб юборилган буюртмага янги курьер қидириш муддати.
+  final DateTime? returnSearchUntil;
+
+  bool get isHandoverPending => isRestaurant && handoverStatus == 'pending';
+
+  /// Ресторан кодни киритиши керак (курьер буюртмани қайтармоқда).
+  bool get isReturnToSellerPending => isHandoverPending && handoverTarget == 'seller';
+
   /// Ресторан (ёки админ) «етказилмади» бўйича қарор қила оладими: мижоз муддати ўтган ёки
   /// сервер эскалация қилган. Қоида серверда (`restaurantResolveDeliveryFailed`), бу — фақат кўрсатиш.
   bool deliveryFailedDecisionOpen(DateTime now) {
@@ -187,6 +202,10 @@ class OrderModel {
     this.deliveryFailedReason = '',
     this.deliveryFailedDeadline,
     this.deliveryFailedEscalated = false,
+    this.handoverStatus = '',
+    this.handoverTarget = '',
+    this.handoverExpiresAt,
+    this.returnSearchUntil,
   });
 
   bool get isRestaurant => type == 'restaurant';
@@ -397,7 +416,17 @@ class OrderModel {
           ? _parseDate((d['awaitingCustomerConfirm'] as Map)['escalateAt'])
           : null,
       deliveryFailedEscalated: d['deliveryFailedEscalatedAt'] != null,
+      handoverStatus: _mapString(d['handover'], 'status'),
+      handoverTarget: _mapString(d['handover'], 'target'),
+      handoverExpiresAt: d['handover'] is Map ? _parseDate((d['handover'] as Map)['expiresAt']) : null,
+      returnSearchUntil: _parseDate(d['returnSearchUntil']),
     );
+  }
+
+  static String _mapString(Object? m, String key) {
+    if (m is! Map) return '';
+    final v = m[key];
+    return v is String ? v : '';
   }
 
   /// `awaitingCustomerConfirm.{key}` матни; йўқ ёки бошқа тур — бўш.

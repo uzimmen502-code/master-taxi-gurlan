@@ -20,6 +20,7 @@ import '../data/restaurants_repository.dart';
 import '../domain/courier_tracking.dart';
 import '../domain/preorder.dart';
 import '../domain/restaurant_models.dart';
+import '../courier/restaurant_handover_widgets.dart';
 import '../widgets/courier_info_card.dart';
 import '../widgets/restaurant_checkout_sheet.dart' show restaurantsErrorText;
 import 'merchant_order_actions.dart';
@@ -397,6 +398,11 @@ class MerchantDeliveryFailedPanel extends StatelessWidget {
   }
 }
 
+String _hhmm(DateTime t) {
+  final l = t.toLocal();
+  return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+}
+
 class _MerchantOrderCard extends StatelessWidget {
   const _MerchantOrderCard({
     required this.order,
@@ -586,6 +592,20 @@ class _MerchantOrderCard extends StatelessWidget {
           if (o.isDeliveryFailedPending) ...[
             const SizedBox(height: 10),
             MerchantDeliveryFailedPanel(order: o, now: now, busy: busy, onDecision: onFailedDecision),
+          ],
+          // Курьер буюртмани ресторанга қайтармоқда — курьер экранидаги кодни киритинг (эга, 2026-10-31).
+          if (o.isReturnToSellerPending) ...[
+            const SizedBox(height: 10),
+            MerchantReturnPanel(order: o, onSubmit: (code) => repository.acceptReturn(o.id, code: code)),
+          ],
+          if (o.returnSearchUntil != null && (o.courierId ?? '').isEmpty &&
+              (o.restaurantStatus == RestaurantOrderStatus.ready || o.restaurantStatus == RestaurantOrderStatus.accepted)) ...[
+            const SizedBox(height: 8),
+            Text(
+              context.tr('restaurants_m_return_searching').replaceAll('{time}', _hhmm(o.returnSearchUntil!)),
+              key: ValueKey('return-search-${o.id}'),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.warn),
+            ),
           ],
           if (actions.isNotEmpty) ...[
             const SizedBox(height: 10),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/collection_task.dart';
@@ -19,6 +20,7 @@ import '../../../repositories/courier_scopes_repository.dart';
 import '../../restaurants/courier/restaurant_courier_banner.dart';
 import '../../restaurants/courier/courier_live_publisher.dart';
 import '../../restaurants/courier/restaurant_courier_order_card.dart';
+import '../../restaurants/courier/restaurant_handover_widgets.dart';
 import '../../restaurants/domain/courier_tracking.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -69,6 +71,27 @@ class _CourierViewState extends State<_CourierView> {
     await c.loadActiveRoute();
   }
 
+  /// Курьер Б: бошқа курьер экранидаги кодни киритиб буюртмани олади. Жойи
+  /// (custody, 15-қоида) — GPS оқимидан, бўлмаса бир марта сўралади.
+  Future<void> _acceptHandover(CourierController c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AcceptHandoverDialog(
+        onSubmit: (code) async {
+          var p = c.currentPos;
+          p ??= await Geolocator.getCurrentPosition().timeout(const Duration(seconds: 10));
+          await c.restaurants.acceptHandover(code: code, lat: p.latitude, lng: p.longitude);
+        },
+      ),
+    );
+    if (ok != true || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(context.tr('restaurants_handover_accepted_ok')),
+      behavior: SnackBarBehavior.floating,
+    ));
+    await c.loadActiveRoute();
+  }
+
   void _showTransient(CourierController c) {
     final msg = c.errorMessage ?? c.info;
     if (msg == null || msg == _lastSnackShown) return;
@@ -100,6 +123,13 @@ class _CourierViewState extends State<_CourierView> {
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
         actions: [
+          // Бошқа курьердан буюртма олиш (топшириш коди, эга 2026-10-31).
+          IconButton(
+            key: const ValueKey('accept-handover'),
+            tooltip: context.tr('restaurants_handover_accept_title'),
+            icon: const Icon(Icons.swap_horiz_rounded),
+            onPressed: () => _acceptHandover(c),
+          ),
           CourierOnlineToggle(
             isOnline: c.isOnline,
             onToggle: c.toggleOnline,
@@ -195,6 +225,10 @@ class _CourierViewState extends State<_CourierView> {
               onComplete: ({required delivered, required failReason}) =>
                   c.restaurantComplete(o.id, delivered: delivered, failReason: failReason),
               onFinalizeRoute: () => c.confirmAndAdvance(orderId: o.id),
+              handoverLocation: () {
+                final p = c.currentPos;
+                return p == null ? null : (lat: p.latitude, lng: p.longitude);
+              },
             );
           }
           final tile = CourierOrderTile(

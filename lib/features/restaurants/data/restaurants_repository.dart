@@ -18,6 +18,7 @@ import '../domain/courier_tracking.dart';
 import '../domain/cuisine.dart';
 import '../domain/dish_facts.dart';
 import '../domain/dish_stats.dart';
+import '../domain/handover.dart';
 import '../domain/qty_tiers.dart';
 import '../domain/menu_category_choice.dart';
 import '../domain/restaurant_models.dart';
@@ -826,7 +827,34 @@ class RestaurantsRepository {
         'decision': failed ? 'failed' : 'continue',
       });
 
+  /// Курьер қайтарган буюртмани қабул қилиш — курьер экранидаги 6 хонали код.
+  /// (Топшириш тури: [HandoverStart] — `../domain/handover.dart`.)
+  Future<void> acceptReturn(String orderId, {required String code}) =>
+      _call('restaurantAcceptReturn', {'orderId': orderId, 'code': code});
+
   // ── Курьер ─────────────────────────────────────────────────────────
+
+  /// Топширишни бошлаш (эга, 2026-10-31). [target]: `courier` ёки `seller`.
+  /// Олишдан олдин — сервер дарҳол қўйиб юборади (`released: true`), акс ҳолда
+  /// 6 хонали код қайтади (`code`, `expiresAtMs`).
+  Future<HandoverStart> startHandover(String orderId, {required String target, double? lat, double? lng}) async {
+    final m = await _call('courierStartRestaurantHandover', {
+      'orderId': orderId,
+      'target': target,
+      if (lat != null && lng != null) 'lat': lat,
+      if (lat != null && lng != null) 'lng': lng,
+    });
+    return HandoverStart.fromMap(m);
+  }
+
+  Future<void> cancelHandover(String orderId) =>
+      _call('courierCancelRestaurantHandover', {'orderId': orderId});
+
+  /// Бошқа курьердан олиш: унинг экранидаги код ва ўз GPS'ингиз (custody жойи).
+  Future<String> acceptHandover({required String code, required double lat, required double lng}) async {
+    final m = await _call('courierAcceptRestaurantHandover', {'code': code, 'lat': lat, 'lng': lng});
+    return (m['orderId'] ?? '') as String;
+  }
 
   Future<List<NearbyRestaurantOrder>> listNearby({double? lat, double? lng, int? radiusKm}) async {
     final data = await _call('listNearbyRestaurantOrders', {

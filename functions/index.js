@@ -4825,6 +4825,71 @@ exports.courierGetCustomerWalletBalance = functions.https.onCall(async (data, co
  * `done: true` — tayyor javob (takror yoki oldindan to'langan); aks holda
  * tranzaksiyadan keyingi qadamlar (courier_cash, kvitansiya) uchun qiymatlar.
  */
+/**
+ * Курьер қўлидаги нақд/карта (`courier_cash` ёзуви учун маълумот) — тўлов транзакциясида
+ * `wallet_idempotency` га сақланади (P-2). Нақд/карта бўлмаса `null`.
+ */
+function courierFieldCashOf(normalized, { courierId, module, orderTotal }) {
+  let cashSum = 0;
+  let cardSum = 0;
+  for (const line of normalized) {
+    const amount = parseInt(String(line.amount || 0), 10) || 0;
+    if (line.kind === 'cash') cashSum += amount;
+    else if (line.kind === 'card') cardSum += amount;
+  }
+  if (cashSum + cardSum <= 0) return null;
+  return { courierId: canonicalUid(courierId), cashSum, cardSum, module, orderTotal };
+}
+
+/**
+ * Курьер қўлидаги нақд/карта → `courier_cash` (инкассациягача). Ҳисоб калити ҳар доим 12 рақам
+ * (998…) — `receiveCourierCash` билан мос. Идемпотент (`courierCash:{orderId}`): ҳар чақирувда
+ * қайта уриниш хавфсиз. Аввал бу ёзув фақат БИРИНЧИ чақирувда, транзакциядан ташқарида
+ * бўларди ва хато ютиларди — қайта уринишда `tx.done` олдинроқ қайтгани учун курьернинг
+ * нақд қарзи ҳеч қачон ёзилмай қоларди (аудит P-2, 2026-10-31).
+ * Эски idempotency ҳужжатларида `fieldCash` йўқ — улар учун ҳеч нарса қилинмайди.
+ */
+async function ensureCourierFieldCash(orderId) {
+  let fc = null;
+  try {
+    const idem = await db.collection('wallet_idempotency').doc(`courier_submit_${orderId}`).get();
+    fc = idem.exists ? ((idem.data() || {}).fieldCash || null) : null;
+    if (!fc) return;
+    const cashSum = parseInt(String(fc.cashSum || 0), 10) || 0;
+    const cardSum = parseInt(String(fc.cardSum || 0), 10) || 0;
+    const fieldCash = cashSum + cardSum;
+    const courierCashUid = String(fc.courierId || '');
+    if (fieldCash <= 0 || !courierCashUid) return;
+    await settlementLedger.postEntry(db, {
+      idempotencyKey: `courierCash:${orderId}`,
+      kind: 'courier_field_cash',
+      refType: 'order',
+      refId: orderId,
+      postedBy: courierCashUid,
+      postedRole: 'courier',
+      legs: [
+        { account: settlementLedger.courierCashAccount(courierCashUid), dr: fieldCash },
+        { account: 'admin_clearing', cr: fieldCash },
+      ],
+    }, {
+      mirrorBonus: false,
+      meta: {
+        module: fc.module || '',
+        orderTotal: fc.orderTotal || 0,
+        cashSum,
+        cardSum,
+        method: cardSum > 0 && cashSum > 0 ? 'mixed' : (cardSum > 0 ? 'card' : 'cash'),
+      },
+    });
+  } catch (e) {
+    // Тўлов аллақачон сақланган — бу ерда ташламаймиз; кейинги чақирув (қайта уриниш) тиклайди.
+    console.error(JSON.stringify({
+      action: 'courierSubmitPayment', orderId, result: 'error', errorCode: 'COURIER_CASH_POST_FAILED',
+      message: String((e && e.message) || e).slice(0, 200),
+    }));
+  }
+}
+
 async function courierSubmitPaymentTx(t, {
   ref, orderId, courierId, linesIn, lat, lng,
 }) {
@@ -4970,6 +5035,24 @@ async function courierSubmitPaymentTx(t, {
       'invalid-argument',
       `Underpaid: ${totalSubmitted} < ${remainingDue}`,
     );
+  }
+  // P-1 (ega, 2026-10-31: «курьер ортиқча нақдни мижоз ҳамёнига қайтим қилиб ўтказа олмайди»).
+  // Нақд/карта қолган қарздан (маҳсулот ва ҳамён қаторларидан кейин) ошмайди — ортиқча нақд
+  // қайтими мижозга НАҚД берилади, ҳамёнга эмас. Аввал ортиқча `changeCredit` бўлиб мижоз
+  // ҳамёнига тушарди: курьер+мижоз келишса ҳамёнда пул пайдо бўларди (аудит P-1).
+  // Маҳсулот (in-kind) ортиқчаси қайтим бўлиб ҳамёнга тушиши ЎЗГАРМАДИ — бу AVA маҳсулотни
+  // сотиб олиши (нархи каталогдан юқори эмас, K-5).
+  const cashCardSum = normalized
+    .filter((l) => l.kind === 'cash' || l.kind === 'card')
+    .reduce((s, l) => s + (parseInt(String(l.amount || 0), 10) || 0), 0);
+  const cashCardCap = Math.max(0, remainingDue - (totalSubmitted - cashCardSum));
+  if (cashCardSum > cashCardCap + 1) {
+    console.warn(JSON.stringify({
+      action: 'courierSubmitPayment', orderId, result: 'denied', errorCode: 'CASH_OVERPAY',
+      cashCardSum, cashCardCap, remainingDue,
+    }));
+    throw new functions.https.HttpsError('failed-precondition', 'CASH_OVERPAY',
+      { reason: 'CASH_OVERPAY', code: 'COURIER_CASH_OVERPAY', maxCash: cashCardCap });
   }
   const paidSum = totalSubmitted;
   const changeCredit = Math.max(0, totalSubmitted - remainingDue);
@@ -5170,9 +5253,13 @@ async function courierSubmitPaymentTx(t, {
     walletDebited: walletSum,
     newBalance: prevBalance - walletSum + changeCredit,
   };
+  // P-2: курьер қўлидаги нақд/карта (`courier_cash` ёзуви учун) тўлов билан БИР транзакцияда
+  // сақланади. Ёзувнинг ўзи транзакциядан кейин, лекин ҲАР чақирувда (қайта уриниш ҳам)
+  // шу ердан идемпотент қайта уринилади — аввал хато бўлса, қарз йўқолиб кетарди.
   t.set(idemRef, {
     type: 'courierSubmitPayment',
     result,
+    fieldCash: courierFieldCashOf(normalized, { courierId, module, orderTotal }),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return {
@@ -5264,6 +5351,9 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   const tx = await runCourierSubmitTx({
     ref, orderId, courierId, linesIn, lat, lng,
   });
+  // P-2: қайта уриниш (`tx.done`) ҳам `courier_cash` ни текширади — аввалги чақирувда ёзув
+  // йиқилган бўлса, шу ерда тикланади (калит `courierCash:{orderId}`, идемпотент).
+  await ensureCourierFieldCash(orderId);
   if (tx.done) return tx.result;
   const {
     normalized, orderTotal, totalSubmitted, changeCredit, walletSum, customerUid, module,
@@ -5280,43 +5370,6 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     if (kind === 'cash') cashSum += amount;
     else if (kind === 'card') cardSum += amount;
     else if (kind === 'product') productLines.push(line);
-  }
-
-  // Курьер қўлидаги нақд/карта → courier_cash (инкассациягача).
-  // Ҳисоб калити ҳар доим 12 рақам (998…) — receiveCourierCash билан мос.
-  const fieldCash = cashSum + cardSum;
-  if (fieldCash > 0) {
-    try {
-      const courierCashUid = canonicalUid(courierId);
-      await settlementLedger.postEntry(db, {
-        idempotencyKey: `courierCash:${orderId}`,
-        kind: 'courier_field_cash',
-        refType: 'order',
-        refId: orderId,
-        postedBy: courierCashUid,
-        postedRole: 'courier',
-        legs: [
-          {
-            account: settlementLedger.courierCashAccount(courierCashUid),
-            dr: fieldCash,
-          },
-          { account: 'admin_clearing', cr: fieldCash },
-        ],
-      }, {
-        mirrorBonus: false,
-        meta: {
-          module,
-          orderTotal,
-          cashSum,
-          cardSum,
-          method: cardSum > 0 && cashSum > 0
-            ? 'mixed'
-            : (cardSum > 0 ? 'card' : 'cash'),
-        },
-      });
-    } catch (e) {
-      console.error('courierSubmitPayment courier_cash ledger:', e.message || e);
-    }
   }
 
   const receiptLines = [];

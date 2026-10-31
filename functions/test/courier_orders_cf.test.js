@@ -16,8 +16,10 @@
  *   - suspended kuryer qo'lidagini tugatadi
  *   - `courierListReadyOrders`: faqat ishlaydigan kuryer, faqat id/MFY/
  *     koordinata (telefon, ism, manzil, savat — yo'q), o'z buyurtmasi yo'q
- *   - ikki parallel submit → bitta to'lov, bitta yechim, bitta jurnal,
- *     qaytim BIR marta; qayta urinish saqlangan natijani oladi
+ *   - ikki parallel submit → bitta to'lov, bitta yechim, bitta jurnal;
+ *     qayta urinish saqlangan natijani oladi
+ *   - P-1 (ega, 2026-10-31): ortiqcha naqd/karta → CASH_OVERPAY (hamyonga qaytim YO'Q)
+ *   - P-2: courier_cash yozuvi yiqilsa, qayta urinish uni tiklaydi (bir marta)
  *   - sverka: Σdr == Σcr, aktiv == passiv, ledger == bonusBalance
  */
 'use strict';
@@ -296,26 +298,78 @@ async function main() {
     const cc = await db.collection(settlementLedger.COL_ACCOUNTS).doc(settlementLedger.courierCashAccount(A)).get();
     assert.strictEqual(cc.data().balance, 20000, 'courier_cash BIR marta');
   });
-  await check('PARALLEL submit (naqd 50 000, qaytim 20 000): qaytim BIR marta', async () => {
+  // P-1 (ega, 2026-10-31): ortiqcha NAQD/KARTA mijoz hamyoniga qaytim bo'lib tushmaydi — rad.
+  const expectOverpay = async (promise, maxCash) => {
+    await assert.rejects(promise, (e) => {
+      assert.strictEqual(e.code, 'failed-precondition', `kod ${e.code}: ${e.message}`);
+      assert.strictEqual(e.details && e.details.reason, 'CASH_OVERPAY', JSON.stringify(e.details));
+      assert.strictEqual(e.details.maxCash, maxCash);
+      return true;
+    });
+  };
+  await check('P-1: PARALLEL ortiqcha naqd (50 000, qarz 30 000) — ikkalasi RAD, hamyon/buyurtma o\'zgarmaydi', async () => {
     await seedOrder('p2');
     const before = await bonus();
     const lines = [{ kind: 'cash', amount: 50000 }];
     const rs = await Promise.allSettled([submit('p2', A, lines), submit('p2', A, lines)]);
-    assert.strictEqual(rs.filter((r) => r.status === 'rejected').length, 0);
-    assert.strictEqual(await bonus(), before + 20000, 'qaytim ikki marta yozilmasin');
-    assert.strictEqual(await pcBalance(), before + 20000);
-    assert.strictEqual(await walletLedger('change_accrued'), 1);
+    assert.strictEqual(rs.filter((r) => r.status === 'rejected').length, 2, 'ikkalasi rad');
+    for (const r of rs) await expectOverpay(Promise.reject(r.reason), 30000);
+    assert.strictEqual(await bonus(), before, 'hamyonga qaytim tushmadi');
+    assert.strictEqual(await walletLedger('change_accrued'), 0);
+    assert.strictEqual((await order('p2')).paymentStatus, 'unpaid');
+    assert.strictEqual((await sub('p2', 'payment_lines')).length, 0);
+  });
+  await check('P-1: ortiqcha KARTA ham rad (30 001 > 30 000 + 1 tolerans)', async () => {
+    await expectOverpay(submit('p2', A, [{ kind: 'card', amount: 30002 }]), 30000);
+  });
+  await check('P-1: hamyon 10 000 + naqd 25 000 (qarz 30 000) — rad, maxCash 20 000', async () => {
+    await expectOverpay(submit('p2', A, [{ kind: 'wallet', amount: 10000 }, { kind: 'cash', amount: 25000 }]), 20000);
+    assert.strictEqual((await order('p2')).paymentStatus, 'unpaid');
+  });
+  await check('P-1: aniq naqd (30 000) — o\'tadi, qaytim 0', async () => {
+    const before = await bonus();
+    const r = await submit('p2', A, [{ kind: 'cash', amount: 30000 }]);
+    assert.strictEqual(r.ok, true); assert.strictEqual(r.changeCredit, 0);
+    assert.strictEqual(await bonus(), before);
   });
   await check('qayta urinish (javob yo\'qolgan): saqlangan natija, yangi harakat yo\'q', async () => {
     const before = await bonus();
-    const r = await submit('p2', A, [{ kind: 'cash', amount: 50000 }]);
-    assert.strictEqual(r.ok, true); assert.strictEqual(r.idempotent, true); assert.strictEqual(r.changeCredit, 20000);
+    const r = await submit('p2', A, [{ kind: 'cash', amount: 30000 }]);
+    assert.strictEqual(r.ok, true); assert.strictEqual(r.idempotent, true); assert.strictEqual(r.changeCredit, 0);
     assert.strictEqual(await bonus(), before);
     assert.strictEqual((await sub('p2', 'payment_lines')).length, 1);
   });
   await check('takror javobni BOSHQA kuryer ololmaydi (marshrutda bo\'lsa ham)', async () => {
     await db.collection('delivery_routes').doc('r_p2_B').set({ courierId: B, status: 'active', orders: ['p2'] });
-    await expectDenied(submit('p2', B, [{ kind: 'cash', amount: 50000 }]), 'COURIER_ASSIGNMENT_CONFLICT');
+    await expectDenied(submit('p2', B, [{ kind: 'cash', amount: 30000 }]), 'COURIER_ASSIGNMENT_CONFLICT');
+  });
+
+  // P-2: courier_cash yozuvi yiqilsa, qayta urinish uni TIKLAYDI (avval yo'qolib ketardi).
+  const courierCash = async () => ((await db.collection(settlementLedger.COL_ACCOUNTS)
+    .doc(settlementLedger.courierCashAccount(A)).get()).data() || {}).balance || 0;
+  await check('P-2: courier_cash yozuvi yiqildi → qayta urinishda tiklandi, ikki marta yozilmadi', async () => {
+    await seedOrder('p3');
+    const before = await courierCash();
+    const realPost = settlementLedger.postEntry;
+    let failOnce = true;
+    settlementLedger.postEntry = async (d, entry, opts) => {
+      if (failOnce && entry.kind === 'courier_field_cash') { failOnce = false; throw new Error('simulyatsiya: ledger yiqildi'); }
+      return realPost(d, entry, opts);
+    };
+    try {
+      const r1 = await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(r1.ok, true, 'to\'lov saqlandi');
+      assert.strictEqual(await courierCash(), before, 'birinchi chaqiruvda courier_cash yozilmadi (simulyatsiya)');
+      const idem = (await db.collection('wallet_idempotency').doc('courier_submit_p3').get()).data();
+      assert.strictEqual(idem.fieldCash.cashSum, 30000, 'fieldCash tranzaksiyada saqlangan');
+      const r2 = await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(r2.idempotent, true);
+      assert.strictEqual(await courierCash(), before + 30000, 'qayta urinishda tiklandi');
+      await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
+      assert.strictEqual(await courierCash(), before + 30000, 'ikki marta yozilmadi');
+    } finally {
+      settlementLedger.postEntry = realPost;
+    }
   });
   await check('sverka: Σdr == Σcr, aktiv == passiv, passenger_credit == bonusBalance', async () => {
     const rec = await settlementLedger.reconcile(db);

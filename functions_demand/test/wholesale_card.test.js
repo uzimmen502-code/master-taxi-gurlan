@@ -23,6 +23,12 @@ const api = require('../api/wholesale_orders');
 const C = require('../api/wholesale_card');
 const E = require('../api/wholesale_events');
 const N = require('../notify/wholesale_notify');
+const CC = require('../core/card_crypto');
+const { makeFakeKms } = require('./helpers/fake_kms');
+
+/** Soxta KMS (karta shifrlash — to'liq testlar: card_crypto.test.js). */
+const KMS = makeFakeKms();
+const cardCrypto = CC.createCardCrypto({ fetchImpl: KMS.fetchImpl, getAccessToken: KMS.getAccessToken });
 
 let passed = 0;
 const tests = [];
@@ -129,9 +135,15 @@ async function rejects(promise, code, reason) {
 }
 const origLog = console.log;
 const origErr = console.error;
+const origWarn = console.warn;
 let captured = [];
-const quiet = () => { captured = []; console.log = (...a) => captured.push(a.join(' ')); console.error = (...a) => captured.push(a.join(' ')); };
-const loud = () => { console.log = origLog; console.error = origErr; };
+const quiet = () => {
+  captured = [];
+  console.log = (...a) => captured.push(a.join(' '));
+  console.error = (...a) => captured.push(a.join(' '));
+  console.warn = (...a) => captured.push(a.join(' '));
+};
+const loud = () => { console.log = origLog; console.error = origErr; console.warn = origWarn; };
 async function q(fn) { quiet(); try { return await fn(); } finally { loud(); } }
 
 const quote = (db) => api.makeQuoteWholesaleOrder({ db, now: () => NOW });
@@ -196,7 +208,7 @@ ok('karta egasi: 2 va 60 belgi o\'tadi; 1, 61, raqam bilan boshlanish — RAD; b
 
 ok('setWholesaleSellerCard: auth; sotuvchi emas; tasdiqlanmagan — RAD, hech narsa yozilmaydi', async () => {
   const db = makeDb();
-  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW });
+  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW, cardCrypto });
   await q(async () => {
     await rejects(set({ cardNumber: CARD, holderName: 'Ali' }, {}), 'unauthenticated');
     await rejects(set({ cardNumber: CARD, holderName: 'Ali' }, ctx(STRANGER)), 'permission-denied', 'not_wholesale_seller');
@@ -208,14 +220,16 @@ ok('setWholesaleSellerCard: auth; sotuvchi emas; tasdiqlanmagan — RAD, hech na
   assert.strictEqual(db.docs.get(`wholesale_sellers/${SELLER}`).hasPayoutCard, undefined);
 });
 
-ok('setWholesaleSellerCard: private/payout (to\'liq) + ommaviy last4; takror — unchanged; almashtirish — v2 + tarix; log maskali', async () => {
+ok('setWholesaleSellerCard: private/payout (KMS shifrlangan, ochiq matn yo\'q) + ommaviy last4; takror — unchanged; almashtirish — v2 + tarix; log maskali', async () => {
   const db = makeDb();
-  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW });
+  const set = C.makeSetWholesaleSellerCard({ db, now: () => NOW, cardCrypto });
   const r1 = await q(() => set({ cardNumber: '4111 1111 1111 1111', holderName: 'Ali Valiyev' }, ctx(SELLER)));
   assert.deepStrictEqual([r1.ok, r1.last4, r1.unchanged], [true, '1111', false]);
   assert.ok(captured.every((l) => !l.includes(CARD)), 'logda to\'liq raqam yo\'q');
   const p = db.docs.get(`wholesale_sellers/${SELLER}/private/payout`);
-  assert.deepStrictEqual([p.cardNumber, p.holderName, p.last4, p.version, p.updatedBy], [CARD, 'Ali Valiyev', '1111', 1, SELLER]);
+  assert.deepStrictEqual([p.cardNumber, p.holderName, p.last4, p.version, p.updatedBy, p.encVersion], [undefined, undefined, '1111', 1, SELLER, 1]);
+  assert.strictEqual(await cardCrypto.decryptCard(p.cardNumberEnc, { sellerId: SELLER, field: 'cardNumber' }), CARD);
+  assert.strictEqual(await cardCrypto.decryptCard(p.holderNameEnc, { sellerId: SELLER, field: 'holderName' }), 'Ali Valiyev');
   const pub = db.docs.get(`wholesale_sellers/${SELLER}`);
   assert.deepStrictEqual([pub.hasPayoutCard, pub.cardLast4, pub.companyName], [true, '1111', 'Guruch savdo']);
   assert.ok(!JSON.stringify(pub).includes(CARD), 'ommaviy hujjatda to\'liq raqam yo\'q');
@@ -283,7 +297,7 @@ ok('getWholesaleCardPaymentInfo: xaridor — summa/karta/egasi/sotuvchi; begona,
     'wholesale_orders/w1': ORDER_WALLET,
     'wholesale_orders/p1': { ...ORDER_CARD, status: 'placed' },
   }));
-  const info = C.makeGetWholesaleCardPaymentInfo({ db });
+  const info = C.makeGetWholesaleCardPaymentInfo({ db, cardCrypto });
   const r = await q(() => info({ orderId: 'o1' }, ctx(BUYER)));
   assert.deepStrictEqual(r, { amount: 200000, cardNumber: CARD, holderName: 'ALI VALIYEV', sellerName: 'Guruch savdo' });
   assert.ok(captured.every((l) => !l.includes(CARD)));

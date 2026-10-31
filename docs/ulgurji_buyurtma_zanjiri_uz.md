@@ -139,6 +139,22 @@ system — `in_delivery → payment_dispute`, `refused → returning`, `returnin
 `wholesale_buyer_stats/{tel}.cardRefusals`, `wholesale_seller_stats/{tel}.{cardBlocked, debtOrderIds}`.
 Оммавий сотувчи ҳужжатида: `hasPayoutCard`, `cardLast4`.
 
+### Карта шифрлаш (эга қарори, 2026-10-31)
+- **Нима:** `private/payout` = `{cardNumberEnc, holderNameEnc, last4, encVersion: 1, version, …}` —
+  карта рақами ва эгаси исми Cloud KMS (симметрик, ENCRYPT_DECRYPT) билан шифрланган, очиқ
+  `cardNumber`/`holderName` ЁЗИЛМАЙДИ. Шакл: `kms:v1:<base64 ciphertext>`; AAD =
+  `wholesale_seller_card|v1|{канон тел}|{майдон}` (ciphertext бошқа сотувчига кўчса — KMS рад этади).
+- **Калит:** env `WHOLESALE_CARD_KMS_KEY`, default
+  `projects/master-taxi-gurlan/locations/europe-west1/keyRings/ava-secrets/cryptoKeys/wholesale-seller-card`
+  (`functions_demand/core/card_crypto.js`); функциялар `master-taxi-gurlan@appspot.gserviceaccount.com`.
+- **KMS ишламаса:** `setWholesaleSellerCard` — FAIL CLOSED (`card_encryption_unavailable`, ҳеч нарса
+  ёзилмайди); `getWholesaleCardPaymentInfo` — `unavailable` / `card_decryption_unavailable`.
+  Квота ва `placeWholesaleOrder` декрипт қилмайди (фақат «карта бор» шакли: `payoutDocHasCard`, иккала
+  codebase'да бир хил қоида).
+- **Эски очиқ ҳужжатлар:** ўқилади (`legacy_plaintext_card` огоҳлантириши); кўчириш —
+  `functions_demand/tools/encrypt_seller_cards.js` (dry-run → `--write`; текширувдан кейингина очиқ
+  майдонлар ўчади + `admin_audit`; `--restore-plaintext` — фавқулодда орқага).
+
 ### Қайтиш жўнатмаси
 `refused` бўлиши билан demand триггери `onWholesaleOrderUpdated` жўнатма очади: origin = харидор манзили,
 destination = сотувчи, эгаси = олувчи = сотувчи, `source: 'wholesale_return'`, нарх — ўша пайтдаги фаол

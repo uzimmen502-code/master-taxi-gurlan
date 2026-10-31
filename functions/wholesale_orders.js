@@ -138,6 +138,28 @@ const RELAY_ACCRUAL_ACCOUNT = 'platform_accrual';
 const RELAY_FEE_ACCOUNT = 'earnings:ava_logistics_fee';
 const relayEarnedKey = (shipmentId, legId) => `relayEarned:${shipmentId}:${legId}`;
 const relayReleaseKey = (shipmentId) => `relayRelease:${shipmentId}`;
+/**
+ * Sotuvchi kartasi bormi (`wholesale_sellers/{tel}/private/payout`, server-only). Karta
+ * 2026-10-31 dan Cloud KMS bilan SHIFRLANGAN (demand `setWholesaleSellerCard`):
+ * `cardNumberEnc` + `holderNameEnc` = `kms:v1:<base64>`, `last4` = 4 raqam. Shifrlashdan
+ * oldingi ochiq hujjat (`cardNumber` 16 raqam + `holderName`) ham qabul qilinadi (migratsiya
+ * `functions_demand/tools/encrypt_seller_cards.js`). Bu yerda DEKRIPT YO'Q — faqat «bor/yo'q».
+ * Demand `api/wholesale_card.js payoutCardShape` bilan AYNAN bir xil qoida
+ * (paritet testi: functions_demand/test/wholesale_card.test.js).
+ */
+const CARD_ENC_PREFIX = 'kms:v1:';
+const CARD_ENC_MAX = 4096;
+function isCardEncValue(v) {
+  return typeof v === 'string' && v.startsWith(CARD_ENC_PREFIX) && v.length > CARD_ENC_PREFIX.length
+    && v.length <= CARD_ENC_MAX && /^[A-Za-z0-9+/]+={0,2}$/.test(v.slice(CARD_ENC_PREFIX.length));
+}
+function payoutDocHasCard(d) {
+  const x = d || {};
+  if (isCardEncValue(x.cardNumberEnc) && isCardEncValue(x.holderNameEnc) && typeof x.last4 === 'string' && /^\d{4}$/.test(x.last4)) {
+    return true;
+  }
+  return typeof x.cardNumber === 'string' && /^\d{16}$/.test(x.cardNumber) && typeof x.holderName === 'string' && x.holderName !== '';
+}
 const OUTBOUND_SETTLE_STATUSES = Object.freeze([STATUS.REFUSED, STATUS.RETURNING, STATUS.RETURNED]);
 /**
  * Relay jo'natmasi qabul qiluvchiga HAQIQATAN topshirilganmi (tovar puli shundan keyin).
@@ -303,7 +325,7 @@ function attachWholesaleOrders(exportsObj, deps) {
             t.get(db.collection(BUYER_STATS).doc(uid)),
           ]);
           cardCtx = {
-            hasCard: payoutSnaps.some((p) => p.exists && /^\d{16}$/.test(String((p.data() || {}).cardNumber || ''))),
+            hasCard: payoutSnaps.some((p) => p.exists && payoutDocHasCard(p.data())),
             blocked: sStatsSnap.exists && (sStatsSnap.data() || {}).cardBlocked === true,
             refusals: bStatsSnap.exists && isInt((bStatsSnap.data() || {}).cardRefusals) ? (bStatsSnap.data() || {}).cardRefusals : 0,
           };
@@ -1701,5 +1723,6 @@ module.exports = {
   RETURN_SOURCE,
   methodOf,
   quoteAmountsOk,
+  payoutDocHasCard,
   attachWholesaleOrders,
 };

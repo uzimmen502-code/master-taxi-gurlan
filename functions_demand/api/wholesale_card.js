@@ -10,7 +10,8 @@
  * kuryer haqi qaytarilmaydi; xaridor 2 marta rad etgach karta usuli unga yopiladi.
  *
  *   setWholesaleSellerCard            sotuvchi (tasdiqlangan): karta (16 raqam, Luhn) + egasi
- *                                      → `wholesale_sellers/{tel}/private/payout` (FAQAT server)
+ *                                      → `wholesale_sellers/{tel}/private/payout` (FAQAT server;
+ *                                      Cloud KMS bilan SHIFRLANGAN — `core/card_crypto.js`)
  *   getWholesaleCardPaymentInfo       xaridor, karta buyurtma `in_delivery`: summa + karta
  *   submitWholesaleCardReceipt        xaridor: chek rasmi yo'li (Storage) → `receipt_submitted`
  *   confirmWholesaleCardPayment       sotuvchi: «Pul tushdi» (awaiting | receipt_submitted)
@@ -29,6 +30,7 @@ const {
 } = require('../core/ids');
 const L = require('../core/logistics');
 const WO = require('../core/wholesale_orders');
+const cardCryptoLib = require('../core/card_crypto');
 const { assertStrictAdmin } = require('../analytics/access');
 
 const ORDERS = 'wholesale_orders';
@@ -60,6 +62,21 @@ const isPosInt = (n) => isInt(n) && n > 0;
 function log(action, fields) {
   console.log(JSON.stringify({ module: 'wholesale_orders', action, ...fields }));
 }
+
+function warn(action, fields) {
+  console.warn(JSON.stringify({ module: 'wholesale_orders', action, ...fields }));
+}
+
+/** KMS qatlami: index.js bitta nusxani beradi; berilmasa — bitta kechiktirilgan default. */
+let defaultCardCrypto = null;
+function cardCryptoFrom(deps) {
+  if (deps && deps.cardCrypto) return deps.cardCrypto;
+  if (!defaultCardCrypto) defaultCardCrypto = cardCryptoLib.createCardCrypto();
+  return defaultCardCrypto;
+}
+
+/** Ichki diagnostika kodi (25-band): CardCryptoError.code yoki umumiy. Matn/ciphertext YO'Q. */
+const cryptoCodeOf = (e) => (cardCryptoLib.isCardCryptoError(e) ? e.code : 'CARD_CRYPTO_UNKNOWN');
 
 function msOf(v) {
   if (v == null) return null;
@@ -137,18 +154,66 @@ async function findSellerDoc(db, id) {
   return null;
 }
 
-/** Sotuvchi kartasi (server-only `private/payout`) — yaroqli bo'lsa. */
+/**
+ * `private/payout` hujjatining karta shakli (DEKRIPT QILMASDAN):
+ *   'kms'    — `cardNumberEnc` + `holderNameEnc` (`kms:v1:…`) + `last4` (4 raqam) — 2026-10-31 dan;
+ *   'legacy' — eski ochiq `cardNumber` (16 raqam) + `holderName` (shifrlashdan oldin yozilgan;
+ *              `tools/encrypt_seller_cards.js` ko'chiradi). Ikkalasi bo'lsa — 'kms' ustun.
+ * Default codebase `placeWholesaleOrder` dagi `payoutDocHasCard` AYNAN shu qoida (paritet testi).
+ */
+function payoutCardShape(d) {
+  const x = d || {};
+  if (cardCryptoLib.isEncryptedValue(x.cardNumberEnc) && cardCryptoLib.isEncryptedValue(x.holderNameEnc)
+    && typeof x.last4 === 'string' && /^\d{4}$/.test(x.last4)) {
+    return { kind: 'kms', last4: x.last4 };
+  }
+  if (typeof x.cardNumber === 'string' && /^\d{16}$/.test(x.cardNumber) && typeof x.holderName === 'string' && x.holderName) {
+    return { kind: 'legacy', last4: last4Of(x.cardNumber) };
+  }
+  return null;
+}
+
+const payoutDocHasCard = (d) => payoutCardShape(d) !== null;
+
+/**
+ * Sotuvchi kartasi (server-only `private/payout`) — yaroqli bo'lsa. DEKRIPT QILINMAYDI
+ * (kvota faqat «bor/yo'q» va last4 ni biladi): `revealPayoutCard` alohida.
+ */
 async function readPayoutCard(db, sellerId) {
   const ids = [...new Set([String(sellerId || ''), ...candidateIdsFor(sellerId)].filter(Boolean))];
   for (const x of ids) {
     const s = await db.collection(SELLERS).doc(x).collection('private').doc('payout').get();
     if (!s.exists) continue;
     const d = s.data() || {};
-    if (typeof d.cardNumber === 'string' && /^\d{16}$/.test(d.cardNumber) && typeof d.holderName === 'string' && d.holderName) {
-      return { sellerDocId: x, cardNumber: d.cardNumber, holderName: d.holderName, last4: last4Of(d.cardNumber) };
+    const shape = payoutCardShape(d);
+    if (!shape) continue;
+    if (shape.kind === 'kms') {
+      return {
+        sellerDocId: x, kind: 'kms', last4: shape.last4, cardNumberEnc: d.cardNumberEnc, holderNameEnc: d.holderNameEnc,
+      };
     }
+    return {
+      sellerDocId: x, kind: 'legacy', last4: shape.last4, cardNumber: d.cardNumber, holderName: d.holderName,
+    };
   }
   return null;
+}
+
+/**
+ * To'liq karta (xaridorga ko'rsatish uchun). 'kms' — ikkala maydon parallel dekript (AAD =
+ * sotuvchi hujjati ID'si + maydon); natija 16 raqam va saqlangan last4 bilan mos bo'lishi shart.
+ * 'legacy' — ochiq matn qaytadi (`legacy: true`). Xato — `CardCryptoError` (chaqiruvchi o'giradi).
+ */
+async function revealPayoutCard(cardCrypto, card) {
+  if (card.kind === 'legacy') return { cardNumber: card.cardNumber, holderName: card.holderName, legacy: true };
+  const [cardNumber, holderName] = await Promise.all([
+    cardCrypto.decryptCard(card.cardNumberEnc, { sellerId: card.sellerDocId, field: 'cardNumber' }),
+    cardCrypto.decryptCard(card.holderNameEnc, { sellerId: card.sellerDocId, field: 'holderName' }),
+  ]);
+  if (!/^\d{16}$/.test(cardNumber) || last4Of(cardNumber) !== card.last4 || !holderName) {
+    throw new cardCryptoLib.CardCryptoError('CARD_PLAINTEXT_INVALID', 'Dekript natijasi karta shakliga mos emas');
+  }
+  return { cardNumber, holderName, legacy: false };
 }
 
 /** Hamyon egasi hujjati — default codebase `walletUidOf` bilan bir xil (12, keyin 9 xonali). */
@@ -224,14 +289,50 @@ function historyWrite(tx, ref, o, entry, now) {
  * FAQAT `private/payout` da (klientga yopiq — qoida yo'q = rad); ommaviy hujjatda
  * `hasPayoutCard` + `cardLast4` (Admin SDK; egasi qoidasi o'zgargan maydonlarnigina
  * tekshiradi). O'zgarish tarixi — `private/payout/history/v{n}` (faqat oxirgi 4 raqam).
- * Bir xil karta+ism — `unchanged`, yozuv yo'q.
+ *
+ * SHIFRLASH (ega, 2026-10-31): `private/payout` = `{cardNumberEnc, holderNameEnc, last4,
+ * encVersion: 1, version, updatedAt, updatedBy, createdAt}` — ochiq `cardNumber`/`holderName`
+ * YO'Q (hujjat to'liq almashtiriladi — eski ochiq maydonlar o'chadi). KMS chaqiruvlari
+ * tranzaksiyadan TASHQARIDA (tarmoq tranzaksiyani cho'zmasin, retry KMS'ni takrorlamasin).
+ *
+ * «unchanged» (sir saqlanadigan joy yo'q — kalitli hash o'rniga): joriy hujjat 'kms' bo'lsa —
+ * last4 farq qilsa DARHOL «o'zgargan» (KMS chaqirilmaydi); last4 teng bo'lsa — mavjud ikki
+ * maydon dekript qilinib solishtiriladi (2 KMS chaqiruvi, faqat shu holatda). Dekript xatosi —
+ * «o'zgargan» deb qayta shifrlanadi (KMS ishlamasa shifrlash ham yiqiladi → fail closed).
+ * Joriy hujjat 'legacy' (ochiq) va karta+ism bir xil — `unchanged: true`, lekin hujjat
+ * SHIFRLANGANIGA almashtiriladi (versiya/tarix o'zgarmaydi).
+ *
+ * KMS ishlamasa — FAIL CLOSED: `failed-precondition` / `card_encryption_unavailable`, hech
+ * narsa yozilmaydi. Tranzaksiyada `version` tranzaksiyadan oldingi o'qishdagidan farq qilsa
+ * (parallel so'rov) — `unavailable` / `card_concurrent_update`, hech narsa yozilmaydi.
  */
 function makeSetWholesaleSellerCard(deps) {
   const { db, now: nowFn } = deps;
+  /** Joriy hujjat shu karta+ism bilan bir xilmi (yuqoridagi qoida). */
+  async function sameAsStored(cardCrypto, sellerDocId, cur, cardNumber, holderName, last4) {
+    const shape = payoutCardShape(cur);
+    if (!shape) return { same: false, shape: null, holderChanged: true };
+    if (shape.kind === 'legacy') {
+      const same = cur.cardNumber === cardNumber && cur.holderName === holderName;
+      return { same, shape, holderChanged: cur.holderName !== holderName };
+    }
+    if (shape.last4 !== last4) return { same: false, shape, holderChanged: null };
+    try {
+      const plain = await revealPayoutCard(cardCrypto, {
+        kind: 'kms', sellerDocId, last4: shape.last4, cardNumberEnc: cur.cardNumberEnc, holderNameEnc: cur.holderNameEnc,
+      });
+      return { same: plain.cardNumber === cardNumber && plain.holderName === holderName, shape, holderChanged: plain.holderName !== holderName };
+    } catch (e) {
+      log('setSellerCard', { result: 'compare_decrypt_failed', last4, errorCode: cryptoCodeOf(e) });
+      return { same: false, shape, holderChanged: null };
+    }
+  }
+
   return async function setWholesaleSellerCard(data, context) {
     const callerId = callerIdFrom(context);
     if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
     const d = data || {};
+    let last4 = null;
     try {
       const cardNumber = parseCardNumber(d.cardNumber);
       const holderName = parseHolderName(d.holderName);
@@ -240,27 +341,73 @@ function makeSetWholesaleSellerCard(deps) {
       if (seller.data.approvalStatus !== 'approved') {
         throw fail('failed-precondition', 'Sotuvchi hali tasdiqlanmagan', 'seller_not_approved');
       }
-      const last4 = last4Of(cardNumber);
-      const now = nowFn ? nowFn() : new Date();
+      last4 = last4Of(cardNumber);
+      const cardCrypto = cardCryptoFrom(deps);
       const payoutRef = seller.ref.collection('private').doc('payout');
+
+      // 1) Joriy holat (tranzaksiyadan tashqarida) — «unchanged» qarori.
+      const s0 = await payoutRef.get();
+      const cur0 = s0.exists ? (s0.data() || {}) : {};
+      const v0 = isInt(cur0.version) ? cur0.version : 0;
+      const cmp = await sameAsStored(cardCrypto, seller.id, cur0, cardNumber, holderName, last4);
+      if (cmp.same && cmp.shape.kind === 'kms') {
+        log('setSellerCard', { result: 'unchanged', last4, version: v0 || 1 });
+        return { ok: true, last4, unchanged: true };
+      }
+      const upgradeOnly = cmp.same && cmp.shape.kind === 'legacy';
+
+      // 2) Shifrlash — FAIL CLOSED.
+      let cardNumberEnc;
+      let holderNameEnc;
+      try {
+        [cardNumberEnc, holderNameEnc] = await Promise.all([
+          cardCrypto.encryptCard(cardNumber, { sellerId: seller.id, field: 'cardNumber' }),
+          cardCrypto.encryptCard(holderName, { sellerId: seller.id, field: 'holderName' }),
+        ]);
+      } catch (e) {
+        console.error(JSON.stringify({
+          module: 'wholesale_orders', action: 'setSellerCard', result: 'failed', last4, errorCode: 'CARD_ENCRYPTION_FAILED', kmsCode: cryptoCodeOf(e),
+        }));
+        throw fail('failed-precondition', 'Kartani hozir saqlab bo\'lmadi. Birozdan keyin qayta urinib ko\'ring', 'card_encryption_unavailable');
+      }
+
+      // 3) Yozuv — tranzaksiyada, joriy versiya o'zgarmagan bo'lsa.
+      const now = nowFn ? nowFn() : new Date();
       const out = await db.runTransaction(async (tx) => {
         const s = await tx.get(payoutRef);
         const cur = s.exists ? (s.data() || {}) : {};
-        if (cur.cardNumber === cardNumber && cur.holderName === holderName) return { unchanged: true, version: cur.version || 1 };
-        const version = (isInt(cur.version) ? cur.version : 0) + 1;
+        const vCur = isInt(cur.version) ? cur.version : 0;
+        if (vCur !== v0) {
+          throw fail('unavailable', 'Karta boshqa so\'rov bilan o\'zgardi. Qayta urinib ko\'ring', 'card_concurrent_update');
+        }
+        const base = {
+          cardNumberEnc, holderNameEnc, last4, encVersion: cardCryptoLib.ENC_VERSION,
+        };
+        if (upgradeOnly) {
+          tx.set(payoutRef, {
+            ...base,
+            version: vCur || 1,
+            updatedAt: cur.updatedAt || now,
+            updatedBy: cur.updatedBy || callerId,
+            createdAt: cur.createdAt || now,
+            encryptedAt: now,
+          });
+          return { unchanged: true, upgraded: true, version: vCur || 1 };
+        }
+        const version = vCur + 1;
         tx.set(payoutRef, {
-          cardNumber, holderName, last4, version, updatedAt: now, updatedBy: callerId, createdAt: cur.createdAt || now,
+          ...base, version, updatedAt: now, updatedBy: callerId, createdAt: cur.createdAt || now,
         });
         tx.set(payoutRef.collection('history').doc(`v${version}`), {
-          version, last4, prevLast4: cur.last4 || null, holderChanged: cur.holderName !== holderName, at: now, by: callerId,
+          version, last4, prevLast4: cur.last4 || null, holderChanged: cmp.holderChanged, encVersion: cardCryptoLib.ENC_VERSION, at: now, by: callerId,
         });
         tx.set(seller.ref, { hasPayoutCard: true, cardLast4: last4, payoutCardUpdatedAt: now }, { merge: true });
-        return { unchanged: false, version };
+        return { unchanged: false, upgraded: false, version };
       });
-      log('setSellerCard', { result: out.unchanged ? 'unchanged' : 'ok', last4, version: out.version });
+      log('setSellerCard', { result: out.upgraded ? 'unchanged_encrypted' : (out.unchanged ? 'unchanged' : 'ok'), last4, version: out.version });
       return { ok: true, last4, unchanged: out.unchanged };
     } catch (e) {
-      log('setSellerCard', { result: 'denied', errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN' });
+      log('setSellerCard', { result: 'denied', last4, errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN' });
       throw e;
     }
   };
@@ -273,6 +420,9 @@ function makeSetWholesaleSellerCard(deps) {
 /**
  * `getWholesaleCardPaymentInfo({orderId})` — FAQAT xaridor, karta buyurtma, `in_delivery`.
  * `amount` = tovar + yetkazish (eshik oldida to'lanadigan hammasi).
+ * Karta KMS bilan dekript qilinadi; eski ochiq hujjat (shifrlashdan oldin) — o'zicha qaytadi
+ * va `legacy_plaintext_card` ogohlantirishi (PII'siz) yoziladi. Dekript xatosi —
+ * `unavailable` / `card_decryption_unavailable` (foydalanuvchiga umumiy matn).
  */
 function makeGetWholesaleCardPaymentInfo(deps) {
   const { db } = deps;
@@ -293,11 +443,22 @@ function makeGetWholesaleCardPaymentInfo(deps) {
       }
       const card = await readPayoutCard(db, o.sellerId);
       if (!card) throw fail('failed-precondition', 'Sotuvchi kartasi topilmadi', 'seller_no_card');
+      let plain;
+      try {
+        plain = await revealPayoutCard(cardCryptoFrom(deps), card);
+      } catch (e) {
+        console.error(JSON.stringify({
+          module: 'wholesale_orders', action: 'getCardPaymentInfo', result: 'failed', orderId, last4: card.last4,
+          errorCode: 'CARD_DECRYPTION_FAILED', kmsCode: cryptoCodeOf(e),
+        }));
+        throw fail('unavailable', 'Karta ma\'lumotini hozir olib bo\'lmadi. Birozdan keyin qayta urinib ko\'ring', 'card_decryption_unavailable');
+      }
+      if (plain.legacy) warn('getCardPaymentInfo', { result: 'legacy_plaintext_card', orderId, errorCode: 'LEGACY_PLAINTEXT_CARD' });
       const seller = await findSellerDoc(db, o.sellerId);
       const sd = seller ? seller.data : {};
       const sellerName = String(sd.companyName || sd.ownerName || '').trim().slice(0, 200);
       log('getCardPaymentInfo', { result: 'ok', orderId, last4: card.last4 });
-      return { amount, cardNumber: card.cardNumber, holderName: card.holderName, sellerName };
+      return { amount, cardNumber: plain.cardNumber, holderName: plain.holderName, sellerName };
     } catch (e) {
       denied('getCardPaymentInfo', orderId, e);
       throw e;
@@ -766,7 +927,10 @@ module.exports = {
   receiptDownloadUrl,
   last4Of,
   findSellerDoc,
+  payoutCardShape,
+  payoutDocHasCard,
   readPayoutCard,
+  revealPayoutCard,
   walletUidFor,
   walletBalance,
   buyerRefusals,

@@ -6,7 +6,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../models/delivery_failed.dart';
 import '../../../models/order_model.dart';
+import '../../customer_confirm/widgets/delivery_failed_courier_controls.dart';
 import 'courier_payment_sheet.dart';
 
 class CourierOrderTile extends StatelessWidget {
@@ -21,6 +23,7 @@ class CourierOrderTile extends StatelessWidget {
     required this.onArrived,
     required this.onPayment,
     required this.onFinalizeRoute,
+    this.onReportFailed,
   });
 
   final OrderModel order;
@@ -33,6 +36,9 @@ class CourierOrderTile extends StatelessWidget {
   final Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> lines)
       onPayment;
   final Future<void> Function() onFinalizeRoute;
+
+  /// «Етказиб бўлмади» (эга, 2026-10-31); `null` — тугма йўқ (эски чақирувчи).
+  final Future<void> Function(String reason)? onReportFailed;
 
   static const Color _green = AppColors.primaryDark;
 
@@ -70,6 +76,8 @@ class CourierOrderTile extends StatelessWidget {
       order.effectiveFulfillment == 'completed';
 
   String _statusLabel(BuildContext context) {
+    if (order.isOrderDeliveryFailedFinal) return context.tr('delivery_failed_status_final');
+    if (order.isOrderDeliveryFailedPending) return context.tr('delivery_failed_status_pending');
     if (_isFinalized) return context.tr('courier_status_done');
     switch (order.effectiveFulfillment) {
       case 'courier_picked':
@@ -201,6 +209,36 @@ class CourierOrderTile extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               _buildActionButtonsRow(context),
+              if (onReportFailed != null) ...[
+                const SizedBox(height: 6),
+                DeliveryFailedCourierControls(
+                  state: DeliveryFailedState(
+                    pending: order.isOrderDeliveryFailedPending,
+                    reason: order.deliveryFailedReason,
+                    deadline: order.deliveryFailedDeadline,
+                    escalated: order.deliveryFailedEscalated,
+                    leg: 'delivery',
+                  ),
+                  canReport: order.courierCanReportOrderFailed,
+                  decider: 'seller',
+                  onReport: onReportFailed!,
+                ),
+              ],
+            ] else if (onReportFailed != null && order.isOrderDeliveryFailedPending) ...[
+              // Маршрут охирига сурилган кутаётган буюртма — ҳолати кўриниб турсин.
+              const SizedBox(height: 8),
+              DeliveryFailedCourierControls(
+                state: DeliveryFailedState(
+                  pending: true,
+                  reason: order.deliveryFailedReason,
+                  deadline: order.deliveryFailedDeadline,
+                  escalated: order.deliveryFailedEscalated,
+                  leg: 'delivery',
+                ),
+                canReport: false,
+                decider: 'seller',
+                onReport: onReportFailed!,
+              ),
             ],
           ],
         ),
@@ -216,6 +254,7 @@ class CourierOrderTile extends StatelessWidget {
     if (order.canCourierArrive) {
       chips.add(_actionChip(context.tr('courier_arrived_btn'), onArrived));
     }
+    // «Етказиб бўлмади» кутилаётганда ҳам мижоз чиқиб келса курьер тўловни олади (сервер рухсат беради).
     if (_canSubmitPayment) {
       chips.add(
         _actionChip(

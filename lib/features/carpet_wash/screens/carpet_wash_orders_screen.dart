@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/carpet_wash_order.dart';
+import '../../../models/delivery_failed.dart';
+import '../../customer_confirm/widgets/delivery_failed_order_card.dart';
 import '../../../repositories/carpet_wash_orders_repository.dart';
 import '../../../core/theme/ava_tokens.dart';
 
@@ -100,6 +102,19 @@ class _OrderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // «Олиб/топшириб бўлмади» (эга, 2026-10-31; ҳамма мижоз учун мажбурий): тасдиқ ёки «Ҳозир бераман/Олмоқчиман».
+          if (order.deliveryFailed.pending) ...[
+            DeliveryFailedConfirmCard(
+              key: ValueKey('df-${order.id}'),
+              item: DeliveryFailedConfirmCard.taskItem(
+                module: DeliveryFailedModule.carpet,
+                id: order.id,
+                failReason: order.deliveryFailed.reason,
+                leg: order.deliveryFailed.leg,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               Expanded(

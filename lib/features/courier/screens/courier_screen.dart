@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/collection_task.dart';
+import '../../../models/delivery_failed.dart';
 import '../../../repositories/collection_tasks_repository.dart';
 import '../../../repositories/delivery_routes_repository.dart';
 import '../../../repositories/orders_repository.dart';
@@ -26,6 +27,28 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Kuryer paneli — yetkazib berish marshrutini ko'rsatadi va boshqaradi.
+/// Нон/бозор «етказиб бўлмади» (эга, 2026-10-31): сервер хатоси — фойдаланувчи тилида (ички код йўқ).
+Future<void> _reportFailed(BuildContext context, CourierController c, String orderId, String reason) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    await c.reportOrderFailed(orderId, reason);
+    if (!context.mounted) return;
+    messenger?.showSnackBar(SnackBar(content: Text(context.tr('restaurants_courier_failed_sent'))));
+  } on DeliveryFailedException catch (e) {
+    if (!context.mounted) return;
+    messenger?.showSnackBar(SnackBar(
+      content: Text(context.tr(deliveryFailedErrorKey(e.reason))),
+      backgroundColor: Colors.red.shade700,
+    ));
+  } catch (_) {
+    if (!context.mounted) return;
+    messenger?.showSnackBar(SnackBar(
+      content: Text(context.tr('delivery_failed_err_generic')),
+      backgroundColor: Colors.red.shade700,
+    ));
+  }
+}
+
 class CourierScreen extends StatelessWidget {
   const CourierScreen({super.key});
 
@@ -241,6 +264,7 @@ class _CourierViewState extends State<_CourierView> {
             onArrived: () => c.markArrived(o.id),
             onPayment: (lines) => c.submitPayment(o.id, lines),
             onFinalizeRoute: () => c.confirmAndAdvance(orderId: o.id),
+            onReportFailed: (reason) => _reportFailed(context, c, o.id, reason),
           );
           // Нон/бозор буюртмаси етказиш йўлида (курьер олган → етган): курьернинг жонли нуқтаси мижозга кўринади
           // (ресторан буюртмасидаги каби; фон хизмати + ёзув ҳуқуқи `firestore.rules`да).

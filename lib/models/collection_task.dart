@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'delivery_failed.dart';
+
 /// Битта йиғиб оlish qator — каталог + miqdor + narx.
 class CollectionItem {
   const CollectionItem({
@@ -59,6 +61,7 @@ class CollectionTask {
     this.completedAt,
     this.createdAt,
     this.createdBy = '',
+    this.deliveryFailed = DeliveryFailedState.none,
   });
 
   final String id;
@@ -78,6 +81,12 @@ class CollectionTask {
   final DateTime? completedAt;
   final DateTime? createdAt;
   final String createdBy;
+
+  /// «Етказилмади» кутиш ҳолати (эга, 2026-10-31; фақат сервер ёзади).
+  final DeliveryFailedState deliveryFailed;
+
+  /// Курьер «олиб бўлмади» деб ёпилган (`failed`, админ янги вазифа очади).
+  bool get isFailed => status == 'failed';
 
   bool get hasPickupGps => pickupLat != null && pickupLng != null;
 
@@ -99,6 +108,8 @@ class CollectionTask {
         return 'Якунланган';
       case 'cancelled':
         return 'Бекор қилинган';
+      case 'failed':
+        return 'Олинмади';
       default:
         return 'Тайинланган';
     }
@@ -133,6 +144,7 @@ class CollectionTask {
       completedAt: (d['completedAt'] as Timestamp?)?.toDate(),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       createdBy: (d['createdBy'] ?? '') as String,
+      deliveryFailed: DeliveryFailedState.fromDoc(d, DeliveryFailedModule.collection),
     );
   }
 }

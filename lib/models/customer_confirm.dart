@@ -44,6 +44,9 @@ abstract final class CustomerConfirmModule {
   static const carpet = 'carpet';
   static const agro = 'agro';
   static const collection = 'collection';
+
+  /// Нон/бозор буюртмаси — фақат «етказилмади» (эга, 2026-10-31).
+  static const order = 'order';
 }
 
 /// Мижоз тасдиғи қадамлари (сервер `step`).
@@ -80,7 +83,11 @@ String customerConfirmFailReasonKey(String reason) {
 
 /// Тасдиқ тугмаси матни калити — қадамга қараб. Номаълум қадам (сервер
 /// кейин қўшган) — умумий «Тасдиқлайман».
-String customerConfirmButtonKey(String step) {
+String customerConfirmButtonKey(String step, {String leg = ''}) {
+  // «Етказилмади» олиб кетишда (мижоз беради): «Ҳа, бермадим».
+  if (step == CustomerConfirmStep.deliveryFailed && leg == 'pickup') {
+    return 'customer_confirm_btn_not_given';
+  }
   switch (step) {
     case CustomerConfirmStep.handoverPickup:
       return 'customer_confirm_btn_handover';
@@ -95,7 +102,10 @@ String customerConfirmButtonKey(String step) {
 }
 
 /// Қадамга мос қисқа изоҳ калити (сервер `summary` бермаганда).
-String customerConfirmHintKey(String step) {
+String customerConfirmHintKey(String step, {String leg = ''}) {
+  if (step == CustomerConfirmStep.deliveryFailed && leg == 'pickup') {
+    return 'customer_confirm_hint_delivery_failed_pickup';
+  }
   switch (step) {
     case CustomerConfirmStep.handoverPickup:
       return 'customer_confirm_hint_handover_pickup';
@@ -123,6 +133,8 @@ String customerConfirmModuleKey(String module) {
       return 'customer_confirm_module_agro';
     case CustomerConfirmModule.collection:
       return 'customer_confirm_module_collection';
+    case CustomerConfirmModule.order:
+      return 'customer_confirm_module_order';
     default:
       return 'customer_confirm_module_generic';
   }
@@ -194,6 +206,7 @@ class CustomerConfirmation {
     this.details,
     this.canReject = false,
     this.failReason = '',
+    this.leg = '',
   });
 
   final String module;
@@ -209,6 +222,12 @@ class CustomerConfirmation {
 
   /// «Етказилмади» сабаби (`details.failReason`); бошқа қадамда бўш.
   final String failReason;
+
+  /// «Етказилмади» бўлаги (`details.leg`): `pickup` — олиб кетиш (мижоз беради), `return`, `delivery`.
+  final String leg;
+
+  /// «Олмоқчиман» тугмаси калити: олиб кетишда «Ҳозир бераман».
+  String get rejectButtonKey => leg == 'pickup' ? 'customer_confirm_btn_ready_to_give' : 'customer_confirm_btn_want_it';
 
   /// Рўйхатда ва «банд» белгисида ягона калит (бир буюртмада икки қадам бўлиши мумкин).
   String get key => '$module/$id/$step';
@@ -234,6 +253,9 @@ class CustomerConfirmation {
       canReject: raw['canReject'] == true,
       failReason: raw['details'] is Map && (raw['details'] as Map)['failReason'] is String
           ? (raw['details'] as Map)['failReason'] as String
+          : '',
+      leg: raw['details'] is Map && (raw['details'] as Map)['leg'] is String
+          ? (raw['details'] as Map)['leg'] as String
           : '',
     );
   }

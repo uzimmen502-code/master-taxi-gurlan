@@ -6,14 +6,15 @@ import '../../../models/order_model.dart';
 import '../../../services/customer_confirm_service.dart';
 import 'customer_confirm_card.dart';
 
-/// Мижознинг ресторан буюртмаси экранида: курьер «етказиб бўлмади» деди —
-/// мижоз тасдиқлайди ёки «Олмоқчиман» дейди (эга, 2026-10-31; ҳамма мижоз учун).
+/// Мижознинг буюртма экранида: курьер «етказиб бўлмади» деди — мижоз тасдиқлайди ёки
+/// «Олмоқчиман» дейди (эга, 2026-10-31; ҳамма мижоз учун). Ресторан (`restaurant`) ва
+/// нон/бозор (`order`) буюртмаси — модул буюртма туридан.
 ///
 /// Бош саҳифа банери `module_config/customer_confirm` ёқилмаган бўлса
 /// кўринмайди; бу карточка буюртма ҳужжатидан (мижоз ўзи ўқийди) жонли
 /// чиқади — қўшимча сўров йўқ. Қоида ва ҳолат — серверда
 /// (`customerConfirmHandover`); бу ерда фақат кўрсатиш ва тугма.
-class DeliveryFailedOrderCard extends StatefulWidget {
+class DeliveryFailedOrderCard extends StatelessWidget {
   const DeliveryFailedOrderCard({super.key, required this.order, this.service});
 
   final OrderModel order;
@@ -21,18 +22,48 @@ class DeliveryFailedOrderCard extends StatefulWidget {
 
   /// Буюртмадан тасдиқ элементи (сарлавҳа/изоҳ — маҳаллий матн калитлари).
   static CustomerConfirmation itemFor(OrderModel o) => CustomerConfirmation(
-        module: CustomerConfirmModule.restaurant,
+        module: o.isRestaurant ? CustomerConfirmModule.restaurant : CustomerConfirmModule.order,
         id: o.id,
         step: CustomerConfirmStep.deliveryFailed,
         canReject: true,
         failReason: o.deliveryFailedReason.isEmpty ? 'other' : o.deliveryFailedReason,
+        leg: o.isRestaurant ? '' : 'delivery',
       );
 
   @override
-  State<DeliveryFailedOrderCard> createState() => _DeliveryFailedOrderCardState();
+  Widget build(BuildContext context) =>
+      DeliveryFailedConfirmCard(item: itemFor(order), service: service);
 }
 
-class _DeliveryFailedOrderCardState extends State<DeliveryFailedOrderCard> {
+/// Умумий «етказилмади» тасдиқ карточкаси (нон/бозор, ресторан, гилам, сут, йиғиш).
+class DeliveryFailedConfirmCard extends StatefulWidget {
+  const DeliveryFailedConfirmCard({super.key, required this.item, this.service});
+
+  /// Модул/ид/сабаб/бўлак — ҳужжатдан (мижоз ўз ҳужжатини ўқийди).
+  final CustomerConfirmation item;
+  final CustomerConfirmService? service;
+
+  /// Гилам/сут/йиғиш вазифаси учун элемент.
+  static CustomerConfirmation taskItem({
+    required String module,
+    required String id,
+    required String failReason,
+    required String leg,
+  }) =>
+      CustomerConfirmation(
+        module: module,
+        id: id,
+        step: CustomerConfirmStep.deliveryFailed,
+        canReject: true,
+        failReason: failReason.isEmpty ? 'other' : failReason,
+        leg: leg,
+      );
+
+  @override
+  State<DeliveryFailedConfirmCard> createState() => _DeliveryFailedConfirmCardState();
+}
+
+class _DeliveryFailedConfirmCardState extends State<DeliveryFailedConfirmCard> {
   late final CustomerConfirmService _service = widget.service ?? CustomerConfirmService();
   bool _busy = false;
 
@@ -42,8 +73,8 @@ class _DeliveryFailedOrderCardState extends State<DeliveryFailedOrderCard> {
     String? errKey;
     try {
       await _service.confirm(
-        module: CustomerConfirmModule.restaurant,
-        id: widget.order.id,
+        module: widget.item.module,
+        id: widget.item.id,
         step: CustomerConfirmStep.deliveryFailed,
         reject: reject,
       );
@@ -55,8 +86,11 @@ class _DeliveryFailedOrderCardState extends State<DeliveryFailedOrderCard> {
       if (mounted) setState(() => _busy = false);
     }
     if (!mounted) return;
+    final doneKey = reject
+        ? (widget.item.leg == 'pickup' ? 'customer_confirm_ready_to_give_done' : 'customer_confirm_rejected_done')
+        : 'customer_confirm_done';
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(context.tr(errKey ?? (reject ? 'customer_confirm_rejected_done' : 'customer_confirm_done'))),
+      content: Text(context.tr(errKey ?? doneKey)),
       backgroundColor: errKey == null ? null : Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
     ));
@@ -65,7 +99,7 @@ class _DeliveryFailedOrderCardState extends State<DeliveryFailedOrderCard> {
   @override
   Widget build(BuildContext context) {
     return CustomerConfirmCard(
-      item: DeliveryFailedOrderCard.itemFor(widget.order),
+      item: widget.item,
       busy: _busy,
       onConfirm: () => _decide(reject: false),
       onReject: () => _decide(reject: true),

@@ -6,10 +6,13 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/carpet_wash_order.dart';
 import '../../../models/customer_confirm.dart';
+import '../../../models/delivery_failed.dart';
+import '../../../services/delivery_failed_service.dart';
 import '../../../services/carpet_wash_service.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../courier/widgets/courier_task_list.dart';
 import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
+import '../../customer_confirm/widgets/delivery_failed_courier_controls.dart';
 import '../../../core/utils/user_error.dart';
 
 const _brown = Color(0xFF6D4C41);
@@ -22,9 +25,12 @@ const _brown = Color(0xFF6D4C41);
 /// очиш эса ҳар бир курьерга вазифани олмасданоқ мижоз исми, телефони ва
 /// манзилини берарди (40-қоида).
 class CarpetWashCourierScreen extends StatefulWidget {
-  const CarpetWashCourierScreen({super.key, this.service});
+  const CarpetWashCourierScreen({super.key, this.service, this.deliveryFailedService});
 
   final CarpetWashService? service;
+
+  /// «Етказилмади» callable'лари (тестда алмаштирилади).
+  final DeliveryFailedService? deliveryFailedService;
 
   @override
   State<CarpetWashCourierScreen> createState() =>
@@ -34,7 +40,12 @@ class CarpetWashCourierScreen extends StatefulWidget {
 class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
   late final CarpetWashService _service =
       widget.service ?? CarpetWashService();
+  late final DeliveryFailedService _df =
+      widget.deliveryFailedService ?? DeliveryFailedService();
   String _phone = '';
+
+  /// Рўйхатда «етказилмади» кутаётган вазифа бор — рўйхат ўзи янгиланади (мижоз/админ жавоби).
+  bool _dfWatching = false;
 
   @override
   void initState() {
@@ -124,7 +135,9 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
             _ActiveCourierTab(
               load: _loadActive,
               awaiting: _awaiting,
+              dfWatching: _dfWatching,
               onNext: _advance,
+              onReportFailed: _reportFailed,
               onCall: callPhone,
             ),
           ],
@@ -152,6 +165,8 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
         setState(() => stale.forEach(_awaiting.remove));
       }
     }
+    final anyDf = list.any((o) => o.deliveryFailed.pending);
+    if (anyDf != _dfWatching && mounted) setState(() => _dfWatching = anyDf);
     return list;
   }
 
@@ -171,6 +186,30 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
           SnackBar(content: Text('$e')),
         );
       }
+    }
+    await reload();
+  }
+
+  /// «Олиб/етказиб бўлмади» (эга, 2026-10-31): ҳолат ўзгармайди — мижоз тасдиғи сўралади,
+  /// жавоб бўлмаса админ ҳал қилади. Хато — фойдаланувчи тилида (ички код йўқ).
+  Future<void> _reportFailed(
+    CarpetWashOrder order,
+    String reason,
+    Future<void> Function() reload,
+  ) async {
+    String? errKey;
+    try {
+      await _df.report(module: DeliveryFailedModule.carpet, id: order.id, reason: reason);
+    } on DeliveryFailedException catch (e) {
+      errKey = deliveryFailedErrorKey(e.reason);
+    } catch (_) {
+      errKey = 'delivery_failed_err_generic';
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.tr(errKey ?? 'restaurants_courier_failed_sent')),
+        backgroundColor: errKey == null ? null : Colors.red.shade700,
+      ));
     }
     await reload();
   }
@@ -268,12 +307,16 @@ class _ActiveCourierTab extends StatelessWidget {
     required this.awaiting,
     required this.onNext,
     required this.onCall,
+    this.dfWatching = false,
+    this.onReportFailed,
   });
 
   final Future<List<CarpetWashOrder>> Function() load;
 
   /// Мижоз тасдиғи кутилаётган вазифалар (`id → status`).
   final Map<String, String> awaiting;
+  final bool dfWatching;
+  final Future<void> Function(CarpetWashOrder order, String reason, Future<void> Function() reload)? onReportFailed;
   final _TaskAction onNext;
   final Future<bool> Function(String phone) onCall;
 
@@ -283,7 +326,7 @@ class _ActiveCourierTab extends StatelessWidget {
       load: load,
       emptyText: context.tr('carpet_no_active_tasks'),
       // Кутиш давомида рўйхат ўзи янгиланади: мижоз тасдиқласа вазифа ўтади.
-      autoRefresh: awaiting.isNotEmpty,
+      autoRefresh: awaiting.isNotEmpty || dfWatching,
       itemBuilder: (context, order, reload) {
         final isPickup =
             order.status == CarpetWashOrder.statusPickupInDelivery;
@@ -313,6 +356,15 @@ class _ActiveCourierTab extends StatelessWidget {
               const SizedBox(height: 10),
               if (waiting) ...[
                 const CourierAwaitingNotice(),
+                const SizedBox(height: 10),
+              ],
+              if (onReportFailed != null && order.deliveryFailed.pending) ...[
+                DeliveryFailedCourierControls(
+                  state: order.deliveryFailed,
+                  canReport: false,
+                  pickup: isPickup,
+                  onReport: (r) => onReportFailed!(order, r, reload),
+                ),
                 const SizedBox(height: 10),
               ],
               Row(
@@ -348,6 +400,13 @@ class _ActiveCourierTab extends StatelessWidget {
                   ),
                 ],
               ),
+              if (onReportFailed != null && !order.deliveryFailed.pending && hasArrived && !waiting)
+                DeliveryFailedCourierControls(
+                  state: order.deliveryFailed,
+                  canReport: true,
+                  pickup: isPickup,
+                  onReport: (r) => onReportFailed!(order, r, reload),
+                ),
             ],
           ),
         );

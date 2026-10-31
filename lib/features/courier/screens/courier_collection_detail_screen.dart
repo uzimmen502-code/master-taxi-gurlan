@@ -12,10 +12,13 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/user_error.dart';
 import '../../../models/collection_task.dart';
 import '../../../models/customer_confirm.dart';
+import '../../../models/delivery_failed.dart';
 import '../../../repositories/collection_tasks_repository.dart';
 import '../../../services/collection_service.dart';
+import '../../../services/delivery_failed_service.dart';
 import '../../../services/order_payment_service.dart';
 import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
+import '../../customer_confirm/widgets/delivery_failed_courier_controls.dart';
 
 typedef CollectionFinalizeFn = Future<Map<String, dynamic>> Function({
   required String courierPhone,
@@ -32,9 +35,13 @@ class CourierCollectionDetailScreen extends StatefulWidget {
     this.repository,
     this.pollInterval = const Duration(seconds: 8),
     this.finalize,
+    this.deliveryFailedService,
   });
 
   final CollectionTask task;
+
+  /// «Олиб бўлмади» callable'лари (тестда алмаштирилади).
+  final DeliveryFailedService? deliveryFailedService;
 
   /// Якунлаш callable'и — синовда алмаштирилади; одатда
   /// [CollectionService.finalizeCollection].
@@ -63,10 +70,17 @@ class _CourierCollectionDetailScreenState
   Timer? _pollTimer;
   bool _polling = false;
 
+  /// «Олиб бўлмади» (эга, 2026-10-31): мижоз ёки админ қарори кутилмоқда.
+  late DeliveryFailedState _dfState = widget.task.deliveryFailed;
+  late final DeliveryFailedService _df = widget.deliveryFailedService ?? DeliveryFailedService();
+
   @override
   void initState() {
     super.initState();
     _hasArrived = widget.task.hasArrived;
+    if (widget.task.deliveryFailed.pending) {
+      _pollTimer = Timer.periodic(widget.pollInterval, (_) => _checkTask());
+    }
     _qtyCtrls = [
       for (final item in widget.task.items)
         TextEditingController(text: _qtyText(item.qty)),
@@ -107,7 +121,17 @@ class _CourierCollectionDetailScreenState
     try {
       final t = await repo.getById(widget.task.id);
       if (!mounted) return;
-      if (t != null && t.isActive) return;
+      if (t != null && t.isActive) {
+        // «Олиб бўлмади» кутиши ўзгарган бўлиши мумкин (мижоз/админ «давом этсин» деди).
+        if (t.deliveryFailed.pending != _dfState.pending || t.deliveryFailed.escalated != _dfState.escalated) {
+          setState(() => _dfState = t.deliveryFailed);
+        }
+        if (!_awaitingCustomer && !_dfState.pending) {
+          _pollTimer?.cancel();
+          _pollTimer = null;
+        }
+        return;
+      }
       // Ҳисоб-китоб варағи ҳали очиқ бўлса, `pop` уни ёпарди — кейинги уринишда.
       if (ModalRoute.of(context)?.isCurrent != true) return;
       _pollTimer?.cancel();
@@ -189,6 +213,28 @@ class _CourierCollectionDetailScreenState
         ),
       );
     }
+  }
+
+  /// «Олиб бўлмади»: ҳолат ўзгармайди — мижоз тасдиғи сўралади, жавоб бўлмаса админ ҳал қилади.
+  /// Якунланса (`failed`) вазифа фаол рўйхатдан чиқади — экран ёпилади ([_checkTask]).
+  Future<void> _reportFailed(String reason) async {
+    String? errKey;
+    try {
+      await _df.report(module: DeliveryFailedModule.collection, id: widget.task.id, reason: reason);
+      if (mounted) {
+        setState(() => _dfState = DeliveryFailedState(pending: true, reason: reason, leg: 'pickup'));
+      }
+      _pollTimer ??= Timer.periodic(widget.pollInterval, (_) => _checkTask());
+    } on DeliveryFailedException catch (e) {
+      errKey = deliveryFailedErrorKey(e.reason);
+    } catch (_) {
+      errKey = 'delivery_failed_err_generic';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(context.tr(errKey ?? 'restaurants_courier_failed_sent')),
+      backgroundColor: errKey == null ? null : Colors.red.shade700,
+    ));
   }
 
   Future<void> _onFinalizePressed() async {
@@ -524,6 +570,15 @@ class _CourierCollectionDetailScreenState
                       fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
+            if (!_awaitingCustomer && (_hasArrived || _dfState.pending)) ...[
+              const SizedBox(height: 6),
+              DeliveryFailedCourierControls(
+                state: _dfState,
+                canReport: _hasArrived,
+                pickup: true,
+                onReport: _reportFailed,
+              ),
+            ],
           ],
         ),
       ),

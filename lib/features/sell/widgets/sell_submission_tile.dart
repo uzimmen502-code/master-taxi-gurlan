@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/collection_task.dart';
+import '../../../models/delivery_failed.dart';
 import '../../../models/sell_submission.dart';
 import '../../../repositories/collection_tasks_repository.dart';
+import '../../customer_confirm/widgets/delivery_failed_order_card.dart';
 
 /// Platforma taklifi kartasi — status, yig‘ish, summa, forward.
 class SellSubmissionTile extends StatelessWidget {
@@ -144,7 +146,7 @@ class _CollectionProgressLine extends StatelessWidget {
           );
         }
         final value = task.finalValue > 0 ? task.finalValue : task.totalValue;
-        return Row(
+        final line = Row(
           children: [
             Icon(Icons.local_shipping_outlined,
                 size: 14, color: Colors.blue.shade700),
@@ -158,6 +160,24 @@ class _CollectionProgressLine extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Colors.blue.shade800,
                 ),
+              ),
+            ),
+          ],
+        );
+        // «Олиб бўлмади» (эга, 2026-10-31; мажбурий): мижоз тасдиқлайди ёки «Ҳозир бераман».
+        if (!task.deliveryFailed.pending) return line;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            line,
+            const SizedBox(height: 8),
+            DeliveryFailedConfirmCard(
+              key: ValueKey('df-${task.id}'),
+              item: DeliveryFailedConfirmCard.taskItem(
+                module: DeliveryFailedModule.collection,
+                id: task.id,
+                failReason: task.deliveryFailed.reason,
+                leg: 'pickup',
               ),
             ),
           ],

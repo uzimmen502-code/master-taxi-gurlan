@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'delivery_failed.dart';
+
 /// `agro_pickup_orders/{id}` — qishloq xo'jaligi mahsulotini qabul qilish.
 class AgroPickupOrder {
   const AgroPickupOrder({
@@ -20,6 +22,7 @@ class AgroPickupOrder {
     this.arrivedAt,
     this.createdAt,
     this.updatedAt,
+    this.deliveryFailed = DeliveryFailedState.none,
   });
 
   final String id;
@@ -39,6 +42,9 @@ class AgroPickupOrder {
   final DateTime? arrivedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// «Етказилмади» кутиш ҳолати (эга, 2026-10-31; фақат сервер ёзади).
+  final DeliveryFailedState deliveryFailed;
 
   static const productMilk = 'milk';
 
@@ -80,6 +86,7 @@ class AgroPickupOrder {
       status: (d['status'] ?? statusNew) as String,
       pickupCourierId: (d['pickupCourierId'] ?? '') as String,
       arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
+      deliveryFailed: DeliveryFailedState.fromDoc(d, DeliveryFailedModule.agro),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
     );

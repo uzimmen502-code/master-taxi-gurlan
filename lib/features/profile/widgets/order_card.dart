@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
+import '../../customer_confirm/widgets/delivery_failed_order_card.dart';
 
 class OrderCard extends StatelessWidget {
   const OrderCard({
@@ -83,6 +84,16 @@ class OrderCard extends StatelessWidget {
                   params: {'n': '${order.items.length - 3}'}),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
         const SizedBox(height: 8),
+        // Нон/бозор «етказиб бўлмади» (эга, 2026-10-31; мажбурий): тасдиқ ёки «Олмоқчиман».
+        if (order.isOrderDeliveryFailedPending) ...[
+          DeliveryFailedOrderCard(key: ValueKey('df-${order.id}'), order: order),
+          const SizedBox(height: 8),
+        ],
+        if (order.isOrderDeliveryFailedFinal)
+          _BadgeBox(
+            text: context.tr('delivery_failed_status_final'),
+            color: Colors.red,
+          ),
         if (order.deliveryTime.isNotEmpty)
           _BadgeBox(
             text: context.trMsg('orders_eta',

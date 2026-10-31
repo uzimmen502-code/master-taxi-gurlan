@@ -39,7 +39,7 @@ class CustomerConfirmCard extends StatelessWidget {
         : context.tr(customerConfirmModuleKey(item.module));
     final summary = item.summary.isNotEmpty
         ? item.summary
-        : context.tr(customerConfirmHintKey(item.step));
+        : context.tr(customerConfirmHintKey(item.step, leg: item.leg));
     final d = item.details;
 
     return Container(
@@ -143,7 +143,7 @@ class CustomerConfirmCard extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      context.tr(customerConfirmButtonKey(item.step)),
+                      context.tr(customerConfirmButtonKey(item.step, leg: item.leg)),
                       textAlign: TextAlign.center,
                     ),
             ),
@@ -159,7 +159,7 @@ class CustomerConfirmCard extends StatelessWidget {
                   textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 child: Text(
-                  context.tr('customer_confirm_btn_want_it'),
+                  context.tr(item.rejectButtonKey),
                   textAlign: TextAlign.center,
                 ),
               ),

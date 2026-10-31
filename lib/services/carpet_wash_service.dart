@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/carpet_wash_order.dart';
 import '../models/customer_confirm.dart';
+import '../models/delivery_failed.dart';
 
 /// Gilam yuvish Cloud Functions wrapper.
 class CarpetWashService {
@@ -63,6 +64,8 @@ class CarpetWashService {
       status: (m['status'] as String?) ?? fallbackStatus,
       pickupArrivedAt: at(m['pickupArrivedAtMs']),
       returnArrivedAt: at(m['returnArrivedAtMs']),
+      deliveryFailed: DeliveryFailedState.fromCallable(m,
+          leg: m['status'] == CarpetWashOrder.statusReturnInDelivery ? 'return' : 'pickup'),
       createdAt: at(m['createdAtMs']),
     );
   }

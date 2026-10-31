@@ -16,6 +16,8 @@ import '../../../repositories/delivery_routes_repository.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../repositories/provider_presence_repository.dart';
 import '../../../services/courier_route_service.dart';
+import '../../../services/delivery_failed_service.dart';
+import '../../../models/delivery_failed.dart';
 import '../../../services/order_payment_service.dart';
 import '../../restaurants/courier/restaurant_courier_logic.dart';
 import '../../restaurants/data/restaurants_repository.dart';
@@ -51,6 +53,9 @@ class CourierController extends ChangeNotifier {
   /// `FcmService`), янги курьерда эса қоида уни рад этарди.
   final ProviderPresenceRepository _presence;
   final CourierRouteService _routeService = CourierRouteService();
+
+  /// «Етказилмади» callable'лари (тестда алмаштирилади).
+  late DeliveryFailedService deliveryFailed = DeliveryFailedService();
 
   String _courierPhone = '';
   String _courierName = 'Курьер';
@@ -93,6 +98,9 @@ class CourierController extends ChangeNotifier {
   /// тўлангани етказилгунча `paid` бўлади, у ҳали тугамаган.
   static bool isOrderFinalized(OrderModel o) {
     if (o.isRestaurant) return isRestaurantOrderFinalized(o);
+    // «Етказилмади» деб ёпилган (эга, 2026-10-31): сервер уни маршрутдан ўзи чиқаради;
+    // эскирган snapshot'да ҳам «кейинги буюртма» тугмаси чиқсин.
+    if (o.isOrderDeliveryFailedFinal || o.status == 'cancelled') return true;
     return o.effectivePayment == 'paid' ||
         o.effectiveFulfillment == 'completed' ||
         o.status == 'delivered';
@@ -348,6 +356,16 @@ class CourierController extends ChangeNotifier {
       order: before ??
           OrderModel(id: orderId, type: 'restaurant', total: 0, status: '', items: const []),
     );
+  }
+
+  /// Нон/бозор: «етказиб бўлмади» (эга, 2026-10-31). Ҳолат ва пул ўзгармайди — мижоз тасдиғи сўралади;
+  /// сервер буюртмани маршрут охирига суради (курьер кейингисига ўтади), якунда маршрутдан чиқаради.
+  /// Хато чақирувчига қайтади (карточка матнини кўрсатади).
+  Future<void> reportOrderFailed(String orderId, String reason) async {
+    await deliveryFailed.report(module: DeliveryFailedModule.order, id: orderId, reason: reason);
+    await _refreshOrder(orderId);
+    _info = 'restaurants_courier_failed_sent';
+    _safeNotify();
   }
 
   Future<Map<String, dynamic>> submitPayment(

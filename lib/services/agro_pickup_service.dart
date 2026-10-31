@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/agro_pickup_order.dart';
 import '../models/customer_confirm.dart';
+import '../models/delivery_failed.dart';
 
 /// Agro qabul (sut va h.k.) Cloud Functions wrapper.
 class AgroPickupService {
@@ -63,6 +64,7 @@ class AgroPickupService {
       note: (m['note'] ?? '') as String,
       status: (m['status'] as String?) ?? fallbackStatus,
       arrivedAt: at(m['arrivedAtMs']),
+      deliveryFailed: DeliveryFailedState.fromCallable(m, leg: 'pickup'),
       createdAt: at(m['createdAtMs']),
     );
   }

@@ -52,6 +52,7 @@ import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_tasks_admin_screen.dart';
 import 'customer_confirm_admin_screen.dart';
+import 'delivery_failed_admin_screen.dart';
 import 'courier_management_screen.dart';
 import 'taxi_verification_screen.dart';
 import 'driver_applications_screen.dart';
@@ -196,6 +197,15 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Мижоз тасдиғи',
       icon: Icons.verified_outlined,
       description: 'Мижоз тасдиғи: модуллар босқичи ва синовчилар',
+      access: _SectionAccess.users,
+    ),
+    // Сервер: `listDeliveryFailedPending` / `resolveDeliveryFailed` — гилам/сут/йиғиш фақат
+    // admin/superadmin (нон/бозор — сотувчи ҳам), шунинг учун `users`.
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'Етказилмади — қарор',
+      icon: Icons.report_problem_outlined,
+      description: 'Курьер «етказиб бўлмади» деди, мижоз жавоб бермади — қарор',
       access: _SectionAccess.users,
     ),
     _AdminSection(
@@ -662,6 +672,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Мижоз тасдиғи') {
       return const CustomerConfirmAdminScreen();
+    }
+    if (section.label == 'Етказилмади — қарор') {
+      return const DeliveryFailedAdminScreen();
     }
     if (section.label == 'Кафе-ресторанлар') {
       return const RestaurantsAdminScreen();

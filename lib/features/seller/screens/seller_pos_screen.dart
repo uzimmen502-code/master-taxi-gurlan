@@ -11,6 +11,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/bread_product.dart';
 import '../../../models/order_model.dart';
+import '../../customer_confirm/widgets/delivery_failed_decision_list.dart';
 import '../controllers/seller_pos_controller.dart';
 
 /// Sotuvchi mini-kassa — Tezkor + Buyurtmalar.
@@ -69,6 +70,9 @@ class _SellerPosView extends StatelessWidget {
       ),
       body: Column(
         children: [
+          // Нон/бозор «етказилмади»: мижоз жавоб бермаса сотувчи ҳал қилади (эга, 2026-10-31).
+          // Кутаётган бўлмаса ҳеч нарса кўринмайди.
+          const DeliveryFailedDecisionList(hideWhenEmpty: true),
           _MainTabs(c: c),
           Expanded(
             child: c.mainTab == SellerMainTab.tezkor

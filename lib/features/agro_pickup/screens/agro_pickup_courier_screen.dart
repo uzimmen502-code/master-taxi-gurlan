@@ -5,10 +5,13 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/agro_pickup_order.dart';
+import '../../../models/delivery_failed.dart';
 import '../../../services/agro_pickup_service.dart';
+import '../../../services/delivery_failed_service.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../courier/widgets/courier_task_list.dart';
 import '../../customer_confirm/widgets/courier_awaiting_notice.dart';
+import '../../customer_confirm/widgets/delivery_failed_courier_controls.dart';
 import '../../../core/utils/user_error.dart';
 
 const _green = AvaLight.ok;
@@ -21,9 +24,12 @@ const _green = AvaLight.ok;
 /// ҲАММА курьерларнинг `pickup_in_delivery` вазифаларини олиб, бегонасини
 /// клиентда яширарди.
 class AgroPickupCourierScreen extends StatefulWidget {
-  const AgroPickupCourierScreen({super.key, this.service});
+  const AgroPickupCourierScreen({super.key, this.service, this.deliveryFailedService});
 
   final AgroPickupService? service;
+
+  /// «Етказилмади» callable'лари (тестда алмаштирилади).
+  final DeliveryFailedService? deliveryFailedService;
 
   @override
   State<AgroPickupCourierScreen> createState() =>
@@ -33,7 +39,12 @@ class AgroPickupCourierScreen extends StatefulWidget {
 class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
   late final AgroPickupService _service =
       widget.service ?? AgroPickupService();
+  late final DeliveryFailedService _df =
+      widget.deliveryFailedService ?? DeliveryFailedService();
   String _phone = '';
+
+  /// Рўйхатда «олиб бўлмади» кутаётган вазифа бор — рўйхат ўзи янгиланади.
+  bool _dfWatching = false;
 
   @override
   void initState() {
@@ -108,7 +119,9 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
             _ActiveTab(
               load: _loadActive,
               awaiting: _awaiting,
+              dfWatching: _dfWatching,
               onNext: _advance,
+              onReportFailed: _reportFailed,
               onCall: callPhone,
             ),
           ],
@@ -136,7 +149,32 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
         setState(() => stale.forEach(_awaiting.remove));
       }
     }
+    final anyDf = list.any((o) => o.deliveryFailed.pending);
+    if (anyDf != _dfWatching && mounted) setState(() => _dfWatching = anyDf);
     return list;
+  }
+
+  /// «Олиб бўлмади» (эга, 2026-10-31): мижоз тасдиғи сўралади, жавоб бўлмаса админ ҳал қилади.
+  Future<void> _reportFailed(
+    AgroPickupOrder order,
+    String reason,
+    Future<void> Function() reload,
+  ) async {
+    String? errKey;
+    try {
+      await _df.report(module: DeliveryFailedModule.agro, id: order.id, reason: reason);
+    } on DeliveryFailedException catch (e) {
+      errKey = deliveryFailedErrorKey(e.reason);
+    } catch (_) {
+      errKey = 'delivery_failed_err_generic';
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.tr(errKey ?? 'restaurants_courier_failed_sent')),
+        backgroundColor: errKey == null ? null : Colors.red.shade700,
+      ));
+    }
+    await reload();
   }
 
   /// «Етиб келдим» → «Олиб кетилди», кейин рўйхатни янгилаш.
@@ -213,12 +251,16 @@ class _ActiveTab extends StatelessWidget {
     required this.awaiting,
     required this.onNext,
     required this.onCall,
+    this.dfWatching = false,
+    this.onReportFailed,
   });
 
   final Future<List<AgroPickupOrder>> Function() load;
 
   /// Мижоз тасдиғи кутилаётган вазифалар (`id → status`).
   final Map<String, String> awaiting;
+  final bool dfWatching;
+  final Future<void> Function(AgroPickupOrder order, String reason, Future<void> Function() reload)? onReportFailed;
   final _TaskAction onNext;
   final Future<bool> Function(String phone) onCall;
 
@@ -228,7 +270,7 @@ class _ActiveTab extends StatelessWidget {
       load: load,
       emptyText: context.tr('carpet_no_active_tasks'),
       // Кутиш давомида рўйхат ўзи янгиланади: мижоз тасдиқласа вазифа ўтади.
-      autoRefresh: awaiting.isNotEmpty,
+      autoRefresh: awaiting.isNotEmpty || dfWatching,
       itemBuilder: (context, order, reload) {
         final hasArrived = order.arrivedAt != null;
         final waiting = awaiting[order.id] == order.status;
@@ -245,6 +287,14 @@ class _ActiveTab extends StatelessWidget {
           onPrimary: waiting ? null : () => onNext(order, reload),
           waiting: waiting,
           onCall: () => onCall(order.customerPhone),
+          failControls: onReportFailed == null
+              ? null
+              : DeliveryFailedCourierControls(
+                  state: order.deliveryFailed,
+                  canReport: hasArrived && !waiting,
+                  pickup: true,
+                  onReport: (r) => onReportFailed!(order, r, reload),
+                ),
         );
       },
     );
@@ -259,6 +309,7 @@ class _OrderCard extends StatelessWidget {
     this.onCall,
     this.subtitle,
     this.waiting = false,
+    this.failControls,
   });
 
   final AgroPickupOrder order;
@@ -273,6 +324,9 @@ class _OrderCard extends StatelessWidget {
   /// `null` — вазифа ҳали олинмаган: мижоз маълумоти йўқ, қўнғироқ ҳам йўқ.
   final VoidCallback? onCall;
   final String? subtitle;
+
+  /// «Олиб бўлмади» тугмаси / кутиш блоки (фақат «Фаол» табда).
+  final Widget? failControls;
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +391,10 @@ class _OrderCard extends StatelessWidget {
             )
           else
             SizedBox(width: double.infinity, child: primary),
+          if (failControls != null) ...[
+            const SizedBox(height: 6),
+            failControls!,
+          ],
         ],
       ),
     );

@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'delivery_failed.dart';
+
 /// `carpet_wash_orders/{id}` — gilam yuvish buyurtmasi.
 class CarpetWashOrder {
   const CarpetWashOrder({
@@ -21,6 +23,7 @@ class CarpetWashOrder {
     this.returnArrivedAt,
     this.createdAt,
     this.updatedAt,
+    this.deliveryFailed = DeliveryFailedState.none,
   });
 
   final String id;
@@ -41,6 +44,9 @@ class CarpetWashOrder {
   final DateTime? returnArrivedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// «Етказилмади» кутиш ҳолати (эга, 2026-10-31; фақат сервер ёзади).
+  final DeliveryFailedState deliveryFailed;
 
   static const statusNew = 'new';
   static const statusAccepted = 'accepted';
@@ -100,6 +106,7 @@ class CarpetWashOrder {
       returnCourierId: (d['returnCourierId'] ?? '') as String,
       pickupArrivedAt: (d['pickupArrivedAt'] as Timestamp?)?.toDate(),
       returnArrivedAt: (d['returnArrivedAt'] as Timestamp?)?.toDate(),
+      deliveryFailed: DeliveryFailedState.fromDoc(d, DeliveryFailedModule.carpet),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
     );

@@ -126,6 +126,30 @@ class OrderModel {
   /// Ресторанга қайтарилган / қўйиб юборилган буюртмага янги курьер қидириш муддати.
   final DateTime? returnSearchUntil;
 
+  /// «Етказилмади» белгисининг модули (`awaitingCustomerConfirm.module`): нон/бозорда order,
+  /// ресторанда бўш (эски белги шакли).
+  final String deliveryFailedModule;
+
+  /// Нон/бозор буюртмаси (эга, 2026-10-31): курьер «етказиб бўлмади» деди — мижоз ёки сотувчи
+  /// қарорини кутяпти. Қоида серверда (delivery_failed.js), бу — фақат кўрсатиш.
+  bool get isOrderDeliveryFailedPending =>
+      !isRestaurant &&
+      awaitingConfirmStep == 'delivery_failed' &&
+      deliveryFailedModule == 'order' &&
+      status == 'in_delivery' &&
+      (effectiveFulfillment == 'courier_picked' || effectiveFulfillment == 'arrived');
+
+  /// Нон/бозор буюртмаси «етказилмади» деб ёпилган (`fulfillmentStatus: delivery_failed`).
+  bool get isOrderDeliveryFailedFinal => !isRestaurant && effectiveFulfillment == 'delivery_failed';
+
+  /// Курьер «етказиб бўлмади» юбора оладими (нон/бозор): йўлда ёки етиб келган, кутиш йўқ.
+  bool get courierCanReportOrderFailed =>
+      !isRestaurant &&
+      status == 'in_delivery' &&
+      (effectiveFulfillment == 'courier_picked' || effectiveFulfillment == 'arrived') &&
+      paymentStatus != 'payment_pending_confirm' &&
+      !isOrderDeliveryFailedPending;
+
   bool get isHandoverPending => isRestaurant && handoverStatus == 'pending';
 
   /// Ресторан кодни киритиши керак (курьер буюртмани қайтармоқда).
@@ -202,6 +226,7 @@ class OrderModel {
     this.deliveryFailedReason = '',
     this.deliveryFailedDeadline,
     this.deliveryFailedEscalated = false,
+    this.deliveryFailedModule = '',
     this.handoverStatus = '',
     this.handoverTarget = '',
     this.handoverExpiresAt,
@@ -416,6 +441,7 @@ class OrderModel {
           ? _parseDate((d['awaitingCustomerConfirm'] as Map)['escalateAt'])
           : null,
       deliveryFailedEscalated: d['deliveryFailedEscalatedAt'] != null,
+      deliveryFailedModule: awaitingField(d, 'module'),
       handoverStatus: _mapString(d['handover'], 'status'),
       handoverTarget: _mapString(d['handover'], 'target'),
       handoverExpiresAt: d['handover'] is Map ? _parseDate((d['handover'] as Map)['expiresAt']) : null,

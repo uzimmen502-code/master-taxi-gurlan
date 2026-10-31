@@ -8,6 +8,7 @@
     "test:settlement:all": "node tools/settlement_e2e_test.js",
     "test:anon-sessions": "node test/anon_session_fields.test.js",
     "test:tv-playback-stats": "node test/tv_clip_playback_stats_rules.test.js",
+    "test:tv-views-rules": "node test/tv_clip_views_rules.test.js",
     "test:tv-clip-runs": "node test/tv_clip_runs.test.js",
     "test:tv-clip-output": "node test/tv_clip_output.test.js",
     "test:tv-clip-moderation": "node test/tv_clip_moderation.test.js",

@@ -4076,7 +4076,8 @@ service cloud.firestore {
       }
 
       match /views/{viewerId} {
-        allow read: if isAdmin();
+        allow list: if isAdmin();
+        allow get: if isAdmin() || phoneDocIdsMatch(userDocIdFromPhoneToken(), viewerId);
         allow create: if isAuth()
             && phoneDocIdsMatch(userDocIdFromPhoneToken(), viewerId)
             && request.resource.data.keys().hasOnly(['viewedAt']);

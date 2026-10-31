@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../core/utils/crash_report.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 
@@ -91,6 +94,15 @@ class TvClipViewRecorder {
         )
         .then((ok) {
       if (ok) onRecorded?.call();
+    }, onError: (Object e, StackTrace st) {
+      // Ko'rish hisobi best-effort: rules/tarmoq xatosi ilovani «fatal»
+      // qilmasin (avval ushlanmagan async xato Crashlytics'da fatal edi).
+      unawaited(CrashReport.nonFatal(
+        e,
+        st,
+        reason: 'TV_CLIP_VIEW_RECORD_FAILED',
+        keys: {'clipId': clipId},
+      ));
     });
   }
 

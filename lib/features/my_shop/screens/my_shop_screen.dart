@@ -10,6 +10,7 @@ import '../../business_map/screens/business_products_screen.dart';
 import '../../business_map/screens/my_businesses_screen.dart' show waitForMyBusiness;
 import '../my_shop_presence.dart';
 import '../seller_tg_channel.dart';
+import '../shop_opened_celebration.dart';
 import '../widgets/seller_tg_channel_card.dart';
 import '../widgets/shop_link_sheet.dart';
 import 'main_shop_screen.dart';
@@ -122,9 +123,13 @@ class _MyShopScreenState extends State<MyShopScreen> {
           ),
         ));
     // Янги дўкон (филиал эмас) сақланди — унинг маҳсулотлар экрани дарров очилади (эга, 2026-10-26: «маъқул», «ҳа»).
+    // Таҳрир, филиал (`true`), бекор ёки хато — бу ерга келмайди.
     if (b != null || result is! String || result.isEmpty || !mounted) return;
     final created = await _findShop(result);
-    if (created != null && mounted) await _openProducts(created);
+    if (created == null || !mounted) return;
+    // Табрик (эга, 2026-10-31): шу дўкон учун бир марта, «Маҳсулот қўшиш» босилгач маҳсулотлар экрани.
+    await celebrateShopOpenedOnce(context, created.id);
+    if (mounted) await _openProducts(created);
   }
 
   /// Янги дўкон рўйхатга тушгунча кутади — умумий [waitForMyBusiness] (аввал жорий рўйхат, бўлмаса янги обуна).

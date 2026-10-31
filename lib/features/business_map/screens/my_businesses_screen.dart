@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/celebration_dialog.dart';
+import '../../my_shop/shop_opened_celebration.dart';
 import '../data/business_repository.dart';
 import '../domain/business.dart';
 import '../domain/product_kind.dart' as product_kind;
@@ -76,10 +78,29 @@ class _MyBusinessesScreenState extends State<MyBusinessesScreen> {
         ));
     // Янги объект (филиал эмас) сақланди — маҳсулот сотадиган тур (чакана/улгуржи) бўлса, маҳсулотлар экрани
     // дарров очилади («Менинг дўконим» каби). Бошқа турлар (кафе, хизмат …) — рўйхатда қолади.
+    // Таҳрир, филиал (`true`), бекор ёки хато — бу ерга келмайди.
     if (b != null || result is! String || result.isEmpty || !mounted) return;
     final created = await waitForMyBusiness(result, current: _mine, watch: _repo.watchMine(_uid));
-    if (created == null || !mounted || !product_kind.isShopCategory(created.category)) return;
-    await _openProducts(created);
+    if (created == null || !mounted) return;
+    // Табрик (эга, 2026-10-31) — шу объект учун бир марта: дўкон — «Дўконингиз очилди!» (кейин маҳсулотлар),
+    // бошқа тур — «Бизнесингиз харитада!». Харитада кўринмайдиган (онлайн) бошқа тур — табриксиз.
+    if (!product_kind.isShopCategory(created.category)) {
+      if (!created.online) await _celebrateOnMapOnce(created.id);
+      return;
+    }
+    await celebrateShopOpenedOnce(context, created.id);
+    if (mounted) await _openProducts(created);
+  }
+
+  Future<void> _celebrateOnMapOnce(String id) async {
+    if (!await CelebrationOnce.claim('business_on_map_$id') || !mounted) return;
+    await showCelebration(
+      context,
+      icon: Icons.add_business_rounded,
+      title: context.tr('bizmap_on_map_title'),
+      subtitle: context.tr('bizmap_on_map_sub'),
+      buttonLabel: context.tr('my_shop_continue'),
+    );
   }
 
   Future<void> _openProducts(Business b) => Navigator.of(context).push<void>(

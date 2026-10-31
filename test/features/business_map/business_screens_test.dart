@@ -11,6 +11,7 @@ import 'package:ava_gurlan/features/home/widgets/home_business_section.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Firebase'сиз: репозиторийнинг тармоқ қисмлари алмаштирилган.
 class _FakeRepo extends BusinessRepository {
@@ -75,16 +76,27 @@ class _LateRepo extends _FakeRepo {
   Stream<List<Business>> watchMine(String ownerId) => live.stream;
 }
 
-Business _b(String id, String name, BusinessCategory c, {String owner = '998901111111'}) => Business(
+Business _b(String id, String name, BusinessCategory c, {String owner = '998901111111', bool online = false}) => Business(
       id: id,
       ownerId: owner,
       name: name,
       category: c,
       phone: '998901234567',
-      lat: 41.3,
-      lng: 69.2,
-      address: 'Тошкент',
+      lat: online ? 0.0 : 41.3,
+      lng: online ? 0.0 : 69.2,
+      address: online ? '' : 'Тошкент',
+      online: online,
     );
+
+/// Табрик калитлари (эга, 2026-10-31; локализациясиз — калитнинг ўзи).
+final _shopTitle = find.text('my_shop_opened_title');
+final _mapTitle = find.text('bizmap_on_map_title');
+
+Future<void> _tapCelebration(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('celebration_ok')));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('celebration_ok')), findsNothing);
+}
 
 Future<void> _pump(WidgetTester tester, Widget home) async {
   tester.view.physicalSize = const Size(1200 * 2, 1800 * 2);
@@ -215,6 +227,9 @@ void main() {
   });
 
   group('MyBusinessesScreen', () {
+    // Табрик «бир марта» белгиси ([CelebrationOnce]) — ҳар тест тоза хотира билан.
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
     testWidgets('бўш рўйхат — тушунтириш матни, FAB ва бўш ҳолатдаги «қўшиш» тугмаси форма очади', (tester) async {
       final empty = _FakeRepo([]);
       final opened = <Business?>[];
@@ -270,26 +285,84 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('янги чакана объект (ID қайтди) — маҳсулотлар экрани очилади', (tester) async {
+    // Табрик (эга, 2026-10-31): дўкон — «Дўконингиз очилди!» ва маҳсулотлар; бошқа тур — «Бизнесингиз харитада!».
+    testWidgets('янги чакана объект (ID қайтди) — табрик «Дўконингиз очилди!», «Маҳсулот қўшиш»дан кейин маҳсулотлар', (tester) async {
       await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], 'n1');
+      expect(_shopTitle, findsOneWidget);
+      expect(find.text('my_shop_opened_add_products'), findsOneWidget);
+      expect(_mapTitle, findsNothing);
+      expect(find.textContaining('PRODUCTS'), findsNothing, reason: 'табрик ёпилмагунча');
+      await _tapCelebration(tester);
       expect(find.text('PRODUCTS n1'), findsOneWidget);
     });
 
-    testWidgets('янги улгуржи объект — маҳсулотлар экрани очилади', (tester) async {
+    testWidgets('янги улгуржи объект — дўкон табриги, кейин маҳсулотлар экрани', (tester) async {
       await createVia(tester, [_b('w1', 'Омбор', BusinessCategory.wholesale)], 'w1');
+      expect(_shopTitle, findsOneWidget);
+      await _tapCelebration(tester);
       expect(find.text('PRODUCTS w1'), findsOneWidget);
     });
 
-    testWidgets('янги кафе (food) — маҳсулотлар экрани очилмайди, рўйхатда қолади', (tester) async {
+    testWidgets('янги кафе (food) — «Бизнесингиз харитада!», «Давом этиш»дан кейин рўйхатда қолади (маҳсулотлар йўқ)', (tester) async {
       await createVia(tester, [_b('f1', 'Ошхона', BusinessCategory.food)], 'f1');
+      expect(_mapTitle, findsOneWidget);
+      expect(find.text('bizmap_on_map_sub'), findsOneWidget);
+      expect(find.text('my_shop_continue'), findsOneWidget);
+      expect(_shopTitle, findsNothing);
+      await _tapCelebration(tester);
       expect(find.textContaining('PRODUCTS'), findsNothing);
       expect(find.text('Ошхона'), findsOneWidget);
     });
 
-    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани очилмайди', (tester) async {
+    testWidgets('янги онлайн (харитада йўқ) бошқа тур — «харитада» табриги йўқ', (tester) async {
+      await createVia(tester, [_b('s1', 'Онлайн дарс', BusinessCategory.education, online: true)], 's1');
+      expect(_mapTitle, findsNothing);
+      expect(_shopTitle, findsNothing);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+    });
+
+    testWidgets('табрик шу объект учун БИР МАРТА: ўша ID яна қайтса — табриксиз', (tester) async {
+      await createVia(tester, [_b('f1', 'Ошхона', BusinessCategory.food)], 'f1');
+      await _tapCelebration(tester);
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      expect(_mapTitle, findsNothing);
+
+      // Дўкон ҳам: иккинчи марта — табриксиз, маҳсулотлар дарров.
+      await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], 'n1');
+      await _tapCelebration(tester);
+      Navigator.of(tester.element(find.text('PRODUCTS n1'))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      expect(_shopTitle, findsNothing);
+      expect(find.text('PRODUCTS n1'), findsOneWidget);
+    });
+
+    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани ва табрик йўқ', (tester) async {
       await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], true);
       expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(find.byKey(const ValueKey('celebration_ok')), findsNothing);
       await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], null);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(find.byKey(const ValueKey('celebration_ok')), findsNothing);
+    });
+
+    testWidgets('таҳрир (карточка босилди): форма ID қайтарса ҳам — табрик ва маҳсулотлар йўқ', (tester) async {
+      await _pump(
+        tester,
+        MyBusinessesScreen(
+          repository: _FakeRepo([_b('f1', 'Ошхона', BusinessCategory.food), _b('n1', 'Дўкон', BusinessCategory.retail)]),
+          ownerId: '998901111111',
+          openForm: (context, existing) async => existing?.id,
+          productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
+        ),
+      );
+      await tester.tap(find.text('Ошхона'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Дўкон'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('celebration_ok')), findsNothing);
       expect(find.textContaining('PRODUCTS'), findsNothing);
     });
 
@@ -311,6 +384,8 @@ void main() {
       expect(find.textContaining('PRODUCTS'), findsNothing, reason: 'ҳали рўйхатда йўқ');
       repo.live.add([_b('late1', 'Кечиккан', BusinessCategory.retail), _b('old', 'Эски', BusinessCategory.auto)]);
       await tester.pumpAndSettle();
+      expect(_shopTitle, findsOneWidget, reason: 'объект топилгач — табрик');
+      await _tapCelebration(tester);
       expect(find.text('PRODUCTS late1'), findsOneWidget);
     });
 
@@ -331,6 +406,7 @@ void main() {
       await tester.pump(const Duration(seconds: 9));
       await tester.pumpAndSettle();
       expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(find.byKey(const ValueKey('celebration_ok')), findsNothing, reason: 'тури номаълум — табрик йўқ');
       expect(find.text('Эски'), findsOneWidget);
     });
 

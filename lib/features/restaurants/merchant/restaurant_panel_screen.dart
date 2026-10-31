@@ -190,7 +190,14 @@ class _RestaurantPanelScreenState extends State<RestaurantPanelScreen> {
                         key: ValueKey('tabs_$_restaurantId'),
                         index: _tab < (_bookingsOn ? 5 : 4) ? _tab : 0,
                         children: [
-                          MerchantOrdersTab(restaurant: r, repository: _repo),
+                          MerchantOrdersTab(
+                            restaurant: r,
+                            repository: _repo,
+                            // «Биринчи буюртма» табригидан «Буюртмани кўриш» — Буюртмалар табига.
+                            onShowOrders: () {
+                              if (mounted && _tab != 0) setState(() => _tab = 0);
+                            },
+                          ),
                           MerchantMenuTab(restaurant: r, repository: _repo),
                           MerchantShopTab(restaurant: r, repository: _repo),
                           MerchantReportTab(restaurant: r, repository: _repo),

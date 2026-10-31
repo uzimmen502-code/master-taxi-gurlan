@@ -12,6 +12,7 @@ import 'package:ava_gurlan/features/my_shop/widgets/shop_name_dialog.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// «Менинг дўконим»: бир нечта дўкон, дўкон номи, биринчи кириш. Локализация
 /// делегати АТАЙЛАБ уланмаган: `context.tr` калитнинг ўзини қайтаради
@@ -42,7 +43,21 @@ void _bigView(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
+/// «Дўконингиз очилди!» табриги (эга, 2026-10-31) — калит (локализациясиз).
+final _openedTitle = find.text('my_shop_opened_title');
+
+/// Табрикдаги «Маҳсулот қўшиш» — ойна ёпилади, чақирувчи кейинги экранни очади.
+Future<void> _tapCelebration(WidgetTester tester) async {
+  expect(find.text('my_shop_opened_add_products'), findsOneWidget);
+  await tester.tap(find.byKey(const ValueKey('celebration_ok')));
+  await tester.pumpAndSettle();
+  expect(_openedTitle, findsNothing);
+}
+
 void main() {
+  // Табрик «бир марта» белгиси ([CelebrationOnce]) — ҳар тест тоза хотира билан.
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   group('MyShopPresence', () {
     Future<MyShopPresence> load({
       Future<bool> Function(String)? ads,
@@ -268,7 +283,7 @@ void main() {
     });
 
     // Янги дўкондан кейин маҳсулотлар экрани дарров (эга, 2026-10-26: «маъқул», «ҳа»).
-    Future<void> openWithForm(WidgetTester tester, Object? formResult) async {
+    Future<void> openWithForm(WidgetTester tester, Object? formResult, {bool tapNew = true}) async {
       _bigView(tester);
       await tester.pumpWidget(_app(MyShopScreen(
         key: UniqueKey(),
@@ -279,19 +294,48 @@ void main() {
         productsScreen: (shop) => Scaffold(body: Text('PRODUCTS ${shop.id}')),
       )));
       await tester.pumpAndSettle();
+      if (!tapNew) return;
       await tester.tap(find.text('my_shop_new_shop'));
       await tester.pumpAndSettle();
     }
 
-    testWidgets('янги дўкон сақланди (ID қайтди) — шу дўконнинг маҳсулотлар экрани дарров очилади', (tester) async {
+    // Табрик (эга, 2026-10-31): янги дўкон — бир марта, «Маҳсулот қўшиш»дан кейин маҳсулотлар.
+    testWidgets('янги дўкон сақланди (ID қайтди) — аввал табрик, «Маҳсулот қўшиш»дан кейин шу дўконнинг маҳсулотлари', (tester) async {
       await openWithForm(tester, 'n1');
+      expect(_openedTitle, findsOneWidget);
+      expect(find.text('my_shop_opened_sub'), findsOneWidget);
+      expect(find.textContaining('PRODUCTS'), findsNothing, reason: 'табрик ёпилмагунча маҳсулотлар очилмайди');
+      await _tapCelebration(tester);
       expect(find.text('PRODUCTS n1'), findsOneWidget);
     });
 
-    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани очилмайди', (tester) async {
+    testWidgets('табрик шу дўкон учун БИР МАРТА: ўша ID яна қайтса — табриксиз, маҳсулотлар дарров', (tester) async {
+      await openWithForm(tester, 'n1');
+      await _tapCelebration(tester);
+      Navigator.of(tester.element(find.text('PRODUCTS n1'))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('my_shop_new_shop'));
+      await tester.pumpAndSettle();
+      expect(_openedTitle, findsNothing);
+      expect(find.text('PRODUCTS n1'), findsOneWidget);
+    });
+
+    testWidgets('таҳрир/филиал (true) ёки бекор (null) — маҳсулотлар экрани ва табрик йўқ', (tester) async {
       await openWithForm(tester, true);
       expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(_openedTitle, findsNothing);
       await openWithForm(tester, null);
+      expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(_openedTitle, findsNothing);
+    });
+
+    testWidgets('таҳрир («⋮» → номини ўзгартириш): форма ID қайтарса ҳам — табрик ва маҳсулотлар йўқ', (tester) async {
+      await openWithForm(tester, 'n1', tapNew: false);
+      await tester.tap(find.byKey(const ValueKey('my_shop_menu_n1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('my_shop_rename'));
+      await tester.pumpAndSettle();
+      expect(_openedTitle, findsNothing);
       expect(find.textContaining('PRODUCTS'), findsNothing);
     });
 
@@ -643,37 +687,53 @@ void main() {
       expect(r.pushed.single, isA<MyShopScreen>());
     });
 
-    testWidgets('дўкони йўқ, варақ бекор қилинди — ҳеч нарса очилмайди, ном ёзилмайди', (tester) async {
+    testWidgets('дўкони йўқ, варақ бекор қилинди — ҳеч нарса очилмайди, ном ёзилмайди, табрик йўқ', (tester) async {
       final r = await run(tester, presence: MyShopPresence.none);
       expect(r.pushed, isEmpty);
       expect(r.saved, isEmpty);
+      expect(_openedTitle, findsNothing);
     });
 
-    testWidgets('биринчи кириш: ном сақланади, Аҳоли бозорида форма дарҳол очилади', (tester) async {
+    testWidgets('биринчи кириш: ном сақланади, табрик, «Маҳсулот қўшиш»дан кейин Аҳоли бозорида форма дарҳол очилади', (tester) async {
       final r = await run(
         tester,
         presence: MyShopPresence.none,
         first: const AvaFirstShop(name: 'Barakat kiyim', target: AvaShopTarget.retail),
       );
       expect(r.saved, ['$_phone|Barakat kiyim']);
+      expect(_openedTitle, findsOneWidget);
+      expect(r.pushed, isEmpty, reason: 'табрик ёпилмагунча асосий дўкон очилмайди');
+      await _tapCelebration(tester);
       final screen = r.pushed.single as MainShopScreen;
       expect(screen.initialSegment, 0);
       expect(screen.openAddOnStart, isTrue);
     });
 
-    testWidgets('биринчи кириш, номсиз, Улгуржи — ном ёзилмайди, форма автоматик очилмайди', (tester) async {
+    testWidgets('биринчи кириш табриги эга телефони бўйича БИР МАРТА: иккинчи марта — табриксиз, дарров дўкон', (tester) async {
+      const first = AvaFirstShop(name: '', target: AvaShopTarget.retail);
+      final a = await run(tester, presence: MyShopPresence.none, first: first);
+      await _tapCelebration(tester);
+      expect(a.pushed.single, isA<MainShopScreen>());
+
+      final b = await run(tester, presence: MyShopPresence.none, first: first);
+      expect(_openedTitle, findsNothing);
+      expect(b.pushed.single, isA<MainShopScreen>());
+    });
+
+    testWidgets('биринчи кириш, номсиз, Улгуржи — ном ёзилмайди, форма автоматик очилмайди, табрик йўқ (сотувчи ҳали тасдиқланмаган)', (tester) async {
       final r = await run(
         tester,
         presence: MyShopPresence.none,
         first: const AvaFirstShop(name: '', target: AvaShopTarget.wholesale),
       );
       expect(r.saved, isEmpty);
+      expect(_openedTitle, findsNothing);
       final screen = r.pushed.single as MainShopScreen;
       expect(screen.initialSegment, 1);
       expect(screen.openAddOnStart, isFalse);
     });
 
-    testWidgets('ном сақланмаса — содда хабар, дўкон барибир очилади', (tester) async {
+    testWidgets('ном сақланмаса — содда хабар, дўкон барибир очилади (табрикдан кейин)', (tester) async {
       final r = await run(
         tester,
         presence: MyShopPresence.none,
@@ -682,7 +742,14 @@ void main() {
       );
       expect(find.text('my_shop_name_save_failed'), findsOneWidget);
       expect(find.text('permission-denied'), findsNothing);
+      await _tapCelebration(tester);
       expect(r.pushed.single, isA<MainShopScreen>());
+    });
+
+    testWidgets('дўкони бор эга — табрик йўқ (у аввал очилган)', (tester) async {
+      final r = await run(tester, presence: const MyShopPresence(retail: true));
+      expect(_openedTitle, findsNothing);
+      expect(r.pushed.single, isA<MyShopScreen>());
     });
 
     testWidgets('Н-4: вараққа фақат очиқ бозорлар узатилади', (tester) async {
@@ -712,7 +779,7 @@ void main() {
       expect(r.saved, isEmpty);
     });
 
-    testWidgets('Н-4: рухсат этилмаган бозор қайтса — очилмайди', (tester) async {
+    testWidgets('Н-4: рухсат этилмаган бозор қайтса — очилмайди, табрик йўқ', (tester) async {
       final r = await run(
         tester,
         presence: MyShopPresence.none,
@@ -720,6 +787,7 @@ void main() {
         first: const AvaFirstShop(name: '', target: AvaShopTarget.retail),
       );
       expect(r.pushed, isEmpty);
+      expect(_openedTitle, findsNothing);
     });
   });
 

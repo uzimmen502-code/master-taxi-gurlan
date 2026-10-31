@@ -2,7 +2,45 @@ import 'package:flutter/material.dart';
 
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/formatters.dart';
 import '../../repositories/driver_repository.dart';
+import 'celebration_dialog.dart';
+
+/// Ҳайдовчи аризаси ТАСДИҚЛАНДИ — табрик (эга, 2026-10-31: конфетти, «янги иш бошланди»).
+///
+/// Ҳар телефон (+ тур маълум бўлса — `local` / `marshrut` / `intercity`) учун БИР МАРТА
+/// ([CelebrationOnce]: `driver_approved_<телефон>[_<тур>]`). Ойна «Давом этиш» босилгунча кутади.
+///
+/// `true` — табрик кўрсатилди; `false` — кўрсатилмади (аввал кўрсатилган, телефон номаълум ёки
+/// бу контекстда ойна хавфсиз очилмайди) — чақирувчи аввалги snack хабарини кўрсатади.
+/// Хато/рад этишда чақирилмайди — фақат тасдиқ лаҳзасида.
+Future<bool> showDriverApprovedCelebrationOnce(
+  BuildContext context, {
+  required String phone,
+  String? taxiType,
+}) async {
+  final id = canonicalPhoneId(phone);
+  if (id.length < 9 || !_canShowCelebration(context)) return false;
+  final type = (taxiType ?? '').trim();
+  final key = type.isEmpty ? 'driver_approved_$id' : 'driver_approved_${id}_$type';
+  if (!await CelebrationOnce.claim(key)) return false;
+  if (!context.mounted || !_canShowCelebration(context)) return false;
+  await showCelebration(
+    context,
+    icon: Icons.local_taxi_rounded,
+    title: context.tr('driver_request_approved_title'),
+    subtitle: context.tr('driver_request_approved_sub'),
+    buttonLabel: context.tr('celebration_continue'),
+  );
+  return true;
+}
+
+/// Ойна очиш мумкинми: контекст тирик, устида Navigator ва MaterialLocalizations бор
+/// (push'дан келган `navigatorKey` контексти учун ҳам — акс ҳолда snack қолади).
+bool _canShowCelebration(BuildContext context) =>
+    context.mounted &&
+    Navigator.maybeOf(context, rootNavigator: true) != null &&
+    Localizations.of<MaterialLocalizations>(context, MaterialLocalizations) != null;
 
 /// Admin tasdiqini kutayotgan haydovchi arizasi yuborilgach xabarlar.
 Future<void> showDriverApplicationPendingFeedback(

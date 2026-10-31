@@ -553,6 +553,9 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           if (submitResult.autoApproved) {
             await UserAudience.saveTaxiDriver(true);
             if (!mounted) return;
+            // Эга, 2026-10-31: биринчи марта — табрик (конфетти); кейинги марталар — snack.
+            if (await showDriverApprovedCelebrationOnce(context, phone: phone, taxiType: 'local')) return;
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               backgroundColor: LocalTaxiColors.primary,
               behavior: SnackBarBehavior.floating,
@@ -582,6 +585,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           plate: carPlate,
           taxiType: 'local',
         );
+        if (!mounted) return;
+        if (await showDriverApprovedCelebrationOnce(context, phone: phone, taxiType: 'local')) return;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           backgroundColor: LocalTaxiColors.primary,

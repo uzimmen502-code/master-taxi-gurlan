@@ -14,6 +14,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/order_model.dart';
 import '../../home/widgets/ava_chip.dart';
 import '../../home/widgets/ava_section.dart';
+import '../../../shared/widgets/celebration_dialog.dart';
 import '../../profile/screens/wallet_screen.dart';
 import '../data/restaurants_repository.dart';
 import '../domain/courier_tracking.dart';
@@ -25,11 +26,21 @@ import 'merchant_order_actions.dart';
 import 'merchant_order_sounds.dart';
 
 class MerchantOrdersTab extends StatefulWidget {
-  const MerchantOrdersTab({super.key, required this.restaurant, required this.repository, this.playSound = true});
+  const MerchantOrdersTab({
+    super.key,
+    required this.restaurant,
+    required this.repository,
+    this.playSound = true,
+    this.onShowOrders,
+  });
 
   final Restaurant restaurant;
   final RestaurantsRepository repository;
   final bool playSound;
+
+  /// «Биринчи буюртма» табригида «Буюртмани кўриш» босилгач — панел шу табга ўтади
+  /// (`IndexedStack`да таб бошқа таб очиқ турганда ҳам қурилган, табрик ўша пайт ҳам чиқади).
+  final VoidCallback? onShowOrders;
 
   @override
   State<MerchantOrdersTab> createState() => _MerchantOrdersTabState();
@@ -46,6 +57,13 @@ class _MerchantOrdersTabState extends State<MerchantOrdersTab> {
   /// Оқим бир марта очилади (ҳар rebuild'да янги listener эмас); ресторан
   /// алмашса таб `ValueKey` билан қайта яратилади.
   late final Stream<List<OrderModel>> _orders = widget.repository.watchRestaurantOrders(widget.restaurant.id);
+
+  /// «Биринчи буюртма келди» табриги (эга, 2026-10-31; қоида — [FirstOrderDetector]).
+  final _firstOrder = FirstOrderDetector();
+
+  /// Табрикланадиган буюртма — устида бошқа экран/варақ бўлса, панел қайта кўрингунча кутади.
+  String? _firstOrderId;
+  bool _celebrating = false;
 
   @override
   void dispose() {
@@ -71,9 +89,52 @@ class _MerchantOrdersTabState extends State<MerchantOrdersTab> {
     }
     _knownFresh = fresh;
     _firstLoad = false;
+    _firstOrderId ??= _firstOrder.onList(list);
+    _maybeCelebrateFirstOrder(list);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncTicker(fresh.isNotEmpty);
     });
+  }
+
+  /// `build` ичидан (ҳар қайта қурилишда) чақирилади — ойна кадрдан кейин очилади.
+  void _maybeCelebrateFirstOrder(List<OrderModel> list) {
+    final id = _firstOrderId;
+    if (id == null || _celebrating) return;
+    // Бошқа қурилмада қабул/рад қилинди ёки бекор бўлди — «мижоз кутяпти» энди нотўғри.
+    if (!list.any((o) => o.id == id && merchantBucketFor(o) == MerchantOrderBucket.fresh)) {
+      _firstOrderId = null;
+      return;
+    }
+    // Устида бошқа экран (таом формаси) ёки варақ — панелга қайтилганда (бу боғлиқлик
+    // табни қайта қуради) кўрсатилади, «Буюртмани кўриш» ҳақиқатан буюртмани кўрсатсин.
+    if (ModalRoute.isCurrentOf(context) == false) return;
+    _celebrating = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _celebrateFirstOrder());
+  }
+
+  Future<void> _celebrateFirstOrder() async {
+    try {
+      if (!mounted) return;
+      // Шу қурилмада шу ресторан учун БИР МАРТА.
+      if (!await CelebrationOnce.claim('restaurant_first_order_${widget.restaurant.id}')) return;
+      if (!mounted) return;
+      // Ойна фақат тугма билан ёпилади; буюртма ўзи қабул қилинмайди — эга қарор қилади.
+      await showCelebration(
+        context,
+        icon: Icons.receipt_long_rounded,
+        title: context.tr('restaurants_m_first_order_title'),
+        subtitle: context.tr('restaurants_m_first_order_sub'),
+        buttonLabel: context.tr('restaurants_m_first_order_view'),
+      );
+      if (!mounted) return;
+      setState(() => _bucket = MerchantOrderBucket.fresh);
+      widget.onShowOrders?.call();
+    } catch (e) {
+      debugPrint('[MerchantOrders] first order celebration $e');
+    } finally {
+      _firstOrderId = null;
+      _celebrating = false;
+    }
   }
 
   Future<void> _run(OrderModel o, Future<void> Function() fn, {String? okKey}) async {

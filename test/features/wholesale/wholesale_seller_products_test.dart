@@ -123,7 +123,8 @@ void main() {
     testWidgets('сотувчи номи сарлавҳада, товарлар карточкада', (t) async {
       await pump(t, () => Stream.value([_p('a'), _p('b')]));
       await t.pump();
-      expect(find.text('Sunlight'), findsOneWidget);
+      // Карточка изоҳи ҳам сотувчи номи (МОҚ олиб ташланди, эга 2026-11-01).
+      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Sunlight')), findsOneWidget);
       expect(find.byType(WholesaleProductCard), findsNWidgets(2));
     });
 

@@ -155,6 +155,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        // Сарлавҳа ва «Бозор / Сотувчи» ораси ихчам (эга, 2026-11-01).
+        toolbarHeight: 48,
         title: Text(
           context.tr(_isChina ? 'wholesale_title_china' : 'wholesale_title'),
         ),
@@ -164,12 +166,13 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
         ],
         bottom: TabBar(
           controller: _tabCtrl,
+          labelPadding: EdgeInsets.zero,
           labelColor: AvaLight.ink,
           unselectedLabelColor: AppColors.sectionMuted,
           indicatorColor: AvaLight.ink,
           tabs: [
-            Tab(text: context.tr('wholesale_tab_market')),
-            Tab(text: context.tr('wholesale_tab_seller')),
+            Tab(height: 38, text: context.tr('wholesale_tab_market')),
+            Tab(height: 38, text: context.tr('wholesale_tab_seller')),
           ],
         ),
       ),

@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/l10n/l10n_extension.dart';
 import '../../ads/widgets/market_grid.dart';
 import '../models/wholesale_product.dart';
 import '../utils/wholesale_labels.dart';
@@ -18,10 +17,6 @@ class WholesaleProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moq = context
-        .tr('wholesale_moq_short')
-        .replaceAll('{qty}', '${product.moq}')
-        .replaceAll('{unit}', wholesaleUnitLabel(context, product.unit));
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 0,
@@ -86,9 +81,8 @@ class WholesaleProductCard extends StatelessWidget {
             MarketCardText(
               title: product.title,
               price: wholesalePriceLine(context, product),
-              caption: product.sellerCompanyName.isEmpty
-                  ? moq
-                  : '$moq · ${product.sellerCompanyName}',
+              // «МОҚ» олиб ташланди (эга, 2026-11-01) — фақат сотувчи.
+              caption: product.sellerCompanyName,
             ),
           ],
         ),

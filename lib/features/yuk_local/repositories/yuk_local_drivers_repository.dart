@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_query.dart';
@@ -14,10 +15,15 @@ import '../../yuk_shared/yuk_vehicle_types.dart';
 /// Эгалик `ownerId` (каноник телефон). Бир фойдаланувчи бир нечта эълон
 /// қўшиши мумкин. Кўриниш: жойлашув + иш вақти + expiresAt (онлайн йўқ).
 class YukLocalDriversRepository {
-  YukLocalDriversRepository({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+  YukLocalDriversRepository({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _db = firestore ?? FirebaseFirestore.instance,
+        _functions = functions;
 
   final FirebaseFirestore _db;
+  final FirebaseFunctions? _functions;
+  FirebaseFunctions get _fns => _functions ?? FirebaseFunctions.instance;
 
   static const int watchLimit = 200;
 
@@ -31,11 +37,10 @@ class YukLocalDriversRepository {
   /// доим шу ҳудуд эълонларига тегишли — бошқа ҳудуд лимитни «еб қўймайди».
   /// Бир майдонли `in` + `limit` — композит индекс керак эмас.
   ///
-  /// Эски эълонларда `districtId` йўқ. Firestore'да «майдон йўқ» бўйича
-  /// сўров қилиб бўлмайди, шунинг учун улар АЛОҲИДА оқимда келади ва
-  /// клиентда қўшилади — backfill қилингунча биронта эълон йўқолиб
-  /// кетмайди (`functions/tools/backfill_yuk_local_district.js`).
-  /// Backfill'дан кейин иккинчи оқим бўшайди ва уни олиб ташласа бўлади.
+  /// Ҳудудсиз эълонлар (туман аниқланмаган): сервер триггери
+  /// (`onYukLocalDriverWrite`) йўқ `districtId`ни `''` қилиб ёзади — шу
+  /// сабабли улар аниқ `== ''` сўрови билан келади. Аввал бу оқим бутун
+  /// коллекциядан тартибсиз 200 тагача ҳужжат ўқирди (аудит P-4).
   Stream<List<YukLocalDriver>> watchScoped(
     GeoScope scope, {
     int limit = watchLimit,
@@ -44,7 +49,9 @@ class YukLocalDriversRepository {
         (d.updatedAt ?? d.createdAt)?.millisecondsSinceEpoch ?? 0;
     return geoScopedStream<YukLocalDriver>(
       scope: scope,
+      // Бир майдонли orderBy + limit — композит индекс керак эмас.
       nation: () => _col
+          .orderBy('updatedAt', descending: true)
           .limit(limit)
           .snapshots()
           .map((snap) => snap.docs.map(_fromDoc).toList()),
@@ -53,10 +60,11 @@ class YukLocalDriversRepository {
           .limit(limit)
           .snapshots()
           .map((snap) => snap.docs.map(_fromDoc).toList()),
-      legacy: () => _col.limit(limit).snapshots().map((snap) => snap.docs
-          .map(_fromDoc)
-          .where((d) => d.hasNoDistrict)
-          .toList()),
+      legacy: () => _col
+          .where('districtId', isEqualTo: '')
+          .limit(limit)
+          .snapshots()
+          .map((snap) => snap.docs.map(_fromDoc).toList()),
       idOf: (d) => d.id,
       compare: (a, b) => ms(b).compareTo(ms(a)),
       limit: limit,
@@ -121,6 +129,8 @@ class YukLocalDriversRepository {
     required int workStartMinutes,
     required int workEndMinutes,
     String locationLabel = '',
+    String districtId = '',
+    String regionId = '',
   }) async {
     final id = canonicalPhoneId(ownerId);
     if (id.isEmpty) {
@@ -161,6 +171,12 @@ class YukLocalDriversRepository {
       // фақат бўш бўлмаган қийматларни беради, шунинг учун ҳудуд ҳали
       // танланмаган бўлса эски хатти-ҳаракат сақланади.
       ...ServiceConfigHolder.reportStamp(),
+      // Эга қарори 2026-10-31: эълон тумани — машина ТУРГАН жой (GPS).
+      // Аниқланса профил муҳри устидан ёзилади.
+      if (districtId.trim().isNotEmpty) ...{
+        'districtId': districtId.trim(),
+        if (regionId.trim().isNotEmpty) 'regionId': regionId.trim(),
+      },
     };
 
     if (!existing.exists) {
@@ -192,6 +208,23 @@ class YukLocalDriversRepository {
   Future<void> deleteMine(String docId) async {
     if (docId.trim().isEmpty) return;
     await _col.doc(docId).delete();
+  }
+
+  /// «Узайтириш» — муддатни сервер +30 кунга чўзади (эга қарори 2026-10-31).
+  /// Муддат клиентда ёзилмайди (rules `expiresAt`ни қулфлаган); қайта
+  /// чақирилса сервер иккинчи марта чўзмайди. Қайтаради: янги муддат.
+  Future<DateTime?> renewListing(String listingId) async {
+    final id = listingId.trim();
+    if (id.isEmpty) return null;
+    final res = await _fns
+        .httpsCallable('renewYukLocalListing')
+        .call<Object?>({'listingId': id});
+    final data = res.data;
+    if (data is Map) {
+      final ms = data['expiresAtMs'];
+      if (ms is num) return DateTime.fromMillisecondsSinceEpoch(ms.toInt());
+    }
+    return null;
   }
 
   Future<void> updateAcceptRadius({

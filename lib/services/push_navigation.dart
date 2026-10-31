@@ -468,8 +468,14 @@ class PushNavigation {
 
     if (screen == 'yuk_local') {
       if (!_moduleOpen(nav, 'yuk_local')) return;
+      // `yuk_local_expire_soon` пуши — шу эълон детали («Узайтириш» тугмаси).
+      final listingId = (data['listingId'] ?? '').trim();
       await nav.push(
-        MaterialPageRoute(builder: (_) => const YukLocalScreen()),
+        MaterialPageRoute(
+          builder: (_) => YukLocalScreen(
+            highlightListingId: listingId.isEmpty ? null : listingId,
+          ),
+        ),
       );
       return;
     }

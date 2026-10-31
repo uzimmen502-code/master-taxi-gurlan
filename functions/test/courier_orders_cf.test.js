@@ -360,16 +360,25 @@ async function main() {
       const r1 = await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
       assert.strictEqual(r1.ok, true, 'to\'lov saqlandi');
       assert.strictEqual(await courierCash(), before, 'birinchi chaqiruvda courier_cash yozilmadi (simulyatsiya)');
-      const idem = (await db.collection('wallet_idempotency').doc('courier_submit_p3').get()).data();
-      assert.strictEqual(idem.fieldCash.cashSum, 30000, 'fieldCash tranzaksiyada saqlangan');
+      // R1 (jonli, 2026-10-16): niyat to'lov tranzaksiyasida `courier_cash_pending` ga yoziladi.
+      const pend = await db.collection('courier_cash_pending').doc('p3').get();
+      assert.ok(pend.exists, 'niyat hujjati saqlangan');
+      assert.strictEqual(pend.data().cashSum, 30000);
       const r2 = await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
       assert.strictEqual(r2.idempotent, true);
       assert.strictEqual(await courierCash(), before + 30000, 'qayta urinishda tiklandi');
+      assert.ok(!(await db.collection('courier_cash_pending').doc('p3').get()).exists, 'niyat o\'chdi');
       await submit('p3', A, [{ kind: 'cash', amount: 30000 }]);
       assert.strictEqual(await courierCash(), before + 30000, 'ikki marta yozilmadi');
     } finally {
       settlementLedger.postEntry = realPost;
     }
+  });
+  await check('C-8 (jonli): submit — courierPhone 9 xonali, token 12 xonali — ishlaydi', async () => {
+    await seedOrder('p4');
+    const r = await call('courierSubmitPayment', { orderId: 'p4', courierPhone: A.slice(3), lines: [{ kind: 'cash', amount: 30000 }] }, A);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual((await order('p4')).paymentStatus, 'paid');
   });
   await check('sverka: Σdr == Σcr, aktiv == passiv, passenger_credit == bonusBalance', async () => {
     const rec = await settlementLedger.reconcile(db);

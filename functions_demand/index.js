@@ -44,10 +44,13 @@ const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
 const logisticsApi = require('./api/logistics');
 const wholesaleAdminApi = require('./api/wholesale_admin');
-const coreConfigAdminApi = require('./api/core_config_admin');
+const wholesaleStockApi = require('./api/wholesale_stock');
+const wholesaleOrdersApi = require('./api/wholesale_orders');
+const wholesaleCardApi = require('./api/wholesale_card');
+const wholesaleEventsApi = require('./api/wholesale_events');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
-const { getModuleConfig, ALL_REGION } = require('./core/config');
+const { getModuleConfig } = require('./core/config');
 const caps = require('./core/capabilities');
 const { toCanonicalId } = require('./core/ids');
 const { enabledModules } = require('./core/registry');
@@ -243,23 +246,22 @@ exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminReactivateLeg(logisticsDeps),
 ));
 
-// ═══════════════════════════════════════════════════════════════════════
-// TALAB YADROSI — admin: hudud bo'yicha yoqish va push chegarasi
-// ═══════════════════════════════════════════════════════════════════════
-
 /**
- * ADMIN — hududni yoqish/o'chirish (off | shadow | push) va `push.minScore`
- * (ega 2026-10-20). Faqat admin/superadmin. Server tekshiradi: hududda
- * ishlay oladigan taklifchi >= 5; push uchun chegara o'lchab qo'yilgan bo'lishi
- * shart. Har o'zgarish `admin_audit`ga (41-qoida), konfig bilan bir tranzaksiyada.
+ * ADMIN — posilka YO'QOLDI (D1, ega qarori 2026-10-16): faqat admin/superadmin.
+ * Bitta tranzaksiya: jo'natma `lost` + `loss_pending`, LEG `disputed`, incident, audit.
+ * Pulni (G mijozga, kuryer hamyonidan) default codebase trigger/reconcile hisoblaydi.
  */
-exports.adminSetCoreConfig = fn.https.onCall(wrapCallable(
-  coreConfigAdminApi.makeAdminSetCoreConfig({ db }),
+exports.adminMarkShipmentLost = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminMarkShipmentLost({ db }),
 ));
 
-/** ADMIN (o'qish: admin/superadmin/dispatcher) — hududlar holati, taklifchilar, audit. */
-exports.adminGetCoreOverview = fn.https.onCall(wrapCallable(
-  coreConfigAdminApi.makeAdminGetCoreOverview({ db }),
+/**
+ * ADMIN — ishga tushirish bosqichi (off | internal | pilot | public) va sinovchilar
+ * (D8, ega qarori 2026-10-16): `tools/set_logistics_stage.js` ning callable shakli.
+ * Faqat admin/superadmin; `logistics_audit` (41-band); kuchga kirishi ≤ 60 s.
+ */
+exports.adminSetLogisticsStage = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminSetLogisticsStage({ db }),
 ));
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -278,6 +280,118 @@ exports.adminSetWholesaleProductMarket = fn.https.onCall(wrapCallable(
     deleteField: () => admin.firestore.FieldValue.delete(),
   }),
 ));
+
+// Ulgurji: qadoqlar bo'yicha qoldiq — faqat mahsulot egasi, tranzaksiya + history (2026-10-31).
+exports.setWholesaleStock = fn.https.onCall(wrapCallable(
+  wholesaleStockApi.makeSetWholesaleStock({ db }),
+));
+
+// Ulgurji buyurtma zanjiri, 2-bosqich (docs/ulgurji_buyurtma_zanjiri_uz.md):
+// kvota (narx serverda, muhrlanadi), sotuvchi rad / xaridor bekor (faqat holat —
+// pul va qoldiqni default codebase triggeri qaytaradi), admin AVA ulushi.
+exports.quoteWholesaleOrder = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeQuoteWholesaleOrder({ db }),
+));
+exports.cancelWholesaleOrder = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeCancelWholesaleOrder({ db }),
+));
+exports.setWholesaleOrderSettings = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeSetWholesaleOrderSettings({ db }),
+));
+
+/**
+ * Ulgurji buyurtma, 3-bosqich: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
+ * (sotuvchi qabul/rad qilmaydi, ega 2026-10-31). Narx — kvotada muhrlangan;
+ * idempotent (`demand_idempotency/wholesale_ship_{orderId}`). Holat o'zgarmaydi —
+ * `in_delivery` ga default codebase o'tkazadi (yetkazish haqi eskrouga o'tganda).
+ * Logistika jo'natuvchi darvozasi bu yerda YO'Q (Ulgurji darvozasi kvotada); LEG
+ * ochilishi/matching/push — `module_config/logistics_all` ga bo'ysunadi.
+ */
+exports.onWholesaleOrderCreated = fn.firestore
+  .document('wholesale_orders/{orderId}')
+  .onCreate(async (snap, context) => {
+    try {
+      await wholesaleOrdersApi.onWholesaleOrderCreated({ db, messaging }, snap.data() || {}, context.params.orderId);
+    } catch (e) {
+      // `ensureWholesaleShipment` xatoni o'zi yozadi; bu yer — kutilmagan holat. Reconcile qayta urinadi.
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'onWholesaleOrderCreated', result: 'failed',
+        orderId: context.params.orderId, errorCode: 'WHOLESALE_SHIPMENT_TRIGGER_FAILED',
+        message: String((e && e.message) || e).slice(0, 200),
+      }));
+    }
+    return null;
+  });
+
+/**
+ * Xaridor (faqat `order.buyerId`) — Ulgurji jo'natmasining YETKAZISH kodi (Q-5: kuryer
+ * shu kodni kiritganda pul sotuvchiga). Relay `getShipmentSecrets`ga tegilmaydi.
+ */
+exports.getWholesaleDeliveryCode = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeGetWholesaleDeliveryCode({ db }),
+));
+
+// ── Ulgurji 3b: «yetkazilganda karta orqali» (ega, 2026-10-31; docs/ulgurji_buyurtma_zanjiri_uz.md).
+// Pul — default codebase (ledger). Bu yerda: karta, chek, «Pul tushdi», rad, nizo, qaytish jo'natmasi, xabarlar.
+exports.setWholesaleSellerCard = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeSetWholesaleSellerCard({ db }),
+));
+exports.getWholesaleCardPaymentInfo = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeGetWholesaleCardPaymentInfo({ db }),
+));
+exports.submitWholesaleCardReceipt = fn.https.onCall(wrapCallable(
+  // Standart bucket — loyiha konfiguratsiyasidan (FIREBASE_CONFIG.storageBucket), kechiktirilgan.
+  wholesaleCardApi.makeSubmitWholesaleCardReceipt({ db, getBucket: () => admin.storage().bucket() }),
+));
+exports.confirmWholesaleCardPayment = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeConfirmWholesaleCardPayment({ db }),
+));
+exports.markWholesaleBuyerRefused = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeMarkWholesaleBuyerRefused({ db }),
+));
+exports.adminResolveWholesaleCardDispute = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeAdminResolveWholesaleCardDispute({ db }),
+));
+exports.getWholesaleReturnHandoverCode = fn.https.onCall(wrapCallable(
+  wholesaleCardApi.makeGetWholesaleReturnHandoverCode({ db }),
+));
+/** Chek RECEIPT_TIMEOUT_MS (30 daq) tasdiqlanmasa → payment_dispute (aynan bir marta). */
+exports.wholesaleCardDisputeSweeper = fn.pubsub
+  .schedule('every 5 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleCardApi.runWholesaleCardDisputeSweep({ db });
+    return null;
+  });
+/**
+ * `wholesale_orders` onUpdate: rad etilsa — qaytish jo'natmasi (LEG-1 posilka qo'lidagi
+ * kuryerga); holat/to'lov o'tishlari bo'yicha xabarlar (in-app + push, 3 til, idempotent).
+ */
+exports.onWholesaleOrderUpdated = fn.firestore
+  .document('wholesale_orders/{orderId}')
+  .onUpdate(async (change, context) => {
+    try {
+      await wholesaleEventsApi.onWholesaleOrderUpdated(
+        { db, messaging }, change.before.data() || {}, change.after.data() || {}, context.params.orderId,
+      );
+    } catch (e) {
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'onWholesaleOrderUpdated', result: 'failed',
+        orderId: context.params.orderId, errorCode: 'WHOLESALE_ORDER_UPDATE_TRIGGER_FAILED',
+        message: String((e && e.message) || e).slice(0, 200),
+      }));
+    }
+    return null;
+  });
+
+/** Yiqilgan/o'tkazib yuborilgan jo'natma yaratish — qayta urinish (eng ko'pi 5, keyin admin). */
+exports.wholesaleShipmentReconcile = fn.pubsub
+  .schedule('every 10 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleOrdersApi.reconcileWholesaleShipments({ db });
+    return null;
+  });
 
 /**
  * Eskrou tushdi (default codebase yozadi) → LEG-1 ochiladi + matching.
@@ -310,6 +424,19 @@ exports.expireDemandsSweeper = fn.pubsub
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
     const run = maintenance.makeExpireSweeper({ db });
+    return run();
+  });
+
+/**
+ * Relay zanjiri qotib qolmasin (audit L3c): to'langan jo'natmaning draft
+ * LEG'ini (eskrou triggeri / scanHandover / qayta rejalash ochmay qolgan)
+ * mavjud idempotent activateLeg bilan ochadi. Har 10 daqiqada; chegarali.
+ */
+exports.legChainSweeper = fn.pubsub
+  .schedule('every 10 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const run = logisticsApi.makeLegChainSweeper(logisticsDeps);
     return run();
   });
 
@@ -414,9 +541,8 @@ exports.recomputeTrust = fn.firestore
     if (!e.subjectId) return null;
     try {
       // Konfig modul bo'yicha, lekin trust GLOBAL — shuning uchun
-      // pilot modulining UMUMIY (`service_all`) konfigi ishlatiladi: hech bir
-      // hududga bog'lanmaydi (ega 2026-10-20: qoidalar butun respublikada).
-      const config = await getModuleConfig(db, 'service', ALL_REGION);
+      // pilot modulining konfigi ishlatiladi (vaznlar bir xil).
+      const config = await getModuleConfig(db, 'service', 'xorazm');
       await trustEventsApi.recompute(db, e.subjectId, config);
     } catch (err) {
       console.error(`recomputeTrust xatosi (${e.subjectId}): ${err.message}`);

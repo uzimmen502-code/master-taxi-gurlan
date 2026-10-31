@@ -122,6 +122,36 @@ ok('custody idempotentlik kaliti — jo\'natma+LEG+tur+clientRequestId', () => {
   assert.strictEqual(L.custodyIdempotencyKey('s1', 'l1', 'pickup', 'req-1'), 's1_l1_pickup_req-1');
 });
 
+// ─── Audit S5/L13 (2026-10-16): dalil rasmi — faqat o'z Storage yo'li ───
+const fbUrl = (bucket, obj, q = '?alt=media&token=t0k') => `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(obj)}${q}`;
+ok('S5: rasm URL — faqat Firebase Storage, logistics/{callerId}/{fayl}', () => {
+  const B = 'proj.firebasestorage.app';
+  const me = '998902220002';
+  const okUrl = fbUrl(B, `logistics/${me}/s1_123_ab.jpg`);
+  assert.strictEqual(L.isOwnProofPhotoUrl(okUrl, me, [B]), true, 'to\'g\'ri URL');
+  assert.strictEqual(L.isOwnProofPhotoUrl(okUrl, me, []), true, 'bucket noma\'lum — faqat yo\'l tekshiriladi');
+  assert.strictEqual(L.isOwnProofPhotoUrl(
+    `https://storage.googleapis.com/${B}/logistics/${me}/a.jpg`, me, [B]), true, 'storage.googleapis.com shakli');
+  // Begona host / sxema
+  assert.strictEqual(L.isOwnProofPhotoUrl('https://evil.example/logistics/' + me + '/a.jpg', me, [B]), false);
+  assert.strictEqual(L.isOwnProofPhotoUrl(`https://firebasestorage.googleapis.com.evil.example/v0/b/${B}/o/logistics%2F${me}%2Fa.jpg`, me, [B]), false);
+  assert.strictEqual(L.isOwnProofPhotoUrl(okUrl.replace('https:', 'http:'), me, [B]), false, 'http rad');
+  assert.strictEqual(L.isOwnProofPhotoUrl(`https://user:pw@firebasestorage.googleapis.com/v0/b/${B}/o/logistics%2F${me}%2Fa.jpg`, me, [B]), false);
+  // Begona bucket (pin bo'lsa)
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl('other-bucket', `logistics/${me}/a.jpg`), me, [B]), false);
+  // Boshqa foydalanuvchi yo'li / boshqa papka / yo'l ichida yo'l / ..
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl(B, 'logistics/998909999999/a.jpg'), me, [B]), false, 'boshqa foydalanuvchi');
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl(B, `ads/${me}/a.jpg`), me, [B]), false, 'boshqa papka');
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl(B, `logistics/${me}/x/a.jpg`), me, [B]), false, 'ichki papka');
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl(B, `logistics/${me}/../998909999999/a.jpg`), me, [B]), false, '..');
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl(B, `logistics/${me}/`), me, [B]), false, 'fayl nomi yo\'q');
+  assert.strictEqual(L.isOwnProofPhotoUrl(fbUrl(B, `logistics/${me}9/a.jpg`), me, [B]), false, 'prefiks emas, to\'liq ID');
+  // Bo'sh/yaroqsiz
+  assert.strictEqual(L.isOwnProofPhotoUrl('', me, [B]), false);
+  assert.strictEqual(L.isOwnProofPhotoUrl('not a url', me, [B]), false);
+  assert.strictEqual(L.isOwnProofPhotoUrl(okUrl, '', [B]), false, 'callerId bo\'sh');
+});
+
 (async () => {
   for (const t of tests) {
     try { await t.fn(); passed += 1; console.log(`  OK  ${t.name}`); } catch (e) {

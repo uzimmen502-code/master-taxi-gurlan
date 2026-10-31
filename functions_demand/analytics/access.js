@@ -29,10 +29,13 @@ function fail(code, message) {
 }
 
 /**
- * Чақирувчи берилган роллардан биридами.
- *
- * @returns {Promise<string>} канон ID
+ * Pul oqimiga ta'sir qiluvchi admin amallari (yo'qolgan posilka, D1 2026-10-16)
+ * uchun TORROQ ro'yxat: `dispatcher` KIRMAYDI (ega qarori 6-band: faqat
+ * admin/superadmin). `functions/index.js`dagi `requireCallerRoles(['admin',
+ * 'superadmin'])` bilan bir xil.
  */
+const STRICT_ADMIN_ROLES = new Set(['admin', 'superadmin']);
+
 async function assertRole(db, context, roles) {
   const callerId = callerIdFrom(context);
   if (!callerId) {
@@ -54,20 +57,20 @@ async function assertRole(db, context, roles) {
   throw fail('permission-denied', 'Ruxsat yo\'q');
 }
 
-/** Чақирувчи админми (admin / superadmin / dispatcher). */
+/**
+ * Чақирувчи админми.
+ *
+ * @returns {Promise<string>} канон ID
+ */
 function assertAnalyticsAdmin(db, context) {
   return assertRole(db, context, ADMIN_ROLES);
 }
 
-/**
- * ЯДРО КАЛИТИНИ ЎЗГАРТИРУВЧИ рол: фақат admin / superadmin.
- * `dispatcher` ўқиши мумкин, лекин ҳудудни ёқиш/ўчириш — муҳим амал (41-банд).
- */
-const CORE_CONFIG_WRITE_ROLES = new Set(['admin', 'superadmin']);
-function assertCoreConfigAdmin(db, context) {
-  return assertRole(db, context, CORE_CONFIG_WRITE_ROLES);
+/** Faqat admin/superadmin (dispatcher EMAS). @returns {Promise<string>} kanon ID */
+function assertStrictAdmin(db, context) {
+  return assertRole(db, context, STRICT_ADMIN_ROLES);
 }
 
 module.exports = {
-  ADMIN_ROLES, CORE_CONFIG_WRITE_ROLES, assertAnalyticsAdmin, assertCoreConfigAdmin,
+  ADMIN_ROLES, STRICT_ADMIN_ROLES, assertAnalyticsAdmin, assertStrictAdmin,
 };

@@ -24,15 +24,18 @@
  * (`submitOffer`) LEG uchun ishlatilmaydi — narx tarifdan (D-8).
  */
 
-const { callerIdFrom, toCanonicalId } = require('../core/ids');
-const { resolveFlags, getModuleConfig } = require('../core/config');
+const { callerIdFrom, toCanonicalId, candidateIdsFor } = require('../core/ids');
+const { resolveFlags, getModuleConfig, clearCache: clearConfigCache } = require('../core/config');
 const sm = require('../core/state_machine');
 const tariffCore = require('../core/tariff');
 const L = require('../core/logistics');
 const { getAdapter } = require('../core/registry');
-const { runMatching } = require('../matching/orchestrator');
+const { runMatching, hardFilterReason, attachStats } = require('../matching/orchestrator');
+const capabilitiesSource = require('../sources/capabilities');
+const { SERVICES_BY_LEG_KIND } = require('../sources/logistics_candidates');
+const caps = require('../core/capabilities');
 const geoHash = require('../geo/geo_hash');
-const { assertAnalyticsAdmin } = require('../analytics/access');
+const { assertAnalyticsAdmin, assertStrictAdmin } = require('../analytics/access');
 
 const DEMANDS = 'demands';
 const MATCHES = 'demand_matches';
@@ -42,9 +45,9 @@ const MAX_PARCELS = 5;
 
 /**
  * Konfig HUDUDSIZ: `module_config/logistics_all`. Logistika hududlararo
- * (Xorazm → Toshkent), bitta kill switch yetadi. (Eslatma: `moduleRegionKey`
- * avval `_`li hudud ID'sini rad etardi; 2026-10-20 dan `__` bilan qabul qiladi,
- * lekin logistika baribir hududsiz qoladi.)
+ * (Xorazm → Toshkent), bitta kill switch yetadi. Yana bir sabab: yadroning
+ * `moduleRegionKey` `_`li hudud ID'sini (`toshkent_shahri`) qabul qilmaydi —
+ * bu ids.js'dagi mavjud chegara, shu yerda aylanib o'tilmaydi.
  */
 const CONFIG_REGION = 'all';
 
@@ -111,22 +114,48 @@ async function validatePoint(db, raw, name) {
   };
 }
 
-function validateParcel(raw, i) {
+/**
+ * E'lon qilingan qiymat (declaredValue) MAJBURIY (ega qarori 2026-10-16, D1):
+ * posilka yo'qolsa mijozga aynan shu summa (G) qaytariladi — qiymatsiz
+ * jo'natma qabul qilinmaydi. Yo'q / null / 0 / manfiy -> `declared_value_required`;
+ * butun son bo'lmasa -> avvalgidek `parcel_invalid`. Haq hisobi (declaredValueFee)
+ * va tarif chegarasi (`over_declared_value`) `core/tariff.js`da O'ZGARMAGAN.
+ * Yangi qoida FAQAT shu yerda (quote ham, create ham shu validatsiyadan o'tadi);
+ * `quoteParcel` toza hisob funksiyasi bo'lib qoladi (paritet fixturasi 0 ni ishlatadi).
+ */
+function validateParcel(raw, i, opts = {}) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = {
     actualWeightG: p.actualWeightG,
     lengthCm: p.lengthCm,
     widthCm: p.widthCm,
     heightCm: p.heightCm,
-    declaredValue: p.declaredValue == null ? 0 : p.declaredValue,
+    declaredValue: p.declaredValue,
     description: String(p.description || '').slice(0, 200),
     fragile: p.fragile === true,
   };
-  for (const k of ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
+  // `dimsOptional` — FAQAT ichki yordamchi (`createShipmentInternal`, Ulgurji buyurtmasi):
+  // ko'p donali qadoqning umumiy o'lchami noma'lum (`tariff.quoteParcel` izohi). Uchala
+  // o'lcham ham yo'q bo'lsa — null; qisman berilsa odatdagidek tekshiriladi. Klient
+  // callable'lari (`createLogisticsOrder`, kotirovka) bu bayroqsiz — o'lcham MAJBURIY.
+  const noDims = opts.dimsOptional === true
+    && [out.lengthCm, out.widthCm, out.heightCm].every((x) => x === undefined || x === null);
+  if (noDims) {
+    out.lengthCm = null;
+    out.widthCm = null;
+    out.heightCm = null;
+  }
+  for (const k of noDims ? ['actualWeightG'] : ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
     if (!isPosInt(out[k])) throw fail('invalid-argument', `parcels[${i}].${k} musbat butun son bo'lishi kerak`, 'parcel_invalid');
   }
-  if (!isInt(out.declaredValue) || out.declaredValue < 0) {
+  if (out.declaredValue === undefined || out.declaredValue === null || out.declaredValue === '') {
+    throw fail('invalid-argument', `parcels[${i}].declaredValue majburiy (posilka qiymati, so'm)`, 'declared_value_required');
+  }
+  if (!isInt(out.declaredValue)) {
     throw fail('invalid-argument', `parcels[${i}].declaredValue butun so'm`, 'parcel_invalid');
+  }
+  if (out.declaredValue <= 0) {
+    throw fail('invalid-argument', `parcels[${i}].declaredValue musbat bo'lishi kerak`, 'declared_value_required');
   }
   return out;
 }
@@ -135,7 +164,8 @@ function validateParcels(raw) {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_PARCELS) {
     throw fail('invalid-argument', `parcels 1..${MAX_PARCELS}`, 'parcels_count');
   }
-  return raw.map(validateParcel);
+  // Lambda ATAYLAB: `map` uchinchi argument (massiv) beradi — u `opts` bo'lib qolmasin.
+  return raw.map((p, i) => validateParcel(p, i));
 }
 
 function validateRecipient(raw) {
@@ -153,13 +183,17 @@ async function requireActiveTariff(db) {
   return t;
 }
 
-async function requireEnabled(db, callerId) {
-  const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+function assertModuleEnabled(flags) {
   if (!flags.enabled) {
     throw fail('unavailable', flags.killReason
       ? 'Xizmat vaqtincha to\'xtatilgan'
       : 'Jo\'natma xizmati sizning hududingizda hali ishga tushmagan', 'module_disabled');
   }
+}
+
+async function requireEnabled(db, callerId) {
+  const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+  assertModuleEnabled(flags);
   // INTERNAL bosqich (42-band): sinov ro'yxatida bo'lmagan — xizmat «hali
   // ishga tushmagan». Mavjudligini boshqacha oshkor qilmaymiz.
   if (!L.isStageAllowed(flags.config, callerId)) {
@@ -293,6 +327,9 @@ function buildLegDemand({
         heightCm: snap.heightCm,
         fragile: parcel.fragile === true,
       },
+      // Ulgurji buyurtmasi jo'natmasi (3-bosqich): LEG egasi (sotuvchi) uni
+      // `cancelDemand`/`acceptOffer` bilan boshqara olmasin. Oddiy jo'natmada YO'Q.
+      ...(shipment.wholesaleOrderId ? { wholesaleOrderId: shipment.wholesaleOrderId } : {}),
     },
     payerSide: 'sender',
     termsAcceptedAt: order.termsAcceptedAt || null,
@@ -333,6 +370,80 @@ async function reserveTrackingSeq(db, now, count) {
     tx.set(ref, { seq: cur + count, updatedAt: now }, { merge: true });
     return cur + 1;
   });
+}
+
+/**
+ * BITTA SHIPMENT yozuvlari — `createLogisticsOrder` va `createShipmentInternal`
+ * uchun YAGONA manba (nusxa yo'q, CLAUDE.md 4/7): shipment + private/secrets +
+ * private/internal (ichki ulush, 14-band) + route_plans v1 + LEG(draft) + LEG stats.
+ * `shipmentExtra` faqat berilganda qo'shiladi — oddiy jo'natma shakli o'zgarmaydi
+ * (paritet fixturasi). `write` — batch (set).
+ */
+function addShipmentWrites(write, {
+  db, now, order, ownerId, tariff, origin, destination, recipientName, parcel, priceSnapshot,
+  trackingNumber, adapter, ttl, shipmentExtra,
+}) {
+  const shipmentRef = db.collection(L.SHIPMENTS).doc();
+  const legRef = db.collection(DEMANDS).doc();
+  const qrSecret = L.newQrSecret();
+  const shipment = {
+    orderId: order.id,
+    ownerId,
+    trackingNumber,
+    status: L.SHIPMENT_STATUS.AWAITING_PAYMENT,
+    paymentStatus: L.PAYMENT_STATUS.PENDING,
+    origin,
+    destination,
+    recipientName,
+    parcel,
+    /** D-8: narx muhrlangan — tarif keyin o'zgarsa bu o'zgarmaydi. */
+    priceSnapshot,
+    currentCustodian: { kind: L.CUSTODIAN_KIND.SENDER, id: ownerId, since: now },
+    currentLegId: null,
+    routePlanVersion: 1,
+    legIds: [legRef.id],
+    legCount: 1,
+    assignedProviderIds: [],
+    custodyCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    ...(shipmentExtra || {}),
+  };
+  const route = buildRoute({
+    tariff, shipment, version: 1,
+    points: [{ from: origin, to: destination }],
+  });
+  const leg = route.legs[0];
+
+  write.set(shipmentRef, shipment);
+  write.set(shipmentRef.collection('private').doc('secrets'), { qrSecret, createdAt: now });
+  // ICHKI qatlam — mijoz o'qimaydi (qoida: private/* yopiq).
+  write.set(shipmentRef.collection('private').doc('internal'), {
+    platformShare: route.split.platformShare,
+    providerPool: route.split.providerPool,
+    legPayouts: route.split.legPayouts,
+    tariffVersion: tariff.version,
+    updatedAt: now,
+  });
+  write.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id), {
+    shipmentId: shipmentRef.id, currentVersion: 1, updatedAt: now,
+  });
+  write.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id).collection('versions').doc('1'), {
+    version: 1,
+    legs: route.legs.map((l) => ({ ...l, legId: legRef.id })),
+    reason: 'initial',
+    createdBy: 'system',
+    createdAt: now,
+    supersededAt: null,
+  });
+  write.set(legRef, buildLegDemand({
+    ownerId, order, shipment, shipmentId: shipmentRef.id, leg,
+    legIndex: 0, legCount: 1, legIds: [legRef.id], adapter, now, ttlMinutes: ttl,
+  }));
+  write.set(legRef.collection('private').doc('stats'), {
+    matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
+  });
+  return { shipmentId: shipmentRef.id, legId: legRef.id, split: route.split };
 }
 
 function makeCreateLogisticsOrder(deps) {
@@ -376,67 +487,23 @@ function makeCreateLogisticsOrder(deps) {
     };
 
     for (let i = 0; i < q.parcels.length; i += 1) {
-      const shipmentRef = db.collection(L.SHIPMENTS).doc();
-      const legRef = db.collection(DEMANDS).doc();
       const trackingNumber = L.formatTrackingNumber(now, seqStart + i);
-      const qrSecret = L.newQrSecret();
-      const shipment = {
-        orderId: orderRef.id,
+      const w = addShipmentWrites(batch, {
+        db,
+        now,
+        order,
         ownerId,
-        trackingNumber,
-        status: L.SHIPMENT_STATUS.AWAITING_PAYMENT,
-        paymentStatus: L.PAYMENT_STATUS.PENDING,
+        tariff: q.tariff,
         origin: q.origin,
         destination: q.destination,
         recipientName: recipient.name,
         parcel: q.parcels[i],
-        /** D-8: narx muhrlangan — tarif keyin o'zgarsa bu o'zgarmaydi. */
         priceSnapshot: { ...q.quotes[i], calculatedAt: now },
-        currentCustodian: { kind: L.CUSTODIAN_KIND.SENDER, id: ownerId, since: now },
-        currentLegId: null,
-        routePlanVersion: 1,
-        legIds: [legRef.id],
-        legCount: 1,
-        assignedProviderIds: [],
-        custodyCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const route = buildRoute({
-        tariff: q.tariff, shipment, version: 1,
-        points: [{ from: q.origin, to: q.destination }],
+        trackingNumber,
+        adapter,
+        ttl,
       });
-      const leg = route.legs[0];
-
-      batch.set(shipmentRef, shipment);
-      batch.set(shipmentRef.collection('private').doc('secrets'), { qrSecret, createdAt: now });
-      // ICHKI qatlam — mijoz o'qimaydi (qoida: private/* yopiq).
-      batch.set(shipmentRef.collection('private').doc('internal'), {
-        platformShare: route.split.platformShare,
-        providerPool: route.split.providerPool,
-        legPayouts: route.split.legPayouts,
-        tariffVersion: q.tariff.version,
-        updatedAt: now,
-      });
-      batch.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id), {
-        shipmentId: shipmentRef.id, currentVersion: 1, updatedAt: now,
-      });
-      batch.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id).collection('versions').doc('1'), {
-        version: 1,
-        legs: route.legs.map((l) => ({ ...l, legId: legRef.id })),
-        reason: 'initial',
-        createdBy: 'system',
-        createdAt: now,
-        supersededAt: null,
-      });
-      batch.set(legRef, buildLegDemand({
-        ownerId, order, shipment, shipmentId: shipmentRef.id, leg,
-        legIndex: 0, legCount: 1, legIds: [legRef.id], adapter, now, ttlMinutes: ttl,
-      }));
-      batch.set(legRef.collection('private').doc('stats'), {
-        matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
-      });
-      shipmentIds.push(shipmentRef.id);
+      shipmentIds.push(w.shipmentId);
       trackingNumbers.push(trackingNumber);
     }
 
@@ -458,10 +525,27 @@ function makeCreateLogisticsOrder(deps) {
       createdAt: now,
       updatedAt: now,
     });
-    batch.set(idemRef, {
+    // Idempotentlik hujjati AYNI atomik yozuvda va `create()` bilan (audit L5):
+    // yuqoridagi `get` tekshiruvi tranzaksiyasiz — ikki parallel chaqiruv ikkalasi
+    // ham «yo'q» deb ko'rib ikkita ORDER yaratardi. `create()` hujjat bor bo'lsa
+    // butun batch'ni rad etadi (ALREADY_EXISTS) → hech narsa yozilmaydi,
+    // g'olibning natijasi qaytariladi. (Yutqazgan chaqiruv tracking raqamini
+    // band qilgan bo'lishi mumkin — raqamda tirqish, ORDER yo'q.)
+    batch.create(idemRef, {
       ownerId, kind: 'logistics_order', orderId: orderRef.id, shipmentIds, createdAt: now,
     });
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e && (e.code === 6 || e.code === 'already-exists')) {
+        const won = await idemRef.get();
+        if (won.exists) {
+          const d = won.data() || {};
+          return { orderId: d.orderId, shipmentIds: d.shipmentIds || [], duplicate: true };
+        }
+      }
+      throw e;
+    }
 
     return {
       orderId: orderRef.id,
@@ -472,6 +556,169 @@ function makeCreateLogisticsOrder(deps) {
       paymentStatus: L.PAYMENT_STATUS.PENDING,
       duplicate: false,
     };
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ICHKI YARATISH — boshqa modul (Ulgurji buyurtmasi, 3-bosqich) uchun
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Callable EMAS (server triggeri chaqiradi). `createLogisticsOrder` bilan BITTA
+ * yozuv manbasi (`addShipmentWrites`), farqlari:
+ *   - narx QAYTA HISOBLANMAYDI: chaqiruvchi modul muhrlagan `priceSnapshot`
+ *     (D-8, 9-band); ichki ulush (platformShare/pool/legPayouts) — o'sha
+ *     muhrlangan `tariffVersion` hujjatidan (`adminPlanShipmentRoute` naqshi).
+ *     Versiya hujjati yo'q — `tariff_version_missing` (taxmin yo'q);
+ *   - logistika jo'natuvchi darvozasi (`requireEnabled`) YO'Q: chaqiruvchi
+ *     modul o'z darvozasini o'tkazgan (Ulgurji — kvotada). LEG ochilishi,
+ *     matching va push esa `module_config/logistics_all` ga BO'YSUNADI
+ *     (`activateLeg`: enabled/matchingEnabled/pushEnabled, ijrochi bosqichi);
+ *   - o'lchamsiz posilka mumkin (`validateParcel` `dimsOptional`);
+ *   - `recipientId` (qabul qiluvchi AVA foydalanuvchisi — `getShipmentSecrets`
+ *     yetkazish kodini UNGA beradi), `source`, `extra` — shipment va ORDER'da.
+ * Idempotent: `demand_idempotency/{idempotencyKey}` AYNI batch'da `create()` —
+ * trigger qayta ishlasa / parallel chaqirilsa ham BITTA jo'natma (yutqazgan
+ * chaqiruv g'olib natijasini oladi; tracking raqamida tirqish bo'lishi mumkin).
+ * Pul YO'Q: `paymentStatus: pending` (eskrouni default codebase yozadi).
+ */
+async function createShipmentInternal(deps, input) {
+  const { db, now: nowFn } = deps;
+  const now = nowFn ? nowFn() : new Date();
+  const p = input || {};
+  const key = String(p.idempotencyKey || '');
+  if (!/^[A-Za-z0-9_-]{8,200}$/.test(key)) throw fail('invalid-argument', 'idempotencyKey', 'idempotency_key');
+  const idemRef = db.collection(IDEMPOTENCY).doc(key);
+  const dup = (d) => ({
+    orderId: d.orderId, shipmentId: (d.shipmentIds || [])[0] || null,
+    trackingNumber: (d.trackingNumbers || [])[0] || null, duplicate: true,
+  });
+  const idem = await idemRef.get();
+  if (idem.exists) return dup(idem.data() || {});
+
+  const ownerId = toCanonicalId(p.ownerId || '');
+  if (!ownerId) throw fail('invalid-argument', 'Jo\'natuvchi', 'owner_required');
+  const recipientId = toCanonicalId(p.recipientId || '');
+  if (!recipientId) throw fail('invalid-argument', 'Qabul qiluvchi', 'recipient_required');
+  if (recipientId === ownerId) throw fail('invalid-argument', 'Jo\'natuvchi = qabul qiluvchi', 'recipient_is_owner');
+  const recipient = { name: String((p.recipient || {}).name || '').trim().slice(0, 80), phone: recipientId };
+  const source = String(p.source || '');
+  if (!/^[a-z_]{2,32}$/.test(source)) throw fail('invalid-argument', 'source', 'source_required');
+  const origin = p.origin;
+  const destination = p.destination;
+  if (!origin || !GEO_ID_RE.test(String(origin.regionId || ''))
+    || !destination || !GEO_ID_RE.test(String(destination.regionId || ''))) {
+    throw fail('failed-precondition', 'Manzil yo\'q', 'points_missing');
+  }
+  const parcel = validateParcel(p.parcel, 0, { dimsOptional: true });
+  const snap = p.priceSnapshot && typeof p.priceSnapshot === 'object' ? p.priceSnapshot : {};
+  if (!isPosInt(snap.customerPrice) || !isPosInt(snap.tariffVersion)) {
+    throw fail('failed-precondition', 'Muhrlangan narx yo\'q', 'price_snapshot_invalid');
+  }
+  // Muhr posilkaga mos (vazn/qiymat) — boshqa posilkaning narxi bilan jo'natma ochilmasin.
+  if (snap.actualWeightG !== parcel.actualWeightG || (snap.declaredValue || 0) !== parcel.declaredValue) {
+    throw fail('failed-precondition', 'Muhrlangan narx posilkaga mos emas', 'price_snapshot_mismatch');
+  }
+  const tSnap = await db.collection(tariffCore.COLLECTION).doc(tariffCore.versionDocId(snap.tariffVersion)).get();
+  if (!tSnap.exists) throw fail('failed-precondition', 'Muhrlangan tarif versiyasi topilmadi', 'tariff_version_missing');
+  const tariff = tSnap.data() || {};
+  if (Number(tariff.version) !== snap.tariffVersion) {
+    throw fail('failed-precondition', 'Tarif versiyasi mos emas', 'tariff_version_mismatch');
+  }
+  const adapter = getAdapter(L.MODULE);
+  if (!adapter) throw fail('unimplemented', 'logistics adapteri ulanmagan');
+  const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
+  const ttl = Number((config.logistics || {}).legTtlMinutes) || 3 * 24 * 60;
+  const extra = p.extra && typeof p.extra === 'object' ? p.extra : {};
+  const pricedAt = p.pricedAt || now;
+
+  const seqStart = await reserveTrackingSeq(db, now, 1);
+  const trackingNumber = L.formatTrackingNumber(now, seqStart);
+  const orderRef = db.collection(L.ORDERS).doc();
+  const order = { id: orderRef.id, ownerId, termsAcceptedAt: null };
+  const batch = db.batch();
+  const w = addShipmentWrites(batch, {
+    db,
+    now,
+    order,
+    ownerId,
+    tariff,
+    origin,
+    destination,
+    recipientName: recipient.name,
+    parcel,
+    priceSnapshot: { ...snap, calculatedAt: pricedAt },
+    trackingNumber,
+    adapter,
+    ttl,
+    shipmentExtra: { recipientId, source, ...extra },
+  });
+  batch.set(orderRef, {
+    ownerId,
+    status: L.deriveOrderStatus([L.SHIPMENT_STATUS.AWAITING_PAYMENT]),
+    shipmentIds: [w.shipmentId],
+    trackingNumbers: [trackingNumber],
+    origin,
+    destination,
+    /** Qabul qiluvchi telefoni FAQAT shu yerda (egasi o'qiydi) — 40-band. */
+    recipient,
+    recipientId,
+    source,
+    ...extra,
+    note: '',
+    customerPriceTotal: snap.customerPrice,
+    currency: 'UZS',
+    tariffVersion: snap.tariffVersion,
+    consolidation: { count: 1, discountApplied: false, tariffVersion: snap.tariffVersion },
+    termsAcceptedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.create(idemRef, {
+    ownerId, kind: 'internal_shipment', source, orderId: orderRef.id,
+    shipmentIds: [w.shipmentId], trackingNumbers: [trackingNumber], createdAt: now,
+  });
+  try {
+    await batch.commit();
+  } catch (e) {
+    if (e && (e.code === 6 || e.code === 'already-exists')) {
+      const won = await idemRef.get();
+      if (won.exists) return dup(won.data() || {});
+    }
+    throw e;
+  }
+  return {
+    orderId: orderRef.id, shipmentId: w.shipmentId, trackingNumber, duplicate: false,
+  };
+}
+
+/**
+ * To'lanmagan (awaiting_payment + pending) jo'natmani va uning draft/active
+ * LEG'larini bekor qilish — chaqiruvchining TRANZAKSIYASIDA. Ikki bosqich
+ * (`prepareLegCancelInTx` naqshi): bu funksiya faqat O'QIYDI, qaytargan
+ * `commit(now, by)` YOZADI. Pul harakati boshlangan / yo'q jo'natma → null.
+ */
+async function prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) {
+  if (!shipmentId) return null;
+  const shipRef = db.collection(L.SHIPMENTS).doc(String(shipmentId));
+  const s = await tx.get(shipRef);
+  if (!s.exists) return null;
+  const ship = s.data() || {};
+  if (ship.status !== L.SHIPMENT_STATUS.AWAITING_PAYMENT || ship.paymentStatus !== L.PAYMENT_STATUS.PENDING) return null;
+  const legSnaps = await Promise.all((ship.legIds || []).map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+  return (now, by) => {
+    tx.update(shipRef, {
+      status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelUnpaidShipment'),
+      cancelledAt: now, cancelledBy: by, updatedAt: now,
+    });
+    for (const ls of legSnaps) {
+      if (ls.exists && sm.canTransition((ls.data() || {}).status, sm.STATUS.CANCELLED)) {
+        tx.update(ls.ref, { status: sm.STATUS.CANCELLED, cancelledBy: by, cancelledAt: now, updatedAt: now });
+      }
+    }
+    if (ship.orderId) {
+      tx.update(db.collection(L.ORDERS).doc(String(ship.orderId)), { status: 'cancelled', cancelledAt: now, updatedAt: now });
+    }
   };
 }
 
@@ -602,6 +849,88 @@ function makeOnShipmentFunded(deps) {
   };
 }
 
+/**
+ * SWEEPER: zanjir qotib qolmasin (audit L3c). LEG ochilishi uch joyda
+ * «bir martalik» edi va xatosi faqat logga tushardi:
+ *   - eskrou triggeri (`onShipmentFunded`) -> LEG-1;
+ *   - `scanHandover` -> keyingi LEG;
+ *   - `adminPlanShipmentRoute` -> yangi LEG-1.
+ * Biri yiqilsa LEG `draft`da qoladi, kuryerga ko'rinmaydi, pul eskrouda.
+ *
+ * Bu sweeper TO'LANGAN (`escrow_funded`) jo'natmalarning ochilishi KERAK
+ * bo'lgan BITTA LEG'ini tekshiradi va `draft` bo'lsa mavjud `activateLeg`ni
+ * chaqiradi (u tranzaksion va idempotent: boshqa chaqiruv ochgan / bekor
+ * qilingan / joriy marshrutda yo'q LEG'ni `skipped` qiladi):
+ *   - `ready` jo'natma (hali olinmagan) -> LEG-1 (`legIds[0]`);
+ *   - `in_transit` jo'natma -> `currentLegId`dan keyingi LEG (faqat
+ *     `openNextLegOn: 'in_progress'` bo'lganda — scanHandover bilan bir xil).
+ * Jo'natma uchun faqat 1 ta LEG hujjati o'qiladi (N+1 emas).
+ *
+ * Chegara: holat bo'yicha tenglik filtri + hujjat ID tartibi (yangi indeks
+ * kerak emas), sahifa `batchSize`, bir aylanishda eng ko'pi `maxPages` sahifa.
+ * Soni chegaradan oshsa `truncated: true` logga tushadi (jim yo'qolmaydi).
+ * Yo'lda/tayyor jo'natmalar yetkazilgach shu holatlardan chiqadi.
+ */
+function makeLegChainSweeper(deps) {
+  const { db, batchSize = 100, maxPages = 10 } = deps;
+
+  return async function legChainSweeper() {
+    const startedAt = Date.now();
+    const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+    if (!flags.enabled) {
+      console.log(JSON.stringify({ action: 'legChainSweeper', result: 'skipped', reason: 'disabled' }));
+      return { scanned: 0, opened: 0, failed: 0, truncated: false, skipped: 'disabled' };
+    }
+    const openNext = (((flags.config || {}).logistics || {}).openNextLegOn || 'in_progress') === 'in_progress';
+    const out = { scanned: 0, opened: 0, failed: 0, truncated: false };
+
+    const handle = async (shipmentId, ship, status) => {
+      if (ship.paymentStatus !== L.PAYMENT_STATUS.ESCROW_FUNDED) return;
+      const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
+      let idx = 0;
+      if (status === L.SHIPMENT_STATUS.IN_TRANSIT) {
+        const cur = legIds.indexOf(ship.currentLegId);
+        if (cur < 0 || !openNext) return;
+        idx = cur + 1;
+      }
+      if (idx >= legIds.length) return;
+      const legId = legIds[idx];
+      try {
+        const ls = await db.collection(DEMANDS).doc(legId).get();
+        if (!ls.exists || (ls.data() || {}).status !== sm.STATUS.DRAFT) return;
+        const r = await activateLeg(deps, legId);
+        if (r && r.activated) out.opened += 1;
+        console.log(JSON.stringify({
+          action: 'legChainSweeper.activate', shipmentId, legId, legIndex: idx, result: r,
+        }));
+      } catch (e) {
+        out.failed += 1;
+        console.error(JSON.stringify({
+          action: 'legChainSweeper.activate', result: 'error', errorCode: 'LEG_ACTIVATE_FAILED',
+          shipmentId, legId, message: e.message,
+        }));
+      }
+    };
+
+    for (const status of [L.SHIPMENT_STATUS.READY, L.SHIPMENT_STATUS.IN_TRANSIT]) {
+      let last = null;
+      for (let page = 0; page < maxPages; page += 1) {
+        let q = db.collection(L.SHIPMENTS).where('status', '==', status).orderBy('__name__').limit(batchSize);
+        if (last) q = q.startAfter(last);
+        const snap = await q.get();
+        for (const sd of snap.docs) {
+          out.scanned += 1;
+          await handle(sd.id, sd.data() || {}, status);
+        }
+        if (snap.size < batchSize) break;
+        last = snap.docs[snap.docs.length - 1];
+        if (page === maxPages - 1) out.truncated = true;
+      }
+    }
+    console.log(JSON.stringify({ action: 'legChainSweeper', result: 'ok', ...out, durationMs: Date.now() - startedAt }));
+    return out;
+  };
+}
 // ═══════════════════════════════════════════════════════════════════════
 // ORDER holati (derived) — har o'zgarishdan keyin
 // ═══════════════════════════════════════════════════════════════════════
@@ -622,6 +951,60 @@ async function recomputeOrderStatus(db, orderId, now) {
 // IJROCHI: LEG'ni OLISH (birinchi qabul g'olib)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Ijrochi hali ham shu LEG'ni olishga haqlimi (audit L6). Match hujjati
+ * matching paytidagi holat: undan keyin capability bekor qilinishi, qarz
+ * bloki, trust/moderator bloki yoki sinov ro'yxatidan chiqarish mumkin.
+ * Qoidalar QAYTA YOZILMAYDI — matcher bilan bir xil hardFilterReason
+ * (trust, blok, qarz, adapter.isEligible: hudud + INTERNAL bosqich).
+ *
+ * Ijrochi ma'lumoti tranzaksiyadan OLDIN yuklanadi (users -> accountId ->
+ * capability + provider_stats); LEG o'zi tranzaksiya ichida o'qiladi.
+ */
+async function loadAcceptCandidates(db, providerId) {
+  const doc = await capabilitiesSource.fetchForProvider(db, providerId);
+  const out = [];
+  if (!doc) return out;
+  const services = new Set();
+  for (const list of Object.values(SERVICES_BY_LEG_KIND)) for (const s of list) services.add(s);
+  for (const service of services) {
+    if (!caps.isEligible(doc, service)) continue;
+    const svc = doc[service] || {};
+    // Manba qoidasi bilan bir xil: kuryer faqat posilka oladiganlar.
+    if (service === 'courier' && svc.acceptsParcels !== true) continue;
+    out.push({
+      providerId,
+      accountId: doc.id,
+      source: 'capabilities',
+      viaService: service,
+      regionIds: svc.regionIds || [],
+      districtIds: svc.districtIds || [],
+      acceptsParcels: svc.acceptsParcels === true,
+      capabilityStatus: caps.statusOf(doc, service),
+    });
+  }
+  await attachStats(db, out);
+  return out;
+}
+
+function assertStillEligible(legId, leg, candidates, config) {
+  const adapter = getAdapter(L.MODULE);
+  if (!adapter) throw fail('unimplemented', 'logistics adapteri ulanmagan');
+  const kind = ((leg.attributes || {}).legKind) || 'direct';
+  const services = SERVICES_BY_LEG_KIND[kind] || SERVICES_BY_LEG_KIND.direct;
+  const demand = { id: legId, ...leg };
+  let why = 'capability_not_eligible';
+  for (const c of candidates) {
+    if (!services.includes(c.viaService)) continue;
+    const r = hardFilterReason(demand, c, config, adapter);
+    if (!r) return;
+    why = r;
+  }
+  // Foydalanuvchi matni match yo'qligi bilan bir xil (sababni oshkor qilmaymiz).
+  // `not_matched` — mavjud kod (ilova matni bor, parity fixture'da); sabab `why`da (ichki).
+  throw fail('permission-denied', 'Bu jo\'natma sizga mos emas', 'not_matched', { why });
+}
+
 function makeAcceptLeg(deps) {
   const { db, now: nowFn } = deps;
 
@@ -631,6 +1014,14 @@ function makeAcceptLeg(deps) {
     if (!providerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
     const legId = String((data || {}).legId || '');
     if (!legId) throw fail('invalid-argument', 'legId majburiy');
+
+    // Match tuzilgandan keyin holat o'zgargan bo'lishi mumkin (audit L6): kill
+    // switch, INTERNAL bosqich, capability va qarz bloki shu yerda QAYTA
+    // tekshiriladi (matcher bilan bir xil qoidalar). Ma'lumot tranzaksiyadan
+    // oldin yuklanadi, tekshiruv — LEG/match o'qilgach (match yo'q ijrochiga
+    // modul holati oshkor qilinmaydi: avvalgidek `not_matched`).
+    const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+    const acceptCandidates = await loadAcceptCandidates(db, providerId);
 
     const legRef = db.collection(DEMANDS).doc(legId);
     const matchRef = db.collection(MATCHES).doc(`${legId}_${providerId}`);
@@ -648,6 +1039,8 @@ function makeAcceptLeg(deps) {
       if (sm.isPastExpiry((leg.timeWindow || {}).expiresAt, now)) {
         throw fail('failed-precondition', 'LEG muddati tugagan', 'expired');
       }
+      assertModuleEnabled(flags);
+      assertStillEligible(legId, leg, acceptCandidates, flags.config);
 
       const a = leg.attributes || {};
       const shipmentRef = db.collection(L.SHIPMENTS).doc(String(a.shipmentId || ''));
@@ -781,13 +1174,96 @@ async function closeOtherMatches(db, legId, winnerId, status, now) {
 // CUSTODY: OLISH (7.4) — bitta callable, bitta tranzaksiya
 // ═══════════════════════════════════════════════════════════════════════
 
-function validateProofInput(data, config) {
+/**
+ * Ilovaning O'Z Storage bucket'lari (audit S5/L13). Manba tartibi:
+ *   1) `deps.storageBucket` (qo'lda berilgan; string yoki massiv);
+ *   2) `FIREBASE_CONFIG.storageBucket` — Functions runtime o'zi qo'yadi;
+ *   3) `GCLOUD_PROJECT` -> Firebase standart nomlari (`<loyiha>.firebasestorage.app`,
+ *      `<loyiha>.appspot.com`) — XULOSA (INFERRED), repo'da bucket nomi faqat
+ *      `lib/firebase_options.dart`da;
+ *   4) hech biri yo'q -> [] : bucket PIN QILINMAYDI (faqat host + `logistics/{id}/`).
+ */
+function storageBucketsFor(deps) {
+  const d = (deps || {}).storageBucket;
+  if (d) return (Array.isArray(d) ? d : [d]).map(String).filter(Boolean);
+  try {
+    const cfg = JSON.parse(process.env.FIREBASE_CONFIG || '{}');
+    if (cfg && cfg.storageBucket) return [String(cfg.storageBucket)];
+  } catch (_) { /* FIREBASE_CONFIG yaroqsiz — keyingi manba */ }
+  const p = process.env.GCLOUD_PROJECT;
+  if (p) return [`${p}.firebasestorage.app`, `${p}.appspot.com`];
+  return [];
+}
+
+/**
+ * Dalil rasmlari: faqat chaqiruvchining O'Z yuklagan fayli
+ * (`logistics/{callerId}/...`). Bo'sh qatorlar avvalgidek tushiriladi; boshqa
+ * har qanday URL (begona host, boshqa foydalanuvchi yo'li) — aniq rad.
+ */
+function normalizeProofPhotos(raw, callerId, buckets) {
+  const out = [];
+  for (const u of (Array.isArray(raw) ? raw : []).slice(0, 4)) {
+    const s = String(u || '').trim();
+    if (!s) continue;
+    if (s.length > 500 || !L.isOwnProofPhotoUrl(s, callerId, buckets)) {
+      throw fail('invalid-argument', 'Rasm manzili noto\'g\'ri', 'photo_url_invalid');
+    }
+    out.push(s);
+  }
+  return out;
+}
+
+// ─── Kod urinishlari cheklovi (audit S4/L7, 2026-10-16) ────────────────
+// 6 xonali kod HMAC'dan, jo'natma uchun doimiy; ijrochi uni 10^6 ta urinib
+// topishi mumkin edi. Har (jo'natma, LEG, chaqiruvchi, tur) uchun xato
+// urinishlar `shipments/{id}/private/codeAttempts_*` hujjatida SANALADI
+// (`private/{docId}` qoidasi: klient o'qimaydi ham, yozmaydi ham). Hisob
+// kod tekshiruvi bilan BIR tranzaksiyada: ikki parallel xato taxmin ham
+// sanaladi. Xato urinishdan keyin chaqiruv tranzaksiyadan SO'NG xato
+// tashlaydi (aks holda tranzaksiya yozuvni bekor qilardi).
+
+function codeLockedError(retryAfterSec) {
+  return fail('resource-exhausted',
+    'Juda ko\'p noto\'g\'ri urinish bo\'ldi. Biroz kutib, qayta urinib ko\'ring.',
+    'CODE_ATTEMPTS_LOCKED', { retryAfterSec });
+}
+
+function codeAttemptsRef(shipmentRef, kind, legId, callerId) {
+  return shipmentRef.collection('private').doc(`codeAttempts_${kind}_${legId}_${callerId}`);
+}
+
+/**
+ * Tranzaksiya ICHIDA, o'qishlardan keyin. `verify()` — kod to'g'rimi.
+ * Qaytaradi: `null` (to'g'ri — davom eting; hisoblagich o'chirildi) yoki
+ * `{ blocked: 'locked'|'bad', retryAfterSec }`.
+ */
+function applyCodeAttempt(tx, ref, snap, now, limits, verify, meta) {
+  const att = snap && snap.exists ? (snap.data() || {}) : null;
+  const leftMs = L.codeLockRemainingMs(att, now);
+  if (leftMs > 0) return { blocked: 'locked', retryAfterSec: Math.ceil(leftMs / 1000) };
+  if (verify()) {
+    if (att) tx.delete(ref);
+    return null;
+  }
+  const next = L.registerFailedCodeAttempt(att, now, limits);
+  tx.set(ref, { ...meta, ...next, updatedAt: now });
+  if (next.lockedUntil) return { blocked: 'locked', retryAfterSec: Math.ceil(limits.lockMs / 1000) };
+  return { blocked: 'bad' };
+}
+
+/** Qulf bo'lsa — qulf xatosi (+ log); aks holda chaqiruvchi o'zi «noto'g'ri kod» tashlaydi. */
+function throwIfCodeLocked(blocked, log) {
+  if (blocked.blocked !== 'locked') return;
+  console.error(JSON.stringify({ result: 'denied', errorCode: 'CODE_ATTEMPTS_LOCKED', ...log }));
+  throw codeLockedError(blocked.retryAfterSec);
+}
+
+function validateProofInput(data, config, photoCtx) {
   const d = data || {};
   const code = d.code == null ? '' : String(d.code).trim();
   const qrPayload = d.qrPayload == null ? '' : String(d.qrPayload).trim();
   if (!code && !qrPayload) throw fail('invalid-argument', 'Kod yoki QR kerak', 'proof_required');
-  const photos = (Array.isArray(d.photoUrls) ? d.photoUrls : [])
-    .map((u) => String(u || '').trim()).filter((u) => /^https?:\/\//.test(u) && u.length <= 500).slice(0, 4);
+  const photos = normalizeProofPhotos(d.photoUrls, (photoCtx || {}).callerId, (photoCtx || {}).buckets);
   const requirePhoto = ((config || {}).logistics || {}).requireHandoverPhoto !== false;
   if (requirePhoto && photos.length === 0) throw fail('invalid-argument', 'Rasm majburiy', 'photo_required');
   const loc = d.location && typeof d.location === 'object' ? d.location : null;
@@ -816,7 +1292,7 @@ function makeScanHandover(deps) {
     if (!pre.exists) throw fail('not-found', 'LEG topilmadi');
     const preLeg = pre.data() || {};
     const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
-    const proof = validateProofInput(data, config);
+    const proof = validateProofInput(data, config, { callerId: providerId, buckets: storageBucketsFor(deps) });
 
     const a = preLeg.attributes || {};
     const shipmentId = String(a.shipmentId || '');
@@ -829,11 +1305,12 @@ function makeScanHandover(deps) {
     const eventRef = db.collection(L.CUSTODY).doc(eventId);
     const idx = Number(a.legIndex) || 0;
     const count = Number(a.legCount) || 1;
+    const attemptsRef = codeAttemptsRef(shipmentRef, 'handover', legId, providerId);
 
     const result = await db.runTransaction(async (tx) => {
-      const reads = [tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef), tx.get(orderRef)];
+      const reads = [tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef), tx.get(orderRef), tx.get(attemptsRef)];
       if (prevLegRef) reads.push(tx.get(prevLegRef));
-      const [legSnap, shipSnap, secSnap, evSnap, orderSnap, prevSnap] = await Promise.all(reads);
+      const [legSnap, shipSnap, secSnap, evSnap, orderSnap, attSnap, prevSnap] = await Promise.all(reads);
 
       if (evSnap.exists) {
         return { idempotent: true, event: evSnap.data() };
@@ -857,9 +1334,12 @@ function makeScanHandover(deps) {
         // D-TAXI-13 analogi: to'lovsiz custody yo'q.
         throw fail('failed-precondition', 'To\'lov tasdiqlanmagan', 'not_funded');
       }
-      if (!L.verifyHandoverProof(shipmentId, qrSecret, { code: proof.code, qrPayload: proof.qrPayload })) {
-        throw fail('permission-denied', 'Kod noto\'g\'ri', 'bad_proof');
-      }
+      const blocked = applyCodeAttempt(
+        tx, attemptsRef, attSnap, now, L.codeAttemptLimits(config),
+        () => L.verifyHandoverProof(shipmentId, qrSecret, { code: proof.code, qrPayload: proof.qrPayload }),
+        { kind: 'handover', shipmentId, legId, callerId: providerId },
+      );
+      if (blocked) return { blocked };
 
       // Kimdan olinadi — JORIY custodian (D-7: faqat jismoniy qabulda o'zgaradi).
       const cur = ship.currentCustodian || {};
@@ -946,8 +1426,9 @@ function makeScanHandover(deps) {
         tx.update(prevLegRef, { status: sm.STATUS.COMPLETED, completedAt: now, handedOverAt: now, updatedAt: now });
         const prevProvider = (prevLeg.assignment || {}).providerId;
         if (prevProvider) {
+          // Topshirgan ijrochida PII qolmasin (audit L10): kontakt shu tranzaksiyada yopiladi.
           tx.set(db.collection(MATCHES).doc(`${prevLegId}_${prevProvider}`), {
-            status: 'completed', closedAt: now,
+            status: 'completed', closedAt: now, contactUnlocked: null,
           }, { merge: true });
         }
       }
@@ -955,16 +1436,31 @@ function makeScanHandover(deps) {
       return { idempotent: false, event, nextLegId: a.nextLegId || null, orderId: a.orderId || null };
     });
 
-    if (result.idempotent) {
-      return { ok: true, idempotent: true, eventId, legStatus: 'in_progress' };
+    if (result.blocked) {
+      throwIfCodeLocked(result.blocked, { action: 'scanHandover', shipmentId, legId });
+      throw fail('permission-denied', 'Kod noto\'g\'ri', 'bad_proof');
     }
+
     // Zanjir (6.1): posilka yo'lda — keyingi LEG ochiladi.
     const openOn = ((config.logistics || {}).openNextLegOn) || 'in_progress';
-    if (result.nextLegId && openOn === 'in_progress') {
-      try { await activateLeg(deps, result.nextLegId); } catch (e) {
-        console.error(`keyingi LEG ochilmadi (${result.nextLegId}): ${e.message}`);
+    const openNextLeg = async (nextLegId) => {
+      if (!nextLegId || openOn !== 'in_progress') return;
+      try { await activateLeg(deps, nextLegId); } catch (e) {
+        console.error(JSON.stringify({
+          action: 'scanHandover.openNextLeg', result: 'error', errorCode: 'NEXT_LEG_OPEN_FAILED',
+          shipmentId, legId, nextLegId, message: e.message,
+        }));
       }
+    };
+    if (result.idempotent) {
+      // Takroriy chaqiruv (audit L3a): birinchi chaqiruvda keyingi LEG ochilmay
+      // qolgan bo'lishi mumkin (xato faqat logga tushadi) — shu yerda QAYTA
+      // uriniladi. `activateLeg` tranzaksion va idempotent: LEG allaqachon
+      // ochilgan bo'lsa `skipped` qaytaradi. Faqat hodisani yozgan ijrochi uchun.
+      if (((result.event || {}).createdBy) === providerId) await openNextLeg(a.nextLegId || null);
+      return { ok: true, idempotent: true, eventId, legStatus: 'in_progress' };
     }
+    await openNextLeg(result.nextLegId);
     await recomputeOrderStatus(db, result.orderId, now);
     return { ok: true, idempotent: false, eventId, legStatus: 'in_progress', shipmentId };
   };
@@ -991,8 +1487,7 @@ function makeConfirmDelivery(deps) {
     if (!pre.exists) throw fail('not-found', 'LEG topilmadi');
     const preLeg = pre.data() || {};
     const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
-    const photos = (Array.isArray((data || {}).photoUrls) ? data.photoUrls : [])
-      .map((u) => String(u || '').trim()).filter((u) => /^https?:\/\//.test(u) && u.length <= 500).slice(0, 4);
+    const photos = normalizeProofPhotos((data || {}).photoUrls, providerId, storageBucketsFor(deps));
     if (((config.logistics || {}).requireHandoverPhoto !== false) && photos.length === 0) {
       throw fail('invalid-argument', 'Rasm majburiy', 'photo_required');
     }
@@ -1009,10 +1504,11 @@ function makeConfirmDelivery(deps) {
     const eventRef = db.collection(L.CUSTODY).doc(eventId);
     const idx = Number(a.legIndex) || 0;
     const count = Number(a.legCount) || 1;
+    const attemptsRef = codeAttemptsRef(shipmentRef, 'delivery', legId, providerId);
 
     const result = await db.runTransaction(async (tx) => {
-      const [legSnap, shipSnap, secSnap, evSnap] = await Promise.all([
-        tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef),
+      const [legSnap, shipSnap, secSnap, evSnap, attSnap] = await Promise.all([
+        tx.get(legRef), tx.get(shipmentRef), tx.get(secretsRef), tx.get(eventRef), tx.get(attemptsRef),
       ]);
       if (evSnap.exists) return { idempotent: true };
       if (!legSnap.exists || !shipSnap.exists || !secSnap.exists) {
@@ -1031,9 +1527,12 @@ function makeConfirmDelivery(deps) {
       if (cur.kind !== L.CUSTODIAN_KIND.PROVIDER || cur.id !== providerId) {
         throw fail('failed-precondition', 'Custody zanjiri mos emas', 'custody_mismatch');
       }
-      if (!L.verifyDeliveryCode(shipmentId, (secSnap.data() || {}).qrSecret, deliveryCode)) {
-        throw fail('permission-denied', 'Yetkazish kodi noto\'g\'ri', 'bad_delivery_code');
-      }
+      const blocked = applyCodeAttempt(
+        tx, attemptsRef, attSnap, now, L.codeAttemptLimits(config),
+        () => L.verifyDeliveryCode(shipmentId, (secSnap.data() || {}).qrSecret, deliveryCode),
+        { kind: 'delivery', shipmentId, legId, callerId: providerId },
+      );
+      if (blocked) return { blocked };
 
       const event = {
         shipmentId,
@@ -1067,12 +1566,17 @@ function makeConfirmDelivery(deps) {
       });
       sm.assertTransition(leg.status, sm.STATUS.COMPLETED, 'confirmDelivery');
       tx.update(legRef, { status: sm.STATUS.COMPLETED, completedAt: now, updatedAt: now });
+      // Yetkazilgach qabul qiluvchi ismi/telefoni/manzili ijrochida qolmasin (audit L10).
       tx.set(db.collection(MATCHES).doc(`${legId}_${providerId}`), {
-        status: 'completed', closedAt: now,
+        status: 'completed', closedAt: now, contactUnlocked: null,
       }, { merge: true });
       return { idempotent: false, orderId: a.orderId || null };
     });
 
+    if (result.blocked) {
+      throwIfCodeLocked(result.blocked, { action: 'confirmDelivery', shipmentId, legId });
+      throw fail('permission-denied', 'Yetkazish kodi noto\'g\'ri', 'bad_delivery_code');
+    }
     if (!result.idempotent) await recomputeOrderStatus(db, result.orderId, now);
     return { ok: true, idempotent: result.idempotent, eventId, shipmentStatus: L.SHIPMENT_STATUS.DELIVERED };
   };
@@ -1093,53 +1597,68 @@ function makeCancelLogisticsOrder(deps) {
     if (!orderId) throw fail('invalid-argument', 'orderId majburiy');
 
     const orderRef = db.collection(L.ORDERS).doc(orderId);
-    const orderSnap = await orderRef.get();
-    if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
-    const order = orderSnap.data() || {};
-    if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
 
-    const shipSnap = await db.collection(L.SHIPMENTS).where('orderId', '==', orderId).get();
-    const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
-    for (const s of ships) {
-      if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
-      if (!L.isShipmentCancellable(s.data.status)) {
-        throw fail('failed-precondition', 'Posilka allaqachon yo\'lda — bekor qilib bo\'lmaydi', 'in_transit', { shipmentId: s.id });
-      }
-    }
+    // O'qish + tekshiruv + yozuv BITTA tranzaksiyada (audit L1, 2026-10-16).
+    // Avval jo'natmalar tranzaksiyasiz o'qilib, keyin batch yozilardi:
+    //   - oradagi eskrou tushishi: jo'natma `cancelled` + `escrow_funded`
+    //     qolardi (refund_pending yozilmasdi — pul qaytmasdi);
+    //   - oradagi `scanHandover`: yo'lga chiqqan (`in_transit`) jo'natma
+    //     bekor qilinardi (custody boshlangan, ijrochi qo'lida).
+    // Endi `scanHandover`/eskrou bilan to'qnashsa commit qayta uriniladi va
+    // holat/`paymentStatus`/`custodyCount` yangidan tekshiriladi.
+    const out = await db.runTransaction(async (tx) => {
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
+      const order = orderSnap.data() || {};
+      if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
 
-    let refundPending = 0;
-    const legIdsAll = [];
-    const batch = db.batch();
-    for (const s of ships) {
-      if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
-      const patch = {
-        status: L.assertShipmentTransition(s.data.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelLogisticsOrder'),
-        cancelledAt: now,
-        cancelledBy: 'owner',
-        updatedAt: now,
-      };
-      // Eskrou tushgan bo'lsa — refund (pulni default codebase qaytaradi).
-      if (s.data.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) {
-        patch.paymentStatus = L.assertPaymentTransition(s.data.paymentStatus, L.PAYMENT_STATUS.REFUND_PENDING, 'cancel');
-        refundPending += 1;
+      const shipSnap = await tx.get(db.collection(L.SHIPMENTS).where('orderId', '==', orderId));
+      const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
+      for (const s of ships) {
+        if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
+        // Custody boshlangan bo'lsa (status ham, `custodyCount` ham) — bekor yo'q.
+        if (!L.isShipmentCancellable(s.data.status) || (Number(s.data.custodyCount) || 0) > 0) {
+          throw fail('failed-precondition', 'Posilka allaqachon yo\'lda — bekor qilib bo\'lmaydi', 'in_transit', { shipmentId: s.id });
+        }
       }
-      batch.update(s.ref, patch);
-      for (const legId of (s.data.legIds || [])) legIdsAll.push(legId);
-    }
-    for (const legId of legIdsAll) {
-      const ref = db.collection(DEMANDS).doc(legId);
-      const snap = await ref.get();
-      if (!snap.exists) continue;
-      const st = (snap.data() || {}).status;
-      if (sm.canTransition(st, sm.STATUS.CANCELLED)) {
-        batch.update(ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'owner', cancelledAt: now, updatedAt: now });
-      }
-    }
-    batch.update(orderRef, { status: 'cancelled', cancelledAt: now, updatedAt: now });
-    await batch.commit();
 
-    for (const legId of legIdsAll) await closeOtherMatches(db, legId, null, 'cancelled', now);
-    return { ok: true, cancelled: ships.length, refundPending };
+      const legIdsAll = [];
+      for (const s of ships) {
+        if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
+        for (const legId of (s.data.legIds || [])) legIdsAll.push(legId);
+      }
+      const legSnaps = await Promise.all(legIdsAll.map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+
+      // Barcha o'qishlar tugadi — endi faqat yozuv.
+      let refundPending = 0;
+      for (const s of ships) {
+        if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
+        const patch = {
+          status: L.assertShipmentTransition(s.data.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelLogisticsOrder'),
+          cancelledAt: now,
+          cancelledBy: 'owner',
+          updatedAt: now,
+        };
+        // Eskrou tushgan bo'lsa — refund (pulni default codebase qaytaradi).
+        if (s.data.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) {
+          patch.paymentStatus = L.assertPaymentTransition(s.data.paymentStatus, L.PAYMENT_STATUS.REFUND_PENDING, 'cancel');
+          refundPending += 1;
+        }
+        tx.update(s.ref, patch);
+      }
+      for (const snap of legSnaps) {
+        if (!snap.exists) continue;
+        const st = (snap.data() || {}).status;
+        if (sm.canTransition(st, sm.STATUS.CANCELLED)) {
+          tx.update(snap.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'owner', cancelledAt: now, updatedAt: now });
+        }
+      }
+      tx.update(orderRef, { status: 'cancelled', cancelledAt: now, updatedAt: now });
+      return { cancelled: ships.length, refundPending, legIdsAll };
+    });
+
+    for (const legId of out.legIdsAll) await closeOtherMatches(db, legId, null, 'cancelled', now);
+    return { ok: true, cancelled: out.cancelled, refundPending: out.refundPending };
   };
 }
 
@@ -1198,13 +1717,20 @@ function makeAdminUpsertLogisticsTariff(deps) {
     if (errors.length) throw fail('invalid-argument', errors[0], 'tariff_invalid', { errors });
 
     const ref = db.collection(tariffCore.COLLECTION).doc(tariffCore.versionDocId(doc.version));
-    const prev = await ref.get();
-    if (prev.exists && (prev.data() || {}).status !== tariffCore.STATUS.DRAFT) {
-      // Faol/eski versiya O'ZGARMAS (9-band): yangi versiya ochiladi.
-      throw fail('failed-precondition', 'Faol yoki eski versiyani tahrirlab bo\'lmaydi — yangi versiya oching', 'tariff_immutable');
-    }
-    await ref.set({ ...doc, updatedAt: now, updatedBy: adminId, createdAt: prev.exists ? (prev.data() || {}).createdAt || now : now });
-    await db.collection(TARIFF_AUDIT).add({ kind: 'tariff_upsert', version: doc.version, by: adminId, at: now });
+    // O'qish + holat tekshiruvi + yozuv BITTA tranzaksiyada (audit L12): avval
+    // `get` → `set` tranzaksiyasiz edi — oradagi `adminActivateLogisticsTariff`
+    // faol tarifni `draft`ga qaytarib yuborardi (ko'rsatkich esa hamon shu
+    // versiyani faol deb turardi). Endi to'qnashuvda qayta uriniladi va
+    // `active`/`retired` hujjat ustiga HECH QACHON yozilmaydi (9-band).
+    await db.runTransaction(async (tx) => {
+      const prev = await tx.get(ref);
+      if (prev.exists && (prev.data() || {}).status !== tariffCore.STATUS.DRAFT) {
+        // Faol/eski versiya O'ZGARMAS (9-band): yangi versiya ochiladi.
+        throw fail('failed-precondition', 'Faol yoki eski versiyani tahrirlab bo\'lmaydi — yangi versiya oching', 'tariff_immutable');
+      }
+      tx.set(ref, { ...doc, updatedAt: now, updatedBy: adminId, createdAt: prev.exists ? (prev.data() || {}).createdAt || now : now });
+      tx.set(db.collection(TARIFF_AUDIT).doc(), { kind: 'tariff_upsert', version: doc.version, by: adminId, at: now });
+    });
     return { version: doc.version, status: tariffCore.STATUS.DRAFT, activationErrors: tariffCore.validateTariff(doc, { forActivation: true }) };
   };
 }
@@ -1302,7 +1828,7 @@ function makeAdminPlanShipmentRoute(deps) {
     // tranzaksiyasiz o'qilib, keyin batch yozilardi — oradagi `acceptLeg`
     // qabulini rejalash jimgina o'chirib yuborardi (emulatorda isbotlangan).
     // `acceptLeg` ham LEG + jo'natmani tranzaksiyada o'qiydi → bitta g'olib.
-    const oldLegs = await db.runTransaction(async (tx) => {
+    const { old: oldLegs, paymentStatus: paidStatus } = await db.runTransaction(async (tx) => {
       const curSnap = await tx.get(shipRef);
       const cur = curSnap.data() || {};
       if (![L.SHIPMENT_STATUS.AWAITING_PAYMENT, L.SHIPMENT_STATUS.READY].includes(cur.status)) {
@@ -1364,13 +1890,16 @@ function makeAdminPlanShipmentRoute(deps) {
         legPayouts: route.split.legPayouts,
         updatedAt: now,
       }, { merge: true });
-      return old;
+      // To'lov holati AYNI tranzaksiyadan (audit L3b): tashqarida o'qilgan
+      // `ship.paymentStatus` eskirishi mumkin — rejalash paytida eskrou tushsa
+      // yangi LEG-1 `draft`da qolardi (trigger eski `legIds[0]`ni ochardi).
+      return { old, paymentStatus: cur.paymentStatus };
     });
     for (const o of oldLegs) await closeOtherMatches(db, o.id, null, 'cancelled', now);
 
     // To'langan bo'lsa birinchi LEG darhol ochiladi.
     let first = null;
-    if (ship.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) first = await activateLeg(deps, legIds[0]);
+    if (paidStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) first = await activateLeg(deps, legIds[0]);
     return { version, legIds, legCount: legIds.length, firstLeg: first };
   };
 }
@@ -1440,14 +1969,347 @@ function makeAdminReactivateLeg(deps) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ADMIN — posilka YO'QOLDI (D1, ega qarori 2026-10-16)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `adminMarkShipmentLost({ shipmentId, reason, note?, opId })` — faqat admin/superadmin.
+ *
+ * BITTA tranzaksiya (cancel -> refund_pending -> trigger naqshi bilan bir xil):
+ *   - SHIPMENT `in_transit|disputed` -> `lost`, `paymentStatus`
+ *     `escrow_funded|escrow_frozen` -> `loss_pending`;
+ *   - yo'qolgan LEG (`currentLegId`, posilka qo'lidagi ijrochi) `in_progress` -> `disputed`
+ *     (LEG state machine'dagi yagona «muammo» holati; `completed` EMAS — haq to'lanmaydi;
+ *     `cancelled` EMAS — ish bekor bo'lmadi, yo'qoldi); keyingi LEG'lar `cancelled`;
+ *   - `logistics_incidents/{shipmentId}` (G, kuryer, mijoz, admin, sabab) + `events/declared`
+ *     + `logistics_audit` (41-band) — hammasi AYNI tranzaksiyada.
+ * PUL bu yerda YO'Q: default codebase `onLogisticsShipmentUpdate` (+ reconcile) `loss_pending`
+ * ni ko'rib G ni kuryer hamyonidan mijozga o'tkazadi (`functions/relay_escrow.js`).
+ *
+ * G = `priceSnapshot.declaredValue` (muhrlangan). Jazo = G (qo'shimcha to'lov EMAS).
+ * Idempotent: incident bor bo'lsa hech narsa yozilmaydi, birinchi natija qaytadi.
+ * Parallel ikki chaqiruv: tranzaksiya qayta uriniladi va ikkinchisi incident'ni ko'radi.
+ */
+/**
+ * `db.runTransaction` + CHEKLANGAN qayta urinish FAQAT xom (HttpsError bo'lmagan) xatolarda.
+ * Biznes rad (`fail(...)` = HttpsError) qayta urinilmaydi. Tranzaksiya funksiyasi idempotent
+ * bo'lishi shart (holatni har urinishda qayta o'qiydi).
+ */
+async function runTxRetryRaw(db, fn, attempts = 3) {
+  let last = null;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await db.runTransaction(fn);
+    } catch (e) {
+      if (e && typeof e.code === 'string' && e.httpErrorCode) throw e; // HttpsError - biznes rad
+      last = e;
+      console.warn(JSON.stringify({
+        action: 'runTxRetryRaw', result: 'retry', attempt: i, errorCode: 'TX_RAW_ERROR',
+        message: String((e && e.message) || e).slice(0, 120),
+      }));
+      await new Promise((r) => setTimeout(r, 40 * i + Math.floor(Math.random() * 60)));
+    }
+  }
+  throw last;
+}
+
+function makeAdminMarkShipmentLost(deps) {
+  const { db, now: nowFn } = deps;
+
+  async function run(data, context, adminId, now) {
+    const d = data || {};
+    const shipmentId = String(d.shipmentId || '').trim();
+    const reason = String(d.reason || '').trim().slice(0, 300);
+    const note = String(d.note || '').trim().slice(0, 1000);
+    const opId = String(d.opId || '').trim();
+    if (!shipmentId) throw fail('invalid-argument', 'shipmentId majburiy');
+    if (reason.length < 3) throw fail('invalid-argument', 'Yo\'qolish sababi majburiy (kamida 3 belgi)', 'loss_reason_required');
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(opId)) throw fail('invalid-argument', 'opId (6-64 belgi: harf, raqam, _ -)', 'loss_op_id');
+
+    const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
+    const incRef = db.collection(L.INCIDENTS).doc(shipmentId);
+
+    // Parallel `confirmDelivery` bilan poygada yutqazgan tomon Firestore'dan XOM xato olardi
+    // ("Transaction is invalid or closed", kod 3 - Admin SDK qayta urinishda eski get'larni
+    // yopilgan tranzaksiyaga o'tkazadi; courierSubmitPayment'da ham shunday topilgan).
+    // Biznes rad (HttpsError) darhol; xom xatoda tranzaksiya qayta ishga tushiriladi - ikkinchi
+    // urinish holatni qayta o'qib toza `shipment_not_lossable` beradi (qarang runTxRetryRaw).
+    const out = await runTxRetryRaw(db, async (tx) => {
+      const [shipSnap, incSnap] = await Promise.all([tx.get(shipRef), tx.get(incRef)]);
+      if (!shipSnap.exists) throw fail('not-found', 'Jo\'natma topilmadi');
+      const ship = shipSnap.data() || {};
+      if (incSnap.exists) {
+        const inc = incSnap.data() || {};
+        return {
+          idempotent: true, status: ship.status, paymentStatus: ship.paymentStatus,
+          goodsValue: inc.goodsValue, legId: inc.legId, accountId: (inc.courier || {}).accountId,
+        };
+      }
+
+      if (![L.SHIPMENT_STATUS.IN_TRANSIT, L.SHIPMENT_STATUS.DISPUTED].includes(ship.status)) {
+        throw fail('failed-precondition', 'Faqat yo\'lda yoki nizoli jo\'natma yo\'qolgan deb belgilanadi', 'shipment_not_lossable', { status: ship.status });
+      }
+      if (![L.PAYMENT_STATUS.ESCROW_FUNDED, L.PAYMENT_STATUS.ESCROW_FROZEN].includes(ship.paymentStatus)) {
+        throw fail('failed-precondition', 'To\'lov holati yo\'qolishga mos emas', 'payment_not_lossable', { paymentStatus: ship.paymentStatus });
+      }
+      const cur = ship.currentCustodian || {};
+      const courierUid = toCanonicalId(cur.id);
+      if (cur.kind !== L.CUSTODIAN_KIND.PROVIDER || !courierUid) {
+        throw fail('failed-precondition', 'Posilka ijrochi qo\'lida emas — yo\'qolgan deb belgilab bo\'lmaydi', 'custodian_not_provider', { kind: cur.kind || null });
+      }
+      const goodsValue = L.goodsValueOf(ship);
+      if (!goodsValue) {
+        throw fail('failed-precondition', 'Posilka qiymati yozilmagan — qo\'lda hal qilinadi', 'declared_value_missing');
+      }
+      const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
+      const idx = legIds.indexOf(ship.currentLegId);
+      if (idx < 0) throw fail('failed-precondition', 'Joriy LEG marshrutda yo\'q', 'leg_superseded', { legId: ship.currentLegId || null });
+      const legId = legIds[idx];
+
+      // Barcha o'qishlar — yozuvdan OLDIN.
+      const legSnaps = await Promise.all(legIds.slice(idx).map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+      const userSnaps = await Promise.all(candidateIdsFor(courierUid).map((id) => tx.get(db.collection('users').doc(id))));
+
+      const lostLeg = legSnaps[0].exists ? (legSnaps[0].data() || {}) : null;
+      if (!lostLeg || lostLeg.module !== L.MODULE) throw fail('failed-precondition', 'LEG topilmadi', 'shipment_missing');
+      if ((lostLeg.assignment || {}).providerId !== courierUid) {
+        throw fail('failed-precondition', 'Custody zanjiri mos emas', 'custody_mismatch');
+      }
+      if (![sm.STATUS.IN_PROGRESS, sm.STATUS.DISPUTED].includes(lostLeg.status)) {
+        throw fail('failed-precondition', 'LEG olish holatida emas', 'leg_not_in_progress', { status: lostLeg.status });
+      }
+      const accountId = String((userSnaps.find((s) => s.exists && (s.data() || {}).accountId) || { data: () => ({}) }).data().accountId || '');
+      if (!accountId) {
+        throw fail('failed-precondition', 'Kuryer hisobi (accountId) topilmadi — qarzni yozib bo\'lmaydi', 'courier_account_missing');
+      }
+
+      // ── YOZUV ──
+      tx.update(shipRef, {
+        status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.LOST, 'adminMarkShipmentLost'),
+        paymentStatus: L.assertPaymentTransition(ship.paymentStatus, L.PAYMENT_STATUS.LOSS_PENDING, 'adminMarkShipmentLost'),
+        lostAt: now,
+        lostLegId: legId,
+        lossIncidentId: shipmentId,
+        updatedAt: now,
+      });
+      if (lostLeg.status === sm.STATUS.IN_PROGRESS) {
+        sm.assertTransition(lostLeg.status, sm.STATUS.DISPUTED, 'adminMarkShipmentLost');
+        tx.update(legSnaps[0].ref, { status: sm.STATUS.DISPUTED, lostAt: now, updatedAt: now });
+      }
+      const laterLegIds = [];
+      for (let i = 1; i < legSnaps.length; i += 1) {
+        const s = legSnaps[i];
+        if (!s.exists) continue;
+        if (sm.canTransition((s.data() || {}).status, sm.STATUS.CANCELLED)) {
+          tx.update(s.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'lost', cancelledAt: now, updatedAt: now });
+          laterLegIds.push(s.id);
+        }
+      }
+      tx.set(incRef, {
+        type: 'lost',
+        status: 'declared',
+        shipmentId,
+        orderId: ship.orderId || null,
+        trackingNumber: ship.trackingNumber || '',
+        legId,
+        legIndex: idx,
+        courier: { uid: courierUid, accountId },
+        customer: { uid: ship.ownerId },
+        /** G — mijozga qaytariladigan summa; yetkazish haqi QAYTARILMAYDI (ega qarori). */
+        goodsValue,
+        customerPrice: Number((ship.priceSnapshot || {}).customerPrice) || 0,
+        tariffVersion: (ship.priceSnapshot || {}).tariffVersion || null,
+        /** Default codebase to'ldiradi (relay_escrow.js settleLoss): hisoblangunga qadar null. */
+        refundedNow: null,
+        outstanding: null,
+        paidTotal: 0,
+        declaredBy: adminId,
+        reason,
+        note,
+        opId,
+        declaredAt: now,
+        updatedAt: now,
+      });
+      tx.set(incRef.collection('events').doc('declared'), {
+        type: 'declared', amount: goodsValue, by: adminId, reason, at: now,
+      });
+      tx.set(db.collection(TARIFF_AUDIT).doc(`lost_${shipmentId}`), {
+        kind: 'shipment_lost', shipmentId, legId, goodsValue, by: adminId, reason, at: now,
+      });
+      return {
+        idempotent: false, status: L.SHIPMENT_STATUS.LOST, paymentStatus: L.PAYMENT_STATUS.LOSS_PENDING,
+        goodsValue, legId, accountId, orderId: ship.orderId || null, closeLegIds: [legId, ...laterLegIds],
+      };
+    });
+
+    if (!out.idempotent) {
+      // Tranzaksiyadan TASHQARIDA: matchlar yopiladi (kuryerda qabul qiluvchi PII qolmasin),
+      // ORDER holati qayta hisoblanadi (`lost` -> `problem`). Yiqilsa ham yo'qolish yozilgan.
+      try {
+        for (const id of out.closeLegIds) await closeOtherMatches(db, id, null, 'cancelled', now);
+        await recomputeOrderStatus(db, out.orderId, now);
+      } catch (e) {
+        console.error(JSON.stringify({
+          action: 'adminMarkShipmentLost.after', result: 'error', errorCode: 'LOSS_POST_STEPS_FAILED',
+          shipmentId, legId: out.legId, message: e.message,
+        }));
+      }
+    }
+    console.log(JSON.stringify({
+      action: 'adminMarkShipmentLost', result: out.idempotent ? 'idempotent' : 'ok', shipmentId, legId: out.legId,
+      accountId: out.accountId, goodsValue: out.goodsValue,
+    }));
+    return {
+      ok: true, idempotent: out.idempotent, shipmentId, legId: out.legId, status: out.status,
+      paymentStatus: out.paymentStatus, goodsValue: out.goodsValue,
+    };
+  }
+
+  return async function adminMarkShipmentLost(data, context) {
+    const now = nowFn ? nowFn() : new Date();
+    const adminId = await assertStrictAdmin(db, context);
+    try {
+      return await run(data, context, adminId, now);
+    } catch (e) {
+      console.error(JSON.stringify({
+        action: 'adminMarkShipmentLost', result: 'denied', shipmentId: String((data || {}).shipmentId || ''),
+        errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN',
+      }));
+      throw e;
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ADMIN - ishga tushirish bosqichi va sinovchilar (D8, ega qarori 2026-10-16)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Sinovchilar ro'yxati chegarasi (hujjat o'lchami / suiiste'mol himoyasi, biznes qoida emas). */
+const STAGE_TESTERS_MAX = 500;
+/** Server konfigni shuncha soniya keshlaydi (`core/config.js`) - o'zgarish shu ichida kuchga kiradi. */
+const STAGE_EFFECTIVE_WITHIN_SECONDS = 60;
+
+function parseTesterList(raw) {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) throw fail('invalid-argument', 'Sinovchilar ro\'yxati massiv bo\'lishi kerak', 'tester_invalid');
+  const out = [];
+  for (const item of raw) {
+    const s = String(item === null || item === undefined ? '' : item).trim();
+    if (!s) continue;
+    const id = toCanonicalId(s);
+    if (!id) throw fail('invalid-argument', 'Telefon raqami noto\'g\'ri', 'tester_invalid');
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * `adminSetLogisticsStage({ stage?, addTesterIds?, removeTesterIds?, testerIds?, reason? })`
+ * - `tools/set_logistics_stage.js` ning callable shakli. Faqat admin/superadmin
+ * (dispatcher EMAS: bosqich butun xizmatni ochadi/yopadi). `module_config/
+ * logistics_all.logistics.{stage,testerIds}` ni YANGILAYDI (boshqa kalitlar
+ * tegilmaydi; hujjat yo'q bo'lsa YARATMAYDI - CLI kabi), bitta tranzaksiyada
+ * `logistics_audit` (41-band). Telefonlar javobga ham, auditga ham CHIQMAYDI
+ * (faqat soni, 40-band). O'zgarish yo'q -> `unchanged: true`, audit yo'q.
+ * `testerIds` (to'liq almashtirish) `addTesterIds`/`removeTesterIds` bilan birga berilmaydi.
+ */
+function makeAdminSetLogisticsStage(deps) {
+  const { db, now: nowFn } = deps;
+  const ref = db.collection('module_config').doc(`${L.MODULE}_${CONFIG_REGION}`);
+
+  return async function adminSetLogisticsStage(data, context) {
+    const now = nowFn ? nowFn() : new Date();
+    const adminId = await assertStrictAdmin(db, context);
+    const d = data || {};
+    const reason = String(d.reason || '').trim().slice(0, 300);
+    try {
+      let nextStageArg = null;
+      if (d.stage !== undefined && d.stage !== null) {
+        if (!Object.values(L.STAGE).includes(d.stage)) {
+          throw fail('invalid-argument', 'Bosqich noma\'lum', 'stage_invalid', { allowed: Object.values(L.STAGE) });
+        }
+        nextStageArg = d.stage;
+      }
+      const add = parseTesterList(d.addTesterIds);
+      const remove = parseTesterList(d.removeTesterIds);
+      const replace = parseTesterList(d.testerIds);
+      if (replace !== undefined && (add !== undefined || remove !== undefined)) {
+        throw fail('invalid-argument', 'testerIds va add/remove birga berilmaydi', 'tester_args_conflict');
+      }
+      if (nextStageArg === null && add === undefined && remove === undefined && replace === undefined) {
+        throw fail('invalid-argument', 'O\'zgartirish yo\'q', 'nothing_to_change');
+      }
+
+      const out = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw fail('failed-precondition', 'Logistika moduli konfigi yo\'q', 'module_config_missing');
+        const cur = (snap.data() || {}).logistics || {};
+        const curStage = L.stageOf({ logistics: cur });
+        const curList = (Array.isArray(cur.testerIds) ? cur.testerIds : [])
+          .map((t) => toCanonicalId(String(t))).filter(Boolean);
+        let nextList;
+        if (replace !== undefined) {
+          nextList = replace;
+        } else {
+          nextList = curList.filter((t) => !(remove || []).includes(t));
+          for (const t of (add || [])) if (!nextList.includes(t)) nextList.push(t);
+        }
+        if (nextList.length > STAGE_TESTERS_MAX) {
+          throw fail('invalid-argument', `Sinovchilar ${STAGE_TESTERS_MAX} tadan oshmasin`, 'testers_limit');
+        }
+        const nextStage = nextStageArg === null ? curStage : nextStageArg;
+        const added = nextList.filter((t) => !curList.includes(t)).length;
+        const removed = curList.filter((t) => !nextList.includes(t)).length;
+        const sameList = added === 0 && removed === 0;
+        if (nextStage === curStage && sameList) {
+          return { unchanged: true, stage: curStage, testerCount: curList.length, added: 0, removed: 0 };
+        }
+        tx.update(ref, {
+          'logistics.stage': nextStage,
+          'logistics.testerIds': nextList,
+          updatedAt: now,
+          updatedBy: adminId,
+        });
+        tx.set(db.collection(TARIFF_AUDIT).doc(), {
+          kind: 'stage_update',
+          from: { stage: curStage, testerCount: curList.length },
+          to: { stage: nextStage, testerCount: nextList.length },
+          added,
+          removed,
+          by: adminId,
+          reason,
+          at: now,
+        });
+        return { unchanged: false, stage: nextStage, testerCount: nextList.length, added, removed };
+      });
+      clearConfigCache();
+      console.log(JSON.stringify({
+        action: 'adminSetLogisticsStage', result: out.unchanged ? 'unchanged' : 'ok', stage: out.stage,
+        testerCount: out.testerCount, added: out.added, removed: out.removed,
+      }));
+      return { ok: true, ...out, effectiveWithinSeconds: STAGE_EFFECTIVE_WITHIN_SECONDS };
+    } catch (e) {
+      console.error(JSON.stringify({
+        action: 'adminSetLogisticsStage', result: 'denied', errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN',
+      }));
+      throw e;
+    }
+  };
+}
+
 module.exports = {
   TARIFF_AUDIT,
   MAX_PARCELS,
+  STAGE_TESTERS_MAX,
   CONFIG_REGION,
   validatePoint,
   quoteParcelForPoints,
+  validateParcel,
   validateParcels,
   validateRecipient,
+  createShipmentInternal,
+  prepareCancelUnpaidShipmentInTx,
   buildLegDemand,
   buildRoute,
   activateLeg,
@@ -1456,6 +2318,7 @@ module.exports = {
   makeGetLogisticsAccess,
   makeCreateLogisticsOrder,
   makeOnShipmentFunded,
+  makeLegChainSweeper,
   makeAcceptLeg,
   prepareLegCancelInTx,
   makeScanHandover,
@@ -1466,4 +2329,6 @@ module.exports = {
   makeAdminActivateLogisticsTariff,
   makeAdminPlanShipmentRoute,
   makeAdminReactivateLeg,
+  makeAdminMarkShipmentLost,
+  makeAdminSetLogisticsStage,
 };

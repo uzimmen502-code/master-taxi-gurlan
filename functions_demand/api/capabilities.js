@@ -21,10 +21,6 @@
 const caps = require('../core/capabilities');
 const fcm = require('../notify/fcm');
 const { callerIdFrom, requireCanonicalId, candidateIdsFor } = require('../core/ids');
-const moduleGate = require('../core/module_gate');
-
-/** Admin «Ҳудудлар ва хизматлар» modul id'si (Dart `kKnownModuleIds`). */
-const COURIER_MODULE = 'courier';
 
 const COLLECTION = 'provider_capabilities';
 const USERS = 'users';
@@ -125,13 +121,6 @@ function makeRequestCapability(deps) {
     }
     const lc = caps.lifecycleOf(service);
     const now = nowFn ? nowFn() : new Date();
-    // MEDIUM-4 (audit 2026-10-31): admin «Ҳудудлар ва хизматлар» `courier` moduli yopiq bo'lsa
-    // YANGI kuryer arizasi qabul qilinmaydi. FAQAT kuryer — taksi va boshqa xizmatlarga ta'sir YO'Q.
-    // Allaqachon ishlayotgan / navbatdagi (`applied`) arizaga qayta bosish tegilmaydi (pastda,
-    // o'zgarishsiz javoblardan KEYIN tekshiriladi). Konfig o'qilmasa — fail-open (module_gate.js).
-    const gate = service === 'courier'
-      ? await moduleGate.moduleOpenFor(db, COURIER_MODULE, callerId, { activeDistrictId: data && data.geoDistrictId })
-      : null;
 
     return db.runTransaction(async (tx) => {
       const acc = await readAccountId(db, tx, callerId);
@@ -162,15 +151,6 @@ function makeRequestCapability(deps) {
       // hech narsani o'zgartirmaydi, ariza vaqti ham qayta yozilmaydi (21-qoida).
       if (current === lc.initial) {
         return { accountId, status: current, changed: false };
-      }
-      if (gate && !gate.open) {
-        console.log(JSON.stringify({
-          module: 'capabilities', action: 'requestCapability', service, result: 'error',
-          errorCode: moduleGate.MODULE_CLOSED, moduleStatus: gate.status,
-        }));
-        const e = httpError('failed-precondition', moduleGate.MODULE_CLOSED);
-        e.details = { code: moduleGate.MODULE_CLOSED, moduleId: COURIER_MODULE, status: gate.status };
-        throw e;
       }
 
       /**

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../core/utils/crash_report.dart';
 import '../../models/agro_pickup_order.dart';
 import '../../models/carpet_wash_order.dart';
 import '../../models/order_model.dart';
@@ -94,21 +95,34 @@ class CustomerOrdersHub {
       controller.add(entries);
     }
 
+    // Bitta manba rad etilsa (rules/tarmoq) qolganlari ko'rinaversin; avval
+    // onError yo'q edi → ushlanmagan permission-denied fatal bo'lardi.
+    void Function(Object, StackTrace) onSourceError(String source) =>
+        (e, st) {
+          unawaited(CrashReport.nonFatal(
+            e,
+            st,
+            reason: 'CUSTOMER_ORDERS_SOURCE_FAILED',
+            keys: {'source': source},
+          ));
+          publish();
+        };
+
     final subs = <StreamSubscription<dynamic>>[
       _orders.watchByUser(phoneAliases).listen((v) {
         food = v;
         publish();
-      }),
+      }, onError: onSourceError('orders')),
       _carpet.watchForCustomer(customerPhone).listen((v) {
         carpets = v;
         publish();
-      }),
+      }, onError: onSourceError('carpet')),
       _agro.watchForCustomer(customerPhone).listen((v) {
         milks = v
             .where((o) => o.productType == AgroPickupOrder.productMilk)
             .toList(growable: false);
         publish();
-      }),
+      }, onError: onSourceError('agro')),
     ];
 
     controller.onCancel = () {

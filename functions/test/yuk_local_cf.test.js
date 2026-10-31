@@ -78,6 +78,29 @@ async function testTtl() {
   check('бошқа эга: биринчи', r4.first === true);
 }
 
+/** Триггердан ОЛДИНГИ эгалар (сервер ҳолати йўқ) — тарихдан аниқланади. */
+async function testLegacyOwners() {
+  await Promise.all(['yuk_local_drivers', 'yuk_local_owner_state', 'yuk_local_created_log', 'yuk_local_owner_meta'].map(wipe));
+  const L1 = '998901000001';
+  const L2 = '998901000002';
+  const L3 = '998901000003';
+  // L1: эски эълони турибди (триггерсиз ёзилган) — янгиси 10 кун.
+  await db.doc('yuk_local_drivers/old1').set(listing(L1));
+  const r1 = await createListing('new1', listing(L1));
+  check('эски эълони бор эга: first=false (10 кун)', r1.first === false);
+  // L2: эълони ўчирилган, лекин meta аввал яратилган — 10 кун.
+  await db.doc(`yuk_local_owner_meta/${L2}`).set({ ownerId: L2, everPublished: true });
+  await new Promise((r) => setTimeout(r, 2300));
+  const r2 = await createListing('new2', listing(L2));
+  check('meta эълондан олдин яратилган: first=false', r2.first === false);
+  // L3: эски клиент — эълон, кейин meta (биринчи марта) — 60 кун қолади.
+  const ref = db.collection('yuk_local_drivers').doc('new3');
+  await ref.set(listing(L3));
+  await db.doc(`yuk_local_owner_meta/${L3}`).set({ ownerId: L3, everPublished: true });
+  const r3 = await yuk.onListingWrite('new3', null, await ref.get());
+  check('meta эълондан КЕЙИН ёзилган (эски клиент, биринчи эълон): first=true', r3.first === true);
+}
+
 async function testNormalize() {
   // Бегона телефон (эски ёки ёлғон клиент) — эга рақамига қайтади; туман йўқ — ''.
   const data = listing(OWNER, { phone: `+${OTHER}` });
@@ -195,6 +218,7 @@ async function testDemoRefresh() {
 
 async function main() {
   await testTtl();
+  await testLegacyOwners();
   await testNormalize();
   await testRenew();
   await testDaily();

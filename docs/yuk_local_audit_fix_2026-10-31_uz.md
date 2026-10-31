@@ -72,7 +72,16 @@
 
 ## Deploy тартиби ва rollback
 
-1. **Migration `--apply`.** Backup `functions/tools/backup/yuk_local_backfill_<runId>.json` га ёзилади. Rollback: `--rollback <file>`.
+1. **Migration `--apply` — эга ўзи ишга туширади.** Production'га ёзишни рухсат тизими рад этди. Триггер бу migration'сиз ҳам тўғри ишлайди: «биринчи эълон» мавжуд эълонлар ва `yuk_local_owner_meta.createTime` орқали аниқланади (A банди ихтиёрий бўлди). B, C ва D бандлари эса шу скрипт ишга туширилгунча бажарилмайди:
+   - B: 7 та намунада туман йўқ. Янги иловада улар туман ва вилоят рўйхатида кўринмайди, фақат мамлакат даражасида кўринади.
+   - C: муддатсиз эски эълон.
+   - D: эски эълоннинг тумани нотўғри.
+
+   Ишга тушириш:
+   ```
+   NODE_PATH=<functions>/node_modules SA=<service-account.json> BACKUP_DIR=<functions>/tools/backup node functions/tools/yuk_local_backfill_2026_10_31.js --apply
+   ```
+   Backup `yuk_local_backfill_<runId>.json` га ёзилади. Rollback: `--rollback <file>`.
 2. **Functions** (пин `deploy-biz-fns`, номи бўйича): `refreshYukDemoPresence`, `onYukLocalDriverWrite`, `renewYukLocalListing`, `yukLocalDailyMaintenance`. Rollback: аввалги `yuk_local.js` билан `refreshYukDemoPresence`ни қайта deploy қилиш ва 3 та янги функцияни ўчириш.
 3. **Rules** алоҳида deploy қилинади. Олдин жонли ruleset олинади ва `functions/tools/yuk_local_rules_patch_2026_10_31.js` билан патчланади. Rollback: аввалги ruleset ID.
 4. **Hosting** жонли SHA устига қурилади. Rollback: аввалги build.

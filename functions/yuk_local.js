@@ -41,6 +41,10 @@ const REMIND_DAYS = [3, 2, 1];
 const DEMO_DELETE_AFTER_REAL = 10;
 
 const COL = 'yuk_local_drivers';
+/** Эски клиент белгиси (`everPublished`) — фақат тарихни аниқлаш учун ўқилади. */
+const OWNER_META = 'yuk_local_owner_meta';
+/** meta шу эълондан камида шунча олдин яратилган бўлса — эга аввал эълон берган. */
+const META_SKEW_MS = 2000;
 const OWNER_STATE = 'yuk_local_owner_state';
 const CREATED_LOG = 'yuk_local_created_log';
 const DEMO_STATE_DOC = 'config/yuk_local_demo';
@@ -96,15 +100,33 @@ function createYukLocal(deps) {
     let first = null;
     if (created && ownerId.length >= 9) {
       const ref = db.collection(COL).doc(id);
+      const createdMs = after.createTime && typeof after.createTime.toMillis === 'function'
+        ? after.createTime.toMillis()
+        : Date.now();
       const result = await db.runTransaction(async (tx) => {
         const stateRef = db.collection(OWNER_STATE).doc(ownerId);
         const logRef = db.collection(CREATED_LOG).doc(id);
-        const [state, logged] = await Promise.all([tx.get(stateRef), tx.get(logRef)]);
+        const [state, logged, others, meta] = await Promise.all([
+          tx.get(stateRef),
+          tx.get(logRef),
+          tx.get(db.collection(COL).where('ownerId', '==', ownerId).limit(5)),
+          tx.get(db.collection(OWNER_META).doc(ownerId)),
+        ]);
         if (logged.exists) {
           // Триггер қайта чақирилди (retry) — аввалги қарор.
           return { first: logged.data().first === true, retried: true };
         }
-        const isFirst = !state.exists;
+        // Сервер ҳолати бўлмаса (триггердан олдинги эгалар) — тарихдан: бошқа
+        // эълони бор ёки эски `yuk_local_owner_meta` шу эълондан АВВАЛ яратилган
+        // (клиент meta'ни эълондан кейин ёзади — шунинг учун updatedAt эмас,
+        // ҳужжат яратилган вақт солиштирилади).
+        let isFirst = !state.exists;
+        if (isFirst) {
+          const hasOther = others.docs.some((x) => x.id !== id);
+          const metaEarlier = meta.exists && meta.createTime
+            && meta.createTime.toMillis() < createdMs - META_SKEW_MS;
+          if (hasOther || metaEarlier) isFirst = false;
+        }
         tx.set(stateRef, {
           ownerId,
           listingsCreated: FieldValue.increment(1),

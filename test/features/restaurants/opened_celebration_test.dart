@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/restaurants/merchant/opened_celebration.dart';
+import 'package:ava_gurlan/shared/widgets/celebration_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,7 +36,7 @@ void main() {
     expect(find.text('restaurants_m_submitted_approved'), findsOneWidget);
     expect(find.text('restaurants_m_opened_sub'), findsOneWidget);
     expect(find.text('restaurants_m_opened_go_panel'), findsOneWidget);
-    expect(find.byKey(const ValueKey('opened_confetti')), findsOneWidget);
+    expect(find.byKey(const ValueKey('celebration_confetti')), findsOneWidget);
     await t.pumpAndSettle();
   });
 
@@ -48,7 +49,7 @@ void main() {
   testWidgets('«Панелга ўтиш» — ойна ёпилади (кейин чақирувчи панелни очади)', (t) async {
     await _open(t, homeCook: false);
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const ValueKey('opened_go_panel')));
+    await t.tap(find.byKey(const ValueKey('celebration_ok')));
     await t.pumpAndSettle();
     expect(find.text('restaurants_m_opened_go_panel'), findsNothing);
     expect(find.text('open'), findsOneWidget);
@@ -62,7 +63,7 @@ void main() {
 
   testWidgets('«анимацияни камайтириш» ёқиқ — конфеттисиз, фақат карта', (t) async {
     await _open(t, homeCook: false, reduceMotion: true);
-    expect(find.byKey(const ValueKey('opened_confetti')), findsNothing);
+    expect(find.byKey(const ValueKey('celebration_confetti')), findsNothing);
     expect(find.text('restaurants_m_submitted_approved'), findsOneWidget);
   });
 

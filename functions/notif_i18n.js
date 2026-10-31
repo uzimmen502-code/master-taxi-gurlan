@@ -128,6 +128,42 @@ const MESSAGES = {
     uz_Latn: { title: 'Buyurtma yetkaziladi', body: 'Kuryer buyurtmangizni yetkazishni davom ettiradi.' },
     ru: { title: 'Заказ будет доставлен', body: 'Курьер продолжит доставку вашего заказа.' },
   },
+  // ── Топшириш (эга, 2026-10-31). Матнлар PROPOSED — эга тасдиқлайди.
+  courier_handover_done: {
+    uz_Cyrl: { title: 'Буюртма топширилди', body: 'Буюртма бошқа курьерга топширилди. Ҳақингиз масофа улушига қараб ҳисобланади.' },
+    uz_Latn: { title: 'Buyurtma topshirildi', body: 'Buyurtma boshqa kuryerga topshirildi. Haqingiz masofa ulushiga qarab hisoblanadi.' },
+    ru: { title: 'Заказ передан', body: 'Заказ передан другому курьеру. Ваша оплата рассчитывается по доле пройденного расстояния.' },
+  },
+  customer_courier_changed: {
+    uz_Cyrl: { title: 'Курьер алмашди', body: 'Буюртмангизни энди бошқа курьер етказади.' },
+    uz_Latn: { title: 'Kuryer almashdi', body: 'Buyurtmangizni endi boshqa kuryer yetkazadi.' },
+    ru: { title: 'Курьер сменился', body: 'Ваш заказ теперь доставит другой курьер.' },
+  },
+  courier_return_done: {
+    uz_Cyrl: { title: 'Буюртма ресторанга қайтарилди', body: 'Ресторан буюртмани қабул қилди.' },
+    uz_Latn: { title: 'Buyurtma restoranga qaytarildi', body: 'Restoran buyurtmani qabul qildi.' },
+    ru: { title: 'Заказ возвращён в ресторан', body: 'Ресторан принял заказ.' },
+  },
+  customer_no_courier_cancel: {
+    uz_Cyrl: { title: 'Буюртма бекор қилинди', body: 'Буюртмангиз учун курьер топилмади, буюртма бекор қилинди.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Buyurtmangiz uchun kuryer topilmadi, buyurtma bekor qilindi.' },
+    ru: { title: 'Заказ отменён', body: 'Для вашего заказа не нашёлся курьер, заказ отменён.' },
+  },
+  customer_no_courier_cancel_prepaid: {
+    uz_Cyrl: { title: 'Буюртма бекор қилинди', body: 'Буюртмангиз учун курьер топилмади, буюртма бекор қилинди. Олдиндан тўлаган пулингизни қайтариш учун ресторанга хабар берилди.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Buyurtmangiz uchun kuryer topilmadi, buyurtma bekor qilindi. Oldindan to\'lagan pulingizni qaytarish uchun restoranga xabar berildi.' },
+    ru: { title: 'Заказ отменён', body: 'Для вашего заказа не нашёлся курьер, заказ отменён. Ресторан уведомлён о возврате вашей предоплаты.' },
+  },
+  restaurant_no_courier_cancel: {
+    uz_Cyrl: { title: 'Буюртма бекор қилинди', body: 'Қайтарилган буюртмага 30 дақиқада курьер топилмади. AVA ҳақи қайтарилди.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Qaytarilgan buyurtmaga 30 daqiqada kuryer topilmadi. AVA haqi qaytarildi.' },
+    ru: { title: 'Заказ отменён', body: 'Для возвращённого заказа за 30 минут не нашёлся курьер. Комиссия AVA возвращена.' },
+  },
+  restaurant_no_courier_cancel_prepaid: {
+    uz_Cyrl: { title: 'Буюртма бекор қилинди — пулни қайтаринг', body: 'Қайтарилган буюртмага 30 дақиқада курьер топилмади. Мижоз олдиндан тўлаган — пулини мижозга қайтаринг. AVA ҳақи қайтарилди.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi — pulni qaytaring', body: 'Qaytarilgan buyurtmaga 30 daqiqada kuryer topilmadi. Mijoz oldindan to\'lagan — pulini mijozga qaytaring. AVA haqi qaytarildi.' },
+    ru: { title: 'Заказ отменён — верните деньги', body: 'Для возвращённого заказа за 30 минут не нашёлся курьер. Клиент внёс предоплату — верните ему деньги. Комиссия AVA возвращена.' },
+  },
   confirm_carpet_pickup: {
     uz_Cyrl: { title: 'Гиламни курьерга бердингизми?', body: 'Курьер гиламни олдим деб белгилади. Гиламни курьерга берганингизни тасдиқланг.' },
     uz_Latn: { title: 'Gilamni kuryerga berdingizmi?', body: 'Kuryer gilamni oldim deb belgiladi. Gilamni kuryerga berganingizni tasdiqlang.' },

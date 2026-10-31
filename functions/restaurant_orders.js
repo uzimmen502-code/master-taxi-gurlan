@@ -184,6 +184,64 @@ const i18n = require('./notif_i18n');
 
 const msOf = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
 
+/**
+ * TOPSHIRISH (ega qarorlari 2026-10-31: C-4..C-7, A-2, A-3) — FAQAT restoran buyurtmasi
+ * (boshqa turlar alohida qaror, hisobotda UNKNOWN):
+ *   - olishdan OLDIN (accepted/ready): kuryer buyurtmani qo'yib yuboradi → yangi kuryer qidiriladi;
+ *   - olgandan KEYIN (picked/arrived): kod bilan jismoniy topshirish — boshqa kuryerga
+ *     (`courierAcceptRestaurantHandover`, kod + GPS) yoki restoranga (`restaurantAcceptReturn`, kod);
+ *   - restoranga qaytgach / qo'yib yuborilgach `RETURN_SEARCH_MIN` (30) daqiqa yangi kuryer
+ *     qidiriladi; topilmasa buyurtma bekor (2 % restoranga qaytadi) — jadval `expireReturnedRestaurantOrders`;
+ *   - chegara va jarima YO'Q;
+ *   - kuryer haqi masofa ulushi bo'yicha (`computeCourierShares`): butun so'm, qoldiq oxirgi kuryerga.
+ *   Custody zanjiri — mavjud `custody_events` (o'zgarmas; logistics bilan bir kolleksiya, `orderType: 'restaurant'`,
+ *   `shipmentId`/`completesLegId`/`deliversShipment` YO'Q — relay/wholesale triggerlari o'tkazib yuboradi).
+ */
+const HANDOVER_TTL_MIN = 15;
+const HANDOVER_CODE_ATTEMPTS = 5;
+const HANDOVER_CALLER_ATTEMPTS = 10;
+const HANDOVER_CALLER_WINDOW_MIN = 30;
+const RETURN_SEARCH_MIN = 30;
+const HANDOVER_TARGETS = ['courier', 'seller'];
+const HANDOVER_CODES = 'courier_handover_codes';
+const HANDOVER_ATTEMPTS = 'courier_handover_attempts';
+const CUSTODY = 'custody_events';
+
+/**
+ * Kuryerlar ulushi (A-3): `legs` = [{ courierId, meters }] tartib bilan (oxirgisi — yetkazgan kuryer).
+ * Bir kuryer bir necha bo'lak olib borgan bo'lsa — qo'shiladi. Butun so'm (floor), qoldiq OXIRGI
+ * kuryerga; jami har doim `fee` ga teng. Masofa yig'indisi 0 bo'lsa — hammasi oxirgi kuryerga.
+ */
+function computeCourierShares(fee, legs) {
+  const total = Number.isInteger(fee) && fee > 0 ? fee : 0;
+  const order = [];
+  const meters = new Map();
+  for (const l of Array.isArray(legs) ? legs : []) {
+    const id = String((l && l.courierId) || '');
+    if (!id) continue;
+    const m = Number(l.meters);
+    const add = Number.isFinite(m) && m > 0 ? Math.round(m) : 0;
+    if (!meters.has(id)) order.push(id);
+    meters.set(id, (meters.get(id) || 0) + add);
+  }
+  if (order.length === 0) return [];
+  const last = String(legs[legs.length - 1].courierId);
+  const sumM = order.reduce((s, id) => s + meters.get(id), 0);
+  const out = order.map((id) => ({ courierId: id, meters: meters.get(id), amount: 0 }));
+  if (sumM <= 0) {
+    out.find((x) => x.courierId === last).amount = total;
+    return out;
+  }
+  let given = 0;
+  for (const x of out) {
+    if (x.courierId === last) continue;
+    x.amount = Math.floor((total * x.meters) / sumM);
+    given += x.amount;
+  }
+  out.find((x) => x.courierId === last).amount = total - given;
+  return out;
+}
+
 function canTransition(from, to) {
   const allowed = TRANSITIONS[from];
   return !!allowed && allowed.includes(to);
@@ -1637,7 +1695,11 @@ function attachRestaurantOrders(exportsObj, deps) {
         routeId = routeRef.id;
       }
       // `courierName` — mijoz va restoran egasi kimni kutishini bilishi uchun (S6); faqat buyurtma ishtirokchilari o'qiydi.
-      t.update(orderRef, { courierId, deliveryRouteId: routeId, courierClaimedAt: ts(), updatedAt: ts(), ...(courierName ? { courierName } : {}) });
+      t.update(orderRef, {
+        courierId, deliveryRouteId: routeId, courierClaimedAt: ts(), updatedAt: ts(), ...(courierName ? { courierName } : {}),
+        // Qaytarilgan/qo'yib yuborilgan buyurtmaga kuryer topildi — 30 daqiqalik qidiruv tugadi.
+        ...(od.returnSearchUntil !== undefined ? { returnSearchUntil: admin.firestore.FieldValue.delete() } : {}),
+      });
       addEvent(t, orderRef, { from: od.restaurantStatus, to: od.restaurantStatus, actor: 'courier', actorId: courierId, reason: 'claimed', meta: { routeId } });
       return { ok: true, routeId, restaurantId: od.restaurantId, customerUid: od.userPhone };
     }), (od) => {
@@ -1792,7 +1854,26 @@ function attachRestaurantOrders(exportsObj, deps) {
       let walletPrep = null;
       let refundPrep = null;
       let prevStrikes = 0;
-      if (to === RS.delivered && od.deliveryPaymentMethod === 'wallet' && fee > 0) {
+      // Topshirish bo'lgan bo'lsa (A-3): yetkazish haqi kuryerlar orasida masofa ulushi bo'yicha.
+      // Bo'laklar: `courierLegs` (qaytarilganlar — hissasiz) + oxirgi topshirish nuqtasi → mijoz.
+      let shares = null;
+      if (to === RS.delivered && Array.isArray(od.courierLegs) && od.courierLegs.length > 0) {
+        const cLat = Number(od.lat);
+        const cLng = Number(od.lng);
+        const custPt = validLatLng(cLat, cLng) ? { lat: cLat, lng: cLng } : null;
+        const legs = od.courierLegs.filter((l) => l && !l.returned)
+          .map((l) => ({ courierId: canonicalUid(String(l.courierId || '')), meters: Number(l.meters) || 0 }));
+        legs.push({ courierId, meters: legMeters(custodyStartPoint(od), custPt) });
+        shares = computeCourierShares(fee, legs);
+      }
+      const split = shares && shares.filter((s) => s.amount > 0).length > 1 ? shares.filter((s) => s.amount > 0) : null;
+      let splitPreps = null;
+      if (to === RS.delivered && od.deliveryPaymentMethod === 'wallet' && fee > 0 && split) {
+        splitPreps = await Promise.all(split.map((s) => settlementLedger.prepareBonusInTx(t, db, customerUid, {
+          fundingAccount: settlementLedger.passengerCreditAccount(s.courierId),
+          idempotencyKey: `restDeliveryShare_${orderId}_${s.courierId}`,
+        })));
+      } else if (to === RS.delivered && od.deliveryPaymentMethod === 'wallet' && fee > 0) {
         walletPrep = await settlementLedger.prepareBonusInTx(t, db, customerUid, {
           fundingAccount: settlementLedger.passengerCreditAccount(courierId),
           idempotencyKey: `restDelivery_${orderId}`,
@@ -1827,6 +1908,42 @@ function attachRestaurantOrders(exportsObj, deps) {
           deliveryFeeFallback = 'insufficient_wallet';
         }
       }
+      if (splitPreps) {
+        // Bitta tranzaksiyada mijoz hisobidan bir nechta yozuv: `commitBonusInTx` mutlaq balans yozadi,
+        // shuning uchun har keyingi yozuvga oldingisidan keyingi qoldiq beriladi (o'qish READ fazasida).
+        const already = splitPreps.every((p) => p.jExists);
+        const pending = split.reduce((sum, s, i) => sum + (splitPreps[i].jExists ? 0 : s.amount), 0);
+        if (already) {
+          walletPaid = fee;
+        } else if (splitPreps[0].pcPrev >= pending) {
+          let pc = splitPreps[0].pcPrev;
+          const cRef = db.collection('users').doc(customerUid);
+          split.forEach((s, i) => {
+            const prep = splitPreps[i];
+            if (prep.jExists) return;
+            prep.pcPrev = pc;
+            settlementLedger.commitBonusInTx(t, prep, {
+              delta: -s.amount, kind: 'restaurant_delivery_fee', refType: 'order', refId: orderId,
+              meta: { module: MODULE_ID, courierId: s.courierId.slice(-4), share: true, meters: s.meters },
+              postedBy: customerUid, postedRole: 'client',
+            });
+            pc -= s.amount;
+            const kRef = db.collection('users').doc(s.courierId);
+            t.set(kRef, { bonusBalance: inc(s.amount), balanceUpdatedAt: ts() }, { merge: true });
+            t.set(kRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_credit', amount: s.amount, module: MODULE_ID, refType: 'order', refId: orderId, meta: { share: true }, createdAt: ts(), createdBy: 'server' });
+          });
+          t.set(cRef, { bonusBalance: inc(-pending), balanceUpdatedAt: ts() }, { merge: true });
+          t.set(cRef.collection('wallet_ledger').doc(), { type: 'restaurant_delivery_debit', amount: -pending, module: MODULE_ID, refType: 'order', refId: orderId, meta: { split: split.length }, createdAt: ts(), createdBy: 'server' });
+          walletPaid = fee;
+        } else {
+          deliveryPaymentMethod = 'cash';
+          deliveryFeeFallback = 'insufficient_wallet';
+        }
+      }
+      // Naqd: oxirgi kuryer hammasini oladi; oldingilar ulushini kim/qanday to'lashi — ega qarori YO'Q (UNKNOWN).
+      const payoutSettlement = !shares ? null
+        : !split ? 'single'
+          : walletPaid === fee ? 'wallet_split' : 'cash_unsettled';
       const buyout = od.foodPaymentMethod === 'cash_buyout';
       const foodAmount = foodAmountOf(od);
       const cashCollected = to === RS.delivered
@@ -1838,6 +1955,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         t.update(orderRef, statusPatch(RS.delivered, {
           deliveredAt: ts(), completedAt: ts(), courierId, deliveryPaymentMethod, deliveryFeeFallback,
           deliveryFeeWalletPaid: walletPaid, cashCollected, cashPaid: cashCollected,
+          ...(shares ? { payoutShares: shares, payoutSettlement, custodyPoint: admin.firestore.FieldValue.delete() } : {}),
           ...(buyout || od.paymentStatus === 'paid' ? { paymentStatus: 'paid' } : {}),
           ...clearMarker,
           ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
@@ -1864,7 +1982,10 @@ function attachRestaurantOrders(exportsObj, deps) {
           }, { merge: true });
         }
       }
-      const result = { ok: true, orderId, outcome, deliveryFee: fee, walletPaid, cashCollected, refundAmount: refund.amount, deliveryPaymentMethod };
+      const result = {
+        ok: true, orderId, outcome, deliveryFee: fee, walletPaid, cashCollected, refundAmount: refund.amount, deliveryPaymentMethod,
+        ...(shares ? { payoutShares: shares.map((s) => ({ courierTail: s.courierId.slice(-4), meters: s.meters, amount: s.amount })), payoutSettlement } : {}),
+      };
       t.set(idemRef, { type: 'courierCompleteRestaurantDelivery', result, createdAt: ts() });
       addEvent(t, orderRef, confirmStep
         ? { from, to, actor: 'customer', actorId: customerUid, reason: 'customer_confirmed', meta: { walletPaid, cashCollected, refundAmount: refund.amount, step: confirmStep, courierId, ...(to === RS.deliveryFailed ? { failReason } : {}) } }
@@ -2171,6 +2292,423 @@ function attachRestaurantOrders(exportsObj, deps) {
     .onRun(async () => escalateDeliveryFailed());
 
   // ═══════════════════════════════════════════════════════════════════════
+  // TOPSHIRISH: boshqa kuryerga / restoranga (ega qarorlari 2026-10-31)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const delField = () => admin.firestore.FieldValue.delete();
+  const handoverCode = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+
+  function optLatLng(data) {
+    const lat = Number(data && data.lat);
+    const lng = Number(data && data.lng);
+    return validLatLng(lat, lng) ? { lat, lng } : null;
+  }
+
+  /** Buyurtma bo'yicha joriy jismoniy nuqta: oxirgi topshirish nuqtasi, bo'lmasa restoran. */
+  function custodyStartPoint(od) {
+    const p = od.custodyPoint;
+    if (p && validLatLng(Number(p.lat), Number(p.lng))) return { lat: Number(p.lat), lng: Number(p.lng) };
+    const rLat = Number(od.restaurantLat);
+    const rLng = Number(od.restaurantLng);
+    return validLatLng(rLat, rLng) ? { lat: rLat, lng: rLng } : null;
+  }
+
+  function legMeters(from, to) {
+    if (!from || !to) return 0;
+    return Math.round(tariff.haversineMeters(from.lat, from.lng, to.lat, to.lng));
+  }
+
+  function custodyEventDoc({ orderId, od, kind, from, to, location, proof, actorId, handoverId, meta }) {
+    return {
+      orderType: 'restaurant',
+      orderId,
+      restaurantId: String(od.restaurantId || ''),
+      shipmentId: null,
+      legId: null,
+      /** Qoida `get()`siz: mijoz o'z buyurtmasi tarixini o'qiy oladi (`isOwner(ownerId)`). */
+      ownerId: canonicalUid(String(od.userPhone || '')),
+      kind,
+      from,
+      to,
+      timestamp: ts(),
+      location: location || null,
+      proof: proof || {},
+      createdBy: actorId,
+      idempotencyKey: `rest_${orderId}_${handoverId}`,
+      handoverId,
+      meta: meta || {},
+      deliversShipment: false,
+    };
+  }
+
+  /**
+   * Kuryer topshirishni boshlaydi.
+   *   accepted/ready (hali olinmagan): DARHOL qo'yib yuboradi — kuryer, marshrut o'chadi, 30 daqiqa qidiruv.
+   *   picked/arrived: kod chiqadi (TTL 15 daq). `target: 'courier'` — kod boshqa kuryerga aytiladi;
+   *   `target: 'seller'` — kod restoranga aytiladi. Takroriy chaqiruv o'sha kodni qaytaradi.
+   */
+  exportsObj.courierStartRestaurantHandover = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const target = str(data && data.target, 16);
+    if (!orderId || orderId.includes('/') || !HANDOVER_TARGETS.includes(target)) throw fail('invalid-argument', 'HANDOVER_ARGS_INVALID');
+    const loc = optLatLng(data);
+    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    const out = await withContention(orderRef, 'handover_start', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      courierAuthOf().assertOrderActionable(od, courierId, 'courierStartRestaurantHandover', orderId);
+      const st = od.restaurantStatus;
+      // ── Olishdan oldin: qo'yib yuborish (jismoniy narsa yo'q, kod kerak emas) ──
+      if ([RS.accepted, RS.ready].includes(st)) {
+        const routeRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+        const routeSnap = routeRef ? await t.get(routeRef) : null;
+        const until = tsOf(new Date(now().getTime() + RETURN_SEARCH_MIN * 60 * 1000));
+        t.update(orderRef, {
+          courierId: null, courierName: delField(), deliveryRouteId: delField(), courierClaimedAt: delField(),
+          returnSearchUntil: until, releasedAt: ts(), releasedBy: courierId, updatedAt: ts(),
+          handoverCount: inc(1),
+        });
+        detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'courier_released');
+        addEvent(t, orderRef, { from: st, to: st, actor: 'courier', actorId: courierId, reason: 'courier_released', meta: { searchMin: RETURN_SEARCH_MIN } });
+        return { released: true, od: { ...od, courierId: null }, untilMs: until.toMillis() };
+      }
+      if (![RS.picked, RS.arrived].includes(st)) {
+        throw fail('failed-precondition', 'HANDOVER_NOT_ALLOWED', { from: st });
+      }
+      const m = od[CC_MARKER_FIELD];
+      if (m && m.step === FAILED_STEP) throw fail('failed-precondition', 'HANDOVER_BLOCKED_FAILED_PENDING');
+      // Naqd vykup: kuryer A restoranga o'z pulini bergan; B ga o'tkazishda kuryerlararo hisob — ega qarori yo'q.
+      if (target === 'courier' && od.foodPaymentMethod === 'cash_buyout') {
+        throw fail('failed-precondition', 'HANDOVER_BUYOUT_UNSUPPORTED');
+      }
+      const ho = od.handover;
+      const nowMs = now().getTime();
+      const sec = await t.get(secretRef);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      if (ho && ho.status === 'pending' && ho.fromCourierId === courierId && ho.target === target
+          && msOf(ho.expiresAt) > nowMs && sd.handoverCode) {
+        return { idempotent: true, handoverId: ho.id, code: sd.handoverCode, expiresAtMs: msOf(ho.expiresAt) };
+      }
+      // Kuryerga: kod butun tizimda yagona (B buyurtma raqamini bilmaydi) — `courier_handover_codes/{code}`.
+      let code = handoverCode();
+      let codeRef = null;
+      if (target === 'courier') {
+        for (let i = 0; i < 5; i += 1) {
+          codeRef = db.collection(HANDOVER_CODES).doc(code);
+          const cs = await t.get(codeRef);
+          if (!cs.exists || (msOf((cs.data() || {}).expiresAt) || 0) <= nowMs) break;
+          code = handoverCode();
+          codeRef = null;
+        }
+        if (!codeRef) throw fail('aborted', 'HANDOVER_CODE_BUSY');
+      }
+      const oldCodeRef = ho && ho.status === 'pending' && ho.target === 'courier' && sd.handoverCode
+        ? db.collection(HANDOVER_CODES).doc(String(sd.handoverCode)) : null;
+      // WRITE fazasi.
+      const handoverId = `h${nowMs.toString(36)}${crypto.randomInt(0, 1296).toString(36)}`;
+      const expiresAt = tsOf(new Date(nowMs + HANDOVER_TTL_MIN * 60 * 1000));
+      if (oldCodeRef && (!codeRef || oldCodeRef.path !== codeRef.path)) t.delete(oldCodeRef);
+      if (codeRef) t.set(codeRef, { orderId, handoverId, fromCourierId: courierId, expiresAt, createdAt: ts() });
+      t.set(secretRef, { handoverCode: code, handoverAttempts: 0, handoverId }, { merge: true });
+      t.update(orderRef, {
+        handover: {
+          status: 'pending', id: handoverId, target, fromCourierId: courierId, createdAt: ts(), expiresAt,
+          ...(loc ? { fromLat: loc.lat, fromLng: loc.lng } : {}),
+        },
+        updatedAt: ts(),
+      });
+      addEvent(t, orderRef, { from: st, to: st, actor: 'courier', actorId: courierId, reason: 'handover_started', meta: { target, handoverId } });
+      return { handoverId, code, expiresAtMs: expiresAt.toMillis() };
+    }), () => null);
+    if (out.released) {
+      log('handover_release', { orderId, userId: courierId.slice(-4), result: 'released', durationMs: Date.now() - t0 });
+      await notifyNearbyCouriers(orderId, out.od, 'ready');
+      return { ok: true, released: true, searchUntilMs: out.untilMs };
+    }
+    log('handover_start', { orderId, userId: courierId.slice(-4), result: out.idempotent ? 'idempotent' : 'ok', target, durationMs: Date.now() - t0 });
+    return { ok: true, handoverId: out.handoverId, code: out.code, expiresAtMs: out.expiresAtMs, target, ...(out.idempotent ? { idempotent: true } : {}) };
+  });
+
+  /** Kuryer boshlagan topshirishni bekor qiladi (kod o'chadi). Takror — idempotent. */
+  exportsObj.courierCancelRestaurantHandover = functions.https.onCall(async (data, context) => {
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    await db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      courierAuthOf().assertOrderActionable(od, courierId, 'courierCancelRestaurantHandover', orderId);
+      const ho = od.handover;
+      if (!ho || ho.status !== 'pending') return;
+      const sec = await t.get(secretRef);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      if (ho.target === 'courier' && sd.handoverCode) t.delete(db.collection(HANDOVER_CODES).doc(String(sd.handoverCode)));
+      t.set(secretRef, { handoverCode: delField(), handoverAttempts: delField(), handoverId: delField() }, { merge: true });
+      t.update(orderRef, { handover: delField(), updatedAt: ts() });
+      addEvent(t, orderRef, { from: od.restaurantStatus, to: od.restaurantStatus, actor: 'courier', actorId: courierId, reason: 'handover_cancelled', meta: { handoverId: ho.id } });
+    });
+    return { ok: true };
+  });
+
+  /** Kod bo'yicha urinishlar chegarasi (kuryer boshiga, oyna bilan) — kod taxmin qilinmasin. */
+  async function consumeCallerAttempt(uid) {
+    const ref = db.collection(HANDOVER_ATTEMPTS).doc(uid);
+    return db.runTransaction(async (t) => {
+      const s = await t.get(ref);
+      const d = s.exists ? (s.data() || {}) : {};
+      const nowMs = now().getTime();
+      const windowStart = msOf(d.windowStart) || 0;
+      const fresh = nowMs - windowStart > HANDOVER_CALLER_WINDOW_MIN * 60 * 1000;
+      const count = fresh ? 0 : (Number(d.count) || 0);
+      if (count >= HANDOVER_CALLER_ATTEMPTS) return false;
+      t.set(ref, { count: count + 1, windowStart: fresh ? tsOf(new Date(nowMs)) : d.windowStart, updatedAt: ts() });
+      return true;
+    });
+  }
+
+  /**
+   * Kuryer B kuryer A dan buyurtmani oladi: A ning ekranidagi 6 xonali kod + B ning GPS'i (custody joyi, 15-qoida).
+   * Bitta g'olib (tranzaksiya). Holat `picked` (B mijozga yo'lda); A marshrutidan olinadi, B marshrutiga qo'shiladi;
+   * `courierLegs` ga A ning bo'lagi (oxirgi nuqta → topshirish nuqtasi) yoziladi; `custody_events` ga A → B.
+   */
+  exportsObj.courierAcceptRestaurantHandover = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.new);
+    const code = str(data && data.code, 8);
+    const loc = optLatLng(data);
+    if (!/^\d{6}$/.test(code)) throw fail('invalid-argument', 'HANDOVER_CODE_INVALID');
+    if (!loc) throw fail('invalid-argument', 'HANDOVER_LOCATION_REQUIRED');
+    if (!(await consumeCallerAttempt(courierId))) throw fail('resource-exhausted', 'HANDOVER_TOO_MANY_ATTEMPTS');
+    const codeRef = db.collection(HANDOVER_CODES).doc(code);
+    const pre = await codeRef.get();
+    const cd = pre.exists ? (pre.data() || {}) : null;
+    if (!cd || (msOf(cd.expiresAt) || 0) <= now().getTime()) throw fail('failed-precondition', 'HANDOVER_CODE_MISMATCH');
+    const orderId = String(cd.orderId || '');
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    const courierName = await courierDisplayName(courierId);
+    const out = await withContention(orderRef, 'handover_accept', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      const ho = od.handover;
+      const [cs, sec, memberSnap, routeQ] = await Promise.all([
+        t.get(codeRef), t.get(secretRef),
+        t.get(db.collection(RESTAURANTS).doc(String(od.restaurantId || '')).collection(MEMBERS).doc(courierId)),
+        t.get(db.collection(ROUTES).where('courierId', '==', courierId).where('status', 'in', ['active', 'ready']).limit(1)),
+      ]);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      const cdx = cs.exists ? (cs.data() || {}) : null;
+      if (!ho || ho.status !== 'pending' || ho.target !== 'courier' || !cdx || cdx.handoverId !== ho.id
+          || sd.handoverCode !== code || (msOf(ho.expiresAt) || 0) <= now().getTime()) {
+        // Takror: shu kuryer allaqachon olgan.
+        if (canonicalUid(String(od.courierId || '')) === courierId && od.lastHandoverId === (cdx && cdx.handoverId)) {
+          return { idempotent: true };
+        }
+        throw fail('failed-precondition', 'HANDOVER_CODE_MISMATCH');
+      }
+      if ((Number(sd.handoverAttempts) || 0) >= HANDOVER_CODE_ATTEMPTS) throw fail('failed-precondition', 'HANDOVER_CODE_LOCKED');
+      const fromCourier = canonicalUid(String(ho.fromCourierId || ''));
+      if (fromCourier === courierId) throw fail('failed-precondition', 'HANDOVER_SAME_COURIER');
+      if (canonicalUid(String(od.courierId || '')) !== fromCourier) throw fail('failed-precondition', 'HANDOVER_STALE');
+      if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) throw fail('failed-precondition', 'HANDOVER_NOT_ALLOWED', { from: od.restaurantStatus });
+      if (courierAuthOf().isOwnOrder(od, courierId)) throw fail('permission-denied', 'COURIER_OWN_ORDER');
+      if (memberSnap.exists) throw fail('permission-denied', 'COURIER_IS_RESTAURANT_MEMBER');
+      const oldRouteRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+      const oldRouteSnap = oldRouteRef ? await t.get(oldRouteRef) : null;
+      // WRITE fazasi.
+      const startPt = custodyStartPoint(od);
+      const meters = legMeters(startPt, loc);
+      const legs = Array.isArray(od.courierLegs) ? od.courierLegs.slice() : [];
+      legs.push({ courierId: fromCourier, meters, fromLat: startPt ? startPt.lat : null, fromLng: startPt ? startPt.lng : null, toLat: loc.lat, toLng: loc.lng, handoverId: ho.id });
+      detachFromRouteInTx(t, oldRouteRef, oldRouteSnap, orderId, 'handed_over');
+      let routeId;
+      if (!routeQ.empty) {
+        const rt = routeQ.docs[0];
+        const existing = Array.isArray(rt.data().orders) ? rt.data().orders.slice() : [];
+        if (!existing.includes(orderId)) existing.push(orderId);
+        t.update(rt.ref, { orders: existing, updatedAt: ts() });
+        routeId = rt.id;
+      } else {
+        const routeRef = db.collection(ROUTES).doc();
+        t.set(routeRef, {
+          orders: [orderId], courierId, status: 'active', currentIndex: 0,
+          routeSource: 'restaurant_handover', createdAt: ts(), startedAt: ts(),
+        });
+        routeId = routeRef.id;
+      }
+      t.delete(codeRef);
+      t.set(secretRef, { handoverCode: delField(), handoverAttempts: delField(), handoverId: delField() }, { merge: true });
+      t.delete(db.collection(COURIER_LIVE).doc(orderId)); // A ning nuqtasi; B o'zi yozadi (S6)
+      t.update(orderRef, statusPatch(RS.picked, {
+        courierId, deliveryRouteId: routeId, courierName: courierName || delField(),
+        handover: delField(), lastHandoverId: ho.id, handoverCount: inc(1),
+        courierLegs: legs, custodyPoint: { lat: loc.lat, lng: loc.lng },
+      }));
+      t.set(db.collection(CUSTODY).doc(`rest_${orderId}_${ho.id}`), custodyEventDoc({
+        orderId, od, kind: 'handover',
+        from: { kind: 'courier', id: fromCourier }, to: { kind: 'courier', id: courierId },
+        location: loc, proof: { codeVerified: true }, actorId: courierId, handoverId: ho.id,
+        meta: { meters, statusBefore: od.restaurantStatus },
+      }));
+      addEvent(t, orderRef, {
+        from: od.restaurantStatus, to: RS.picked, actor: 'courier', actorId: courierId, reason: 'handover_accepted',
+        meta: { handoverId: ho.id, fromCourierId: fromCourier, meters, routeId },
+      });
+      return { ok: true, fromCourier, customerUid: od.userPhone, restaurantId: od.restaurantId };
+    }), (od) => (canonicalUid(String(od.courierId || '')) === courierId && od.lastHandoverId === cd.handoverId ? { idempotent: true } : null)).catch(async (e) => {
+      // Noto'g'ri kod / bloklangan: urinishni buyurtma sirida ham hisoblaymiz (kod bo'yicha chegara).
+      if (e instanceof HttpsError && (e.details || {}).code === 'HANDOVER_CODE_MISMATCH') {
+        try { await secretRef.set({ handoverAttempts: inc(1) }, { merge: true }); } catch (_) { /* log yetarli */ }
+      }
+      throw e;
+    });
+    log('handover_accept', { orderId, userId: courierId.slice(-4), result: out.idempotent ? 'idempotent' : 'ok', durationMs: Date.now() - t0 });
+    if (!out.idempotent) {
+      await notifyI18n(out.fromCourier, 'courier_handover_done', {}, { orderId });
+      await notifyI18n(out.customerUid, 'customer_courier_changed', {}, { orderId });
+    }
+    return { ok: true, orderId, ...(out.idempotent ? { idempotent: true } : {}) };
+  });
+
+  /**
+   * Restoran (a'zo) kuryer qaytargan buyurtmani qabul qiladi: kuryer ekranidagi kod. Holat `ready`
+   * (yangi olish kodi), kuryer va marshrut o'chadi, 30 daqiqa yangi kuryer qidiriladi; custody kuryer → restoran.
+   * Naqd vykup bo'lgan bo'lsa — to'lov belgisi qaytariladi (yangi kuryer qayta vykup qiladi);
+   * restoran kuryerga vykup pulini jismonan qaytaradi (AVA hisobida emas — D-REST-1; hodisada qayd).
+   */
+  exportsObj.restaurantAcceptReturn = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const orderId = str(data && data.orderId, 64);
+    const code = str(data && data.code, 8);
+    if (!orderId || orderId.includes('/') || !/^\d{6}$/.test(code)) throw fail('invalid-argument', 'HANDOVER_CODE_INVALID');
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const secretRef = orderRef.collection(PRIVATE).doc('secrets');
+    const out = await withContention(orderRef, 'handover_return', () => db.runTransaction(async (t) => {
+      const od = await getOrderInTx(t, orderRef);
+      await requireMemberInTx(t, String(od.restaurantId || ''), uid);
+      const ho = od.handover;
+      const sec = await t.get(secretRef);
+      const sd = sec.exists ? (sec.data() || {}) : {};
+      if (!ho || ho.status !== 'pending' || ho.target !== 'seller') {
+        if (od.lastReturnBy === uid && od.restaurantStatus === RS.ready && !od.courierId) return { idempotent: true };
+        throw fail('failed-precondition', 'HANDOVER_NOT_PENDING');
+      }
+      if ((msOf(ho.expiresAt) || 0) <= now().getTime()) throw fail('failed-precondition', 'HANDOVER_EXPIRED');
+      const attempts = Number(sd.handoverAttempts) || 0;
+      if (attempts >= HANDOVER_CODE_ATTEMPTS) throw fail('failed-precondition', 'HANDOVER_CODE_LOCKED');
+      if (!sd.handoverCode || sd.handoverCode !== code) {
+        t.set(secretRef, { handoverAttempts: inc(1) }, { merge: true });
+        return { mismatch: true, left: HANDOVER_CODE_ATTEMPTS - attempts - 1 };
+      }
+      if (![RS.picked, RS.arrived].includes(od.restaurantStatus)) throw fail('failed-precondition', 'HANDOVER_NOT_ALLOWED', { from: od.restaurantStatus });
+      const fromCourier = canonicalUid(String(ho.fromCourierId || ''));
+      const routeRef = od.deliveryRouteId ? db.collection(ROUTES).doc(String(od.deliveryRouteId)) : null;
+      const routeSnap = routeRef ? await t.get(routeRef) : null;
+      // WRITE fazasi.
+      const rPt = custodyStartPoint({ restaurantLat: od.restaurantLat, restaurantLng: od.restaurantLng });
+      const startPt = custodyStartPoint(od);
+      const legs = Array.isArray(od.courierLegs) ? od.courierLegs.slice() : [];
+      // Qaytarilgan bo'lak yetkazishga hissa qo'shmaydi (ulushdan chiqariladi — hisobotda UNKNOWN).
+      legs.push({ courierId: fromCourier, meters: 0, returned: true, handoverId: ho.id,
+        fromLat: startPt ? startPt.lat : null, fromLng: startPt ? startPt.lng : null, toLat: rPt ? rPt.lat : null, toLng: rPt ? rPt.lng : null });
+      const buyoutPaid = od.paidBy === 'courier_buyout' ? (Number(od.buyoutAmount) || foodAmountOf(od)) : 0;
+      const until = tsOf(new Date(now().getTime() + RETURN_SEARCH_MIN * 60 * 1000));
+      detachFromRouteInTx(t, routeRef, routeSnap, orderId, 'returned_to_restaurant');
+      t.set(secretRef, {
+        handoverCode: delField(), handoverAttempts: delField(), handoverId: delField(),
+        pickupCode: pickupCode(), pickupAttempts: 0,
+      }, { merge: true });
+      t.delete(db.collection(COURIER_LIVE).doc(orderId));
+      t.update(orderRef, statusPatch(RS.ready, {
+        courierId: null, courierName: delField(), deliveryRouteId: delField(), courierClaimedAt: delField(),
+        handover: delField(), lastHandoverId: ho.id, lastReturnBy: uid, handoverCount: inc(1),
+        courierLegs: legs, custodyPoint: delField(), returnSearchUntil: until, returnedAt: ts(),
+        ...(buyoutPaid > 0 ? { paymentStatus: 'unpaid', paidBy: delField(), paidAt: delField(), buyoutAmount: delField() } : {}),
+      }));
+      t.set(db.collection(CUSTODY).doc(`rest_${orderId}_${ho.id}`), custodyEventDoc({
+        orderId, od, kind: 'return_to_seller',
+        from: { kind: 'courier', id: fromCourier }, to: { kind: 'restaurant', id: String(od.restaurantId || '') },
+        location: rPt, proof: { codeVerified: true }, actorId: uid, handoverId: ho.id,
+        meta: { statusBefore: od.restaurantStatus, buyoutReturnDue: buyoutPaid },
+      }));
+      addEvent(t, orderRef, {
+        from: od.restaurantStatus, to: RS.ready, actor: 'restaurant', actorId: uid, reason: 'returned_to_restaurant',
+        meta: { handoverId: ho.id, fromCourierId: fromCourier, buyoutReturnDue: buyoutPaid, searchMin: RETURN_SEARCH_MIN },
+      });
+      return { ok: true, fromCourier, od: { ...od, courierId: null, restaurantStatus: RS.ready }, untilMs: until.toMillis(), buyoutPaid };
+    }), (od) => (od.lastReturnBy === uid && od.restaurantStatus === RS.ready && !od.courierId ? { idempotent: true } : null));
+    if (out.mismatch) {
+      log('handover_return', { orderId, result: 'denied', errorCode: 'HANDOVER_CODE_MISMATCH' });
+      throw fail('failed-precondition', 'HANDOVER_CODE_MISMATCH', { attemptsLeft: out.left });
+    }
+    log('handover_return', { orderId, userId: uid.slice(-4), result: out.idempotent ? 'idempotent' : 'ok', durationMs: Date.now() - t0 });
+    if (!out.idempotent) {
+      await notifyI18n(out.fromCourier, 'courier_return_done', {}, { orderId });
+      await notifyNearbyCouriers(orderId, out.od, 'ready');
+    }
+    return { ok: true, ...(out.idempotent ? { idempotent: true } : { searchUntilMs: out.untilMs, buyoutReturnDue: out.buyoutPaid }) };
+  });
+
+  /**
+   * Jadval (har daqiqa): qaytarilgan / qo'yib yuborilgan buyurtmaga 30 daqiqada kuryer topilmadi →
+   * bekor (`rejected`, `rejectedBy: system`, sabab `no_courier_after_return`), 2 % restoranga qaytadi.
+   * Kuryer olgan bo'lsa — faqat maydon o'chadi. Bitta maydon diapazon so'rovi — kompozit indeks yo'q.
+   */
+  async function expireReturnedOne(orderRef, at) {
+    return db.runTransaction(async (t) => {
+      const s = await t.get(orderRef);
+      if (!s.exists) return null;
+      const od = s.data() || {};
+      const dl = msOf(od.returnSearchUntil);
+      if (dl === null) return null;
+      const searching = od.type === 'restaurant' && !od.courierId && [RS.accepted, RS.ready].includes(od.restaurantStatus);
+      if (!searching) {
+        t.update(orderRef, { returnSearchUntil: delField() });
+        return { stale: true };
+      }
+      if (dl > at.getTime()) return null;
+      const prep = await prepareFeeInTx(t, od, orderRef.id, false);
+      const refund = commitFeeInTx(t, prep, { orderId: orderRef.id, actorId: 'system' });
+      t.update(orderRef, statusPatch(RS.rejected, {
+        rejectedAt: ts(), rejectedBy: 'system', rejectReason: 'no_courier_after_return', returnSearchUntil: delField(),
+        'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null,
+      }));
+      addEvent(t, orderRef, { from: od.restaurantStatus, to: RS.rejected, actor: 'system', reason: 'no_courier_after_return', meta: { refundAmount: refund.amount } });
+      return { orderId: orderRef.id, restaurantId: od.restaurantId, customerUid: od.userPhone, prepaid: od.foodPaymentMethod === 'prepay' && od.paymentStatus === 'paid' };
+    });
+  }
+
+  async function expireReturned() {
+    const at = now();
+    const snap = await db.collection(ORDERS).where('returnSearchUntil', '<=', tsOf(at)).limit(ESCALATE_BATCH).get();
+    let cancelled = 0;
+    for (const doc of snap.docs) {
+      try {
+        const r = await expireReturnedOne(doc.ref, at);
+        if (!r || r.stale) continue;
+        cancelled += 1;
+        log('return_expire', { orderId: r.orderId, restaurantId: r.restaurantId, result: 'rejected_no_courier', prepaid: r.prepaid });
+        await notifyI18n(r.customerUid, r.prepaid ? 'customer_no_courier_cancel_prepaid' : 'customer_no_courier_cancel', {}, { orderId: r.orderId });
+        await notifyMembersI18n(r.restaurantId, r.prepaid ? 'restaurant_no_courier_cancel_prepaid' : 'restaurant_no_courier_cancel', {}, r.orderId);
+      } catch (e) {
+        console.error(JSON.stringify({ module: MODULE_ID, action: 'return_expire', orderId: doc.id, result: 'failed', errorCode: 'RETURN_EXPIRE_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+      }
+    }
+    return { scanned: snap.size, cancelled };
+  }
+
+  exportsObj.expireReturnedRestaurantOrders = functions.pubsub
+    .schedule('every 1 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => expireReturned());
+
+  // ═══════════════════════════════════════════════════════════════════════
   // JADVAL: qabul qilinmagan buyurtmalar (taymaut) — har daqiqa
   // ═══════════════════════════════════════════════════════════════════════
 
@@ -2262,4 +2800,5 @@ module.exports = {
   ACCEPT_TIMEOUT_MIN, AUTO_PAUSE_AFTER_TIMEOUTS, AUTO_PAUSE_MIN,
   STRIKES_FOR_PREPAY_ONLY, PREPAY_ONLY_DAYS, PICKUP_CODE_ATTEMPTS,
   EARNINGS_ACCOUNT, MODULE_ID,
+  computeCourierShares, HANDOVER_TTL_MIN, RETURN_SEARCH_MIN, HANDOVER_CODE_ATTEMPTS,
 };

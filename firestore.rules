@@ -34,8 +34,6 @@ service cloud.firestore {
     // ko'chirilgandan keyingi `deviceTrustMode: limited` cheklovi) — faqat
     // server: avval egasi o'ziga KYC belgisini qo'yib yoki cheklovni olib
     // tashlab pul yechishi mumkin edi (hamyon auditi O-17).
-    // `deletion` / `deleted` / `deletedAt` / `revivedAt` (hisobni o'chirish, 2026-10-24) — faqat server:
-    // klient o'chirish holatini soxtalashtirmasin va "o'chirilgan qobiq" belgisini qo'ymasin/olmasin.
     function walletFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny([
@@ -43,7 +41,10 @@ service cloud.firestore {
             'realtyUnlocksLeft', 'realtyOwnerKey',
             'realtyPro', 'realtyTeamOwner', 'accountId',
             'payoutKycVerified', 'security',
-            'deletion', 'deleted', 'deletedAt', 'revivedAt'
+            // deletion*: hisobni o'chirish holati - faqat server (2026-10-24).
+            'deletion', 'deleted', 'deletedAt', 'revivedAt',
+            // (`myTreeComponent()`) — эгаси ўзи ёзса бошқа оиланинг дарахтини ўқирди.
+            'treeComponentId'
           ]);
     }
 
@@ -541,6 +542,27 @@ service cloud.firestore {
           : 0;
     }
 
+    // Аудит 2026-10-31 (HIGH-1): клип файли ФАҚАТ эганинг `tv_clips/<ownerPhone>/` папкасидан
+    function tvClipOwnMediaUrlOk(url, owner) {
+      return url == ''
+          || url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/master-taxi-gurlan[.]firebasestorage[.]app/o/tv_clips%2F'
+              + owner.replace('[+]', '%2B') + '%2F[^/?%]+[?].*');
+    }
+
+    function tvClipOwnMediaOk(d) {
+      return d.ownerPhone is string
+          && d.get('videoUrl', '') is string
+          && d.get('posterUrl', '') is string
+          && tvClipOwnMediaUrlOk(d.get('videoUrl', ''), d.ownerPhone)
+          && tvClipOwnMediaUrlOk(d.get('posterUrl', ''), d.ownerPhone);
+    }
+
+    // HIGH-3: transcode натижаси — фақат сервер ёзади.
+    function tvClipServerMediaKeys() {
+      return ['hlsUrl', 'videoVariants', 'variantLadder', 'variantRun', 'variantBackend',
+              'processedVideoUrl', 'processingStatus'];
+    }
+
     function tvClipLikeCountOnly() {
       return isAuth()
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -669,11 +691,35 @@ service cloud.firestore {
               && request.resource.data.photoUrl.size() <= 500);
     }
 
+    // 2026-10-25 (ega: admin nazorati barcha kirish yo'llarida): qat'iy taqqoslash — maydonni O'CHIRISH ham o'zgarish.
+    function tvShopSame(field) {
+      return request.resource.data.get(field, null) == resource.data.get(field, null);
+    }
+
     function tvShopOwnerFieldsLocked() {
       return notChanged('boostUntil')
           && notChanged('socialPostedAt')
           && notChanged('ownerPhone')
-          && notChanged('viewCount');
+          && notChanged('viewCount')
+          && tvShopSame('blockedByParent');
+    }
+
+    // Admin bloklagan onlayn do'kon (tv_shops/{phone}.status == 'blocked') egasi yangi mahsulot qo'sha olmaydi.
+    function tvShopOwnerShopOpen() {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && (!exists(/databases/$(database)/documents/tv_shops/$(uid))
+              || get(/databases/$(database)/documents/tv_shops/$(uid)).data.get('status', 'active') != 'blocked');
+    }
+
+    // tv_shops blok maydonlarini faqat admin (Cloud Function) yozadi.
+    function tvShopBlockFieldsLocked() {
+      return tvShopSame('status')
+          && tvShopSame('blockedAt')
+          && tvShopSame('blockedBy')
+          && tvShopSame('blockReason')
+          // Doimiy havola ID'si (getMyShopLink) — faqat server; egasi boshqa do'konning havolasini egallay olmasin.
+          && tvShopSame('publicId');
     }
     // Vitrina hujjati o'lchami/qiymati (yaratish va eganing tahriri uchun umumiy). Joriy ilova yozadigan hamma
     // shakl o'tadi: title<=200, description<=2000, price butun 0..999999999, photoUrls<=7, clipIds<=50, tur product|service.
@@ -695,7 +741,8 @@ service cloud.firestore {
               && exists(/databases/$(database)/documents/businesses/$(d.businessId))
               && phoneDocIdsMatch(
                   userDocIdFromPhoneToken(),
-                  get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('ownerId', '')));
+                  get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('ownerId', ''))
+              && get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('status', 'active') != 'blocked');
     }
 
     function tvShopItemCreateOk() {
@@ -705,8 +752,10 @@ service cloud.firestore {
           && d.get('viewCount', 0) == 0
           && d.get('status', 'active') in ['active', 'pending']
           && d.get('clipIds', []) is list && d.get('clipIds', []).size() == 0
+          && !('blockedByParent' in d)
           && tvShopItemShapeOk(d)
-          && tvShopBusinessLinkOk(d);
+          && tvShopBusinessLinkOk(d)
+          && tvShopOwnerShopOpen();
     }
 
     function tvShopOwnerUpdateOk() {
@@ -777,7 +826,7 @@ service cloud.firestore {
                'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
                'realtyUnlocksLeft', 'realtyOwnerKey',
                'realtyPro', 'realtyTeamOwner', 'accountId',
-               'payoutKycVerified', 'security',
+               'payoutKycVerified', 'security', 'treeComponentId',
                'deletion', 'deleted', 'deletedAt', 'revivedAt'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
@@ -1960,8 +2009,12 @@ service cloud.firestore {
       // ким ўқий, ҳар қандай админ роли (dispatcher ҳам) тўғридан-тўғри
       // ёзиб депозитни бошқа картага йўналтира оларди. Илова бу ҳужжатни
       // умуман ўқимайди. Тест: functions/test/admin_panel_audit_rules.test.js
+      // courier_task_payout (курьер вазифа ҳақи фоизлари — ИЧКИ харажат, 14-банд)
+      // — клиентга на ўқиш, на ёзиш: фақат CF `adminGet/SetCourierTaskPayoutSettings`.
       allow read: if docId != 'courier' && docId != 'tv_social'
-          && docId != 'wallet_bot';
+          && docId != 'wallet_bot'
+          && docId != 'courier_task_payout'
+          && docId != 'courier_service_fee';
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
       // `prices` ичидаги маҳаллий такси тарифи — фақат CF
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
@@ -1979,6 +2032,9 @@ service cloud.firestore {
           && docId != 'restaurant_seasons'
           && docId != 'restaurant_ramadan'
           && docId != 'all_orders_stuck'
+          && docId != 'wholesale_orders'
+          && docId != 'courier_service_fee'
+          && docId != 'courier_task_payout'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'
@@ -2140,6 +2196,23 @@ service cloud.firestore {
               request.resource.data.text is string
               && request.resource.data.text.size() > 0
               && request.resource.data.text.size() <= 500
+            )
+          )
+          // Лотин / рус матни (2026-10-26) — ихтиёрий; бўлса матн, 1..500 (бўш — майдон ўчирилади).
+          && (
+            !('textLatn' in request.resource.data)
+            || (
+              request.resource.data.textLatn is string
+              && request.resource.data.textLatn.size() > 0
+              && request.resource.data.textLatn.size() <= 500
+            )
+          )
+          && (
+            !('textRu' in request.resource.data)
+            || (
+              request.resource.data.textRu is string
+              && request.resource.data.textRu.size() > 0
+              && request.resource.data.textRu.size() <= 500
             )
           )
           && (
@@ -2316,11 +2389,47 @@ service cloud.firestore {
     // INTERCITY / LOCAL TAXI / JOB
     // ══════════════════════════════════════
     // E'lon yoqilayotgan bo'lsa (`isActive: true`) `billingTripId` shart.
+    //
+    // AUDIT H1 (2026-10): avval faqat `billingTripId` BO'SH EMASLIGI tekshirilardi.
+    // `endTripListing` (komissiya to'liq qaytgan, reys `cancelled`) dan keyin haydovchi
+    // eski `billingTripId` bilan `isActive: true` qilib komissiyasiz e'lon qila olardi.
+    // Endi e'lon YOQILISHI (nofaoldan faolga) yoki faol e'londa `billingTripId`NI
+    // O'ZGARTIRISH uchun ko'rsatilgan reys HAQIQATAN to'langan bo'lishi shart:
+    // `taxi_trips/{id}` mavjud, `status == 'published'` va `driverUid` = chaqiruvchi.
+    // Ilovaning boshqa yozuvlari (o'rin, narx, ko'chirish, tripStatus, isOnPanel,
+    // autoAccept, isActive:false) cheklanmaydi. Tekshiruv faqat yoqish/reys almashtirishda
+    // bitta `get` sarflaydi.
+    // Tarixiy teshik (QOLDI, 1 kunlik e'lon): faol e'lon, reys keyin bekor qilinsa ham
+    // tahrirlanaveradi - qoida faqat YANGIDAN yoqishni yopadi.
+    function intercityBillingTripOk(tripId) {
+      return tripId is string
+          && tripId != ''
+          && tripId.matches('^[A-Za-z0-9_-]+$')
+          && exists(/databases/$(database)/documents/taxi_trips/$(tripId))
+          && get(/databases/$(database)/documents/taxi_trips/$(tripId)).data.get('status', '') == 'published'
+          && isOwner(get(/databases/$(database)/documents/taxi_trips/$(tripId)).data.get('driverUid', ''));
+    }
+
+    // Hujjat YARATILAYOTGANDA.
     function intercityPublishGateOk() {
+      return request.resource.data.get('isActive', false) != true
+          || intercityBillingTripOk(request.resource.data.get('billingTripId', ''));
+    }
+
+    // Hujjat YANGILANAYOTGANDA (`resource` = hozirgi, `request.resource` = natija).
+    function intercityPublishGateUpdateOk() {
       return request.resource.data.get('isActive', false) != true
           || (
             request.resource.data.get('billingTripId', '') is string
             && request.resource.data.get('billingTripId', '') != ''
+            && (
+              (
+                resource.data.get('isActive', false) == true
+                && request.resource.data.get('billingTripId', '')
+                    == resource.data.get('billingTripId', '')
+              )
+              || intercityBillingTripOk(request.resource.data.get('billingTripId', ''))
+            )
           );
     }
 
@@ -2357,7 +2466,7 @@ service cloud.firestore {
       allow create: if isAdmin()
           || (isOwner(id) && intercityPublishGateOk());
       allow update: if isAdmin()
-          || (isOwner(id) && intercityPublishGateOk())
+          || (isOwner(id) && intercityPublishGateUpdateOk())
           || intercityDriverEntertainmentPatch();
       allow delete: if false;
 
@@ -2587,10 +2696,19 @@ service cloud.firestore {
 
     // Shikoyatlar — dating/market CF orqali; boshqa turlar client yaratishi mumkin.
     match /reports/{reportId} {
+      // shop_content (do'kon/mahsulot shikoyati) — faqat submitShopComplaint (kunlik cheklov, takrorga qarshi), 2026-10-25.
       allow create: if isAuth()
           && request.resource.data.get('type', '') != 'dating_profile'
-          && request.resource.data.get('type', '') != 'market_ad';
+          && request.resource.data.get('type', '') != 'market_ad'
+          && request.resource.data.get('type', '') != 'shop_content'
+          // restaurant_content / realty_content — faqat submitContentComplaint (sabab ro'yxatdan, takrorga qarshi tranzaksiya), 2026-10-25.
+          && request.resource.data.get('type', '') != 'restaurant_content'
+          && request.resource.data.get('type', '') != 'realty_content';
       allow read, update, delete: if isAdmin();
+    }
+    // submitContentComplaint qulfi (shikoyatchi × obyekt → ochiq shikoyat ID) — faqat CF.
+    match /report_open_keys/{keyId} {
+      allow read, write: if false;
     }
 
     // ── Tanishuv (Dating) ──────────────────────────────────────────
@@ -2767,7 +2885,9 @@ service cloud.firestore {
           && adAuthorImmutable()
           && changed.hasOnly([
             'text', 'title', 'priceText', 'isUrgent', 'type', 'editedAt'
-          ]);
+          ])
+          && (!changed.hasAny(['type'])
+              || request.resource.data.get('type', '') in ['work', 'service', 'ad', 'announcement']);
     }
 
     function adModerationPatchOk() {
@@ -2826,7 +2946,6 @@ service cloud.firestore {
           && request.resource.data.description.size() <= 2000
           && request.resource.data.imageUrls is list
           && request.resource.data.imageUrls.size() >= 1
-          // 1..7 (эга қарори, 2026-10-17; аввал 1..5). Эски илова ≤5 юборади — мос.
           && request.resource.data.imageUrls.size() <= 7
           // `districtId`/`regionId` — эга МАҲСУЛОТ ҳудудини тузата олиши
           // учун (аудит, 2026-09-27). Мавжудлиги `geo_districts` бўйича
@@ -3109,7 +3228,8 @@ service cloud.firestore {
                   && d.unitDims.keys().hasAll(['l', 'w', 'h'])
                   && d.unitDims.l is int && d.unitDims.l >= 1 && d.unitDims.l <= 1000
                   && d.unitDims.w is int && d.unitDims.w >= 1 && d.unitDims.w <= 1000
-                  && d.unitDims.h is int && d.unitDims.h >= 1 && d.unitDims.h <= 1000));
+                  && d.unitDims.h is int && d.unitDims.h >= 1 && d.unitDims.h <= 1000))
+          && (!('packs' in d) || (d.packs is list && d.packs.size() <= 5));
     }
 
     // Яратиш — фақат тасдиқланган сотувчи; ҳолат `pending`, ёки
@@ -3159,15 +3279,12 @@ service cloud.firestore {
                 'createdAt', 'updatedAt', 'publishedAt', 'moderatedAt',
                 'moderatedBy',
                 'market', 'currency', 'deliveryDays',
-                'unitWeightG', 'unitDims'
+                'unitWeightG', 'unitDims', 'packs'
               ]);
     }
 
     // Эга — контент таҳрири (қайта `pending`га тушади) ёки фақат
     // яшириш (`inactive`) — ҳеч қачон ўзини `active` қилолмайди.
-    // Нарх поғоналари (`priceTiers`) — ҳар бир элемент таркиби клиентда
-    // (Dart модел) шаклланади; `imageUrls`даги каби бу ерда фақат
-    // рўйхат ҳажми текширилади (per-item schema Rules'да текширилмайди).
     function wholesaleProductOwnerUpdateOk() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return wholesaleProductOwnerIsCaller()
@@ -3177,7 +3294,7 @@ service cloud.firestore {
           && changed.hasOnly([
                 'title', 'titleLower', 'searchTokens', 'description',
                 'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt',
-                'currency', 'deliveryDays', 'unitWeightG', 'unitDims'
+                'currency', 'deliveryDays', 'unitWeightG', 'unitDims', 'packs'
               ])
           && wholesaleProductShippingOk()
           && request.resource.data.priceTiers is list
@@ -3239,6 +3356,11 @@ service cloud.firestore {
           || wholesaleProductViewIncrementOk()
           || wholesaleProductVideoLinkOk();
       allow delete: if isAdmin() || wholesaleProductOwnerIsCaller();
+    }
+    // Qoldiq: faqat server (setWholesaleStock, buyurtma).
+    match /wholesale_stock/{id} { allow read: if true; }
+    match /wholesale_orders/{id} {
+      allow read: if isAdmin() || isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId);
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -3463,6 +3585,14 @@ service cloud.firestore {
             || (isAuth() && isRestaurantMember(rid));
         allow write: if false;
       }
+
+      // Кўришлар статистикаси (2026-10-25; functions/shop_stats.js `recordShopEvent`): кунлик ҳужжат
+      // `view_stats/{yyyymmdd}`. Фақат шу рестораннинг а'золари (эга/ходим) ва админ ID бўйича `get` қилади
+      // (ҳали йўқ кун ҳам — 0); рўйхат ва ёзув ёпиқ — фақат CF ёзади (20-банд).
+      match /view_stats/{day} {
+        allow get: if isAdmin() || (isAuth() && isRestaurantMember(rid));
+        allow list, create, update, delete: if false;
+      }
     }
 
     // Бўлимлар индекси (S3, D-REST-33): таомнинг тайёр кўриниши (`functions/restaurant_dish_index.js`).
@@ -3653,6 +3783,23 @@ service cloud.firestore {
                // Курьер рейсни ўзгача бировга ўтказа олмайди.
                && request.resource.data.get('courierId', '')
                   == resource.data.get('courierId', '')
+               // C5/F11: status faqat ilova yozadigan o'tishlar bilan:
+               //   o'zgarmaydi | ready -> active (startRoute) |
+               //   completed — FAQAT reys tugaganda (currentIndex >=
+               //   orders.size(); ilova avval advanceIndex, keyin
+               //   completeRoute yozadi). cancelled/ready/active'ga
+               //   qaytarish kuryerga yo'q: yetkazilmagan buyurtmali reys
+               //   completed bo'lsa assertOrderOnActiveRoute buyurtmani
+               //   rad etadi va custody uziladi.
+               && (
+                    request.resource.data.get('status', '')
+                      == resource.data.get('status', '')
+                    || (resource.data.get('status', '') == 'ready'
+                        && request.resource.data.get('status', '') == 'active')
+                    || (request.resource.data.get('status', '') == 'completed'
+                        && request.resource.data.currentIndex
+                           >= request.resource.data.orders.size())
+                  )
              );
       allow delete: if false;
     }
@@ -3887,45 +4034,35 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ─── Туман ичида юк (live машиналар) ───────────────────────────────
-    // Эгалик faqat `ownerId` бўйича — ҳужжат ID'си auto-ID (бир рақам остида
-    // бир нечта эълон). Эски телефон-ID ҳужжатларда ҳам `ownerId` бор,
-    // шунинг учун улар ҳам ишлашда давом этади.
-    // Туман ичида: жойлашув + иш вақти + TTL. Онлайн/heartbeat йўқ.
+    // Туман ичида юк. Муддат/isDemo/рейтинг — сервер (functions/yuk_local.js), аудит 2026-10-31.
+    function ykK() {
+      return ['ownerName','phone','vehicleType','plateNumber','capacityKg','capacityTons','bodyLengthM','bodyWidthM','bodyHeightM','acceptRadiusKm','loadStatus','lat','lng','locationLabel','workStartMinutes','workEndMinutes','updatedAt','regionId','districtId','serviceAreaId','online','lastOnlineAt'];
+    }
+    function ykD(d) {
+      let me = userDocIdFromPhoneToken();
+      return me != '' && d.vehicleType is string && d.ownerName is string && d.lat is number && d.lng is number
+        && d.get('workStartMinutes', 0) is int && d.get('workEndMinutes', 0) is int && d.get('districtId', '') is string
+        && d.get('loadStatus', 'empty') in ['empty', 'busy', 'offline']
+        && d.phone is string && phoneDocIdsMatch(me, d.phone.replace('[^0-9]', ''));
+    }
     function yukLocalDriverCreateOk() {
       let d = request.resource.data;
-      return isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), d.ownerId)
-          && d.vehicleType is string
-          && d.phone is string
-          && d.ownerName is string
-          && d.lat is number
-          && d.lng is number
-          && d.workStartMinutes is int
-          && d.workEndMinutes is int
-          && d.loadStatus in ['empty', 'busy', 'offline'];
+      return ykD(d) && phoneDocIdsMatch(userDocIdFromPhoneToken(), d.ownerId)
+        && d.keys().hasOnly(ykK().concat(['ownerId', 'rating', 'completedLoads', 'createdAt', 'expiresAt']))
+        && d.loadStatus is string && d.workStartMinutes is int && d.workEndMinutes is int
+        && d.get('rating', 0) == 0 && d.get('completedLoads', 0) == 0
+        && (!('expiresAt' in d) || (d.expiresAt is timestamp && d.expiresAt <= request.time + duration.value(65, 'd')));
     }
-
     function yukLocalDriverOwnerUpdateOk() {
-      return isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId)
-          && notChanged('ownerId')
-          && notChanged('rating')
-          && notChanged('completedLoads')
-          && notChanged('createdAt')
-          && notChanged('expiresAt');
+      return ykD(request.resource.data) && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(ykK());
     }
-
     match /yuk_local_drivers/{driverId} {
-      allow read: if isAuth();
+      allow read: if isAdmin() || userDocIdFromPhoneToken() != '';
       allow create: if yukLocalDriverCreateOk();
       allow update: if isAdmin() || yukLocalDriverOwnerUpdateOk();
-      allow delete: if isAdmin()
-          || (isAuth()
-              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId));
+      allow delete: if isAdmin() || (isAuth() && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId));
     }
-
-    // Биринчи эълон TTL (60 кун) учун тарихий белги.
     match /yuk_local_owner_meta/{ownerId} {
       allow read: if isAuth()
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerId);
@@ -3933,6 +4070,36 @@ service cloud.firestore {
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerId)
           && request.resource.data.ownerId == ownerId
           && request.resource.data.everPublished == true;
+    }
+
+    // AVA расмий тармоқларига жойлаш розилиги (7-босқич, 2026-10-25):
+    // «Рухсат бераман» вақти — фақат сервер вақти (`serverTimestamp`),
+    // версия — 1..99. Эски илова иккисини ҳам ёзмайди (ўтади). Кейин
+    // ўзгартириб бўлмайди (update рўйхатида қулф).
+    function tvClipSocialConsentOk(d) {
+      return (!('socialConsentAt' in d) || d.socialConsentAt == request.time)
+          && (!('socialConsentVersion' in d)
+              || (d.socialConsentVersion is int
+                  && d.socialConsentVersion > 0
+                  && d.socialConsentVersion < 100));
+    }
+
+    // Сотувчининг ЎЗ Telegram канали (`socialNetworks` ичида 'seller_telegram', 2026-10-25): фақат ЯРАТИШДА ва
+    // «Рухсат бераман» билан — розилик матни каналнинг номини айтган (версия ≥ 2). Кейин қўшиб бўлмайди (олиб
+    // ташлаш — розиликни қайтариб олиш — мумкин). `is list` — эски/ғалати ҳужжатларда хато бермасин.
+    function tvClipSellerChannelCreateOk(d) {
+      return !(d.get('socialNetworks', []) is list
+              && d.get('socialNetworks', []).hasAny(['seller_telegram']))
+          || (d.get('socialConsent', false) == true
+              && d.get('socialConsentVersion', 0) is int
+              && d.get('socialConsentVersion', 0) >= 2);
+    }
+
+    function tvClipSellerChannelUpdateOk() {
+      let a = request.resource.data.get('socialNetworks', []);
+      let b = resource.data.get('socialNetworks', []);
+      return !(a is list && a.hasAny(['seller_telegram']))
+          || (b is list && b.hasAny(['seller_telegram']));
     }
 
     // Ресторан видеоси (`linkKind == 'restaurant'`, `linkId` = ресторан id)
@@ -4022,7 +4189,11 @@ service cloud.firestore {
                           && tvAutoApproveOn()))
                   && !request.resource.data.keys().hasAny([
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
-                      'socialVideoUrl'])
+                      'socialVideoUrl', 'socialNoticeVersion'])
+                  && tvClipSocialConsentOk(request.resource.data)
+                  && tvClipOwnMediaOk(request.resource.data)
+                  && !request.resource.data.keys().hasAny(tvClipServerMediaKeys())
+                  && tvClipSellerChannelCreateOk(request.resource.data)
                   && tvClipRestaurantLinkOk(request.resource.data)
                   && tvClipRealtyLinkOk(request.resource.data)));
       // Egasi `socialRetryAt`ni o'zgartirsa trigger `force` bilan qayta
@@ -4033,11 +4204,20 @@ service cloud.firestore {
               && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
               && tvClipRestaurantLinkUpdateOk()
               && tvClipRealtyLinkUpdateOk()
+              && tvClipSellerChannelUpdateOk()
+              // `ownerPhone` (2026-10-26, review H1): egasi klipni boshqa sotuvchi nomiga o'tkaza olmaydi.
               && !request.resource.data.diff(resource.data).affectedKeys()
-                  .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
+                  .hasAny(['ownerPhone', 'expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',
                            'socialPost', 'socialPostedAt', 'socialRetryAt',
-                           'socialVideoUrl']))
+                           'socialVideoUrl', 'socialConsentAt',
+                           'socialConsentVersion', 'socialNoticeVersion'])
+              && !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(tvClipServerMediaKeys().concat(['likeCount', 'viewCount',
+                           'commentCount', 'playbackStats']))
+              && (!request.resource.data.diff(resource.data).affectedKeys()
+                      .hasAny(['videoUrl', 'posterUrl'])
+                  || tvClipOwnMediaOk(request.resource.data)))
           || tvClipLikeCountOnly()
           || tvClipViewCountOnly()
           || tvClipCommentCountOnly()
@@ -4123,11 +4303,47 @@ service cloud.firestore {
 
     match /tv_shops/{ownerPhone} {
       allow read: if true;
+      // 2026-10-25: blok maydonlari (status/blockedAt/blockedBy/blockReason) faqat admin callable'ida
+      // (adminSetShopStatus); bloklangan do'konni egasi o'chirib, qayta ocha olmaydi.
       allow create: if isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone);
-      allow update, delete: if isAdmin()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+          && !request.resource.data.keys().hasAny(['status', 'blockedAt', 'blockedBy', 'blockReason', 'publicId']);
+      allow update: if isAdmin()
           || (isAuth()
-              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone));
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+              && tvShopBlockFieldsLocked());
+      allow delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+              && resource.data.get('status', 'active') != 'blocked');
+    }
+
+    // Sotuvchi statistikasi (2026-10-25, 6-bosqich): faqat EGASI o'z kunlik hujjatini o'qiydi (get, hujjat ID bilan);
+    // ro'yxat va yozish yopiq — faqat recordShopEvent (Cloud Function) yozadi. Takror belgilari — faqat server.
+    match /shop_stats/{docId} {
+      // ID = <egasining telefoni>_<yyyymmdd>: hali yo'q kun ham o'qiladi (0), begona kun — yo'q.
+      allow get: if isAuth()
+          && userDocIdFromPhoneToken().size() == 12
+          && docId.matches(userDocIdFromPhoneToken() + '_[0-9]{8}');
+      allow list, create, update, delete: if false;
+    }
+    match /shop_stats_seen/{docId} {
+      allow read, write: if false;
+    }
+
+    // Сотувчининг ўз Telegram канали (2026-10-25; functions/seller_tg_channel.js). Ёзиш — фақат callable'лар.
+    // Эга ўз ҳужжатини фақат ID билан ўқийди; рўйхат ва бегона ҳужжат — йўқ. Индекс ва ҳисоблагич — фақат сервер.
+    match /seller_tg_channels/{ownerPhone} {
+      allow get: if isAuth()
+          && userDocIdFromPhoneToken().size() == 12
+          && userDocIdFromPhoneToken() == ownerPhone;
+      allow list, create, update, delete: if false;
+    }
+    match /seller_tg_channel_chats/{chatId} {
+      allow read, write: if false;
+    }
+    match /seller_tg_rate_limits/{ownerPhone} {
+      allow read, write: if false;
     }
 
     match /tv_shop_items/{itemId} {
@@ -4408,7 +4624,9 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.providerId)
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['status', 'seenAt'])
-                    && request.resource.data.status in ['new', 'seen', 'skipped'];
+                    && request.resource.data.status in ['new', 'seen', 'skipped']
+                    // S2/L9: accepted/in_progress/... matchni pasaytirib bo'lmaydi.
+                    && resource.data.get('status', '') in ['new', 'seen', 'skipped'];
     }
 
     // ══════════════════════════════════════
@@ -4695,7 +4913,7 @@ service cloud.firestore {
     // лекин ёзмайди. `enabled`/`pushEnabled` kill switch'лари ҳам шу ерда.
     match /module_config/{key} {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && key != 'wholesale_orders_all';
     }
 
     // Жарима ва қарз ҲОЛАТИ. Пулнинг ўзи `wallet_ledger`да (Т-11).

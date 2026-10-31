@@ -318,9 +318,9 @@ class _AdminShellState extends State<AdminShell> {
     // 2026-10-08: номи ўзгарди ва «Улгуржи бозор» тепасида.
     _AdminSection(
       group: 'Бозорлар ва эълонлар',
-      label: 'Аҳоли бозори',
+      label: 'Аралаш бозор',
       icon: Icons.storefront_outlined,
-      description: 'Аҳоли эълонлари — модерация ва шикоятлар',
+      description: 'Аралаш бозор эълонлари — модерация ва шикоятлар',
     ),
     // «AVA дўкони» алоҳида бўлими ОЛИБ ТАШЛАНДИ (2026-10-07): иловада AVA
     // дўкони тўлиқ Улгуржига ўтган (эга қарори 2026-10-06), энди админда
@@ -628,7 +628,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Эълонлар ва хизматлар') {
       return const JobsModerationScreen();
     }
-    if (section.label == 'Аҳоли бозори') {
+    if (section.label == 'Аралаш бозор') {
       return const MarketModerationScreen();
     }
     if (section.label == 'Улгуржи бозор') {
@@ -1232,7 +1232,7 @@ class _Sidebar extends StatelessWidget {
             .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
-      case 'Аҳоли бозори':
+      case 'Аралаш бозор':
         return db
             .collection('ads')
             .where('type', isEqualTo: 'cheap_product')

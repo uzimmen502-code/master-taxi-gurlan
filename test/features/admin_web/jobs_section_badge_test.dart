@@ -48,7 +48,7 @@ void main() {
     final market =
         File('lib/features/admin_web/screens/market_moderation_screen.dart')
             .readAsStringSync();
-    expect(market.contains("'АҲОЛИ БОЗОРИ — назорати'"), isTrue);
+    expect(market.contains("'АРАЛАШ БОЗОР — назорати'"), isTrue);
     expect(market.contains("— nazorati'"), isFalse);
     final jobs =
         File('lib/features/admin_web/screens/jobs_moderation_screen.dart')

@@ -1574,7 +1574,7 @@ class _EditDialogState extends State<_EditDialog> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Аҳоли бозорида кўрсатиш'),
+                title: const Text('Аралаш бозорда кўрсатиш'),
                 value: _inMarket,
                 onChanged: (v) => setState(() => _inMarket = v),
               ),

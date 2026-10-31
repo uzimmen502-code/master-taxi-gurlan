@@ -64,9 +64,9 @@ void main() {
       expect(YukLocalSchedule.timeOfDayToMinutes(8, 15), 495);
     });
 
-    test('TTL: биринчи эълон 60 кун, кейингилари 10 кун', () {
+    test('TTL: биринчи эълон 60 кун, кейингилари 30 кун (эга 2026-10-31)', () {
       expect(YukLocalSchedule.firstListingTtl, const Duration(days: 60));
-      expect(YukLocalSchedule.nextListingTtl, const Duration(days: 10));
+      expect(YukLocalSchedule.nextListingTtl, const Duration(days: 30));
     });
   });
 

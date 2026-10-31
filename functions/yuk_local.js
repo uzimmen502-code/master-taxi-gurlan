@@ -8,7 +8,7 @@
  * эга қарорлари):
  *
  * - `onYukLocalDriverWrite` (триггер): янги эълон муддати — эганинг биринчи
- *   эълони 60 кун, кейингилари 10 кун (сервер вақтидан, клиент ёзгани
+ *   эълони 60 кун, кейингилари 30 кун (сервер вақтидан, клиент ёзгани
  *   устидан); `phone` = эга рақами; йўқ `districtId` → `''` (ҳудудсизлар
  *   аниқ сўров билан келади); ҳисоб `yuk_local_created_log` га (намуналарни
  *   ўчириш учун).
@@ -33,7 +33,8 @@ const DEMO_REFRESH_BEFORE_MS = 30 * DAY_MS;
 
 // Эга қарорлари, 2026-10-31 (CLAUDE.md 46-банд — docs/yuk_local_audit_fix_2026-10-31_uz.md).
 const FIRST_LISTING_TTL_MS = 60 * DAY_MS;
-const NEXT_LISTING_TTL_MS = 10 * DAY_MS;
+// Эга, 2026-10-31 (кейинроқ): кейинги эълонлар 10 → 30 кун.
+const NEXT_LISTING_TTL_MS = 30 * DAY_MS;
 const RENEW_TTL_MS = 30 * DAY_MS;
 const RENEW_WINDOW_MS = 3 * DAY_MS;
 const EXPIRED_DELETE_AFTER_MS = 30 * DAY_MS;

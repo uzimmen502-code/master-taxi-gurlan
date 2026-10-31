@@ -1,6 +1,6 @@
 /**
  * Туман ичида юк — `functions/yuk_local.js` (аудит 2026-10-31, эга қарорлари):
- * муддат 60/10 кун сервердан, телефон/туман нормаллаштириш, «Узайтириш» +30 кун,
+ * муддат 60/30 кун сервердан (эга 2026-10-31: 60/10 → 60/30), телефон/туман нормаллаштириш, «Узайтириш» +30 кун,
  * 3/2/1 кун пуш (кунига бир марта), 30 кундан кейин ўчириш, 10 та ҳақиқий
  * эълондан кейин намуналарни ўчириш, намуна cron'и `updatedAt` ёзмайди.
  *
@@ -59,11 +59,11 @@ async function testTtl() {
   const a1 = (await db.doc('yuk_local_drivers/a1').get()).data();
   check('биринчи эълон: first=true, муддат ≈ createdAt+60 кун',
     r1.first === true && Math.abs(a1.expiresAt.toMillis() - (a1.createdAt.toMillis() + 60 * DAY)) < 2000, JSON.stringify(r1));
-  // Иккинчи эълон, клиент (ёлғон) 60 кун ёзди — сервер 10 кунга туширади.
+  // Иккинчи эълон, клиент (ёлғон) 60 кун ёзди — сервер 30 кунга туширади.
   const r2 = await createListing('a2', listing(OWNER, { expiresAt: Timestamp.fromMillis(now + 60 * DAY) }));
   const a2 = (await db.doc('yuk_local_drivers/a2').get()).data();
-  check('иккинчи эълон: first=false, муддат 10 кунга туширилди',
-    r2.first === false && Math.abs(a2.expiresAt.toMillis() - (a2.createdAt.toMillis() + 10 * DAY)) < 2000);
+  check('иккинчи эълон: first=false, муддат 30 кунга туширилди',
+    r2.first === false && Math.abs(a2.expiresAt.toMillis() - (a2.createdAt.toMillis() + 30 * DAY)) < 2000);
   // Retry: ўша ҳужжат учун триггер қайта чақирилди — қарор ўзгармайди, ҳисоб 2 та.
   const again = await yuk.onListingWrite('a1', null, await db.doc('yuk_local_drivers/a1').get());
   const state = (await db.doc(`yuk_local_owner_state/${OWNER}`).get()).data();
@@ -72,7 +72,7 @@ async function testTtl() {
   // Ўчирилган биринчи эълон кейин ҳам «биринчи» бўлмайди.
   await db.doc('yuk_local_drivers/a1').delete();
   const r3 = await createListing('a3', listing(OWNER));
-  check('аввалгиси ўчирилган бўлса ҳам кейингиси 10 кун', r3.first === false);
+  check('аввалгиси ўчирилган бўлса ҳам кейингиси 30 кун', r3.first === false);
   // Бошқа эга — биринчи.
   const r4 = await createListing('b1', listing(OTHER));
   check('бошқа эга: биринчи', r4.first === true);
@@ -84,11 +84,11 @@ async function testLegacyOwners() {
   const L1 = '998901000001';
   const L2 = '998901000002';
   const L3 = '998901000003';
-  // L1: эски эълони турибди (триггерсиз ёзилган) — янгиси 10 кун.
+  // L1: эски эълони турибди (триггерсиз ёзилган) — янгиси 30 кун.
   await db.doc('yuk_local_drivers/old1').set(listing(L1));
   const r1 = await createListing('new1', listing(L1));
-  check('эски эълони бор эга: first=false (10 кун)', r1.first === false);
-  // L2: эълони ўчирилган, лекин meta аввал яратилган — 10 кун.
+  check('эски эълони бор эга: first=false (30 кун)', r1.first === false);
+  // L2: эълони ўчирилган, лекин meta аввал яратилган — 30 кун.
   await db.doc(`yuk_local_owner_meta/${L2}`).set({ ownerId: L2, everPublished: true });
   await new Promise((r) => setTimeout(r, 2300));
   const r2 = await createListing('new2', listing(L2));

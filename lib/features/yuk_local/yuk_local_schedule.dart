@@ -6,10 +6,10 @@ class YukLocalSchedule {
   static const Duration firstListingTtl = Duration(days: 60);
 
   /// Кейинги эълонлар.
-  static const Duration nextListingTtl = Duration(days: 10);
+  static const Duration nextListingTtl = Duration(days: 30);
 
   // Муддат ҚАРОРИ серверда (`functions/yuk_local.js`, эга 2026-10-31):
-  // яратилганда 60/10 кун, «Узайтириш» +30 кун, муддат тугашига ≤3 кун
+  // яратилганда 60/30 кун, «Узайтириш» +30 кун, муддат тугашига ≤3 кун
   // қолганда ёки ўтгач узайтирилади, ўтганидан 30 кун кейин ўчирилади.
   // Қуйидагилар фақат UI учун (тугма кўрсатиш) — сервер барибир текширади.
 

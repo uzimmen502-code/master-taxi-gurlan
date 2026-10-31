@@ -110,6 +110,9 @@ async function main() {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const fdb = ctx.firestore();
     await fdb.collection('intercity_drivers').doc(DRIVER).set(driverDoc());
+    // Audit H1: e'lonni yoqish uchun `billingTripId` HAQIQIY to'langan (published) va
+    // chaqiruvchining o'z reysi bo'lishi shart (batafsil: intercity_billing_gate_rules.test.js).
+    await fdb.collection('taxi_trips').doc('trip_test_01').set({driverUid: DRIVER, status: 'published'});
     await fdb.collection('intercity_bookings').doc('bkA').set(bookingData());
     await fdb.collection('intercity_bookings').doc('bkB').set(bookingData());
     await fdb.collection('intercity_bookings').doc('bkC').set(bookingData());

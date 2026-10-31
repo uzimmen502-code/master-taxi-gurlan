@@ -51,6 +51,7 @@ const OTHER_COURIER = '998907778899';
 const READY_ROUTE = 'route_ready';
 const ACTIVE_ROUTE = 'route_active';
 const ORPHAN_ROUTE = 'route_orphan';
+const PENDING_ROUTE = 'route_pending';
 
 function routeDoc(courierId, status) {
   return {
@@ -97,6 +98,8 @@ async function main() {
       await db.collection('delivery_routes').doc(ACTIVE_ROUTE)
           .set(routeDoc(COURIER, 'active'));
       // Egasiz reys — `onDeliveryRouteCreate` courierId'siz ham yaratadi.
+      await db.collection('delivery_routes').doc(PENDING_ROUTE)
+          .set(routeDoc(COURIER, 'active'));
       await db.collection('delivery_routes').doc(ORPHAN_ROUTE)
           .set(routeDoc('', 'ready'));
     });
@@ -172,11 +175,57 @@ async function main() {
       'kuryer currentIndex\'ni suradi (advanceIndex)',
       () => assertSucceeds(doc(mine, ACTIVE_ROUTE).update({currentIndex: 1})));
 
+  // C5/F11: tugatish faqat reys tugaganda (currentIndex >= orders.length).
+  // Ilova avval advanceIndex, keyin completeRoute yozadi (2 ta alohida yozuv).
   await check(
-      'kuryer reysni tugatadi (completeRoute)',
+      'kuryer oxirgi bekatga o\'tadi (advanceIndex -> 2/2)',
+      () => assertSucceeds(doc(mine, ACTIVE_ROUTE).update({currentIndex: 2})));
+
+  await check(
+      'kuryer reysni tugatadi, reys tugagan (completeRoute)',
       () => assertSucceeds(doc(mine, ACTIVE_ROUTE).update({
         status: 'completed', completedAt: new Date(),
       })));
+
+  // C5/F11: yetkazilmagan buyurtma bor reysni kuryer tugata olmaydi.
+  await check(
+      'C5: kuryer currentIndex=0 (2 buyurtma) reysni tugata olmaydi',
+      () => assertFails(doc(mine, PENDING_ROUTE).update({
+        status: 'completed', completedAt: new Date(),
+      })));
+
+  await check(
+      'C5: kuryer currentIndex=1 (1 buyurtma qolgan) reysni tugata olmaydi',
+      async () => {
+        await assertSucceeds(doc(mine, PENDING_ROUTE).update({currentIndex: 1}));
+        await assertFails(doc(mine, PENDING_ROUTE).update({
+          status: 'completed', completedAt: new Date(),
+        }));
+      });
+
+  await check(
+      'C5: kuryer reysni cancelled qila olmaydi',
+      () => assertFails(doc(mine, PENDING_ROUTE).update({status: 'cancelled'})));
+
+  await check(
+      'C5: kuryer faol reysni ready ga qaytara olmaydi',
+      () => assertFails(doc(mine, PENDING_ROUTE).update({status: 'ready'})));
+
+  await check(
+      'C5: kuryer tugagan reysni qayta active qila olmaydi',
+      () => assertFails(doc(mine, ACTIVE_ROUTE).update({status: 'active'})));
+
+  await check(
+      'C5: begona kuryer tugagan reysni ham o\'zgartira olmaydi',
+      () => assertFails(doc(other, PENDING_ROUTE).update({currentIndex: 2})));
+
+  await check(
+      'C5: admin yetkazilmagan buyurtmali reysni tugata/bekor qila oladi',
+      async () => {
+        await assertSucceeds(doc(adminDb, PENDING_ROUTE).update({
+          status: 'cancelled',
+        }));
+      });
 
   // ── Admin ───────────────────────────────────────────────────────────
   await check(

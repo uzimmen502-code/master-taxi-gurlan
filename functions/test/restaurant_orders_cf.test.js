@@ -636,7 +636,9 @@ async function main() {
       updatedAt: admin.firestore.Timestamp.now(),
     });
     const NEAR_NO_LIMIT = '998913000003';
-    await db.collection('users').doc(NEAR_NO_LIMIT).set({ role: 'user', bonusBalance: 0 });
+    // C-5: onlayn ro'yxat capability bilan tekshiriladi — bu haqiqiy (approved) kuryer.
+    ACC[NEAR_NO_LIMIT] = 'accCOURIER0000000000N';
+    await seedCourier(NEAR_NO_LIMIT, 'approved');
     await presence(COURIER_A, { lat: R_LOC.lat + 0.001, lng: R_LOC.lng }); // ~110 m
     await presence(COURIER_B, { lat: 41.3, lng: 69.2 }); // Toshkent — radiusdan tashqarida
     await presence(NEAR_NO_LIMIT, { lat: R_LOC.lat, lng: R_LOC.lng + 0.002 }); // yaqin, vykup limiti yo'q
@@ -721,6 +723,18 @@ async function main() {
     assert.ok(!ready.orders.find((x) => x.id === r.orderId), 'courierListReadyOrders da yo\'q');
     await expectCode(call('courierCreateRoute', { courierPhone: COURIER_B, orderedOrderIds: [r.orderId] }, COURIER_B), 'no_ready_orders');
     assert.strictEqual((await order(r.orderId)).restaurantStatus, 'ready', 'holat buzilmadi');
+    await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'test' }, OWNER);
+  });
+  await check('K3b R/F1: kuryer olmasdan (ready) «yetkazildi» qila olmaydi — kod, olish va pul yo\'q', async () => {
+    const r = await place(rid, CUSTOMER2, { deliveryPaymentMethod: 'cash' });
+    await call('restaurantAcceptOrder', { orderId: r.orderId }, OWNER);
+    await call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_B);
+    await call('restaurantMarkReady', { orderId: r.orderId }, OWNER);
+    const k0 = await pcBal(COURIER_B);
+    await expectCode(call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'delivered' }, COURIER_B), 'ORDER_NOT_PICKED');
+    await expectCode(call('courierCompleteRestaurantDelivery', { orderId: r.orderId, outcome: 'failed' }, COURIER_B), 'ORDER_INVALID_TRANSITION');
+    assert.strictEqual((await order(r.orderId)).restaurantStatus, 'ready', 'holat buzilmadi');
+    assert.strictEqual(await pcBal(COURIER_B), k0, 'kuryerga pul tushmadi');
     await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'test' }, OWNER);
   });
   await check('K4 olib ketish: ready bo\'lmasdan yo\'q; kod noto\'g\'ri → MISMATCH (urinish sanaladi); to\'g\'ri → picked', async () => {
@@ -948,6 +962,75 @@ async function main() {
     const back = await call('adminSetRestaurantDeliveryPrices', { ...TARIFF, regions: {}, reason: 'qaytarish' }, ADMIN);
     assert.strictEqual(back.version, 3);
     assert.strictEqual(((await db.collection('restaurant_delivery_tariffs').doc('v3').get()).data()).previous.base, 6000);
+  });
+  await check('AD1b D9: AVA ulushi/tungi koeffitsient — sozlama yo\'q = 2 %; admin 3 % → yangi buyurtma 3 %, eskisi 2 %; tarif saqlashda yo\'qolmaydi; null = standart', async () => {
+    const docRef = db.collection('settings').doc('restaurant_delivery');
+    const histCol = db.collection('restaurant_delivery_tariffs');
+    const setFee = (d, who = ADMIN) => call('adminSetRestaurantFeeSettings', d, who);
+    // 1. Sozlama yo'q → eski xatti-harakat (200 bps), buyurtmaga manba muhrlanadi.
+    const v0 = (await docRef.get()).data().version;
+    assert.strictEqual((await docRef.get()).data().avaFeeBps, undefined, 'seedda avaFeeBps yo\'q');
+    const o0 = await place(rid, CUSTOMER);
+    const od0 = await order(o0.orderId);
+    assert.deepStrictEqual(od0.avaFee, { rateBps: 200, basis: 60000, amount: 1200, version: 1, charged: false },
+      'sozlamasiz buyurtma hujjati AVVALGI shaklda (muhrsiz)');
+    // 2. Huquq va tekshiruv.
+    await expectCode(setFee({ avaFeeBps: 300 }, STRANGER), 'Admin role required', 'permission-denied');
+    for (const bad of [10001, -1, 2.5, '300', true]) {
+      await expectCode(setFee({ avaFeeBps: bad, reason: 'x' }), 'AVA_FEE_BPS_INVALID');
+    }
+    for (const bad of [0.5, 4, 'x']) await expectCode(setFee({ nightCoef: bad }), 'NIGHT_COEF_INVALID');
+    await expectCode(setFee({ reason: 'hech narsa' }), 'NOTHING_TO_CHANGE');
+    assert.strictEqual((await docRef.get()).data().version, v0, 'rad etilganlar versiyani oshirmadi');
+    // 3. 3 % + tun ×2: bitta yangi versiya, tarix, audit; narxlar tegilmaydi.
+    const before = (await docRef.get()).data();
+    const r = await setFee({ avaFeeBps: 300, nightCoef: 2, reason: 'ega qarori' });
+    assert.strictEqual(r.version, v0 + 1);
+    const after = (await docRef.get()).data();
+    assert.deepStrictEqual({ f: after.avaFeeBps, n: after.nightCoef, b: after.base, p: after.perKm, rf: after.roadFactor, mk: after.maxKm, v: after.version, by: after.updatedBy },
+      { f: 300, n: 2, b: before.base, p: before.perKm, rf: before.roadFactor, mk: before.maxKm, v: v0 + 1, by: ADMIN });
+    const h = (await histCol.doc(`v${v0 + 1}`).get()).data();
+    assert.strictEqual(h.avaFeeBps, 300);
+    assert.strictEqual(h.previous.version, v0);
+    assert.strictEqual(h.previous.avaFeeBps, null);
+    assert.strictEqual(h.previous.nightCoef, before.nightCoef);
+    assert.strictEqual(h.changedBy, ADMIN);
+    const audit = await db.collection('admin_audit').where('kind', '==', 'restaurant_fee_settings').get();
+    assert.strictEqual(audit.size, 1);
+    assert.strictEqual(audit.docs[0].data().to, String(v0 + 1));
+    assert.strictEqual(tariffMod.resolveDeliveryPrices(after, 'default').nightPermille, 2000, 'tungi koeffitsient hisobga kiradi');
+    // Qayta (bir xil qiymat) → yangi versiya ochilmaydi (idempotent).
+    const again = await setFee({ avaFeeBps: 300, nightCoef: 2, reason: 'takror' });
+    assert.deepStrictEqual({ v: again.version, u: again.unchanged }, { v: v0 + 1, u: true });
+    assert.strictEqual((await histCol.doc(`v${v0 + 2}`).get()).exists, false);
+    // 4. Yangi buyurtma 3 % (muhrlanadi), eskisi 2 % da qoladi; qabulda aynan muhrlangan summa.
+    const o1 = await place(rid, CUSTOMER);
+    const od1 = await order(o1.orderId);
+    assert.deepStrictEqual({ r: od1.avaFee.rateBps, a: od1.avaFee.amount, sv: od1.avaFee.settingsVersion, s: od1.avaFee.rateSource, v: od1.avaFee.version },
+      { r: 300, a: 1800, sv: v0 + 1, s: 'setting', v: 1 });
+    assert.strictEqual((await order(o0.orderId)).avaFee.rateBps, 200, 'eski buyurtma o\'zgarmadi');
+    assert.strictEqual((await order(o0.orderId)).avaFee.amount, 1200);
+    const bal = await pcBal(OWNER);
+    await call('restaurantAcceptOrder', { orderId: o1.orderId }, OWNER);
+    assert.strictEqual(await pcBal(OWNER), bal - 1800, 'qabulda muhrlangan 1 800 yechildi');
+    await call('restaurantRejectOrder', { orderId: o1.orderId, reason: 'sinov' }, OWNER);
+    assert.strictEqual(await pcBal(OWNER), bal, 'rad etishda aynan muhrlangan 1 800 qaytdi');
+    await call('customerCancelRestaurantOrder', { orderId: o0.orderId }, CUSTOMER);
+    // 5. Narx tarifini saqlash avaFeeBps'ni YO'QOTMAYDI (to'liq hujjat qayta yoziladi).
+    const back = await call('adminSetRestaurantDeliveryPrices', { ...TARIFF, nightCoef: 2, regions: {}, reason: 'narx' }, ADMIN);
+    assert.strictEqual(back.version, v0 + 2);
+    assert.strictEqual((await docRef.get()).data().avaFeeBps, 300, 'avaFeeBps saqlanib qoldi');
+    assert.strictEqual((await histCol.doc(`v${v0 + 2}`).get()).data().previous.avaFeeBps, 300);
+    // 6. null → standartga qaytish (maydon olib tashlanadi); tungi koeffitsient qaytariladi.
+    const reset = await setFee({ avaFeeBps: null, nightCoef: 1.5, reason: 'qaytarish' });
+    assert.strictEqual(reset.version, v0 + 3);
+    const fin = (await docRef.get()).data();
+    assert.strictEqual('avaFeeBps' in fin, false);
+    assert.strictEqual(fin.nightCoef, 1.5);
+    const o2 = await place(rid, CUSTOMER);
+    const od2 = await order(o2.orderId);
+    assert.deepStrictEqual(od2.avaFee, { rateBps: 200, basis: 60000, amount: 1200, version: 1, charged: false });
+    await call('customerCancelRestaurantOrder', { orderId: o2.orderId }, CUSTOMER);
   });
   await check('AD2 ega 2026-10-31: avto-tasdiq kaliti O\'CHIQ bo\'lsa ham yangi restoran DARHOL `approved`; eski admin callable ishlaydi (audit)', async () => {
     await expectCode(call('adminSetRestaurantAutoApprove', { enabled: false }, STRANGER), 'Admin role required', 'permission-denied');

@@ -229,6 +229,8 @@ function attachRestaurantOrders(exportsObj, deps) {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger,
     requireCallerRoles, notifyUserInApp, notifyCourierArrivedToCustomer, axios,
     fetchRoute: fetchRouteOverride, now: nowFn, courierPush,
+    // Mijoz tasdig'i (D2/D7): `customer_confirm.js`. Yo'q bo'lsa — eski oqim (gate yo'q).
+    customerConfirm,
   } = deps;
   // `courierAuth` index.js da bu attach'dan KEYIN e'lon qilinadi (const, TDZ):
   // shuning uchun yuklashda emas, chaqiruvda olinadi (deps getter).
@@ -413,9 +415,17 @@ function attachRestaurantOrders(exportsObj, deps) {
   }
 
   // ── Yetkazish narxi (D-REST-4) ─────────────────────────────────────────
-  async function quoteDelivery(r, { toLat, toLng, at: atOverride }) {
+  async function readTariffDoc() {
     const tariffSnap = await db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]).get();
-    const tariffData = tariffSnap.exists ? (tariffSnap.data() || {}) : {};
+    return tariffSnap.exists ? (tariffSnap.data() || {}) : {};
+  }
+
+  /**
+   * `preloaded` — chaqiruvchi hujjatni allaqachon o'qigan bo'lsa (ortiqcha o'qish yo'q; kuryer auditi D9).
+   * `at` — oldindan buyurtmada yetkazish vaqti (S4b, tungi koeffitsient shu vaqtga qarab).
+   */
+  async function quoteDelivery(r, { toLat, toLng, at: atOverride }, preloaded) {
+    const tariffData = preloaded || await readTariffDoc();
     const fromLat = Number(r.lat);
     const fromLng = Number(r.lng);
     if (!validLatLng(fromLat, fromLng)) throw fail('failed-precondition', 'RESTAURANT_LOCATION_MISSING');
@@ -809,6 +819,8 @@ function attachRestaurantOrders(exportsObj, deps) {
           : (cur.roadFactor != null ? cur.roadFactor : tariff.DEFAULT_ROAD_FACTOR),
         maxKm: global.maxKm != null ? global.maxKm : intOr(cur.maxKm, tariff.DEFAULT_MAX_KM, 1, 100),
         regions,
+        // D9: AVA ulushi (`adminSetRestaurantFeeSettings`) narx tarifini saqlashda YO'QOLMAYDI.
+        ...(cur.avaFeeBps != null ? { avaFeeBps: cur.avaFeeBps } : {}),
         version: next,
         reason,
         updatedAt: ts(),
@@ -826,6 +838,7 @@ function attachRestaurantOrders(exportsObj, deps) {
           nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
           roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
           maxKm: cur.maxKm == null ? null : cur.maxKm,
+          avaFeeBps: cur.avaFeeBps == null ? null : cur.avaFeeBps,
           regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
         },
         changedBy: actor,
@@ -839,6 +852,86 @@ function attachRestaurantOrders(exportsObj, deps) {
     });
     log('admin_tariff', { userId: actor, version, result: 'ok' });
     return { ok: true, version };
+  });
+
+  /**
+   * Admin — AVA ulushi (bps) va tungi koeffitsient (D9, ega qarori 2026-10-16).
+   * `adminSetRestaurantDeliveryPrices` bilan BITTA hujjat (`settings/restaurant_delivery`)
+   * va BITTA versiya zanjiri (`restaurant_delivery_tariffs/v{n}`): har haqiqiy
+   * o'zgarish yangi `version` + o'zgarmas tarix + audit. Narxlar (base, perKm,
+   * regions, ...) TEGILMAYDI. Mavjud buyurtmalar o'z `avaFee`/`deliveryTariffSnapshot`
+   * muhri bilan qoladi (9-qoida). Sozlama yo'q → standart 200 bps / ×1.5.
+   * data: { avaFeeBps?: butun 0..10000 | null (null = standartga qaytish),
+   *         nightCoef?: 1..3, reason }
+   * Bir xil qiymat qayta yuborilsa — versiya OCHILMAYDI (`unchanged: true`).
+   */
+  exportsObj.adminSetRestaurantFeeSettings = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const d = data || {};
+    const wantFee = Object.prototype.hasOwnProperty.call(d, 'avaFeeBps') && d.avaFeeBps !== undefined;
+    let feeBps = null; // null = standartga qaytarish
+    if (wantFee && d.avaFeeBps !== null) {
+      const v = d.avaFeeBps;
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < tariff.AVA_FEE_BPS_MIN || v > tariff.AVA_FEE_BPS_MAX) {
+        throw fail('invalid-argument', 'AVA_FEE_BPS_INVALID', { min: tariff.AVA_FEE_BPS_MIN, max: tariff.AVA_FEE_BPS_MAX });
+      }
+      feeBps = v;
+    }
+    let nightCoef = null;
+    if (d.nightCoef != null && d.nightCoef !== '') {
+      const c = Number(d.nightCoef);
+      if (!Number.isFinite(c) || c < tariff.NIGHT_COEF_MIN || c > tariff.NIGHT_COEF_MAX) {
+        throw fail('invalid-argument', 'NIGHT_COEF_INVALID', { min: tariff.NIGHT_COEF_MIN, max: tariff.NIGHT_COEF_MAX });
+      }
+      nightCoef = Math.round(c * 1000) / 1000;
+    }
+    if (!wantFee && nightCoef == null) throw fail('invalid-argument', 'NOTHING_TO_CHANGE');
+    const reason = str(d.reason, 300);
+    const ref = db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]);
+    const out = await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const cur = snap.exists ? (snap.data() || {}) : {};
+      const prevVersion = Number.isInteger(cur.version) ? cur.version : 0;
+      const curFee = cur.avaFeeBps == null ? null : cur.avaFeeBps;
+      const curNight = cur.nightCoef == null ? null : cur.nightCoef;
+      const nextFee = wantFee ? feeBps : curFee;
+      const nextNight = nightCoef != null ? nightCoef : curNight;
+      if (nextFee === curFee && nextNight === curNight) {
+        return { version: prevVersion, unchanged: true, avaFeeBps: curFee, nightCoef: curNight };
+      }
+      const next = prevVersion + 1;
+      const tariffDoc = { ...cur, version: next, reason, updatedAt: ts(), updatedBy: actor };
+      if (nextFee == null) delete tariffDoc.avaFeeBps; else tariffDoc.avaFeeBps = nextFee;
+      if (nextNight != null) tariffDoc.nightCoef = nextNight;
+      t.set(ref, tariffDoc);
+      t.create(db.collection(TARIFF_HISTORY).doc(`v${next}`), {
+        ...tariffDoc,
+        previous: {
+          version: prevVersion,
+          base: cur.base == null ? null : cur.base,
+          perKm: cur.perKm == null ? null : cur.perKm,
+          nightCoef: curNight,
+          nightStart: cur.nightStart == null ? null : cur.nightStart,
+          nightEnd: cur.nightEnd == null ? null : cur.nightEnd,
+          roadFactor: cur.roadFactor == null ? null : cur.roadFactor,
+          maxKm: cur.maxKm == null ? null : cur.maxKm,
+          avaFeeBps: curFee,
+          regions: cur.regions && typeof cur.regions === 'object' ? cur.regions : {},
+        },
+        changeKind: 'fee_settings',
+        changedBy: actor,
+        changedAt: ts(),
+      });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'restaurant_fee_settings', actor, target: TARIFF_DOC.join('/'),
+        from: String(prevVersion), to: String(next), reason,
+        detail: { avaFeeBps: nextFee, prevAvaFeeBps: curFee, nightCoef: nextNight, prevNightCoef: curNight },
+        at: ts(),
+      });
+      return { version: next, unchanged: false, avaFeeBps: nextFee, nightCoef: nextNight };
+    });
+    log('admin_fee_settings', { userId: actor, version: out.version, unchanged: out.unchanged, result: 'ok' });
+    return { ok: true, ...out };
   });
 
   /** Admin — `settings/app.restaurantAutoApprove`. ESKI admin panellar uchun qoldirildi: 2026-10-31 dan
@@ -1098,12 +1191,15 @@ function attachRestaurantOrders(exportsObj, deps) {
       const minOrder = intOr(r.minOrderAmount, 0, 0, 1000000000);
       if (itemsTotal < minOrder) throw fail('failed-precondition', 'MIN_ORDER_NOT_MET', { minOrderAmount: minOrder, itemsTotal });
 
+      // Tarif hujjati BIR marta: yetkazish narxi VA AVA ulushi (D9) shundan.
+      const tariffData = await readTariffDoc();
+
       // Yetkazish narxi.
       let deliveryFee = 0;
       let deliveryFeeSource = 'none';
       let deliveryQuote = {};
       if (deliveryMode === 'ava_courier') {
-        const q = await quoteDelivery(r, { toLat, toLng, at: scheduledFor || undefined });
+        const q = await quoteDelivery(r, { toLat, toLng, at: scheduledFor || undefined }, tariffData);
         deliveryFee = q.deliveryFee;
         deliveryFeeSource = q.deliveryFeeSource;
         deliveryQuote = {
@@ -1131,7 +1227,12 @@ function attachRestaurantOrders(exportsObj, deps) {
         }
       }
 
-      const avaFee = { ...tariff.computeAvaFee(itemsTotal), charged: false };
+      // D9: ulush foizi admin sozlamasidan (yo'q bo'lsa 2 %); buyurtmaga muhrlanadi —
+      // keyin sozlama o'zgarsa ham shu buyurtmaning ulushi o'zgarmaydi.
+      const avaFee = {
+        ...tariff.computeAvaFee(itemsTotal, tariff.resolveAvaFeeSettings(tariffData)),
+        charged: false,
+      };
       const code = pickupCode();
       // Oddiy buyurtma — 5 daqiqa; oldindan — 2 soat yoki bajarilishdan 30 daqiqa oldin (restoran_preorder.js).
       const deadline = scheduledFor
@@ -1584,28 +1685,41 @@ function attachRestaurantOrders(exportsObj, deps) {
   });
 
   /**
-   * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
-   * yoki `delivery_failed` (2 % restoranga qaytadi, mijozga strike).
-   * Idempotent: `wallet_idempotency/rest_complete_{orderId}`.
+   * Yakun tranzaksiyasi — YAGONA yadro (7-qoida): kuryerning `courierCompleteRestaurantDelivery`
+   * chaqiruvi ham, mijozning tasdig'i (`customerConfirmHandover`, modul `restaurant`) ham shuni
+   * ishlatadi.
+   *   `gate: true` (kuryer chaqiruvi) va mijoz tasdig'i shu mijoz uchun YOQILGAN bo'lsa,
+   *   'delivered' YAKUNLANMAYDI: faqat kutish belgisi yoziladi (holat va pul o'zgarmaydi).
+   *   `confirmStep` — mijoz tasdig'i: yadro bajariladi, belgi o'chadi, tasdiq izi yoziladi.
+   * Sozlama o'chiq bo'lsa yo'l AVVALGI kod bilan bir xil. Pul kalitlari o'zgarmagan
+   * (`rest_complete_{id}`, `restDelivery_{id}`), shuning uchun qayta urinish ikki marta to'lamaydi.
    */
-  exportsObj.courierCompleteRestaurantDelivery = functions.https.onCall(async (data, context) => {
-    const t0 = Date.now();
-    const uid = requirePhoneUid(context);
-    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
-    const orderId = str(data && data.orderId, 64);
-    const outcome = (data && data.outcome) === 'failed' ? 'failed' : 'delivered';
-    const failReason = FAIL_REASONS.includes(data && data.failReason) ? data.failReason : 'other';
-    const orderRef = db.collection(ORDERS).doc(orderId);
-    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
-    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
-    const out = await db.runTransaction(async (t) => {
+  async function completeInTx(t, {
+    orderRef, idemRef, orderId, courierId, outcome, failReason, gate, confirmStep,
+  }) {
       // READ fazasi.
       const [idemSnap, od] = await Promise.all([t.get(idemRef), getOrderInTx(t, orderRef)]);
       courierAuthOf().assertOrderActionable(od, courierId, 'courierCompleteRestaurantDelivery', orderId);
       if (idemSnap.exists) return { done: true, result: { ...(idemSnap.data().result || { ok: true }), idempotent: true } };
       const to = outcome === 'delivered' ? RS.delivered : RS.deliveryFailed;
       const from = assertTransition(od, to, orderId);
+      // `ready → delivered` jadvalda restoranning O'Z kuryeri uchun (restaurantMarkDelivered).
+      // AVA kuryeri esa olmasdan (kod, `picked`, `arrived` siz) yakunlay olmaydi:
+      // buyurtma `accepted`da marshrutga olinadi, `ready` bo'lgach kod aylanib o'tilardi.
+      if (from !== RS.picked && from !== RS.arrived) {
+        log('complete', { orderId, result: 'denied', errorCode: 'ORDER_NOT_PICKED', from, to });
+        throw fail('failed-precondition', 'ORDER_NOT_PICKED', { from, to });
+      }
       const customerUid = canonicalUid(String(od.userPhone || ''));
+      // Mijoz tasdig'i (D2/D7): yoqilgan bo'lsa kuryer yetkazishni YAKUNLAY OLMAYDI. 'failed' ochiq qoladi.
+      if (gate && to === RS.delivered && customerConfirm && await customerConfirm.isGated('restaurant', customerUid)) {
+        const rq = customerConfirm.requestInTx(t, orderRef, od, { step: 'received', courierId });
+        if (rq.created) {
+          addEvent(t, orderRef, { from, to: from, actor: 'courier', actorId: courierId, reason: 'customer_confirm_requested', meta: { step: 'received' } });
+        }
+        return { done: true, result: customerConfirm.awaitingResponse('received'), requested: { od, created: rq.created } };
+      }
+      const clearMarker = customerConfirm ? customerConfirm.clearPatch(od) : {};
       const fee = Number(od.deliveryFee) || 0;
       let walletPrep = null;
       let refundPrep = null;
@@ -1657,6 +1771,8 @@ function attachRestaurantOrders(exportsObj, deps) {
           deliveredAt: ts(), completedAt: ts(), courierId, deliveryPaymentMethod, deliveryFeeFallback,
           deliveryFeeWalletPaid: walletPaid, cashCollected, cashPaid: cashCollected,
           ...(buyout || od.paymentStatus === 'paid' ? { paymentStatus: 'paid' } : {}),
+          ...clearMarker,
+          ...(confirmStep ? customerConfirm.confirmedPatch(confirmStep, courierId) : {}),
         }));
         t.set(db.collection(CUSTOMER_STATS).doc(customerUid), { completedCount: inc(1), updatedAt: ts() }, { merge: true });
       } else {
@@ -1665,6 +1781,7 @@ function attachRestaurantOrders(exportsObj, deps) {
         t.update(orderRef, statusPatch(RS.deliveryFailed, {
           failedAt: ts(), courierId, failReason, 'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null,
           rejectReason: `delivery_failed:${failReason}`,
+          ...clearMarker,
         }));
         if (strike) {
           // Mijoz eshikda olmadi — strike; ikkinchisidan faqat oldindan
@@ -1679,9 +1796,35 @@ function attachRestaurantOrders(exportsObj, deps) {
       }
       const result = { ok: true, orderId, outcome, deliveryFee: fee, walletPaid, cashCollected, refundAmount: refund.amount, deliveryPaymentMethod };
       t.set(idemRef, { type: 'courierCompleteRestaurantDelivery', result, createdAt: ts() });
-      addEvent(t, orderRef, { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
+      addEvent(t, orderRef, confirmStep
+        ? { from, to, actor: 'customer', actorId: customerUid, reason: 'customer_confirmed', meta: { walletPaid, cashCollected, refundAmount: refund.amount, step: confirmStep, courierId } }
+        : { from, to, actor: 'courier', actorId: courierId, reason: to === RS.deliveryFailed ? failReason : '', meta: { walletPaid, cashCollected, refundAmount: refund.amount } });
       return { done: false, result, customerUid, restaurantId: od.restaurantId };
-    });
+  }
+
+  /**
+   * Yakun: `delivered` (yetkazish puli naqd yoki mijoz hamyoni → kuryer hamyoni)
+   * yoki `delivery_failed` (2 % restoranga qaytadi, mijozga strike).
+   * Idempotent: `wallet_idempotency/rest_complete_{orderId}`.
+   * Mijoz tasdig'i yoqilgan bo'lsa 'delivered' kuryer chaqiruvida yakunlanmaydi:
+   * `{ ok, awaitingCustomer: true, step: 'received' }` qaytadi (yadro: `completeInTx`).
+   */
+  exportsObj.courierCompleteRestaurantDelivery = functions.https.onCall(async (data, context) => {
+    const t0 = Date.now();
+    const uid = requirePhoneUid(context);
+    const courierId = await courierAuthOf().resolve(uid, COURIER_AUTH_MODES.finish);
+    const orderId = str(data && data.orderId, 64);
+    const outcome = (data && data.outcome) === 'failed' ? 'failed' : 'delivered';
+    const failReason = FAIL_REASONS.includes(data && data.failReason) ? data.failReason : 'other';
+    const orderRef = db.collection(ORDERS).doc(orderId);
+    const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+    await courierAuthOf().assertOrderOnActiveRoute(courierId, orderId);
+    const out = await db.runTransaction((t) => completeInTx(t, {
+      orderRef, idemRef, orderId, courierId, outcome, failReason, gate: true,
+    }));
+    if (out.requested) {
+      await customerConfirm.afterRequest('restaurant', orderId, 'received', out.requested.od, {}, out.requested.created);
+    }
     if (out.done) return out.result;
     log('complete', { orderId, restaurantId: out.restaurantId, userId: courierId, result: outcome, walletPaid: out.result.walletPaid, durationMs: Date.now() - t0 });
     if (outcome === 'delivered') {
@@ -1691,6 +1834,32 @@ function attachRestaurantOrders(exportsObj, deps) {
     }
     return out.result;
   });
+
+  // Mijoz tasdig'i yadrosi (D2/D7): `customerConfirmHandover({module:'restaurant', step:'received'})`
+  // kuryer chaqiruvi bilan AYNAN bir xil `completeInTx` ni ishlatadi (saqlangan courierId bilan).
+  if (customerConfirm) {
+    customerConfirm.registerHandler('restaurant', {
+      collection: ORDERS,
+      phoneField: 'userPhone',
+      customerPhoneOf: (od) => od.userPhone,
+      statusOf: (od) => String(od.restaurantStatus || ''),
+      describe: (od, marker) => (marker.step === 'received' && [RS.picked, RS.arrived].includes(od.restaurantStatus)
+        ? { key: 'confirm_restaurant_received', params: {} } : null),
+      confirm: async (t, { ref, id, od, marker }) => {
+        const orderId = id;
+        const idemRef = db.collection(IDEMPOTENCY).doc(`rest_complete_${orderId}`);
+        const out = await completeInTx(t, {
+          orderRef: ref, idemRef, orderId, courierId: canonicalUid(String(marker.courierId || '')),
+          outcome: 'delivered', failReason: 'other', gate: false, confirmStep: 'received',
+        });
+        if (out.done) {
+          // Pul allaqachon yopilgan (idempotentlik hujjati bor), belgi esa qolib ketgan: tozalaymiz.
+          t.update(ref, { ...customerConfirm.clearPatch(od), ...customerConfirm.confirmedPatch('received', marker.courierId) });
+        }
+        return { status: RS.delivered };
+      },
+    });
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   // JADVAL: qabul qilinmagan buyurtmalar (taymaut) — har daqiqa

@@ -234,6 +234,51 @@ const listing = (o = {}) => ({ isActive: true, seats: 2, seatCapacity: 4, schedu
     assert.strictEqual((await db.collection('schedules').doc('S1').get()).data().startTime, '16:00');
   });
 
+  // ── Audit M6: oldindan saralash (tranzaksiya faqat oynaga yaqin e'lonlar uchun) ──
+  // Daqiqada bir marta o'qilgan snapshot'dagi `hour/minute`dan jo'nash vaqti hisoblanadi
+  // (deriveDepartureMs); oynadan (<=10 daq, +5 daq zaxira) tashqaridagi e'lon uchun tranzaksiya
+  // OCHILMAYDI. `minute` maydoni yo'q (eski e'lon) bo'lsa saralanmaydi - qaror tranzaksiyada.
+  await reset();
+  await db.collection('intercity_drivers').doc(D).update({ minute: 20 });
+  await check('M6: jo\'nashga 60 daq bor -> tranzaksiya ochilmaydi (not_yet), hech narsa o\'zgarmaydi', async () => {
+    const st = await run(DEP - 60 * MIN);
+    assert.strictEqual(st.checked, 1); assert.strictEqual(st.opened, 0);
+    assert.strictEqual(st.skipped.not_yet, 1); assert.strictEqual(st.shifted, 0);
+    assert.strictEqual((await db.collection('taxi_trips').doc('T1').get()).data().rescheduleCount, 0);
+  });
+  await check('M6: jo\'nash o\'tib ketgan (30 daq) -> tranzaksiya ochilmaydi (departed)', async () => {
+    const st = await run(DEP + 30 * MIN);
+    assert.strictEqual(st.opened, 0); assert.strictEqual(st.skipped.departed, 1);
+  });
+  await check('M6: zaxira oynasi (jo\'nashga 12 daq) -> tranzaksiya ochiladi, qaror o\'sha yerda (not_yet), surilmaydi', async () => {
+    const st = await run(DEP - 12 * MIN);
+    assert.strictEqual(st.opened, 1); assert.strictEqual(st.shifted, 0); assert.strictEqual(st.skipped.not_yet, 1);
+  });
+  await check('M6: aynan 10 daq qoldi -> tranzaksiya ochiladi va SURILADI (xulq o\'zgarmagan)', async () => {
+    const st = await run(DEP - 10 * MIN);
+    assert.strictEqual(st.opened, 1); assert.strictEqual(st.shifted, 1);
+    assert.strictEqual((await db.collection('taxi_trips').doc('T1').get()).data().rescheduleCount, 1);
+    assert.strictEqual((await db.collection('intercity_drivers').doc(D).get()).data().hour, 16);
+  });
+  await reset();
+  await check('M6: `minute` yo\'q (eski e\'lon) -> saralanmaydi, tranzaksiya ochiladi (reys vaqti bo\'yicha qaror)', async () => {
+    const st = await run(DEP - 60 * MIN);
+    assert.strictEqual(st.opened, 1); assert.strictEqual(st.skipped.not_yet, 1);
+  });
+  await reset();
+  await db.collection('intercity_drivers').doc(D).update({ minute: 20 });
+  await check('M6: ko\'p e\'lon - faqat oynadagisi tranzaksiya ochadi', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await db.collection('intercity_drivers').doc(`99890111009${i}`).set({
+        isActive: true, seats: 2, seatCapacity: 4, scheduleDate: '2026-10-15', hour: 15, minute: 40,
+        phoneDigits: `99890111009${i}`, price: 100000,
+      });
+    }
+    const st = await run(DEP - 8 * MIN); // 14:12 Toshkent: D (14:20) oynada, qolganlari 15:40 - 88 daq
+    assert.strictEqual(st.checked, 6); assert.strictEqual(st.opened, 1);
+    assert.strictEqual(st.shifted, 1); assert.strictEqual(st.skipped.not_yet, 5);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
   process.exit(failed ? 1 : 0);

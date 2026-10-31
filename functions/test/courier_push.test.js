@@ -135,6 +135,16 @@ async function main() {
   await presence(C12, { lat: 41.85, lng: 60.39 });
   await expectEq('onlineCouriers: 9 va 12 xonali — bitta yozuv', (await push.onlineCouriers()).length, 1);
 
+  // ── C-5: soxta presence — capability tekshiruvi ──
+  await reset();
+  await presence(A, { lat: 41.84, lng: 60.39 });
+  await presence(B, { lat: 41.85, lng: 60.39 }); // kuryer bo'lmagan, soxta presence
+  const guarded = createCourierPush({ db, canonicalUid, now: () => NOW, isWorking: async (id) => id === A });
+  await expectEq('C-5: capability yo\'q (soxta presence) onlayn ro\'yxatga TUSHMAYDI',
+    (await guarded.onlineCouriers()).map((c) => c.id), [A]);
+  const throwing = createCourierPush({ db, canonicalUid, now: () => NOW, isWorking: async () => { throw new Error('x'); } });
+  await expectEq('C-5: tekshiruv xato bersa — ishonilmaydi (yopiq tomonga)', await throwing.onlineCouriers(), []);
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} courier_push checks passed.`);
   if (failed.length) process.exitCode = 1;

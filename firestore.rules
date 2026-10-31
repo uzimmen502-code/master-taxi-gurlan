@@ -1919,8 +1919,11 @@ service cloud.firestore {
       // ким ўқий, ҳар қандай админ роли (dispatcher ҳам) тўғридан-тўғри
       // ёзиб депозитни бошқа картага йўналтира оларди. Илова бу ҳужжатни
       // умуман ўқимайди. Тест: functions/test/admin_panel_audit_rules.test.js
+      // courier_task_payout (курьер вазифа ҳақи фоизлари — ИЧКИ харажат, 14-банд)
+      // — клиентга на ўқиш, на ёзиш: фақат CF `adminGet/SetCourierTaskPayoutSettings`.
       allow read: if docId != 'courier' && docId != 'tv_social'
-          && docId != 'wallet_bot';
+          && docId != 'wallet_bot'
+          && docId != 'courier_task_payout';
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
       // `prices` ичидаги маҳаллий такси тарифи — фақат CF
       // `adminSetLocalTaxiPrices` (версия + тарих, эга қарори 2026-10-07);
@@ -1938,6 +1941,7 @@ service cloud.firestore {
           && docId != 'restaurant_seasons'
           && docId != 'restaurant_ramadan'
           && docId != 'all_orders_stuck'
+          && docId != 'courier_task_payout'
           && (docId != 'anomaly_settings' || isSuperAdmin())
           && (
             docId != 'prices'
@@ -2275,11 +2279,47 @@ service cloud.firestore {
     // INTERCITY / LOCAL TAXI / JOB
     // ══════════════════════════════════════
     // E'lon yoqilayotgan bo'lsa (`isActive: true`) `billingTripId` shart.
+    //
+    // AUDIT H1 (2026-10): avval faqat `billingTripId` BO'SH EMASLIGI tekshirilardi.
+    // `endTripListing` (komissiya to'liq qaytgan, reys `cancelled`) dan keyin haydovchi
+    // eski `billingTripId` bilan `isActive: true` qilib komissiyasiz e'lon qila olardi.
+    // Endi e'lon YOQILISHI (nofaoldan faolga) yoki faol e'londa `billingTripId`NI
+    // O'ZGARTIRISH uchun ko'rsatilgan reys HAQIQATAN to'langan bo'lishi shart:
+    // `taxi_trips/{id}` mavjud, `status == 'published'` va `driverUid` = chaqiruvchi.
+    // Ilovaning boshqa yozuvlari (o'rin, narx, ko'chirish, tripStatus, isOnPanel,
+    // autoAccept, isActive:false) cheklanmaydi. Tekshiruv faqat yoqish/reys almashtirishda
+    // bitta `get` sarflaydi.
+    // Tarixiy teshik (QOLDI, 1 kunlik e'lon): faol e'lon, reys keyin bekor qilinsa ham
+    // tahrirlanaveradi - qoida faqat YANGIDAN yoqishni yopadi.
+    function intercityBillingTripOk(tripId) {
+      return tripId is string
+          && tripId != ''
+          && tripId.matches('^[A-Za-z0-9_-]+$')
+          && exists(/databases/$(database)/documents/taxi_trips/$(tripId))
+          && get(/databases/$(database)/documents/taxi_trips/$(tripId)).data.get('status', '') == 'published'
+          && isOwner(get(/databases/$(database)/documents/taxi_trips/$(tripId)).data.get('driverUid', ''));
+    }
+
+    // Hujjat YARATILAYOTGANDA.
     function intercityPublishGateOk() {
+      return request.resource.data.get('isActive', false) != true
+          || intercityBillingTripOk(request.resource.data.get('billingTripId', ''));
+    }
+
+    // Hujjat YANGILANAYOTGANDA (`resource` = hozirgi, `request.resource` = natija).
+    function intercityPublishGateUpdateOk() {
       return request.resource.data.get('isActive', false) != true
           || (
             request.resource.data.get('billingTripId', '') is string
             && request.resource.data.get('billingTripId', '') != ''
+            && (
+              (
+                resource.data.get('isActive', false) == true
+                && request.resource.data.get('billingTripId', '')
+                    == resource.data.get('billingTripId', '')
+              )
+              || intercityBillingTripOk(request.resource.data.get('billingTripId', ''))
+            )
           );
     }
 
@@ -2316,7 +2356,7 @@ service cloud.firestore {
       allow create: if isAdmin()
           || (isOwner(id) && intercityPublishGateOk());
       allow update: if isAdmin()
-          || (isOwner(id) && intercityPublishGateOk())
+          || (isOwner(id) && intercityPublishGateUpdateOk())
           || intercityDriverEntertainmentPatch();
       allow delete: if false;
 
@@ -3585,6 +3625,23 @@ service cloud.firestore {
                // Курьер рейсни ўзгача бировга ўтказа олмайди.
                && request.resource.data.get('courierId', '')
                   == resource.data.get('courierId', '')
+               // C5/F11: status faqat ilova yozadigan o'tishlar bilan:
+               //   o'zgarmaydi | ready -> active (startRoute) |
+               //   completed — FAQAT reys tugaganda (currentIndex >=
+               //   orders.size(); ilova avval advanceIndex, keyin
+               //   completeRoute yozadi). cancelled/ready/active'ga
+               //   qaytarish kuryerga yo'q: yetkazilmagan buyurtmali reys
+               //   completed bo'lsa assertOrderOnActiveRoute buyurtmani
+               //   rad etadi va custody uziladi.
+               && (
+                    request.resource.data.get('status', '')
+                      == resource.data.get('status', '')
+                    || (resource.data.get('status', '') == 'ready'
+                        && request.resource.data.get('status', '') == 'active')
+                    || (request.resource.data.get('status', '') == 'completed'
+                        && request.resource.data.currentIndex
+                           >= request.resource.data.orders.size())
+                  )
              );
       allow delete: if false;
     }
@@ -4333,7 +4390,9 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.providerId)
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['status', 'seenAt'])
-                    && request.resource.data.status in ['new', 'seen', 'skipped'];
+                    && request.resource.data.status in ['new', 'seen', 'skipped']
+                    // S2/L9: accepted/in_progress/... matchni pasaytirib bo'lmaydi.
+                    && resource.data.get('status', '') in ['new', 'seen', 'skipped'];
     }
 
     // ══════════════════════════════════════

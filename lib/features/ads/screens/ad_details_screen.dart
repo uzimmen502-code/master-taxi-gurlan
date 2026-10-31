@@ -17,6 +17,7 @@ import '../repositories/ads_repository.dart';
 import '../widgets/ad_image_slider.dart';
 import 'ad_details_route.dart';
 import 'cheap_products_screen.dart';
+import 'seller_ads_screen.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 /// Ном ичидаги биринчи маъноли сўз (≥3 ҳарф, кичик ҳарфда) — «Ўхшаш
@@ -371,6 +372,19 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   ],
                   // Сотувчи ўзи қўшган видеоролик (бор бўлсагина кўринади).
                   LinkedVideoButton(linkId: ad.id, ownerPhone: ad.ownerId),
+                  // «Сотувчининг барча маҳсулотлари» (OLX каби, эга 2026-11-01).
+                  if (phoneDigits(ad.ownerId).length >= 9) ...[
+                    const SizedBox(height: 12),
+                    _SellerAdsCard(
+                      sellerName: ad.sellerName,
+                      onOpen: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => SellerAdsScreen(ownerId: ad.ownerId, sellerName: ad.sellerName),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
                     Row(
@@ -482,6 +496,65 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Сотувчи номи + «Сотувчининг барча маҳсулотлари →» (Улгуржи [WholesaleSellerCard] билан бир хил маъно).
+class _SellerAdsCard extends StatelessWidget {
+  const _SellerAdsCard({required this.sellerName, required this.onOpen});
+
+  final String sellerName;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = sellerName.trim();
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onOpen,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.storefront_outlined, color: AppColors.primaryText),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (name.isNotEmpty)
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppText.bodyMedium),
+                      ),
+                    Text(
+                      context.tr('shop_item_seller_all'),
+                      style: const TextStyle(
+                        color: AppColors.primaryText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: AppText.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.primaryText),
+            ],
+          ),
+        ),
       ),
     );
   }

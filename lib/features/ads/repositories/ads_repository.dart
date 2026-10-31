@@ -282,6 +282,35 @@ class AdsRepository {
     });
   }
 
+  /// Сотувчининг БОШҚАЛАРГА кўринадиган (фаол) эълонлари — «Сотувчининг барча
+  /// маҳсулотлари» экрани учун (OLX каби, эга 2026-11-01).
+  ///
+  /// Сўров шакли [getMyAds] билан бир хил (`type` + `ownerId` whereIn +
+  /// `status == active`): янги индекс керак эмас; `firestore.rules` `ads`
+  /// list шохи `status == 'active'` ни сўров фильтридан исботлайди.
+  /// Тартиб — клиентда, янгилари олдин.
+  Stream<List<AdModel>> watchSellerActiveAds(String ownerId, {int limit = feedLimit}) {
+    final aliases = _ownerAliases(ownerId);
+    if (aliases.isEmpty) return Stream.value(const []);
+    return _cheapQuery()
+        .where('ownerId', whereIn: aliases)
+        .where('status', isEqualTo: 'active')
+        .limit(limit)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs.map(AdModel.fromFirestore).toList();
+      list.sort((a, b) {
+        final da = b.publishedAt ?? b.createdAt;
+        final db = a.publishedAt ?? a.createdAt;
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return da.compareTo(db);
+      });
+      return list;
+    });
+  }
+
   /// Эгада ЭНГ КАМИДА битта эълон борми (ҳар қандай ҳолатда: фаол, текширувда,
   /// яширин). «＋» менюсида «Менинг дўконим» қатори шу билан танланади.
   /// Сўров шакли [getMyAds] билан бир хил (`type` + `ownerId` whereIn), фақат

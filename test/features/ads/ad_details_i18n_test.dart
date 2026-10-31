@@ -26,6 +26,7 @@ void main() {
     'ad_swipe_next',
     'cheap_products_empty',
     'cheap_products_load_error',
+    'ad_seller_ads_empty',
   ];
 
   Map<String, dynamic> load(String lang) => jsonDecode(

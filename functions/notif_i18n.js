@@ -111,7 +111,7 @@ const MESSAGES = {
   courier_delivery_failed_final: {
     uz_Cyrl: { title: 'Буюртма ёпилди', body: '«Етказиб бўлмади» тасдиқланди. Кейинги буюртмага ўтишингиз мумкин.' },
     uz_Latn: { title: 'Buyurtma yopildi', body: '«Yetkazib bo\'lmadi» tasdiqlandi. Keyingi buyurtmaga o\'tishingiz mumkin.' },
-    ru: { title: 'Заказ закрыт', body: 'Недоставка подтверждена. Можно переходить к следующему заказу.' },
+    ru: { title: 'Заказ закрыт', body: 'Отметка «не удалось доставить» подтверждена. Можно переходить к следующему заказу.' },
   },
   customer_delivery_failed_final: {
     uz_Cyrl: { title: 'Буюртма етказилмади', body: 'Курьер буюртмани етказа олмади ва буюртма ёпилди.' },
@@ -119,9 +119,9 @@ const MESSAGES = {
     ru: { title: 'Заказ не доставлен', body: 'Курьер не смог доставить заказ, заказ закрыт.' },
   },
   courier_delivery_failed_continue: {
-    uz_Cyrl: { title: 'Буюртмани етказинг', body: '«Етказиб бўлмади» қабул қилинмади: буюртмани мижозга етказишни давом эттиринг.' },
-    uz_Latn: { title: 'Buyurtmani yetkazing', body: '«Yetkazib bo\'lmadi» qabul qilinmadi: buyurtmani mijozga yetkazishni davom ettiring.' },
-    ru: { title: 'Доставьте заказ', body: 'Недоставка не принята: продолжайте доставку заказа клиенту.' },
+    uz_Cyrl: { title: 'Буюртмани етказинг', body: '«Етказиб бўлмади» қабул қилинмади: етказишни давом эттиринг.' },
+    uz_Latn: { title: 'Buyurtmani yetkazing', body: '«Yetkazib bo\'lmadi» qabul qilinmadi: yetkazishni davom ettiring.' },
+    ru: { title: 'Продолжите доставку', body: 'Отметка «не удалось доставить» не принята: продолжайте доставку.' },
   },
   customer_delivery_failed_continue: {
     uz_Cyrl: { title: 'Буюртма етказилади', body: 'Курьер буюртмангизни етказишни давом эттиради.' },
@@ -131,9 +131,9 @@ const MESSAGES = {
   // ── «Етказилмади» — нон/бозор, гилам, сут, йиғиш (эга, 2026-10-31; delivery_failed.js).
   // Матнлар PROPOSED — эга тасдиқлайди. Курьерга якун/давом — юқоридаги умумий калитлар.
   confirm_order_delivery_failed: {
-    uz_Cyrl: { title: 'Курьер буюртмани етказа олмадими?', body: 'Курьер «етказиб бўлмади» деб белгилади. Буюртмани олмаган бўлсангиз, тасдиқланг — ҳамёндан тўланган пул қайтади. Олмоқчи бўлсангиз, «Олмоқчиман» тугмасини босинг.' },
-    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bo\'lmadi» deb belgiladi. Buyurtmani olmagan bo\'lsangiz, tasdiqlang — hamyondan to\'langan pul qaytadi. Olmoqchi bo\'lsangiz, «Olmoqchiman» tugmasini bosing.' },
-    ru: { title: 'Курьер не смог доставить заказ?', body: 'Курьер отметил, что не смог доставить заказ. Если вы не получили заказ, подтвердите — оплата с кошелька вернётся. Если хотите получить его, нажмите «Хочу получить».' },
+    uz_Cyrl: { title: 'Курьер буюртмани етказа олмадими?', body: 'Курьер «етказиб бўлмади» деб белгилади. Буюртмани олмаган бўлсангиз, тасдиқланг — ҳамёндан тўлаган бўлсангиз, пул қайтади. Олмоқчи бўлсангиз, «Олмоқчиман» тугмасини босинг.' },
+    uz_Latn: { title: 'Kuryer buyurtmani yetkaza olmadimi?', body: 'Kuryer «yetkazib bo\'lmadi» deb belgiladi. Buyurtmani olmagan bo\'lsangiz, tasdiqlang — hamyondan to\'lagan bo\'lsangiz, pul qaytadi. Olmoqchi bo\'lsangiz, «Olmoqchiman» tugmasini bosing.' },
+    ru: { title: 'Курьер не смог доставить заказ?', body: 'Курьер отметил, что не смог доставить заказ. Если вы его не получили, подтвердите — оплата с кошелька, если была, вернётся. Если хотите получить заказ, нажмите «Хочу получить».' },
   },
   confirm_carpet_pickup_failed: {
     uz_Cyrl: { title: 'Курьер гиламни ола олмадими?', body: 'Курьер «гиламни олиб бўлмади» деб белгилади. Тўғри бўлса, тасдиқланг — гилам кейинроқ олиб кетилади. Ҳозир бермоқчи бўлсангиз, «Ҳозир бераман» тугмасини босинг.' },
@@ -156,9 +156,9 @@ const MESSAGES = {
     ru: { title: 'Курьер не смог забрать продукцию?', body: 'Курьер отметил, что сбор не состоялся. Если это так, подтвердите — администратор назначит новое время. Если хотите передать продукцию сейчас, нажмите «Передам сейчас».' },
   },
   delivery_failed_decide: {
-    uz_Cyrl: { title: 'Курьер вазифаси бўйича қарор керак', body: 'Курьер «етказиб бўлмади» деди, мижоз жавоб бермади. «Етказилмади» ёки «Давом этсин» — ҳал қилинг.' },
-    uz_Latn: { title: 'Kuryer vazifasi bo\'yicha qaror kerak', body: 'Kuryer «yetkazib bo\'lmadi» dedi, mijoz javob bermadi. «Yetkazilmadi» yoki «Davom etsin» — hal qiling.' },
-    ru: { title: 'Нужно решение по заданию курьера', body: 'Курьер сообщил, что не смог доставить, а клиент не ответил. Решите: «Не доставлено» или «Продолжить».' },
+    uz_Cyrl: { title: 'Курьер вазифаси бўйича қарор керак', body: 'Курьер вазифани бажара олмаганини белгилади, мижоз жавоб бермади. «Етказилмади» ёки «Давом этсин» — ҳал қилинг.' },
+    uz_Latn: { title: 'Kuryer vazifasi bo\'yicha qaror kerak', body: 'Kuryer vazifani bajara olmaganini belgiladi, mijoz javob bermadi. «Yetkazilmadi» yoki «Davom etsin» — hal qiling.' },
+    ru: { title: 'Нужно решение по заданию курьера', body: 'Курьер отметил, что не смог выполнить задание, а клиент не ответил. Решите: «Не доставлено» или «Продолжить».' },
   },
   customer_order_delivery_failed_refund: {
     uz_Cyrl: { title: 'Буюртма етказилмади — пул қайтарилди', body: 'Буюртма бекор қилинди. Ҳамёндан тўланган {amount} сўм ҳисобингизга қайтарилди.' },
@@ -166,9 +166,9 @@ const MESSAGES = {
     ru: { title: 'Заказ не доставлен — деньги возвращены', body: 'Заказ отменён. Оплаченные с кошелька {amount} сум возвращены на ваш счёт.' },
   },
   customer_pickup_failed_final: {
-    uz_Cyrl: { title: 'Курьер олиб кета олмади', body: 'Буюртмангиз қайта навбатга қўйилди — бошқа курьер келади.' },
-    uz_Latn: { title: 'Kuryer olib keta olmadi', body: 'Buyurtmangiz qayta navbatga qo\'yildi — boshqa kuryer keladi.' },
-    ru: { title: 'Курьер не смог забрать', body: 'Ваш заказ снова поставлен в очередь — приедет другой курьер.' },
+    uz_Cyrl: { title: 'Курьер олиб кета олмади', body: 'Буюртмангиз қайта навбатга қўйилди — курьер қайта келади.' },
+    uz_Latn: { title: 'Kuryer olib keta olmadi', body: 'Buyurtmangiz qayta navbatga qo\'yildi — kuryer qayta keladi.' },
+    ru: { title: 'Курьер не смог забрать', body: 'Ваш заказ снова поставлен в очередь — курьер приедет ещё раз.' },
   },
   customer_carpet_return_failed_final: {
     uz_Cyrl: { title: 'Гилам топширилмади', body: 'Гиламингиз цехга қайтарилди ва қайта етказилади.' },

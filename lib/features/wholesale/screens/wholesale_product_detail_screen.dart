@@ -21,6 +21,7 @@ import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
 import '../widgets/wholesale_pack_chips.dart';
 import '../widgets/wholesale_product_strip.dart';
+import '../widgets/wholesale_seller_card.dart';
 import '../widgets/wholesale_tier_picker.dart';
 
 /// Маҳсулот тафсилоти — қўнғироқ ҳамиша бор; буюртма дарвозаси очиқ
@@ -476,32 +477,7 @@ class _WholesaleProductDetailViewState
                     ),
                   ],
                   const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: PdDark.surface,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.storefront_outlined,
-                          size: 18, color: PdDark.brand),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          p.sellerCompanyName.isEmpty
-                              ? context.tr('wholesale_seller_label')
-                              : p.sellerCompanyName,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            height: 1.2,
-                            fontWeight: FontWeight.w600,
-                            color: PdDark.ink,
-                          ),
-                        ),
-                      ),
-                    ]),
-                  ),
+                  WholesaleSellerCard(product: p),
                   if (_similar.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     WholesaleProductStrip(

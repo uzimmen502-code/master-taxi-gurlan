@@ -240,6 +240,42 @@ class WholesaleProductsRepository {
     });
   }
 
+  /// Сотувчининг ОММАВИЙ (фаол) маҳсулотлари — харидор кўради.
+  ///
+  /// [watchBySeller] дан фарқи: `status == active` сўровда қайд қилинади.
+  /// `wholesale_products` қоидаси фақат фаол ёки ўз ҳужжатини ўқишга
+  /// рухсат беради, шунинг учун бегона сотувчининг рўйхат сўрови шу
+  /// шартсиз рад этилади. Тартиб клиентда (янгиси биринчи): `orderBy`
+  /// қўшилса таркибий индекс керак бўлади.
+  Stream<List<WholesaleProduct>> watchActiveBySeller(
+    String sellerId, {
+    String? market,
+  }) {
+    final id = canonicalPhoneId(sellerId);
+    if (id.isEmpty) return Stream.value(const []);
+    return _col
+        .where('sellerId', isEqualTo: id)
+        .where('status', isEqualTo: WholesaleProduct.statusActive)
+        .snapshots()
+        .map((snap) => sortActiveSellerProducts(
+              snap.docs.map(WholesaleProduct.fromFirestore),
+              market: market,
+            ));
+  }
+
+  /// [watchActiveBySeller] тартиби: бозор филтри + `publishedAt` камаювчи.
+  static List<WholesaleProduct> sortActiveSellerProducts(
+    Iterable<WholesaleProduct> all, {
+    String? market,
+  }) {
+    final list = market == null ? all.toList() : filterByMarket(all, market);
+    int ms(WholesaleProduct p) =>
+        (p.publishedAt ?? p.updatedAt ?? p.createdAt)?.millisecondsSinceEpoch ??
+        0;
+    list.sort((a, b) => ms(b).compareTo(ms(a)));
+    return list;
+  }
+
   /// Admin рўйхати — барча маҳсулотлар, энг янгиси биринчи. Саҳифалар
   /// (500 та + «Яна юклаш») — экранда, `AdminPagedList` орқали.
   ///

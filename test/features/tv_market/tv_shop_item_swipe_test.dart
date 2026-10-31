@@ -39,18 +39,16 @@ void main() {
   Future<TvShopItem?> latest(String id) async =>
       items.firstWhere((i) => i.id == id);
 
-  testWidgets('«›» тугмаси кейинги маҳсулотни очади, ҳисоблагич 2 / 3',
+  testWidgets('«‹ N / M ›» тугмаси ЙЎҚ (эга, 2026-11-01: матн устига тушарди)',
       (tester) async {
     await _pump(
       tester,
       TvShopItemSwipeScreen(items: items, initialIndex: 0, loadLatest: latest),
     );
-    expect(find.text('1 / 3'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('ad-swipe-next')));
-    await tester.pumpAndSettle();
-    expect(find.text('2 / 3'), findsOneWidget);
-    expect(find.widgetWithText(AppBar, 'Кўк кўйлак'), findsOneWidget);
+    expect(find.text('1 / 3'), findsNothing);
+    expect(find.byKey(const ValueKey('ad-swipe-next')), findsNothing);
+    expect(find.byKey(const ValueKey('ad-swipe-prev')), findsNothing);
+    expect(find.widgetWithText(AppBar, 'Қизил кўйлак'), findsOneWidget);
   });
 
   testWidgets('саҳифа охирида юқорига суриш — кейинги маҳсулот (ўхшашлар билан)',
@@ -70,12 +68,12 @@ void main() {
     // 1-свайп: охиригача айлантиради (ўхшашлар саҳифани узайтиради).
     await tester.drag(list, const Offset(0, -2000));
     await tester.pumpAndSettle();
-    expect(find.text('1 / 3'), findsOneWidget,
+    expect(find.widgetWithText(AppBar, 'Қизил кўйлак'), findsOneWidget,
         reason: 'ўртадан бошланган свайп ўтказмайди — фақат охиригача');
     // 2-свайп охиридан бошланади — кейингига ўтади.
     await tester.drag(list, const Offset(0, -300));
     await tester.pumpAndSettle();
-    expect(find.text('2 / 3'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Кўк кўйлак'), findsOneWidget);
   });
 
   testWidgets('чўзилиш (stretch) эффекти йўқ — алоҳида экранда ҳам',

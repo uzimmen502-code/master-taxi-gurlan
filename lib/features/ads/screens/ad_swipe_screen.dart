@@ -50,21 +50,6 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
     super.dispose();
   }
 
-  /// Свайпга муқобил тугма (WCAG 2.5.7): олдинги/кейинги эълонга ўтиш.
-  void _step(int delta) {
-    final target = _index + delta;
-    if (target < 0 || target >= widget.ads.length) return;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _pager.jumpToPage(target);
-      return;
-    }
-    _pager.animateToPage(
-      target,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final ads = widget.ads;
@@ -95,24 +80,8 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
               ad: ads[i],
             ),
           ),
-          // Нечанчи эълон эканини кўрсатиб туради — фойдаланувчи
-          // лентанинг ичида эканини билсин.
-          // Тепада ЎРТАДА: ўнг томонда AppBar'нинг «шикоят» иконкаси бор,
-          // чап томонда — орқага тугмаси (счётчик иконка устига тушарди).
-          // Икки томонида — олдинги/кейинги тугмаси: свайп ягона йўл
-          // бўлмасин (экран ўқувчи ва тугма билан ишловчилар учун).
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 4,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: AdSwipeNav(
-                index: _index,
-                count: ads.length,
-                onStep: _step,
-              ),
-            ),
-          ),
+          // «‹ N / M ›» тугмаси олиб ташланди (эга, 2026-11-01): тепада қотиб туриб,
+          // сурилганда матн устига тушарди. Ўтиш — суриш билан.
           // Сурса бўлишини биринчи эълондагина айтамиз — кейин халақит
           // бермасин.
           if (_index == 0)
@@ -161,60 +130,3 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
     );
   }
 }
-
-/// «‹ 3 / 12 ›» — нечанчи эълон эканини кўрсатади ва свайпга муқобил:
-/// олдинги/кейинги эълонга тугма билан ўтиш (WCAG 2.5.7, экран ўқувчи учун
-/// ҳам). Чегарада тегишли тугма ўчиқ.
-class AdSwipeNav extends StatelessWidget {
-  const AdSwipeNav({
-    super.key,
-    required this.index,
-    required this.count,
-    required this.onStep,
-  });
-
-  final int index;
-  final int count;
-
-  /// -1 = олдинги, +1 = кейинги.
-  final ValueChanged<int> onStep;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            key: const ValueKey('ad-swipe-prev'),
-            tooltip: context.tr('ad_swipe_prev'),
-            color: Colors.white,
-            disabledColor: Colors.white38,
-            icon: const Icon(Icons.chevron_left_rounded),
-            onPressed: index > 0 ? () => onStep(-1) : null,
-          ),
-          Text(
-            '${index + 1} / $count',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: AppText.labelSmall,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          IconButton(
-            key: const ValueKey('ad-swipe-next'),
-            tooltip: context.tr('ad_swipe_next'),
-            color: Colors.white,
-            disabledColor: Colors.white38,
-            icon: const Icon(Icons.chevron_right_rounded),
-            onPressed: index < count - 1 ? () => onStep(1) : null,
-          ),
-        ],
-      ),
-    );
-  }
-}

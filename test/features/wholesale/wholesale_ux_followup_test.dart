@@ -1,6 +1,5 @@
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
 import 'package:ava_gurlan/features/wholesale/repositories/wholesale_products_repository.dart';
-import 'package:ava_gurlan/features/wholesale/screens/wholesale_product_detail_screen.dart';
 import 'package:ava_gurlan/features/wholesale/widgets/wholesale_empty_market.dart';
 import 'package:ava_gurlan/features/wholesale/widgets/wholesale_field_error.dart';
 import 'package:flutter/material.dart';
@@ -74,35 +73,6 @@ void main() {
       )));
       expect(find.byType(OutlinedButton), findsNothing);
       expect(find.text('wholesale_empty_try_area'), findsOneWidget);
-    });
-  });
-
-  group('WholesaleSwipeNav - svaypga muqobil', () {
-    Widget nav(int index, int count, ValueChanged<int> onStep) =>
-        _host(WholesaleSwipeNav(index: index, count: count, onStep: onStep));
-
-    testWidgets('o\'rtada ikkala tugma ishlaydi, har biri >= 48 dp', (tester) async {
-      final steps = <int>[];
-      await tester.pumpWidget(nav(1, 3, steps.add));
-      expect(find.text('2 / 3'), findsOneWidget);
-      for (final k in ['wholesale-swipe-prev', 'wholesale-swipe-next']) {
-        final s = tester.getSize(find.byKey(ValueKey(k)));
-        expect(s.width, greaterThanOrEqualTo(48), reason: k);
-        expect(s.height, greaterThanOrEqualTo(48), reason: k);
-      }
-      await tester.tap(find.byKey(const ValueKey('wholesale-swipe-prev')));
-      await tester.tap(find.byKey(const ValueKey('wholesale-swipe-next')));
-      expect(steps, [-1, 1]);
-    });
-
-    testWidgets('chegarada tegishli tugma o\'chiq', (tester) async {
-      final steps = <int>[];
-      await tester.pumpWidget(nav(0, 3, steps.add));
-      await tester.tap(find.byKey(const ValueKey('wholesale-swipe-prev')), warnIfMissed: false);
-      expect(steps, isEmpty);
-      await tester.pumpWidget(nav(2, 3, steps.add));
-      await tester.tap(find.byKey(const ValueKey('wholesale-swipe-next')), warnIfMissed: false);
-      expect(steps, isEmpty);
     });
   });
 

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/edge_swipe_pager.dart';
-import '../../ads/screens/ad_swipe_screen.dart' show AdSwipeNav;
 import '../models/tv_shop.dart';
 import 'tv_shop_item_detail_screen.dart';
 
@@ -54,21 +53,6 @@ class _TvShopItemSwipeScreenState extends State<TvShopItemSwipeScreen> {
     super.dispose();
   }
 
-  /// Свайпга муқобил тугма (WCAG 2.5.7).
-  void _step(int delta) {
-    final target = _index + delta;
-    if (target < 0 || target >= widget.items.length) return;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _pager.jumpToPage(target);
-      return;
-    }
-    _pager.animateToPage(
-      target,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   TvShopItemDetailScreen _page(TvShopItem item) => TvShopItemDetailScreen(
         // Калит бўлмаса бир маҳсулотнинг ҳолати бошқасида қолиб кетарди.
         key: ValueKey(item.id),
@@ -95,20 +79,7 @@ class _TvShopItemSwipeScreenState extends State<TvShopItemSwipeScreen> {
             onPageChanged: (i) => setState(() => _index = i),
             itemBuilder: (_, i) => _page(items[i]),
           ),
-          // AppBar ОСТИДА, расм устида ўртада: AppBar'да сарлавҳа ва
-          // иконкалар бор, расмнинг ўнг юқорисида «Видео» тугмаси.
-          Positioned(
-            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 20,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: AdSwipeNav(
-                index: _index,
-                count: items.length,
-                onStep: _step,
-              ),
-            ),
-          ),
+          // «‹ N / M ›» тугмаси олиб ташланди (эга, 2026-11-01) — ўтиш суриш билан.
         ],
       ),
     );

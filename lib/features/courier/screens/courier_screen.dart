@@ -14,6 +14,8 @@ import 'courier_collection_tasks_screen.dart';
 import '../../carpet_wash/screens/carpet_wash_courier_screen.dart';
 import '../../agro_pickup/screens/agro_pickup_courier_screen.dart';
 import 'courier_mfy_selection_screen.dart';
+import 'courier_scopes_screen.dart';
+import '../../../repositories/courier_scopes_repository.dart';
 import '../../restaurants/courier/restaurant_courier_banner.dart';
 import '../../restaurants/courier/courier_live_publisher.dart';
 import '../../restaurants/courier/restaurant_courier_order_card.dart';
@@ -105,6 +107,7 @@ class _CourierViewState extends State<_CourierView> {
         ],
       ),
       body: Column(children: [
+        if (c.presenceUid.isNotEmpty) _WorkAreaBanner(uid: c.presenceUid),
         _CollectionTasksBanner(courierUid: c.courierUid),
         const _CarpetWashBanner(),
         const _AgroPickupBanner(),
@@ -227,6 +230,79 @@ class _CourierViewState extends State<_CourierView> {
         },
       )),
     ]);
+  }
+}
+
+/// «Иш ҳудуди: Туман · Вилоят» — курьер тоифалари (эга қарори 2026-10-31).
+class _WorkAreaBanner extends StatefulWidget {
+  const _WorkAreaBanner({required this.uid});
+
+  final String uid;
+
+  @override
+  State<_WorkAreaBanner> createState() => _WorkAreaBannerState();
+}
+
+class _WorkAreaBannerState extends State<_WorkAreaBanner> {
+  final _repo = CourierScopesRepository();
+  Future<CourierScopes>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _repo.load(widget.uid);
+  }
+
+  String _summary(CourierScopes s) {
+    final parts = <String>[
+      for (final scope in CourierScopes.all)
+        if (s.scopes.contains(scope))
+          s.isActive(scope)
+              ? context.tr('courier_scope_$scope')
+              : '${context.tr('courier_scope_$scope')} (${context.tr('courier_scope_status_${s.review[scope] == 'rejected' ? 'rejected' : 'pending'}')})',
+    ];
+    return parts.isEmpty ? '—' : parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<CourierScopes>(
+      future: _future,
+      builder: (ctx, snap) {
+        final summary = snap.hasData ? _summary(snap.data!) : '';
+        return Material(
+          color: AppColors.scaffold,
+          child: InkWell(
+            onTap: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => CourierScopesScreen(uid: widget.uid),
+              ));
+              if (mounted) setState(() => _future = _repo.load(widget.uid));
+            },
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.map_outlined, size: 20, color: AppColors.primaryText),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    summary.isEmpty
+                        ? context.tr('courier_scope_title')
+                        : context.tr('courier_scope_banner').replaceAll('{list}', summary),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

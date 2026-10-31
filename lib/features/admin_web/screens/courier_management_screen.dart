@@ -23,6 +23,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
+import 'courier_scope_admin_panel.dart';
 
 class CourierManagementScreen extends StatefulWidget {
   const CourierManagementScreen({super.key});
@@ -317,6 +318,8 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _approvalModeCard(),
+          const SizedBox(height: 8),
+          const CourierScopeModeCard(),
           const SizedBox(height: 12),
           Card(
             shape: RoundedRectangleBorder(
@@ -424,7 +427,8 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
               const Spacer(),
               DropdownButton<String>(
                 value: _filter,
-                items: _filters.entries
+                items: {..._filters, ...courierScopeFilters}
+                    .entries
                     .map((e) =>
                         DropdownMenuItem(value: e.key, child: Text(e.value)))
                     .toList(),
@@ -433,6 +437,11 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
             ],
           ),
           const SizedBox(height: 8),
+          if (_filter.startsWith('scope:'))
+            Expanded(
+              child: CourierScopeRequestsList(status: _filter.substring(6)),
+            )
+          else
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _db

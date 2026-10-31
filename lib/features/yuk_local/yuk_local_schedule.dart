@@ -6,10 +6,10 @@ class YukLocalSchedule {
   static const Duration firstListingTtl = Duration(days: 60);
 
   /// Кейинги эълонлар.
-  static const Duration nextListingTtl = Duration(days: 10);
+  static const Duration nextListingTtl = Duration(days: 30);
 
   // Муддат ҚАРОРИ серверда (`functions/yuk_local.js`, эга 2026-10-31):
-  // яратилганда 60/10 кун, «Узайтириш» +30 кун, муддат тугашига ≤3 кун
+  // яратилганда 60/30 кун, «Узайтириш» +30 кун, муддат тугашига ≤3 кун
   // қолганда ёки ўтгач узайтирилади, ўтганидан 30 кун кейин ўчирилади.
   // Қуйидагилар фақат UI учун (тугма кўрсатиш) — сервер барибир текширади.
 
@@ -18,6 +18,20 @@ class YukLocalSchedule {
 
   /// Муддати ўтган эълон шунча вақт эгада кўринади, кейин сервер ўчиради.
   static const Duration expiredGrace = Duration(days: 30);
+
+  /// Бир рақамга фаол эълонлар чегараси (эга 2026-10-31). Сервер триггери
+  /// 11-чисини ўчиради; бу ерда фақат форма очилмаслиги учун.
+  static const int maxActiveListings = 10;
+
+  /// Фаол эълонлар сони — муддати йўқ (эски) ёки ҳали ўтмаган [expiries].
+  static int activeCount(Iterable<DateTime?> expiries, {DateTime? now}) {
+    final t = now ?? DateTime.now();
+    return expiries.where((e) => e == null || e.isAfter(t)).length;
+  }
+
+  /// Яна битта янги эълон бериш мумкинми.
+  static bool canAddListing(Iterable<DateTime?> expiries, {DateTime? now}) =>
+      activeCount(expiries, now: now) < maxActiveListings;
 
   /// Эга узайтира оладими: муддати ≤3 кун қолган ёки ўтган (30 кун ичида).
   static bool canRenew(DateTime? expiresAt, {DateTime? now}) {

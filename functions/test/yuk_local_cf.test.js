@@ -1,6 +1,6 @@
 /**
  * Туман ичида юк — `functions/yuk_local.js` (аудит 2026-10-31, эга қарорлари):
- * муддат 60/10 кун сервердан, телефон/туман нормаллаштириш, «Узайтириш» +30 кун,
+ * муддат 60/30 кун сервердан (эга 2026-10-31: 60/10 → 60/30), телефон/туман нормаллаштириш, «Узайтириш» +30 кун,
  * 3/2/1 кун пуш (кунига бир марта), 30 кундан кейин ўчириш, 10 та ҳақиқий
  * эълондан кейин намуналарни ўчириш, намуна cron'и `updatedAt` ёзмайди.
  *
@@ -59,11 +59,11 @@ async function testTtl() {
   const a1 = (await db.doc('yuk_local_drivers/a1').get()).data();
   check('биринчи эълон: first=true, муддат ≈ createdAt+60 кун',
     r1.first === true && Math.abs(a1.expiresAt.toMillis() - (a1.createdAt.toMillis() + 60 * DAY)) < 2000, JSON.stringify(r1));
-  // Иккинчи эълон, клиент (ёлғон) 60 кун ёзди — сервер 10 кунга туширади.
+  // Иккинчи эълон, клиент (ёлғон) 60 кун ёзди — сервер 30 кунга туширади.
   const r2 = await createListing('a2', listing(OWNER, { expiresAt: Timestamp.fromMillis(now + 60 * DAY) }));
   const a2 = (await db.doc('yuk_local_drivers/a2').get()).data();
-  check('иккинчи эълон: first=false, муддат 10 кунга туширилди',
-    r2.first === false && Math.abs(a2.expiresAt.toMillis() - (a2.createdAt.toMillis() + 10 * DAY)) < 2000);
+  check('иккинчи эълон: first=false, муддат 30 кунга туширилди',
+    r2.first === false && Math.abs(a2.expiresAt.toMillis() - (a2.createdAt.toMillis() + 30 * DAY)) < 2000);
   // Retry: ўша ҳужжат учун триггер қайта чақирилди — қарор ўзгармайди, ҳисоб 2 та.
   const again = await yuk.onListingWrite('a1', null, await db.doc('yuk_local_drivers/a1').get());
   const state = (await db.doc(`yuk_local_owner_state/${OWNER}`).get()).data();
@@ -72,7 +72,7 @@ async function testTtl() {
   // Ўчирилган биринчи эълон кейин ҳам «биринчи» бўлмайди.
   await db.doc('yuk_local_drivers/a1').delete();
   const r3 = await createListing('a3', listing(OWNER));
-  check('аввалгиси ўчирилган бўлса ҳам кейингиси 10 кун', r3.first === false);
+  check('аввалгиси ўчирилган бўлса ҳам кейингиси 30 кун', r3.first === false);
   // Бошқа эга — биринчи.
   const r4 = await createListing('b1', listing(OTHER));
   check('бошқа эга: биринчи', r4.first === true);
@@ -84,11 +84,11 @@ async function testLegacyOwners() {
   const L1 = '998901000001';
   const L2 = '998901000002';
   const L3 = '998901000003';
-  // L1: эски эълони турибди (триггерсиз ёзилган) — янгиси 10 кун.
+  // L1: эски эълони турибди (триггерсиз ёзилган) — янгиси 30 кун.
   await db.doc('yuk_local_drivers/old1').set(listing(L1));
   const r1 = await createListing('new1', listing(L1));
-  check('эски эълони бор эга: first=false (10 кун)', r1.first === false);
-  // L2: эълони ўчирилган, лекин meta аввал яратилган — 10 кун.
+  check('эски эълони бор эга: first=false (30 кун)', r1.first === false);
+  // L2: эълони ўчирилган, лекин meta аввал яратилган — 30 кун.
   await db.doc(`yuk_local_owner_meta/${L2}`).set({ ownerId: L2, everPublished: true });
   await new Promise((r) => setTimeout(r, 2300));
   const r2 = await createListing('new2', listing(L2));
@@ -115,6 +115,67 @@ async function testNormalize() {
   // Намуна — тегилмайди.
   const d = await yuk.onListingWrite('demoX', null, { exists: true, data: () => ({ isDemo: true, ownerId: 'demo' }) });
   check('намуна эълонига триггер тегмайди', d.action === 'demo');
+}
+
+/** Эга 2026-10-31: бир рақамга 10 тагача ФАОЛ эълон (намуна ва муддати ўтганлар саналмайди). */
+async function testActiveLimit() {
+  await Promise.all(['yuk_local_drivers', 'yuk_local_owner_state', 'yuk_local_created_log', 'notifications'].map(wipe));
+  const now = Date.now();
+  const P = '998905550000';
+  const exp = (days) => Timestamp.fromMillis(now + days * DAY);
+  // 9 та фаол + 3 та муддати ўтган (саналмайди).
+  for (let i = 0; i < 9; i += 1) await db.doc(`yuk_local_drivers/act${i}`).set(listing(P, { expiresAt: exp(20) }));
+  for (let i = 0; i < 3; i += 1) await db.doc(`yuk_local_drivers/old${i}`).set(listing(P, { expiresAt: exp(-2) }));
+  const r10 = await createListing('new10', listing(P, { expiresAt: exp(30) }));
+  check('10-фаол эълон (9 фаол + 3 ўтган) — қабул қилинди', r10.action === 'created'
+    && (await db.doc('yuk_local_drivers/new10').get()).exists, JSON.stringify(r10.action));
+  const r11 = await createListing('new11', listing(P, { expiresAt: exp(30) }));
+  const n11 = await db.doc('yuk_local_drivers/new11').get();
+  const notes = (await db.collection('notifications').get()).docs.map((x) => x.data());
+  check('11-фаол эълон — ўчирилди, YUK_ACTIVE_LIMIT', r11.action === 'rejected_limit' && !n11.exists, JSON.stringify(r11));
+  check('эгасига хабар: type yuk_local_limit, screen yuk_local, матнда 10',
+    notes.length === 1 && notes[0].type === 'yuk_local_limit' && notes[0].targetPhone === P
+      && notes[0].screen === 'yuk_local' && notes[0].body.includes('10'));
+  const log11 = await db.doc('yuk_local_created_log/new11').get();
+  check('рад этилган эълон намуна ҳисобига ва эга тарихига кирмайди', !log11.exists);
+  // Retry: ўша event қайта келди — хабар такрорланмайди.
+  await yuk.onListingWrite('new11', null, n11.exists ? n11 : { exists: true, data: () => listing(P), createTime: Timestamp.now() });
+  const notes2 = await db.collection('notifications').get();
+  check('retry: хабар такрорланмайди', notes2.size === 1, `${notes2.size}`);
+  // Бошқа эга — чегарага таъсир йўқ.
+  const other = await createListing('otherOwner', listing(OTHER, { expiresAt: exp(30) }));
+  check('бошқа эга — таъсирсиз', other.action === 'created');
+
+  // Бир вақтда 2 та эълон (9 фаол бор эди): фақат кейинги (createTime) ўчади.
+  await Promise.all(['yuk_local_drivers', 'notifications'].map(wipe));
+  const Q = '998905550001';
+  for (let i = 0; i < 9; i += 1) await db.doc(`yuk_local_drivers/q${i}`).set(listing(Q, { expiresAt: exp(20) }));
+  const ra = db.collection('yuk_local_drivers').doc('raceA');
+  const rb = db.collection('yuk_local_drivers').doc('raceB');
+  await ra.set(listing(Q, { expiresAt: exp(30) }));
+  await rb.set(listing(Q, { expiresAt: exp(30) }));
+  const [sa, sb] = await Promise.all([ra.get(), rb.get()]);
+  const [xa, xb] = await Promise.all([yuk.onListingWrite('raceA', null, sa), yuk.onListingWrite('raceB', null, sb)]);
+  const [ea, eb] = await Promise.all([ra.get(), rb.get()]);
+  check('пойга: аввалгиси қолди, кейингиси ўчди (фақат битта ғолиб)',
+    ea.exists && !eb.exists && xa.action === 'created' && xb.action === 'rejected_limit', `${xa.action}/${xb.action}`);
+}
+
+async function testRenewLimit() {
+  await wipe('yuk_local_drivers');
+  const now = Date.now();
+  const P = '998905550002';
+  for (let i = 0; i < 10; i += 1) {
+    await db.doc(`yuk_local_drivers/a${i}`).set(listing(P, { expiresAt: Timestamp.fromMillis(now + (i === 0 ? 2 : 20) * DAY) }));
+  }
+  await db.doc('yuk_local_drivers/expired1').set(listing(P, { expiresAt: Timestamp.fromMillis(now - 3 * DAY) }));
+  const blocked = await yuk.renew(P, 'expired1', now);
+  check('10 та фаол бор — муддати ўтганни узайтириш YUK_ACTIVE_LIMIT', !blocked.ok && blocked.code === 'YUK_ACTIVE_LIMIT', JSON.stringify(blocked));
+  const ok = await yuk.renew(P, 'a0', now);
+  check('10 та фаол бор — фаол (2 кун қолган) эълонни узайтириш мумкин', ok.ok === true);
+  await db.doc('yuk_local_drivers/a5').delete();
+  const after = await yuk.renew(P, 'expired1', now);
+  check('биттаси ўчирилгач — узайтириш мумкин', after.ok === true);
 }
 
 async function testRenew() {
@@ -219,6 +280,8 @@ async function testDemoRefresh() {
 async function main() {
   await testTtl();
   await testLegacyOwners();
+  await testActiveLimit();
+  await testRenewLimit();
   await testNormalize();
   await testRenew();
   await testDaily();

@@ -120,10 +120,8 @@ ok('kuryer: sabab kodi noto\'g\'ri — reason_invalid; eski APK matni → custom
   assert.strictEqual(orderOf(db).deliveryFailed, undefined);
 });
 
-ok('to\'lov usullari: HAMYON — so\'rov YO\'Q (not_card_order, pul qoidasi kodda yo\'q); chek yuborilgan — receipt_submitted; tasdiqlangan — card_payment_confirmed; nizo — invalid_transition', async () => {
-  let { db } = await setup({ extraOrder: { paymentMethod: 'wallet', cardPayment: null, payment: { status: 'held' } } });
-  await rejects(report(db), 'failed-precondition', 'not_card_order');
-  assert.strictEqual(orderOf(db).deliveryFailed, undefined);
+ok('to\'lov usullari (karta): chek yuborilgan — receipt_submitted; tasdiqlangan — card_payment_confirmed; nizo — invalid_transition', async () => {
+  let db;
   ({ db } = await setup({ extraOrder: { cardPayment: { status: 'receipt_submitted', receiptPath: 'p', submittedAt: NOW } } }));
   await rejects(report(db), 'failed-precondition', 'receipt_submitted');
   ({ db } = await setup({ extraOrder: { cardPayment: { status: 'confirmed' } } }));
@@ -310,6 +308,148 @@ ok('kuryer holati: oxirgi LEG kuryeri — pending/stage/muddat/qaror; begona/xar
   st = await get(K1);
   assert.deepStrictEqual([st.pending, st.resolution], [false, { by: 'buyer', decision: 'continue' }]);
   for (const who of [STRANGER, BUYER, SELLER]) await rejects(get(who), 'permission-denied', 'not_last_leg_courier');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// HAMYON buyurtmasi (ega, 2026-11-01: «тавсияларга розиман»)
+// ═══════════════════════════════════════════════════════════════════════
+const WALLET = { paymentMethod: 'wallet', cardPayment: null, payment: { status: 'held', payer: 'buyer' } };
+
+ok('sof (hamyon): WALLET_REASONS = 3 kod (`other` yo\'q, default WALLET_REFUSAL_FAULT paritet); allowedReasonsOf; stillRefusable', () => {
+  assert.deepStrictEqual([...F.WALLET_REASONS], ['customer_absent', 'customer_refused', 'courier_problem']);
+  // Default codebase `functions/wholesale_orders.js` WALLET_REFUSAL_FAULT kalitlari bilan AYNAN bir xil (ikkala testda shu ro'yxat).
+  assert.deepStrictEqual(F.allowedReasonsOf({ paymentMethod: 'wallet' }), [...F.WALLET_REASONS]);
+  assert.deepStrictEqual(F.allowedReasonsOf({}), [...F.WALLET_REASONS], 'eski hujjat (usul yo\'q) = hamyon');
+  assert.deepStrictEqual(F.allowedReasonsOf({ paymentMethod: 'card_on_delivery' }), [...F.REASONS]);
+  const ship = { currentLegId: 'l1', currentCustodian: { kind: 'provider', id: K1 } };
+  const w = (df, extra = {}) => ({
+    status: 'in_delivery', paymentMethod: 'wallet', payment: { status: 'held' }, deliveryFailed: { legId: 'l1', courierId: K1, ...df }, ...extra,
+  });
+  assert.strictEqual(F.stillRefusable(w({ reasonCode: 'customer_absent' }), ship), null);
+  assert.strictEqual(F.stillRefusable(w({ reasonCode: 'other' }), ship), 'reason_not_allowed_wallet');
+  assert.strictEqual(F.stillRefusable(w({ reasonCode: 'courier_problem' }, { payment: { status: 'released' } }), ship), 'wallet_payment_state');
+  assert.strictEqual(F.stillRefusable(w({ reasonCode: 'courier_problem' }, { status: 'delivered' }), ship), 'status_changed');
+});
+
+ok('HAMYON kuryer: «бошқа» — reason_not_allowed_wallet (allowed 3 ta); eski APK sababsiz — reason_required; so\'rov/tarix/xabar YO\'Q', async () => {
+  const { db } = await setup({ extraOrder: WALLET });
+  const e = await rejects(report(db, { reasonCode: 'other', reason: 'x' }), 'invalid-argument', 'reason_not_allowed_wallet');
+  assert.deepStrictEqual(e.details.allowed, [...F.WALLET_REASONS]);
+  await rejects(report(db, { reason: 'pul yo\'q' }), 'invalid-argument', 'reason_required');
+  const o = orderOf(db);
+  assert.deepStrictEqual([o.deliveryFailed, o.historySeq, news(db).length], [undefined, 3, 0]);
+});
+
+ok('HAMYON: customer_absent → so\'rov (holat/pul o\'zgarmaydi) → xaridor tasdig\'i → refused, refusal.reasonCode, refundStatus pending (pul — default), hisoblagich +1; kuryer holati: paymentMethod/allowedReasons', async () => {
+  const { db } = await setup({ extraOrder: WALLET });
+  const get = () => q(() => F.makeGetWholesaleDeliveryFailedState({ db })({ orderId: ORDER_ID }, ctx(K1)));
+  let st = await get();
+  assert.deepStrictEqual([st.paymentMethod, st.allowedReasons], ['wallet', [...F.WALLET_REASONS]]);
+  const before = orderOf(db);
+  const r = await report(db, { reasonCode: 'customer_absent' });
+  assert.deepStrictEqual([r.status, r.awaitingBuyer], ['in_delivery', true]);
+  assert.deepStrictEqual(orderOf(db).payment, before.payment);
+  assert.ok(news(db).includes(`wholesale_${ORDER_ID}_ws_df_buyer_confirm_${BUYER}_df1`));
+  st = await get();
+  assert.deepStrictEqual([st.pending, st.reasonCode], [true, 'customer_absent']);
+  const c = await respond(db, 'confirm');
+  assert.strictEqual(c.status, 'refused');
+  const o = orderOf(db);
+  assert.deepStrictEqual([o.status, o.refundStatus, o.returnStatus, o.refusal.reasonCode, o.refusal.by, o.refusal.confirmedBy], ['refused', 'pending', 'pending_shipment', 'customer_absent', K1, 'buyer']);
+  assert.deepStrictEqual(o.payment, before.payment, 'pul maydonlari tegilmagan');
+  assert.strictEqual(db.docs.get(`wholesale_buyer_stats/${BUYER}`).cardRefusals, 1);
+});
+
+ok('HAMYON: courier_problem → muddat o\'tgach SOTUVCHI «Етказилмади» → refused (reasonCode courier_problem, hisoblagich YO\'Q) + audit; karta kuryer holati — 4 sabab', async () => {
+  const { db } = await setup({ extraOrder: WALLET });
+  await report(db, { reasonCode: 'courier_problem' });
+  await rejects(resolve(db, 'failed', SELLER, at(15 * MIN - 1)), 'failed-precondition', 'decision_not_yet');
+  const r = await resolve(db, 'failed', SELLER, at(15 * MIN));
+  assert.strictEqual(r.status, 'refused');
+  const o = orderOf(db);
+  assert.deepStrictEqual([o.refusal.reasonCode, o.refusal.confirmedBy], ['courier_problem', 'seller']);
+  assert.strictEqual(db.docs.get(`wholesale_buyer_stats/${BUYER}`), undefined);
+  assert.strictEqual(audits(db).length, 1);
+  const { db: db2 } = await setup();
+  const st = await q(() => F.makeGetWholesaleDeliveryFailedState({ db: db2 })({ orderId: ORDER_ID }, ctx(K1)));
+  assert.deepStrictEqual([st.paymentMethod, st.allowedReasons], ['card_on_delivery', [...F.REASONS]]);
+});
+
+ok('HAMYON eskirgan so\'rov: kutish paytida pul eskroudan chiqdi (payment.status ≠ held) → confirm — df_state_changed, rad YO\'Q', async () => {
+  const { db } = await setup({ extraOrder: WALLET });
+  await report(db, { reasonCode: 'customer_refused' });
+  await db.collection('wholesale_orders').doc(ORDER_ID).update({ 'payment.status': 'released' });
+  await rejects(respond(db, 'confirm'), 'failed-precondition', 'df_state_changed');
+  const o = orderOf(db);
+  assert.deepStrictEqual([o.status, o.deliveryFailed.supersededWhy], ['in_delivery', 'wallet_payment_state']);
+});
+
+ok('xabarlar (sof): karta — sabab bo\'yicha xaridor kaliti; admin nizosi/eski — ws_refused_buyer; hamyon — sotuvchiga hamyon matni, xaridorga pul hisoblangach (summa bilan); qarz — to\'lovchiga; kuryer to\'lagach — kuryerga', () => {
+  const E = require('../api/wholesale_events');
+  const keys = (b, a) => E.transitionNotifications(b, a).map((x) => `${x.to}:${x.key}`).sort();
+  const card = { paymentMethod: 'card_on_delivery', status: 'in_delivery', cardPayment: { status: 'awaiting' } };
+  const refusedCard = (reasonCode, via = 'courier') => ({ ...card, status: 'refused', refusal: { via, ...(reasonCode ? { reasonCode } : {}) } });
+  for (const [code, key] of [['customer_absent', 'ws_refused_buyer_absent'], ['customer_refused', 'ws_refused_buyer_refused'], ['courier_problem', 'ws_refused_buyer_courier'], ['other', 'ws_refused_buyer_other'], [null, 'ws_refused_buyer']]) {
+    assert.deepStrictEqual(keys(card, refusedCard(code)), [`buyer:${key}`, 'seller:ws_refused_seller'].sort(), String(code));
+  }
+  assert.deepStrictEqual(keys(card, refusedCard('customer_refused', 'admin_dispute')), ['buyer:ws_refused_buyer', 'seller:ws_refused_seller'].sort());
+  const wal = { paymentMethod: 'wallet', status: 'in_delivery', payment: { status: 'held' } };
+  const wRef = { ...wal, status: 'refused', refundStatus: 'pending', refusal: { by: K1, via: 'courier', reasonCode: 'customer_absent' } };
+  assert.deepStrictEqual(keys(wal, wRef), ['seller:ws_refused_seller_wallet']);
+  const wDone = { ...wRef, refundStatus: 'done', walletRefusal: { fault: 'buyer', goodsRefunded: 140000, returnFeeCharged: 40000 } };
+  assert.deepStrictEqual(keys(wRef, wDone), ['buyer:ws_refused_buyer_wallet']);
+  assert.deepStrictEqual(keys(wDone, wDone), [], 'takror yozuv — xabar yo\'q');
+  const wDoneC = { ...wRef, refundStatus: 'done', walletRefusal: { fault: 'courier', goodsRefunded: 140000, returnFeeCharged: null } };
+  assert.deepStrictEqual(keys(wRef, wDoneC), ['buyer:ws_refused_buyer_wallet_courier']);
+  // Qarz: xaridor / kuryer / (karta) sotuvchi.
+  assert.deepStrictEqual(keys(wDone, { ...wDone, returnDebt: { amount: 1, payer: 'buyer' } }), ['admins:ws_return_debt_admin_buyer', 'buyer:ws_return_debt_buyer']);
+  assert.deepStrictEqual(keys(wDoneC, { ...wDoneC, returnDebt: { amount: 5, payer: 'courier' } }), ['admins:ws_return_debt_admin_courier', 'refusal_courier:ws_return_debt_courier']);
+  const cRef = refusedCard('customer_absent');
+  assert.deepStrictEqual(keys(cRef, { ...cRef, returnDebt: { amount: 40000 } }), ['admins:ws_return_debt_admin', 'seller:ws_return_debt_seller']);
+  // Kuryer to'lagan qaytish → kuryerga; xaridor to'lagan → yo'q (refund xabarida bor).
+  const fundedBy = (payer) => ({ ...wDoneC, status: 'returning', returnPayment: { status: 'funded', payer } });
+  assert.deepStrictEqual(keys({ ...wDoneC, returnPayment: { status: 'held', payer: 'courier' } }, fundedBy('courier')), ['refusal_courier:ws_return_fee_courier', 'seller:ws_returning_seller'].sort());
+  assert.deepStrictEqual(keys({ ...wDone, returnPayment: { status: 'held', payer: 'buyer' } }, { ...fundedBy('buyer'), walletRefusal: wDone.walletRefusal }), ['seller:ws_returning_seller']);
+});
+
+ok('xabar yetkazish: hamyon refund → xaridorga summa bilan (uz_Latn); kuryer qarzi → refusal.by (K1, ru) inbox', async () => {
+  const E = require('../api/wholesale_events');
+  const db = makeDb(seedW());
+  const base = {
+    paymentMethod: 'wallet', productTitle: 'Guruch', qty: 10, goodsTotal: 140000, deliveryFee: 60000, buyerId: BUYER, sellerId: SELLER,
+    status: 'refused', refundStatus: 'pending', refusal: { by: K1, via: 'courier', reasonCode: 'courier_problem' },
+    returnShipment: { shipmentId: 'R1', trackingNumber: 'T' },
+  };
+  const done = { ...base, refundStatus: 'done', walletRefusal: { fault: 'buyer', goodsRefunded: 140000, returnFeeCharged: 40000 } };
+  await q(() => E.onWholesaleOrderUpdated({ db, now: at(0) }, base, done, ORDER_ID));
+  const nb = db.docs.get(`admin_news/wholesale_${ORDER_ID}_ws_refused_buyer_wallet_${BUYER}`);
+  assert.ok(nb && nb.body.includes('140000') && nb.body.includes('40000') && !/\{\w+\}/.test(nb.title + nb.body), JSON.stringify(nb));
+  const debt = { ...done, walletRefusal: { fault: 'courier', goodsRefunded: 140000 }, returnDebt: { amount: 25000, payer: 'courier', courierId: K1 } };
+  await q(() => E.onWholesaleOrderUpdated({ db, now: at(0) }, done, debt, ORDER_ID));
+  const nk = db.docs.get(`admin_news/wholesale_${ORDER_ID}_ws_return_debt_courier_${K1}`);
+  assert.ok(nk && nk.body.includes('25000') && /Нужно/.test(nk.body), JSON.stringify(nk));
+});
+
+ok('xabar matnlari (rad, hamyon, qarz): 12 yangi kalit × 3 til — bo\'sh emas, o\'rinbosar qolmaydi, «» qo\'shtirnoq, «Недоставк»/«Принял» yo\'q', () => {
+  const keys = ['ws_refused_buyer_absent', 'ws_refused_buyer_refused', 'ws_refused_buyer_courier', 'ws_refused_buyer_other', 'ws_refused_buyer_wallet',
+    'ws_refused_buyer_wallet_courier', 'ws_refused_seller_wallet', 'ws_return_fee_courier', 'ws_return_debt_buyer', 'ws_return_debt_courier',
+    'ws_return_debt_admin_buyer', 'ws_return_debt_admin_courier'];
+  const params = {
+    product: 'Гуруч', qty: 10, orderId: 'o1', amount: 25000, refund: 140000, returnFee: 40000,
+  };
+  for (const k of keys) {
+    for (const lang of N.LANGS) {
+      const m = N.render(k, lang, params);
+      assert.ok(m.title && m.body && !/\{\w+\}/.test(m.title + m.body), `${k}/${lang}`);
+      assert.ok(!/["']{2}|"[^"]*"/.test(m.body), `${k}/${lang}: «» qo'shtirnoq`);
+    }
+  }
+  const ru = keys.map((k) => N.render(k, 'ru', params).body).join(' ');
+  assert.ok(!/Недоставк|Принял|принял|смог |отказался/.test(ru), 'rus: jinsli o\'tgan zamon yo\'q');
+  assert.ok(N.render('ws_refused_buyer_wallet', 'uz_Cyrl', params).body.includes('140000'));
+  assert.ok(N.render('ws_refused_buyer_wallet', 'uz_Cyrl', params).body.includes('40000'));
+  // Avvalgi matn (admin nizosi) o'zgarmagan.
+  assert.ok(N.render('ws_refused_buyer', 'uz_Cyrl', params).body.includes('тўлов амалга ошмагани'));
 });
 
 ok('xabar matnlari: 6 yangi kalit × 3 til — bo\'sh emas, o\'rinbosar qolmaydi; {timeout} ishlatiladi ({minutes}=30 EMAS)', () => {

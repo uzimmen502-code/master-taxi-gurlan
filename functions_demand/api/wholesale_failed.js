@@ -13,7 +13,7 @@
  *   oqim (so'rov, xaridor javobi, muddat, sotuvchi/admin qarori) shu yerda, `delivery_failed.js` NAQSHI
  *   bilan (birinchi qaror yutadi, tranzaksiya, ro'yxat, sweeper), rad natijasi — mavjud `writeRefusal`.
  *
- *   markWholesaleBuyerRefused          oxirgi LEG kuryeri (posilka qo'lida), karta, to'lov `awaiting`:
+ *   markWholesaleBuyerRefused          oxirgi LEG kuryeri (posilka qo'lida), karta (`awaiting`) yoki hamyon:
  *                                       HOLAT/PUL O'ZGARMAYDI — `deliveryFailed` so'rovi + muddat
  *   respondWholesaleDeliveryFailed     xaridor: confirm → rad (mavjud natija) | reject («Олмоқчиман») → davom
  *   resolveWholesaleDeliveryFailed     muddat o'tgach: buyurtma SOTUVCHISI yoki qat'iy admin:
@@ -30,9 +30,13 @@
  *   deliveryFailedDueAt  muddat (sweeper bitta maydonli oraliq so'rovi); eskalatsiya/yopilishda null
  * Tarix — `wholesale_orders/{id}/history/{seq}` (o'zgarmas, mavjud), admin/sotuvchi qarori — `admin_audit`.
  *
- * TO'LOV USULLARI (core/wholesale_orders.js PAYMENT_METHODS): `card_on_delivery` — mavjud rad natijasi;
- * `wallet` — rad/qaytish PUL QOIDASI kodda YO'Q → so'rov ochilmaydi (`not_card_order`, avvalgidek),
- * ega savoli. Kuryerga «borib keldim» haqi va hisoblagich — mavjud `writeRefusal`/default qoidalari.
+ * TO'LOV USULLARI (core/wholesale_orders.js PAYMENT_METHODS): `card_on_delivery` — mavjud rad natijasi
+ * (to'lov `awaiting` bo'lsagina); `wallet` (ega, 2026-11-01: «тавсияларга розиман») — AYNI oqim, lekin sabab
+ * ANIQ bo'lishi shart: `WALLET_REASONS` (`other` → `reason_not_allowed_wallet`, eski APK sababsiz →
+ * `reason_required`) — pul kim to'lashiga bog'liq. Pul (tovar summasi xaridorga, yetkazish haqi qaytmaydi,
+ * qaytish haqi aybdordan) — default `functions/wholesale_orders.js` `settleWalletRefusalInTx` / `fundReturn`
+ * (`refusal.reasonCode` ga qarab; ayb jadvali `WALLET_REFUSAL_FAULT` — paritet). Kuryer haqi (ishlangan LEG) —
+ * o'zgarmagan `settleOutboundOnRefusal`. Hisoblagich — mavjud `writeRefusal` qoidasi (xaridor sababli).
  */
 
 const {
@@ -51,6 +55,11 @@ const CONFIG_DOC = ['server_config', 'customer_confirm'];
 
 /** Kuryer sabablari — default `restaurant_orders.js` FAIL_REASONS bilan AYNAN bir xil (codebase'lar aro import yo'q). */
 const REASONS = Object.freeze(['customer_absent', 'customer_refused', 'courier_problem', 'other']);
+/**
+ * Hamyon buyurtmasida ruxsat etilgan sabablar (ega, 2026-11-01): `other` YO'Q — qaytish haqini kim to'lashi
+ * sababga bog'liq. Default `WALLET_REFUSAL_FAULT` kalitlari bilan AYNAN bir xil (paritet testi ikkala tomonda).
+ */
+const WALLET_REASONS = Object.freeze(['customer_absent', 'customer_refused', 'courier_problem']);
 /** Xaridor hisoblagichi faqat shu sabablarda (ega 4-qarori, 2026-10-31: «faqat hisoblagich»). */
 const STRIKE_REASONS = Object.freeze(['customer_absent', 'customer_refused']);
 /** Eski APK (sabab kodi yo'q, «Харидор тўламади» tugmasi) — INFERRED: xaridor rad etdi. */
@@ -158,16 +167,26 @@ function parcelWith(ship, legId, courierId) {
 }
 
 /**
- * Rad natijasiga hali yaroqlimi (sof): yetkazilmoqda, karta, to'lov `awaiting`, posilka o'sha kuryerda.
+ * Rad natijasiga hali yaroqlimi (sof): yetkazilmoqda, posilka o'sha kuryerda; karta — to'lov `awaiting`;
+ * hamyon — sabab `WALLET_REASONS` da va pul hali eskrouda (`payment.status: held`).
  * Aks holda so'rov eskirgan (xaridor chek yubordi / sotuvchi «Пул тушди» / yetkazildi / admin bekor qildi).
  */
 function stillRefusable(o, ship) {
   const df = o.deliveryFailed || {};
   if (o.status !== WO.STATUS.IN_DELIVERY) return 'status_changed';
-  if (WO.methodOf(o) !== WO.PAYMENT_METHOD.CARD) return 'not_card_order';
-  if ((o.cardPayment || {}).status !== WO.CARD_PAYMENT.AWAITING) return 'card_payment_progressed';
+  if (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD) {
+    if ((o.cardPayment || {}).status !== WO.CARD_PAYMENT.AWAITING) return 'card_payment_progressed';
+  } else {
+    if (!WALLET_REASONS.includes(df.reasonCode)) return 'reason_not_allowed_wallet';
+    if ((o.payment || {}).status !== 'held') return 'wallet_payment_state';
+  }
   if (!parcelWith(ship || {}, df.legId, df.courierId)) return 'parcel_moved';
   return null;
+}
+
+/** Shu buyurtmada kuryer tanlay oladigan sabablar (UI uchun; server baribir tekshiradi). */
+function allowedReasonsOf(o) {
+  return WO.methodOf(o) === WO.PAYMENT_METHOD.WALLET ? [...WALLET_REASONS] : [...REASONS];
 }
 
 function stateOf(o) {
@@ -309,10 +328,21 @@ function makeReportWholesaleDeliveryFailed(deps) {
         // Eski (2026-11-01 gacha) darhol rad etilgan buyurtma — avvalgidek idempotent.
         if (o.status === WO.STATUS.REFUSED && sameUser((o.refusal || {}).by, callerId)) return { refused: true, o };
         if (isPending(o)) return { idempotent: true, o };
-        if (WO.methodOf(o) !== WO.PAYMENT_METHOD.CARD) throw fail('failed-precondition', 'Buyurtma karta orqali emas', 'not_card_order');
+        const isWallet = WO.methodOf(o) === WO.PAYMENT_METHOD.WALLET;
+        if (isWallet) {
+          // Hamyon (ega, 2026-11-01): pul sababga bog'liq — eski APK (sababsiz) va «бошқа» qabul qilinmaydi.
+          if (legacy) throw fail('invalid-argument', 'Sababni tanlang', 'reason_required', { allowed: WALLET_REASONS });
+          if (!WALLET_REASONS.includes(reasonCode)) {
+            throw fail('invalid-argument', 'Hamyon buyurtmasida aniq sabab tanlanadi', 'reason_not_allowed_wallet', { allowed: WALLET_REASONS });
+          }
+        }
         if (!parcelWith(ship, lastLeg, callerId)) throw fail('failed-precondition', 'Posilka sizda emas', 'parcel_not_in_hand');
         const cp = o.cardPayment || {};
-        if (o.status === WO.STATUS.IN_DELIVERY) {
+        if (isWallet) {
+          if (o.status === WO.STATUS.IN_DELIVERY && (o.payment || {}).status !== 'held') {
+            throw fail('failed-precondition', 'To\'lov holati mos emas', 'wallet_payment_state');
+          }
+        } else if (o.status === WO.STATUS.IN_DELIVERY) {
           if (cp.status === WO.CARD_PAYMENT.CONFIRMED) throw fail('failed-precondition', 'To\'lov tasdiqlangan', 'card_payment_confirmed');
           if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) {
             throw fail('failed-precondition', 'Xaridor chek yuborgan — sotuvchi yoki admin hal qiladi', 'receipt_submitted');
@@ -606,7 +636,10 @@ function makeGetWholesaleDeliveryFailedState(deps) {
       if (!shipmentId) throw fail('permission-denied', 'Ruxsat yo\'q', 'not_last_leg_courier');
       const ss = await db.collection(L.SHIPMENTS).doc(shipmentId).get();
       assertLastLegCourier(o, ss.exists ? (ss.data() || {}) : {}, orderId, shipmentId, callerId);
-      return { ok: true, orderId, status: String(o.status || ''), ...stateOf(o) };
+      // `paymentMethod` / `allowedReasons` — kuryer oynasi hamyon buyurtmasida «бошқа» ni ko'rsatmasin (PII yo'q).
+      return {
+        ok: true, orderId, status: String(o.status || ''), ...stateOf(o), paymentMethod: WO.methodOf(o), allowedReasons: allowedReasonsOf(o),
+      };
     } catch (e) {
       denied('getState', orderId, e);
       throw e;
@@ -676,6 +709,7 @@ async function runWholesaleDeliveryFailedSweep(deps, { limit = SWEEP_LIMIT } = {
 
 module.exports = {
   REASONS,
+  WALLET_REASONS,
   STRIKE_REASONS,
   LEGACY_REASON,
   STAGE,
@@ -686,6 +720,7 @@ module.exports = {
   isPending,
   decisionDue,
   stillRefusable,
+  allowedReasonsOf,
   stateOf,
   makeReportWholesaleDeliveryFailed,
   makeRespondWholesaleDeliveryFailed,

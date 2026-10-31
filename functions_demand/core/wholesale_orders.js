@@ -16,7 +16,7 @@
  * Kim qaysi o'tishni qiladi (19-band: autentifikatsiya ≠ avtorizatsiya):
  *   buyer  : placed → cancelled           (yetkazish hali ochilmagan bo'lsa)
  *   admin  : placed | in_delivery → cancelled (kuryer hali olmagan bo'lsa — 3-bosqich)
- *   system : placed → in_delivery → delivered (relay — 3-bosqich)
+ *   system : placed → in_delivery → delivered (relay — 3-bosqich); in_delivery | payment_dispute → lost
  *
  * Bu jadval FAQAT SHU YERDA. Default codebase (`functions/wholesale_orders.js`)
  * boshlang'ich `placed` ni yozadi va `cancelled` da pulni qaytaradi —
@@ -36,6 +36,14 @@
  *   returning       → returned        (system: qaytish jo'natmasi sotuvchiga yetdi; qoldiq +N SHU YERDA)
  * `refused` da `refundStatus: pending` — default codebase sotuvchining AVA ulushi
  * ushlanmasini qaytaradi (sotuv bo'lmadi — PROPOSED), qoldiq EMAS.
+ *
+ * ── YO'QOLGAN POSILKA (ega, 2026-10-31) ────────────────────────────────
+ *   in_delivery     → lost (system: chiqish jo'natmasi relay'da `loss_settled`)
+ *   payment_dispute → lost (system: o'sha; karta, chek yuborilgan — pul admin ko'rib chiqishida)
+ * `lost` — oxirgi holat. Kuryer (custody) tovar qiymatini SOTUVCHIGA to'laydi (relay
+ * `settleLoss`, jonli). Xaridor tomoni — default codebase `settleLost`: hamyon buyurtmasi —
+ * eskrou qoldig'i (goodsTotal) xaridorga; karta (xaridor to'lamagan) — AVA ulushi sotuvchiga.
+ * Qoldiq TIKLANMAYDI (tovar yo'q).
  */
 
 const STATUS = Object.freeze({
@@ -47,17 +55,19 @@ const STATUS = Object.freeze({
   PAYMENT_DISPUTE: 'payment_dispute',
   RETURNING: 'returning',
   RETURNED: 'returned',
+  LOST: 'lost',
 });
 
 const ALLOWED = Object.freeze({
   [STATUS.PLACED]: [STATUS.IN_DELIVERY, STATUS.CANCELLED],
-  [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.CANCELLED, STATUS.REFUSED, STATUS.PAYMENT_DISPUTE],
-  [STATUS.PAYMENT_DISPUTE]: [STATUS.IN_DELIVERY, STATUS.REFUSED],
+  [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.CANCELLED, STATUS.REFUSED, STATUS.PAYMENT_DISPUTE, STATUS.LOST],
+  [STATUS.PAYMENT_DISPUTE]: [STATUS.IN_DELIVERY, STATUS.REFUSED, STATUS.LOST],
   [STATUS.REFUSED]: [STATUS.RETURNING],
   [STATUS.RETURNING]: [STATUS.RETURNED],
   [STATUS.CANCELLED]: [],
   [STATUS.DELIVERED]: [],
   [STATUS.RETURNED]: [],
+  [STATUS.LOST]: [],
 });
 
 const ACTOR = Object.freeze({
@@ -74,7 +84,8 @@ const ACTOR_ALLOWED = Object.freeze({
   },
   [ACTOR.SYSTEM]: {
     [STATUS.PLACED]: [STATUS.IN_DELIVERY],
-    [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.PAYMENT_DISPUTE],
+    [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.PAYMENT_DISPUTE, STATUS.LOST],
+    [STATUS.PAYMENT_DISPUTE]: [STATUS.LOST],
     [STATUS.REFUSED]: [STATUS.RETURNING],
     [STATUS.RETURNING]: [STATUS.RETURNED],
   },
@@ -112,6 +123,15 @@ const RECEIPT_TIMEOUT_MINUTES = RECEIPT_TIMEOUT_MS / 60000;
 const RETURN_STATUS = Object.freeze({
   PENDING_SHIPMENT: 'pending_shipment', AWAITING_PAYMENT: 'awaiting_payment', IN_TRANSIT: 'in_transit', RETURNED: 'returned',
 });
+
+/** `lost` ga faqat shu holatlardan (system) — default `settleLost` paritet testi bilan. */
+const LOST_FROM_STATUSES = Object.freeze([STATUS.IN_DELIVERY, STATUS.PAYMENT_DISPUTE]);
+/**
+ * `order.payment.status` yo'qolishdan keyin:
+ *   refunded_lost — eskrou qoldig'i to'lovchiga qaytdi (hamyon: xaridor goodsTotal; karta: sotuvchi avaFee);
+ *   lost_review   — karta, xaridor to'lovni bildirgan (chek / tasdiq / nizo): pul YO'Q, admin hal qiladi.
+ */
+const LOST_PAYMENT = Object.freeze({ REFUNDED: 'refunded_lost', REVIEW: 'lost_review' });
 
 const methodOf = (doc) => ((doc || {}).paymentMethod === PAYMENT_METHOD.CARD ? PAYMENT_METHOD.CARD : PAYMENT_METHOD.WALLET);
 
@@ -161,6 +181,8 @@ module.exports = {
   RECEIPT_TIMEOUT_MS,
   RECEIPT_TIMEOUT_MINUTES,
   RETURN_STATUS,
+  LOST_FROM_STATUSES,
+  LOST_PAYMENT,
   methodOf,
   canTransition,
   canActorTransition,

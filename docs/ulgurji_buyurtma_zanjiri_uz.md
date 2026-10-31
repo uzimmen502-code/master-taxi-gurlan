@@ -152,3 +152,29 @@ matching ишламайди; курьер `getWholesaleReturnHandoverCode` ко�
 - `returnAnomaly` (масалан қайтиш нархи муҳрга мос эмас) — ушланма `escrow:wholesale_return` да туради, админ ҳал қилади.
 - Рад ҳисоблагичини камайтириш/ноллаш (админ) — қурилмаган.
 - Чек: файл Storage'да борлиги сервер томонидан текширилади (`receipt_not_found`), сотувчи чекни `cardPayment.receiptUrl` (Firebase token ҳавола) орқали кўради — Storage'га сотувчи рухсати ЙЎҚ (IAM берилмаган). Storage қоидаси: харидор ўз йўлига ёзади/ўқийди (image/*, <8MB), админ — `isCatalogAdmin()`.
+
+## 6. Йўқолган посилка — харидор томони (сервер)
+
+**What / when (2026-10-31, эга):** посилка йўқолса custody'даги курьер жавобгар ва товар қийматини тўлайди.
+Relay `adminMarkShipmentLost` → `settleLoss` (жонли, ЎЗГАРМАГАН) товар қиймати G (= `declaredValue` =
+`goodsTotal`) ни курьер ҳамёнидан жўнатма эгасига = **сотувчига** ўтказади (етмаса — курьер қарзи), кейин
+`paymentStatus: loss_settled`. Шундан КЕЙИН default `settleLost` (`onWholesaleShipmentLoss` триггери +
+`wholesaleOrdersReconcile` 10 дақиқа) битта транзакцияда, калит `bonus:wholesaleLost:{orderId}`:
+
+| Ҳолат | Пул | `payment.status` |
+|---|---|---|
+| Ҳамён | `escrow:wholesale:{id}` (= goodsTotal) → харидор ҳамёни (`wholesale_lost_refund`) | `refunded_lost` |
+| Карта, харидор тўламаган (`cardPayment.awaiting`) | эскроудаги avaFee → сотувчи | `refunded_lost` |
+| Карта, чек/тасдиқ/низо | пул ЙЎҚ, эскроу қолади — админ ҳал қилади | `lost_review` |
+
+Буюртма `in_delivery | payment_dispute → lost` (system), history `lost_settled`; қолдиқ ТИКЛАНМАЙДИ;
+сотувчига `escrow:wholesale` дан товар пули ҲЕЧ ҚАЧОН берилмайди. Хабарлар (3 тил, PROPOSED матн):
+`ws_lost_buyer_wallet|card|review`, `ws_lost_seller`, `ws_lost_review_admin`.
+
+**Why `loss_settled`, `loss_pending` эмас:** relay пули (LEG ҳақи, эскроу, курьер компенсацияси) ёпилгач
+ишлайди; `loss_pending → loss_settled` ягона ўтиш (қайтмайди).
+
+**Очиқ (эга):** харидорга етказиш ҳақи ҳам қайтадими (PROPOSED: йўқ — relay LEG/AVA'га тақсимлаган);
+`lost_review` ни ҳал қилувчи админ воситаси йўқ; курьер = сотувчи бўлса relay `LOSS_SAME_ACCOUNT` да
+тўхтайди (`loss_pending` қолади, харидорга қайтариш бўлмайди); қайтиш жўнатмаси (`wholesale_return`)
+йўқолса — қамралмаган.

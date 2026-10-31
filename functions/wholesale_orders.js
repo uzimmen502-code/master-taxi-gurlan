@@ -59,6 +59,20 @@
  *   RETURN FUND Dr escrow:wholesale_return:{id} Cr escrow:{qaytishShipmentId} (`wholesaleReturnFund:{id}`)
  *               → qaytish jo'natmasi `escrow_funded`/`ready`, buyurtma refused → returning
  *   RETURNED    qaytish jo'natmasi sotuvchiga yetdi (custody `deliversShipment`) → returned + qoldiq +N
+ *
+ * ── YO'QOLGAN POSILKA (ega, 2026-10-31: custody'dagi kuryer javobgar) ───
+ * Admin `adminMarkShipmentLost` (demand) → relay `settleLoss` (jonli, O'ZGARMAYDI): tugagan LEG
+ * kuryerlariga haq, escrow:{shipmentId} yopiladi, tovar qiymati G (= goodsTotal, declaredValue)
+ * kuryer hamyonidan jo'natma EGASIGA = SOTUVCHIGA (yetmasa — kuryer qarzi) → `loss_settled`.
+ * Shundan KEYIN shu fayl (`settleLost`, trigger `onWholesaleShipmentLoss` + reconcile), BITTA
+ * tranzaksiya, kalit `bonus:wholesaleLost:{id}`:
+ *   HAMYON  Dr escrow:wholesale:{id} goodsTotal / Cr passenger_credit:{xaridor} (wallet_ledger
+ *           `wholesale_lost_refund`); yetkazish haqi relay'da taqsimlangan — TEGILMAYDI
+ *   KARTA   (xaridor to'lamagan, `cardPayment.awaiting`) Dr escrow:wholesale:{id} avaFee /
+ *           Cr passenger_credit:{sotuvchi} (rad mantiqi bilan bir xil)
+ *   KARTA   (chek/tasdiq/nizo — xaridor to'lagan bo'lishi mumkin) pul YO'Q, `lost_review` (admin)
+ *   → buyurtma `lost`, eskrou 0 (review'dan tashqari), qoldiq TIKLANMAYDI. Sotuvchiga tovar puli
+ *   escrow:wholesale dan HECH QACHON berilmaydi (uni kuryer kompensatsiyasi qoplaydi).
  */
 
 const ORDERS = 'wholesale_orders';
@@ -87,8 +101,15 @@ const STATUS = Object.freeze({
   PAYMENT_DISPUTE: 'payment_dispute',
   RETURNING: 'returning',
   RETURNED: 'returned',
+  // Yo'qolgan posilka (ega, 2026-10-31): faqat SYSTEM (`settleLost`, shu fayl).
+  LOST: 'lost',
 });
 const REFUND_STATUSES = Object.freeze([STATUS.CANCELLED, STATUS.REFUSED]);
+/** Paritet: demand `LOST_FROM_STATUSES` / `LOST_PAYMENT`. */
+const LOST_FROM_STATUSES = Object.freeze([STATUS.IN_DELIVERY, STATUS.PAYMENT_DISPUTE]);
+const LOST_PAYMENT = Object.freeze({ REFUNDED: 'refunded_lost', REVIEW: 'lost_review' });
+/** relay `settleLoss` yakuniy holati (`functions/relay_escrow.js` LOSS_SETTLED bilan bir xil). */
+const SHIPMENT_LOSS_SETTLED = 'loss_settled';
 const REFUND_STATUS = Object.freeze({ PENDING: 'pending', DONE: 'done' });
 /** Paritet: demand `core/wholesale_orders.js` (yagona jadval) — functions/test/wholesale_orders.test.js. */
 const PAYMENT_METHOD = Object.freeze({ WALLET: 'wallet', CARD: 'card_on_delivery' });
@@ -127,6 +148,8 @@ const refusedKey = (orderId) => `wholesaleRefused:${orderId}`;
 const returnHoldKey = (orderId) => `wholesaleReturnHold:${orderId}`;
 const returnFundKey = (orderId) => `wholesaleReturnFund:${orderId}`;
 const returnEscrowAccount = (orderId) => `escrow:wholesale_return:${orderId}`;
+/** Yo'qolish: `bonus:` prefiksli (prepareBonusInTx) — eskrou qoldig'i to'lovchiga. */
+const lostKey = (orderId) => `wholesaleLost:${orderId}`;
 /**
  * Relay hisob/kalitlari — `functions/relay_escrow.js` bilan AYNAN bir xil (o'sha fayl O'ZGARMAYDI;
  * paritet + «ikki yo'l bir vaqtda» testi: functions/test/wholesale_card_cf.test.js). Rad etilgan karta
@@ -1436,6 +1459,154 @@ function attachWholesaleOrders(exportsObj, deps) {
     return out;
   }
 
+  // ── YO'QOLGAN POSILKA: xaridor tomoni (sotuvchini kuryer relay `settleLoss` da qoplagan) ──
+  /**
+   * Chiqish jo'natmasi relay'da `loss_settled` (kuryer kompensatsiyasi hisoblandi, eskrou yopildi)
+   * → BITTA tranzaksiyada: (hamyon) eskrou qoldig'i goodsTotal → xaridor; (karta, to'lanmagan)
+   * avaFee → sotuvchi; (karta, to'lov bildirilgan) pul yo'q — `lost_review`; buyurtma → `lost` +
+   * history `lost_settled`. Qoldiq tiklanmaydi. Eskrou AYNAN kutilgan summa bo'lmasa — anomaliya,
+   * pul YO'Q. Idempotent: holat tranzaksiyada + `bonus:wholesaleLost:{id}` (trigger takrori /
+   * reconcile bir vaqtda — bir marta). Jo'natma hujjatiga TEGILMAYDI (relay egaligi).
+   */
+  async function settleLost(orderId) {
+    const started = Date.now();
+    const orderRef = db.collection(ORDERS).doc(String(orderId || ''));
+    const s0 = await orderRef.get();
+    if (!s0.exists) return { skipped: 'order_missing' };
+    const o0 = s0.data() || {};
+    if (o0.status === STATUS.LOST) return { skipped: 'already_lost' };
+    if (!LOST_FROM_STATUSES.includes(o0.status)) return { skipped: `status_${o0.status || 'none'}` };
+    const shipmentId = String((o0.shipment || {}).shipmentId || '');
+    if (!shipmentId) return { skipped: 'no_shipment' };
+    const shipRef = db.collection(SHIPMENTS).doc(shipmentId);
+    const ss0 = await shipRef.get();
+    const ship0 = ss0.exists ? (ss0.data() || {}) : {};
+    if (ship0.paymentStatus !== SHIPMENT_LOSS_SETTLED) return { skipped: `shipment_${ship0.paymentStatus || 'none'}` };
+    const when = now();
+
+    const out = await db.runTransaction(async (t) => {
+      // ── READ fazasi ──
+      const [os, ss] = await Promise.all([t.get(orderRef), t.get(shipRef)]);
+      if (!os.exists) return { skipped: 'order_missing' };
+      const o = os.data() || {};
+      if (o.status === STATUS.LOST) return { skipped: 'already_lost' };
+      if (!LOST_FROM_STATUSES.includes(o.status)) return { skipped: `status_${o.status || 'none'}` };
+      if (String((o.shipment || {}).shipmentId || '') !== shipmentId) return { skipped: 'shipment_mismatch', anomaly: true };
+      const s = ss.exists ? (ss.data() || {}) : {};
+      if (s.source !== 'wholesale' || s.wholesaleOrderId !== orderId) return { skipped: 'shipment_not_wholesale', anomaly: true };
+      if (s.paymentStatus !== SHIPMENT_LOSS_SETTLED) return { skipped: `shipment_${s.paymentStatus || 'none'}` };
+      const pay = o.payment || {};
+      if (pay.deliveryFunded !== true) return { skipped: 'delivery_not_funded', anomaly: true };
+      const isCard = methodOf(o) === PAYMENT_METHOD.CARD;
+      // Karta: xaridor to'lovni bildirgan (chek / tasdiq / nizo) — u sotuvchi kartasiga to'lagan bo'lishi
+      // mumkin, sotuvchi esa kuryerdan G ham oladi. Kim kimga qaytaradi — ADMIN (pul YO'Q, eskrou qoladi).
+      const review = isCard && (o.status === STATUS.PAYMENT_DISPUTE
+        || (o.cardPayment || {}).status !== CARD_PAYMENT.AWAITING);
+      let amount = 0;
+      let payeeWalletUid = '';
+      let ledger = null;
+      if (!review) {
+        if (pay.status !== (isCard ? 'held_seller' : 'held')) return { skipped: 'payment_invalid', anomaly: true };
+        amount = pay.amount - o.deliveryFee;
+        payeeWalletUid = isCard ? String(pay.payerWalletUid || '') : String(o.buyerWalletUid || '');
+        if (!isInt(amount) || amount < 0 || !payeeWalletUid) return { skipped: 'amount_invalid', anomaly: true };
+        // Hamyon: eskrouda AYNAN tovar summasi qolgan bo'lishi shart (yetkazish haqi SHIP_FUND da ketgan).
+        if (!isCard && amount !== o.goodsTotal) return { skipped: 'amount_invalid', anomaly: true };
+        ledger = await settlementLedger.prepareBonusInTx(t, db, payeeWalletUid, {
+          fundingAccount: escrowAccount(orderId), idempotencyKey: lostKey(orderId),
+        });
+        if (!ledger.jExists && ledger.fundPrev !== amount) {
+          return { skipped: 'escrow_mismatch', anomaly: true, escrow: ledger.fundPrev };
+        }
+      }
+
+      // ── WRITE fazasi ──
+      const refundTo = review || amount === 0 ? null : (isCard ? 'seller' : 'buyer');
+      const posted = !review && amount > 0;
+      if (posted && !ledger.jExists) {
+        settlementLedger.commitBonusInTx(t, ledger, {
+          delta: amount,
+          kind: 'wholesale_lost_refund',
+          refType: 'wholesale_order',
+          refId: orderId,
+          meta: {
+            module: 'wholesale', status: o.status, shipmentId, paymentMethod: methodOf(o), payee: refundTo,
+            incidentId: String(s.lossIncidentId || shipmentId),
+          },
+          postedBy: 'system',
+          postedRole: 'system',
+        });
+        mirrorWallet(t, payeeWalletUid, amount, 'wholesale_lost_refund', orderId, when, { shipmentId, payee: refundTo });
+      }
+      const incidentId = String(s.lossIncidentId || shipmentId);
+      const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+      t.update(orderRef, {
+        status: STATUS.LOST,
+        lostAt: when,
+        statusUpdatedAt: when,
+        updatedAt: when,
+        historySeq: seq,
+        lost: {
+          shipmentId,
+          incidentId,
+          refundTo,
+          refunded: amount,
+          review,
+          shipmentLostAt: s.lostAt || null,
+          lossSettledAt: s.lossSettledAt || null,
+        },
+        'payment.status': review ? LOST_PAYMENT.REVIEW : LOST_PAYMENT.REFUNDED,
+        'payment.lostRefund': amount,
+        'payment.lostRefundEntryId': posted ? `bonus:${lostKey(orderId)}` : null,
+        ...(review ? {} : { 'payment.refundedAt': when, refundStatus: REFUND_STATUS.DONE, refundedAt: when }),
+      });
+      t.set(orderRef.collection(HISTORY).doc(String(seq)), {
+        seq, from: o.status, to: STATUS.LOST, event: 'lost_settled', actor: 'system', actorId: null, reason: '',
+        meta: {
+          shipmentId, incidentId, paymentMethod: methodOf(o), refundTo, refunded: amount, review,
+          cardPaymentStatus: isCard ? ((o.cardPayment || {}).status || null) : null, stockRestored: false,
+        },
+        at: when,
+      });
+      return {
+        lost: true, refunded: amount, refundTo, review, ledgerExisted: !!(ledger && ledger.jExists), from: o.status,
+      };
+    });
+    if (out.anomaly) {
+      logError('lost', {
+        orderId, shipmentId, errorCode: `WHOLESALE_LOST_${String(out.skipped).toUpperCase()}`,
+        ...(out.escrow !== undefined ? { escrow: out.escrow } : {}),
+      });
+      await markAnomaly(orderId, 'lostAnomaly', out.skipped);
+    } else {
+      log('lost', {
+        orderId, shipmentId, result: out.lost ? 'ok' : 'skipped', skipped: out.skipped || null, from: out.from || null,
+        amount: out.refunded || 0, refundTo: out.refundTo || null, review: !!out.review, durationMs: Date.now() - started,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * `shipments/{id}` onUpdate (YANGI trigger — relay `onLogisticsShipmentUpdate` O'ZGARMAYDI):
+   * faqat Ulgurji chiqish jo'natmasi `paymentStatus` → `loss_settled` bo'lganda. O'qishsiz filtr
+   * (boshqa jo'natmalar uchun bitta ham Firestore o'qishi yo'q). Yiqilsa — reconcile.
+   */
+  async function onShipmentLossUpdate(before, after) {
+    const b = before || {};
+    const a = after || {};
+    if (a.paymentStatus !== SHIPMENT_LOSS_SETTLED || b.paymentStatus === SHIPMENT_LOSS_SETTLED) return { skipped: 'not_loss_settled' };
+    if (a.source !== 'wholesale' || typeof a.wholesaleOrderId !== 'string' || !a.wholesaleOrderId) return { skipped: 'not_wholesale' };
+    try {
+      return await settleLost(a.wholesaleOrderId);
+    } catch (e) {
+      logError('lost', {
+        orderId: a.wholesaleOrderId, errorCode: 'WHOLESALE_LOST_FAILED', message: String((e && e.message) || e).slice(0, 200),
+      });
+      return { skipped: 'failed' };
+    }
+  }
+
   /**
    * Jo'natma yetkazilgan (`deliversShipment` custody hodisasi) va Ulgurji buyurtmasiniki
    * bo'lsa — tovar puli. Oddiy jo'natma — tegmaydi. Relay o'z RELEASE'ini o'zining
@@ -1532,7 +1703,8 @@ function attachWholesaleOrders(exportsObj, deps) {
    * Qotib qolganlar (trigger yiqilgan / o'tkazib yuborilgan), har biri 10 daqiqadan eski:
    *   A) `pending` qaytarishlar;
    *   B) jo'natma bog'langan, lekin yetkazish haqi o'tmagan (`placed`) → SHIP_FUND;
-   *   C) jo'natma yetkazilgan, buyurtma hali `in_delivery` → RELEASE.
+   *   C) jo'natma yetkazilgan, buyurtma hali `in_delivery` → RELEASE;
+   *   F) jo'natma `loss_settled`, buyurtma hali `in_delivery`/`payment_dispute` → settleLost.
    * Har yozuv idempotent — trigger bilan bir vaqtda ishlash xavfsiz. Tenglik
    * filtrlari bitta maydonda (yangi indeks kerak emas).
    */
@@ -1571,7 +1743,22 @@ function attachWholesaleOrders(exportsObj, deps) {
         logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_SHIP_FUND_FAILED', message: String((e && e.message) || e).slice(0, 200) });
       }
     }
-    // C) RELEASE qotgan (jo'natma yetkazilgan, buyurtma in_delivery).
+    // F) Yo'qolgan posilka: jo'natma `loss_settled`, buyurtma hali in_delivery / payment_dispute
+    //    (trigger yiqilgan), 10 daqiqadan eski. Anomaliya belgisi bo'lsa — admin ko'radi (o'tkaziladi).
+    out.lostChecked = 0; out.lostSettled = 0;
+    const tryLost = async (d, o, ship) => {
+      if (o.lostAnomaly) return;
+      if (nowMs - (msOf(ship.lossSettledAt) || msOf(ship.updatedAt) || 0) < minAgeMs) return;
+      out.lostChecked += 1;
+      try {
+        const r = await settleLost(d.id);
+        if (r && r.lost) out.lostSettled += 1;
+      } catch (e) {
+        out.failed += 1;
+        logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_LOST_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+      }
+    };
+    // C) RELEASE qotgan (jo'natma yetkazilgan, buyurtma in_delivery). F) shu o'qishda.
     const inDel = await db.collection(ORDERS).where('status', '==', STATUS.IN_DELIVERY).limit(limit).get();
     for (const d of inDel.docs) {
       const o = d.data() || {};
@@ -1580,6 +1767,7 @@ function attachWholesaleOrders(exportsObj, deps) {
       try {
         const s = await db.collection(SHIPMENTS).doc(shipmentId).get();
         const ship = s.exists ? (s.data() || {}) : {};
+        if (ship.paymentStatus === SHIPMENT_LOSS_SETTLED) { await tryLost(d, o, ship); continue; }
         if (!isShipmentDelivered(ship)) continue;
         if (nowMs - (msOf(ship.deliveredAt) || msOf(ship.updatedAt) || 0) < minAgeMs) continue;
         out.releaseChecked += 1;
@@ -1588,6 +1776,21 @@ function attachWholesaleOrders(exportsObj, deps) {
       } catch (e) {
         out.failed += 1;
         logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_RELEASE_FAILED', message: String((e && e.message) || e).slice(0, 200) });
+      }
+    }
+    // F) karta nizosidagi (payment_dispute) buyurtma jo'natmasi yo'qolgan.
+    const disputed = await db.collection(ORDERS).where('status', '==', STATUS.PAYMENT_DISPUTE).limit(limit).get();
+    for (const d of disputed.docs) {
+      const o = d.data() || {};
+      const shipmentId = String((o.shipment || {}).shipmentId || '');
+      if (!shipmentId) continue;
+      try {
+        const s = await db.collection(SHIPMENTS).doc(shipmentId).get();
+        const ship = s.exists ? (s.data() || {}) : {};
+        if (ship.paymentStatus === SHIPMENT_LOSS_SETTLED) await tryLost(d, o, ship);
+      } catch (e) {
+        out.failed += 1;
+        logError('reconcile', { orderId: d.id, errorCode: 'WHOLESALE_RECONCILE_LOST_FAILED', message: String((e && e.message) || e).slice(0, 200) });
       }
     }
     // D) 3b: rad etilgan karta buyurtmasi — qaytish haqi (qarz bo'lsa HAR aylanishda, ya'ni
@@ -1661,6 +1864,10 @@ function attachWholesaleOrders(exportsObj, deps) {
   exportsObj.onWholesaleCustodyEvent = functions.firestore
     .document('custody_events/{eventId}')
     .onCreate(async (snap) => { await onCustodyEvent(snap.data() || {}); return null; });
+  // Yo'qolgan posilka (ega, 2026-10-31): relay `loss_settled` dan keyin xaridor tomoni.
+  exportsObj.onWholesaleShipmentLoss = functions.firestore
+    .document(`${SHIPMENTS}/{shipmentId}`)
+    .onUpdate(async (change) => { await onShipmentLossUpdate(change.before.data() || {}, change.after.data() || {}); return null; });
   // 3b: har 10 daqiqa (ega, 2026-10-31: qaytish qarzi hamyon to'ldirilgach 10 daqiqada yopilsin).
   exportsObj.wholesaleOrdersReconcile = functions.pubsub
     .schedule('every 10 minutes')
@@ -1668,7 +1875,7 @@ function attachWholesaleOrders(exportsObj, deps) {
 
   return {
     place, refundOrder, onStatusChange, reconcile, shipFund, releaseGoods, onShipmentDelivered, onCustodyEvent,
-    fundReturn, completeReturn, settleOutboundOnRefusal,
+    fundReturn, completeReturn, settleOutboundOnRefusal, settleLost, onShipmentLossUpdate,
   };
 }
 
@@ -1689,6 +1896,10 @@ module.exports = {
   returnHoldKey,
   returnFundKey,
   returnEscrowAccount,
+  lostKey,
+  LOST_FROM_STATUSES,
+  LOST_PAYMENT,
+  SHIPMENT_LOSS_SETTLED,
   relayEarnedKey,
   relayReleaseKey,
   RELAY_ACCRUAL_ACCOUNT,

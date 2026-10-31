@@ -686,16 +686,29 @@ async function demandFlip(orderId, to) {
     assert.strictEqual((await api.releaseGoods(id)).skipped, 'shipment_closed');
     assert.strictEqual((await api.onShipmentDelivered(SHIP)).skipped, 'shipment_closed');
     clock = new Date(T0.getTime() + 60 * 60 * 1000);
-    assert.strictEqual((await api.reconcile()).releaseChecked, 0);
-    assert.strictEqual(await bal(W.escrowAccount(id)), 140000);
-    await db.collection('shipments').doc(SHIP).update({ status: 'in_transit', paymentStatus: 'escrow_funded' });
+    // Yo'qolish (ega, 2026-10-31): reconcile tovar pulini SOTUVCHIGA bermaydi — xaridorga qaytaradi
+    // (`settleLost`; to'liq zanjir: functions/test/wholesale_lost_cf.test.js).
+    const rec = await api.reconcile();
+    assert.deepStrictEqual([rec.releaseChecked, rec.released, rec.lostSettled], [0, 0, 1]);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 0);
+    assert.strictEqual(await bal(pcOf(SELLER)), 0, 'sotuvchiga eskroudan tovar puli YO\'Q');
+    assert.strictEqual(await bal(pcOf(BUYER)), 300000 - 60000, 'xaridorga goodsTotal qaytdi');
+    assert.strictEqual((await orderOf(id)).status, 'lost');
+    await assertLedgerSound();
+    // Sotuvchi hamyoni yo'q — yangi buyurtmada (yuqoridagi `lost` — oxirgi holat).
+    await seed();
+    const { orderId: id2 } = await place();
+    await seedShipment(id2);
+    await link(id2);
+    await api.shipFund(id2);
+    await db.collection('shipments').doc(SHIP).update({ status: 'in_transit' });
     await deliver();
     await db.collection('users').doc(SELLER).delete();
-    const r = await api.releaseGoods(id);
+    const r = await api.releaseGoods(id2);
     assert.deepStrictEqual([r.skipped, r.anomaly], ['seller_wallet_missing', true]);
-    assert.strictEqual(await bal(W.escrowAccount(id)), 140000);
-    assert.strictEqual((await orderOf(id)).releaseAnomaly.code, 'seller_wallet_missing');
-    assert.strictEqual((await orderOf(id)).status, 'in_delivery');
+    assert.strictEqual(await bal(W.escrowAccount(id2)), 140000);
+    assert.strictEqual((await orderOf(id2)).releaseAnomaly.code, 'seller_wallet_missing');
+    assert.strictEqual((await orderOf(id2)).status, 'in_delivery');
   });
 
   const failed = results.filter((r) => !r.pass).length;

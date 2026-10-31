@@ -50,6 +50,16 @@ function transitionNotifications(before, after) {
   }
   if (changedTo(b, a, WO.STATUS.RETURNING)) out.push({ to: 'seller', key: 'ws_returning_seller' });
   if (changedTo(b, a, WO.STATUS.RETURNED)) out.push({ to: 'seller', key: 'ws_returned_seller' });
+  // Yo'qolgan posilka (ega, 2026-10-31): default `settleLost` yozgan to'lov holatiga qarab.
+  if (changedTo(b, a, WO.STATUS.LOST)) {
+    if ((a.payment || {}).status === WO.LOST_PAYMENT.REVIEW) {
+      out.push({ to: 'buyer', key: 'ws_lost_buyer_review' }, { to: 'seller', key: 'ws_lost_seller' },
+        { to: 'admins', key: 'ws_lost_review_admin' });
+    } else {
+      out.push({ to: 'buyer', key: WO.methodOf(a) === WO.PAYMENT_METHOD.CARD ? 'ws_lost_buyer_card' : 'ws_lost_buyer_wallet' },
+        { to: 'seller', key: 'ws_lost_seller' });
+    }
+  }
   return out;
 }
 
@@ -63,6 +73,8 @@ function paramsOf(o, orderId) {
     amount: Number.isInteger(o.goodsTotal) && Number.isInteger(o.deliveryFee) ? o.goodsTotal + o.deliveryFee : '',
     tracking: rs.trackingNumber || '',
     ...(Number.isInteger(debt.amount) ? { amount: debt.amount } : {}),
+    // Yo'qolish: xaridorga qaytgan summa (hamyon — goodsTotal); `{refund}` faqat lost xabarlarida.
+    refund: Number.isInteger((o.payment || {}).lostRefund) ? o.payment.lostRefund : '',
   };
 }
 

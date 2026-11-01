@@ -10,8 +10,13 @@
  * ҳужжат ID = мижоз телефони; танишув чати — ташқи Telegram бот). `wholesale_orders` — пул/
  * етказиш занжири, унга чат аралаштирилмайди (13-банд).
  *
+ * Аралаш бозор (эга 2026-11-01: «унга ҳам қўш»): эълон (`ads`, type cheap_product) ва дўкон
+ * маҳсулоти (`tv_shop_items`) учун ҳам ШУ чат — `source` бўйича (SOURCES жадвали). Эски
+ * Улгуржи/Хитой чатлари (`source` майдонисиз) — `wholesale`.
+ *
  * Коллекциялар (ҳаммаси client-write ЁПИҚ, фақат шу CF'лар ёзади):
- *   deal_chats/{productId}_{buyerUid}  — чат (детерминистик ID → қайта очиш идемпотент)
+ *   deal_chats/{prefix}{productId}_{buyerUid} — чат (детерминистик ID → қайта очиш идемпотент;
+ *     prefix: wholesale — йўқ (эски ID'лар сақланади), ad — `ad-`, shop_item — `si-`)
  *     /messages/{senderUid}-{clientId} — хабар (ID → қайта юбориш идемпотент, 21-банд)
  *   deal_chat_usage/{uid}              — дақиқалик чегара ҳисоби (ҳеч кимга ўқилмайди)
  *
@@ -32,7 +37,39 @@ const { render, langOfPhone } = require('./notif_i18n');
 
 const CHATS = 'deal_chats';
 const USAGE = 'deal_chat_usage';
-const PRODUCTS = 'wholesale_products';
+
+/** Чат манбалари: коллекция, ID префикси, сотувчи/ном/расм/нарх қоидаси. */
+const SOURCES = Object.freeze({
+  wholesale: {
+    collection: 'wholesale_products',
+    prefix: '',
+    isActive: (p) => p.status === 'active',
+    seller: (p) => p.sellerId,
+    photo: (p) => (Array.isArray(p.imageUrls) ? p.imageUrls[0] : ''),
+    market: (p) => (p.market === 'china' ? 'china' : 'wholesale'),
+    price: () => null,
+  },
+  // Аралаш бозор эълони: фақат `cheap_product` (бошқа эълон турлари — бошқа модуллар).
+  ad: {
+    collection: 'ads',
+    prefix: 'ad-',
+    isActive: (p) => p.status === 'active' && p.type === 'cheap_product',
+    seller: (p) => p.ownerId,
+    photo: (p) => (Array.isArray(p.imageUrls) ? p.imageUrls[0] : ''),
+    market: () => 'aralash',
+    price: (p) => p.price,
+  },
+  // Дўкон маҳсулоти: `status` йўқ эски ҳужжат = active (илова `TvShopItem.fromFirestore` билан бир хил).
+  shop_item: {
+    collection: 'tv_shop_items',
+    prefix: 'si-',
+    isActive: (p) => (p.status == null ? 'active' : p.status) === 'active',
+    seller: (p) => p.ownerPhone,
+    photo: (p) => (Array.isArray(p.photoUrls) && p.photoUrls[0]) || p.photoUrl || '',
+    market: () => 'aralash',
+    price: (p) => p.price,
+  },
+});
 
 // PROPOSED (47-банд) — эга тасдиқлагунча; ўзгартириш = шу константалар.
 const LIMITS = Object.freeze({
@@ -43,14 +80,20 @@ const LIMITS = Object.freeze({
 });
 
 const PRODUCT_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
-const CHAT_ID_RE = /^[A-Za-z0-9_-]{1,100}_\d{11,15}$/;
+const CHAT_ID_RE = /^[A-Za-z0-9_-]{1,104}_\d{11,15}$/;
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
 // Телефон рақами (E.164 рақамлари); ўзбек рақами — 998 + 9 хона.
 const UID_RE = /^\d{11,15}$/;
 
-/** Чат ID — маҳсулот + харидор (бир харидор бир маҳсулот бўйича битта чат). */
-function dealChatId(productId, buyerUid) {
-  return `${productId}_${buyerUid}`;
+/** Чат ID — манба префикси + маҳсулот + харидор (бир харидор бир маҳсулот бўйича битта чат). */
+function dealChatId(productId, buyerUid, source = 'wholesale') {
+  const src = SOURCES[source] || SOURCES.wholesale;
+  return `${src.prefix}${productId}_${buyerUid}`;
+}
+
+/** Нарх — фақат манфий бўлмаган бутун сон (8-банд); бошқаси — сақланмайди. */
+function priceOf(v) {
+  return Number.isSafeInteger(v) && v > 0 ? v : null;
 }
 
 /** Хабар матни: trim; бўш ёки чегарадан узун — `null` (жимгина қисқартирилмайди). */
@@ -120,7 +163,7 @@ function attachDealChats(exportsObj, deps) {
   }
 
   /**
-   * data: { productId } → { ok, chatId, created }.
+   * data: { productId, source? } → { ok, chatId, created }. source: wholesale (default) | ad | shop_item.
    * Мавжуд чат (аъзо бўлса) — маҳсулот ҳолатидан қатъи назар қайтарилади (келишув давом этади).
    */
   exportsObj.openDealChat = functions.https.onCall(async (data, context) => {
@@ -128,8 +171,11 @@ function attachDealChats(exportsObj, deps) {
     const uid = requireUser(context);
     const productId = String((data && data.productId) || '').trim();
     if (!PRODUCT_ID_RE.test(productId)) throw fail('invalid-argument', 'PRODUCT_INVALID');
-    const chatRef = db.collection(CHATS).doc(dealChatId(productId, uid));
-    const productRef = db.collection(PRODUCTS).doc(productId);
+    const source = data && data.source != null ? String(data.source) : 'wholesale';
+    const src = Object.prototype.hasOwnProperty.call(SOURCES, source) ? SOURCES[source] : null;
+    if (!src) throw fail('invalid-argument', 'PRODUCT_INVALID');
+    const chatRef = db.collection(CHATS).doc(dealChatId(productId, uid, source));
+    const productRef = db.collection(src.collection).doc(productId);
 
     const out = await db.runTransaction(async (t) => {
       const [chatSnap, productSnap] = await Promise.all([t.get(chatRef), t.get(productRef)]);
@@ -139,17 +185,21 @@ function attachDealChats(exportsObj, deps) {
       }
       if (!productSnap.exists) throw fail('not-found', 'PRODUCT_UNAVAILABLE');
       const p = productSnap.data() || {};
-      if (p.status !== 'active') throw fail('failed-precondition', 'PRODUCT_UNAVAILABLE');
-      const sellerUid = canonicalUid(p.sellerId || '');
+      if (!src.isActive(p)) throw fail('failed-precondition', 'PRODUCT_UNAVAILABLE');
+      const sellerUid = canonicalUid(String(src.seller(p) || ''));
       if (!UID_RE.test(sellerUid)) throw fail('failed-precondition', 'PRODUCT_UNAVAILABLE');
       if (sellerUid === uid) throw fail('failed-precondition', 'OWN_PRODUCT');
-      const photo = Array.isArray(p.imageUrls) && typeof p.imageUrls[0] === 'string' ? p.imageUrls[0] : '';
+      const rawPhoto = src.photo(p);
+      const photo = typeof rawPhoto === 'string' ? rawPhoto : '';
+      const price = priceOf(src.price(p));
       t.create(chatRef, {
         members: [uid, sellerUid],
         buyerId: uid,
         sellerId: sellerUid,
         productId,
-        market: p.market === 'china' ? 'china' : 'wholesale',
+        source,
+        market: src.market(p),
+        ...(price != null ? { productPrice: price } : {}),
         productTitle: String(p.title || '').trim().slice(0, LIMITS.titleMax),
         productPhoto: photo.slice(0, 1000),
         lastMessage: '',
@@ -160,7 +210,7 @@ function attachDealChats(exportsObj, deps) {
       });
       return { created: true };
     });
-    log({ action: 'openDealChat', userId: uid, chatId: chatRef.id, productId, result: out.created ? 'created' : 'existing', durationMs: Date.now() - started });
+    log({ action: 'openDealChat', userId: uid, chatId: chatRef.id, productId, source, result: out.created ? 'created' : 'existing', durationMs: Date.now() - started });
     return { ok: true, chatId: chatRef.id, created: out.created };
   });
 
@@ -226,5 +276,5 @@ function attachDealChats(exportsObj, deps) {
 }
 
 module.exports = {
-  attachDealChats, dealChatId, normalizeText, previewOf, rateGate, LIMITS,
+  attachDealChats, dealChatId, normalizeText, previewOf, rateGate, priceOf, LIMITS, SOURCES,
 };

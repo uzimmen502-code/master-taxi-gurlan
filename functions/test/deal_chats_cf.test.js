@@ -133,6 +133,60 @@ async function main() {
     assert.strictEqual((await db.collection('deal_chats').get()).size, 2);
   });
 
+  await check('M1 Aralash bozor: e\'lon (ads cheap_product) — chat ad- prefiks, source/market/narx; o\'z e\'loni, faol emas, boshqa tur — rad', async () => {
+    await db.collection('ads').doc('a_ok').set({
+      type: 'cheap_product', status: 'active', ownerId: `+${SELLER}`, title: 'Velosiped', price: 450000,
+      imageUrls: ['https://img/a1.jpg'],
+    });
+    await db.collection('ads').doc('a_off').set({ type: 'cheap_product', status: 'inactive', ownerId: SELLER, title: 'X' });
+    await db.collection('ads').doc('a_job').set({ type: 'job', status: 'active', ownerId: SELLER, title: 'Ish' });
+    await db.collection('ads').doc('a_float').set({ type: 'cheap_product', status: 'active', ownerId: SELLER, title: 'F', price: 10.5 });
+    const r = await call('openDealChat', { productId: 'a_ok', source: 'ad' }, BUYER);
+    assert.deepStrictEqual(r, { ok: true, chatId: `ad-a_ok_${BUYER}`, created: true });
+    const d = await chatDoc(r.chatId);
+    assert.deepStrictEqual(d.members, [BUYER, SELLER]);
+    assert.deepStrictEqual([d.source, d.market, d.productTitle, d.productPhoto, d.productPrice], ['ad', 'aralash', 'Velosiped', 'https://img/a1.jpg', 450000]);
+    await expectCode(call('openDealChat', { productId: 'a_ok', source: 'ad' }, SELLER), 'OWN_PRODUCT');
+    await expectCode(call('openDealChat', { productId: 'a_off', source: 'ad' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    await expectCode(call('openDealChat', { productId: 'a_job', source: 'ad' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    await expectCode(call('openDealChat', { productId: 'a_ok', source: 'evil' }, BUYER), 'PRODUCT_INVALID');
+    await expectCode(call('openDealChat', { productId: 'a_ok', source: 'constructor' }, BUYER), 'PRODUCT_INVALID');
+    // Бутун бўлмаган нарх сақланмайди (8-банд), чат очилаверади.
+    const f = await call('openDealChat', { productId: 'a_float', source: 'ad' }, BUYER);
+    assert.ok(!('productPrice' in (await chatDoc(f.chatId))));
+    // Улгуржи (source йўқ) — эски ID шакли ўзгармаган.
+    assert.strictEqual(dealChatId('p_ok', BUYER), `p_ok_${BUYER}`);
+  });
+
+  await check('M2 Aralash bozor: do\'kon mahsuloti (tv_shop_items) — si- prefiks, photoUrls/photoUrl, status yo\'q = active; blocked — rad; ikki tomonlama yozishma', async () => {
+    await db.collection('tv_shop_items').doc('s_ok').set({ ownerPhone: SELLER, title: 'Gilam', price: 1200000, photoUrl: 'https://img/cover.jpg' });
+    await db.collection('tv_shop_items').doc('s_blk').set({ ownerPhone: SELLER, title: 'B', status: 'blocked' });
+    await db.collection('tv_shop_items').doc('s_pend').set({ ownerPhone: SELLER, title: 'P', status: 'pending' });
+    const r = await call('openDealChat', { productId: 's_ok', source: 'shop_item' }, BUYER);
+    assert.strictEqual(r.chatId, `si-s_ok_${BUYER}`);
+    const d = await chatDoc(r.chatId);
+    assert.deepStrictEqual([d.source, d.market, d.productPhoto, d.productPrice, d.sellerId], ['shop_item', 'aralash', 'https://img/cover.jpg', 1200000, SELLER]);
+    await expectCode(call('openDealChat', { productId: 's_blk', source: 'shop_item' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    await expectCode(call('openDealChat', { productId: 's_pend', source: 'shop_item' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    // Бир хил ID'ли маҳсулот учта манбада — учта алоҳида чат (тўқнашмайди).
+    await db.collection('ads').doc('same').set({ type: 'cheap_product', status: 'active', ownerId: SELLER, title: 'A' });
+    await db.collection('tv_shop_items').doc('same').set({ ownerPhone: SELLER, title: 'S' });
+    const a = await call('openDealChat', { productId: 'same', source: 'ad' }, BUYER);
+    const s = await call('openDealChat', { productId: 'same', source: 'shop_item' }, BUYER);
+    assert.notStrictEqual(a.chatId, s.chatId);
+    // Харидор ↔ сотувчи: иккала томон ёзади, push иккинчи томонга, матни билан.
+    sent.length = 0;
+    await call('sendDealMessage', { chatId: r.chatId, text: 'Gilam bormi?', clientId: 'si-buyer-0001' }, BUYER);
+    await call('sendDealMessage', { chatId: r.chatId, text: 'Bor, keling', clientId: 'si-seller-0001' }, SELLER);
+    assert.deepStrictEqual(sent.map((m) => [m.token, m.notification.title, m.notification.body]), [
+      ['tok-seller', '💬 Gilam', 'Gilam bormi?'],
+      ['tok-buyer', '💬 Gilam', 'Bor, keling'],
+    ]);
+    const m = await msgs(r.chatId);
+    assert.deepStrictEqual(m.map((x) => x.from), [BUYER, SELLER]);
+    await expectCode(call('sendDealMessage', { chatId: r.chatId, text: 'x', clientId: 'si-strgr-0001' }, STRANGER), 'CHAT_NOT_FOUND');
+  });
+
   await check('S1 yuborish: validatsiya (chatId, matn bo\'sh/1001, clientId)', async () => {
     await expectCode(call('sendDealMessage', { chatId: 'bad id', text: 'x', clientId: cid() }, BUYER), 'CHAT_INVALID');
     await expectCode(call('sendDealMessage', { chatId: CHAT, text: '   ', clientId: cid() }, BUYER), 'TEXT_INVALID');

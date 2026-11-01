@@ -99,7 +99,8 @@ Future<void> showGeoSelectorSheet(
               selected: !GeoContext.isAway,
               onTap: () async {
                 Navigator.pop(ctx);
-                await GeoContext.resetToHome();
+                // Қўлда танлов: GPS телефон бошқа туманга кўчгунча устидан ёзмайди (эга, 2026-11-01).
+                await GeoContext.chooseHome();
               },
             ),
             tile(

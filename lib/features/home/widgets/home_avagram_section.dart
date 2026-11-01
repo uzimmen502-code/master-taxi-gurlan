@@ -85,7 +85,7 @@ class _HomeAvagramSectionState extends State<HomeAvagramSection> {
     try {
       // AVAGram модул танлови (D-GEO-1): Республика танланган бўлса туман
       // устуворлиги йўқ; акс ҳолда танланган/фаол туман биринчи.
-      final scope = GeoContext.scopeFor('tv_market');
+      final scope = GeoContext.homeScopeFor('tv_market');
       final page = await _repo.fetchHomePage(
         districtId:
             scope.level == GeoLevel.nation ? '' : scope.area.districtId,

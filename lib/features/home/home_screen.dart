@@ -8,8 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_share.dart';
 import '../../core/geo/geo_context.dart';
 import '../../core/geo/geo_selector.dart';
-import '../../core/geo/geo_suggest_banner.dart';
 import '../../core/geo/location_area_service.dart';
+import '../../core/geo/location_permission_prompt.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
@@ -233,6 +233,7 @@ class _HomeViewState extends State<_HomeView> {
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
       unawaited(_checkLocationSuggestion());
+      unawaited(_askLocationOnce());
       unawaited(_refreshDriverRoles());
       unawaited(_refreshShopPresence());
     });
@@ -357,54 +358,30 @@ class _HomeViewState extends State<_HomeView> {
   /// «Ҳозирги жойим» пункти; `null` — аниқланмаган.
   GeoArea? _locationArea;
 
-  /// Кўрсатиладиган локация таклифи (D-GEO-12) — `null` бўлса йўқ.
-  GeoArea? _suggestArea;
   DateTime? _lastLocationCheckAt;
 
-  /// Жорий туманни аниқлаш (рухсат СЎРАМАЙДИ, 10 дақиқада бир марта).
-  Future<void> _checkLocationSuggestion() async {
+  /// GPS туманини аниқлаш ва тепага қўйиш (эга, 2026-11-01: биринчи ўрин GPS, иккинчи — қўлда
+  /// танлов, у телефон бошқа туманга кўчгунча сақланади — [GeoContext.applyGps]). Рухсат бу ерда
+  /// СЎРАЛМАЙДИ ([_askLocationOnce] бир марта сўрайди); 10 дақиқада бир марта ([force] — дарҳол).
+  /// Аввалги «Сиз ҳозир …дасиз» баннери (D-GEO-12) ўрнига — тасдиқсиз, ўзи.
+  Future<void> _checkLocationSuggestion({bool force = false}) async {
     final now = DateTime.now();
-    if (_lastLocationCheckAt != null &&
+    if (!force &&
+        _lastLocationCheckAt != null &&
         now.difference(_lastLocationCheckAt!) < const Duration(minutes: 10)) {
       return;
     }
     _lastLocationCheckAt = now;
     final area = await LocationAreaService().detect();
     if (!mounted) return;
-    final dismissed =
-        area == null ? null : await suggestionDismissedAt(area.districtId);
-    final previous = await lastDetectedDistrict();
-    if (area != null) await rememberDetectedDistrict(area.districtId);
-    if (!mounted) return;
-    setState(() {
-      _locationArea = area;
-      final keep = _suggestArea != null && area != null && _suggestArea!.districtId == area.districtId;
-      // Жавоб берилмаган таклиф — кейинги текширувда (10 дақиқа) ҳам ўша туманда бўлса қолади.
-      _suggestArea = keep ||
-              shouldSuggestLocation(
-                detected: area,
-                active: GeoContext.active,
-                dismissedAt: dismissed,
-                now: DateTime.now(),
-                previousDetectedDistrictId: previous,
-              )
-          ? area
-          : null;
-    });
+    setState(() => _locationArea = area);
+    await GeoContext.applyGps(area);
   }
 
-  Future<void> _acceptLocationSuggestion() async {
-    final a = _suggestArea;
-    if (a == null) return;
-    setState(() => _suggestArea = null);
-    await GeoContext.setActive(a, GeoAreaSource.location);
-  }
-
-  Future<void> _declineLocationSuggestion() async {
-    final a = _suggestArea;
-    if (a == null) return;
-    setState(() => _suggestArea = null);
-    await dismissSuggestion(a.districtId, DateTime.now());
+  /// Биринчи очилишда жойлашув рухсати (ихчам ойна, бир марта). Берилса — GPS дарҳол.
+  Future<void> _askLocationOnce() async {
+    final granted = await askLocationPermissionOnce(context);
+    if (granted && mounted) await _checkLocationSuggestion(force: true);
   }
 
   @override
@@ -1474,13 +1451,6 @@ class _HomeViewState extends State<_HomeView> {
                                     )
                                   : null,
                             ),
-                            if (_suggestArea != null &&
-                                !_suggestArea!.sameAs(GeoContext.active))
-                              GeoSuggestBanner(
-                                area: _suggestArea!,
-                                onYes: _acceptLocationSuggestion,
-                                onNo: _declineLocationSuggestion,
-                              ),
                             // Мижоз тасдиғи (D2/D7): курьер «олдим/етказдим»
                             // деганидан кейин мижоз ўз қурилмасида тасдиқлайди.
                             // Бўш бўлса ёки сервер жавобермаса — жой эгалламайди.
@@ -1562,7 +1532,7 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
                                 key: _sectionKey(
-                                    'ads_ad_${GeoContext.scopeFor('jobs').key}'),
+                                    'ads_ad_${GeoContext.homeScopeFor('jobs').key}'),
                                 adType: 'ad',
                                 titleKey: 'home_section_ads',
                                 onOpenAll: () => _openGated(
@@ -1582,7 +1552,7 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
                                 key: _sectionKey(
-                                    'ads_service_${GeoContext.scopeFor('jobs').key}'),
+                                    'ads_service_${GeoContext.homeScopeFor('jobs').key}'),
                                 adType: 'service',
                                 titleKey: 'home_section_services',
                                 onOpenAll: () => _openGated(
@@ -1627,7 +1597,7 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeRealtySection(
                                 key: _sectionKey(
-                                    'realty_${GeoContext.scopeFor('realty').key}'),
+                                    'realty_${GeoContext.homeScopeFor('realty').key}'),
                                 onOpenAll: () => _push(const RealtyScreen()),
                                 onOpenMap: () =>
                                     _push(const RealtyMapScreen()),
@@ -1655,7 +1625,7 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeYukLocalSection(
                                 key: _sectionKey(
-                                    'yuk_local_${GeoContext.scopeFor('yuk_local').key}'),
+                                    'yuk_local_${GeoContext.homeScopeFor('yuk_local').key}'),
                                 isGuest: uid.length < 9,
                                 onRegister: () =>
                                     unawaited(openProfileScreen(context)),
@@ -1678,7 +1648,7 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeMarketSection(
                                 key: _sectionKey(
-                                    'market_${GeoContext.scopeFor('cheap_products_home').key}'),
+                                    'market_${GeoContext.homeScopeFor('cheap_products_home').key}'),
                                 onOpenAll: () => _openModule(
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),
@@ -1747,7 +1717,7 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAvagramSection(
                                 key: _sectionKey(
-                                    'avagram_${GeoContext.scopeFor('tv_market').key}'),
+                                    'avagram_${GeoContext.homeScopeFor('tv_market').key}'),
                                 onOpenAll: () =>
                                     _push(const TvMarketFeedScreen()),
                                 onOpenClip: (clip) => _push(

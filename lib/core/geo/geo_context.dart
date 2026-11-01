@@ -128,11 +128,19 @@ enum GeoAreaSource { home, location, manual }
 ///   [ServiceConfigHolder.applyActiveDistrict].
 /// - **Модулдаги танлов** ([scopeFor]) — даража ва ҳудуд; қоида
 ///   [kModuleGeoPolicies]да (сақланади ёки йўқ).
+///
+/// **Устунлик (эга, 2026-11-01):** 1) GPS — телефон турган туман тепада ЎЗИ кўрсатилади
+/// ([applyGps]); 2) фойдаланувчи қўлда танласа (ойнадан «Бошқа ҳудуд» ёки «Яшаш жойим») — шу
+/// танлов телефон БОШҚА ТУМАНГА КЎЧГУНЧА сақланади, кейин яна GPS. GPS йўқ (рухсат/веб/аниқланмади)
+/// — танлов ёки яшаш жойи. Бош экран маълумотлари шу кўрсатилган ҳудуд бўйича ([homeScopeFor]).
 class GeoContext {
   GeoContext._();
 
   static const _kActive = 'geo_active_v1';
   static const _kScopePrefix = 'geo_scope_v1_';
+
+  /// Қўлда танлов белгиси: `{gps: <танлов пайтидаги GPS тумани | null>}`; йўқ — танлов йўқ.
+  static const _kPin = 'geo_manual_pin_v1';
 
   /// Фаол ҳудуд ёки модул танлови ўзгарганда.
   static final ValueNotifier<int> revision = ValueNotifier(0);
@@ -141,6 +149,18 @@ class GeoContext {
   static GeoAreaSource _activeSource = GeoAreaSource.home;
   static final Map<String, GeoScope> _scopes = {};
   static bool _loaded = false;
+
+  /// Фойдаланувчи ҳудудни ҚЎЛДА танлаган (GPS устидан ёзмайди, телефон бошқа туманга кўчгунча).
+  static bool _pinned = false;
+
+  /// Қўлда танлов пайтидаги GPS тумани; `null` — ўшанда GPS номаълум эди (биринчи аниқлаш таянч бўлади).
+  static String? _pinGps;
+
+  /// Охирги аниқланган GPS тумани (шу сеансда).
+  static String? _lastGps;
+
+  /// Ҳудуд қўлда танланганми (UI/тест).
+  static bool get isPinned => _pinned;
 
   /// Тест учун — яшаш жойини бериш (`ServiceConfigHolder`сиз).
   @visibleForTesting
@@ -179,6 +199,15 @@ class GeoContext {
               GeoAreaSource.manual;
         }
       }
+      final pin = prefs.getString(_kPin);
+      if (pin != null && pin.isNotEmpty) {
+        final j = jsonDecode(pin) as Map<String, dynamic>;
+        _pinned = true;
+        _pinGps = (j['gps'] as String?)?.trim().isNotEmpty == true ? j['gps'] as String : null;
+      } else if (_active != null && _activeSource == GeoAreaSource.manual) {
+        // Эски илова: қўлда танланган, белгиси йўқ — танлов сақланади, GPS таянчи кейин.
+        _pinned = true;
+      }
       for (final key in prefs.getKeys().where((k) => k.startsWith(_kScopePrefix))) {
         final s = prefs.getString(key);
         if (s == null || s.isEmpty) continue;
@@ -202,6 +231,15 @@ class GeoContext {
       _active = area;
       _activeSource = source;
     }
+    // Қўлда танлов — GPS устидан ёзмайди (телефон бошқа туманга кўчгунча); GPS/«Ҳозирги жойим» — белги ечилади.
+    if (source == GeoAreaSource.manual) {
+      _pinned = true;
+      _pinGps = _lastGps;
+    } else if (source == GeoAreaSource.location) {
+      _pinned = false;
+      _pinGps = null;
+    }
+    await _savePin();
     revision.value++;
     // Хизматлар танланган ҳудуд бўйича (эга, 2026-10-31, «А вариант»).
     await ServiceConfigHolder.applyActiveDistrict(_active?.districtId ?? '');
@@ -221,6 +259,56 @@ class GeoContext {
   }
 
   static Future<void> resetToHome() => setActive(GeoArea.empty, GeoAreaSource.home);
+
+  /// Ойнадан «Яшаш жойим» — бу ҳам ҚЎЛДА танлов (GPS устидан ёзмайди, телефон кўчгунча).
+  static Future<void> chooseHome() => setActive(GeoArea.empty, GeoAreaSource.manual);
+
+  /// GPS натижаси (эга, 2026-11-01): биринчи ўрин GPS, иккинчи — қўлда танлов.
+  ///
+  /// - [gps] `null`/бўш — ҳеч нарса ўзгармайди (танлов ёки яшаш жойи қолади).
+  /// - Қўлда танлов бор ва телефон ўша туманда (ёки таянч ҳали йўқ — шу аниқлаш таянч) — танлов қолади.
+  /// - Акс ҳолда (танлов йўқ ёки телефон бошқа туманга кўчган) — тепада GPS тумани.
+  ///
+  /// Қайтаради: фаол ҳудуд ўзгардими.
+  static Future<bool> applyGps(GeoArea? gps) async {
+    if (gps == null || gps.isEmpty || gps.districtId.isEmpty) return false;
+    _lastGps = gps.districtId;
+    if (_pinned) {
+      if (_pinGps == null) {
+        _pinGps = gps.districtId;
+        await _savePin();
+        return false;
+      }
+      if (_pinGps == gps.districtId) return false;
+      // Телефон бошқа туманга кўчди — қўлда танлов тугади.
+      _pinned = false;
+      _pinGps = null;
+    }
+    if (gps.sameAs(active) && activeSource != GeoAreaSource.manual) {
+      await _savePin();
+      return false;
+    }
+    await setActive(gps, GeoAreaSource.location);
+    return true;
+  }
+
+  static Future<void> _savePin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_pinned) {
+        await prefs.setString(_kPin, jsonEncode({'gps': _pinGps}));
+      } else {
+        await prefs.remove(_kPin);
+      }
+    } catch (e) {
+      debugPrint('GeoContext.pin: $e');
+    }
+  }
+
+  /// Бош экран бўлими учун (эга, 2026-11-01: «танланган (кўрсатилган) ҳудуд бўйича бош экрандаги
+  /// маълумотлар»): модул ичидаги танлов ҲИСОБГА ОЛИНМАЙДИ — модул сукут даражаси + тепадаги ҳудуд.
+  static GeoScope homeScopeFor(String moduleId) =>
+      GeoScope(level: geoPolicyFor(moduleId).defaultLevel, area: active);
 
   /// Модулдаги жорий кўриниш. Сақланган танлов бўлмаса — қоидадаги сукут
   /// даража + фаол ҳудуд.
@@ -267,6 +355,9 @@ class GeoContext {
     _scopes.clear();
     _sessionScopes.clear();
     _loaded = false;
+    _pinned = false;
+    _pinGps = null;
+    _lastGps = null;
     homeOverride = null;
   }
 }

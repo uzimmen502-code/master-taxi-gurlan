@@ -18,73 +18,11 @@ import 'geo_names.dart';
 List<String> _names(List<String> all) =>
     all.where((n) => n.trim().isNotEmpty).toList(growable: false);
 
-/// Локация таклифи (D-GEO-12): «Сиз ҳозир Чилонзордасиз…» — тасдиқсиз
-/// ўтмайди, «Йўқ» шу туманга 24 соат сўралмайди.
-const kGeoSuggestQuiet = Duration(hours: 24);
-
-/// Таклиф кўрсатиладими (тоза функция — тест учун).
-///
-/// Эга, 2026-10-26: «фойдаланувчининг геолокацияси аниқ ўзгаргандагина таклиф қилинсин». Шунинг учун
-/// [previousDetectedDistrictId] — олдинги аниқлашдаги туман: `null` (биринчи аниқлаш — бошланғич нуқта)
-/// ёки ҳозиргиси билан бир хил бўлса (жойидан жилмаган) — таклиф ЙЎҚ. Аввал танланган ҳудуддан фарқ
-/// қилишнинг ўзи етарли эди — жойидан жилмаган одамга ҳам қайта-қайта чиқарди.
-bool shouldSuggestLocation({
-  required GeoArea? detected,
-  required GeoArea active,
-  required DateTime? dismissedAt,
-  required DateTime now,
-  required String? previousDetectedDistrictId,
-}) {
-  if (detected == null || detected.isEmpty) return false;
-  if (previousDetectedDistrictId == null || previousDetectedDistrictId == detected.districtId) return false;
-  if (detected.sameAs(active)) return false;
-  if (dismissedAt != null && now.difference(dismissedAt) < kGeoSuggestQuiet) return false;
-  return true;
-}
-
-String _dismissKey(String districtId) => 'geo_suggest_dismiss_$districtId';
-
-Future<DateTime?> suggestionDismissedAt(String districtId) async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final ms = prefs.getInt(_dismissKey(districtId));
-    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
-  } catch (_) {
-    return null;
-  }
-}
-
-Future<void> dismissSuggestion(String districtId, DateTime now) async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_dismissKey(districtId), now.millisecondsSinceEpoch);
-  } catch (_) {}
-}
-
-const _lastDetectedKey = 'geo_last_detected_district';
-
-/// Олдинги аниқлашдаги туман (`shouldSuggestLocation.previousDetectedDistrictId` учун).
-Future<String?> lastDetectedDistrict() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_lastDetectedKey);
-  } catch (_) {
-    return null;
-  }
-}
-
-Future<void> rememberDetectedDistrict(String districtId) async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastDetectedKey, districtId);
-  } catch (_) {}
-}
-
 /// Жорий жойлашувдан туманни аниқлайди (D-GEO-13, А вариант — телефон
 /// geocoder'и + номни мослаш).
 ///
-/// - GPS рухсати ОЛДИН берилган бўлса ишлайди; рухсат СЎРАМАЙДИ (GPS
-///   фақат керак пайтда сўралади — таклиф шартлари).
+/// - GPS рухсати ОЛДИН берилган бўлса ишлайди; рухсат СЎРАМАЙДИ (бир марталик ихчам ойна —
+///   `askLocationPermissionOnce`). Натижа тепадаги ҳудуд — `GeoContext.applyGps` (эга, 2026-11-01).
 /// - Вебда ишламайди (geocoder йўқ).
 /// - Натижа geohash-5 (~5 км) катак бўйича 7 кун кешланади — ҳар очилишда
 ///   Firestore ўқиш ва geocoder чақирувидан сақлайди (37-банд).
@@ -102,8 +40,8 @@ class LocationAreaService {
       final perm = await Geolocator.checkPermission();
       if (perm != LocationPermission.always && perm != LocationPermission.whileInUse) return null;
       if (!await Geolocator.isLocationServiceEnabled()) return null;
-      // Фақат ҲОЗИРГИ жойлашув (эга, 2026-10-26: «аниқ ўзгарганда»): `getLastKnownPosition` кечаги ёки
-      // бошқа жойдаги нуқтани бериши мумкин эди — жилмаган одамга нотўғри таклиф. Олиб бўлмаса — `null`.
+      // Фақат ҲОЗИРГИ жойлашув: `getLastKnownPosition` кечаги ёки бошқа жойдаги нуқтани бериши мумкин —
+      // нотўғри туман тепага чиқарди. Олиб бўлмаса — `null`.
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,

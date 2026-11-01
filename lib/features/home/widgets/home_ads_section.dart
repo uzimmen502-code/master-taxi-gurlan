@@ -61,7 +61,7 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
         // `jobs` модули танлови (туман/вилоят/Республика) — экран билан
         // бир хил (D-GEO-1).
         .watchScoped(
-          GeoContext.scopeFor('jobs'),
+          GeoContext.homeScopeFor('jobs'),
           types: [widget.adType],
           limit: HomeAdsSection.limit,
         )

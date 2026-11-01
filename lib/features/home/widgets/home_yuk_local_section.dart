@@ -76,7 +76,7 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     // Модул экрани билан бир хил доира (D-GEO-6: туман ёки вилоят).
     _sub = _repo
-        .watchScoped(GeoContext.scopeFor('yuk_local'))
+        .watchScoped(GeoContext.homeScopeFor('yuk_local'))
         .listen(
       (all) {
         if (!mounted) return;

@@ -132,7 +132,7 @@ class _HomeRealtySectionState extends State<HomeRealtySection> {
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     // Кўчмас мулк модул танлови (D-GEO-15) — лента ва харита билан бир хил.
     _sub = _repo
-        .watchScoped(GeoContext.scopeFor('realty'), limit: HomeRealtySection.limit)
+        .watchScoped(GeoContext.homeScopeFor('realty'), limit: HomeRealtySection.limit)
         .listen(
       (list) {
         if (!mounted) return;

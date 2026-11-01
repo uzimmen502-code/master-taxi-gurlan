@@ -74,7 +74,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     // Модул танлови (туман/вилоят/Республика, D-GEO-1) — модул экрани
     // билан бир хил. Аввал бош саҳифа туман, «Барчаси» Республика эди.
     _sub = _repo
-        .watchScoped(GeoContext.scopeFor('cheap_products_home'), limit: _limit)
+        .watchScoped(GeoContext.homeScopeFor('cheap_products_home'), limit: _limit)
         .listen(
       (list) {
         if (!mounted) return;
@@ -102,7 +102,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
 
   /// Эълон туманининг номи — фақат ўша туман кўриниб турган бўлса маълум.
   String? _districtNote(String districtId) {
-    final area = GeoContext.scopeFor('cheap_products_home').area;
+    final area = GeoContext.homeScopeFor('cheap_products_home').area;
     return districtId.isNotEmpty && districtId == area.districtId
         ? GeoNames.district(districtId, context.contentLang, fallback: area.districtLabel)
         : null;

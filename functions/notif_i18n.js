@@ -36,6 +36,13 @@ const MESSAGES = {
     uz_Latn: { title: '🇨🇳 Xitoy so\'rovingizga taklif keldi', body: '{refNo} bo\'yicha taklifni ilovada ko\'rishingiz mumkin.' },
     ru: { title: '🇨🇳 Получено предложение по запросу в Китай', body: 'Предложение по {refNo} можно посмотреть в приложении.' },
   },
+  // Улгуржи/Хитой «Буюртма ёзиш» чати (deal_chats.js, эга 2026-11-01). Хабар матни push'да ЙЎҚ
+  // (40-банд) — фақат маҳсулот номи `{title}`. Матн PROPOSED.
+  deal_chat_message: {
+    uz_Cyrl: { title: '💬 Янги хабар: {title}', body: 'Буюртма чатида сизга янги хабар бор. Ўқиш учун босинг.' },
+    uz_Latn: { title: '💬 Yangi xabar: {title}', body: 'Buyurtma chatida sizga yangi xabar bor. O\'qish uchun bosing.' },
+    ru: { title: '💬 Новое сообщение: {title}', body: 'У вас новое сообщение в чате заказа. Нажмите, чтобы прочитать.' },
+  },
   auto_shift_stop_midnight: {
     uz_Cyrl: { title: '⏱ Рейс автоматик сурилмайди', body: 'Жўнаш вақти кеч бўлгани учун рейс бугун яна сурилмайди. Янги кунга кўчиринг ёки тугатинг.' },
     uz_Latn: { title: '⏱ Reys avtomatik surilmaydi', body: 'Jo\'nash vaqti kech bo\'lgani uchun reys bugun yana surilmaydi. Yangi kunga ko\'chiring yoki tugating.' },

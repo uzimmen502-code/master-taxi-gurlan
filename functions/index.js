@@ -166,6 +166,11 @@ const { attachChinaInquiries } = require('./china_inquiries');
 attachChinaInquiries(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
 });
+// Улгуржи/Хитой «Буюртма ёзиш» — харидор ↔ эълон эгаси чати (ega qarori 2026-11-01). `resolveFcmToken` — hoisted.
+const { attachDealChats } = require('./deal_chats');
+attachDealChats(exports, {
+  functions, db, admin, callerPhone, canonicalUid, resolveFcmToken,
+});
 // Бизнес харитаси (2026-10-23, ega): объектни эгаси қўшади, админ фақат таҳрирлайди/ўчиради. Дарвоза — мижозда (`business_map` модули).
 const { attachBusinessDirectory } = require('./business_directory');
 attachBusinessDirectory(exports, {

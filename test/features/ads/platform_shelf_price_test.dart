@@ -1,6 +1,7 @@
 import 'package:ava_gurlan/features/ads/widgets/platform_market_card.dart';
 import 'package:ava_gurlan/models/platform_product.dart';
 import 'package:ava_gurlan/models/price_tier.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Эски товар (2026-10-07 гача) — поғоналар нархдан ҳисобланади.
@@ -55,4 +56,12 @@ void main() {
       expect(platformShelfPrice(p).price, '10 000 сўм');
     });
   });
-}
+
+  testWidgets('«AVA» белгиси ~20% кичик (эга, 2026-11-01): шрифт 9', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SizedBox(width: 180, height: 320, child: PlatformMarketCard(product: _p()))),
+    ));
+    final badge = find.descendant(of: find.byKey(const ValueKey('platform_ava_badge')), matching: find.text('AVA'));
+    expect(badge, findsOneWidget);
+    expect(tester.widget<Text>(badge).style!.fontSize, 9);
+  });}

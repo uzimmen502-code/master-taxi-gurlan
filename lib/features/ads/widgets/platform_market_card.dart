@@ -58,20 +58,22 @@ class PlatformMarketCard extends StatelessWidget {
                   Positioned(
                     top: 6,
                     left: 6,
+                    // «AVA» белгиси ~20% кичик (эга, 2026-11-01): шрифт 11 → 9, бўшлиқ мутаносиб.
                     child: Container(
+                      key: const ValueKey('platform_ava_badge'),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                        horizontal: 5,
+                        vertical: 1.5,
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.button,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(5),
                       ),
                       child: const Text(
                         'AVA',
                         style: TextStyle(
                           color: AppColors.onPrimary,
-                          fontSize: 11,
+                          fontSize: 9,
                           fontWeight: FontWeight.w800,
                         ),
                       ),

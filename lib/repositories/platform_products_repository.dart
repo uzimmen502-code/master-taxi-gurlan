@@ -4,6 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/platform_product.dart';
 
+/// AVA маҳсулотлари Улгуржида (бозор экрани ва бош саҳифа Улгуржи бўлими) кўрсатиладими.
+///
+/// `false` (эга, 2026-11-01): AVA маҳсулотлари эганинг ЎЗ Улгуржи бўлимига кўчирилди
+/// (`wholesale_products/pp_*`, сотувчи «AVA», `functions/tools/migrate_platform_to_owner_wholesale.js`) —
+/// Улгуржида улар сотувчи маҳсулоти сифатида кўринади, AVA нусхаси такрорланмасин. Аралаш бозорда AVA
+/// нусхаси (сават билан) ҚОЛАДИ. Қайтариш — `true`.
+const bool kPlatformInWholesale = false;
+
 /// `platform_products` — AVA товарлари каталоги (2026-10-06 дан Улгуржи
 /// бозорнинг бир қисми; алоҳида «AVA дўкони» экрани йўқ).
 class PlatformProductsRepository {
@@ -132,6 +140,8 @@ class PlatformProductsRepository {
   }
 
   /// Улгуржи бозор лентаси учун — AVA дўкони товарлари.
+  ///
+  /// Улгуржида AVA (`platform_products`) лентаси ЎЧИҚ — [kPlatformInWholesale].
   ///
   /// Эга қарори (2026-10-06): «AVA дўкони тўлиқ Улгуржига ўтади. Ҳамма
   /// фаол AVA товари Улгуржи лентасида». Аввал (2026-09-29) фақат нарх

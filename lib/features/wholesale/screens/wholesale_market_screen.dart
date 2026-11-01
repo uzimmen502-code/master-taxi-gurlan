@@ -75,7 +75,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
 
   /// Хитой бозорида AVA товари кўрсатилмайди: у ердаги товар хорижий
   /// етказиб берувчиники, валюта ва етказиш муддати ҳам бошқа.
-  bool get _showPlatform => !_isChina;
+  /// Улгуржида ҳам ЎЧИҚ (эга, 2026-11-01) — [kPlatformInWholesale].
+  bool get _showPlatform => kPlatformInWholesale && !_isChina;
 
   @override
   void initState() {

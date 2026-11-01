@@ -1,6 +1,7 @@
 import 'package:ava_gurlan/features/ads/widgets/platform_market_card.dart';
 import 'package:ava_gurlan/models/platform_product.dart';
 import 'package:ava_gurlan/models/price_tier.dart';
+import 'package:ava_gurlan/repositories/platform_products_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -64,4 +65,9 @@ void main() {
     final badge = find.descendant(of: find.byKey(const ValueKey('platform_ava_badge')), matching: find.text('AVA'));
     expect(badge, findsOneWidget);
     expect(tester.widget<Text>(badge).style!.fontSize, 9);
-  });}
+  });
+
+  test('Улгуржида AVA нусхаси йўқ — маҳсулотлар эганинг бўлимидан (эга, 2026-11-01)', () {
+    expect(kPlatformInWholesale, isFalse);
+  });
+}

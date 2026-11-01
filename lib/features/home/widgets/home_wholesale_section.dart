@@ -116,6 +116,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
   bool _platformLoading = false;
 
   bool get _withPlatform =>
+      kPlatformInWholesale &&
       widget.onOpenPlatformProduct != null &&
       widget.market == WholesaleProduct.marketWholesale;
 

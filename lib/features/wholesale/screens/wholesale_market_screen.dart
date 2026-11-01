@@ -147,8 +147,10 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 48,
+        // Сарлавҳада «бозор» сўзи йўқ (эга, 2026-11-01: «мантиқан ортиқча»): «Улгуржи» / «Хитой».
+        // `wholesale_title` бошқа жойларда (буюртма карточкаси, AVA маҳсулоти, форма) ўзгармаган.
         title: Text(
-          context.tr(_isChina ? 'wholesale_title_china' : 'wholesale_title'),
+          context.tr(_isChina ? 'wholesale_screen_title_china' : 'wholesale_screen_title'),
         ),
         // Харидор буюртмалари (4-босқич) — Хитой бозорида буюртма йўқ.
         actions: [

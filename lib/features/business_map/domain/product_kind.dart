@@ -1,34 +1,50 @@
 import 'business.dart';
 import 'business_category.dart';
 
-/// Дўкон тоифаси (чакана / улгуржи) — «Менинг онлайн дўконим»даги дўконлар. Ягона манба
-/// (`MyShopPresence.isShopCategory` ҳам шуни ишлатади).
-bool isShopCategory(BusinessCategory c) => c == BusinessCategory.retail || c == BusinessCategory.wholesale;
+/// Дўкон тоифаси — «Менинг онлайн дўконим»даги дўконлар («Савдо ва дўконлар»; эски чакана/улгуржи ҳам шу
+/// турга ўгирилади — [BusinessCategory.legacyWires]). Ягона манба (`MyShopPresence.isShopCategory` ҳам шуни ишлатади).
+bool isShopCategory(BusinessCategory c) => c == BusinessCategory.retail;
 
 /// Дўконда (асосий дўкон ёки чакана/улгуржи) фақат маҳсулот: «Хизмат» танлови йўқ (эга, 2026-10-26: «дўкон ичида
 /// қанақа хизмат бўлиши мумкин»). Бошқа объектларда (сартарош, ўқув маркази …) танлов қолади.
 bool sellsOnlyProducts(Business b) => b.isOwnShop || isShopCategory(b.category);
 
 /// Объект маҳсулоти учун бошланғич тур: `service` (хизмат) ёки `product` (маҳсулот). Эга формада ўзгартира олади.
-/// Хизмат кўрсатувчи турлар — хизмат; савдо/ишлаб чиқариш/овқат/авто/бошқа — маҳсулот.
+/// Товар сотадиган/ишлаб чиқарадиган турлар — маҳсулот; қолганлари (хизмат кўрсатувчилар) — хизмат.
 String defaultProductKind(BusinessCategory c) {
   switch (c) {
-    case BusinessCategory.personal:
-    case BusinessCategory.homeServices:
-    case BusinessCategory.health:
-    case BusinessCategory.education:
-    case BusinessCategory.leisure:
-    case BusinessCategory.logistics:
-    case BusinessCategory.professional:
-    case BusinessCategory.itMedia:
-      return 'service';
     case BusinessCategory.retail:
-    case BusinessCategory.wholesale:
+    case BusinessCategory.manufacturing:
+    case BusinessCategory.agriculture:
     case BusinessCategory.food:
     case BusinessCategory.auto:
-    case BusinessCategory.manufacturing:
+    case BusinessCategory.foreignTrade:
+    case BusinessCategory.fashion:
     case BusinessCategory.other:
       return 'product';
+    case BusinessCategory.logistics:
+    case BusinessCategory.construction:
+    case BusinessCategory.realEstate:
+    case BusinessCategory.personal:
+    case BusinessCategory.education:
+    case BusinessCategory.health:
+    case BusinessCategory.it:
+    case BusinessCategory.marketing:
+    case BusinessCategory.finance:
+    case BusinessCategory.professional:
+    case BusinessCategory.tourism:
+    case BusinessCategory.sport:
+    case BusinessCategory.creative:
+    case BusinessCategory.family:
+    case BusinessCategory.animals:
+    case BusinessCategory.energy:
+    case BusinessCategory.rental:
+    case BusinessCategory.agency:
+    case BusinessCategory.ecology:
+    case BusinessCategory.security:
+    case BusinessCategory.businessSupport:
+    case BusinessCategory.social:
+      return 'service';
   }
 }
 

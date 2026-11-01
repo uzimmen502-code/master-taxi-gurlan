@@ -115,7 +115,7 @@ void main() {
       p('Аvto Moyka', BusinessCategory.auto, sub: 'мойка'),
       p('Нон дўкони', BusinessCategory.retail, addr: 'Гурлан'),
       p('Кафе Бахор', BusinessCategory.food),
-      p('Улгуржи база', BusinessCategory.wholesale),
+      p('Импорт база', BusinessCategory.foreignTrade),
     ];
 
     test('фильтрсиз — ҳаммаси; тур бўйича; ном/кичик тур/манзил бўйича (регистрсиз)', () {
@@ -135,9 +135,9 @@ void main() {
     test('categoriesPresent: фақат бор турлар, enum тартибида', () {
       expect(categoriesPresent(pins), [
         BusinessCategory.retail,
-        BusinessCategory.wholesale,
         BusinessCategory.food,
         BusinessCategory.auto,
+        BusinessCategory.foreignTrade,
       ]);
       expect(categoriesPresent(const []), isEmpty);
     });

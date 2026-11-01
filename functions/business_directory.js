@@ -27,11 +27,31 @@ const GEO_DISTRICTS = 'geo_districts';
 const ADMIN_AUDIT = 'admin_audit';
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 
-/** Тур гуруҳлари (B-10). Рўйхат Dart томонида `BusinessCategory` билан бир хил бўлиши шарт. */
+/**
+ * Фаолият турлари — 30 та (эга, 2026-11-01: «олдинги 14 та харита категориясини энг янги 30 та харита категорияси
+ * билан такомиллаштир»), тартиб = эга рўйхатидаги рақам. Dart `BusinessCategory` билан бир хил (тест қулфлайди).
+ */
 const CATEGORIES = Object.freeze([
-  'retail', 'wholesale', 'food', 'auto', 'manufacturing', 'personal', 'home_services',
-  'health', 'education', 'leisure', 'logistics', 'professional', 'it_media', 'other',
+  'retail', 'manufacturing', 'agriculture', 'food', 'logistics', 'auto', 'construction', 'real_estate',
+  'personal', 'education', 'health', 'it', 'marketing', 'finance', 'professional', 'tourism', 'sport',
+  'creative', 'family', 'animals', 'energy', 'rental', 'agency', 'foreign_trade', 'fashion', 'ecology',
+  'security', 'business_support', 'social', 'other',
 ]);
+
+/**
+ * Эски 14 талик рўйхатнинг янгисида йўқ қийматлари → янгиси (эски APK шуларни юборади; Dart `legacyWires`).
+ * Ёзувда ҳар доим ЯНГИ қиймат сақланади.
+ */
+const LEGACY_CATEGORIES = Object.freeze({
+  wholesale: 'retail', home_services: 'personal', leisure: 'sport', it_media: 'it',
+});
+
+/** Келган тур → сақланадиган тур (эски бўлса янгиси); рўйхатда йўқ — `null`. */
+function categoryOf(raw) {
+  const s = typeof raw === 'string' ? raw : '';
+  const c = Object.prototype.hasOwnProperty.call(LEGACY_CATEGORIES, s) ? LEGACY_CATEGORIES[s] : s;
+  return CATEGORIES.includes(c) ? c : null;
+}
 
 const LIMITS = Object.freeze({
   nameMin: 2,
@@ -73,7 +93,8 @@ function normalizeInput(input, fail) {
     throw fail('invalid-argument', 'BUSINESS_NAME_INVALID',
       `Номи ${LIMITS.nameMin}–${LIMITS.nameMax} белги бўлсин.`);
   }
-  if (!CATEGORIES.includes(d.category)) {
+  const category = categoryOf(d.category);
+  if (!category) {
     throw fail('invalid-argument', 'BUSINESS_CATEGORY_INVALID', 'Фаолият турини танланг.');
   }
   const lat = d.lat;
@@ -100,7 +121,7 @@ function normalizeInput(input, fail) {
   }
   return {
     name,
-    category: d.category,
+    category,
     subtype: str(d.subtype, LIMITS.subtypeMax),
     description: str(d.description, LIMITS.descriptionMax),
     phone,
@@ -320,5 +341,5 @@ function attachBusinessDirectory(exportsObj, deps) {
 }
 
 module.exports = {
-  attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LIMITS, BOUNDS, EDITABLE,
+  attachBusinessDirectory, normalizeInput, changedKeys, CATEGORIES, LEGACY_CATEGORIES, categoryOf, LIMITS, BOUNDS, EDITABLE,
 };

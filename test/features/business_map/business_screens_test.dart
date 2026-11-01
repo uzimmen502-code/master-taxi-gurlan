@@ -296,8 +296,8 @@ void main() {
       expect(find.text('PRODUCTS n1'), findsOneWidget);
     });
 
-    testWidgets('янги улгуржи объект — дўкон табриги, кейин маҳсулотлар экрани', (tester) async {
-      await createVia(tester, [_b('w1', 'Омбор', BusinessCategory.wholesale)], 'w1');
+    testWidgets('эски «улгуржи» қийматли объект («Савдо ва дўконлар»га ўгирилади) — дўкон табриги, кейин маҳсулотлар', (tester) async {
+      await createVia(tester, [_b('w1', 'Омбор', BusinessCategory.fromWire('wholesale'))], 'w1');
       expect(_shopTitle, findsOneWidget);
       await _tapCelebration(tester);
       expect(find.text('PRODUCTS w1'), findsOneWidget);
@@ -484,6 +484,91 @@ void main() {
       await tester.tap(find.text('bizmap_save'));
       await tester.pumpAndSettle();
       expect(repo.calls.single, startsWith('upsert:7:Мой Дўкон:retail:'));
+    });
+
+    // 30 тур + автокомплит (эга, 2026-11-01).
+    group('автокомплит', () {
+      final catField = find.byKey(const ValueKey('biz_category_field'));
+      final subField = find.byKey(const ValueKey('biz_subtype_field'));
+      String textOf(WidgetTester t, Finder f) => t.widget<TextField>(f).controller!.text;
+
+      testWidgets('Фаолият тури: аниқроқ тур бўйича топилади, танланса иккала майдон тўлади, серверга wire кетади',
+          (tester) async {
+        final repo = _FakeRepo([]);
+        await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));
+        expect(textOf(tester, catField), 'business_cat_retail');
+
+        await tester.enterText(catField, 'шином');
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('biz_category_opt_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('biz_category_opt_1')), findsNothing);
+        expect(find.text('Шиномонтаж'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('biz_category_opt_0')));
+        await tester.pumpAndSettle();
+        expect(textOf(tester, catField), 'business_cat_auto');
+        expect(textOf(tester, subField), 'Шиномонтаж');
+
+        await tester.ensureVisible(find.text('bizmap_save'));
+        await tester.tap(find.text('bizmap_save'));
+        await tester.pumpAndSettle();
+        expect(repo.calls.single, startsWith('upsert:7:Мой Дўкон:auto:'));
+      });
+
+      testWidgets('рўйхатдан танланмаган матн — тур йўқ, сервер чақирилмайди', (tester) async {
+        final repo = _FakeRepo([]);
+        await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));
+        await tester.enterText(catField, 'Ўйлаб топилган тур');
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('bizmap_save'));
+        await tester.tap(find.text('bizmap_save'));
+        await tester.pumpAndSettle();
+        expect(find.text('bizmap_err_category'), findsOneWidget);
+        expect(repo.calls, isEmpty);
+      });
+
+      testWidgets('Аниқроқ тури: танланган тур таклифлари; тур алмашса бошқа турнинг тайёр номи тозаланади, ўз матни қолади',
+          (tester) async {
+        final repo = _FakeRepo([]);
+        await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('7', 'Мой Дўкон', BusinessCategory.retail)));
+        await tester.tap(subField);
+        await tester.pumpAndSettle();
+        expect(find.text('Супермаркет'), findsOneWidget);
+        expect(find.text('Шиномонтаж'), findsNothing);
+        await tester.tap(find.text('Супермаркет'));
+        await tester.pumpAndSettle();
+        expect(textOf(tester, subField), 'Супермаркет');
+
+        // Тур → тиббиёт: «Супермаркет» у турда йўқ — тозаланади; рухсат/лицензия изоҳи чиқади.
+        await tester.enterText(catField, 'business_cat_health');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('biz_category_opt_0')));
+        await tester.pumpAndSettle();
+        expect(textOf(tester, catField), 'business_cat_health');
+        expect(textOf(tester, subField), '');
+        expect(find.text('business_cat_note_health'), findsOneWidget);
+
+        // Ўз матни тур алмашганда ҳам қолади.
+        await tester.enterText(subField, 'Бобомнинг устахонаси');
+        await tester.pumpAndSettle();
+        await tester.enterText(catField, 'business_cat_food');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('biz_category_opt_0')));
+        await tester.pumpAndSettle();
+        expect(textOf(tester, subField), 'Бобомнинг устахонаси');
+        expect(find.text('business_cat_note_health'), findsNothing);
+      });
+
+      testWidgets('тур йўқ: аниқроқ тур бутун рўйхатдан топилади ва танланса тур ҳам белгиланади', (tester) async {
+        final repo = _FakeRepo([]);
+        await _pump(tester, BusinessFormScreen(repository: repo));
+        await tester.enterText(subField, 'эвакуат');
+        await tester.pumpAndSettle();
+        expect(find.text('business_cat_auto'), findsOneWidget, reason: 'тур номи ҳам кўринади');
+        await tester.tap(find.byKey(const ValueKey('biz_subtype_opt_0')));
+        await tester.pumpAndSettle();
+        expect(textOf(tester, subField), 'Эвакуатор');
+        expect(textOf(tester, catField), 'business_cat_auto');
+      });
     });
 
     testWidgets('«Ўз сайтингиз»: изоҳ кўринади; @ҳандл рад этилади; тўғри сайт сақланади', (tester) async {

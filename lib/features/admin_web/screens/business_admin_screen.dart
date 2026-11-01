@@ -277,22 +277,41 @@ class _BusinessAdminScreenState extends State<BusinessAdminScreen> {
 }
 
 /// Админ панели матнлари Кирилл ёзувида қотирилган (бошқа админ экранлар каби) — иловадаги 3 тилли
-/// калитлар админга керак эмас.
-String _catLabel(BusinessCategory c) => switch (c) {
-      BusinessCategory.retail => 'Дўкон',
-      BusinessCategory.wholesale => 'Улгуржи савдо',
-      BusinessCategory.food => 'Кафе ва ресторанлар',
-      BusinessCategory.auto => 'Авто хизматлар',
-      BusinessCategory.manufacturing => 'Ишлаб чиқариш',
-      BusinessCategory.personal => 'Шахсий хизматлар',
-      BusinessCategory.homeServices => 'Маиший ва техник хизматлар',
-      BusinessCategory.health => 'Тиббиёт ва соғлиқ',
-      BusinessCategory.education => 'Таълим',
-      BusinessCategory.leisure => 'Дам олиш, спорт, туризм',
-      BusinessCategory.logistics => 'Логистика ва транспорт',
-      BusinessCategory.professional => 'Касбий ва молиявий хизматлар',
-      BusinessCategory.itMedia => 'ИТ, реклама, алоқа',
-      BusinessCategory.other => 'Бошқа',
+/// калитлар админга керак эмас. Матн `assets/lang/uz_Cyrl.json` даги `business_cat_<wire>` билан бир хил
+/// (тест қулфлайди). 30 тур — эга, 2026-11-01.
+String _catLabel(BusinessCategory c) => adminBusinessCategoryLabel(c);
+
+String adminBusinessCategoryLabel(BusinessCategory c) => switch (c) {
+      BusinessCategory.retail => 'Савдо ва дўконлар',
+      BusinessCategory.manufacturing => 'Ишлаб чиқариш ва ҳунармандчилик',
+      BusinessCategory.agriculture => 'Қишлоқ хўжалиги',
+      BusinessCategory.food => 'Овқатланиш ва озиқ-овқат хизмати',
+      BusinessCategory.logistics => 'Транспорт, ташиш ва логистика',
+      BusinessCategory.auto => 'Автомобиль ва транспортга хизмат кўрсатиш',
+      BusinessCategory.construction => 'Қурилиш ва таъмирлаш',
+      BusinessCategory.realEstate => 'Кўчмас мулк ва ижара',
+      BusinessCategory.personal => 'Маиший ва шахсий хизматлар',
+      BusinessCategory.education => 'Таълим ва ўқув марказлари',
+      BusinessCategory.health => 'Тиббиёт ва саломатлик',
+      BusinessCategory.it => 'Ахборот технологиялари ва рақамли хизматлар',
+      BusinessCategory.marketing => 'Реклама, маркетинг ва оммавий ахборот',
+      BusinessCategory.finance => 'Молия, суғурта ва бухгалтерия',
+      BusinessCategory.professional => 'Юридик ва профессионал хизматлар',
+      BusinessCategory.tourism => 'Туризм, меҳмонхона ва дам олиш',
+      BusinessCategory.sport => 'Спорт ва кўнгилочар хизматлар',
+      BusinessCategory.creative => 'Фото, видео, мусиқа ва ижод',
+      BusinessCategory.family => 'Болалар, оила ва парвариш хизматлари',
+      BusinessCategory.animals => 'Ҳайвонлар ва ветеринария',
+      BusinessCategory.energy => 'Энергетика ва коммунал хизматлар',
+      BusinessCategory.rental => 'Ижара, ускуналар ва вақтинча фойдаланиш',
+      BusinessCategory.agency => 'Воситачилик ва агентлик хизматлари',
+      BusinessCategory.foreignTrade => 'Импорт, экспорт ва халқаро савдо',
+      BusinessCategory.fashion => 'Мода, кийим ва тўй хизматлари',
+      BusinessCategory.ecology => 'Экология, чиқиндилар ва қайта ишлаш',
+      BusinessCategory.security => 'Хавфсизлик ва қўриқлаш',
+      BusinessCategory.businessSupport => 'Бошқарув, идора ва бизнесни қўллаб-қувватлаш',
+      BusinessCategory.social => 'Ижтимоий, жамоат ва махсус хизматлар',
+      BusinessCategory.other => 'Бошқа ва янги бизнес турлари',
     };
 
 /// Ўчириш диалоги: сабаб (камида 3 белги) киритилмагунча тугма ўчиқ. Controller'ни диалогнинг ўзи

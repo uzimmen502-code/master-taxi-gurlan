@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../domain/business_category.dart';
 
-/// Харита тепасидаги тур чиплари: «Ҳаммаси» + БАРЧА 14 та фаолият тури (мавжуд-мавжуд эмаслигидан қатъи назар),
-/// ҳар бири ўз рангида (эга, 2026-10-23). Танланган чип — шу ранг билан тўлдирилади; харитадаги маркер ҳам шу ранг.
+/// Харита тепасидаги тур чиплари: «Ҳаммаси» + БАРЧА 30 та фаолият тури (мавжуд-мавжуд эмаслигидан қатъи назар),
+/// ҳар бири ўз рангида (эга, 2026-10-23; 30 тур — 2026-11-01), чипда қисқа ном. Танланган чип — шу ранг билан тўлдирилади; харитадаги маркер ҳам шу ранг.
 class BusinessCategoryChips extends StatelessWidget {
   const BusinessCategoryChips({super.key, required this.selected, required this.onChanged});
 
@@ -29,7 +29,7 @@ class BusinessCategoryChips extends StatelessWidget {
           for (final c in BusinessCategory.values)
             _Chip(
               key: ValueKey('biz_chip_${c.wire}'),
-              label: context.tr(c.labelKey),
+              label: context.tr(c.shortLabelKey),
               icon: c.icon,
               color: c.color,
               selected: selected == c,

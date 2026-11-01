@@ -122,7 +122,7 @@ void main() {
 
     test('фақат чакана ва улгуржи объектлар «дўкон» ҳисобланади', () {
       expect(MyShopPresence.isShopCategory(_biz('1', 'a', BusinessCategory.retail)), isTrue);
-      expect(MyShopPresence.isShopCategory(_biz('2', 'b', BusinessCategory.wholesale)), isTrue);
+      expect(MyShopPresence.isShopCategory(_biz('2', 'b', BusinessCategory.fromWire('wholesale'))), isTrue);
       expect(MyShopPresence.isShopCategory(_biz('3', 'c', BusinessCategory.food)), isFalse);
     });
   });
@@ -177,7 +177,7 @@ void main() {
     testWidgets('бир нечта қўшимча дўкон кўринади, чакана/улгуржи бўлмаганлари — йўқ', (tester) async {
       await open(tester, shops: [
         _biz('1', 'Kiyim do‘koni', BusinessCategory.retail, address: 'Gurlan'),
-        _biz('2', 'Ulgurji ombor', BusinessCategory.wholesale),
+        _biz('2', 'Ulgurji ombor', BusinessCategory.fromWire('wholesale')),
         _biz('3', 'Oshxona', BusinessCategory.food),
       ]);
       expect(find.text('my_shop_other_title'), findsNothing);
@@ -364,7 +364,7 @@ void main() {
     testWidgets('асосий дўкон: ичида дўконлар бор — огоҳлантиришда сони, тасдиқдан кейин БАРЧАСИ ўчади (эга, 2026-10-26)', (tester) async {
       final calls = await openMain(tester, shops: [
         _biz('b1', 'Ichki', BusinessCategory.retail),
-        _biz('b2', 'Ombor', BusinessCategory.wholesale),
+        _biz('b2', 'Ombor', BusinessCategory.fromWire('wholesale')),
       ]);
       expect(find.byKey(const ValueKey('my_shop_main_has_inner')), findsNothing, reason: 'аввалги тўсиқ йўқ');
       final body = tester.widget<Text>(find.byKey(const ValueKey('my_shop_main_delete_body')));

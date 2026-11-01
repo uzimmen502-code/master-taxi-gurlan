@@ -426,6 +426,7 @@ void main() {
         saveName: save ?? (n) async => saved.add(n),
         retailView: (_) => const Center(child: Text('RETAIL')),
         wholesaleView: (_) => const Center(child: Text('WHOLESALE')),
+        chinaView: (_) => const Center(child: Text('CHINA')),
       )));
       await tester.pumpAndSettle();
       return saved;
@@ -444,14 +445,18 @@ void main() {
       expect(find.text('RETAIL'), findsOneWidget);
       await open(tester, segment: 1);
       expect(find.text('WHOLESALE'), findsOneWidget);
+      await open(tester, segment: 2);
+      expect(find.text('CHINA'), findsOneWidget);
     });
 
     testWidgets('фақат икки бўлим: Аҳоли бозори ва Улгуржи — AVAGram бўлими йўқ', (tester) async {
       await open(tester);
       expect(find.text('tv_shop_to_market'), findsOneWidget);
       expect(find.text('home_module_wholesale'), findsOneWidget);
+      // Хитой бозори — бозор экранидаги «Сотувчи» таби ўрнига (эга, 2026-11-01).
+      expect(find.text('home_module_china'), findsOneWidget);
       expect(find.text('AVAGram'), findsNothing);
-      expect(find.byType(Tab), findsNWidgets(2));
+      expect(find.byType(Tab), findsNWidgets(3));
     });
 
     testWidgets('номни ўзгартириш: тўғри ном сақланади ва сарлавҳа янгиланади', (tester) async {

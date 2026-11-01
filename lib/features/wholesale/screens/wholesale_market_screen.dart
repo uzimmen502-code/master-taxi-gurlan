@@ -38,20 +38,19 @@ import '../wholesale_celebrations.dart';
 /// Хитой бозори ҳам ШУ экран — архитектураси бир хил (эга қарори), фақат
 /// [market] билан ажралади: ўша коллекция, ўша сотувчи рўйхати, ўша
 /// модерация. Сотувчи иккала бозорга ҳам маҳсулот қўя олади.
+///
+/// «Сотувчи» таби олиб ташланди (эга, 2026-11-01): бозор экрани — фақат харидор учун. Сотувчи
+/// бўлиш, ҳолат ва маҳсулот қўшиш — «＋» → «Менинг дўконим» → «Улгуржи бозор» / «Хитой бозори»
+/// ([WholesaleSellerArea], [MainShopScreen]).
 class WholesaleMarketScreen extends StatefulWidget {
   const WholesaleMarketScreen({
     super.key,
     required this.userPhone,
-    this.initialTabIndex = 0,
     this.market = WholesaleProduct.marketWholesale,
   });
 
   /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
   final String market;
-
-  /// 0 — «Бозор», 1 — «Мен сотувчиман». Бош саҳифадаги «＋ → Сотувчи
-  /// бўлиш» дарҳол иккинчи табни очади.
-  final int initialTabIndex;
 
   /// Жорий фойдаланувчи телефони — бош экрандан узатилади (`HomeController`
   /// фақат Home subtree'ида мавжуд, push қилинган экранда `context.read`
@@ -62,9 +61,7 @@ class WholesaleMarketScreen extends StatefulWidget {
   State<WholesaleMarketScreen> createState() => _WholesaleMarketScreenState();
 }
 
-class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabCtrl;
+class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
   final _searchCtrl = TextEditingController();
   final _productsRepo = WholesaleProductsRepository();
   final _platformRepo = PlatformProductsRepository();
@@ -83,11 +80,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: widget.initialTabIndex.clamp(0, 1),
-    );
     if (_showPlatform) unawaited(_loadPlatform());
   }
 
@@ -119,7 +111,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   void dispose() {
     // D-GEO-10: кейинги сафар яна «Бутун Ўзбекистон»дан очилсин.
     GeoContext.clearSessionScope(_geoModule);
-    _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -155,7 +146,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // Сарлавҳа ва «Бозор / Сотувчи» ораси ихчам (эга, 2026-11-01).
         toolbarHeight: 48,
         title: Text(
           context.tr(_isChina ? 'wholesale_title_china' : 'wholesale_title'),
@@ -164,25 +154,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
         actions: [
           if (!_isChina) WholesaleBuyerOrdersAction(userPhone: widget.userPhone),
         ],
-        bottom: TabBar(
-          controller: _tabCtrl,
-          labelPadding: EdgeInsets.zero,
-          labelColor: AvaLight.ink,
-          unselectedLabelColor: AppColors.sectionMuted,
-          indicatorColor: AvaLight.ink,
-          tabs: [
-            Tab(height: 38, text: context.tr('wholesale_tab_market')),
-            Tab(height: 38, text: context.tr('wholesale_tab_seller')),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        children: [
-          _marketTab(),
-          WholesaleSellerArea(phone: widget.userPhone, market: widget.market),
-        ],
-      ),
+      body: _marketTab(),
     );
   }
 

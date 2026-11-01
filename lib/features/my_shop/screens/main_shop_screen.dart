@@ -10,8 +10,9 @@ import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/screens/wholesale_market_screen.dart';
 import '../widgets/shop_name_dialog.dart';
 
-/// Асосий дўкон — эганинг ўз маҳсулотлари бир жойда, икки бўлимда: Аҳоли бозори
-/// (`ads`) ва Улгуржи (`wholesale_*`). Каталогда ҳар маҳсулот РАСМ ва ВИДЕО билан
+/// Асосий дўкон — эганинг ўз маҳсулотлари бир жойда, уч бўлимда: Аралаш бозор
+/// (`ads`), Улгуржи ва Хитой бозори (`wholesale_*`, битта сотувчи рўйхати). Улгуржи/Хитой бозор
+/// экранидаги «Сотувчи» таби олиб ташланган (эга, 2026-11-01) — сотувчи иши ФАҚАТ шу ерда. Каталогда ҳар маҳсулот РАСМ ва ВИДЕО билан
 /// (видео AVAGram лентасига ҳам тушади, лекин AVAGram алоҳида бўлим эмас). Номи
 /// `tv_shops/{телефон}.name`да (ўзгартириш мумкин).
 ///
@@ -27,12 +28,13 @@ class MainShopScreen extends StatefulWidget {
     @visibleForTesting this.saveName,
     @visibleForTesting this.retailView,
     @visibleForTesting this.wholesaleView,
+    @visibleForTesting this.chinaView,
   });
 
   /// Каноник телефон (`canonicalPhoneId`) — чақирувчи 9+ рақам эканини текширади.
   final String phone;
 
-  /// 0 — Аҳоли бозори, 1 — Улгуржи.
+  /// 0 — Аралаш бозор, 1 — Улгуржи, 2 — Хитой бозори.
   final int initialSegment;
 
   /// Биринчи киришда («Онлайн Дўкон очиш» → Аҳоли бозори): янги маҳсулот
@@ -46,6 +48,7 @@ class MainShopScreen extends StatefulWidget {
   final Future<void> Function(String name)? saveName;
   final WidgetBuilder? retailView;
   final WidgetBuilder? wholesaleView;
+  final WidgetBuilder? chinaView;
 
   @override
   State<MainShopScreen> createState() => _MainShopScreenState();
@@ -64,9 +67,9 @@ class _MainShopScreenState extends State<MainShopScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(
-      length: 2,
+      length: 3,
       vsync: this,
-      initialIndex: widget.initialSegment.clamp(0, 1),
+      initialIndex: widget.initialSegment.clamp(0, 2),
     );
     _loadName();
   }
@@ -141,6 +144,7 @@ class _MainShopScreenState extends State<MainShopScreen>
           tabs: [
             Tab(text: context.tr('tv_shop_to_market')),
             Tab(text: context.tr('home_module_wholesale')),
+            Tab(text: context.tr('home_module_china')),
           ],
         ),
       ),
@@ -155,6 +159,12 @@ class _MainShopScreenState extends State<MainShopScreen>
               WholesaleSellerArea(
                 phone: widget.phone,
                 market: WholesaleProduct.marketWholesale,
+              ),
+          // Хитой маҳсулотини қўшиш (бозор экранидаги «Сотувчи» таби ўрнига, эга 2026-11-01).
+          widget.chinaView?.call(context) ??
+              WholesaleSellerArea(
+                phone: widget.phone,
+                market: WholesaleProduct.marketChina,
               ),
         ],
       ),

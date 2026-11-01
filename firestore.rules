@@ -2087,6 +2087,23 @@ service cloud.firestore {
         allow write: if false;
       }
     }
+    // ── Улгуржи/Хитой «Буюртма ёзиш» чати (functions/deal_chats.js, эга қарори 2026-11-01) ──
+    // Харидор ↔ эълон эгаси (сотувчи). `members` — иккала томоннинг канон рақами (998…, CF ёзади).
+    // Ўқиш ФАҚАТ иштирокчиларга: get ва list (`where members array-contains <ўз рақами>`
+    // сўрови — қоида уни исботлай олади; филтрсиз ёки бошқанинг рақами билан list рад).
+    // Аноним сессия (`phone_number` йўқ) → phoneFromToken() == '' → рад. Админга ҳам ЙЎҚ (40-банд).
+    // Ёзиш — ҳеч ким (чат очиш, хабар, ўқилди — фақат callable: openDealChat / sendDealMessage /
+    // markDealChatRead; `unread`, `last*` майдонлари клиентдан ўзгармайди).
+    // `deal_chat_usage/{uid}` (дақиқалик чегара) учун match ЙЎҚ — ҳамма учун ёпиқ.
+    match /deal_chats/{chatId} {
+      allow get, list: if phoneFromToken() in resource.data.members;
+      allow write: if false;
+      // Хабарлар — ота чат иштирокчилари (чат йўқ бўлса get() хатоси → рад).
+      match /messages/{messageId} {
+        allow get, list: if phoneFromToken() in get(/databases/$(database)/documents/deal_chats/$(chatId)).data.members;
+        allow write: if false;
+      }
+    }
     match /china_suppliers/{supplierId} {
       allow read: if isAdmin();
       allow write: if false;

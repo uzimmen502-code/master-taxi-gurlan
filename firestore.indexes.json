@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "deal_chats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "members",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "lastAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "china_inquiries",
       "queryScope": "COLLECTION",
       "fields": [

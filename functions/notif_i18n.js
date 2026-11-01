@@ -36,12 +36,12 @@ const MESSAGES = {
     uz_Latn: { title: '🇨🇳 Xitoy so\'rovingizga taklif keldi', body: '{refNo} bo\'yicha taklifni ilovada ko\'rishingiz mumkin.' },
     ru: { title: '🇨🇳 Получено предложение по запросу в Китай', body: 'Предложение по {refNo} можно посмотреть в приложении.' },
   },
-  // Улгуржи/Хитой «Буюртма ёзиш» чати (deal_chats.js, эга 2026-11-01). Хабар матни push'да ЙЎҚ
-  // (40-банд) — фақат маҳсулот номи `{title}`. Матн PROPOSED.
+  // Улгуржи/Хитой «Буюртма ёзиш» чати (deal_chats.js). Эга 2026-11-01: push'да хабар матни
+  // кўрсатилсин — body = `{text}` (120 белгигача), сарлавҳа = маҳсулот номи `{title}`.
   deal_chat_message: {
-    uz_Cyrl: { title: '💬 Янги хабар: {title}', body: 'Буюртма чатида сизга янги хабар бор. Ўқиш учун босинг.' },
-    uz_Latn: { title: '💬 Yangi xabar: {title}', body: 'Buyurtma chatida sizga yangi xabar bor. O\'qish uchun bosing.' },
-    ru: { title: '💬 Новое сообщение: {title}', body: 'У вас новое сообщение в чате заказа. Нажмите, чтобы прочитать.' },
+    uz_Cyrl: { title: '💬 {title}', body: '{text}' },
+    uz_Latn: { title: '💬 {title}', body: '{text}' },
+    ru: { title: '💬 {title}', body: '{text}' },
   },
   auto_shift_stop_midnight: {
     uz_Cyrl: { title: '⏱ Рейс автоматик сурилмайди', body: 'Жўнаш вақти кеч бўлгани учун рейс бугун яна сурилмайди. Янги кунга кўчиринг ёки тугатинг.' },

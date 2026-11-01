@@ -147,7 +147,7 @@ async function main() {
     await expectCode(call('sendDealMessage', { chatId: `p_ok_${STRANGER}`, text: 'salom', clientId: cid() }, STRANGER), 'CHAT_NOT_FOUND');
   });
 
-  await check('S3 харидор ёзади → sotuvchiga push (matnsiz, ru), unread seller=1, last*, lastAt paydo', async () => {
+  await check('S3 харидор ёзади → sotuvchiga push (MATNI bilan, ega 2026-11-01), unread seller=1, last*, lastAt paydo', async () => {
     sent.length = 0;
     const r = await call('sendDealMessage', { chatId: CHAT, text: '  100 dona kerak, narxi?  ', clientId: 'buyer-msg-0001' }, BUYER);
     assert.deepStrictEqual([r.ok, r.duplicate, r.messageId], [true, false, `${BUYER}-buyer-msg-0001`]);
@@ -163,8 +163,8 @@ async function main() {
     assert.strictEqual(p.token, 'tok-seller');
     assert.deepStrictEqual(p.data, { type: 'deal_chat', screen: 'deal_chat', tab: 'messages', chatId: CHAT });
     assert.ok(p.notification.title.includes('Samokat X1'), p.notification.title);
-    assert.ok(/Новое сообщение/.test(p.notification.title), 'sotuvchi tili ru');
-    assert.ok(!p.notification.body.includes('100 dona'), 'push matnida xabar matni YO\'Q');
+    assert.strictEqual(p.notification.title, '💬 Samokat X1');
+    assert.strictEqual(p.notification.body, '100 dona kerak, narxi?', 'push matnida xabar matni BOR');
   });
 
   await check('S4 clientId takrori — dublikat: yangi xabar, unread++ va push YO\'Q', async () => {
@@ -184,7 +184,7 @@ async function main() {
     assert.strictEqual(d.lastFrom, SELLER);
     assert.strictEqual(sent.length, 1);
     assert.strictEqual(sent[0].token, 'tok-buyer');
-    assert.ok(/Yangi xabar/.test(sent[0].notification.title));
+    assert.strictEqual(sent[0].notification.body, 'Dona 45 000, 100 dan ko\'p bo\'lsa chegirma');
     assert.strictEqual((await msgs(CHAT)).length, 2);
   });
 
@@ -198,6 +198,14 @@ async function main() {
     await call('sendDealMessage', { chatId: chat2, text: 'salom', clientId: 'buyer2-msg-001' }, BUYER2);
     await call('sendDealMessage', { chatId: chat2, text: 'javob', clientId: 'seller-msg-0002' }, SELLER);
     assert.strictEqual(sent.length, 1, 'BUYER2 da fcmToken yo\'q — faqat sotuvchiga');
+    // Chegara: uzun/ko'p qatorli matn push'da bir qator, 120 belgi (to'liq matn — ilovada).
+    sent.length = 0;
+    await call('sendDealMessage', { chatId: chat2, text: `qator\n${'z'.repeat(600)}`, clientId: 'buyer2-msg-002' }, BUYER2);
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sent[0].notification.body.length, LIMITS.previewMax);
+    assert.ok(sent[0].notification.body.startsWith('qator z'), sent[0].notification.body.slice(0, 20));
+    const full = (await msgs(chat2)).pop();
+    assert.strictEqual(full.text.length, 606, 'xabarning o\'zi qisqartirilmaydi');
   });
 
   await check('R1 o\'qildi: o\'z unread 0 ga; takror — o\'zgarishsiz; boshqa tomonniki tegilmaydi', async () => {

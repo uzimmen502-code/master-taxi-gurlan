@@ -18,8 +18,9 @@
  * `lastAt` фақат БИРИНЧИ хабарда пайдо бўлади: очилиб, ёзилмаган чат рўйхат сўровига
  * (`orderBy('lastAt')`) тушмайди — сотувчига бўш чат кўринмайди.
  *
- * Push'да хабар матни ЙЎҚ (40-банд: телефон/манзил ёзилиши мумкин, қулф экранда кўринмасин) —
- * фақат маҳсулот номи. Матн иловада, Firestore қоидаси уни фақат иштирокчиларга беради.
+ * Push'да хабар МАТНИ кўрсатилади (эга қарори 2026-11-01: «билдиришномада хабар матни
+ * кўрсатилсин»; аввал 40-банд сабаб фақат маҳсулот номи эди) — `previewOf` бўйича 120 белги.
+ * Сарлавҳа — маҳсулот номи. Логга матн ЁЗИЛМАЙДИ (24-банд).
  *
  * Диагностика кодлари (HttpsError message = код, клиент `byServerMessage` билан таржима қилади):
  * PHONE_REQUIRED, PRODUCT_INVALID, PRODUCT_UNAVAILABLE, OWN_PRODUCT, CHAT_INVALID, CHAT_NOT_FOUND,
@@ -103,11 +104,11 @@ function attachDealChats(exportsObj, deps) {
     return snap.data();
   }
 
-  async function pushToOther({ to, chatId, productTitle }) {
+  async function pushToOther({ to, chatId, productTitle, text }) {
     const token = await resolveFcmToken(to);
     if (!token) return 'no_token';
     const lang = await langOfPhone(db, to);
-    const m = render('deal_chat_message', lang, { title: productTitle || 'AVA' });
+    const m = render('deal_chat_message', lang, { title: productTitle || 'AVA', text: previewOf(text) });
     await admin.messaging().send({
       token,
       notification: { title: m.title, body: m.body },
@@ -199,7 +200,7 @@ function attachDealChats(exportsObj, deps) {
     if (!out.duplicate && out.other) {
       // Push муваффақиятсиз бўлса ҳам хабар сақланган — хато логга (23-банд).
       try {
-        push = await pushToOther({ to: out.other, chatId: chatRef.id, productTitle: out.productTitle });
+        push = await pushToOther({ to: out.other, chatId: chatRef.id, productTitle: out.productTitle, text });
       } catch (e) {
         push = 'error';
         log({ action: 'deal_chat_push', chatId: chatRef.id, result: 'error', errorCode: 'PUSH_FAILED', message: String(e && e.message).slice(0, 200) });

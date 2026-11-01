@@ -451,10 +451,10 @@ void main() {
 
     testWidgets('фақат икки бўлим: Аҳоли бозори ва Улгуржи — AVAGram бўлими йўқ', (tester) async {
       await open(tester);
-      expect(find.text('tv_shop_to_market'), findsOneWidget);
-      expect(find.text('home_module_wholesale'), findsOneWidget);
+      expect(find.text('my_shop_tab_aralash'), findsOneWidget);
+      expect(find.text('my_shop_tab_wholesale'), findsOneWidget);
       // Хитой бозори — бозор экранидаги «Сотувчи» таби ўрнига (эга, 2026-11-01).
-      expect(find.text('home_module_china'), findsOneWidget);
+      expect(find.text('my_shop_tab_china'), findsOneWidget);
       expect(find.text('AVAGram'), findsNothing);
       expect(find.byType(Tab), findsNWidgets(3));
     });

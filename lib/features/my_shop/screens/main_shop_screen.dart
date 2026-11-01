@@ -141,10 +141,11 @@ class _MainShopScreenState extends State<MainShopScreen>
           labelColor: AvaLight.ink,
           unselectedLabelColor: AppColors.sectionMuted,
           indicatorColor: AvaLight.ink,
+          // Қисқа номлар («бозор» сўзисиз, эга 2026-11-01) — учта таб телефонда кесилмасин.
           tabs: [
-            Tab(text: context.tr('tv_shop_to_market')),
-            Tab(text: context.tr('home_module_wholesale')),
-            Tab(text: context.tr('home_module_china')),
+            Tab(text: context.tr('my_shop_tab_aralash')),
+            Tab(text: context.tr('my_shop_tab_wholesale')),
+            Tab(text: context.tr('my_shop_tab_china')),
           ],
         ),
       ),

@@ -557,7 +557,7 @@ class _InboxRow {
 
   /// [chats] — `lastAt` бўйича камаювчи (сўров тартиби); бўш эмас.
   factory _InboxRow.dealChats(List<DealChat> chats, String uid) {
-    final n = chats.fold<int>(0, (s, c) => s + c.unreadFor(uid));
+    final n = DealChatRepository.sumUnread(chats, uid);
     return _InboxRow._(
       kind: _InboxRowKind.dealChats,
       unread: n > 0,

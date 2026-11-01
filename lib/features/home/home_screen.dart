@@ -24,6 +24,7 @@ import '../../repositories/platform_products_repository.dart';
 import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/news_repository.dart';
+import '../deal_chat/data/deal_chat_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import '../customer_confirm/widgets/customer_confirm_banner.dart';
@@ -208,6 +209,8 @@ class _HomeViewState extends State<_HomeView> {
       watch: ({required userId, required audiences}) =>
           news.watchUnreadTotal(userId: userId, audiences: audiences),
       audience: UserAudience.current,
+      // «Буюртма чатлари»даги ўқилмаганлар ҳам белгига қўшилади (эга, 2026-11-01).
+      watchExtra: (uid) => _dealRepo().watchUnreadTotal(canonicalPhoneId(uid)),
     );
     _configListener = () {
       if (mounted) setState(() {});
@@ -262,6 +265,15 @@ class _HomeViewState extends State<_HomeView> {
 
   /// Бўлим калити: тортиб янгилашда ўзгаради → бўлим қайта яратилади.
   Key _sectionKey(String base) => ValueKey('${base}_$_refreshEpoch');
+
+  /// Провайдер бўлмаса (тест) — ўзи яратади (Firebase лазй), `MessagesTab` билан бир хил.
+  DealChatRepository _dealRepo() {
+    try {
+      return context.read<DealChatRepository>();
+    } on ProviderNotFoundException {
+      return DealChatRepository();
+    }
+  }
 
   /// Хабарлар белгисини ҳозирги телефон/аудиторияга мослайди.
   Future<void> _syncUnread() =>

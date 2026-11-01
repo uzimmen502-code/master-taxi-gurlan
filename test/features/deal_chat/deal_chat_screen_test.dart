@@ -50,6 +50,8 @@ class FakeDealRepo implements DealChatRepository {
   Future<String> openChat(String productId) async => 'p1_$buyer';
   @override
   Stream<List<DealChat>> watchMyChats(String myUid, {int limit = 50}) => const Stream.empty();
+  @override
+  Stream<int> watchUnreadTotal(String myUid) => const Stream.empty();
 }
 
 DealChat chatDoc({Map<String, int> unread = const {}, String lastFrom = buyer, String last = 'salom'}) =>
@@ -228,6 +230,17 @@ void main() {
         expect(m.containsKey(k), isTrue, reason: '$lang:$k');
       }
     }
+  });
+
+  test('бош саҳифа белгиси: фақат МЕНИНГ ўқилмаганларим қўшилади', () {
+    final chats = [
+      chatDoc(unread: {seller: 3, buyer: 1}),
+      chatDoc(unread: {seller: 2}),
+      chatDoc(unread: const {}),
+    ];
+    expect(DealChatRepository.sumUnread(chats, seller), 5);
+    expect(DealChatRepository.sumUnread(chats, buyer), 1);
+    expect(DealChatRepository.sumUnread(const [], seller), 0);
   });
 
   test('clientId: сервер шакли, ҳар сафар янги', () {

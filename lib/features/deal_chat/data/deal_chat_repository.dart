@@ -54,6 +54,15 @@ class DealChatRepository {
       .snapshots()
       .map((s) => s.docs.map((d) => DealChat.fromMap(d.id, d.data())).toList());
 
+  /// Бош саҳифа «Хабарлар» белгиси учун: менинг ўқилмаган хабарларим йиғиндиси
+  /// ([watchMyChats] — энг янги 50 чат; эскироқ чатдаги ўқилмаган белгига тушмайди).
+  /// Сон ўзгармаса қайта чиқарилмайди (ортиқча rebuild йўқ).
+  Stream<int> watchUnreadTotal(String myUid) =>
+      watchMyChats(myUid).map((list) => sumUnread(list, myUid)).distinct();
+
+  static int sumUnread(List<DealChat> chats, String myUid) =>
+      chats.fold<int>(0, (s, c) => s + c.unreadFor(myUid));
+
   Stream<DealChat?> watchChat(String chatId) => _chats
       .doc(chatId)
       .snapshots()

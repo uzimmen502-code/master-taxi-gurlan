@@ -431,7 +431,6 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   if (phoneDigits(ad.ownerId).length >= 9) ...[
                     const SizedBox(height: 12),
                     _SellerAdsCard(
-                      sellerName: ad.sellerName,
                       onOpen: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
@@ -556,57 +555,48 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   }
 }
 
-/// Сотувчи номи + «Сотувчининг барча маҳсулотлари →» (Улгуржи [WholesaleSellerCard] билан бир хил маъно).
+/// «Сотувчининг барча маҳсулотлари →». Сотувчи номи бу ерда ЙЎҚ — у сарлавҳа остида бор; номи
+/// оддий «Сотувчи» бўлган эълонда «Сотувчи / Сотувчининг…» такрори чиқарди (эга, 2026-11-01).
 class _SellerAdsCard extends StatelessWidget {
-  const _SellerAdsCard({required this.sellerName, required this.onOpen});
+  const _SellerAdsCard({required this.onOpen});
 
-  final String sellerName;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final name = sellerName.trim();
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         onTap: onOpen,
+        // Ихчам (эга, 2026-11-01): майдон баландлиги ≈ шрифт баландлиги.
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          key: const ValueKey('ad_seller_all_box'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.grey.shade300),
           ),
           child: Row(
             children: [
-              const Icon(Icons.storefront_outlined, color: AppColors.primaryText),
-              const SizedBox(width: 10),
+              const Icon(Icons.storefront_outlined, size: 16, color: AppColors.primaryText),
+              const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (name.isNotEmpty)
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppText.bodyMedium),
-                      ),
-                    Text(
-                      context.tr('shop_item_seller_all'),
-                      style: const TextStyle(
-                        color: AppColors.primaryText,
-                        fontWeight: FontWeight.w600,
-                        fontSize: AppText.bodySmall,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  context.tr('shop_item_seller_all'),
+                  key: const ValueKey('ad_seller_all'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontWeight: FontWeight.w600,
+                    fontSize: AppText.bodyMedium,
+                    height: 1.2,
+                  ),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.primaryText),
+              const Icon(Icons.chevron_right, size: 16, color: AppColors.primaryText),
             ],
           ),
         ),

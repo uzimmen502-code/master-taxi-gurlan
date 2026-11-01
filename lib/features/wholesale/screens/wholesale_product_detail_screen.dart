@@ -2,13 +2,20 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../core/utils/user_error.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../ads/widgets/ad_image_slider.dart';
+import '../../deal_chat/data/deal_chat_repository.dart';
+import '../../deal_chat/deal_chat_support.dart';
+import '../../deal_chat/screens/deal_chat_screen.dart';
+import '../../profile/screens/profile_screen.dart';
+import '../widgets/wholesale_detail_actions.dart';
 import '../models/wholesale_product.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../widgets/wholesale_checkout_sheet.dart';
@@ -136,11 +143,65 @@ class _WholesaleProductDetailViewState
 
   late final List<WholesaleProduct> _similar =
       similarWholesale(widget.product, widget.catalog);
+
+  /// Жорий фойдаланувчи (канон рақам); бўш — меҳмон ёки ҳали ўқилмади.
+  String _myUid = '';
+  bool _writeBusy = false;
+
   @override
   void initState() {
     super.initState();
     if (_countedThisSession.add(widget.product.id)) {
       WholesaleProductsRepository().incrementViews(widget.product.id);
+    }
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    if (mounted && uid != _myUid) setState(() => _myUid = uid);
+  }
+
+  /// «Буюртма ёзиш» → эълон эгаси билан чат (эга қарори 2026-11-01).
+  Future<void> _writeOrder() async {
+    if (_writeBusy) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // Меҳмон (телефонсиз) — чат фақат рўйхатдан ўтганларга (сервер ҳам: PHONE_REQUIRED).
+    if (_myUid.length < 11) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(context.tr('deal_chat_login_required')),
+        action: SnackBarAction(
+          label: context.tr('deal_chat_login_cta'),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+          ),
+        ),
+      ));
+      return;
+    }
+    setState(() => _writeBusy = true);
+    try {
+      final repo = DealChatRepository();
+      final chatId = await repo.openChat(widget.product.id);
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => DealChatScreen(
+          chatId: chatId,
+          myUid: _myUid,
+          initialProduct: widget.product,
+          repository: repo,
+        ),
+      ));
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+          content: Text(userErrorMessage(context, e,
+              fallbackKey: 'deal_chat_open_failed', byServerMessage: kDealChatServerErrors)),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _writeBusy = false);
     }
   }
 
@@ -334,25 +395,13 @@ class _WholesaleProductDetailViewState
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: SizedBox(
-                height: 48,
-                child: FilledButton.icon(
-                  key: const ValueKey('wholesale-call'),
-                  onPressed: _call,
-                  // Сутли (молочный) ранг (эга, 2026-11-01).
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _kMilk,
-                    foregroundColor: _kMilkInk,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.call),
-                  label: Text(
-                    context.tr('wholesale_call'),
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
-                ),
+              // Сутли (молочный) ранг (эга, 2026-11-01): «Қўнғироқ қилиш» + «Буюртма ёзиш».
+              child: WholesaleDetailActions(
+                onCall: _call,
+                onWriteOrder: _writeOrder,
+                // Ўз эълонида йўқ (сервер ҳам рад этади: OWN_PRODUCT).
+                showWriteOrder: wholesaleShowWriteOrder(myUid: _myUid, sellerId: p.sellerId),
+                writeBusy: _writeBusy,
               ),
             ),
           ),
@@ -361,10 +410,6 @@ class _WholesaleProductDetailViewState
     );
   }
 }
-
-/// Пастки тугманинг сутли ранги ва ёзуви (эга, 2026-11-01).
-const Color _kMilk = Color(0xFFF6EFE2);
-const Color _kMilkInk = Color(0xFF2A2118);
 
 /// Сотувчи номи — босилса «Сотувчининг барча маҳсулотлари» (алоҳида катта тугма ўрнига).
 class _SellerLink extends StatelessWidget {

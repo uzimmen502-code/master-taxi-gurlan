@@ -17,9 +17,12 @@ import '../../../repositories/chat_repository.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/news_repository.dart';
 import '../../chat/screens/chat_screen.dart';
+import '../../deal_chat/data/deal_chat_repository.dart';
+import '../../deal_chat/screens/deal_chats_screen.dart';
 import 'dialog_news_detail_screen.dart';
 
-/// Мурожаатлар: admin_news (диалог), support чат, ҳайдовчи аризаси.
+/// Мурожаатлар: admin_news (диалог), support чат, ҳайдовчи аризаси, «Буюртма чатлари»
+/// (Улгуржи/Хитой харидор ↔ сотувчи, эга 2026-11-01).
 class MessagesTab extends StatefulWidget {
   const MessagesTab({
     super.key,
@@ -50,9 +53,21 @@ class _MessagesTabState extends State<MessagesTab>
   Stream<List<NewsItem>>? _newsStream;
   Stream<bool>? _chatStream;
   Stream<Map<String, dynamic>?>? _driverStream;
+  /// «Буюртма чатлари» (битта обуна; хато — масалан индекс ҳали йўқ — қатор кўринмайди).
+  StreamSubscription<List<DealChat>>? _dealSub;
+  List<DealChat> _dealChats = const [];
 
   @override
   bool get wantKeepAlive => true;
+
+  /// Провайдер бўлмаса (илованинг бошқа қисми, тест) — ўзи яратади (Firebase лазй).
+  DealChatRepository _dealRepo() {
+    try {
+      return context.read<DealChatRepository>();
+    } on ProviderNotFoundException {
+      return DealChatRepository();
+    }
+  }
 
   @override
   void initState() {
@@ -67,6 +82,7 @@ class _MessagesTabState extends State<MessagesTab>
     final newsRepo = context.read<NewsRepository>();
     final chatRepo = context.read<ChatRepository>();
     final driverRepo = context.read<DriverRepository>();
+    final dealRepo = _dealRepo();
     // Ўчирилган хабарлар сервердан (барча қурилмада бир хил); янги ўчириш дарров, тўплам фақат ўсади.
     if (uid.length >= 9) {
       _dismissedSub = newsRepo.watchDismissedIds(uid).listen((ids) {
@@ -79,6 +95,12 @@ class _MessagesTabState extends State<MessagesTab>
         _newsStream = newsRepo.watchDialogNews(userId: uid, limit: 80);
         _chatStream = chatRepo.watchUnreadFromAdmin(uid);
         _driverStream = driverRepo.watchMyDriverRequest(uid);
+        _dealSub = dealRepo.watchMyChats(uid).listen(
+          (list) {
+            if (mounted) setState(() => _dealChats = list);
+          },
+          onError: (Object e) => debugPrint('[MessagesTab] deal chats: $e'),
+        );
       }
       _ready = true;
     });
@@ -95,6 +117,7 @@ class _MessagesTabState extends State<MessagesTab>
   @override
   void dispose() {
     _dismissedSub?.cancel();
+    _dealSub?.cancel();
     super.dispose();
   }
 
@@ -119,6 +142,7 @@ class _MessagesTabState extends State<MessagesTab>
       return Center(child: Text(context.tr('msgs_phone_required')));
     }
 
+    final dealChats = _dealChats;
     return StreamBuilder<List<NewsItem>>(
       stream: _newsStream,
       builder: (ctx, newsSnap) {
@@ -160,6 +184,9 @@ class _MessagesTabState extends State<MessagesTab>
                 }
                 for (final g in groups) {
                   rows.add(_InboxRow.dialog(g));
+                }
+                if (dealChats.isNotEmpty) {
+                  rows.add(_InboxRow.dealChats(dealChats, uid));
                 }
 
                 if (rows.length == 1 &&
@@ -218,7 +245,86 @@ class _MessagesTabState extends State<MessagesTab>
         return _driverCard(context, row.group!, row.hideKey);
       case _InboxRowKind.dialog:
         return _dialogCard(context, row.group!);
+      case _InboxRowKind.dealChats:
+        return _dealChatsCard(context, uid, row.unreadCount);
     }
+  }
+
+  /// «Буюртма чатлари» — харидор ва сотувчи учун битта қатор (ичида рўйхат).
+  Widget _dealChatsCard(BuildContext context, String uid, int unread) {
+    return Material(
+      key: const ValueKey('deal-chats-row'),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DealChatsScreen(myUid: uid, repository: _dealRepo()),
+            ),
+          );
+          widget.onMarkedRead?.call();
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.forum_outlined, color: AppColors.primaryText),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.tr('deal_chats_title'),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: unread > 0 ? FontWeight.bold : FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      unread > 0
+                          ? context.trMsg('deal_chats_unread', params: {'n': '$unread'})
+                          : context.tr('deal_chats_subtitle'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: unread > 0 ? Colors.red.shade700 : Colors.grey.shade600,
+                        fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (unread > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    unread > 99 ? '99+' : '$unread',
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _supportChatCard(BuildContext context, String uid, bool unread) {
@@ -437,7 +543,7 @@ class _MessagesTabState extends State<MessagesTab>
   }
 }
 
-enum _InboxRowKind { supportChat, driver, dialog }
+enum _InboxRowKind { supportChat, driver, dialog, dealChats }
 
 class _InboxRow {
   _InboxRow._({
@@ -446,7 +552,22 @@ class _InboxRow {
     this.unread = false,
     required this.sortTime,
     this.hideKey = '',
+    this.unreadCount = 0,
   });
+
+  /// [chats] — `lastAt` бўйича камаювчи (сўров тартиби); бўш эмас.
+  factory _InboxRow.dealChats(List<DealChat> chats, String uid) {
+    final n = chats.fold<int>(0, (s, c) => s + c.unreadFor(uid));
+    return _InboxRow._(
+      kind: _InboxRowKind.dealChats,
+      unread: n > 0,
+      unreadCount: n,
+      sortTime: chats.first.lastAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
+  /// «Буюртма чатлари»даги ўқилмаган хабарлар жами.
+  final int unreadCount;
 
   factory _InboxRow.supportChat({required bool unread}) => _InboxRow._(
         kind: _InboxRowKind.supportChat,

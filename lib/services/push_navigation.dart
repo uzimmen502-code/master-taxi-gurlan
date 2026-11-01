@@ -31,6 +31,8 @@ import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
 import '../features/china_inquiry/screens/china_inquiries_screen.dart';
+import '../features/deal_chat/deal_chat_support.dart';
+import '../features/deal_chat/screens/deal_chat_screen.dart';
 import '../features/profile/screens/wallet_screen.dart';
 import '../features/realty/screens/my_realty_listings_screen.dart';
 import '../features/realty/screens/realty_alerts_screen.dart';
@@ -379,6 +381,20 @@ class PushNavigation {
         ),
       );
       return;
+    }
+
+    // Улгуржи/Хитой «Буюртма ёзиш» чати (functions/deal_chats.js): `{type: deal_chat, chatId}`.
+    // Push'даги маълумотга ишонилмайди: экран чатни Firestore'дан ўқийди (rules: фақат иштирокчи).
+    final dealChatId = dealChatIdFromPush(data);
+    if (dealChatId != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (phone.length >= 11) {
+        await nav.push(
+          MaterialPageRoute(builder: (_) => DealChatScreen(chatId: dealChatId, myUid: phone)),
+        );
+        return;
+      }
     }
 
     // Хитой бозори: «сўровингизга таклиф келди» (functions/china_inquiries.js,

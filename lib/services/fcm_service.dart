@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/l10n/user_lang_sync.dart';
 import '../core/utils/formatters.dart';
 import '../features/customer_confirm/customer_confirm_controller.dart';
+import '../features/deal_chat/deal_chat_support.dart';
 import '../firebase_options.dart';
 import '../utils/locale_utils.dart';
 import 'arrival_ringer.dart';
@@ -178,6 +179,8 @@ class FCMService {
       // Очиқ банер/экран рўйхатни серверданоқ қайта олади.
       CustomerConfirmSignal.bump();
     }
+    // «Буюртма ёзиш» чати очиқ турибди — хабар экранда кўринади, банер ортиқча.
+    if (DealChatPresence.suppressForeground(message.data)) return;
     if (n != null) {
       await NotificationDelivery.show(
         title: n.title ?? '',

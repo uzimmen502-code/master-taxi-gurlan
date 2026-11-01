@@ -31,9 +31,26 @@ void main() {
       expect(BusinessCategory.wires, server);
     });
 
-    test('fromWire: номаълум/бўш/null — other (синмайди)', () {
+    test('эски 14 талик қийматлар сервердаги LEGACY_CATEGORIES билан бир хил ўгирилади', () {
+      final js = File('functions/business_directory.js').readAsStringSync();
+      final m = RegExp(r'const LEGACY_CATEGORIES = Object\.freeze\(\{([\s\S]*?)\}\)').firstMatch(js);
+      expect(m, isNotNull, reason: 'functions/business_directory.js да LEGACY_CATEGORIES топилмади');
+      final server = {
+        for (final x in RegExp(r"([a-z_]+): '([a-z_]+)'").allMatches(m!.group(1)!)) x.group(1)!: x.group(2)!,
+      };
+      expect({for (final e in BusinessCategory.legacyWires.entries) e.key: e.value.wire}, server);
+      for (final legacy in server.keys) {
+        expect(BusinessCategory.wires, isNot(contains(legacy)), reason: legacy);
+      }
+    });
+
+    test('fromWire: номаълум/бўш/null — other (синмайди); эски қиймат — янгиси', () {
       expect(BusinessCategory.fromWire('auto'), BusinessCategory.auto);
-      expect(BusinessCategory.fromWire('home_services'), BusinessCategory.homeServices);
+      expect(BusinessCategory.fromWire('real_estate'), BusinessCategory.realEstate);
+      expect(BusinessCategory.fromWire('home_services'), BusinessCategory.personal);
+      expect(BusinessCategory.fromWire('wholesale'), BusinessCategory.retail);
+      expect(BusinessCategory.fromWire('leisure'), BusinessCategory.sport);
+      expect(BusinessCategory.fromWire('it_media'), BusinessCategory.it);
       expect(BusinessCategory.fromWire('yoq'), BusinessCategory.other);
       expect(BusinessCategory.fromWire(''), BusinessCategory.other);
       expect(BusinessCategory.fromWire(null), BusinessCategory.other);
@@ -137,7 +154,7 @@ void main() {
             phone: '998901234567', companyName: 'Sunlight', approvalStatus: status, lat: lat, lng: lng,
           );
       final pin = BusinessPin.fromWholesaleSeller(s('approved', lat: 41.3, lng: 69.2))!;
-      expect(pin.category, BusinessCategory.wholesale);
+      expect(pin.category, BusinessCategory.retail); // «Савдо ва дўконлар» (30 тур)
       expect(pin.id, '998901234567');
       expect(BusinessPin.fromWholesaleSeller(s('pending', lat: 41.3, lng: 69.2)), isNull);
       expect(BusinessPin.fromWholesaleSeller(s('approved')), isNull);

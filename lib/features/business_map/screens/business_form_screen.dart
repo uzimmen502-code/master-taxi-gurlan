@@ -10,7 +10,9 @@ import '../../map_picker/screens/map_picker_screen.dart';
 import '../data/business_repository.dart';
 import '../domain/business.dart';
 import '../domain/business_category.dart';
+import '../domain/business_subtypes.dart';
 import '../domain/website_link.dart';
+import '../widgets/business_type_autocomplete.dart';
 
 /// Эга ўз объектини қўшади/таҳрирлайди (B-1). Жойни мавжуд [MapPickerScreen] билан белгилайди (B-5).
 /// Ҳамма текширув серверда (`upsertMyBusiness`); бу ерда фақат тез инкор ва тушунарли хато матни.
@@ -53,6 +55,12 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
   late final TextEditingController _address;
   late final TextEditingController _hours;
   late final TextEditingController _website;
+
+  /// «Фаолият тури» автокомплит матни; [_category] фақат рўйхатдан танланганда қўйилади, матн ўзгарса — бекор.
+  final TextEditingController _categoryText = TextEditingController();
+  final FocusNode _categoryFocus = FocusNode();
+  final FocusNode _subtypeFocus = FocusNode();
+  bool _categoryTextInit = false;
 
   BusinessCategory? _category;
 
@@ -109,12 +117,58 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_categoryTextInit) return;
+    _categoryTextInit = true;
+    final c = _category;
+    if (c != null) _categoryText.text = context.tr(c.labelKey);
+  }
+
+  @override
   void dispose() {
-    for (final c in [_name, _subtype, _description, _phone, _address, _hours, _website]) {
+    for (final c in [_name, _subtype, _description, _phone, _address, _hours, _website, _categoryText]) {
       c.dispose();
     }
+    _categoryFocus.dispose();
+    _subtypeFocus.dispose();
     super.dispose();
   }
+
+  String _label(BusinessCategory c) => context.tr(c.labelKey);
+
+  /// Тур танланди (рўйхатдан ёки аниқроқ тур орқали). Аниқроқ тури: таклиф ўзи берган бўлса — шу; бошқа турнинг
+  /// тайёр номи қолган бўлса — тозаланади; эганинг ўз матни — тегилмайди.
+  void _pickCategory(BusinessCategory c, {String? subtype}) {
+    setState(() {
+      _category = c;
+      _categoryText.text = _label(c);
+      if (subtype != null) {
+        _subtype.text = subtype;
+      } else if (!BusinessSubtypes.fits(_subtype.text, c)) {
+        _subtype.clear();
+      }
+      _error = null;
+    });
+  }
+
+  Widget _categoryOption(BuildContext context, BusinessTypeOption o) => ListTile(
+        dense: true,
+        leading: CircleAvatar(
+          radius: 14,
+          backgroundColor: o.category.color,
+          child: Icon(o.category.icon, size: 16, color: Colors.white),
+        ),
+        title: Text(_label(o.category)),
+        subtitle: o.subtype == null ? null : Text(o.subtype!),
+      );
+
+  Widget _subtypeOption(BuildContext context, BusinessTypeOption o) => ListTile(
+        dense: true,
+        title: Text(o.subtype ?? ''),
+        // Тур ҳали танланмаган бўлса — қайси турга тегишлилиги ҳам кўринади.
+        subtitle: _category == null ? Text(_label(o.category)) : null,
+      );
 
   Future<void> _pickLocation() async {
     final r = await Navigator.of(context).push<MapPickerResult>(
@@ -238,30 +292,47 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
           ),
           const SizedBox(height: 8),
           if (!widget.lockCategory) ...[
-            DropdownButtonFormField<BusinessCategory>(
-              initialValue: _category,
-              isExpanded: true,
-              decoration: _dec('bizmap_f_category'),
-              items: [
-                for (final c in BusinessCategory.values)
-                  DropdownMenuItem(
-                    value: c,
-                    child: Row(children: [
-                      Icon(c.icon, size: 18),
-                      const SizedBox(width: 8),
-                      Flexible(child: Text(context.tr(c.labelKey), overflow: TextOverflow.ellipsis)),
-                    ]),
-                  ),
-              ],
-              onChanged: _busy ? null : (v) => setState(() => _category = v),
+            BusinessTypeAutocomplete(
+              keyPrefix: 'biz_category',
+              controller: _categoryText,
+              focusNode: _categoryFocus,
+              enabled: !_busy,
+              decoration: _dec('bizmap_f_category', hintKey: 'bizmap_f_category_hint').copyWith(
+                prefixIcon: _category == null ? const Icon(Icons.search_rounded) : Icon(_category!.icon, color: _category!.color),
+              ),
+              // Танланган тур номи турганда — 30 таси ҳаммаси (бошқасига алмаштириш осон бўлсин).
+              options: (text) => BusinessSubtypes.categoryOptions(
+                _category != null && text == _label(_category!) ? '' : text,
+                context.contentLang,
+                _label,
+              ),
+              displayString: (o) => _label(o.category),
+              onSelected: (o) => _pickCategory(o.category, subtype: o.subtype),
+              itemBuilder: _categoryOption,
+              onChanged: (text) {
+                if (_category != null && text != _label(_category!)) setState(() => _category = null);
+              },
             ),
             const SizedBox(height: 16),
           ],
-          TextField(
+          BusinessTypeAutocomplete(
+            keyPrefix: 'biz_subtype',
             controller: _subtype,
+            focusNode: _subtypeFocus,
             enabled: !_busy,
             maxLength: 60,
-            decoration: _dec('bizmap_f_subtype', hintKey: 'bizmap_f_subtype_hint'),
+            decoration: _dec('bizmap_f_subtype', hintKey: 'bizmap_f_subtype_hint').copyWith(
+              helperText: _category == null || BusinessSubtypes.noteKey(_category!) == null
+                  ? null
+                  : context.tr(BusinessSubtypes.noteKey(_category!)!),
+              helperMaxLines: 3,
+            ),
+            options: (text) => BusinessSubtypes.subtypeOptions(text, context.contentLang, category: _category),
+            displayString: (o) => o.subtype ?? '',
+            onSelected: (o) {
+              if (_category != o.category) _pickCategory(o.category, subtype: o.subtype);
+            },
+            itemBuilder: _subtypeOption,
           ),
           TextField(
             controller: _description,

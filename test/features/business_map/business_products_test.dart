@@ -122,19 +122,20 @@ void main() {
       expect(parseProductPrice('-5'), isNull);
     });
 
-    test('бошланғич тур: хизмат турлари — service, қолгани — product (14 тур тўлиқ қопланган)', () {
-      const services = {
-        BusinessCategory.personal,
-        BusinessCategory.homeServices,
-        BusinessCategory.health,
-        BusinessCategory.education,
-        BusinessCategory.leisure,
-        BusinessCategory.logistics,
-        BusinessCategory.professional,
-        BusinessCategory.itMedia,
+    test('бошланғич тур: товар турлари — product, қолгани (хизмат) — service (30 тур тўлиқ қопланган)', () {
+      const products = {
+        BusinessCategory.retail,
+        BusinessCategory.manufacturing,
+        BusinessCategory.agriculture,
+        BusinessCategory.food,
+        BusinessCategory.auto,
+        BusinessCategory.foreignTrade,
+        BusinessCategory.fashion,
+        BusinessCategory.other,
       };
+      expect(BusinessCategory.values.length, 30);
       for (final c in BusinessCategory.values) {
-        expect(defaultProductKind(c), services.contains(c) ? 'service' : 'product', reason: c.wire);
+        expect(defaultProductKind(c), products.contains(c) ? 'product' : 'service', reason: c.wire);
       }
     });
 
@@ -404,7 +405,9 @@ void main() {
   group('Дўконда фақат маҳсулот', () {
     test('sellsOnlyProducts: асосий дўкон, чакана, улгуржи — ҳа; хизмат кўрсатувчи — йўқ', () {
       expect(sellsOnlyProducts(_biz()), isTrue);
-      expect(sellsOnlyProducts(_biz(c: BusinessCategory.wholesale)), isTrue);
+      // Эски «улгуржи» ҳужжат «Савдо ва дўконлар»га ўгирилади — дўкон бўлиб қолади.
+      expect(sellsOnlyProducts(_biz(c: BusinessCategory.fromWire('wholesale'))), isTrue);
+      expect(sellsOnlyProducts(_biz(c: BusinessCategory.foreignTrade)), isFalse);
       expect(sellsOnlyProducts(Business.ownShop(ownerId: '998901111111', name: 'Asosiy')), isTrue);
       expect(sellsOnlyProducts(_biz(c: BusinessCategory.personal)), isFalse);
       expect(sellsOnlyProducts(_biz(c: BusinessCategory.food)), isFalse, reason: 'кафе — объект, дўкон эмас');

@@ -117,7 +117,7 @@ class BusinessPin {
       source: BusinessSource.wholesaleSeller,
       id: s.phone,
       name: s.companyName,
-      category: BusinessCategory.wholesale,
+      category: BusinessCategory.retail, // «Савдо ва дўконлар» (30 тур, 2026-11-01; эски «Улгуржи савдо» шу турда)
       lat: lat,
       lng: lng,
       phone: s.phone,

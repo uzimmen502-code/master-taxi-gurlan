@@ -24,13 +24,22 @@ void main() {
 
   testWidgets('lockCategory: тур танлови йўқ, ном майдони бор', (tester) async {
     await open(tester, lock: true);
-    expect(find.byType(DropdownButtonFormField<BusinessCategory>), findsNothing);
+    expect(find.byKey(const ValueKey('biz_category_field')), findsNothing);
     expect(find.text('bizmap_f_category'), findsNothing);
     expect(find.text('bizmap_f_name'), findsOneWidget);
   });
 
-  testWidgets('умумий форма (харита): тур танлови аввалгидек', (tester) async {
+  testWidgets('умумий форма (харита): тур танлови бор (автокомплит, тур номи билан)', (tester) async {
     await open(tester, lock: false);
-    expect(find.byType(DropdownButtonFormField<BusinessCategory>), findsOneWidget);
+    expect(find.byKey(const ValueKey('biz_category_field')), findsOneWidget);
+    expect(find.text('business_cat_retail'), findsOneWidget);
+  });
+
+  testWidgets('lockCategory: аниқроқ тури — шу турнинг (Савдо ва дўконлар) таклифлари', (tester) async {
+    await open(tester, lock: true);
+    await tester.tap(find.byKey(const ValueKey('biz_subtype_field')));
+    await tester.pumpAndSettle();
+    expect(find.text('Озиқ-овқат дўкони'), findsOneWidget);
+    expect(find.text('Шиномонтаж'), findsNothing);
   });
 }

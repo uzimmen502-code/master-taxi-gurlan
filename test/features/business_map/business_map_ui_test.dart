@@ -35,17 +35,17 @@ class _Loc implements LocationService {
 
 void main() {
   group('BusinessCategory ранглари', () {
-    test('14 та ранг, ҳаммаси турлича ва тўлиқ шаффоф эмас (чип ва маркер учун)', () {
+    test('30 та ранг, ҳаммаси турлича ва тўлиқ шаффоф эмас (чип ва маркер учун)', () {
       final colors = [for (final c in BusinessCategory.values) c.color.toARGB32()];
-      expect(colors.length, 14);
-      expect(colors.toSet().length, 14, reason: 'иккита тур бир хил рангда бўлмаслиги керак');
+      expect(colors.length, 30);
+      expect(colors.toSet().length, 30, reason: 'иккита тур бир хил рангда бўлмаслиги керак');
       for (final c in BusinessCategory.values) {
         expect(c.color.a, 1.0, reason: c.wire);
       }
     });
 
     test('иконкалар ҳам турлича (чипда ажратиш осон)', () {
-      expect({for (final c in BusinessCategory.values) c.icon.codePoint}.length, 14);
+      expect({for (final c in BusinessCategory.values) c.icon.codePoint}.length, 30);
     });
   });
 
@@ -60,7 +60,7 @@ void main() {
       ));
     }
 
-    testWidgets('«Ҳаммаси» + БАРЧА 14 тур чипи (скроллда ҳам мавжуд, яшириб қўйилмайди)', (tester) async {
+    testWidgets('«Ҳаммаси» + БАРЧА 30 тур чипи (қисқа номи билан) (скроллда ҳам мавжуд, яшириб қўйилмайди)', (tester) async {
       await pump(tester, onChanged: (_) {});
       expect(find.byKey(const ValueKey('biz_chip_all')), findsOneWidget);
       // ListView кечиктирилган қурилади: ҳар бирига скролл қилиб, мавжудлигини текшириб чиқамиз.
@@ -68,7 +68,7 @@ void main() {
         await tester.scrollUntilVisible(find.byKey(ValueKey('biz_chip_${c.wire}')), 200,
             scrollable: find.byType(Scrollable).first);
         expect(find.byKey(ValueKey('biz_chip_${c.wire}')), findsOneWidget, reason: c.wire);
-        expect(find.text(c.labelKey), findsOneWidget);
+        expect(find.text(c.shortLabelKey), findsOneWidget);
       }
     });
 
@@ -148,7 +148,7 @@ void main() {
   });
 
   group('BusinessMarkerIcons', () {
-    testWidgets('барча 14 тур учун иконка чизилади ва тур бўйича кешланади', (tester) async {
+    testWidgets('барча 30 тур учун иконка чизилади ва тур бўйича кешланади', (tester) async {
       await tester.runAsync(() async {
         for (final c in BusinessCategory.values) {
           final a = await BusinessMarkerIcons.of(c);

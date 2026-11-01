@@ -16,6 +16,7 @@ import '../../tv_market/screens/tv_shop_public_screen.dart';
 import '../../tv_market/services/shop_stats_recorder.dart';
 import '../domain/business.dart';
 import '../domain/business_pin.dart';
+import '../domain/business_subtypes.dart';
 import '../domain/website_link.dart';
 
 /// Нуқта босилганда чиқадиган тўлиқ маълумот варағи (эга қарори: «танлаб босилганда тўлиқ маълумот»).
@@ -80,7 +81,13 @@ class BusinessDetailSheet extends StatelessWidget {
             Text(pin.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             if (pin.subtitle.isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(pin.subtitle, style: TextStyle(fontSize: 14, color: Colors.grey.shade700)),
+              Text(
+                // Тайёр аниқроқ тур — кўрувчи тилида (эга бошқа тилда танлаган бўлса ҳам); эркин матн — ўзи.
+                pin.source == BusinessSource.business
+                    ? BusinessSubtypes.display(pin.subtitle, context.contentLang, category: pin.category)
+                    : pin.subtitle,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+              ),
             ],
             const SizedBox(height: 14),
             if (pin.description.isNotEmpty)

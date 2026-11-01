@@ -313,6 +313,10 @@ void main() {
       expect(find.text(d.tr('deal_chat_write')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('contact_bar_write')));
       expect(writes, 1);
+      // «Ёзиш» қўнғироқдан қисқароқ (эга, 2026-11-01).
+      final writeW = tester.getSize(find.byKey(const ValueKey('contact_bar_write'))).width;
+      final callW = tester.getSize(find.byType(ElevatedButton)).width;
+      expect(writeW, lessThan(callW));
       await tester.pumpWidget(l10nApp(delegate: d, home: Scaffold(bottomNavigationBar: TvChannelContactBar(onCall: () {}))));
       await tester.pump();
       expect(find.byKey(const ValueKey('contact_bar_write')), findsNothing);

@@ -282,9 +282,11 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                     ),
                   ),
                 ),
+              // «Ёзиш» қўнғироқдан қисқароқ (эга, 2026-11-01): 3 : 2.
               Row(
                 children: [
                   Expanded(
+                    flex: 3,
                     child: ElevatedButton.icon(
                       onPressed: canCall ? _callSeller : null,
                       icon: const Icon(Icons.call),
@@ -302,6 +304,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   if (showWrite) ...[
                     const SizedBox(width: 10),
                     Expanded(
+                      flex: 2,
                       child: OutlinedButton.icon(
                         key: const ValueKey('ad_write_seller'),
                         onPressed: _writeBusy ? null : _writeSeller,

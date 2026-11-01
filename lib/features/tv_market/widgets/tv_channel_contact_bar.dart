@@ -27,9 +27,11 @@ class TvChannelContactBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
         child: SizedBox(
           height: 50,
+          // «Ёзиш» қўнғироқдан қисқароқ (эга, 2026-11-01): 3 : 2.
           child: Row(
             children: [
               Expanded(
+                flex: 3,
                 child: ElevatedButton.icon(
                   onPressed: onCall,
                   icon: const Icon(Icons.call_rounded, size: 20),
@@ -52,6 +54,7 @@ class TvChannelContactBar extends StatelessWidget {
               if (onWrite != null) ...[
                 const SizedBox(width: 10),
                 Expanded(
+                  flex: 2,
                   child: OutlinedButton.icon(
                     key: const ValueKey('contact_bar_write'),
                     onPressed: writeBusy ? null : onWrite,

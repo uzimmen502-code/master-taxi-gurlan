@@ -14,7 +14,9 @@ if (!/^demo-/.test(process.env.GCLOUD_PROJECT)) throw new Error('demo-* loyiha k
 
 const fns = require('../index');
 const admin = require('firebase-admin');
-const { normalizeInput, changedKeys, CATEGORIES, LIMITS, EDITABLE } = require('../business_directory');
+const {
+  normalizeInput, changedKeys, CATEGORIES, LEGACY_CATEGORIES, categoryOf, LIMITS, EDITABLE,
+} = require('../business_directory');
 const { encode } = require('../geo_hash');
 
 const db = admin.firestore();
@@ -86,10 +88,28 @@ async function main() {
     assert.strictEqual(code({ regionId: 'r1', districtId: 'd1' }), 'OK');
   });
 
-  await check('P3 kategoriyalar ro\'yxati: 14 ta, takrorsiz, "other" bor (Dart paritet testi shu ro\'yxatni qulflaydi)', () => {
-    assert.strictEqual(CATEGORIES.length, 14);
-    assert.strictEqual(new Set(CATEGORIES).size, 14);
-    assert.ok(CATEGORIES.includes('other'));
+  await check('P3 kategoriyalar ro\'yxati: 30 ta (ega, 2026-11-01), takrorsiz, "other" oxirida (Dart paritet testi shu ro\'yxatni qulflaydi)', () => {
+    assert.strictEqual(CATEGORIES.length, 30);
+    assert.strictEqual(new Set(CATEGORIES).size, 30);
+    assert.strictEqual(CATEGORIES[0], 'retail');
+    assert.strictEqual(CATEGORIES[29], 'other');
+  });
+
+  await check('P3b eski 14 talik qiymatlar (eski APK) yangisiga o\'giriladi; noma\'lum - rad', () => {
+    const cat = (c) => normalizeInput({ ...BASE, category: c }, fail).category;
+    assert.strictEqual(cat('wholesale'), 'retail');
+    assert.strictEqual(cat('home_services'), 'personal');
+    assert.strictEqual(cat('leisure'), 'sport');
+    assert.strictEqual(cat('it_media'), 'it');
+    for (const c of ['retail', 'food', 'auto', 'manufacturing', 'personal', 'health', 'education', 'logistics', 'professional', 'other']) {
+      assert.strictEqual(cat(c), c, c); // eski ro'yxatdan qolganlari o'zgarmaydi
+    }
+    for (const c of CATEGORIES) assert.strictEqual(cat(c), c, c);
+    for (const v of Object.values(LEGACY_CATEGORIES)) assert.ok(CATEGORIES.includes(v), v);
+    for (const k of Object.keys(LEGACY_CATEGORIES)) assert.ok(!CATEGORIES.includes(k), k);
+    assert.strictEqual(categoryOf('constructor'), null); // prototip kalitlari o'tmaydi
+    assert.strictEqual(categoryOf('__proto__'), null);
+    assert.strictEqual(categoryOf(['retail']), null);
   });
 
   await check('P4 changedKeys: faqat tahrirlanadigan maydonlar', () => {

@@ -80,7 +80,8 @@ class _DealChatScreenState extends State<DealChatScreen> {
   void _onChat(DealChat? chat) {
     if (chat == null || !mounted) return;
     setState(() => _chat = chat);
-    if (!_productRequested && _product == null && chat.productId.isNotEmpty) {
+    // Нарх ва бирлик фақат Улгуржи/Хитой маҳсулотидан; Аралаш бозор чатида — чатдаги нарх.
+    if (!_productRequested && _product == null && chat.productId.isNotEmpty && chat.source == 'wholesale') {
       _productRequested = true;
       _repo.fetchProduct(chat.productId).then((p) {
         if (mounted && p != null) setState(() => _product = p);
@@ -248,6 +249,8 @@ class _ProductHeader extends StatelessWidget {
       final from = pack.priceTiers.length > 1 ? '${context.tr('home_price_from')} ' : '';
       price = '$from${formatPrice(pack.priceForQty(pack.moq))} ${p.currencyLabel} / '
           '${wholesaleUnitLabel(context, p.unit)}';
+    } else if ((chat?.productPrice ?? 0) > 0) {
+      price = '${formatPrice(chat!.productPrice!)} ${context.tr('currency_sum')}';
     }
     return Container(
       key: const ValueKey('deal-chat-product'),

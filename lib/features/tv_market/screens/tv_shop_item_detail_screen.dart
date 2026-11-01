@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
+import '../../deal_chat/open_deal_chat.dart';
 import '../domain/similar_items.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
@@ -66,10 +69,36 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
   late TvShopItem _item = widget.item;
   late bool _available = widget.item.isActive;
 
+  /// «Ёзиш» (сотувчи билан чат, эга 2026-11-01).
+  String _myUid = '';
+  bool _writeBusy = false;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (mounted && uid != _myUid) setState(() => _myUid = uid);
+    } catch (_) {
+      // Рақам ўқилмаса — меҳмон ҳолати («Ёзиш» босилса рўйхатдан ўтишга чақирилади).
+    }
+  }
+
+  Future<void> _writeSeller() async {
+    if (_writeBusy) return;
+    if (_myUid.length >= 11) setState(() => _writeBusy = true);
+    try {
+      await openDealChatFlow(context,
+          productId: _item.id, myUid: _myUid, source: DealChatSource.shopItem);
+    } finally {
+      if (mounted) setState(() => _writeBusy = false);
+    }
   }
 
   Future<void> _refresh() async {
@@ -240,7 +269,14 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
               ],
             ),
             ),
-      bottomNavigationBar: _available ? TvChannelContactBar(onCall: () => _call(context)) : null,
+      bottomNavigationBar: _available
+          ? TvChannelContactBar(
+              onCall: () => _call(context),
+              // ЎЗ маҳсулотида «Ёзиш» йўқ (сервер ҳам OWN_PRODUCT).
+              onWrite: dealChatShowWrite(myUid: _myUid, ownerPhone: item.ownerPhone) ? _writeSeller : null,
+              writeBusy: _writeBusy,
+            )
+          : null,
     );
   }
 }

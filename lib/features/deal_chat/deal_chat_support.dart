@@ -18,13 +18,13 @@ class DealChatPresence {
       (data['type'] ?? '') == 'deal_chat' && _open != null && (data['chatId'] ?? '') == _open;
 }
 
-/// Push'даги `chatId` — сервер шакли (`<productId>_<рақам>`); бошқаси — `null`.
+/// Push'даги `chatId` — сервер шакли (`[ad-|si-]<productId>_<рақам>`); бошқаси — `null`.
 String? dealChatIdFromPush(Map<String, String> data) {
   final type = (data['type'] ?? '').trim();
   final screen = (data['screen'] ?? '').trim();
   if (type != 'deal_chat' && screen != 'deal_chat') return null;
   final id = (data['chatId'] ?? '').trim();
-  return RegExp(r'^[A-Za-z0-9_-]{1,100}_\d{11,15}$').hasMatch(id) ? id : null;
+  return RegExp(r'^[A-Za-z0-9_-]{1,104}_\d{11,15}$').hasMatch(id) ? id : null;
 }
 
 /// Сервер хабар коди (`HttpsError.message`) → l10n калити (`userErrorMessage(byServerMessage:)`).

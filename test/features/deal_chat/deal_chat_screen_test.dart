@@ -6,8 +6,10 @@ import 'dart:async';
 import 'package:ava_gurlan/features/chat/widgets/message_bubble.dart';
 import 'package:ava_gurlan/features/deal_chat/data/deal_chat_repository.dart';
 import 'package:ava_gurlan/features/deal_chat/deal_chat_support.dart';
+import 'package:ava_gurlan/features/deal_chat/open_deal_chat.dart';
 import 'package:ava_gurlan/features/deal_chat/screens/deal_chat_screen.dart';
 import 'package:ava_gurlan/features/deal_chat/screens/deal_chats_screen.dart';
+import 'package:ava_gurlan/features/tv_market/widgets/tv_channel_contact_bar.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -44,10 +46,18 @@ class FakeDealRepo implements DealChatRepository {
 
   @override
   Future<void> markRead(String id) async => readCalls.add(id);
+  final fetchCalls = <String>[];
   @override
-  Future<WholesaleProduct?> fetchProduct(String productId) async => null;
+  Future<WholesaleProduct?> fetchProduct(String productId) async {
+    fetchCalls.add(productId);
+    return null;
+  }
+  final openCalls = <(String, String)>[];
   @override
-  Future<String> openChat(String productId) async => 'p1_$buyer';
+  Future<String> openChat(String productId, {String source = 'wholesale'}) async {
+    openCalls.add((productId, source));
+    return 'p1_$buyer';
+  }
   @override
   Stream<List<DealChat>> watchMyChats(String myUid, {int limit = 50}) => const Stream.empty();
   @override
@@ -248,5 +258,97 @@ void main() {
     final b = DealChatRepository.newClientId();
     expect(RegExp(r'^[A-Za-z0-9_-]{8,64}$').hasMatch(a), isTrue);
     expect(a, isNot(b));
+  });
+  group('Аралаш бозор «Ёзиш» (эга 2026-11-01)', () {
+    test('DealChat: source/productPrice; эски ҳужжат (майдонсиз) — wholesale, нарх йўқ', () {
+      final a = DealChat.fromMap('ad-a1_$buyer', {
+        'members': [buyer, seller], 'buyerId': buyer, 'sellerId': seller, 'productId': 'a1',
+        'source': 'ad', 'market': 'aralash', 'productPrice': 450000,
+      });
+      expect([a.source, a.market, a.productPrice], ['ad', 'aralash', 450000]);
+      final old = DealChat.fromMap(chatId, {'members': [buyer, seller], 'productId': 'p1'});
+      expect([old.source, old.productPrice], ['wholesale', null]);
+      final bad = DealChat.fromMap(chatId, {'productPrice': 10.5});
+      expect(bad.productPrice, isNull, reason: 'пул — фақат бутун сон');
+    });
+
+    testWidgets('Аралаш чат: нарх чатдан (сўм), Улгуржи маҳсулоти ЎҚИЛМАЙДИ', (tester) async {
+      final repo = FakeDealRepo();
+      await tester.pumpWidget(l10nApp(delegate: d, home: DealChatScreen(chatId: 'ad-a1_$buyer', myUid: buyer, repository: repo)));
+      repo.chat.add(const DealChat(
+        id: 'ad-a1_$buyer', members: [buyer, seller], buyerId: buyer, sellerId: seller, productId: 'a1',
+        source: 'ad', market: 'aralash', productPrice: 450000, productTitle: 'Velosiped',
+      ));
+      repo.messages.add(const []);
+      await tester.pump();
+      expect(find.text('Velosiped'), findsOneWidget);
+      final price = tester.widget<Text>(find.byKey(const ValueKey('deal-chat-price'))).data!;
+      expect(price, contains('450'));
+      expect(price, contains(d.tr('currency_sum')));
+      expect(repo.fetchCalls, isEmpty);
+    });
+
+    testWidgets('Улгуржи чат (source йўқ) — маҳсулот аввалгидек ўқилади', (tester) async {
+      final repo = await pumpChat(tester);
+      expect(repo.fetchCalls, ['p1']);
+    });
+
+    test('«Ёзиш» кўриниши: ўз эълонида йўқ, меҳмонга бор, эгасиз — йўқ; рақам шакли фарқ қилмайди', () {
+      expect(dealChatShowWrite(myUid: buyer, ownerPhone: seller), isTrue);
+      expect(dealChatShowWrite(myUid: seller, ownerPhone: '+998 90 111 00 02'), isFalse);
+      expect(dealChatShowWrite(myUid: seller, ownerPhone: '901110002'), isFalse);
+      expect(dealChatShowWrite(myUid: '', ownerPhone: seller), isTrue);
+      expect(dealChatShowWrite(myUid: buyer, ownerPhone: ''), isFalse);
+    });
+
+    test('push: ad-/si- префиксли чат ID ҳам қабул қилинади', () {
+      expect(dealChatIdFromPush({'type': 'deal_chat', 'chatId': 'ad-AbC123_$buyer'}), 'ad-AbC123_$buyer');
+      expect(dealChatIdFromPush({'type': 'deal_chat', 'chatId': 'si-NaN_$buyer'}), 'si-NaN_$buyer');
+    });
+
+    testWidgets('дўкон маҳсулоти пастки панели: onWrite берилса «Ёзиш» бор ва ишлайди; йўқ — фақат қўнғироқ', (tester) async {
+      var writes = 0;
+      await tester.pumpWidget(l10nApp(delegate: d, home: Scaffold(bottomNavigationBar: TvChannelContactBar(onCall: () {}, onWrite: () => writes++))));
+      await tester.pump();
+      expect(find.text(d.tr('deal_chat_write')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('contact_bar_write')));
+      expect(writes, 1);
+      await tester.pumpWidget(l10nApp(delegate: d, home: Scaffold(bottomNavigationBar: TvChannelContactBar(onCall: () {}))));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('contact_bar_write')), findsNothing);
+      await tester.pumpWidget(l10nApp(delegate: d, home: Scaffold(bottomNavigationBar: TvChannelContactBar(onCall: () {}, onWrite: () => writes++, writeBusy: true))));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('contact_bar_write')), warnIfMissed: false);
+      expect(writes, 1, reason: 'band пайтида иккинчи босиш йўқ');
+    });
+
+    testWidgets('меҳмон «Ёзиш» босса — сервер чақирилмайди, рўйхатдан ўтишга чақирилади', (tester) async {
+      final repo = FakeDealRepo();
+      await tester.pumpWidget(l10nApp(delegate: d, home: Builder(
+        builder: (ctx) => Scaffold(body: TextButton(
+          onPressed: () => openDealChatFlow(ctx, productId: 'a1', myUid: '', source: DealChatSource.ad, repository: repo),
+          child: const Text('go'),
+        )),
+      )));
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      expect(find.text(d.tr('deal_chat_login_required')), findsOneWidget);
+      expect(repo.openCalls, isEmpty);
+    });
+
+    testWidgets('рўйхатдан ўтган: манба серверга узатилади ва чат очилади', (tester) async {
+      final repo = FakeDealRepo();
+      await tester.pumpWidget(l10nApp(delegate: d, home: Builder(
+        builder: (ctx) => Scaffold(body: TextButton(
+          onPressed: () => openDealChatFlow(ctx, productId: 's1', myUid: buyer, source: DealChatSource.shopItem, repository: repo),
+          child: const Text('go'),
+        )),
+      )));
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump();
+      expect(repo.openCalls, [('s1', 'shop_item')]);
+      expect(find.byType(DealChatScreen), findsOneWidget);
+    });
   });
 }

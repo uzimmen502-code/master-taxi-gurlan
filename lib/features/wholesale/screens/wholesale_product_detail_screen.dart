@@ -8,13 +8,9 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
-import '../../../core/utils/user_error.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../ads/widgets/ad_image_slider.dart';
-import '../../deal_chat/data/deal_chat_repository.dart';
-import '../../deal_chat/deal_chat_support.dart';
-import '../../deal_chat/screens/deal_chat_screen.dart';
-import '../../profile/screens/profile_screen.dart';
+import '../../deal_chat/open_deal_chat.dart';
 import '../widgets/wholesale_detail_actions.dart';
 import '../models/wholesale_product.dart';
 import '../repositories/wholesale_products_repository.dart';
@@ -166,40 +162,11 @@ class _WholesaleProductDetailViewState
   /// «Буюртма ёзиш» → эълон эгаси билан чат (эга қарори 2026-11-01).
   Future<void> _writeOrder() async {
     if (_writeBusy) return;
-    final messenger = ScaffoldMessenger.of(context);
-    // Меҳмон (телефонсиз) — чат фақат рўйхатдан ўтганларга (сервер ҳам: PHONE_REQUIRED).
-    if (_myUid.length < 11) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('deal_chat_login_required')),
-        action: SnackBarAction(
-          label: context.tr('deal_chat_login_cta'),
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
-          ),
-        ),
-      ));
-      return;
-    }
-    setState(() => _writeBusy = true);
+    // Меҳмон огоҳлантириши, чат очиш ва хато матни — умумий ([openDealChatFlow]).
+    if (_myUid.length >= 11) setState(() => _writeBusy = true);
     try {
-      final repo = DealChatRepository();
-      final chatId = await repo.openChat(widget.product.id);
-      if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => DealChatScreen(
-          chatId: chatId,
-          myUid: _myUid,
-          initialProduct: widget.product,
-          repository: repo,
-        ),
-      ));
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(
-          content: Text(userErrorMessage(context, e,
-              fallbackKey: 'deal_chat_open_failed', byServerMessage: kDealChatServerErrors)),
-        ));
-      }
+      await openDealChatFlow(context,
+          productId: widget.product.id, myUid: _myUid, initialProduct: widget.product);
     } finally {
       if (mounted) setState(() => _writeBusy = false);
     }

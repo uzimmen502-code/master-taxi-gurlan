@@ -12,6 +12,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/user_error.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../deal_chat/open_deal_chat.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_image_slider.dart';
@@ -63,6 +64,10 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   late final Future<List<AdModel>> _similarAdsFuture;
   bool _similarOutcomeLogged = false;
 
+  /// «Ёзиш» (сотувчи билан чат, эга 2026-11-01): жорий рақам ва босилганда band ҳолат.
+  String _myUid = '';
+  bool _writeBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +75,24 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         ? context.read<AdsRepository>().getSimilarAds(current: widget.ad, limit: 6)
         : Future.value(const <AdModel>[]);
     WidgetsBinding.instance.addPostFrameCallback((_) => _countViewOnce());
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    final uid = canonicalPhoneId(await _myPhone());
+    if (mounted && uid != _myUid) setState(() => _myUid = uid);
+  }
+
+  /// «Ёзиш» → эълон эгаси билан чат (Аралаш бозор, эга қарори 2026-11-01).
+  Future<void> _writeSeller() async {
+    if (_writeBusy) return;
+    if (_myUid.length >= 11) setState(() => _writeBusy = true);
+    try {
+      await openDealChatFlow(context,
+          productId: widget.ad.id, myUid: _myUid, source: DealChatSource.ad);
+    } finally {
+      if (mounted) setState(() => _writeBusy = false);
+    }
   }
 
   Future<void> _countViewOnce() async {
@@ -233,6 +256,8 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   Widget build(BuildContext context) {
     final ad = widget.ad;
     final canCall = phoneDigits(_callPhone).length >= 9;
+    // Фаол эълон ва ЎЗ эълони эмас — «Ёзиш» (сервер ҳам текширади).
+    final showWrite = ad.isActive && ad.id.isNotEmpty && dealChatShowWrite(myUid: _myUid, ownerPhone: ad.ownerId);
 
     return Scaffold(
       backgroundColor: AppColors.scaffold,
@@ -257,18 +282,45 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                     ),
                   ),
                 ),
-              ElevatedButton.icon(
-                onPressed: canCall ? _callSeller : null,
-                icon: const Icon(Icons.call),
-                label: Text(context.tr('wholesale_call')),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.onPrimary,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: canCall ? _callSeller : null,
+                      icon: const Icon(Icons.call),
+                      label: Text(context.tr('wholesale_call'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.onPrimary,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  if (showWrite) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('ad_write_seller'),
+                        onPressed: _writeBusy ? null : _writeSeller,
+                        icon: _writeBusy
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.chat_bubble_outline),
+                        label: Text(context.tr('deal_chat_write'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primaryText,
+                          side: const BorderSide(color: AppColors.primary, width: 1.5),
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),

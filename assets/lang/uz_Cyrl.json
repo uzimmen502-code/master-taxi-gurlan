@@ -5249,6 +5249,7 @@
   "wholesale_return_status_awaiting_payment_buyer": "Қайтариш ҳақи харидор ҳамёнидан тўланишини кутмоқда",
   "wholesale_return_status_awaiting_payment_courier": "Қайтариш ҳақи курьер ҳамёнидан тўланишини кутмоқда",
   "deal_chat_write_order": "Буюртма ёзиш",
+  "deal_chat_write": "Ёзиш",
   "deal_chat_with_seller": "Сотувчи билан чат",
   "deal_chat_with_buyer": "Харидор билан чат",
   "deal_chat_hint": "Миқдор ва шартларни ёзинг...",

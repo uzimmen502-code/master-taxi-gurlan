@@ -5249,6 +5249,7 @@
   "wholesale_return_status_awaiting_payment_buyer": "Qaytarish haqi xaridor hamyonidan to'lanishini kutmoqda",
   "wholesale_return_status_awaiting_payment_courier": "Qaytarish haqi kuryer hamyonidan to'lanishini kutmoqda",
   "deal_chat_write_order": "Buyurtma yozish",
+  "deal_chat_write": "Yozish",
   "deal_chat_with_seller": "Sotuvchi bilan chat",
   "deal_chat_with_buyer": "Xaridor bilan chat",
   "deal_chat_hint": "Miqdor va shartlarni yozing...",

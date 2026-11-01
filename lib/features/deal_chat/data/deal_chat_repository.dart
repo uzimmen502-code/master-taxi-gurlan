@@ -24,8 +24,12 @@ class DealChatRepository {
   CollectionReference<Map<String, dynamic>> get _chats => _db.collection('deal_chats');
 
   /// Чатни очади ёки мавжудини қайтаради (сервер идемпотент). → `chatId`.
-  Future<String> openChat(String productId) async {
-    final res = await _fns.httpsCallable('openDealChat').call<Object?>({'productId': productId});
+  /// [source]: `wholesale` (Улгуржи/Хитой) | `ad` | `shop_item` (Аралаш бозор).
+  Future<String> openChat(String productId, {String source = 'wholesale'}) async {
+    final res = await _fns.httpsCallable('openDealChat').call<Object?>({
+      'productId': productId,
+      if (source != 'wholesale') 'source': source,
+    });
     final d = res.data;
     final id = d is Map ? '${d['chatId'] ?? ''}' : '';
     if (id.isEmpty) throw StateError('openDealChat: chatId missing');
@@ -107,6 +111,8 @@ class DealChat {
     required this.sellerId,
     required this.productId,
     this.market = 'wholesale',
+    this.source = 'wholesale',
+    this.productPrice,
     this.productTitle = '',
     this.productPhoto = '',
     this.lastMessage = '',
@@ -121,6 +127,12 @@ class DealChat {
   final String sellerId;
   final String productId;
   final String market;
+
+  /// `wholesale` | `ad` | `shop_item`; эски чатларда майдон йўқ — `wholesale`.
+  final String source;
+
+  /// Аралаш бозор: чат очилгандаги нарх (сўм, бутун сон); Улгуржида — `null` (нарх маҳсулотдан).
+  final int? productPrice;
   final String productTitle;
   final String productPhoto;
   final String lastMessage;
@@ -146,6 +158,8 @@ class DealChat {
       sellerId: '${d['sellerId'] ?? ''}',
       productId: '${d['productId'] ?? ''}',
       market: '${d['market'] ?? 'wholesale'}',
+      source: '${d['source'] ?? 'wholesale'}',
+      productPrice: d['productPrice'] is int ? d['productPrice'] as int : null,
       productTitle: '${d['productTitle'] ?? ''}',
       productPhoto: '${d['productPhoto'] ?? ''}',
       lastMessage: '${d['lastMessage'] ?? ''}',

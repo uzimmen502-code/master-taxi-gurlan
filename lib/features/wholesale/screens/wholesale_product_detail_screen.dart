@@ -14,7 +14,9 @@ import '../../deal_chat/open_deal_chat.dart';
 import '../widgets/wholesale_detail_actions.dart';
 import '../models/wholesale_product.dart';
 import '../repositories/wholesale_products_repository.dart';
+import '../repositories/wholesale_stock_repository.dart';
 import '../widgets/wholesale_checkout_sheet.dart';
+import '../widgets/wholesale_compact_detail_parts.dart';
 import '../services/wholesale_video_link.dart';
 import '../utils/wholesale_labels.dart';
 import '../utils/wholesale_similar.dart';
@@ -134,8 +136,19 @@ class _WholesaleProductDetailViewState
 
   void _selectPack(String id) {
     if (id == _packId) return;
-    setState(() => _packId = id);
+    setState(() {
+      _packId = id;
+      // Қадоқ алмашса миқдор шу қадоқнинг минимумидан бошланади.
+      _qty = _pack.moq;
+    });
   }
+
+  /// Улгуржи (Б вариант): танланган миқдор — фақат кўрсатиш (≈ сумма),
+  /// буюртма нархини сервер ҳисоблайди (CLAUDE.md 18).
+  late int _qty = _pack.moq;
+
+  /// Қолдиқ (`wholesale_stock`) — фақат Улгуржида, битта ҳужжат тинглагичи.
+  Stream<WholesaleStock>? _stock;
 
   late final List<WholesaleProduct> _similar =
       similarWholesale(widget.product, widget.catalog);
@@ -149,6 +162,9 @@ class _WholesaleProductDetailViewState
     super.initState();
     if (_countedThisSession.add(widget.product.id)) {
       WholesaleProductsRepository().incrementViews(widget.product.id);
+    }
+    if (!widget.product.isChina) {
+      _stock = WholesaleStockRepository().watch(widget.product.id);
     }
     _loadMe();
   }
@@ -208,6 +224,156 @@ class _WholesaleProductDetailViewState
 
   @override
   Widget build(BuildContext context) {
+    // Улгуржи — Аралаш бозордаги AVA маҳсулоти экрани андозасида (эга,
+    // 2026-11-02, «Б вариант»); Хитой ҳозирча эски кўринишда.
+    if (!widget.product.isChina) {
+      final stream = _stock;
+      if (stream == null) return _buildCompact(context, null);
+      return StreamBuilder<WholesaleStock>(
+        stream: stream,
+        builder: (context, snap) => _buildCompact(context, snap.data?.of(_packId)),
+      );
+    }
+    return _buildChina(context);
+  }
+
+  /// Улгуржи тафсилоти («Б вариант»): расм ~28% баландлик, ном, сотувчи,
+  /// қадоқ, «нарх / бирлик ··· Қолди: N», поғоналар, 2 қатор тавсиф,
+  /// ўхшашлар; пастда [− N +] [📞] [Буюртма ёзиш · ≈ сумма].
+  Widget _buildCompact(BuildContext context, int? stockQty) {
+    final p = widget.product;
+    final pack = _pack;
+    final images = pack.hasPhoto
+        ? [pack.photoUrl, ...p.imageUrls.where((u) => u != pack.photoUrl)]
+        : p.imageUrls;
+    final unitLabel = wholesaleUnitLabel(context, p.unit);
+    final maxQty = (stockQty != null && stockQty > 0) ? stockQty : kWholesaleMaxQty;
+    final qty = clampCompactQty(_qty, moq: pack.moq, max: maxQty);
+    final price = pack.priceForQty(qty);
+    final h = MediaQuery.sizeOf(context).height;
+    const meta = TextStyle(fontSize: 11, height: 1.2, color: PdDark.muted);
+    void setQty(int q) => setState(() => _qty = clampCompactQty(q, moq: pack.moq, max: maxQty));
+
+    return ProductDetailDark(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            context.tr('wholesale_title'),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 0.15),
+          ),
+        ),
+        body: ListView(
+          physics: kEdgeSwipePhysics,
+          children: [
+            Stack(
+              children: [
+                AdImageSlider(
+                  key: ValueKey('wholesale-images-${pack.id}'),
+                  imageUrls: images,
+                  height: (h * 0.28).clamp(150.0, 240.0),
+                  backgroundColor: PdDark.surface,
+                ),
+                if (p.videoClipIds.isNotEmpty)
+                  Positioned(
+                    left: 2,
+                    bottom: 0,
+                    child: _VideoChip(label: context.tr('wholesale_watch_video'), onTap: _openVideo),
+                  ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    p.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, height: 1.2, fontWeight: FontWeight.w700, color: PdDark.ink),
+                  ),
+                  _SellerLink(product: p),
+                  if (p.hasPacks) ...[
+                    WholesalePackChips(product: p, selectedId: pack.id, onSelected: _selectPack),
+                    const SizedBox(height: 6),
+                  ],
+                  WholesalePriceStockRow(
+                    priceText: '${formatPrice(price)} ${p.currencyLabel}',
+                    unitLabel: unitLabel,
+                    stockQty: stockQty,
+                  ),
+                  // Етказиш маълумоти (У1) — битта майда қатор.
+                  const SizedBox(height: 2),
+                  Text(
+                    pack.hasShippingData
+                        ? [
+                            context
+                                .tr('wholesale_weight_line')
+                                .replaceAll('{weight}', formatWeightG(pack.unitWeightG!)),
+                            if (pack.unitDims != null)
+                              context.tr('wholesale_dims_line').replaceAll('{dims}', pack.unitDims!.label),
+                          ].join(' · ')
+                        : context.tr('wholesale_no_shipping_data'),
+                    style: pack.hasShippingData ? meta : meta.copyWith(color: const Color(0xFFF0A868)),
+                  ),
+                  if (pack.priceTiers.length > 1) ...[
+                    const SizedBox(height: 8),
+                    WholesaleTierRow(
+                      tiers: pack.priceTiers,
+                      qty: qty,
+                      unitLabel: unitLabel,
+                      onPick: setQty,
+                    ),
+                  ],
+                  if (p.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _CompactDescription(text: p.description.trim()),
+                  ],
+                  if (_similar.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    WholesaleProductStrip(
+                      title: context.tr('platform_store_similar'),
+                      items: _similar,
+                      onTap: _openProduct,
+                    ),
+                  ],
+                  if (widget.showNextHint) ...[
+                    const SizedBox(height: 8),
+                    const _NextHint(),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: Material(
+          color: PdDark.surface,
+          elevation: 8,
+          shadowColor: Colors.black,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: WholesaleCompactBottomBar(
+                qty: qty,
+                minQty: pack.moq,
+                maxQty: maxQty,
+                onQtyChanged: setQty,
+                totalText: '≈ ${formatPrice(price * qty)} ${p.currencyLabel}',
+                onCall: _call,
+                onWriteOrder: _writeOrder,
+                showWriteOrder: wholesaleShowWriteOrder(myUid: _myUid, sellerId: p.sellerId),
+                writeBusy: _writeBusy,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Хитой бозори — аввалги кўриниш (эга, 2026-11-02: «ҳозирча фақат улгуржи»).
+  Widget _buildChina(BuildContext context) {
     final p = widget.product;
     final pack = _pack;
     // Миқдор экранда танланмайди (эга, 2026-11-01: чат ёки телефонда
@@ -451,6 +617,36 @@ class _NextHint extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Тавсиф — 2 қатор (намуна экрандагидек); босилса тўлиқ очилади/ёпилади,
+/// узун матн йўқолмасин.
+class _CompactDescription extends StatefulWidget {
+  const _CompactDescription({required this.text});
+
+  final String text;
+
+  @override
+  State<_CompactDescription> createState() => _CompactDescriptionState();
+}
+
+class _CompactDescriptionState extends State<_CompactDescription> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      key: const ValueKey('wholesale-description'),
+      borderRadius: BorderRadius.circular(6),
+      onTap: () => setState(() => _open = !_open),
+      child: Text(
+        widget.text,
+        maxLines: _open ? null : 2,
+        overflow: _open ? TextOverflow.visible : TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 11.5, height: 1.3, color: PdDark.ink.withValues(alpha: 0.8)),
+      ),
     );
   }
 }

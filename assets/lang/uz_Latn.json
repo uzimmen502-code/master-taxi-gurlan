@@ -1977,6 +1977,7 @@
   "wholesale_err_stock_invalid": "Qoldiq 0 dan 1 000 000 gacha butun son bo'lsin",
   "wholesale_stock_save_failed": "Mahsulot saqlandi, lekin qoldiq saqlanmadi. Qayta urinib ko'ring.",
   "wholesale_stock_left": "Qoldiq: {qty} {unit}",
+  "wholesale_stock_left_short": "Qoldi: {qty} {unit}",
   "wholesale_stock_out": "Tugagan",
   "wholesale_pick_pack": "Qadoqni tanlang",
   "product_swipe_next_up": "Keyingi mahsulot uchun yuqoriga suring",

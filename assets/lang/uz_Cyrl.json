@@ -1977,6 +1977,7 @@
   "wholesale_err_stock_invalid": "Қолдиқ 0 дан 1 000 000 гача бутун сон бўлсин",
   "wholesale_stock_save_failed": "Маҳсулот сақланди, лекин қолдиқ сақланмади. Қайта уриниб кўринг.",
   "wholesale_stock_left": "Қолдиқ: {qty} {unit}",
+  "wholesale_stock_left_short": "Қолди: {qty} {unit}",
   "wholesale_stock_out": "Тугаган",
   "wholesale_pick_pack": "Қадоқни танланг",
   "product_swipe_next_up": "Кейинги маҳсулот учун юқорига суринг",

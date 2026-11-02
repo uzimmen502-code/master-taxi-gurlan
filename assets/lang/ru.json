@@ -1977,6 +1977,7 @@
   "wholesale_err_stock_invalid": "Остаток — целое число от 0 до 1 000 000",
   "wholesale_stock_save_failed": "Товар сохранён, но остаток не сохранился. Попробуйте ещё раз.",
   "wholesale_stock_left": "Остаток: {qty} {unit}",
+  "wholesale_stock_left_short": "Осталось: {qty} {unit}",
   "wholesale_stock_out": "Нет в наличии",
   "wholesale_pick_pack": "Выберите фасовку",
   "product_swipe_next_up": "Потяните вверх — следующий товар",

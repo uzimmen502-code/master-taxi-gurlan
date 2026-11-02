@@ -17,6 +17,10 @@
  *   incentive_grants/{programId}_{uid}      — бир одамга бир дастурдан БИР грант (детерминистик ID)
  *   incentive_ledger/{type}_{grantId}[...]  — ўзгармас журнал (grant/expire/revoke/spend/refund)
  *   incentive_budget_days/{programId}_{YYYYMMDD} — кунлик бюджет ҳисоби (Тошкент куни)
+ *   incentive_profiles/{uid}                — МУҲРЛАНГАН жинс ва туғилган сана (эга 2026-11-03: жинс бир
+ *                                             марта, ўзгариш — админ тасдиғи билан). Биринчи марта қиймат
+ *                                             пайдо бўлганда ёзилади; шартлар ШУ бўйича текширилади —
+ *                                             иловани қайта ўрнатиб «аёл» деб танлаш бонус бермайди.
  *
  * Пул — бутун сўм (8-банд). Логда телефон рақам тўлиқ чиқмайди (40-банд).
  *
@@ -30,6 +34,8 @@ const PROGRAMS = 'incentive_programs';
 const GRANTS = 'incentive_grants';
 const LEDGER = 'incentive_ledger';
 const DAYS = 'incentive_budget_days';
+const PROFILES = 'incentive_profiles';
+const FROZEN_GENDERS = Object.freeze(['male', 'female']);
 
 const STAGES = Object.freeze(['off', 'internal', 'pilot', 'public']);
 const GENDERS = Object.freeze(['female', 'male', 'any']);
@@ -94,6 +100,28 @@ function ageAt(birth, nowMs) {
   let age = ty - birth.y;
   if (tm < birth.m || (tm === birth.m && td < birth.d)) age -= 1;
   return age;
+}
+
+/**
+ * Муҳрлаш: ҳали муҳрланмаган ва фойдаланувчида тўғри қиймати бор майдонлар (соф функция).
+ * → { gender?, birthDate? } — бўш объект: ёзиш керак эмас.
+ */
+function frozenPatch(user, frozen) {
+  const u = user || {};
+  const f = frozen || {};
+  const patch = {};
+  if (!FROZEN_GENDERS.includes(f.gender) && FROZEN_GENDERS.includes(u.gender)) patch.gender = u.gender;
+  if (!parseBirthDate(f.birthDate) && parseBirthDate(u.birthDate)) patch.birthDate = String(u.birthDate).trim();
+  return patch;
+}
+
+/** Шартлар учун фойдаланувчи: муҳрланган жинс/сана устун (соф функция). */
+function withFrozen(user, frozen) {
+  const f = frozen || {};
+  const out = { ...(user || {}) };
+  if (FROZEN_GENDERS.includes(f.gender)) out.gender = f.gender;
+  if (parseBirthDate(f.birthDate)) out.birthDate = String(f.birthDate).trim();
+  return out;
 }
 
 /** Машина профили — `claimCarProfileBonus` билан БИР ХИЛ қоида (эга: «ҳозирги ҳолат ўзгармасин»). */
@@ -421,12 +449,21 @@ function attachIncentives(exportsObj, deps) {
    */
   exportsObj.getMyIncentiveOffers = functions.https.onCall(async (data, context) => {
     const uid = requireUser(context);
-    const [progSnap, userSnap, registeredMs] = await Promise.all([
+    const profRef = db.collection(PROFILES).doc(uid);
+    const [progSnap, userSnap, registeredMs, profSnap] = await Promise.all([
       db.collection(PROGRAMS).where('stage', 'in', ['internal', 'pilot', 'public']).get(),
       db.collection('users').doc(uid).get(),
       registeredMsOf(context),
+      profRef.get(),
     ]);
-    const user = userSnap.exists ? userSnap.data() : {};
+    const rawUser = userSnap.exists ? userSnap.data() : {};
+    // Рўйхатдан кейинги биринчи чақирувда жинс/сана муҳрланади (бир марта; кейин ўзгармайди).
+    const frozen = profSnap.exists ? profSnap.data() : {};
+    const patch = frozenPatch(rawUser, frozen);
+    if (Object.keys(patch).length) {
+      await profRef.set({ uid, ...patch, updatedAt: ts(), ...(profSnap.exists ? {} : { createdAt: ts() }) }, { merge: true });
+    }
+    const user = withFrozen(rawUser, { ...frozen, ...patch });
     const nowMs = Date.now();
     const offers = [];
     for (const d of progSnap.docs) {
@@ -455,19 +492,27 @@ function attachIncentives(exportsObj, deps) {
     const progRef = db.collection(PROGRAMS).doc(programId);
     const grantRef = db.collection(GRANTS).doc(grantId);
     const userRef = db.collection('users').doc(uid);
+    const profRef = db.collection(PROFILES).doc(uid);
 
     const out = await db.runTransaction(async (t) => {
       const nowMs = Date.now();
       const dayRef = db.collection(DAYS).doc(`${programId}_${tashkentDayKey(nowMs)}`);
-      const [progSnap, grantSnap, userSnap, daySnap] = await Promise.all([
-        t.get(progRef), t.get(grantRef), t.get(userRef), t.get(dayRef),
+      const [progSnap, grantSnap, userSnap, daySnap, profSnap] = await Promise.all([
+        t.get(progRef), t.get(grantRef), t.get(userRef), t.get(dayRef), t.get(profRef),
       ]);
       if (grantSnap.exists) return { duplicate: true, amount: grantSnap.data().amount };
       if (!progSnap.exists) throw fail('not-found', 'PROGRAM_INVALID');
       if (!userSnap.exists) throw fail('failed-precondition', 'PHONE_REQUIRED');
       const p = progSnap.data();
-      const el = evaluateEligibility(p, userSnap.data(), { nowMs, uid, registeredMs });
-      if (!el.ok) throw fail('failed-precondition', el.code);
+      const frozen = profSnap.exists ? profSnap.data() : {};
+      const patch = frozenPatch(userSnap.data(), frozen);
+      const el = evaluateEligibility(p, withFrozen(userSnap.data(), { ...frozen, ...patch }), { nowMs, uid, registeredMs });
+      if (!el.ok) {
+        // Рад этилса ҳам муҳр ёзилади (кейинги уринишда жинсни алмаштириш ёрдам бермасин).
+        if (Object.keys(patch).length) t.set(profRef, { uid, ...patch, updatedAt: ts() }, { merge: true });
+        return { rejected: el.code };
+      }
+      if (Object.keys(patch).length) t.set(profRef, { uid, ...patch, updatedAt: ts() }, { merge: true });
       const counters = p.counters || {};
       const granted = Number.isSafeInteger(counters.grantedAmount) ? counters.grantedAmount : 0;
       if (granted + p.amount > p.budgetTotal) throw fail('resource-exhausted', 'BUDGET_EXHAUSTED');
@@ -495,6 +540,10 @@ function attachIncentives(exportsObj, deps) {
       });
       return { duplicate: false, amount: p.amount };
     });
+    if (out.rejected) {
+      log({ action: 'claimIncentive', userId: mask(uid), programId, result: 'rejected', errorCode: out.rejected, durationMs: Date.now() - started });
+      throw fail('failed-precondition', out.rejected);
+    }
     log({ action: 'claimIncentive', userId: mask(uid), programId, result: out.duplicate ? 'duplicate' : 'granted', amount: out.amount, durationMs: Date.now() - started });
     return { ok: true, grantId, amount: out.amount, duplicate: out.duplicate };
   });
@@ -551,6 +600,36 @@ function attachIncentives(exportsObj, deps) {
     });
     log({ action: 'adminUpsertIncentiveProgram', programId: ref.id, actor: mask(actor), created });
     return { ok: true, programId: ref.id, created };
+  });
+
+  /**
+   * data: { uid } — админ жинс/туғилган сана ўзгаришини ТАСДИҚЛАГАНДАН кейин муҳрни users ҳужжатидаги
+   * янги қийматга алмаштириш («Админ тасдиқлари» экрани чақиради). Аудит: admin_audit.
+   */
+  exportsObj.adminResyncIncentiveProfile = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, [...ADMIN_ROLES, 'dispatcher'], 'Admin only');
+    const uid = String((data && data.uid) || '').replace(/\D/g, '');
+    if (!UID_RE.test(uid)) throw fail('invalid-argument', 'PHONE_REQUIRED');
+    const userRef = db.collection('users').doc(uid);
+    const profRef = db.collection(PROFILES).doc(uid);
+    const out = await db.runTransaction(async (t) => {
+      const [userSnap, profSnap] = await Promise.all([t.get(userRef), t.get(profRef)]);
+      if (!userSnap.exists) throw fail('not-found', 'USER_NOT_FOUND');
+      const u = userSnap.data();
+      const prev = profSnap.exists ? profSnap.data() : {};
+      const next = {};
+      if (FROZEN_GENDERS.includes(u.gender)) next.gender = u.gender;
+      if (parseBirthDate(u.birthDate)) next.birthDate = String(u.birthDate).trim();
+      t.set(profRef, { uid, ...next, updatedAt: ts(), resyncedBy: actor }, { merge: true });
+      t.create(db.collection('admin_audit').doc(), {
+        action: 'incentiveProfileResync', userId: uid, actor, at: ts(),
+        from: { gender: prev.gender || '', birthDate: prev.birthDate || '' },
+        to: { gender: next.gender || '', birthDate: next.birthDate || '' },
+      });
+      return next;
+    });
+    log({ action: 'adminResyncIncentiveProfile', userId: mask(uid), actor: mask(actor), result: 'ok' });
+    return { ok: true, gender: out.gender || '', birthDate: out.birthDate || '' };
   });
 
   /** data: { programId, stage } — тез ёқиш/ўчириш. */
@@ -679,6 +758,7 @@ function attachIncentives(exportsObj, deps) {
 
 module.exports = {
   attachIncentives, validateProgram, evaluateEligibility, parseBirthDate, ageAt, hasCarProfile,
+  frozenPatch, withFrozen,
   tashkentDayKey, grantIdOf, STAGES,
   computeIncentivePlan, normCategory, readActiveGrantsInTx, applyIncentiveSpendInTx,
   prepareIncentiveRefundInTx, commitIncentiveRefundInTx,

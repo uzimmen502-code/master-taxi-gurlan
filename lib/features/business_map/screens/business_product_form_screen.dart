@@ -84,7 +84,11 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   /// Нарх бирлиги танлови (S2): объект тури профилидаги рўйхат; таҳрирда сақланган бирлик рўйхатда бўлмаса ҳам
   /// кўрсатилади (тур кейин ўзгарган бўлиши мумкин — эга қийматини йўқотмасин).
   late final BusinessTypeProfile _profile = BusinessTypeProfile.forBusiness(widget.business);
-  late PriceUnit _unit = widget.existing?.priceUnit ?? _profile.defaultPriceUnit;
+  // Таҳрир — сақланган бирлик; «Тез бошлаш» шаблони — шаблон бирлиги (S5); акс ҳолда тур бошланғичи.
+  late PriceUnit _unit = widget.existing?.priceUnit ??
+      (widget.initialOffer != null
+          ? PriceUnit.fromWire(widget.initialOffer!.priceUnitWire) // '' = аниқ нарх
+          : _profile.defaultPriceUnit);
   late final List<PriceUnit> _units = [
     for (final u in PriceUnit.values)
       if (_profile.priceUnits.contains(u) || u == widget.existing?.priceUnit) u,

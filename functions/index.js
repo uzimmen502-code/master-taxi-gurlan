@@ -5,6 +5,9 @@ const crypto = require('crypto');
 admin.initializeApp();
 
 const db = admin.firestore();
+// Рағбат дастурлари (эга 2026-11-02) — AVA дўкони буюртмасида сарфлаш/қайтариш.
+const incentivesCore = require('./incentives');
+const { attachIncentives } = incentivesCore;
 
 const settlementLedger = require('./settlement_ledger');
 const adminPin = require('./admin_pin');
@@ -2935,6 +2938,8 @@ async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
       total: lineTotal,
       productId,
       inventoryId: productId,
+      // Рағбат туркуми (эга 2026-11-02: шина, мой, аккумулятор, суғурта…) — админ маҳсулотда белгилайди.
+      incentiveCategory: incentivesCore.normCategory(d.incentiveCategory),
     });
     decrements.push({
       kind: 'platform',
@@ -3289,10 +3294,28 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       return null;
     }
 
-    const orderTotal = serverTotal;
-    if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
+    const grossTotal = serverTotal;
+    if (!Number.isFinite(grossTotal) || grossTotal <= 0) {
       throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
     }
+
+    // Рағбат (эга 2026-11-02): фақат AVA дўкони, мижоз рози бўлса (useIncentive), маҳсулот суммасидан,
+    // грант улуш чегараси ва туркумлари бўйича. Сумма буюртмани КАМАЙТИРАДИ — `total` нетто.
+    // Грантлар — ЁЗИШДАН ОЛДИН ўқилади (транзакция қоидаси).
+    const incentiveUid = canonicalUid(callerUid);
+    let incentiveGrants = [];
+    let incentivePlan = { total: 0, perGrant: [] };
+    if (orderType === 'platform' && orderBase.useIncentive === true) {
+      incentiveGrants = await incentivesCore.readActiveGrantsInTx(t, db, incentiveUid);
+      incentivePlan = incentivesCore.computeIncentivePlan(
+          incentiveGrants,
+          pricedItems.map((it) => ({ category: it.incentiveCategory, total: it.total })),
+          Date.now());
+      if (incentivePlan.total > (platformItemsTotal || 0)) {
+        throw new functions.https.HttpsError('internal', 'INCENTIVE_PLAN_INVALID');
+      }
+    }
+    const orderTotal = grossTotal - incentivePlan.total;
 
     const invKeys = Object.keys(agg);
     const invSnaps = {};
@@ -3333,6 +3356,9 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     if (!Number.isFinite(requested) || requested < 0) requested = 0;
     const walletDebit = useWallet ? Math.min(Math.floor(requested), maxWallet) : 0;
     const cashDue = orderTotal - walletDebit;
+    if (orderTotal <= 0 && incentivePlan.total <= 0) {
+      throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+    }
 
     const bonusCtx = walletDebit > 0
       ? await settlementLedger.prepareBonusInTx(t, db, userRef.id, { idempotencyKey })
@@ -3381,6 +3407,12 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       });
     }
 
+    if (incentivePlan.total > 0) {
+      incentivesCore.applyIncentiveSpendInTx(t, db, admin, {
+        uid: incentiveUid, grants: incentiveGrants, plan: incentivePlan, orderId: orderRef.id,
+      });
+    }
+
     const inventoryDecrements = Object.keys(agg).map((k) => ({
       kind: agg[k].col === 'bread_products'
           ? 'bread'
@@ -3419,7 +3451,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       orderPayload.note = clampStr(orderBase.note || orderBase.comment, 500);
     }
     if (paymentStatus === 'paid') {
-      orderPayload.paymentMethod = 'wallet';
+      // Тўлиқ рағбат билан қопланган (ҳамёнсиз) — 'incentive'.
+      orderPayload.paymentMethod = walletDebit > 0 ? 'wallet' : 'incentive';
       orderPayload.paidAmount = orderTotal;
       orderPayload.paidAt = admin.firestore.FieldValue.serverTimestamp();
     }
@@ -3443,6 +3476,13 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       }
       if (platformDeliveryFeePercent != null) {
         orderPayload.deliveryFeePercent = platformDeliveryFeePercent;
+      }
+      if (incentivePlan.total > 0) {
+        // Брутто (маҳсулот + етказиш) ва AVA рағбати; `total` — мижоз тўлайдиган нетто.
+        orderPayload.grossTotal = grossTotal;
+        orderPayload.incentiveApplied = incentivePlan.total;
+        orderPayload.incentiveUid = incentiveUid;
+        orderPayload.incentiveGrants = incentivePlan.perGrant;
       }
       // 9-қоида: буюртма қайси нарх қоидаси билан ҳисобланганини сақлайди —
       // қоида кейин ўзгарса, эски буюртма нархи «кўчиб» кетмасин.
@@ -3479,6 +3519,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       balanceApplied: walletDebit,
       cashDue,
       paymentStatus,
+      incentiveApplied: incentivePlan.total,
     };
     t.set(idemRef, {
       type: 'placeOrderPostPaid',
@@ -3557,6 +3598,8 @@ async function prepareOrderCancelInTx(t, orderRef, od) {
     inv.push({ ref: db.collection(col).doc(id), qty });
   }
   const invSnaps = await Promise.all(inv.map((r) => t.get(r.ref)));
+  // Рағбат (эга 2026-11-02) — грантга қайтади, ҳамёнга эмас. Ўқиш — шу ерда (ёзишдан олдин).
+  const incentiveCtx = await incentivesCore.prepareIncentiveRefundInTx(t, db, orderRef.id, od);
 
   const walletRefund = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
   let customerRef = null;
@@ -3598,7 +3641,7 @@ async function prepareOrderCancelInTx(t, orderRef, od) {
     bonusCtx = await settlementLedger.prepareBonusInTx(
         t, db, customerRef.id, { idempotencyKey: orderCancelRefundKey(orderRef.id) });
   }
-  return { orderRef, od, inv, invSnaps, walletRefund, customerRef, customerSnap, bonusCtx };
+  return { orderRef, od, inv, invSnaps, walletRefund, customerRef, customerSnap, bonusCtx, incentiveCtx };
 }
 
 /** @returns {number} ҳақиқатда қайтарилган ҳамён суммаси */
@@ -3644,6 +3687,8 @@ function commitOrderCancelInTx(t, ctx, { orderPatch, actorUid, actorRole, create
     });
     refunded = ctx.walletRefund;
   }
+
+  incentivesCore.commitIncentiveRefundInTx(t, db, admin, ctx.incentiveCtx, { actor: actorUid, nowMs: Date.now() });
 
   t.update(ctx.orderRef, orderPatch);
   return refunded;
@@ -20862,6 +20907,11 @@ attachAnonSessionMerge(exports, {
   admin,
   canonicalUid,
   requireCallerRoles,
+});
+
+// --- Рағбат дастурлари (эга 2026-11-02): аёллар / машина — AVA дўкони учун, алоҳида incentiveBalance ---
+attachIncentives(exports, {
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, repricePlatformOrderFromCatalog,
 });
 
 // --- AVA official IG / Facebook / YouTube / Telegram clip publish ---

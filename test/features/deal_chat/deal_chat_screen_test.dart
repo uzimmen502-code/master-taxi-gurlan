@@ -8,7 +8,6 @@ import 'package:ava_gurlan/features/deal_chat/data/deal_chat_repository.dart';
 import 'package:ava_gurlan/features/deal_chat/deal_chat_support.dart';
 import 'package:ava_gurlan/features/deal_chat/open_deal_chat.dart';
 import 'package:ava_gurlan/features/deal_chat/screens/deal_chat_screen.dart';
-import 'package:ava_gurlan/features/deal_chat/screens/deal_chats_screen.dart';
 import 'package:ava_gurlan/features/tv_market/widgets/tv_channel_contact_bar.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -197,22 +196,6 @@ void main() {
     repo.chat.add(chatDoc(unread: {buyer: 0, seller: 3}));
     await tester.pump();
     expect(repo.readCalls.length, 1);
-  });
-
-  testWidgets('рўйхат қатори: қарши томон, «Сиз:» префикси, ўқилмаганлар нишони', (tester) async {
-    await tester.pumpWidget(l10nApp(
-      delegate: d,
-      home: Scaffold(
-        body: Column(children: [
-          DealChatTile(chat: chatDoc(unread: {seller: 3}), myUid: seller, onTap: () {}),
-          DealChatTile(chat: chatDoc(lastFrom: buyer, last: 'salom'), myUid: buyer, onTap: () {}),
-        ]),
-      ),
-    ));
-    expect(find.text(d.tr('deal_chat_role_buyer')), findsOneWidget); // сотувчи кўради: харидор
-    expect(find.text(d.tr('deal_chat_role_seller')), findsOneWidget); // харидор кўради: сотувчи
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('${d.tr('deal_chat_you')} salom'), findsOneWidget);
   });
 
   test('push юкламаси: фақат deal_chat ва сервер шаклидаги chatId', () {

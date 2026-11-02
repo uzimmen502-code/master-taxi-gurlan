@@ -181,6 +181,24 @@ void main() {
       expect(deals[1].canDismiss, isFalse, reason: 'серверда ўчириш йўқ');
     });
 
+    test('буюртма чати: сотувчи кўрганда қарши томон — «Харидор» (эски DealChatTile текшируви)', () {
+      const buyer = '998905555555';
+      final c = DealChat(
+          id: 's',
+          members: const [uid, buyer],
+          buyerId: buyer,
+          sellerId: uid,
+          productId: 'p',
+          productTitle: 'Ун',
+          lastMessage: 'бор',
+          lastFrom: buyer,
+          lastAt: now,
+          unread: const {uid: 3});
+      final e = build(InboxData(deals: [c])).firstWhere((x) => x.kind == InboxKind.deal);
+      expect(e.preview, 'deal_chat_role_buyer: бор');
+      expect(e.unreadCount, 3);
+    });
+
     test('ўқилмаган: baseline дан кейингиси жирний, очилгандан кейин оддий', () async {
       final fresh = now.subtract(const Duration(hours: 1));
       final old = now.subtract(const Duration(hours: 5));

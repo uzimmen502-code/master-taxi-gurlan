@@ -20811,6 +20811,10 @@ attachAnonSessionMerge(exports, {
   requireCallerRoles,
 });
 
+// --- Рағбат дастурлари (эга 2026-11-02): аёллар / машина — AVA дўкони учун, алоҳида incentiveBalance ---
+const { attachIncentives } = require('./incentives');
+attachIncentives(exports, { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles });
+
 // --- AVA official IG / Facebook / YouTube / Telegram clip publish ---
 const { attachTvSocialPublish } = require('./tv_social_publish');
 attachTvSocialPublish(exports, {

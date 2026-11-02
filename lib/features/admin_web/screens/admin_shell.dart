@@ -68,6 +68,7 @@ import 'sell_submissions_admin_screen.dart';
 import 'risk_review_screen.dart';
 import 'anomaly_settings_screen.dart';
 import 'demand_core_admin_screen.dart';
+import 'incentive_programs_admin_screen.dart';
 import 'service_config_admin_screen.dart';
 import 'splash_taglines_screen.dart';
 import 'users_devices_screen.dart';
@@ -485,6 +486,15 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Settlement Ledger — float, settlement, журнал',
       access: _SectionAccess.finance,
     ),
+    // Рағбат дастурлари (эга 2026-11-02): аёллар / машина — AVA дўкони учун. Сервер рухсати ҳам
+    // admin + superadmin (`incentives.js` ADMIN_ROLES) — шунинг учун `users` даражаси.
+    _AdminSection(
+      group: 'Молия',
+      label: 'Рағбат дастурлари',
+      icon: Icons.card_giftcard,
+      description: 'Аёллар / машина бонуси · бюджет · фойдаланувчи бўйича',
+      access: _SectionAccess.users,
+    ),
   ];
 
   Future<void> _logout() async {
@@ -714,6 +724,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Мой каталоги') {
       return const OilCatalogAdminScreen();
+    }
+    if (section.label == 'Рағбат дастурлари') {
+      return const IncentiveProgramsAdminScreen();
     }
     if (section.label == 'Харид нархлари') {
       return const ProcurementPricesScreen();

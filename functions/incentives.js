@@ -206,6 +206,178 @@ function grantIdOf(programId, uid) {
   return `${programId}_${uid}`;
 }
 
+// ── AVA дўкони буюртмасида сарфлаш (2-босқич) ─────────────────────────────────
+// Қоида (эга 2026-11-02 қарорлари асосида):
+//  • рағбат фақат МАҲСУЛОТ суммасини қоплайди (етказиш ҳақи — ҳамён/нақд);
+//  • ҳар грант ўз `maxOrderSharePct` чегарасидан ошмайди (ўзи қоплай оладиган туркумлар
+//    суммасининг фоизи) ва ўз туркум қолдиқларидан;
+//  • бир қатор суммасини фақат бир марта қоплаш мумкин; муддати яқинроқ грант биринчи;
+//  • туркумсиз маҳсулот — `general` (фақат «any» грант қоплайди).
+// Натижа буюртма суммасини КАМАЙТИРАДИ (`total` = нетто) — курьер/касса/чек ўзгаришсиз тўғри ишлайди.
+
+const BUCKET_ANY = 'any';
+
+function normCategory(c) {
+  const s = String(c || '').trim().toLowerCase();
+  return CATEGORY_RE.test(s) ? s : 'general';
+}
+
+/**
+ * Соф функция. grants: [{id, programId, remaining, buckets:{k:int}, maxOrderSharePct, expiresAtMs}],
+ * lines: [{category, total}] → { total, perGrant:[{grantId, programId, amount, byBucket}], itemsTotal }.
+ */
+function computeIncentivePlan(grants, lines, nowMs) {
+  const lineAvail = {};
+  const lineBase = {};
+  let itemsTotal = 0;
+  for (const l of lines || []) {
+    const c = normCategory(l && l.category);
+    const t = Math.max(0, Math.trunc(Number(l && l.total) || 0));
+    lineAvail[c] = (lineAvail[c] || 0) + t;
+    lineBase[c] = (lineBase[c] || 0) + t;
+    itemsTotal += t;
+  }
+  const active = (grants || [])
+    .filter((g) => Number.isSafeInteger(g.remaining) && g.remaining > 0 && g.expiresAtMs != null && g.expiresAtMs > nowMs)
+    .sort((a, b) => (a.expiresAtMs - b.expiresAtMs) || String(a.id).localeCompare(String(b.id)));
+  const perGrant = [];
+  let total = 0;
+  for (const g of active) {
+    const pct = Math.min(100, Math.max(1, Math.trunc(Number(g.maxOrderSharePct) || 0)));
+    const keys = Object.keys(g.buckets || {})
+      .filter((k) => Number.isSafeInteger(g.buckets[k]) && g.buckets[k] > 0)
+      .sort((a, b) => Number(a === BUCKET_ANY) - Number(b === BUCKET_ANY));
+    if (!keys.length) continue;
+    const coversAll = keys.includes(BUCKET_ANY);
+    const cats = coversAll ? Object.keys(lineBase) : keys.filter((k) => lineBase[k] > 0);
+    const base = cats.reduce((s, c) => s + (lineBase[c] || 0), 0);
+    let capLeft = Math.min(Math.floor(base * pct / 100), g.remaining);
+    if (capLeft <= 0) continue;
+    const byBucket = {};
+    let used = 0;
+    for (const k of keys) {
+      let bucketLeft = g.buckets[k];
+      const targets = k === BUCKET_ANY ? Object.keys(lineAvail).sort() : [k];
+      for (const c of targets) {
+        if (capLeft <= 0 || bucketLeft <= 0) break;
+        const take = Math.min(capLeft, bucketLeft, lineAvail[c] || 0);
+        if (take <= 0) continue;
+        lineAvail[c] -= take;
+        capLeft -= take;
+        bucketLeft -= take;
+        used += take;
+        byBucket[k] = (byBucket[k] || 0) + take;
+      }
+    }
+    if (used > 0) {
+      perGrant.push({ grantId: g.id, programId: g.programId, amount: used, byBucket });
+      total += used;
+    }
+  }
+  return { total, perGrant, itemsTotal };
+}
+
+function grantFromDoc(d) {
+  const x = d.data() || {};
+  const buckets = {};
+  Object.entries(x.buckets || {}).forEach(([k, v]) => { if (Number.isSafeInteger(v)) buckets[k] = v; });
+  return {
+    id: d.id, ref: d.ref, programId: x.programId, uid: x.uid, status: x.status,
+    remaining: Number.isSafeInteger(x.remaining) ? x.remaining : 0, buckets,
+    maxOrderSharePct: x.maxOrderSharePct, expiresAtMs: toMs(x.expiresAt),
+  };
+}
+
+/** Транзакция ичида (ЁЗИШДАН ОЛДИН): фойдаланувчининг фаол грантлари. */
+async function readActiveGrantsInTx(t, db, uid) {
+  const snap = await t.get(db.collection(GRANTS).where('uid', '==', uid).where('status', '==', 'active'));
+  return snap.docs.map(grantFromDoc);
+}
+
+/** Режани ёзиш: грант қолдиқлари, users.incentiveBalance, дастур counters, ўзгармас журнал. */
+function applyIncentiveSpendInTx(t, db, admin, { uid, grants, plan, orderId }) {
+  if (!plan || plan.total <= 0) return;
+  const FieldValue = admin.firestore.FieldValue;
+  for (const pg of plan.perGrant) {
+    const g = grants.find((x) => x.id === pg.grantId);
+    if (!g) throw new Error(`incentive grant missing ${pg.grantId}`);
+    const remaining = g.remaining - pg.amount;
+    if (remaining < 0) throw new Error('incentive overspend');
+    const buckets = { ...g.buckets };
+    Object.entries(pg.byBucket).forEach(([k, v]) => { buckets[k] = (buckets[k] || 0) - v; });
+    t.update(g.ref, { remaining, buckets, status: remaining > 0 ? 'active' : 'spent', updatedAt: FieldValue.serverTimestamp() });
+    t.update(db.collection(PROGRAMS).doc(pg.programId), { 'counters.spentAmount': FieldValue.increment(pg.amount) });
+    t.create(db.collection(LEDGER).doc(`spend_${orderId}_${pg.grantId}`), {
+      type: 'spend', uid, programId: pg.programId, grantId: pg.grantId, amount: pg.amount,
+      byBucket: pg.byBucket, orderId, actor: uid, at: FieldValue.serverTimestamp(),
+    });
+  }
+  t.update(db.collection('users').doc(uid), {
+    incentiveBalance: FieldValue.increment(-plan.total), incentiveUpdatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+/** Бекор қилишда (ЎҚИШ босқичи): буюртмада ишлатилган грантлар. */
+async function prepareIncentiveRefundInTx(t, db, orderId, od) {
+  const applied = Number.isSafeInteger(od && od.incentiveApplied) ? od.incentiveApplied : 0;
+  const list = Array.isArray(od && od.incentiveGrants) ? od.incentiveGrants : [];
+  const uid = String((od && od.incentiveUid) || '');
+  if (applied <= 0 || !list.length || !UID_RE.test(uid)) return null;
+  const entries = [];
+  for (const pg of list) {
+    if (!pg || !pg.grantId || !Number.isSafeInteger(pg.amount) || pg.amount <= 0) continue;
+    const ref = db.collection(GRANTS).doc(String(pg.grantId));
+    const ledgerRef = db.collection(LEDGER).doc(`refund_${orderId}_${pg.grantId}`);
+    const [snap, ledgerSnap] = await Promise.all([t.get(ref), t.get(ledgerRef)]);
+    entries.push({ pg, ref, snap, ledgerRef, done: ledgerSnap.exists });
+  }
+  return { uid, orderId, entries };
+}
+
+/**
+ * Бекор қилишда (ЁЗИШ босқичи). Грант фаол/сарфланган ва муддати ўтмаган — қолдиқ ва туркумлар
+ * тикланади; муддати ўтган/бекор қилинган — қайтарилмайди (журналда `refund_forfeit`). Идемпотент.
+ * → ҳақиқатда тикланган сумма.
+ */
+function commitIncentiveRefundInTx(t, db, admin, ctx, { actor, nowMs }) {
+  if (!ctx) return 0;
+  const FieldValue = admin.firestore.FieldValue;
+  let restored = 0;
+  for (const e of ctx.entries) {
+    if (e.done) continue;
+    const g = e.snap.exists ? e.snap.data() : null;
+    const exp = g ? toMs(g.expiresAt) : null;
+    const ok = g && (g.status === 'active' || g.status === 'spent') && exp != null && exp > nowMs;
+    if (ok) {
+      const buckets = { ...(g.buckets || {}) };
+      Object.entries(e.pg.byBucket || {}).forEach(([k, v]) => {
+        if (Number.isSafeInteger(v)) buckets[k] = (Number.isSafeInteger(buckets[k]) ? buckets[k] : 0) + v;
+      });
+      t.update(e.ref, {
+        remaining: (Number.isSafeInteger(g.remaining) ? g.remaining : 0) + e.pg.amount,
+        buckets, status: 'active', updatedAt: FieldValue.serverTimestamp(),
+      });
+      t.update(db.collection(PROGRAMS).doc(e.pg.programId), { 'counters.spentAmount': FieldValue.increment(-e.pg.amount) });
+      restored += e.pg.amount;
+    } else if (g) {
+      t.update(db.collection(PROGRAMS).doc(e.pg.programId), {
+        'counters.spentAmount': FieldValue.increment(-e.pg.amount),
+        'counters.expiredAmount': FieldValue.increment(e.pg.amount),
+      });
+    }
+    t.create(e.ledgerRef, {
+      type: ok ? 'refund' : 'refund_forfeit', uid: ctx.uid, programId: e.pg.programId, grantId: e.pg.grantId,
+      amount: e.pg.amount, byBucket: e.pg.byBucket || {}, orderId: ctx.orderId, actor, at: FieldValue.serverTimestamp(),
+    });
+  }
+  if (restored > 0) {
+    t.update(db.collection('users').doc(ctx.uid), {
+      incentiveBalance: FieldValue.increment(restored), incentiveUpdatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+  return restored;
+}
+
 function attachIncentives(exportsObj, deps) {
   const { functions, db, admin, callerPhone, canonicalUid, requireCallerRoles } = deps;
   const HttpsError = functions.https.HttpsError;
@@ -476,6 +648,24 @@ function attachIncentives(exportsObj, deps) {
     return { expired, amount };
   }
 
+  /**
+   * Саватча учун олдиндан ҳисоб (ёзув йўқ): data { items:[{productId, qty}], pricingVersion } →
+   * { ok, incentiveTotal, itemsTotal, perGrant }. Буюртмадаги ҳисоб билан БИР функция ([computeIncentivePlan]).
+   */
+  exportsObj.previewIncentiveForOrder = functions.https.onCall(async (data, context) => {
+    const uid = requireUser(context);
+    const reprice = deps.repricePlatformOrderFromCatalog;
+    if (typeof reprice !== 'function') throw fail('failed-precondition', 'PREVIEW_UNAVAILABLE');
+    const priced = await reprice(data && data.items, data && data.pricingVersion);
+    const snap = await db.collection(GRANTS).where('uid', '==', uid).where('status', '==', 'active').get();
+    const plan = computeIncentivePlan(snap.docs.map(grantFromDoc),
+      priced.items.map((it) => ({ category: it.incentiveCategory, total: it.total })), Date.now());
+    return {
+      ok: true, incentiveTotal: plan.total, itemsTotal: plan.itemsTotal,
+      perGrant: plan.perGrant.map((p) => ({ programId: p.programId, amount: p.amount, byBucket: p.byBucket })),
+    };
+  });
+
   exportsObj.incentiveExpirySweep = functions.pubsub
     .schedule('every day 03:10').timeZone('Asia/Tashkent')
     .onRun(async () => {
@@ -490,4 +680,6 @@ function attachIncentives(exportsObj, deps) {
 module.exports = {
   attachIncentives, validateProgram, evaluateEligibility, parseBirthDate, ageAt, hasCarProfile,
   tashkentDayKey, grantIdOf, STAGES,
+  computeIncentivePlan, normCategory, readActiveGrantsInTx, applyIncentiveSpendInTx,
+  prepareIncentiveRefundInTx, commitIncentiveRefundInTx,
 };

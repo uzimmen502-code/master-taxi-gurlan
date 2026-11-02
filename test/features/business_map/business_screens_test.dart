@@ -6,8 +6,11 @@ import 'package:ava_gurlan/features/business_map/data/business_repository.dart';
 import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/business_map/screens/business_form_screen.dart';
+import 'package:ava_gurlan/features/business_map/screens/business_next_step_screen.dart';
 import 'package:ava_gurlan/features/business_map/screens/my_businesses_screen.dart';
 import 'package:ava_gurlan/features/home/widgets/home_business_section.dart';
+import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
+import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,6 +67,25 @@ class _FakeRepo extends BusinessRepository {
   @override
   Future<void> adminDelete(String businessId, {required String reason}) async =>
       calls.add('adminDelete:$businessId:$reason');
+}
+
+/// Эга хабидаги таклифлар сони учун (Firebase'сиз; бўш каталог).
+class _FakeShop implements TvShopRepository {
+  final fetches = <String>[];
+
+  @override
+  Future<List<TvShopItem>> fetchByBusiness(
+    String businessId, {
+    String ownerPhone = '',
+    bool onlyActive = true,
+    int limit = 200,
+  }) async {
+    fetches.add(businessId);
+    return const [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
 
 /// Обуна кейинроқ янгиланади (янги объект бирданига рўйхатга тушмайди).
@@ -278,13 +300,20 @@ void main() {
       expect(find.byType(FloatingActionButton), findsNothing);
     });
 
-    // Янги объектдан кейин занжир давом этади (эга, 2026-11-03): дўкон — маҳсулотлар; овқатланиш — «Меню»
-    // занжири; қолган турлар — маҳсулот/хизмат каталоги.
+    // Янги объектдан кейин занжир давом этади (эга, 2026-11-03): дўкон — маҳсулотлар; қолган ҳамма тур — «Кейинги
+    // қадам» экрани (S1): овқатланиш объектида унинг асосий тугмаси «Меню» занжирини, бошқаларида каталогни очади.
     // «Меню» занжири чақирувлари: «<объект ID>|<бошқа объектларга уланган ресторанлар>».
     final menuCalls = <String>[];
     setUp(menuCalls.clear);
     Future<void> fakeMenuFlow(BuildContext context, Business b, Set<String> linked) async =>
         menuCalls.add('${b.id}|${(linked.toList()..sort()).join(',')}');
+
+    final hub = find.byType(BusinessNextStepScreen);
+    bool hubJustCreated(WidgetTester tester) => tester.widget<BusinessNextStepScreen>(hub).justCreated;
+    Future<void> tapOffers(WidgetTester tester) async {
+      await tester.tap(find.byKey(const ValueKey('biz_next_cta_offers')));
+      await tester.pumpAndSettle();
+    }
 
     Future<void> createVia(WidgetTester tester, List<Business> rows, Object? formResult) async {
       await _pump(
@@ -292,6 +321,7 @@ void main() {
         MyBusinessesScreen(
           key: UniqueKey(),
           repository: _FakeRepo(rows),
+          shopRepository: _FakeShop(),
           ownerId: '998901111111',
           openForm: (context, existing) async => formResult,
           productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
@@ -320,7 +350,7 @@ void main() {
       expect(find.text('PRODUCTS w1'), findsOneWidget);
     });
 
-    testWidgets('янги кафе (food) — «Бизнесингиз харитада!», «Давом этиш»дан кейин «Меню» занжири (маҳсулотлар эмас)',
+    testWidgets('янги кафе (food) — «Бизнесингиз харитада!», кейин «Кейинги қадам»; унинг тугмаси «Меню» занжири',
         (tester) async {
       await createVia(
         tester,
@@ -336,36 +366,49 @@ void main() {
       expect(find.text('my_shop_continue'), findsOneWidget);
       expect(_shopTitle, findsNothing);
       expect(menuCalls, isEmpty, reason: 'табрик ёпилмагунча');
+      expect(hub, findsNothing, reason: 'табрик ёпилмагунча');
       await _tapCelebration(tester);
+      expect(hub, findsOneWidget);
+      expect(hubJustCreated(tester), isTrue);
+      expect(menuCalls, isEmpty, reason: 'меню — эга тугмани босганда');
+      await tapOffers(tester);
       expect(menuCalls, ['f1|r_old'], reason: 'бошқа объектга уланган меню таклиф қилинмаслиги учун узатилади');
       expect(find.textContaining('PRODUCTS'), findsNothing);
     });
 
-    testWidgets('янги хизмат тури (харитада) — «харитада» табриги, кейин маҳсулот/хизмат каталоги (занжир давом этади)',
-        (tester) async {
+    testWidgets('янги хизмат тури (харитада) — «харитада» табриги, кейин «Кейинги қадам» → каталог', (tester) async {
       await createVia(tester, [_b('a1', 'Мойка', BusinessCategory.auto)], 'a1');
       expect(_mapTitle, findsOneWidget);
-      expect(find.textContaining('PRODUCTS'), findsNothing, reason: 'табрик ёпилмагунча');
+      expect(hub, findsNothing, reason: 'табрик ёпилмагунча');
       await _tapCelebration(tester);
+      expect(hub, findsOneWidget);
+      expect(find.text('biz_next_services_cta'), findsWidgets, reason: 'тур профили: хизмат');
+      await tapOffers(tester);
       expect(find.text('PRODUCTS a1'), findsOneWidget);
       expect(menuCalls, isEmpty);
     });
 
-    testWidgets('янги онлайн (харитада йўқ) бошқа тур — табриксиз, каталог дарров', (tester) async {
+    testWidgets('янги онлайн (харитада йўқ) бошқа тур — табриксиз, «Кейинги қадам» дарров', (tester) async {
       await createVia(tester, [_b('s1', 'Онлайн дарс', BusinessCategory.education, online: true)], 's1');
       expect(_mapTitle, findsNothing);
       expect(_shopTitle, findsNothing);
+      expect(hub, findsOneWidget);
+      await tapOffers(tester);
       expect(find.text('PRODUCTS s1'), findsOneWidget);
     });
 
-    testWidgets('янги онлайн овқатланиш объекти — меню эмас (сервер ҳам рад этади), каталог дарров', (tester) async {
+    testWidgets('янги онлайн овқатланиш объекти — меню эмас (сервер ҳам рад этади), хабдан каталог', (tester) async {
       await createVia(tester, [_b('o1', 'Онлайн таом', BusinessCategory.food, online: true)], 'o1');
       expect(_mapTitle, findsNothing);
+      expect(hub, findsOneWidget);
+      await tapOffers(tester);
       expect(menuCalls, isEmpty);
       expect(find.text('PRODUCTS o1'), findsOneWidget);
     });
 
-    testWidgets('рўйхат: овқатланиш объектида «Меню» (маҳсулотлар эмас), бошқаларида «Маҳсулотлар»', (tester) async {
+    testWidgets('рўйхат: қатор босилса — эга хаби (justCreated эмас); ✎ — таҳрир формаси; ўчириш тугмаси турибди',
+        (tester) async {
+      final opened = <String?>[];
       await _pump(
         tester,
         MyBusinessesScreen(
@@ -373,41 +416,60 @@ void main() {
             _b('f1', 'Ошхона', BusinessCategory.food),
             _b('f2', 'Чойхона', BusinessCategory.food, restaurantId: 'r2'),
             _b('n1', 'Дўкон', BusinessCategory.retail),
-            _b('o1', 'Онлайн таом', BusinessCategory.food, online: true),
           ]),
+          shopRepository: _FakeShop(),
           ownerId: '998901111111',
+          openForm: (context, existing) async {
+            opened.add(existing?.id);
+            return true;
+          },
           productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
           menuFlow: fakeMenuFlow,
         ),
       );
       Finder rowOf(String name) => find.ancestor(of: find.text(name), matching: find.byType(ListTile));
-      Finder menuIn(String name) => find.descendant(of: rowOf(name), matching: find.byTooltip('restaurants_m_tab_menu'));
-      Finder productsIn(String name) => find.descendant(of: rowOf(name), matching: find.byTooltip('bizprod_open'));
-
-      expect(menuIn('Ошхона'), findsOneWidget);
-      expect(productsIn('Ошхона'), findsNothing);
-      expect(menuIn('Чойхона'), findsOneWidget);
-      expect(menuIn('Дўкон'), findsNothing);
-      expect(productsIn('Дўкон'), findsOneWidget);
-      expect(menuIn('Онлайн таом'), findsNothing, reason: 'харитада йўқ объект менюга уланмайди');
-      expect(productsIn('Онлайн таом'), findsOneWidget);
       expect(find.descendant(of: rowOf('Ошхона'), matching: find.byTooltip('bizmap_delete')), findsOneWidget);
+      expect(find.descendant(of: rowOf('Ошхона'), matching: find.byTooltip('edit')), findsOneWidget);
 
-      await tester.tap(menuIn('Ошхона'));
+      // ✎ — форма (хаб эмас).
+      await tester.tap(find.byKey(const ValueKey('my_biz_edit_n1')));
       await tester.pumpAndSettle();
+      expect(opened, ['n1']);
+      expect(hub, findsNothing);
+
+      // Қатор — хаб; овқатланиш объектида «Меню» (бошқа объектга уланган ресторан узатилади).
+      await tester.tap(find.text('Ошхона'));
+      await tester.pumpAndSettle();
+      expect(hub, findsOneWidget);
+      expect(hubJustCreated(tester), isFalse);
+      expect(find.byKey(const ValueKey('biz_next_later')), findsNothing);
+      await tapOffers(tester);
       expect(menuCalls, ['f1|r2']);
-      await tester.tap(menuIn('Чойхона'));
+      // Хабдаги таҳрир — рўйхат экранининг формаси (тест ҳуки ҳам).
+      await tester.tap(find.byKey(const ValueKey('biz_next_edit_action')));
       await tester.pumpAndSettle();
-      expect(menuCalls.last, 'f2|', reason: 'ўз ресторани «бошқага уланган» ҳисобланмайди');
-      expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(opened, ['n1', 'f1']);
+      Navigator.of(tester.element(hub)).pop();
+      await tester.pumpAndSettle();
+
+      // Дўкон қатори ҳам хабга (маҳсулотлар — хабдан).
+      await tester.tap(find.text('Дўкон'));
+      await tester.pumpAndSettle();
+      await tapOffers(tester);
+      expect(find.text('PRODUCTS n1'), findsOneWidget);
     });
 
     testWidgets('табрик шу объект учун БИР МАРТА: ўша ID яна қайтса — табриксиз', (tester) async {
       await createVia(tester, [_b('f1', 'Ошхона', BusinessCategory.food)], 'f1');
       await _tapCelebration(tester);
+      Navigator.of(tester.element(hub)).pop();
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
       expect(_mapTitle, findsNothing);
+      expect(hub, findsOneWidget, reason: 'табриксиз — «Кейинги қадам» дарров');
+      Navigator.of(tester.element(hub)).pop();
+      await tester.pumpAndSettle();
 
       // Дўкон ҳам: иккинчи марта — табриксиз, маҳсулотлар дарров.
       await createVia(tester, [_b('n1', 'Янги дўкон', BusinessCategory.retail)], 'n1');
@@ -429,7 +491,7 @@ void main() {
       expect(find.byKey(const ValueKey('celebration_ok')), findsNothing);
     });
 
-    testWidgets('таҳрир (карточка босилди): форма ID қайтарса ҳам — табрик ва маҳсулотлар йўқ', (tester) async {
+    testWidgets('таҳрир (✎ босилди): форма ID қайтарса ҳам — табрик, хаб ва маҳсулотлар йўқ', (tester) async {
       await _pump(
         tester,
         MyBusinessesScreen(
@@ -439,12 +501,13 @@ void main() {
           productsScreen: (b) => Scaffold(body: Text('PRODUCTS ${b.id}')),
         ),
       );
-      await tester.tap(find.text('Ошхона'));
+      await tester.tap(find.byKey(const ValueKey('my_biz_edit_f1')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Дўкон'));
+      await tester.tap(find.byKey(const ValueKey('my_biz_edit_n1')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('celebration_ok')), findsNothing);
       expect(find.textContaining('PRODUCTS'), findsNothing);
+      expect(hub, findsNothing);
     });
 
     testWidgets('янги объект кечикиб рўйхатга тушади — обуна орқали топилиб очилади', (tester) async {

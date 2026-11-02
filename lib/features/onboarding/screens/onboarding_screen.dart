@@ -335,6 +335,16 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   ),
                 ],
                 const SizedBox(height: 14),
+                Text(
+                  loc.translate('ob_gender_label'),
+                  key: const ValueKey('ob_gender_label'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _muted,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(

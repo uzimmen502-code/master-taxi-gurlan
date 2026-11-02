@@ -37,6 +37,13 @@ void main() {
     }
   });
 
+  test('Улгуржи экрани: ҳудуд фильтри йўқ — доим бутун мамлакат (эга 2026-11-03, «А»)', () {
+    final src = File('lib/features/wholesale/screens/wholesale_market_screen.dart').readAsStringSync();
+    expect(src.contains('GeoTierBar('), isFalse, reason: 'ҳудуд чиплари қайтмасин');
+    expect(src.contains('getActiveProducts(market: widget.market)'), isTrue);
+    expect(RegExp(r'getActiveProducts\([^)]*geo:').hasMatch(src), isFalse);
+  });
+
   group('Аралаш бозорга чиқадиган AVA товари (marketEligible)', () {
     PlatformProduct p(String id, {bool active = true, bool market = true, int price = 1000}) =>
         PlatformProduct(id: id, name: id, price: price, active: active, showInMarket: market);

@@ -208,6 +208,12 @@ class ProfileController extends ChangeNotifier {
       if (address.isEmpty && user.addressLegacy.isNotEmpty) {
         address = user.addressLegacy;
       }
+      // Жинс — сервердаги қиймат ҳақиқат манбаи (рўйхатда бир марта, кейин админ тасдиғи билан).
+      if ((user.gender == 'male' || user.gender == 'female') && user.gender != gender) {
+        gender = user.gender;
+        unawaited(_prefs?.setString('user_gender', gender));
+        notifyListeners();
+      }
       photoUrl = user.photoUrl;
       _photoPath = user.photoPath;
       if (photoUrl.isNotEmpty && imagePath == null) {
@@ -354,6 +360,40 @@ class ProfileController extends ChangeNotifier {
   void setGender(String v) {
     gender = v;
     notifyListeners();
+  }
+
+  /// Жинс ўзгартириш сўровини текшириш (соф функция). → хато калити ёки `null`.
+  static String? validateGenderRequest(String current, String requested) {
+    if (requested != 'male' && requested != 'female') return 'prof_gender_request_failed';
+    if (requested == current) return 'prof_gender_same';
+    return null;
+  }
+
+  /// Жинсни ўзгартириш — тўғридан-тўғри эмас, админ тасдиғи учун сўров (эга 2026-11-03).
+  Future<bool> requestGenderChange(String requested) async {
+    final err = validateGenderRequest(gender, requested);
+    if (err != null) {
+      errorMessage = err;
+      notifyListeners();
+      return false;
+    }
+    final uid = canonicalPhoneId(phone);
+    if (uid.length < 9) {
+      errorMessage = 'prof_phone_save_first';
+      notifyListeners();
+      return false;
+    }
+    try {
+      await _userRepo.requestGenderChange(uid: uid, currentGender: gender, requestedGender: requested);
+      successMessage = 'prof_gender_request_sent';
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[Profile] requestGenderChange: $e');
+      errorMessage = 'prof_gender_request_failed';
+      notifyListeners();
+      return false;
+    }
   }
 
   void setRole(String v) {

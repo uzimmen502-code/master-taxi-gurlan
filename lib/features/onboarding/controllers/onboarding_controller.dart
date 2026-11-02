@@ -141,8 +141,10 @@ class OnboardingController extends ChangeNotifier {
     final d = phoneDigits(phone);
     if (d.length < 12) return 'ob_phone_required';
     if (gender != 'male' && gender != 'female') return 'ob_err_gender';
-    if (birthDate.trim().isNotEmpty &&
-        parseBirthDate(birthDate.trim()) == null) {
+    // Туғилган сана — МАЖБУРИЙ (эга 2026-11-03). Келажак ёки 1900 дан олдинги сана — нотўғри.
+    if (birthDate.trim().isEmpty) return 'ob_err_birth_required';
+    final born = parseBirthDate(birthDate.trim());
+    if (born == null || born.isAfter(DateTime.now()) || born.year < 1900) {
       return 'ob_birth_invalid_format';
     }
     return null;

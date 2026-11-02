@@ -1524,9 +1524,9 @@
   "ob_back": "Ortga",
   "ob_birth_benefit": "Kiritsangiz — AVA tug‘ilgan kunda tabrik va bonus beradi.",
   "ob_birth_calendar": "Kalendardan tanlash",
-  "ob_birth_enter": "Tug‘ilgan kuningizni kiriting",
+  "ob_birth_enter": "Tug‘ilgan kuningiz (majburiy)",
   "ob_birth_hint": "Tug'ilgan kuningizda bonus va tabrik olish uchun sanani to'g'ri kiriting (masalan: 15.03.1971).",
-  "ob_birth_input_hint": "KK.OO.YYYY · ixtiyoriy (masalan: 15.03.1971)",
+  "ob_birth_input_hint": "KK.OO.YYYY (masalan: 15.03.1971)",
   "ob_birth_invalid_format": "Sanani KK.OO.YYYY formatida kiriting (masalan: 15.03.1971)",
   "ob_birth_optional": "Hozir kiritmasangiz, keyin profildan kiritishingiz mumkin.",
   "ob_birth_picker": "Tug'ilgan kuningizni tanlang",
@@ -5321,5 +5321,12 @@
   "auto_cat_insurance": "Sug'urta",
   "auto_hub_route": "Yo'l",
   "ob_gender_label": "Jinsingiz (majburiy)",
-  "ob_err_gender": "Jinsingizni tanlang: erkak yoki ayol"
+  "ob_err_gender": "Jinsingizni tanlang: erkak yoki ayol",
+  "ob_err_birth_required": "Tug'ilgan kuningizni kiriting (majburiy)",
+  "prof_gender_change_btn": "O'zgartirishni so'rash",
+  "prof_gender_change_title": "Jinsni o'zgartirish",
+  "prof_gender_change_body": "Jins ro'yxatdan o'tishda bir marta belgilanadi. O'zgartirish admin tasdig'idan keyin kuchga kiradi.",
+  "prof_gender_request_sent": "So'rov yuborildi. Admin tasdiqlagach, jins o'zgaradi.",
+  "prof_gender_request_failed": "So'rovni yuborib bo'lmadi. Qayta urinib ko'ring.",
+  "prof_gender_same": "Bu jins allaqachon belgilangan"
 }

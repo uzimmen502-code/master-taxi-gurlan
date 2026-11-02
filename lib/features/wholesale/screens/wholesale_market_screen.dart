@@ -5,8 +5,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/geo/geo_context.dart';
-import '../../../core/geo/geo_tier_bar.dart';
-import '../../../core/geo/module_geo_policy.dart' show GeoLevel;
 import '../../../core/l10n/l10n_extension.dart';
 import '../../china_inquiry/widgets/china_inquiry_entry.dart';
 import '../../../core/theme/app_theme.dart';
@@ -123,24 +121,18 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
     setState(() => _query = '');
   }
 
-  /// Улгуржи — ҳудудни фойдаланувчи танлайди (Республика / вилоят / туман),
-  /// ҳар сафар Республикадан (D-GEO-10). Хитой — доим Республика.
+  /// Улгуржи ҳам, Хитой ҳам — доим бутун мамлакат (эга, 2026-11-03, «А
+  /// вариант»: Улгуржи маҳсулотлари админ очган барча ҳудудларда кўринсин,
+  /// вилоят/туман фильтри ҳеч нарсани яширмасин). Аввал Улгуржида ҳудуд
+  /// чиплари бор эди (D-GEO-10). Модул ҳудуд бўйича ёпилса — дарвоза
+  /// (`ServiceConfigHolder`) экранни очмайди.
   static const _geoModule = 'wholesale_market';
-  GeoScope _scope = GeoContext.scopeFor(_geoModule);
 
   Stream<List<WholesaleProduct>>? _stream;
-  String _streamKey = '';
 
   Stream<List<WholesaleProduct>> _productsStream() {
-    // Stream фақат ҲУДУД бўйича (қидирув матни бўйича ЭМАС): қидирув
-    // натижада, клиентда филтрланади — ҳар ҳарфда янги Firestore сўрови йўқ.
-    final geo = _isChina ? null : _scope;
-    final key = '${geo?.key}';
-    if (_stream == null || key != _streamKey) {
-      _streamKey = key;
-      _stream = _productsRepo.getActiveProducts(market: widget.market, geo: geo);
-    }
-    return _stream!;
+    // Қидирув клиентда филтрланади — ҳар ҳарфда янги Firestore сўрови йўқ.
+    return _stream ??= _productsRepo.getActiveProducts(market: widget.market);
   }
 
   @override
@@ -187,12 +179,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
         ),
       ),
       if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
-      if (!_isChina)
-        GeoTierBar(
-          moduleId: _geoModule,
-          scope: _scope,
-          onChanged: (s) => setState(() => _scope = s),
-        ),
       Expanded(
         child: WholesaleStreamBuilder<List<WholesaleProduct>>(
           stream: _productsStream(),
@@ -205,8 +191,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
             if (items.isEmpty && platform.isEmpty) {
               return WholesaleEmptyMarket(
                 hasQuery: _query.trim().isNotEmpty,
-                // Ҳудуд торайтирилган бўлса — бошқа ҳудудни кўриш таклифи.
-                narrowedArea: !_isChina && _scope.level != GeoLevel.nation,
+                // Ҳудуд фильтри йўқ (2026-11-03) — «бошқа ҳудуд» таклифи керак эмас.
+                narrowedArea: false,
                 onClearSearch: _clearSearch,
               );
             }

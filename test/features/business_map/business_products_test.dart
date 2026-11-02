@@ -122,13 +122,14 @@ void main() {
       expect(parseProductPrice('-5'), isNull);
     });
 
+    // 2026-11-03 (S0): auto тур бошланғичи — service (аудит: аниқроқ турларнинг кўпи хизмат); савдо аниқроқ
+    // турлари (эҳтиёт қисм, аккумулятор, шина савдоси) — product (business_type_profile_test.dart).
     test('бошланғич тур: товар турлари — product, қолгани (хизмат) — service (30 тур тўлиқ қопланган)', () {
       const products = {
         BusinessCategory.retail,
         BusinessCategory.manufacturing,
         BusinessCategory.agriculture,
         BusinessCategory.food,
-        BusinessCategory.auto,
         BusinessCategory.foreignTrade,
         BusinessCategory.fashion,
         BusinessCategory.other,

@@ -62,7 +62,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
       text: (widget.existing?.price ?? 0) > 0 ? '${widget.existing!.price}' : '');
   late final TextEditingController _desc = TextEditingController(text: widget.existing?.description ?? '');
   late String _kind = widget.existing?.kind ??
-      (sellsOnlyProducts(widget.business) ? 'product' : defaultProductKind(widget.business.category));
+      (sellsOnlyProducts(widget.business) ? 'product' : defaultProductKind(widget.business.category, subtype: widget.business.subtype));
 
   /// Дўконда «Хизмат» танлови йўқ ([sellsOnlyProducts]). Аввал хизмат деб сақланган эски дўкон ёзуви — танлов
   /// кўринади, эга уни маҳсулотга ўтказа олсин.

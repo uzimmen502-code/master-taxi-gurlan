@@ -77,9 +77,15 @@ void main() {
       expect(cyr['business_cat_other'], 'Бошқа ва янги бизнес турлари');
     });
 
-    test('изоҳ фақат тиббиёт ва молияда', () {
-      expect([for (final c in BusinessCategory.values) if (BusinessSubtypes.noteKey(c) != null) c],
-          [BusinessCategory.health, BusinessCategory.finance]);
+    // Эга 2026-11-03: лицензияли турлар — тиббиёт, молия, юридик/касбий, хавфсизлик, оила/болалар (эслатма, тўсиқ эмас).
+    test('изоҳ фақат лицензияли 5 турда', () {
+      expect([for (final c in BusinessCategory.values) if (BusinessSubtypes.noteKey(c) != null) c], [
+        BusinessCategory.health,
+        BusinessCategory.finance,
+        BusinessCategory.professional,
+        BusinessCategory.family,
+        BusinessCategory.security,
+      ]);
     });
 
     test('админдаги номлар uz_Cyrl матни билан бир хил (битта манба)', () {

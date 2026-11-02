@@ -672,10 +672,15 @@ abstract final class BusinessSubtypes {
     ],
   };
 
-  /// Рухсат/лицензия эслатмаси бор турлар (эга рўйхатидаги изоҳ) — матн калити.
+  /// Рухсат/лицензия эслатмаси бор турлар (эга рўйхатидаги изоҳ) — матн калити. Эслатма нашрни ТЎСМАЙДИ
+  /// (эга 2026-11-03: лицензияли турлар — тиббиёт, молия, юридик/касбий, хавфсизлик, оила/болалар — текширувсиз
+  /// дарҳол чиқади, фақат эслатма билан).
   static String? noteKey(BusinessCategory c) => switch (c) {
         BusinessCategory.health => 'business_cat_note_health',
         BusinessCategory.finance => 'business_cat_note_finance',
+        BusinessCategory.professional => 'business_cat_note_professional',
+        BusinessCategory.security => 'business_cat_note_security',
+        BusinessCategory.family => 'business_cat_note_family',
         _ => null,
       };
 

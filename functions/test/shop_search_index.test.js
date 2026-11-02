@@ -112,6 +112,21 @@ async function main() {
     assert.strictEqual(await idx('shop_f1'), undefined);
   });
 
+  await check('T4 S6 trigger: klinika (health) -> subtitle tur nomi, «Тиббиёт» tokeni, «дўкон» yo\'q; type shop qoladi', async () => {
+    await db.collection('businesses').doc('h1').set({
+      ownerId: OWNER, name: 'Shifo', category: 'health', subtype: 'Стоматология', address: 'Gurlan', status: 'active',
+    });
+    await fire('onSearchIndexBusinessWrite', 'businesses', 'h1', 'id');
+    const e = await idx('shop_h1');
+    assert.deepStrictEqual([e.type, e.moduleId, e.active, e.subtitle], ['shop', 'cheap_products_home', true, 'Стоматология']);
+    for (const t of ['тиббиёт', 'tibbiyot', 'медицина', 'shifo', 'gurlan']) assert.ok(e.searchTokens.includes(t), t);
+    assert.ok(!e.searchTokens.includes('дўкон') && !e.keywords.includes('магазин'));
+    const plan = await require('../tools/backfill_shop_search_index').plan(db, { only: ['businesses'] });
+    assert.ok(plan.length > 0 && plan.every((s) => s.col === 'businesses'), '--only businesses');
+    await db.collection('businesses').doc('h1').delete();
+    await fire('onSearchIndexBusinessWrite', 'businesses', 'h1', 'id');
+  });
+
   await check('B1 backfill vositasi: reja -> yozish (keyingi reja bo\'sh) -> qaytarish (avvalgi holat)', async () => {
     const tool = require('../tools/backfill_shop_search_index');
     await db.collection('tv_shop_items').doc('old1').set({ ownerPhone: OWNER, title: 'Eski non', status: 'active' });

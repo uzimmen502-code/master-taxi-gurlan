@@ -14,6 +14,7 @@
  *
  *   node functions/tools/backfill_shop_search_index.js            # dry run
  *   node functions/tools/backfill_shop_search_index.js --apply
+ *   node functions/tools/backfill_shop_search_index.js --only businesses           # фақат бизнес объектлари (dry run)
  *   node functions/tools/backfill_shop_search_index.js --rollback functions/tools/backup/<file>.json --apply
  */
 'use strict';
@@ -28,10 +29,15 @@ function sameTokens(a, b) {
   return Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
-/** Режа (тест ишлатади): қайси ҳужжатга нима ёзилади. */
-async function plan(db) {
+const COLS = Object.freeze(['tv_shop_items', 'tv_shops', 'businesses']);
+
+/**
+ * Режа (тест ишлатади): қайси ҳужжатга нима ёзилади. [only] — фақат шу тўпламлар (масалан S6 2026-11-03:
+ * `--only businesses` — бизнес объектлари индекси янги тур матни билан қайта ёзилади, бошқасига тегилмайди).
+ */
+async function plan(db, { only = COLS } = {}) {
   const out = [];
-  const items = await db.collection('tv_shop_items').get();
+  const items = only.includes('tv_shop_items') ? await db.collection('tv_shop_items').get() : { docs: [] };
   items.docs.forEach((d) => {
     const x = d.data() || {};
     const tokens = shopItemTokens(x);
@@ -39,7 +45,7 @@ async function plan(db) {
       out.push({ col: 'tv_shop_items', id: d.id, field: 'searchTokens', before: x.searchTokens === undefined ? null : x.searchTokens, value: tokens });
     }
   });
-  for (const col of ['tv_shops', 'businesses']) {
+  for (const col of ['tv_shops', 'businesses'].filter((c) => only.includes(c))) {
     const snap = await db.collection(col).get();
     snap.docs.forEach((d) => {
       const x = d.data() || {};
@@ -96,7 +102,10 @@ async function main() {
     if (apply) console.log(`tiklandi: ${await rollback(db, admin, steps)}`);
     return;
   }
-  const steps = await plan(db);
+  const onlyIdx = process.argv.indexOf('--only');
+  const only = onlyIdx > 0 ? String(process.argv[onlyIdx + 1] || '').split(',').filter((c) => COLS.includes(c)) : COLS;
+  if (!only.length) throw new Error(`--only: ${COLS.join('|')} (vergul bilan)`);
+  const steps = await plan(db, { only });
   const by = steps.reduce((m, s) => ({ ...m, [s.col]: (m[s.col] || 0) + 1 }), {});
   console.log(`${apply ? 'APPLY' : 'DRY RUN'} backfill: ${steps.length} ta hujjat ${JSON.stringify(by)}`);
   steps.slice(0, 20).forEach((s) => console.log(`  ${s.col}/${s.id.replace(/\d{5}(\d{4})/, '*****$1')} ${s.field}`));

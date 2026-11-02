@@ -15,8 +15,23 @@
  */
 
 const { buildSearchIndexTokens } = require('./search_tokens');
+const { categoryOf } = require('./business_directory');
+/**
+ * Фаолият тури номлари (uz_Cyrl / uz_Latn / ru; `full` ва `short`) — СЕРВЕРДАГИ ягона манба (7-банд). Мижоз
+ * `assets/lang/*.json` `business_cat_<wire>` / `business_cat_short_<wire>` билан бир хиллиги ва калитлари
+ * `business_directory.js` CATEGORIES билан бир хиллиги тест билан қулфланган (test/shop_search_category.test.js).
+ */
+const CATEGORY_LABELS = require('./business_category_labels.json');
 
 const SHOP_KEYWORDS = Object.freeze(['дўкон', 'dokon', "do'kon", 'магазин', 'бозор', 'bozor']);
+const SERVICE_KEYWORDS = Object.freeze(['хизмат', 'xizmat', 'услуга']);
+const LANGS = Object.freeze(['uz_Cyrl', 'uz_Latn', 'ru']);
+/**
+ * Қидирувда «дўкон/магазин/бозор» сўзлари бериладиган турлар (S6, 2026-11-03; PROPOSED — эга тасдиқлагунча):
+ * савдо ва мода/кийим. Сартарош, клиника, юрист … «дўкон» эмас — улар ўз тури номи билан топилади.
+ * Тури йўқ/нотаниш (эски ҳужжат) — аввалги хулқ сақланади (дўкон сўзлари).
+ */
+const SHOP_WORD_CATEGORIES = Object.freeze(new Set(['retail', 'fashion']));
 const digits = (v) => String(v == null ? '' : v).replace(/\D/g, '');
 const s = (v, max) => String(v == null ? '' : v).trim().slice(0, max);
 
@@ -42,17 +57,20 @@ function shopItemToSearchEntry(id, d) {
   const photos = Array.isArray(d.photoUrls) ? d.photoUrls : [];
   const cover = s(photos[0] || d.photoUrl, 500);
   const owner = canonicalPhone(d.ownerPhone);
+  // Хизмат (`kind: 'service'`, rules: product|service, стандарт product) — «дўкон» эмас; фақат матн (токенлар
+  // номи+тавсифидан, ўзгармайди).
+  const service = d.kind === 'service';
   return {
     type: 'shop_item',
     moduleId: 'cheap_products_home',
     sourceCollection: 'tv_shop_items',
     sourceId: id,
     title,
-    subtitle: s(d.ownerName, 120) || 'Онлайн дўкон',
+    subtitle: s(d.ownerName, 120) || (service ? 'Хизмат' : 'Онлайн дўкон'),
     price: Number.isInteger(d.price) && d.price > 0 ? d.price : null,
     imageUrl: cover,
     iconKey: 'shop',
-    keywords: [...SHOP_KEYWORDS],
+    keywords: [...(service ? SERVICE_KEYWORDS : SHOP_KEYWORDS)],
     searchTokens: shopItemTokens(d),
     priorityBoost: 0,
     active: d.status === 'active' && title.length > 0 && owner.length === 12,
@@ -79,19 +97,47 @@ function tvShopToSearchEntry(phone, d) {
   };
 }
 
+/** Тур номлари: аввал қисқа (uz_Cyrl, uz_Latn, ru), кейин тўлиқ; такрорсиз, тартиб барқарор. */
+function categoryKeywords(category) {
+  const l = category ? CATEGORY_LABELS[category] : null;
+  if (!l) return [];
+  return [...LANGS.map((k) => l.short[k]), ...LANGS.map((k) => l.full[k])];
+}
+
+/**
+ * Бизнес объекти → `shop_<id>` (S6, 2026-11-03). `type: 'shop'` ва `moduleId` ЎЗГАРМАЙДИ (мижоз филтри
+ * `search_index_repository.dart` `typeShop` + `targetOwner`). Матн тури бўйича:
+ *  • keywords: аниқроқ тур (subtype) + тур номи 3 тилда (қисқа, тўлиқ) + фақат савдо/мода учун дўкон сўзлари;
+ *  • subtitle: subtype → (онлайн савдо: «Онлайн дўкон») → тур номи (uz_Cyrl, «Бошқа» эмас) → манзил → охирги захира;
+ *  • searchTokens: номи → subtitle → keywords → манзил (64 чегараси; номи ва тури биринчи ўринда).
+ * iconKey 'shop' қолади: мижоз iconKey'ни кўрсатмайди (фақат моделда ўқилади).
+ */
 function businessToSearchEntry(id, d) {
   const name = s(d.name, 160);
   const owner = canonicalPhone(d.ownerId);
+  const category = categoryOf(d.category);
+  const shopLike = category === null || SHOP_WORD_CATEGORIES.has(category);
+  const subtype = s(d.subtype, 60);
+  const address = s(d.address, 200);
+  const label = category ? CATEGORY_LABELS[category].short.uz_Cyrl : '';
+  const subtitle = subtype
+    || (d.online === true && shopLike ? 'Онлайн дўкон' : '')
+    || (category && category !== 'other' ? label : '')
+    || address
+    || (shopLike ? 'Онлайн дўкон' : label);
+  const keywords = [...new Set([subtype, ...categoryKeywords(category), ...(shopLike ? SHOP_KEYWORDS : [])]
+    .map((k) => k.trim().toLowerCase()).filter(Boolean))];
   return {
     type: 'shop',
     moduleId: 'cheap_products_home',
     sourceCollection: 'businesses',
     sourceId: id,
     title: name,
-    subtitle: s(d.address, 200) || s(d.subtype, 200) || 'Онлайн дўкон',
+    subtitle,
     imageUrl: '',
     iconKey: 'shop',
-    keywords: [...SHOP_KEYWORDS, s(d.subtype, 60)].filter(Boolean),
+    keywords,
+    searchTokens: buildSearchIndexTokens(name, subtitle, ...keywords, address),
     priorityBoost: 1,
     // Эгасиз (админ қўшган) объектнинг онлайн дўкони йўқ — қидирувдан дўкон очилмайди.
     active: name.length >= 2 && d.status !== 'blocked' && owner.length === 12,

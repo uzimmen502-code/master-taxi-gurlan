@@ -83,6 +83,19 @@ void main() {
       expect(b.districtId, 'd1');
     });
 
+    test('tryFromMap: уланган ресторан (restaurantId) ўқилади; йўқ/бўш/сон — уланмаган', () {
+      Business b(Object? rid) => Business.tryFromMap('x', {
+            'name': 'Кафе', 'category': 'food', 'lat': 41.0, 'lng': 60.0, 'restaurantId': rid,
+          })!;
+      expect(b(' r1 ').restaurantId, 'r1');
+      expect(b(' r1 ').hasRestaurant, isTrue);
+      for (final v in [null, '', '  ', 42]) {
+        expect(b(v).restaurantId, '', reason: '$v');
+        expect(b(v).hasRestaurant, isFalse, reason: '$v');
+      }
+      expect(b('r1').toCallable().containsKey('restaurantId'), isFalse, reason: 'фақат сервер ёзади (18-банд)');
+    });
+
     test('tryFromMap: координата йўқ/нотўғри — null (харита синмайди)', () {
       expect(Business.tryFromMap('x', {'name': 'a', 'category': 'retail'}), isNull);
       expect(Business.tryFromMap('x', {'lat': '41', 'lng': 60}), isNull);
@@ -195,6 +208,59 @@ void main() {
       expect(b.contains(41, 60), isTrue);
       expect(b.contains(40.99, 60.5), isFalse);
       expect(b.contains(41.5, 61.01), isFalse);
+    });
+  });
+
+  group('mergeLinkedRestaurantPins (уланган объект + ресторан = битта белги, эга 2026-11-03)', () {
+    BusinessPin biz(String id, {String rid = ''}) => BusinessPin.fromBusiness(Business(
+          id: id, ownerId: '998901111111', name: id, category: BusinessCategory.food, phone: '998901111111',
+          lat: 41.8, lng: 60.3, restaurantId: rid,
+        ));
+    BusinessPin rest(String id) => BusinessPin.fromRestaurant(
+          Restaurant.fromMap(id, {'name': id, 'status': 'approved', 'lat': 41.8, 'lng': 60.3}),
+        )!;
+    List<String> keys(List<BusinessPin> pins) => [for (final p in pins) p.key];
+
+    test('linkedRestaurantId: фақат объект манбасида ва уланган бўлса', () {
+      expect(biz('b1', rid: 'r1').linkedRestaurantId, 'r1');
+      expect(biz('b1').linkedRestaurantId, '');
+      expect(rest('r1').linkedRestaurantId, '');
+      expect(_pin('p', 1, 1).linkedRestaurantId, '', reason: 'origin йўқ');
+    });
+
+    test('уланган: ресторан белгиси олиб ташланади, объект белгиси қолади (битта белги)', () {
+      final out = mergeLinkedRestaurantPins([rest('r1'), biz('b1', rid: 'r1')]);
+      expect(keys(out), ['business:b1']);
+    });
+
+    test('уланмаган: иккаласи ҳам қолади; рўйхат ўзгармайди', () {
+      final pins = [biz('b1'), rest('r1')];
+      expect(identical(mergeLinkedRestaurantPins(pins), pins), isTrue);
+      expect(keys(mergeLinkedRestaurantPins(pins)), ['business:b1', 'restaurant:r1']);
+    });
+
+    test('мос объекти рўйхатда йўқ ресторан қолади; бошқа ресторанга уланган объект ҳеч нарсани яширмайди', () {
+      // b9 → r9 (r9 ҳудуддан ташқарида), r1 нинг объекти рўйхатда йўқ (блокланган/онлайн/ўқилмаган).
+      final out = mergeLinkedRestaurantPins([biz('b9', rid: 'r9'), rest('r1')]);
+      expect(keys(out), ['business:b9', 'restaurant:r1']);
+    });
+
+    test('бир нечта жуфт; бошқа манбалар ва бир хил ID ли бошқа манба тегилмайди; тартиб сақланади', () {
+      final ws = BusinessPin(source: BusinessSource.wholesaleSeller, id: 'r2', name: 'w', category: BusinessCategory.retail, lat: 1, lng: 1);
+      final out = mergeLinkedRestaurantPins([
+        rest('r1'),
+        biz('b1', rid: 'r1'),
+        ws,
+        rest('r2'),
+        rest('r3'),
+        biz('r3'), // объект ID'си ресторан ID'сига тенг, лекин уланмаган — ресторан қолади
+        biz('b2', rid: 'r2'),
+      ]);
+      expect(keys(out), ['business:b1', 'wholesaleSeller:r2', 'restaurant:r3', 'business:r3', 'business:b2']);
+    });
+
+    test('бўш рўйхат — бўш', () {
+      expect(mergeLinkedRestaurantPins(const []), isEmpty);
     });
   });
 }

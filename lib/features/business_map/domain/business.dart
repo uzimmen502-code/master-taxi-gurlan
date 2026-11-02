@@ -39,7 +39,7 @@ class Business {
 
   bool get isBranch => branchOf.isNotEmpty;
 
-  /// Уланган ресторан бўлими (estaurants/{id} — меню, буюртма, курьер); бўш — уланмаган. ФАҚАТ сервер ёзади
+  /// Уланган ресторан бўлими (`restaurants/{id}` — меню, буюртма, курьер); бўш — уланмаган. ФАҚАТ сервер ёзади
   /// (linkBusinessRestaurant, эга 2026-11-03); [toCallable]да юборилмайди. Харитада бу объект ва ресторан —
   /// битта белги.
   final String restaurantId;
@@ -68,7 +68,7 @@ class Business {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  /// «Менинг дўконим»нинг ЎЗ дўкони (харитада жойи йўқ): эганинг usinessIdсиз маҳсулотлари.
+  /// «Менинг дўконим»нинг ЎЗ дўкони (харитада жойи йўқ): эганинг `businessId`сиз маҳсулотлари.
   /// Харита объекти эмас — фақат шу каталог экранлари битта кодда ишлаши учун (id бўш).
   factory Business.ownShop({required String ownerId, required String name, String districtId = ''}) => Business(
         id: '',
@@ -81,7 +81,7 @@ class Business {
         districtId: districtId,
       );
 
-  /// 	rue — харита объекти эмас, эганинг ўз дўкони ([Business.ownShop]).
+  /// `true` — харита объекти эмас, эганинг ўз дўкони ([Business.ownShop]).
   bool get isOwnShop => id.isEmpty;
 
   static String _s(Object? v) => v is String ? v.trim() : '';

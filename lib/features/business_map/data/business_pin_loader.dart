@@ -99,7 +99,9 @@ class BusinessPinLoader {
             if (bounds.contains(p.lat, p.lng)) p,
       ];
       return PinLoadResult(
-        pins: capNearest(all, bounds.centerLat, bounds.centerLng),
+        // Уланган объект ва ресторан — битта белги; ҳудуд фильтридан КЕЙИН (ташқаридаги объект ичкаридаги
+        // ресторанни яширмасин), чегарадан ОЛДИН (иккита белги битта жойни эгалламасин).
+        pins: capNearest(mergeLinkedRestaurantPins(all), bounds.centerLat, bounds.centerLng),
         failed: failed,
         tooWide: true,
       );
@@ -120,7 +122,10 @@ class BusinessPinLoader {
         for (final p in list)
           if (bounds.contains(p.lat, p.lng)) p,
     ];
-    return PinLoadResult(pins: capNearest(inView, bounds.centerLat, bounds.centerLng), failed: failed);
+    return PinLoadResult(
+      pins: capNearest(mergeLinkedRestaurantPins(inView), bounds.centerLat, bounds.centerLng),
+      failed: failed,
+    );
   }
 
   /// [maxPins] дан кўп бўлса — марказга энг яқинлари (аниқ ва детерминистик).

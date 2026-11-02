@@ -8,6 +8,7 @@ import '../../../core/utils/map_launcher.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../restaurants/domain/restaurant_models.dart';
+import '../../restaurants/open_restaurant_checked.dart';
 import '../../restaurants/screens/restaurant_screen.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
@@ -22,14 +23,27 @@ import '../domain/website_link.dart';
 /// Нуқта босилганда чиқадиган тўлиқ маълумот варағи (эга қарори: «танлаб босилганда тўлиқ маълумот»).
 ///
 /// Матн фақат берилган майдонларни кўрсатади (бўш қатор йўқ). Кафе ва зарядка станцияси учун
-/// ўз экранини очиш тугмаси бор; улгуржи сотувчи ва оддий объектда — қўнғироқ ва йўналиш.
+/// ўз экранини очиш тугмаси бор (ресторан бўлимига уланган объектда ҳам «Меню»); улгуржи сотувчи ва оддий
+/// объектда — қўнғироқ ва йўналиш.
 class BusinessDetailSheet extends StatelessWidget {
-  const BusinessDetailSheet({super.key, required this.pin, this.shopRepository});
+  const BusinessDetailSheet({
+    super.key,
+    required this.pin,
+    this.shopRepository,
+    this.loadRestaurant,
+    this.pushScreen,
+  });
 
   final BusinessPin pin;
 
   /// Тест учун; бўлмаса — ҳақиқий витрина репозиторийси.
   final TvShopRepository? shopRepository;
+
+  /// Тест учун: уланган ресторанни ўқиш; бўлмаса — `RestaurantsRepository().getRestaurant`.
+  final Future<Restaurant?> Function(String id)? loadRestaurant;
+
+  /// Тест учун: уланган ресторан менюси навигаторга қўшилиш ўрнига шу ерга берилади (варақ барибир ёпилади).
+  final void Function(Widget screen)? pushScreen;
 
   static Future<void> show(BuildContext context, BusinessPin pin) {
     return showModalBottomSheet<void>(
@@ -133,6 +147,14 @@ class BusinessDetailSheet extends StatelessWidget {
                     icon: const Icon(Icons.storefront_rounded, size: 18),
                     label: Text(context.tr('shop_go_to_shop')),
                   ),
+                // Ресторан бўлимига уланган объект: ресторан белгиси харитада шу белгига қўшилган (эга, 2026-11-03),
+                // меню шу ердан очилади. «Дўконга ўтиш» ҳам қолади (кафенинг маҳсулотлари бўлиши мумкин).
+                if (origin is Business && origin.hasRestaurant && !origin.isBlocked)
+                  _LinkedMenuButton(
+                    restaurantId: origin.restaurantId,
+                    loadRestaurant: loadRestaurant,
+                    pushScreen: pushScreen,
+                  ),
                 if (origin is Restaurant)
                   OutlinedButton.icon(
                     onPressed: () {
@@ -165,8 +187,78 @@ class BusinessDetailSheet extends StatelessWidget {
   }
 }
 
+/// Уланган ресторан менюсини очиш. Ресторан ОЧИШ ВАҚТИДА ўқилади ва текширилади — ҳавола/қидирув билан бир хил
+/// [openRestaurantChecked]: йўқ, тасдиқланмаган ёки ўқиб бўлмаса — «вақтинча мавжуд эмас». Ўқиш давомида тугма
+/// ўчиқ ва айланувчи белги (иккинчи босиш янги сўров очмайди).
+class _LinkedMenuButton extends StatefulWidget {
+  const _LinkedMenuButton({required this.restaurantId, this.loadRestaurant, this.pushScreen});
+
+  final String restaurantId;
+  final Future<Restaurant?> Function(String id)? loadRestaurant;
+  final void Function(Widget screen)? pushScreen;
+
+  @override
+  State<_LinkedMenuButton> createState() => _LinkedMenuButtonState();
+}
+
+class _LinkedMenuButtonState extends State<_LinkedMenuButton> {
+  bool _loading = false;
+
+  /// Варақ ҳали очиқ ва энг устида (фойдаланувчи ўқиш пайтида ёпмаган) — шундагина `pop` варақни ёпади;
+  /// акс ҳолда `pop` остидаги харита экранини ёпиб юборарди.
+  bool get _sheetOnTop => mounted && (ModalRoute.of(context)?.isCurrent ?? false);
+
+  Future<void> _open() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    var opened = false;
+    await openRestaurantChecked(
+      context,
+      widget.restaurantId,
+      source: 'map',
+      load: widget.loadRestaurant,
+      // Харитадаги ресторан белгисининг «Меню»си ҳам модул дарвозасисиз очилади — бу белги ўшанинг ўрнида,
+      // хатти-ҳаракати бир хил қолади (харитада дарвоза йўқ).
+      canOpenModule: () async => true,
+      push: (screen) {
+        if (!_sheetOnTop) return;
+        opened = true;
+        final nav = Navigator.of(context);
+        nav.pop();
+        final push = widget.pushScreen;
+        if (push != null) return push(screen);
+        nav.push(MaterialPageRoute<void>(builder: (_) => screen));
+      },
+    );
+    if (!mounted || opened) return;
+    // Очилмади: «вақтинча мавжуд эмас» хабари харита экранида — варақ уни ёпиб туради, шунинг учун варақ ёпилади.
+    if (ModalRoute.of(context)?.isCurrent ?? false) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: const ValueKey('biz_open_menu'),
+      onPressed: _loading ? null : _open,
+      icon: _loading
+          ? const SizedBox(
+              key: ValueKey('biz_open_menu_loading'),
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.restaurant_menu_rounded, size: 18),
+      label: Text(context.tr('bizmap_open_menu')),
+    );
+  }
+}
+
 /// Объектнинг маҳсулот/хизматлари (фақат фаол ва ЭГАСИ ўзи ёзганлар): горизонтал қатор, босилса — детал.
-/// Битта сўров (usinessId), фақат шу варақ очилганда; харита ва рўйхатда ўқиш йўқ (36-банд).
+/// Битта сўров (`businessId`), фақат шу варақ очилганда; харита ва рўйхатда ўқиш йўқ (36-банд).
 class _ProductsStrip extends StatefulWidget {
   const _ProductsStrip({required this.business, this.repository});
 

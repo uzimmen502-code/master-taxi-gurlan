@@ -46,6 +46,14 @@ class BusinessPin {
 
   String get key => '${source.name}:$id';
 
+  /// Объектга уланган ресторан бўлими (`Business.restaurantId`, фақат сервер ёзади); бошқа манбада ва уланмаган
+  /// объектда — бўш. Бўш эмас бўлса: харитада ресторан белгиси шу белгига қўшилади ([mergeLinkedRestaurantPins])
+  /// ва варақда «Меню» тугмаси чиқади.
+  String get linkedRestaurantId {
+    final o = origin;
+    return source == BusinessSource.business && o is Business ? o.restaurantId : '';
+  }
+
   factory BusinessPin.fromBusiness(Business b) => BusinessPin(
         source: BusinessSource.business,
         id: b.id,
@@ -125,4 +133,20 @@ class BusinessPin {
       origin: s,
     );
   }
+}
+
+/// Ресторан бўлимига уланган объект харитада БИТТА белги (эга, 2026-11-03): рўйхатда шу ресторанга уланган
+/// объект белгиси бўлса — ресторан белгиси олиб ташланади, объект белгиси қолади (меню унинг варағидан очилади).
+/// Объект рўйхатда йўқ бўлса (блокланган, фақат онлайн, ҳудуддан ташқарида ёки ўқилмаган) — ресторан белгиси
+/// қолади. Қолган тартиб ўзгармайди; соф функция (тест учун).
+List<BusinessPin> mergeLinkedRestaurantPins(List<BusinessPin> pins) {
+  final linked = {
+    for (final p in pins)
+      if (p.linkedRestaurantId.isNotEmpty) p.linkedRestaurantId,
+  };
+  if (linked.isEmpty) return pins;
+  return [
+    for (final p in pins)
+      if (p.source != BusinessSource.restaurant || !linked.contains(p.id)) p,
+  ];
 }

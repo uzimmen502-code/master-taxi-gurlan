@@ -1,11 +1,82 @@
+import 'dart:async';
+
 import 'package:ava_gurlan/core/theme/app_theme.dart';
+import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_pin.dart';
 import 'package:ava_gurlan/features/business_map/domain/pin_filter.dart';
 import 'package:ava_gurlan/features/business_map/widgets/business_detail_sheet.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
+import 'package:ava_gurlan/features/restaurants/screens/restaurant_screen.dart';
+import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
+import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.dart';
+import 'package:ava_gurlan/features/tv_market/services/shop_stats_recorder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Объект варағидаги маҳсулотлар қатори учун: каталог бўш (Firebase'сиз).
+class _NoShop extends Fake implements TvShopRepository {
+  @override
+  Future<List<TvShopItem>> fetchByBusiness(
+    String businessId, {
+    String ownerPhone = '',
+    bool onlyActive = true,
+    int limit = 200,
+  }) async =>
+      const [];
+}
+
+/// Ресторанга уланган объект варағи — ҳақиқий модал варақда ([BusinessDetailSheet.show] каби), ўқиш ва экран
+/// очиш сохта.
+Future<void> _openLinked(
+  WidgetTester tester,
+  BusinessPin pin, {
+  required Future<Restaurant?> Function(String id) load,
+  required void Function(Widget screen) push,
+}) async {
+  tester.view.physicalSize = const Size(400 * 2, 1600 * 2);
+  tester.view.devicePixelRatio = 2;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MaterialApp(
+      key: UniqueKey(), // ҳар чақирувда янги дарахт (бир тестда бир неча марта очилади)
+      theme: AppTheme.light,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                showDragHandle: true,
+                useSafeArea: true,
+                builder: (_) => BusinessDetailSheet(pin: pin, shopRepository: _NoShop(), loadRestaurant: load, pushScreen: push),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+}
+
+BusinessPin _linkedBiz({String restaurantId = 'r1', String status = 'active'}) => BusinessPin.fromBusiness(Business(
+      id: 'b1',
+      ownerId: '998901111111',
+      name: 'Бахор кафе',
+      category: BusinessCategory.food,
+      phone: '998901234567',
+      lat: 41.84,
+      lng: 60.39,
+      restaurantId: restaurantId,
+      status: status,
+    ));
+
+Restaurant _rest({String status = 'approved'}) =>
+    Restaurant.fromMap('r1', {'name': 'Бахор кафе', 'status': status, 'lat': 41.84, 'lng': 60.39});
 
 /// Локализация делегати АТАЙЛАБ уланмаган: `context.tr` калитнинг ўзини қайтаради.
 Future<void> _open(WidgetTester tester, BusinessPin pin) async {
@@ -104,6 +175,80 @@ void main() {
       await _open(tester, pin);
       expect(find.text('bizmap_open_ev'), findsOneWidget);
       expect(find.text('bizmap_open_menu'), findsNothing);
+    });
+  });
+
+  group('BusinessDetailSheet — ресторан бўлимига уланган объект (битта белги, эга 2026-11-03)', () {
+    final sent = <Map<String, Object?>>[];
+    setUp(() {
+      sent.clear();
+      ShopStatsRecorder.resetForTest();
+      ShopStatsRecorder.sink = (d) async => sent.add(d);
+    });
+    tearDown(() => ShopStatsRecorder.sink = null);
+
+    testWidgets('«Меню» бор (дўкон тугмаси ҳам); босилса — ўқиш пайтида айланувчи белги, кейин варақ ёпилиб меню очилади',
+        (tester) async {
+      final gate = Completer<Restaurant?>();
+      final asked = <String>[];
+      final pushed = <Widget>[];
+      await _openLinked(tester, _linkedBiz(), load: (id) {
+        asked.add(id);
+        return gate.future;
+      }, push: pushed.add);
+      expect(find.byKey(const ValueKey('biz_open_menu')), findsOneWidget);
+      expect(find.text('bizmap_open_menu'), findsOneWidget);
+      expect(find.byKey(const ValueKey('biz_open_shop')), findsOneWidget, reason: 'кафенинг маҳсулотлари бўлиши мумкин');
+
+      await tester.tap(find.byKey(const ValueKey('biz_open_menu')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('biz_open_menu_loading')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('biz_open_menu')));
+      await tester.pump();
+      expect(asked, ['r1'], reason: 'ўқиш пайтида иккинчи босиш янги сўров очмайди');
+
+      gate.complete(_rest());
+      await tester.pumpAndSettle();
+      expect(pushed, hasLength(1));
+      expect(pushed.single, isA<RestaurantScreen>());
+      expect((pushed.single as RestaurantScreen).restaurant.id, 'r1');
+      expect(find.text('Бахор кафе'), findsNothing, reason: 'варақ ёпилди');
+      expect(sent, [
+        {'kind': 'restaurant_view', 'restaurantId': 'r1', 'source': 'map'},
+      ]);
+    });
+
+    testWidgets('уланмаган ёки блокланган объектда «Меню» йўқ', (tester) async {
+      Future<Restaurant?> load(String _) async => fail('ўқилмаслиги керак');
+      await _openLinked(tester, _linkedBiz(restaurantId: ''), load: load, push: (_) => fail('очилмаслиги керак'));
+      expect(find.byKey(const ValueKey('biz_open_menu')), findsNothing);
+      expect(find.text('bizmap_open_menu'), findsNothing);
+
+      await _openLinked(tester, _linkedBiz(status: 'blocked'), load: load, push: (_) => fail('очилмаслиги керак'));
+      expect(find.byKey(const ValueKey('biz_open_menu')), findsNothing);
+    });
+
+    testWidgets('ресторан йўқ / тасдиқланмаган / ўқиб бўлмади — «вақтинча мавжуд эмас», меню очилмайди, кўриш ёзилмайди',
+        (tester) async {
+      final loads = <Future<Restaurant?> Function(String)>[
+        (_) async => null,
+        (_) async => _rest(status: 'suspended'),
+        (_) async => throw Exception('permission-denied'),
+      ];
+      for (final load in loads) {
+        final pushed = <Widget>[];
+        await _openLinked(tester, _linkedBiz(), load: load, push: pushed.add);
+        await tester.tap(find.byKey(const ValueKey('biz_open_menu')));
+        await tester.pumpAndSettle();
+        expect(pushed, isEmpty);
+        expect(find.text('tv_market_restaurant_unavailable'), findsOneWidget);
+        // Варақ ёпилади: хабар харита экранида, варақ уни ёпиб турмасин.
+        expect(find.byKey(const ValueKey('biz_open_menu')), findsNothing);
+        expect(find.text('open'), findsOneWidget);
+        ScaffoldMessenger.of(tester.element(find.text('open'))).removeCurrentSnackBar();
+        await tester.pumpAndSettle();
+      }
+      expect(sent, isEmpty);
     });
   });
 

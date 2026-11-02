@@ -68,6 +68,7 @@ import 'sell_submissions_admin_screen.dart';
 import 'risk_review_screen.dart';
 import 'anomaly_settings_screen.dart';
 import 'demand_core_admin_screen.dart';
+import 'ava_service_centers_admin_screen.dart';
 import 'incentive_programs_admin_screen.dart';
 import 'service_config_admin_screen.dart';
 import 'splash_taglines_screen.dart';
@@ -310,6 +311,14 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Мой каталоги',
       icon: Icons.opacity,
       description: 'Мой/фильтр · нарх · расм',
+      access: _SectionAccess.opsAndFinance,
+    ),
+    // AVA Сервис маркази — ҳар туман учун (эга 2026-11-03): «Менинг машинам» ва «Мой алмаштириш»да.
+    _AdminSection(
+      group: 'Такси ва транспорт',
+      label: 'AVA Сервис марказлари',
+      icon: Icons.build_circle,
+      description: 'Ҳар туман: манзил · харитада жой · телефон',
       access: _SectionAccess.opsAndFinance,
     ),
 
@@ -724,6 +733,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Мой каталоги') {
       return const OilCatalogAdminScreen();
+    }
+    if (section.label == 'AVA Сервис марказлари') {
+      return const AvaServiceCentersAdminScreen();
     }
     if (section.label == 'Рағбат дастурлари') {
       return const IncentiveProgramsAdminScreen();

@@ -1,11 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_context.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/map_launcher.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../models/oil_vehicle.dart';
 import '../../../models/platform_product.dart';
+import '../../../repositories/oil_change_repository.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../../repositories/settings_repository.dart';
 import '../../../repositories/user_repository.dart';
@@ -79,7 +83,16 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
       kAutoHubCategories.contains(widget.initialCategory) ? widget.initialCategory : '';
   late Future<Map<String, String>?> _car;
   late final Future<List<PlatformProduct>> _products = PlatformProductsRepository().fetchCatalog();
-  late final Future<String> _servicePhone = SettingsRepository().getDispatcherPhone();
+  /// Фаол (тепада кўрсатилган) туманнинг AVA Сервис маркази; йўқ бўлса — диспетчер телефони.
+  late final Future<({OilServicePoint? center, String fallbackPhone})> _avaService = _loadService();
+
+  Future<({OilServicePoint? center, String fallbackPhone})> _loadService() async {
+    final results = await Future.wait<Object?>([
+      OilChangeRepository().fetchAvaCenter(GeoContext.active.districtId),
+      SettingsRepository().getDispatcherPhone(),
+    ]);
+    return (center: results[0] as OilServicePoint?, fallbackPhone: (results[1] as String?) ?? '');
+  }
   late Future<List<IncentiveOffer>> _offers;
 
   String get _phone => canonicalPhoneId(widget.uid);
@@ -311,34 +324,65 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
 
   /// AVA сервис — биринчи ўринда (эга 2026-11-02: «устунлик АВА сервисга йўналтиришга»).
   Widget _serviceCard(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _servicePhone,
+    return FutureBuilder<({OilServicePoint? center, String fallbackPhone})>(
+      future: _avaService,
       builder: (context, snap) {
-        final phone = (snap.data ?? '').trim();
+        final center = snap.data?.center;
+        final phone = (center != null && center.phone.trim().isNotEmpty
+                ? center.phone
+                : (snap.data?.fallbackPhone ?? ''))
+            .trim();
+        final name = center != null && center.name.trim().isNotEmpty
+            ? center.name.trim()
+            : context.tr('auto_hub_service_title');
+        final address = center?.address.trim() ?? '';
         return _section(
           key: const ValueKey('auto_hub_service'),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.build_circle, size: 34, color: AppColors.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
+                children: [
+                  Icon(Icons.build_circle, size: 34, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        Text(
+                          address.isNotEmpty ? address : context.tr('auto_hub_service_sub'),
+                          key: const ValueKey('auto_hub_service_address'),
+                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (phone.isNotEmpty || (center?.hasLocation ?? false)) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
-                    Text(context.tr('auto_hub_service_title'),
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                    Text(context.tr('auto_hub_service_sub'),
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+                    if (phone.isNotEmpty)
+                      FilledButton.tonalIcon(
+                        key: const ValueKey('auto_hub_call'),
+                        onPressed: () => callPhone(phone),
+                        icon: const Icon(Icons.phone),
+                        label: Text(context.tr('auto_hub_call')),
+                      ),
+                    if (center != null && center.hasLocation)
+                      OutlinedButton.icon(
+                        key: const ValueKey('auto_hub_route'),
+                        onPressed: () => openMapsNavigation(lat: center.lat!, lng: center.lng!, label: name),
+                        icon: const Icon(Icons.directions),
+                        label: Text(context.tr('auto_hub_route')),
+                      ),
                   ],
                 ),
-              ),
-              if (phone.isNotEmpty)
-                FilledButton.tonalIcon(
-                  key: const ValueKey('auto_hub_call'),
-                  onPressed: () => callPhone(phone),
-                  icon: const Icon(Icons.phone),
-                  label: Text(context.tr('auto_hub_call')),
-                ),
+              ],
             ],
           ),
         );

@@ -774,6 +774,60 @@ async function main() {
     await assert.rejects(fns.deleteMyMainShop.run({}, { auth: null }), /Authentication required/);
   });
 
+  // ── L: овқатланиш объекти ↔ ресторан бўлими (эга, 2026-11-03: занжир + битта белги) ──
+  const FOOD = { ...BASE, category: 'food', subtype: 'Кафе', name: 'Gurlan Kafe' };
+  const L_OWN = '998912000061';
+  const L_OTH = '998912000062';
+  await db.collection('users').doc(L_OWN).set({ role: 'user' });
+  await db.collection('users').doc(L_OTH).set({ role: 'user' });
+  const lFood = (await call('upsertMyBusiness', { ...FOOD, clientRequestId: 'link-food-1' }, L_OWN)).businessId;
+  const lFood2 = (await call('upsertMyBusiness', { ...FOOD, name: 'Kafe 2', clientRequestId: 'link-food-2' }, L_OWN)).businessId;
+  const lAuto = (await call('upsertMyBusiness', { ...BASE, clientRequestId: 'link-auto-1' }, L_OWN)).businessId;
+  const lOnline = (await call('upsertMyBusiness', { ...FOOD, online: true, clientRequestId: 'link-onl-1' }, L_OWN)).businessId;
+  await db.collection('restaurants').doc('rst_own_1').set({ ownerUid: L_OWN, name: 'Gurlan Kafe', status: 'approved' });
+  await db.collection('restaurants').doc('rst_oth_1').set({ ownerUid: L_OTH, name: 'Begona', status: 'approved' });
+
+  await check('L1 egasi o\'z food obyektini o\'z restoraniga ulaydi; qayta — changed:false (idempotent)', async () => {
+    const r1 = await call('linkBusinessRestaurant', { businessId: lFood, restaurantId: 'rst_own_1' }, L_OWN);
+    assert.deepStrictEqual([r1.ok, r1.changed], [true, true]);
+    assert.strictEqual((await biz(lFood)).restaurantId, 'rst_own_1');
+    const r2 = await call('linkBusinessRestaurant', { businessId: lFood, restaurantId: 'rst_own_1' }, L_OWN);
+    assert.strictEqual(r2.changed, false);
+  });
+
+  await check('L2 egasi tahrir qilsa (upsertMyBusiness) restaurantId saqlanadi', async () => {
+    await call('upsertMyBusiness', { ...FOOD, businessId: lFood, description: 'yangi tavsif' }, L_OWN);
+    const b = await biz(lFood);
+    assert.strictEqual(b.description, 'yangi tavsif');
+    assert.strictEqual(b.restaurantId, 'rst_own_1');
+  });
+
+  await check('L3 begona restoran — RESTAURANT_NOT_FOUND; begona obyekt — BUSINESS_NOT_FOUND', async () => {
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_oth_1' }, L_OWN), 'RESTAURANT_NOT_FOUND');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_own_1' }, L_OTH), 'BUSINESS_NOT_FOUND');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'yoq_rst' }, L_OWN), 'RESTAURANT_NOT_FOUND');
+    assert.strictEqual((await biz(lFood2)).restaurantId, undefined);
+  });
+
+  await check('L4 bitta menyu ikki obyektga ulanmaydi — RESTAURANT_ALREADY_LINKED', async () => {
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_own_1' }, L_OWN), 'RESTAURANT_ALREADY_LINKED');
+  });
+
+  await check('L5 food bo\'lmagan / online / bloklangan obyekt — rad', async () => {
+    await db.collection('restaurants').doc('rst_own_2').set({ ownerUid: L_OWN, name: 'Ikkinchi', status: 'approved' });
+    await expectCode(call('linkBusinessRestaurant', { businessId: lAuto, restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_NOT_FOOD');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lOnline, restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_ONLINE');
+    await call('adminSetBusinessStatus', { businessId: lFood2, status: 'blocked', reason: 'sinov' }, ADMIN);
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood2, restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_BLOCKED');
+  });
+
+  await check('L6 noto\'g\'ri ID / telefonsiz — rad', async () => {
+    await expectCode(call('linkBusinessRestaurant', { businessId: '../x', restaurantId: 'rst_own_2' }, L_OWN), 'BUSINESS_NOT_FOUND');
+    await expectCode(call('linkBusinessRestaurant', { businessId: lFood, restaurantId: 'a/b' }, L_OWN), 'RESTAURANT_NOT_FOUND');
+    await assert.rejects(fns.linkBusinessRestaurant.run({ businessId: lFood, restaurantId: 'rst_own_2' }, { auth: null }),
+      /Authentication required/);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

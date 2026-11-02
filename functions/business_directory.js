@@ -40,6 +40,8 @@ const GEO_DISTRICTS = 'geo_districts';
 const ADMIN_AUDIT = 'admin_audit';
 const ITEMS = 'tv_shop_items';
 const SHOPS = 'tv_shops';
+/** Ресторан бўлими (меню/буюртма) — овқатланиш объекти шу ерга уланади (linkBusinessRestaurant). */
+const RESTAURANTS = 'restaurants';
 /** Онлайн дўкон ва йўналиш дўкони ҳолатлари (админ ўрнатади). */
 const BLOCK_STATUSES = Object.freeze(['active', 'blocked']);
 /** `blockedByParent` белгиси: дўкон блоки ёки муайян йўналиш блоки. */
@@ -562,6 +564,56 @@ function attachBusinessDirectory(exportsObj, deps) {
       return { deleted: true };
     });
     log({ action: 'deleteMyBusiness', userId: uid, businessId: ref.id, result: out.deleted ? 'deleted' : 'noop', durationMs: Date.now() - started });
+    return { ok: true, ...out };
+  });
+
+  /**
+   * data: { businessId, restaurantId } → { ok, changed }. «Менинг бизнесим» овқатланиш объекти ↔ ресторан бўлими
+   * (меню, буюртма, курьер) — эга, 2026-11-03: «қўшилгандан кейин занжир охиригача», «харитада битта белги».
+   * Текширув (клиентга ишонилмайди, 18-банд): объект ва ресторан ИККАЛАСИ ҳам чақирувчиники; объект `food`,
+   * онлайн эмас, блокланмаган; ресторан бошқа объектга уланмаган. `businesses.restaurantId` ФАҚАТ шу ерда
+   * ёзилади (rules: клиент ёза олмайди); `upsertMyBusiness` таҳрири `update` бўлгани учун майдонни сақлайди.
+   * Идемпотент: ўша жуфт қайта — `changed: false` (21-банд).
+   */
+  exportsObj.linkBusinessRestaurant = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const uid = requireUser(context);
+    const bRef = db.collection(COLLECTION).doc(docId(data && data.businessId, 'BUSINESS_NOT_FOUND'));
+    const rid = docId(data && data.restaurantId, 'RESTAURANT_NOT_FOUND');
+    const rRef = db.collection(RESTAURANTS).doc(rid);
+    let out;
+    try {
+      out = await db.runTransaction(async (t) => {
+        const [b, r, taken] = await Promise.all([
+          t.get(bRef),
+          t.get(rRef),
+          t.get(db.collection(COLLECTION).where('restaurantId', '==', rid).limit(2)),
+        ]);
+        const bx = b.exists ? (b.data() || {}) : null;
+        if (!bx || bx.ownerId !== uid) throw fail('not-found', 'BUSINESS_NOT_FOUND', 'Объект топилмади.');
+        if (isBlocked(b)) throw fail('failed-precondition', 'BUSINESS_BLOCKED', 'Объект вақтинча блокланган.');
+        if (categoryOf(bx.category) !== 'food') {
+          throw fail('failed-precondition', 'BUSINESS_NOT_FOOD', 'Меню фақат овқатланиш объектида.');
+        }
+        if (bx.online === true) throw fail('failed-precondition', 'BUSINESS_ONLINE', 'Объект харитада эмас.');
+        const rx = r.exists ? (r.data() || {}) : null;
+        if (!rx || canonicalUid(String(rx.ownerUid || '')) !== uid) {
+          throw fail('not-found', 'RESTAURANT_NOT_FOUND', 'Ресторан топилмади.');
+        }
+        if (taken.docs.some((x) => x.id !== bRef.id)) {
+          throw fail('already-exists', 'RESTAURANT_ALREADY_LINKED', 'Бу меню бошқа объектга уланган.');
+        }
+        if (bx.restaurantId === rid) return { changed: false };
+        t.update(bRef, { restaurantId: rid, updatedAt: ts() });
+        return { changed: true };
+      });
+    } catch (e) {
+      log({ action: 'linkBusinessRestaurant', userId: uid, businessId: bRef.id, restaurantId: rid, result: 'error',
+        errorCode: (e && e.details && e.details.code) || 'INTERNAL', durationMs: Date.now() - started });
+      throw e;
+    }
+    log({ action: 'linkBusinessRestaurant', userId: uid, businessId: bRef.id, restaurantId: rid,
+      result: out.changed ? 'linked' : 'noop', durationMs: Date.now() - started });
     return { ok: true, ...out };
   });
 

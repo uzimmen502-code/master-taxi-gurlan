@@ -3201,7 +3201,7 @@ function platformDeliveryFeeFromSettings(settings, itemsTotal) {
 }
 
 /** Буюртма + омбор; bread/platform нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */
-exports.placeOrderPostPaid =functions.https.onCall(async (data, context) => {
+exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
   }

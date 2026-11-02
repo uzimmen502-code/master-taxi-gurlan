@@ -4204,6 +4204,9 @@ service cloud.firestore {
                   && (request.resource.data.status == 'pending'
                       || (request.resource.data.status == 'active'
                           && tvAutoApproveOn()))
+                  // Видео устидаги «жойланган сана» (эга, 2026-11-02) — фақат
+                  // сервер вақти. Ilova 2026-08-15'dan beri serverTimestamp() yozadi.
+                  && request.resource.data.createdAt == request.time
                   && !request.resource.data.keys().hasAny([
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
                       'socialVideoUrl', 'socialNoticeVersion'])
@@ -4223,8 +4226,9 @@ service cloud.firestore {
               && tvClipRealtyLinkUpdateOk()
               && tvClipSellerChannelUpdateOk()
               // `ownerPhone` (2026-10-26, review H1): egasi klipni boshqa sotuvchi nomiga o'tkaza olmaydi.
+              // `createdAt` (2026-11-02): жойланган сана таҳрирда ўзгармайди.
               && !request.resource.data.diff(resource.data).affectedKeys()
-                  .hasAny(['ownerPhone', 'expiresAt', 'adDurationDays', 'adTier', 'adScope',
+                  .hasAny(['ownerPhone', 'createdAt', 'expiresAt', 'adDurationDays', 'adTier', 'adScope',
                            'regionId', 'status', 'rejectReason',
                            'socialPost', 'socialPostedAt', 'socialRetryAt',
                            'socialVideoUrl', 'socialConsentAt',

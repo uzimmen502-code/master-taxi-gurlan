@@ -21,6 +21,7 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
+const { serverTimestamp } = require('firebase/firestore');
 
 const RULES_PATH = process.env.RULES_FILE || path.join(__dirname, '..', '..', 'firestore.rules');
 const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
@@ -62,9 +63,35 @@ async function main() {
     const ownerPhone = extra.ownerPhone || OWNER;
     return {
       ownerPhone, ownerName: 'Али', title: 'Обзор', videoUrl: ownClipUrl(ownerPhone),
-      category: 'product', status: 'pending', ...extra,
+      category: 'product', status: 'pending', createdAt: serverTimestamp(), ...extra,
     };
   };
+
+  // ─── Жойланган сана (эга, 2026-11-02): `createdAt` фақат сервер вақти ───
+  //   S1 serverTimestamp() билан яратилади (ilova shakli)
+  //   S2 клиент ўзи танлаган сана (ўтмиш/келажак) — рад
+  //   S3 `createdAt`сиз — рад
+  //   S4 эгаси таҳрирда `createdAt`ни ўзгартира олмайди; бошқа таҳрир ишлайди
+  await reset();
+  await check('S1 createdAt = serverTimestamp() — яратилади', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('s1').set(newClip())));
+  await check('S2 клиент санаси (ўтмиш) — рад', () =>
+    assertFails(owner().collection('tv_clips').doc('s2').set(
+      newClip({ createdAt: new Date('2026-10-31T09:00:00Z') }))));
+  await check('S2b клиент санаси (келажак) — рад', () =>
+    assertFails(owner().collection('tv_clips').doc('s2b').set(
+      newClip({ createdAt: new Date(Date.now() + 86400000) }))));
+  await check('S3 createdAt йўқ — рад', () => {
+    const c = newClip();
+    delete c.createdAt;
+    return assertFails(owner().collection('tv_clips').doc('s3').set(c));
+  });
+  await check('S4 эгаси createdAt ни ўзгартира олмайди', () =>
+    assertFails(owner().collection('tv_clips').doc('c1').update({ createdAt: new Date() })));
+  await check('S4b эгаси createdAt ни serverTimestamp билан ҳам янгилай олмайди', () =>
+    assertFails(owner().collection('tv_clips').doc('c1').update({ createdAt: serverTimestamp() })));
+  await check('S4c эгаси сарлавҳани таҳрирлайди (сана тегилмайди)', () =>
+    assertSucceeds(owner().collection('tv_clips').doc('c1').update({ title: 'Янги' })));
 
   await reset();
   await check('A эгаси боғлашли оддий клип яратади (pending)', () =>

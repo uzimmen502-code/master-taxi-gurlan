@@ -32,7 +32,13 @@ class BusinessProductFormScreen extends StatefulWidget {
     this.pickPhotos,
     this.uploadPhotos,
     this.addVideo,
+    this.initialOffer,
   }) : _repo = repository;
+
+  /// Янги таклиф учун олдиндан тўлдириш (каталогдаги «Тез бошлаш» шаблони, S5): ном (жорий тилда), тур
+  /// (`product`/`service`) ва нарх бирлиги wire қиймати (`PriceUnit.wire`; S2 форма танлови ўқийди).
+  /// Таҳрирда ([existing]) ишлатилмайди; дўконда тур доим `product`.
+  final ({String title, String kind, String priceUnitWire})? initialOffer;
 
   final Business business;
   final TvShopItem? existing;
@@ -57,12 +63,15 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   late final String _phone =
       widget.ownerPhone ?? canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
 
-  late final TextEditingController _name = TextEditingController(text: widget.existing?.title ?? '');
+  late final TextEditingController _name =
+      TextEditingController(text: widget.existing?.title ?? widget.initialOffer?.title ?? '');
   late final TextEditingController _price = TextEditingController(
       text: (widget.existing?.price ?? 0) > 0 ? '${widget.existing!.price}' : '');
   late final TextEditingController _desc = TextEditingController(text: widget.existing?.description ?? '');
   late String _kind = widget.existing?.kind ??
-      (sellsOnlyProducts(widget.business) ? 'product' : defaultProductKind(widget.business.category, subtype: widget.business.subtype));
+      (sellsOnlyProducts(widget.business)
+          ? 'product'
+          : widget.initialOffer?.kind ?? defaultProductKind(widget.business.category, subtype: widget.business.subtype));
 
   /// Дўконда «Хизмат» танлови йўқ ([sellsOnlyProducts]). Аввал хизмат деб сақланган эски дўкон ёзуви — танлов
   /// кўринади, эга уни маҳсулотга ўтказа олсин.

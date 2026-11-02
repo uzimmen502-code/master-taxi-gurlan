@@ -11,6 +11,15 @@ import '../models/user_model.dart';
 /// `admin_news` — broadcast / мурожаат / буюртма (алохида фильтр).
 enum NewsFeedKind { broadcast, dialog, order }
 
+/// [NewsRepository.watchInboxNews] натижаси — уч бўлим.
+class InboxNewsLists {
+  const InboxNewsLists({this.broadcast = const [], this.dialog = const [], this.orders = const []});
+
+  final List<NewsItem> broadcast;
+  final List<NewsItem> dialog;
+  final List<NewsItem> orders;
+}
+
 /// `admin_news` — умумий янгиликлар ва буюртма хабарлари (алохида фильтр).
 class NewsRepository {
   NewsRepository({FirebaseFirestore? db})
@@ -219,6 +228,76 @@ class NewsRepository {
         feed: NewsFeedKind.order,
         limit: limit,
       );
+
+  /// «Хабарлар» битта рўйхати учун: ИККИ тингловчи (умумий + шахсий) ва уч
+  /// бўлимга ажратиш. Аввал ҳар таб ўз жуфтини очарди (6 та тингловчи), шахсий
+  /// сўров эса 30 та билан чекланиб, эскироқ хабарлар жимгина йўқоларди.
+  ///
+  /// [role] — умумий янгиликлар аудиторияси (аввалги «Янгилик» таби каби
+  /// `['all', role]`); мурожаат ва буюртма — аввалгидек `['all', 'user']`.
+  Stream<InboxNewsLists> watchInboxNews({
+    required String userId,
+    String role = 'user',
+    int globalLimit = 50,
+    int personalLimit = 100,
+  }) {
+    final uid = canonicalPhoneId(userId);
+    return lazyBroadcastStream<InboxNewsLists>((controller) {
+      List<NewsItem>? global;
+      List<NewsItem>? personal;
+      var personalReady = uid.length < 9;
+
+      void emit() {
+        if (global == null || !personalReady) return;
+        final all = _mergeDedupe(global!, personal ?? const []);
+        List<NewsItem> pick(NewsFeedKind f, List<String> aud) =>
+            _filterForUser(all, audiences: aud, userId: uid, feed: f);
+        if (controller.isClosed) return;
+        controller.add(InboxNewsLists(
+          broadcast: pick(NewsFeedKind.broadcast, ['all', role]),
+          dialog: pick(NewsFeedKind.dialog, const ['all', 'user']),
+          orders: pick(NewsFeedKind.order, const ['all', 'user']),
+        ));
+      }
+
+      final subGlobal = _broadcastCol
+          .orderBy('createdAt', descending: true)
+          .limit(globalLimit)
+          .snapshots()
+          .listen((snap) {
+        global = snap.docs.map(NewsItem.fromDoc).toList(growable: false);
+        emit();
+      }, onError: controller.addError);
+
+      if (uid.length < 9) {
+        personal = const [];
+        emit();
+        return [subGlobal];
+      }
+
+      final aliases = phoneAliases(uid);
+      final subPersonal = _col
+          .where('targetUserId', whereIn: aliases.length > 10 ? aliases.sublist(0, 10) : aliases)
+          .orderBy('createdAt', descending: true)
+          .limit(personalLimit)
+          .snapshots()
+          .listen((snap) {
+        personal = snap.docs.map(NewsItem.fromDoc).toList(growable: false);
+        personalReady = true;
+        emit();
+      }, onError: (e, _) {
+        personal = const [];
+        personalReady = true;
+        emit();
+        if (e is FirebaseException && e.code == 'permission-denied') {
+          debugPrint('admin_news personal: permission-denied (телефонсиз сессия)');
+          return;
+        }
+        if (!controller.isClosed) controller.addError(e);
+      });
+      return [subGlobal, subPersonal];
+    });
+  }
 
   static int countUnreadInList(
     List<NewsItem> items,

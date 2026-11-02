@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/user_error.dart';
 import '../../../models/chat_message.dart';
+import '../../chat/widgets/chat_composer.dart';
 import '../../chat/widgets/message_bubble.dart';
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/utils/wholesale_labels.dart';
@@ -129,10 +130,13 @@ class _DealChatScreenState extends State<DealChatScreen> {
     final chat = _chat;
     final iAmSeller = chat?.isSeller(widget.myUid) ?? false;
     return Scaffold(
+      backgroundColor: context.ava.bg,
       appBar: AppBar(
         title: Text(context.tr(iAmSeller ? 'deal_chat_with_buyer' : 'deal_chat_with_seller')),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onPrimary,
+        backgroundColor: context.ava.surface,
+        foregroundColor: context.ava.ink,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
       ),
       body: Column(
         children: [
@@ -149,8 +153,10 @@ class _DealChatScreenState extends State<DealChatScreen> {
     return StreamBuilder<List<DealMessage>>(
       stream: _msgStream,
       builder: (context, snap) {
+        final c = context.ava;
         if (snap.hasError && !snap.hasData) {
-          return Center(child: Text(context.tr('deal_chat_load_failed')));
+          return Center(
+              child: Text(context.tr('deal_chat_load_failed'), style: AvaText.body.copyWith(color: c.inkRow)));
         }
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         final msgs = snap.data!;
@@ -162,23 +168,29 @@ class _DealChatScreenState extends State<DealChatScreen> {
                 context.tr('deal_chat_empty'),
                 key: const ValueKey('deal-chat-empty'),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
+                style: AvaText.body.copyWith(color: c.ink2),
               ),
             ),
           );
         }
+        final readIds = dealReadMessageIds(msgs, myUid: widget.myUid, chat: _chat);
+        final rows = withDaySeparators<DealMessage>(msgs, (m) => m.at);
         return ListView.builder(
           key: const ValueKey('deal-chat-messages'),
           reverse: true,
-          padding: const EdgeInsets.all(12),
-          itemCount: msgs.length,
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          itemCount: rows.length,
           itemBuilder: (_, i) {
-            final m = msgs[msgs.length - 1 - i];
+            final r = rows[rows.length - 1 - i];
+            if (r is ChatDay) return ChatDaySeparator(day: r.day);
+            final m = r as DealMessage;
+            final mine = m.from == widget.myUid;
             // Умумий пуфакча (support чат) — `fromPhone` бўш: «Админ» ёрлиғи чиқмайди.
             return MessageBubble(
               key: ValueKey('deal-msg-${m.id}'),
               message: ChatMessage(id: m.id, text: m.text, createdAt: m.at),
-              isMine: m.from == widget.myUid,
+              isMine: mine,
+              read: mine && readIds != null ? readIds.contains(m.id) : null,
             );
           },
         );
@@ -187,46 +199,30 @@ class _DealChatScreenState extends State<DealChatScreen> {
   }
 
   Widget _composer() {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                key: const ValueKey('deal-chat-input'),
-                controller: _ctrl,
-                minLines: 1,
-                maxLines: 4,
-                maxLength: kDealChatTextMax,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: context.tr('deal_chat_hint'),
-                  counterText: '',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              key: const ValueKey('deal-chat-send'),
-              tooltip: context.tr('deal_chat_send'),
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.primaryDark,
-                foregroundColor: AppColors.onPrimary,
-                minimumSize: const Size(48, 48),
-              ),
-              onPressed: _sending ? null : _send,
-              icon: _sending
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.send),
-            ),
-          ],
-        ),
-      ),
+    return ChatComposer(
+      controller: _ctrl,
+      onSend: _send,
+      sending: _sending,
+      hintKey: 'deal_chat_hint',
+      maxLength: kDealChatTextMax,
+      inputKey: const ValueKey('deal-chat-input'),
+      sendKey: const ValueKey('deal-chat-send'),
     );
   }
+}
+
+/// Меники хабарлардан қайсилари ҚАРШИ ТОМОН томонидан ўқилган (✓✓). Сервер
+/// `unread[қарши томон]` = у ҳали ўқимаган МЕНИКИ хабарлар сони (`sendDealMessage`
+/// ошириб, `markDealChatRead` нолга туширади) — шунинг учун меники охирги шунча
+/// хабар ўқилмаган, олдингилари ўқилган. Чат ҳужжати ҳали келмаган бўлса — `null`
+/// (белги кўрсатилмайди).
+Set<String>? dealReadMessageIds(List<DealMessage> msgs, {required String myUid, required DealChat? chat}) {
+  if (chat == null) return null;
+  final other = chat.isSeller(myUid) ? chat.buyerId : chat.sellerId;
+  if (other.isEmpty) return null;
+  final mine = msgs.where((m) => m.from == myUid).toList();
+  final unread = chat.unreadFor(other).clamp(0, mine.length);
+  return {for (final m in mine.take(mine.length - unread)) m.id};
 }
 
 /// Маҳсулот: расм, ном, нарх (нарх — маҳсулот ўқилса; ёпиқ/ўчирилган бўлса фақат ном).

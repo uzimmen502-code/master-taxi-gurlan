@@ -3,6 +3,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/chat_message.dart';
 import 'news_repository.dart';
 
+/// `support_chats/{uid}` ҳужжатининг рўйхат учун керакли қисми.
+class SupportChatMeta {
+  const SupportChatMeta({this.lastMessage = '', this.updatedAt, this.lastFromAdmin = false});
+
+  final String lastMessage;
+  final DateTime? updatedAt;
+  final bool lastFromAdmin;
+
+  static const empty = SupportChatMeta();
+}
+
 /// `support_chats` collection — admin va foydalanuvchi orasidagi yordam chati.
 class ChatRepository {
   ChatRepository({FirebaseFirestore? db})
@@ -18,6 +29,20 @@ class ChatRepository {
       _chatRef(chatId).snapshots().map((s) {
         if (!s.exists) return false;
         return (s.data()?['lastFromAdmin'] ?? false) == true;
+      });
+
+  /// «Хабарлар» рўйхатидаги «AVA ёрдам» қатори: охирги хабар, вақти, ўқилмаганми
+  /// (ўша битта ҳужжат — [watchUnreadFromAdmin] билан бир хил ўқиш).
+  Stream<SupportChatMeta> watchSupportMeta(String chatId) =>
+      _chatRef(chatId).snapshots().map((s) {
+        final d = s.data();
+        if (!s.exists || d == null) return SupportChatMeta.empty;
+        final at = d['updatedAt'];
+        return SupportChatMeta(
+          lastMessage: '${d['lastMessage'] ?? ''}',
+          updatedAt: at is Timestamp ? at.toDate() : null,
+          lastFromAdmin: d['lastFromAdmin'] == true,
+        );
       });
 
   /// Мижоз чатни очганда — badge тушириш.

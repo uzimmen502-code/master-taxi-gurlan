@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
 import '../../../repositories/chat_repository.dart';
 import '../../../repositories/news_repository.dart';
 import '../../profile/inbox_hide_keys.dart';
 import '../controllers/chat_controller.dart';
+import '../widgets/chat_composer.dart';
 import '../widgets/message_bubble.dart';
 
 class ChatScreen extends StatelessWidget {
@@ -57,16 +58,16 @@ class _ChatView extends StatefulWidget {
 }
 
 class _ChatViewState extends State<_ChatView> {
-  static const _green = AppColors.primaryDark;
-
   final _msgCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
   DateTime? _clearedAt;
   StreamSubscription<Set<String>>? _dismissedSub;
+  late Stream<List<ChatMessage>> _messages;
+  bool _sending = false;
 
   @override
   void initState() {
     super.initState();
+    _messages = context.read<ChatController>().messages;
     _dismissedSub = widget.dismissedIds.listen((ids) {
       final at = InboxHideKeys.supportChatClearedAt(ids);
       if (mounted && at != _clearedAt) setState(() => _clearedAt = at);
@@ -84,44 +85,59 @@ class _ChatViewState extends State<_ChatView> {
   void dispose() {
     _dismissedSub?.cancel();
     _msgCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
   }
 
+  /// Юборилмаса — матн майдонга қайтади ва тушунарли хабар (аввал хато жимгина йўқоларди).
   Future<void> _send() async {
     final ctrl = context.read<ChatController>();
     final text = _msgCtrl.text;
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || _sending) return;
     _msgCtrl.clear();
-    await ctrl.send(text);
-    await Future.delayed(const Duration(milliseconds: 120));
-    if (!mounted || !_scrollCtrl.hasClients) return;
-    _scrollCtrl.animateTo(
-      _scrollCtrl.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-    );
+    setState(() => _sending = true);
+    try {
+      await ctrl.send(text);
+    } catch (e) {
+      debugPrint('[ChatScreen] send: $e');
+      if (!mounted) return;
+      if (_msgCtrl.text.isEmpty) _msgCtrl.text = text;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('chat_send_failed'))),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final ctrl = context.read<ChatController>();
+    final c = context.ava;
     final title = ctrl.isAdmin
         ? context.tr('chat_customer_title')
-        : context.tr('chat_admin_title');
+        : context.tr('inbox_support_title');
 
     return Scaffold(
+      backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onPrimary,
+        backgroundColor: c.surface,
+        foregroundColor: c.ink,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
       ),
       body: Column(
         children: [
           Expanded(
             child: StreamBuilder<List<ChatMessage>>(
-              stream: ctrl.messages,
+              stream: _messages,
               builder: (context, snap) {
+                // Аввал хато бўлса чексиз айланиб турарди.
+                if (snap.hasError && !snap.hasData) {
+                  return _ChatError(
+                    onRetry: () => setState(() => _messages = ctrl.reloadMessages()),
+                  );
+                }
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -129,58 +145,73 @@ class _ChatViewState extends State<_ChatView> {
                     .where((m) => InboxHideKeys.visibleAfterClear(m.createdAt, _clearedAt))
                     .toList();
                 if (messages.isEmpty) {
-                  return Center(child: Text(context.tr('chat_empty')));
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(context.tr('chat_empty'),
+                          textAlign: TextAlign.center, style: AvaText.body.copyWith(color: c.ink2)),
+                    ),
+                  );
                 }
+                final rows = withDaySeparators<ChatMessage>(messages, (m) => m.createdAt);
+                // Тескари рўйхат — чат энг янги хабардан (пастдан) очилади.
                 return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: messages.length,
+                  reverse: true,
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  itemCount: rows.length,
                   itemBuilder: (_, i) {
-                    final m = messages[i];
+                    final r = rows[rows.length - 1 - i];
+                    if (r is ChatDay) return ChatDaySeparator(day: r.day);
+                    final m = r as ChatMessage;
                     // Client SDK `fromAdmin` ёза олмайди — "меники"ни телефон бўйича.
                     final my = ctrl.myPhone;
                     final mine = my.isNotEmpty
                         ? phoneDigits(m.fromPhone) == my
                         : !m.fromAdmin;
-                    return MessageBubble(message: m, isMine: mine);
+                    return MessageBubble(key: ValueKey('chat-msg-${m.id}'), message: m, isMine: mine);
                   },
                 );
               },
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _msgCtrl,
-                      minLines: 1,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        hintText: context.tr('chat_hint'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _send,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _green,
-                      foregroundColor: AppColors.onPrimary,
-                    ),
-                    child: const Icon(Icons.send),
-                  ),
-                ],
-              ),
-            ),
+          ChatComposer(
+            controller: _msgCtrl,
+            onSend: _send,
+            sending: _sending,
+            hintKey: 'chat_hint',
+            inputKey: const ValueKey('support-chat-input'),
+            sendKey: const ValueKey('support-chat-send'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChatError extends StatelessWidget {
+  const _ChatError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_outlined, size: 40, color: c.ink3),
+            const SizedBox(height: 10),
+            Text(context.tr('chat_load_failed'),
+                key: const ValueKey('chat-load-failed'),
+                textAlign: TextAlign.center,
+                style: AvaText.body.copyWith(color: c.inkRow)),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: onRetry, child: Text(context.tr('inbox_retry'))),
+          ],
+        ),
       ),
     );
   }

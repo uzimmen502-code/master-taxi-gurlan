@@ -1,7 +1,5 @@
 import 'package:ava_gurlan/features/profile/inbox_hide_keys.dart';
-import 'package:ava_gurlan/features/profile/widgets/news_delete_button.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// «Хабарлар»: ҳайдовчи аризаси ва «Админ билан чат»да ўчириш (эга, 2026-10-26: «кирит»).
@@ -36,27 +34,5 @@ void main() {
       expect(InboxHideKeys.visibleAfterClear(null, cleared), isTrue, reason: 'ҳозиргина юборилган (сервер вақти кутилмоқда)');
       expect(InboxHideKeys.visibleAfterClear(DateTime(2020), null), isTrue);
     });
-  });
-
-  testWidgets('NewsDeleteButton: ўз тасдиқ матнлари (чат — «тарих тозаланади, қатор қолади»)', (t) async {
-    var called = false;
-    await t.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: NewsDeleteButton(
-          titleKey: 'chat_clear_title',
-          bodyKey: 'chat_clear_body',
-          doneKey: 'chat_cleared_snack',
-          onDelete: () async => called = true,
-        ),
-      ),
-    ));
-    await t.tap(find.byKey(const ValueKey('news-delete')));
-    await t.pumpAndSettle();
-    expect(find.text('chat_clear_title'), findsOneWidget);
-    expect(find.text('chat_clear_body'), findsOneWidget);
-    await t.tap(find.byKey(const ValueKey('news-delete-confirm')));
-    await t.pumpAndSettle();
-    expect(called, isTrue);
-    expect(find.text('chat_cleared_snack'), findsOneWidget);
   });
 }

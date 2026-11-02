@@ -25,8 +25,11 @@ class ChatController extends ChangeNotifier {
   String get myPhone => _myPhone;
   String get myName => _myName;
 
-  /// Xabarlar real-time oqimi.
-  Stream<List<ChatMessage>> get messages => _repo.watchMessages(chatId);
+  /// Хабарлар оқими — БИР марта яратилади. Аввал getter ҳар ўқилганда янги Firestore
+  /// обунасини очарди (ҳар қайта чизишда қайта обуна). Хатодан кейин — [reloadMessages].
+  late Stream<List<ChatMessage>> messages = _repo.watchMessages(chatId);
+
+  Stream<List<ChatMessage>> reloadMessages() => messages = _repo.watchMessages(chatId);
 
   Future<void> _loadMe() async {
     final prefs = await SharedPreferences.getInstance();

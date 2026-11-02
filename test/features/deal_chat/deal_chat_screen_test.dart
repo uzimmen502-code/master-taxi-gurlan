@@ -355,4 +355,40 @@ void main() {
       expect(find.byType(DealChatScreen), findsOneWidget);
     });
   });
+
+  group('Улгуржи миқдор чатга (эга 2026-11-02)', () {
+    testWidgets('занжир: draft → чат майдонида, ЎЗИ юборилмайди; «Юбориш» — айнан шу матн серверга', (tester) async {
+      final repo = FakeDealRepo();
+      const draft = 'Assalomu alaykum! Un (25 kg): 11 dona olmoqchiman (≈ 110 000 сўм).';
+      await tester.pumpWidget(l10nApp(delegate: d, home: Builder(
+        builder: (ctx) => Scaffold(body: TextButton(
+          onPressed: () => openDealChatFlow(ctx, productId: 'p1', myUid: buyer, repository: repo, draft: draft),
+          child: const Text('go'),
+        )),
+      )));
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump();
+      repo.chat.add(chatDoc());
+      repo.messages.add(const []);
+      // Маршрут ўтиш анимацияси тугасин (тугма босиладиган бўлсин).
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(repo.openCalls, [('p1', 'wholesale')]);
+      final input = find.byKey(const ValueKey('deal-chat-input'));
+      expect(tester.widget<TextField>(input).controller!.text, draft);
+      expect(repo.sent, isEmpty, reason: 'харидор кўрмасдан хабар кетмасин');
+      await tester.tap(find.byKey(const ValueKey('deal-chat-send')));
+      await tester.pump();
+      expect(repo.sent.single['text'], draft);
+    });
+
+    testWidgets('draft йўқ ёки бўш — майдон бўш (Аралаш/Хитой аввалгидек)', (tester) async {
+      final repo = FakeDealRepo();
+      await tester.pumpWidget(l10nApp(
+        delegate: d,
+        home: DealChatScreen(chatId: chatId, myUid: buyer, repository: repo, initialDraft: '   '),
+      ));
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('deal-chat-input'))).controller!.text, '');
+    });
+  });
 }

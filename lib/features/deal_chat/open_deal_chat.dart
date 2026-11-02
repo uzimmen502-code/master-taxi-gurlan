@@ -40,6 +40,7 @@ Future<void> openDealChatFlow(
   String source = DealChatSource.wholesale,
   WholesaleProduct? initialProduct,
   DealChatRepository? repository,
+  String? draft,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final navigator = Navigator.of(context);
@@ -65,6 +66,7 @@ Future<void> openDealChatFlow(
         myUid: myUid,
         initialProduct: initialProduct,
         repository: repo,
+        initialDraft: draft,
       ),
     ));
   } catch (e) {

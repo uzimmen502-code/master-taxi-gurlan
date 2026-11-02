@@ -25,7 +25,13 @@ class DealChatScreen extends StatefulWidget {
     required this.myUid,
     this.initialProduct,
     this.repository,
+    this.initialDraft,
   });
+
+  /// Ёзиш майдонига олдиндан қўйиладиган матн (эга, 2026-11-02: Улгуржи
+  /// тафсилотида танланган миқдор чатга борсин). Ўзи ЮБОРИЛМАЙДИ — харидор
+  /// кўриб, ўзгартириб, ўзи юборади.
+  final String? initialDraft;
 
   final String chatId;
 
@@ -64,6 +70,8 @@ class _DealChatScreenState extends State<DealChatScreen> {
   void initState() {
     super.initState();
     _product = widget.initialProduct;
+    final draft = widget.initialDraft?.trim() ?? '';
+    if (draft.isNotEmpty) _ctrl.text = draft;
     DealChatPresence.enter(widget.chatId);
     _chatSub = _repo.watchChat(widget.chatId).listen(_onChat, onError: (Object e) {
       debugPrint('[DealChat] watchChat: $e');

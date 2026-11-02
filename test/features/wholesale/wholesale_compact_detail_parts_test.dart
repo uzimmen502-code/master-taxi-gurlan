@@ -67,6 +67,26 @@ void main() {
     });
   });
 
+  group('wholesaleOrderDraft (миқдор чатга)', () {
+    test('қадоқ билан ва қадоқсиз; 3 тилда калит бор', () {
+      expect(
+        wholesaleOrderDraft(template: d.tr('deal_chat_order_draft'), title: ' Un ', packLabel: '25 kg qop', qty: 1200, unitLabel: 'dona', totalText: '12 000 000 сўм'),
+        'Assalomu alaykum! Un (25 kg qop): 1 200 dona olmoqchiman (≈ 12 000 000 сўм).',
+      );
+      expect(
+        wholesaleOrderDraft(template: '{product}|{qty}|{unit}|{total}', title: 'Un', packLabel: '  ', qty: 5, unitLabel: 'kg', totalText: 'T'),
+        'Un|5|kg|T',
+      );
+      for (final lang in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+        final j = jsonDecode(File('assets/lang/$lang.json').readAsStringSync()) as Map<String, dynamic>;
+        final v = j['deal_chat_order_draft'] as String;
+        for (final ph in ['{product}', '{qty}', '{unit}', '{total}']) {
+          expect(v.contains(ph), isTrue, reason: '$lang $ph');
+        }
+      }
+    });
+  });
+
   group('clampCompactQty', () {
     test('MOQ дан кам — MOQ, қолдиқдан кўп — қолдиқ', () {
       expect(clampCompactQty(0, moq: 5, max: 100), 5);
@@ -177,6 +197,9 @@ void main() {
     final write = tester.getCenter(find.byKey(const ValueKey('wholesale-write-order')));
     expect([(step.dy - call.dy).abs() < 1, (call.dy - write.dy).abs() < 1], [true, true]);
     expect(step.dx < call.dx && call.dx < write.dx, isTrue);
+    // Қўнғироқ каттароқ (56 px), «Буюртма ёзиш» ҳарфи 12 (эга, 2026-11-02).
+    expect(tester.getSize(find.byKey(const ValueKey('wholesale-call'))).width, WholesaleCompactBottomBar.callWidth);
+    expect(tester.widget<Text>(find.text(d.tr('deal_chat_write_order'))).style!.fontSize, 12);
     await tester.tap(find.byKey(const ValueKey('wholesale-call')));
     await tester.tap(find.byKey(const ValueKey('wholesale-write-order')));
     expect([calls, writes], [1, 1]);

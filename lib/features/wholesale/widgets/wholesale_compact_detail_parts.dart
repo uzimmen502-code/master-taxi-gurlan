@@ -22,6 +22,26 @@ int clampCompactQty(int value, {required int moq, required int max}) {
   return value;
 }
 
+/// «Буюртма ёзиш» чат майдонига тайёр матн (эга, 2026-11-02: танланган
+/// миқдор чатга борсин). Қадоқ бўлса номдан кейин қавсда. Нарх — фақат
+/// тахминий (≈), ҳақиқий нарх сотувчи билан келишилади.
+String wholesaleOrderDraft({
+  required String template,
+  required String title,
+  required String packLabel,
+  required int qty,
+  required String unitLabel,
+  required String totalText,
+}) {
+  final pack = packLabel.trim();
+  final product = pack.isEmpty ? title.trim() : '${title.trim()} ($pack)';
+  return template
+      .replaceAll('{product}', product)
+      .replaceAll('{qty}', formatPrice(qty))
+      .replaceAll('{unit}', unitLabel)
+      .replaceAll('{total}', totalText);
+}
+
 /// «11 000 сўм / дона ··· Қолди: 120 дона» — қолдиқ нарх билан БИР қаторда.
 /// Қолдиқ киритилмаган (`null`) — ўнг томон бўш; `0` — «Тугаган» (қизил).
 class WholesalePriceStockRow extends StatelessWidget {
@@ -289,6 +309,9 @@ class WholesaleCompactBottomBar extends StatelessWidget {
 
   static const double _h = 40;
 
+  /// Қўнғироқ тугмаси эни (аввал [_h] — квадрат эди).
+  static const double callWidth = 56;
+
   @override
   Widget build(BuildContext context) {
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
@@ -316,8 +339,9 @@ class WholesaleCompactBottomBar extends StatelessWidget {
         children: [
           WholesaleQtyStepper(qty: qty, min: minQty, max: maxQty, onChanged: onQtyChanged, height: _h),
           const SizedBox(width: 8),
+          // Қўнғироқ каттароқ (эга, 2026-11-02): 40 → 56 px эн, белги 22.
           SizedBox(
-            width: _h,
+            width: callWidth,
             height: _h,
             child: Tooltip(
               message: context.tr('wholesale_call'),
@@ -330,7 +354,7 @@ class WholesaleCompactBottomBar extends StatelessWidget {
                   shape: shape,
                   padding: EdgeInsets.zero,
                 ),
-                child: const Icon(Icons.call, size: 18),
+                child: const Icon(Icons.call, size: 22),
               ),
             ),
           ),
@@ -360,12 +384,13 @@ class WholesaleCompactBottomBar extends StatelessWidget {
                         children: [
                           Text(
                             context.tr('deal_chat_write_order'),
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, height: 1.1),
+                            // «Буюртма ёзиш» сал кичикроқ (эга, 2026-11-02): 13 → 12, сумма 11 → 10.5.
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, height: 1.1),
                           ),
                           Text(
                             totalText,
                             key: const ValueKey('wholesale-compact-total'),
-                            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11, height: 1.1),
+                            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 10.5, height: 1.1),
                           ),
                         ],
                       ),

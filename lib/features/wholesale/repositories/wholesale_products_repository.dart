@@ -123,6 +123,9 @@ class WholesaleProductsRepository {
       return geoScopedStream<WholesaleProduct>(
         scope: geo,
         nation: () => getActiveProducts(limit: limit, market: market),
+        // «Барча ҳудудларда» сотувчилар (AVA, эга 2026-11-03) — ҳар қандай
+        // вилоят/туман танланганда ҳам рўйхатда.
+        legacy: () => watchAllAreasProducts(market: market),
         byDistricts: (ids) => _col
             .where('status', isEqualTo: WholesaleProduct.statusActive)
             .where('districtId', whereIn: ids)
@@ -261,6 +264,37 @@ class WholesaleProductsRepository {
               snap.docs.map(WholesaleProduct.fromFirestore),
               market: market,
             ));
+  }
+
+  /// «Барча ҳудудларда» кўринадиган сотувчилар (эга, 2026-11-03: AVA
+  /// маҳсулотлари ҳамма ҳудудда). Белги — `wholesale_sellers.allAreas == true`;
+  /// уни ФАҚАТ админ SDK ёзади (сотувчи create/update қоидаларидаги
+  /// `hasOnly` рўйхатида йўқ — мижоз ўзига қўя олмайди). Сотувчи рўйхати бир
+  /// марта ўқилади (кам ўзгаради), маҳсулотлар — тинглагич; 30 тадан бўлак
+  /// (`whereIn` чеклови) — ҳозир 1 та сотувчи.
+  Stream<List<WholesaleProduct>> watchAllAreasProducts({String? market}) {
+    return Stream.fromFuture(
+      _db
+          .collection('wholesale_sellers')
+          .where('allAreas', isEqualTo: true)
+          .limit(30)
+          .get()
+          .then((s) => s.docs.map((d) => d.id).toList())
+          .catchError((Object e) {
+        // Ўқилмаса — оддий ҳудуд рўйхати ишлайверсин.
+        return <String>[];
+      }),
+    ).asyncExpand((ids) {
+      if (ids.isEmpty) return Stream.value(const <WholesaleProduct>[]);
+      return _col
+          .where('sellerId', whereIn: ids)
+          .where('status', isEqualTo: WholesaleProduct.statusActive)
+          .snapshots()
+          .map((snap) => sortActiveSellerProducts(
+                snap.docs.map(WholesaleProduct.fromFirestore),
+                market: market,
+              ));
+    });
   }
 
   /// [watchActiveBySeller] тартиби: бозор филтри + `publishedAt` камаювчи.

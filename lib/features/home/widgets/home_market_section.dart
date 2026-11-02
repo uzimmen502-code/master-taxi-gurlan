@@ -5,14 +5,20 @@ import 'package:flutter/material.dart';
 
 import 'dart:math';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/data_url_image.dart';
+import '../../../core/utils/fair_mix.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
+import '../../../models/platform_product.dart';
+import '../../../repositories/platform_products_repository.dart';
 import '../../ads/models/ad_model.dart';
 import '../../ads/repositories/ads_repository.dart';
+import '../../ads/widgets/platform_market_card.dart' show platformShelfPrice;
 import 'ava_list_row.dart';
 import 'ava_section.dart';
 
@@ -25,14 +31,23 @@ class HomeMarketSection extends StatefulWidget {
     super.key,
     required this.onOpenAll,
     required this.onOpenAd,
+    this.onOpenPlatform,
   });
 
   final VoidCallback onOpenAll;
   /// Босилган эълон ва бўлимдаги БАРЧА эълонлар (тафсилотда суриб ўтиш учун).
   final void Function(AdModel ad, List<AdModel> shelf) onOpenAd;
 
+  /// AVA маҳсулоти (`platform_products`) босилди (эга, 2026-11-03: AVA
+  /// маҳсулотлари бош саҳифадаги Аралаш бўлимида ҳам). `null` — AVA йўқ.
+  final void Function(PlatformProduct product)? onOpenPlatform;
+
   /// Икки қатор тўлиши учун 5 эмас, 10 та (қаранг: [AvaProductShelf]).
   static const limit = 10;
+
+  /// AVA маҳсулотлари: индексли `active + sortOrder` сўрови (бош саҳифа бутун
+  /// каталогни ўқимасин, 37-қоида); қоидаси Аралаш бозор экрани билан бир хил.
+  static const platformLimit = 20;
 
   @override
   State<HomeMarketSection> createState() => _HomeMarketSectionState();
@@ -51,11 +66,31 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
   int _limit = HomeMarketSection.limit;
   bool _endReached = false;
 
+  final _platformRepo = PlatformProductsRepository();
+  List<PlatformProduct> _platform = const [];
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
     _listen();
+    if (widget.onOpenPlatform != null) unawaited(_loadPlatform());
+  }
+
+  Future<void> _loadPlatform() async {
+    try {
+      final list = await _platformRepo.fetchActive(limit: HomeMarketSection.platformLimit);
+      if (!mounted) return;
+      setState(() {
+        _platform = PlatformProductsRepository.marketEligible(list);
+        if (_platform.isNotEmpty && _status == AvaSectionStatus.empty) {
+          _status = AvaSectionStatus.ready;
+        }
+      });
+    } catch (e) {
+      // AVA юкланмаса ҳам бўлим эълонлар билан ишлайди.
+      debugPrint('[HomeMarket] platform $e');
+    }
   }
 
   void _onScroll() {
@@ -88,7 +123,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             random: _rnd,
           );
           _endReached = list.length < _limit;
-          _status = _items.isEmpty
+          _status = _items.isEmpty && _platform.isEmpty
               ? AvaSectionStatus.empty
               : AvaSectionStatus.ready;
         });
@@ -118,8 +153,14 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
   @override
   Widget build(BuildContext context) {
     // Баландлик ҳақиқий мазмундан (ном 1 қатор, туман изоҳи) ҳисобланади.
-    final hasFoot = _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
-    final hasPrice = _items.any((a) => a.price > 0);
+    // Навбатма-навбат: эълон ва AVA маҳсулоти (Аралаш бозор экранидаги каби).
+    final entries = FairMix.roundRobin<Object>([
+      _items,
+      _platform,
+    ]);
+    final hasFoot = _platform.isNotEmpty ||
+        _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
+    final hasPrice = _platform.isNotEmpty || _items.any((a) => a.price > 0);
     return AvaSection(
       moduleId: 'cheap_products_home',
       title: context.tr('home_section_cheap_products'),
@@ -137,9 +178,11 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
           hasPriceNote: false,
           hasFootnote: hasFoot,
         ),
-        itemCount: _items.length,
+        itemCount: entries.length,
         itemBuilder: (context, i) {
-          final ad = _items[i];
+          final e = entries[i];
+          if (e is PlatformProduct) return _platformTile(e);
+          final ad = e as AdModel;
           final cover = ad.imageUrls.isEmpty ? '' : ad.imageUrls.first;
           return AvaTileCard(
             titleMaxLines: 1,
@@ -171,6 +214,35 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
           );
         },
       ),
+    );
+  }
+
+  /// AVA маҳсулоти — пастки қаторда «AVA» (Улгуржи бўлимидаги каби).
+  Widget _platformTile(PlatformProduct p) {
+    final price = platformShelfPrice(p);
+    final cover = p.coverImageUrl.trim();
+    Widget? image;
+    if (isHttpImageUrl(cover)) {
+      image = ColoredBox(
+        color: context.ava.surface2,
+        child: CachedNetworkImage(imageUrl: cover, fit: BoxFit.contain),
+      );
+    } else if (isDataImageUrl(cover)) {
+      final bytes = decodeDataUrlImageBytes(cover);
+      if (bytes != null) {
+        image = ColoredBox(
+          color: context.ava.surface2,
+          child: Image.memory(bytes, fit: BoxFit.contain),
+        );
+      }
+    }
+    return AvaTileCard(
+      titleMaxLines: 1,
+      title: p.name,
+      price: price.price,
+      footnote: BrandLabels.brand,
+      onTap: () => widget.onOpenPlatform?.call(p),
+      image: image,
     );
   }
 }

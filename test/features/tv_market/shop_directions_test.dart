@@ -2,6 +2,7 @@ import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/business_map/data/business_repository.dart';
 import 'package:ava_gurlan/features/business_map/domain/business.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
+import 'package:ava_gurlan/features/deal_chat/data/deal_chat_repository.dart';
 import 'package:ava_gurlan/features/tv_market/domain/shop_directions.dart';
 import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
 import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.dart';
@@ -9,6 +10,7 @@ import 'package:ava_gurlan/features/tv_market/screens/tv_shop_public_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Эга қарори 2026-10-25: «битта онлайн дўкон, унинг таркибида турли йўналишдаги дўконлар; харидор маҳсулот,
 /// видео ёки харита орқали ЎША ягона дўконга, айнан тегишли йўналишга ўтади».
@@ -150,7 +152,9 @@ void main() {
     final bizs = [_biz('b1', 'Сидабилла — Кийим', day: 1), _biz('b2', 'Сидабилла — Техника', day: 2)];
 
     // UniqueKey: кетма-кет `pump`да эски State қайта ишлатилмасин (ҳар бири — янги кириш).
-    TvShopPublicScreen screen(_FakeShop s, {String businessId = '', String highlight = '', Object? bizError}) => TvShopPublicScreen(
+    TvShopPublicScreen screen(_FakeShop s,
+            {String businessId = '', String highlight = '', Object? bizError, DealChatRepository? deal}) =>
+        TvShopPublicScreen(
           key: UniqueKey(),
           ownerPhone: _owner,
           businessId: businessId,
@@ -158,7 +162,50 @@ void main() {
           shopRepository: s,
           businessRepository: _FakeBiz(bizs, error: bizError),
           loadChannelInfo: false,
+          dealChatRepository: deal,
         );
+
+    group('«Ёзиш» ва бўлим номи (S3, эга 2026-11-03)', () {
+      testWidgets('объект учун очилди (бошқа харидор): «Ёзиш» бор, source business, productId = объект', (tester) async {
+        SharedPreferences.setMockInitialValues({'user_phone': _alien});
+        final deal = _FakeDeal();
+        await pump(tester, screen(shop0(), businessId: 'b1', deal: deal));
+        expect(find.byKey(const ValueKey('contact_bar_write')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('contact_bar_write')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(deal.openCalls, [('b1', 'business')]);
+      });
+
+      testWidgets('«Барчаси» ёки ўз дўкони танланган — «Ёзиш» йўқ; эганинг ўзига — йўқ', (tester) async {
+        SharedPreferences.setMockInitialValues({'user_phone': _alien});
+        await pump(tester, screen(shop0(), deal: _FakeDeal()));
+        expect(tester.widget<ChoiceChip>(find.byKey(const ValueKey('shop_dir_all'))).selected, isTrue);
+        expect(find.byKey(const ValueKey('contact_bar_write')), findsNothing);
+
+        SharedPreferences.setMockInitialValues({'user_phone': _owner});
+        await pump(tester, screen(shop0(), businessId: 'b1', deal: _FakeDeal()));
+        expect(find.byKey(const ValueKey('contact_bar_write')), findsNothing);
+      });
+
+      testWidgets('меҳмон — «Ёзиш» бор; босилса сервер чақирилмайди, рўйхатдан ўтиш хабари', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final deal = _FakeDeal();
+        await pump(tester, screen(shop0(), businessId: 'b1', deal: deal));
+        await tester.tap(find.byKey(const ValueKey('contact_bar_write')));
+        await tester.pump();
+        expect(deal.openCalls, isEmpty);
+        expect(find.text('deal_chat_login_required'), findsOneWidget);
+      });
+
+      testWidgets('бўлим номи: объект танланган — тур профилидан; «Барчаси» — витрина', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await pump(tester, screen(shop0(), businessId: 'b1'));
+        expect(tester.widget<Text>(find.byKey(const ValueKey('shop_section_title'))).data, 'bizprod_title_products');
+        await pump(tester, screen(shop0()));
+        expect(tester.widget<Text>(find.byKey(const ValueKey('shop_section_title'))).data, 'tv_shop_vitrine');
+      });
+    });
 
     testWidgets('маҳсулотдан кирилди (Техника) — Техника танланган, карточкаси, фақат унинг маҳсулоти; «Барчаси» — ҳаммаси', (tester) async {
       await pump(tester, screen(shop0(), highlight: 't1'));
@@ -234,6 +281,20 @@ void main() {
       expect(s.pageCalls, 0);
     });
   });
+}
+
+class _FakeDeal extends Fake implements DealChatRepository {
+  final openCalls = <(String, String)>[];
+  @override
+  Future<String> openChat(String productId, {String source = 'wholesale'}) async {
+    openCalls.add((productId, source));
+    return 'bz-${productId}_$_alien';
+  }
+
+  @override
+  Stream<DealChat?> watchChat(String chatId) => const Stream.empty();
+  @override
+  Stream<List<DealMessage>> watchMessages(String chatId, {int limit = 200}) => const Stream.empty();
 }
 
 class _FakeShop implements TvShopRepository {

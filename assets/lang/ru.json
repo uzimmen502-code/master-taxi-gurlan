@@ -4277,6 +4277,8 @@
   "biz_open_page": "Перейти на страницу",
   "biz_customer_view": "Глазами клиента",
   "biz_link_qr": "Ссылка и QR",
+  "biz_chat_unavailable": "Этот объект сейчас недоступен.",
+  "biz_chat_own": "Это ваш объект.",
   "price_unit_fixed": "Точная цена",
   "price_unit_from": "Цена от («от …»)",
   "price_unit_hour": "В час",

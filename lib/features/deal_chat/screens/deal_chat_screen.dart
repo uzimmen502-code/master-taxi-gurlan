@@ -247,8 +247,15 @@ class _ProductHeader extends StatelessWidget {
     final photo = (chat?.productPhoto.isNotEmpty ?? false)
         ? chat!.productPhoto
         : ((p?.imageUrls.isNotEmpty ?? false) ? p!.imageUrls.first : '');
+    final isBusiness = chat?.isBusiness ?? false;
+    // Объект чати — нарх ва маҳсулот белгиси йўқ; маҳсулот чатида объект номи (бор бўлса) — кимга ёзилаётгани.
+    final seller = chat?.sellerName ?? '';
+    final sellerLine = (!isBusiness && seller.isNotEmpty && seller != title) ? seller : '';
+    final placeholderIcon = isBusiness ? Icons.storefront_rounded : Icons.inventory_2_outlined;
     String? price;
-    if (p != null) {
+    if (isBusiness) {
+      // нарх йўқ
+    } else if (p != null) {
       final pack = p.effectivePacks.first;
       final from = pack.priceTiers.length > 1 ? '${context.tr('home_price_from')} ' : '';
       price = '$from${formatPrice(pack.priceForQty(pack.moq))} ${p.currencyLabel} / '
@@ -270,12 +277,12 @@ class _ProductHeader extends StatelessWidget {
               child: photo.isEmpty
                   ? ColoredBox(
                       color: Colors.grey.shade200,
-                      child: const Icon(Icons.inventory_2_outlined, color: Colors.grey))
+                      child: Icon(placeholderIcon, key: const ValueKey('deal-chat-placeholder'), color: Colors.grey))
                   : Image.network(photo,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => ColoredBox(
                           color: Colors.grey.shade200,
-                          child: const Icon(Icons.inventory_2_outlined, color: Colors.grey))),
+                          child: Icon(placeholderIcon, color: Colors.grey))),
             ),
           ),
           const SizedBox(width: 12),
@@ -287,6 +294,14 @@ class _ProductHeader extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.2)),
+                if (sellerLine.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(sellerLine,
+                      key: const ValueKey('deal-chat-seller'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                ],
                 if (price != null) ...[
                   const SizedBox(height: 2),
                   Text(price,

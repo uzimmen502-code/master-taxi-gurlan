@@ -24,7 +24,8 @@ class DealChatRepository {
   CollectionReference<Map<String, dynamic>> get _chats => _db.collection('deal_chats');
 
   /// Чатни очади ёки мавжудини қайтаради (сервер идемпотент). → `chatId`.
-  /// [source]: `wholesale` (Улгуржи/Хитой) | `ad` | `shop_item` (Аралаш бозор).
+  /// [source]: `wholesale` (Улгуржи/Хитой) | `ad` | `shop_item` (Аралаш бозор) | `business` (объект,
+  /// [productId] = объект ID).
   Future<String> openChat(String productId, {String source = 'wholesale'}) async {
     final res = await _fns.httpsCallable('openDealChat').call<Object?>({
       'productId': productId,
@@ -119,6 +120,8 @@ class DealChat {
     this.lastFrom = '',
     this.lastAt,
     this.unread = const {},
+    this.businessId = '',
+    this.sellerName = '',
   });
 
   final String id;
@@ -139,6 +142,16 @@ class DealChat {
   final String lastFrom;
   final DateTime? lastAt;
   final Map<String, int> unread;
+
+  /// Объект («Менинг бизнесим»): `business` чатида — объектнинг ўзи, `shop_item` чатида — маҳсулот
+  /// тегишли объект. Эски чатларда майдон йўқ — `''`.
+  final String businessId;
+
+  /// Сотувчи номи (объект номи) — сервер бор бўлса ёзади; йўқ — `''`.
+  final String sellerName;
+
+  /// Объект билан чат (маҳсулот эмас): нарх йўқ, сарлавҳада объект номи.
+  bool get isBusiness => source == 'business';
 
   int unreadFor(String uid) => unread[uid] ?? 0;
   bool isSeller(String uid) => sellerId == uid;
@@ -166,6 +179,8 @@ class DealChat {
       lastFrom: '${d['lastFrom'] ?? ''}',
       lastAt: (d['lastAt'] is Timestamp) ? (d['lastAt'] as Timestamp).toDate() : null,
       unread: unread,
+      businessId: d['businessId'] is String ? (d['businessId'] as String).trim() : '',
+      sellerName: d['sellerName'] is String ? (d['sellerName'] as String).trim() : '',
     );
   }
 }

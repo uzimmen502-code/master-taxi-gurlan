@@ -172,7 +172,8 @@ class _Avatar extends StatelessWidget {
     }
     return switch (e.kind) {
       InboxKind.support => _circle(c.okSoft, Icons.support_agent, c.ok),
-      InboxKind.deal => _circle(c.brandSoft, Icons.inventory_2_outlined, c.brandText),
+      InboxKind.deal => _circle(
+          c.brandSoft, e.category == 'business' ? Icons.storefront_rounded : Icons.inventory_2_outlined, c.brandText),
       InboxKind.dialog => _circle(c.brandSoft, Icons.mail_outline, c.brandText),
       InboxKind.driver => _circle(c.brandSoft, Icons.local_taxi_outlined, c.brandText),
       InboxKind.order => _circle(

@@ -63,6 +63,16 @@ class FakeDealRepo implements DealChatRepository {
   Stream<int> watchUnreadTotal(String myUid) => const Stream.empty();
 }
 
+class _FailingOpenRepo extends FakeDealRepo {
+  _FailingOpenRepo(this.error);
+  final Object error;
+  @override
+  Future<String> openChat(String productId, {String source = 'wholesale'}) async {
+    openCalls.add((productId, source));
+    throw error;
+  }
+}
+
 DealChat chatDoc({Map<String, int> unread = const {}, String lastFrom = buyer, String last = 'salom'}) =>
     DealChat(
       id: chatId,
@@ -336,6 +346,113 @@ void main() {
       await tester.pump();
       expect(repo.openCalls, [('s1', 'shop_item')]);
       expect(find.byType(DealChatScreen), findsOneWidget);
+    });
+  });
+
+  group('Объект билан чат (source business, S3 2026-11-03)', () {
+    const bizId = '998901110002_b1730000000000000';
+    const bizChatId = 'bz-${bizId}_$buyer';
+
+    test('DealChat: businessId/sellerName ўқилади; эски ҳужжатда — бўш; сон/бошқа тур — бўш', () {
+      final c = DealChat.fromMap(bizChatId, {
+        'members': [buyer, seller], 'buyerId': buyer, 'sellerId': seller, 'productId': bizId,
+        'source': 'business', 'market': 'business', 'productTitle': 'Гулбаҳор', 'businessId': bizId,
+        'sellerName': ' Гулбаҳор ',
+      });
+      expect([c.source, c.businessId, c.sellerName, c.isBusiness], ['business', bizId, 'Гулбаҳор', true]);
+      final old = DealChat.fromMap(chatId, {'members': [buyer, seller], 'productId': 'p1'});
+      expect([old.businessId, old.sellerName, old.isBusiness], ['', '', false]);
+      final bad = DealChat.fromMap(chatId, {'businessId': 12, 'sellerName': null});
+      expect([bad.businessId, bad.sellerName], ['', '']);
+    });
+
+    test('push: bz- ID (объект ID ичида «_» бор) қабул қилинади', () {
+      expect(dealChatIdFromPush({'type': 'deal_chat', 'chatId': bizChatId}), bizChatId);
+      expect(dealChatIdFromPush({'type': 'deal_chat', 'chatId': 'bz-$bizId'}), isNull, reason: 'харидор рақамисиз');
+    });
+
+    testWidgets('сарлавҳа: объект номи, нарх ЙЎҚ, дўкон белгиси; Улгуржи маҳсулоти ўқилмайди', (tester) async {
+      final repo = FakeDealRepo();
+      await tester.pumpWidget(l10nApp(delegate: d, home: DealChatScreen(chatId: bizChatId, myUid: buyer, repository: repo)));
+      repo.chat.add(const DealChat(
+        id: bizChatId, members: [buyer, seller], buyerId: buyer, sellerId: seller, productId: bizId,
+        source: 'business', market: 'business', productTitle: 'Гулбаҳор', productPrice: 50000,
+        businessId: bizId, sellerName: 'Гулбаҳор',
+      ));
+      repo.messages.add(const []);
+      await tester.pump();
+      expect(find.text('Гулбаҳор'), findsOneWidget, reason: 'объект номи бир марта (сотувчи қатори такрорламайди)');
+      expect(find.byKey(const ValueKey('deal-chat-price')), findsNothing);
+      expect(find.byKey(const ValueKey('deal-chat-seller')), findsNothing);
+      expect(tester.widget<Icon>(find.byKey(const ValueKey('deal-chat-placeholder'))).icon, Icons.storefront_rounded);
+      expect(repo.fetchCalls, isEmpty);
+    });
+
+    testWidgets('объектга тегишли маҳсулот чати: нарх ва объект номи қатори; белги — маҳсулот', (tester) async {
+      final repo = FakeDealRepo();
+      await tester.pumpWidget(l10nApp(delegate: d, home: DealChatScreen(chatId: 'si-s1_$buyer', myUid: buyer, repository: repo)));
+      repo.chat.add(const DealChat(
+        id: 'si-s1_$buyer', members: [buyer, seller], buyerId: buyer, sellerId: seller, productId: 's1',
+        source: 'shop_item', market: 'aralash', productTitle: 'Соч олиш', productPrice: 30000,
+        businessId: bizId, sellerName: 'Гулбаҳор',
+      ));
+      repo.messages.add(const []);
+      await tester.pump();
+      expect(tester.widget<Text>(find.byKey(const ValueKey('deal-chat-seller'))).data, 'Гулбаҳор');
+      expect(find.byKey(const ValueKey('deal-chat-price')), findsOneWidget);
+      expect(tester.widget<Icon>(find.byKey(const ValueKey('deal-chat-placeholder'))).icon, Icons.inventory_2_outlined);
+    });
+
+    testWidgets('openDealChatFlow: source business серверга узатилади, чат очилади, натижа true', (tester) async {
+      final repo = FakeDealRepo();
+      bool? result;
+      await tester.pumpWidget(l10nApp(delegate: d, home: Builder(
+        builder: (ctx) => Scaffold(body: TextButton(
+          onPressed: () async => result = await openDealChatFlow(ctx,
+              productId: bizId, myUid: buyer, source: DealChatSource.business, repository: repo),
+          child: const Text('go'),
+        )),
+      )));
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump();
+      expect(repo.openCalls, [(bizId, 'business')]);
+      expect(find.byType(DealChatScreen), findsOneWidget);
+      Navigator.of(tester.element(find.byType(DealChatScreen))).pop();
+      await tester.pumpAndSettle();
+      expect(result, isTrue);
+    });
+
+    testWidgets('объект мавжуд эмас (PRODUCT_UNAVAILABLE) — объект ҳақида хабар, натижа false', (tester) async {
+      final repo = _FailingOpenRepo(FirebaseFunctionsException(code: 'failed-precondition', message: 'PRODUCT_UNAVAILABLE'));
+      bool? result;
+      await tester.pumpWidget(l10nApp(delegate: d, home: Builder(
+        builder: (ctx) => Scaffold(body: TextButton(
+          onPressed: () async => result = await openDealChatFlow(ctx,
+              productId: bizId, myUid: buyer, source: DealChatSource.business, repository: repo),
+          child: const Text('go'),
+        )),
+      )));
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text(d.tr('biz_chat_unavailable')), findsOneWidget);
+      expect(find.text(d.tr('deal_chat_product_unavailable')), findsNothing);
+      expect(result, isFalse);
+    });
+
+    test('хато калитлари: бошқа манбада ўзгармайди; объектда — 3 тилда мавжуд', () {
+      expect(dealChatErrorKeys(DealChatSource.shopItem), same(kDealChatServerErrors));
+      final biz = dealChatErrorKeys(DealChatSource.business);
+      expect(biz['PRODUCT_UNAVAILABLE'], 'biz_chat_unavailable');
+      expect(biz['OWN_PRODUCT'], 'biz_chat_own');
+      expect(biz['RATE_LIMITED'], 'err_too_many');
+      for (final lang in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+        final m = loadLang(lang);
+        for (final k in biz.values) {
+          expect(m.containsKey(k), isTrue, reason: '$lang:$k');
+        }
+      }
     });
   });
 

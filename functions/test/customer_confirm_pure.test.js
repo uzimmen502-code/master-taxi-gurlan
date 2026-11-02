@@ -30,7 +30,7 @@ async function main() {
   await check('P1 sozlama yo\'q / bo\'sh / noto\'g\'ri tur -> hamma modul off, testerlar bo\'sh', () => {
     for (const raw of [null, undefined, {}, [], 'x', 5, { modules: null }, { modules: [] }, { modules: 'public' }]) {
       const c = cc.normalizeConfig(raw, canon);
-      assert.deepStrictEqual(c, { modules: { restaurant: 'off', carpet: 'off', agro: 'off', collection: 'off' }, testerIds: [], failedTimeoutMin: 15 }, JSON.stringify(raw));
+      assert.deepStrictEqual(c, { modules: { restaurant: 'off', carpet: 'off', agro: 'off', collection: 'off', business: 'off' }, testerIds: [], failedTimeoutMin: 15 }, JSON.stringify(raw));
     }
   });
   await check('P2 noto\'g\'ri bosqich qiymatlari -> off (PUBLIC, 1, null, obyekt emas, ortiqcha bo\'shliq, matn)', () => {
@@ -76,6 +76,8 @@ async function main() {
       // «Етказилмади» gilam/sut/yig'ish/non-bozorda ham (ega qarorlari 2026-10-31, delivery_failed.js).
       restaurant: ['received', 'delivery_failed'], carpet: ['handover_pickup', 'handover_return', 'delivery_failed'],
       agro: ['handover_pickup', 'delivery_failed'], collection: ['finalize', 'delivery_failed'], order: ['delivery_failed'],
+      // «Менинг бизнесим» маҳсулот буюртмаси (эга 2026-11-03, business_orders.js).
+      business: ['received', 'delivery_failed'],
     });
   });
 
@@ -165,14 +167,16 @@ async function main() {
     assert.strictEqual(cc.isMandatoryStep('restaurant', 'delivery_failed'), true);
     assert.strictEqual(cc.isMandatoryStep('restaurant', 'received'), false);
     // Ega qarorlari 2026-10-31: «yetkazilmadi» hamma kuryer turida majburiy va rad etiladigan; boshqa qadamlar — yo'q.
-    for (const m of ['carpet', 'agro', 'collection', 'order']) {
+    for (const m of ['carpet', 'agro', 'collection', 'order', 'business']) {
       assert.strictEqual(cc.isMandatoryStep(m, 'delivery_failed'), true, m);
     }
     assert.strictEqual(cc.isMandatoryStep('carpet', 'handover_pickup'), false);
     assert.strictEqual(cc.isMandatoryStep('collection', 'finalize'), false);
+    assert.strictEqual(cc.isMandatoryStep('business', 'received'), false, 'business received — босқичга боғлиқ');
     const df = ['delivery_failed'];
-    assert.deepStrictEqual(cc.REJECTABLE_STEPS, { restaurant: df, carpet: df, agro: df, collection: df, order: df });
-    assert.deepStrictEqual(cc.MODULES, ['restaurant', 'carpet', 'agro', 'collection'], 'sozlama modullari o\'zgarmadi');
+    assert.deepStrictEqual(cc.REJECTABLE_STEPS, { restaurant: df, carpet: df, agro: df, collection: df, order: df, business: df });
+    // Эга 2026-11-03: `business` қўшилди (received босқичи шу ҳужжатда); қолганлари ўзгармади.
+    assert.deepStrictEqual(cc.MODULES, ['restaurant', 'carpet', 'agro', 'collection', 'business'], 'sozlama modullari');
     assert.deepStrictEqual(cc.MANDATORY_ONLY_MODULES, ['order']);
   });
 

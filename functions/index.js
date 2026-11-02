@@ -111,6 +111,17 @@ attachRestaurantOrders(exports, {
   get courierAuth() { return courierAuth; },
   notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),
 });
+// «Менинг бизнесим» маҳсулот буюртмаси AVA курьери билан (эга 2026-11-03): МАВЖУД курьер тизими
+// (`orders` type 'business', delivery_routes, courier_auth, courier_push, customer_confirm, delivery_failed).
+// Босқич `server_config/business_orders` (сукут OFF). Эски `orders` callable'лари уни ресторан каби четлайди.
+const businessOrdersLib = require('./business_orders');
+const isBusinessOrder = businessOrdersLib.isBusinessOrder;
+businessOrdersLib.attachBusinessOrders(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, axios,
+  requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES, customerConfirm, courierPush,
+  get courierAuth() { return courierAuth; },
+  notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),
+});
 // Таом кухналари умумий рўйхати (D-REST-24, 2026-10-19): сотувчи ўз кухна номини
 // дубликатсиз қўшади; админ яширади.
 const { attachRestaurantCuisines } = require('./restaurant_cuisines');
@@ -1059,6 +1070,8 @@ exports.onOrderUpdate = functions.firestore
     // Restoran buyurtmasi: xabarlar va o'tishlar `restaurant_orders.js` da
     // (auto `ready` ham qo'llanmaydi — restoran o'zi «Tayyor» deydi).
     if (String(after.type || '') === 'restaurant') return;
+    // Бизнес буюртмаси ҳам: хабарлар ва ўтишлар `business_orders.js` да (авто `ready` йўқ).
+    if (isBusinessOrder(after)) return;
 
     const afterStatus = after.status === 'courier' ? 'in_delivery' : after.status;
     if (
@@ -1212,6 +1225,8 @@ exports.onOrderCreate = functions.firestore
     // Restoran buyurtmasi: restoran a'zolariga push `placeRestaurantOrder`
     // da; «pickup → barcha seller» yo'li unga tegishli emas.
     if (String(orderType) === 'restaurant') return;
+    // Бизнес буюртмаси: сотувчига push `placeBusinessOrder` да; «Non» чеки/админ FCM унга тегишли эмас.
+    if (isBusinessOrder(order)) return;
     const total = order.total || 0;
     const fmt = new Intl.NumberFormat('uz-UZ').format(total);
     const emoji = orderType === 'platform' ? 'Ulgurji' : 'Non';
@@ -3778,6 +3793,11 @@ exports.customerCancelOrder = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('failed-precondition',
           'USE_RESTAURANT_CANCEL', { code: 'USE_RESTAURANT_CANCEL' });
     }
+    // Бизнес буюртмаси — `customerCancelBusinessOrder` (фақат `placed`); бу ердаги ҳамён қайтими тегишли эмас.
+    if (guard.exists && isBusinessOrder(guard.data())) {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_BUSINESS_CANCEL', { code: 'USE_BUSINESS_CANCEL' });
+    }
   }
 
   let txDuplicate = null;
@@ -4555,6 +4575,11 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('failed-precondition',
           'USE_RESTAURANT_PICKUP', { code: 'USE_RESTAURANT_PICKUP' });
     }
+    // Бизнес буюртмаси — фақат `courierPickupBusinessOrder` (сотувчи коди, вэкуп, ҳолат жадвали).
+    if (isBusinessOrder(od)) {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_BUSINESS_PICKUP', { code: 'USE_BUSINESS_PICKUP' });
+    }
     const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
     if (fs === 'cancelled' || fs === 'completed') {
       throw new functions.https.HttpsError('failed-precondition', 'order closed');
@@ -4631,6 +4656,8 @@ exports.courierCreateRoute = functions.https.onCall(async (data, context) => {
         // kodi, vykup limiti, 2 % hisobi o'sha yerda); bu yo'l uni darhol
         // `in_delivery` qilib qo'yardi.
         if (String(od.type || '') === 'restaurant') continue;
+        // Бизнес буюртмаси — фақат `courierClaimBusinessOrder` (вэкуп лимити, сотувчи коди).
+        if (isBusinessOrder(od)) continue;
         // Олиб кетиш / POS буюртмаси курьерга тегишли эмас (мижоз ўзи олади).
         if (isCourierExcludedFulfillment(od)) continue;
         validated.push(orderId);
@@ -4741,6 +4768,8 @@ exports.courierListReadyOrders = functions.https.onCall(async (data, context) =>
     if (courierAuth.isOwnOrder(od, courierId)) return;
     // Restoran buyurtmalari — `listNearbyRestaurantOrders` (o'z proeksiyasi).
     if (String(od.type || '') === 'restaurant') return;
+    // Бизнес буюртмалари — `listNearbyBusinessOrders` (ўз проекцияси).
+    if (isBusinessOrder(od)) return;
     // Олиб кетиш / POS — курьер рўйхатида кўринмайди (`courierCreateRoute` билан бир хил).
     if (isCourierExcludedFulfillment(od)) return;
     const oLat = num(od.lat);
@@ -4815,6 +4844,7 @@ exports.courierRecoverOrphanRoute = functions.https.onCall(async (data, context)
       && canonicalUid(String((od && od.courierId) || '')) === courierId
       && od.paymentStatus !== 'paid'
       && String(od.type || '') !== 'restaurant'
+      && !isBusinessOrder(od)
       && !courierAuth.isOwnOrder(od, courierId);
     const odSnap = await db.collection('orders')
       .where('courierId', 'in', idForms)
@@ -4892,6 +4922,10 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
     if (String(cur.type || '') === 'restaurant') {
       throw new functions.https.HttpsError('failed-precondition',
           'USE_RESTAURANT_ARRIVE', { code: 'USE_RESTAURANT_ARRIVE' });
+    }
+    if (isBusinessOrder(cur)) {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_BUSINESS_ARRIVE', { code: 'USE_BUSINESS_ARRIVE' });
     }
     const fs = cur.fulfillmentStatus || '';
     if (fs !== 'courier_picked' && cur.status !== 'in_delivery') {
@@ -5543,6 +5577,11 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     if (guard.exists && String((guard.data() || {}).type || '') === 'restaurant') {
       throw new functions.https.HttpsError('failed-precondition',
           'USE_RESTAURANT_COMPLETION', { code: 'USE_RESTAURANT_COMPLETION' });
+    }
+    // Бизнес буюртмасида ҳам товар пули AVA ники эмас — `courierCompleteBusinessOrder`.
+    if (guard.exists && isBusinessOrder(guard.data())) {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_BUSINESS_COMPLETION', { code: 'USE_BUSINESS_COMPLETION' });
     }
   }
   const tx = await runCourierSubmitTx({
@@ -8993,6 +9032,10 @@ async function applyAdminOrderStatus(orderId, status, adminUid) {
     // o'zgartirsa ikki holat ajraladi. Admin uchun alohida vosita keyin.
     if (String(od.type || '') === 'restaurant') {
       return { orderId, status, skipped: 'RESTAURANT_ORDER_READONLY', from: String(od.status || '') };
+    }
+    // Бизнес буюртмаси ҳам — ҳолати `businessStatus` жадвалидан (business_orders.js).
+    if (isBusinessOrder(od)) {
+      return { orderId, status, skipped: 'BUSINESS_ORDER_READONLY', from: String(od.status || '') };
     }
     const err = adminOrderTransitionError(od, status);
     if (err) {

@@ -57,7 +57,12 @@
 
 const i18n = require('./notif_i18n');
 
-const MODULES = Object.freeze(['restaurant', 'carpet', 'agro', 'collection']);
+/**
+ * business — «Менинг бизнесим» маҳсулот буюртмаси (`orders`, type business; business_orders.js, эга 2026-11-03):
+ *   received (courierCompleteBusinessOrder; босқич шу ҳужжатда, стандарт OFF) ва
+ *   delivery_failed (courierReportDeliveryFailed, delivery_failed.js — МАЖБУРИЙ, рад этиладиган).
+ */
+const MODULES = Object.freeze(['restaurant', 'carpet', 'agro', 'collection', 'business']);
 /**
  * Faqat MAJBURIY qadamli modullar (`server_config` bosqichi YO'Q, sozlama hujjatiga yozilmaydi):
  *   order — non/bozor buyurtmasi (`orders`, type bread|platform) «yetkazilmadi» (ega qarori 2026-10-31,
@@ -75,6 +80,7 @@ const STEPS = Object.freeze({
   agro: Object.freeze(['handover_pickup', 'delivery_failed']),
   collection: Object.freeze(['finalize', 'delivery_failed']),
   order: Object.freeze(['delivery_failed']),
+  business: Object.freeze(['received', 'delivery_failed']),
 });
 /**
  * «Етказилмади» (ega qarori 2026-10-31, C-2): HAMMA mijoz uchun MAJBURIY — `server_config` dagi
@@ -83,8 +89,8 @@ const STEPS = Object.freeze({
  * (ega «тавсияларга розиман», 2026-10-31).
  */
 const DF = Object.freeze(['delivery_failed']);
-const MANDATORY_STEPS = Object.freeze({ restaurant: DF, carpet: DF, agro: DF, collection: DF, order: DF });
-const REJECTABLE_STEPS = Object.freeze({ restaurant: DF, carpet: DF, agro: DF, collection: DF, order: DF });
+const MANDATORY_STEPS = Object.freeze({ restaurant: DF, carpet: DF, agro: DF, collection: DF, order: DF, business: DF });
+const REJECTABLE_STEPS = Object.freeze({ restaurant: DF, carpet: DF, agro: DF, collection: DF, order: DF, business: DF });
 const DECISIONS = Object.freeze(['confirm', 'reject']);
 /** Mijoz javob bermasa — shuncha daqiqadan keyin qaror restoran/sotuvchiga o'tadi (ega: 15, admin o'zgartiradi). */
 const FAILED_TIMEOUT_MIN_DEFAULT = 15;

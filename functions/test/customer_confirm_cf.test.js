@@ -273,7 +273,8 @@ async function main() {
     const g = await call('adminGetCustomerConfirmation', {}, ADMIN);
     assert.deepStrictEqual(
       { ok: g.ok, v: g.version, m: g.modules, n: g.testerCount, e: g.enabled },
-      { ok: true, v: 0, m: { restaurant: 'off', carpet: 'off', agro: 'off', collection: 'off' }, n: 0, e: false },
+      // `business` — «Менинг бизнесим» буюртмаси (эга 2026-11-03), сукут OFF.
+      { ok: true, v: 0, m: { restaurant: 'off', carpet: 'off', agro: 'off', collection: 'off', business: 'off' }, n: 0, e: false },
     );
   });
   await check('A2 tekshiruvlar: modul / bosqich / tester / sabab xatolari, hech narsa yozilmaydi', async () => {

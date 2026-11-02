@@ -48,9 +48,16 @@
 const i18n = require('./notif_i18n');
 const { MARKER_FIELD, FLAG_FIELD, REJECTED_FIELD } = require('./customer_confirm');
 const { FAIL_REASONS } = require('./restaurant_orders');
+// «Менинг бизнесим» маҳсулот буюртмаси (эга 2026-11-03): ҳолатлар жадвали — ягона манба.
+const bizStates = require('./business_order_states');
 
 const STEP = 'delivery_failed';
-const MODULES = Object.freeze(['order', 'carpet', 'agro', 'collection']);
+/**
+ * business — «Менинг бизнесим» буюртмаси (`orders`, type business; business_orders.js). Қарорни шу
+ * буюртманинг сотувчиси (`sellerUid` = businesses.ownerId) ёки admin/superadmin қилади; товар сотувчига
+ * қайтади (ҳодиса), пул ҳаракати йўқ (етказиш ҳақи фақат якунда ечилади, AVA улуши 0).
+ */
+const MODULES = Object.freeze(['order', 'carpet', 'agro', 'collection', 'business']);
 const DECISIONS = Object.freeze(['failed', 'continue']);
 const DUE_AT = 'deliveryFailedDueAt';
 const ESCALATED_AT = 'deliveryFailedEscalatedAt';
@@ -74,6 +81,8 @@ const DECIDER_ROLES = Object.freeze({
   carpet: ADMIN_ROLES,
   agro: ADMIN_ROLES,
   collection: ADMIN_ROLES,
+  // + ҳужжатнинг ўз сотувчиси (`SPECS.business.sellerOf`), роли қандай бўлишидан қатъи назар.
+  business: ADMIN_ROLES,
 });
 
 const msOf = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
@@ -92,6 +101,9 @@ const SPECS = Object.freeze({
     collection: 'orders',
     phoneField: 'userPhone',
     phoneOf: (od) => String(od.userPhone || od.phone || ''),
+    // `orders` коллекцияси `business` билан умумий: бошқа модул ҳужжати «эскирган» деб тозаланмасин.
+    owns: (od) => ORDER_TYPES.includes(String(od.type || '')),
+    onRoute: true,
     legOf: (od) => (ORDER_TYPES.includes(String(od.type || ''))
       && String(od.status || '') === 'in_delivery'
       && ORDER_ACTIVE_FS.includes(String(od.fulfillmentStatus || '')) ? 'delivery' : null),
@@ -127,7 +139,25 @@ const SPECS = Object.freeze({
     courierOf: (od) => String(od.courierId || ''),
     arrivedOf: (od) => !!od.arrivedAt,
   }),
+  business: Object.freeze({
+    collection: 'orders',
+    phoneField: 'userPhone',
+    phoneOf: (od) => String(od.userPhone || od.phone || ''),
+    owns: (od) => bizStates.isBusinessOrder(od),
+    onRoute: true,
+    legOf: (od) => (bizStates.isBusinessOrder(od) && bizStates.IN_DELIVERY.includes(String(od.businessStatus || ''))
+      ? 'delivery' : null),
+    courierOf: (od) => String(od.courierId || ''),
+    arrivedOf: () => true, // ресторандаги каби: олиб кетгандан кейин ҳам (курьер муаммоси)
+    sellerOf: (od) => String(od.sellerUid || ''),
+  }),
 });
+
+/** Ҳужжат шу модулникими (умумий коллекцияда бошқа модул ҳужжатига тегилмайди). `owns` йўқ — ҳаммаси. */
+function ownsDoc(moduleKey, od) {
+  const spec = SPECS[moduleKey];
+  return !!spec && (!spec.owns || spec.owns(od || {}));
+}
 
 /** Белги шу модулнинг «етказилмади» сўрови ва ҳужжат ҳали ўша бўлакдами (соф). */
 function isPending(moduleKey, od) {
@@ -238,7 +268,7 @@ function attachDeliveryFailed(exportsObj, deps) {
     const spec = SPECS[moduleKey];
     // 'finish' — тўхтатилган курьер ҳам қўлидагини якунлай олади (courier_auth.js).
     const courierId = await courierAuthOf().resolve(uid, MODES.finish);
-    if (moduleKey === 'order') await courierAuthOf().assertOrderOnActiveRoute(courierId, id);
+    if (spec.onRoute) await courierAuthOf().assertOrderOnActiveRoute(courierId, id);
     const timeoutMin = await customerConfirm.getFailedTimeoutMin();
     const out = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
@@ -246,7 +276,7 @@ function attachDeliveryFailed(exportsObj, deps) {
       const od = snap.data() || {};
       const leg = spec.legOf(od);
       // Эгалик АВВАЛ (бегона курьер ҳолатни билмасин).
-      if (moduleKey === 'order') {
+      if (spec.onRoute) {
         courierAuthOf().assertOrderActionable(od, courierId, 'courierReportDeliveryFailed', id);
       } else if (canon(spec.courierOf(od, leg || 'pickup')) !== courierId) {
         throw fail('permission-denied', 'DF_NOT_YOUR_TASK');
@@ -317,6 +347,11 @@ function attachDeliveryFailed(exportsObj, deps) {
         if (e && e.message === 'REFUND_ACCOUNT_NOT_FOUND') throw fail('unavailable', 'DF_REFUND_ACCOUNT_NOT_FOUND');
         throw e;
       }
+    } else if (moduleKey === 'business') {
+      ctx.idemRef = db.collection(IDEMPOTENCY).doc(`delivery_failed_${moduleKey}_${ref.id}`);
+      const idem = await t.get(ctx.idemRef);
+      if (idem.exists) throw fail('failed-precondition', 'DF_ALREADY_FINAL');
+      ctx.route = await routeRefOf(t, od, ref.id);
     }
     return ctx;
   }
@@ -392,6 +427,43 @@ function attachDeliveryFailed(exportsObj, deps) {
           meta: { from: courierId, to: 'workshop' },
         });
       }
+    } else if (moduleKey === 'business') {
+      // Ҳолат жадвали — business_order_states.js (17-қоида); пул ҳаракати йўқ: етказиш ҳақи фақат
+      // `delivered`да ечилади, AVA улуши 0. Вэкуп товар пули — AVA ledger'идан ташқари (ҳодиса).
+      const from = String(od.businessStatus || '');
+      const to = bizStates.BS.deliveryFailed;
+      if (!bizStates.canTransition(from, to)) throw fail('failed-precondition', 'DF_NOT_ACTIVE', { status: from });
+      toStatus = to;
+      t.update(ref, {
+        ...common,
+        ...bizStates.statusFields(to),
+        statusUpdatedAt: ts(),
+        rejectReason: `delivery_failed:${reason}`,
+      });
+      t.delete(db.collection(COURIER_LIVE).doc(id));
+      if (ctx.route) {
+        const r = routeAfter(ctx.route.rd, id, 'remove');
+        if (r) {
+          const active = ['active', 'ready'].includes(String(ctx.route.rd.status || ''));
+          t.update(ctx.route.ref, {
+            orders: r.orders, currentIndex: r.currentIndex, updatedAt: ts(),
+            ...(r.exhausted && active ? { status: 'completed', completedAt: ts(), completedReason: 'delivery_failed' } : {}),
+          });
+        }
+      }
+      t.set(ctx.idemRef, {
+        type: 'deliveryFailed', result: { ok: true, module: moduleKey, id, refundAmount: 0, by }, createdAt: ts(),
+      });
+      // Буюртма тарихи (append-only) — бизнес буюртмасининг ўз ҳодисалари ҳам тўлиқ бўлсин (16-қоида).
+      t.set(ref.collection('order_events').doc(), {
+        from, to, actor: by, actorId: actorId || null, reason: `delivery_failed:${reason}`,
+        meta: { courierId, viaCustomerConfirm: !!confirmStep, buyoutAmount: Number(od.buyoutAmount) || 0 },
+        at: ts(),
+      });
+      addEvent(t, {
+        moduleKey, id, kind: 'goods_return_to_seller', actor: 'system', actorId: null, reason,
+        meta: { from: courierId, to: 'seller', orderType: bizStates.ORDER_TYPE, buyoutAmount: Number(od.buyoutAmount) || 0 },
+      });
     } else if (moduleKey === 'agro') {
       toStatus = agroReleaseEdge.to;
       t.update(ref, {
@@ -423,7 +495,8 @@ function attachDeliveryFailed(exportsObj, deps) {
       moduleKey, id, kind: 'failed', actor: by, actorId, reason,
       meta: { leg, from: String(od.status || ''), to: toStatus, refundAmount, courierId, viaCustomerConfirm: !!confirmStep },
     });
-    return { moduleKey, id, refundAmount, toStatus, courierId, customerUid, leg, reason, by };
+    const sellerUid = spec.sellerOf ? canon(spec.sellerOf(od)) : '';
+    return { moduleKey, id, refundAmount, toStatus, courierId, customerUid, leg, reason, by, sellerUid };
   }
 
   /** «Давом этсин» (мижоз рад этди ёки қарор қилувчи «давом» деди) — WRITE фазаси. Ҳолат ўзгармайди. */
@@ -465,12 +538,15 @@ function attachDeliveryFailed(exportsObj, deps) {
     carpet_return: 'customer_carpet_return_failed_final',
     agro_pickup: 'customer_pickup_failed_final',
     collection_pickup: 'customer_collection_failed_final',
+    business_delivery: 'customer_delivery_failed_final',
   });
   const groupThousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
   async function afterFinal(r) {
     log({ action: 'delivery_failed_final', moduleKey: r.moduleKey, id: r.id, result: 'failed', by: r.by, refundAmount: r.refundAmount, toStatus: r.toStatus });
     if (r.courierId) await notifyKey(r.courierId, 'courier_delivery_failed_final', {}, { moduleKey: r.moduleKey, id: r.id, screen: 'courier' });
+    // Бизнес буюртмаси: сотувчи товар қайтишини билсин (ўзи қарор қилган бўлса ҳам — ҳолат ёпилди).
+    if (r.sellerUid && r.by !== 'seller') await notifyKey(r.sellerUid, 'restaurant_delivery_failed_final', {}, { moduleKey: r.moduleKey, id: r.id, screen: 'business_orders' });
     if (!r.customerUid) return;
     if (r.refundAmount > 0) {
       // Ҳамёнга пул қайтди — мижоз ўзи тасдиқлаган бўлса ҳам суммани билсин.
@@ -497,6 +573,8 @@ function attachDeliveryFailed(exportsObj, deps) {
     carpet_return: 'confirm_carpet_return_failed',
     agro_pickup: 'confirm_agro_pickup_failed',
     collection_pickup: 'confirm_collection_failed',
+    // Умумий матн (пул қайтиши ҳақида гап йўқ — бизнес буюртмасида олдиндан ечилган пул йўқ).
+    business_delivery: 'confirm_restaurant_delivery_failed',
   });
 
   for (const moduleKey of MODULES) {
@@ -562,17 +640,24 @@ function attachDeliveryFailed(exportsObj, deps) {
     if (!DECISIONS.includes(decision)) throw fail('invalid-argument', 'DF_ARGS_INVALID');
     // Ким: телефон токени; рухсат: `users/{uid}.role` (requireCallerRoles билан бир хил манба), модулга қараб.
     const { uid, role } = await callerRole(context);
-    if (!DECIDER_ROLES[moduleKey].includes(role)) {
+    const roleOk = DECIDER_ROLES[moduleKey].includes(role);
+    // Бизнес: роль бўлмаса — шу буюртманинг сотувчиси бўлиши шарт (транзакцияда, ҳужжатдан текширилади).
+    const sellerOf = SPECS[moduleKey].sellerOf;
+    if (!roleOk && !sellerOf) {
       log({ action: 'resolveDeliveryFailed', moduleKey, id, userId: uid.slice(-4), role, result: 'denied', errorCode: 'DF_NOT_ALLOWED' });
       throw fail('permission-denied', 'DF_NOT_ALLOWED');
     }
-    const by = role; // seller | admin | superadmin
+    const by = roleOk ? role : 'seller'; // seller | admin | superadmin
     let out;
     try {
       out = await db.runTransaction(async (t) => {
         const snap = await t.get(ref);
         if (!snap.exists) throw fail('not-found', 'DF_NOT_FOUND');
         const od = snap.data() || {};
+        // Эгалик АВВАЛ (бегона фойдаланувчи ҳолатни билмасин).
+        if (!roleOk && (!ownsDoc(moduleKey, od) || canon(sellerOf(od)) !== uid)) {
+          throw fail('permission-denied', 'DF_NOT_ALLOWED');
+        }
         if (!isPending(moduleKey, od)) {
           const res = od[RESOLUTION];
           // Такрор: шу қарор аллақачон қабул қилинган.
@@ -631,7 +716,7 @@ function attachDeliveryFailed(exportsObj, deps) {
       const s = await t.get(ref);
       if (!s.exists) return;
       const od = s.data() || {};
-      if (isPending(moduleKey, od) || od[OPEN] === undefined) return;
+      if (!ownsDoc(moduleKey, od) || isPending(moduleKey, od) || od[OPEN] === undefined) return;
       t.update(ref, {
         [OPEN]: del(),
         ...(od[DUE_AT] !== undefined ? { [DUE_AT]: del() } : {}),
@@ -642,16 +727,28 @@ function attachDeliveryFailed(exportsObj, deps) {
 
   exportsObj.listDeliveryFailedPending = functions.https.onCall(async (data, context) => {
     const { uid, role } = await callerRole(context);
+    // Бизнес модули — роли бўлмаса фақат объект эгасига (`businesses.ownerId`) ва фақат ЎЗ (sellerUid)
+    // буюртмалари; объекти йўқ оддий фойдаланувчи аввалгидек DF_NOT_ALLOWED олади.
     const modules = MODULES.filter((m) => DECIDER_ROLES[m].includes(role));
+    if (!modules.includes('business')) {
+      const own = await db.collection('businesses').where('ownerId', '==', uid).limit(1).get();
+      if (!own.empty) modules.push('business');
+    }
     if (modules.length === 0) throw fail('permission-denied', 'DF_NOT_ALLOWED');
     const nowMs = now().getTime();
     const per = await Promise.all(modules.map(async (moduleKey) => {
       const spec = SPECS[moduleKey];
-      const snap = await db.collection(spec.collection).where(OPEN, '==', true).limit(LIST_LIMIT).get();
+      const ownOnly = !DECIDER_ROLES[moduleKey].includes(role);
+      // Фақат тенглик филтрлари — композит индекс керак эмас.
+      let q = db.collection(spec.collection).where(OPEN, '==', true);
+      if (ownOnly) q = q.where('sellerUid', '==', uid);
+      const snap = await q.limit(LIST_LIMIT).get();
       const items = [];
       const stale = [];
       for (const doc of snap.docs) {
         const od = doc.data() || {};
+        if (!ownsDoc(moduleKey, od)) continue; // умумий коллекция: бошқа модул ҳужжати
+        if (ownOnly && canon(spec.sellerOf(od)) !== uid) continue;
         if (!isPending(moduleKey, od)) { stale.push(doc.ref); continue; }
         const m = od[MARKER_FIELD] || {};
         items.push({
@@ -667,7 +764,7 @@ function attachDeliveryFailed(exportsObj, deps) {
           customerName: str(od.userName || od.customerName, 80),
           customerPhoneTail: tail4(spec.phoneOf(od)),
           address: str(od.address || od.pickupAddress, 200),
-          total: moduleKey === 'order' && Number.isInteger(od.total) ? od.total : null,
+          total: (moduleKey === 'order' || moduleKey === 'business') && Number.isInteger(od.total) ? od.total : null,
           courierTail: tail4(m.courierId),
         });
       }
@@ -691,6 +788,8 @@ function attachDeliveryFailed(exportsObj, deps) {
       const od = s.data() || {};
       const due = msOf(od[DUE_AT]);
       if (due === null) return null;
+      // Умумий коллекция (`orders`: order + business): бошқа модул ҳужжатини «эскирган» деб тозаламаймиз.
+      if (!ownsDoc(moduleKey, od)) return null;
       if (!isPending(moduleKey, od)) {
         // Эскирган муддат (бошқа йўл билан якунланган/белги алмашган) — фақат кутиш майдонлари ўчади.
         t.update(ref, {
@@ -705,14 +804,19 @@ function attachDeliveryFailed(exportsObj, deps) {
       const m = od[MARKER_FIELD] || {};
       addEvent(t, {
         moduleKey, id: ref.id, kind: 'escalated', actor: 'system', actorId: null, reason: String(m.failReason || ''),
-        meta: { leg: String(m.leg || ''), courierId: String(m.courierId || ''), to: DECIDER_ROLES[moduleKey].join('|') },
+        meta: { leg: String(m.leg || ''), courierId: String(m.courierId || ''), to: SPECS[moduleKey].sellerOf ? 'seller' : DECIDER_ROLES[moduleKey].join('|') },
       });
-      return { id: ref.id };
+      return { id: ref.id, sellerUid: SPECS[moduleKey].sellerOf ? canon(SPECS[moduleKey].sellerOf(od)) : '' };
     });
   }
 
-  async function notifyDeciders(moduleKey, id) {
+  async function notifyDeciders(moduleKey, id, sellerUid) {
     try {
+      // Бизнес: қарорни шу буюртманинг сотувчиси қилади (админлар рўйхатда кўради).
+      if (SPECS[moduleKey].sellerOf) {
+        if (sellerUid) await notifyKey(sellerUid, 'delivery_failed_decide', {}, { moduleKey, id, screen: 'business_orders' });
+        return;
+      }
       const snap = await db.collection('users').where('role', 'in', [...DECIDER_ROLES[moduleKey]]).limit(NOTIFY_LIMIT).get();
       await Promise.all(snap.docs.map((d) => notifyKey(d.id, 'delivery_failed_decide', {}, {
         moduleKey, id, screen: moduleKey === 'order' ? 'seller_pos' : 'admin',
@@ -738,7 +842,7 @@ function attachDeliveryFailed(exportsObj, deps) {
           if (r.stale) { out.stale += 1; continue; }
           out.escalated += 1;
           log({ action: 'delivery_failed_escalate', moduleKey, id: r.id, result: 'escalated' });
-          await notifyDeciders(moduleKey, r.id);
+          await notifyDeciders(moduleKey, r.id, r.sellerUid);
         } catch (e) {
           out.failed += 1;
           console.error(JSON.stringify({ module: 'delivery_failed', action: 'delivery_failed_escalate', moduleKey, id: doc.id, result: 'failed', errorCode: 'DF_ESCALATE_FAILED', message: String((e && e.message) || e).slice(0, 160) }));

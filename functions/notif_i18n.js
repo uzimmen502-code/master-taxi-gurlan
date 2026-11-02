@@ -238,6 +238,78 @@ const MESSAGES = {
     uz_Latn: { title: 'Mahsulotni kuryerga berdingizmi?', body: 'Kuryer mahsulotni oldim deb belgiladi. Kuryerga berganingizni tasdiqlang.' },
     ru: { title: 'Вы передали продукцию курьеру?', body: 'Курьер отметил, что забрал продукцию. Подтвердите, что вы передали её курьеру.' },
   },
+  // ── «Менинг бизнесим» маҳсулот буюртмаси (эга, 2026-11-03; business_orders.js). Матнлар PROPOSED — эга тасдиқлайди.
+  // `{amount}`, `{fee}`, `{buyout}` — сўм (бўшлиқ билан), `{min}` — дақиқа, `{km}` — масофа, `{name}` — объект номи.
+  business_order_new: {
+    uz_Cyrl: { title: 'Янги буюртма', body: '{amount} сўмлик буюртма. {min} дақиқа ичида қабул қилинг.' },
+    uz_Latn: { title: 'Yangi buyurtma', body: '{amount} so\'mlik buyurtma. {min} daqiqa ichida qabul qiling.' },
+    ru: { title: 'Новый заказ', body: 'Заказ на {amount} сум. Примите его в течение {min} мин.' },
+  },
+  business_order_cancelled: {
+    uz_Cyrl: { title: 'Буюртма бекор қилинди', body: 'Мижоз буюртмани бекор қилди.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: 'Mijoz buyurtmani bekor qildi.' },
+    ru: { title: 'Заказ отменён', body: 'Клиент отменил заказ.' },
+  },
+  business_order_accepted: {
+    uz_Cyrl: { title: 'Буюртма қабул қилинди', body: 'Сотувчи буюртмангизни тайёрламоқда. Курьер топилгач хабар берамиз.' },
+    uz_Latn: { title: 'Buyurtma qabul qilindi', body: 'Sotuvchi buyurtmangizni tayyorlamoqda. Kuryer topilgach xabar beramiz.' },
+    ru: { title: 'Заказ принят', body: 'Продавец готовит ваш заказ. Сообщим, когда найдётся курьер.' },
+  },
+  business_order_rejected: {
+    uz_Cyrl: { title: 'Буюртма рад этилди', body: 'Сотувчи буюртмани қабул қила олмади.' },
+    uz_Latn: { title: 'Buyurtma rad etildi', body: 'Sotuvchi buyurtmani qabul qila olmadi.' },
+    ru: { title: 'Заказ отклонён', body: 'Продавец не смог принять заказ.' },
+  },
+  business_order_cancelled_courier: {
+    uz_Cyrl: { title: 'Буюртма бекор бўлди', body: 'Сотувчи буюртмани бекор қилди — уни олиб кетиш шарт эмас.' },
+    uz_Latn: { title: 'Buyurtma bekor bo\'ldi', body: 'Sotuvchi buyurtmani bekor qildi — uni olib ketish shart emas.' },
+    ru: { title: 'Заказ отменён', body: 'Продавец отменил заказ — забирать его не нужно.' },
+  },
+  business_order_ready_courier: {
+    uz_Cyrl: { title: 'Буюртма тайёр', body: 'Сотувчидан олиб кетишингиз мумкин.' },
+    uz_Latn: { title: 'Buyurtma tayyor', body: 'Sotuvchidan olib ketishingiz mumkin.' },
+    ru: { title: 'Заказ готов', body: 'Можно забрать у продавца.' },
+  },
+  business_order_courier_assigned_seller: {
+    uz_Cyrl: { title: 'Курьер бириктирилди', body: 'Курьер буюртмани олиб кетишга келмоқда.' },
+    uz_Latn: { title: 'Kuryer biriktirildi', body: 'Kuryer buyurtmani olib ketishga kelmoqda.' },
+    ru: { title: 'Курьер назначен', body: 'Курьер едет забрать заказ.' },
+  },
+  business_order_courier_assigned: {
+    uz_Cyrl: { title: 'Курьер топилди', body: 'Буюртмангизни курьер етказади.' },
+    uz_Latn: { title: 'Kuryer topildi', body: 'Buyurtmangizni kuryer yetkazadi.' },
+    ru: { title: 'Курьер найден', body: 'Курьер доставит ваш заказ.' },
+  },
+  business_order_picked: {
+    uz_Cyrl: { title: 'Буюртма йўлда', body: 'Курьер буюртмани сотувчидан олди.' },
+    uz_Latn: { title: 'Buyurtma yo\'lda', body: 'Kuryer buyurtmani sotuvchidan oldi.' },
+    ru: { title: 'Заказ в пути', body: 'Курьер забрал заказ у продавца.' },
+  },
+  business_order_delivered: {
+    uz_Cyrl: { title: 'Буюртма етказилди', body: 'Харидингиз учун раҳмат!' },
+    uz_Latn: { title: 'Buyurtma yetkazildi', body: 'Xaridingiz uchun rahmat!' },
+    ru: { title: 'Заказ доставлен', body: 'Спасибо за покупку!' },
+  },
+  business_order_delivered_seller: {
+    uz_Cyrl: { title: 'Буюртма етказилди', body: 'Курьер буюртмани мижозга топширди.' },
+    uz_Latn: { title: 'Buyurtma yetkazildi', body: 'Kuryer buyurtmani mijozga topshirdi.' },
+    ru: { title: 'Заказ доставлен', body: 'Курьер передал заказ клиенту.' },
+  },
+  business_order_expired: {
+    uz_Cyrl: { title: 'Сотувчи жавоб бермади', body: 'Буюртма қабул қилинмади. Бошқа сотувчини танлаб кўринг.' },
+    uz_Latn: { title: 'Sotuvchi javob bermadi', body: 'Buyurtma qabul qilinmadi. Boshqa sotuvchini tanlab ko\'ring.' },
+    ru: { title: 'Продавец не ответил', body: 'Заказ не был принят. Попробуйте выбрать другого продавца.' },
+  },
+  business_order_expired_seller: {
+    uz_Cyrl: { title: 'Буюртма ўтказиб юборилди', body: 'Буюртма вақтида қабул қилинмагани учун бекор бўлди.' },
+    uz_Latn: { title: 'Buyurtma o\'tkazib yuborildi', body: 'Buyurtma vaqtida qabul qilinmagani uchun bekor bo\'ldi.' },
+    ru: { title: 'Заказ пропущен', body: 'Заказ отменён, так как не был принят вовремя.' },
+  },
+  business_courier_offer: {
+    uz_Cyrl: { title: 'Янги етказиш буюртмаси', body: '{name} · {km} км · етказиш {fee} сўм · выкуп {buyout} сўм' },
+    uz_Latn: { title: 'Yangi yetkazish buyurtmasi', body: '{name} · {km} km · yetkazish {fee} so\'m · vykup {buyout} so\'m' },
+    ru: { title: 'Новый заказ на доставку', body: '{name} · {km} км · доставка {fee} сум · выкуп {buyout} сум' },
+  },
   confirm_collection_finalize: {
     uz_Cyrl: { title: 'Курьер ёзган миқдорни тасдиқлайсизми?', body: 'Курьер қуйидагини ёзди: {summary}. Жами: {amount} сўм. Тўғри бўлса, тасдиқланг — шундан кейин ҳисоб-китоб амалга ошади.' },
     uz_Latn: { title: 'Kuryer yozgan miqdorni tasdiqlaysizmi?', body: 'Kuryer quyidagini yozdi: {summary}. Jami: {amount} so\'m. To\'g\'ri bo\'lsa, tasdiqlang — shundan keyin hisob-kitob amalga oshadi.' },

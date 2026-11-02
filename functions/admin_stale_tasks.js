@@ -9,6 +9,7 @@
  * Modullar (hammasi mavjud hujjatlar, yangi collection YO'Q):
  *   courier_orders    orders: status == 'in_delivery' (type != 'restaurant')
  *   restaurant_orders orders: type == 'restaurant' va restaurantStatus in (ready, picked, arrived), KURYERLI
+ *   business_orders   orders: type == 'business' va businessStatus in (accepted, ready, picked, arrived), KURYERLI
  *   carpet            carpet_wash_orders: pickup_in_delivery | return_in_delivery | accepted
  *   agro              agro_pickup_orders: pickup_in_delivery | accepted
  *   relay_shipments   shipments: status == 'in_transit'
@@ -55,7 +56,8 @@ const SPECS = Object.freeze([
     key: 'courier_orders',
     collection: 'orders',
     queries: [[['status', 'in_delivery']]],
-    keep: (d) => d.type !== 'restaurant',
+    // Ресторан ва «Менинг бизнесим» буюртмаларининг ўз жадвали бор (пастда алоҳида модул).
+    keep: (d) => d.type !== 'restaurant' && d.type !== 'business',
     status: (d) => str(d.status),
     courier: (d) => str(d.courierId),
     time: (d) => firstMs(d.statusUpdatedAt, d.updatedAt, d.inDeliveryAt, d.createdAt),
@@ -66,6 +68,16 @@ const SPECS = Object.freeze([
     queries: ['ready', 'picked', 'arrived'].map((s) => [['type', 'restaurant'], ['restaurantStatus', s]]),
     keep: (d) => !!d.courierId,
     status: (d) => str(d.restaurantStatus),
+    courier: (d) => str(d.courierId),
+    time: (d) => firstMs(d.statusUpdatedAt, d.updatedAt, d.createdAt),
+  },
+  {
+    // «Менинг бизнесим» маҳсулот буюртмаси (business_orders.js, эга 2026-11-03) — курьерли ҳолатлар.
+    key: 'business_orders',
+    collection: 'orders',
+    queries: ['accepted', 'ready', 'picked', 'arrived'].map((s) => [['type', 'business'], ['businessStatus', s]]),
+    keep: (d) => !!d.courierId,
+    status: (d) => str(d.businessStatus),
     courier: (d) => str(d.courierId),
     time: (d) => firstMs(d.statusUpdatedAt, d.updatedAt, d.createdAt),
   },

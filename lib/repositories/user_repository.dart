@@ -322,7 +322,10 @@ class UserRepository {
         .limit(100)
         .snapshots()
         .map((q) {
-      final items = q.docs.map(BirthDateChangeRequest.fromDoc).toList();
+      final items = q.docs
+          .where((d) => d.data()['kind'] != GenderChangeRequest.kind)
+          .map(BirthDateChangeRequest.fromDoc)
+          .toList();
       items.sort((a, b) {
         final ad = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bd = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -343,6 +346,73 @@ class UserRepository {
           {
             'birthDate': request.requestedBirthDate.trim(),
             'birthDateApprovedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
+      tx.update(requestRef, {
+        'status': 'approved',
+        'reviewedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  /// Жинс ўзгартириш — админ тасдиғи навбати (эга 2026-11-03). Жинс рўйхатдан ўтишда бир марта
+  /// белгиланади; кейин фақат шу сўров орқали.
+  Future<void> requestGenderChange({
+    required String uid,
+    required String currentGender,
+    required String requestedGender,
+  }) async {
+    if (uid.isEmpty || (requestedGender != 'male' && requestedGender != 'female')) return;
+    await _birthDateRequests.add({
+      'kind': GenderChangeRequest.kind,
+      'userId': uid,
+      'currentGender': currentGender.trim(),
+      'requestedGender': requestedGender,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await _addRiskEvent(
+      userId: uid,
+      type: 'gender_change_request',
+      severity: 'low',
+      message: 'User жинсни ўзгартириш сўрови юборди',
+      meta: {'currentGender': currentGender.trim(), 'requestedGender': requestedGender},
+    );
+  }
+
+  Stream<List<GenderChangeRequest>> watchPendingGenderChangeRequests() {
+    return _birthDateRequests
+        .where('status', isEqualTo: 'pending')
+        .limit(100)
+        .snapshots()
+        .map((q) {
+      final items = q.docs
+          .where((d) => d.data()['kind'] == GenderChangeRequest.kind)
+          .map(GenderChangeRequest.fromDoc)
+          .toList();
+      items.sort((a, b) {
+        final ad = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bd = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bd.compareTo(ad);
+      });
+      return items;
+    });
+  }
+
+  Future<void> approveGenderChange(GenderChangeRequest request) async {
+    final userRef = _col.doc(request.userId);
+    final requestRef = _birthDateRequests.doc(request.id);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(requestRef);
+      if ((snap.data()?['status'] ?? '') != 'pending') return;
+      tx.set(
+          userRef,
+          {
+            'gender': request.requestedGender,
+            'genderApprovedAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           },
           SetOptions(merge: true));

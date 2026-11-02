@@ -32,6 +32,42 @@ class BirthDateChangeRequest {
   }
 }
 
+/// Жинс ўзгартириш сўрови (эга 2026-11-03: «жинс бир марта, ўзгариш — админ тасдиғи билан»).
+/// Туғилган кун сўровлари билан БИР тўплам (`birthdate_change_requests`), `kind: 'gender'`.
+class GenderChangeRequest {
+  const GenderChangeRequest({
+    required this.id,
+    required this.userId,
+    required this.currentGender,
+    required this.requestedGender,
+    required this.status,
+    this.createdAt,
+  });
+
+  static const kind = 'gender';
+
+  final String id;
+  final String userId;
+  final String currentGender;
+  final String requestedGender;
+  final String status;
+  final DateTime? createdAt;
+
+  factory GenderChangeRequest.fromDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final d = doc.data() ?? const <String, dynamic>{};
+    return GenderChangeRequest(
+      id: doc.id,
+      userId: (d['userId'] ?? '') as String,
+      currentGender: (d['currentGender'] ?? '') as String,
+      requestedGender: (d['requestedGender'] ?? '') as String,
+      status: (d['status'] ?? 'pending') as String,
+      createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+    );
+  }
+}
+
 class DeviceChangeRequest {
   const DeviceChangeRequest({
     required this.id,

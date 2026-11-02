@@ -44,7 +44,9 @@ service cloud.firestore {
             // deletion*: hisobni o'chirish holati - faqat server (2026-10-24).
             'deletion', 'deleted', 'deletedAt', 'revivedAt',
             // (`myTreeComponent()`) — эгаси ўзи ёзса бошқа оиланинг дарахтини ўқирди.
-            'treeComponentId'
+            'treeComponentId',
+            // Рағбат қолдиғи (incentives.js, эга 2026-11-02) — фақат сервер.
+            'incentiveBalance', 'incentiveUpdatedAt'
           ]);
     }
 
@@ -827,7 +829,8 @@ service cloud.firestore {
                'realtyUnlocksLeft', 'realtyOwnerKey',
                'realtyPro', 'realtyTeamOwner', 'accountId',
                'payoutKycVerified', 'security', 'treeComponentId',
-               'deletion', 'deleted', 'deletedAt', 'revivedAt'
+               'deletion', 'deleted', 'deletedAt', 'revivedAt',
+               'incentiveBalance', 'incentiveUpdatedAt'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 
@@ -2103,6 +2106,26 @@ service cloud.firestore {
         allow get, list: if phoneFromToken() in get(/databases/$(database)/documents/deal_chats/$(chatId)).data.members;
         allow write: if false;
       }
+    }
+    // ── Рағбат дастурлари (functions/incentives.js, эга қарори 2026-11-02) ──
+    // Аёллар / машина — AVA дўкони учун. Ёзиш ФАҚАТ callable (claimIncentive, adminUpsertIncentiveProgram,
+    // adminSetIncentiveStage, adminRevokeIncentiveGrant) ва expiry scheduler. Дастур созламаси — админ;
+    // грант ва журнал — эгаси (`uid` = ўз рақами; list фақат `where uid == <ўз рақами>`) ёки админ.
+    match /incentive_programs/{programId} {
+      allow get, list: if isAdmin();
+      allow write: if false;
+    }
+    match /incentive_grants/{grantId} {
+      allow get, list: if isAdmin() || resource.data.uid == phoneFromToken();
+      allow write: if false;
+    }
+    match /incentive_ledger/{entryId} {
+      allow get, list: if isAdmin() || resource.data.uid == phoneFromToken();
+      allow write: if false;
+    }
+    match /incentive_budget_days/{dayId} {
+      allow get, list: if isAdmin();
+      allow write: if false;
     }
     match /china_suppliers/{supplierId} {
       allow read: if isAdmin();

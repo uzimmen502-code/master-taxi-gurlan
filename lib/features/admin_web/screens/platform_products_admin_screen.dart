@@ -1072,6 +1072,16 @@ class _EditDialog extends StatefulWidget {
   State<_EditDialog> createState() => _EditDialogState();
 }
 
+/// Рағбат туркумлари (эга 2026-11-02) — машина дастури туркумлари билан бир хил калитлар
+/// (админ «Рағбат дастурлари»да шу калитларни ишлатади). Бўш — туркумсиз (умумий).
+const Map<String, String> _kIncentiveCats = {
+  '': 'Йўқ',
+  'tire': 'Шина',
+  'oil': 'Мой',
+  'battery': 'Аккумулятор',
+  'insurance': 'Суғурта',
+};
+
 class _EditDialogState extends State<_EditDialog> {
   late final TextEditingController _name;
   late final TextEditingController _desc;
@@ -1083,6 +1093,10 @@ class _EditDialogState extends State<_EditDialog> {
   late bool _featured;
   late bool _inMarket;
   late String _goodsKind;
+
+  /// Рағбат туркуми (эга 2026-11-02): машина бонуси ва «Менинг машинам» шу бўйича.
+  late String _incentiveCategory;
+  final _incentiveOther = TextEditingController();
   late String _docId;
 
   /// Улгуржи нарх поғоналари. Поғона Улгуржи лентасига чиқиш шарти ЭМАС
@@ -1114,6 +1128,8 @@ class _EditDialogState extends State<_EditDialog> {
     _featured = e?.featuredOnHome ?? false;
     _inMarket = e?.showInMarket ?? true;
     _goodsKind = e?.goodsKind ?? '';
+    _incentiveCategory = e?.incentiveCategory ?? '';
+    if (!_kIncentiveCats.containsKey(_incentiveCategory)) _incentiveOther.text = _incentiveCategory;
     _imageUrls = List<String>.from(e?.displayImages ?? const <String>[]);
     _tiers = [
       for (final t in e?.priceTiers ?? const <PriceTier>[])
@@ -1125,6 +1141,7 @@ class _EditDialogState extends State<_EditDialog> {
   @override
   void dispose() {
     _pasteSub?.cancel();
+    _incentiveOther.dispose();
     _name.dispose();
     _desc.dispose();
     _price.dispose();
@@ -1341,6 +1358,7 @@ class _EditDialogState extends State<_EditDialog> {
         showInMarket: _inMarket,
         sortOrder: int.tryParse(_sort.text.trim()) ?? 0,
         goodsKind: _goodsKind,
+      incentiveCategory: PlatformProduct.normalizeIncentiveCategory(_incentiveCategory),
         priceTiers: tiers,
         createdAt: existing?.createdAt,
       ),
@@ -1558,6 +1576,40 @@ class _EditDialogState extends State<_EditDialog> {
                 onSelectionChanged: (s) {
                   setState(() => _goodsKind = s.isEmpty ? '' : s.first);
                 },
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Рағбат туркуми (машина бонуси / «Менинг машинам»)',
+                style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade800),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final e in _kIncentiveCats.entries)
+                    ChoiceChip(
+                      key: ValueKey('incentive_cat_${e.key.isEmpty ? 'none' : e.key}'),
+                      label: Text(e.value),
+                      selected: _incentiveCategory == e.key,
+                      onSelected: (_) => setState(() {
+                        _incentiveCategory = e.key;
+                        _incentiveOther.clear();
+                      }),
+                    ),
+                  SizedBox(
+                    width: 170,
+                    child: TextField(
+                      controller: _incentiveOther,
+                      decoration: const InputDecoration(
+                        labelText: 'Бошқа калит (лотин)',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (v) => setState(() => _incentiveCategory = v.trim().toLowerCase()),
+                    ),
+                  ),
+                ],
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

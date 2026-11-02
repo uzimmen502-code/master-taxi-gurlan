@@ -19,8 +19,14 @@ class PlatformStoreController extends ChangeNotifier {
   PlatformStoreController({
     PlatformProductsRepository? repo,
     PlatformCartStore? cartStore,
+    Future<int> Function(List<Map<String, dynamic>> items)? incentivePreviewer,
   })  : _repoOverride = repo,
-        _cartStore = cartStore ?? PlatformCartStore();
+        _cartStore = cartStore ?? PlatformCartStore(),
+        _incentivePreviewer = incentivePreviewer;
+
+  /// Рағбат (AVA бонуси) олдиндан ҳисоби — тест учун алмаштирилади; бўлмаса
+  /// `previewIncentiveForOrder` callable (сервер буюртмадаги билан БИР қоида).
+  final Future<int> Function(List<Map<String, dynamic>> items)? _incentivePreviewer;
 
   final PlatformProductsRepository? _repoOverride;
 
@@ -58,12 +64,72 @@ class PlatformStoreController extends ChangeNotifier {
       _cart.putIfAbsent(e.key, () => e.value);
     }
     notifyListeners();
+    _schedulePreview();
   }
   bool loading = true;
   String? errorMessage;
   int walletBalance = 0;
   /// Мижоз ҳамёндан тўлашни танладими (default off — opt-in).
   bool useWallet = false;
+
+  /// AVA бонуси (рағбат, эга 2026-11-02): `users.incentiveBalance` — фақат AVA дўконида.
+  int incentiveBalance = 0;
+
+  /// Бонусни ишлатиш (сукут бўйича ЁҚИҚ — бонус бор бўлса ўзи қўлланади, мижоз ўчириши мумкин).
+  bool useIncentive = true;
+
+  /// Сервер ҳисоблаган шу саватга қўлланадиган бонус (туркум ва улуш чегараси бўйича).
+  int incentivePreview = 0;
+  Timer? _previewTimer;
+  int _previewSeq = 0;
+
+  void setUseIncentive(bool value) {
+    if (useIncentive == value) return;
+    useIncentive = value;
+    notifyListeners();
+  }
+
+  /// Саватча ўзгарганда бонус ҳисобини янгилаш (350 мс кечиктириб — ҳар босишда сўров эмас).
+  void _schedulePreview() {
+    _previewTimer?.cancel();
+    if (incentiveBalance <= 0 || _cart.isEmpty) {
+      if (incentivePreview != 0) {
+        incentivePreview = 0;
+        notifyListeners();
+      }
+      return;
+    }
+    _previewTimer = Timer(const Duration(milliseconds: 350), () => unawaited(_runPreview()));
+  }
+
+  Future<void> _runPreview() async {
+    final seq = ++_previewSeq;
+    final items = [
+      for (final e in _cart.entries) {'productId': e.key, 'qty': e.value},
+    ];
+    try {
+      final previewer = _incentivePreviewer ?? _callPreview;
+      final v = await previewer(items);
+      if (seq != _previewSeq) return;
+      incentivePreview = v < 0 ? 0 : v;
+    } catch (e) {
+      // Ҳисоб олинмаса — бонус кўрсатилмайди; буюртмада сервер барибир ўзи ҳисоблайди.
+      debugPrint('[PlatformStore] incentive preview: $e');
+      if (seq != _previewSeq) return;
+      incentivePreview = 0;
+    }
+    notifyListeners();
+  }
+
+  Future<int> _callPreview(List<Map<String, dynamic>> items) async {
+    final res = await FirebaseFunctions.instance.httpsCallable('previewIncentiveForOrder').call<Object?>({
+      'items': items,
+      'pricingVersion': kPlatformPricingVersion,
+    });
+    final d = res.data;
+    return d is Map && d['incentiveTotal'] is num ? (d['incentiveTotal'] as num).toInt() : 0;
+  }
+
   bool isSubmitting = false;
   /// `delivery` | `pickup`
   String fulfillmentMode = 'delivery';
@@ -77,6 +143,10 @@ class PlatformStoreController extends ChangeNotifier {
   }
 
   List<PlatformProduct> get products => List.unmodifiable(_products);
+
+  /// Тест: каталогни Firebase'сиз бериш.
+  @visibleForTesting
+  set debugProducts(List<PlatformProduct> value) => _products = value;
   Map<String, int> get cart => Map.unmodifiable(_cart);
 
   int get cartItemCount => _cart.values.fold(0, (a, b) => a + b);
@@ -104,12 +174,21 @@ class PlatformStoreController extends ChangeNotifier {
   /// Маҳсулот + етказиб бериш.
   int get grandTotal => cartTotal + deliveryFee;
 
-  int get walletApplyAmount {
-    if (!useWallet || walletBalance <= 0 || grandTotal <= 0) return 0;
-    return walletBalance < grandTotal ? walletBalance : grandTotal;
+  /// Қўлланадиган AVA бонуси — фақат маҳсулот суммасидан (етказиш ҳақи бонусдан эмас).
+  int get incentiveApplyAmount {
+    if (!useIncentive || incentivePreview <= 0) return 0;
+    return incentivePreview < cartTotal ? incentivePreview : cartTotal;
   }
 
-  int get cashDuePreview => grandTotal - walletApplyAmount;
+  /// Мижоз тўлайдиган сумма (бонусдан кейин) — ҳамён ва нақд шунга қўлланади.
+  int get netTotal => grandTotal - incentiveApplyAmount;
+
+  int get walletApplyAmount {
+    if (!useWallet || walletBalance <= 0 || netTotal <= 0) return 0;
+    return walletBalance < netTotal ? walletBalance : netTotal;
+  }
+
+  int get cashDuePreview => netTotal - walletApplyAmount;
 
   bool isInCart(String id) => (_cart[id] ?? 0) > 0;
 
@@ -203,6 +282,7 @@ class PlatformStoreController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _previewTimer?.cancel();
     _settingsSub?.cancel();
     _settingsSub = null;
     super.dispose();
@@ -244,7 +324,13 @@ class PlatformStoreController extends ChangeNotifier {
         u = await FirebaseFirestore.instance.collection('users').doc(uid9).get();
       }
       walletBalance = (u?.data()?['bonusBalance'] as num?)?.toInt() ?? 0;
+      // Рағбат — каноник (998…) ҳужжатда (сервер `claimIncentive` шу ерга ёзади).
+      final canon = (u != null && u.id == uid12)
+          ? u
+          : (uid12.length >= 12 ? await FirebaseFirestore.instance.collection('users').doc(uid12).get() : null);
+      incentiveBalance = (canon?.data()?['incentiveBalance'] as num?)?.toInt() ?? 0;
       notifyListeners();
+      _schedulePreview();
     } catch (_) {}
   }
 
@@ -278,6 +364,7 @@ class PlatformStoreController extends ChangeNotifier {
     _cart[p.id] = next;
     _persistCart();
     notifyListeners();
+    _schedulePreview();
   }
 
   /// Поғонани танлашда саватга қўйиладиган миқдор: поғона бошланиши, `step`
@@ -300,6 +387,7 @@ class PlatformStoreController extends ChangeNotifier {
     _cart[p.id] = q;
     _persistCart();
     notifyListeners();
+    _schedulePreview();
     return true;
   }
 
@@ -311,6 +399,7 @@ class PlatformStoreController extends ChangeNotifier {
     _cart[id] = next;
     _persistCart();
     notifyListeners();
+    _schedulePreview();
   }
 
   void decrease(String id) {
@@ -324,6 +413,7 @@ class PlatformStoreController extends ChangeNotifier {
     }
     _persistCart();
     notifyListeners();
+    _schedulePreview();
   }
 
   void clearCart() {
@@ -331,6 +421,7 @@ class PlatformStoreController extends ChangeNotifier {
     useWallet = false;
     _persistCart();
     notifyListeners();
+    _schedulePreview();
   }
 
   void setFulfillmentMode(String mode) {
@@ -393,6 +484,7 @@ class PlatformStoreController extends ChangeNotifier {
       }
 
       final apply = walletApplyAmount;
+      final incentive = incentiveApplyAmount;
       final orderData = <String, dynamic>{
         'type': 'platform',
         // Сервер шу версия бўйича нархни ҳисоблайди (улгуржи поғоналари,
@@ -403,13 +495,16 @@ class PlatformStoreController extends ChangeNotifier {
         'address': address,
         'phone': phone.isNotEmpty ? phone : userPhone,
         'items': items,
-        'total': grandTotal,
+        // Сервер суммаларни ўзи қайта ҳисоблайди (бонус ҳам); бу ерда — фақат кўриниш/эски ҳисоб.
+        'total': netTotal,
         'itemsTotal': cartTotal,
         'deliveryFee': deliveryFee,
         'deliveryFeePercent': deliveryFeePercent,
         'balanceApplied': apply,
         'useWallet': useWallet,
-        'cashDue': grandTotal - apply,
+        // AVA бонуси (эга 2026-11-02) — фақат мижоз рози бўлса ва ҳисобда бонус бор бўлса.
+        'useIncentive': useIncentive && incentive > 0,
+        'cashDue': netTotal - apply,
         'cashPaid': 0,
         'status': 'new',
         'fulfillmentStatus': 'pending',

@@ -25,6 +25,7 @@ class PlatformProduct {
     this.showInMarket = true,
     this.sortOrder = 0,
     this.goodsKind = '',
+    this.incentiveCategory = '',
     this.priceTiers = const [],
     this.createdAt,
   });
@@ -51,6 +52,16 @@ class PlatformProduct {
 
   /// `food` | `non_food` | ''.
   final String goodsKind;
+
+  /// Рағбат туркуми (эга 2026-11-02): `tire`, `oil`, `battery`, `insurance`… — машина бонуси шу туркум
+  /// бўйича қўлланади ва «Менинг машинам» шу бўйича маҳсулот кўрсатади. Бўш — умумий (`general`).
+  final String incentiveCategory;
+
+  /// Сервер `normCategory` билан бир хил: кичик лотин/рақам/«_», 2–30 белги; бошқаси — бўш.
+  static String normalizeIncentiveCategory(String? raw) {
+    final s = (raw ?? '').trim().toLowerCase();
+    return RegExp(r'^[a-z0-9_]{2,30}$').hasMatch(s) ? s : '';
+  }
 
   /// Улгуржи нарх поғоналари (2026-09-29, эга қарори: «АВА дўкони
   /// бундан кейин Улгуржи бозор мақомида»).
@@ -209,6 +220,7 @@ class PlatformProduct {
       showInMarket: d['showInMarket'] as bool? ?? true,
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
       goodsKind: normalizeKind(d['goodsKind']?.toString()),
+      incentiveCategory: normalizeIncentiveCategory(d['incentiveCategory']?.toString()),
       priceTiers: parsePriceTiers(d['priceTiers']),
       createdAt: d['createdAt'] is Timestamp
           ? (d['createdAt'] as Timestamp).toDate()
@@ -233,6 +245,7 @@ class PlatformProduct {
     bool? showInMarket,
     int? sortOrder,
     String? goodsKind,
+    String? incentiveCategory,
     List<PriceTier>? priceTiers,
     DateTime? createdAt,
   }) {
@@ -253,6 +266,7 @@ class PlatformProduct {
       showInMarket: showInMarket ?? this.showInMarket,
       sortOrder: sortOrder ?? this.sortOrder,
       goodsKind: goodsKind ?? this.goodsKind,
+      incentiveCategory: incentiveCategory ?? this.incentiveCategory,
       priceTiers: priceTiers ?? this.priceTiers,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -288,6 +302,7 @@ class PlatformProduct {
         'showInMarket': showInMarket,
         'sortOrder': sortOrder,
         'goodsKind': normalizeKind(goodsKind),
+      'incentiveCategory': normalizeIncentiveCategory(incentiveCategory),
         ..._tierField(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -307,6 +322,7 @@ class PlatformProduct {
         'showInMarket': showInMarket,
         'sortOrder': sortOrder,
         'goodsKind': normalizeKind(goodsKind),
+      'incentiveCategory': normalizeIncentiveCategory(incentiveCategory),
         ..._tierField(),
         'updatedAt': FieldValue.serverTimestamp(),
       };

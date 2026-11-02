@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,10 +13,19 @@ class IdentityApprovalsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      _header(),
-      const Expanded(child: _BirthDateRequestsTab()),
-    ]);
+    return DefaultTabController(
+      length: 2,
+      child: Column(children: [
+        _header(),
+        const Material(
+          color: Colors.white,
+          child: TabBar(tabs: [Tab(text: 'Туғилган кун'), Tab(text: 'Жинс')]),
+        ),
+        const Expanded(
+          child: TabBarView(children: [_BirthDateRequestsTab(), _GenderRequestsTab()]),
+        ),
+      ]),
+    );
   }
 
   Widget _header() {
@@ -43,7 +53,7 @@ class IdentityApprovalsScreen extends StatelessWidget {
               ),
               SizedBox(height: 3),
               Text(
-                'Туғилган кун ўзгаришларини назорат қилиш',
+                'Туғилган кун ва жинс ўзгаришларини назорат қилиш',
                 style: TextStyle(color: Colors.black54),
               ),
             ],
@@ -117,6 +127,7 @@ class _BirthDateRequestCard extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await repo.approveBirthDateChange(request);
+      await _resyncIncentiveProfile(messenger, request.userId);
       messenger.showSnackBar(const SnackBar(
         content: Text('Туғилган кун ўзгариши тасдиқланди',
             style: TextStyle(color: AppColors.onPrimary)),
@@ -142,6 +153,113 @@ class _BirthDateRequestCard extends StatelessWidget {
       messenger.showSnackBar(
         SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
       );
+    }
+  }
+}
+
+/// Рағбат муҳрини (жинс/туғилган сана) янги қийматга алмаштириш — тасдиқдан кейин. Бўлмаса бонус
+/// эски (рўйхатдаги) қиймат бўйича қолади. Хатода ишни тўхтатмайди, огоҳлантиради.
+Future<void> _resyncIncentiveProfile(ScaffoldMessengerState messenger, String uid) async {
+  try {
+    await FirebaseFunctions.instance
+        .httpsCallable('adminResyncIncentiveProfile')
+        .call<Object?>({'uid': uid});
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('Тасдиқланди, лекин рағбат муҳри янгиланмади: $e'),
+      backgroundColor: Colors.orange,
+    ));
+  }
+}
+
+String _genderLabel(String g) => switch (g) {
+      'female' => 'Аёл',
+      'male' => 'Эркак',
+      _ => '—',
+    };
+
+class _GenderRequestsTab extends StatelessWidget {
+  const _GenderRequestsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.read<UserRepository>();
+    return StreamBuilder<List<GenderChangeRequest>>(
+      stream: repo.watchPendingGenderChangeRequests(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return Center(child: Text('Хатолик: ${snap.error}'));
+        }
+        final requests = snap.data ?? const <GenderChangeRequest>[];
+        if (requests.isEmpty) {
+          return const _EmptyState(text: 'Кутилаётган жинс сўрови йўқ');
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(18),
+          itemCount: requests.length,
+          itemBuilder: (_, i) => _GenderRequestCard(request: requests[i]),
+        );
+      },
+    );
+  }
+}
+
+class _GenderRequestCard extends StatelessWidget {
+  const _GenderRequestCard({required this.request});
+
+  final GenderChangeRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RequestCard(
+      icon: Icons.wc,
+      title: 'User: ${request.userId}',
+      subtitle:
+          'Ҳозирги: ${_genderLabel(request.currentGender)} → Янги: ${_genderLabel(request.requestedGender)}\n'
+          'Диққат: жинс рағбат (аёллар бонуси) шартига таъсир қилади.',
+      createdAt: request.createdAt,
+      actions: [
+        OutlinedButton.icon(
+          onPressed: () => _reject(context),
+          icon: const Icon(Icons.close, size: 16),
+          label: const Text('Рад этиш'),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton.icon(
+          onPressed: () => _approve(context),
+          icon: const Icon(Icons.check, size: 16),
+          label: const Text('Тасдиқлаш'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _approve(BuildContext context) async {
+    final repo = context.read<UserRepository>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await repo.approveGenderChange(request);
+      await _resyncIncentiveProfile(messenger, request.userId);
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Жинс ўзгариши тасдиқланди', style: TextStyle(color: AppColors.onPrimary)),
+        backgroundColor: AppColors.button,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _reject(BuildContext context) async {
+    final repo = context.read<UserRepository>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await repo.rejectBirthDateChange(request.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Сўров рад этилди'), backgroundColor: Colors.orange));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red));
     }
   }
 }

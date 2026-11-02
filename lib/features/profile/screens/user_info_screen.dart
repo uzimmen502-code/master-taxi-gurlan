@@ -21,7 +21,6 @@ class UserInfoScreen extends StatefulWidget {
 }
 
 class _UserInfoScreenState extends State<UserInfoScreen> {
-  static const _green = AppColors.primaryDark;
 
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -123,6 +122,50 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             context.trMsg(msg),
             style: const TextStyle(color: AppColors.onPrimary),
           ),
+          backgroundColor: AppColors.button,
+        ),
+      );
+    }
+  }
+
+  Future<void> _requestGenderChange() async {
+    final c = context.read<ProfileController>();
+    final loc = AppLocalizations.of(context)!;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(loc.translate('prof_gender_change_title')),
+        content: Text(loc.translate('prof_gender_change_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(loc.translate('cancel')),
+          ),
+          for (final g in const ['male', 'female'])
+            if (g != c.gender)
+              FilledButton(
+                key: ValueKey('prof_gender_pick_$g'),
+                onPressed: () => Navigator.pop(ctx, g),
+                child: Text(loc.translate(g)),
+              ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await c.requestGenderChange(picked);
+    if (!mounted) return;
+    final err = c.consumeError();
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.trMsg(err)), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final msg = c.consumeSuccess();
+    if (msg != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.trMsg(msg), style: const TextStyle(color: AppColors.onPrimary)),
           backgroundColor: AppColors.button,
         ),
       );
@@ -253,18 +296,23 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             _row(
               icon: Icons.person,
               label: loc.translate('gender'),
-              child: _editing
-                  ? Row(children: [
-                      _genderChip(c, 'male', loc.translate('male')),
-                      const SizedBox(width: 8),
-                      _genderChip(c, 'female', loc.translate('female')),
-                    ])
-                  : Text(
+              // Жинс рўйхатдан ўтишда бир марта; ўзгартириш — админ тасдиғи учун сўров (эга 2026-11-03).
+              child: Row(children: [
+                Expanded(
+                  child: Text(
                       c.gender == 'female'
                           ? loc.translate('female')
                           : loc.translate('male'),
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w500)),
+                ),
+                if (_editing)
+                  TextButton(
+                    key: const ValueKey('prof_gender_change_request'),
+                    onPressed: _requestGenderChange,
+                    child: Text(loc.translate('prof_gender_change_btn')),
+                  ),
+              ]),
             ),
             const Divider(height: 24),
             _row(
@@ -402,31 +450,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(color: AppColors.primaryText)),
-      ),
-    );
-  }
-
-  Widget _genderChip(ProfileController c, String value, String label) {
-    final sel = c.gender == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => c.setGender(value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-          decoration: BoxDecoration(
-            color: sel ? _green : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: sel ? _green : Colors.grey.shade300),
-          ),
-          child: Text(label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: sel ? AppColors.onPrimary : Colors.black87,
-                  fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
-        ),
       ),
     );
   }

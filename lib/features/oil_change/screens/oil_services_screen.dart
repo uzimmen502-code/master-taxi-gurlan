@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_context.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/map_launcher.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
@@ -22,7 +24,11 @@ class OilServicesScreen extends StatelessWidget {
       body: StreamBuilder<List<OilServicePoint>>(
         stream: repo.watchServicePoints(),
         builder: (context, snap) {
-          final points = snap.data ?? const <OilServicePoint>[];
+          // AVA маркази — фақат фаол туманники ва биринчи (эга 2026-11-03).
+          final points = orderServicePoints(
+            snap.data ?? const <OilServicePoint>[],
+            GeoContext.active.districtId,
+          );
           if (snap.connectionState == ConnectionState.waiting &&
               !snap.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -62,6 +68,8 @@ class OilServicesScreen extends StatelessWidget {
                 name: p.name,
                 address: p.address,
                 phone: p.phone,
+                lat: p.hasLocation ? p.lat : null,
+                lng: p.hasLocation ? p.lng : null,
               );
             },
           );
@@ -75,6 +83,8 @@ class OilServicesScreen extends StatelessWidget {
     required String name,
     required String address,
     required String phone,
+    double? lat,
+    double? lng,
   }) {
     return Card(
       elevation: 0,
@@ -97,6 +107,14 @@ class OilServicesScreen extends StatelessWidget {
                 onPressed: () => callPhone(phone),
                 icon: const Icon(Icons.phone),
                 label: Text(phone),
+              ),
+            ],
+            if (lat != null && lng != null) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => openMapsNavigation(lat: lat, lng: lng, label: name),
+                icon: const Icon(Icons.directions),
+                label: Text(context.tr('auto_hub_route')),
               ),
             ],
           ],

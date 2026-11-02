@@ -21,6 +21,8 @@ import '../../../models/delivery_failed.dart';
 import '../../../services/order_payment_service.dart';
 import '../../restaurants/courier/restaurant_courier_logic.dart';
 import '../../restaurants/data/restaurants_repository.dart';
+import '../../business_orders/data/business_orders_repository.dart';
+import '../../business_orders/domain/business_order.dart';
 import '../../../core/utils/user_error.dart';
 
 /// Kuryer paneli — marshrut + post-paid to'lov.
@@ -33,18 +35,25 @@ class CourierController extends ChangeNotifier {
     required OrdersRepository ordersRepo,
     ProviderPresenceRepository? presenceRepo,
     RestaurantsRepository? restaurantsRepo,
+    BusinessOrdersRepository? businessRepo,
   })  : _routes = routesRepo,
         _orders = ordersRepo,
         _presence = presenceRepo ?? ProviderPresenceRepository(),
-        _restaurantsRepo = restaurantsRepo;
+        _restaurantsRepo = restaurantsRepo,
+        _businessRepo = businessRepo;
 
   final DeliveryRoutesRepository _routes;
   final OrdersRepository _orders;
   final RestaurantsRepository? _restaurantsRepo;
+  final BusinessOrdersRepository? _businessRepo;
 
   /// Ресторан буюртмалари (Б3): callable'лар ва жонли буюртма оқими.
   late final RestaurantsRepository restaurants =
       _restaurantsRepo ?? RestaurantsRepository();
+
+  /// «Менинг бизнесим» буюртмалари (2026-11-03): callable'лар ва жонли буюртма оқими.
+  late final BusinessOrdersRepository business =
+      _businessRepo ?? BusinessOrdersRepository();
 
   /// Жонли ҳолат (онлайн, GPS) — фақат `provider_presence` (13.6.3,
   /// D-CLEAN-1). Эски `couriers`га иккинчи ёзув олиб ташланди: уни
@@ -98,6 +107,8 @@ class CourierController extends ChangeNotifier {
   /// тўлангани етказилгунча `paid` бўлади, у ҳали тугамаган.
   static bool isOrderFinalized(OrderModel o) {
     if (o.isRestaurant) return isRestaurantOrderFinalized(o);
+    // Бизнес буюртмаси — фақат якуний `businessStatus` (`paymentStatus` бу ерда маъносиз).
+    if (o.isBusiness) return BusinessOrderStatus.isFinal(o.businessStatus);
     // «Етказилмади» деб ёпилган (эга, 2026-10-31): сервер уни маршрутдан ўзи чиқаради;
     // эскирган snapshot'да ҳам «кейинги буюртма» тугмаси чиқсин.
     if (o.isOrderDeliveryFailedFinal || o.status == 'cancelled') return true;
@@ -356,6 +367,38 @@ class CourierController extends ChangeNotifier {
       order: before ??
           OrderModel(id: orderId, type: 'restaurant', total: 0, status: '', items: const []),
     );
+  }
+
+  // ── «Менинг бизнесим» буюртмалари. Хато чақирувчига қайтади (карточка ўзи кўрсатади). ─────────────
+
+  Future<void> businessPickup(String orderId, String code) async {
+    await business.pickup(orderId, pickupCode: code);
+    await _refreshOrder(orderId);
+    _info = 'courier_info_picked';
+    _safeNotify();
+  }
+
+  Future<void> businessArrive(String orderId) async {
+    await business.arrive(orderId);
+    await _refreshOrder(orderId);
+    _info = 'courier_info_arrived';
+    _safeNotify();
+  }
+
+  /// `delivered` ёки мижоз тасдиғи кутилмоқда (`awaitingCustomer`).
+  Future<BusinessCompleteResult> businessComplete(String orderId) async {
+    final res = await business.complete(orderId);
+    await _refreshOrder(orderId);
+    return res;
+  }
+
+  /// «Етказиб бўлмади» — умумий `courierReportDeliveryFailed` (`module: business`); мижоз (муддат ўтса —
+  /// сотувчи) тасдиқлайди.
+  Future<void> businessReportFailed(String orderId, String reason) async {
+    await deliveryFailed.report(module: DeliveryFailedModule.business, id: orderId, reason: reason);
+    await _refreshOrder(orderId);
+    _info = 'restaurants_courier_failed_sent';
+    _safeNotify();
   }
 
   /// Нон/бозор: «етказиб бўлмади» (эга, 2026-10-31). Ҳолат ва пул ўзгармайди — мижоз тасдиғи сўралади;

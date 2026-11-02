@@ -13,6 +13,9 @@ abstract final class DeliveryFailedModule {
   static const carpet = 'carpet';
   static const agro = 'agro';
   static const collection = 'collection';
+
+  /// «Менинг бизнесим» маҳсулот буюртмаси (`orders`, type business); қарор — шу буюртма сотувчиси ёки админ.
+  static const business = 'business';
 }
 
 /// Курьер сабаблари — сервер `FAIL_REASONS` (restaurant_orders.js) билан бир хил.
@@ -171,6 +174,7 @@ String deliveryFailedModuleKey(String module, String leg) => switch (module) {
         leg == 'return' ? 'delivery_failed_module_carpet_return' : 'delivery_failed_module_carpet_pickup',
       DeliveryFailedModule.agro => 'delivery_failed_module_agro',
       DeliveryFailedModule.collection => 'delivery_failed_module_collection',
+      DeliveryFailedModule.business => 'biz_order_module',
       _ => 'customer_confirm_module_generic',
     };
 

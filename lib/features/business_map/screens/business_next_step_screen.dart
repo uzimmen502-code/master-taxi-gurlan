@@ -31,6 +31,10 @@ import '../../realty/screens/add_realty_listing_screen.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_public_screen.dart';
 import '../../yuk_local/screens/yuk_local_screen.dart';
+import '../../business_orders/data/business_orders_repository.dart';
+import '../../business_orders/domain/business_order.dart';
+import '../../business_orders/screens/seller_business_orders_screen.dart';
+import '../../business_orders/widgets/business_order_entry.dart' show businessAcceptsCourierOrders;
 import '../business_food_flow.dart';
 import '../data/business_repository.dart';
 import '../domain/business.dart';
@@ -59,6 +63,8 @@ class BusinessNextStepScreen extends StatefulWidget {
     @visibleForTesting this.openShare,
     @visibleForTesting this.openChats,
     @visibleForTesting this.openBridge,
+    @visibleForTesting this.loadOrdersInfo,
+    @visibleForTesting this.openOrders,
   })  : _shopRepo = shopRepository,
         _bizRepo = businessRepository;
 
@@ -100,8 +106,36 @@ class BusinessNextStepScreen extends StatefulWidget {
   /// Тест учун: тур кўприги (уй-жой эълони / юк ташувчи / зарядлаш станцияси) ўрнига.
   final Future<void> Function(BuildContext context, BusinessModuleBridge bridge)? openBridge;
 
+  /// Тест учун: «Буюртмалар» қатори маълумоти (`null` — қатор кўринмайди).
+  final Future<BizSellerOrdersInfo?> Function(Business business)? loadOrdersInfo;
+
+  /// Тест учун: сотувчи буюртмалари экрани ўрнига.
+  final Future<void> Function(BuildContext context, Business business)? openOrders;
+
   @override
   State<BusinessNextStepScreen> createState() => _BusinessNextStepScreenState();
+}
+
+/// Эга хабидаги «Буюртмалар» қатори: [newCount] — сотувчи жавобини кутаётган (`placed`) буюртмалар.
+typedef BizSellerOrdersInfo = ({int newCount, int total});
+
+/// Қатор кўринадими: модул дарвозаси очиқ ва объект курьер етказишига мос, ёки буюртмалар аллақачон бор
+/// (дарвоза кейин ёпилса ҳам эга ўз буюртмаларини кўра олсин). Онлайн объект ва асосий дўконда — йўқ.
+Future<BizSellerOrdersInfo?> loadBizSellerOrdersInfo(Business b, {BusinessOrdersRepository? repository}) async {
+  if (b.online || b.isOwnShop || b.id.isEmpty) return null;
+  final repo = repository ?? BusinessOrdersRepository();
+  final results = await Future.wait<Object?>([
+    repo.access(businessId: b.id),
+    repo.fetchSellerOrders(b.ownerId).then<List<BusinessOrder>?>((l) => l, onError: (Object e) {
+      debugPrint('[BizNextStep] seller orders: $e');
+      return null;
+    }),
+  ]);
+  final access = results[0] as BusinessOrdersAccess;
+  final orders = [for (final o in (results[1] as List<BusinessOrder>?) ?? const <BusinessOrder>[]) if (o.businessId == b.id) o];
+  final open = access.allowed && businessAcceptsCourierOrders(b);
+  if (!open && orders.isEmpty) return null;
+  return (newCount: orders.where((o) => o.status == BusinessOrderStatus.placed).length, total: orders.length);
 }
 
 /// Пастки асосий тугма учун бажариладиган қадамлар.
@@ -116,6 +150,9 @@ class _BusinessNextStepScreenState extends State<BusinessNextStepScreen> {
 
   bool _previewed = false;
   bool _shared = false;
+
+  /// «Буюртмалар» қатори (AVA курьери билан маҳсулот буюртмалари); `null` — кўринмайди.
+  BizSellerOrdersInfo? _orders;
 
   BusinessTypeProfile get _profile => BusinessTypeProfile.forBusiness(_b);
 
@@ -148,6 +185,31 @@ class _BusinessNextStepScreenState extends State<BusinessNextStepScreen> {
     }, onError: (Object e) => debugPrint('[BizNextStep] watch: $e'));
     unawaited(_loadMarks());
     unawaited(_loadCount());
+    unawaited(_loadOrders());
+  }
+
+  /// Буюртмалар қатори — битта дарвоза чақируви + битта ўқиш (листенер йўқ, 36-қоида); хато — қатор йўқ.
+  Future<void> _loadOrders() async {
+    try {
+      final b = _b;
+      final info = await (widget.loadOrdersInfo?.call(b) ?? loadBizSellerOrdersInfo(b));
+      if (mounted) setState(() => _orders = info);
+    } catch (e) {
+      debugPrint('[BizNextStep] orders ${_b.id}: $e');
+    }
+  }
+
+  Future<void> _openOrders() async {
+    final b = _b;
+    final custom = widget.openOrders;
+    if (custom != null) {
+      await custom(context, b);
+    } else {
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => SellerBusinessOrdersScreen(sellerUid: b.ownerId, businessId: b.id),
+      ));
+    }
+    if (mounted) await _loadOrders();
   }
 
   @override
@@ -397,6 +459,18 @@ class _BusinessNextStepScreenState extends State<BusinessNextStepScreen> {
             ctaLabel: context.tr('inbox_filter_chats'),
             onCta: _chats,
           ),
+          if (_orders case final BizSellerOrdersInfo info)
+            _StepCard(
+              key: const ValueKey('biz_next_step_orders'),
+              icon: Icons.receipt_long_rounded,
+              title: context.tr('biz_order_seller_entry'),
+              subtitle: info.newCount > 0
+                  ? context.tr('biz_order_seller_entry_sub').replaceAll('{count}', '${info.newCount}')
+                  : context.tr('biz_order_seller_entry_none'),
+              ctaKey: const ValueKey('biz_next_cta_orders'),
+              ctaLabel: info.newCount > 0 ? '${context.tr('biz_order_seller_open')} (${info.newCount})' : context.tr('biz_order_seller_open'),
+              onCta: _openOrders,
+            ),
           if (bridge != null) ...[
             const SizedBox(height: 12),
             Padding(

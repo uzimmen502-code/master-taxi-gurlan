@@ -54,6 +54,12 @@ class OrderModel {
   final double? restaurantLng;
   final int itemsTotal;
 
+  /// «Менинг бизнесим» маҳсулот буюртмаси (`type: 'business'`, business_orders.js, 2026-11-03): ҳолат —
+  /// `businessStatus` (ягона жадвал `business_order_states.js`); `status`/`fulfillmentStatus` — кўзгу.
+  /// Тўлиқ кўриниш — `features/business_orders` (бу ерда фақат рўйхат ва курьер маршрути учун).
+  final String businessStatus;
+  final String businessName;
+
   /// ФАҚАТ ЭСКИ буюртмалар: қадоқлаш ҳақи олиб ташланган (D-REST-28), янги буюртмада 0.
   /// Эски ҳужжатларнинг жами суммаси тўғри кўриниши учун ўқилади — тўғридан-тўғри эмас,
   /// [foodAmount] орқали.
@@ -208,6 +214,8 @@ class OrderModel {
     this.restaurantLat,
     this.restaurantLng,
     this.itemsTotal = 0,
+    this.businessStatus = '',
+    this.businessName = '',
     this.packagingTotal = 0,
     this.qtyDiscountTotal = 0,
     this.deliveryFee = 0,
@@ -239,6 +247,9 @@ class OrderModel {
 
   bool get isRestaurant => type == 'restaurant';
 
+  /// «Менинг бизнесим» маҳсулот буюртмаси (AVA курьери).
+  bool get isBusiness => type == 'business';
+
   /// Таомларни баҳолаш мумкин: ресторан буюртмаси ва ЕТКАЗИЛГАН (сервер ҳам шуни талаб қилади).
   bool get canRateDishes => isRestaurant && restaurantStatus == 'delivered';
 
@@ -262,6 +273,7 @@ class OrderModel {
   String get typeLabelUz => switch (type) {
         'restaurant' => 'Кафе-ресторан',
         'platform' => 'Улгуржи бозор',
+        'business' => 'Дўкон буюртмаси',
         _ => 'Нон',
       };
 
@@ -269,6 +281,7 @@ class OrderModel {
   String get typeLabelKey => switch (type) {
         'restaurant' => 'home_module_restaurants',
         'platform' => 'home_module_wholesale',
+        'business' => 'biz_order_module',
         _ => 'wlt_m_bread',
       };
 
@@ -314,6 +327,8 @@ class OrderModel {
     // Ресторан буюртмаси — фақат ресторан қабул қилгунча (2 % ҳали
     // ечилмаган; `customerCancelRestaurantOrder`).
     if (isRestaurant) return restaurantStatus == 'placed';
+    // Бизнес буюртмаси — фақат сотувчи қабул қилгунча (`customerCancelBusinessOrder`).
+    if (isBusiness) return businessStatus == 'placed';
     if (effectivePayment == 'paid' &&
         effectiveFulfillment == 'completed') {
       return false;
@@ -420,6 +435,8 @@ class OrderModel {
       restaurantLat: (d['restaurantLat'] as num?)?.toDouble(),
       restaurantLng: (d['restaurantLng'] as num?)?.toDouble(),
       itemsTotal: (d['itemsTotal'] as num?)?.toInt() ?? 0,
+      businessStatus: d['businessStatus'] is String ? d['businessStatus'] as String : '',
+      businessName: d['businessName'] is String ? d['businessName'] as String : '',
       packagingTotal: (d['packagingTotal'] as num?)?.toInt() ?? 0,
       qtyDiscountTotal: (d['qtyDiscountTotal'] as num?)?.toInt() ?? 0,
       deliveryFee: (d['deliveryFee'] as num?)?.toInt() ?? 0,

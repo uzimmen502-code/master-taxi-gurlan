@@ -50,6 +50,15 @@ class BusinessRepository {
     return _parse(snap.docs);
   }
 
+  /// Битта объект (бир марта ўқиш); йўқ ёки яроқсиз — `null`. «Буюртма бериш» тугмаси учун: объект харитада
+  /// (онлайн эмас), блокланмаган ва тури курьер етказишига мос эканини билиш.
+  Future<Business?> fetchById(String businessId) async {
+    if (businessId.isEmpty) return null;
+    final d = await _col.doc(businessId).get();
+    final data = d.data();
+    return d.exists && data != null ? Business.tryFromMap(d.id, data) : null;
+  }
+
   List<Business> _parse(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final out = <Business>[];
     for (final d in docs) {

@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
 import '../features/home/home_module_gate.dart';
+import '../features/business_orders/courier/business_nearby_orders_screen.dart';
+import '../features/business_orders/screens/business_order_screen.dart';
+import '../features/business_orders/screens/seller_business_orders_screen.dart';
 import '../features/chat/screens/chat_screen.dart';
 import '../features/courier/screens/courier_screen.dart';
 import '../features/customer_confirm/customer_confirm_controller.dart';
@@ -57,6 +60,9 @@ import '../features/logistics/ui/logistics_ui_adapter.dart';
 import '../main.dart';
 import 'user_audience.dart';
 
+/// «Менинг бизнесим» буюртмаси push'ининг манзили ([PushNavigation.businessOrderPushTarget]).
+enum BusinessOrderPushTarget { courierOffer, courierRoute, seller, buyer }
+
 /// FCM / local push босилганда тегишли экранга ўтиш.
 class PushNavigation {
   PushNavigation._();
@@ -103,6 +109,25 @@ class PushNavigation {
     if (type != 'wholesale_order' && screen != 'wholesale_order') return null;
     final id = (data['orderId'] ?? '').trim();
     return RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id) ? id : null;
+  }
+
+  /// «Менинг бизнесим» буюртмаси push'и қаерга олиб боради (`functions/business_orders.js`):
+  /// * `type: business_courier_offer` → курьер панели + яқиндаги дўкон буюртмалари;
+  /// * `screen: business_orders` → сотувчи буюртмалари (ва `orderId` бўлса — тафсилот);
+  /// * `type: business_order` + `screen: courier` → курьер панели (маршрут);
+  /// * `type: business_order` (+ `screen: orders`) → харидор буюртма экрани (`orderId`).
+  /// Бошқа push — `null`. `orderId` фақат Firestore ID шаклида қабул қилинади (бошқаси — бўш).
+  @visibleForTesting
+  static ({BusinessOrderPushTarget target, String orderId})? businessOrderPushTarget(Map<String, String> data) {
+    final type = (data['type'] ?? '').trim();
+    final screen = (data['screen'] ?? '').trim();
+    final raw = (data['orderId'] ?? '').trim();
+    final orderId = RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(raw) ? raw : '';
+    if (type == 'business_courier_offer') return (target: BusinessOrderPushTarget.courierOffer, orderId: orderId);
+    if (screen == 'business_orders') return (target: BusinessOrderPushTarget.seller, orderId: orderId);
+    if (type != 'business_order') return null;
+    if (screen == 'courier') return (target: BusinessOrderPushTarget.courierRoute, orderId: orderId);
+    return orderId.isEmpty ? null : (target: BusinessOrderPushTarget.buyer, orderId: orderId);
   }
 
   /// Сотувчига «янги буюртма» push'и (`functions_demand/notify/wholesale_notify.js`
@@ -455,6 +480,27 @@ class PushNavigation {
     // умумий fallback уни Янгиликлар → «Хабарлар» табига олиб боради
     // (`_newsHubTabIndex`да `sell_offer` шу табга бириктирилган):
     // таклиф ҳақидаги хабарнинг ўзи ўша ерда сақланади.
+
+    // ── «Менинг бизнесим» буюртмаси (business_orders.js) ───────────────
+    // Push'даги маълумотга ишонилмайди: экранлар ҳужжатни Firestore'дан ўқийди (rules: харидор/сотувчи/курьер).
+    final biz = businessOrderPushTarget(data);
+    if (biz != null) {
+      switch (biz.target) {
+        case BusinessOrderPushTarget.courierOffer:
+          await nav.push(MaterialPageRoute(builder: (_) => const CourierScreen()));
+          if (!nav.mounted) return;
+          await nav.push(MaterialPageRoute(builder: (_) => const BusinessNearbyOrdersScreen()));
+        case BusinessOrderPushTarget.courierRoute:
+          await nav.push(MaterialPageRoute(builder: (_) => const CourierScreen()));
+        case BusinessOrderPushTarget.seller:
+          await nav.push(MaterialPageRoute(
+            builder: (_) => SellerBusinessOrdersScreen(initialOrderId: biz.orderId),
+          ));
+        case BusinessOrderPushTarget.buyer:
+          await nav.push(MaterialPageRoute(builder: (_) => BusinessOrderScreen(orderId: biz.orderId)));
+      }
+      return;
+    }
 
     // ── Кафе-ресторан (restaurant_orders.js) ─────────────────────────
     // Ресторан а'зосига: `screen: restaurant_orders` + `restaurantId` →

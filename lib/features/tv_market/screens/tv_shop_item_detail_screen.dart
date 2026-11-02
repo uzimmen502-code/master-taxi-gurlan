@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../shared/widgets/product_mini_tile.dart';
+import '../../business_orders/widgets/business_order_entry.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../domain/similar_items.dart';
 import '../models/tv_clip.dart';
@@ -271,6 +272,10 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
                   item: item,
                   onVideo: item.hasVideo ? () => _openClip(context) : null,
                 ),
+                // «Буюртма бериш» (AVA курьери, «Менинг бизнесим» буюртмаси): фақат дарвоза очиқ ва маҳсулот/объект
+                // мос бўлса кўринади ([BusinessOrderEntry] ўзи текширади; бўлмаса — ҳеч нарса).
+                if (item.businessId.isNotEmpty)
+                  BusinessOrderEntry(key: ValueKey('biz_order_entry_${item.id}'), item: item, myUid: _myUid),
                 if (openShop != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),

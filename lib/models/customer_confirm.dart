@@ -47,6 +47,9 @@ abstract final class CustomerConfirmModule {
 
   /// Нон/бозор буюртмаси — фақат «етказилмади» (эга, 2026-10-31).
   static const order = 'order';
+
+  /// «Менинг бизнесим» маҳсулот буюртмаси — «Олдим» ва «етказилмади» (сервер customer_confirm.js, 2026-11-03).
+  static const business = 'business';
 }
 
 /// Мижоз тасдиғи қадамлари (сервер `step`).
@@ -135,6 +138,8 @@ String customerConfirmModuleKey(String module) {
       return 'customer_confirm_module_collection';
     case CustomerConfirmModule.order:
       return 'customer_confirm_module_order';
+    case CustomerConfirmModule.business:
+      return 'biz_order_module';
     default:
       return 'customer_confirm_module_generic';
   }

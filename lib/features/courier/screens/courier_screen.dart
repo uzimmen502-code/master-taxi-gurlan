@@ -23,6 +23,8 @@ import '../../restaurants/courier/courier_live_publisher.dart';
 import '../../restaurants/courier/restaurant_courier_order_card.dart';
 import '../../restaurants/courier/restaurant_handover_widgets.dart';
 import '../../restaurants/domain/courier_tracking.dart';
+import '../../business_orders/courier/business_courier_banner.dart';
+import '../../business_orders/courier/business_courier_order_card.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -89,6 +91,14 @@ class _CourierViewState extends State<_CourierView> {
   Future<void> _onRestaurantClaimed(CourierController c) async {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(context.tr('restaurants_courier_claimed_ok')),
+      behavior: SnackBarBehavior.floating,
+    ));
+    await c.loadActiveRoute();
+  }
+
+  Future<void> _onBusinessClaimed(CourierController c) async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(context.tr('biz_order_courier_claimed_ok')),
       behavior: SnackBarBehavior.floating,
     ));
     await c.loadActiveRoute();
@@ -167,6 +177,11 @@ class _CourierViewState extends State<_CourierView> {
         RestaurantCourierBanner(
           courierUid: c.presenceUid,
           onClaimed: () => _onRestaurantClaimed(c),
+        ),
+        // «Менинг бизнесим» буюртмалари — ресторан ёнида; дарвоза ёпиқ бўлса кўринмайди.
+        BusinessCourierBanner(
+          repository: c.business,
+          onClaimed: () => _onBusinessClaimed(c),
         ),
         Expanded(
           child: !c.hasRoute
@@ -252,6 +267,23 @@ class _CourierViewState extends State<_CourierView> {
                 final p = c.currentPos;
                 return p == null ? null : (lat: p.latitude, lng: p.longitude);
               },
+            );
+          }
+          if (o.isBusiness) {
+            // «Менинг бизнесим» буюртмаси: дўкон → код → мижоз → топшириш; ҳолат жонли (`watchOrder`).
+            return BusinessCourierOrderCard(
+              key: ValueKey('biz_${o.id}'),
+              order: o,
+              index: i,
+              isDone: i < c.currentOrderIndex || finalized,
+              isCurrent: isCurrent && !finalized,
+              needsFinalize: isCurrent && finalized,
+              repository: c.business,
+              onPickup: (code) => c.businessPickup(o.id, code),
+              onArrive: () => c.businessArrive(o.id),
+              onComplete: () => c.businessComplete(o.id),
+              onReportFailed: (reason) => c.businessReportFailed(o.id, reason),
+              onFinalizeRoute: () => c.confirmAndAdvance(orderId: o.id),
             );
           }
           final tile = CourierOrderTile(

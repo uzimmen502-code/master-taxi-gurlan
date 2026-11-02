@@ -15,6 +15,9 @@ import '../../../models/order_model.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../services/order_payment_service.dart';
 import '../../profile/widgets/order_card.dart';
+import '../../business_orders/data/business_orders_repository.dart';
+import '../../business_orders/screens/business_order_screen.dart';
+import '../../business_orders/widgets/business_order_hub_tile.dart';
 import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/courier_tracking.dart';
 import '../../restaurants/screens/restaurant_order_screen.dart';
@@ -185,6 +188,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _entryBody(BuildContext context, CustomerOrderEntry entry) {
+    final food = entry.food;
+    if (food != null && food.isBusiness) {
+      // «Менинг бизнесим» буюртмаси — ўз карточкаси (қаторлари бошқа шаклда; бекор — ўз callable'и).
+      return BusinessOrderHubTile(
+        order: food,
+        cancelling: _cancellingOrderId == food.id,
+        onCancel: food.canCustomerCancel ? () => _cancelFoodOrder(food) : null,
+      );
+    }
     return switch (entry.kind) {
       CustomerOrderKind.food => OrderCard(
           order: entry.food!,
@@ -225,6 +237,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
       // умумий `customerCancelOrder` уни рад этади (USE_RESTAURANT_CANCEL).
       if (order.isRestaurant) {
         await RestaurantsRepository().cancel(order.id);
+      } else if (order.isBusiness) {
+        // Бизнес буюртмаси — `customerCancelBusinessOrder` (фақат `placed`).
+        await BusinessOrdersRepository().cancel(order.id);
       } else {
         await OrderPaymentService.customerCancelOrder(orderId: order.id);
       }
@@ -247,6 +262,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   void _openEntryDetail(BuildContext context, CustomerOrderEntry entry) {
     final food = entry.food;
+    if (food != null && food.isBusiness) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => BusinessOrderScreen(orderId: food.id)),
+      );
+      return;
+    }
     if (food != null && food.isRestaurant) {
       // Кузатув экрани: босқичлар, тўлов реквизити, «Тўладим», қўнғироқ.
       Navigator.of(context).push(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -6,6 +7,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../deal_chat/data/deal_chat_repository.dart';
+import '../../deal_chat/open_deal_chat.dart';
 import '../../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../restaurants/domain/restaurant_models.dart';
 import '../../restaurants/open_restaurant_checked.dart';
@@ -18,6 +21,7 @@ import '../../tv_market/services/shop_stats_recorder.dart';
 import '../domain/business.dart';
 import '../domain/business_pin.dart';
 import '../domain/business_subtypes.dart';
+import '../domain/business_type_profile.dart';
 import '../domain/website_link.dart';
 
 /// Нуқта босилганда чиқадиган тўлиқ маълумот варағи (эга қарори: «танлаб босилганда тўлиқ маълумот»).
@@ -32,9 +36,13 @@ class BusinessDetailSheet extends StatelessWidget {
     this.shopRepository,
     this.loadRestaurant,
     this.pushScreen,
+    this.dealChatRepository,
   });
 
   final BusinessPin pin;
+
+  /// Тест учун: «Ёзиш» чат репозиторийси; бўлмаса — ҳақиқий (Firebase).
+  final DealChatRepository? dealChatRepository;
 
   /// Тест учун; бўлмаса — ҳақиқий витрина репозиторийси.
   final TvShopRepository? shopRepository;
@@ -46,6 +54,7 @@ class BusinessDetailSheet extends StatelessWidget {
   final void Function(Widget screen)? pushScreen;
 
   static Future<void> show(BuildContext context, BusinessPin pin) {
+    recordView(pin);
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -53,6 +62,16 @@ class BusinessDetailSheet extends StatelessWidget {
       useSafeArea: true,
       builder: (_) => BusinessDetailSheet(pin: pin),
     );
+  }
+
+  /// Эгаси бор объект варағи очилди → дўкон кўриши (`shop_view`, йўналиш = шу объект, манба `map`); санашни
+  /// сервер қилади (`recordShopEvent`), ресторан белгисидаги «Меню» каби. Ёзгич сессияда бир марта юборади —
+  /// кейин «Дўконга ўтиш» (ўша калит) иккинчи марта санамайди.
+  static void recordView(BusinessPin pin) {
+    final origin = pin.origin;
+    if (origin is! Business || origin.isBlocked || origin.id.isEmpty) return;
+    if (phoneDigits(origin.ownerId).length < 9) return;
+    ShopStatsRecorder.shopView(ownerPhone: origin.ownerId, businessId: origin.id, source: 'map');
   }
 
   /// Умумий `callPhone` (кафе, юк, такси ва бошқа экранлар билан бир хил): рақам яроқсиз бўлса ёки
@@ -126,6 +145,10 @@ class BusinessDetailSheet extends StatelessWidget {
                     icon: const Icon(Icons.call_rounded, size: 18),
                     label: Text(context.tr('bizmap_call')),
                   ),
+                // «Ёзиш» — объект эгаси билан чат (source business, сервер 2026-11-03). Ўз объектида ва
+                // блокланганда йўқ; эгасиз (админ қўшган) объектда йўқ — сервер ҳам рад этади.
+                if (origin is Business && !origin.isBlocked && origin.id.isNotEmpty)
+                  _BusinessWriteButton(business: origin, repository: dealChatRepository),
                 OutlinedButton.icon(
                   onPressed: () => openMapsNavigation(lat: pin.lat, lng: pin.lng, label: pin.name),
                   icon: const Icon(Icons.directions_rounded, size: 18),
@@ -145,7 +168,8 @@ class BusinessDetailSheet extends StatelessWidget {
                       );
                     },
                     icon: const Icon(Icons.storefront_rounded, size: 18),
-                    label: Text(context.tr('shop_go_to_shop')),
+                    // Тур профилидан: дўкон — «Дўконга ўтиш», хизмат — «Барча хизматлар», бошқаси — «Саҳифага ўтиш».
+                    label: Text(context.tr(BusinessTypeProfile.forBusiness(origin).openCatalogKey)),
                   ),
                 // Ресторан бўлимига уланган объект: ресторан белгиси харитада шу белгига қўшилган (эга, 2026-11-03),
                 // меню шу ердан очилади. «Дўконга ўтиш» ҳам қолади (кафенинг маҳсулотлари бўлиши мумкин).
@@ -183,6 +207,76 @@ class BusinessDetailSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// «Ёзиш» — объект эгаси билан чат ([DealChatSource.business]). Жорий рақам (`user_phone`) ўқилгунча кўринмайди;
+/// ўз объектида — йўқ ([dealChatShowWrite]); меҳмонга кўринади, босганда рўйхатдан ўтишга чақирилади.
+/// Чат варақ устида очилади (ёпилса — варақ қайтади); меҳмон ёки хато бўлса варақ ёпилади — хабар харитада.
+class _BusinessWriteButton extends StatefulWidget {
+  const _BusinessWriteButton({required this.business, this.repository});
+
+  final Business business;
+  final DealChatRepository? repository;
+
+  @override
+  State<_BusinessWriteButton> createState() => _BusinessWriteButtonState();
+}
+
+class _BusinessWriteButtonState extends State<_BusinessWriteButton> {
+  String? _myUid;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    var uid = '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    } catch (_) {
+      // Рақам ўқилмаса — меҳмон ҳолати.
+    }
+    if (mounted) setState(() => _myUid = uid);
+  }
+
+  Future<void> _write() async {
+    final me = _myUid ?? '';
+    if (_busy) return;
+    if (me.length >= 11) setState(() => _busy = true);
+    final opened = await openDealChatFlow(
+      context,
+      productId: widget.business.id,
+      myUid: me,
+      source: DealChatSource.business,
+      repository: widget.repository,
+    );
+    if (!mounted) return;
+    if (!opened && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = _myUid;
+    if (me == null || !dealChatShowWrite(myUid: me, ownerPhone: widget.business.ownerId)) {
+      return const SizedBox.shrink();
+    }
+    return OutlinedButton.icon(
+      key: const ValueKey('biz_write'),
+      onPressed: _busy ? null : _write,
+      icon: _busy
+          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.chat_bubble_outline, size: 18),
+      label: Text(context.tr('deal_chat_write')),
     );
   }
 }
@@ -293,7 +387,9 @@ class _ProductsStripState extends State<_ProductsStrip> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.tr('bizprod_section'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              Text(context.tr(BusinessTypeProfile.forBusiness(widget.business).offersSectionKey),
+                  key: const ValueKey('biz_products_title'),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               SizedBox(
                 height: 118,

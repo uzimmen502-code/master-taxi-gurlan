@@ -18,7 +18,8 @@ class DealChatPresence {
       (data['type'] ?? '') == 'deal_chat' && _open != null && (data['chatId'] ?? '') == _open;
 }
 
-/// Push'даги `chatId` — сервер шакли (`[ad-|si-]<productId>_<рақам>`); бошқаси — `null`.
+/// Push'даги `chatId` — сервер шакли (`[ad-|si-|bz-]<productId>_<рақам>`; объект ID'си ичида ҳам `_` бор —
+/// `bz-998…_b17…_998…`); бошқаси — `null`.
 String? dealChatIdFromPush(Map<String, String> data) {
   final type = (data['type'] ?? '').trim();
   final screen = (data['screen'] ?? '').trim();

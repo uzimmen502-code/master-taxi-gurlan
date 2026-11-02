@@ -146,6 +146,18 @@ class BusinessTypeProfile {
         BusinessOfferGroup.mixed => 'bizprod_title',
       };
 
+  /// Харидор юзаларидаги каталог/саҳифа тугмаси (S3): дўкон — «Дўконга ўтиш», хизмат — «Барча хизматлар»,
+  /// аралаш ва овқатланиш — «Саҳифага ўтиш» (овқатланиш менюси ўз «Меню» тугмасида).
+  String get openCatalogKey => switch (group) {
+        BusinessOfferGroup.products => 'shop_go_to_shop',
+        BusinessOfferGroup.services => 'biz_open_services',
+        BusinessOfferGroup.menu || BusinessOfferGroup.mixed => 'biz_open_page',
+      };
+
+  /// Харидор юзаларидаги таклифлар бўлими сарлавҳаси (S3): [catalogTitleKey], овқатланишда эса бу бўлим
+  /// ресторан менюси эмас, объектнинг дўкон таклифлари — умумий «Маҳсулотлар ва хизматлар».
+  String get offersSectionKey => group == BusinessOfferGroup.menu ? 'bizprod_section' : catalogTitleKey;
+
   /// Каталог бўш бўлгандаги матн.
   String get emptyStateKey => switch (group) {
         BusinessOfferGroup.products => 'bizprod_empty',

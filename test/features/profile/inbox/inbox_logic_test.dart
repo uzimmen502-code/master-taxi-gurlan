@@ -199,6 +199,48 @@ void main() {
       expect(e.unreadCount, 3);
     });
 
+    group('объект номи (sellerName, S3 2026-11-03)', () {
+      const seller = '998907777777';
+      DealChat c({String source = 'shop_item', String title = 'Ун 50 кг', String sellerName = '', String sellerId = seller,
+              String buyerId = uid, String lastFrom = seller}) =>
+          DealChat(
+            id: 'x',
+            members: const [uid, seller],
+            buyerId: buyerId,
+            sellerId: sellerId,
+            productId: 'p',
+            source: source,
+            productTitle: title,
+            sellerName: sellerName,
+            lastMessage: 'бор',
+            lastFrom: lastFrom,
+            lastAt: now,
+          );
+      InboxEntry row(DealChat d) => build(InboxData(deals: [d])).firstWhere((x) => x.kind == InboxKind.deal);
+
+      test('харидорга: маҳсулот чатида сотувчи хабари — объект номи билан, сарлавҳа — маҳсулот', () {
+        final e = row(c(sellerName: 'Бахор дўкони'));
+        expect(e.title, 'Ун 50 кг');
+        expect(e.preview, 'Бахор дўкони: бор');
+        expect(e.category, '');
+      });
+
+      test('sellerName йўқ (эски чат) — «Сотувчи»; меники — «Сиз»; сотувчига — «Харидор» (объект номи эмас)', () {
+        expect(row(c()).preview, 'deal_chat_role_seller: бор');
+        expect(row(c(sellerName: 'Бахор', lastFrom: uid)).preview, 'deal_chat_you бор');
+        const other = '998905555555';
+        final mineShop = row(c(sellerName: 'Бахор', sellerId: uid, buyerId: other, lastFrom: other));
+        expect(mineShop.preview, 'deal_chat_role_buyer: бор');
+      });
+
+      test('объект чати: сарлавҳа = объект номи, такрорланмайди («Сотувчи:»), белги — дўкон', () {
+        final e = row(c(source: 'business', title: 'Гулбаҳор салони', sellerName: 'Гулбаҳор салони'));
+        expect(e.title, 'Гулбаҳор салони');
+        expect(e.preview, 'deal_chat_role_seller: бор');
+        expect(e.category, 'business');
+      });
+    });
+
     test('ўқилмаган: baseline дан кейингиси жирний, очилгандан кейин оддий', () async {
       final fresh = now.subtract(const Duration(hours: 1));
       final old = now.subtract(const Duration(hours: 5));

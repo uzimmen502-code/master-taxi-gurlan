@@ -4277,6 +4277,8 @@
   "biz_open_page": "Sahifaga o'tish",
   "biz_customer_view": "Mijoz ko'zi bilan",
   "biz_link_qr": "Havola va QR",
+  "biz_chat_unavailable": "Bu obyekt hozir mavjud emas.",
+  "biz_chat_own": "Bu sizning obyektingiz.",
   "price_unit_fixed": "Aniq narx",
   "price_unit_from": "Boshlang'ich narx («…dan»)",
   "price_unit_hour": "Soatiga",

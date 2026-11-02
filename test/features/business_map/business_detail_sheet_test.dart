@@ -6,6 +6,8 @@ import 'package:ava_gurlan/features/business_map/domain/business_category.dart';
 import 'package:ava_gurlan/features/business_map/domain/business_pin.dart';
 import 'package:ava_gurlan/features/business_map/domain/pin_filter.dart';
 import 'package:ava_gurlan/features/business_map/widgets/business_detail_sheet.dart';
+import 'package:ava_gurlan/features/deal_chat/data/deal_chat_repository.dart';
+import 'package:ava_gurlan/features/deal_chat/screens/deal_chat_screen.dart';
 import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
 import 'package:ava_gurlan/features/restaurants/screens/restaurant_screen.dart';
 import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
@@ -13,6 +15,7 @@ import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.da
 import 'package:ava_gurlan/features/tv_market/services/shop_stats_recorder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Объект варағидаги маҳсулотлар қатори учун: каталог бўш (Firebase'сиз).
 class _NoShop extends Fake implements TvShopRepository {
@@ -24,6 +27,35 @@ class _NoShop extends Fake implements TvShopRepository {
     int limit = 200,
   }) async =>
       const [];
+}
+
+/// Битта сўровда берилган таклифлар.
+class _OneShop extends Fake implements TvShopRepository {
+  _OneShop(this.items);
+  final List<TvShopItem> items;
+  @override
+  Future<List<TvShopItem>> fetchByBusiness(
+    String businessId, {
+    String ownerPhone = '',
+    bool onlyActive = true,
+    int limit = 200,
+  }) async =>
+      items;
+}
+
+/// «Ёзиш» чати: очиш чақирувлари ёзилади, чат экрани бўш оқимлар билан (Firebase'сиз).
+class _FakeDeal extends Fake implements DealChatRepository {
+  final openCalls = <(String, String)>[];
+  @override
+  Future<String> openChat(String productId, {String source = 'wholesale'}) async {
+    openCalls.add((productId, source));
+    return 'bz-${productId}_998902222222';
+  }
+
+  @override
+  Stream<DealChat?> watchChat(String chatId) => const Stream.empty();
+  @override
+  Stream<List<DealMessage>> watchMessages(String chatId, {int limit = 200}) => const Stream.empty();
 }
 
 /// Ресторанга уланган объект варағи — ҳақиқий модал варақда ([BusinessDetailSheet.show] каби), ўқиш ва экран
@@ -249,6 +281,146 @@ void main() {
         await tester.pumpAndSettle();
       }
       expect(sent, isEmpty);
+    });
+  });
+
+  group('BusinessDetailSheet — харидор юзаси S3 (эга 2026-11-03)', () {
+    const owner = '998901111111';
+    const me = '998902222222';
+
+    BusinessPin bizPin({String ownerId = owner, String status = 'active', BusinessCategory cat = BusinessCategory.personal}) =>
+        BusinessPin.fromBusiness(Business(
+          id: 'b1',
+          ownerId: ownerId,
+          name: 'Гулбаҳор салони',
+          category: cat,
+          phone: '998901234567',
+          lat: 41.84,
+          lng: 60.39,
+          status: status,
+        ));
+
+    Future<_FakeDeal> openBiz(WidgetTester tester, BusinessPin pin, {String? myPhone}) async {
+      SharedPreferences.setMockInitialValues({if (myPhone != null) 'user_phone': myPhone});
+      final repo = _FakeDeal();
+      tester.view.physicalSize = const Size(400 * 2, 1600 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          key: UniqueKey(),
+          theme: AppTheme.light,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => BusinessDetailSheet(pin: pin, shopRepository: _NoShop(), dealChatRepository: repo),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    testWidgets('бошқанинг объекти: «Ёзиш» бор; босилса — source business, productId = объект ID, чат очилади',
+        (tester) async {
+      final repo = await openBiz(tester, bizPin(), myPhone: me);
+      expect(find.byKey(const ValueKey('biz_write')), findsOneWidget);
+      expect(find.text('deal_chat_write'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('biz_write')));
+      // Чат экрани хабар кутиб айланувчи белги кўрсатади — pumpAndSettle эмас.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(repo.openCalls, [('b1', 'business')]);
+      expect(find.byType(DealChatScreen), findsOneWidget);
+      // Чат ёпилса — варақ қайтади.
+      Navigator.of(tester.element(find.byType(DealChatScreen))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('biz_write')), findsOneWidget);
+    });
+
+    testWidgets('ўз объекти (рақам шакли фарқ қилса ҳам) — «Ёзиш» йўқ', (tester) async {
+      await openBiz(tester, bizPin(), myPhone: '+998 90 111 11 11');
+      expect(find.byKey(const ValueKey('biz_write')), findsNothing);
+      expect(find.byKey(const ValueKey('biz_open_shop')), findsOneWidget, reason: 'бошқа тугмалар жойида');
+    });
+
+    testWidgets('блокланган ёки эгасиз объект — «Ёзиш» йўқ', (tester) async {
+      await openBiz(tester, bizPin(status: 'blocked'), myPhone: me);
+      expect(find.byKey(const ValueKey('biz_write')), findsNothing);
+      await openBiz(tester, bizPin(ownerId: 'admin'), myPhone: me);
+      expect(find.byKey(const ValueKey('biz_write')), findsNothing);
+    });
+
+    testWidgets('меҳмон: «Ёзиш» бор; босилса — сервер чақирилмайди, варақ ёпилади, рўйхатдан ўтиш хабари',
+        (tester) async {
+      final repo = await openBiz(tester, bizPin());
+      await tester.tap(find.byKey(const ValueKey('biz_write')));
+      await tester.pumpAndSettle();
+      expect(repo.openCalls, isEmpty);
+      expect(find.byKey(const ValueKey('biz_write')), findsNothing, reason: 'варақ ёпилди');
+      expect(find.text('deal_chat_login_required'), findsOneWidget);
+    });
+
+    testWidgets('каталог тугмаси тур профилидан: хизмат / дўкон / овқатланиш', (tester) async {
+      await openBiz(tester, bizPin(), myPhone: me);
+      expect(find.text('biz_open_services'), findsOneWidget);
+      expect(find.text('shop_go_to_shop'), findsNothing);
+      await openBiz(tester, bizPin(cat: BusinessCategory.retail), myPhone: me);
+      expect(find.text('shop_go_to_shop'), findsOneWidget);
+      await openBiz(tester, bizPin(cat: BusinessCategory.food), myPhone: me);
+      expect(find.text('biz_open_page'), findsOneWidget);
+    });
+
+    testWidgets('таклифлар қатори сарлавҳаси — тур профилидан', (tester) async {
+      SharedPreferences.setMockInitialValues({'user_phone': me});
+      final item = TvShopItem(
+        id: 's1', ownerPhone: owner, ownerName: 'x', title: 'Соч олиш', price: 30000, photoUrl: '',
+        kind: 'service', districtId: 'd', districtLabel: '', businessId: 'b1',
+      );
+      tester.view.physicalSize = const Size(400 * 2, 1600 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(body: BusinessDetailSheet(pin: bizPin(), shopRepository: _OneShop([item]), dealChatRepository: _FakeDeal())),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.byKey(const ValueKey('biz_products_title'))).data, 'biz_catalog_services');
+    });
+
+    group('кўриш статистикаси', () {
+      final sent = <Map<String, Object?>>[];
+      setUp(() {
+        sent.clear();
+        ShopStatsRecorder.resetForTest();
+        ShopStatsRecorder.sink = (d) async => sent.add(d);
+      });
+      tearDown(() => ShopStatsRecorder.sink = null);
+
+      test('эгаси бор объект варағи — shop_view (объект, map), бир марта', () {
+        BusinessDetailSheet.recordView(bizPin());
+        BusinessDetailSheet.recordView(bizPin());
+        expect(sent, [
+          {'kind': 'shop_view', 'ownerPhone': owner, 'businessId': 'b1', 'source': 'map'},
+        ]);
+      });
+
+      test('блокланган, эгасиз объект ва бошқа нуқталар — ёзилмайди', () {
+        BusinessDetailSheet.recordView(bizPin(status: 'blocked'));
+        BusinessDetailSheet.recordView(bizPin(ownerId: 'admin'));
+        BusinessDetailSheet.recordView(_biz());
+        expect(sent, isEmpty);
+      });
     });
   });
 

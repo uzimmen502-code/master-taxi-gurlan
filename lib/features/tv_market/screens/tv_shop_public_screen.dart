@@ -11,6 +11,9 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../ads/screens/cheap_products_screen.dart';
 import '../../business_map/data/business_repository.dart';
 import '../../business_map/domain/business.dart';
+import '../../business_map/domain/business_type_profile.dart';
+import '../../deal_chat/data/deal_chat_repository.dart';
+import '../../deal_chat/open_deal_chat.dart';
 import '../domain/shop_directions.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
@@ -44,8 +47,12 @@ class TvShopPublicScreen extends StatefulWidget {
     this.loadChannelInfo = true,
     this.pageSize = 100,
     this.source = 'other',
+    this.dealChatRepository,
   })  : _shopRepo = shopRepository,
         _bizRepo = businessRepository;
+
+  /// Тест учун: «Ёзиш» чат репозиторийси; бўлмаса — ҳақиқий (Firebase).
+  final DealChatRepository? dealChatRepository;
 
   /// Статистика манбаи (`ShopStatsRecorder.sources`): харидор бу дўконга қаердан келди.
   final String source;
@@ -102,6 +109,10 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   /// Админ бутун онлайн дўконни блоклаган (`tv_shops.status`): ҳеч қандай маълумот кўрсатилмайди.
   bool _blocked = false;
 
+  /// «Ёзиш» (объект эгаси билан чат): жорий рақам — ўқилгунча `null` (тугма кўринмайди), меҳмон — `''`.
+  String? _myUid;
+  bool _writeBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +120,39 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
     _district = widget.districtLabel.trim();
     _districtId = widget.districtId.trim();
     _load();
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    var uid = '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    } catch (_) {
+      // Рақам ўқилмаса — меҳмон ҳолати («Ёзиш» босилса рўйхатдан ўтишга чақирилади).
+    }
+    if (mounted) setState(() => _myUid = uid);
+  }
+
+  /// «Ёзиш» танланган ЙЎНАЛИШ (объект) учун: блокланмаган, ўзиники эмас. «Барчаси» ёки асосий дўкон
+  /// танланганда — йўқ (сервер манбаи фақат объект ёки маҳсулот бўйича).
+  Business? get _writableBusiness {
+    final b = _selectedBusiness;
+    final me = _myUid;
+    if (b == null || b.isBlocked || b.id.isEmpty || me == null) return null;
+    return dealChatShowWrite(myUid: me, ownerPhone: b.ownerId.isNotEmpty ? b.ownerId : widget.ownerPhone) ? b : null;
+  }
+
+  Future<void> _write(Business b) async {
+    if (_writeBusy) return;
+    final me = _myUid ?? '';
+    if (me.length >= 11) setState(() => _writeBusy = true);
+    try {
+      await openDealChatFlow(context,
+          productId: b.id, myUid: me, source: DealChatSource.business, repository: widget.dealChatRepository);
+    } finally {
+      if (mounted) setState(() => _writeBusy = false);
+    }
   }
 
   @override
@@ -534,6 +578,7 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
     final business = _selectedBusiness;
     final inDirection = d == null ? const <TvShopItem>[] : d.itemsFor(_selection, _items, ownerPhone: widget.ownerPhone);
     final visible = _visible;
+    final writable = _writableBusiness;
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F9),
       appBar: AppBar(
@@ -591,7 +636,11 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                             if (d != null && d.hasChoice) _directionChips(d),
                             if (business != null) _directionCard(business),
                             Text(
-                              context.tr('tv_shop_vitrine'),
+                              // Объект танланган — тур профилидан («Хизматлар» / «Маҳсулотлар» …); бошқа — витрина.
+                              context.tr(business == null
+                                  ? 'tv_shop_vitrine'
+                                  : BusinessTypeProfile.forBusiness(business).offersSectionKey),
+                              key: const ValueKey('shop_section_title'),
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                             ),
                             const SizedBox(height: 10),
@@ -656,7 +705,13 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                     ],
                   ],
                 ),
-      bottomNavigationBar: _blocked || _loading ? null : TvChannelContactBar(onCall: _call),
+      bottomNavigationBar: _blocked || _loading
+          ? null
+          : TvChannelContactBar(
+              onCall: _call,
+              onWrite: writable == null ? null : () => _write(writable),
+              writeBusy: _writeBusy,
+            ),
     );
   }
 

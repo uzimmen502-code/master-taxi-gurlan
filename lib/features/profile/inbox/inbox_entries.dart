@@ -80,7 +80,7 @@ class InboxEntry {
   final bool pinned;
   final String photoUrl;
 
-  /// Янгилик тури (`emergency`, `promo` …) — белги ранги.
+  /// Янгилик тури (`emergency`, `promo` …) — белги ранги; буюртма чатида `business` — объект чати белгиси.
   final String category;
   final String orderType;
 
@@ -135,9 +135,13 @@ List<InboxEntry> buildInboxEntries(
   // ── Буюртма чатлари (ҳар бири алоҳида қатор) ──
   for (final c in d.deals) {
     final mine = c.lastFrom == uid;
+    // Харидорга сотувчи хабари — объект номи билан (сервер `sellerName` ёзган бўлса), «Сотувчи» ўрнига;
+    // объект чатида сарлавҳанинг ўзи объект номи — такрорланмайди.
     final who = mine
         ? tr('deal_chat_you')
-        : '${tr(c.isSeller(uid) ? 'deal_chat_role_buyer' : 'deal_chat_role_seller')}:';
+        : (!c.isSeller(uid) && c.sellerName.isNotEmpty && c.sellerName != c.productTitle)
+            ? '${c.sellerName}:'
+            : '${tr(c.isSeller(uid) ? 'deal_chat_role_buyer' : 'deal_chat_role_seller')}:';
     out.add(InboxEntry(
       key: 'deal:${c.id}',
       kind: InboxKind.deal,
@@ -146,6 +150,8 @@ List<InboxEntry> buildInboxEntries(
       time: c.lastAt,
       unreadCount: c.unreadFor(uid),
       photoUrl: c.productPhoto,
+      // Объект чати — белгиси дўкон (маҳсулот қутиси эмас).
+      category: c.isBusiness ? 'business' : '',
       payload: c,
     ));
   }

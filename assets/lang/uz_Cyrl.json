@@ -4277,6 +4277,8 @@
   "biz_open_page": "Саҳифага ўтиш",
   "biz_customer_view": "Мижоз кўзи билан",
   "biz_link_qr": "Ҳавола ва QR",
+  "biz_chat_unavailable": "Бу объект ҳозир мавжуд эмас.",
+  "biz_chat_own": "Бу сизнинг объектингиз.",
   "price_unit_fixed": "Аниқ нарх",
   "price_unit_from": "Бошланғич нарх («…дан»)",
   "price_unit_hour": "Соатига",

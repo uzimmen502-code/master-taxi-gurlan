@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/product_detail_dark.dart';
+import '../../../shared/widgets/product_mini_tile.dart';
 import '../models/wholesale_product.dart';
 import '../utils/wholesale_labels.dart';
 
@@ -21,10 +21,8 @@ class WholesaleProductStrip extends StatelessWidget {
   final List<WholesaleProduct> items;
   final ValueChanged<WholesaleProduct> onTap;
 
-  /// Ўхшаш маҳсулотлар асосий расмдан урғуни олмасин (эга, 2026-10-31):
-  /// 136 → 108 px, баландлик 226 → 178 px.
-  static const double _tileWidth = 108;
-  static const double _stripHeight = 178;
+  // Ўлчамлар (эга, 2026-10-31: 136 → 108 px, 226 → 178 px) — [ProductMiniTile]да;
+  // Аралаш бозор тафсилотлари ҳам шу картани ишлатади (эга, 2026-11-03).
 
   @override
   Widget build(BuildContext context) {
@@ -45,106 +43,26 @@ class WholesaleProductStrip extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: _stripHeight,
+          height: ProductMiniTile.stripHeight(context),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => _Tile(
-              product: items[i],
-              onTap: () => onTap(items[i]),
-            ),
+            itemBuilder: (_, i) {
+              final p = items[i];
+              return ProductMiniTile(
+                palette: ProductMiniPalette.dark,
+                imageUrl: p.imageUrls.isEmpty ? '' : p.imageUrls.first,
+                title: p.title,
+                price: wholesalePriceLine(context, p),
+                // Ўхшашлар — бошқа сотувчилардан: ким сотаётгани кўринсин (эга, 2026-11-01).
+                subtitle: p.sellerCompanyName,
+                onTap: () => onTap(p),
+              );
+            },
           ),
         ),
       ],
-    );
-  }
-}
-
-class _Tile extends StatelessWidget {
-  const _Tile({required this.product, required this.onTap});
-
-  final WholesaleProduct product;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: WholesaleProductStrip._tileWidth,
-      child: Material(
-        color: PdDark.surface,
-        borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: product.imageUrls.isEmpty
-                    ? const ColoredBox(
-                        color: PdDark.surface2,
-                        child: Icon(Icons.inventory_2_outlined,
-                            color: PdDark.muted),
-                      )
-                    : ColoredBox(
-                        color: PdDark.surface2,
-                        child: CachedNetworkImage(
-                          imageUrl: product.imageUrls.first,
-                          // contain: расм четлари қирқилмайди (ега 2026-10-19).
-                          fit: BoxFit.contain,
-                          memCacheWidth: 300,
-                          errorWidget: (_, __, ___) => const ColoredBox(
-                            color: PdDark.surface2,
-                            child: Icon(Icons.broken_image,
-                                color: PdDark.muted),
-                          ),
-                        ),
-                      ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.15,
-                        fontWeight: FontWeight.w600,
-                        color: PdDark.ink,
-                      ),
-                    ),
-                    Text(
-                      wholesalePriceLine(context, product),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.15,
-                        fontWeight: FontWeight.w600,
-                        color: PdDark.brand,
-                      ),
-                    ),
-                    // Ўхшашлар — бошқа сотувчилардан: ким сотаётгани кўринсин (эга, 2026-11-01).
-                    if (product.sellerCompanyName.trim().isNotEmpty)
-                      Text(
-                        product.sellerCompanyName.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, height: 1.15, color: PdDark.muted),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

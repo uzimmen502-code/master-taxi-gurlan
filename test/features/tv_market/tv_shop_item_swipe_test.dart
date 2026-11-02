@@ -21,8 +21,8 @@ TvShopItem _item(String id, String title, {String owner = '998901111111'}) =>
       status: 'active',
     );
 
-Future<void> _pump(WidgetTester tester, Widget home) async {
-  tester.view.physicalSize = const Size(400 * 2, 800 * 2);
+Future<void> _pump(WidgetTester tester, Widget home, {double height = 800}) async {
+  tester.view.physicalSize = Size(400 * 2, height * 2);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: home));
@@ -61,6 +61,9 @@ void main() {
         similarPool: items,
         loadLatest: latest,
       ),
+      // Ўхшашлар картаси Улгуржидагидек ихчам (178 px, 2026-11-03) — саҳифа экрандан
+      // узун бўлиши учун экран пастроқ.
+      height: 600,
     );
     expect(find.byKey(const ValueKey('shop_item_similar')), findsOneWidget,
         reason: 'ўхшашлар бор — саҳифа экрандан узун');

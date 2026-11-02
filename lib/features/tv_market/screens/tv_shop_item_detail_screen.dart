@@ -7,6 +7,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
+import '../../../shared/widgets/product_mini_tile.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../domain/similar_items.dart';
 import '../models/tv_clip.dart';
@@ -18,7 +19,6 @@ import '../widgets/shop_complaint_sheet.dart';
 import '../widgets/shop_unavailable_view.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_shop_item_card.dart';
-import '../widgets/tv_shop_item_grid_card.dart';
 import 'tv_market_feed_screen.dart';
 import 'tv_shop_public_screen.dart';
 
@@ -195,17 +195,27 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
         const SizedBox(height: 16),
         Text(context.tr('platform_store_similar'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
+        // Улгуржидаги карта билан БИР ХИЛ ([ProductMiniTile], эга 2026-11-03): аввал
+        // 236 px лентада 160 px карта таги бўш қоларди.
         SizedBox(
-          height: 236,
+          height: ProductMiniTile.stripHeight(context),
           child: ListView.separated(
             key: const ValueKey('shop_item_similar'),
             scrollDirection: Axis.horizontal,
             itemCount: similar.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (_, i) => SizedBox(
-              width: 160,
-              child: TvShopItemGridCard(item: similar[i], onTap: () => _openSimilar(similar[i])),
-            ),
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final s = similar[i];
+              return ProductMiniTile(
+                key: ValueKey('shop-similar-${s.id}'),
+                imageUrl: s.coverPhotoUrl,
+                title: s.title,
+                price: s.hasPrice ? formatMoney(s.price) : null,
+                subtitle: s.ownerName,
+                border: true,
+                onTap: () => _openSimilar(s),
+              );
+            },
           ),
         ),
       ],

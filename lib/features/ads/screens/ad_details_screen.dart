@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -12,6 +11,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/user_error.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/product_mini_tile.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
@@ -464,11 +464,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                     FutureBuilder<List<AdModel>>(
                       future: _similarAdsFuture,
                       builder: (context, snap) {
-                        // Лента баландлиги тизим шрифтига эргашади (катта
-                        // шрифтда ном/нарх тошиб кетмасин); 1.6 дан ошмайди.
-                        final shelfHeight = 206 *
-                            (MediaQuery.textScalerOf(context).scale(14) / 14)
-                                .clamp(1.0, 1.6);
+                        // Улгуржидаги карта билан БИР ХИЛ ([ProductMiniTile], эга 2026-11-03);
+                        // баландлик тизим шрифтига эргашади (1.6 гача).
+                        final shelfHeight = ProductMiniTile.stripHeight(context);
                         if (snap.connectionState == ConnectionState.waiting) {
                           return SizedBox(
                             height: shelfHeight,
@@ -518,11 +516,19 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: items.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
                             itemBuilder: (_, i) {
                               final similar = items[i];
-                              return _SimilarAdTile(
-                                ad: similar,
+                              return ProductMiniTile(
+                                key: ValueKey('ad-similar-${similar.id}'),
+                                imageUrl: similar.imageUrls.isNotEmpty ? similar.imageUrls.first : '',
+                                title: similar.title,
+                                price: formatMoney(similar.price),
+                                // Сотувчи қайси ҳудудда — яқин маҳсулот муҳим (эски эълонда бўш — сатр йўқ).
+                                subtitle: similar.districtId.isEmpty
+                                    ? ''
+                                    : GeoNames.district(similar.districtId, context.contentLang),
+                                border: true,
                                 onTap: () {
                                   _similarClicks++;
                                   _logSimilarMetrics('click');
@@ -597,109 +603,6 @@ class _SellerAdsCard extends StatelessWidget {
                 ),
               ),
               const Icon(Icons.chevron_right, size: 16, color: AppColors.primaryText),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SimilarAdTile extends StatelessWidget {
-  const _SimilarAdTile({required this.ad, required this.onTap});
-
-  final AdModel ad;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = ad.imageUrls.isNotEmpty ? ad.imageUrls.first : null;
-    final district = ad.districtId.isEmpty
-        ? ''
-        : GeoNames.district(ad.districtId, context.contentLang);
-
-    return SizedBox(
-      width: 150,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: 1.5,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 3,
-                child: imageUrl == null
-                    ? const ColoredBox(
-                        color: AppColors.cardImageBg,
-                        child: Center(child: Icon(Icons.image)),
-                      )
-                    : ColoredBox(
-                        color: AppColors.cardImageBg,
-                        // CachedNetworkImage: диск кеши бор (Image.network ҳар
-                        // очилишда қайта юклар эди) — қолган лентадагидек.
-                        child: CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          // contain: расм четлари қирқилмайди (ега 2026-10-19).
-                          fit: BoxFit.contain,
-                          errorWidget: (_, __, ___) => const ColoredBox(
-                            color: AppColors.cardImageBg,
-                            child: Center(child: Icon(Icons.broken_image)),
-                          ),
-                          placeholder: (_, __) => const ColoredBox(
-                            color: AppColors.cardImageBg,
-                            child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        ),
-                      ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        ad.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: AppText.bodySmall,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatMoney(ad.price),
-                        style: const TextStyle(
-                          color: AppColors.primaryText,
-                          fontWeight: FontWeight.w700,
-                          fontSize: AppText.bodySmall,
-                        ),
-                      ),
-                      // Сотувчи қайси ҳудудда — яқин маҳсулот муҳим. Эски
-                      // эълонларда `districtId` бўш: сатр умуман кўринмайди.
-                      if (district.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          district,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: AppText.labelSmall,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),

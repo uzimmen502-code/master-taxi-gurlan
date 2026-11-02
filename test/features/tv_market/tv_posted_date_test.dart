@@ -83,10 +83,14 @@ void main() {
     }
 
     testWidgets('янги клип: сана тепа чап бурчакда, оқ хирароқ', (tester) async {
-      await pump(tester, clip(DateTime.utc(2026, 11, 3, 8)));
+      // Чегарадан кейинги СОБИТ вақт; кутилган матн ҳақиқий «ҳозир»дан ҳисобланади
+      // (аввал «03.11.2026» қотирилган эди — шу куни тест «Бугун, …» кўриб йиқиларди).
+      final posted = kTvPostedDateSince.add(const Duration(minutes: 1));
+      await pump(tester, clip(posted));
       final f = find.byKey(const ValueKey('tv-posted-date'));
       expect(f, findsOneWidget);
-      expect(tester.widget<Text>(f).data, '03.11.2026');
+      expect(tester.widget<Text>(f).data,
+          tvPostedDateLabel(posted, now: DateTime.now(), todayWord: 'tv_posted_today'));
       final pos = tester.getTopLeft(f);
       expect(pos.dx, 12);
       expect(pos.dy, lessThan(200), reason: 'сана тепада бўлиши керак');

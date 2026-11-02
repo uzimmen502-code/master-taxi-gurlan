@@ -16,7 +16,12 @@
  *
  * Коллекциялар (ҳаммаси client-write ЁПИҚ, фақат шу CF'лар ёзади):
  *   deal_chats/{prefix}{productId}_{buyerUid} — чат (детерминистик ID → қайта очиш идемпотент;
- *     prefix: wholesale — йўқ (эски ID'лар сақланади), ad — `ad-`, shop_item — `si-`)
+ *     prefix: wholesale — йўқ (эски ID'лар сақланади), ad — `ad-`, shop_item — `si-`, business — `bz-`)
+ *     Ихтиёрий контекст (2026-11-03): `businessId` + `sellerName` (объект номи) — `business` чатида ва
+ *     `businessId`ли `shop_item` чатида; эски чатларда йўқ (клиент: йўқ → '').
+ *
+ * «Менинг бизнесим» объекти (эга 2026-11-03): харидор каталог таклифисиз ҳам объектнинг ўзига ёзади
+ * (`source: business`, productId = `businesses/{id}`), эгаси қайси объект ҳақида эканини кўради.
  *     /messages/{senderUid}-{clientId} — хабар (ID → қайта юбориш идемпотент, 21-банд)
  *   deal_chat_usage/{uid}              — дақиқалик чегара ҳисоби (ҳеч кимга ўқилмайди)
  *
@@ -68,8 +73,26 @@ const SOURCES = Object.freeze({
     photo: (p) => (Array.isArray(p.photoUrls) && p.photoUrls[0]) || p.photoUrl || '',
     market: () => 'aralash',
     price: (p) => p.price,
+    // Йўналиш дўкони маҳсулоти (`businessId` бор) — чатга объект номи ҳам ёзилади (эга 2026-11-03:
+    // «эгаси қайси бизнес ҳақида эканини кўрсин»). Ном `businesses/{id}`дан, эгаси мос келса.
+    businessIdOf: (p) => (typeof p.businessId === 'string' ? p.businessId.trim() : ''),
+  },
+  // «Менинг бизнесим» объектининг ўзи (каталог таклифисиз — хизмат, умумий савол; эга 2026-11-03).
+  // productId = `businesses/{id}`; сотувчи = `ownerId` (админ қўшган эгасиз объект → UID_RE рад этади).
+  business: {
+    collection: 'businesses',
+    prefix: 'bz-',
+    isActive: (p) => p.status !== 'blocked',
+    seller: (p) => p.ownerId,
+    title: (p) => p.name,
+    photo: () => '',
+    market: () => 'business',
+    price: () => null,
+    businessIdOf: (_p, id) => id,
   },
 });
+
+const BUSINESSES = 'businesses';
 
 // PROPOSED (47-банд) — эга тасдиқлагунча; ўзгартириш = шу константалар.
 const LIMITS = Object.freeze({
@@ -163,7 +186,7 @@ function attachDealChats(exportsObj, deps) {
   }
 
   /**
-   * data: { productId, source? } → { ok, chatId, created }. source: wholesale (default) | ad | shop_item.
+   * data: { productId, source? } → { ok, chatId, created }. source: wholesale (default) | ad | shop_item | business.
    * Мавжуд чат (аъзо бўлса) — маҳсулот ҳолатидан қатъи назар қайтарилади (келишув давом этади).
    */
   exportsObj.openDealChat = functions.https.onCall(async (data, context) => {
@@ -192,6 +215,23 @@ function attachDealChats(exportsObj, deps) {
       const rawPhoto = src.photo(p);
       const photo = typeof rawPhoto === 'string' ? rawPhoto : '';
       const price = priceOf(src.price(p));
+      const title = String((src.title ? src.title(p) : p.title) || '').trim().slice(0, LIMITS.titleMax);
+      // Объект контексти (businessId + sellerName = объект номи). `business` — ҳужжатнинг ўзи;
+      // `shop_item` — `businessId` бўлса битта қўшимча ўқиш (фақат яратишда), объект эгаси = сотувчи бўлсагина.
+      let bizCtx = null;
+      const bizId = src.businessIdOf ? String(src.businessIdOf(p, productId) || '') : '';
+      if (bizId && PRODUCT_ID_RE.test(bizId)) {
+        if (source === 'business') {
+          bizCtx = { businessId: bizId, sellerName: title };
+        } else {
+          const bSnap = await t.get(db.collection(BUSINESSES).doc(bizId));
+          const b = bSnap.exists ? bSnap.data() || {} : null;
+          const bName = b ? String(b.name || '').trim().slice(0, LIMITS.titleMax) : '';
+          if (b && bName && canonicalUid(String(b.ownerId || '')) === sellerUid) {
+            bizCtx = { businessId: bizId, sellerName: bName };
+          }
+        }
+      }
       t.create(chatRef, {
         members: [uid, sellerUid],
         buyerId: uid,
@@ -200,17 +240,18 @@ function attachDealChats(exportsObj, deps) {
         source,
         market: src.market(p),
         ...(price != null ? { productPrice: price } : {}),
-        productTitle: String(p.title || '').trim().slice(0, LIMITS.titleMax),
+        productTitle: title,
         productPhoto: photo.slice(0, 1000),
+        ...(bizCtx || {}),
         lastMessage: '',
         lastFrom: '',
         unread: { [uid]: 0, [sellerUid]: 0 },
         createdAt: ts(),
         updatedAt: ts(),
       });
-      return { created: true };
+      return { created: true, businessId: bizCtx ? bizCtx.businessId : undefined };
     });
-    log({ action: 'openDealChat', userId: uid, chatId: chatRef.id, productId, source, result: out.created ? 'created' : 'existing', durationMs: Date.now() - started });
+    log({ action: 'openDealChat', userId: uid, chatId: chatRef.id, productId, source, ...(out.businessId ? { businessId: out.businessId } : {}), result: out.created ? 'created' : 'existing', durationMs: Date.now() - started });
     return { ok: true, chatId: chatRef.id, created: out.created };
   });
 

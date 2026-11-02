@@ -185,6 +185,63 @@ async function main() {
     const m = await msgs(r.chatId);
     assert.deepStrictEqual(m.map((x) => x.from), [BUYER, SELLER]);
     await expectCode(call('sendDealMessage', { chatId: r.chatId, text: 'x', clientId: 'si-strgr-0001' }, STRANGER), 'CHAT_NOT_FOUND');
+    // businessId'сиз маҳсулот — объект контексти ёзилмайди (эски шакл ўзгармаган).
+    assert.ok(!('businessId' in d) && !('sellerName' in d));
+  });
+
+  const BIZ = `${SELLER}_req-0001`;
+  await check('B1 «Mening biznesim» obyekti (source business): bz- prefiks, title = nom, businessId/sellerName, rasm \'\', narx yo\'q; takror — o\'sha chat', async () => {
+    await db.collection('businesses').doc(BIZ).set({ ownerId: SELLER, name: '  Sartaroshxona Nur  ', status: 'active', category: 'personal' });
+    const r = await call('openDealChat', { productId: BIZ, source: 'business' }, BUYER);
+    assert.deepStrictEqual(r, { ok: true, chatId: `bz-${BIZ}_${BUYER}`, created: true });
+    assert.strictEqual(dealChatId(BIZ, BUYER, 'business'), r.chatId);
+    const d = await chatDoc(r.chatId);
+    assert.deepStrictEqual(d.members, [BUYER, SELLER]);
+    assert.deepStrictEqual(
+      [d.source, d.market, d.productId, d.productTitle, d.productPhoto, d.businessId, d.sellerName, d.sellerId],
+      ['business', 'business', BIZ, 'Sartaroshxona Nur', '', BIZ, 'Sartaroshxona Nur', SELLER]);
+    assert.ok(!('productPrice' in d) && !('lastAt' in d));
+    const again = await call('openDealChat', { productId: BIZ, source: 'business' }, BUYER);
+    assert.deepStrictEqual(again, { ok: true, chatId: r.chatId, created: false });
+    // Чат ID клиент/сервер regex'ларига мос — шу чатга ёзиш ишлайди, push объект эгасига, сарлавҳа = объект номи.
+    sent.length = 0;
+    await call('sendDealMessage', { chatId: r.chatId, text: 'Ertaga bo\'shmisiz?', clientId: 'bz-buyer-00001' }, BUYER);
+    assert.deepStrictEqual(sent.map((m) => [m.token, m.notification.title, m.data.chatId]), [['tok-seller', '💬 Sartaroshxona Nur', r.chatId]]);
+  });
+
+  await check('B2 business: bloklangan / yo\'q / egasiz (admin) — PRODUCT_UNAVAILABLE; o\'ziniki — OWN_PRODUCT; chat yaratilmaydi', async () => {
+    await db.collection('businesses').doc('biz_blk').set({ ownerId: SELLER, name: 'B', status: 'blocked' });
+    await db.collection('businesses').doc('biz_admin').set({ ownerId: 'admin', name: 'A', status: 'active' });
+    const n0 = (await db.collection('deal_chats').get()).size;
+    await expectCode(call('openDealChat', { productId: 'biz_blk', source: 'business' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    await expectCode(call('openDealChat', { productId: 'no_such_biz', source: 'business' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    await expectCode(call('openDealChat', { productId: 'biz_admin', source: 'business' }, BUYER), 'PRODUCT_UNAVAILABLE');
+    await expectCode(call('openDealChat', { productId: BIZ, source: 'business' }, SELLER), 'OWN_PRODUCT');
+    assert.strictEqual((await db.collection('deal_chats').get()).size, n0);
+    // Status майдонисиз эски объект — фаол ҳисобланади.
+    await db.collection('businesses').doc('biz_legacy').set({ ownerId: SELLER, name: 'Eski' });
+    const r = await call('openDealChat', { productId: 'biz_legacy', source: 'business' }, BUYER2);
+    assert.strictEqual(r.created, true);
+  });
+
+  await check('B3 shop_item + businessId: chatga businessId + sellerName (obyekt nomi); begona/yo\'q obyekt — kontekst yozilmaydi', async () => {
+    await db.collection('tv_shop_items').doc('s_biz').set({ ownerPhone: SELLER, title: 'Soch olish', price: 50000, businessId: BIZ });
+    const r = await call('openDealChat', { productId: 's_biz', source: 'shop_item' }, BUYER);
+    assert.strictEqual(r.chatId, `si-s_biz_${BUYER}`);
+    const d = await chatDoc(r.chatId);
+    assert.deepStrictEqual([d.productTitle, d.businessId, d.sellerName, d.productPrice], ['Soch olish', BIZ, 'Sartaroshxona Nur', 50000]);
+    // Бошқа эганинг объекти (ёт businessId) — ном ошкор бўлмайди.
+    await db.collection('businesses').doc('biz_other').set({ ownerId: STRANGER, name: 'Yot', status: 'active' });
+    await db.collection('tv_shop_items').doc('s_foreign').set({ ownerPhone: SELLER, title: 'F', businessId: 'biz_other' });
+    await db.collection('tv_shop_items').doc('s_gone').set({ ownerPhone: SELLER, title: 'G', businessId: 'deleted_biz' });
+    for (const id of ['s_foreign', 's_gone']) {
+      const x = await call('openDealChat', { productId: id, source: 'shop_item' }, BUYER);
+      const xd = await chatDoc(x.chatId);
+      assert.ok(x.created && !('businessId' in xd) && !('sellerName' in xd), id);
+    }
+    // Улгуржи/эълон чатларида контекст йўқ.
+    assert.ok(!('businessId' in (await chatDoc(CHAT))));
+    assert.ok(!('businessId' in (await chatDoc(`ad-a_ok_${BUYER}`))));
   });
 
   await check('S1 yuborish: validatsiya (chatId, matn bo\'sh/1001, clientId)', async () => {

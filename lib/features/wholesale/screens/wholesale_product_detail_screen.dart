@@ -178,13 +178,14 @@ class _WholesaleProductDetailViewState
   }
 
   /// «Буюртма ёзиш» → эълон эгаси билан чат (эга қарори 2026-11-01).
-  Future<void> _writeOrder() async {
+  /// [draft] — Улгуржида танланган миқдор матни чат майдонига (эга, 2026-11-02).
+  Future<void> _writeOrder({String? draft}) async {
     if (_writeBusy) return;
     // Меҳмон огоҳлантириши, чат очиш ва хато матни — умумий ([openDealChatFlow]).
     if (_myUid.length >= 11) setState(() => _writeBusy = true);
     try {
       await openDealChatFlow(context,
-          productId: widget.product.id, myUid: _myUid, initialProduct: widget.product);
+          productId: widget.product.id, myUid: _myUid, initialProduct: widget.product, draft: draft);
     } finally {
       if (mounted) setState(() => _writeBusy = false);
     }
@@ -363,7 +364,16 @@ class _WholesaleProductDetailViewState
                 onQtyChanged: setQty,
                 totalText: '≈ ${formatPrice(price * qty)} ${p.currencyLabel}',
                 onCall: _call,
-                onWriteOrder: _writeOrder,
+                onWriteOrder: () => _writeOrder(
+                  draft: wholesaleOrderDraft(
+                    template: context.tr('deal_chat_order_draft'),
+                    title: p.title,
+                    packLabel: p.hasPacks ? pack.label : '',
+                    qty: qty,
+                    unitLabel: unitLabel,
+                    totalText: '${formatPrice(price * qty)} ${p.currencyLabel}',
+                  ),
+                ),
                 showWriteOrder: wholesaleShowWriteOrder(myUid: _myUid, sellerId: p.sellerId),
                 writeBusy: _writeBusy,
               ),

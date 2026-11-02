@@ -5258,6 +5258,7 @@
   "wholesale_return_status_awaiting_payment_buyer": "Ожидается оплата обратной доставки из кошелька покупателя",
   "wholesale_return_status_awaiting_payment_courier": "Ожидается оплата обратной доставки из кошелька курьера",
   "deal_chat_write_order": "Написать заказ",
+  "deal_chat_order_draft": "Здравствуйте! {product}: хочу заказать {qty} {unit} (≈ {total}).",
   "deal_chat_write": "Написать",
   "deal_chat_with_seller": "Чат с продавцом",
   "deal_chat_with_buyer": "Чат с покупателем",

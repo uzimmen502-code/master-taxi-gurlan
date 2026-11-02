@@ -27,6 +27,7 @@ class Business {
     this.status = 'active',
     this.online = false,
     this.branchOf = '',
+    this.restaurantId = '',
   });
 
   /// Фақат онлайн йўналиш (жисмоний жойи йўқ): координатасиз, харитада чизилмайди ([lat]/[lng] = 0).
@@ -37,6 +38,13 @@ class Business {
   final String branchOf;
 
   bool get isBranch => branchOf.isNotEmpty;
+
+  /// Уланган ресторан бўлими (estaurants/{id} — меню, буюртма, курьер); бўш — уланмаган. ФАҚАТ сервер ёзади
+  /// (linkBusinessRestaurant, эга 2026-11-03); [toCallable]да юборилмайди. Харитада бу объект ва ресторан —
+  /// битта белги.
+  final String restaurantId;
+
+  bool get hasRestaurant => restaurantId.isNotEmpty;
 
   /// `active` | `blocked` — фақат сервер (админ) ўрнатади; клиент [toCallable]да юбормайди.
   final String status;
@@ -110,6 +118,7 @@ class Business {
       status: d['status'] == 'blocked' ? 'blocked' : 'active',
       online: online,
       branchOf: _s(d['branchOf']),
+      restaurantId: _s(d['restaurantId']),
     );
   }
 

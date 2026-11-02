@@ -127,6 +127,7 @@ import 'widgets/home_realty_section.dart';
 import 'widgets/home_wholesale_section.dart';
 import 'widgets/home_yuk_local_section.dart';
 import 'home_market_nav.dart';
+import 'create_sheet_loop.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 // Эски пастки меню ранглари (`_headerBorder`, `_brandGreen`,
@@ -949,13 +950,19 @@ class _HomeViewState extends State<_HomeView> {
     if (_createSheetBusy) return;
     _createSheetBusy = true;
     try {
-      await _openCreateSheetInner();
+      // Бўлимдан орқага қайтилса — «＋» менюси қайта очилади (эга, 2026-11-03: «фақат бир қадам
+      // орқага»). Меню ёпилса, бўлим очилмаса ёки бошқа экранга ўтилган бўлса — тўхтайди.
+      await runCreateSheetLoop(
+        openOnce: _openCreateSheetInner,
+        stillHere: () => mounted && (ModalRoute.of(context)?.isCurrent ?? false),
+      );
     } finally {
       _createSheetBusy = false;
     }
   }
 
-  Future<void> _openCreateSheetInner() async {
+  /// 	rue — бўлим экрани очилиб, ундан қайтилди (менюни қайта кўрсатиш керак).
+  Future<bool> _openCreateSheetInner() async {
     final hasPhone = phoneDigits(context.read<HomeController>().phone).length >= 9;
     // Совуқ ишга туширишда телефон кечроқ тайёр бўлади — ҳолат ҳали юкланмаган
     // бўлса, менюни кўрсатишдан олдин қисқа муддат кутамиз. Телефонсиз — кутиш
@@ -966,7 +973,7 @@ class _HomeViewState extends State<_HomeView> {
         if (!_shopLoaded) _refreshShopPresence(),
       ]).timeout(const Duration(milliseconds: 1500),
           onTimeout: () => const <void>[]);
-      if (!mounted) return;
+      if (!mounted) return false;
     } else {
       if (_stale(_rolesAt)) unawaited(_refreshDriverRoles());
       if (_stale(_shopAt)) unawaited(_refreshShopPresence());
@@ -986,7 +993,7 @@ class _HomeViewState extends State<_HomeView> {
       locked: gates.locked,
       needsPhone: !hasPhone,
     );
-    if (action == null || !mounted) return;
+    if (action == null || !mounted) return false;
 
     switch (avaCreateRoute(action, gates, hasPhone: hasPhone)) {
       case AvaCreateRoute.appOnly:
@@ -994,13 +1001,13 @@ class _HomeViewState extends State<_HomeView> {
           content: Text(context.tr('home_create_video_app_only')),
           duration: const Duration(seconds: 3),
         ));
-        return;
+        return false;
       case AvaCreateRoute.soon:
         HomeModuleGate.onTapBlocked(context, gates.blockedModule[action] ?? '');
-        return;
+        return false;
       case AvaCreateRoute.needPhone:
         needPhoneForAction(context);
-        return;
+        return false;
       case AvaCreateRoute.open:
         break;
     }
@@ -1008,7 +1015,7 @@ class _HomeViewState extends State<_HomeView> {
     // Китоб ва AVA AI телефонсиз ҳам очилади (AI ўзи рўйхатдан ўтишни таклиф қилади).
     if (action == AvaCreateAction.book) {
       await _push(const AvaBookScreen());
-      return;
+      return true;
     }
     if (action == AvaCreateAction.assistant) {
       await openAssistantEntry(
@@ -1016,7 +1023,7 @@ class _HomeViewState extends State<_HomeView> {
         phone: context.read<HomeController>().phone,
         push: _push,
       );
-      return;
+      return true;
     }
 
     // Қолган барча йўллар эгалик телефонига боғланган (телефон юқорида текширилди).
@@ -1066,6 +1073,7 @@ class _HomeViewState extends State<_HomeView> {
       case AvaCreateAction.assistant:
         break; // юқорида ҳал қилинган
     }
+    return true;
   }
 
   /// «＋» → «Ҳайдовчи бўлиш»: «Иш панели» (автомобиль, учта йўналиш, текширув,

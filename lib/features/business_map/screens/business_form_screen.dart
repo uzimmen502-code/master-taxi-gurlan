@@ -14,6 +14,9 @@ import '../domain/business_subtypes.dart';
 import '../domain/website_link.dart';
 import '../widgets/business_type_autocomplete.dart';
 
+/// «Жойни харитада белгилаш» — тўқ қизил (Material red 900; оқ фонда контраст 6.6:1).
+const kBizPickLocationRed = Color(0xFFB71C1C);
+
 /// Эга ўз объектини қўшади/таҳрирлайди (B-1). Жойни мавжуд [MapPickerScreen] билан белгилайди (B-5).
 /// Ҳамма текширув серверда (`upsertMyBusiness`); бу ерда фақат тез инкор ва тушунарли хато матни.
 class BusinessFormScreen extends StatefulWidget {
@@ -313,7 +316,8 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
                 if (_category != null && text != _label(_category!)) setState(() => _category = null);
               },
             ),
-            const SizedBox(height: 16),
+            // «Фаолият тури» ↔ «Аниқроқ тури» оралиғи — минимал (эга, 2026-11-03; аввал 16).
+            const SizedBox(height: 6),
           ],
           BusinessTypeAutocomplete(
             keyPrefix: 'biz_subtype',
@@ -377,12 +381,21 @@ class _BusinessFormScreenState extends State<BusinessFormScreen> {
           ],
           if (!_online) ...[
             const SizedBox(height: 8),
+            // Белгиланмаган — тўқ қизил, кўзга ташланади (эга, 2026-11-03); белгилангач — яшил.
             OutlinedButton.icon(
+              key: const ValueKey('biz_pick_location'),
               onPressed: _busy ? null : _pickLocation,
               icon: Icon(hasLocation ? Icons.check_circle_rounded : Icons.add_location_alt_rounded,
-                  color: hasLocation ? Colors.green.shade700 : null),
-              label: Text(context.tr(hasLocation ? 'bizmap_location_set' : 'bizmap_pick_location')),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  color: hasLocation ? Colors.green.shade700 : kBizPickLocationRed),
+              label: Text(
+                context.tr(hasLocation ? 'bizmap_location_set' : 'bizmap_pick_location'),
+                style: hasLocation ? null : const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                foregroundColor: hasLocation ? null : kBizPickLocationRed,
+                side: hasLocation ? null : const BorderSide(color: kBizPickLocationRed, width: 1.8),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(

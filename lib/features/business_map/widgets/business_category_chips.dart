@@ -29,7 +29,8 @@ class BusinessCategoryChips extends StatelessWidget {
           for (final c in BusinessCategory.values)
             _Chip(
               key: ValueKey('biz_chip_${c.wire}'),
-              label: context.tr(c.shortLabelKey),
+              // Тўлиқ ном (эга, 2026-11-03: қисқартириш нотўғри бўлган).
+              label: context.tr(c.labelKey),
               icon: c.icon,
               color: c.color,
               selected: selected == c,

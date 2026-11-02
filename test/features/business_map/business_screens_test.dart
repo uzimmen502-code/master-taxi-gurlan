@@ -469,6 +469,35 @@ void main() {
       expect(repo.calls, isEmpty);
     });
 
+    // Эга, 2026-11-03: номлар тўлиқ, оралиқ минимал, «Жойни харитада белгилаш» тўқ қизил.
+    testWidgets('«Жойни харитада белгилаш» — тўқ қизил, қалин; белгилангач — яшил', (tester) async {
+      await _pump(tester, BusinessFormScreen(repository: _FakeRepo([])));
+      final btn = find.byKey(const ValueKey('biz_pick_location'));
+      final style = tester.widget<OutlinedButton>(btn).style!;
+      expect(style.foregroundColor!.resolve({}), kBizPickLocationRed);
+      expect(style.side!.resolve({})!.color, kBizPickLocationRed);
+      final label = tester.widget<Text>(find.descendant(of: btn, matching: find.text('bizmap_pick_location')));
+      expect(label.style!.fontWeight, FontWeight.w800);
+
+      await _pump(tester,
+          BusinessFormScreen(key: UniqueKey(), repository: _FakeRepo([]), existing: _b('1', 'Мой Дўкон', BusinessCategory.retail)));
+      expect(tester.widget<OutlinedButton>(btn).style!.foregroundColor?.resolve({}), isNot(kBizPickLocationRed),
+          reason: 'белгиланган — оддий');
+      expect(find.text('bizmap_location_set'), findsOneWidget);
+    });
+
+    testWidgets('тур майдонлари узун номни тўлиқ кўрсатади (3 қаторгача), оралиқ ≤ 6 px', (tester) async {
+      await _pump(tester, BusinessFormScreen(repository: _FakeRepo([]), existing: _b('1', 'IT', BusinessCategory.it)));
+      final cat = find.byKey(const ValueKey('biz_category_field'));
+      final sub = find.byKey(const ValueKey('biz_subtype_field'));
+      final tf = tester.widget<TextField>(cat);
+      expect(tf.maxLines, 3);
+      expect(tf.minLines, 1);
+      expect(tester.widget<TextField>(sub).maxLines, 3);
+      final gap = tester.getTopLeft(sub).dy - tester.getBottomLeft(cat).dy;
+      expect(gap, lessThanOrEqualTo(6.5));
+    });
+
     testWidgets('таҳрирда майдонлар тўлдирилган; жой бор бўлса "белгиланди" ёзуви', (tester) async {
       final repo = _FakeRepo([]);
       await _pump(tester, BusinessFormScreen(repository: repo, existing: _b('1', 'Мой Дўкон', BusinessCategory.retail)));

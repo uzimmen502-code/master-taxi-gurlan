@@ -342,6 +342,8 @@ class OilHistoryEntry {
   }
 }
 
+/// Сервис нуқтаси (`oil_change_services`). AVA Сервис маркази (эга 2026-11-03: «ҳар битта туман учун
+/// Админ белгилайди») ҳам шу тўпламда: [isAvaCenter] + [districtId], ID `ava_<districtId>` — туманга битта.
 class OilServicePoint {
   const OilServicePoint({
     required this.id,
@@ -351,7 +353,12 @@ class OilServicePoint {
     this.lat,
     this.lng,
     this.active = true,
+    this.districtId = '',
+    this.isAvaCenter = false,
   });
+
+  /// Туманнинг AVA Сервис маркази ҳужжати ID'си.
+  static String avaCenterId(String districtId) => 'ava_${districtId.trim()}';
 
   final String id;
   final String name;
@@ -360,6 +367,21 @@ class OilServicePoint {
   final double? lat;
   final double? lng;
   final bool active;
+  final String districtId;
+  final bool isAvaCenter;
+
+  bool get hasLocation => lat != null && lng != null && (lat != 0 || lng != 0);
+
+  Map<String, dynamic> toMap() => {
+        'name': name.trim(),
+        'phone': phone.trim(),
+        'address': address.trim(),
+        'lat': lat,
+        'lng': lng,
+        'active': active,
+        'districtId': districtId.trim(),
+        'isAvaCenter': isAvaCenter,
+      };
 
   static OilServicePoint fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
@@ -371,8 +393,18 @@ class OilServicePoint {
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),
       active: d['active'] != false,
+      districtId: (d['districtId'] as String?) ?? '',
+      isAvaCenter: d['isAvaCenter'] == true,
     );
   }
+}
+
+/// Сервис нуқталари рўйхати (Мой алмаштириш экрани): бошқа туманларнинг AVA марказлари
+/// кўрсатилмайди; шу тумандаги AVA маркази биринчи (эга: «устунлик АВА сервисга»).
+List<OilServicePoint> orderServicePoints(List<OilServicePoint> points, String districtId) {
+  final ava = [for (final p in points) if (p.isAvaCenter && p.districtId == districtId && districtId.isNotEmpty) p];
+  final rest = [for (final p in points) if (!p.isAvaCenter) p];
+  return [...ava, ...rest];
 }
 
 class OilPricePackage {

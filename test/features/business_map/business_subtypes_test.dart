@@ -53,16 +53,13 @@ void main() {
   });
 
   group('Матн калитлари (3 тил) ва админ', () {
-    test('30 тур: тўлиқ ва қисқа ном 3 тилда; қисқа ≤ тўлиқ; эски 4 калит йўқ', () {
+    test('30 тур: тўлиқ ном 3 тилда; қисқа ном ЙЎҚ (эга, 2026-11-03); эски 4 калит йўқ', () {
       for (final l in langs) {
         final m = lang(l);
         for (final c in BusinessCategory.values) {
           final full = m[c.labelKey] as String?;
-          final short = m[c.shortLabelKey] as String?;
           expect(full, isNotNull, reason: '$l ${c.labelKey}');
-          expect(short, isNotNull, reason: '$l ${c.shortLabelKey}');
-          expect(short!.length, lessThanOrEqualTo(full!.length), reason: '$l ${c.wire}');
-          expect(short.length, lessThanOrEqualTo(24), reason: '$l ${c.wire}: чип узун');
+          expect(m.containsKey('business_cat_short_${c.wire}'), isFalse, reason: '$l ${c.wire}: қисқа ном қайтмасин');
         }
         for (final old in BusinessCategory.legacyWires.keys) {
           expect(m.containsKey('business_cat_$old'), isFalse, reason: '$l: эски калит қолган');

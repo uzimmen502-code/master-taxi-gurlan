@@ -53,8 +53,6 @@ enum BusinessCategory {
 
   String get labelKey => 'business_cat_$wire';
 
-  /// Харита чипи учун қисқа ном (эга, 2026-11-01: «озроқ қисқартирсанг бўлади»); бошқа жойда — тўлиқ [labelKey].
-  String get shortLabelKey => 'business_cat_short_$wire';
 
   /// Эски 14 талик рўйхатнинг янги рўйхатда йўқ wire'лари → янгиси. Сервердаги `LEGACY_CATEGORIES` билан бир хил.
   static const legacyWires = <String, BusinessCategory>{

@@ -49,6 +49,12 @@ class BusinessTypeAutocomplete extends StatelessWidget {
           focusNode: node,
           enabled: enabled,
           maxLength: maxLength,
+          // Узун номлар («Ахборот технологиялари ва рақамли хизматлар») тўлиқ кўринсин — майдон
+          // 3 қаторгача ўсади (эга, 2026-11-03: «номлари тўлиқ бўлсин»). Enter — янги қатор эмас.
+          minLines: 1,
+          maxLines: 3,
+          keyboardType: TextInputType.text,
+          textInputAction: TextInputAction.done,
           decoration: decoration,
           onChanged: onChanged,
           onSubmitted: (_) => onSubmit(),

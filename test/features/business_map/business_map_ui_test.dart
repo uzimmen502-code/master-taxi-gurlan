@@ -68,7 +68,7 @@ void main() {
         await tester.scrollUntilVisible(find.byKey(ValueKey('biz_chip_${c.wire}')), 200,
             scrollable: find.byType(Scrollable).first);
         expect(find.byKey(ValueKey('biz_chip_${c.wire}')), findsOneWidget, reason: c.wire);
-        expect(find.text(c.shortLabelKey), findsOneWidget);
+        expect(find.text(c.labelKey), findsOneWidget, reason: 'тўлиқ ном (2026-11-03)');
       }
     });
 

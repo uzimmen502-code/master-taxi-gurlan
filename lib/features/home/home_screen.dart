@@ -31,7 +31,6 @@ import '../customer_confirm/widgets/customer_confirm_banner.dart';
 import 'widgets/home_wallet_ticker_slot.dart';
 import '../../core/widgets/zone_gate.dart';
 import '../ads/models/ad_model.dart';
-import '../ads/screens/ad_details_route.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../profile/screens/news_hub_screen.dart';
 import '../tv_market/screens/tv_publish_screen.dart';
@@ -1291,12 +1290,9 @@ class _HomeViewState extends State<_HomeView> {
       _showTezKundaSnack();
       return;
     }
-    // Бўлимдаги эълонлар орасида суриб ўтиш мумкин (эга талаби 2026-10-21).
-    // Орқага — Аҳоли бозорига (2026-10-31).
-    await _pushOverMarket(
-      const CheapProductsScreen(),
-      () => _push(adDetailsFor(ad, shelf)),
-    );
+    // Тафсилот эмас — Аралаш бозор рўйхати, босилган эълон биринчи ўринда
+    // (эга, 2026-11-03). Тафсилот рўйхатдаги карточка босилганда очилади.
+    await _push(CheapProductsScreen(pinnedAd: ad));
   }
 
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.

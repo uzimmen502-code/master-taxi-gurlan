@@ -5312,5 +5312,8 @@
   "auto_cat_tire": "Шины",
   "auto_cat_oil": "Масло",
   "auto_cat_battery": "Аккумулятор",
-  "auto_cat_insurance": "Страховка"
+  "auto_cat_insurance": "Страховка",
+  "auto_hub_route": "Маршрут",
+  "ob_gender_label": "Ваш пол (обязательно)",
+  "ob_err_gender": "Укажите пол: мужской или женский"
 }

@@ -204,6 +204,40 @@ class OilChangeRepository {
         .map((s) => s.docs.map(OilServicePoint.fromDoc).toList());
   }
 
+  /// Туманнинг AVA Сервис маркази (фаол бўлса). Битта ҳужжат ўқиш, индекс шарт эмас.
+  Future<OilServicePoint?> fetchAvaCenter(String districtId) async {
+    if (districtId.trim().isEmpty) return null;
+    try {
+      final snap = await _db.collection('oil_change_services').doc(OilServicePoint.avaCenterId(districtId)).get();
+      if (!snap.exists) return null;
+      final p = OilServicePoint.fromDoc(snap);
+      return p.active && p.isAvaCenter ? p : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Админ: барча AVA марказлари (фаол ва ўчиқ).
+  Stream<List<OilServicePoint>> watchAvaCenters() {
+    return _db
+        .collection('oil_change_services')
+        .where('isAvaCenter', isEqualTo: true)
+        .snapshots()
+        .map((s) => s.docs.map(OilServicePoint.fromDoc).toList());
+  }
+
+  /// Админ: туман марказини сақлаш (rules: `oil_change_services` write = isAdmin). ID туманга боғлиқ —
+  /// қайта сақлаш дубликат яратмайди.
+  Future<void> saveAvaCenter(OilServicePoint p, {required String actor}) {
+    final id = OilServicePoint.avaCenterId(p.districtId);
+    return _db.collection('oil_change_services').doc(id).set({
+      ...p.toMap(),
+      'isAvaCenter': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedBy': actor,
+    }, SetOptions(merge: true));
+  }
+
   Future<List<OilPricePackage>> loadPricePackages() async {
     try {
       final snap =

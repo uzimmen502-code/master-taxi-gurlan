@@ -42,7 +42,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   String _phoneDigits = '';
   String _phoneE164 = '';
   String _userName = '';
-  String _gender = 'male';
+  String _gender = '';
   String _birthDate = '';
   String _address = '';
 
@@ -83,7 +83,8 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             prefs.getString('userName') ??
             '')
         .trim();
-    _gender = prefs.getString('user_gender') ?? 'male';
+    // Сукут 'male' эмас — бўш бўлса профилдаги (сервер) қиймат олинади (эга 2026-11-03).
+    _gender = prefs.getString('user_gender') ?? '';
     _birthDate = prefs.getString('user_birth_date') ?? '';
     _address = prefs.getString('user_address') ?? '';
 
@@ -274,9 +275,9 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   }
 
   String _genderLabel(BuildContext context) {
-    return _gender == 'female'
-        ? context.tr('gender_female')
-        : context.tr('gender_male');
+    if (_gender == 'female') return context.tr('gender_female');
+    if (_gender == 'male') return context.tr('gender_male');
+    return '—';
   }
 
   String _primaryLabel(BuildContext context) {

@@ -29,13 +29,27 @@ import '../utils/market_shop_items.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/platform_market_card.dart';
 
+/// [pinned] ни рўйхат бошига қўяди, айнан шу ID'ли бошқа нусхаларни олиб
+/// ташлайди (такрорланмасин). [pinned] `null` бўлса — рўйхат ўзгармайди.
+@visibleForTesting
+List<T> withPinnedFirst<T>(List<T> list, T? pinned, Object? Function(T) idOf) {
+  if (pinned == null) return list;
+  final id = idOf(pinned);
+  return [pinned, ...list.where((e) => idOf(e) != id)];
+}
+
 /// Аҳоли бозори: қидирув + лента.
 class CheapProductsScreen extends StatefulWidget {
-  const CheapProductsScreen({super.key, this.initialQuery = ''});
+  const CheapProductsScreen({super.key, this.initialQuery = '', this.pinnedAd});
 
   /// Қидирув сатри олдиндан тўлдирилган очилиш (мас. эълон тафсилотидаги
   /// «Ўхшаш маҳсулотлар → Барчаси»).
   final String initialQuery;
+
+  /// Асосий экрандаги «Аралаш бозор» бўлимида босилган эълон (эга, 2026-11-03):
+  /// бозор рўйхати очилади, шу эълон БИРИНЧИ ўринда (ҳудуд фильтридан қатъи
+  /// назар — босилган нарса йўқолмасин). Қидирувда — одатдагидек тартиб.
+  final AdModel? pinnedAd;
 
   @override
   State<CheapProductsScreen> createState() => _CheapProductsScreenState();
@@ -442,7 +456,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                final ads = snap.data ?? const <AdModel>[];
+                final pinned = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedAd : null;
+                final ads = withPinnedFirst(snap.data ?? const <AdModel>[], pinned, (a) => a.id);
                 final platform = _filteredPlatform();
                 final shop = _filteredShop();
                 final found = platform.length + ads.length + shop.length;
@@ -484,7 +499,11 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                final entries = _mixedEntries(platform, ads, shop);
+                final mixed = _mixedEntries(platform, ads, shop);
+                // Босилган эълон — аралаш тўрнинг БИРИНЧИ катагида.
+                final entries = pinned == null
+                    ? mixed
+                    : withPinnedFirst(mixed, _MarketEntry.ad(pinned), (e) => e.ad?.id);
                 // Свайп шу дўкон маҳсулотлари орасида — экрандаги тартибда.
                 final shopInGrid = [
                   for (final e in entries)

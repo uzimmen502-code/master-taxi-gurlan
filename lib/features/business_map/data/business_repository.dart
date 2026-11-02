@@ -81,6 +81,18 @@ class BusinessRepository {
     await _fns.httpsCallable('deleteMyBusiness').call<Object?>({'businessId': businessId});
   }
 
+  /// Овқатланиш объектини эганинг ресторан бўлимига (меню, буюртма, курьер) улайди (`linkBusinessRestaurant`,
+  /// эга 2026-11-03). Сервер текширади: иккаласи ҳам чақирувчиники, объект `food`, онлайн эмас, блокланмаган,
+  /// ресторан бошқа объектга уланмаган. Идемпотент (ўша жуфт қайта — ўзгариш йўқ). Хато коди — [errorCode]:
+  /// `BUSINESS_NOT_FOUND` · `BUSINESS_BLOCKED` · `BUSINESS_NOT_FOOD` · `BUSINESS_ONLINE` · `RESTAURANT_NOT_FOUND` ·
+  /// `RESTAURANT_ALREADY_LINKED`.
+  Future<void> linkRestaurant(String businessId, String restaurantId) async {
+    await _fns.httpsCallable('linkBusinessRestaurant').call<Object?>({
+      'businessId': businessId,
+      'restaurantId': restaurantId,
+    });
+  }
+
   /// Асосий онлайн дўконни ўчириш (`deleteMyMainShop`): ичида дўкон бўлса — `SHOP_HAS_INNER_SHOPS`, блокланган —
   /// `SHOP_BLOCKED` ([errorCode]). Дўкон номи ва ўз маҳсулотлари ўчади; улгуржи/Аҳоли эълонлари қолади.
   Future<void> deleteMainShop() async {

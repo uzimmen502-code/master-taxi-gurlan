@@ -18,13 +18,30 @@ import '../../tv_market/services/tv_clip_link.dart';
 import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 
 class RestaurantRegisterScreen extends StatefulWidget {
-  const RestaurantRegisterScreen({super.key, this.repository, this.homeCook = false});
+  const RestaurantRegisterScreen({
+    super.key,
+    this.repository,
+    this.homeCook = false,
+    this.prefill,
+    this.onRegistered,
+    this.panelInitialTab = 0,
+  });
 
   final RestaurantsRepository? repository;
 
   /// `true` — «Уй ошпази бўлиш»: `legalType` `individual` га қотирилади,
   /// танлов кўрсатилмайди. `false` — кафе-ресторан: фақат `yatt`/`llc`.
   final bool homeCook;
+
+  /// Олдиндан тўлдириш (масалан «Менинг бизнесим»даги овқатланиш объектидан). `null` — одатдаги бўш форма.
+  final RestaurantRegisterPrefill? prefill;
+
+  /// Ресторан ОЧИЛГАЧ (табрик ва панелдан олдин) кутилади — масалан объектга улаш (`linkBusinessRestaurant`).
+  /// Хато берса ҳам ресторан бор: панелга ўтилади, фақат огоҳлантириш кўрсатилади.
+  final Future<void> Function(String restaurantId)? onRegistered;
+
+  /// Рўйхатдан кейин очиладиган панел таби ([RestaurantPanelScreen.menuTab] — Меню).
+  final int panelInitialTab;
 
   @override
   State<RestaurantRegisterScreen> createState() => _RestaurantRegisterScreenState();
@@ -57,6 +74,8 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
   @override
   void initState() {
     super.initState();
+    // Майдонлар `_phoneLoaded` дан кейин қурилади — олдиндан тўлдириш уларнинг бошланғич матнига тушади.
+    widget.prefill?.applyTo(_data);
     _loadPhone();
   }
 
@@ -64,7 +83,9 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('user_phone') ?? '';
-      if (raw.isNotEmpty) _data.contactPhone = raw;
+      // Олдиндан берилган телефон (бўш бўлмаса) профилдагидан устун.
+      final prefilled = (widget.prefill?.contactPhone.trim() ?? '').isNotEmpty;
+      if (raw.isNotEmpty && !prefilled) _data.contactPhone = raw;
     } catch (_) {}
     if (mounted) setState(() => _phoneLoaded = true);
   }
@@ -95,6 +116,22 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
       if (!mounted) return;
       final rid = (res['restaurantId'] ?? '') as String;
       final status = (res['status'] ?? 'applied') as String;
+      // Чақирувчининг давоми (масалан объектга улаш). Ресторан аллақачон ОЧИЛГАН: хато бўлса ҳам панелга ўтамиз,
+      // эга «Меню» тугмасидан қайта улайди.
+      final onRegistered = widget.onRegistered;
+      if (onRegistered != null && rid.isNotEmpty) {
+        try {
+          await onRegistered(rid);
+        } catch (e) {
+          debugPrint('[RestaurantRegister] onRegistered($rid) failed: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(context.tr('bizmap_menu_link_after_register_failed'))),
+            );
+          }
+        }
+        if (!mounted) return;
+      }
       if (status == 'approved') {
         // Эга, 2026-10-31: очилиш — табрик (конфетти); «Панелга ўтиш» босилгач панел.
         await showOpenedCelebration(context, homeCook: widget.homeCook);
@@ -108,7 +145,9 @@ class _RestaurantRegisterScreenState extends State<RestaurantRegisterScreen> {
       final nav = Navigator.of(context);
       // `pushReplacement` панел ёпилгунча тугамайди — кутмаймиз.
       unawaited(nav.pushReplacement(
-        MaterialPageRoute(builder: (_) => RestaurantPanelScreen(restaurantId: rid, repository: _repo)),
+        MaterialPageRoute(
+          builder: (_) => RestaurantPanelScreen(restaurantId: rid, repository: _repo, initialTab: widget.panelInitialTab),
+        ),
       ));
       // Ихтиёрий таомлар обзори видеоси: ресторан ЯРАТИЛДИ; видео бекор
       // қилинса/йиқилса таъсир йўқ.

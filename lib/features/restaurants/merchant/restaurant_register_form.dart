@@ -188,3 +188,63 @@ class RestaurantFormData {
         'payment': {'prepay': prepay, 'cash': cash},
       };
 }
+
+/// Рўйхатдан ўтиш формасига ОЛДИНДАН тўлдириладиган қийматлар — масалан «Менинг бизнесим»даги овқатланиш
+/// объектидан (эга, 2026-11-03: объект → меню занжири). Эга формада барибир кўради ва ўзгартира олади; сервер
+/// ўз текширувини қилади (18-қоида). Бўш матн / `null` майдон — тегилмайди (одатдаги бошланғич қиймат қолади).
+class RestaurantRegisterPrefill {
+  const RestaurantRegisterPrefill({
+    this.name = '',
+    this.description = '',
+    this.address = '',
+    this.contactPhone = '',
+    this.lat,
+    this.lng,
+    this.venueType,
+    this.openTime,
+    this.closeTime,
+  });
+
+  final String name;
+  final String description;
+  final String address;
+
+  /// Бўш бўлмаса — профилдаги телефондан (`user_phone`) устун.
+  final String contactPhone;
+  final double? lat;
+  final double? lng;
+
+  /// Фақат кафе-ресторан учун ([VenueType.choices]); уй ошпазида эътиборсиз (сервер `home` ни ўзи қўяди).
+  final String? venueType;
+
+  /// Иш вақти `HH:MM`: иккаласи ҳам тўғри бўлса — «доим очиқ» ўчади ва шу вақтлар қўйилади.
+  final String? openTime;
+  final String? closeTime;
+
+  void applyTo(RestaurantFormData d) {
+    if (name.trim().isNotEmpty) d.name = name.trim();
+    if (description.trim().isNotEmpty) d.description = description.trim();
+    if (address.trim().isNotEmpty) d.address = address.trim();
+    if (contactPhone.trim().isNotEmpty) d.contactPhone = contactPhone.trim();
+    if (lat != null && lng != null) {
+      d.lat = lat;
+      d.lng = lng;
+    }
+    if (d.legalType != RestaurantFormData.homeCookLegalType && VenueType.choices.contains(venueType)) {
+      d.venueType = venueType;
+    }
+    final open = openTime?.trim() ?? '';
+    final close = closeTime?.trim() ?? '';
+    if (_validHhmm(open) && _validHhmm(close)) {
+      d.alwaysOpen = false;
+      d.openTime = open;
+      d.closeTime = close;
+    }
+  }
+
+  /// `HH:MM`, соат ≤ 23, дақиқа ≤ 59 — сервер `hhmmToMin` билан бир хил (нотўғриси сақланмай қолмасин).
+  static bool _validHhmm(String s) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(s);
+    return m != null && int.parse(m.group(1)!) <= 23 && int.parse(m.group(2)!) <= 59;
+  }
+}

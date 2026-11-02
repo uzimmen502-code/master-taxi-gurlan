@@ -61,7 +61,9 @@ class OnboardingController extends ChangeNotifier {
   DeviceBindingCheckResult? lastBindingResult;
 
   /// Ихчам онбординг: шахс+телефон → fingerprint bind → Home. Тил/туман олдинда.
-  String gender = 'male';
+  /// Жинс — МАЖБУРИЙ, сукут йўқ (эга 2026-11-03: «жинс белгиланиши шарт, мажбурий»). Аввал 'male'
+  /// эди — танламаган аёл «эркак» бўлиб қоларди ва аёллар рағбатидан четда қоларди.
+  String gender = '';
   String birthDate = '';
 
   // Манзил (МФЙ/кўча/уй/GPS) онбордингда йиғилмайди — фойдаланувчи уни
@@ -125,10 +127,20 @@ class OnboardingController extends ChangeNotifier {
   String? validate({
     required String name,
     required String phone,
+  }) =>
+      validateOnboardingInput(name: name, phone: phone, gender: gender, birthDate: birthDate);
+
+  /// Рўйхатдан ўтиш майдонларини текшириш (соф функция — тест учун). → l10n калити ёки `null`.
+  static String? validateOnboardingInput({
+    required String name,
+    required String phone,
+    required String gender,
+    required String birthDate,
   }) {
     if (name.trim().isEmpty) return 'ob_err_name';
     final d = phoneDigits(phone);
     if (d.length < 12) return 'ob_phone_required';
+    if (gender != 'male' && gender != 'female') return 'ob_err_gender';
     if (birthDate.trim().isNotEmpty &&
         parseBirthDate(birthDate.trim()) == null) {
       return 'ob_birth_invalid_format';
@@ -343,6 +355,12 @@ class OnboardingController extends ChangeNotifier {
     }
     if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
       errorMessage = 'ob_err_zone';
+      notifyListeners();
+      return false;
+    }
+    // Иккинчи ҳимоя: жинс танланмай профил ёзилмасин (мажбурий, эга 2026-11-03).
+    if (gender != 'male' && gender != 'female') {
+      errorMessage = 'ob_err_gender';
       notifyListeners();
       return false;
     }

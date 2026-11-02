@@ -43,10 +43,10 @@ class HomeInfoTicker extends StatefulWidget {
   static const _question = Color(0xFF2C2C2A);
   static const _answer   = Color(0xFF412402);
 
-  /// Қора хошия (эга, 2026-10-31: «3 px қилиб жонлига чиқар»). Хошия баннер ичида — матн жойи
+  /// Қора хошия (эга, 2026-10-31: «3 px»; 2026-11-02: 3 px → 2 px). Хошия баннер ичида — матн жойи
   /// ҳар томондан шунча кичраяди, шрифт [_fitFontSize] да шунга мосланади.
   static const borderColor = Color(0xFF000000);
-  static const borderWidth = 3.0;
+  static const borderWidth = 2.0;
 
   @override
   State<HomeInfoTicker> createState() => _HomeInfoTickerState();

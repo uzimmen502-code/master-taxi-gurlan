@@ -45,6 +45,47 @@ List<WholesaleProduct> similarWholesale(
   return scored.take(limit).map((e) => e.$1).toList(growable: false);
 }
 
+/// Улгуржи «Б вариант» (эга, 2026-11-02) — намуна экран (Аралашдаги AVA
+/// маҳсулоти) қоидаси: номи мос товарлар ҲАР ҚАНДАЙ сотувчидан (бошқа
+/// сотувчилар олдинда), мос ном бўлмаса — шу бозордаги бошқа товарлар нарх
+/// бўйича. Сабаб: Улгуржида товарларнинг кўпи битта сотувчиники, [similarWholesale]
+/// эса фақат бошқа сотувчиларни олгани учун қатор бўш қоларди.
+List<WholesaleProduct> similarWholesaleAny(
+  WholesaleProduct current,
+  Iterable<WholesaleProduct> pool, {
+  int limit = 16,
+}) {
+  final others = _eligible(current, pool).toList();
+  if (others.isEmpty) return const [];
+  final mine = AdSearchText.buildTokens(current.title, '').toSet();
+  int byPriceThenName(WholesaleProduct a, WholesaleProduct b) {
+    final byPrice = a.basePrice.compareTo(b.basePrice);
+    if (byPrice != 0) return byPrice;
+    return a.titleLower.compareTo(b.titleLower);
+  }
+
+  final scored = <(WholesaleProduct, int)>[];
+  if (mine.isNotEmpty) {
+    for (final p in others) {
+      final overlap = AdSearchText.buildTokens(p.title, '').where(mine.contains).length;
+      if (overlap > 0) scored.add((p, overlap));
+    }
+  }
+  if (scored.isEmpty) {
+    others.sort(byPriceThenName);
+    return others.take(limit).toList(growable: false);
+  }
+  scored.sort((a, b) {
+    final aOther = a.$1.sellerId != current.sellerId ? 0 : 1;
+    final bOther = b.$1.sellerId != current.sellerId ? 0 : 1;
+    if (aOther != bOther) return aOther.compareTo(bOther);
+    final byOverlap = b.$2.compareTo(a.$2);
+    if (byOverlap != 0) return byOverlap;
+    return byPriceThenName(a.$1, b.$1);
+  });
+  return scored.take(limit).map((e) => e.$1).toList(growable: false);
+}
+
 /// Свайп кетма-кетлиги: лентадаги тартиб (кейинги/олдинги маҳсулот), фақат
 /// шу бозордаги ФАОЛ товарлар. Жорий товар доим рўйхатда: лентада бўлмаса
 /// (мас. қидирувдан ёки видеодан очилган) — бошида туради.

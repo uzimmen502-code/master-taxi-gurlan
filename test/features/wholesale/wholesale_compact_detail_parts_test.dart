@@ -3,8 +3,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
+import 'package:ava_gurlan/features/wholesale/utils/wholesale_similar.dart';
 import 'package:ava_gurlan/features/wholesale/widgets/wholesale_compact_detail_parts.dart';
-import 'package:ava_gurlan/models/price_tier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +25,47 @@ void main() {
     PriceTier(minQty: 10, price: 11000),
     PriceTier(minQty: 50, price: 10000),
   ];
+
+  group('similarWholesaleAny (намуна экран қоидаси)', () {
+    WholesaleProduct p(String id, String title, {String seller = 'ava', int price = 10000, String market = WholesaleProduct.marketWholesale, String status = WholesaleProduct.statusActive}) =>
+        WholesaleProduct(
+          id: id,
+          sellerId: seller,
+          sellerCompanyName: seller,
+          title: title,
+          titleLower: title.toLowerCase(),
+          description: '',
+          priceTiers: [PriceTier(minQty: 1, price: price)],
+          status: status,
+          market: market,
+        );
+
+    test('битта сотувчи: номи мос ўз товарлари ҳам чиқади (аввал бўш эди)', () {
+      final cur = p('1', 'Ун Эъзоз');
+      final pool = [cur, p('2', 'Ун Олтин', price: 9000), p('3', 'Шакар')];
+      expect(similarWholesale(cur, pool), isEmpty, reason: 'эски қоида — фақат бошқа сотувчи');
+      expect(similarWholesaleAny(cur, pool).map((e) => e.id), ['2']);
+    });
+
+    test('мос ном йўқ — бошқа товарлар нарх бўйича (бўш қолмайди)', () {
+      final cur = p('1', 'Ун Эъзоз');
+      final pool = [cur, p('2', 'Шакар', price: 12000), p('3', 'Гуруч', price: 8000)];
+      expect(similarWholesaleAny(cur, pool).map((e) => e.id), ['3', '2']);
+    });
+
+    test('бошқа сотувчи олдинда; Хитой, нофаол ва ўзи кирмайди', () {
+      final cur = p('1', 'Ун Эъзоз');
+      final pool = [
+        cur,
+        p('2', 'Ун оқ', price: 1),
+        p('3', 'Ун 50 кг', seller: 'bozor', price: 99999),
+        p('4', 'Ун хитой', market: WholesaleProduct.marketChina),
+        p('5', 'Ун эски', status: 'hidden'),
+      ];
+      expect(similarWholesaleAny(cur, pool).map((e) => e.id), ['3', '2']);
+      expect(similarWholesaleAny(cur, [cur]), isEmpty);
+    });
+  });
 
   group('clampCompactQty', () {
     test('MOQ дан кам — MOQ, қолдиқдан кўп — қолдиқ', () {

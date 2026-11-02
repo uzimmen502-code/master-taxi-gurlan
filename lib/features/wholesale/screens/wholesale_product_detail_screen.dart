@@ -150,8 +150,10 @@ class _WholesaleProductDetailViewState
   /// Қолдиқ (`wholesale_stock`) — фақат Улгуржида, битта ҳужжат тинглагичи.
   Stream<WholesaleStock>? _stock;
 
-  late final List<WholesaleProduct> _similar =
-      similarWholesale(widget.product, widget.catalog);
+  // Улгуржи — намуна экран қоидаси ([similarWholesaleAny]); Хитой — аввалгидек.
+  late final List<WholesaleProduct> _similar = widget.product.isChina
+      ? similarWholesale(widget.product, widget.catalog)
+      : similarWholesaleAny(widget.product, widget.catalog);
 
   /// Жорий фойдаланувчи (канон рақам); бўш — меҳмон ёки ҳали ўқилмади.
   String _myUid = '';

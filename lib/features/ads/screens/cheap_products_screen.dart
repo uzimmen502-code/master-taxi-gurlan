@@ -40,7 +40,16 @@ List<T> withPinnedFirst<T>(List<T> list, T? pinned, Object? Function(T) idOf) {
 
 /// Аҳоли бозори: қидирув + лента.
 class CheapProductsScreen extends StatefulWidget {
-  const CheapProductsScreen({super.key, this.initialQuery = '', this.pinnedAd});
+  const CheapProductsScreen({
+    super.key,
+    this.initialQuery = '',
+    this.pinnedAd,
+    this.pinnedPlatform,
+  });
+
+  /// Бош саҳифадаги Аралаш бўлимида босилган AVA маҳсулоти — [pinnedAd] каби
+  /// биринчи ўринда (эга, 2026-11-03).
+  final PlatformProduct? pinnedPlatform;
 
   /// Қидирув сатри олдиндан тўлдирилган очилиш (мас. эълон тафсилотидаги
   /// «Ўхшаш маҳсулотлар → Барчаси»).
@@ -500,10 +509,13 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 }
 
                 final mixed = _mixedEntries(platform, ads, shop);
-                // Босилган эълон — аралаш тўрнинг БИРИНЧИ катагида.
-                final entries = pinned == null
-                    ? mixed
-                    : withPinnedFirst(mixed, _MarketEntry.ad(pinned), (e) => e.ad?.id);
+                // Босилган эълон / AVA маҳсулоти — аралаш тўрнинг БИРИНЧИ катагида.
+                final pinnedAva = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedPlatform : null;
+                final entries = pinned != null
+                    ? withPinnedFirst(mixed, _MarketEntry.ad(pinned), (e) => e.ad?.id)
+                    : pinnedAva != null
+                        ? withPinnedFirst(mixed, _MarketEntry.platform(pinnedAva), (e) => e.platform?.id)
+                        : mixed;
                 // Свайп шу дўкон маҳсулотлари орасида — экрандаги тартибда.
                 final shopInGrid = [
                   for (final e in entries)

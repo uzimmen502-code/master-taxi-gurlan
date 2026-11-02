@@ -133,11 +133,13 @@ class PlatformProductsRepository {
   /// админнинг белгиси умуман ишламас эди (қурилмада сезилди).
   Future<List<PlatformProduct>> fetchForMarket({int limit = 40}) async {
     final all = await fetchCatalog(limit: catalogLimit);
-    return all
-        .where((p) => p.active && p.showInMarket && p.price > 0)
-        .take(limit)
-        .toList(growable: false);
+    return marketEligible(all).take(limit).toList(growable: false);
   }
+
+  /// Аралаш бозорга чиқадиган AVA товари (экран ва бош саҳифа бўлими учун
+  /// ЯГОНА қоида): фаол, «бозор» белгиси бор, нархи бор.
+  static List<PlatformProduct> marketEligible(Iterable<PlatformProduct> all) =>
+      all.where((p) => p.active && p.showInMarket && p.price > 0).toList(growable: false);
 
   /// Улгуржи бозор лентаси учун — AVA дўкони товарлари.
   ///

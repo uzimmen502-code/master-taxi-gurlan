@@ -1287,6 +1287,16 @@ class _HomeViewState extends State<_HomeView> {
     await _push(CheapProductsScreen(pinnedAd: ad));
   }
 
+  /// Бош саҳифадаги Аралаш бўлимидаги AVA маҳсулоти — эълон каби: бозор
+  /// рўйхати, шу маҳсулот биринчи ўринда (эга, 2026-11-03).
+  Future<void> _openMarketPlatform(PlatformProduct product) async {
+    if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
+      _showTezKundaSnack();
+      return;
+    }
+    await _push(CheapProductsScreen(pinnedPlatform: product));
+  }
+
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
   Future<void> _openWholesaleProduct(
     WholesaleProduct product,
@@ -1658,9 +1668,10 @@ class _HomeViewState extends State<_HomeView> {
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),
                                 ),
-                                // АЙНАН босилган эълон очилади (умумий
-                                // рўйхат эмас) — тафсилот экрани бор.
+                                // Бозор рўйхати, босилган карточка биринчи
+                                // ўринда (эга, 2026-11-03).
                                 onOpenAd: _openMarketAd,
+                                onOpenPlatform: _openMarketPlatform,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid(

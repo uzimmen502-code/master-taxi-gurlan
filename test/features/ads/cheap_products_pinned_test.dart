@@ -26,6 +26,12 @@ void main() {
     expect(identical(withPinnedFirst<String>(list, null, id), list), isTrue);
   });
 
+  test('AVA маҳсулоти ҳам биринчи ўринга (бошқа тур катаклари тегилмайди)', () {
+    String? avaId(String s) => s.startsWith('p:') ? s.substring(2) : null;
+    final grid = ['ad:1', 'p:5', 's:2', 'p:7'];
+    expect(withPinnedFirst(grid, 'p:7', avaId), ['p:7', 'ad:1', 'p:5', 's:2']);
+  });
+
   test('ID null бўлган элементлар (платформа/дўкон катаклари) тегилмайди', () {
     String? adId(String s) => s.startsWith('ad:') ? s.substring(3) : null;
     final grid = ['p:1', 'ad:7', 's:2', 'ad:9'];

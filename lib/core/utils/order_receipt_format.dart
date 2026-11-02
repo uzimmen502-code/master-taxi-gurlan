@@ -150,6 +150,10 @@ class OrderReceiptFormat {
   // ─── Жами, манзил ───────────────────────────────────────────────────
 
   static Iterable<String> _footerLines(OrderModel order, ReceiptTr tr) sync* {
+    // AVA бонуси (рағбат) — жамидан ОЛДИН айирилган; `total` нетто.
+    if (order.incentiveApplied > 0) {
+      yield '${tr('incentive_bonus_label')}: −${formatMoney(order.incentiveApplied)}';
+    }
     yield '${tr('total')}: ${formatMoney(order.total)}';
     if (order.balanceApplied > 0) {
       yield '${tr('crr_pay_from_wallet')}: ${formatMoney(order.balanceApplied)}';

@@ -27,10 +27,12 @@ class WalletSection extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: StreamBuilder<int>(
-        stream: repo.watchBonusBalance(uid),
+      // Пул бўлиб кўринади (эга 2026-11-02): шахсий пул + AVA бонуси битта сумма; остида бонус қисми.
+      child: StreamBuilder<({int bonus, int incentive})>(
+        stream: repo.watchWalletBalances(uid),
         builder: (context, snap) {
-          final bal = snap.data ?? 0;
+          final incentive = snap.data?.incentive ?? 0;
+          final bal = (snap.data?.bonus ?? 0) + incentive;
           return Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -64,6 +66,14 @@ class WalletSection extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (incentive > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    context.tr('wlt_incentive_part').replaceAll('{amount}', formatPrice(incentive)),
+                    key: const ValueKey('wallet_incentive_part'),
+                    style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Text(
                   context.tr('wlt_intro'),

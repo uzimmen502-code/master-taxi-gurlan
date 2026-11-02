@@ -64,6 +64,16 @@ class UserRepository {
       .snapshots()
       .map((s) => (s.data()?['bonusBalance'] as num?)?.toInt() ?? 0);
 
+  /// Ҳамён кўриниши учун (эга 2026-11-02): шахсий пул ва AVA бонуси. Тўлов текширувларида
+  /// фақат [watchBonusBalance] ишлатилсин — бонус бошқа хизматларга сарфланмайди.
+  Stream<({int bonus, int incentive})> watchWalletBalances(String uid) => _col.doc(uid).snapshots().map((s) {
+        final d = s.data();
+        return (
+          bonus: (d?['bonusBalance'] as num?)?.toInt() ?? 0,
+          incentive: (d?['incentiveBalance'] as num?)?.toInt() ?? 0,
+        );
+      });
+
   /// Wallet ledger — oxirgi operatsiyalar.
   Stream<List<WalletLedgerEntry>> watchWalletLedger(
     String uid, {

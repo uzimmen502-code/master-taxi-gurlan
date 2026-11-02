@@ -10,6 +10,7 @@ import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../assistant/assistant_entry.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
+import '../incentives/screens/auto_hub_screen.dart';
 import '../../models/job_ad.dart';
 import '../jobs/jobs_sections.dart';
 import '../jobs/screens/jobs_screen.dart';
@@ -299,11 +300,19 @@ List<ServiceSpotlightItem> buildHomeServices(
       iconScale: 1.15,
       onTap: () => a.push(const MilkPickupScreen()),
     ),
+    // «Авто шина» → «Менинг машинам» (эга 2026-11-02): AVA дўкони машина маҳсулотлари + бонус + AVA сервис.
     ServiceSpotlightItem(
       moduleId: 'tire',
-      label: context.tr('home_module_tire'),
+      label: context.tr('auto_hub_title'),
       imagePath: 'assets/images/services/service_tire.png',
-      onTap: () {},
+      onTap: () {
+        final phone = phoneDigits(context.read<HomeController>().phone);
+        if (phone.length < 9) {
+          needPhoneForAction(context);
+          return;
+        }
+        a.push(AutoHubScreen(uid: phone, initialCategory: 'tire'));
+      },
     ),
     ServiceSpotlightItem(
       moduleId: 'car_wash',

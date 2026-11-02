@@ -43,6 +43,7 @@ import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../dating/dating_telegram_bot.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
+import '../incentives/incentive_offers_flow.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../restaurants/data/restaurants_repository.dart';
 import '../restaurants/screens/restaurant_screen.dart';
@@ -190,6 +191,7 @@ class _HomeViewState extends State<_HomeView> {
   /// бўлади, шунинг учун оқим `build`да телефон пайдо бўлганда уланади.
   late final HomeUnreadBadge _unread;
   String _unreadPhone = '';
+  bool _incentiveFlowStarted = false;
 
   /// Тортиб янгилаш ҳисоблагичи: ошса, бўлимлар қайта яратилади ва ўз
   /// маълумотини қайта сўрайди (қаранг: [_refreshHome]).
@@ -1379,6 +1381,13 @@ class _HomeViewState extends State<_HomeView> {
         if (mounted) unawaited(_syncUnread());
       });
     }
+    // Рағбат (эга 2026-11-02): янги фойдаланувчига табрик / машина таклифи — сессияда бир марта.
+    if (uid.length >= 9 && !_incentiveFlowStarted) {
+      _incentiveFlowStarted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(IncentiveOffersFlow.run(context, uid));
+      });
+    }
 
     return Scaffold(
       backgroundColor: _bg,
@@ -1472,7 +1481,7 @@ class _HomeViewState extends State<_HomeView> {
                                 showWallet: _walletVisible,
                                 tickerAds: snap.data ?? const <HomeTickerAd>[],
                                 wallet: WalletCard(
-                                  balanceAmount: formatPrice(user?.bonusBalance ?? 0),
+                                  balanceAmount: formatPrice(user?.walletDisplayTotal ?? 0),
                                   balanceCurrency: kCurrencySum,
                                   lastTxAmount: '—',
                                   displayName: _displayName(context, user, home),

@@ -19,6 +19,9 @@ class OrderModel {
   final double? lng;
 
   final int balanceApplied;
+
+  /// AVA бонуси (рағбат, эга 2026-11-02) — AVA дўкони буюртмасида; `total` ундан КЕЙИНГИ (нетто) сумма.
+  final int incentiveApplied;
   final int cashDue;
   final int cashPaid;
 
@@ -184,6 +187,7 @@ class OrderModel {
     this.lat,
     this.lng,
     this.balanceApplied = 0,
+    this.incentiveApplied = 0,
     this.cashDue = 0,
     this.cashPaid = 0,
     this.extras = const [],
@@ -391,6 +395,7 @@ class OrderModel {
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),
       balanceApplied: (d['balanceApplied'] as num?)?.toInt() ?? 0,
+      incentiveApplied: (d['incentiveApplied'] as num?)?.toInt() ?? 0,
       cashDue: (d['cashDue'] as num?)?.toInt() ?? 0,
       cashPaid: (d['cashPaid'] as num?)?.toInt() ?? 0,
       extras: (d['extras'] as List?)

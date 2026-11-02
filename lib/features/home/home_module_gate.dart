@@ -9,7 +9,8 @@ class HomeModuleGate {
   HomeModuleGate._();
 
   /// Hali implement qilinmagan modullar — hamkorlik taklifi.
-  static const placeholderModuleIds = {'tire', 'car_wash'};
+  /// 'tire' 2026-11-02 дан «Менинг машинам» (AutoHubScreen) — очилиши админ «Хизматлар созламаси»да.
+  static const placeholderModuleIds = {'car_wash'};
 
   static bool showInGrid(String moduleId) =>
       ServiceConfigHolder.isVisible(moduleId);

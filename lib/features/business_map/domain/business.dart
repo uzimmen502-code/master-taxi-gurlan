@@ -40,7 +40,7 @@ class Business {
   bool get isBranch => branchOf.isNotEmpty;
 
   /// Уланган ресторан бўлими (`restaurants/{id}` — меню, буюртма, курьер); бўш — уланмаган. ФАҚАТ сервер ёзади
-  /// (linkBusinessRestaurant, эга 2026-11-03); [toCallable]да юборилмайди. Харитада бу объект ва ресторан —
+  /// (`linkBusinessRestaurant`, эга 2026-11-03); [toCallable]да юборилмайди. Харитада бу объект ва ресторан —
   /// битта белги.
   final String restaurantId;
 

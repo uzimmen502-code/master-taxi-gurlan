@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/celebration_dialog.dart';
 import '../../my_shop/shop_opened_celebration.dart';
+import '../business_food_flow.dart';
 import '../data/business_repository.dart';
 import '../domain/business.dart';
 import '../domain/product_kind.dart' as product_kind;
@@ -42,6 +43,7 @@ class MyBusinessesScreen extends StatefulWidget {
     this.ownerId,
     @visibleForTesting this.openForm,
     @visibleForTesting this.productsScreen,
+    @visibleForTesting this.menuFlow,
   }) : _repo = repository;
 
   final BusinessRepository? _repo;
@@ -55,6 +57,9 @@ class MyBusinessesScreen extends StatefulWidget {
 
   /// Тест учун: маҳсулотлар экрани ўрнига.
   final Widget Function(Business business)? productsScreen;
+
+  /// Тест учун: овқатланиш объектининг «Меню» занжири ([openBusinessMenuFlow]) ўрнига.
+  final Future<void> Function(BuildContext context, Business business, Set<String> linkedRestaurantIds)? menuFlow;
 
   @override
   State<MyBusinessesScreen> createState() => _MyBusinessesScreenState();
@@ -76,20 +81,38 @@ class _MyBusinessesScreenState extends State<MyBusinessesScreen> {
         Navigator.of(context).push<Object?>(
           MaterialPageRoute(builder: (_) => BusinessFormScreen(existing: b)),
         ));
-    // Янги объект (филиал эмас) сақланди — маҳсулот сотадиган тур (чакана/улгуржи) бўлса, маҳсулотлар экрани
-    // дарров очилади («Менинг дўконим» каби). Бошқа турлар (кафе, хизмат …) — рўйхатда қолади.
-    // Таҳрир, филиал (`true`), бекор ёки хато — бу ерга келмайди.
+    // Янги объект (филиал эмас) сақланди — занжир охиригача давом этади (эга, 2026-11-03): дўкон — маҳсулотлар
+    // экрани («Менинг дўконим» каби); овқатланиш объекти — «Меню» (ресторан бўлими); қолган турлар — маҳсулот/хизмат
+    // каталоги. Таҳрир, филиал (`true`), бекор ёки хато — бу ерга келмайди.
     if (b != null || result is! String || result.isEmpty || !mounted) return;
     final created = await waitForMyBusiness(result, current: _mine, watch: _repo.watchMine(_uid));
     if (created == null || !mounted) return;
     // Табрик (эга, 2026-10-31) — шу объект учун бир марта: дўкон — «Дўконингиз очилди!» (кейин маҳсулотлар),
-    // бошқа тур — «Бизнесингиз харитада!». Харитада кўринмайдиган (онлайн) бошқа тур — табриксиз.
-    if (!product_kind.isShopCategory(created.category)) {
-      if (!created.online) await _celebrateOnMapOnce(created.id);
+    // бошқа тур — «Бизнесингиз харитада!». Харитада кўринмайдиган (онлайн) бошқа тур — табриксиз, каталог дарров.
+    if (product_kind.isShopCategory(created.category)) {
+      await celebrateShopOpenedOnce(context, created.id);
+      if (mounted) await _openProducts(created);
       return;
     }
-    await celebrateShopOpenedOnce(context, created.id);
-    if (mounted) await _openProducts(created);
+    if (!created.online) {
+      await _celebrateOnMapOnce(created.id);
+      if (!mounted) return;
+    }
+    if (businessCanHaveMenu(created)) {
+      await _openMenu(created);
+    } else {
+      await _openProducts(created);
+    }
+  }
+
+  /// «Меню» занжири. Эганинг бошқа объектларига уланган ресторанлар таклиф қилинмайди.
+  Future<void> _openMenu(Business b) {
+    final linked = {
+      for (final x in _mine)
+        if (x.id != b.id && x.hasRestaurant) x.restaurantId,
+    };
+    return widget.menuFlow?.call(context, b, linked) ??
+        openBusinessMenuFlow(context, b, businessRepo: _repo, linkedRestaurantIds: linked);
   }
 
   Future<void> _celebrateOnMapOnce(String id) async {
@@ -218,11 +241,19 @@ class _MyBusinessesScreenState extends State<MyBusinessesScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        tooltip: context.tr('bizprod_open'),
-                        icon: const Icon(Icons.inventory_2_outlined),
-                        onPressed: () => _openProducts(b),
-                      ),
+                      // Овқатланиш объекти — маҳсулотлар эмас, ресторан бўлимининг менюси (эга, 2026-11-03).
+                      if (businessCanHaveMenu(b))
+                        IconButton(
+                          tooltip: context.tr('restaurants_m_tab_menu'),
+                          icon: const Icon(Icons.restaurant_menu_rounded),
+                          onPressed: () => _openMenu(b),
+                        )
+                      else
+                        IconButton(
+                          tooltip: context.tr('bizprod_open'),
+                          icon: const Icon(Icons.inventory_2_outlined),
+                          onPressed: () => _openProducts(b),
+                        ),
                       IconButton(
                         tooltip: context.tr('bizmap_delete'),
                         icon: const Icon(Icons.delete_outline_rounded),

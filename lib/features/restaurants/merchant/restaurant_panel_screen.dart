@@ -22,6 +22,9 @@ class RestaurantPanelScreen extends StatefulWidget {
   final RestaurantsRepository? repository;
   final int initialTab;
 
+  /// «Меню» табининг ўрни (0 — Буюртмалар, 1 — Меню, 2 — Дўкон, 3 — Ҳисобот): объектдан келганда шу очилади.
+  static const int menuTab = 1;
+
   @override
   State<RestaurantPanelScreen> createState() => _RestaurantPanelScreenState();
 }

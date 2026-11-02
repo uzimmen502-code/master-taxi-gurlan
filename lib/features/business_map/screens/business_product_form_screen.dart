@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,12 +11,14 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../tv_market/domain/price_unit.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_publish_screen.dart';
 import '../../tv_market/screens/tv_shop_item_photos_screen.dart';
 import '../../tv_market/services/tv_storage_service.dart';
 import '../domain/business.dart';
+import '../domain/business_type_profile.dart';
 import '../domain/product_kind.dart';
 
 /// Объектнинг маҳсулот/хизмати: ном, нарх, тавсиф, 7 тагача расм, ихтиёрий 1 видео (эга қарори, 2026-10-24).
@@ -68,6 +71,15 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   /// кўринади, эга уни маҳсулотга ўтказа олсин.
   late final bool _showKindChoice = !sellsOnlyProducts(widget.business) || widget.existing?.kind == 'service';
   final List<String> _photos = [];
+
+  /// Нарх бирлиги танлови (S2): объект тури профилидаги рўйхат; таҳрирда сақланган бирлик рўйхатда бўлмаса ҳам
+  /// кўрсатилади (тур кейин ўзгарган бўлиши мумкин — эга қийматини йўқотмасин).
+  late final BusinessTypeProfile _profile = BusinessTypeProfile.forBusiness(widget.business);
+  late PriceUnit _unit = widget.existing?.priceUnit ?? _profile.defaultPriceUnit;
+  late final List<PriceUnit> _units = [
+    for (final u in PriceUnit.values)
+      if (_profile.priceUnits.contains(u) || u == widget.existing?.priceUnit) u,
+  ];
 
   /// Янги маҳсулот: «Видео (ихтиёрий)» белгиланган — сақлангандан кейин видео экрани дарров очилади.
   bool _wantVideo = false;
@@ -129,6 +141,11 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           'price': price,
           'description': _desc.text.trim(),
           'kind': _kind,
+          // Белгиланган нарх — майдон ёзилмайди; аввал бирлик бор эди — ўчирилади (эски ҳужжат шакли).
+          if (_unit != PriceUnit.fixed)
+            'priceUnit': _unit.wire
+          else if (widget.existing!.priceUnit != PriceUnit.fixed)
+            'priceUnit': FieldValue.delete(),
         });
       } else {
         final urls = await (widget.uploadPhotos ?? _defaultUpload)(_phone, List.of(_photos));
@@ -149,6 +166,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           description: _desc.text.trim(),
           status: 'active',
           businessId: widget.business.id,
+          priceUnit: _unit,
         ));
       }
       if (!mounted) return;
@@ -227,6 +245,53 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     );
   }
 
+  /// Нарх майдони остида харидор кўрадиган кўриниш («50 000 сўм / соат», «Келишилади»). Белгиланган нархда ва
+  /// кўрсатиладиган нарх йўқ бўлса — `null` (ортиқча матн йўқ).
+  String? _pricePreview() {
+    if (_unit == PriceUnit.fixed) return null;
+    final price = parseProductPrice(_price.text) ?? 0;
+    final s = formatOfferPrice(price, _unit, context.tr);
+    return s.isEmpty ? null : s;
+  }
+
+  /// Нарх бирлиги — тур профилидаги рўйхат (чиплар). «Келишилади»да нарх бўш қолиши мумкин (майдон ихтиёрий).
+  Widget _unitSection() {
+    final c = context.ava;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(context.tr('price_unit_label'), style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Wrap(
+            key: const ValueKey('bizprod_unit'),
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final u in _units)
+                ChoiceChip(
+                  key: ValueKey('bizprod_unit_${u.name}'),
+                  label: Text(context.tr(u.labelKey)),
+                  selected: _unit == u,
+                  showCheckmark: false,
+                  onSelected: _busy ? null : (_) => setState(() => _unit = u),
+                  selectedColor: c.brandSoft,
+                  backgroundColor: c.chip,
+                  side: BorderSide(color: _unit == u ? c.brand : c.line, width: _unit == u ? 1.5 : 1),
+                  labelStyle: TextStyle(
+                    fontSize: 13,
+                    color: c.ink,
+                    fontWeight: _unit == u ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _thumb(String path) {
     Widget broken(BuildContext _, Object __, StackTrace? ___) => const ColoredBox(color: Color(0x11000000), child: Icon(Icons.broken_image_outlined));
     final img = kIsWeb
@@ -270,8 +335,14 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             enabled: !_busy,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]'))],
-            decoration: InputDecoration(labelText: context.tr('bizprod_f_price'), border: const OutlineInputBorder()),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: context.tr('bizprod_f_price'),
+              border: const OutlineInputBorder(),
+              helperText: _pricePreview(),
+            ),
           ),
+          if (_units.length > 1) _unitSection(),
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey('bizprod_desc'),

@@ -1,0 +1,16 @@
+diff --git a/firestore.rules b/firestore.rules
+index 68b7387..caaea76 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -731,7 +731,10 @@ service cloud.firestore {
+           && d.get('price', 0) is int && d.get('price', 0) >= 0 && d.get('price', 0) <= 999999999
+           && d.get('photoUrls', []) is list && d.get('photoUrls', []).size() <= 7
+           && d.get('clipIds', []) is list && d.get('clipIds', []).size() <= 50
+-          && d.get('kind', 'product') in ['product', 'service'];
++          && d.get('kind', 'product') in ['product', 'service']
++          // S2 (2026-11-03): narx birligi ixtiyoriy; bo'lsa — faqat ro'yxatdagi satr ('' = belgilangan narx).
++          // price>=0 avvalgidek (0 = narx ko'rsatilmaydi / «Kelishiladi»).
++          && d.get('priceUnit', '') in ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'm2', 'piece', 'negotiable'];
+     }
+ 
+     // businessId faqat shu foydalanuvchining O'Z ob'ektiga (businesses/{id}.ownerId); mavjud bo'lmagan ob'ektga

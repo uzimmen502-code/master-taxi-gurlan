@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
@@ -150,9 +149,11 @@ class TvVitrineCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    if (item.hasPrice) ...[
+                    if (item.priceLabel(context.tr).isNotEmpty) ...[
                       Text(
-                        formatMoney(item.price),
+                        item.priceLabel(context.tr),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AvaLight.ok,
                           fontWeight: FontWeight.w800,

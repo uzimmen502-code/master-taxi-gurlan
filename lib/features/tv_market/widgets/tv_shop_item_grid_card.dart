@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
 import '../../../core/theme/app_theme.dart';
@@ -26,6 +25,7 @@ class TvShopItemGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cover = item.coverPhotoUrl;
     final photos = item.displayPhotos.length;
+    final priceText = item.priceLabel(context.tr);
     // Карта кўриниши Аҳоли бозоридаги бошқа карталар (AdCard,
     // PlatformMarketCard) билан бир хил: Card, соя 2, радиус 12, расм
     // `contain` (четлари қирқилмайди, эга 2026-10-19). Ажратиб турадиган
@@ -97,7 +97,7 @@ class TvShopItemGridCard extends StatelessWidget {
               MarketCardText(
                 title: item.title,
                 titleLines: 2,
-                price: item.hasPrice ? formatMoney(item.price) : null,
+                price: priceText.isEmpty ? null : priceText,
                 // Нарх ранги бошқа карталардагидек (AdCard — primaryText).
               ),
             ],

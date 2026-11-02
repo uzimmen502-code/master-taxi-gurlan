@@ -18,6 +18,13 @@ class UserModel {
 
   final int bonusBalance;
 
+  /// AVA бонуси (рағбат) — фақат AVA дўконида, нақдга ечилмайди. Ҳамёнда `bonusBalance` билан
+  /// БИРГА кўрсатилади (эга 2026-11-02), лекин тўлов текширувларида ҲИСОБГА ОЛИНМАЙДИ.
+  final int incentiveBalance;
+
+  /// Ҳамёнда кўрсатиладиган умумий сумма (шахсий пул + AVA бонуси).
+  int get walletDisplayTotal => bonusBalance + incentiveBalance;
+
   /// Profil rasmi (Storage URL) — «Мен» qarindosh yozuvi bilan sinxron.
   final String photoUrl;
 
@@ -55,6 +62,7 @@ class UserModel {
     this.address = const UserAddress(),
     this.addressLegacy = '',
     this.bonusBalance = 0,
+    this.incentiveBalance = 0,
     this.photoUrl = '',
     this.photoPath = '',
     this.lastNewsReadAt,
@@ -92,6 +100,7 @@ class UserModel {
           ? (d['address'] as String)
           : (d['legacyAddress'] ?? '') as String,
       bonusBalance: (d['bonusBalance'] as num?)?.toInt() ?? 0,
+      incentiveBalance: (d['incentiveBalance'] as num?)?.toInt() ?? 0,
       photoUrl: (d['photoUrl'] ?? d['avatar'] ?? '') as String,
       photoPath: (d['photoPath'] ?? '') as String,
       lastNewsReadAt: (d['lastNewsReadAt'] as Timestamp?)?.toDate(),

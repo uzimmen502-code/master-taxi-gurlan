@@ -15,6 +15,7 @@ import '../../../widgets/order_checkout_wallet_banner.dart';
 import '../../profile/screens/address_edit_screen.dart';
 import '../ava_store_colors.dart';
 import '../controllers/platform_store_controller.dart';
+import 'incentive_bonus_row.dart';
 import 'platform_cross_sell_sheet.dart';
 
 /// Сават: товарлар + жами (ёпишган) + буюртма.
@@ -78,10 +79,19 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
             color: AvaStoreColors.ink,
           ),
         ),
-        content: Column(
+        content: ListenableBuilder(
+          listenable: c,
+          builder: (_, __) => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            IncentiveBonusRow(
+              available: c.incentivePreview,
+              applied: c.incentiveApplyAmount,
+              enabled: c.useIncentive,
+              onChanged: c.setUseIncentive,
+            ),
+            if (c.incentivePreview > 0) const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -91,7 +101,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
               ),
               child: Text(
                 '${context.tr('platform_store_pay_total')}: '
-                '${formatPrice(c.grandTotal)} ${loc.translate('sum')}',
+                '${formatPrice(c.netTotal)} ${loc.translate('sum')}',
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 17,
@@ -101,7 +111,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
             ),
             const SizedBox(height: 12),
             OrderCheckoutWalletBanner(
-              orderTotal: c.grandTotal,
+              orderTotal: c.netTotal,
               walletBalance: c.walletBalance,
               useWallet: c.useWallet,
               onUseWalletChanged: c.setUseWallet,
@@ -114,6 +124,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
               style: const TextStyle(fontSize: 12.5, color: AvaStoreColors.muted),
             ),
           ],
+        ),
         ),
         actions: [
           TextButton(
@@ -352,6 +363,15 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
                     ),
                   ),
                 ],
+                if (c.incentivePreview > 0) ...[
+                  const SizedBox(height: 8),
+                  IncentiveBonusRow(
+                    available: c.incentivePreview,
+                    applied: c.incentiveApplyAmount,
+                    enabled: c.useIncentive,
+                    onChanged: c.setUseIncentive,
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Divider(
                   height: 1,
@@ -370,7 +390,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
                     ),
                     const Spacer(),
                     Text(
-                      '${formatPrice(c.grandTotal)} ${loc.translate('sum')}',
+                      '${formatPrice(c.netTotal)} ${loc.translate('sum')}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         color: AppColors.primaryText,

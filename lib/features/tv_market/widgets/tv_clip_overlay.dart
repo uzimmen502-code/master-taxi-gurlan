@@ -4,6 +4,7 @@ import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
+import '../utils/tv_posted_date.dart';
 import '../utils/tv_view_format.dart';
 import 'tv_ad_label.dart';
 import 'tv_owner_action_bar.dart';
@@ -71,8 +72,21 @@ class TvClipOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    final dateLabel = tvPostedDateLabel(
+      clip.createdAt,
+      now: DateTime.now(),
+      todayWord: context.tr('tv_posted_today'),
+    );
     return Stack(
       children: [
+        // Жойланган сана — видеонинг тепа чап бурчагида, лента AppBar'и
+        // (toolbar + 48 px таблар қатори) остида. Фақат янги клипларда.
+        if (dateLabel != null)
+          Positioned(
+            left: 12,
+            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 48 + 6,
+            child: IgnorePointer(child: TvPostedDateText(dateLabel)),
+          ),
         Positioned(
           left: 12,
           // Пастки қатор экраннинг ўнг чеккасигача чўзилади. Ўнгдаги
@@ -167,6 +181,27 @@ class TvClipOverlay extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Жойланган сана ёзуви: оқ, хирароқ (78%), лекин соя билан ҳар қандай
+/// фонда ўқилади.
+class TvPostedDateText extends StatelessWidget {
+  const TvPostedDateText(this.label, {super.key});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      key: const ValueKey('tv-posted-date'),
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.78),
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        shadows: const [Shadow(blurRadius: 4, color: Colors.black54)],
+      ),
     );
   }
 }

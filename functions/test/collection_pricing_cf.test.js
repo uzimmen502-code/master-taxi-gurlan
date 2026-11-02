@@ -149,6 +149,40 @@ async function main() {
     assert.strictEqual(await bonus(), before);
   });
 
+  // ── 9 xonali / +998 courierPhone (bug 2026-11-03) ─────────────────────
+  // Symptom: ilova prefs `user_phone` (9 xonali) yuborsa «Phone mismatch».
+  // Root cause: `assertCourierPhone` xom raqam, token va `task.courierId` — kanon (998…).
+  // Fix: ikkala tomon `canonicalUid` (C-8 kabi); begona chaqiruvchi baribir rad.
+  await check('yig\'ib olish: courierPhone 9 xonali (arrived) va +998 (finalize) — ishlaydi; begona rad', async () => {
+    const B = '998902220002';
+    const A9 = A.slice(3);
+    await submission('s4');
+    const r = await createTask('s4', [{ code: 'cheese', qty: 2 }]);
+    assert.strictEqual((await task(r.taskId)).courierId, A, 'vazifada kanon ID');
+    // begona token + A ning raqami — rad (arrived ham, finalize ham)
+    await expectFail(call('courierMarkCollectionArrived', { courierPhone: A9, taskId: r.taskId }, B), 'permission-denied');
+    await expectFail(call('courierMarkCollectionArrived', { courierPhone: B, taskId: r.taskId }, B), 'permission-denied');
+    const arrived = await call('courierMarkCollectionArrived', { courierPhone: A9, taskId: r.taskId }, A);
+    assert.strictEqual(arrived.ok, true, JSON.stringify(arrived));
+    const t1 = await task(r.taskId);
+    assert.strictEqual(t1.status, 'collecting');
+    assert.ok(t1.arrivedAt, 'arrivedAt yozildi');
+    const again = await call('courierMarkCollectionArrived', { courierPhone: `+${A}`, taskId: r.taskId }, A);
+    assert.strictEqual(again.idempotent, true);
+    const items = [{ code: 'cheese', qty: 2 }];
+    const before = await bonus();
+    await expectFail(call('courierFinalizeCollection', { courierPhone: A9, taskId: r.taskId, cashGiven: 0, items }, B),
+      'permission-denied');
+    const fin = await call('courierFinalizeCollection', { courierPhone: `+${A}`, taskId: r.taskId, cashGiven: 0, items }, A);
+    assert.strictEqual(fin.ok, true, JSON.stringify(fin));
+    assert.strictEqual(fin.V, 40000);
+    assert.strictEqual(await bonus(), before + 40000);
+    // 9 xonali bilan takror — idempotent natija (pul ikki marta emas)
+    const fin2 = await call('courierFinalizeCollection', { courierPhone: A9, taskId: r.taskId, cashGiven: 0, items }, A);
+    assert.strictEqual(fin2.alreadyCompleted, true);
+    assert.strictEqual(await bonus(), before + 40000);
+  });
+
   // ── kuryer to'lovi: «mahsulot» qatori ─────────────────────────────────
   const seedOrder = async (id) => {
     await db.collection('orders').doc(id).set({

@@ -275,6 +275,34 @@ async function main() {
     assert.strictEqual(r.count, ids.length, 'ko\'ringan hammasi qabul qilindi');
     assert.deepStrictEqual((await listReady(A)).orders, [], 'olingandan keyin ro\'yxat bo\'sh');
   });
+  // Bug 2026-11-03: Symptom — olib ketish (pickup) / POS buyurtmasi kuryer
+  // ro'yxatida chiqib, marshrutga olinardi. Root cause — `sellerMarkPickupReady`
+  // ham `status:'ready'` qo'yadi, list/route `fulfillmentMode`ni tekshirmasdi.
+  // Fix — `isCourierExcludedFulfillment` (yagona predikat) ikkala joyda.
+  await check('pickup/pos: ro\'yxatda YO\'Q, marshrutga OLINMAYDI; delivery va eski (maydonsiz) — oladi', async () => {
+    const base = { userPhone: CUSTOMER, status: 'ready', total: 10000, mfy: 'Navoiy' };
+    await db.collection('orders').doc('fmPickup').set({ ...base, fulfillmentMode: 'pickup', fulfillmentStatus: 'ready' });
+    await db.collection('orders').doc('fmPos').set({ ...base, fulfillmentMode: 'pos' });
+    await db.collection('orders').doc('fmDelivery').set({ ...base, fulfillmentMode: 'delivery' });
+    await db.collection('orders').doc('fmLegacy').set({ ...base });
+    const ids = (await listReady(A)).orders.map((o) => o.id).sort();
+    assert.deepStrictEqual(ids, ['fmDelivery', 'fmLegacy']);
+    // faqat pickup/pos — marshrut YO'Q (avvalgi `no_ready_orders`)
+    await assert.rejects(call('courierCreateRoute', { courierPhone: A, orderedOrderIds: ['fmPickup', 'fmPos'] }, A),
+      (e) => e.code === 'failed-precondition' && e.message === 'no_ready_orders');
+    const r = await call('courierCreateRoute', {
+      courierPhone: A, orderedOrderIds: ['fmPickup', 'fmPos', 'fmDelivery', 'fmLegacy'],
+    }, A);
+    assert.strictEqual(r.count, 2);
+    const route = (await db.collection('delivery_routes').doc(r.routeId).get()).data();
+    assert.deepStrictEqual([...route.orders].sort(), ['fmDelivery', 'fmLegacy']);
+    for (const id of ['fmPickup', 'fmPos']) {
+      const od = await order(id);
+      assert.strictEqual(od.status, 'ready', `${id} tegilmadi`);
+      assert.strictEqual(od.courierId, undefined, `${id}: kuryer yozilmadi`);
+    }
+    assert.strictEqual((await order('fmDelivery')).courierId, A);
+  });
 
   // ── parallel submit / idempotentlik ──────────────────────────────────
   await reset();

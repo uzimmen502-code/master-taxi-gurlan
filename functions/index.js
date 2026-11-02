@@ -2803,6 +2803,17 @@ function assertCourierPhone(courierPhone) {
   return uid;
 }
 
+/**
+ * Курьер ОЛА олмайдиган буюртма тури: мижоз ўзи олиб кетади (`pickup`,
+ * `sellerMarkPickupReady` уни ҳам `status:'ready'` қилади) ёки дўконда
+ * жойида сотилган (`pos`). Майдони йўқ эски буюртма — етказиш (ўзгармайди).
+ * `courierListReadyOrders` ва `courierCreateRoute` — ЯГОНА манба (7-қоида).
+ */
+function isCourierExcludedFulfillment(od) {
+  const mode = String((od && od.fulfillmentMode) || '');
+  return mode === 'pickup' || mode === 'pos';
+}
+
 const courierAuth = makeCourierAuth({
   db, caps: capabilitiesModel, canonicalUid, HttpsError: functions.https.HttpsError,
 });
@@ -3154,8 +3165,43 @@ async function repriceBreadOrderFromCatalog(orderBase) {
   };
 }
 
+/**
+ * AVA дўкони (`platform`) етказиб бериш ҳақи — ЯГОНА манба `settings/app`:
+ * `platformDeliveryFeePercent` (0..100, admin `adminSetPlatformDeliveryFeePercent`)
+ * ва `platformDeliveryFeeVersion` (йўқ бўлса 0 — эски созлама).
+ *
+ * 9-қоида: hardcode fallback ЙЎҚ (аввал 5 % эди) — фоиз созланмаган ёки бузуқ
+ * бўлса буюртма `TARIFF_NOT_CONFIGURED` билан рад этилади (fail closed,
+ * `restaurant_delivery_tariff.js` / `local_taxi` билан бир хил).
+ * 8-қоида: float йўқ — фоиз базис пунктга (bps) ўгирилади ва бутун сонда
+ * яхлитланади: `floor((itemsTotal × bps + 5000) / 10000)` — мусбат бутун
+ * сонлар учун аввалги `Math.round(itemsTotal × pct / 100)` билан АЙНАН тенг.
+ */
+function platformDeliveryFeeFromSettings(settings, itemsTotal) {
+  const raw = (settings || {}).platformDeliveryFeePercent;
+  const pctIn = (typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== ''))
+    ? Number(raw)
+    : NaN;
+  if (!Number.isFinite(pctIn) || pctIn < 0) {
+    console.error(JSON.stringify({
+      action: 'placeOrderPostPaid', result: 'denied', errorCode: 'TARIFF_NOT_CONFIGURED',
+      reason: 'platformDeliveryFeePercent missing/invalid',
+    }));
+    throw new functions.https.HttpsError('failed-precondition', 'TARIFF_NOT_CONFIGURED',
+        { code: 'TARIFF_NOT_CONFIGURED' });
+  }
+  // Аввалги хатти-ҳаракат сақланади: 100 % дан юқори — 100 %.
+  const percent = Math.min(pctIn, 100);
+  const bps = Math.round(percent * 100);
+  const total = Number(itemsTotal) || 0;
+  const fee = Math.floor((total * bps + 5000) / 10000);
+  const verRaw = Number((settings || {}).platformDeliveryFeeVersion);
+  const version = Number.isInteger(verRaw) && verRaw > 0 ? verRaw : 0;
+  return { percent, bps, fee, version };
+}
+
 /** Буюртма + омбор; bread/platform нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */
-exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
+exports.placeOrderPostPaid =functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
   }
@@ -3243,6 +3289,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   let platformItemsTotal = null;
   let platformDeliveryFee = null;
   let platformDeliveryFeePercent = null;
+  let platformDeliveryFeeVersion = null;
   if (orderType === 'bread') {
     const priced = await repriceBreadOrderFromCatalog(orderBase);
     pricedItems = priced.items;
@@ -3258,12 +3305,11 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
     const appSettings = await db.collection('settings').doc('app').get();
-    let pct = Number((appSettings.data() || {}).platformDeliveryFeePercent);
-    if (!Number.isFinite(pct) || pct < 0) pct = 5;
-    if (pct > 100) pct = 100;
+    const fee = platformDeliveryFeeFromSettings(appSettings.data() || {}, serverTotal);
     platformItemsTotal = serverTotal;
-    platformDeliveryFeePercent = pct;
-    platformDeliveryFee = Math.round(serverTotal * pct / 100);
+    platformDeliveryFeePercent = fee.percent;
+    platformDeliveryFeeVersion = fee.version;
+    platformDeliveryFee = fee.fee;
     serverTotal = platformItemsTotal + platformDeliveryFee;
   } else if (!Number.isFinite(serverTotal) || serverTotal <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
@@ -3476,6 +3522,10 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       }
       if (platformDeliveryFeePercent != null) {
         orderPayload.deliveryFeePercent = platformDeliveryFeePercent;
+      }
+      if (platformDeliveryFeeVersion != null) {
+        // 9-қоида: қайси % версияси билан ҳисобланганини сақлаймиз.
+        orderPayload.deliveryFeeVersion = platformDeliveryFeeVersion;
       }
       if (incentivePlan.total > 0) {
         // Брутто (маҳсулот + етказиш) ва AVA рағбати; `total` — мижоз тўлайдиган нетто.
@@ -4581,6 +4631,8 @@ exports.courierCreateRoute = functions.https.onCall(async (data, context) => {
         // kodi, vykup limiti, 2 % hisobi o'sha yerda); bu yo'l uni darhol
         // `in_delivery` qilib qo'yardi.
         if (String(od.type || '') === 'restaurant') continue;
+        // Олиб кетиш / POS буюртмаси курьерга тегишли эмас (мижоз ўзи олади).
+        if (isCourierExcludedFulfillment(od)) continue;
         validated.push(orderId);
       }
 
@@ -4689,6 +4741,8 @@ exports.courierListReadyOrders = functions.https.onCall(async (data, context) =>
     if (courierAuth.isOwnOrder(od, courierId)) return;
     // Restoran buyurtmalari — `listNearbyRestaurantOrders` (o'z proeksiyasi).
     if (String(od.type || '') === 'restaurant') return;
+    // Олиб кетиш / POS — курьер рўйхатида кўринмайди (`courierCreateRoute` билан бир хил).
+    if (isCourierExcludedFulfillment(od)) return;
     const oLat = num(od.lat);
     const oLng = num(od.lng);
     if (hasLoc && oLat != null && oLng != null
@@ -9210,8 +9264,10 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
-    const courierId = assertCourierPhone(data.courierPhone);
-    if (callerPhone(context) !== courierId) {
+    // C-8 каби: иккала томон ҳам канон (998…) шаклда — илова 9 рақамли
+    // `user_phone` юборади, `task.courierId` эса канон сақланади.
+    const courierId = canonicalUid(assertCourierPhone(data.courierPhone));
+    if (canonicalUid(callerPhone(context)) !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
     // 'finish': vazifa shu kuryerniki ekani pastda (`task.courierId`) tekshiriladi.
@@ -9232,7 +9288,7 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
         throw new functions.https.HttpsError('not-found', 'task not found');
       }
       const cur = taskSnap.data() || {};
-      if (String(cur.courierId || '') !== courierId) {
+      if (canonicalUid(String(cur.courierId || '')) !== courierId) {
         throw new functions.https.HttpsError('permission-denied', 'Not your task');
       }
       if (!['assigned', 'collecting'].includes(String(cur.status || ''))) {
@@ -9287,7 +9343,8 @@ const COLLECTION_ACTIVE_STATUSES = ['assigned', 'collecting'];
 function collectionValidate(task, { courierId, taskId, itemsIn }) {
   // F9 (audit 2026-10-16): egalik AVVAL — begona kuryer yakunlangan vazifaning
   // pul natijasini (idempotent javob) ko'rmasin.
-  if (String(task.courierId || '') !== courierId) {
+  // `courierId` — канон (998…); эски вазифада 9 рақамли қолган бўлса ҳам бир хил шахс.
+  if (canonicalUid(String(task.courierId || '')) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Not your task');
   }
   // Idempotency: якунланган бўлса — сақланган натижани қайтарамиз.
@@ -9678,8 +9735,9 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
-    const courierId = assertCourierPhone(data.courierPhone);
-    if (callerPhone(context) !== courierId) {
+    // C-8 каби: иккала томон канон (998…) — 9 рақамли `courierPhone` ҳам ишлайди.
+    const courierId = canonicalUid(assertCourierPhone(data.courierPhone));
+    if (canonicalUid(callerPhone(context)) !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
     // 'finish': vazifa shu kuryerniki ekani pastda (`task.courierId`) tekshiriladi.
@@ -17523,18 +17581,48 @@ exports.adminSetPlatformFeaturedAuto = functions.https.onCall(async (data, conte
 
 /** AVA дўкони етказиб бериш ҳақи % — `settings/app.platformDeliveryFeePercent`. */
 exports.adminSetPlatformDeliveryFeePercent = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
   let pct = Number(data.percent);
   if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
     throw new functions.https.HttpsError(
         'invalid-argument', 'percent 0..100 бўлиши керак');
   }
   pct = Math.round(pct * 100) / 100;
-  await db.collection('settings').doc('app').set({
-    platformDeliveryFeePercent: pct,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  return { ok: true, percent: pct };
+  // 9/41-қоида: ҳар ўзгариш версияланади ва тарихга (immutable) ёзилади —
+  // буюртма `deliveryFeeVersion` орқали қайси % билан ҳисобланганини билади.
+  // Версия йўқ эски созлама — 0 (биринчи ўзгариш → v1).
+  const appRef = db.collection('settings').doc('app');
+  const version = await db.runTransaction(async (t) => {
+    const snap = await t.get(appRef);
+    const cur = snap.exists ? (snap.data() || {}) : {};
+    const prevVerRaw = Number(cur.platformDeliveryFeeVersion);
+    const prevVer = Number.isInteger(prevVerRaw) && prevVerRaw > 0 ? prevVerRaw : 0;
+    const prevPctRaw = cur.platformDeliveryFeePercent;
+    const prevPercent = (typeof prevPctRaw === 'number' && Number.isFinite(prevPctRaw))
+      ? prevPctRaw
+      : null;
+    const next = prevVer + 1;
+    t.set(appRef, {
+      platformDeliveryFeePercent: pct,
+      platformDeliveryFeeVersion: next,
+      // `updatedBy` (админ телефони) БУ ЕРГА ЁЗИЛМАЙДИ: `settings/app` ҳаммага
+      // очиқ ўқилади (40-қоида, PII). Ким ўзгартирди — ёпиқ тарих ҳужжатида (`by`).
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    t.create(db.collection('platform_delivery_fee_history').doc(`v${next}`), {
+      percent: pct,
+      prevPercent,
+      version: next,
+      by: adminUid,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return next;
+  });
+  console.log(JSON.stringify({
+    action: 'adminSetPlatformDeliveryFeePercent', result: 'ok', userId: adminUid,
+    percent: pct, version,
+  }));
+  return { ok: true, percent: pct, version };
 });
 
 // ══════════════════════════════════════

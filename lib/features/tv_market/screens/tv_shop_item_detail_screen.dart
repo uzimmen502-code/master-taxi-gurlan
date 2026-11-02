@@ -206,11 +206,12 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (_, i) {
               final s = similar[i];
+              final sPrice = s.priceLabel(context.tr);
               return ProductMiniTile(
                 key: ValueKey('shop-similar-${s.id}'),
                 imageUrl: s.coverPhotoUrl,
                 title: s.title,
-                price: s.hasPrice ? formatMoney(s.price) : null,
+                price: sPrice.isEmpty ? null : sPrice,
                 subtitle: s.ownerName,
                 border: true,
                 onTap: () => _openSimilar(s),

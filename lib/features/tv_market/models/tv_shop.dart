@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../domain/price_unit.dart';
+
 /// Сотувчи мини-дўкони — `tv_shops/{ownerPhone}`.
 class TvShop {
   const TvShop({
@@ -61,10 +63,14 @@ class TvShopItem {
     this.status = 'active',
     this.createdAt,
     this.businessId = '',
+    this.priceUnit = PriceUnit.fixed,
   });
 
   /// Эга қарори (2026-10-24): 7 тагача расм (Аҳоли бозори эълони билан бир хил).
   static const maxPhotos = 7;
+
+  /// Нарх бирлиги (S2, 2026-11-03). Эски ҳужжатда йўқ — [PriceUnit.fixed]; `fixed` бўлса майдон ёзилмайди.
+  final PriceUnit priceUnit;
 
   /// Бизнес харитаси объекти (`businesses/{id}`); бўш — оддий витрина товари.
   final String businessId;
@@ -135,6 +141,10 @@ class TvShopItem {
   bool get isBlocked => status == 'blocked';
   bool get hasVideo => clipIds.isNotEmpty;
   bool get hasPrice => price > 0;
+
+  /// Карточка/варақдаги нарх матни — ягона [formatOfferPrice] орқали; кўрсатиладиган нарх йўқ бўлса `''`.
+  /// `fixed` учун аввалги `formatMoney(price)` билан айнан бир хил.
+  String priceLabel(String Function(String key) tr) => formatOfferPrice(price, priceUnit, tr);
   bool get isBoosted =>
       boostUntil != null && boostUntil!.isAfter(DateTime.now());
   bool get socialPosted => socialPostedAt != null;
@@ -172,6 +182,7 @@ class TvShopItem {
       status: (d['status'] ?? 'active') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       businessId: (d['businessId'] ?? '') is String ? (d['businessId'] ?? '') as String : '',
+      priceUnit: PriceUnit.fromWire(d['priceUnit']),
     );
   }
 
@@ -183,6 +194,8 @@ class TvShopItem {
       'ownerName': ownerName,
       'title': title,
       'price': price,
+      // Белгиланган нархда майдон йўқ — эски ҳужжат/APK билан бир хил шакл (26-банд).
+      if (priceUnit != PriceUnit.fixed) 'priceUnit': priceUnit.wire,
       'photoUrl': photos.isNotEmpty ? photos.first : photoUrl,
       'photoUrls': photos,
       'kind': kind,

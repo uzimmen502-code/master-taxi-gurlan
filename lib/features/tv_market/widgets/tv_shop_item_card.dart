@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
 import '../../../core/theme/ava_tokens.dart';
@@ -98,9 +97,9 @@ class TvShopItemCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 8),
-                  if (item.hasPrice) ...[
+                  if (item.priceLabel(context.tr).isNotEmpty) ...[
                     Text(
-                      formatMoney(item.price),
+                      item.priceLabel(context.tr),
                       style: const TextStyle(
                         color: AvaLight.ok,
                         fontWeight: FontWeight.w800,

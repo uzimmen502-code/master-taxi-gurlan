@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
 import '../../tv_market/models/tv_ad_prefill.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
@@ -324,7 +323,7 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
                   subtitle: Text(
                     [
                       if (it.isBlocked) context.tr('bizprod_status_blocked'),
-                      if (it.hasPrice) formatMoney(it.price),
+                      if (it.priceLabel(context.tr).isNotEmpty) it.priceLabel(context.tr),
                       context.tr(it.kind == 'service' ? 'bizprod_kind_service' : 'bizprod_kind_product'),
                       if (it.hasVideo) context.tr('bizprod_has_video'),
                     ].join(' · '),

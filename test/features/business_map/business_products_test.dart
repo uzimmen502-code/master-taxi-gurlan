@@ -97,7 +97,8 @@ TvShopItem _item(
     );
 
 Future<void> _pump(WidgetTester tester, Widget home) async {
-  tester.view.physicalSize = const Size(420 * 2, 900 * 2);
+  // S2 (2026-11-03): формада нарх бирлиги чиплари қўшилди — ListView ленивий, сақлаш тугмаси кўринсин.
+  tester.view.physicalSize = const Size(420 * 2, 1400 * 2);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: home));

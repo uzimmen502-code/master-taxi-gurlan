@@ -424,8 +424,8 @@ class _ProductsStripState extends State<_ProductsStrip> {
                             ),
                             const SizedBox(height: 3),
                             Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                            if (it.hasPrice)
-                              Text(formatMoney(it.price), maxLines: 1, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                            if (it.priceLabel(context.tr).isNotEmpty)
+                              Text(it.priceLabel(context.tr), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
                           ],
                         ),
                       ),

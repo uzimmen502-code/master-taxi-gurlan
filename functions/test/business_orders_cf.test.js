@@ -128,7 +128,7 @@ const ITEMS = {
 async function reset() {
   await clearEmulator();
   await db.collection('server_config').doc('business_orders').set({ stage: 'public' });
-  await db.collection('settings').doc('business_delivery').set(TARIFF);
+  await db.collection('settings').doc('restaurant_delivery').set(TARIFF);
   for (const u of [SELLER, BUYER, BUYER2, STRANGER]) {
     await db.collection('users').doc(u).set({ role: 'user', name: `U${u.slice(-4)}`, bonusBalance: 0 });
   }
@@ -238,43 +238,34 @@ async function main() {
     assert.strictEqual((await call('getBusinessOrdersAccess', { businessId: 'biz1' }, BUYER)).allowed, true);
     await cfg.set({ stage: 'public' });
   });
-  await check('F2 тариф ҳужжати йўқ → TARIFF_NOT_CONFIGURED; base йўқ → TARIFF_NOT_CONFIGURED', async () => {
-    const t = db.collection('settings').doc('business_delivery');
+  await check('F2 МАВЖУД ресторан тарифи ишлатилади (эга 2026-11-03): ҳужжат йўқ / base йўқ → TARIFF_NOT_CONFIGURED; эски business_delivery эътиборсиз', async () => {
+    const t = db.collection('settings').doc('restaurant_delivery');
     await t.delete();
+    await db.collection('settings').doc('business_delivery').set({ base: 1, perKm: 1, version: 99 });
     await expectCode(call('quoteBusinessOrder', { businessId: 'biz1', items: [{ itemId: 'p1', qty: 1 }], ...C_LOC }, BUYER), 'TARIFF_NOT_CONFIGURED', 'failed-precondition');
     await expectCode(place(BUYER), 'TARIFF_NOT_CONFIGURED');
     await t.set({ perKm: 1000, version: 1 });
     await expectCode(place(BUYER), 'TARIFF_NOT_CONFIGURED');
-    // Ресторан тарифи бор бўлса ҳам бизнесга ишлатилмайди (алоҳида версияланган ҳужжат).
-    await db.collection('settings').doc('restaurant_delivery').set({ base: 5000, perKm: 1500, version: 1 });
-    await expectCode(place(BUYER), 'TARIFF_NOT_CONFIGURED');
+    await db.collection('settings').doc('business_delivery').delete();
     await t.set(TARIFF);
   });
-  await check('F3 avaFeeBps > 0 → AVA_FEE_NOT_SUPPORTED (fail closed); admin callable фақат 0 қабул қилади', async () => {
-    await db.collection('settings').doc('business_delivery').set({ ...TARIFF, avaFeeBps: 200 });
-    await expectCode(place(BUYER), 'AVA_FEE_NOT_SUPPORTED');
-    await db.collection('settings').doc('business_delivery').set(TARIFF);
-    await expectCode(call('adminSetBusinessDeliveryTariff', { base: 6000, perKm: 1500, avaFeeBps: 100, reason: 'test' }, ADMIN), 'AVA_FEE_NOT_SUPPORTED');
-    await assert.rejects(call('adminSetBusinessDeliveryTariff', { base: 6000, perKm: 1500, reason: 'test' }, BUYER));
+  await check('F3 ресторан avaFeeBps (ресторан улуши) бизнес буюртмасига ТАЪСИР ҚИЛМАЙДИ: avaFee 0; тариф callable йўқ', async () => {
+    await db.collection('settings').doc('restaurant_delivery').set({ ...TARIFF, avaFeeBps: 200 });
+    const r = await place(BUYER);
+    const od = (await db.collection('orders').doc(r.orderId).get()).data();
+    assert.strictEqual(od.avaFee.rateBps, 0);
+    assert.strictEqual(od.avaFee.amount, 0);
+    await call('customerCancelBusinessOrder', { orderId: r.orderId }, BUYER);
+    await db.collection('settings').doc('restaurant_delivery').set(TARIFF);
+    assert.strictEqual(typeof fns.adminSetBusinessDeliveryTariff, 'undefined', 'алоҳида тариф callable йўқ (битта манба)');
   });
-  await check('F4 adminSetBusinessDeliveryTariff: версия+1, ўзгармас тарих v{n}, audit, avaFeeBps 0; adminSetBusinessOrdersConfig: audit, телефонлар яширин', async () => {
-    const r = await call('adminSetBusinessDeliveryTariff', { ...TARIFF, version: undefined, reason: 'narx sinovi' }, ADMIN);
-    assert.strictEqual(r.version, TARIFF.version + 1);
-    const cur = (await db.collection('settings').doc('business_delivery').get()).data();
-    assert.strictEqual(cur.avaFeeBps, 0);
-    assert.strictEqual(cur.base, TARIFF.base);
-    const h = (await db.collection('business_delivery_tariffs').doc(`v${r.version}`).get()).data();
-    assert.strictEqual(h.previous.version, TARIFF.version);
-    const audits = (await db.collection('admin_audit').where('kind', '==', 'business_delivery_tariff').get()).size;
-    assert.strictEqual(audits, 1);
+  await check('F4 adminSetBusinessOrdersConfig: audit, телефонлар яширин', async () => {
     const c = await call('adminSetBusinessOrdersConfig', { stage: 'public', addTesterIds: [BUYER2], reason: 'sinov' }, ADMIN);
     assert.strictEqual(c.testerCount, 1);
     const a = (await db.collection('admin_audit').where('kind', '==', 'business_orders_config').get()).docs[0].data();
     assert.ok(!JSON.stringify(a).includes(BUYER2), 'audit\'да тўлиқ телефон йўқ');
     await expectCode(call('adminSetBusinessOrdersConfig', { stage: 'beta', reason: 'xx1' }, ADMIN), 'STAGE_INVALID');
-    await db.collection('settings').doc('business_delivery').set(TARIFF);
   });
-
   // ── 3. Жойлаш ───────────────────────────────────────────────────────
   let o1;
   await check('P1 нарх ФАҚАТ каталогдан (клиент price/total эътиборсиз), снимок, тариф версияси, avaFee 0, placed, код, ҳодиса', async () => {
@@ -306,7 +297,8 @@ async function main() {
     assert.strictEqual(od.deliveryTariffVersion, TARIFF.version);
     assert.strictEqual(od.deliveryTariffSnapshot.base, TARIFF.base);
     assert.strictEqual(od.deliveryTariffSnapshot.perKm, TARIFF.perKm);
-    assert.deepStrictEqual(od.avaFee, { rateBps: 0, basis: 55000, amount: 0, version: 1, settingsVersion: TARIFF.version, rateSource: 'default', charged: false });
+    const cfgVersion = ((await db.collection('server_config').doc('business_orders').get()).data() || {}).version || 0;
+    assert.deepStrictEqual(od.avaFee, { rateBps: 0, basis: 55000, amount: 0, version: 1, settingsVersion: cfgVersion, rateSource: 'default', charged: false });
     assert.strictEqual(od.goodsPaymentMethod, 'cash_buyout');
     assert.strictEqual(od.deliveryPaymentMethod, 'wallet');
     assert.strictEqual(od.courierId, null);

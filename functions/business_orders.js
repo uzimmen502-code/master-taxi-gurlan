@@ -7,22 +7,22 @@
  *     «етказилмади» — `delivery_failed.js` (модул `business`, қарорни сотувчи қилади — ресторандаги каби).
  *   - Етказиш ҳақини ХАРИДОР курьерга тўлайди (ресторан модели): нақд ёки ҳамён (`bizDelivery_{orderId}`,
  *     мижоз passenger_credit → курьер passenger_credit, ресторан `restDelivery_` билан бир хил ёндашув).
- *   - AVA ҳозир комиссия ОЛМАЙДИ: `settings/business_delivery.avaFeeBps` (йўқ = 0). Ҳар буюртмага
+ *   - AVA ҳозир комиссия ОЛМАЙДИ (ресторан ҳужжатидаги `avaFeeBps` бу ерда ЎҚИЛМАЙДИ). Ҳар буюртмага
  *     `avaFee` муҳри (rateBps 0, settingsVersion). Комиссия ечиш коди ҲАЛИ ЙЎҚ — шунинг учун > 0 қиймат
  *     буюртмани РАД этади (`AVA_FEE_NOT_SUPPORTED`, fail closed), админ callable эса фақат 0 қабул қилади.
  *   - Фақат ЖИСМОНИЙ жойи бор объект (`businesses.online != true`, координата бор) ва фақат
  *     `kind == 'product'` маҳсулот; хизмат етказилмайди.
  *
- * ТОВАР ПУЛИ (PROPOSED — ресторан `cash_buyout` семантикаси, 47-қоида): курьер олиб кетишда товар
+ * ТОВАР ПУЛИ (CONFIRMED эга 2026-11-03 — ресторан `cash_buyout` семантикаси): курьер олиб кетишда товар
  * пулини СОТУВЧИГА ўз пулидан беради ва мижоздан жами (товар + нақд бўлса етказиш) олади. Товар пули
  * AVA ledger'ига ЁЗИЛМАЙДИ (AVA сотувчи эмас) — фақат ҳолат (`paymentStatus`, `buyoutAmount`) ва ҳодиса.
  * Курьернинг вэкуп лимити — мавжуд `restaurant_courier_prefs` (`courierSetBuyoutPrefs`).
  * «Етказилмади»да товар сотувчига қайтади (ҳодиса); вэкуп пулини сотувчи курьерга қайтариши — AVA'дан
  * ташқари (UNKNOWN: эга қарори керак).
  *
- * ТАРИФ — `settings/business_delivery` (шакли `settings/restaurant_delivery` билан бир хил; соф функциялар
- * `restaurant_delivery_tariff.js`дан), тарих `business_delivery_tariffs/v{n}`, ҳужжат/нарх йўқ →
- * `TARIFF_NOT_CONFIGURED`. Буюртмага `deliveryTariffVersion` + `deliveryTariffSnapshot` (9-қоида).
+ * ТАРИФ — МАВЖУД ресторан тарифи `settings/restaurant_delivery` (эга 2026-11-03; соф функциялар
+ * `restaurant_delivery_tariff.js`дан), тарих `restaurant_delivery_tariffs/v{n}`, ҳужжат/нарх йўқ →
+ * `TARIFF_NOT_CONFIGURED`. Чегаралар (15 дақ, 100/30, ''/дона/кг/м²) — CONFIRMED эга 2026-11-03. Буюртмага `deliveryTariffVersion` + `deliveryTariffSnapshot` (9-қоида).
  *
  * БОСҚИЧ (42-қоида) — `server_config/business_orders` (rules'да match йўқ = клиентга ёпиқ; тестер
  * телефонлари оммавий эмас, 40-қоида): { stage: off|internal|pilot|public, testerIds, pilotDistrictIds,
@@ -59,8 +59,12 @@ const COURIER_LIVE = 'order_courier_live';
 const CUSTODY = 'custody_events';
 const ADMIN_AUDIT = 'admin_audit';
 const CONFIG_DOC = Object.freeze(['server_config', 'business_orders']);
-const TARIFF_DOC = Object.freeze(['settings', 'business_delivery']);
-const TARIFF_HISTORY = 'business_delivery_tariffs';
+/**
+ * Эга 2026-11-03: «мавжуд тариф ишлатилсин» — ресторан етказиш тарифи (битта манба, 7-қоида).
+ * Нархни фақат `adminSetRestaurantDeliveryPrices` ўзгартиради (версия + тарих шу ерда).
+ */
+const TARIFF_DOC = Object.freeze(['settings', 'restaurant_delivery']);
+const TARIFF_HISTORY = 'restaurant_delivery_tariffs';
 
 const STAGES = Object.freeze(['off', 'internal', 'pilot', 'public']);
 /** Сотувчи қабул қилиш муддати, дақиқа (PROPOSED; `acceptTimeoutMin` билан ўзгаради). */
@@ -523,7 +527,9 @@ function attachBusinessOrders(exportsObj, deps) {
     });
 
     const tariffDoc = await readTariffDoc();
-    const ava = resolveAvaFee(tariffDoc);
+    // Ресторан ҳужжатидаги `avaFeeBps` — ресторан улуши (D9), бизнес буюртмасига ТЕГИШЛИ ЭМАС:
+    // эга 2026-11-03 — бизнес буюртмасидан AVA улуши йўқ. Муҳр версияси = босқич конфиги версияси.
+    const ava = resolveAvaFee({ version: cfg.version });
     if (!ava.ok) throw fail('failed-precondition', ava.code);
     const quote = await quoteDelivery({ fromLat, fromLng, toLat, toLng }, tariffDoc);
     const avaFee = {
@@ -1149,98 +1155,9 @@ function attachBusinessOrders(exportsObj, deps) {
     .onRun(async () => expireUnaccepted());
 
   // ═══════════════════════════════════════════════════════════════════════
-  // АДМИН: тариф (версия + тарих + audit) ва босқич (audit) — 9, 41, 42-қоида
+  // АДМИН: босқич (audit) — 41, 42-қоида. Тариф — ресторан callable (adminSetRestaurantDeliveryPrices).
   // ═══════════════════════════════════════════════════════════════════════
   const ADMIN_ROLES = ['admin', 'superadmin'];
-
-  function parsePrices(o, label) {
-    const base = Number(o && o.base);
-    const perKm = Number(o && o.perKm);
-    if (!Number.isInteger(base) || base <= 0 || base > 10000000 || !Number.isInteger(perKm) || perKm < 0 || perKm > 10000000) {
-      throw fail('invalid-argument', 'PRICE_INVALID', { region: label });
-    }
-    const out = { base, perKm };
-    if (o.nightCoef != null && o.nightCoef !== '') {
-      const c = Number(o.nightCoef);
-      if (!Number.isFinite(c) || c < tariff.NIGHT_COEF_MIN || c > tariff.NIGHT_COEF_MAX) throw fail('invalid-argument', 'NIGHT_COEF_INVALID', { region: label });
-      out.nightCoef = Math.round(c * 1000) / 1000;
-    }
-    if (o.maxKm != null && o.maxKm !== '') {
-      const m = Number(o.maxKm);
-      if (!Number.isInteger(m) || m < 1 || m > 100) throw fail('invalid-argument', 'MAX_KM_INVALID', { region: label });
-      out.maxKm = m;
-    }
-    return out;
-  }
-
-  /**
-   * data: { base, perKm, nightCoef?, nightStart?, nightEnd?, roadFactor?, maxKm?, regions?, avaFeeBps?, reason }
-   * Ҳар сақлаш — янги `version`, ўзгармас `business_delivery_tariffs/v{n}` ва `admin_audit`, битта
-   * транзакцияда. Мавжуд буюртмалар ўз `deliveryTariffVersion`/`deliveryTariffSnapshot` билан қолади.
-   * `avaFeeBps` ҳозир фақат 0 (эга 2026-11-03; ечиш коди йўқ).
-   */
-  exportsObj.adminSetBusinessDeliveryTariff = functions.https.onCall(async (data, context) => {
-    const actor = await requireCallerRoles(context, ADMIN_ROLES, 'Admin role required');
-    const d = data || {};
-    const reason = str(d.reason, 300);
-    if (reason.length < 3) throw fail('invalid-argument', 'REASON_REQUIRED');
-    const global = parsePrices(d, 'global');
-    for (const h of [d.nightStart, d.nightEnd]) {
-      if (h != null && h !== '' && !(Number.isInteger(Number(h)) && Number(h) >= 0 && Number(h) <= 23)) {
-        throw fail('invalid-argument', 'NIGHT_HOURS_INVALID');
-      }
-    }
-    if (d.roadFactor != null && d.roadFactor !== '') {
-      const rf = Number(d.roadFactor);
-      if (!Number.isFinite(rf) || rf < 1 || rf > 2) throw fail('invalid-argument', 'ROAD_FACTOR_INVALID');
-    }
-    if (d.avaFeeBps !== undefined && d.avaFeeBps !== null && d.avaFeeBps !== 0) {
-      throw fail('invalid-argument', 'AVA_FEE_NOT_SUPPORTED', { allowed: [0] });
-    }
-    const regions = {};
-    const rawRegions = d.regions && typeof d.regions === 'object' ? d.regions : {};
-    for (const [k, v] of Object.entries(rawRegions)) {
-      if (!localTaxi.REGION_KEYS.includes(k)) throw fail('invalid-argument', 'REGION_UNKNOWN', { region: k });
-      if (v) regions[k] = parsePrices(v, k);
-    }
-    const ref = db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]);
-    const version = await db.runTransaction(async (t) => {
-      const snap = await t.get(ref);
-      const cur = snap.exists ? (snap.data() || {}) : {};
-      const prevVersion = Number.isInteger(cur.version) ? cur.version : 0;
-      const next = prevVersion + 1;
-      const doc = {
-        base: global.base,
-        perKm: global.perKm,
-        nightCoef: global.nightCoef != null ? global.nightCoef : (cur.nightCoef != null ? cur.nightCoef : tariff.DEFAULT_NIGHT_COEF),
-        nightStart: d.nightStart != null && d.nightStart !== '' ? Number(d.nightStart) : intOr(cur.nightStart, tariff.DEFAULT_NIGHT_START_H, 0, 23),
-        nightEnd: d.nightEnd != null && d.nightEnd !== '' ? Number(d.nightEnd) : intOr(cur.nightEnd, tariff.DEFAULT_NIGHT_END_H, 0, 23),
-        roadFactor: d.roadFactor != null && d.roadFactor !== '' ? Math.round(Number(d.roadFactor) * 1000) / 1000
-          : (cur.roadFactor != null ? cur.roadFactor : tariff.DEFAULT_ROAD_FACTOR),
-        maxKm: global.maxKm != null ? global.maxKm : intOr(cur.maxKm, tariff.DEFAULT_MAX_KM, 1, 100),
-        regions,
-        avaFeeBps: 0,
-        version: next,
-        reason,
-        updatedAt: ts(),
-        updatedBy: actor,
-      };
-      t.set(ref, doc);
-      t.create(db.collection(TARIFF_HISTORY).doc(`v${next}`), {
-        ...doc,
-        previous: snap.exists ? { ...cur, updatedAt: cur.updatedAt || null } : null,
-        changedBy: actor,
-        changedAt: ts(),
-      });
-      t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: 'business_delivery_tariff', actor, target: TARIFF_DOC.join('/'),
-        from: String(prevVersion), to: String(next), reason, at: ts(),
-      });
-      return next;
-    });
-    log('admin_tariff', { userId: tail4(actor), version, result: 'ok' });
-    return { ok: true, version };
-  });
 
   /**
    * data: { stage?, addTesterIds?, removeTesterIds?, pilotDistrictIds?, acceptTimeoutMin?, reason }

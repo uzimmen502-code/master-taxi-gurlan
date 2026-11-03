@@ -1545,6 +1545,19 @@ service cloud.firestore {
           && resource.data.restaurantId is string
           && isRestaurantMember(resource.data.restaurantId);
     }
+    // «Менинг бизнесим» буюртмаси (`type: 'business'`, business_orders.js, эга 2026-11-03): сотувчи — `sellerUid`
+    // (= businesses.ownerId, фақат сервер ёзади). Бўш `sellerUid`/телефонсиз токен мос келмайди (анонимга оқмасин).
+    // get / ота ҳужжат — `.get()` билан; list — фақат тўғридан-тўғри майдон (`.get()` default тузоғи): сўров
+    // `where sellerUid == <ўз телефони>` бўлиши шарт.
+    function isBusinessSellerOf(o) {
+      let s = phoneDigits(o.get('sellerUid', ''));
+      return isAuth() && s != '' && phoneDocIdsMatch(phoneFromToken(), s);
+    }
+    function isBusinessSellerOfOrderList() {
+      return isAuth()
+          && phoneFromToken() != ''
+          && resource.data.sellerUid == phoneFromToken();
+    }
 
     // КУРЬЕРНИНГ ЖОНЛИ ЖОЙИ — буюртма бўйича (S6, эга 2026-10-19: мижоз ва ресторан эгаси курьерни кузатсин).
     // `order_courier_live/{orderId}`: ФАҚАТ шу буюртмага биринчи бўлиб тайинланган курьер ёзади ва ФАҚАТ
@@ -1560,7 +1573,9 @@ service cloud.firestore {
       return (o.get('type', '') == 'restaurant'
               && o.get('restaurantStatus', '') in ['accepted', 'ready', 'picked', 'arrived'])
           || (o.get('type', '') in ['bread', 'platform']
-              && o.get('fulfillmentStatus', '') in ['courier_picked', 'arrived']);
+              && o.get('fulfillmentStatus', '') in ['courier_picked', 'arrived'])
+          || (o.get('type', '') == 'business'
+              && o.get('businessStatus', '') in ['accepted', 'ready', 'picked', 'arrived']);
     }
     function liveIsCourierOf(o) {
       let me = userDocIdFromPhoneToken();
@@ -1590,6 +1605,7 @@ service cloud.firestore {
           || (liveOrderActive(liveOrderData(oid)) && (
               phoneDocIdsMatch(phoneFromToken(), phoneDigits(liveOrderData(oid).get('userPhone', '')))
               || isRestaurantMember(liveOrderData(oid).get('restaurantId', '_'))
+              || isBusinessSellerOf(liveOrderData(oid))
           ))
       );
       allow list: if false;
@@ -1606,11 +1622,15 @@ service cloud.firestore {
           || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
           || isActiveRouteCourierOfOrder()
           || isRestaurantMemberOfOrderGet()
+          || isBusinessSellerOf(resource.data)
       );
       // `list` — курьер йўли ЙЎҚ (юқорига қаранг).
       allow list: if isAuth() && (
           isStaff()
           || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+          // Бизнес сотувчиси ресторан шартидан ОЛДИН: `restaurantId` филтрсиз сўровда ресторан шарти
+          // хато беради ва ундан кейинги шартгача етиб бормайди (тест: biz_order_rules.test.js).
+          || isBusinessSellerOfOrderList()
           || isRestaurantMemberOfOrderList()
       );
 
@@ -1655,17 +1675,18 @@ service cloud.firestore {
                  phoneDigits(restaurantOrderParent().get('userPhone', '')))
             || (restaurantOrderParent().get('restaurantId', '') != ''
                 && isRestaurantMember(restaurantOrderParent().get('restaurantId', '')))
+            || isBusinessSellerOf(restaurantOrderParent())
         );
         allow write: if false;
       }
-      // `private/secrets` — pickupCode: фақат ресторан (курьерга оғзаки
+      // `private/secrets` — pickupCode: фақат ресторан / бизнес сотувчиси (курьерга оғзаки
       // айтади) ва админ; мижоз ва курьер ўқимайди.
       match /private/{doc} {
         allow read: if isAdmin() || (
             isAuth()
             && restaurantOrderParent().get('restaurantId', '') != ''
             && isRestaurantMember(restaurantOrderParent().get('restaurantId', ''))
-        );
+        ) || isBusinessSellerOf(restaurantOrderParent());
         allow write: if false;
       }
     }

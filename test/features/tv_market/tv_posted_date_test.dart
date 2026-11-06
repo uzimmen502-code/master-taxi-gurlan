@@ -1,4 +1,5 @@
 import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
+import 'package:ava_gurlan/features/tv_market/screens/tv_market_feed_screen.dart';
 import 'package:ava_gurlan/features/tv_market/utils/tv_posted_date.dart';
 import 'package:ava_gurlan/features/tv_market/widgets/tv_clip_overlay.dart';
 import 'package:flutter/material.dart';
@@ -96,6 +97,63 @@ void main() {
       expect(pos.dy, lessThan(200), reason: 'сана тепада бўлиши керак');
       final color = tester.widget<Text>(f).style!.color!;
       expect(color.a, inExclusiveRange(0.5, 1.0));
+    });
+
+    // Регрессия (эга скриншоти 2026-11-06): ҳақиқий лента тузилмасида
+    // (`extendBodyBehindAppBar` + AppBar + 48 px таблар) сана табдан ≈104 px
+    // пастда эди — AppBar баландлиги иккинчи марта қўшилган.
+    testWidgets('ҳақиқий лентада: сана таблар остидан 3 px; таб ёзуви яшил чизиқдан 1 px', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final posted = kTvPostedDateSince.add(const Duration(minutes: 1));
+      await tester.pumpWidget(MaterialApp(
+        home: DefaultTabController(
+          length: 3,
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: AppBar(
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: TabBar(
+                  dividerHeight: 0,
+                  indicatorWeight: 2.5,
+                  labelStyle: const TextStyle(fontSize: 11.5, height: 1.15),
+                  tabs: [
+                    tvFeedTabLabel('AVAGram'),
+                    tvFeedTabLabel('Янгиликлар', showBadge: true, badgeLabel: 'янги'),
+                    tvFeedTabLabel('Реклама ва эълонлар'),
+                  ],
+                ),
+              ),
+            ),
+            body: Stack(children: [
+              TvClipOverlay(
+                clip: clip(posted),
+                onContact: () {},
+                onLike: () {},
+                onComment: () {},
+                onShare: () {},
+                onSave: () {},
+              ),
+            ]),
+          ),
+        ),
+      ));
+      final appBarBottom = tester.getRect(find.byType(AppBar)).bottom;
+      final dateTop = tester.getTopLeft(find.byKey(const ValueKey('tv-posted-date'))).dy;
+      expect(dateTop - appBarBottom, kTvPostedDateGap);
+
+      final tabBar = tester.getRect(find.byType(TabBar));
+      final indicatorTop = tabBar.bottom - 2.5;
+      for (final t in ['AVAGram', 'Янгиликлар']) {
+        final textBottom = tester.getRect(find.text(t)).bottom;
+        expect(indicatorTop - textBottom, closeTo(kTvTabLabelGap, 0.01), reason: t);
+      }
+      // 2 қаторли ёрлиқ ҳам пастга текисланади (тепадан кесилмайди).
+      final longRect = tester.getRect(find.text('Реклама ва эълонлар'));
+      expect(indicatorTop - longRect.bottom, closeTo(kTvTabLabelGap, 0.01));
+      expect(longRect.top, greaterThanOrEqualTo(tabBar.top));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('эски клип: сана йўқ', (tester) async {

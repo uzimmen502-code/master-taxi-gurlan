@@ -1547,14 +1547,14 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
               height: 1.15,
             ),
             tabs: [
-              _tvTabLabel(context.tr('tv_tab_avagram')),
-              _tvTabLabel(
+              tvFeedTabLabel(context.tr('tv_tab_avagram')),
+              tvFeedTabLabel(
                 context.tr('tv_tab_news'),
                 badgeKey: const ValueKey('tv_news_unread_dot'),
                 showBadge: tvNewsHasUnread(latest: _newsLatestAt, seen: _newsSeenAt),
                 badgeLabel: context.tr('tv_news_unread'),
               ),
-              _tvTabLabel(context.tr('tv_tab_ads')),
+              tvFeedTabLabel(context.tr('tv_tab_ads')),
             ],
           ),
         ),
@@ -1655,9 +1655,17 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 }
 
+/// Таб ёзуви (матн қутиси) остидан яшил индикатор чизиғигача, px (эга 2026-11-06: 1 px).
+const double kTvTabLabelGap = 1;
+
+/// Таб баландлиги (Flutter `Tab` стандарти, матнли таб) — ёзув шу қутининг ПАСТИГА қўйилади.
+const double _kTvTabHeight = 46;
+
 /// Узун ёрлиқлар (мас. «Реклама ва эълонлар») экранга сиғиши учун 2
-/// қаторга ўралади — қирқилмайди, isScrollable шарт эмас.
-Tab _tvTabLabel(String text, {Key? badgeKey, bool showBadge = false, String badgeLabel = ''}) {
+/// қаторга ўралади — қирқилмайди, isScrollable шарт эмас. Ёзув таб ўртасида
+/// эмас, пастида: индикатор чизиғигача [kTvTabLabelGap].
+@visibleForTesting
+Tab tvFeedTabLabel(String text, {Key? badgeKey, bool showBadge = false, String badgeLabel = ''}) {
   final label = Text(
     text,
     textAlign: TextAlign.center,
@@ -1665,10 +1673,20 @@ Tab _tvTabLabel(String text, {Key? badgeKey, bool showBadge = false, String badg
     softWrap: true,
     overflow: TextOverflow.ellipsis,
   );
-  if (!showBadge) return Tab(child: label);
+  // widthFactor: 1 — ёзув кенглигича қолади (индикатор ёзув остида, таб бўйлаб эмас).
+  Widget atBottom(Widget child) => SizedBox(
+        height: _kTvTabHeight,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          widthFactor: 1,
+          child: Padding(padding: const EdgeInsets.only(bottom: kTvTabLabelGap), child: child),
+        ),
+      );
+  if (!showBadge) return Tab(height: _kTvTabHeight, child: atBottom(label));
   // Ўқилмаган янгилик: ёзув ёнида кичик нуқта (Semantics — экран ўқувчи учун).
   return Tab(
-    child: Semantics(
+    height: _kTvTabHeight,
+    child: atBottom(Semantics(
       label: badgeLabel,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1683,7 +1701,7 @@ Tab _tvTabLabel(String text, {Key? badgeKey, bool showBadge = false, String badg
           ),
         ],
       ),
-    ),
+    )),
   );
 }
 

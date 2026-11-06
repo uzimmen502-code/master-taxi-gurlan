@@ -79,12 +79,15 @@ class TvClipOverlay extends StatelessWidget {
     );
     return Stack(
       children: [
-        // Жойланган сана — видеонинг тепа чап бурчагида, лента AppBar'и
-        // (toolbar + 48 px таблар қатори) остида. Фақат янги клипларда.
+        // Жойланган сана — видеонинг тепа чап бурчагида, таблар қатори
+        // остидан [kTvPostedDateGap] px пастда. Фақат янги клипларда.
+        // Лента `extendBodyBehindAppBar: true` — Scaffold body'га берадиган
+        // `padding.top` ЎЗИ статус бар + AppBar + таблар баландлигини ўз ичига
+        // олади; аввал улар яна қўшилгани учун сана ≈104 px пастга тушган эди.
         if (dateLabel != null)
           Positioned(
             left: 12,
-            top: MediaQuery.paddingOf(context).top + kToolbarHeight + 48 + 6,
+            top: MediaQuery.paddingOf(context).top + kTvPostedDateGap,
             child: IgnorePointer(child: TvPostedDateText(dateLabel)),
           ),
         Positioned(
@@ -184,6 +187,10 @@ class TvClipOverlay extends StatelessWidget {
     );
   }
 }
+
+/// Таблар қаторининг пастки чегарасидан (яшил чизиқ остидан) сана ёзувигача, px
+/// (эга 2026-11-06: 3 px).
+const double kTvPostedDateGap = 3;
 
 /// Жойланган сана ёзуви: оқ, хирароқ (78%), лекин соя билан ҳар қандай
 /// фонда ўқилади.

@@ -128,20 +128,23 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
 
   @override
   void dispose() {
-    _panelCtrl?.removeListener(_onPanelControllerUpdate);
-    final ctrl = context.read<MarshrutDriverPanelController>();
-    ctrl.onStopRingtone = null;
-    ctrl.onPassengerOrderCancelled = null;
-    ctrl.onEndStopApproaching = null;
-    _stopRingtone();
+    // Observer — БИРИНЧИ. Аввал `dispose`да `context.read` хато ташлаб,
+    // `removeObserver`гача етмасди; кейинги `resumed` ўлик context'ни
+    // ўқиб fatal берарди (Crashlytics 602ee296).
     WidgetsBinding.instance.removeObserver(this);
+    final ctrl = _panelCtrl;
+    ctrl?.removeListener(_onPanelControllerUpdate);
+    ctrl?.onStopRingtone = null;
+    ctrl?.onPassengerOrderCancelled = null;
+    ctrl?.onEndStopApproaching = null;
+    _stopRingtone();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      final ctrl = context.read<MarshrutDriverPanelController>();
+    final ctrl = _panelCtrl;
+    if (state == AppLifecycleState.resumed && mounted && ctrl != null) {
       ctrl.checkPendingTrips();
       unawaited(ctrl.refreshProfileInfo());
       unawaited(ctrl.probeNetworkNow());

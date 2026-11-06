@@ -436,6 +436,10 @@ class _RelativesScreenState extends State<RelativesScreen>
             ),
       body: phone == null
           ? const Center(child: CircularProgressIndicator())
+          // Telefonsiz (kirmagan) foydalanuvchi: `doc('')` build ichida
+          // ArgumentError tashlardi (Crashlytics 2889e1c0, fatal).
+          : phone.isEmpty
+          ? _empty(context.tr('rel_phone_verify'))
           : StreamBuilder<List<RelativePerson>>(
               stream: _repo.watchPeople(phone),
               builder: (context, snap) {

@@ -1,5 +1,6 @@
 // «Хабарлар» битта рўйхат (эга, 2026-11-02): вақт формати, ўқилганлик, қаторлар, филтр/қидирув.
 import 'package:ava_gurlan/features/deal_chat/data/deal_chat_repository.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:ava_gurlan/features/profile/inbox/inbox_entries.dart';
 import 'package:ava_gurlan/features/profile/inbox/inbox_read_store.dart';
 import 'package:ava_gurlan/features/profile/inbox/inbox_time.dart';
@@ -276,7 +277,9 @@ void main() {
     });
 
     test('ҳайдовчи аризаси: ҳолат ўзгарса яна жирний', () async {
-      final drv = {'status': 'pending', 'createdAt': null};
+      // Аниқ сана: `createdAt: null` бўлса код ҲАҚИҚИЙ «ҳозир»ни олади — тест
+      // 2026-11-06 07:00Z дан кейин йиқиларди (қотирилган `now` + 1 кун).
+      final drv = {'status': 'pending', 'createdAt': Timestamp.fromDate(now)};
       var e = build(InboxData(driver: drv));
       expect(e.any((x) => x.kind == InboxKind.driver), isTrue);
       await read.markOpened('driver', at: now.add(const Duration(days: 1)));

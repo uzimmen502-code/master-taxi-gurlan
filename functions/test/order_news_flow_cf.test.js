@@ -225,6 +225,60 @@ async function main() {
     assert.strictEqual(pushOf(DISP_TOKEN).length, 0);
   });
 
+  // ── N10 (эга 2026-11-07): «тайёр» → ҳудуддаги ОНЛАЙН курьерларга овозли/вибрацияли push ──
+  const NEAR = '998933000101'; // ~1 км
+  const FAR = '998933000102'; // ~30 км — ҳудуддан ташқари
+  const STALE = '998933000103'; // presence эски (онлайн эмас)
+  const NEAR_TOKEN = 'tok_near_1234567890';
+  const FAR_TOKEN = 'tok_far_1234567890';
+  const STALE_TOKEN = 'tok_stale_1234567890';
+  const ORDER_LOC = { lat: 41.8406, lng: 60.3917 };
+  async function seedOnlineCourier(phone, token, lat, lng, ageSec = 5) {
+    const acc = `acc_${phone}`;
+    await db.collection('users').doc(phone).set({ role: 'user', accountId: acc, fcmToken: token, appLang: 'uz_Cyrl' });
+    await db.collection('provider_capabilities').doc(acc).set({
+      identity: { accountId: acc, primaryUid: phone }, courier: { active: true }, status: { courier: 'approved' },
+    });
+    await db.collection('provider_presence').doc(phone).set({
+      isOnline: true, module: 'courier', lat, lng, updatedAt: new Date(Date.now() - ageSec * 1000),
+    });
+  }
+  async function resetCouriers() {
+    await resetStaff();
+    await seedOnlineCourier(NEAR, NEAR_TOKEN, 41.8496, 60.3917);
+    await seedOnlineCourier(FAR, FAR_TOKEN, 42.11, 60.39);
+    await seedOnlineCourier(STALE, STALE_TOKEN, 41.8410, 60.3917, 600);
+  }
+
+  await resetCouriers();
+  await check('N10 ready → faqat hududdagi ONLAYN kuryerga ovozli push (kanal courier_new_order), bir marta; uzoq/eski — yo\'q', async () => {
+    const before = { ...plat, ...ORDER_LOC, status: 'accepted' };
+    await updateOrder('k1', before, { status: 'ready' }, 'evt-k1');
+    await updateOrder('k1', before, { status: 'ready' }, 'evt-k1'); // takror
+    const near = pushOf(NEAR_TOKEN);
+    assert.strictEqual(near.length, 1, `near: ${near.length}`);
+    assert.strictEqual(near[0].data.type, 'courier_new_order');
+    assert.strictEqual(near[0].data.orderId, 'k1');
+    assert.strictEqual(near[0].android.notification.channelId, 'courier_new_order');
+    assert.strictEqual(near[0].android.notification.sound, 'incoming_ring');
+    // Intl uz-UZ гуруҳлагичи — узилмас бўшлиқ (U+00A0); `\s` уни ҳам қамрайди.
+    assert.ok(/^AVA дўкони · 55\s000 сўм/.test(near[0].notification.body), near[0].notification.body);
+    assert.ok(/1\.0 км/.test(near[0].notification.body), near[0].notification.body);
+    assert.strictEqual(pushOf(FAR_TOKEN).length, 0, 'hududdan tashqari');
+    assert.strictEqual(pushOf(STALE_TOKEN).length, 0, 'onlayn emas');
+  });
+
+  await resetCouriers();
+  await check('N11 kuryerga push yo\'q: olib ketish (pickup), restoran, in_delivery; non ham — bor', async () => {
+    await updateOrder('k2', { ...plat, ...ORDER_LOC, status: 'accepted', fulfillmentMode: 'pickup' }, { status: 'ready' }, 'evt-k2');
+    await updateOrder('k3', { ...plat, ...ORDER_LOC, status: 'ready' }, { status: 'in_delivery' }, 'evt-k3');
+    assert.strictEqual(pushOf(NEAR_TOKEN).length, 0, `pickup/in_delivery: ${pushOf(NEAR_TOKEN).length}`);
+    await updateOrder('k4', { ...base, ...ORDER_LOC, status: 'accepted' }, { status: 'ready' }, 'evt-k4');
+    const near = pushOf(NEAR_TOKEN);
+    assert.strictEqual(near.length, 1);
+    assert.ok(near[0].notification.body.startsWith('Нон ·'), near[0].notification.body);
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
   process.exit(failed ? 1 : 0);

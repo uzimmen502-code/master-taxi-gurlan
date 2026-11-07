@@ -340,6 +340,12 @@ Object.assign(MESSAGES, {
     uz_Latn: { title: '🚚 Buyurtma kuryerga topshirildi', body: 'AVA do\'koni · №{no}. Kuryerni kuzatish uchun havolaga o\'ting.' },
     ru: { title: '🚚 Заказ передан курьеру', body: 'Магазин AVA · №{no}. Перейдите по ссылке, чтобы отследить курьера.' },
   },
+  // Ҳудуддаги ОНЛАЙН курьерга «янги буюртма» (эга 2026-11-07: овоз + вибрация, канал `courier_new_order`).
+  courier_new_order: {
+    uz_Cyrl: { title: '🔔 Янги буюртма', body: '{label} · {amount} сўм{dist}. Курьер панелида олинг.' },
+    uz_Latn: { title: '🔔 Yangi buyurtma', body: '{label} · {amount} so\'m{dist}. Kuryer panelida oling.' },
+    ru: { title: '🔔 Новый заказ', body: '{label} · {amount} сум{dist}. Заберите в панели курьера.' },
+  },
   // Диспетчер курьер жойини ўқий олмайди (rules `order_courier_live`: фақат админ) — ҳаволасиз.
   platform_seller_handed_courier_nolink: {
     uz_Cyrl: { title: '🚚 Буюртма курьерга топширилди', body: 'AVA дўкони · №{no}. Курьер йўлда.' },

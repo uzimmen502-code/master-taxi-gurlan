@@ -1061,6 +1061,7 @@ async function getOrderFlowMode(field, defaultValue = 'manual') {
 }
 
 const notifI18n = require('./notif_i18n');
+const { tokenOk } = require('./courier_push');
 
 /**
  * AVA дўкони (`type: platform`) курьер босқичи хабари калити (эга 2026-11-07), бошқа ҳолат — `null`.
@@ -1113,6 +1114,68 @@ async function notifyPlatformStaff(orderId, order, status) {
     console.log(JSON.stringify({ action: 'platformStaffNotify', orderId, status, result: 'ok', recipients: messages.length }));
   } catch (e) {
     console.error(JSON.stringify({ action: 'platformStaffNotify', orderId, status, result: 'failed', errorCode: 'NOTIFY_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+  }
+}
+
+/** Курьер хабари учун буюртма тури номи — уч тилда (ички атама йўқ). */
+const COURIER_ORDER_LABELS = Object.freeze({
+  platform: { uz_Cyrl: 'AVA дўкони', uz_Latn: 'AVA do\'koni', ru: 'Магазин AVA' },
+  bread: { uz_Cyrl: 'Нон', uz_Latn: 'Non', ru: 'Хлеб' },
+});
+
+/**
+ * «Тайёр» буюртма → ҳудуддаги ОНЛАЙН курьерларга овозли/вибрацияли push (эга 2026-11-07).
+ * «Ҳудуд» — `courierListReadyOrders` билан БИР ХИЛ қоида (D-GEO-3): курьернинг жонли нуқтасидан
+ * [COURIER_READY_RADIUS_KM_DEFAULT] км; координатасиз буюртма ёки курьер — чекланмайди. Курьер рўйхатида
+ * кўринмайдиган буюртмалар (ресторан, бизнес, олиб кетиш/POS, ўз буюртмаси) — push ҳам йўқ.
+ * Онлайн рўйхати `courierPush.onlineCouriers()` (presence ≤120 с + capability + «Туман» тоифаси).
+ * Best-effort: хато буюртма оқимини тўхтатмайди. Чақирувчи уни бир марта чақиради (news gate).
+ */
+async function notifyCouriersOrderReady(orderId, order) {
+  try {
+    const type = String(order.type || 'bread');
+    if (type === 'restaurant' || isBusinessOrder(order) || isCourierExcludedFulfillment(order)) return { notified: 0 };
+    if ((order.courierId || '').toString().trim()) return { notified: 0 };
+    const oLat = Number(order.lat);
+    const oLng = Number(order.lng);
+    const orderGeo = Number.isFinite(oLat) && Number.isFinite(oLng) && !(oLat === 0 && oLng === 0)
+      && Math.abs(oLat) <= 90 && Math.abs(oLng) <= 180;
+    const radiusM = COURIER_READY_RADIUS_KM_DEFAULT * 1000;
+    const candidates = (await courierPush.onlineCouriers())
+      .filter((c) => !courierAuth.isOwnOrder(order, c.id))
+      .map((c) => ({ ...c, distanceM: orderGeo && c.lat != null && c.lng != null
+        ? localTaxiGeo.haversineMeters(c.lat, c.lng, oLat, oLng) : null }))
+      .filter((c) => c.distanceM == null || c.distanceM <= radiusM);
+    const amount = new Intl.NumberFormat('uz-UZ').format(Math.round(Number(order.total) || 0));
+    const seen = new Set();
+    const messages = [];
+    for (const c of candidates) {
+      const token = await courierPush.resolveToken(c.id);
+      if (!tokenOk(token) || seen.has(token)) continue;
+      seen.add(token);
+      const lang = await notifI18n.langOfPhone(db, c.id);
+      const labels = COURIER_ORDER_LABELS[type] || COURIER_ORDER_LABELS.bread;
+      const km = c.distanceM == null ? '' : ` · ${(c.distanceM / 1000).toFixed(1)} ${lang === 'uz_Latn' ? 'km' : 'км'}`;
+      const m = notifI18n.render('courier_new_order', lang, { label: labels[lang] || labels.uz_Cyrl, amount, dist: km });
+      messages.push({
+        token,
+        notification: { title: m.title, body: m.body },
+        data: { type: 'courier_new_order', screen: 'courier', orderId: String(orderId) },
+        android: {
+          priority: 'high',
+          // Илова каналини яратади (овоз `incoming_ring` + вибрация); эски APK'да канал йўқ —
+          // Android стандарт каналда кўрсатади.
+          notification: { channelId: 'courier_new_order', sound: 'incoming_ring', defaultVibrateTimings: false, vibrateTimingsMillis: [0, 800, 400, 800, 400, 1200] },
+        },
+        apns: { payload: { aps: { sound: 'default' } } },
+      });
+    }
+    if (messages.length) await admin.messaging().sendEach(messages);
+    console.log(JSON.stringify({ action: 'courierNewOrderPush', orderId, type, candidates: candidates.length, result: 'ok', notified: messages.length }));
+    return { notified: messages.length };
+  } catch (e) {
+    console.error(JSON.stringify({ action: 'courierNewOrderPush', orderId, result: 'failed', errorCode: 'COURIER_PUSH_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+    return { notified: 0 };
   }
 }
 
@@ -1223,6 +1286,8 @@ exports.onOrderUpdate = functions.firestore
     // Сотувчи (AVA дўкони — админ/диспетчерлар; эга 2026-11-07, `onOrderCreate` билан бир хил қабул қилувчилар).
     // Хабар бир марта ёзилгандан кейингина (триггер такрорида push қайта кетмайди).
     if (platformKey) await notifyPlatformStaff(change.after.id, after, status);
+    // Ҳудуддаги онлайн курьерларга «янги буюртма» (овоз + вибрация) — фақат «тайёр» ўтишида, бир марта.
+    if (status === 'ready') await notifyCouriersOrderReady(change.after.id, after);
 
     const fcmTitle = `📢 ${title}`;
     const fcmBody = body || typeLabel;

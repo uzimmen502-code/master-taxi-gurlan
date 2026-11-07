@@ -122,7 +122,18 @@ class LogisticsRepository {
     await _call(_demand, 'acceptLeg', {'legId': legId});
   }
 
+  /// Бўлакни ҚАЙТАРИШ (йиғиш пайтида) — ядронинг мавжуд `cancelAssignment`
+  /// callable'и; бу ерда чақирилади, чунки сервер `details.reason`
+  /// (`CHAIN_LOCKED` ва б.) матн танлаш учун керак (`MatchRepository` уни
+  /// йўқотади). Рухсат ва ҳолат — серверда.
+  Future<void> giveBackLeg(String legId) async {
+    await _call(_demand, 'cancelAssignment', {'demandId': legId});
+  }
+
   /// Посилкани ОЛДИМ — код ёки QR + расм (мажбурий) + ҳолат белгиси.
+  ///
+  /// [selfTransfer] — олдинги бўлак ҳам шу курьерда (ўзига топшириш): код ва
+  /// расм керак эмас, сервер `legAssignments` бўйича текширади (эга 2026-11-07).
   Future<Map<String, dynamic>> scanHandover({
     required String legId,
     String? code,
@@ -132,6 +143,7 @@ class LogisticsRepository {
     double? lat,
     double? lng,
     double? accuracy,
+    bool selfTransfer = false,
   }) =>
       _call(_demand, 'scanHandover', {
         'legId': legId,
@@ -139,6 +151,7 @@ class LogisticsRepository {
         if (qrPayload != null && qrPayload.isNotEmpty) 'qrPayload': qrPayload,
         'photoUrls': photoUrls,
         'conditionFlags': conditionFlags,
+        if (selfTransfer) 'selfTransfer': true,
         if (lat != null && lng != null)
           'location': {'lat': lat, 'lng': lng, if (accuracy != null) 'accuracy': accuracy},
         'clientRequestId': newRequestId(),

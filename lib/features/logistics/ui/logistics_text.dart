@@ -26,8 +26,19 @@ String? logisticsErrorKey(Object error) {
       (error.code == 'resource-exhausted' && error.reason == error.code)) {
     return 'logistics_code_locked';
   }
+  final chain = kLogisticsChainErrorKeys[error.reason];
+  if (chain != null) return chain;
   return error.l10nKey;
 }
+
+/// Йўл бўлакларини йиғиш хатолари (сервер катта ҳарфда, эга 2026-11-07).
+/// `CODE_ATTEMPTS_LOCKED` каби `logistics_err_<reason>` қолипидан ташқарида —
+/// паритет фикстураси `callableReasons`ни бузмаслиги учун.
+const kLogisticsChainErrorKeys = <String, String>{
+  'CHAIN_LOCKED': 'logistics_chain_err_locked',
+  'CHAIN_NOT_LOCKED': 'logistics_chain_err_not_locked',
+  'CHAIN_EXPIRED': 'logistics_chain_err_expired',
+};
 
 /// `toshkent_shahri` → «Toshkent shahri». Проекцияда фақат ID келади
 /// (ижрочи карточкаси учун етарли; мижоз экранида манзил матни бор).

@@ -400,6 +400,102 @@ class LogisticsOrder {
   }
 }
 
+/// Йўл бўлакларини йиғиш режими (`shipments/{id}.chain.mode`, эга 2026-11-07).
+///
+/// `sequential` — эски хулқ (бўлаклар кетма-кет очилади). `assembleAll` —
+/// ҳамма бўлак бирданига эълон қилинади, жўнатма фақат ҲАР бир бўлакка
+/// курьер топилгач («қулфланди») йўлга чиқади. Номаълум қиймат — `unknown`
+/// ва эски хулқ сифатида қаралади (илова қулаб тушмайди, сервер ҳал қилади).
+enum ChainMode {
+  sequential,
+  assembleAll,
+  unknown;
+
+  static ChainMode parse(Object? v) {
+    switch (v?.toString()) {
+      case 'assemble_all':
+        return ChainMode.assembleAll;
+      case 'sequential':
+        return ChainMode.sequential;
+      default:
+        return ChainMode.unknown;
+    }
+  }
+}
+
+/// Йиғиш ҳолати (`chain.state`). Номаълум қиймат — `unknown`.
+enum ChainState {
+  assembling,
+  locked,
+  expired,
+  cancelled,
+  unknown;
+
+  static ChainState parse(Object? v) {
+    for (final s in ChainState.values) {
+      if (s != ChainState.unknown && s.name == v?.toString()) return s;
+    }
+    return ChainState.unknown;
+  }
+}
+
+/// `shipments/{id}.chain` — йўл бўлакларини йиғиш ҳолати (сервер ёзади,
+/// илова фақат ўқийди ва кўрсатади — 44-банд).
+///
+/// Эски ҳужжатда `chain` йўқ → [ShipmentChain.fromMap] `null` қайтаради ва
+/// ҳамма жойда эски хулқ сақланади (26-банд).
+class ShipmentChain {
+  const ShipmentChain({
+    required this.mode,
+    required this.state,
+    this.deadlineAt,
+    this.lockedAt,
+    this.claimed = 0,
+    this.legCount = 0,
+  });
+
+  final ChainMode mode;
+  final ChainState state;
+  final DateTime? deadlineAt;
+  final DateTime? lockedAt;
+  final int claimed;
+  final int legCount;
+
+  static ShipmentChain? fromMap(Map<String, dynamic>? m) {
+    if (m == null) return null;
+    final claimed = toDemandInt(m['claimed']) ?? 0;
+    final count = toDemandInt(m['legCount']) ?? 0;
+    return ShipmentChain(
+      mode: ChainMode.parse(m['mode']),
+      state: ChainState.parse(m['state']),
+      deadlineAt: parseDemandDate(m['deadlineAt']),
+      lockedAt: parseDemandDate(m['lockedAt']),
+      claimed: claimed < 0 ? 0 : claimed,
+      legCount: count < 0 ? 0 : count,
+    );
+  }
+
+  /// Йиғиш режими (ҳамма бўлак бирданига). Бошқа ҳар қандай режим — эски хулқ.
+  bool get isAssembleAll => mode == ChainMode.assembleAll;
+
+  /// Режим йиғиш ва ҳолат маълум — фақат шунда иловада янги чекловлар
+  /// (олишни ёпиш, «қайтариш» тугмаси) ишлайди. Номаълум ҳолатда эски хулқ.
+  bool get isGated => isAssembleAll && state != ChainState.unknown;
+
+  bool get isAssembling => isAssembleAll && state == ChainState.assembling;
+  bool get isLocked => isAssembleAll && state == ChainState.locked;
+  bool get isExpired => isAssembleAll && state == ChainState.expired;
+  bool get isCancelled => isAssembleAll && state == ChainState.cancelled;
+
+  /// Йиғиш муддатигача қолган вақт; муддат йўқ бўлса `null`, ўтган бўлса 0.
+  Duration? remaining(DateTime now) {
+    final d = deadlineAt;
+    if (d == null) return null;
+    final left = d.difference(now);
+    return left.isNegative ? Duration.zero : left;
+  }
+}
+
 /// `shipments/{id}` — битта жисмоний қути (D-4).
 class Shipment {
   const Shipment({
@@ -423,6 +519,9 @@ class Shipment {
     this.deliveredAt,
     this.source = '',
     this.wholesaleOrderId = '',
+    this.chain,
+    this.legAssignments = const {},
+    this.currentLegId = '',
   });
 
   final String id;
@@ -449,6 +548,22 @@ class Shipment {
   final String source;
   final String wholesaleOrderId;
 
+  /// Йўл бўлакларини йиғиш ҳолати; эски ҳужжатда `null` (эски хулқ).
+  final ShipmentChain? chain;
+
+  /// `legAssignments` — бўлак ID → курьер ID (сервер ёзади).
+  final Map<String, String> legAssignments;
+
+  /// Ҳозир бажарилаётган бўлак ID'си (сервер `currentLegId`); бўлмаса бўш.
+  final String currentLegId;
+
+  /// [legIndex] бўлакни ушлаб турган курьер ID'си (маълум бўлмаса `null`).
+  String? holderOfLegIndex(int legIndex) {
+    if (legIndex < 0 || legIndex >= legIds.length) return null;
+    final h = legAssignments[legIds[legIndex]];
+    return h == null || h.isEmpty ? null : h;
+  }
+
   bool get needsPayment =>
       status == ShipmentStatus.awaitingPayment && paymentStatus == PaymentStatus.pending;
 
@@ -457,6 +572,11 @@ class Shipment {
 
   factory Shipment.fromMap(String id, Map<String, dynamic> m) {
     final cust = asDemandMap(m['currentCustodian']) ?? const {};
+    final rawAssign = asDemandMap(m['legAssignments']) ?? const {};
+    final assignments = <String, String>{
+      for (final e in rawAssign.entries)
+        if (e.value != null && e.value.toString().isNotEmpty) e.key: e.value.toString(),
+    };
     return Shipment(
       id: id,
       orderId: (m['orderId'] ?? '').toString(),
@@ -478,6 +598,9 @@ class Shipment {
       deliveredAt: parseDemandDate(m['deliveredAt']),
       source: (m['source'] ?? '').toString(),
       wholesaleOrderId: (m['wholesaleOrderId'] ?? '').toString(),
+      chain: ShipmentChain.fromMap(asDemandMap(m['chain'])),
+      legAssignments: assignments,
+      currentLegId: (m['currentLegId'] ?? '').toString(),
     );
   }
 }
@@ -566,7 +689,12 @@ class LegProjection {
     required this.fromDistrictId,
     required this.toDistrictId,
     required this.toRegionId,
+    this.chainMode = ChainMode.unknown,
   });
+
+  /// Йиғиш режими (`attributes.chainMode`). Проекцияда бўлмаса `unknown` —
+  /// аниқ ҳолат жўнатма ҳужжатидан ([Shipment.chain]) олинади.
+  final ChainMode chainMode;
 
   /// Custodian бўлгач кодларни олиш учун (`getShipmentSecrets`).
   final String shipmentId;
@@ -606,8 +734,53 @@ class LegProjection {
       fromDistrictId: (d['fromDistrictId'] ?? '').toString(),
       toDistrictId: (d['toDistrictId'] ?? '').toString(),
       toRegionId: (d['toRegionId'] ?? '').toString(),
+      chainMode: ChainMode.parse(d['chainMode']),
     );
   }
+}
+
+/// Ижрочи учун йиғиш дарвозаси (соф функция — виджет ва тест бир хил қоида).
+///
+/// [chain] — жўнатма ҳужжатидан (тайинлангач ўқилади); [projectionMode] —
+/// проекциядан (тайинлангунча). [shipmentLoaded] `false` бўлса ва проекция
+/// йиғиш режимини айтса — ҳолат ҳали номаълум, олиш ёпиқ туради.
+enum LegChainGate {
+  /// Эски хулқ (кетма-кет ёки маълумот йўқ) — ҳеч нарса ўзгармайди.
+  none,
+
+  /// Ҳолат юкланмоқда — олиш ёпиқ, тугма кўрсатилмайди.
+  loading,
+
+  /// Бўлаклар йиғилмоқда — олиш ёпиқ, «қайтариш» мумкин.
+  assembling,
+
+  /// Ҳамма бўлакка курьер топилди — олиш очиқ, «қайтариш» йўқ.
+  locked,
+
+  /// Муддат тугади ёки бекор — амал йўқ.
+  closed,
+}
+
+LegChainGate legChainGate({
+  required ShipmentChain? chain,
+  required ChainMode projectionMode,
+  required bool shipmentLoaded,
+}) {
+  if (chain != null && chain.isGated) {
+    if (chain.isAssembling) return LegChainGate.assembling;
+    if (chain.isLocked) return LegChainGate.locked;
+    return LegChainGate.closed;
+  }
+  if (chain == null && !shipmentLoaded && projectionMode == ChainMode.assembleAll) {
+    return LegChainGate.loading;
+  }
+  return LegChainGate.none;
+}
+
+/// «47 соат 05 дақ.» учун соат ва дақиқа (юқорига яхлитланган дақиқа).
+({int hours, int minutes}) chainRemainingParts(Duration d) {
+  final totalMin = d.inSeconds <= 0 ? 0 : (d.inSeconds + 59) ~/ 60;
+  return (hours: totalMin ~/ 60, minutes: totalMin % 60);
 }
 
 /// «1 234 567» — бутун сўм форматлаш (ядро `ServiceUiAdapter._money` билан бир хил).

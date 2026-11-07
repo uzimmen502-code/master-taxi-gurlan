@@ -102,6 +102,8 @@ const logisticsAdapter = {
       fromDistrictId: (demand.location || {}).districtId || '',
       toDistrictId: (demand.destination || {}).districtId || '',
       toRegionId: (demand.destination || {}).regionId || '',
+      // Zanjir (2026-11-07): kuryer olishdan OLDIN «butun zanjir yig'ilgach yuriladi»ni ko'rsin.
+      ...(a.chainMode ? { chainMode: a.chainMode } : {}),
     };
     return p;
   },

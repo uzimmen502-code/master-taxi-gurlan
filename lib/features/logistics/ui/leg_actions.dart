@@ -9,9 +9,17 @@
 //                                       (`getShipmentSecrets` — custodian)
 //   completed     → «Бажарилди» (ҳақ ҳисоб-китобдан кейин ҳамёнга)
 //
+// Йўл бўлакларини йиғиш (`shipments.chain.mode == assemble_all`, эга
+// 2026-11-07): `accepted`да ҳамма бўлакка курьер топилмагунча олиш ёпиқ,
+// «Бўлакни қайтариш» (`cancelAssignment`) фақат шу пайтда; қулфлангач
+// оддий олиш. Олдинги бўлак ҳам менда бўлса — «Кейинги бўлакни давом
+// эттириш» (`scanHandover`, `selfTransfer: true`, код/расмсиз).
+// `chain` йўқ ёки `sequential` — эски хулқ ўзгармайди.
+//
 // Ҳамма ҳисоб ва текширув СЕРВЕРДА (18-банд): бу виджет фақат кирим
 // йиғади ва натижани кўрсатади. Хато матни `details.reason` бўйича.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -31,6 +39,7 @@ import '../../wholesale/utils/wholesale_order_errors.dart';
 import '../data/logistics_repository.dart';
 import '../domain/logistics_models.dart';
 import '../services/logistics_photo_storage.dart';
+import '../widgets/chain_status_banner.dart';
 import '../widgets/shipment_codes_sheet.dart';
 import 'logistics_text.dart';
 
@@ -69,6 +78,12 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
   Shipment? _shipment;
   String _shipmentLoadedFor = '';
 
+  /// Жўнатма ҳужжатини ўқишга уриниш тугадими (муваффақиятли ёки хато).
+  /// Йиғиш ҳолати ўзгариши (йиғилмоқда → қулфланди) экранда кўриниши учун
+  /// жонли тинглаш — фақат шу тафсилот экрани очиқ турганда.
+  bool _shipmentResolved = false;
+  StreamSubscription<Shipment?>? _shipmentSub;
+
   DemandMatch get match => widget.match;
 
   @override
@@ -83,19 +98,58 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     _loadShipment();
   }
 
-  Future<void> _loadShipment() async {
+  @override
+  void dispose() {
+    _shipmentSub?.cancel();
+    super.dispose();
+  }
+
+  void _loadShipment() {
     final id = LegProjection.fromAttributes(match.projection.attributes).shipmentId;
     if (id.isEmpty || id == _shipmentLoadedFor) return;
     _shipmentLoadedFor = id;
+    _shipmentSub?.cancel();
+    var first = true;
     try {
-      final s = await _repo.watchShipment(id).first;
-      if (mounted) setState(() => _shipment = s);
-      if (_isWholesaleOutbound && match.status == MatchStatus.inProgress) await _loadDeliveryFailed();
+      _shipmentSub = _repo.watchShipment(id).listen(
+        (s) {
+          if (!mounted) return;
+          setState(() {
+            _shipment = s;
+            _shipmentResolved = true;
+          });
+          if (first) {
+            first = false;
+            if (_isWholesaleOutbound && match.status == MatchStatus.inProgress) _loadDeliveryFailed();
+          }
+        },
+        onError: (Object e) {
+          // Ўқилмади (масалан бўлак қайтарилгач рухсат йўқ) — улгуржи амаллари
+          // кўрсатилмайди, асосий LEG оқими ишлайверади (сервер ҳал қилади).
+          debugPrint('[LegActions] shipment read failed: ${e.runtimeType}');
+          if (mounted) setState(() => _shipmentResolved = true);
+        },
+      );
     } catch (e) {
-      // Ўқилмади — улгуржи амаллари кўрсатилмайди, асосий LEG оқими ишлайверади.
-      debugPrint('[LegActions] shipment read failed: ${e.runtimeType}');
+      debugPrint('[LegActions] shipment watch failed: ${e.runtimeType}');
+      _shipmentResolved = true;
     }
   }
+
+  /// Олдинги бўлак ҳам менда ва посилка ҳозир менинг қўлимда (ўша бўлак
+  /// бажарилмоқда) — «Кейинги бўлакни давом эттириш» (код/расмсиз).
+  bool _canSelfContinue(LegProjection leg) {
+    final s = _shipment;
+    if (s == null || leg.legIndex <= 0) return false;
+    if (s.holderOfLegIndex(leg.legIndex - 1) != widget.providerId) return false;
+    if (s.custodianKind != CustodianKind.provider || s.custodianId != widget.providerId) return false;
+    final prevId = s.legIds[leg.legIndex - 1];
+    return s.currentLegId.isEmpty || s.currentLegId == prevId;
+  }
+
+  /// Кейинги бўлак ҳам менда (ўрта бўлакни бажараётганда изоҳ учун).
+  bool _nextIsMine(LegProjection leg) =>
+      _shipment?.holderOfLegIndex(leg.legIndex + 1) == widget.providerId;
 
   /// «Етказилмади» сўрови ҳолати (2026-11-01) — экран очилганда ва «Янгилаш»да (доимий тинглаш йўқ).
   WholesaleDeliveryFailedReport? _df;
@@ -129,17 +183,68 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
 
     if (status.canOffer) {
       children.add(_primary(context, 'logistics_leg_take', () => _take(leg)));
-    } else if (status == MatchStatus.accepted) {
-      // Улгуржи қайтиш LEG'и: «жўнатувчи» — посилка қўлидаги курьернинг ўзи,
-      // топшириш кодини сервердан олади ва «Посилкани олдим» га киритади.
-      if (_isWholesaleReturn) {
-        children.add(_secondary(context, 'wholesale_courier_return_code_btn', _showReturnCode,
-            key: const ValueKey('wholesale-courier-return-code')));
-        children.add(const SizedBox(height: 8));
+      if (leg.chainMode == ChainMode.assembleAll) {
+        children.add(const SizedBox(height: 6));
+        children.add(_hint(context, 'logistics_chain_offer_hint'));
       }
-      children.add(_primary(context, 'logistics_picked_up_btn', () => _proof(delivery: false, leg: leg)));
-      children.add(const SizedBox(height: 6));
-      children.add(_hint(context, 'logistics_code_hint'));
+    } else if (status == MatchStatus.accepted) {
+      // Йўл бўлакларини йиғиш (эга 2026-11-07): ҳамма бўлакка курьер
+      // топилмагунча олиш ЁПИҚ (сервер ҳам `CHAIN_NOT_LOCKED` билан рад
+      // этади), бўлакни фақат шу пайтда қайтариш мумкин.
+      final chain = _shipment?.chain;
+      final gate = legChainGate(
+        chain: chain,
+        projectionMode: leg.chainMode,
+        shipmentLoaded: _shipmentResolved,
+      );
+      switch (gate) {
+        case LegChainGate.loading:
+          children.add(const Center(
+            key: ValueKey('chain-loading'),
+            child: Padding(
+              padding: EdgeInsets.all(8),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+          ));
+        case LegChainGate.assembling:
+          children.add(ChainStatusBanner(chain: chain!, legCountFallback: leg.legCount));
+          children.add(const SizedBox(height: 8));
+          children.add(_hint(context, 'logistics_chain_wait_pickup'));
+          children.add(const SizedBox(height: 10));
+          children.add(_secondary(context, 'logistics_chain_give_back', _giveBack,
+              key: const ValueKey('chain-give-back'), danger: true));
+        case LegChainGate.closed:
+          if (chain!.isExpired) {
+            children.add(ChainStatusBanner(chain: chain, legCountFallback: leg.legCount));
+          } else {
+            children.add(_closedBox(context));
+          }
+        case LegChainGate.locked:
+        case LegChainGate.none:
+          if (gate == LegChainGate.locked) {
+            children.add(ChainStatusBanner(chain: chain!, legCountFallback: leg.legCount));
+            children.add(const SizedBox(height: 8));
+          }
+          if (_canSelfContinue(leg)) {
+            // Олдинги бўлак ҳам менда — ўзимга топшириш, код ва расм керак эмас.
+            children.add(_primary(context, 'logistics_chain_self_continue', _selfContinue,
+                key: const ValueKey('chain-self-continue')));
+            children.add(const SizedBox(height: 6));
+            children.add(_hint(context, 'logistics_chain_self_hint'));
+          } else {
+            // Улгуржи қайтиш LEG'и: «жўнатувчи» — посилка қўлидаги курьернинг ўзи,
+            // топшириш кодини сервердан олади ва «Посилкани олдим» га киритади.
+            if (_isWholesaleReturn) {
+              children.add(_secondary(context, 'wholesale_courier_return_code_btn', _showReturnCode,
+                  key: const ValueKey('wholesale-courier-return-code')));
+              children.add(const SizedBox(height: 8));
+            }
+            children.add(_primary(context, 'logistics_picked_up_btn', () => _proof(delivery: false, leg: leg),
+                key: const ValueKey('logistics-pickup')));
+            children.add(const SizedBox(height: 6));
+            children.add(_hint(context, 'logistics_code_hint'));
+          }
+      }
     } else if (status == MatchStatus.inProgress) {
       if (isLast) {
         children.add(_primary(context, 'logistics_delivered_btn', () => _proof(delivery: true, leg: leg)));
@@ -165,6 +270,10 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
         children.add(_primary(context, 'logistics_show_code_next', () => _showCodes(leg)));
         children.add(const SizedBox(height: 6));
         children.add(_hint(context, 'logistics_next_hint'));
+        if (_nextIsMine(leg)) {
+          children.add(const SizedBox(height: 6));
+          children.add(_hint(context, 'logistics_chain_next_is_mine'));
+        }
         final next = match.contact?.nextProviderPhone;
         if (next != null && next.isNotEmpty) {
           children.add(const SizedBox(height: 8));
@@ -215,6 +324,47 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     await _run(() async {
       await _repo.acceptLeg(match.demandId);
       _snack('logistics_leg_taken');
+    });
+  }
+
+  /// Бўлакни қайтариш — фақат йиғиш пайтида (қулфлангач сервер
+  /// `CHAIN_LOCKED` билан рад этади, матни кўрсатилади).
+  Future<void> _giveBack() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('logistics_chain_give_back')),
+        content: Text(ctx.tr('logistics_chain_give_back_confirm')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(ctx.tr('consent_no')),
+          ),
+          FilledButton(
+            key: const ValueKey('chain-give-back-yes'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(ctx.tr('logistics_confirm')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _run(() async {
+      await _repo.giveBackLeg(match.demandId);
+      _snack('logistics_chain_given_back');
+    });
+  }
+
+  /// Кейинги бўлакни давом эттириш — олдинги бўлак ҳам менда (битта тап).
+  /// Сервер `legAssignments` бўйича текширади; идемпотентлик — `clientRequestId`.
+  Future<void> _selfContinue() async {
+    await _run(() async {
+      await _repo.scanHandover(
+        legId: match.demandId,
+        photoUrls: const [],
+        selfTransfer: true,
+      );
+      _snack('logistics_chain_self_done');
     });
   }
 
@@ -376,9 +526,10 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
 
   // ── Виджетлар ──────────────────────────────────────────────────────
 
-  Widget _primary(BuildContext context, String key, VoidCallback onTap) {
+  Widget _primary(BuildContext context, String textKey, VoidCallback onTap, {Key? key}) {
     final c = context.ava;
     return FilledButton(
+      key: key,
       onPressed: _busy ? null : onTap,
       style: FilledButton.styleFrom(
         backgroundColor: c.brand,
@@ -389,9 +540,22 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
       child: _busy
           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
           : Text(
-              context.tr(key),
+              context.tr(textKey),
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
+    );
+  }
+
+  Widget _closedBox(BuildContext context) {
+    final c = context.ava;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.chip, borderRadius: BorderRadius.circular(12)),
+      child: Text(
+        context.tr('match_taken'),
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 13, color: c.ink2),
+      ),
     );
   }
 

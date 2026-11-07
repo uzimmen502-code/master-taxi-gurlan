@@ -14,6 +14,7 @@ import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../data/logistics_repository.dart';
 import '../domain/logistics_models.dart';
 import '../ui/logistics_text.dart';
+import '../widgets/chain_status_banner.dart';
 import '../widgets/shipment_codes_sheet.dart';
 import 'logistics_home_screen.dart' show LogisticsStatusChip;
 
@@ -311,6 +312,13 @@ class _ShipmentCard extends StatelessWidget {
               ),
             ],
           ),
+          // Йўл бўлакларини йиғиш (эга 2026-11-07): курьерлар йиғилмоқда +
+          // муддат + пул қайтиши изоҳи; муддат ўтса — изоҳ. Қулфлангач ёки
+          // эски жўнатмада (`chain` йўқ) ҳеч нарса қўшилмайди.
+          if (s.chain != null && (s.chain!.isAssembling || s.chain!.isExpired)) ...[
+            const SizedBox(height: 8),
+            ChainStatusBanner(chain: s.chain!, forSender: true, legCountFallback: s.legCount),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [

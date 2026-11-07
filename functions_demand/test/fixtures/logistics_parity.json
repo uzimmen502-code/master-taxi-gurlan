@@ -118,6 +118,7 @@
     "leg_superseded",
     "leg_reactivate_failed",
     "self_transfer_invalid",
+    "wholesale_managed",
     "payout_override_invalid",
     "payout_override_sum",
     "payout_override_chain_only",

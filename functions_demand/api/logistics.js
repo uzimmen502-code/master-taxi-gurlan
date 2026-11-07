@@ -1997,6 +1997,12 @@ function makeConfirmDelivery(deps) {
 // BEKOR QILISH (custody boshlanmagan bo'lsa)
 // ═══════════════════════════════════════════════════════════════════════
 
+/** Ulgurji buyurtmasi ORDER/jo'natmasi (`source` 'wholesale…' yoki `wholesaleOrderId`). */
+function isWholesaleRecord(d) {
+  const x = d || {};
+  return !!x.wholesaleOrderId || (typeof x.source === 'string' && x.source.startsWith('wholesale'));
+}
+
 function makeCancelLogisticsOrder(deps) {
   const { db, now: nowFn } = deps;
 
@@ -2022,9 +2028,19 @@ function makeCancelLogisticsOrder(deps) {
       if (!orderSnap.exists) throw fail('not-found', 'Buyurtma topilmadi');
       const order = orderSnap.data() || {};
       if (order.ownerId !== ownerId) throw fail('permission-denied', 'Bu buyurtma sizniki emas');
+      // Ulgurji buyurtmasi jo'natmasi: egasi = sotuvchi, u bekor QILA OLMAYDI (ega,
+      // 2026-10-31: sotuvchi buyurtmaga aralashmaydi). Bekor — xaridor/admin, Ulgurji
+      // buyurtmasining o'z oqimi orqali. Belgi ORDER'da ham, jo'natmada ham tekshiriladi.
+      // (Jonli kod feat/ulg-relay-guards dan — relay zanjiri bilan 2026-11-07 birlashtirildi.)
+      if (isWholesaleRecord(order)) {
+        throw fail('permission-denied', 'Bu jo\'natmani bekor qilib bo\'lmaydi', 'wholesale_managed');
+      }
 
       const shipSnap = await tx.get(db.collection(L.SHIPMENTS).where('orderId', '==', orderId));
       const ships = shipSnap.docs.map((d) => ({ ref: d.ref, id: d.id, data: d.data() || {} }));
+      if (ships.some((s) => isWholesaleRecord(s.data))) {
+        throw fail('permission-denied', 'Bu jo\'natmani bekor qilib bo\'lmaydi', 'wholesale_managed');
+      }
       for (const s of ships) {
         if (s.data.status === L.SHIPMENT_STATUS.CANCELLED) continue;
         // Custody boshlangan bo'lsa (status ham, `custodyCount` ham) — bekor yo'q.
@@ -2107,7 +2123,12 @@ function makeGetShipmentSecrets(deps) {
       handoverCode: L.handoverCodeFor(shipmentId, qrSecret),
     };
     // Yetkazish kodi — FAQAT egasiga (u qabul qiluvchiga yetkazadi).
-    if (isOwner) out.deliveryCode = L.deliveryCodeFor(shipmentId, qrSecret);
+    // Ulgurji jo'natmasida egasi (sotuvchi) kodni OLMAYDI — pul shu kod bilan yechiladi;
+    // xaridor kodni `getWholesaleDeliveryCode` dan oladi. Istisno: egasi = qabul qiluvchi
+    // (`recipientId`, masalan qaytish jo'natmasi) — o'zi qabul qiladi.
+    const ownerGetsCode = isOwner && (!isWholesaleRecord(ship)
+      || (typeof ship.recipientId === 'string' && ship.recipientId !== '' && ship.recipientId === callerId));
+    if (ownerGetsCode) out.deliveryCode = L.deliveryCodeFor(shipmentId, qrSecret);
     return out;
   };
 }
@@ -2590,6 +2611,29 @@ function makeAdminReopenChainLeg(deps) {
  * Idempotent: incident bor bo'lsa hech narsa yozilmaydi, birinchi natija qaytadi.
  * Parallel ikki chaqiruv: tranzaksiya qayta uriniladi va ikkinchisi incident'ni ko'radi.
  */
+/**
+ * `db.runTransaction` + CHEKLANGAN qayta urinish FAQAT xom (HttpsError bo'lmagan) xatolarda.
+ * Biznes rad (`fail(...)` = HttpsError) qayta urinilmaydi. Tranzaksiya funksiyasi idempotent
+ * bo'lishi shart (holatni har urinishda qayta o'qiydi).
+ */
+async function runTxRetryRaw(db, fn, attempts = 3) {
+  let last = null;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await db.runTransaction(fn);
+    } catch (e) {
+      if (e && typeof e.code === 'string' && e.httpErrorCode) throw e; // HttpsError - biznes rad
+      last = e;
+      console.warn(JSON.stringify({
+        action: 'runTxRetryRaw', result: 'retry', attempt: i, errorCode: 'TX_RAW_ERROR',
+        message: String((e && e.message) || e).slice(0, 120),
+      }));
+      await new Promise((r) => setTimeout(r, 40 * i + Math.floor(Math.random() * 60)));
+    }
+  }
+  throw last;
+}
+
 function makeAdminMarkShipmentLost(deps) {
   const { db, now: nowFn } = deps;
 
@@ -2606,7 +2650,12 @@ function makeAdminMarkShipmentLost(deps) {
     const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
     const incRef = db.collection(L.INCIDENTS).doc(shipmentId);
 
-    const out = await db.runTransaction(async (tx) => {
+    // Parallel `confirmDelivery` bilan poygada yutqazgan tomon Firestore'dan XOM xato olardi
+    // ("Transaction is invalid or closed", kod 3 - Admin SDK qayta urinishda eski get'larni
+    // yopilgan tranzaksiyaga o'tkazadi; courierSubmitPayment'da ham shunday topilgan).
+    // Biznes rad (HttpsError) darhol; xom xatoda tranzaksiya qayta ishga tushiriladi - ikkinchi
+    // urinish holatni qayta o'qib toza `shipment_not_lossable` beradi (qarang runTxRetryRaw).
+    const out = await runTxRetryRaw(db, async (tx) => {
       const [shipSnap, incSnap] = await Promise.all([tx.get(shipRef), tx.get(incRef)]);
       if (!shipSnap.exists) throw fail('not-found', 'Jo\'natma topilmadi');
       const ship = shipSnap.data() || {};

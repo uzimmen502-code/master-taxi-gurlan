@@ -92,6 +92,35 @@ class AdminLogisticsService {
   Future<Map<String, dynamic>> upsertTariff(Map<String, dynamic> tariff) =>
       _demand.call('adminUpsertLogisticsTariff', {'tariff': tariff});
 
+  /// Йўл бўлакларини йиғиш (эга 2026-11-07): қулфлангандан кейин курьер
+  /// тушиб қолса — бўлакни қайта эълон қилиш. Рухсат ва ҳолат — серверда, audit.
+  Future<Map<String, dynamic>> reopenChainLeg({
+    required String shipmentId,
+    required String legId,
+    required String reason,
+  }) =>
+      _demand.call('adminReopenChainLeg', {
+        'shipmentId': shipmentId,
+        'legId': legId,
+        'reason': reason.trim(),
+      });
+
+  /// Маршрутни қайта режалаш + бўлак ҳақини қўлда бериш (`payoutOverrides`:
+  /// `[{legIndex, amount}]`, бутун сўм, йиғинди = ижрочилар пули — сервер
+  /// текширади). [legs] — `[{from, to}]` (ўша нуқталар, маршрут ўзгармаса ҳам).
+  Future<Map<String, dynamic>> planRouteWithPayouts({
+    required String shipmentId,
+    required List<Map<String, dynamic>> legs,
+    required List<Map<String, int>> payoutOverrides,
+    required String reason,
+  }) =>
+      _demand.call('adminPlanShipmentRoute', {
+        'shipmentId': shipmentId,
+        'legs': legs,
+        'payoutOverrides': payoutOverrides,
+        'reason': reason.trim(),
+      });
+
   /// Босқич ва/ёки синовчилар. Фақат берилган майдонлар юборилади.
   Future<StageChangeResult> setStage({
     String? stage,

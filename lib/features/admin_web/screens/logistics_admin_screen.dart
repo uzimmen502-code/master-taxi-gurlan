@@ -17,11 +17,12 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
-import '../../logistics/domain/logistics_models.dart' show logisticsMoney;
+import '../../logistics/domain/logistics_models.dart' show ShipmentChain, logisticsMoney;
 import '../../logistics/domain/tariff_adjust.dart';
 import '../services/admin_courier_payout_service.dart';
 import '../services/admin_logistics_service.dart';
 import '../utils/logistics_tariff_inputs.dart';
+import '../widgets/logistics_chain_legs_dialog.dart';
 import '../widgets/logistics_loss_dialogs.dart';
 import '../widgets/logistics_loss_list.dart';
 import '../widgets/courier_service_fee_panel.dart';
@@ -609,6 +610,13 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
             (status == 'ready' || status == 'in_transit')
         ? rawProblem
         : null;
+    // Йўл бўлакларини йиғиш (эга 2026-11-07); `chain` йўқ — эски жўнатма.
+    final chain = ShipmentChain.fromMap(
+        s['chain'] is Map ? (s['chain'] as Map).map((k, v) => MapEntry(k.toString(), v)) : null);
+    final chainLine = chain != null && chain.isAssembleAll
+        ? chainSummaryLine(chain, legCountFallback: legIds.length, fmt: _fmt)
+        : null;
+    final showLegs = legIds.length > 1 || chainLine != null;
     return Card(
       color: problem != null ? Colors.orange.shade50 : null,
       child: ListTile(
@@ -617,12 +625,21 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
           'эгаси: ${s['ownerId']} · қўлида: ${cust['kind']} ${cust['id'] ?? ''} · '
           'LEG: ${s['legCount'] ?? 1} (маршрут v${s['routePlanVersion'] ?? 1}) · '
           'нарх: $price · янгиланган: ${_fmt(s['updatedAt'])}'
+          '${chainLine != null ? '\n$chainLine' : ''}'
           '${problem != null ? '\n⚠ LEG муддати тугаган: ${problem['legId']} (${_fmt(problem['at'])}) — ижрочи топилмади' : ''}',
         ),
-        isThreeLine: problem != null,
+        isThreeLine: problem != null || chainLine != null,
         trailing: Wrap(
           spacing: 6,
           children: [
+            if (showLegs)
+              OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => showChainLegsDialog(context, shipmentId: id, shipment: s, service: _logistics, db: _db),
+                icon: const Icon(Icons.linear_scale, size: 16),
+                label: const Text('Бўлаклар'),
+              ),
             if (problem != null)
               FilledButton.icon(
                 onPressed: _busy ? null : () => _reactivateLeg(id, (problem['legId'] ?? '').toString()),

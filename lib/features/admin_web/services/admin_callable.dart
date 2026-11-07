@@ -66,6 +66,9 @@ String adminErrorText(Object error) {
     'FEE_BPS_INVALID': 'Хизмат ҳақи 0..50 % оралиғида бўлиши керак',
     'REASON_REQUIRED': 'Сабабни ёзинг (камида 3 белги)',
     'NOTHING_TO_CHANGE': 'Ўзгариш йўқ',
+    'CHAIN_LOCKED': 'Ҳамма бўлакка курьер топилган (қулфланган)',
+    'CHAIN_NOT_LOCKED': 'Бўлаклар ҳали йиғилмоқда (қулфланмаган)',
+    'CHAIN_EXPIRED': 'Йиғиш муддати тугаган',
   };
   final mapped = byReason[error.reason];
   if (mapped != null) return mapped;

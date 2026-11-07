@@ -452,6 +452,7 @@ class ShipmentChain {
     this.lockedAt,
     this.claimed = 0,
     this.legCount = 0,
+    this.selfTransferLegIds = const [],
   });
 
   final ChainMode mode;
@@ -460,6 +461,10 @@ class ShipmentChain {
   final DateTime? lockedAt;
   final int claimed;
   final int legCount;
+
+  /// Олдинги бўлаги ҳам ШУ курьерда бўлган бўлак ID'лари (сервер ёзади, телефонсиз —
+  /// занжирда `legAssignments` ёзилмайди, бошқа курьер рақамлари кўринмасин).
+  final List<String> selfTransferLegIds;
 
   static ShipmentChain? fromMap(Map<String, dynamic>? m) {
     if (m == null) return null;
@@ -472,6 +477,7 @@ class ShipmentChain {
       lockedAt: parseDemandDate(m['lockedAt']),
       claimed: claimed < 0 ? 0 : claimed,
       legCount: count < 0 ? 0 : count,
+      selfTransferLegIds: demandStringList(m['selfTransferLegIds']),
     );
   }
 

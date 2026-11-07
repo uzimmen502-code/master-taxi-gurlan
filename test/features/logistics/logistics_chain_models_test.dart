@@ -61,6 +61,15 @@ void main() {
       expect(ch.lockedAt, isNull);
       expect(ch.claimed, 2);
       expect(ch.legCount, 3);
+      expect(ch.selfTransferLegIds, isEmpty, reason: 'майдон йўқ — бўш');
+    });
+
+    test('selfTransferLegIds — телефонсиз бўлак ID рўйхати (сервер 2026-11-07)', () {
+      final ch = ShipmentChain.fromMap({
+        'mode': 'assemble_all', 'state': 'locked', 'selfTransferLegIds': ['L1', 'L2'],
+      })!;
+      expect(ch.selfTransferLegIds, ['L1', 'L2']);
+      expect(ShipmentChain.fromMap({'mode': 'assemble_all', 'selfTransferLegIds': 'bad'})!.selfTransferLegIds, isEmpty);
     });
 
     test('Timestamp ўрнига toDate() берувчи объект ва ISO сатр', () {

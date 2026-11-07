@@ -101,13 +101,14 @@ Shipment _ship({
       if (currentLegId.isNotEmpty) 'currentLegId': currentLegId,
     });
 
-Map<String, dynamic> _chain(String state, {int claimed = 2}) => {
+Map<String, dynamic> _chain(String state, {int claimed = 2, List<String> selfTransferLegIds = const []}) => {
       'mode': 'assemble_all',
       'state': state,
       'deadlineAt': DateTime.now().add(const Duration(hours: 40)),
       'lockedAt': state == 'locked' ? DateTime.now() : null,
       'claimed': claimed,
       'legCount': 3,
+      'selfTransferLegIds': selfTransferLegIds,
     };
 
 Future<void> _pump(WidgetTester tester, DemandMatch match, _FakeRepo repo) async {
@@ -179,8 +180,8 @@ void main() {
 
   testWidgets('олдинги бўлак ҳам менда ва посилка қўлимда: бир тап давом эттириш (selfTransfer)', (tester) async {
     final repo = _FakeRepo(_ship(
-      chain: _chain('locked', claimed: 3),
-      assignments: {'L0': _me, 'L1': _me, 'L2': 'K9'},
+      // Занжирда сервер `legAssignments` ёзмайди — фақат телефонсиз `selfTransferLegIds`.
+      chain: _chain('locked', claimed: 3, selfTransferLegIds: ['L1']),
       custodian: {'kind': 'provider', 'id': _me},
       currentLegId: 'L0',
     ));
@@ -215,8 +216,7 @@ void main() {
 
   testWidgets('олдинги бўлак менда, лекин посилка ҳали олинмаган: давом эттириш ЙЎҚ', (tester) async {
     final repo = _FakeRepo(_ship(
-      chain: _chain('locked', claimed: 3),
-      assignments: {'L0': _me, 'L1': _me},
+      chain: _chain('locked', claimed: 3, selfTransferLegIds: ['L1']),
       custodian: {'kind': 'sender', 'id': 'U1'},
     ));
     await _pump(tester, _match(status: 'accepted'), repo);

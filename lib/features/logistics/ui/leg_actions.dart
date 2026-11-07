@@ -138,18 +138,28 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
 
   /// Олдинги бўлак ҳам менда ва посилка ҳозир менинг қўлимда (ўша бўлак
   /// бажарилмоқда) — «Кейинги бўлакни давом эттириш» (код/расмсиз).
+  /// Занжирда сервер `chain.selfTransferLegIds` беради (телефонсиз); эски кетма-кет
+  /// жўнатмада — `legAssignments` (аввалги хулқ).
+  bool _prevIsMine(Shipment s, int legIndex) {
+    if (legIndex <= 0 || legIndex >= s.legIds.length) return false;
+    final chain = s.chain;
+    if (chain != null && chain.isAssembleAll) return chain.selfTransferLegIds.contains(s.legIds[legIndex]);
+    return s.holderOfLegIndex(legIndex - 1) == widget.providerId;
+  }
+
   bool _canSelfContinue(LegProjection leg) {
     final s = _shipment;
-    if (s == null || leg.legIndex <= 0) return false;
-    if (s.holderOfLegIndex(leg.legIndex - 1) != widget.providerId) return false;
+    if (s == null || !_prevIsMine(s, leg.legIndex)) return false;
     if (s.custodianKind != CustodianKind.provider || s.custodianId != widget.providerId) return false;
     final prevId = s.legIds[leg.legIndex - 1];
     return s.currentLegId.isEmpty || s.currentLegId == prevId;
   }
 
   /// Кейинги бўлак ҳам менда (ўрта бўлакни бажараётганда изоҳ учун).
-  bool _nextIsMine(LegProjection leg) =>
-      _shipment?.holderOfLegIndex(leg.legIndex + 1) == widget.providerId;
+  bool _nextIsMine(LegProjection leg) {
+    final s = _shipment;
+    return s != null && _prevIsMine(s, leg.legIndex + 1);
+  }
 
   /// «Етказилмади» сўрови ҳолати (2026-11-01) — экран очилганда ва «Янгилаш»да (доимий тинглаш йўқ).
   WholesaleDeliveryFailedReport? _df;

@@ -133,7 +133,8 @@ class LogisticsRepository {
   /// Посилкани ОЛДИМ — код ёки QR + расм (мажбурий) + ҳолат белгиси.
   ///
   /// [selfTransfer] — олдинги бўлак ҳам шу курьерда (ўзига топшириш): код ва
-  /// расм керак эмас, сервер `legAssignments` бўйича текширади (эга 2026-11-07).
+  /// расм керак эмас, сервер олдинги бўлак ижрочиси = чақирувчи = жорий эгасини текширади
+  /// (рад — `self_transfer_invalid`; эга 2026-11-07).
   Future<Map<String, dynamic>> scanHandover({
     required String legId,
     String? code,

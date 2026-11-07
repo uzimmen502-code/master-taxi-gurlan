@@ -418,7 +418,64 @@ function isStageAllowed(config, userId) {
   return list.some((t) => toCanonicalId(String(t || '')) === id);
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ZANJIR («avval butun zanjirni yig', keyin yur», ega qarori 2026-11-07)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `shipments/{id}.chain` (klient shartnomasi):
+ *   { mode, state, deadlineAt, lockedAt, claimed, legCount }
+ * `chain` maydoni YO'Q eski / `sequential` jo'natma — mavjud xatti-harakat.
+ *
+ *   assembling ──(hamma LEG olindi)──> locked
+ *        │ └──(egasi bekor qildi)────> cancelled
+ *        └──(deadlineAt o'tdi)───────> expired  (jo'natma cancelled + refund_pending)
+ */
+const CHAIN_MODE = { SEQUENTIAL: 'sequential', ASSEMBLE_ALL: 'assemble_all' };
+const CHAIN_STATE = {
+  ASSEMBLING: 'assembling', LOCKED: 'locked', EXPIRED: 'expired', CANCELLED: 'cancelled',
+};
+/** Diagnostika kodlari (`details.reason`) — klient shu bo'yicha matn ko'rsatadi. */
+const CHAIN_ERROR = {
+  LOCKED: 'CHAIN_LOCKED', NOT_LOCKED: 'CHAIN_NOT_LOCKED', EXPIRED: 'CHAIN_EXPIRED',
+};
+const CHAIN_ASSEMBLY_HOURS_DEFAULT = 48;
+/** Konfig xatosidan himoya: 1 soatdan 30 kungacha (biznes qoida EMAS — chegara). */
+const CHAIN_ASSEMBLY_HOURS_MAX = 30 * 24;
+
+/** Konfigdagi rejim; noma'lum qiymat — `sequential` (mavjud xatti-harakat). */
+function chainModeOf(config) {
+  const m = (((config || {}).logistics) || {}).chainMode;
+  return m === CHAIN_MODE.ASSEMBLE_ALL ? CHAIN_MODE.ASSEMBLE_ALL : CHAIN_MODE.SEQUENTIAL;
+}
+
+function chainAssemblyHoursOf(config) {
+  const h = Number((((config || {}).logistics) || {}).chainAssemblyHours);
+  if (!Number.isInteger(h) || h < 1 || h > CHAIN_ASSEMBLY_HOURS_MAX) return CHAIN_ASSEMBLY_HOURS_DEFAULT;
+  return h;
+}
+
+/** Jo'natma «avval yig'» rejimidami (hujjatdagi muhrlangan rejim, konfig EMAS). */
+function isAssembleAll(shipment) {
+  const c = (shipment || {}).chain;
+  return !!c && c.mode === CHAIN_MODE.ASSEMBLE_ALL;
+}
+
+/** Yig'ish muddati: fundedAt + soat (to'lov tushgan payt — pul to'langan). */
+function chainDeadlineFrom(fundedAt, hours) {
+  const base = msOf(fundedAt);
+  return new Date(base + hours * 3600 * 1000);
+}
+
 module.exports = {
+  CHAIN_MODE,
+  CHAIN_STATE,
+  CHAIN_ERROR,
+  CHAIN_ASSEMBLY_HOURS_DEFAULT,
+  chainModeOf,
+  chainAssemblyHoursOf,
+  isAssembleAll,
+  chainDeadlineFrom,
   ORDERS,
   SHIPMENTS,
   CUSTODY,

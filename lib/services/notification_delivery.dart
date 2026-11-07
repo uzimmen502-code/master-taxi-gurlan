@@ -59,6 +59,16 @@ class NotificationDelivery {
         enableVibration: true,
         vibrationPattern: alarmVibrate,
       ),
+      AndroidNotificationChannel(
+        courierNewOrderChannel,
+        'Курьер — янги буюртма',
+        description: 'Ҳудудингизда янги буюртма — овоз ва вибрация',
+        importance: Importance.max,
+        playSound: true,
+        sound: alarmSound,
+        enableVibration: true,
+        vibrationPattern: alarmVibrate,
+      ),
       const AndroidNotificationChannel(
         'taxi_channel',
         'Такси хабарлари',
@@ -89,12 +99,20 @@ class NotificationDelivery {
   /// Баланд приоритетли огоҳлантиришлар (heads-up) — fullScreenIntent йўқ
   /// (Play: USE_FULL_SCREEN_INTENT faqat alarm/call core apps).
   static bool isRingAlert(String type) {
-    return isDriverBookingAlert(type) || type == 'courier_arrived';
+    return isDriverBookingAlert(type) || type == 'courier_arrived' || type == courierNewOrderType;
   }
+
+  /// Ҳудуддаги курьерга «янги буюртма» (эга 2026-11-07: овоз + вибрация) —
+  /// `functions/index.js` `notifyCouriersOrderReady`, канал [courierNewOrderChannel].
+  static const courierNewOrderType = 'courier_new_order';
+  static const courierNewOrderChannel = 'courier_new_order';
 
   static String channelForType(String type) {
     if (type == 'courier_arrived') {
       return 'courier_arrival_alarm';
+    }
+    if (type == courierNewOrderType) {
+      return courierNewOrderChannel;
     }
     if (isDriverBookingAlert(type)) {
       return 'intercity_driver_alarm';
@@ -132,8 +150,11 @@ class NotificationDelivery {
     await ensureInitialized();
     final channelId = channelForType(type);
     final isAlarm = isRingAlert(type);
-    final alarmChannelName =
-        type == 'courier_arrived' ? 'Курьер етиб келди' : 'Ҳайдовчи — янги брон';
+    final alarmChannelName = switch (type) {
+      'courier_arrived' => 'Курьер етиб келди',
+      courierNewOrderType => 'Курьер — янги буюртма',
+      _ => 'Ҳайдовчи — янги брон',
+    };
     const alarmSound = RawResourceAndroidNotificationSound('incoming_ring');
     final nav = PushNavigation.enrichFcmData({
       'type': type,

@@ -493,6 +493,12 @@ class PushNavigation {
     // (`_newsHubTabIndex`да `sell_offer` шу табга бириктирилган):
     // таклиф ҳақидаги хабарнинг ўзи ўша ерда сақланади.
 
+    // ── Ҳудуддаги курьерга «янги буюртма» (эга 2026-11-07) → курьер панели (тайёр буюртмалар) ──
+    if (type == 'courier_new_order') {
+      await nav.push(MaterialPageRoute(builder: (_) => const CourierScreen()));
+      return;
+    }
+
     // ── Курьерни кузатиш (AVA дўкони: «курьерга топширилди») ──────────
     final trackOrderId = courierTrackingOrderIdFromPush(data);
     if (trackOrderId != null) {

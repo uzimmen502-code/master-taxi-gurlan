@@ -1060,6 +1060,62 @@ async function getOrderFlowMode(field, defaultValue = 'manual') {
   }
 }
 
+const notifI18n = require('./notif_i18n');
+
+/**
+ * AVA дўкони (`type: platform`) курьер босқичи хабари калити (эга 2026-11-07), бошқа ҳолат — `null`.
+ * `ready` — «курьерни кутмоқда»; `in_delivery` — «курьерга топширилди» + кузатиш ҳаволаси.
+ */
+function platformCourierStepKey(orderType, status) {
+  if (String(orderType || '') !== 'platform') return null;
+  if (status === 'ready') return 'platform_order_awaiting_courier';
+  if (status === 'in_delivery') return 'platform_order_handed_courier';
+  return null;
+}
+
+/** №: ҳужжат ID'сининг охирги 6 белгиси (ягона рақам майдони йўқ). */
+function shortOrderNo(orderId) {
+  return String(orderId || '').slice(-6).toUpperCase();
+}
+
+/**
+ * Сотувчи томони — AVA дўкони ходимлари (admin/superadmin/dispatcher, `onOrderCreate` билан бир хил).
+ * Кузатиш ҳаволаси фақат админларга: `order_courier_live` ни rules бўйича фақат `isAdmin()` ўқийди.
+ * Хабар ҳар бирига ўз тилида; best-effort (хато буюртма оқимини тўхтатмайди).
+ */
+async function notifyPlatformStaff(orderId, order, status) {
+  const handed = status === 'in_delivery';
+  try {
+    const snap = await db.collection('users')
+      .where('role', 'in', ['admin', 'superadmin', 'dispatcher'])
+      .get();
+    const amount = new Intl.NumberFormat('uz-UZ').format(Math.round(Number(order.total) || 0));
+    const params = { no: shortOrderNo(orderId), amount };
+    const messages = [];
+    for (const d of snap.docs) {
+      const u = d.data() || {};
+      const token = u.fcmToken;
+      if (typeof token !== 'string' || token.length <= 10) continue;
+      const isAdminRole = u.role === 'admin' || u.role === 'superadmin';
+      const key = !handed ? 'platform_seller_awaiting_courier'
+        : (isAdminRole ? 'platform_seller_handed_courier' : 'platform_seller_handed_courier_nolink');
+      const m = notifI18n.render(key, notifI18n.normalizeLang(u.appLang), params);
+      messages.push({
+        token,
+        notification: { title: m.title, body: m.body },
+        data: handed && isAdminRole
+          ? { type: 'order', status, screen: 'courier_tracking', orderId: String(orderId) }
+          : { type: 'new_order', status, orderId: String(orderId), orderType: 'platform' },
+        android: { priority: 'high' },
+      });
+    }
+    if (messages.length) await admin.messaging().sendEach(messages);
+    console.log(JSON.stringify({ action: 'platformStaffNotify', orderId, status, result: 'ok', recipients: messages.length }));
+  } catch (e) {
+    console.error(JSON.stringify({ action: 'platformStaffNotify', orderId, status, result: 'failed', errorCode: 'NOTIFY_FAILED', message: String((e && e.message) || e).slice(0, 160) }));
+  }
+}
+
 // Буюртма статуси ўзгарганда
 exports.onOrderUpdate = functions.firestore
   .document('orders/{orderId}')
@@ -1130,7 +1186,17 @@ exports.onOrderUpdate = functions.firestore
 
     const orderType = after.type || 'bread';
     const typeLabel = orderTypeLabel(orderType);
-    const newsBody = [body, typeLabel].filter(Boolean).join('\n');
+    // AVA дўкони (эга 2026-11-07): «курьерни кутмоқда» / «курьерга топширилди» + кузатиш ҳаволаси,
+    // мижоз тилида (3 тил). Курьер олганда икки йўл ҳам `status: in_delivery` + `courier_picked` ёзади.
+    const platformKey = platformCourierStepKey(orderType, status);
+    const tracking = platformKey === 'platform_order_handed_courier';
+    if (platformKey) {
+      const lang = await notifI18n.langOfPhone(db, uid);
+      const m = notifI18n.render(platformKey, lang, {});
+      title = m.title;
+      body = m.body;
+    }
+    const newsBody = platformKey ? body : [body, typeLabel].filter(Boolean).join('\n');
     // Битта ўтиш (event) — битта хабар. eventId бўлмаса (эски runtime) —
     // аввалгидек тасодифий ID.
     const eventId = String((context && context.eventId) || '');
@@ -1147,10 +1213,16 @@ exports.onOrderUpdate = functions.firestore
       orderId: change.after.id,
       orderStatus: status,
       orderType,
+      // Илова «Хабарлар»да шу қаторни босганда курьерни кузатиш экранини очади.
+      ...(tracking ? { trackOrderId: change.after.id } : {}),
       priority: 8,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     if (!created) return;
+
+    // Сотувчи (AVA дўкони — админ/диспетчерлар; эга 2026-11-07, `onOrderCreate` билан бир хил қабул қилувчилар).
+    // Хабар бир марта ёзилгандан кейингина (триггер такрорида push қайта кетмайди).
+    if (platformKey) await notifyPlatformStaff(change.after.id, after, status);
 
     const fcmTitle = `📢 ${title}`;
     const fcmBody = body || typeLabel;
@@ -1160,7 +1232,9 @@ exports.onOrderUpdate = functions.firestore
         await admin.messaging().send({
           token,
           notification: { title: fcmTitle, body: fcmBody },
-          data: { type: 'order', status, screen: 'news', tab: 'orders' },
+          data: tracking
+            ? { type: 'order', status, screen: 'courier_tracking', orderId: change.after.id }
+            : { type: 'order', status, screen: 'news', tab: 'orders' },
           android: { priority: 'high' },
         });
       } catch (e) {

@@ -15,6 +15,7 @@
  *   N4 тур ёрлиғи: `platform` — «Улгуржи бозор» (аввал «Нон»)
  *   N5 notifyUserInApp → onAdminNewsCreate: push БИР марта (аввал икки)
  *   N6 админ қўлда ёзган шахсий хабар — onAdminNewsCreate push'и сақланди
+ *   N7–N9 AVA дўкони: «курьерни кутмоқда» / «курьерга топширилди» + кузатиш (мижоз ва сотувчи), нон ўзгармаган
  */
 'use strict';
 const assert = require('assert');
@@ -165,6 +166,63 @@ async function main() {
     });
     await fns.onAdminNewsCreate.run(await ref.get(), { params: { newsId: 'm1' } });
     assert.strictEqual(pushesTo(TOKEN), 1);
+  });
+
+  // ── N7 / N8 (эга 2026-11-07): AVA дўкони — «курьерни кутмоқда», «курьерга топширилди» + кузатиш ──
+  const ADMIN = '998901000030';
+  const DISP = '998901000031';
+  const ADMIN_TOKEN = 'tok_admin_1234567890';
+  const DISP_TOKEN = 'tok_disp_1234567890';
+  const pushOf = (token) => sent.filter((m) => m.token === token);
+  async function resetStaff() {
+    await reset();
+    await db.collection('users').doc(ADMIN).set({ role: 'admin', fcmToken: ADMIN_TOKEN, appLang: 'uz_Latn' });
+    await db.collection('users').doc(DISP).set({ role: 'dispatcher', fcmToken: DISP_TOKEN });
+  }
+  const plat = { ...base, type: 'platform', total: 55000 };
+
+  await resetStaff();
+  await check('N7 platform ready → mijoz «курьерни кутмоқда» (3 til), sotuvchi (admin+dispetcher) — bir marta', async () => {
+    await updateOrder('p1', { ...plat, status: 'accepted' }, { status: 'ready' }, 'evt-p1');
+    await updateOrder('p1', { ...plat, status: 'accepted' }, { status: 'ready' }, 'evt-p1'); // takror
+    const [n] = await orderNews('p1');
+    assert.strictEqual(n.title, '⏳ Буюртмангиз курьерни кутмоқда');
+    assert.strictEqual(n.trackOrderId, undefined);
+    assert.strictEqual(pushesTo(TOKEN), 1);
+    assert.strictEqual(pushOf(TOKEN)[0].data.screen, 'news');
+    const a = pushOf(ADMIN_TOKEN);
+    assert.strictEqual(a.length, 1, `admin push: ${a.length}`);
+    assert.strictEqual(a[0].notification.title, '⏳ Buyurtma kuryerni kutmoqda', 'admin tili uz_Latn');
+    assert.ok(a[0].notification.body.includes('№P1 ·'), a[0].notification.body);
+    assert.strictEqual(pushOf(DISP_TOKEN).length, 1);
+  });
+
+  await resetStaff();
+  await check('N8 platform in_delivery → «курьерга топширилди» + kuzatish havolasi (mijoz, admin); dispetcher — havolasiz; ru', async () => {
+    await db.collection('users').doc(CUSTOMER).set({ role: 'user', fcmToken: TOKEN, appLang: 'ru' });
+    await updateOrder('p2', { ...plat, status: 'ready' },
+      { status: 'in_delivery', fulfillmentStatus: 'courier_picked', courierId: '998901000099' }, 'evt-p2');
+    const [n] = await orderNews('p2');
+    assert.strictEqual(n.title, '🚚 Ваш заказ передан курьеру');
+    assert.strictEqual(n.body, 'Перейдите по ссылке, чтобы отследить курьера.');
+    assert.strictEqual(n.trackOrderId, 'p2');
+    const c = pushOf(TOKEN)[0];
+    assert.deepStrictEqual({ screen: c.data.screen, orderId: c.data.orderId }, { screen: 'courier_tracking', orderId: 'p2' });
+    const a = pushOf(ADMIN_TOKEN)[0];
+    assert.strictEqual(a.data.screen, 'courier_tracking');
+    assert.strictEqual(a.data.orderId, 'p2');
+    const d = pushOf(DISP_TOKEN)[0];
+    assert.notStrictEqual(d.data.screen, 'courier_tracking', 'dispetcher order_courier_live ni o\'qiy olmaydi');
+    assert.ok(d.notification.body.includes('Курьер йўлда'), d.notification.body);
+  });
+
+  await resetStaff();
+  await check('N9 non buyurtmasi o\'zgarmagan: ready — «Буюртмангиз тайёр!», sotuvchiga push yo\'q', async () => {
+    await updateOrder('b1', { ...base, status: 'accepted' }, { status: 'ready' }, 'evt-b1');
+    const [n] = await orderNews('b1');
+    assert.strictEqual(n.title, '🟠 Буюртмангиз тайёр!');
+    assert.strictEqual(pushOf(ADMIN_TOKEN).length, 0);
+    assert.strictEqual(pushOf(DISP_TOKEN).length, 0);
   });
 
   const failed = results.filter((r) => !r).length;

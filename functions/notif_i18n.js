@@ -317,6 +317,37 @@ const MESSAGES = {
   },
 };
 
+// AVA дўкони (`orders` type platform, «Оформить заказ») — эга 2026-11-07: мижоз ва сотувчига
+// «курьерни кутмоқда», «курьерга топширилди» + курьерни кузатиш ҳаволаси (`onOrderUpdate`).
+Object.assign(MESSAGES, {
+  platform_order_awaiting_courier: {
+    uz_Cyrl: { title: '⏳ Буюртмангиз курьерни кутмоқда', body: 'Буюртма тайёр. Курьер тез орада олиб кетади.' },
+    uz_Latn: { title: '⏳ Buyurtmangiz kuryerni kutmoqda', body: 'Buyurtma tayyor. Kuryer tez orada olib ketadi.' },
+    ru: { title: '⏳ Ваш заказ ожидает курьера', body: 'Заказ готов. Курьер скоро его заберёт.' },
+  },
+  platform_order_handed_courier: {
+    uz_Cyrl: { title: '🚚 Буюртмангиз курьерга топширилди', body: 'Курьерни кузатиш учун ҳаволага ўтинг.' },
+    uz_Latn: { title: '🚚 Buyurtmangiz kuryerga topshirildi', body: 'Kuryerni kuzatish uchun havolaga o\'ting.' },
+    ru: { title: '🚚 Ваш заказ передан курьеру', body: 'Перейдите по ссылке, чтобы отследить курьера.' },
+  },
+  platform_seller_awaiting_courier: {
+    uz_Cyrl: { title: '⏳ Буюртма курьерни кутмоқда', body: 'AVA дўкони · №{no} · {amount} сўм. Курьер ҳали олмади.' },
+    uz_Latn: { title: '⏳ Buyurtma kuryerni kutmoqda', body: 'AVA do\'koni · №{no} · {amount} so\'m. Kuryer hali olmadi.' },
+    ru: { title: '⏳ Заказ ожидает курьера', body: 'Магазин AVA · №{no} · {amount} сум. Курьер ещё не забрал.' },
+  },
+  platform_seller_handed_courier: {
+    uz_Cyrl: { title: '🚚 Буюртма курьерга топширилди', body: 'AVA дўкони · №{no}. Курьерни кузатиш учун ҳаволага ўтинг.' },
+    uz_Latn: { title: '🚚 Buyurtma kuryerga topshirildi', body: 'AVA do\'koni · №{no}. Kuryerni kuzatish uchun havolaga o\'ting.' },
+    ru: { title: '🚚 Заказ передан курьеру', body: 'Магазин AVA · №{no}. Перейдите по ссылке, чтобы отследить курьера.' },
+  },
+  // Диспетчер курьер жойини ўқий олмайди (rules `order_courier_live`: фақат админ) — ҳаволасиз.
+  platform_seller_handed_courier_nolink: {
+    uz_Cyrl: { title: '🚚 Буюртма курьерга топширилди', body: 'AVA дўкони · №{no}. Курьер йўлда.' },
+    uz_Latn: { title: '🚚 Buyurtma kuryerga topshirildi', body: 'AVA do\'koni · №{no}. Kuryer yo\'lda.' },
+    ru: { title: '🚚 Заказ передан курьеру', body: 'Магазин AVA · №{no}. Курьер в пути.' },
+  },
+});
+
 /** Номаълум/бўш → `uz_Cyrl`. */
 function normalizeLang(v) {
   const s = String(v || '');

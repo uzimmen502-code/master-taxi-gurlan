@@ -15,6 +15,8 @@ import '../features/courier/screens/courier_screen.dart';
 import '../features/customer_confirm/customer_confirm_controller.dart';
 import '../features/customer_confirm/screens/customer_confirm_screen.dart';
 import '../features/restaurants/courier/restaurant_nearby_orders_screen.dart';
+import '../features/restaurants/data/restaurants_repository.dart';
+import '../features/restaurants/screens/courier_tracking_screen.dart';
 import '../features/restaurants/merchant/restaurant_panel_screen.dart';
 import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
 import '../features/intercity_taxi/driver/screens/intercity_driver_panel_screen.dart';
@@ -107,6 +109,16 @@ class PushNavigation {
     final type = (data['type'] ?? '').trim();
     final screen = (data['screen'] ?? '').trim();
     if (type != 'wholesale_order' && screen != 'wholesale_order') return null;
+    final id = (data['orderId'] ?? '').trim();
+    return RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id) ? id : null;
+  }
+
+  /// «Курьерга топширилди — кузатиш учун ҳаволага ўтинг» push'и (`functions/index.js` `onOrderUpdate`,
+  /// AVA дўкони, эга 2026-11-07): `{screen: courier_tracking, orderId}` → `orderId` (Firestore ID шакли),
+  /// акс ҳолда `null`. Push'га ишонилмайди: экран буюртма ва курьер нуқтасини Firestore'дан ўқийди (rules).
+  @visibleForTesting
+  static String? courierTrackingOrderIdFromPush(Map<String, String> data) {
+    if ((data['screen'] ?? '').trim() != 'courier_tracking') return null;
     final id = (data['orderId'] ?? '').trim();
     return RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(id) ? id : null;
   }
@@ -480,6 +492,15 @@ class PushNavigation {
     // умумий fallback уни Янгиликлар → «Хабарлар» табига олиб боради
     // (`_newsHubTabIndex`да `sell_offer` шу табга бириктирилган):
     // таклиф ҳақидаги хабарнинг ўзи ўша ерда сақланади.
+
+    // ── Курьерни кузатиш (AVA дўкони: «курьерга топширилди») ──────────
+    final trackOrderId = courierTrackingOrderIdFromPush(data);
+    if (trackOrderId != null) {
+      await nav.push(MaterialPageRoute(
+        builder: (_) => CourierTrackingScreen(orderId: trackOrderId, repository: RestaurantsRepository()),
+      ));
+      return;
+    }
 
     // ── «Менинг бизнесим» буюртмаси (business_orders.js) ───────────────
     // Push'даги маълумотга ишонилмайди: экранлар ҳужжатни Firestore'дан ўқийди (rules: харидор/сотувчи/курьер).

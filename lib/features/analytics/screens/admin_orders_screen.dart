@@ -15,6 +15,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../admin_web/services/admin_auth_service.dart';
 import '../../admin_web/services/admin_orders_service.dart';
 import '../../admin_web/widgets/order_history_from_bar.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../utils/locale_utils.dart';
+import '../../restaurants/data/restaurants_repository.dart';
+import '../../restaurants/domain/courier_tracking.dart';
+import '../../restaurants/screens/courier_tracking_screen.dart';
 
 /// Админ учун — `orders` навбати (ҳолатни янгилаш).
 ///
@@ -987,6 +992,19 @@ class _OrderColumnModeBarState extends State<_OrderColumnModeBar> {
   }
 }
 
+/// Админ иловасида (`main_admin.dart`) `AppLocalizations` уланмаган — кузатиш экрани калитлари хом
+/// чиқмаслиги учун шу экранга ўзбекча (кирилл) таржима берилади.
+Future<void> openAdminCourierTracking(BuildContext context, OrderModel order) {
+  return Navigator.of(context).push(MaterialPageRoute<void>(
+    builder: (ctx) => Localizations.override(
+      context: ctx,
+      locale: LocaleUtils.uzCyrl,
+      delegates: const [AppLocalizations.delegate],
+      child: CourierTrackingScreen(orderId: order.id, repository: RestaurantsRepository(), initial: order),
+    ),
+  ));
+}
+
 class _OrderCard extends StatelessWidget {
   const _OrderCard({
     required this.order,
@@ -1062,6 +1080,16 @@ class _OrderCard extends StatelessWidget {
               order: order,
               title: '🧾 Чек · ${fmt.formatMoney(order.total)}',
             ),
+            // Сотувчи (AVA дўкони) ҳам курьерни кузатади (эга 2026-11-07): курьер олгандан мижозга етгунча.
+            if (CourierTracking.canTrack(order)) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: ValueKey('admin_track_${order.id}'),
+                onPressed: () => openAdminCourierTracking(context, order),
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: const Text('Курьерни кузатиш'),
+              ),
+            ],
             if (next != null && next!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(

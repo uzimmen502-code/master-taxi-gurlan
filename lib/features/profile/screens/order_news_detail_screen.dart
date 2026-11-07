@@ -8,6 +8,9 @@ import '../../../models/order_model.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../shared/widgets/order_receipt_view.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../restaurants/data/restaurants_repository.dart';
+import '../../restaurants/domain/courier_tracking.dart';
+import '../../restaurants/widgets/courier_info_card.dart';
 
 /// Битта буюртма: чек + барча статус хабарлари.
 class OrderNewsDetailScreen extends StatelessWidget {
@@ -25,6 +28,9 @@ class OrderNewsDetailScreen extends StatelessWidget {
         return context.tr('news_dt_accepted');
       case 'ready':
         return context.tr('news_dt_ready');
+      // Аввал хом «in_delivery» кўринарди.
+      case 'in_delivery':
+        return context.tr('order_status_in_delivery');
       case 'delivered':
         return context.tr('news_dt_delivered');
       case 'rejected':
@@ -73,9 +79,16 @@ class OrderNewsDetailScreen extends StatelessWidget {
                   padding: EdgeInsets.all(24),
                   child: Center(child: CircularProgressIndicator()),
                 )
-              else if (orderSnap.data != null)
-                OrderReceiptView(order: orderSnap.data!)
-              else
+              else if (orderSnap.data != null) ...[
+                OrderReceiptView(order: orderSnap.data!),
+                // «Курьерга топширилди — кузатиш учун ҳаволага ўтинг» (эга 2026-11-07): курьер буюртмани
+                // олгандан мижозга етгунча — курьер маълумоти ва «Курьерни кузатиш» (мавжуд карточка).
+                if (CourierTracking.canTrack(orderSnap.data!))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: CourierInfoCard(order: orderSnap.data!, repository: RestaurantsRepository()),
+                  ),
+              ] else
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(

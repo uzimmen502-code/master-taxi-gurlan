@@ -1,5 +1,5 @@
 {
-  "_doc": "AVA Logistics Relay: viloyat transfer nuqtalari (ega qarori 2026-11-07: transfer nuqta = viloyatning RASMIY ma'muriy markazi). Kalit - geo_regions ID, districtId - geo_districts ID (functions/tools/data/uzbekistan_geo_data.js va functions/tools/seed-service-config.js dan). module_config/logistics_all.logistics.transferPoints.regions shu jadval ustiga yozadi (har viloyat alohida). toshkent_shahri ATAYLAB YO'Q: poytaxt o'zi markaz, 12 tumandan qaysi biri transfer nuqta ekanini repo aniqlamaydi (UNKNOWN / NEEDS CONFIRMATION) - ega konfigda belgilaguncha shu viloyatga/dan buyurtma bitta to'g'ridan-to'g'ri LEG bo'lib qoladi (TRANSFER_POINT_MISSING log).",
+  "_doc": "AVA Logistics Relay: viloyat transfer nuqtalari (ega qarori 2026-11-07: transfer nuqta = viloyatning RASMIY ma'muriy markazi). Kalit - geo_regions ID, districtId - geo_districts ID (functions/tools/data/uzbekistan_geo_data.js va functions/tools/seed-service-config.js dan). module_config/logistics_all.logistics.transferPoints.regions shu jadval ustiga yozadi (har viloyat alohida). toshkent_shahri -> yashnobod (Yashnobod tumani) - ega qarori 2026-11-12.",
   "regions": {
     "xorazm": { "districtId": "urganch_shahri" },
     "qoraqalpogiston": { "districtId": "nukus_shahri" },
@@ -13,6 +13,7 @@
     "qashqadaryo": { "districtId": "qarshi_shahri" },
     "surxondaryo": { "districtId": "termiz_shahri" },
     "jizzax": { "districtId": "jizzax_shahri" },
-    "sirdaryo": { "districtId": "guliston_shahri" }
+    "sirdaryo": { "districtId": "guliston_shahri" },
+    "toshkent_shahri": { "districtId": "yashnobod" }
   }
 }

@@ -112,8 +112,15 @@ ok('standart jadval: har tuman ID repo geo ma\'lumotida, aynan shu viloyatda (to
     assert.ok(districtsOf[rid], `viloyat geo ma'lumotida yo'q: ${rid}`);
     assert.ok(districtsOf[rid].has(tp.districtId), `${rid} → ${tp.districtId} repo'da yo'q`);
   }
-  assert.strictEqual(DEFAULT_TABLE.regions.toshkent_shahri, undefined);
-  assert.strictEqual(Object.keys(DEFAULT_TABLE.regions).length, 13);
+  // Ega 2026-11-12: Toshkent shahri transfer nuqtasi — Yashnobod tumani.
+  assert.deepStrictEqual(DEFAULT_TABLE.regions.toshkent_shahri, { districtId: 'yashnobod' });
+  assert.strictEqual(Object.keys(DEFAULT_TABLE.regions).length, 14);
+});
+
+ok('standart jadval: Gurlan → Chilonzor = Gurlan → Urganch sh. → Yashnobod → Chilonzor (3 LEG)', () => {
+  const r = S.planRelayPoints(P('xorazm', 'gurlan'), P('toshkent_shahri', 'chilonzor'), { regions: DEFAULT_TABLE.regions });
+  assert.strictEqual(r.fallback, null, JSON.stringify(r.fallback));
+  assert.deepStrictEqual(r.points.map((p) => p.districtId), ['gurlan', 'urganch_shahri', 'yashnobod', 'chilonzor']);
 });
 
 ok('konfig: standart — sequential, 48 soat, jadval; Firestore viloyat bo\'yicha ustiga yozadi', () => {
@@ -128,7 +135,8 @@ ok('konfig: standart — sequential, 48 soat, jadval; Firestore viloyat bo\'yich
   assert.strictEqual(merged.logistics.transferPoints.regions.xorazm.districtId, 'urganch_shahri', 'boshqa maydon saqlanadi');
   assert.strictEqual(merged.logistics.transferPoints.regions.xorazm.addressText, 'Bekat');
   assert.strictEqual(merged.logistics.transferPoints.regions.andijon.districtId, 'andijon_shahri');
-  assert.strictEqual(config.DEFAULTS.logistics.transferPoints.regions.toshkent_shahri, undefined, 'standart buzilmaydi');
+  // Konfig (yunusobod) standartni o'zgartirmaydi — standart Yashnobod bo'lib qoladi.
+  assert.strictEqual(config.DEFAULTS.logistics.transferPoints.regions.toshkent_shahri.districtId, 'yashnobod', 'standart buzilmaydi');
 });
 
 (async () => {

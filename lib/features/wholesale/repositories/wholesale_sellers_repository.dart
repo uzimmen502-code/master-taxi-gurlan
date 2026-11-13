@@ -90,6 +90,22 @@ class WholesaleSellersRepository {
     return WholesaleSeller.fromFirestore(snap);
   }
 
+  /// «Сотувчилар» таби учун (эга, 2026-11-13): бир нечта сотувчи ID бўйича,
+  /// 30 тадан бўлак (`whereIn` чеклови). Калит — каноник телефон. Ўқиш
+  /// ҳаммага очиқ (rules `wholesale_sellers` read: true).
+  Future<Map<String, WholesaleSeller>> fetchByIds(Iterable<String> phones) async {
+    final ids = phones.map(canonicalPhoneId).where((e) => e.isNotEmpty).toSet().toList();
+    final out = <String, WholesaleSeller>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final part = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+      final snap = await _col.where(FieldPath.documentId, whereIn: part).get();
+      for (final d in snap.docs) {
+        out[canonicalPhoneId(d.id)] = WholesaleSeller.fromFirestore(d);
+      }
+    }
+    return out;
+  }
+
   /// Ўз ҳолатини кузатиш (рўйхатдан ўтиш экрани — pending/approved/rejected).
   Stream<WholesaleSeller?> watchByPhone(String phone) {
     final id = canonicalPhoneId(phone);

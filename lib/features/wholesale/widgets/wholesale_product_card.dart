@@ -10,13 +10,50 @@ class WholesaleProductCard extends StatelessWidget {
     super.key,
     required this.product,
     required this.onTap,
+    this.onSellerTap,
   });
 
   final WholesaleProduct product;
   final VoidCallback onTap;
 
+  /// Сотувчи номи (карточка пастки қатори) босилса — унинг магазини
+  /// (эга, 2026-11-13). `null` — номи оддий матн (магазиннинг ўзида).
+  final VoidCallback? onSellerTap;
+
+  /// Пастки «сотувчи» қаторининг босиладиган баландлиги.
+  static const double sellerTapHeight = 28;
+
   @override
   Widget build(BuildContext context) {
+    final card = _card(context);
+    final tap = onSellerTap;
+    if (tap == null || product.sellerCompanyName.trim().isEmpty) return card;
+    return Stack(
+      children: [
+        card,
+        Positioned(
+          left: 4,
+          right: 4,
+          bottom: 4,
+          height: sellerTapHeight,
+          child: Semantics(
+            button: true,
+            label: product.sellerCompanyName,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                key: ValueKey('wholesale-card-seller-${product.id}'),
+                borderRadius: BorderRadius.circular(8),
+                onTap: tap,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _card(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 0,
@@ -82,7 +119,10 @@ class WholesaleProductCard extends StatelessWidget {
               title: product.title,
               price: wholesalePriceLine(context, product),
               // «МОҚ» олиб ташланди (эга, 2026-11-01) — фақат сотувчи.
-              caption: product.sellerCompanyName,
+              // Босиладиган бўлса «›» — магазинга ўтиш белгиси.
+              caption: onSellerTap != null && product.sellerCompanyName.trim().isNotEmpty
+                  ? '${product.sellerCompanyName} ›'
+                  : product.sellerCompanyName,
             ),
           ],
         ),

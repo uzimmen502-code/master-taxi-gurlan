@@ -25,8 +25,10 @@ import '../widgets/wholesale_field_error.dart';
 import '../widgets/wholesale_order_entries.dart';
 import '../widgets/wholesale_product_card.dart';
 import '../widgets/wholesale_stream_builder.dart';
+import '../widgets/wholesale_sellers_list.dart';
 import 'wholesale_product_detail_screen.dart';
 import 'wholesale_product_form_screen.dart';
+import 'wholesale_seller_products_screen.dart';
 import '../wholesale_celebrations.dart';
 
 /// Улгуржи/кичик улгуржи бозор — умумий кириш нуқтаси.
@@ -121,6 +123,22 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
     setState(() => _query = '');
   }
 
+  /// 0 — маҳсулотлар, 1 — «Сотувчилар» (эга, 2026-11-13; фақат Улгуржида).
+  int _tab = 0;
+
+  void _openStore(String sellerId, String sellerName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WholesaleSellerProductsScreen(
+          sellerId: sellerId,
+          sellerName: sellerName,
+          market: widget.market,
+        ),
+      ),
+    );
+  }
+
   /// Улгуржи ҳам, Хитой ҳам — доим бутун мамлакат (эга, 2026-11-03, «А
   /// вариант»: Улгуржи маҳсулотлари админ очган барча ҳудудларда кўринсин,
   /// вилоят/туман фильтри ҳеч нарсани яширмасин). Аввал Улгуржида ҳудуд
@@ -163,7 +181,7 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
           textInputAction: TextInputAction.search,
           onChanged: (v) => setState(() => _query = v),
           decoration: InputDecoration(
-            hintText: context.tr('wholesale_search_hint'),
+            hintText: context.tr(_tab == 1 ? 'wholesale_sellers_search_hint' : 'wholesale_search_hint'),
             prefixIcon: const Icon(Icons.search),
             // Тозалаш: матн бор бўлсагина (48 dp босиладиган майдон).
             suffixIcon: _query.isEmpty
@@ -179,12 +197,37 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
         ),
       ),
       if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
+      if (!_isChina)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<int>(
+              key: const ValueKey('wholesale-market-tabs'),
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(value: 0, label: Text(context.tr('wholesale_tab_products'))),
+                ButtonSegment(value: 1, label: Text(context.tr('wholesale_tab_sellers'))),
+              ],
+              selected: {_tab},
+              onSelectionChanged: (s) => setState(() => _tab = s.first),
+            ),
+          ),
+        ),
       Expanded(
         child: WholesaleStreamBuilder<List<WholesaleProduct>>(
           stream: _productsStream(),
           // Firestore stream хатодан кейин ёпилади: кэшни ташлаб қайта улаймиз.
           onRetry: () => setState(() => _stream = null),
           builder: (context, data) {
+            if (!_isChina && _tab == 1) {
+              return WholesaleSellersList(
+                products: data ?? const <WholesaleProduct>[],
+                market: widget.market,
+                query: _query,
+                onOpen: (s) => _openStore(s.phone, s.companyName),
+              );
+            }
             final items = WholesaleProductsRepository.filterBySearch(
                 data ?? const <WholesaleProduct>[], _query);
             final platform = _filteredPlatform();
@@ -217,6 +260,10 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
                 final p = e.seller!;
                 return WholesaleProductCard(
                   product: p,
+                  // Сотувчи номи → магазини (эга, 2026-11-13; Улгуржида).
+                  onSellerTap: _isChina || p.sellerId.trim().isEmpty
+                      ? null
+                      : () => _openStore(p.sellerId, p.sellerCompanyName),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(

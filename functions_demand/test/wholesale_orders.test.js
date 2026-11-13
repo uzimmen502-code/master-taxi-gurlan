@@ -330,6 +330,36 @@ ok('miqdor: MOQ dan kam RAD, MOQ ga teng o\'tadi (chegara)', async () => {
   } finally { loud(); }
 });
 
+ok('minimal buyurtma (ega 2026-11-13): sotuvchi soni pog\'onadan katta bo\'lsa — u; kichik yoki noto\'g\'ri — pog\'ona', () => {
+  const withMoq = (packMoq, productMoq) => ({
+    ...RICE,
+    packs: RICE.packs.map((p) => (p.id === 'p1' ? { ...p, minOrderQty: packMoq } : p)),
+    ...(productMoq === undefined ? {} : { minOrderQty: productMoq }),
+  });
+  assert.strictEqual(api.resolvePack(withMoq(25), 'p1').moq, 25);
+  assert.strictEqual(api.resolvePack(withMoq(1), 'p1').moq, 1, 'pog\'ona ham 1');
+  assert.strictEqual(api.resolvePack({ ...RICE, packs: [{ ...RICE.packs[1], minOrderQty: 3 }] }, 'p2').moq, 5, 'pog\'ona (5) katta');
+  for (const bad of [0, -4, 2.5, '25', null, 1000001]) {
+    assert.strictEqual(api.resolvePack(withMoq(bad), 'p1').moq, 1, `noto'g'ri: ${bad}`);
+  }
+  // Mahsulot darajasidagi son qadoqli mahsulotga TA'SIR QILMAYDI (faqat default qadoq).
+  assert.strictEqual(api.resolvePack(withMoq(undefined, 40), 'p1').moq, 1);
+  assert.strictEqual(api.resolvePack({ ...FLOUR, minOrderQty: 40 }, 'default').moq, 40);
+  assert.strictEqual(api.resolvePack({ ...FLOUR, minOrderQty: 1000000 }, 'default').moq, 1000000, 'chegara');
+});
+
+ok('miqdor: sotuvchi minimal soni (25) — 24 RAD (details.moq=25), 25 o\'tadi', async () => {
+  quiet();
+  try {
+    const rice = { ...RICE, packs: RICE.packs.map((p) => (p.id === 'p1' ? { ...p, minOrderQty: 25 } : p)) };
+    const db = makeDb({ 'wholesale_products/rice': rice });
+    const e = await rejects(quote(db)(req({ packId: 'p1', qty: 24 }), ctx(BUYER)), 'invalid-argument', 'below_moq');
+    assert.strictEqual(e.details.moq, 25);
+    const r = await quote(db)(req({ packId: 'p1', qty: 25 }), ctx(BUYER));
+    assert.strictEqual(r.qty, 25);
+  } finally { loud(); }
+});
+
 ok('qoldiq: kiritilmagan RAD; qoldiqdan ko\'p RAD; qoldiqqa teng o\'tadi', async () => {
   quiet();
   try {

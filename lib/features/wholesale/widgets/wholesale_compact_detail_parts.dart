@@ -293,7 +293,12 @@ class WholesaleCompactBottomBar extends StatelessWidget {
     required this.onWriteOrder,
     this.showWriteOrder = true,
     this.writeBusy = false,
+    this.onPlaceOrder,
   });
+
+  /// Онлайн «Буюртма бериш» (эга, 2026-11-13: «албатта қайтарамиз»; 01.11 да олиб
+  /// ташланган эди). `null` — тугма йўқ: дарвоза ёпиқ, ўз маҳсулоти ёки меҳмон.
+  final VoidCallback? onPlaceOrder;
 
   final int qty;
   final int minQty;
@@ -312,8 +317,46 @@ class WholesaleCompactBottomBar extends StatelessWidget {
   /// Қўнғироқ тугмаси эни (аввал [_h] — квадрат эди).
   static const double callWidth = 56;
 
+  /// Брэнд тўқ сариқ (#FFA500) — асосий амал; сутли тугмалардан ажралиб турсин.
+  static const Color _orderColor = Color(0xFFFFA500);
+
   @override
   Widget build(BuildContext context) {
+    final row = _row(context);
+    final place = onPlaceOrder;
+    if (place == null) return row;
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: _h,
+          width: double.infinity,
+          child: FilledButton(
+            key: const ValueKey('wholesale-place-order'),
+            onPressed: place,
+            style: FilledButton.styleFrom(
+              backgroundColor: _orderColor,
+              foregroundColor: kWholesaleMilkInk,
+              shape: shape,
+            ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '${context.tr('wholesale_order_btn')} · $totalText',
+                maxLines: 1,
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        row,
+      ],
+    );
+  }
+
+  Widget _row(BuildContext context) {
     final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
     if (!showWriteOrder) {
       return SizedBox(

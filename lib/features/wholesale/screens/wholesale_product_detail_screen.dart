@@ -13,8 +13,10 @@ import '../../ads/widgets/ad_image_slider.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../widgets/wholesale_detail_actions.dart';
 import '../models/wholesale_product.dart';
+import '../repositories/wholesale_orders_repository.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../repositories/wholesale_stock_repository.dart';
+import 'wholesale_order_detail_screen.dart';
 import '../widgets/wholesale_checkout_sheet.dart';
 import '../widgets/wholesale_compact_detail_parts.dart';
 import '../services/wholesale_video_link.dart';
@@ -175,6 +177,53 @@ class _WholesaleProductDetailViewState
     final prefs = await SharedPreferences.getInstance();
     final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     if (mounted && uid != _myUid) setState(() => _myUid = uid);
+    unawaited(_checkCanOrder());
+  }
+
+  /// Онлайн «Буюртма бериш» (эга, 2026-11-13: «албатта қайтарамиз» — 01.11 да олиб
+  /// ташланган эди): Улгуржида, ўз товари эмас ва буюртма дарвозаси шу
+  /// фойдаланувчини киритса. Ҳал қилувчи — сервер (`module_disabled` бўлса
+  /// варақ ёпилади ва тугма яширинади; қўнғироқ ва чат қолади).
+  final _ordersRepo = WholesaleOrdersRepository();
+  bool _canOrder = false;
+
+  Future<void> _checkCanOrder() async {
+    final p = widget.product;
+    final uid = _myUid;
+    final allowed = !p.isChina &&
+        uid.length >= 11 &&
+        canonicalPhoneId(p.sellerId) != uid &&
+        (await _ordersRepo.gate()).allows(uid);
+    if (mounted && allowed != _canOrder) setState(() => _canOrder = allowed);
+  }
+
+  Future<void> _placeOrder(int qty) async {
+    final orderId = await showWholesaleCheckoutSheet(
+      context,
+      product: widget.product,
+      pack: _pack,
+      qty: qty,
+      repository: _ordersRepo,
+    );
+    if (!mounted) return;
+    if (orderId == null) {
+      // Варақда дарвоза ёпиқ чиққан бўлса — тугма яширинсин.
+      unawaited(_checkCanOrder());
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('wholesale_order_placed'))),
+    );
+    unawaited(Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WholesaleOrderDetailScreen(
+          orderId: orderId,
+          viewerId: _myUid,
+          repository: _ordersRepo,
+        ),
+      ),
+    ));
   }
 
   /// «Буюртма ёзиш» → эълон эгаси билан чат (эга қарори 2026-11-01).
@@ -376,6 +425,7 @@ class _WholesaleProductDetailViewState
                 ),
                 showWriteOrder: wholesaleShowWriteOrder(myUid: _myUid, sellerId: p.sellerId),
                 writeBusy: _writeBusy,
+                onPlaceOrder: _canOrder ? () => _placeOrder(qty) : null,
               ),
             ),
           ),

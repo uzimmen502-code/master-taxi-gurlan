@@ -224,6 +224,35 @@ void main() {
     expect(find.text(d.tr('wholesale_call')), findsOneWidget);
   });
 
+  testWidgets('«Буюртма бериш» (эга, 2026-11-13): берилмаса йўқ; берилса тепада, сумма билан, босилади', (tester) async {
+    var places = 0;
+    Widget bar({VoidCallback? place}) => _host(
+          WholesaleCompactBottomBar(
+            qty: 10,
+            minQty: 1,
+            maxQty: 100,
+            onQtyChanged: (_) {},
+            totalText: '≈ 110 000 сўм',
+            onCall: () {},
+            onWriteOrder: () {},
+            onPlaceOrder: place,
+          ),
+          d: d,
+        );
+    await tester.pumpWidget(bar());
+    expect(find.byKey(const ValueKey('wholesale-place-order')), findsNothing, reason: 'дарвоза ёпиқ');
+    await tester.pumpWidget(bar(place: () => places++));
+    await tester.pumpAndSettle();
+    final btn = find.byKey(const ValueKey('wholesale-place-order'));
+    expect(btn, findsOneWidget);
+    expect(find.text('${d.tr('wholesale_order_btn')} · ≈ 110 000 сўм'), findsOneWidget);
+    expect(tester.getCenter(btn).dy < tester.getCenter(find.byKey(const ValueKey('wholesale-call'))).dy, isTrue,
+        reason: 'асосий амал — қўнғироқ қаторидан тепада');
+    expect(find.byKey(const ValueKey('wholesale-write-order')), findsOneWidget, reason: 'чат ҳам қолади');
+    await tester.tap(btn);
+    expect(places, 1);
+  });
+
   testWidgets('тор экран (320 dp): тошиб кетмайди', (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
@@ -237,6 +266,7 @@ void main() {
         totalText: '≈ 1 099 989 000 сўм',
         onCall: () {},
         onWriteOrder: () {},
+        onPlaceOrder: () {},
       ),
       d: d,
     ));

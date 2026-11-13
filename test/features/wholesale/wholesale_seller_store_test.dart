@@ -1,6 +1,7 @@
 // Улгуржи «сотувчи магазини» (эга, 2026-11-13, 1–2-босқич).
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_seller.dart';
+import 'package:ava_gurlan/features/wholesale/screens/wholesale_market_screen.dart' show WholesaleChinaTypeChips;
 import 'package:ava_gurlan/features/wholesale/screens/wholesale_seller_products_screen.dart';
 import 'package:ava_gurlan/features/wholesale/utils/wholesale_store.dart';
 import 'package:ava_gurlan/features/wholesale/widgets/wholesale_product_card.dart';
@@ -88,6 +89,25 @@ void main() {
       expect(filterStores(list, 'savdo', place).map((e) => e.seller.phone), ['1']);
       expect(filterStores(list, 'урганч', place).map((e) => e.seller.phone), ['2']);
       expect(filterStores(list, '  ', place).length, 2);
+    });
+  });
+
+  group('Хитойдаги сотувчи тури (chinaSellerType, эга «Б»)', () {
+    test('рўйхатдан ўтиш ва қайта юбориш маълумотида фақат рухсат этилган қиймат', () {
+      const ok = WholesaleSeller(phone: '998901110001', companyName: 'AVA', chinaSellerType: 'china_buyer');
+      expect(ok.toFirestoreCreate()['chinaSellerType'], 'china_buyer');
+      expect(ok.toFirestoreResubmit()['chinaSellerType'], 'china_buyer');
+      const empty = WholesaleSeller(phone: '998901110001', companyName: 'AVA');
+      expect(empty.toFirestoreCreate().containsKey('chinaSellerType'), isFalse);
+      const bad = WholesaleSeller(phone: '998901110001', companyName: 'AVA', chinaSellerType: 'boss');
+      expect(bad.toFirestoreCreate().containsKey('chinaSellerType'), isFalse, reason: 'rules рад этарди');
+    });
+
+    test('матн калитлари; Улгуржи тури алоҳида қолади', () {
+      expect(WholesaleSeller.chinaTypeLabelKey('china_factory'), 'wholesale_china_type_factory');
+      expect(WholesaleSeller.chinaTypeLabelKey('china_buyer'), 'wholesale_china_type_buyer');
+      expect(WholesaleSeller.chinaTypeLabelKey('manufacturer'), '');
+      expect(WholesaleSeller.typeLabelKey('china_factory'), '', reason: 'Улгуржи турларига аралашмайди');
     });
   });
 
@@ -184,6 +204,34 @@ void main() {
       expect(find.textContaining('wholesale_delivery_days'), findsNothing);
     });
 
+    testWidgets('Хитой магазини: тур белгиланган бўлса — «Хитой фабрикаси» (умумий ёзув эмас)', (t) async {
+      final prev = FlutterError.onError;
+      FlutterError.onError = (d) {
+        if (d.exceptionAsString().contains('overflowed by')) return;
+        prev?.call(d);
+      };
+      addTearDown(() => FlutterError.onError = prev);
+      await t.pumpWidget(MaterialApp(
+        home: WholesaleSellerProductsScreen(
+          sellerId: '998901110001',
+          sellerName: 'AVA',
+          market: WholesaleProduct.marketChina,
+          streamFactory: () => Stream.value(const <WholesaleProduct>[]),
+          sellerLoader: () async => const WholesaleSeller(
+            phone: '998901110001',
+            companyName: 'AVA',
+            approvalStatus: WholesaleSeller.statusApproved,
+            chinaSellerType: WholesaleSeller.chinaTypeFactory,
+          ),
+        ),
+      ));
+      await t.pump();
+      await t.pump();
+      final meta = t.widget<Text>(find.byKey(const ValueKey('wholesale-store-meta'))).data!;
+      expect(meta, contains('wholesale_china_type_factory'));
+      expect(meta, isNot(contains('wholesale_store_china_import')));
+    });
+
     testWidgets('Улгуржи магазинида валюта қатори йўқ', (t) async {
       await pump(t, [_p('a')], seller: _s('998901110001', 'Ун-Савдо'));
       await t.pump();
@@ -239,6 +287,26 @@ void main() {
       await t.tap(find.byKey(const ValueKey('wholesale-seller-row-998900000001')));
       expect(opened, ['998900000001']);
       expect(calls, 1);
+    });
+
+    testWidgets('Хитой тури чиплари: танлаш ва яна босиб бўшатиш', (t) async {
+      var value = '';
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, set) => WholesaleChinaTypeChips(value: value, onChanged: (v) => set(() => value = v)),
+          ),
+        ),
+      ));
+      await t.tap(find.byKey(const ValueKey('wholesale-china-type-china_factory')));
+      await t.pump();
+      expect(value, 'china_factory');
+      await t.tap(find.byKey(const ValueKey('wholesale-china-type-china_buyer')));
+      await t.pump();
+      expect(value, 'china_buyer');
+      await t.tap(find.byKey(const ValueKey('wholesale-china-type-china_buyer')));
+      await t.pump();
+      expect(value, '');
     });
 
     testWidgets('карточкадаги сотувчи номи алоҳида босилади', (t) async {

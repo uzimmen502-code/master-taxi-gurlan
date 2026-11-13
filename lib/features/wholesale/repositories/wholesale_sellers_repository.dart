@@ -42,6 +42,7 @@ class WholesaleSellersRepository {
     String address = '',
     double? lat,
     double? lng,
+    String chinaSellerType = '',
   }) async {
     final id = canonicalPhoneId(phone);
     final ref = _col.doc(id);
@@ -60,6 +61,7 @@ class WholesaleSellersRepository {
       address: address,
       lat: lat,
       lng: lng,
+      chinaSellerType: chinaSellerType,
     );
     await ref.set(seller.toFirestoreCreate(autoApproved: autoApproved));
     final saved = await ref.get();
@@ -71,6 +73,15 @@ class WholesaleSellersRepository {
     final id = canonicalPhoneId(seller.phone);
     if (id.isEmpty) return;
     await _col.doc(id).update(seller.toFirestoreShipFromUpdate());
+  }
+
+  /// Эга — Хитой бозоридаги турини белгилайди/ўзгартиради ('' — бўшатиш).
+  /// Rules `wholesaleSellerOwnerUpdateOk` + `wholesaleChinaSellerTypeOk`.
+  Future<void> updateChinaSellerType(String phone, String type) async {
+    final id = canonicalPhoneId(phone);
+    if (id.isEmpty) return;
+    final t = WholesaleSeller.chinaSellerTypes.contains(type) ? type : '';
+    await _col.doc(id).update({'chinaSellerType': t, 'updatedAt': FieldValue.serverTimestamp()});
   }
 
   /// Рад этилган сотувчи маълумотини тузатиб қайта юборади (`rejected` →

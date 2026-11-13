@@ -319,6 +319,9 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
   final _companyCtrl = TextEditingController();
   final _ownerCtrl = TextEditingController();
   String _sellerType = '';
+
+  /// Хитой бўлимида рўйхатдан ўтганда — Хитойдаги тури (ихтиёрий; эга, «Б»).
+  String _chinaType = '';
   bool _registering = false;
 
   /// Жўнатиш манзили (У1) — етказиш ҳақи учун мажбурий.
@@ -375,6 +378,7 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
     _companyCtrl.text = s.companyName;
     _ownerCtrl.text = s.ownerName;
     _sellerType = s.sellerType;
+    _chinaType = s.chinaSellerType;
     _shipFrom = ShipFromDraft(
       regionId: s.regionId,
       districtId: s.districtId,
@@ -424,6 +428,7 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
           address: _shipFrom.address.trim(),
           lat: _shipFrom.lat,
           lng: _shipFrom.lng,
+          chinaSellerType: _chinaType,
         ));
         if (!mounted) return;
         setState(() => _editingRejected = false);
@@ -442,6 +447,7 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
         address: _shipFrom.address.trim(),
         lat: _shipFrom.lat,
         lng: _shipFrom.lng,
+        chinaSellerType: widget.market == WholesaleProduct.marketChina ? _chinaType : '',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -543,6 +549,16 @@ class _WholesaleSellerAreaState extends State<WholesaleSellerArea> {
             ),
         ]),
         if (_typeErr != null) WholesaleFieldError(textKey: _typeErr!),
+        // Хитой бўлимида — Хитойдаги тури (ихтиёрий, алоҳида майдон; эга, 2026-11-13 «Б»).
+        if (widget.market == WholesaleProduct.marketChina) ...[
+          const SizedBox(height: 16),
+          Text(context.tr('wholesale_china_type_title'), style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          WholesaleChinaTypeChips(
+            value: _chinaType,
+            onChanged: (t) => setState(() => _chinaType = t),
+          ),
+        ],
         const SizedBox(height: 16),
         TextField(
           key: _companyKey,
@@ -709,6 +725,21 @@ class _MyProductsView extends StatelessWidget {
                 ),
               ),
             ),
+          // Хитой бўлимида — Хитойдаги тури (эга, 2026-11-13 «Б»): магазинда кўринади.
+          if (market == WholesaleProduct.marketChina)
+            ListTile(
+              key: const ValueKey('wholesale-china-type-row'),
+              dense: true,
+              leading: const Icon(Icons.flag_outlined),
+              title: Text(context.tr('wholesale_china_type_title')),
+              subtitle: Text(
+                WholesaleSeller.chinaTypeLabelKey(seller.chinaSellerType).isEmpty
+                    ? context.tr('wholesale_china_type_none')
+                    : context.tr(WholesaleSeller.chinaTypeLabelKey(seller.chinaSellerType)),
+              ),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: () => _editChinaType(context),
+            ),
           Expanded(
             // StatefulBuilder: «Қайта уриниш» шу ерни қайта қуради ва янги stream олинади.
             child: StatefulBuilder(
@@ -741,6 +772,51 @@ class _MyProductsView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Хитойдаги турини танлаш варағи (сотувчи ўзи; модерациясиз — эга).
+  Future<void> _editChinaType(BuildContext context) async {
+    var value = seller.chinaSellerType;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(ctx.tr('wholesale_china_type_title'), style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              WholesaleChinaTypeChips(value: value, onChanged: (t) => setSheet(() => value = t)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () async {
+                  try {
+                    await WholesaleSellersRepository().updateChinaSellerType(seller.phone, value);
+                    if (ctx.mounted) Navigator.pop(ctx, true);
+                  } catch (e) {
+                    debugPrint('[Wholesale] updateChinaSellerType failed: $e');
+                    if (!ctx.mounted) return;
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                      backgroundColor: AppColors.error,
+                      content: Text(ctx.tr('wholesale_action_failed')),
+                    ));
+                  }
+                },
+                child: Text(ctx.tr('save')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (saved == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('wholesale_china_type_saved'))),
+      );
+    }
   }
 
   /// Жўнатиш манзилини киритиш/ўзгартириш варағи (эски сотувчилар учун).
@@ -1080,6 +1156,28 @@ class _MyProductsView extends StatelessWidget {
   }
 }
 
+
+/// Хитойдаги сотувчи тури танлови: «Хитой фабрикаси» / «Воситачи (байер)».
+/// Танланганини яна босиш — бўшатади (ихтиёрий майдон).
+class WholesaleChinaTypeChips extends StatelessWidget {
+  const WholesaleChinaTypeChips({super.key, required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(spacing: 8, children: [
+      for (final t in WholesaleSeller.chinaSellerTypes)
+        ChoiceChip(
+          key: ValueKey('wholesale-china-type-$t'),
+          label: Text(context.tr(WholesaleSeller.chinaTypeLabelKey(t))),
+          selected: value == t,
+          onSelected: (_) => onChanged(value == t ? '' : t),
+        ),
+    ]);
+  }
+}
 
 /// Улгуржи лентасидаги битта катак: ё сотувчи товари, ё AVA дўкони
 /// товари (эга қарори, 2026-09-29).

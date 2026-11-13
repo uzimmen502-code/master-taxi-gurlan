@@ -217,8 +217,10 @@ class WholesaleStoreHeader extends StatelessWidget {
   static String metaLine(BuildContext context, WholesaleSeller s, {bool china = false}) {
     final place = _place(context, s);
     if (china) {
+      // Хитойдаги тури (эга, «Б», алоҳида майдон) бўлса — шу; бўлмаса умумий ёзув.
+      final chinaKey = WholesaleSeller.chinaTypeLabelKey(s.chinaSellerType);
       return [
-        '🇨🇳 ${context.tr('wholesale_store_china_import')}',
+        '🇨🇳 ${context.tr(chinaKey.isNotEmpty ? chinaKey : 'wholesale_store_china_import')}',
         if (place.isNotEmpty) context.tr('wholesale_store_china_receive').replaceAll('{place}', place),
       ].join(' · ');
     }

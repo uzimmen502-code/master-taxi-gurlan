@@ -22,7 +22,25 @@ class WholesaleSeller {
     this.lng,
     this.hasPayoutCard = false,
     this.cardLast4 = '',
+    this.chinaSellerType = '',
   });
+
+  /// Хитой бозоридаги тури (эга, 2026-11-13, «Б»): Улгуржи [sellerType]дан
+  /// АЛОҲИДА — фақат Хитой магазинида кўринади. Rules `wholesaleChinaSellerTypeOk`.
+  static const chinaTypeFactory = 'china_factory';
+  static const chinaTypeBuyer = 'china_buyer';
+  static const chinaSellerTypes = [chinaTypeFactory, chinaTypeBuyer];
+
+  static String chinaTypeLabelKey(String type) {
+    switch (type) {
+      case chinaTypeFactory:
+        return 'wholesale_china_type_factory';
+      case chinaTypeBuyer:
+        return 'wholesale_china_type_buyer';
+      default:
+        return '';
+    }
+  }
 
   static const statusPending = 'pending';
   static const statusApproved = 'approved';
@@ -92,6 +110,9 @@ class WholesaleSeller {
   final bool hasPayoutCard;
   final String cardLast4;
 
+  /// `china_factory` | `china_buyer` | '' (кўрсатилмаган, эски ҳужжатларда йўқ).
+  final String chinaSellerType;
+
   /// Етказиш ҳақини ҳисоблаш учун манзил етарлими (вилоят + туман).
   bool get hasShipFrom => regionId.isNotEmpty && districtId.isNotEmpty;
 
@@ -127,6 +148,7 @@ class WholesaleSeller {
       lng: (d['lng'] as num?)?.toDouble(),
       hasPayoutCard: d['hasPayoutCard'] == true,
       cardLast4: (d['cardLast4'] as String?)?.trim() ?? '',
+      chinaSellerType: (d['chinaSellerType'] as String?)?.trim() ?? '',
     );
   }
 
@@ -153,6 +175,7 @@ class WholesaleSeller {
         if (autoApproved) 'approvedAt': FieldValue.serverTimestamp(),
         if (autoApproved) 'approvedBy': 'auto',
         if (hasShipFrom || address.trim().isNotEmpty) ...shipFromFields(),
+        if (chinaSellerTypes.contains(chinaSellerType)) 'chinaSellerType': chinaSellerType,
       };
 
   /// Рад этилган сотувчи маълумотини тузатиб қайта юбориши
@@ -165,6 +188,7 @@ class WholesaleSeller {
         'approvalStatus': statusPending,
         'updatedAt': FieldValue.serverTimestamp(),
         ...shipFromFields(),
+        if (chinaSellerTypes.contains(chinaSellerType)) 'chinaSellerType': chinaSellerType,
       };
 
   /// Эга жўнатиш манзилини ўзгартириши (`wholesaleSellerOwnerUpdateOk`).

@@ -3168,6 +3168,14 @@ service cloud.firestore {
           && d.lng >= 55 && d.lng <= 74;
     }
 
+    // Хитой бозоридаги сотувчи тури (эга, 2026-11-13, «Б вариант»): Улгуржи
+    // `sellerType`дан АЛОҲИДА майдон — фақат Хитой магазинида кўринади. Бўш —
+    // кўрсатилмаган. Паритет: lib/features/wholesale/models/wholesale_seller.dart.
+    function wholesaleChinaSellerTypeOk() {
+      return request.resource.data.get('chinaSellerType', '')
+          in ['', 'china_factory', 'china_buyer'];
+    }
+
     function wholesaleSellerCreateOk(phone) {
       return isAuth()
           && isOwner(phone)
@@ -3183,6 +3191,7 @@ service cloud.firestore {
           )
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && wholesaleChinaSellerTypeOk()
           && wholesaleSellerShipFromOk()
           // Жўнатиш манзили МАЖБУРИЙ (эга, D-GEO-14, 2026-10-11): товар
           // ҳудуди шундан олинади (`wholesale_geo.js`).
@@ -3190,7 +3199,7 @@ service cloud.firestore {
           && request.resource.data.get('districtId', '') != ''
           && wholesaleSellerLocationRequiredOk()
           && request.resource.data.keys().hasOnly([
-                'phone', 'companyName', 'ownerName', 'sellerType',
+                'phone', 'companyName', 'ownerName', 'sellerType', 'chinaSellerType',
                 'approvalStatus', 'createdAt', 'approvedAt', 'approvedBy',
                 'regionId', 'districtId', 'address', 'lat', 'lng', 'updatedAt'
               ]);
@@ -3203,11 +3212,12 @@ service cloud.firestore {
       return isOwner(phone)
           && request.resource.data.phone == resource.data.phone
           && changed.hasOnly([
-                'companyName', 'ownerName', 'sellerType', 'updatedAt',
+                'companyName', 'ownerName', 'sellerType', 'chinaSellerType', 'updatedAt',
                 'regionId', 'districtId', 'address', 'lat', 'lng'
               ])
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && wholesaleChinaSellerTypeOk()
           && request.resource.data.companyName is string
           && request.resource.data.companyName.size() >= 2
           && request.resource.data.companyName.size() <= 200
@@ -3229,11 +3239,12 @@ service cloud.firestore {
           && request.resource.data.get('approvalStatus', '') == 'pending'
           && request.resource.data.phone == resource.data.phone
           && changed.hasOnly([
-                'approvalStatus', 'companyName', 'ownerName', 'sellerType',
+                'approvalStatus', 'companyName', 'ownerName', 'sellerType', 'chinaSellerType',
                 'updatedAt', 'regionId', 'districtId', 'address', 'lat', 'lng'
               ])
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && wholesaleChinaSellerTypeOk()
           && request.resource.data.companyName is string
           && request.resource.data.companyName.size() >= 2
           && request.resource.data.companyName.size() <= 200

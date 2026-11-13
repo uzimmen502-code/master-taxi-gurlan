@@ -154,6 +154,50 @@ async function main() {
 
   await check('B14 o\'chirib bo\'lmaydi', () => assertFails(doc(rejected, REJECTED).delete()));
 
+  // C. Xitoy bozoridagi sotuvchi turi - alohida `chinaSellerType` (ega, 2026-11-13, «B»)
+  await seed();
+  await check('C1 tasdiqlangan sotuvchi Xitoy turini qo\'yadi/o\'zgartiradi/bo\'shatadi (egasi tahriri)', async () => {
+    await assertSucceeds(doc(approved, APPROVED).update({ chinaSellerType: 'china_factory', updatedAt: serverTimestamp() }));
+    await assertSucceeds(doc(approved, APPROVED).update({ chinaSellerType: 'china_buyer', updatedAt: serverTimestamp() }));
+    await assertSucceeds(doc(approved, APPROVED).update({ chinaSellerType: '', updatedAt: serverTimestamp() }));
+  });
+
+  await check('C2 noto\'g\'ri Xitoy turi - rad etiladi (egasi tahriri)', async () => {
+    await assertFails(doc(approved, APPROVED).update({ chinaSellerType: 'manufacturer' }));
+    await assertFails(doc(approved, APPROVED).update({ chinaSellerType: 'hacker' }));
+    await assertFails(doc(approved, APPROVED).update({ chinaSellerType: 5 }));
+  });
+
+  await check('C3 begona foydalanuvchi boshqaning Xitoy turini o\'zgartira olmaydi', () =>
+    assertFails(doc(other, APPROVED).update({ chinaSellerType: 'china_factory' })));
+
+  await check('C4 Xitoy turi bilan Ulgurji turi birga - ikkalasi alohida saqlanadi', async () => {
+    await assertSucceeds(doc(approved, APPROVED).update({ chinaSellerType: 'china_buyer', updatedAt: serverTimestamp() }));
+    await testEnv.withSecurityRulesDisabled(async (c) => {
+      const s = (await c.firestore().collection('wholesale_sellers').doc(APPROVED).get()).data();
+      if (s.sellerType !== 'wholesaler' || s.chinaSellerType !== 'china_buyer') throw new Error(JSON.stringify(s));
+    });
+  });
+
+  await seed();
+  await check('C5 qayta yuborishda Xitoy turi - to\'g\'ri qiymat o\'tadi, noto\'g\'ri rad', async () => {
+    await assertFails(doc(rejected, REJECTED).update(resubmitPayload({ chinaSellerType: 'x' })));
+    await assertSucceeds(doc(rejected, REJECTED).update(resubmitPayload({ chinaSellerType: 'china_factory' })));
+  });
+
+  await check('C6 yangi ro\'yxatdan o\'tish: Xitoy turi bilan o\'tadi, noto\'g\'risi rad', async () => {
+    const NEW1 = '998901000021';
+    const NEW2 = '998901000022';
+    const create = (phone, extra) => doc(ctx(phone), phone).set({
+      phone, companyName: 'Yangi Savdo', ownerName: '', sellerType: 'wholesaler',
+      approvalStatus: 'pending', createdAt: serverTimestamp(),
+      regionId: 'xorazm', districtId: 'gurlan', address: 'Markaz ko\'chasi 1', lat: 41.8, lng: 60.4,
+      ...extra,
+    });
+    await assertSucceeds(create(NEW1, { chinaSellerType: 'china_buyer' }));
+    await assertFails(create(NEW2, { chinaSellerType: 'boss' }));
+  });
+
   await testEnv.cleanup();
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);

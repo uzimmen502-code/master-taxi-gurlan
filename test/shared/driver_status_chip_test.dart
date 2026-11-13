@@ -67,6 +67,11 @@ void main() {
   });
 
   testWidgets('«＋» менюси: ҳайдовчи бўлса «Ҳайдовчи панели»', (tester) async {
+    // Варақ узун (2026-11-13 «Улгуржи/Ишлаб чиқарувчи» банди қўшилди) — рўйхат лениво
+    // чизилади, ҳайдовчи қатори кўринадиган жойда бўлсин.
+    tester.view.physicalSize = const Size(400 * 2, 2400 * 2);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(
       home: Builder(
         builder: (context) => Scaffold(

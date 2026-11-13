@@ -18,7 +18,11 @@ import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../ads/models/ad_model.dart';
 import '../../ads/repositories/ads_repository.dart';
+import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/platform_market_card.dart' show platformShelfPrice;
+import '../../wholesale/models/wholesale_product.dart';
+import '../../wholesale/repositories/wholesale_products_repository.dart';
+import 'home_wholesale_section.dart' show formatShelfPrice;
 import 'ava_list_row.dart';
 import 'ava_section.dart';
 
@@ -32,7 +36,15 @@ class HomeMarketSection extends StatefulWidget {
     required this.onOpenAll,
     required this.onOpenAd,
     this.onOpenPlatform,
+    this.onOpenChina,
   });
+
+  /// Хитой бозори маҳсулоти босилди (эга, 2026-11-13: Хитой маҳсулотлари бош
+  /// саҳифадаги Аралаш бўлимида ҳам). `null` — Хитой маҳсулотлари кўрсатилмайди.
+  final void Function(WholesaleProduct product)? onOpenChina;
+
+  /// Хитой маҳсулотлари сони (бош саҳифа — енгил, 37-банд).
+  static const chinaLimit = 10;
 
   final VoidCallback onOpenAll;
   /// Босилган эълон ва бўлимдаги БАРЧА эълонлар (тафсилотда суриб ўтиш учун).
@@ -75,6 +87,27 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     _scroll.addListener(_onScroll);
     _listen();
     if (widget.onOpenPlatform != null) unawaited(_loadPlatform());
+    if (widget.onOpenChina != null) unawaited(_loadChina());
+  }
+
+  List<WholesaleProduct> _china = const [];
+
+  Future<void> _loadChina() async {
+    try {
+      final list = await WholesaleProductsRepository()
+          .getActiveProducts(limit: HomeMarketSection.chinaLimit, market: WholesaleProduct.marketChina)
+          .first;
+      if (!mounted) return;
+      setState(() {
+        _china = list;
+        if (_china.isNotEmpty && _status == AvaSectionStatus.empty) {
+          _status = AvaSectionStatus.ready;
+        }
+      });
+    } catch (e) {
+      // Хитой юкланмаса ҳам бўлим эълонлар билан ишлайди.
+      debugPrint('[HomeMarket] china $e');
+    }
   }
 
   Future<void> _loadPlatform() async {
@@ -123,7 +156,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             random: _rnd,
           );
           _endReached = list.length < _limit;
-          _status = _items.isEmpty && _platform.isEmpty
+          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty
               ? AvaSectionStatus.empty
               : AvaSectionStatus.ready;
         });
@@ -157,10 +190,12 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     final entries = FairMix.roundRobin<Object>([
       _items,
       _platform,
+      _china,
     ]);
     final hasFoot = _platform.isNotEmpty ||
+        _china.isNotEmpty ||
         _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
-    final hasPrice = _platform.isNotEmpty || _items.any((a) => a.price > 0);
+    final hasPrice = _platform.isNotEmpty || _china.isNotEmpty || _items.any((a) => a.price > 0);
     return AvaSection(
       moduleId: 'cheap_products_home',
       title: context.tr('home_section_cheap_products'),
@@ -182,6 +217,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
         itemBuilder: (context, i) {
           final e = entries[i];
           if (e is PlatformProduct) return _platformTile(e);
+          if (e is WholesaleProduct) return _chinaTile(e);
           final ad = e as AdModel;
           final cover = ad.imageUrls.isEmpty ? '' : ad.imageUrls.first;
           return AvaTileCard(
@@ -242,7 +278,35 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       price: price.price,
       footnote: BrandLabels.brand,
       onTap: () => widget.onOpenPlatform?.call(p),
-      image: image,
+      // Аралаш бозор экранидаги каби тепа ўнгда «Улгуржи» (эга, 2026-11-13).
+      image: _withBadge(image, context.tr('wholesale_screen_title')),
     );
   }
+
+  /// Хитой маҳсулоти — тепа ўнгда «Хитой», нархи ўз валютасида.
+  Widget _chinaTile(WholesaleProduct p) {
+    final cover = p.imageUrls.isEmpty ? '' : p.imageUrls.first;
+    final image = cover.startsWith('http')
+        ? ColoredBox(
+            color: context.ava.surface2,
+            child: CachedNetworkImage(imageUrl: cover, fit: BoxFit.contain),
+          )
+        : null;
+    return AvaTileCard(
+      titleMaxLines: 1,
+      title: p.title,
+      price: formatShelfPrice(p),
+      footnote: p.sellerCompanyName,
+      onTap: () => widget.onOpenChina?.call(p),
+      image: _withBadge(image, context.tr('wholesale_screen_title_china')),
+    );
+  }
+
+  Widget _withBadge(Widget? image, String badge) => Stack(
+        fit: StackFit.expand,
+        children: [
+          image ?? ColoredBox(color: context.ava.surface2),
+          MarketCornerBadge(text: badge),
+        ],
+      );
 }

@@ -53,7 +53,12 @@ class CheapProductsScreen extends StatefulWidget {
     this.initialQuery = '',
     this.pinnedAd,
     this.pinnedPlatform,
+    this.pinnedChina,
   });
+
+  /// Бош саҳифадаги Аралаш бўлимида босилган Хитой маҳсулоти — биринчи ўринда
+  /// (эга, 2026-11-13).
+  final WholesaleProduct? pinnedChina;
 
   /// Бош саҳифадаги Аралаш бўлимида босилган AVA маҳсулоти — [pinnedAd] каби
   /// биринчи ўринда (эга, 2026-11-03).
@@ -535,7 +540,12 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 final ads = withPinnedFirst(snap.data ?? const <AdModel>[], pinned, (a) => a.id);
                 final platform = _filteredPlatform();
                 final shop = _filteredShop();
-                final china = WholesaleProductsRepository.filterBySearch(_china, _query, limit: _china.length);
+                // Босилган Хитой маҳсулоти рўйхат юкланмасдан ҳам кўринсин.
+                final china = withPinnedFirst(
+                  WholesaleProductsRepository.filterBySearch(_china, _query, limit: _china.length),
+                  CatalogSearch.normalize(_query).isEmpty ? widget.pinnedChina : null,
+                  (p) => p.id,
+                );
                 final found = platform.length + ads.length + shop.length + china.length;
 
                 // Эълонлар келди, платформа/дўкон ҳали юкланяпти: бирорта ҳам
@@ -578,11 +588,14 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 final mixed = _mixedEntries(platform, ads, shop, china);
                 // Босилган эълон / AVA маҳсулоти — аралаш тўрнинг БИРИНЧИ катагида.
                 final pinnedAva = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedPlatform : null;
+                final pinnedChina = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedChina : null;
                 final entries = pinned != null
                     ? withPinnedFirst(mixed, _MarketEntry.ad(pinned), (e) => e.ad?.id)
                     : pinnedAva != null
                         ? withPinnedFirst(mixed, _MarketEntry.platform(pinnedAva), (e) => e.platform?.id)
-                        : mixed;
+                        : pinnedChina != null
+                            ? withPinnedFirst(mixed, _MarketEntry.china(pinnedChina), (e) => e.china?.id)
+                            : mixed;
                 // Свайп шу дўкон маҳсулотлари орасида — экрандаги тартибда.
                 final shopInGrid = [
                   for (final e in entries)

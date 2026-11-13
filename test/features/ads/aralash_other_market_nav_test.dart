@@ -1,5 +1,6 @@
 // Аралаш бозордан Улгуржи/Хитой маҳсулоти (эга, 2026-11-13): орқага — ўша бозор,
 // яна орқага — асосий экран (Аралаш стекдан олинади). Тепа ўнгда бозор белгиси.
+import 'package:ava_gurlan/features/ads/screens/cheap_products_screen.dart' show withPinnedFirst;
 import 'package:ava_gurlan/features/ads/widgets/market_corner_badge.dart';
 import 'package:ava_gurlan/features/ads/widgets/platform_market_card.dart';
 import 'package:ava_gurlan/features/home/home_market_nav.dart';
@@ -39,6 +40,23 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('HOME'), findsOneWidget);
     expect(navKey.currentState!.canPop(), isFalse);
+  });
+
+  test('бош саҳифада босилган Хитой маҳсулоти Аралашда биринчи, такрорсиз', () {
+    WholesaleProduct p(String id) => WholesaleProduct(
+          id: id,
+          sellerId: '998901110001',
+          sellerCompanyName: 'AVA',
+          title: id,
+          titleLower: id,
+          description: 'd',
+          priceTiers: const [WholesalePriceTier(minQty: 1, price: 5)],
+          market: WholesaleProduct.marketChina,
+        );
+    final list = [p('a'), p('b'), p('c')];
+    expect(withPinnedFirst(list, p('c'), (e) => e.id).map((e) => e.id), ['c', 'a', 'b']);
+    // Лентада йўқ бўлса ҳам кўринади (рўйхат ҳали юкланмаган).
+    expect(withPinnedFirst(const <WholesaleProduct>[], p('x'), (e) => e.id).map((e) => e.id), ['x']);
   });
 
   group('бозор белгиси (тепа ўнг)', () {

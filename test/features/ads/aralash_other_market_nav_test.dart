@@ -1,6 +1,5 @@
 // Аралаш бозордан Улгуржи/Хитой маҳсулоти (эга, 2026-11-13): орқага — ўша бозор,
 // яна орқага — асосий экран (Аралаш стекдан олинади). Тепа ўнгда бозор белгиси.
-import 'package:ava_gurlan/features/ads/screens/cheap_products_screen.dart' show withPinnedFirst;
 import 'package:ava_gurlan/features/ads/widgets/market_corner_badge.dart';
 import 'package:ava_gurlan/features/ads/widgets/platform_market_card.dart';
 import 'package:ava_gurlan/features/home/home_market_nav.dart';
@@ -42,21 +41,22 @@ void main() {
     expect(navKey.currentState!.canPop(), isFalse);
   });
 
-  test('бош саҳифада босилган Хитой маҳсулоти Аралашда биринчи, такрорсиз', () {
-    WholesaleProduct p(String id) => WholesaleProduct(
+  test('Аралашга барча Улгуржи сотувчилари; AVA нусхаси (pp_*) такрорланмайди', () {
+    WholesaleProduct p(String id, String seller) => WholesaleProduct(
           id: id,
-          sellerId: '998901110001',
-          sellerCompanyName: 'AVA',
+          sellerId: seller,
+          sellerCompanyName: seller,
           title: id,
           titleLower: id,
           description: 'd',
           priceTiers: const [WholesalePriceTier(minQty: 1, price: 5)],
-          market: WholesaleProduct.marketChina,
+          market: WholesaleProduct.marketWholesale,
         );
-    final list = [p('a'), p('b'), p('c')];
-    expect(withPinnedFirst(list, p('c'), (e) => e.id).map((e) => e.id), ['c', 'a', 'b']);
-    // Лентада йўқ бўлса ҳам кўринади (рўйхат ҳали юкланмаган).
-    expect(withPinnedFirst(const <WholesaleProduct>[], p('x'), (e) => e.id).map((e) => e.id), ['x']);
+    final list = [p('pp_abc', 'AVA'), p('x1', 'Zavod'), p('x2', 'AVA'), p('PP_y', 'Diler')];
+    expect(WholesaleProduct.forAralash(list).map((e) => e.id), ['x1', 'x2', 'PP_y']);
+    expect(p('pp_abc', 'AVA').isPlatformCopy, isTrue);
+    expect(p('xpp_', 'AVA').isPlatformCopy, isFalse);
+    expect(WholesaleProduct.forAralash(const []), isEmpty);
   });
 
   group('бозор белгиси (тепа ўнг)', () {

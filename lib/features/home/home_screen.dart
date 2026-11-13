@@ -1305,16 +1305,6 @@ class _HomeViewState extends State<_HomeView> {
     await _push(CheapProductsScreen(pinnedPlatform: product));
   }
 
-  /// Аралаш бўлимидаги Хитой маҳсулоти — Аралаш рўйхати, у биринчи ўринда
-  /// (эга, 2026-11-13).
-  Future<void> _openMarketChina(WholesaleProduct product) async {
-    if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
-      _showTezKundaSnack();
-      return;
-    }
-    await _push(CheapProductsScreen(pinnedChina: product));
-  }
-
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
   Future<void> _openWholesaleProduct(
     WholesaleProduct product,
@@ -1690,7 +1680,9 @@ class _HomeViewState extends State<_HomeView> {
                                 // ўринда (эга, 2026-11-03).
                                 onOpenAd: _openMarketAd,
                                 onOpenPlatform: _openMarketPlatform,
-                                onOpenChina: _openMarketChina,
+                                // Улгуржи/Хитой маҳсулоти — ўша бозор устида тафсилот,
+                                // орқага бозор, яна орқага асосий экран (эга, 2026-11-13).
+                                onOpenWholesale: _openWholesaleProduct,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid(

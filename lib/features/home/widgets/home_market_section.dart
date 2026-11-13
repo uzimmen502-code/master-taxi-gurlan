@@ -36,15 +36,16 @@ class HomeMarketSection extends StatefulWidget {
     required this.onOpenAll,
     required this.onOpenAd,
     this.onOpenPlatform,
-    this.onOpenChina,
+    this.onOpenWholesale,
   });
 
-  /// Хитой бозори маҳсулоти босилди (эга, 2026-11-13: Хитой маҳсулотлари бош
-  /// саҳифадаги Аралаш бўлимида ҳам). `null` — Хитой маҳсулотлари кўрсатилмайди.
-  final void Function(WholesaleProduct product)? onOpenChina;
+  /// Улгуржи / Хитой бозори маҳсулоти босилди (эга, 2026-11-13: улар бош
+  /// саҳифадаги Аралаш бўлимида ҳам; босилса — ўша бозор, орқага — асосий
+  /// экран). [shelf] — шу бозорнинг бўлимдаги маҳсулотлари. `null` — кўрсатилмайди.
+  final void Function(WholesaleProduct product, List<WholesaleProduct> shelf)? onOpenWholesale;
 
-  /// Хитой маҳсулотлари сони (бош саҳифа — енгил, 37-банд).
-  static const chinaLimit = 10;
+  /// Ҳар бир бозордан (Улгуржи, Хитой) олинадиган сони (бош саҳифа — енгил, 37-банд).
+  static const wholesaleLimit = 10;
 
   final VoidCallback onOpenAll;
   /// Босилган эълон ва бўлимдаги БАРЧА эълонлар (тафсилотда суриб ўтиш учун).
@@ -87,26 +88,36 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     _scroll.addListener(_onScroll);
     _listen();
     if (widget.onOpenPlatform != null) unawaited(_loadPlatform());
-    if (widget.onOpenChina != null) unawaited(_loadChina());
+    if (widget.onOpenWholesale != null) {
+      unawaited(_loadWholesale(WholesaleProduct.marketChina));
+      unawaited(_loadWholesale(WholesaleProduct.marketWholesale));
+    }
   }
 
   List<WholesaleProduct> _china = const [];
+  List<WholesaleProduct> _ulgurji = const [];
 
-  Future<void> _loadChina() async {
+  /// AVA нусхалари (`pp_*`) чиқариб ташланади — AVA асли [_platform] да бор.
+  Future<void> _loadWholesale(String market) async {
     try {
       final list = await WholesaleProductsRepository()
-          .getActiveProducts(limit: HomeMarketSection.chinaLimit, market: WholesaleProduct.marketChina)
+          .getActiveProducts(limit: HomeMarketSection.wholesaleLimit, market: market)
           .first;
       if (!mounted) return;
+      final eligible = WholesaleProduct.forAralash(list);
       setState(() {
-        _china = list;
-        if (_china.isNotEmpty && _status == AvaSectionStatus.empty) {
+        if (market == WholesaleProduct.marketChina) {
+          _china = eligible;
+        } else {
+          _ulgurji = eligible;
+        }
+        if (eligible.isNotEmpty && _status == AvaSectionStatus.empty) {
           _status = AvaSectionStatus.ready;
         }
       });
     } catch (e) {
-      // Хитой юкланмаса ҳам бўлим эълонлар билан ишлайди.
-      debugPrint('[HomeMarket] china $e');
+      // Юкланмаса ҳам бўлим эълонлар билан ишлайди.
+      debugPrint('[HomeMarket] $market $e');
     }
   }
 
@@ -156,7 +167,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             random: _rnd,
           );
           _endReached = list.length < _limit;
-          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty
+          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty && _ulgurji.isEmpty
               ? AvaSectionStatus.empty
               : AvaSectionStatus.ready;
         });
@@ -191,11 +202,13 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       _items,
       _platform,
       _china,
+      _ulgurji,
     ]);
+    final hasWholesale = _china.isNotEmpty || _ulgurji.isNotEmpty;
     final hasFoot = _platform.isNotEmpty ||
-        _china.isNotEmpty ||
+        hasWholesale ||
         _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
-    final hasPrice = _platform.isNotEmpty || _china.isNotEmpty || _items.any((a) => a.price > 0);
+    final hasPrice = _platform.isNotEmpty || hasWholesale || _items.any((a) => a.price > 0);
     return AvaSection(
       moduleId: 'cheap_products_home',
       title: context.tr('home_section_cheap_products'),
@@ -217,7 +230,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
         itemBuilder: (context, i) {
           final e = entries[i];
           if (e is PlatformProduct) return _platformTile(e);
-          if (e is WholesaleProduct) return _chinaTile(e);
+          if (e is WholesaleProduct) return _wholesaleTile(e);
           final ad = e as AdModel;
           final cover = ad.imageUrls.isEmpty ? '' : ad.imageUrls.first;
           return AvaTileCard(
@@ -283,8 +296,9 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     );
   }
 
-  /// Хитой маҳсулоти — тепа ўнгда «Хитой», нархи ўз валютасида.
-  Widget _chinaTile(WholesaleProduct p) {
+  /// Улгуржи / Хитой маҳсулоти — тепа ўнгда бозор номи, нархи ўз валютасида.
+  Widget _wholesaleTile(WholesaleProduct p) {
+    final isChina = p.market == WholesaleProduct.marketChina;
     final cover = p.imageUrls.isEmpty ? '' : p.imageUrls.first;
     final image = cover.startsWith('http')
         ? ColoredBox(
@@ -297,8 +311,8 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       title: p.title,
       price: formatShelfPrice(p),
       footnote: p.sellerCompanyName,
-      onTap: () => widget.onOpenChina?.call(p),
-      image: _withBadge(image, context.tr('wholesale_screen_title_china')),
+      onTap: () => widget.onOpenWholesale?.call(p, List<WholesaleProduct>.of(isChina ? _china : _ulgurji)),
+      image: _withBadge(image, context.tr(isChina ? 'wholesale_screen_title_china' : 'wholesale_screen_title')),
     );
   }
 

@@ -181,6 +181,16 @@ class WholesaleProduct implements AdSearchable {
   /// хизмат белгиси). Хитой бозорининг дарвозаси алоҳида (эга қарори,
   /// 2026-09-28), шунинг учун Хитой оқими `wholesale_market` ни эмас,
   /// `china_market` ни текшириши керак.
+  /// AVA дўкон маҳсулотининг Улгуржидаги нусхаси (`pp_<platformId>`, 2026-11-01
+  /// миграцияси). Аралаш бозорда асли (`platform_products`) бор — нусха иккинчи
+  /// марта кўрсатилмайди.
+  bool get isPlatformCopy => id.startsWith(platformCopyIdPrefix);
+  static const platformCopyIdPrefix = 'pp_';
+
+  /// Аралаш бозорга (бош саҳифа бўлими ҳам) тушадиган Улгуржи/Хитой маҳсулотлари.
+  static List<WholesaleProduct> forAralash(Iterable<WholesaleProduct> list) =>
+      list.where((p) => !p.isPlatformCopy).toList(growable: false);
+
   static String moduleIdFor(String market) =>
       market == marketChina ? 'china_market' : 'wholesale_market';
 

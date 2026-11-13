@@ -86,12 +86,14 @@ class _WholesaleSellersListState extends State<WholesaleSellersList> {
     }
   }
 
+  bool get _china => widget.market == WholesaleProduct.marketChina;
+
   @override
   Widget build(BuildContext context) {
     final stores = filterStores(
       buildStoreSummaries(widget.products, _sellers, market: widget.market),
       widget.query,
-      (s) => WholesaleStoreHeader.metaLine(context, s),
+      (s) => WholesaleStoreHeader.metaLine(context, s, china: _china),
     );
     if (stores.isEmpty) {
       if (_loading) return const Center(child: CircularProgressIndicator());
@@ -125,7 +127,7 @@ class _WholesaleSellersListState extends State<WholesaleSellersList> {
       itemBuilder: (context, i) {
         final e = stores[i];
         final s = e.seller;
-        final meta = WholesaleStoreHeader.metaLine(context, s);
+        final meta = WholesaleStoreHeader.metaLine(context, s, china: _china);
         final count = context.tr('wholesale_store_products_count').replaceAll('{n}', '${e.productCount}');
         return ListTile(
           key: ValueKey('wholesale-seller-row-${s.phone}'),

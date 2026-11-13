@@ -3,37 +3,20 @@ import '../../../core/utils/formatters.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 
-/// Улгуржи «сотувчи магазини» (эга, 2026-11-13, 1–2-босқич): магазин ичида
-/// тартиблаш, «Сотувчилар» таби рўйхати ва қидируви. Соф функциялар —
-/// Firestore'сиз тестланади.
+/// Улгуржи/Хитой «сотувчи магазини» (эга, 2026-11-13, 1–2-босқич):
+/// «Сотувчилар» таби рўйхати ва қидируви. Соф функциялар — Firestore'сиз
+/// тестланади. Магазин ичида тартиблаш тугмалари ЙЎҚ (эга, «В»): доим янгиси биринчи.
 
-/// Магазин ичидаги тартиб: янги, арзон (энг паст поғона нархи), оммабоп (кўришлар).
-enum WholesaleStoreSort { newest, cheapest, popular }
+/// Хитойда «Сотувчилар» таби фақат шунча ва ундан кўп сотувчи бўлса (эга, 2026-11-13).
+const int kChinaSellersTabMin = 2;
 
-int _ms(WholesaleProduct p) =>
-    (p.publishedAt ?? p.updatedAt ?? p.createdAt)?.millisecondsSinceEpoch ?? 0;
-
-List<WholesaleProduct> sortStoreProducts(
-  Iterable<WholesaleProduct> items,
-  WholesaleStoreSort sort,
-) {
-  final list = items.toList();
-  switch (sort) {
-    case WholesaleStoreSort.newest:
-      list.sort((a, b) => _ms(b).compareTo(_ms(a)));
-    case WholesaleStoreSort.cheapest:
-      list.sort((a, b) {
-        final byPrice = a.basePrice.compareTo(b.basePrice);
-        return byPrice != 0 ? byPrice : a.titleLower.compareTo(b.titleLower);
-      });
-    case WholesaleStoreSort.popular:
-      list.sort((a, b) {
-        final byViews = b.views.compareTo(a.views);
-        return byViews != 0 ? byViews : _ms(b).compareTo(_ms(a));
-      });
-  }
-  return list;
-}
+/// Фаол маҳсулотлардаги турли сотувчилар сони (таб кўринишини ҳал қилиш учун).
+int distinctActiveSellers(Iterable<WholesaleProduct> products, {required String market}) => products
+    .where((p) => p.isActive && p.belongsToMarket(market))
+    .map((p) => canonicalPhoneId(p.sellerId))
+    .where((id) => id.isNotEmpty)
+    .toSet()
+    .length;
 
 /// «Сотувчилар» табидаги битта қатор.
 class WholesaleStoreSummary {

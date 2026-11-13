@@ -25,6 +25,7 @@ import '../widgets/wholesale_field_error.dart';
 import '../widgets/wholesale_order_entries.dart';
 import '../widgets/wholesale_product_card.dart';
 import '../widgets/wholesale_stream_builder.dart';
+import '../utils/wholesale_store.dart';
 import '../widgets/wholesale_sellers_list.dart';
 import 'wholesale_product_detail_screen.dart';
 import 'wholesale_product_form_screen.dart';
@@ -197,89 +198,102 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
         ),
       ),
       if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
-      if (!_isChina)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-          child: SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<int>(
-              key: const ValueKey('wholesale-market-tabs'),
-              showSelectedIcon: false,
-              segments: [
-                ButtonSegment(value: 0, label: Text(context.tr('wholesale_tab_products'))),
-                ButtonSegment(value: 1, label: Text(context.tr('wholesale_tab_sellers'))),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) => setState(() => _tab = s.first),
-            ),
-          ),
-        ),
       Expanded(
         child: WholesaleStreamBuilder<List<WholesaleProduct>>(
           stream: _productsStream(),
           // Firestore stream хатодан кейин ёпилади: кэшни ташлаб қайта улаймиз.
           onRetry: () => setState(() => _stream = null),
           builder: (context, data) {
-            if (!_isChina && _tab == 1) {
-              return WholesaleSellersList(
-                products: data ?? const <WholesaleProduct>[],
-                market: widget.market,
-                query: _query,
-                onOpen: (s) => _openStore(s.phone, s.companyName),
-              );
-            }
-            final items = WholesaleProductsRepository.filterBySearch(
-                data ?? const <WholesaleProduct>[], _query);
-            final platform = _filteredPlatform();
-            if (items.isEmpty && platform.isEmpty) {
-              return WholesaleEmptyMarket(
-                hasQuery: _query.trim().isNotEmpty,
-                // Ҳудуд фильтри йўқ (2026-11-03) — «бошқа ҳудуд» таклифи керак эмас.
-                narrowedArea: false,
-                onClearSearch: _clearSearch,
-              );
-            }
-            // Навбатма-навбат: AVA товари лентанинг бошида тўпланиб
-            // қолмасин, сотувчилар товари ҳам кўринсин.
-            final entries = FairMix.roundRobin<_MarketEntry>([
-              platform.map(_MarketEntry.platform).toList(growable: false),
-              items.map(_MarketEntry.seller).toList(growable: false),
-            ]);
-            return MarketProductGrid(
-                        itemCount: entries.length,
-              itemBuilder: (_, i) {
-                final e = entries[i];
-                final avaProduct = e.platform;
-                if (avaProduct != null) {
-                  return PlatformMarketCard(
-                    product: avaProduct,
-                    catalog: platform,
-                    wholesale: true,
-                  );
-                }
-                final p = e.seller!;
-                return WholesaleProductCard(
-                  product: p,
-                  // Сотувчи номи → магазини (эга, 2026-11-13; Улгуржида).
-                  onSellerTap: _isChina || p.sellerId.trim().isEmpty
-                      ? null
-                      : () => _openStore(p.sellerId, p.sellerCompanyName),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => WholesaleProductDetailScreen(
-                        product: p,
-                        catalog: items,
-                      ),
+            final all = data ?? const <WholesaleProduct>[];
+            // «Сотувчилар» таби: Улгуржида доим; Хитойда фақат 2+ сотувчи бўлса
+            // (эга, 2026-11-13 — битта сотувчи бўлса таб фойда бермайди).
+            final showTabs = !_isChina ||
+                distinctActiveSellers(all, market: widget.market) >= kChinaSellersTabMin;
+            final tab = showTabs ? _tab : 0;
+            return Column(children: [
+              if (showTabs)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<int>(
+                      key: const ValueKey('wholesale-market-tabs'),
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(value: 0, label: Text(context.tr('wholesale_tab_products'))),
+                        ButtonSegment(value: 1, label: Text(context.tr('wholesale_tab_sellers'))),
+                      ],
+                      selected: {tab},
+                      onSelectionChanged: (s) => setState(() => _tab = s.first),
                     ),
                   ),
-                );
-              },
-            );
+                ),
+              Expanded(
+                child: tab == 1
+                    ? WholesaleSellersList(
+                        products: all,
+                        market: widget.market,
+                        query: _query,
+                        onOpen: (s) => _openStore(s.phone, s.companyName),
+                      )
+                    : _productsGrid(all),
+              ),
+            ]);
           },
         ),
       ),
     ]);
+  }
+
+  /// Маҳсулотлар лентаси (таб 0).
+  Widget _productsGrid(List<WholesaleProduct> data) {
+    final items = WholesaleProductsRepository.filterBySearch(data, _query);
+    final platform = _filteredPlatform();
+    if (items.isEmpty && platform.isEmpty) {
+      return WholesaleEmptyMarket(
+        hasQuery: _query.trim().isNotEmpty,
+        // Ҳудуд фильтри йўқ (2026-11-03) — «бошқа ҳудуд» таклифи керак эмас.
+        narrowedArea: false,
+        onClearSearch: _clearSearch,
+      );
+    }
+    // Навбатма-навбат: AVA товари лентанинг бошида тўпланиб
+    // қолмасин, сотувчилар товари ҳам кўринсин.
+    final entries = FairMix.roundRobin<_MarketEntry>([
+      platform.map(_MarketEntry.platform).toList(growable: false),
+      items.map(_MarketEntry.seller).toList(growable: false),
+    ]);
+    return MarketProductGrid(
+      itemCount: entries.length,
+      itemBuilder: (_, i) {
+        final e = entries[i];
+        final avaProduct = e.platform;
+        if (avaProduct != null) {
+          return PlatformMarketCard(
+            product: avaProduct,
+            catalog: platform,
+            wholesale: true,
+          );
+        }
+        final p = e.seller!;
+        return WholesaleProductCard(
+          product: p,
+          // Сотувчи номи → магазини (эга, 2026-11-13; Улгуржи ва Хитой).
+          onSellerTap: p.sellerId.trim().isEmpty
+              ? null
+              : () => _openStore(p.sellerId, p.sellerCompanyName),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WholesaleProductDetailScreen(
+                product: p,
+                catalog: items,
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

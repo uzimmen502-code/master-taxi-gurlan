@@ -17,7 +17,7 @@ import 'wholesale_product_detail_screen.dart';
 /// Сотувчи магазини (эга, 2026-11-13, 1-босқич; аввал фақат «барча
 /// маҳсулотлари» рўйхати эди): тепада ном, ✓ (тасдиқланган), тури, шаҳар,
 /// маҳсулотлар сони ва AVA'даги санаси, қўнғироқ; пастда магазин ичида
-/// қидириш, тартиблаш ва маҳсулотлар.
+/// қидириш ва маҳсулотлар (доим янгиси биринчи — тартиблаш тугмалари йўқ).
 ///
 /// Аниқ манзил ва харита нуқтаси КЎРСАТИЛМАЙДИ — фақат вилоят/туман (40-банд).
 /// [market] сотувчининг шу бозордаги товарларини қолдиради.
@@ -59,7 +59,6 @@ class _WholesaleSellerProductsScreenState
   });
 
   String _query = '';
-  WholesaleStoreSort _sort = WholesaleStoreSort.newest;
 
   Stream<List<WholesaleProduct>> _items() =>
       _stream ??= widget.streamFactory?.call() ??
@@ -87,11 +86,10 @@ class _WholesaleSellerProductsScreenState
         // Firestore stream хатодан кейин ёпилади: қайта улаймиз.
         onRetry: () => setState(() => _stream = null),
         builder: (context, data) {
+          // Тартиблаш тугмалари йўқ (эга, 2026-11-13, «В»): доим янгиси биринчи —
+          // оқим ўзи шу тартибда (`watchActiveBySeller` → `sortActiveSellerProducts`).
           final all = data ?? const <WholesaleProduct>[];
-          final shown = sortStoreProducts(
-            WholesaleProductsRepository.filterBySearch(all, _query, limit: all.length),
-            _sort,
-          );
+          final shown = WholesaleProductsRepository.filterBySearch(all, _query, limit: all.length);
           return Column(
             children: [
               FutureBuilder<WholesaleSeller?>(
@@ -101,9 +99,14 @@ class _WholesaleSellerProductsScreenState
                   fallbackName: title,
                   productCount: all.length,
                   onCall: widget.sellerId.trim().isEmpty ? null : _call,
+                  china: widget.market == WholesaleProduct.marketChina,
+                  currencies: {
+                    for (final p in all)
+                      if (p.currency.trim().isNotEmpty) p.currency.trim(),
+                  },
                 ),
               ),
-              if (all.isNotEmpty) ...[
+              if (all.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
                   child: TextField(
@@ -118,26 +121,6 @@ class _WholesaleSellerProductsScreenState
                     ),
                   ),
                 ),
-                SizedBox(
-                  height: 40,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    children: [
-                      for (final s in WholesaleStoreSort.values)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: ChoiceChip(
-                            key: ValueKey('wholesale-store-sort-${s.name}'),
-                            label: Text(context.tr(_sortKey(s))),
-                            selected: _sort == s,
-                            onSelected: (_) => setState(() => _sort = s),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
               Expanded(
                 child: shown.isEmpty
                     ? _Empty(textKey: all.isEmpty ? 'wholesale_empty_products' : 'wholesale_store_search_none')
@@ -166,12 +149,6 @@ class _WholesaleSellerProductsScreenState
       ),
     );
   }
-
-  static String _sortKey(WholesaleStoreSort s) => switch (s) {
-        WholesaleStoreSort.newest => 'wholesale_store_sort_new',
-        WholesaleStoreSort.cheapest => 'wholesale_store_sort_cheap',
-        WholesaleStoreSort.popular => 'wholesale_store_sort_popular',
-      };
 }
 
 class _Empty extends StatelessWidget {
@@ -210,6 +187,8 @@ class WholesaleStoreHeader extends StatelessWidget {
     required this.fallbackName,
     required this.productCount,
     this.onCall,
+    this.china = false,
+    this.currencies = const {},
   });
 
   final WholesaleSeller? seller;
@@ -217,13 +196,33 @@ class WholesaleStoreHeader extends StatelessWidget {
   final int productCount;
   final VoidCallback? onCall;
 
-  /// «Ишлаб чиқарувчи · Тошкент шаҳри, Яшнобод» — тури ва ҳудуди (бор бўлгани).
-  static String metaLine(BuildContext context, WholesaleSeller s) {
+  /// Хитой бозори магазини (эга, 2026-11-13): «🇨🇳 Хитойдан келтириш ·
+  /// Ўзбекистонда қабул: …» ва «Нархлар $ да». Етказиш муддати КЎРСАТИЛМАЙДИ —
+  /// иловадан ташқарида келишилади (эга).
+  final bool china;
+
+  /// Магазиндаги маҳсулотлар валюталари (Хитойда «Нархлар … да» учун).
+  final Set<String> currencies;
+
+  static String _place(BuildContext context, WholesaleSeller s) {
     final lang = context.contentLang;
-    final typeKey = WholesaleSeller.typeLabelKey(s.sellerType);
     final region = GeoNames.region(s.regionId, lang);
     final district = GeoNames.district(s.districtId, lang);
-    final place = [region, district].where((e) => e.trim().isNotEmpty).join(', ');
+    return [region, district].where((e) => e.trim().isNotEmpty).join(', ');
+  }
+
+  /// «Ишлаб чиқарувчи · Тошкент шаҳри, Яшнобод» — тури ва ҳудуди (бор бўлгани).
+  /// Хитойда: «🇨🇳 Хитойдан келтириш · Ўзбекистонда қабул: Тошкент шаҳри, Яшнобод»
+  /// (манзил — мол Ўзбекистонда қабул қилинадиган жой, ишлаб чиқариш жойи эмас).
+  static String metaLine(BuildContext context, WholesaleSeller s, {bool china = false}) {
+    final place = _place(context, s);
+    if (china) {
+      return [
+        '🇨🇳 ${context.tr('wholesale_store_china_import')}',
+        if (place.isNotEmpty) context.tr('wholesale_store_china_receive').replaceAll('{place}', place),
+      ].join(' · ');
+    }
+    final typeKey = WholesaleSeller.typeLabelKey(s.sellerType);
     return [if (typeKey.isNotEmpty) context.tr(typeKey), if (place.isNotEmpty) place].join(' · ');
   }
 
@@ -236,7 +235,10 @@ class WholesaleStoreHeader extends StatelessWidget {
       context.tr('wholesale_store_products_count').replaceAll('{n}', '$productCount'),
       if (since.isNotEmpty) context.tr('wholesale_store_since').replaceAll('{date}', since),
     ].join(' · ');
-    final meta = s == null ? '' : metaLine(context, s);
+    final meta = s == null ? '' : metaLine(context, s, china: china);
+    final currencyNote = china && currencies.isNotEmpty
+        ? context.tr('wholesale_store_currency_note').replaceAll('{cur}', (currencies.toList()..sort()).join(', '))
+        : '';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       child: Row(
@@ -296,6 +298,12 @@ class WholesaleStoreHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 12, color: AppColors.sectionMuted)),
+                if (currencyNote.isNotEmpty)
+                  Text(currencyNote,
+                      key: const ValueKey('wholesale-store-currency'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: AppColors.sectionMuted)),
               ],
             ),
           ),

@@ -41,19 +41,19 @@ WholesaleSeller _s(String phone, String name, {String status = WholesaleSeller.s
       createdAt: DateTime(2026, 10, 5),
     );
 
-List<String> _ids(Iterable<WholesaleProduct> l) => l.map((e) => e.id).toList();
-
 void main() {
-  group('sortStoreProducts', () {
-    final items = [
-      _p('a', price: 300, views: 5, publishedAt: DateTime(2026, 10, 1)),
-      _p('b', price: 100, views: 50, publishedAt: DateTime(2026, 9, 1)),
-      _p('c', price: 200, views: 0, publishedAt: DateTime(2026, 11, 1)),
-    ];
-    test('янги / арзон / оммабоп', () {
-      expect(_ids(sortStoreProducts(items, WholesaleStoreSort.newest)), ['c', 'a', 'b']);
-      expect(_ids(sortStoreProducts(items, WholesaleStoreSort.cheapest)), ['b', 'c', 'a']);
-      expect(_ids(sortStoreProducts(items, WholesaleStoreSort.popular)), ['b', 'a', 'c']);
+  group('distinctActiveSellers (Хитойда таб 2+ сотувчида)', () {
+    test('фақат шу бозордаги фаол маҳсулот сотувчилари санайди', () {
+      final products = [
+        _p('1', seller: '998900000001', market: WholesaleProduct.marketChina),
+        _p('2', seller: '998900000001', market: WholesaleProduct.marketChina),
+        _p('3', seller: '998900000002'), // Улгуржи
+        _p('4', seller: '998900000003', market: WholesaleProduct.marketChina, status: WholesaleProduct.statusInactive),
+      ];
+      expect(distinctActiveSellers(products, market: WholesaleProduct.marketChina), 1);
+      expect(distinctActiveSellers(products, market: WholesaleProduct.marketChina) >= kChinaSellersTabMin, isFalse);
+      products.add(_p('5', seller: '998900000004', market: WholesaleProduct.marketChina));
+      expect(distinctActiveSellers(products, market: WholesaleProduct.marketChina), 2);
     });
   });
 
@@ -137,7 +137,61 @@ void main() {
       expect(find.byType(WholesaleProductCard), findsOneWidget);
     });
 
-    testWidgets('магазин ичида қидириш ва тартиблаш', (t) async {
+    testWidgets('тартиблаш тугмалари йўқ (эга «В»); тартиб — оқимдагидек (янгиси биринчи)', (t) async {
+      await pump(t, [_p('new'), _p('old')], seller: _s('998901110001', 'Ун-Савдо'));
+      await t.pump();
+      await t.pump();
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.textContaining('wholesale_store_sort'), findsNothing);
+      final first = t.widget<WholesaleProductCard>(find.byType(WholesaleProductCard).first);
+      expect(first.product.id, 'new');
+    });
+
+    testWidgets('Хитой магазини: «Хитойдан келтириш», қабул жойи, валюта; етказиш муддати йўқ', (t) async {
+      final prev = FlutterError.onError;
+      FlutterError.onError = (d) {
+        if (d.exceptionAsString().contains('overflowed by')) return;
+        prev?.call(d);
+      };
+      addTearDown(() => FlutterError.onError = prev);
+      final cn = WholesaleProduct(
+        id: 'c1',
+        sellerId: '998901110001',
+        sellerCompanyName: 'AVA',
+        title: 'Чой',
+        titleLower: 'чой',
+        description: 'd',
+        priceTiers: const [WholesalePriceTier(minQty: 1, price: 5)],
+        market: WholesaleProduct.marketChina,
+        currency: r'$',
+      );
+      await t.pumpWidget(MaterialApp(
+        home: WholesaleSellerProductsScreen(
+          sellerId: '998901110001',
+          sellerName: 'AVA',
+          market: WholesaleProduct.marketChina,
+          streamFactory: () => Stream.value([cn]),
+          sellerLoader: () async => _s('998901110001', 'AVA'),
+        ),
+      ));
+      await t.pump();
+      await t.pump();
+      final meta = t.widget<Text>(find.byKey(const ValueKey('wholesale-store-meta'))).data!;
+      expect(meta, contains('wholesale_store_china_import'));
+      expect(meta, isNot(contains('wholesale_seller_type_manufacturer')));
+      final cur = t.widget<Text>(find.byKey(const ValueKey('wholesale-store-currency'))).data!;
+      expect(cur, 'wholesale_store_currency_note');
+      expect(find.textContaining('wholesale_delivery_days'), findsNothing);
+    });
+
+    testWidgets('Улгуржи магазинида валюта қатори йўқ', (t) async {
+      await pump(t, [_p('a')], seller: _s('998901110001', 'Ун-Савдо'));
+      await t.pump();
+      await t.pump();
+      expect(find.byKey(const ValueKey('wholesale-store-currency')), findsNothing);
+    });
+
+    testWidgets('магазин ичида қидириш', (t) async {
       await pump(t, [
         _p('a', title: 'Ун олий нав', price: 300),
         _p('b', title: 'Гуруч лазер', price: 100),
@@ -152,10 +206,7 @@ void main() {
       expect(find.text('wholesale_store_search_none'), findsOneWidget);
       await t.enterText(find.byKey(const ValueKey('wholesale-store-search')), '');
       await t.pump();
-      await t.tap(find.byKey(const ValueKey('wholesale-store-sort-cheapest')));
-      await t.pump();
-      final first = t.widget<WholesaleProductCard>(find.byType(WholesaleProductCard).first);
-      expect(first.product.id, 'b');
+      expect(find.byType(WholesaleProductCard), findsNWidgets(2));
     });
   });
 

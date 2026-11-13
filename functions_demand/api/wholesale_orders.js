@@ -123,11 +123,22 @@ function validDims(raw) {
  * `unitDims` (ilova `WholesaleProduct.effectivePacks` bilan bir xil).
  * @returns {null|{id,label,tiers,moq,unitWeightG,unitDims}}
  */
+/**
+ * Minimal buyurtma (ega, 2026-11-13): sotuvchi yozgan son (`minOrderQty`, ixtiyoriy,
+ * butun 1..MAX_QTY) va eng past narx pog'onasi — qaysi biri KATTA. Noto'g'ri yoki
+ * yo'q qiymat — faqat pog'ona (oldingi xulq). Paritet: lib/.../wholesale_pack.dart `effectiveMoq`.
+ */
+function effectiveMoq(tiers, minOrderQty) {
+  const tierMin = tiers.length ? tiers[0].minQty : 1;
+  const own = isPosInt(minOrderQty) && minOrderQty <= MAX_QTY ? minOrderQty : 0;
+  return Math.max(tierMin, own);
+}
+
 function resolvePack(product, packId) {
   const p = product || {};
   if (!packIdsOf(p).includes(packId)) return null;
   const src = packId === DEFAULT_PACK
-    ? { label: '', priceTiers: p.priceTiers, unitWeightG: p.unitWeightG, unitDims: p.unitDims }
+    ? { label: '', priceTiers: p.priceTiers, unitWeightG: p.unitWeightG, unitDims: p.unitDims, minOrderQty: p.minOrderQty }
     : (p.packs || []).find((x) => x && typeof x.id === 'string' && x.id.trim() === packId);
   if (!src) return null;
   const tiers = cleanTiers(src.priceTiers);
@@ -136,7 +147,7 @@ function resolvePack(product, packId) {
     id: packId,
     label: String(src.label || '').trim().slice(0, 40),
     tiers,
-    moq: tiers.length ? tiers[0].minQty : 1,
+    moq: effectiveMoq(tiers, src.minOrderQty),
     unitWeightG: isPosInt(w) ? w : null,
     unitDims: validDims(src.unitDims),
   };

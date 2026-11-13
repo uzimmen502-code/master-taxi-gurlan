@@ -18,6 +18,10 @@ enum AvaCreateAction {
   ad,
   service,
   shopOnline,
+
+  /// «Улгуржи/Ишлаб чиқарувчи маҳсулотлари» (эга, 2026-11-13): асосий дўкондаги
+  /// «Улгуржи» таби ўрнига — тасдиқланган сотувчига маҳсулот формаси дарҳол.
+  wholesale,
   businessMap,
   driver,
   courier,
@@ -28,13 +32,13 @@ enum AvaCreateAction {
   assistant,
 }
 
-/// «Онлайн Дўкон очиш» ичидаги танлов: маҳсулот қаерга қўшилади.
-enum AvaShopTarget { retail, wholesale }
+/// «Онлайн Дўкон очиш» — маҳсулот қаерга қўшилади. Улгуржи бу ерда йўқ (эга,
+/// 2026-11-13): у «＋» даги алоҳида банд ([AvaCreateAction.wholesale]).
+enum AvaShopTarget { retail }
 
 /// Ҳар бозорнинг модули — `kAvaCreateModules[shopOnline]` билан бир хил ID'лар.
 const Map<AvaShopTarget, String> kAvaShopTargetModules = {
   AvaShopTarget.retail: 'cheap_products_home',
-  AvaShopTarget.wholesale: 'wholesale_market',
 };
 
 /// Биринчи дўкон варағида танлаш мумкин бўлган бозорлар (аудит Н-4): фақат
@@ -55,13 +59,14 @@ enum AvaRowLock {
 
 /// Ҳар банднинг модул дарвозаси — хизматлар каталоги билан БИР манба
 /// (`ServiceConfigHolder` ҳолати). Ҳайдовчи (турларни Иш панели ўзи текширади)
-/// ва китоб (модули йўқ) — дарвозасиз. Дўкон: Аҳоли ёки Улгуржи бозоридан бири.
+/// ва китоб (модули йўқ) — дарвозасиз. Дўкон — Аралаш бозор, Улгуржи — алоҳида банд.
 const Map<AvaCreateAction, List<String>> kAvaCreateModules = {
   AvaCreateAction.businessMap: ['business_map'],
   AvaCreateAction.video: ['tv_market'],
   AvaCreateAction.ad: ['jobs'],
   AvaCreateAction.service: ['jobs'],
-  AvaCreateAction.shopOnline: ['cheap_products_home', 'wholesale_market'],
+  AvaCreateAction.shopOnline: ['cheap_products_home'],
+  AvaCreateAction.wholesale: ['wholesale_market'],
   AvaCreateAction.courier: ['courier'],
   AvaCreateAction.cargo: ['yuk_local'],
   AvaCreateAction.homeCook: ['restaurants'],
@@ -205,7 +210,7 @@ class AvaFirstShop {
 /// бўш — варақ очилмайди (`null`; «＋» қатори аслида `AvaCreateGates` да қулф).
 Future<AvaFirstShop?> showAvaFirstShopSheet(
   BuildContext context, {
-  Set<AvaShopTarget> allowed = const {AvaShopTarget.retail, AvaShopTarget.wholesale},
+  Set<AvaShopTarget> allowed = const {AvaShopTarget.retail},
 }) async {
   if (allowed.isEmpty) return null;
   return showModalBottomSheet<AvaFirstShop>(
@@ -231,10 +236,7 @@ class _FirstShopSheet extends StatefulWidget {
 
 class _FirstShopSheetState extends State<_FirstShopSheet> {
   final _name = TextEditingController();
-  // Аҳоли очиқ бўлса — у (аввалги одатий танлов), акс ҳолда ягона очиқ бозор.
-  late AvaShopTarget _target = widget.allowed.contains(AvaShopTarget.retail)
-      ? AvaShopTarget.retail
-      : widget.allowed.first;
+  late final AvaShopTarget _target = widget.allowed.first;
   String? _error;
 
   @override
@@ -294,36 +296,8 @@ class _FirstShopSheetState extends State<_FirstShopSheet> {
                   border: const OutlineInputBorder(),
                 ),
               ),
-              // Танлов фақат иккала бозор ҳам очиқ бўлса (аудит Н-4).
-              if (widget.allowed.length > 1) ...[
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                  child: Text(
-                    context.tr('home_create_shop_where'),
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink,
-                    ),
-                  ),
-                ),
-                SegmentedButton<AvaShopTarget>(
-                  showSelectedIcon: false,
-                  segments: [
-                    ButtonSegment(
-                      value: AvaShopTarget.retail,
-                      label: Text(context.tr('tv_shop_to_market')),
-                    ),
-                    ButtonSegment(
-                      value: AvaShopTarget.wholesale,
-                      label: Text(context.tr('home_module_wholesale')),
-                    ),
-                  ],
-                  selected: {_target},
-                  onSelectionChanged: (s) => setState(() => _target = s.first),
-                ),
-              ],
+              // «Аралаш / Улгуржи» танлови олиб ташланди (эга, 2026-11-13): Улгуржи —
+              // «＋» даги алоҳида банд.
               const SizedBox(height: 16),
               FilledButton(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
@@ -416,6 +390,8 @@ class _BusinessSheet extends StatelessWidget {
             hasShop ? 'home_my_shop_online' : 'home_create_shop_online',
             hasShop ? 'my_shop_row_sub' : 'home_create_shop_online_hint',
           ),
+          const _Item(AvaCreateAction.wholesale, Icons.factory_rounded,
+              'home_create_wholesale', 'home_create_wholesale_sub'),
         ]),
       ),
       (

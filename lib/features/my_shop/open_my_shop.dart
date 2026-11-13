@@ -46,18 +46,11 @@ Future<void> openMyShop(
     final canCreate = canCreateShop ?? ServiceConfigHolder.isVisible('business_map');
     if (preferMain) {
       // Видеодаги «Дўкон» тугмаси: рўйхатсиз, тўғридан-тўғри асосий дўкон.
-      await push(MainShopScreen(phone: phone, initialSegment: presence.initialSegment));
+      await push(MainShopScreen(phone: phone));
     } else if (canCreate || presence.otherShops > 0) {
-      await push(MyShopScreen(
-        phone: phone,
-        initialSegment: presence.initialSegment,
-        canCreateShop: canCreate,
-      ));
+      await push(MyShopScreen(phone: phone, canCreateShop: canCreate));
     } else {
-      await push(MainShopScreen(
-        phone: phone,
-        initialSegment: presence.initialSegment,
-      ));
+      await push(MainShopScreen(phone: phone));
     }
     return;
   }
@@ -88,17 +81,9 @@ Future<void> openMyShop(
     }
   }
   if (!context.mounted) return;
-  final retail = first.target == AvaShopTarget.retail;
   // Табрик (эга, 2026-10-31) — эга телефони бўйича бир марта, асосий дўкон очилишидан ОЛДИН («Маҳсулот
-  // қўшиш» → форма). Фақат Аҳоли бозори: Улгуржида аввал сотувчи рўйхатдан ўтади ва админ тасдиқлайди —
-  // «дўконингиз очилди» дейиш эрта.
-  if (retail) {
-    await celebrateShopOpenedOnce(context, phone);
-    if (!context.mounted) return;
-  }
-  await push(MainShopScreen(
-    phone: phone,
-    initialSegment: retail ? 0 : 1,
-    openAddOnStart: retail,
-  ));
+  // қўшиш» → форма). Бу ерда фақат Аралаш бозор: Улгуржи — «＋» даги алоҳида банд (эга, 2026-11-13).
+  await celebrateShopOpenedOnce(context, phone);
+  if (!context.mounted) return;
+  await push(MainShopScreen(phone: phone, openAddOnStart: true));
 }

@@ -49,6 +49,7 @@ import '../restaurants/screens/restaurant_screen.dart';
 import '../restaurants/screens/restaurants_list_screen.dart';
 import '../ads/widgets/platform_market_card.dart' show openPlatformProductDetail;
 import '../wholesale/models/wholesale_product.dart';
+import '../wholesale/open_wholesale_seller.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
 import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
@@ -1054,6 +1055,13 @@ class _HomeViewState extends State<_HomeView> {
         // Қайтганда ҳолат янгиланади: маҳсулот қўшилган бўлса қатор энди
         // «Менинг дўконим».
         if (mounted) unawaited(_refreshShopPresence());
+      case AvaCreateAction.wholesale:
+        // Улгуржи/Ишлаб чиқарувчи (эга, 2026-11-13): тасдиқланган сотувчига форма дарҳол.
+        await openWholesaleSeller(context, phone: phone);
+        if (mounted) {
+          _onHomeResurface();
+          unawaited(_refreshShopPresence());
+        }
       case AvaCreateAction.businessMap:
         // Эга — HomeController телефони (бошқа оқимлар билан бир хил; аввал экран
         // FirebaseAuth.phoneNumber'ни ўқирди ва у бўш бўлса рўйхат бўш чиқарди — А-7).

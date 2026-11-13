@@ -180,7 +180,7 @@ void main() {
           phone: _phone,
           loadName: () async => throw StateError('offline'),
           saveName: (_) async {},
-          wholesaleView: (_) => const SizedBox.shrink(),
+          chinaView: (_) => const SizedBox.shrink(),
           // retailView берилмаган: ҳақиқий каталог қурилади, лекин унинг репозитарийси Firebase талаб қилади —
           // шунинг учун бу ерда фақат спиннердан чиқишини `retailView` билан текширамиз.
           retailView: (_) => const Text('CATALOG'),

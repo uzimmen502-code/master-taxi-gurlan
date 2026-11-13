@@ -10,9 +10,9 @@ import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/screens/wholesale_market_screen.dart';
 import '../widgets/shop_name_dialog.dart';
 
-/// Асосий дўкон — эганинг ўз маҳсулотлари бир жойда, уч бўлимда: Аралаш бозор
-/// (`ads`), Улгуржи ва Хитой бозори (`wholesale_*`, битта сотувчи рўйхати). Улгуржи/Хитой бозор
-/// экранидаги «Сотувчи» таби олиб ташланган (эга, 2026-11-01) — сотувчи иши ФАҚАТ шу ерда. Каталогда ҳар маҳсулот РАСМ ва ВИДЕО билан
+/// Асосий дўкон — эганинг ўз маҳсулотлари, икки бўлимда: Аралаш бозор ва Хитой
+/// бозори (`wholesale_*`). «Улгуржи» таби олиб ташланди (эга, 2026-11-13) — у «＋» →
+/// «Улгуржи/Ишлаб чиқарувчи маҳсулотлари» ([openWholesaleSeller]). Каталогда ҳар маҳсулот РАСМ ва ВИДЕО билан
 /// (видео AVAGram лентасига ҳам тушади, лекин AVAGram алоҳида бўлим эмас). Номи
 /// `tv_shops/{телефон}.name`да (ўзгартириш мумкин).
 ///
@@ -27,14 +27,13 @@ class MainShopScreen extends StatefulWidget {
     @visibleForTesting this.loadName,
     @visibleForTesting this.saveName,
     @visibleForTesting this.retailView,
-    @visibleForTesting this.wholesaleView,
     @visibleForTesting this.chinaView,
   });
 
   /// Каноник телефон (`canonicalPhoneId`) — чақирувчи 9+ рақам эканини текширади.
   final String phone;
 
-  /// 0 — Аралаш бозор, 1 — Улгуржи, 2 — Хитой бозори.
+  /// 0 — Аралаш бозор, 1 — Хитой бозори.
   final int initialSegment;
 
   /// Биринчи киришда («Онлайн Дўкон очиш» → Аҳоли бозори): янги маҳсулот
@@ -47,7 +46,6 @@ class MainShopScreen extends StatefulWidget {
   final Future<String> Function()? loadName;
   final Future<void> Function(String name)? saveName;
   final WidgetBuilder? retailView;
-  final WidgetBuilder? wholesaleView;
   final WidgetBuilder? chinaView;
 
   @override
@@ -67,9 +65,9 @@ class _MainShopScreenState extends State<MainShopScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
-      initialIndex: widget.initialSegment.clamp(0, 2),
+      initialIndex: widget.initialSegment.clamp(0, 1),
     );
     _loadName();
   }
@@ -141,10 +139,9 @@ class _MainShopScreenState extends State<MainShopScreen>
           labelColor: AvaLight.ink,
           unselectedLabelColor: AppColors.sectionMuted,
           indicatorColor: AvaLight.ink,
-          // Қисқа номлар («бозор» сўзисиз, эга 2026-11-01) — учта таб телефонда кесилмасин.
+          // Қисқа номлар («бозор» сўзисиз, эга 2026-11-01).
           tabs: [
             Tab(text: context.tr('my_shop_tab_aralash')),
-            Tab(text: context.tr('my_shop_tab_wholesale')),
             Tab(text: context.tr('my_shop_tab_china')),
           ],
         ),
@@ -156,11 +153,6 @@ class _MainShopScreenState extends State<MainShopScreen>
         physics: const NeverScrollableScrollPhysics(),
         children: [
           _retail(context),
-          widget.wholesaleView?.call(context) ??
-              WholesaleSellerArea(
-                phone: widget.phone,
-                market: WholesaleProduct.marketWholesale,
-              ),
           // Хитой маҳсулотини қўшиш (бозор экранидаги «Сотувчи» таби ўрнига, эга 2026-11-01).
           widget.chinaView?.call(context) ??
               WholesaleSellerArea(

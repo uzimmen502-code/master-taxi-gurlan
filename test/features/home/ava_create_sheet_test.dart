@@ -104,12 +104,12 @@ void main() {
       expect(g.hidden, isNot(contains(AvaCreateAction.book)));
     });
 
-    test('дўкон: бозорлардан бири очиқ бўлса очиқ; иккаласи «Тез кунда» — ёпиқ; эгасида дўкон бор — доим очиқ', () {
+    test('дўкон: фақат Аралаш бозорга боғлиқ (Улгуржи — алоҳида банд); «Тез кунда» — ёпиқ; эгасида дўкон бор — доим очиқ', () {
+      // Аралаш ёпиқ бўлса Улгуржи очиқлиги «Онлайн Дўкон»ни очмайди (эга, 2026-11-13).
       expect(
         AvaCreateGates.compute(statusOf: only({'cheap_products_home': ModuleStatus.hidden}), isWeb: false)
-            .locked
-            .containsKey(AvaCreateAction.shopOnline),
-        isFalse,
+            .hidden,
+        contains(AvaCreateAction.shopOnline),
       );
       final both = only({'cheap_products_home': ModuleStatus.soon, 'wholesale_market': ModuleStatus.hidden});
       expect(AvaCreateGates.compute(statusOf: both, isWeb: false).locked[AvaCreateAction.shopOnline], AvaRowLock.soon);
@@ -164,8 +164,9 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.text('need_phone_profile'), findsOneWidget);
-    // Эслатмадаги қулф + 10 та телефон талаб қиладиган банд (12 − китоб − AI).
-    expect(find.byIcon(Icons.lock_outline_rounded), findsNWidgets(11));
+    // Эслатмадаги қулф + 11 та телефон талаб қиладиган банд (13 − китоб − AI;
+    // 13-банд «Улгуржи/Ишлаб чиқарувчи», эга 2026-11-13).
+    expect(find.byIcon(Icons.lock_outline_rounded), findsNWidgets(12));
   });
 
   testWidgets('телефон бор: эслатма ва қулф йўқ', (tester) async {
@@ -404,19 +405,62 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('«Онлайн Дўкон очиш» биринчи кириш варағи: Аҳоли бозори ва Улгуржи танлови', (tester) async {
-    for (final e in const {
-      'tv_shop_to_market': AvaShopTarget.retail,
-      'home_module_wholesale': AvaShopTarget.wholesale,
-    }.entries) {
-      AvaFirstShop? result;
+  testWidgets('«Онлайн Дўкон очиш» биринчи кириш варағи: «Аралаш / Улгуржи» танлови йўқ (эга, 2026-11-13)', (tester) async {
+    AvaFirstShop? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () async => result = await showAvaFirstShopSheet(context),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('home_create_shop_where'), findsNothing);
+    expect(find.text('home_module_wholesale'), findsNothing);
+    await tester.tap(find.text('my_shop_continue'));
+    await tester.pumpAndSettle();
+    expect(result?.target, AvaShopTarget.retail);
+  });
+
+  group('«Улгуржи/Ишлаб чиқарувчи маҳсулотлари» банди (эга, 2026-11-13)', () {
+    ModuleStatus st(String id, Map<String, ModuleStatus> m) => m[id] ?? ModuleStatus.enabled;
+
+    test('Улгуржи модули ёпиқ ва кўринмас — банд яширин; «Онлайн Дўкон» бунга боғлиқ эмас', () {
+      final g = AvaCreateGates.compute(
+        statusOf: (id) => st(id, {'wholesale_market': ModuleStatus.hidden}),
+        isWeb: false,
+      );
+      expect(g.hidden, contains(AvaCreateAction.wholesale));
+      expect(g.hidden.contains(AvaCreateAction.shopOnline), isFalse);
+      expect(g.locked.containsKey(AvaCreateAction.shopOnline), isFalse);
+    });
+
+    test('Аралаш ёпиқ, Улгуржи очиқ — «Онлайн Дўкон» ёпиқ, Улгуржи банди очиқ', () {
+      final g = AvaCreateGates.compute(
+        statusOf: (id) => st(id, {'cheap_products_home': ModuleStatus.hidden}),
+        isWeb: false,
+      );
+      expect(g.hidden, contains(AvaCreateAction.shopOnline));
+      expect(g.hidden.contains(AvaCreateAction.wholesale), isFalse);
+      expect(g.locked.containsKey(AvaCreateAction.wholesale), isFalse);
+    });
+
+    testWidgets('«Сотиш» гуруҳида кўринади ва танланади', (tester) async {
+      AvaCreateAction? result;
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light,
           home: Builder(
             builder: (context) => Scaffold(
               body: ElevatedButton(
-                onPressed: () async => result = await showAvaFirstShopSheet(context),
+                onPressed: () async => result = await showAvaCreateSheet(context),
                 child: const Text('open'),
               ),
             ),
@@ -425,12 +469,16 @@ void main() {
       );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      expect(find.text('home_create_shop_where'), findsOneWidget);
-      await tester.tap(find.text(e.key));
-      await tester.tap(find.text('my_shop_continue'));
+      await tester.scrollUntilVisible(
+        find.text('home_create_wholesale'),
+        120,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('home_create_wholesale_sub'), findsOneWidget);
+      await tester.tap(find.text('home_create_wholesale'));
       await tester.pumpAndSettle();
-      expect(result?.target, e.value, reason: e.key);
-    }
+      expect(result, AvaCreateAction.wholesale);
+    });
   });
 
   testWidgets('тизим шрифти 2× бўлса ҳам варақа 1.15× дан катталашмайди (изоҳ кесилмайди, overflow йўқ)', (tester) async {

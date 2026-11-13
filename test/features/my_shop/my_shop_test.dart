@@ -79,21 +79,14 @@ void main() {
       expect(p.any, isFalse);
     });
 
-    test('фақат Аҳоли эълони — Аҳоли сегменти', () async {
+    test('фақат Аҳоли эълони — дўкон бор', () async {
       final p = await load(ads: _yes);
       expect(p.any, isTrue);
-      expect(p.initialSegment, 0);
     });
 
-    test('фақат улгуржи сотувчи — Улгуржи сегменти', () async {
+    test('фақат улгуржи сотувчи — дўкон бор (Хитой бўлими шу сотувчи ҳужжатида)', () async {
       final p = await load(seller: _yes);
       expect(p.any, isTrue);
-      expect(p.initialSegment, 1);
-    });
-
-    test('иккаласи бор — Аҳоли сегменти', () async {
-      final p = await load(ads: _yes, seller: _yes);
-      expect(p.initialSegment, 0);
     });
 
     test('фақат номи сақланган tv_shops — асосий дўкон бор', () async {
@@ -425,7 +418,6 @@ void main() {
         loadName: () async => name,
         saveName: save ?? (n) async => saved.add(n),
         retailView: (_) => const Center(child: Text('RETAIL')),
-        wholesaleView: (_) => const Center(child: Text('WHOLESALE')),
         chinaView: (_) => const Center(child: Text('CHINA')),
       )));
       await tester.pumpAndSettle();
@@ -440,23 +432,21 @@ void main() {
       expect(find.text('my_shop_main_title'), findsNothing);
     });
 
-    testWidgets('бошланғич сегмент: 0 — Аҳоли, 1 — Улгуржи', (tester) async {
+    testWidgets('бошланғич сегмент: 0 — Аҳоли, 1 — Хитой', (tester) async {
       await open(tester);
       expect(find.text('RETAIL'), findsOneWidget);
       await open(tester, segment: 1);
-      expect(find.text('WHOLESALE'), findsOneWidget);
-      await open(tester, segment: 2);
       expect(find.text('CHINA'), findsOneWidget);
     });
 
-    testWidgets('фақат икки бўлим: Аҳоли бозори ва Улгуржи — AVAGram бўлими йўқ', (tester) async {
+    testWidgets('икки бўлим: Аралаш ва Хитой — «Улгуржи» таби йўқ (эга, 2026-11-13), AVAGram йўқ', (tester) async {
       await open(tester);
       expect(find.text('my_shop_tab_aralash'), findsOneWidget);
-      expect(find.text('my_shop_tab_wholesale'), findsOneWidget);
+      expect(find.text('my_shop_tab_wholesale'), findsNothing);
       // Хитой бозори — бозор экранидаги «Сотувчи» таби ўрнига (эга, 2026-11-01).
       expect(find.text('my_shop_tab_china'), findsOneWidget);
       expect(find.text('AVAGram'), findsNothing);
-      expect(find.byType(Tab), findsNWidgets(3));
+      expect(find.byType(Tab), findsNWidgets(2));
     });
 
     testWidgets('номни ўзгартириш: тўғри ном сақланади ва сарлавҳа янгиланади', (tester) async {
@@ -575,7 +565,7 @@ void main() {
       expect(result, isNull);
     });
 
-    testWidgets('ном + Улгуржи танланса — тозаланган ном ва Улгуржи', (tester) async {
+    testWidgets('ном тозаланади; «Аралаш / Улгуржи» танлови йўқ — Аралаш (эга, 2026-11-13)', (tester) async {
       AvaFirstShop? result;
       _bigView(tester);
       await tester.pumpWidget(_app(Builder(
@@ -591,12 +581,12 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '  Barakat   kiyim ');
-      await tester.tap(find.text('home_module_wholesale'));
-      await tester.pumpAndSettle();
+      expect(find.text('home_module_wholesale'), findsNothing);
+      expect(find.byType(SegmentedButton<AvaShopTarget>), findsNothing);
       await tester.tap(find.text('my_shop_continue'));
       await tester.pumpAndSettle();
       expect(result!.name, 'Barakat kiyim');
-      expect(result!.target, AvaShopTarget.wholesale);
+      expect(result!.target, AvaShopTarget.retail);
     });
   });
 
@@ -609,7 +599,7 @@ void main() {
       bool preferMain = false,
       AvaFirstShop? first,
       bool saveFails = false,
-      Set<AvaShopTarget> targets = const {AvaShopTarget.retail, AvaShopTarget.wholesale},
+      Set<AvaShopTarget> targets = const {AvaShopTarget.retail},
       List<Set<AvaShopTarget>>? asked,
     }) async {
       _bigView(tester);
@@ -652,14 +642,14 @@ void main() {
       expect((r.pushed.single as MyShopScreen).canCreateShop, isTrue);
     });
 
-    testWidgets('фақат улгуржи сотувчи, харита ёпиқ, қўшимча дўкон йўқ — асосий дўкон, Улгуржи сегменти', (tester) async {
+    testWidgets('фақат улгуржи сотувчи, харита ёпиқ, қўшимча дўкон йўқ — асосий дўкон, Аралаш сегменти (Улгуржи таби йўқ)', (tester) async {
       final r = await run(
         tester,
         presence: const MyShopPresence(wholesale: true),
         canCreate: false,
       );
       final screen = r.pushed.single as MainShopScreen;
-      expect(screen.initialSegment, 1);
+      expect(screen.initialSegment, 0);
       expect(screen.openAddOnStart, isFalse);
     });
 
@@ -725,19 +715,6 @@ void main() {
       expect(b.pushed.single, isA<MainShopScreen>());
     });
 
-    testWidgets('биринчи кириш, номсиз, Улгуржи — ном ёзилмайди, форма автоматик очилмайди, табрик йўқ (сотувчи ҳали тасдиқланмаган)', (tester) async {
-      final r = await run(
-        tester,
-        presence: MyShopPresence.none,
-        first: const AvaFirstShop(name: '', target: AvaShopTarget.wholesale),
-      );
-      expect(r.saved, isEmpty);
-      expect(_openedTitle, findsNothing);
-      final screen = r.pushed.single as MainShopScreen;
-      expect(screen.initialSegment, 1);
-      expect(screen.openAddOnStart, isFalse);
-    });
-
     testWidgets('ном сақланмаса — содда хабар, дўкон барибир очилади (табрикдан кейин)', (tester) async {
       final r = await run(
         tester,
@@ -759,15 +736,12 @@ void main() {
 
     testWidgets('Н-4: вараққа фақат очиқ бозорлар узатилади', (tester) async {
       final asked = <Set<AvaShopTarget>>[];
-      final r = await run(
+      await run(
         tester,
         presence: MyShopPresence.none,
-        targets: const {AvaShopTarget.wholesale},
         asked: asked,
-        first: const AvaFirstShop(name: '', target: AvaShopTarget.wholesale),
       );
-      expect(asked.single, {AvaShopTarget.wholesale});
-      expect((r.pushed.single as MainShopScreen).initialSegment, 1);
+      expect(asked.single, {AvaShopTarget.retail});
     });
 
     testWidgets('Н-4: ҳеч бир бозор очиқ эмас — варақ очилмайди, ҳеч нарса push қилинмайди', (tester) async {
@@ -784,24 +758,13 @@ void main() {
       expect(r.saved, isEmpty);
     });
 
-    testWidgets('Н-4: рухсат этилмаган бозор қайтса — очилмайди, табрик йўқ', (tester) async {
-      final r = await run(
-        tester,
-        presence: MyShopPresence.none,
-        targets: const {AvaShopTarget.wholesale},
-        first: const AvaFirstShop(name: '', target: AvaShopTarget.retail),
-      );
-      expect(r.pushed, isEmpty);
-      expect(_openedTitle, findsNothing);
-    });
   });
 
   group('Н-4: биринчи дўкон варағи — фақат очиқ бозорлар', () {
     test('avaOpenableShopTargets — модул ҳолатидан', () {
-      expect(avaOpenableShopTargets((_) => true),
-          {AvaShopTarget.retail, AvaShopTarget.wholesale});
-      expect(avaOpenableShopTargets((id) => id == 'wholesale_market'),
-          {AvaShopTarget.wholesale});
+      expect(avaOpenableShopTargets((_) => true), {AvaShopTarget.retail});
+      // Улгуржи бу варақда йўқ (эга, 2026-11-13) — «＋» даги алоҳида банд.
+      expect(avaOpenableShopTargets((id) => id == 'wholesale_market'), isEmpty);
       expect(avaOpenableShopTargets((id) => id == 'cheap_products_home'),
           {AvaShopTarget.retail});
       expect(avaOpenableShopTargets((_) => false), isEmpty);
@@ -826,25 +789,6 @@ void main() {
       await tester.pumpAndSettle();
       return (result: () => result);
     }
-
-    testWidgets('иккаласи очиқ — танлов кўринади, Аҳоли олдиндан танланган', (tester) async {
-      final s = await pumpSheet(tester, {AvaShopTarget.retail, AvaShopTarget.wholesale});
-      expect(find.byType(SegmentedButton<AvaShopTarget>), findsOneWidget);
-      expect(find.text('home_create_shop_where'), findsOneWidget);
-      await tester.tap(find.text('my_shop_continue'));
-      await tester.pumpAndSettle();
-      expect(s.result()!.target, AvaShopTarget.retail);
-    });
-
-    testWidgets('фақат Улгуржи очиқ — танлов йўқ, Улгуржи танланган', (tester) async {
-      final s = await pumpSheet(tester, {AvaShopTarget.wholesale});
-      expect(find.byType(SegmentedButton<AvaShopTarget>), findsNothing);
-      expect(find.text('home_create_shop_where'), findsNothing);
-      expect(find.text('tv_shop_to_market'), findsNothing);
-      await tester.tap(find.text('my_shop_continue'));
-      await tester.pumpAndSettle();
-      expect(s.result()!.target, AvaShopTarget.wholesale);
-    });
 
     testWidgets('фақат Аҳоли очиқ — танлов йўқ, Аҳоли танланган', (tester) async {
       final s = await pumpSheet(tester, {AvaShopTarget.retail});

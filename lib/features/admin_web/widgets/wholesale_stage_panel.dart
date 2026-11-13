@@ -14,12 +14,13 @@ import '../utils/logistics_stage.dart' show normalizeTesterPhone, testerListCont
 import '../utils/wholesale_orders_admin.dart';
 import 'admin_reason_dialog.dart';
 
-/// Огоҳлантириш матни (docs/ulgurji_buyurtma_zanjiri_uz.md §4) — тестда ҳам текширилади.
+/// Огоҳлантириш матни — тестда ҳам текширилади. Аввалги «relay guard'лари
+/// production'га чиқмагунча ЁПИҚ турсин» матни эскирган: guard'лар 2026-10-31 дан
+/// жонлида (2026-11-13 текширилди: cancelLogisticsOrder v9, getShipmentSecrets v7).
 const kWholesaleGateWarning =
-    'ДИҚҚАТ: дарвоза relay guard\'лари (feat/ulg-relay-guards) production\'га чиқмагунча ЁПИҚ турсин. '
-    'Ҳозирги жонли relay функцияларида Ulgurji жўнатмасининг эгаси (сотувчи) жўнатмани бекор қилиши, '
-    'етказиш кодини олиб харидорсиз «етказилди» қилиши мумкин. Тестчиларни олдиндан қўшиш мумкин — '
-    '«Ёқиқ» ўчиқ турганда ҳеч ким буюртма бера олмайди.';
+    'ДИҚҚАТ: дарвозани очишдан олдин «INTERNAL» босқичда тестчилар билан синаб кўринг. '
+    'Relay ҳимояси жонлида: сотувчи Улгуржи жўнатмасини бекор қила олмайди ва етказиш кодини ололмайди. '
+    'Тестчиларни олдиндан қўшиш мумкин — «Ёқиқ» ўчиқ турганда ҳеч ким буюртма бера олмайди.';
 
 class WholesaleStagePanel extends StatefulWidget {
   const WholesaleStagePanel({super.key, required this.svc});

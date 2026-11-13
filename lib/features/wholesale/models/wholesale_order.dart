@@ -292,7 +292,24 @@ class WholesaleOrder {
     this.walletRefundGoods = 0,
     this.walletReturnFeeCharged = 0,
     this.createdAt,
+    this.sellerDecision = '',
+    this.acceptDeadlineAt,
+    this.cancelReason = '',
   });
+
+  /// Сотувчи қарори (эга, 2026-11-13): `pending` | `accepted` | `rejected` | `timeout`;
+  /// бўш — эски буюртма (қабул қадами бўлмаган, аввалгидек автоматик).
+  final String sellerDecision;
+
+  /// Сотувчи шу вақтгача жавоб бериши керак (2 иш куни, сервер ҳисоблайди).
+  final DateTime? acceptDeadlineAt;
+
+  /// Бекор сабаби: `seller_rejected` | `seller_timeout` | бўш (харидор/админ).
+  final String cancelReason;
+
+  /// Сотувчи жавобини кутяпти: ҳали `placed` ва қарор `pending`.
+  bool get awaitingSellerDecision =>
+      status == WholesaleOrderStatus.placed && sellerDecision == 'pending';
 
   final String id;
   final String buyerId;
@@ -459,19 +476,24 @@ class WholesaleOrder {
       walletRefundGoods: _int(wr['goodsRefunded']),
       walletReturnFeeCharged: _int(wr['returnFeeCharged']),
       createdAt: _date(d['createdAt']),
+      sellerDecision: _str(d['sellerDecision']),
+      acceptDeadlineAt: _date(d['acceptDeadlineAt']),
+      cancelReason: _str(d['cancelReason']),
     );
   }
 }
 
 /// Буюртма тафсилотида КИМГА қайси амал кўринади (соф, тестланади).
 ///
-/// Эга қарори (2026-10-31): СОТУВЧИ буюртмани ҚАБУЛ/РАД ҚИЛМАЙДИ — бу ерда
-/// бундай амал умуман йўқ. Сотувчининг ягона амали — карта буюртмасида
-/// «Пул тушди».
+/// Эга қарори (2026-11-13; 31.10 даги «сотувчи қабул/рад қилмайди» ўрнига):
+/// янги буюртмани сотувчи 2 иш кунида ҚАБУЛ ёки РАД қилади; курьер фақат
+/// қабулдан кейин. Карта буюртмасида «Пул тушди» ҳам қолади.
 class WholesaleOrderActions {
   const WholesaleOrderActions._({
     required this.isBuyer,
     required this.isSeller,
+    required this.canDecide,
+    required this.awaitingDecision,
     required this.canCancel,
     required this.showDeliveryCode,
     required this.showCardInfo,
@@ -488,6 +510,12 @@ class WholesaleOrderActions {
 
   final bool isBuyer;
   final bool isSeller;
+
+  /// Сотувчи: «Қабул қилиш / Рад этиш» — қарор кутилмоқда ва муддат ўтмаган.
+  final bool canDecide;
+
+  /// Харидор (ва муддати ўтган сотувчи): «сотувчи жавобини кутяпмиз ({муддат} гача)».
+  final bool awaitingDecision;
 
   /// Харидор: фақат `placed` да (сервер ҳам шуни текширади).
   final bool canCancel;
@@ -526,15 +554,19 @@ class WholesaleOrderActions {
   /// Сотувчи: «етказилмади» сўрови кўринади (тугмалар муддат ўтгач — [WholesaleDeliveryFailed.canDecide]).
   final bool decideDeliveryFailed;
 
-  factory WholesaleOrderActions.of(WholesaleOrder o, String viewerId) {
+  factory WholesaleOrderActions.of(WholesaleOrder o, String viewerId, {DateTime? now}) {
     final buyer = o.isBuyer(viewerId);
     final seller = !buyer && o.isSeller(viewerId);
     final cardOpen = o.cardPaymentOpen;
     final submitted = o.cardPaymentStatus == WholesaleCardPaymentStatus.receiptSubmitted;
     final inDelivery = o.status == WholesaleOrderStatus.inDelivery;
+    final deadline = o.acceptDeadlineAt;
+    final inTime = deadline == null || (now ?? DateTime.now()).isBefore(deadline);
     return WholesaleOrderActions._(
       isBuyer: buyer,
       isSeller: seller,
+      canDecide: seller && o.awaitingSellerDecision && inTime,
+      awaitingDecision: (buyer || seller) && o.awaitingSellerDecision && !(seller && inTime),
       canCancel: buyer && o.status == WholesaleOrderStatus.placed,
       showDeliveryCode: buyer && inDelivery && (!o.isCardOrder || o.cardConfirmed),
       showCardInfo: buyer && cardOpen,

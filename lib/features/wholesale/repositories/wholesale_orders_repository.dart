@@ -142,7 +142,14 @@ class WholesaleOrdersRepository {
 
   // ── Сотувчи ───────────────────────────────────────────────────────
 
-  /// 3b: «Пул тушди». Сотувчининг БУЮРТМАДАГИ ЯГОНА амали (қабул/рад йўқ).
+  /// Янги буюртмани қабул қилиш (эга, 2026-11-13) — шундан кейин курьер чақирилади.
+  Future<void> acceptOrder(String orderId) => _call(_demand, 'acceptWholesaleOrder', {'orderId': orderId});
+
+  /// Рад этиш — сабаб 3..300 белги (сервер текширади); пул ва қолдиқ қайтади.
+  Future<void> rejectOrder({required String orderId, required String reason}) =>
+      _call(_demand, 'rejectWholesaleOrder', {'orderId': orderId, 'reason': reason.trim()});
+
+  /// 3b: «Пул тушди» (карта буюртмаси).
   Future<void> confirmCardPayment(String orderId) =>
       _call(_demand, 'confirmWholesaleCardPayment', {'orderId': orderId});
 

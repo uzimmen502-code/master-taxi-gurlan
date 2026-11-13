@@ -50,6 +50,13 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'shipment_not_ready': 'wholesale_order_err_shipment_not_ready',
   'shipment_missing': 'wholesale_order_err_shipment_not_ready',
   'shipment_closed': 'wholesale_order_err_shipment_closed',
+  // Сотувчи қарори (эга, 2026-11-13; functions_demand acceptWholesaleOrder/rejectWholesaleOrder)
+  'accept_deadline_passed': 'wholesale_order_err_decision_late',
+  'accept_deadline_missing': 'wholesale_order_err_invalid_transition',
+  'seller_decision_not_required': 'wholesale_order_err_invalid_transition',
+  'order_not_placed': 'wholesale_order_err_invalid_transition',
+  'seller_already_accepted': 'wholesale_order_err_decision_done',
+  'seller_already_rejected': 'wholesale_order_err_decision_done',
   // 3b карта (жонли контракт, 2026-10-31)
   'card_payment_unconfirmed': 'wholesale_order_err_card_payment_unconfirmed',
   'card_invalid': 'wholesale_order_err_card_invalid',

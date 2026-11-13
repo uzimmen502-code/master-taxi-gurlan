@@ -1,9 +1,9 @@
 // Улгуржи буюртма тафсилоти — харидор ҳам, сотувчи ҳам шу экранни кўради;
 // кимга қайси амал кўринишини [WholesaleOrderActions] белгилайди.
 //
-// Эга қарори (2026-10-31): СОТУВЧИ буюртмани ҚАБУЛ/РАД ҚИЛМАЙДИ — бу экранда
-// бундай тугма йўқ. Сотувчининг ягона амали — карта буюртмасида «Пул тушди».
-// Ҳолатни фақат сервер ўзгартиради; экран оқимни кўрсатади.
+// Эга қарори (2026-11-13; 31.10 дагисининг ўрнига): янги буюртмани сотувчи 2 иш
+// кунида «Қабул қилиш» ёки «Рад этиш» қилади, курьер фақат қабулдан кейин.
+// Карта буюртмасида «Пул тушди» ҳам бор. Ҳолатни фақат сервер ўзгартиради.
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -207,7 +207,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   Widget build(BuildContext context) {
     final c = context.ava;
     final o = _o;
-    final a = WholesaleOrderActions.of(o, widget.viewerId);
+    final a = WholesaleOrderActions.of(o, widget.viewerId, now: (widget.now ?? DateTime.now)());
     final unitPrice = formatMoney(o.unitPrice);
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -242,6 +242,14 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         ),
         const SizedBox(height: 10),
         _card(context, WholesaleOrderTimeline(status: o.status)),
+        if (a.canDecide || a.awaitingDecision) ...[
+          const SizedBox(height: 10),
+          _decisionCard(context, a),
+        ],
+        if (_cancelReasonKey(o) != null) ...[
+          const SizedBox(height: 10),
+          _notice(context, _cancelReasonKey(o)!, warn: true, key: const ValueKey('wholesale-cancel-reason')),
+        ],
         if (a.answerDeliveryFailed || a.decideDeliveryFailed) ...[
           const SizedBox(height: 10),
           _deliveryFailedCard(context, a),
@@ -320,8 +328,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
         ),
         const SizedBox(height: 12),
-        // «Етказилмади» картаси кўринса, хато шу карта остида (юқорида) — такрорланмасин.
-        if (_error != null && !a.answerDeliveryFailed && !a.decideDeliveryFailed) WalletInlineError(text: _error!),
+        // «Етказилмади» ёки қарор картаси кўринса, хато шу карта остида (юқорида) — такрорланмасин.
+        if (_error != null && !a.answerDeliveryFailed && !a.decideDeliveryFailed && !a.canDecide)
+          WalletInlineError(text: _error!),
         ..._buyerActions(context, a),
         ..._sellerActions(context, a),
         const SizedBox(height: 24),
@@ -421,6 +430,99 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             key: const ValueKey('wholesale-money-received')),
       if (o.isCardOrder && o.cardConfirmed) _notice(context, 'wholesale_order_card_confirmed', ok: true),
     ];
+  }
+
+  // ── Сотувчи қарори (эга, 2026-11-13): 2 иш кунида қабул ёки рад ─────
+
+  static String? _cancelReasonKey(WholesaleOrder o) {
+    if (o.status != WholesaleOrderStatus.cancelled) return null;
+    return switch (o.cancelReason) {
+      'seller_rejected' => 'wholesale_order_cancel_seller_rejected',
+      'seller_timeout' => 'wholesale_order_cancel_seller_timeout',
+      _ => null,
+    };
+  }
+
+  static String _ddmmHHmm(DateTime t) {
+    final l = t.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(l.day)}.${two(l.month)} ${two(l.hour)}:${two(l.minute)}';
+  }
+
+  Future<void> _accept() async {
+    if (!await _confirm(context.tr('wholesale_order_accept_confirm'),
+        title: context.tr('wholesale_order_accept_btn'))) {
+      return;
+    }
+    await _run(() async {
+      await widget.repository.acceptOrder(_o.id);
+      _snack('wholesale_order_accepted_snack');
+    });
+  }
+
+  Future<void> _reject() async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _RejectReasonDialog(),
+    );
+    if (reason == null || !mounted) return;
+    await _run(() async {
+      await widget.repository.rejectOrder(orderId: _o.id, reason: reason);
+      _snack('wholesale_order_rejected_snack');
+    });
+  }
+
+  Widget _decisionCard(BuildContext context, WholesaleOrderActions a) {
+    final c = context.ava;
+    final until = _o.acceptDeadlineAt;
+    final dateText = until == null ? '' : _ddmmHHmm(until);
+    final text = a.canDecide
+        ? context.tr('wholesale_order_decide_until').replaceAll('{date}', dateText)
+        : context.tr('wholesale_order_decision_wait').replaceAll('{date}', dateText);
+    return Container(
+      key: const ValueKey('wholesale-decision-card'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(text, style: TextStyle(fontSize: 13, color: c.warn, fontWeight: FontWeight.w600)),
+          if (a.canDecide) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    key: const ValueKey('wholesale-order-reject'),
+                    onPressed: _busy ? null : _reject,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: c.danger,
+                      side: BorderSide(color: c.line),
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(context.tr('wholesale_order_reject_btn')),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    key: const ValueKey('wholesale-order-accept'),
+                    onPressed: _busy ? null : _accept,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(context.tr('wholesale_order_accept_btn')),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (_error != null && a.canDecide) ...[const SizedBox(height: 8), WalletInlineError(text: _error!)],
+        ],
+      ),
+    );
   }
 
   // ── «Етказилмади» (эга, 2026-11-01) ───────────────────────────────
@@ -805,6 +907,65 @@ class _ReceiptImage extends StatelessWidget {
             errorWidget: (_, __, ___) => Text(context.tr('wholesale_order_receipt_load_failed'),
                 style: TextStyle(fontSize: 12, color: c.danger)),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Рад этиш сабаби (3..300 белги — сервер ҳам текширади). Сабаб харидорга
+/// хабарномада юборилмайди (шахсий маълумот бўлиши мумкин), буюртмада сақланади.
+class _RejectReasonDialog extends StatefulWidget {
+  const _RejectReasonDialog();
+
+  @override
+  State<_RejectReasonDialog> createState() => _RejectReasonDialogState();
+}
+
+class _RejectReasonDialogState extends State<_RejectReasonDialog> {
+  final _ctrl = TextEditingController();
+  bool _err = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final t = _ctrl.text.trim();
+    if (t.length < 3) {
+      setState(() => _err = true);
+      return;
+    }
+    Navigator.of(context).pop(t);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.tr('wholesale_order_reject_title')),
+      content: TextField(
+        key: const ValueKey('wholesale-reject-reason'),
+        controller: _ctrl,
+        autofocus: true,
+        maxLength: 300,
+        maxLines: 3,
+        onChanged: (_) {
+          if (_err) setState(() => _err = false);
+        },
+        decoration: InputDecoration(
+          hintText: context.tr('wholesale_order_reject_hint'),
+          errorText: _err ? context.tr('wholesale_order_reject_err') : null,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('consent_no'))),
+        FilledButton(
+          key: const ValueKey('wholesale-reject-submit'),
+          onPressed: _submit,
+          child: Text(context.tr('wholesale_order_reject_btn')),
         ),
       ],
     );

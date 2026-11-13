@@ -1,6 +1,7 @@
 // 4-босқич: буюртма тафсилоти — ҳар ҳолат ва ролда фақат рухсат этилган
-// амал кўринади. Эга қарори (2026-10-31): сотувчида ҚАБУЛ/РАД ЙЎҚ; унинг
-// ягона амали — карта буюртмасида «Пул тушди».
+// амал кўринади. ЭСКИ буюртмада (сотувчи қарори майдони йўқ) сотувчида
+// қабул/рад йўқ (31.10 қоидаси); ЯНГИ буюртмада (эга, 2026-11-13) сотувчи
+// 2 иш кунида «Қабул қилиш / Рад этиш» қилади — пастдаги гуруҳ.
 import 'package:ava_gurlan/features/wholesale/models/wholesale_order.dart';
 import 'package:ava_gurlan/features/wholesale/repositories/wholesale_orders_repository.dart';
 import 'package:ava_gurlan/features/wholesale/screens/wholesale_order_detail_screen.dart';
@@ -18,8 +19,14 @@ WholesaleOrder _order({
   String method = WholesalePaymentMethod.wallet,
   Map<String, dynamic>? card,
   Object? returnDebt,
+  String? sellerDecision,
+  DateTime? deadline,
+  String? cancelReason,
 }) =>
     WholesaleOrder.fromMap('o1', {
+      if (sellerDecision != null) 'sellerDecision': sellerDecision,
+      if (deadline != null) 'acceptDeadlineAt': deadline,
+      if (cancelReason != null) 'cancelReason': cancelReason,
       'buyerId': _buyer,
       'sellerId': _seller,
       'productId': 'prod1',
@@ -47,7 +54,7 @@ class _H {
   final uploads = <String>[];
 }
 
-Future<_H> _pump(WidgetTester tester, WholesaleOrder o, String viewer, {_H? h}) async {
+Future<_H> _pump(WidgetTester tester, WholesaleOrder o, String viewer, {_H? h, DateTime? now}) async {
   final hh = h ?? _H();
   tester.view.physicalSize = const Size(400 * 2, 1800 * 2);
   tester.view.devicePixelRatio = 2;
@@ -62,6 +69,7 @@ Future<_H> _pump(WidgetTester tester, WholesaleOrder o, String viewer, {_H? h}) 
           hh.uploads.add('$buyerId/$orderId');
           return 'wholesale_receipts/$buyerId/$orderId/r.jpg';
         },
+        now: now == null ? null : () => now,
       ),
     ),
   ));
@@ -213,7 +221,94 @@ void main() {
     });
   });
 
-  group('сотувчи — қабул/рад ЙЎҚ', () {
+  group('сотувчи қарори (эга, 2026-11-13): 2 иш кунида қабул ёки рад', () {
+    final now = DateTime(2026, 11, 16, 10);
+    final deadline = DateTime(2026, 11, 18, 10);
+    WholesaleOrder pending() => _order(sellerDecision: 'pending', deadline: deadline);
+    const accept = ValueKey('wholesale-order-accept');
+    const reject = ValueKey('wholesale-order-reject');
+
+    testWidgets('сотувчи, муддат ичида: муддат матни + «Қабул қилиш» → тасдиқ → acceptWholesaleOrder', (tester) async {
+      final h = _H();
+      h.demand.handlers['acceptWholesaleOrder'] = (_) => {'ok': true};
+      await _pump(tester, pending(), _seller, h: h, now: now);
+      expect(find.byKey(const ValueKey('wholesale-decision-card')), findsOneWidget);
+      // Тестда таржима юкланмайди — калитнинг ўзи кўринади (сана `{date}` ўрнига матнда қўйилади).
+      expect(find.text('wholesale_order_decide_until'), findsOneWidget);
+      expect(find.byKey(_cancel), findsNothing, reason: 'сотувчи бекор қилмайди — рад этади');
+      await tester.tap(find.byKey(accept));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('wholesale-confirm-yes')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls.single.$1, 'acceptWholesaleOrder');
+      expect(h.demand.calls.single.$2, {'orderId': 'o1'});
+    });
+
+    testWidgets('«Рад этиш»: 2 белги — хато, юборилмайди; сабаб билан → rejectWholesaleOrder', (tester) async {
+      final h = _H();
+      h.demand.handlers['rejectWholesaleOrder'] = (_) => {'ok': true};
+      await _pump(tester, pending(), _seller, h: h, now: now);
+      await tester.tap(find.byKey(reject));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('wholesale-reject-reason')), 'ab');
+      await tester.tap(find.byKey(const ValueKey('wholesale-reject-submit')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls, isEmpty);
+      await tester.enterText(find.byKey(const ValueKey('wholesale-reject-reason')), '  Товар тугаган ');
+      await tester.tap(find.byKey(const ValueKey('wholesale-reject-submit')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls.single.$1, 'rejectWholesaleOrder');
+      expect(h.demand.calls.single.$2, {'orderId': 'o1', 'reason': 'Товар тугаган'});
+    });
+
+    test('амаллар (соф): муддат чегараси — 1 дақиқа олдин қарор бор, муддат вақтида йўқ', () {
+      final o = pending();
+      expect(WholesaleOrderActions.of(o, _seller, now: deadline.subtract(const Duration(minutes: 1))).canDecide, isTrue);
+      expect(WholesaleOrderActions.of(o, _seller, now: deadline).canDecide, isFalse);
+      expect(WholesaleOrderActions.of(o, _buyer, now: now).canDecide, isFalse);
+      expect(WholesaleOrderActions.of(o, _buyer, now: now).awaitingDecision, isTrue);
+      expect(WholesaleOrderActions.of(_order(), _seller, now: now).canDecide, isFalse, reason: 'эски буюртма');
+    });
+
+    testWidgets('сотувчи, муддат ўтган: тугма йўқ (сервер ҳам рад этади), кутиш матни', (tester) async {
+      await _pump(tester, pending(), _seller, now: deadline.add(const Duration(minutes: 1)));
+      expect(find.byKey(accept), findsNothing);
+      expect(find.byKey(reject), findsNothing);
+      expect(find.byKey(const ValueKey('wholesale-decision-card')), findsOneWidget);
+    });
+
+    testWidgets('харидор: «сотувчи жавобини кутяпмиз (муддат)» + бекор қилиш; қабул/рад тугмаси йўқ', (tester) async {
+      await _pump(tester, pending(), _buyer, now: now);
+      expect(find.byKey(const ValueKey('wholesale-decision-card')), findsOneWidget);
+      expect(find.text('wholesale_order_decision_wait'), findsOneWidget);
+      expect(find.byKey(accept), findsNothing);
+      expect(find.byKey(reject), findsNothing);
+      expect(find.byKey(_cancel), findsOneWidget);
+    });
+
+    testWidgets('қабул қилингач (accepted): қарор картаси йўқ', (tester) async {
+      await _pump(tester, _order(sellerDecision: 'accepted', deadline: deadline), _seller, now: now);
+      expect(find.byKey(const ValueKey('wholesale-decision-card')), findsNothing);
+      expect(find.byKey(accept), findsNothing);
+    });
+
+    for (final (reason, key) in [
+      ('seller_rejected', 'wholesale_order_cancel_seller_rejected'),
+      ('seller_timeout', 'wholesale_order_cancel_seller_timeout'),
+    ]) {
+      testWidgets('бекор қилинди ($reason): сабаб изоҳи кўринади', (tester) async {
+        await _pump(
+          tester,
+          _order(status: WholesaleOrderStatus.cancelled, sellerDecision: 'rejected', cancelReason: reason),
+          _buyer,
+        );
+        expect(find.byKey(const ValueKey('wholesale-cancel-reason')), findsOneWidget);
+        expect(find.text(key), findsOneWidget);
+      });
+    }
+  });
+
+  group('сотувчи — ЭСКИ буюртма (қарор майдони йўқ): қабул/рад ЙЎҚ', () {
     for (final s in WholesaleOrderStatus.known) {
       testWidgets('ҳамён буюртмаси, $s: ҳеч қандай амал тугмаси йўқ', (tester) async {
         await _pump(tester, _order(status: s), _seller);

@@ -9,8 +9,11 @@
  *   2) Holat/to'lov o'tishlari bo'yicha xabarlar (in-app + push, 3 til) — `transitionNotifications`
  *      (sof funksiya, testlanadi). Har xabar idempotent (`wholesale_notify` deterministik ID).
  *
- * Yangi karta buyurtmasi haqida sotuvchiga xabar — onCreate (`notifyNewCardOrder`,
- * `onWholesaleOrderCreated` dan chaqiriladi).
+ *   3) Sotuvchi qabul qildi (ega, 2026-11-13; `pending → accepted`) → `ensureWholesaleShipment`.
+ *
+ * Yangi buyurtma haqida sotuvchiga «qabul qiling» xabari — onCreate (`notifySellerDecide`,
+ * `onWholesaleOrderCreated` dan). Karta buyurtmasi xabari (`ws_card_new_order`) — qabuldan keyin;
+ * `notifyNewCardOrder` (eski onCreate yo'li) testlar va moslik uchun saqlanadi.
  *
  * Pul — bu yerda YO'Q (default codebase `onWholesaleOrderStatusChange`).
  */
@@ -47,6 +50,18 @@ function transitionNotifications(before, after) {
   const b = before || {};
   const a = after || {};
   const out = [];
+  // Sotuvchi qabuli (ega, 2026-11-13). Karta buyurtmasi haqidagi sotuvchi xabari endi qabuldan keyin
+  // (yaratilganda — `ws_seller_decide`). Bekor qilish sababi `cancelReason` dan.
+  if (b.sellerDecision !== WO.SELLER_DECISION.ACCEPTED && a.sellerDecision === WO.SELLER_DECISION.ACCEPTED) {
+    out.push({ to: 'buyer', key: 'ws_seller_accepted_buyer' });
+    if (WO.methodOf(a) === WO.PAYMENT_METHOD.CARD) out.push({ to: 'seller', key: 'ws_card_new_order' });
+  }
+  if (changedTo(b, a, WO.STATUS.CANCELLED)) {
+    if (a.cancelReason === WO.CANCEL_REASON.SELLER_REJECTED) out.push({ to: 'buyer', key: 'ws_seller_rejected_buyer' });
+    if (a.cancelReason === WO.CANCEL_REASON.SELLER_TIMEOUT) {
+      out.push({ to: 'buyer', key: 'ws_seller_timeout_buyer' }, { to: 'seller', key: 'ws_seller_timeout_seller' });
+    }
+  }
   if (WO.methodOf(a) === WO.PAYMENT_METHOD.CARD) {
     if (cpStatus(b) !== WO.CARD_PAYMENT.RECEIPT_SUBMITTED && cpStatus(a) === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) {
       out.push({ to: 'seller', key: 'ws_card_receipt' });
@@ -115,6 +130,17 @@ function transitionNotifications(before, after) {
   return out;
 }
 
+/** Qaror muddati — Toshkent vaqtida «dd.MM HH:mm» (Asia/Tashkent, UTC+5); yo'q — bo'sh. */
+function deadlineText(v) {
+  let ms = null;
+  if (v && typeof v.toMillis === 'function') ms = v.toMillis();
+  else if (v instanceof Date) ms = v.getTime();
+  if (ms == null || !Number.isFinite(ms)) return '';
+  const d = new Date(ms + WO.TASHKENT_OFFSET_MS);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
 function paramsOf(o, orderId) {
   const rs = o.returnShipment || {};
   const debt = o.returnDebt || {};
@@ -138,6 +164,7 @@ function paramsOf(o, orderId) {
     // Kuryer qarzi (default `courierReturnDebt`): qaytish narxi jami va qarzga yozilgan qism.
     returnFeeTotal: Number.isInteger(cd.returnFee) ? cd.returnFee : '',
     courierDebt: Number.isInteger(cd.amount) ? cd.amount : '',
+    deadline: deadlineText(o.acceptDeadlineAt),
   };
 }
 
@@ -177,6 +204,15 @@ async function onWholesaleOrderUpdated(deps, before, after, orderId) {
   if (a.status === WO.STATUS.REFUSED && !((a.returnShipment || {}).shipmentId) && !a.returnShipmentError) {
     out.return = await ensureWholesaleReturnShipment(deps, orderId);
   }
+  // Sotuvchi qabul qildi (ega, 2026-11-13) → relay jo'natmasi (idempotent, kalit `wholesale_ship_{orderId}`).
+  // Faqat `pending → accepted` o'tishida; xato belgisi bo'lsa qayta urinish — reconcile (aylanish yo'q).
+  const b = before || {};
+  if (b.sellerDecision !== WO.SELLER_DECISION.ACCEPTED && a.sellerDecision === WO.SELLER_DECISION.ACCEPTED
+    && a.status === WO.STATUS.PLACED && !((a.shipment || {}).shipmentId) && !a.shipmentError) {
+    // Kechiktirilgan require: wholesale_orders.js shu fayldan `notifySellerDecide`ni oladi (aylana import).
+    // eslint-disable-next-line global-require
+    out.shipment = await require('./wholesale_orders').ensureWholesaleShipment(deps, orderId);
+  }
   const items = transitionNotifications(before, a);
   out.notifications = items.length ? await deliver(deps, orderId, a, items) : [];
   return out;
@@ -189,6 +225,13 @@ async function notifyNewCardOrder(deps, data, orderId) {
   return deliver(deps, orderId, o, [{ to: 'seller', key: 'ws_card_new_order' }]);
 }
 
+/** onCreate (ega, 2026-11-13): sotuvchiga «buyurtmani {deadline} gacha qabul qiling» (`ws_seller_decide`). */
+async function notifySellerDecide(deps, data, orderId) {
+  const o = data || {};
+  if (o.status !== WO.STATUS.PLACED || !o.acceptDeadlineAt) return [];
+  return deliver(deps, orderId, o, [{ to: 'seller', key: 'ws_seller_decide' }]);
+}
+
 module.exports = {
-  transitionNotifications, refusedBuyerKey, onWholesaleOrderUpdated, notifyNewCardOrder,
+  transitionNotifications, refusedBuyerKey, onWholesaleOrderUpdated, notifyNewCardOrder, notifySellerDecide, deadlineText,
 };

@@ -300,9 +300,30 @@ exports.setWholesaleOrderSettings = fn.https.onCall(wrapCallable(
   wholesaleOrdersApi.makeSetWholesaleOrderSettings({ db }),
 ));
 
+// Sotuvchi qabuli / radi (ega, 2026-11-13): faqat buyurtma sotuvchisi, `placed` + `pending`,
+// 2 ish kuni ichida. Rad — placed → cancelled, pul/qoldiq default trigger orqali (xaridor bekor qilgandek).
+exports.acceptWholesaleOrder = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeAcceptWholesaleOrder({ db }),
+));
+exports.rejectWholesaleOrder = fn.https.onCall(wrapCallable(
+  wholesaleOrdersApi.makeRejectWholesaleOrder({ db }),
+));
 /**
- * Ulgurji buyurtma, 3-bosqich: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
- * (sotuvchi qabul/rad qilmaydi, ega 2026-10-31). Narx — kvotada muhrlangan;
+ * Qaror muddati (`acceptDeadlineAt`) o'tgan `pending` buyurtmalar → cancelled (system, `seller_timeout`).
+ * Kompozit indeks: wholesale_orders (status, sellerDecision, acceptDeadlineAt).
+ */
+exports.wholesaleSellerDecisionSweeper = fn.pubsub
+  .schedule('every 15 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleOrdersApi.runWholesaleSellerDecisionSweep({ db });
+    return null;
+  });
+
+/**
+ * Ulgurji buyurtma, 3-bosqich: relay jo'natmasi. Ega, 2026-11-13: yangi buyurtmada onCreate
+ * faqat qaror belgisini (`sellerDecision: pending` + `acceptDeadlineAt`) yozadi va sotuvchiga
+ * xabar beradi; jo'natma — qabuldan keyin (onWholesaleOrderUpdated). Narx — kvotada muhrlangan;
  * idempotent (`demand_idempotency/wholesale_ship_{orderId}`). Holat o'zgarmaydi —
  * `in_delivery` ga default codebase o'tkazadi (yetkazish haqi eskrouga o'tganda).
  * Logistika jo'natuvchi darvozasi bu yerda YO'Q (Ulgurji darvozasi kvotada); LEG

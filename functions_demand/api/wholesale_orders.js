@@ -8,13 +8,18 @@
  *                              tarifi bo'yicha yetkazish; `wholesale_quotes/{id}`
  *                              ga MUHRLANADI (15 daqiqa). Pul ushlash — default
  *                              codebase `placeWholesaleOrder` (ledger o'sha yerda).
- *   cancelWholesaleOrder       xaridor:  placed → cancelled. Sotuvchi qabul/rad
- *                              QILMAYDI (ega, 2026-10-31) — zanjir avtomatik.
+ *   cancelWholesaleOrder       xaridor:  placed → cancelled.
  *                              FAQAT holatni + `refundStatus: 'pending'`
  *                              yozadi; pulni qaytarish va qoldiqni tiklash —
  *                              default trigger `onWholesaleOrderStatusChange`.
+ *   acceptWholesaleOrder       sotuvchi (ega, 2026-11-13): qabul — 2 ish kuni ichida;
+ *                              shundan keyingina relay jo'natmasi ochiladi.
+ *   rejectWholesaleOrder       sotuvchi: rad (sabab 3..300) — placed → cancelled,
+ *                              pul/qoldiq xaridor bekor qilgandagi bilan BITTA yo'l.
+ *   runWholesaleSellerDecisionSweep  (har 15 daqiqa) muddat o'tdi → placed → cancelled (system).
  *   setWholesaleOrderSettings  admin: AVA ulushi (bps) — versiya + audit.
- *   onWholesaleOrderCreated    (3-bosqich, trigger) relay jo'natmasi avtomatik
+ *   onWholesaleOrderCreated    (trigger) qaror belgisi `pending` + muddat; ESKI (belgisiz)
+ *                              buyurtmalarda — avvalgidek avtomatik jo'natma
  *   reconcileWholesaleShipments (3-bosqich, har 10 daqiqa) yiqilgan yaratishni qayta urinadi
  *
  * NEGA SOZLAMA SHU CODEBASE'DA: ulush birinchi bo'lib KVOTADA (shu yerda)
@@ -40,7 +45,7 @@ const { assertStrictAdmin } = require('../analytics/access');
 // 3b: «yetkazilganda karta orqali» (ega, 2026-10-31).
 const { cardAvailability } = require('./wholesale_card');
 const { ensureWholesaleReturnShipment, RETURN_MAX_ATTEMPTS } = require('./wholesale_return');
-const { notifyNewCardOrder } = require('./wholesale_events');
+const { notifySellerDecide } = require('./wholesale_events');
 
 const PRODUCTS = 'wholesale_products';
 const SELLERS = 'wholesale_sellers';
@@ -418,6 +423,50 @@ function makeQuoteWholesaleOrder(deps) {
 // BEKOR — faqat holat (pul — default trigger)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * placed → cancelled — YAGONA yozuv yo'li (xaridor bekor qilishi, sotuvchi radi, qaror muddati
+ * o'tishi). Pul va qoldiq BU YERDA YO'Q: faqat `refundStatus: 'pending'` — default codebase
+ * `onWholesaleOrderStatusChange` (`refundOrder`) to'lovchiga qaytaradi va qoldiqni tiklaydi.
+ *
+ * Ikki faza (Firestore: tranzaksiyada hamma o'qish yozuvdan oldin): bu funksiya O'QIYDI
+ * (jo'natma bo'lsa) va yozuvchi funksiyani qaytaradi; chaqiruvchi o'z o'qishlarini tugatgach
+ * uni chaqiradi. `extraPatch` — sabab maydonlari (`cancelReason`, `sellerDecision`, ...).
+ */
+async function prepareCancelInTx(tx, db, ref, o, {
+  actor, actorId, reason, extraPatch, historyMeta, event,
+}) {
+  const from = String(o.status || '');
+  const to = WO.STATUS.CANCELLED;
+  WO.assertTransition(actor, from, to);
+  // 3-bosqich: yetkazish hali TO'LANMAGAN jo'natma ochilgan bo'lsa — u ham bekor
+  // (LEG kuryerga chiqmasin). O'QISH — yozuvdan oldin. To'langan bo'lsa buyurtma
+  // allaqachon `in_delivery` (xaridor/sotuvchi bekor qila olmaydi — yuqoridagi tekshiruv).
+  const shipmentId = String((o.shipment || {}).shipmentId || '');
+  const cancelShipment = shipmentId ? await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) : null;
+  return function write(now) {
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    const patch = {
+      status: to,
+      statusUpdatedAt: now,
+      updatedAt: now,
+      historySeq: seq,
+      refundStatus: WO.REFUND_STATUS.PENDING,
+      cancelledAt: now,
+      cancelledBy: actor,
+      ...(extraPatch || {}),
+    };
+    tx.update(ref, patch);
+    const meta = { ...(historyMeta || {}), ...(cancelShipment ? { shipmentCancelled: shipmentId } : {}) };
+    tx.set(ref.collection(HISTORY).doc(String(seq)), {
+      seq, from, to, actor, actorId: actorId || null, reason: reason || '', at: now,
+      ...(event ? { event } : {}),
+      ...(Object.keys(meta).length ? { meta } : {}),
+    });
+    if (cancelShipment) cancelShipment(now, `wholesale_${actor}`);
+    return { from, seq };
+  };
+}
+
 function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
   return async function transition(data, context) {
     const started = Date.now();
@@ -434,7 +483,7 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         const snap = await tx.get(ref);
         if (!snap.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
         const o = snap.data() || {};
-        // Faqat xaridor (sotuvchi buyurtmaga aralashmaydi, ega 2026-10-31).
+        // Faqat xaridor (sotuvchi radi — alohida `rejectWholesaleOrder`, o'z shartlari bilan).
         if (!sameUser(o.buyerId, callerId)) {
           throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
         }
@@ -442,29 +491,8 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         // 21-band: takror chaqiruv (tarmoq qayta urinishi) — xato emas, ikkinchi yozuv yo'q.
         if (from === to) return { idempotent: true, from };
         WO.assertTransition(actor, from, to);
-        // 3-bosqich: yetkazish hali TO'LANMAGAN jo'natma ochilgan bo'lsa — u ham bekor
-        // (LEG kuryerga chiqmasin). O'QISH — yozuvdan oldin. To'langan bo'lsa buyurtma
-        // allaqachon `in_delivery` (xaridor bekor qila olmaydi — yuqoridagi tekshiruv).
-        const shipmentId = to === WO.STATUS.CANCELLED ? String((o.shipment || {}).shipmentId || '') : '';
-        const cancelShipment = shipmentId ? await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) : null;
-        const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
-        const patch = {
-          status: to,
-          statusUpdatedAt: now,
-          updatedAt: now,
-          historySeq: seq,
-        };
-        if (WO.needsRefund(to)) patch.refundStatus = WO.REFUND_STATUS.PENDING;
-        if (to === WO.STATUS.CANCELLED) {
-          patch.cancelledAt = now;
-          patch.cancelledBy = actor;
-        }
-        tx.update(ref, patch);
-        tx.set(ref.collection(HISTORY).doc(String(seq)), {
-          seq, from, to, actor, actorId: callerId, reason, at: now,
-          ...(cancelShipment ? { meta: { shipmentCancelled: shipmentId } } : {}),
-        });
-        if (cancelShipment) cancelShipment(now, `wholesale_${actor}`);
+        const write = await prepareCancelInTx(tx, db, ref, o, { actor, actorId: callerId, reason });
+        write(now);
         return { idempotent: false, from };
       });
       log(action, {
@@ -487,11 +515,266 @@ function makeCancelWholesaleOrder(deps) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 3-BOSQICH: buyurtma berilishi bilan relay jo'natmasi AVTOMATIK
+// SOTUVCHI QABULI / RADI (ega, 2026-11-13)
 // ═══════════════════════════════════════════════════════════════════════
 //
-// Sotuvchi qabul/rad QILMAYDI (ega, 2026-10-31). `wholesale_orders` onCreate
-// (`placed`) → `createShipmentInternal` (egasi/jo'natuvchi = sotuvchi, LEG-1 olish
+// onCreate → `sellerDecision: 'pending'` + `acceptDeadlineAt` (2 ish kuni, core `acceptDeadlineFor`).
+// Qabul → `accepted` + `acceptedAt`; jo'natmani demand onUpdate triggeri ochadi
+// (`wholesale_events.onWholesaleOrderUpdated` → `ensureWholesaleShipment`, kalit
+// `wholesale_ship_{orderId}`), yiqilsa — `wholesaleShipmentReconcile`.
+// Rad / muddat → placed → cancelled (`prepareCancelInTx` — xaridor bekor qilishi bilan bitta yo'l).
+// ESKI buyurtma (`sellerDecision` yo'q) — qaror callable'lari `seller_decision_not_required` bilan rad.
+
+const SELLER_DECISION_SWEEP_LIMIT = 200;
+
+/**
+ * Qaror callable'lari uchun umumiy shart tekshiruvi (tranzaksiya ichida, o'qilgan `o` ustida).
+ * @returns {null|{idempotent: true}} — idempotent bo'lsa obyekt, davom etish mumkin bo'lsa null.
+ */
+function checkSellerDecisionState(o, nowMs, want) {
+  const dec = o.sellerDecision;
+  if (dec === undefined || dec === null) {
+    throw fail('failed-precondition', 'Bu buyurtma sotuvchi qarorini talab qilmaydi', 'seller_decision_not_required');
+  }
+  if (dec === want) return { idempotent: true };
+  if (dec === WO.SELLER_DECISION.ACCEPTED) {
+    throw fail('failed-precondition', 'Buyurtma allaqachon qabul qilingan', 'seller_already_accepted');
+  }
+  if (dec === WO.SELLER_DECISION.REJECTED) {
+    throw fail('failed-precondition', 'Buyurtma allaqachon rad etilgan', 'seller_already_rejected');
+  }
+  if (dec === WO.SELLER_DECISION.TIMEOUT) {
+    throw fail('failed-precondition', 'Qaror muddati o\'tgan', 'accept_deadline_passed');
+  }
+  if (dec !== WO.SELLER_DECISION.PENDING) {
+    throw fail('failed-precondition', 'Buyurtma holati mos emas', 'seller_decision_state', { sellerDecision: String(dec) });
+  }
+  if (o.status !== WO.STATUS.PLACED) {
+    throw fail('failed-precondition', 'Buyurtma endi faol emas', 'order_not_placed', { status: o.status || null });
+  }
+  const deadline = msOf(o.acceptDeadlineAt);
+  // Muddat yo'q/buzilgan — qaror qabul qilinmaydi (jimgina «cheksiz» emas, 53-band).
+  if (deadline == null) throw fail('failed-precondition', 'Qaror muddati aniqlanmagan', 'accept_deadline_missing');
+  if (nowMs > deadline) throw fail('failed-precondition', 'Qaror muddati o\'tgan', 'accept_deadline_passed');
+  return null;
+}
+
+function requireOrderIdArg(data) {
+  const orderId = String((data || {}).orderId || '').trim();
+  if (!ID_RE.test(orderId)) throw fail('invalid-argument', 'Buyurtma tanlanmagan', 'order_required');
+  return orderId;
+}
+
+/**
+ * `acceptWholesaleOrder({orderId})` — faqat buyurtma sotuvchisi (`order.sellerId`, kanon telefon).
+ * Shart: `placed` + `sellerDecision == pending` + `now <= acceptDeadlineAt`. Takror — idempotent
+ * (ikkinchi yozuv yo'q). Raddan / muddatdan keyin — `failed-precondition` (aniq kod).
+ */
+function makeAcceptWholesaleOrder(deps) {
+  const { db, now: nowFn } = deps;
+  return async function acceptWholesaleOrder(data, context) {
+    const started = Date.now();
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const orderId = requireOrderIdArg(data);
+    const ref = db.collection(ORDERS).doc(orderId);
+    try {
+      const now = nowFn ? nowFn() : new Date();
+      const out = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref);
+        if (!s.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
+        const o = s.data() || {};
+        if (!sameUser(o.sellerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+        const idem = checkSellerDecisionState(o, now.getTime(), WO.SELLER_DECISION.ACCEPTED);
+        if (idem) return idem;
+        const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+        tx.update(ref, {
+          sellerDecision: WO.SELLER_DECISION.ACCEPTED,
+          sellerDecisionAt: now,
+          acceptedAt: now,
+          acceptedBy: callerId,
+          historySeq: seq,
+          updatedAt: now,
+        });
+        tx.set(ref.collection(HISTORY).doc(String(seq)), {
+          seq, from: o.status, to: o.status, event: 'seller_accepted', actor: WO.ACTOR.SELLER, actorId: callerId,
+          reason: '', meta: { acceptDeadlineAt: o.acceptDeadlineAt || null }, at: now,
+        });
+        return { idempotent: false };
+      });
+      log('acceptOrder', { result: out.idempotent ? 'already' : 'ok', orderId, durationMs: Date.now() - started });
+      return {
+        ok: true, orderId, status: WO.STATUS.PLACED, sellerDecision: WO.SELLER_DECISION.ACCEPTED, idempotent: out.idempotent,
+      };
+    } catch (e) {
+      log('acceptOrder', {
+        result: 'denied', orderId, errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN', durationMs: Date.now() - started,
+      });
+      throw e;
+    }
+  };
+}
+
+/**
+ * `rejectWholesaleOrder({orderId, reason})` — faqat sotuvchi; sabab 3..300 belgi (majburiy).
+ * placed → cancelled (`cancelledBy: 'seller'`, `cancelReason: 'seller_rejected'`,
+ * `sellerRejectReason`, `refundStatus: 'pending'`) — pul/qoldiq xaridor bekor qilgandagi
+ * default trigger orqali. Takror — idempotent; qabuldan keyin — `seller_already_accepted`.
+ */
+function makeRejectWholesaleOrder(deps) {
+  const { db, now: nowFn } = deps;
+  return async function rejectWholesaleOrder(data, context) {
+    const started = Date.now();
+    const callerId = callerIdFrom(context);
+    if (!callerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
+    const orderId = requireOrderIdArg(data);
+    const raw = (data || {}).reason;
+    const reason = typeof raw === 'string' ? raw.trim() : '';
+    if (reason.length < WO.REJECT_REASON_MIN || reason.length > WO.REJECT_REASON_MAX) {
+      throw fail('invalid-argument', `Rad sababini yozing (${WO.REJECT_REASON_MIN}–${WO.REJECT_REASON_MAX} belgi)`, 'reason_invalid', {
+        min: WO.REJECT_REASON_MIN, max: WO.REJECT_REASON_MAX,
+      });
+    }
+    const ref = db.collection(ORDERS).doc(orderId);
+    try {
+      const now = nowFn ? nowFn() : new Date();
+      const out = await db.runTransaction(async (tx) => {
+        const s = await tx.get(ref);
+        if (!s.exists) throw fail('not-found', 'Buyurtma topilmadi', 'order_not_found');
+        const o = s.data() || {};
+        if (!sameUser(o.sellerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
+        const idem = checkSellerDecisionState(o, now.getTime(), WO.SELLER_DECISION.REJECTED);
+        if (idem) return idem;
+        const write = await prepareCancelInTx(tx, db, ref, o, {
+          actor: WO.ACTOR.SELLER,
+          actorId: callerId,
+          reason,
+          event: 'seller_rejected',
+          extraPatch: {
+            cancelReason: WO.CANCEL_REASON.SELLER_REJECTED,
+            sellerRejectReason: reason,
+            sellerDecision: WO.SELLER_DECISION.REJECTED,
+            sellerDecisionAt: now,
+          },
+        });
+        write(now);
+        return { idempotent: false };
+      });
+      // Log — sabab matnisiz (erkin matnda shaxsiy ma'lumot bo'lishi mumkin, 24/40-band).
+      log('rejectOrder', { result: out.idempotent ? 'already' : 'ok', orderId, durationMs: Date.now() - started });
+      return {
+        ok: true, orderId, status: WO.STATUS.CANCELLED, sellerDecision: WO.SELLER_DECISION.REJECTED, idempotent: out.idempotent,
+      };
+    } catch (e) {
+      log('rejectOrder', {
+        result: 'denied', orderId, errorCode: (e.details && e.details.reason) || e.code || 'UNKNOWN', durationMs: Date.now() - started,
+      });
+      throw e;
+    }
+  };
+}
+
+/**
+ * onCreate: yangi buyurtmaga qaror belgisi — `sellerDecision: 'pending'` + `acceptDeadlineAt`
+ * (asos — `order.createdAt`, yo'q bo'lsa trigger vaqti) + history `seller_decision_requested`.
+ * Idempotent (tranzaksiya): belgi bor / jo'natma bor / holat placed emas — hech narsa yozilmaydi.
+ * @returns {{marked: boolean, acceptDeadlineAt?: Date, skipped?: string}}
+ */
+async function markSellerDecisionPending(deps, orderId) {
+  const { db, now: nowFn } = deps;
+  const ref = db.collection(ORDERS).doc(orderId);
+  const now = nowFn ? nowFn() : new Date();
+  return db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    if (!s.exists) return { marked: false, skipped: 'order_missing' };
+    const o = s.data() || {};
+    if (o.sellerDecision !== undefined && o.sellerDecision !== null) {
+      return { marked: false, skipped: 'already_marked', acceptDeadlineAt: o.acceptDeadlineAt || null };
+    }
+    if (o.status !== WO.STATUS.PLACED) return { marked: false, skipped: `status_${o.status || 'none'}` };
+    if ((o.shipment || {}).shipmentId) return { marked: false, skipped: 'already_linked' };
+    const baseMs = msOf(o.createdAt) || now.getTime();
+    const deadline = new Date(WO.acceptDeadlineFor(baseMs));
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    tx.update(ref, {
+      sellerDecision: WO.SELLER_DECISION.PENDING,
+      acceptDeadlineAt: deadline,
+      historySeq: seq,
+      updatedAt: now,
+    });
+    tx.set(ref.collection(HISTORY).doc(String(seq)), {
+      seq, from: o.status, to: o.status, event: 'seller_decision_requested', actor: WO.ACTOR.SYSTEM, actorId: null,
+      reason: '', meta: { acceptDeadlineAt: deadline, businessDays: WO.ACCEPT_BUSINESS_DAYS }, at: now,
+    });
+    return { marked: true, acceptDeadlineAt: deadline };
+  });
+}
+
+/**
+ * Sweeper (har 15 daqiqa): `status == placed` + `sellerDecision == pending` +
+ * `acceptDeadlineAt <= now` (kompozit indeks: status, sellerDecision, acceptDeadlineAt) →
+ * har buyurtma alohida tranzaksiyada qayta tekshiriladi va placed → cancelled (system,
+ * `seller_timeout`). Bekor qilingan buyurtma so'rovdan chiqadi — AYNAN BIR MARTA.
+ */
+async function runWholesaleSellerDecisionSweep(deps, { limit = SELLER_DECISION_SWEEP_LIMIT } = {}) {
+  const { db, now: nowFn } = deps;
+  const started = Date.now();
+  const now = nowFn ? nowFn() : new Date();
+  const out = { checked: 0, cancelled: 0, skipped: 0, failed: 0 };
+  const snap = await db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED)
+    .where('sellerDecision', '==', WO.SELLER_DECISION.PENDING)
+    .where('acceptDeadlineAt', '<=', now)
+    .limit(limit)
+    .get();
+  for (const d of snap.docs) {
+    out.checked += 1;
+    try {
+      const r = await db.runTransaction(async (tx) => {
+        const s = await tx.get(d.ref);
+        if (!s.exists) return { skipped: true };
+        const o = s.data() || {};
+        const deadline = msOf(o.acceptDeadlineAt);
+        if (o.status !== WO.STATUS.PLACED || o.sellerDecision !== WO.SELLER_DECISION.PENDING
+          || deadline == null || deadline > now.getTime()) {
+          return { skipped: true };
+        }
+        const write = await prepareCancelInTx(tx, db, d.ref, o, {
+          actor: WO.ACTOR.SYSTEM,
+          actorId: null,
+          reason: WO.CANCEL_REASON.SELLER_TIMEOUT,
+          event: 'seller_timeout',
+          historyMeta: { acceptDeadlineAt: o.acceptDeadlineAt || null },
+          extraPatch: {
+            cancelReason: WO.CANCEL_REASON.SELLER_TIMEOUT,
+            sellerDecision: WO.SELLER_DECISION.TIMEOUT,
+            sellerDecisionAt: now,
+          },
+        });
+        write(now);
+        return { skipped: false };
+      });
+      if (r.skipped) out.skipped += 1;
+      else out.cancelled += 1;
+    } catch (e) {
+      out.failed += 1;
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'sellerDecisionSweep', result: 'failed', orderId: d.id,
+        errorCode: 'SELLER_DECISION_SWEEP_FAILED', message: String((e && e.message) || e).slice(0, 200),
+      }));
+    }
+  }
+  log('sellerDecisionSweep', { result: 'ok', ...out, durationMs: Date.now() - started });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3-BOSQICH: relay jo'natmasi (sotuvchi qabulidan keyin; eski buyurtmada — avtomatik)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Ega, 2026-11-13: yangi buyurtmada jo'natma FAQAT `sellerDecision == accepted` dan keyin
+// (`WO.shipmentAllowed`; chaqiruvchilar: onUpdate triggeri, reconcile). Belgisiz ESKI buyurtma —
+// avvalgidek: `placed` → `createShipmentInternal` (egasi/jo'natuvchi = sotuvchi, LEG-1 olish
 // kontakti = sotuvchi; qabul qiluvchi = xaridor, `recipientId`), narx — kvotada
 // MUHRLANGAN (`order.delivery`, qayta hisoblanmaydi). Keyin tranzaksiyada
 // `order.shipment = {shipmentId, orderId, trackingNumber, createdAt}`; HOLAT
@@ -583,6 +866,10 @@ async function ensureWholesaleShipment(deps, orderId) {
   const o0 = snap.data() || {};
   if (o0.shipment && o0.shipment.shipmentId) return { skipped: 'already_linked', shipmentId: o0.shipment.shipmentId };
   if (o0.status !== WO.STATUS.PLACED) return { skipped: `status_${o0.status || 'none'}` };
+  // Sotuvchi qabuli (ega, 2026-11-13): yangi buyurtmada jo'natma FAQAT qabuldan keyin.
+  // Maydon yo'q (eski buyurtma) — avvalgidek. Qabul qaytarib olinmaydi, shuning uchun
+  // tranzaksiya ichida qayta tekshirish shart emas (holat o'zgarsa — pastda bekor).
+  if (!WO.shipmentAllowed(o0)) return { skipped: `seller_decision_${o0.sellerDecision}` };
   try {
     const name = await buyerDisplayName(db, o0);
     const r = await createShipmentInternal(deps, shipmentInputFromOrder(orderId, o0, name));
@@ -642,18 +929,31 @@ async function ensureWholesaleShipment(deps, orderId) {
   }
 }
 
-/** Trigger: `wholesale_orders/{id}` onCreate. 3b: karta buyurtmasi — sotuvchiga xabar. */
+/**
+ * Trigger: `wholesale_orders/{id}` onCreate.
+ * Ega qarori (2026-11-13): jo'natma DARHOL OCHILMAYDI — qaror belgisi (`pending` + muddat)
+ * yoziladi va sotuvchiga «qabul qiling» xabari (`ws_seller_decide`) boradi. Karta buyurtmasi
+ * haqidagi `ws_card_new_order` — qabuldan keyin (`wholesale_events.transitionNotifications`).
+ * Yangi yaratilgan har buyurtma — yangi qoida bo'yicha (eski yo'l faqat belgisiz eski hujjatlar uchun).
+ */
 async function onWholesaleOrderCreated(deps, data, orderId) {
   if ((data || {}).status !== WO.STATUS.PLACED) return { skipped: 'not_placed' };
-  const r = await ensureWholesaleShipment(deps, orderId);
-  try {
-    await notifyNewCardOrder(deps, data, orderId);
-  } catch (e) {
-    console.error(JSON.stringify({
-      module: 'wholesale_orders', action: 'notifyNewCardOrder', result: 'failed', orderId, errorCode: 'NOTIFY_FAILED',
-    }));
+  // Belgi yiqilsa — xato yuqoriga (index.js log). Jo'natma OCHILMAYDI; reconcile belgisiz
+  // buyurtmani ESKI deb hisoblaydi (hujjatlashtirilgan xavf — hisobotda).
+  const m = await markSellerDecisionPending(deps, orderId);
+  if (m.marked) {
+    try {
+      await notifySellerDecide(deps, { ...data, acceptDeadlineAt: m.acceptDeadlineAt }, orderId);
+    } catch (e) {
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'notifySellerDecide', result: 'failed', orderId, errorCode: 'NOTIFY_FAILED',
+      }));
+    }
+    log('markSellerDecision', { result: 'ok', orderId, acceptDeadlineMs: m.acceptDeadlineAt.getTime() });
+    return { marked: true, acceptDeadlineAt: m.acceptDeadlineAt };
   }
-  return r;
+  // Takror trigger (belgi bor), holat o'zgargan yoki hujjat yo'q — hech narsa qilinmaydi.
+  return { skipped: m.skipped };
 }
 
 /**
@@ -664,18 +964,29 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
   const { db, now: nowFn } = deps;
   const nowMs = (nowFn ? nowFn() : new Date()).getTime();
   const out = {
-    checked: 0, linked: 0, failed: 0, final: 0, young: 0,
+    checked: 0, linked: 0, failed: 0, final: 0, young: 0, awaitingSeller: 0,
   };
-  const snap = await db.collection(ORDERS)
+  // Sotuvchi qabuli (ega, 2026-11-13): A) qabul qilingan, jo'natmasi yo'q (faqat tenglik
+  // filtrlari — kompozit indeks kerak emas); B) belgisiz ESKI buyurtmalar (avvalgi so'rov) —
+  // qaror kutayotgan (`pending`) va boshqa belgililar o'tkaziladi (darvoza `shipmentAllowed`).
+  const accepted = await db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null)
+    .where('sellerDecision', '==', WO.SELLER_DECISION.ACCEPTED).limit(limit).get();
+  const legacy = await db.collection(ORDERS)
     .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null).limit(limit).get();
-  for (const d of snap.docs) {
+  const seen = new Set();
+  for (const d of [...accepted.docs, ...legacy.docs]) {
+    if (seen.has(d.id)) continue;
+    seen.add(d.id);
     const o = d.data() || {};
+    if (!WO.shipmentAllowed(o)) { out.awaitingSeller += 1; continue; }
     const err = o.shipmentError || null;
     if (err && (err.final === true || (isInt(err.attempts) && err.attempts >= SHIPMENT_MAX_ATTEMPTS))) {
       out.final += 1;
       continue;
     }
-    const at = msOf(o.createdAt) || 0;
+    // Qabul qilingan buyurtmada yosh — qabul paytidan (onUpdate triggeri hali ishlayotgan bo'lishi mumkin).
+    const at = Math.max(msOf(o.createdAt) || 0, msOf(o.acceptedAt) || 0);
     if (nowMs - at < minAgeMs) { out.young += 1; continue; } // trigger hali ishlayotgan bo'lishi mumkin
     out.checked += 1;
     const r = await ensureWholesaleShipment(deps, d.id);
@@ -829,6 +1140,11 @@ module.exports = {
   requireOrdersGate,
   makeQuoteWholesaleOrder,
   makeCancelWholesaleOrder,
+  makeAcceptWholesaleOrder,
+  makeRejectWholesaleOrder,
+  markSellerDecisionPending,
+  runWholesaleSellerDecisionSweep,
+  SELLER_DECISION_SWEEP_LIMIT,
   makeSetWholesaleOrderSettings,
   SHIPMENT_MAX_ATTEMPTS,
   SHIPMENT_RECONCILE_MIN_AGE_MS,

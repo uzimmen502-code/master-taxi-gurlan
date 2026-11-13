@@ -29,6 +29,33 @@ const ADMIN_LIMIT = 20;
 
 /** Kalit → til → { title, body }; `{name}` o'rinbosarlari `render`da. */
 const MESSAGES = {
+  // ── Сотувчи қабули (ega, 2026-11-13). {deadline} — Тошкент вақтида «кк.ОО СС:дд» (2 иш куни).
+  // Сабаб матни (сотувчи ёзган) хабарга ҚЎЙИЛМАЙДИ — эркин матнда шахсий маълумот бўлиши мумкин (40-банд).
+  ws_seller_decide: {
+    uz_Cyrl: { title: 'Янги буюртма — қабул қилинг', body: '{product} × {qty}, {amount} сўм. Буюртмани {deadline} гача қабул қилинг ёки рад этинг. Жавоб бўлмаса, буюртма бекор бўлади.' },
+    uz_Latn: { title: 'Yangi buyurtma — qabul qiling', body: '{product} × {qty}, {amount} so\'m. Buyurtmani {deadline} gacha qabul qiling yoki rad eting. Javob bo\'lmasa, buyurtma bekor bo\'ladi.' },
+    ru: { title: 'Новый заказ — примите его', body: '{product} × {qty}, {amount} сум. Примите или отклоните заказ до {deadline}. Без ответа заказ будет отменён.' },
+  },
+  ws_seller_accepted_buyer: {
+    uz_Cyrl: { title: 'Сотувчи буюртмани қабул қилди', body: '{product} × {qty}. Етказиш тайёрланмоқда — ҳолатини буюртма саҳифасида кузатинг.' },
+    uz_Latn: { title: 'Sotuvchi buyurtmani qabul qildi', body: '{product} × {qty}. Yetkazish tayyorlanmoqda — holatini buyurtma sahifasida kuzating.' },
+    ru: { title: 'Продавец принял заказ', body: '{product} × {qty}. Доставка готовится — следите за статусом на странице заказа.' },
+  },
+  ws_seller_rejected_buyer: {
+    uz_Cyrl: { title: 'Сотувчи буюртмани рад этди', body: '{product} × {qty}. Буюртма бекор қилинди. Ҳамёндан тўлаган бўлсангиз, пул ҳамёнингизга қайтарилади.' },
+    uz_Latn: { title: 'Sotuvchi buyurtmani rad etdi', body: '{product} × {qty}. Buyurtma bekor qilindi. Hamyondan to\'lagan bo\'lsangiz, pul hamyoningizga qaytariladi.' },
+    ru: { title: 'Продавец отклонил заказ', body: '{product} × {qty}. Заказ отменён. Если вы оплатили из кошелька, деньги вернутся в кошелёк.' },
+  },
+  ws_seller_timeout_buyer: {
+    uz_Cyrl: { title: 'Буюртма бекор бўлди', body: '{product} × {qty}. Сотувчи белгиланган муддатда жавоб бермади. Ҳамёндан тўлаган бўлсангиз, пул ҳамёнингизга қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma bekor bo\'ldi', body: '{product} × {qty}. Sotuvchi belgilangan muddatda javob bermadi. Hamyondan to\'lagan bo\'lsangiz, pul hamyoningizga qaytariladi.' },
+    ru: { title: 'Заказ отменён', body: '{product} × {qty}. Продавец не ответил в установленный срок. Если вы оплатили из кошелька, деньги вернутся в кошелёк.' },
+  },
+  ws_seller_timeout_seller: {
+    uz_Cyrl: { title: 'Буюртма муддати ўтди — бекор қилинди', body: '{product} × {qty}. Буюртма {deadline} гача қабул қилинмагани учун бекор бўлди.' },
+    uz_Latn: { title: 'Buyurtma muddati o\'tdi — bekor qilindi', body: '{product} × {qty}. Buyurtma {deadline} gacha qabul qilinmagani uchun bekor bo\'ldi.' },
+    ru: { title: 'Срок истёк — заказ отменён', body: '{product} × {qty}. Заказ отменён, так как не был принят до {deadline}.' },
+  },
   ws_card_new_order: {
     uz_Cyrl: { title: 'Янги буюртма — тўлов картангизга', body: '{product} × {qty}. Харидор етказилганда {amount} сўмни картангизга ўтказади. Пул тушгач «Пул тушди» тугмасини босинг.' },
     uz_Latn: { title: 'Yangi buyurtma — to\'lov kartangizga', body: '{product} × {qty}. Xaridor yetkazilganda {amount} so\'mni kartangizga o\'tkazadi. Pul tushgach «Pul tushdi» tugmasini bosing.' },

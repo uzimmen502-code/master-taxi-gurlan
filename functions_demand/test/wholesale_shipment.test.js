@@ -11,7 +11,8 @@
  *   - getWholesaleDeliveryCode: faqat xaridor, relay hosilasi bilan bir xil kod; sotuvchi/begona — rad
  *   - relay getShipmentSecrets / cancelLogisticsOrder O'ZGARMAGAN (jonli): sotuvchi topshirish kodini oladi;
  *     guard'larsiz xavflar qulflangan (tuzatish — feat/ulg-relay-guards, deploy qilinmaguncha darvoza YOPIQ)
- *   - onCreate trigger order.shipment yozadi, holat o'zgarmaydi; xato yo'li + reconcile (2 daqiqa, 5 urinish → final)
+ *   - ensureWholesaleShipment (eski belgisiz buyurtma / qabul qilingan) order.shipment yozadi, holat o'zgarmaydi;
+ *     xato yo'li + reconcile (2 daqiqa, 5 urinish → final). Sotuvchi qabuli darvozasi — wholesale_accept.test.js
  *   - xaridor bekor qilsa — to'lanmagan jo'natma va LEG ham bekor
  *   - logistika jo'natuvchi darvozasi to'smaydi; LEG ochilishi logistics_all ga bo'ysunadi
  *   - to'liq relay oqimi: eskrou (simulyatsiya) → LEG → acceptLeg (olish = sotuvchi) → scan → xaridor kodi bilan delivery
@@ -125,12 +126,12 @@ function quiet() { console.error = () => {}; console.log = () => {}; }
 function loud() { console.error = realError; console.log = realLog; }
 
 // ═══════════════════════════════════════════════════════════════════════
-ok('trigger: jo\'natma + ORDER + sirlar + LEG(draft); order.shipment yoziladi, holat placed qoladi', async () => {
+ok('jo\'natma (eski/qabul qilingan buyurtma): jo\'natma + ORDER + sirlar + LEG(draft); order.shipment yoziladi, holat placed qoladi', async () => {
   const db = makeDb(seedW());
   await placeOrder(db);
   quiet();
   let r;
-  try { r = await W.onWholesaleOrderCreated(deps(db), orderOf(db), ORDER_ID); } finally { loud(); }
+  try { r = await W.ensureWholesaleShipment(deps(db), ORDER_ID); } finally { loud(); }
   assert.strictEqual(r.linked, true);
   const o = orderOf(db);
   assert.strictEqual(o.status, 'placed', 'holat o\'zgarmaydi (in_delivery — eskrou tushganda)');
@@ -225,7 +226,7 @@ ok('muhrlangan tarif versiyasi yo\'q → shipmentError (tariff_version_missing),
   db.docs.delete('module_tariffs/logistics_v7');
   quiet();
   let r;
-  try { r = await W.onWholesaleOrderCreated(deps(db), orderOf(db), ORDER_ID); } finally { loud(); }
+  try { r = await W.ensureWholesaleShipment(deps(db), ORDER_ID); } finally { loud(); }
   assert.strictEqual(r.failed, true);
   assert.strictEqual(r.code, 'tariff_version_missing');
   const o = orderOf(db);
@@ -257,7 +258,7 @@ ok('reconcile: 2 daqiqadan yosh — kutadi; urinishlar 5 ta → final, keyin teg
   db.docs.delete('module_tariffs/logistics_v7');
   quiet();
   try {
-    await W.onWholesaleOrderCreated(deps(db), orderOf(db), ORDER_ID); // attempts 1
+    await W.ensureWholesaleShipment(deps(db), ORDER_ID); // attempts 1 (eski onCreate yo'li)
     const r0 = await W.reconcileWholesaleShipments({ db, now: at(60 * 1000) });
     assert.deepStrictEqual([r0.checked, r0.young], [0, 2], 'trigger hali ishlayotgan bo\'lishi mumkin');
     for (let i = 0; i < 4; i += 1) await W.reconcileWholesaleShipments({ db, now: at(3 * 60 * 1000 + i) });

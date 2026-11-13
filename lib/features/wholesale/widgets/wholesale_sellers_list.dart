@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_product.dart';
@@ -88,8 +89,15 @@ class _WholesaleSellersListState extends State<WholesaleSellersList> {
 
   bool get _china => widget.market == WholesaleProduct.marketChina;
 
+  /// Вилоят/туман номлари [GeoNames] да фонда юкланади — келганда рўйхат қайта
+  /// чизилсин (аввал тингланмас эди: ном кешга тушса ҳам экранда чиқмасди).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: GeoNames.revision,
+        builder: (context, _, __) => _list(context),
+      );
+
+  Widget _list(BuildContext context) {
     final stores = filterStores(
       buildStoreSummaries(widget.products, _sellers, market: widget.market),
       widget.query,

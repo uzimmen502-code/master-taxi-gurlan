@@ -1,5 +1,7 @@
 // Улгуржи «сотувчи магазини» (эга, 2026-11-13, 1–2-босқич).
+import 'package:ava_gurlan/core/geo/geo_names.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
+import 'package:ava_gurlan/models/geo_area.dart';
 import 'package:ava_gurlan/features/wholesale/models/wholesale_seller.dart';
 import 'package:ava_gurlan/features/wholesale/screens/wholesale_market_screen.dart' show WholesaleChinaTypeChips;
 import 'package:ava_gurlan/features/wholesale/screens/wholesale_seller_products_screen.dart';
@@ -287,6 +289,43 @@ void main() {
       await t.tap(find.byKey(const ValueKey('wholesale-seller-row-998900000001')));
       expect(opened, ['998900000001']);
       expect(calls, 1);
+    });
+
+    testWidgets('туман номи кейин юкланса ҳам рўйхатда чиқади (GeoNames.revision тингланади)', (t) async {
+      GeoNames.reset();
+      addTearDown(GeoNames.reset);
+      final products = [_p('1', seller: '998900000001')];
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: WholesaleSellersList(
+            products: products,
+            market: WholesaleProduct.marketWholesale,
+            query: '',
+            onOpen: (_) {},
+            loader: (ids) async => {
+              '998900000001': WholesaleSeller(
+                phone: '998900000001',
+                companyName: 'Бета',
+                approvalStatus: WholesaleSeller.statusApproved,
+                regionId: 'test_region',
+                districtId: 'test_district',
+              ),
+            },
+          ),
+        ),
+      ));
+      await t.pump();
+      await t.pump();
+      expect(find.textContaining('Тестобод'), findsNothing, reason: 'ном ҳали кешда йўқ');
+
+      // Ном фонда келди (бошқа экран ёки Firestore ўқиши) — рўйхат ўзи янгиланади.
+      GeoNames.remember(
+        regions: const [GeoRegion(id: 'test_region', name: 'Тест вилояти')],
+        districts: const [GeoDistrict(id: 'test_district', regionId: 'test_region', name: 'Тестобод тумани')],
+      );
+      GeoNames.revision.value++;
+      await t.pump();
+      expect(find.textContaining('Тестобод'), findsOneWidget);
     });
 
     testWidgets('Хитой тури чиплари: танлаш ва яна босиб бўшатиш', (t) async {

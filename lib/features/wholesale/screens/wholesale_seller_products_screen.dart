@@ -228,8 +228,14 @@ class WholesaleStoreHeader extends StatelessWidget {
     return [if (typeKey.isNotEmpty) context.tr(typeKey), if (place.isNotEmpty) place].join(' · ');
   }
 
+  /// Ҳудуд номи фонда юкланади ([GeoNames]) — келганда сарлавҳа қайта чизилсин.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: GeoNames.revision,
+        builder: (context, _, __) => _header(context),
+      );
+
+  Widget _header(BuildContext context) {
     final s = seller;
     final name = (s?.companyName.trim().isNotEmpty ?? false) ? s!.companyName.trim() : fallbackName;
     final since = storeSinceLabel(s?.approvedAt ?? s?.createdAt);

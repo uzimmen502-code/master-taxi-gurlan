@@ -3304,7 +3304,11 @@ service cloud.firestore {
                   && d.unitDims.l is int && d.unitDims.l >= 1 && d.unitDims.l <= 1000
                   && d.unitDims.w is int && d.unitDims.w >= 1 && d.unitDims.w <= 1000
                   && d.unitDims.h is int && d.unitDims.h >= 1 && d.unitDims.h <= 1000))
-          && (!('packs' in d) || (d.packs is list && d.packs.size() <= 5));
+          && (!('packs' in d) || (d.packs is list && d.packs.size() <= 5))
+          // Минимал буюртма (эга, 2026-11-13): сотувчи ихтиёрий ёзади, 1..1 000 000.
+          // Қадоқли маҳсулотда — қадоқ ичида (packs[].minOrderQty), бу ерда эмас.
+          && (!('minOrderQty' in d)
+              || (d.minOrderQty is int && d.minOrderQty >= 1 && d.minOrderQty <= 1000000));
     }
 
     // Яратиш — фақат тасдиқланган сотувчи; ҳолат `pending`, ёки
@@ -3354,7 +3358,7 @@ service cloud.firestore {
                 'createdAt', 'updatedAt', 'publishedAt', 'moderatedAt',
                 'moderatedBy',
                 'market', 'currency', 'deliveryDays',
-                'unitWeightG', 'unitDims', 'packs'
+                'unitWeightG', 'unitDims', 'packs', 'minOrderQty'
               ]);
     }
 
@@ -3369,7 +3373,8 @@ service cloud.firestore {
           && changed.hasOnly([
                 'title', 'titleLower', 'searchTokens', 'description',
                 'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt',
-                'currency', 'deliveryDays', 'unitWeightG', 'unitDims', 'packs'
+                'currency', 'deliveryDays', 'unitWeightG', 'unitDims', 'packs',
+                'minOrderQty'
               ])
           && wholesaleProductShippingOk()
           && request.resource.data.priceTiers is list

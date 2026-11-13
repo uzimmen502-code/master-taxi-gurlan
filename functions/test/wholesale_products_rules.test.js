@@ -302,6 +302,28 @@ async function main() {
     await assertFails(col(seller).doc(EXISTING).update({ imageUrls: imgs(8), status: 'pending', updatedAt: serverTimestamp() }));
   });
 
+  // ── G. Минимал буюртма (эга, 2026-11-13): ихтиёрий, бутун 1..1 000 000 ──────
+  await seed();
+  await check('G1 yaratish: minOrderQty 25 / chegaralar 1 va 1000000 — o\'tadi', async () => {
+    await assertSucceeds(col(seller).add(appCreatePayload({ minOrderQty: 25 })));
+    await assertSucceeds(col(seller).add(appCreatePayload({ minOrderQty: 1 })));
+    await assertSucceeds(col(seller).add(appCreatePayload({ minOrderQty: 1000000 })));
+  });
+  await check('G2 yaratish: 0 / -1 / 1000001 / satr / kasr — rad', async () => {
+    await assertFails(col(seller).add(appCreatePayload({ minOrderQty: 0 })));
+    await assertFails(col(seller).add(appCreatePayload({ minOrderQty: -1 })));
+    await assertFails(col(seller).add(appCreatePayload({ minOrderQty: 1000001 })));
+    await assertFails(col(seller).add(appCreatePayload({ minOrderQty: '25' })));
+    await assertFails(col(seller).add(appCreatePayload({ minOrderQty: 2.5 })));
+  });
+  await check('G3 egasi tahrirda qo\'yadi / o\'zgartiradi / o\'chiradi — o\'tadi; 0 — rad; begona — rad', async () => {
+    await assertSucceeds(col(seller).doc(EXISTING).update({ minOrderQty: 10, status: 'pending', updatedAt: serverTimestamp() }));
+    await assertSucceeds(col(seller).doc(EXISTING).update({ minOrderQty: 40, status: 'pending', updatedAt: serverTimestamp() }));
+    await assertFails(col(seller).doc(EXISTING).update({ minOrderQty: 0, status: 'pending', updatedAt: serverTimestamp() }));
+    await assertSucceeds(col(seller).doc(EXISTING).update({ minOrderQty: deleteField(), status: 'pending', updatedAt: serverTimestamp() }));
+    await assertFails(col(other).doc(EXISTING).update({ minOrderQty: 5 }));
+  });
+
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
   await testEnv.cleanup();

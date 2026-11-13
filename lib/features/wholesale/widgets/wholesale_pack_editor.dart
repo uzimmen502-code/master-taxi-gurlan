@@ -32,6 +32,7 @@ class WholesalePackDraft {
       d.dimH.text = '${p.unitDims!.h}';
     }
     if (stock != null) d.stock.text = '$stock';
+    if (p.minOrderQty != null) d.minQty.text = '${p.minOrderQty}';
     return d;
   }
 
@@ -43,6 +44,10 @@ class WholesalePackDraft {
   final dimW = TextEditingController();
   final dimH = TextEditingController();
   final stock = TextEditingController();
+
+  /// Минимал буюртма (эга, 2026-11-13): ихтиёрий, бўш — нарх поғонасидан.
+  final minQty = TextEditingController();
+  String? minQtyErrKey;
 
   /// Мавжуд расм URL'и; [newPhoto] танланса ёки [removePhoto] — алмашади.
   String existingPhotoUrl;
@@ -66,6 +71,15 @@ class WholesalePackDraft {
     dimW.dispose();
     dimH.dispose();
     stock.dispose();
+    minQty.dispose();
+  }
+
+  /// Минимал буюртма: бўш — `null` (хато эмас); сон 1..[kWholesaleMaxOrderQty].
+  ({int? qty, String? error}) collectMinQty() {
+    final raw = minQty.text.trim();
+    if (raw.isEmpty) return (qty: null, error: null);
+    final n = validMinOrderQty(int.tryParse(raw));
+    return n == null ? (qty: null, error: 'wholesale_err_min_qty_invalid') : (qty: n, error: null);
   }
 
   /// Тўлдирилган поғоналар (бўш ёки нотўғри майдон ўтказиб юборилади).
@@ -237,6 +251,22 @@ class WholesalePackCard extends StatelessWidget {
               ),
             if (draft.tiersErr) const WholesaleFieldError(textKey: 'wholesale_err_tier_required'),
             const SizedBox(height: 4),
+            TextField(
+              key: ValueKey('wholesale-pack-minqty-${draft.id}'),
+              controller: draft.minQty,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(7)],
+              onChanged: (_) {
+                if (draft.minQtyErrKey != null) draft.minQtyErrKey = null;
+                onChanged();
+              },
+              decoration: _deco(
+                context.tr('wholesale_min_qty_field').replaceAll('{unit}', unitLabel),
+                hint: context.tr('wholesale_min_qty_hint'),
+              ),
+            ),
+            if (draft.minQtyErrKey != null) WholesaleFieldError(textKey: draft.minQtyErrKey!),
+            const SizedBox(height: 8),
             TextField(
               key: ValueKey('wholesale-pack-weight-${draft.id}'),
               controller: draft.weight,

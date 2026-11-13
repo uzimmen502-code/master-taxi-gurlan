@@ -55,7 +55,12 @@ class WholesaleProduct implements AdSearchable {
     this.unitDims,
     this.districtId = '',
     this.packs = const [],
+    this.minOrderQty,
   });
+
+  /// Сотувчи ёзган минимал буюртма (эга, 2026-11-13) — фақат қадоқсиз
+  /// маҳсулотда (қадоқлида ҳар қадоқнинг ўзида, [WholesalePack.minOrderQty]).
+  final int? minOrderQty;
 
   /// Товар (сотувчи жўнатиш манзили) ҳудуди — ФАҚАТ сервер ёзади
   /// (`functions/wholesale_geo.js`, D-GEO-14), клиент ёзмайди ва эски
@@ -83,6 +88,7 @@ class WholesaleProduct implements AdSearchable {
             priceTiers: priceTiers,
             unitWeightG: unitWeightG,
             unitDims: unitDims,
+            minOrderQty: minOrderQty,
           ),
         ];
 
@@ -207,8 +213,8 @@ class WholesaleProduct implements AdSearchable {
   bool get isActive => status == statusActive;
   bool get isInactive => status == statusInactive;
 
-  /// Минимал буюртма сони — энг паст поғона.
-  int get moq => priceTiers.isEmpty ? 1 : priceTiers.first.minQty;
+  /// Минимал буюртма сони — сотувчи ёзгани ёки энг паст поғона, каттаси.
+  int get moq => effectiveMoq(priceTiers, hasPacks ? null : minOrderQty);
 
   /// Бошланғич нарх ("дан ... сўм") — энг паст поғона нархи.
   int get basePrice => priceTiers.isEmpty ? 0 : priceTiers.first.price;
@@ -274,7 +280,20 @@ class WholesaleProduct implements AdSearchable {
           ? (d['districtId'] as String).trim()
           : '',
       packs: WholesalePack.parseList(d['packs']),
+      minOrderQty: validMinOrderQty(d['minOrderQty']),
     );
+  }
+
+  /// Маҳсулот даражасидаги минимал буюртма — фақат қадоқсиз маҳсулотда;
+  /// таҳрирда олиб ташланса ёки қадоқ пайдо бўлса — ўчирилади.
+  Map<String, dynamic> _minOrderField({required bool forUpdate}) {
+    final v = hasPacks ? null : validMinOrderQty(minOrderQty);
+    return {
+      if (v != null)
+        'minOrderQty': v
+      else if (forUpdate)
+        'minOrderQty': FieldValue.delete(),
+    };
   }
 
   /// Қадоқли маҳсулотда маҳсулот даражасидаги нарх/вазн — энг арзон
@@ -330,6 +349,7 @@ class WholesaleProduct implements AdSearchable {
       if (currency.trim().isNotEmpty) 'currency': currency.trim(),
       if (deliveryDays != null) 'deliveryDays': deliveryDays,
       ..._shippingFields(forUpdate: false),
+      ..._minOrderField(forUpdate: false),
       if (hasPacks) ..._packsField,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -360,6 +380,7 @@ class WholesaleProduct implements AdSearchable {
       if (isChina) 'currency': currency.trim(),
       if (isChina) 'deliveryDays': deliveryDays ?? FieldValue.delete(),
       ..._shippingFields(forUpdate: true),
+      ..._minOrderField(forUpdate: true),
       // Қадоқлар олиб ташланса — майдон ҳам ўчади (эски маҳсулот кўриниши).
       if (hasPacks) ..._packsField else 'packs': FieldValue.delete(),
     };

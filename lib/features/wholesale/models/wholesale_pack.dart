@@ -1,6 +1,25 @@
 import 'shipping_dims.dart';
 import '../../../models/price_tier.dart';
 
+/// Сотувчи ёзадиган минимал буюртманинг юқори чегараси (rules ва сервер
+/// `MAX_QTY` билан бир хил).
+const int kWholesaleMaxOrderQty = 1000000;
+
+/// Минимал буюртма (эга, 2026-11-13): сотувчи ёзган сон ва энг паст нарх поғонаси —
+/// қайси бири КАТТА. Ёзилмаган/нотўғри сон — фақат поғона (олдинги хулқ).
+/// Паритет: functions_demand/api/wholesale_orders.js `effectiveMoq`.
+int effectiveMoq(List<PriceTier> tiers, int? minOrderQty) {
+  final tierMin = tiers.isEmpty ? 1 : tiers.first.minQty;
+  final own = validMinOrderQty(minOrderQty) ?? 0;
+  return own > tierMin ? own : tierMin;
+}
+
+/// Сақланадиган минимал буюртма: 1..[kWholesaleMaxOrderQty], акс ҳолда `null`.
+int? validMinOrderQty(Object? v) {
+  final n = v is num && v == v.roundToDouble() ? v.toInt() : null;
+  return n != null && n >= 1 && n <= kWholesaleMaxOrderQty ? n : null;
+}
+
 /// Битта маҳсулотнинг қадоғи (эга, 2026-10-31): «1 кг пакет», «5 кг қоп»,
 /// «25 кг қоп» — ҳар бирининг ЎЗ нарх поғоналари, вазни ва ихтиёрий расми.
 ///
@@ -18,7 +37,11 @@ class WholesalePack {
     this.unitWeightG,
     this.unitDims,
     this.photoUrl = '',
+    this.minOrderQty,
   });
+
+  /// Сотувчи ёзган минимал буюртма (ихтиёрий). Ҳақиқийси — [moq].
+  final int? minOrderQty;
 
   static const maxPacks = 5;
   static const maxLabelLength = 40;
@@ -41,8 +64,8 @@ class WholesalePack {
   bool get hasPhoto => photoUrl.trim().isNotEmpty;
   bool get hasShippingData => (unitWeightG ?? 0) > 0;
 
-  /// Минимал буюртма — энг паст поғона.
-  int get moq => priceTiers.isEmpty ? 1 : priceTiers.first.minQty;
+  /// Минимал буюртма — сотувчи ёзган сон ёки энг паст поғона, каттаси.
+  int get moq => effectiveMoq(priceTiers, minOrderQty);
 
   /// Бошланғич нарх («дан ...») — энг паст поғона нархи.
   int get basePrice => priceTiers.isEmpty ? 0 : priceTiers.first.price;
@@ -77,6 +100,7 @@ class WholesalePack {
       unitWeightG: weight,
       unitDims: ShippingDims.fromMap(m['unitDims']),
       photoUrl: (m['photoUrl'] as String?)?.trim() ?? '',
+      minOrderQty: validMinOrderQty(m['minOrderQty']),
     );
   }
 
@@ -101,6 +125,7 @@ class WholesalePack {
         if (unitWeightG != null && unitWeightG! > 0) 'unitWeightG': unitWeightG,
         if (unitDims != null) 'unitDims': unitDims!.toMap(),
         if (hasPhoto) 'photoUrl': photoUrl.trim(),
+        if (validMinOrderQty(minOrderQty) != null) 'minOrderQty': minOrderQty,
       };
 
   WholesalePack copyWith({
@@ -109,6 +134,7 @@ class WholesalePack {
     int? unitWeightG,
     ShippingDims? unitDims,
     String? photoUrl,
+    int? minOrderQty,
   }) =>
       WholesalePack(
         id: id,
@@ -117,6 +143,7 @@ class WholesalePack {
         unitWeightG: unitWeightG ?? this.unitWeightG,
         unitDims: unitDims ?? this.unitDims,
         photoUrl: photoUrl ?? this.photoUrl,
+        minOrderQty: minOrderQty ?? this.minOrderQty,
       );
 }
 

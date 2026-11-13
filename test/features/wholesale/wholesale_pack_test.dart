@@ -1,4 +1,5 @@
 import 'package:ava_gurlan/features/wholesale/models/wholesale_product.dart';
+import 'package:ava_gurlan/features/wholesale/widgets/wholesale_pack_editor.dart' show WholesalePackDraft;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,6 +90,104 @@ void main() {
     test('update: қадоқлар олиб ташланса — packs ўчирилади', () {
       final m = _product().toFirestoreOwnerUpdate();
       expect(m['packs'], isA<FieldValue>());
+    });
+  });
+
+  group('минимал буюртма (эга, 2026-11-13)', () {
+    test('effectiveMoq: сотувчи сони катта бўлса — у; кичик/нотўғри/йўқ — поғона', () {
+      const t1 = [PriceTier(minQty: 1, price: 100)];
+      const t10 = [PriceTier(minQty: 10, price: 100)];
+      expect(effectiveMoq(t1, 25), 25);
+      expect(effectiveMoq(t10, 5), 10, reason: 'поғона катта');
+      expect(effectiveMoq(t1, null), 1);
+      expect(effectiveMoq(const [], null), 1);
+      for (final bad in [0, -3, kWholesaleMaxOrderQty + 1]) {
+        expect(effectiveMoq(t1, bad), 1, reason: 'нотўғри: $bad');
+      }
+      expect(effectiveMoq(t1, kWholesaleMaxOrderQty), kWholesaleMaxOrderQty, reason: 'чегара');
+    });
+
+    test('validMinOrderQty: бутун 1..1 000 000; каср/сатр/0 — null', () {
+      expect(validMinOrderQty(25), 25);
+      expect(validMinOrderQty(25.0), 25);
+      expect(validMinOrderQty(2.5), isNull);
+      expect(validMinOrderQty('25'), isNull);
+      expect(validMinOrderQty(0), isNull);
+      expect(validMinOrderQty(null), isNull);
+    });
+
+    test('қадоқ: ўқилади, moq га таъсир қилади, ёзилади; нотўғри қиймат ташланади', () {
+      final p = _product(packs: [
+        {..._pack('p1', '1 кг', [[1, 15000]]), 'minOrderQty': 25},
+        {..._pack('p2', '25 кг', [[1, 320000]]), 'minOrderQty': 0},
+      ]);
+      expect(p.packById('p1').minOrderQty, 25);
+      expect(p.packById('p1').moq, 25);
+      expect(p.packById('p2').minOrderQty, isNull);
+      expect(p.packById('p2').moq, 1);
+      final packs = p.toFirestoreCreate()['packs'] as List;
+      expect((packs[0] as Map)['minOrderQty'], 25);
+      expect((packs[1] as Map).containsKey('minOrderQty'), isFalse);
+    });
+
+    test('қадоқсиз маҳсулот: маҳсулот даражасида — ўқилади, default қадоққа ўтади, ёзилади', () {
+      final p = WholesaleProduct.fromMap('x', {
+        'sellerId': '998901111111',
+        'title': 'Ун',
+        'description': 'Олий нав',
+        'priceTiers': [
+          {'minQty': 1, 'price': 9000},
+        ],
+        'minOrderQty': 40,
+      });
+      expect(p.minOrderQty, 40);
+      expect(p.moq, 40);
+      expect(p.effectivePacks.single.moq, 40);
+      expect(p.toFirestoreCreate()['minOrderQty'], 40);
+      expect(p.toFirestoreOwnerUpdate()['minOrderQty'], 40);
+    });
+
+    test('таҳрир: сон олиб ташланса ёки маҳсулот қадоқли бўлса — маҳсулот даражасидагиси ўчирилади', () {
+      expect(_product().toFirestoreOwnerUpdate()['minOrderQty'], isA<FieldValue>());
+      expect(_product().toFirestoreCreate().containsKey('minOrderQty'), isFalse);
+      final packed = WholesaleProduct.fromMap('x', {
+        'sellerId': '998901111111',
+        'title': 'Гуруч',
+        'description': 'Лазер',
+        'priceTiers': [
+          {'minQty': 1, 'price': 15000},
+        ],
+        'minOrderQty': 40,
+        'packs': [_pack('p1', '1 кг', [[1, 15000]])],
+      });
+      expect(packed.moq, 1, reason: 'қадоқли маҳсулотда маҳсулот даражасидаги сон ишламайди');
+      expect(packed.toFirestoreOwnerUpdate()['minOrderQty'], isA<FieldValue>());
+      expect(packed.toFirestoreCreate().containsKey('minOrderQty'), isFalse);
+    });
+  });
+
+  group('форма: минимал буюртма майдони', () {
+    test('бўш — хато эмас; 25 — сақланади; 0 ва 1 000 001 — хато', () {
+      final d = WholesalePackDraft(id: 'p1');
+      addTearDown(d.dispose);
+      expect(d.collectMinQty(), (qty: null, error: null));
+      d.minQty.text = ' 25 ';
+      expect(d.collectMinQty(), (qty: 25, error: null));
+      d.minQty.text = '0';
+      expect(d.collectMinQty().error, 'wholesale_err_min_qty_invalid');
+      d.minQty.text = '1000001';
+      expect(d.collectMinQty().error, 'wholesale_err_min_qty_invalid');
+    });
+
+    test('таҳрир: мавжуд қадоқнинг сони майдонга тушади', () {
+      final d = WholesalePackDraft.fromPack(const WholesalePack(
+        id: 'p1',
+        label: '1 кг',
+        priceTiers: [PriceTier(minQty: 1, price: 100)],
+        minOrderQty: 30,
+      ));
+      addTearDown(d.dispose);
+      expect(d.minQty.text, '30');
     });
   });
 

@@ -215,7 +215,12 @@ class _WholesaleProductFormScreenState
       d.labelErr = !simple && d.label.text.trim().isEmpty;
       d.tiersErr = d.collectTiers().isEmpty;
       d.stockErrKey = d.collectStock().error;
-      if (d.labelErr || d.tiersErr || d.stockErrKey != null || d.collectShipping().error != null) {
+      d.minQtyErrKey = d.collectMinQty().error;
+      if (d.labelErr ||
+          d.tiersErr ||
+          d.stockErrKey != null ||
+          d.minQtyErrKey != null ||
+          d.collectShipping().error != null) {
         ok = false;
       }
     }
@@ -241,6 +246,7 @@ class _WholesaleProductFormScreenState
         unitWeightG: s.weightG,
         unitDims: s.dims,
         photoUrl: photo,
+        minOrderQty: d.collectMinQty().qty,
       ));
     }
     return (packs: out, orphanPhotos: orphans);
@@ -309,6 +315,8 @@ class _WholesaleProductFormScreenState
         unitWeightG: first.unitWeightG,
         unitDims: first.unitDims,
         packs: simple ? const [] : built.packs,
+        // Оддий маҳсулотда минимал буюртма маҳсулотнинг ўзида (қадоқлида — қадоқда).
+        minOrderQty: simple ? first.minOrderQty : null,
       );
       String productId;
       if (_isEdit) {

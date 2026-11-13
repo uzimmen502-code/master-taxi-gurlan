@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
 import '../models/wholesale_product.dart';
 import '../utils/wholesale_labels.dart';
@@ -11,7 +12,11 @@ class WholesaleProductCard extends StatelessWidget {
     required this.product,
     required this.onTap,
     this.onSellerTap,
+    this.cornerBadge,
   });
+
+  /// Тепа ўнгдаги бозор белгиси (Аралаш бозорда «Хитой», эга 2026-11-13).
+  final String? cornerBadge;
 
   final WholesaleProduct product;
   final VoidCallback onTap;
@@ -110,6 +115,8 @@ class WholesaleProductCard extends StatelessWidget {
                             color: Colors.white, size: 16),
                       ),
                     ),
+                  if (cornerBadge != null && cornerBadge!.trim().isNotEmpty)
+                    MarketCornerBadge(text: cornerBadge!),
                 ],
               ),
             ),

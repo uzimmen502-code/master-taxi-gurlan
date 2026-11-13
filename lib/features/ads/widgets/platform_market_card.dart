@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
+import 'market_corner_badge.dart';
 import 'market_grid.dart';
 import '../../platform_store/controllers/platform_store_controller.dart';
 import '../../platform_store/screens/platform_product_detail_screen.dart';
@@ -27,6 +28,8 @@ class PlatformMarketCard extends StatelessWidget {
     required this.product,
     this.catalog = const [],
     this.wholesale = false,
+    this.cornerBadge,
+    this.onTap,
   });
 
   final PlatformProduct product;
@@ -38,6 +41,12 @@ class PlatformMarketCard extends StatelessWidget {
   /// минимал буюртма кўрсатилади (2026-09-29).
   final bool wholesale;
 
+  /// Тепа ўнгдаги бозор белгиси (Аралаш бозорда «Улгуржи», эга 2026-11-13).
+  final String? cornerBadge;
+
+  /// Берилмаса — тафсилот одатдагидек очилади.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -45,7 +54,7 @@ class PlatformMarketCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => openPlatformProductDetail(context, product, catalog),
+        onTap: onTap ?? () => openPlatformProductDetail(context, product, catalog),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -79,6 +88,8 @@ class PlatformMarketCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (cornerBadge != null && cornerBadge!.trim().isNotEmpty)
+                    MarketCornerBadge(text: cornerBadge!),
                 ],
               ),
             ),
@@ -164,18 +175,25 @@ Future<void> openPlatformProductDetail(
   PlatformProduct product, [
   List<PlatformProduct> catalog = const [],
 ]) {
-  return Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => ChangeNotifierProvider<PlatformStoreController>(
-        create: (_) {
-          final c = PlatformStoreController();
-          unawaited(c.init());
-          return c;
-        },
-        child: PlatformProductDetailScreen(
-          product: product,
-          catalog: catalog.isEmpty ? [product] : catalog,
-        ),
+  return Navigator.of(context).push(platformProductDetailRoute(product, catalog));
+}
+
+/// [openPlatformProductDetail] маршрути — навигатор олдиндан олинган ҳолатлар
+/// учун (масалан, Аралашдан Улгуржи бозор устида очиш).
+Route<void> platformProductDetailRoute(
+  PlatformProduct product, [
+  List<PlatformProduct> catalog = const [],
+]) {
+  return MaterialPageRoute<void>(
+    builder: (_) => ChangeNotifierProvider<PlatformStoreController>(
+      create: (_) {
+        final c = PlatformStoreController();
+        unawaited(c.init());
+        return c;
+      },
+      child: PlatformProductDetailScreen(
+        product: product,
+        catalog: catalog.isEmpty ? [product] : catalog,
       ),
     ),
   );

@@ -17,7 +17,15 @@ import '../../../models/platform_product.dart';
 import '../../../models/search_index_entry.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../../repositories/search_index_repository.dart';
+import '../../../core/utils/formatters.dart';
+import '../../home/home_market_nav.dart';
 import '../../my_shop/my_shop_entry.dart';
+import '../../wholesale/models/wholesale_product.dart';
+import '../../wholesale/repositories/wholesale_products_repository.dart';
+import '../../wholesale/screens/wholesale_market_screen.dart';
+import '../../wholesale/screens/wholesale_product_detail_screen.dart';
+import '../../wholesale/widgets/wholesale_product_card.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_shop_item_swipe_screen.dart';
@@ -82,6 +90,13 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   List<TvShopItem> _shopItems = const [];
   bool _platformLoaded = false;
   bool _shopLoaded = false;
+
+  /// Хитой бозори маҳсулотлари ҳам Аралашда (эга, 2026-11-13) — «Хитой» белгиси
+  /// билан; босилса орқага Хитой бозорига. Бир марта юкланади (37-банд).
+  List<WholesaleProduct> _china = const [];
+
+  /// Улгуржи/Хитой бозор экранига узатиш учун (HomeController бу маршрутда йўқ).
+  String _myPhone = '';
 
   /// Қидирувда сервер топган онлайн дўкон маҳсулотлари (`searchTokens`, охирги 80 та билан чекланмайди) ва номи
   /// мос келган дўконлар (`search_index`, тури `shop`) — 2026-10-25, 4-босқич.
@@ -172,6 +187,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     super.initState();
     unawaited(_loadPlatform());
     unawaited(_loadShopItems());
+    unawaited(_loadChina());
+    unawaited(_loadMyPhone());
     unawaited(_loadRegionDistricts());
     if (CatalogSearch.normalize(_streamQuery).isNotEmpty) unawaited(_runShopSearch(_streamQuery));
   }
@@ -208,6 +225,47 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
         _platformLoaded = true;
       });
     }
+  }
+
+  Future<void> _loadChina() async {
+    try {
+      final list = await WholesaleProductsRepository()
+          .getActiveProducts(limit: 80, market: WholesaleProduct.marketChina)
+          .first;
+      if (mounted) setState(() => _china = list);
+    } catch (e) {
+      // Хитой юкланмаса ҳам Аралаш бозор ишлайверсин.
+      debugPrint('[CheapProducts] china $e');
+    }
+  }
+
+  Future<void> _loadMyPhone() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final p = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+      if (mounted) _myPhone = p;
+    } catch (_) {}
+  }
+
+  /// Улгуржи (AVA) маҳсулоти: орқага — Улгуржи бозор, яна орқага — асосий
+  /// экран (эга, 2026-11-13). Аралаш экрани стекдан олинади.
+  void _openWholesaleAva(PlatformProduct p, List<PlatformProduct> catalog) {
+    unawaited(openDetailOverOtherMarket(
+      Navigator.of(context),
+      market: WholesaleMarketScreen(userPhone: _myPhone, market: WholesaleProduct.marketWholesale),
+      detail: platformProductDetailRoute(p, catalog),
+    ));
+  }
+
+  /// Хитой маҳсулоти: орқага — Хитой бозори, яна орқага — асосий экран.
+  void _openChina(WholesaleProduct p, List<WholesaleProduct> catalog) {
+    unawaited(openDetailOverOtherMarket(
+      Navigator.of(context),
+      market: WholesaleMarketScreen(userPhone: _myPhone, market: WholesaleProduct.marketChina),
+      detail: MaterialPageRoute<void>(
+        builder: (_) => WholesaleProductDetailScreen(product: p, catalog: catalog),
+      ),
+    ));
   }
 
   void _logFirestoreError(Object error, [StackTrace? stackTrace]) {
@@ -299,6 +357,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     List<PlatformProduct> platform,
     List<AdModel> ads,
     List<TvShopItem> shop,
+    List<WholesaleProduct> china,
   ) {
     final q = _query;
     if (CatalogSearch.normalize(q).isEmpty) {
@@ -306,6 +365,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
         platform.map(_MarketEntry.platform).toList(growable: false),
         ads.map(_MarketEntry.ad).toList(growable: false),
         shop.map(_MarketEntry.shop).toList(growable: false),
+        china.map(_MarketEntry.china).toList(growable: false),
       ]);
     }
 
@@ -313,12 +373,17 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       ...platform.map(_MarketEntry.platform),
       ...ads.map(_MarketEntry.ad),
       ...shop.map(_MarketEntry.shop),
+      ...china.map(_MarketEntry.china),
     ];
     return FairMix.byScoreThenFair(
       scored,
       (e) {
         if (e.platform != null) {
           return CatalogSearch.scoreProduct(e.platform!, q);
+        }
+        if (e.china != null) {
+          final c = e.china!;
+          return CatalogSearch.score(q, title: c.title, extra: [c.description, c.sellerCompanyName]);
         }
         if (e.shop != null) {
           final i = e.shop!;
@@ -338,6 +403,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       laneKey: (e) {
         if (e.platform != null) return 'platform';
         if (e.shop != null) return 'shop';
+        if (e.china != null) return 'china';
         return 'ad';
       },
     );
@@ -469,7 +535,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 final ads = withPinnedFirst(snap.data ?? const <AdModel>[], pinned, (a) => a.id);
                 final platform = _filteredPlatform();
                 final shop = _filteredShop();
-                final found = platform.length + ads.length + shop.length;
+                final china = WholesaleProductsRepository.filterBySearch(_china, _query, limit: _china.length);
+                final found = platform.length + ads.length + shop.length + china.length;
 
                 // Эълонлар келди, платформа/дўкон ҳали юкланяпти: бирорта ҳам
                 // карта йўқ бўлса «бўш» эмас — юкланиш (аввал учаласи
@@ -478,7 +545,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (platform.isEmpty && ads.isEmpty && shop.isEmpty) {
+                if (platform.isEmpty && ads.isEmpty && shop.isEmpty && china.isEmpty) {
                   return Center(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
@@ -508,7 +575,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                final mixed = _mixedEntries(platform, ads, shop);
+                final mixed = _mixedEntries(platform, ads, shop, china);
                 // Босилган эълон / AVA маҳсулоти — аралаш тўрнинг БИРИНЧИ катагида.
                 final pinnedAva = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedPlatform : null;
                 final entries = pinned != null
@@ -550,9 +617,20 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         itemBuilder: (_, i) {
                           final e = entries[i];
                           if (e.platform != null) {
+                            // Улгуржи маҳсулоти: тепа ўнгда «Улгуржи»; орқага — Улгуржи бозор.
                             return PlatformMarketCard(
                               product: e.platform!,
                               catalog: platform,
+                              cornerBadge: context.tr('wholesale_screen_title'),
+                              onTap: () => _openWholesaleAva(e.platform!, platform),
+                            );
+                          }
+                          if (e.china != null) {
+                            // Хитой маҳсулоти: тепа ўнгда «Хитой»; орқага — Хитой бозори.
+                            return WholesaleProductCard(
+                              product: e.china!,
+                              cornerBadge: context.tr('wholesale_screen_title_china'),
+                              onTap: () => _openChina(e.china!, china),
                             );
                           }
                           if (e.shop != null) {
@@ -637,13 +715,15 @@ class _ShopHitsStrip extends StatelessWidget {
 }
 
 class _MarketEntry {
-  const _MarketEntry._({this.ad, this.platform, this.shop});
+  const _MarketEntry._({this.ad, this.platform, this.shop, this.china});
   factory _MarketEntry.ad(AdModel ad) => _MarketEntry._(ad: ad);
   factory _MarketEntry.platform(PlatformProduct p) =>
       _MarketEntry._(platform: p);
   factory _MarketEntry.shop(TvShopItem item) => _MarketEntry._(shop: item);
+  factory _MarketEntry.china(WholesaleProduct p) => _MarketEntry._(china: p);
 
   final AdModel? ad;
   final PlatformProduct? platform;
   final TvShopItem? shop;
+  final WholesaleProduct? china;
 }

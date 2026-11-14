@@ -78,14 +78,31 @@ const PAYMENT_STATUS = {
   LOSS_PENDING: 'loss_pending',
   /** Yo'qolish puli hisoblandi: eskrou yopildi, G mijozga (qarz bo'lsa — hodisada). */
   LOSS_SETTLED: 'loss_settled',
+  /**
+   * NAQD (S5, ega 2026-11-14): yetkazish haqi eskrouda EMAS — oxirgi LEG kuryeri xaridordan
+   * naqd oladi. LEG'lar shu holatda ochiladi (`escrow_funded` o'rniga). Pul hisobi
+   * (oldingi LEG'lar + AVA ulushi kuryer hamyonidan) — default `functions/relay_cash.js`,
+   * u yakunda `settled` yozadi.
+   */
+  CASH_ON_DELIVERY: 'cash_on_delivery',
+  /**
+   * Ulgurji jo'natmasi zanjiri yig'ilmadi (S7): yetkazish haqini XARIDOR to'lagan
+   * (`escrow:wholesale:{order}` → `escrow:{shipment}`) — mavjud `refund_pending` yo'li
+   * pulni jo'natuvchi (sotuvchi) hamyoniga qaytarishi mumkin (repo lineage), shuning uchun
+   * ALOHIDA holat: hech bir mavjud trigger unga tegmaydi, pulni Ulgurji tomoni
+   * (`escrow:{shipment}` → `escrow:wholesale:{order}`) qaytaradi va `refunded` yozadi.
+   */
+  WHOLESALE_REFUND_PENDING: 'wholesale_refund_pending',
 };
 
 const PAYMENT_ALLOWED = {
-  [PAYMENT_STATUS.PENDING]: [PAYMENT_STATUS.ESCROW_FUNDED, PAYMENT_STATUS.REFUNDED],
+  [PAYMENT_STATUS.PENDING]: [PAYMENT_STATUS.ESCROW_FUNDED, PAYMENT_STATUS.REFUNDED, PAYMENT_STATUS.CASH_ON_DELIVERY],
   [PAYMENT_STATUS.ESCROW_FUNDED]: [
     PAYMENT_STATUS.RELEASE_APPROVED, PAYMENT_STATUS.ESCROW_FROZEN, PAYMENT_STATUS.REFUND_PENDING,
-    PAYMENT_STATUS.LOSS_PENDING,
+    PAYMENT_STATUS.LOSS_PENDING, PAYMENT_STATUS.WHOLESALE_REFUND_PENDING,
   ],
+  [PAYMENT_STATUS.CASH_ON_DELIVERY]: [PAYMENT_STATUS.SETTLED],
+  [PAYMENT_STATUS.WHOLESALE_REFUND_PENDING]: [PAYMENT_STATUS.REFUNDED],
   [PAYMENT_STATUS.ESCROW_FROZEN]: [
     PAYMENT_STATUS.RELEASE_APPROVED, PAYMENT_STATUS.REFUND_PENDING, PAYMENT_STATUS.LOSS_PENDING,
   ],
@@ -418,7 +435,107 @@ function isStageAllowed(config, userId) {
   return list.some((t) => toCanonicalId(String(t || '')) === id);
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ZANJIR («avval butun zanjirni yig', keyin yur», ega qarori 2026-11-07)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `shipments/{id}.chain` (klient shartnomasi):
+ *   { mode, state, deadlineAt, lockedAt, claimed, legCount }
+ * `chain` maydoni YO'Q eski / `sequential` jo'natma — mavjud xatti-harakat.
+ *
+ *   assembling ──(hamma LEG olindi)──> locked
+ *        │ └──(egasi bekor qildi)────> cancelled
+ *        └──(deadlineAt o'tdi)───────> expired  (jo'natma cancelled + refund_pending;
+ *                                               Ulgurji: wholesale_refund_pending; naqd: pul yo'q)
+ */
+const CHAIN_MODE = { SEQUENTIAL: 'sequential', ASSEMBLE_ALL: 'assemble_all' };
+const CHAIN_STATE = {
+  ASSEMBLING: 'assembling', LOCKED: 'locked', EXPIRED: 'expired', CANCELLED: 'cancelled',
+};
+/** Diagnostika kodlari (`details.reason`) — klient shu bo'yicha matn ko'rsatadi. */
+const CHAIN_ERROR = {
+  LOCKED: 'CHAIN_LOCKED', NOT_LOCKED: 'CHAIN_NOT_LOCKED', EXPIRED: 'CHAIN_EXPIRED',
+};
+const CHAIN_ASSEMBLY_HOURS_DEFAULT = 48;
+/** Konfig xatosidan himoya: 1 soatdan 30 kungacha (biznes qoida EMAS — chegara). */
+const CHAIN_ASSEMBLY_HOURS_MAX = 30 * 24;
+
+/** Konfigdagi rejim; noma'lum qiymat — `sequential` (mavjud xatti-harakat). */
+function chainModeOf(config) {
+  const m = (((config || {}).logistics) || {}).chainMode;
+  return m === CHAIN_MODE.ASSEMBLE_ALL ? CHAIN_MODE.ASSEMBLE_ALL : CHAIN_MODE.SEQUENTIAL;
+}
+
+function chainAssemblyHoursOf(config) {
+  const h = Number((((config || {}).logistics) || {}).chainAssemblyHours);
+  if (!Number.isInteger(h) || h < 1 || h > CHAIN_ASSEMBLY_HOURS_MAX) return CHAIN_ASSEMBLY_HOURS_DEFAULT;
+  return h;
+}
+
+/** Jo'natma «avval yig'» rejimidami (hujjatdagi muhrlangan rejim, konfig EMAS). */
+function isAssembleAll(shipment) {
+  const c = (shipment || {}).chain;
+  return !!c && c.mode === CHAIN_MODE.ASSEMBLE_ALL;
+}
+
+/** Yig'ish muddati: fundedAt + soat (to'lov tushgan payt — pul to'langan). */
+function chainDeadlineFrom(fundedAt, hours) {
+  const base = msOf(fundedAt);
+  return new Date(base + hours * 3600 * 1000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// YETKAZISH HAQI TO'LOVI USULI (S5, ega CONFIRMED 2026-11-14)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `shipments/{id}.deliveryPayment` (FAQAT naqd jo'natmada; eskrou jo'natmada maydon YO'Q —
+ * eski hujjatlar va `createLogisticsOrder` shakli o'zgarmagan):
+ *   { method: 'cash', amount, currency: 'UZS', collectorLegId, collectorLegPayout,
+ *     status, collectedBy, collectedAt, refusal? }
+ *
+ *   pending ──(oxirgi kuryer confirmDelivery, cashCollected)──> collected ──(relay_cash)──> settled
+ *      ├──(xaridor rad etdi, naqd to'ladi: haq + qaytish haqi)──> refusal_collected ──> settled
+ *      └──(xaridor rad etdi, to'lamadi)──────────────────────────> refusal_unpaid ──> settled (AVA qoplaydi, xaridor qarzi)
+ */
+const DELIVERY_PAYMENT_METHOD = { ESCROW: 'escrow', CASH: 'cash' };
+const CASH_STATUS = {
+  PENDING: 'pending',
+  COLLECTED: 'collected',
+  REFUSAL_COLLECTED: 'refusal_collected',
+  REFUSAL_UNPAID: 'refusal_unpaid',
+  SETTLED: 'settled',
+};
+
+function isCashShipment(shipment) {
+  const p = (shipment || {}).deliveryPayment;
+  return !!p && p.method === DELIVERY_PAYMENT_METHOD.CASH;
+}
+
+/**
+ * Custody (LEG ochish/olish/topshirish) uchun «to'langan» hisoblanadimi:
+ * eskrou tushgan YOKI naqd jo'natma ochilgan. Boshqa holatlar — yo'q.
+ */
+function isCustodyFunded(shipment) {
+  const s = shipment || {};
+  if (s.paymentStatus === PAYMENT_STATUS.ESCROW_FUNDED) return true;
+  return s.paymentStatus === PAYMENT_STATUS.CASH_ON_DELIVERY && isCashShipment(s);
+}
+
 module.exports = {
+  DELIVERY_PAYMENT_METHOD,
+  CASH_STATUS,
+  isCashShipment,
+  isCustodyFunded,
+  CHAIN_MODE,
+  CHAIN_STATE,
+  CHAIN_ERROR,
+  CHAIN_ASSEMBLY_HOURS_DEFAULT,
+  chainModeOf,
+  chainAssemblyHoursOf,
+  isAssembleAll,
+  chainDeadlineFrom,
   ORDERS,
   SHIPMENTS,
   CUSTODY,

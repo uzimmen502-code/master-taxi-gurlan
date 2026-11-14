@@ -21,6 +21,7 @@ const logisticsCandidates = require('../sources/logistics_candidates');
 const { defaultProjection } = require('../matching/orchestrator');
 const { buildPushText } = require('../notify/policy');
 const L = require('../core/logistics');
+const courierScopes = require('../core/courier_scopes');
 
 /** @type {import('../core/types').DemandModuleAdapter} */
 const logisticsAdapter = {
@@ -45,6 +46,12 @@ const logisticsAdapter = {
       || (!!p.regionId && regions.includes(p.regionId));
 
     if (!inArea(loc)) return 'out_of_area';
+    // Kuryer toifasi (ega qarori 2026-10-31): LEG yo'nalishi toifasi kuryerda FAOL bo'lishi shart.
+    // Yuk tashuvchi (`freight`) bu qoidaga kirmaydi.
+    if (candidate.viaService === 'courier') {
+      const capLike = { courier: candidate.raw || {}, review: { courierScopes: candidate.courierScopeReview || {} } };
+      if (!courierScopes.isScopeActive(capLike, courierScopes.legScope(loc, dest))) return 'courier_scope';
+    }
     const crossesRegion = !!dest.regionId && dest.regionId !== loc.regionId;
     if (crossesRegion && candidate.viaService !== 'freight' && !inArea(dest)) {
       return 'destination_out_of_area';
@@ -95,6 +102,15 @@ const logisticsAdapter = {
       fromDistrictId: (demand.location || {}).districtId || '',
       toDistrictId: (demand.destination || {}).districtId || '',
       toRegionId: (demand.destination || {}).regionId || '',
+      // Zanjir (2026-11-07): kuryer olishdan OLDIN «butun zanjir yig'ilgach yuriladi»ni ko'rsin.
+      ...(a.chainMode ? { chainMode: a.chainMode } : {}),
+      // NAQD (S5, ega 2026-11-14): kuryer OLISHDAN OLDIN bilsin — oxirgi LEG'da xaridordan
+      // olinadigan to'liq yetkazish haqi (14-band istisnosi: yig'uvchi summani bilishi SHART).
+      // Eskrou LEG'da kalitlar yo'q (proyeksiya shakli o'zgarmagan).
+      ...(a.deliveryPaymentMethod === 'cash' ? {
+        deliveryPaymentMethod: 'cash',
+        cashToCollect: Number(a.cashToCollect) || 0,
+      } : {}),
     };
     return p;
   },

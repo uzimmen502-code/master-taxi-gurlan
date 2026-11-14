@@ -194,6 +194,26 @@ const DEFAULTS = {
     codeMaxFailedAttempts: 5,
     /** ... shuncha daqiqa qulf. Bu NARX EMAS — xavfsizlik sozlamasi. */
     codeLockMinutes: 15,
+    /**
+     * Relay zanjiri rejimi (ega qarori 2026-11-07):
+     * `sequential` — MAVJUD xatti-harakat (bitta to'g'ridan-to'g'ri LEG, keyingi
+     * LEG oldingisi olinganda ochiladi); `assemble_all` — marshrut transfer
+     * nuqtalari bo'yicha avtomatik bo'linadi, to'lovdan keyin BARCHA LEG
+     * birdaniga ochiladi, hamma LEG olinganda zanjir «qulflanadi» va shundan
+     * keyingina posilka olinadi. Standart — `sequential` (xavfsiz tomon).
+     */
+    chainMode: 'sequential',
+    /** `assemble_all`: to'lovdan (fundedAt) shuncha soat ichida zanjir yig'ilmasa — bekor + refund. */
+    chainAssemblyHours: 48,
+    /**
+     * Transfer nuqtalari (`core/relay_split.js`): viloyat → rasmiy ma'muriy
+     * markaz tumani. Firestore `regions.<id>` har viloyatni alohida ustiga yozadi.
+     */
+    transferPoints: {
+      regions: require('./seed/transfer_points_default.json').regions,
+      viaCapital: false,
+      capitalRegionId: 'toshkent_shahri',
+    },
   },
 
   // ─── Javobgarlik shifti (Т-10, Қ-2) ─────────────────────────────────

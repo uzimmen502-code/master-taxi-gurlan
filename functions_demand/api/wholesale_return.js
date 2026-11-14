@@ -99,7 +99,7 @@ function returnParcelFromOrder(o) {
  * idempotent (`demand_idempotency/wholesale_return_{orderId}` create).
  * @returns {{orderId, shipmentId, legId, trackingNumber, fee, tariffVersion, courierId, duplicate}}
  */
-async function createReturnShipment(deps, orderId, o, courierIdRaw) {
+async function createReturnShipment(deps, orderId, o, courierIdRaw, opts = {}) {
   const { db, now: nowFn } = deps;
   const now = nowFn ? nowFn() : new Date();
   const idemRef = db.collection(IDEMPOTENCY).doc(returnIdemKey(orderId));
@@ -138,6 +138,15 @@ async function createReturnShipment(deps, orderId, o, courierIdRaw) {
   const snap = rq.quote;
   if (!isPosInt(snap.customerPrice) || !isPosInt(snap.tariffVersion)) {
     throw fail('failed-precondition', 'Qaytish narxi hisoblanmadi', 'return_price_invalid');
+  }
+  // S57 naqd rad (ega shartnomasi 5): qaytish jo'natmasi AYNAN eshik oldida muhrlangan `refusal.returnFee`
+  // bilan (relay_cash shu summani eskrouga o'tkazadi). Tarif orada o'zgargan bo'lsa — jo'natma OCHILMAYDI
+  // (xato belgisi, admin) — boshqa summa bilan ochish pulni nomuvofiq qilardi.
+  if (opts.expectedFee !== undefined && (snap.customerPrice !== opts.expectedFee
+    || (opts.expectedTariffVersion !== undefined && snap.tariffVersion !== opts.expectedTariffVersion))) {
+    throw fail('failed-precondition', 'Qaytish narxi naqd muhrga mos emas', 'cash_return_fee_mismatch', {
+      expected: opts.expectedFee, actual: snap.customerPrice,
+    });
   }
   const tariff = rq.tariff;
   const adapter = getAdapter(L.MODULE);
@@ -312,13 +321,23 @@ async function ensureWholesaleReturnShipment(deps, orderId) {
   try {
     // Posilka qo'lidagi kuryer (asl jo'natmaning joriy custodian'i).
     let courierId = null;
+    let cashOpts = {};
     const outboundId = String((o0.shipment || {}).shipmentId || '');
     if (outboundId) {
       const os = await db.collection(L.SHIPMENTS).doc(outboundId).get();
-      const cur = os.exists ? ((os.data() || {}).currentCustodian || {}) : {};
+      const ship = os.exists ? (os.data() || {}) : {};
+      const cur = ship.currentCustodian || {};
       if (cur.kind === L.CUSTODIAN_KIND.PROVIDER && toCanonicalId(cur.id)) courierId = toCanonicalId(cur.id);
+      // S57: naqd buyurtma — qaytish narxi eshik oldidagi o'zgarmas qayddan (`deliveryPayment.refusal`).
+      if (WO.isCashDelivery(o0)) {
+        const ref0 = (ship.deliveryPayment || {}).refusal || null;
+        if (!ref0 || !isPosInt(ref0.returnFee)) throw fail('failed-precondition', 'Naqd rad qaydi yo\'q', 'cash_refusal_missing');
+        cashOpts = { expectedFee: ref0.returnFee, expectedTariffVersion: ref0.returnTariffVersion };
+      }
+    } else if (WO.isCashDelivery(o0)) {
+      throw fail('failed-precondition', 'Naqd rad qaydi yo\'q', 'cash_refusal_missing');
     }
-    const r = await createReturnShipment(deps, orderId, o0, courierId);
+    const r = await createReturnShipment(deps, orderId, o0, courierId, cashOpts);
     const now = nowFn ? nowFn() : new Date();
     const out = await db.runTransaction(async (tx) => {
       const s = await tx.get(ref);

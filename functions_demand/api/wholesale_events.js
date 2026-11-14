@@ -27,6 +27,7 @@ const cpStatus = (o) => ((o || {}).cardPayment || {}).status || null;
 const bpStatus = (o) => ((o || {}).bankPayment || {}).status || null;
 const changedTo = (b, a, v) => (b || {}).status !== v && (a || {}).status === v;
 const AFTER_REFUSAL = [WO.STATUS.REFUSED, WO.STATUS.RETURNING, WO.STATUS.RETURNED];
+const isWalletMethod = (o) => WO.methodOf(o) === WO.PAYMENT_METHOD.WALLET;
 
 /**
  * Karta buyurtmasi rad etilganda xaridor xabari — SABABGA qarab (ega, 2026-11-01). Admin nizoni rad etgan
@@ -87,6 +88,22 @@ function transitionNotifications(before, after) {
     if (isBank && a.cancelledBy === WO.ACTOR.BUYER && bpStatus(b) === WO.BANK_PAYMENT.AWAITING) {
       out.push({ to: 'seller', key: 'ws_bank_buyer_cancelled_seller' });
     }
+    // S57: relay zanjiri 48 soatda yig'ilmadi (default `onChainExpired`) — xaridor puli qaytadi.
+    if (a.cancelReason === WO.CANCEL_REASON.COURIER_CHAIN_EXPIRED) {
+      out.push({ to: 'buyer', key: 'ws_chain_expired_buyer' }, { to: 'seller', key: 'ws_chain_expired_seller' });
+    }
+  }
+  // S57: naqd yetkazish — jo'natma ochildi (placed → in_delivery): xaridorga kuryerga to'lanadigan summa.
+  if (!isSelf && WO.isCashDelivery(a) && changedTo(b, a, WO.STATUS.IN_DELIVERY) && b.status === WO.STATUS.PLACED) {
+    out.push({ to: 'buyer', key: 'ws_cash_open_buyer' });
+  }
+  // S57: naqd rad — xaridor eshik oldida to'ladi (hamyon usulida tovar summasi ham qaytgani — alohida, pastda).
+  if (!isSelf && WO.isCashDelivery(a) && changedTo(b, a, WO.STATUS.REFUSED) && (a.cashRefusal || {}).paid === true) {
+    out.push({ to: 'buyer', key: 'ws_cash_refusal_paid_buyer' });
+  }
+  if (!isSelf && WO.isCashDelivery(a) && isWalletMethod(a) && b.refundStatus !== WO.REFUND_STATUS.DONE
+    && a.refundStatus === WO.REFUND_STATUS.DONE && AFTER_REFUSAL.includes(a.status) && a.cashRefusalSettlement) {
+    out.push({ to: 'buyer', key: 'ws_cash_refused_goods_refund_buyer' });
   }
   if (WO.methodOf(a) === WO.PAYMENT_METHOD.CARD) {
     if (cpStatus(b) !== WO.CARD_PAYMENT.RECEIPT_SUBMITTED && cpStatus(a) === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) {
@@ -134,7 +151,10 @@ function transitionNotifications(before, after) {
   if (!b.returnDebt && a.returnDebt) {
     // Qarzdor: karta — sotuvchi (avvalgidek); hamyon — xaridor yoki mas'ul kuryer (`returnDebt.payer`).
     const payer = (a.returnDebt || {}).payer;
-    if (payer === 'buyer') out.push({ to: 'buyer', key: 'ws_return_debt_buyer' }, { to: 'admins', key: 'ws_return_debt_admin_buyer' });
+    // S57: naqd rad, xaridor to'lamadi — yetkazish + qaytish haqi qarzi (alohida matn).
+    if (payer === 'buyer' && (a.returnDebt || {}).kind === 'cash_refusal') {
+      out.push({ to: 'buyer', key: 'ws_cash_debt_buyer' }, { to: 'admins', key: 'ws_cash_debt_admin' });
+    } else if (payer === 'buyer') out.push({ to: 'buyer', key: 'ws_return_debt_buyer' }, { to: 'admins', key: 'ws_return_debt_admin_buyer' });
     else if (payer === 'courier') out.push({ to: 'refusal_courier', key: 'ws_return_debt_courier' }, { to: 'admins', key: 'ws_return_debt_admin_courier' });
     else out.push({ to: 'seller', key: 'ws_return_debt_seller' }, { to: 'admins', key: 'ws_return_debt_admin' });
   }
@@ -232,6 +252,10 @@ function paramsOf(o, orderId) {
     bankDeadline: deadlineText(o.bankPayDeadlineAt),
     goods: Number.isInteger(o.goodsTotal) ? o.goodsTotal : '',
     deliveryFee: Number.isInteger(o.deliveryFee) ? o.deliveryFee : '',
+    // S57 naqd: eshik oldidagi jami (rad — yetkazish + qaytish), qarz, qaytgan tovar summasi.
+    cashTotal: Number.isInteger((o.cashRefusal || {}).total) ? o.cashRefusal.total : '',
+    cashDebt: debt.kind === 'cash_refusal' && Number.isInteger(debt.amount) ? debt.amount : '',
+    goodsRefund: Number.isInteger((o.cashRefusalSettlement || {}).goodsRefunded) ? o.cashRefusalSettlement.goodsRefunded : '',
   };
 }
 

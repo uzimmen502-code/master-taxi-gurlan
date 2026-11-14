@@ -68,6 +68,9 @@ const LOSS_PENDING = 'loss_pending';
 const LOSS_SETTLED = 'loss_settled';
 
 const escrowAccount = (shipmentId) => `escrow:${shipmentId}`;
+/** Ulgurji buyurtmasi jo'natmasi (`source` 'wholesale…' yoki `wholesaleOrderId`). */
+const isWholesaleShipment = (s) => !!(s || {}).wholesaleOrderId
+  || (typeof (s || {}).source === 'string' && s.source.startsWith('wholesale'));
 
 function attachRelayEscrow(exports, deps) {
   const {
@@ -102,6 +105,12 @@ function attachRelayEscrow(exports, deps) {
     if (!pre0.exists) throw err('not-found', 'Jo\'natma topilmadi');
     const ship0 = pre0.data() || {};
     if (ship0.ownerId !== phone) throw err('permission-denied', 'Bu jo\'natma sizniki emas');
+    // Ulgurji buyurtmasi jo'natmasi (egasi = sotuvchi): yetkazish haqini xaridor kvotada
+    // to'lagan, eskrouni `wholesale_orders.js` (wholesaleShipFund) o'tkazadi. Sotuvchi
+    // o'z hamyonidan to'lab, buyurtma zanjirini buzmasin.
+    if (isWholesaleShipment(ship0)) {
+      throw err('permission-denied', 'Bu jo\'natma to\'langan', { reason: 'wholesale_managed' });
+    }
     const me = await resolveCaller(context);
     const amount = Number((ship0.priceSnapshot || {}).customerPrice);
     if (!Number.isInteger(amount) || amount <= 0) throw err('failed-precondition', 'Narx yo\'q', { reason: 'no_price' });
@@ -133,6 +142,7 @@ function attachRelayEscrow(exports, deps) {
           const d = s.exists ? (s.data() || {}) : null;
           if (!d) throw Object.assign(new Error('shipment_missing'), { reason: 'shipment_missing' });
           if (d.ownerId !== me.phone) throw Object.assign(new Error('not_owner'), { reason: 'not_owner' });
+          if (isWholesaleShipment(d)) throw Object.assign(new Error('wholesale_managed'), { reason: 'wholesale_managed' });
           if (d.status !== 'awaiting_payment' || d.paymentStatus !== 'pending') {
             throw Object.assign(new Error('not_payable'), { reason: 'not_payable', status: d.status, paymentStatus: d.paymentStatus });
           }
@@ -269,7 +279,26 @@ function attachRelayEscrow(exports, deps) {
     if (ship.paymentStatus !== 'refund_pending') return { skipped: `payment_${ship.paymentStatus}` };
     const amount = Number(ship.escrowAmount || (ship.priceSnapshot || {}).customerPrice) || 0;
     if (amount <= 0) return { skipped: 'no_amount' };
-    const usersDocId = await customerWalletId(ship);
+    // Ulgurji buyurtmasi jo'natmasi: eskrou xaridorning `escrow:wholesale:{order}` idan
+    // to'ldirilgan (egasi = sotuvchi EMAS to'lagan) — qaytarish O'SHA eskrouga (keyin
+    // buyurtma bekor oqimi xaridorga qaytaradi). Sotuvchi hamyoniga HECH QACHON tushmaydi:
+    // boshqa ulgurji manba (masalan `wholesale_return`) / buyurtma ID'si yo'q — pul
+    // harakatsiz, anomaliya (admin ko'radi; holat `refund_pending` qoladi).
+    let wholesaleOrderId = '';
+    if (isWholesaleShipment(ship)) {
+      wholesaleOrderId = ship.source === 'wholesale' && typeof ship.wholesaleOrderId === 'string'
+        ? ship.wholesaleOrderId : '';
+      if (!wholesaleOrderId) {
+        console.error(JSON.stringify({
+          action: 'relayRefund', shipmentId, result: 'skipped', errorCode: 'WHOLESALE_REFUND_ANOMALY',
+          source: String(ship.source || '').slice(0, 32),
+        }));
+        return { skipped: 'wholesale_anomaly', anomaly: true };
+      }
+    }
+    const creditAccount = wholesaleOrderId
+      ? `escrow:wholesale:${wholesaleOrderId}`
+      : settlementLedger.passengerCreditAccount(await customerWalletId(ship));
     const when = now();
     const res = await settlementLedger.postEntry(db, {
       idempotencyKey: `relayRefund:${shipmentId}`,
@@ -280,11 +309,11 @@ function attachRelayEscrow(exports, deps) {
       postedRole: 'system',
       legs: [
         { account: escrowAccount(shipmentId), dr: amount },
-        { account: settlementLedger.passengerCreditAccount(usersDocId), cr: amount },
+        { account: creditAccount, cr: amount },
       ],
     }, {
-      mirrorBonus: true,
-      walletLedgerType: 'logistics_refund',
+      mirrorBonus: !wholesaleOrderId,
+      walletLedgerType: wholesaleOrderId ? null : 'logistics_refund',
       meta: { shipmentId, trackingNumber: ship.trackingNumber || '' },
       precheck: async (tx) => {
         const s = await tx.get(shipRef);
@@ -676,62 +705,6 @@ function attachRelayEscrow(exports, deps) {
     }
   }
 
-  // ── 7. ADMIN: yo'qolish hodisalari ro'yxati (faqat o'qish) ───────────
-  const LIST_LIMIT_DEFAULT = 50;
-  const LIST_LIMIT_MAX = 100;
-  /** Telefon -> faqat oxirgi 4 raqam (40-band: admin ro'yxatida to'liq raqam kerak emas). */
-  const maskPhone = (v) => {
-    const d = String(v || '').replace(/\D/g, '');
-    return d.length >= 4 ? `***${d.slice(-4)}` : '';
-  };
-  const msOf = (v) => {
-    if (v && typeof v.toMillis === 'function') return v.toMillis();
-    if (v instanceof Date) return v.getTime();
-    return null;
-  };
-  const numOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-
-  /**
-   * `adminListLossIncidents({ limit? })` — faqat admin/superadmin (`adminRecordLostParcelPayment`
-   * bilan bir xil tekshiruv). Eng yangi `logistics_incidents` (declaredAt kamayish, bitta maydon
-   * bo'yicha - qo'shimcha indeks YO'Q). limit: standart 50, eng ko'pi 100. Mijoz telefoni/ismi/
-   * manzili va izoh (note) QAYTARILMAYDI; kuryer telefoni oxirgi 4 raqamgacha maskalanadi.
-   */
-  async function listLossIncidents(data, context) {
-    const adminUid = await requireCallerRoles(context, ['admin', 'superadmin'], 'Faqat admin yoki superadmin');
-    const raw = (data || {}).limit;
-    let limit = LIST_LIMIT_DEFAULT;
-    if (raw !== undefined) {
-      if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1) {
-        throw err('invalid-argument', 'limit musbat butun son bo\'lishi kerak', { reason: 'bad_limit' });
-      }
-      limit = Math.min(raw, LIST_LIMIT_MAX);
-    }
-    const snap = await db.collection(INCIDENTS).orderBy('declaredAt', 'desc').limit(limit).get();
-    const items = snap.docs.map((doc) => {
-      const i = doc.data() || {};
-      return {
-        id: doc.id,
-        shipmentId: String(i.shipmentId || doc.id),
-        trackingNumber: String(i.trackingNumber || ''),
-        status: String(i.status || ''),
-        goodsValue: numOrNull(i.goodsValue),
-        refundedNow: numOrNull(i.refundedNow),
-        outstanding: numOrNull(i.outstanding),
-        paidTotal: numOrNull(i.paidTotal),
-        declaredAtMs: msOf(i.declaredAt),
-        courierPhoneMasked: maskPhone((i.courier || {}).uid),
-        courierAccountId: String((i.courier || {}).accountId || ''),
-        reason: String(i.reason || '').slice(0, 300),
-        legId: String(i.legId || ''),
-      };
-    });
-    console.log(JSON.stringify({
-      action: 'adminListLossIncidents', result: 'ok', userId: adminUid, limit, count: items.length,
-    }));
-    return { ok: true, items };
-  }
-
   // ── Triggerlar ───────────────────────────────────────────────────────
   /** custody_events onCreate: LEG tugadi → EARNED; yetkazildi → RELEASE. */
   async function onCustodyEvent(event) {
@@ -871,8 +844,6 @@ function attachRelayEscrow(exports, deps) {
   exports.fundShipmentEscrow = functions.https.onCall(fund);
   /** ADMIN — kuryer to'lagan qarzni yozish (yo'qolgan posilka, D1). Faqat admin/superadmin. */
   exports.adminRecordLostParcelPayment = functions.https.onCall(recordLostPayment);
-  /** ADMIN — yo'qolish hodisalari ro'yxati (D1, faqat o'qish). Faqat admin/superadmin. */
-  exports.adminListLossIncidents = functions.https.onCall(listLossIncidents);
   exports.onLogisticsCustodyEvent = functions.firestore
     .document(`${CUSTODY}/{eventId}`)
     .onCreate(async (snap) => { await onCustodyEvent(snap.data() || {}); return null; });
@@ -885,7 +856,7 @@ function attachRelayEscrow(exports, deps) {
 
   return {
     fund, postEarned, releaseEscrow, refundEscrow, onCustodyEvent, onShipmentUpdate, resolveCaller, reconcile,
-    settleLoss, recordLostPayment, listLossIncidents,
+    settleLoss, recordLostPayment,
   };
 }
 

@@ -124,7 +124,7 @@ async function validatePoint(db, raw, name) {
  * Yangi qoida FAQAT shu yerda (quote ham, create ham shu validatsiyadan o'tadi);
  * `quoteParcel` toza hisob funksiyasi bo'lib qoladi (paritet fixturasi 0 ni ishlatadi).
  */
-function validateParcel(raw, i) {
+function validateParcel(raw, i, opts = {}) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const out = {
     actualWeightG: p.actualWeightG,
@@ -135,7 +135,18 @@ function validateParcel(raw, i) {
     description: String(p.description || '').slice(0, 200),
     fragile: p.fragile === true,
   };
-  for (const k of ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
+  // `dimsOptional` — FAQAT ichki yordamchi (`createShipmentInternal`, Ulgurji buyurtmasi;
+  // Ulgurji lineage'dan ko'chirildi 2026-11-14): ko'p donali qadoqning umumiy o'lchami
+  // noma'lum (`tariff.quoteParcel` izohi). Uchala o'lcham yo'q — null; qisman berilsa
+  // odatdagidek tekshiriladi. Klient callable'lari bu bayroqsiz — o'lcham MAJBURIY.
+  const noDims = opts.dimsOptional === true
+    && [out.lengthCm, out.widthCm, out.heightCm].every((x) => x === undefined || x === null);
+  if (noDims) {
+    out.lengthCm = null;
+    out.widthCm = null;
+    out.heightCm = null;
+  }
+  for (const k of noDims ? ['actualWeightG'] : ['actualWeightG', 'lengthCm', 'widthCm', 'heightCm']) {
     if (!isPosInt(out[k])) throw fail('invalid-argument', `parcels[${i}].${k} musbat butun son bo'lishi kerak`, 'parcel_invalid');
   }
   if (out.declaredValue === undefined || out.declaredValue === null || out.declaredValue === '') {
@@ -154,7 +165,8 @@ function validateParcels(raw) {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_PARCELS) {
     throw fail('invalid-argument', `parcels 1..${MAX_PARCELS}`, 'parcels_count');
   }
-  return raw.map(validateParcel);
+  // Lambda ATAYLAB: `map` uchinchi argument (massiv) beradi — u `opts` bo'lib qolmasin.
+  return raw.map((p, i) => validateParcel(p, i));
 }
 
 function validateRecipient(raw) {
@@ -204,6 +216,20 @@ async function quoteOrderInternal(db, data, callerId) {
   const quotes = parcels.map((p) => tariffCore.quoteParcel(t, p, origin, destination));
   const total = quotes.reduce((s, q) => s + q.customerPrice, 0);
   return { tariff: t, origin, destination, parcels, quotes, total };
+}
+
+/**
+ * BITTA posilka narxi — boshqa modul (Ulgurji buyurtmasi) uchun relay tarifining
+ * O'ZI (tarif hisobi nusxalanmaydi, CLAUDE.md 7). Ulgurji lineage'dan AYNAN
+ * ko'chirildi (2026-11-14; shartnoma: `{ tariff, origin, destination, quote }`).
+ * Logistika DARVOZASI bu yerda YO'Q: chaqiruvchi modul o'z darvozasini tekshiradi.
+ */
+async function quoteParcelForPoints(db, originRaw, destinationRaw, parcel, opts = {}) {
+  const origin = await validatePoint(db, originRaw, 'origin');
+  const destination = await validatePoint(db, destinationRaw, 'destination');
+  const t = await requireActiveTariff(db);
+  const quote = tariffCore.quoteParcel(t, parcel, origin, destination, opts);
+  return { tariff: t, origin, destination, quote };
 }
 
 function makeQuoteLogisticsOrder(deps) {
@@ -302,12 +328,24 @@ function buildLegDemand({
       },
       // Faqat `assemble_all` (2026-11-07): `sequential` LEG hujjati shakli O'ZGARMAGAN.
       ...(chainMode ? { chainMode } : {}),
+      // Ulgurji buyurtmasi jo'natmasi (Ulgurji lineage bilan AYNI kalit): oddiy jo'natmada YO'Q.
+      ...(shipment.wholesaleOrderId ? { wholesaleOrderId: shipment.wholesaleOrderId } : {}),
+      // NAQD (S5, 2026-11-14): kuryer OLISHDAN OLDIN biladi — oxirgi LEG kuryeri xaridordan
+      // `cashToCollect` so'm naqd oladi (to'liq yetkazish haqi; oldingi LEG ulushlari va AVA
+      // ulushi keyin uning hamyonidan yechiladi). Boshqa LEG'larda 0 (naqd ularga tegmaydi).
+      // Eskrou jo'natmada kalitlar YO'Q (shakl o'zgarmagan).
+      ...(L.isCashShipment(shipment) ? {
+        deliveryPaymentMethod: L.DELIVERY_PAYMENT_METHOD.CASH,
+        cashToCollect: legIndex === legCount - 1 ? shipment.deliveryPayment.amount : 0,
+      } : {}),
     },
     payerSide: 'sender',
     termsAcceptedAt: order.termsAcceptedAt || null,
     assignment: { providerId: null, offerId: null, acceptedAt: null },
     tariffVersion: snap.tariffVersion,
-    payment: { kind: 'escrow', legPayout: leg.payout, currency: 'UZS' },
+    payment: L.isCashShipment(shipment)
+      ? { kind: 'cash', legPayout: leg.payout, currency: 'UZS' }
+      : { kind: 'escrow', legPayout: leg.payout, currency: 'UZS' },
     createdAt: now,
     updatedAt: now,
   };
@@ -407,6 +445,107 @@ async function reserveTrackingSeq(db, now, count) {
   });
 }
 
+/**
+ * BITTA SHIPMENT yozuvlari — `createLogisticsOrder` va `createShipmentInternal` uchun
+ * YAGONA manba (CLAUDE.md 4/7; Ulgurji lineage'dagi `addShipmentWrites` zanjir bilan
+ * birlashtirildi 2026-11-14): shipment + private/secrets + private/internal (ichki
+ * ulush, 14-band) + route_plans v1 + LEG(draft)lar + LEG stats.
+ *   - `segments` — `[{from,to}]` (zanjir: `planChainSegments`; aks holda bitta);
+ *   - `chainMode` — faqat `assemble_all` da `shipment.chain` va LEG `chainMode`;
+ *   - `shipmentExtra` — faqat berilganda (oddiy jo'natma shakli o'zgarmaydi — paritet).
+ * `write` — batch (set). Qaytaradi `{ shipmentId, legIds, split }`.
+ */
+function addShipmentWrites(write, {
+  db, now, order, ownerId, tariff, origin, destination, recipientName, parcel, priceSnapshot,
+  trackingNumber, adapter, ttl, segments, chainMode, shipmentExtra,
+}) {
+  const points = Array.isArray(segments) && segments.length ? segments : [{ from: origin, to: destination }];
+  const shipmentRef = db.collection(L.SHIPMENTS).doc();
+  const legRefs = points.map(() => db.collection(DEMANDS).doc());
+  const legIds = legRefs.map((r) => r.id);
+  const qrSecret = L.newQrSecret();
+  const assemble = chainMode === L.CHAIN_MODE.ASSEMBLE_ALL;
+  const shipment = {
+    orderId: order.id,
+    ownerId,
+    trackingNumber,
+    status: L.SHIPMENT_STATUS.AWAITING_PAYMENT,
+    paymentStatus: L.PAYMENT_STATUS.PENDING,
+    origin,
+    destination,
+    recipientName,
+    parcel,
+    /** D-8: narx muhrlangan — tarif keyin o'zgarsa bu o'zgarmaydi. */
+    priceSnapshot,
+    currentCustodian: { kind: L.CUSTODIAN_KIND.SENDER, id: ownerId, since: now },
+    currentLegId: null,
+    routePlanVersion: 1,
+    legIds,
+    legCount: legIds.length,
+    assignedProviderIds: [],
+    custodyCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    ...(shipmentExtra || {}),
+  };
+  if (assemble) {
+    shipment.chain = {
+      mode: chainMode,
+      state: L.CHAIN_STATE.ASSEMBLING,
+      deadlineAt: null,
+      lockedAt: null,
+      claimed: 0,
+      legCount: legIds.length,
+      selfTransferLegIds: [],
+    };
+  }
+  // Payout'lar — MAVJUD splitInternal (LEG turi bo'yicha, admin tarifi).
+  const route = buildRoute({
+    tariff, shipment, version: 1, points,
+  });
+  if (L.isCashShipment(shipment)) {
+    // Yig'uvchi = OXIRGI LEG (uning payout'i naqdda qoladi — `functions/relay_cash.js`).
+    shipment.deliveryPayment = {
+      ...shipment.deliveryPayment,
+      collectorLegId: legIds[legIds.length - 1],
+      collectorLegPayout: route.legs[route.legs.length - 1].payout,
+    };
+  }
+
+  write.set(shipmentRef, shipment);
+  write.set(shipmentRef.collection('private').doc('secrets'), { qrSecret, createdAt: now });
+  // ICHKI qatlam — mijoz o'qimaydi (qoida: private/* yopiq).
+  write.set(shipmentRef.collection('private').doc('internal'), {
+    platformShare: route.split.platformShare,
+    providerPool: route.split.providerPool,
+    legPayouts: route.split.legPayouts,
+    tariffVersion: tariff.version,
+    updatedAt: now,
+  });
+  write.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id), {
+    shipmentId: shipmentRef.id, currentVersion: 1, updatedAt: now,
+  });
+  write.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id).collection('versions').doc('1'), {
+    version: 1,
+    legs: route.legs.map((l, k) => ({ ...l, legId: legIds[k] })),
+    reason: 'initial',
+    createdBy: 'system',
+    createdAt: now,
+    supersededAt: null,
+  });
+  for (let k = 0; k < route.legs.length; k += 1) {
+    write.set(legRefs[k], buildLegDemand({
+      ownerId, order, shipment, shipmentId: shipmentRef.id, leg: route.legs[k],
+      legIndex: k, legCount: route.legs.length, legIds, adapter, now, ttlMinutes: ttl,
+      chainMode: assemble ? chainMode : undefined,
+    }));
+    write.set(legRefs[k].collection('private').doc('stats'), {
+      matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
+    });
+  }
+  return { shipmentId: shipmentRef.id, legIds, split: route.split };
+}
+
 function makeCreateLogisticsOrder(deps) {
   const { db, now: nowFn } = deps;
 
@@ -455,81 +594,25 @@ function makeCreateLogisticsOrder(deps) {
     };
 
     for (let i = 0; i < q.parcels.length; i += 1) {
-      const shipmentRef = db.collection(L.SHIPMENTS).doc();
-      const legRefs = segments.map(() => db.collection(DEMANDS).doc());
-      const legIds = legRefs.map((r) => r.id);
       const trackingNumber = L.formatTrackingNumber(now, seqStart + i);
-      const qrSecret = L.newQrSecret();
-      const shipment = {
-        orderId: orderRef.id,
+      const w = addShipmentWrites(batch, {
+        db,
+        now,
+        order,
         ownerId,
-        trackingNumber,
-        status: L.SHIPMENT_STATUS.AWAITING_PAYMENT,
-        paymentStatus: L.PAYMENT_STATUS.PENDING,
+        tariff: q.tariff,
         origin: q.origin,
         destination: q.destination,
         recipientName: recipient.name,
         parcel: q.parcels[i],
-        /** D-8: narx muhrlangan — tarif keyin o'zgarsa bu o'zgarmaydi. */
         priceSnapshot: { ...q.quotes[i], calculatedAt: now },
-        currentCustodian: { kind: L.CUSTODIAN_KIND.SENDER, id: ownerId, since: now },
-        currentLegId: null,
-        routePlanVersion: 1,
-        legIds,
-        legCount: legIds.length,
-        assignedProviderIds: [],
-        custodyCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      };
-      if (assemble) {
-        shipment.chain = {
-          mode: chainMode,
-          state: L.CHAIN_STATE.ASSEMBLING,
-          deadlineAt: null,
-          lockedAt: null,
-          claimed: 0,
-          legCount: legIds.length,
-          selfTransferLegIds: [],
-        };
-      }
-      // Payout'lar — MAVJUD splitInternal (LEG turi bo'yicha, admin tarifi).
-      const route = buildRoute({
-        tariff: q.tariff, shipment, version: 1, points: segments,
+        trackingNumber,
+        adapter,
+        ttl,
+        segments,
+        chainMode: assemble ? chainMode : null,
       });
-
-      batch.set(shipmentRef, shipment);
-      batch.set(shipmentRef.collection('private').doc('secrets'), { qrSecret, createdAt: now });
-      // ICHKI qatlam — mijoz o'qimaydi (qoida: private/* yopiq).
-      batch.set(shipmentRef.collection('private').doc('internal'), {
-        platformShare: route.split.platformShare,
-        providerPool: route.split.providerPool,
-        legPayouts: route.split.legPayouts,
-        tariffVersion: q.tariff.version,
-        updatedAt: now,
-      });
-      batch.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id), {
-        shipmentId: shipmentRef.id, currentVersion: 1, updatedAt: now,
-      });
-      batch.set(db.collection(L.ROUTE_PLANS).doc(shipmentRef.id).collection('versions').doc('1'), {
-        version: 1,
-        legs: route.legs.map((l, k) => ({ ...l, legId: legIds[k] })),
-        reason: 'initial',
-        createdBy: 'system',
-        createdAt: now,
-        supersededAt: null,
-      });
-      for (let k = 0; k < route.legs.length; k += 1) {
-        batch.set(legRefs[k], buildLegDemand({
-          ownerId, order, shipment, shipmentId: shipmentRef.id, leg: route.legs[k],
-          legIndex: k, legCount: route.legs.length, legIds, adapter, now, ttlMinutes: ttl,
-          chainMode: assemble ? chainMode : undefined,
-        }));
-        batch.set(legRefs[k].collection('private').doc('stats'), {
-          matchedCount: 0, candidateCount: 0, rejectedCount: 0, updatedAt: now,
-        });
-      }
-      shipmentIds.push(shipmentRef.id);
+      shipmentIds.push(w.shipmentId);
       trackingNumbers.push(trackingNumber);
     }
 
@@ -583,6 +666,279 @@ function makeCreateLogisticsOrder(deps) {
       duplicate: false,
     };
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ICHKI YARATISH — boshqa modul (Ulgurji buyurtmasi) uchun (S7, 2026-11-14)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Callable EMAS (server triggeri chaqiradi). Ulgurji lineage'dagi shartnoma AYNAN
+ * saqlangan (`api/wholesale_orders.js` `shipmentInputFromOrder` → shu kirish;
+ * natija `{ orderId, shipmentId, trackingNumber, duplicate }` + qo'shimcha kalitlar).
+ * `createLogisticsOrder` bilan BITTA yozuv manbasi (`addShipmentWrites`) va BITTA
+ * zanjir rejalashtirish (`chainModeOf` + `planChainSegments`, ega «улаш керак бўлса ула»,
+ * 2026-11-13): `module_config/logistics_all.logistics.chainMode == 'assemble_all'` bo'lsa
+ * marshrut transfer nuqtalari bo'yicha LEG'larga bo'linadi; `sequential` — bugungidek
+ * bitta to'g'ridan-to'g'ri LEG. Farqlari:
+ *   - narx QAYTA HISOBLANMAYDI: chaqiruvchi muhrlagan `priceSnapshot` (D-8, 9-band);
+ *     ichki ulush — o'sha muhrlangan `tariffVersion` hujjatidan (yo'q → `tariff_version_missing`);
+ *   - logistika jo'natuvchi darvozasi (`requireEnabled`) YO'Q (chaqiruvchi modul o'zi
+ *     tekshirgan); LEG ochilishi/matching/push `module_config/logistics_all` ga bo'ysunadi;
+ *   - o'lchamsiz posilka mumkin (`dimsOptional`);
+ *   - `recipientId` (yetkazish kodi — `getShipmentSecrets` sotuvchiga BERMAYDI), `source`, `extra`;
+ *   - `deliveryPaymentMethod` (S5): `'escrow'` (standart, bugungidek) | `'cash'` — haq
+ *     eskrouga tushmaydi, jo'natma `openCashShipment` bilan ochiladi, oxirgi LEG kuryeri
+ *     `priceSnapshot.customerPrice` ni naqd oladi (`shipment.deliveryPayment`).
+ * Idempotent: `demand_idempotency/{idempotencyKey}` AYNI batch'da `create()`.
+ */
+async function createShipmentInternal(deps, input) {
+  const { db, now: nowFn } = deps;
+  const now = nowFn ? nowFn() : new Date();
+  const p = input || {};
+  const key = String(p.idempotencyKey || '');
+  if (!/^[A-Za-z0-9_-]{8,200}$/.test(key)) throw fail('invalid-argument', 'idempotencyKey', 'idempotency_key');
+  const idemRef = db.collection(IDEMPOTENCY).doc(key);
+  const dup = (d) => ({
+    orderId: d.orderId,
+    shipmentId: (d.shipmentIds || [])[0] || null,
+    trackingNumber: (d.trackingNumbers || [])[0] || null,
+    legCount: Number(d.legCount) || 1,
+    chainMode: d.chainMode || L.CHAIN_MODE.SEQUENTIAL,
+    deliveryPaymentMethod: d.deliveryPaymentMethod || L.DELIVERY_PAYMENT_METHOD.ESCROW,
+    duplicate: true,
+  });
+  const idem = await idemRef.get();
+  if (idem.exists) return dup(idem.data() || {});
+
+  const ownerId = toCanonicalId(p.ownerId || '');
+  if (!ownerId) throw fail('invalid-argument', 'Jo\'natuvchi', 'owner_required');
+  const recipientId = toCanonicalId(p.recipientId || '');
+  if (!recipientId) throw fail('invalid-argument', 'Qabul qiluvchi', 'recipient_required');
+  if (recipientId === ownerId) throw fail('invalid-argument', 'Jo\'natuvchi = qabul qiluvchi', 'recipient_is_owner');
+  const recipient = { name: String((p.recipient || {}).name || '').trim().slice(0, 80), phone: recipientId };
+  const source = String(p.source || '');
+  if (!/^[a-z_]{2,32}$/.test(source)) throw fail('invalid-argument', 'source', 'source_required');
+  const method = p.deliveryPaymentMethod === undefined || p.deliveryPaymentMethod === null
+    ? L.DELIVERY_PAYMENT_METHOD.ESCROW : String(p.deliveryPaymentMethod);
+  if (!Object.values(L.DELIVERY_PAYMENT_METHOD).includes(method)) {
+    throw fail('invalid-argument', 'deliveryPaymentMethod', 'delivery_payment_method');
+  }
+  const origin = p.origin;
+  const destination = p.destination;
+  if (!origin || !GEO_ID_RE.test(String(origin.regionId || ''))
+    || !destination || !GEO_ID_RE.test(String(destination.regionId || ''))) {
+    throw fail('failed-precondition', 'Manzil yo\'q', 'points_missing');
+  }
+  const parcel = validateParcel(p.parcel, 0, { dimsOptional: true });
+  const snap = p.priceSnapshot && typeof p.priceSnapshot === 'object' ? p.priceSnapshot : {};
+  if (!isPosInt(snap.customerPrice) || !isPosInt(snap.tariffVersion)) {
+    throw fail('failed-precondition', 'Muhrlangan narx yo\'q', 'price_snapshot_invalid');
+  }
+  // Muhr posilkaga mos (vazn/qiymat) — boshqa posilkaning narxi bilan jo'natma ochilmasin.
+  if (snap.actualWeightG !== parcel.actualWeightG || (snap.declaredValue || 0) !== parcel.declaredValue) {
+    throw fail('failed-precondition', 'Muhrlangan narx posilkaga mos emas', 'price_snapshot_mismatch');
+  }
+  const tSnap = await db.collection(tariffCore.COLLECTION).doc(tariffCore.versionDocId(snap.tariffVersion)).get();
+  if (!tSnap.exists) throw fail('failed-precondition', 'Muhrlangan tarif versiyasi topilmadi', 'tariff_version_missing');
+  const tariff = tSnap.data() || {};
+  if (Number(tariff.version) !== snap.tariffVersion) {
+    throw fail('failed-precondition', 'Tarif versiyasi mos emas', 'tariff_version_mismatch');
+  }
+  const adapter = getAdapter(L.MODULE);
+  if (!adapter) throw fail('unimplemented', 'logistics adapteri ulanmagan');
+  const config = await getModuleConfig(db, L.MODULE, CONFIG_REGION);
+  const ttl = Number((config.logistics || {}).legTtlMinutes) || 3 * 24 * 60;
+  const extra = p.extra && typeof p.extra === 'object' ? p.extra : {};
+  const pricedAt = p.pricedAt || now;
+  // Zanjir — `createLogisticsOrder` bilan AYNI qoida va AYNI funksiya (rejim muhrlanadi).
+  const chainMode = L.chainModeOf(config);
+  const assemble = chainMode === L.CHAIN_MODE.ASSEMBLE_ALL;
+  const segments = assemble
+    ? await planChainSegments(db, origin, destination, config, { requestId: key, source })
+    : [{ from: origin, to: destination }];
+
+  const shipmentExtra = { recipientId, source, ...extra };
+  if (method === L.DELIVERY_PAYMENT_METHOD.CASH) {
+    shipmentExtra.deliveryPayment = {
+      method,
+      amount: snap.customerPrice,
+      currency: 'UZS',
+      status: L.CASH_STATUS.PENDING,
+      collectedBy: null,
+      collectedAt: null,
+      // collectorLegId / collectorLegPayout — addShipmentWrites (marshrutdan keyin).
+    };
+  }
+
+  const seqStart = await reserveTrackingSeq(db, now, 1);
+  const trackingNumber = L.formatTrackingNumber(now, seqStart);
+  const orderRef = db.collection(L.ORDERS).doc();
+  const order = { id: orderRef.id, ownerId, termsAcceptedAt: null };
+  const batch = db.batch();
+  const w = addShipmentWrites(batch, {
+    db,
+    now,
+    order,
+    ownerId,
+    tariff,
+    origin,
+    destination,
+    recipientName: recipient.name,
+    parcel,
+    priceSnapshot: { ...snap, calculatedAt: pricedAt },
+    trackingNumber,
+    adapter,
+    ttl,
+    segments,
+    chainMode: assemble ? chainMode : null,
+    shipmentExtra,
+  });
+  batch.set(orderRef, {
+    ownerId,
+    status: L.deriveOrderStatus([L.SHIPMENT_STATUS.AWAITING_PAYMENT]),
+    shipmentIds: [w.shipmentId],
+    trackingNumbers: [trackingNumber],
+    origin,
+    destination,
+    /** Qabul qiluvchi telefoni FAQAT shu yerda (egasi o'qiydi) — 40-band. */
+    recipient,
+    recipientId,
+    source,
+    ...extra,
+    note: '',
+    customerPriceTotal: snap.customerPrice,
+    currency: 'UZS',
+    tariffVersion: snap.tariffVersion,
+    consolidation: { count: 1, discountApplied: false, tariffVersion: snap.tariffVersion },
+    termsAcceptedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.create(idemRef, {
+    ownerId,
+    kind: 'internal_shipment',
+    source,
+    orderId: orderRef.id,
+    shipmentIds: [w.shipmentId],
+    trackingNumbers: [trackingNumber],
+    legCount: w.legIds.length,
+    chainMode,
+    deliveryPaymentMethod: method,
+    createdAt: now,
+  });
+  try {
+    await batch.commit();
+  } catch (e) {
+    if (e && (e.code === 6 || e.code === 'already-exists')) {
+      const won = await idemRef.get();
+      if (won.exists) return dup(won.data() || {});
+    }
+    throw e;
+  }
+  console.log(JSON.stringify({
+    action: 'createShipmentInternal', result: 'ok', source, orderId: orderRef.id, shipmentId: w.shipmentId,
+    legCount: w.legIds.length, chainMode, deliveryPaymentMethod: method,
+  }));
+  return {
+    orderId: orderRef.id,
+    shipmentId: w.shipmentId,
+    trackingNumber,
+    legCount: w.legIds.length,
+    chainMode,
+    deliveryPaymentMethod: method,
+    duplicate: false,
+  };
+}
+
+/**
+ * Jo'natmani pul harakatisiz bekor qilish — chaqiruvchining TRANZAKSIYASIDA (Ulgurji
+ * lineage shartnomasi AYNAN: bu funksiya faqat O'QIYDI, qaytargan `commit(now, by)` YOZADI;
+ * bekor qilib bo'lmasa / yo'q → null). Qamrov:
+ *   - `awaiting_payment` + `pending` (eskrou ham, naqd ham — hali ochilmagan);
+ *   - NAQD, ochilgan (`ready` + `cash_on_delivery`) va custody BOSHLANMAGAN (`custodyCount` 0) —
+ *     pul yo'q, kuryerlar (zanjirda) LEG'ni olgan bo'lishi mumkin: LEG'lar bekor.
+ * Zanjir jo'natmasida `chain.state = cancelled`. Match'lar (ijrochi inbox'i) tranzaksiyadan
+ * keyin `closeShipmentMatches` bilan yopiladi (chaqiruvchi ixtiyoriy chaqiradi; yopilmasa
+ * ham LEG `cancelled` — olib bo'lmaydi).
+ */
+async function prepareCancelUnpaidShipmentInTx(tx, db, shipmentId) {
+  if (!shipmentId) return null;
+  const shipRef = db.collection(L.SHIPMENTS).doc(String(shipmentId));
+  const s = await tx.get(shipRef);
+  if (!s.exists) return null;
+  const ship = s.data() || {};
+  const unpaid = ship.status === L.SHIPMENT_STATUS.AWAITING_PAYMENT && ship.paymentStatus === L.PAYMENT_STATUS.PENDING;
+  const cashOpen = L.isCashShipment(ship) && ship.status === L.SHIPMENT_STATUS.READY
+    && ship.paymentStatus === L.PAYMENT_STATUS.CASH_ON_DELIVERY && (Number(ship.custodyCount) || 0) === 0;
+  if (!unpaid && !cashOpen) return null;
+  const legSnaps = await Promise.all((ship.legIds || []).map((id) => tx.get(db.collection(DEMANDS).doc(id))));
+  return (now, by) => {
+    const patch = {
+      status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.CANCELLED, 'cancelUnpaidShipment'),
+      cancelledAt: now, cancelledBy: by, updatedAt: now,
+    };
+    if (L.isAssembleAll(ship)) patch['chain.state'] = L.CHAIN_STATE.CANCELLED;
+    tx.update(shipRef, patch);
+    for (const ls of legSnaps) {
+      if (ls.exists && sm.canTransition((ls.data() || {}).status, sm.STATUS.CANCELLED)) {
+        tx.update(ls.ref, { status: sm.STATUS.CANCELLED, cancelledBy: by, cancelledAt: now, updatedAt: now });
+      }
+    }
+    if (ship.orderId) {
+      tx.update(db.collection(L.ORDERS).doc(String(ship.orderId)), { status: 'cancelled', cancelledAt: now, updatedAt: now });
+    }
+  };
+}
+
+/** Bekor qilingan jo'natma LEG'larining match'lari (inbox) — tranzaksiyadan keyin, idempotent. */
+async function closeShipmentMatches(db, shipmentId, now) {
+  const s = await db.collection(L.SHIPMENTS).doc(String(shipmentId || '')).get();
+  if (!s.exists) return { skipped: 'missing' };
+  const legIds = (s.data() || {}).legIds || [];
+  for (const legId of legIds) await closeOtherMatches(db, legId, null, 'cancelled', now);
+  return { closed: legIds.length };
+}
+
+/**
+ * NAQD jo'natmani ochish (S5): `awaiting_payment/pending` → `ready/cash_on_delivery`
+ * (TRANZAKSIYADA, eskrou `fund()` ning naqd analogi — pul yozuvi YO'Q), so'ng LEG'lar
+ * `onShipmentFunded` bilan AYNI yo'l bilan ochiladi (zanjir: hammasi + 48 soat muddat;
+ * aks holda LEG-1). Trigger ham shu o'zgarishni ko'radi — ikkalasi idempotent.
+ * Chaqiruvchi: Ulgurji tomoni, eskrou buyurtmada SHIP_FUND qiladigan paytda.
+ */
+async function openCashShipment(deps, shipmentId) {
+  const { db, now: nowFn } = deps;
+  const now = nowFn ? nowFn() : new Date();
+  const ref = db.collection(L.SHIPMENTS).doc(String(shipmentId || ''));
+  const r = await db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    if (!s.exists) throw fail('not-found', 'Jo\'natma topilmadi', 'shipment_missing');
+    const ship = s.data() || {};
+    if (!L.isCashShipment(ship)) throw fail('failed-precondition', 'Naqd jo\'natma emas', 'not_cash_shipment');
+    if (ship.paymentStatus === L.PAYMENT_STATUS.CASH_ON_DELIVERY) return { already: true, before: ship, after: ship };
+    if (ship.status !== L.SHIPMENT_STATUS.AWAITING_PAYMENT || ship.paymentStatus !== L.PAYMENT_STATUS.PENDING) {
+      throw fail('failed-precondition', 'Jo\'natmani ochib bo\'lmaydi', 'not_payable', { status: ship.status });
+    }
+    const patch = {
+      status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.READY, 'openCashShipment'),
+      paymentStatus: L.assertPaymentTransition(ship.paymentStatus, L.PAYMENT_STATUS.CASH_ON_DELIVERY, 'openCashShipment'),
+      fundedAt: now,
+      'deliveryPayment.openedAt': now,
+      updatedAt: now,
+    };
+    tx.update(ref, patch);
+    return {
+      already: false,
+      before: ship,
+      after: {
+        ...ship, status: patch.status, paymentStatus: patch.paymentStatus, fundedAt: now,
+      },
+    };
+  });
+  const act = await makeOnShipmentFunded(deps)(r.already ? {} : r.before, r.after, ref.id);
+  console.log(JSON.stringify({ action: 'openCashShipment', result: r.already ? 'already' : 'ok', shipmentId: ref.id }));
+  return { opened: !r.already, shipmentId: ref.id, activation: act };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -767,7 +1123,8 @@ function makeOnShipmentFunded(deps) {
   return async function onShipmentFunded(before, after, shipmentId) {
     const was = (before || {}).paymentStatus;
     const is = (after || {}).paymentStatus;
-    if (is !== L.PAYMENT_STATUS.ESCROW_FUNDED || was === is) return { skipped: 'no_change' };
+    // Eskrou tushdi YOKI naqd jo'natma ochildi (S5) — ikkalasida ham LEG'lar ochiladi.
+    if (!L.isCustodyFunded(after) || was === is) return { skipped: 'no_change' };
     const legIds = Array.isArray(after.legIds) ? after.legIds : [];
     if (!legIds.length) return { skipped: 'no_legs' };
     if (L.isAssembleAll(after)) return activateChain(deps, shipmentId);
@@ -795,7 +1152,7 @@ async function activateChain(deps, shipmentId) {
     if (!snap.exists) return { skipped: 'missing' };
     const ship = snap.data() || {};
     const chain = ship.chain || {};
-    if (ship.paymentStatus !== L.PAYMENT_STATUS.ESCROW_FUNDED) return { skipped: `payment_${ship.paymentStatus}` };
+    if (!L.isCustodyFunded(ship)) return { skipped: `payment_${ship.paymentStatus}` };
     if (chain.state !== L.CHAIN_STATE.ASSEMBLING) return { skipped: `chain_${chain.state}` };
     const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
     if (chain.deadlineAt) return { legIds, deadlineAt: chain.deadlineAt, already: true };
@@ -885,7 +1242,7 @@ function makeLegChainSweeper(deps) {
     };
 
     const handle = async (shipmentId, ship, status) => {
-      if (ship.paymentStatus !== L.PAYMENT_STATUS.ESCROW_FUNDED) return;
+      if (!L.isCustodyFunded(ship)) return;
       const legIds = Array.isArray(ship.legIds) ? ship.legIds : [];
       if (L.isAssembleAll(ship)) {
         // Yig'ish paytida BARCHA draft LEG ochilishi kerak (trigger yiqilgan bo'lsa).
@@ -1023,12 +1380,20 @@ async function expireChain(deps, shipmentId, now) {
       cancelledAt: now,
       cancelledBy: 'assembly_expired',
       'chain.state': L.CHAIN_STATE.EXPIRED,
+      'chain.expiredAt': now,
       updatedAt: now,
     };
+    // Ulgurji (S7, 2026-11-14): yetkazish haqini XARIDOR to'lagan — jo'natuvchi (sotuvchi)
+    // hamyoniga REFUND YO'Q. Eskrou: `wholesale_refund_pending` (hech bir mavjud trigger
+    // tegmaydi; Ulgurji tomoni pulni `escrow:wholesale:{order}`ga qaytaradi). Naqd: pul yo'q.
+    const wholesale = isWholesaleRecord(ship);
     let refund = false;
+    let refundTarget = null;
     if (ship.paymentStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) {
-      patch.paymentStatus = L.assertPaymentTransition(ship.paymentStatus, L.PAYMENT_STATUS.REFUND_PENDING, 'chainExpired');
-      refund = true;
+      const to = wholesale ? L.PAYMENT_STATUS.WHOLESALE_REFUND_PENDING : L.PAYMENT_STATUS.REFUND_PENDING;
+      patch.paymentStatus = L.assertPaymentTransition(ship.paymentStatus, to, 'chainExpired');
+      refund = !wholesale;
+      refundTarget = wholesale ? 'wholesale' : 'sender_wallet';
     }
     tx.update(shipRef, patch);
     const couriers = [];
@@ -1041,13 +1406,23 @@ async function expireChain(deps, shipmentId, now) {
         tx.update(s.ref, { status: sm.STATUS.CANCELLED, cancelledBy: 'assembly_expired', cancelledAt: now, updatedAt: now });
       }
     }
+    // O'ZGARMAS hodisa (16-band) — Ulgurji tomoni shu yoki jo'natmaning `chain.state`
+    // o'zgarishiga tayanadi. Qo'shimcha kalitlar faqat Ulgurji/naqd jo'natmada.
     tx.set(db.collection(TARIFF_AUDIT).doc(`chain_expired_${shipmentId}`), {
       kind: 'chain_expired', shipmentId, orderId: ship.orderId || null, legCount: legIds.length,
       claimed: Number(chain.claimed) || 0, refundPending: refund, by: 'system', at: now,
+      ...(wholesale ? {
+        source: ship.source || null,
+        wholesaleOrderId: ship.wholesaleOrderId || null,
+        refundTarget,
+        paymentStatusAfter: patch.paymentStatus || ship.paymentStatus || null,
+        deliveryPaymentMethod: L.isCashShipment(ship) ? L.DELIVERY_PAYMENT_METHOD.CASH : L.DELIVERY_PAYMENT_METHOD.ESCROW,
+      } : {}),
     });
     return {
       expired: true, legIds, couriers, ownerId: ship.ownerId, orderId: ship.orderId || null,
       trackingNumber: ship.trackingNumber || '', refund, claimed: Number(chain.claimed) || 0,
+      wholesale, wholesaleOrderId: ship.wholesaleOrderId || null, refundTarget,
     };
   });
   if (!out.expired) return out;
@@ -1061,7 +1436,9 @@ async function expireChain(deps, shipmentId, now) {
     }));
   }
   try {
-    await writeChainNews(db, shipmentId, out.ownerId, 'sender', out.trackingNumber, now);
+    // Ulgurji: jo'natuvchi (sotuvchi) to'lamagan — «to'lov hamyoningizga qaytariladi» matni
+    // NOTO'G'RI bo'lardi. Sotuvchi/xaridorga xabarni Ulgurji tomoni yuboradi (o'z matni bilan).
+    if (!out.wholesale) await writeChainNews(db, shipmentId, out.ownerId, 'sender', out.trackingNumber, now);
     for (const p of out.couriers) await writeChainNews(db, shipmentId, p, 'courier', out.trackingNumber, now);
   } catch (e) {
     console.error(JSON.stringify({
@@ -1071,6 +1448,7 @@ async function expireChain(deps, shipmentId, now) {
   console.log(JSON.stringify({
     action: 'chainExpired', result: 'ok', shipmentId, orderId: out.orderId, legCount: out.legIds.length,
     claimed: out.claimed, couriers: out.couriers.length, refundPending: out.refund,
+    ...(out.wholesale ? { wholesaleOrderId: out.wholesaleOrderId, refundTarget: out.refundTarget } : {}),
   }));
   return out;
 }
@@ -1719,8 +2097,8 @@ function makeScanHandover(deps) {
       if (![L.SHIPMENT_STATUS.READY, L.SHIPMENT_STATUS.IN_TRANSIT].includes(ship.status)) {
         throw fail('failed-precondition', 'Jo\'natma holati olishga mos emas', 'shipment_not_ready', { status: ship.status });
       }
-      if (ship.paymentStatus !== L.PAYMENT_STATUS.ESCROW_FUNDED) {
-        // D-TAXI-13 analogi: to'lovsiz custody yo'q.
+      if (!L.isCustodyFunded(ship)) {
+        // D-TAXI-13 analogi: to'lovsiz custody yo'q (naqd jo'natma — `cash_on_delivery` ochilgan bo'lsa).
         throw fail('failed-precondition', 'To\'lov tasdiqlanmagan', 'not_funded');
       }
       // Zanjir (2026-11-07): butun zanjir yig'ilmaguncha posilka olinmaydi.
@@ -1938,6 +2316,23 @@ function makeConfirmDelivery(deps) {
       if (cur.kind !== L.CUSTODIAN_KIND.PROVIDER || cur.id !== providerId) {
         throw fail('failed-precondition', 'Custody zanjiri mos emas', 'custody_mismatch');
       }
+      // NAQD (S5): kuryer xaridordan haqni olganini ANIQ tasdiqlaydi (summa serverdan,
+      // klientdan EMAS — 18-band). Tasdiqsiz yetkazish yopilmaydi (kod sarflanmaydi).
+      const cash = L.isCashShipment(ship);
+      const dp = ship.deliveryPayment || {};
+      if (cash) {
+        if (dp.status !== L.CASH_STATUS.PENDING) {
+          throw fail('failed-precondition', 'Naqd to\'lov holati mos emas', 'cash_state_invalid', { status: dp.status || null });
+        }
+        if (dp.collectorLegId && dp.collectorLegId !== legId) {
+          throw fail('failed-precondition', 'Naqd haqni faqat oxirgi kuryer oladi', 'cash_collector_mismatch');
+        }
+        if ((data || {}).cashCollected !== true) {
+          throw fail('failed-precondition', 'Xaridordan yetkazish haqini olganingizni tasdiqlang', 'cash_confirmation_required', {
+            cashToCollect: Number(dp.amount) || 0,
+          });
+        }
+      }
       const blocked = applyCodeAttempt(
         tx, attemptsRef, attSnap, now, L.codeAttemptLimits(config),
         () => L.verifyDeliveryCode(shipmentId, (secSnap.data() || {}).qrSecret, deliveryCode),
@@ -1963,25 +2358,45 @@ function makeConfirmDelivery(deps) {
         idempotencyKey: eventId,
         completesLegId: legId,
         completedLegProviderId: providerId,
-        completedLegPayout: Number(a.payout) || 0,
+        // NAQD: yig'uvchining o'z LEG haqi naqdda QOLADI — EARNED (va hamyonga to'lov)
+        // yozilmasin: `relay_escrow.postEarned` 0 summani `no_payout` deb o'tkazadi.
+        // Oldingi LEG'lar EARNED'i (pickup hodisalari) o'zgarmagan; ular va AVA ulushi
+        // yig'uvchi hamyonidan — `functions/relay_cash.js` (`relayCashSettle:{shipmentId}`).
+        completedLegPayout: cash ? 0 : (Number(a.payout) || 0),
         deliversShipment: true,
+        ...(cash ? {
+          cashCollected: {
+            amount: Number(dp.amount) || 0,
+            collectorId: providerId,
+            collectorLegPayout: Number(a.payout) || 0,
+          },
+        } : {}),
       };
       tx.set(eventRef, event);
-      tx.update(shipmentRef, {
+      const shipPatch = {
         status: L.assertShipmentTransition(ship.status, L.SHIPMENT_STATUS.DELIVERED, 'confirmDelivery'),
         currentCustodian: { kind: L.CUSTODIAN_KIND.RECIPIENT, id: null, since: now },
         deliveredAt: now,
         custodyCount: (Number(ship.custodyCount) || 0) + 1,
         lastCustodyEventId: eventId,
         updatedAt: now,
-      });
+      };
+      if (cash) {
+        shipPatch['deliveryPayment.status'] = L.CASH_STATUS.COLLECTED;
+        shipPatch['deliveryPayment.collectedBy'] = providerId;
+        shipPatch['deliveryPayment.collectedAt'] = now;
+        shipPatch['deliveryPayment.collectorLegId'] = legId;
+        shipPatch['deliveryPayment.collectorLegPayout'] = Number(a.payout) || 0;
+        shipPatch['deliveryPayment.custodyEventId'] = eventId;
+      }
+      tx.update(shipmentRef, shipPatch);
       sm.assertTransition(leg.status, sm.STATUS.COMPLETED, 'confirmDelivery');
       tx.update(legRef, { status: sm.STATUS.COMPLETED, completedAt: now, updatedAt: now });
       // Yetkazilgach qabul qiluvchi ismi/telefoni/manzili ijrochida qolmasin (audit L10).
       tx.set(db.collection(MATCHES).doc(`${legId}_${providerId}`), {
         status: 'completed', closedAt: now, contactUnlocked: null,
       }, { merge: true });
-      return { idempotent: false, orderId: a.orderId || null };
+      return { idempotent: false, orderId: a.orderId || null, cash: cash ? Number(dp.amount) || 0 : null };
     });
 
     if (result.blocked) {
@@ -1989,8 +2404,161 @@ function makeConfirmDelivery(deps) {
       throw fail('permission-denied', 'Yetkazish kodi noto\'g\'ri', 'bad_delivery_code');
     }
     if (!result.idempotent) await recomputeOrderStatus(db, result.orderId, now);
-    return { ok: true, idempotent: result.idempotent, eventId, shipmentStatus: L.SHIPMENT_STATUS.DELIVERED };
+    if (result.cash !== null && result.cash !== undefined) {
+      console.log(JSON.stringify({
+        action: 'confirmDelivery.cash', result: 'collected', shipmentId, legId, amount: result.cash,
+      }));
+    }
+    return {
+      ok: true,
+      idempotent: result.idempotent,
+      eventId,
+      shipmentStatus: L.SHIPMENT_STATUS.DELIVERED,
+      ...(result.cash !== null && result.cash !== undefined ? { cashCollected: result.cash } : {}),
+    };
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// NAQD — XARIDOR RAD ETDI (S5, ega CONFIRMED 2026-11-14)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Ega qarori: xaridor eshik oldida tovarni rad etsa ham kuryer haqini XARIDOR to'laydi —
+// chiqish yetkazish haqi VA qaytish (tovarni sotuvchiga qaytarish) haqi, naqd, oxirgi
+// kuryerga. Summa SERVERDA hisoblanadi va kuryerga ko'rsatiladi. Oldingi LEG ulushlari va
+// AVA ulushi — oddiy naqd yetkazishdagidek kuryer hamyonidan (`functions/relay_cash.js`).
+// Xaridor to'lamasa — xaridor qarzi + oldingi kuryerlarga AVA qoplaydi (relay_cash).
+// Rad etish OQIMI (so'rov/xaridor tasdig'i/holat) — Ulgurji tomonida (`wholesale_failed.js`);
+// bu yerda faqat summa va o'zgarmas pul qaydi.
+
+/** Qaytish posilkasi — `wholesale_return.returnParcelFromOrder` bilan AYNI qiymatlar (jo'natma muhridan). */
+function returnQuoteParcelOf(ship) {
+  const p = ship.parcel || {};
+  const hasDims = isPosInt(p.lengthCm) && isPosInt(p.widthCm) && isPosInt(p.heightCm);
+  return {
+    actualWeightG: p.actualWeightG,
+    ...(hasDims ? { lengthCm: p.lengthCm, widthCm: p.widthCm, heightCm: p.heightCm } : {}),
+    declaredValue: p.declaredValue,
+  };
+}
+
+/**
+ * Rad etilganda kuryer xaridordan oladigan summa: `{ deliveryFee, returnFee, total,
+ * returnTariffVersion, currency }`. `deliveryFee` = muhrlangan chiqish narxi (qayta
+ * hisoblanmaydi); `returnFee` = qaytish yo'nalishi (manzil → jo'natuvchi), HOZIRGI faol
+ * tarif — Ulgurji qaytish jo'natmasi (`wholesale_return.createReturnShipment`) bilan AYNI hisob.
+ */
+async function quoteCashRefusalDue(deps, shipmentId) {
+  const { db } = deps;
+  const s = await db.collection(L.SHIPMENTS).doc(String(shipmentId || '')).get();
+  if (!s.exists) throw fail('not-found', 'Jo\'natma topilmadi', 'shipment_missing');
+  const ship = s.data() || {};
+  if (!L.isCashShipment(ship)) throw fail('failed-precondition', 'Naqd jo\'natma emas', 'not_cash_shipment');
+  const deliveryFee = Number((ship.deliveryPayment || {}).amount);
+  if (!isPosInt(deliveryFee)) throw fail('failed-precondition', 'Naqd summa yo\'q', 'cash_amount_invalid');
+  const rq = await quoteParcelForPoints(db, ship.destination, ship.origin, returnQuoteParcelOf(ship), { dimsOptional: true });
+  const returnFee = rq.quote.customerPrice;
+  if (!isPosInt(returnFee) || !isPosInt(rq.quote.tariffVersion)) {
+    throw fail('failed-precondition', 'Qaytish narxi hisoblanmadi', 'return_price_invalid');
+  }
+  const total = deliveryFee + returnFee;
+  if (!Number.isSafeInteger(total)) throw fail('failed-precondition', 'Summa juda katta', 'cash_amount_invalid');
+  return {
+    deliveryFee, returnFee, total, returnTariffVersion: rq.quote.tariffVersion, currency: 'UZS',
+  };
+}
+
+/**
+ * Rad etish natijasi (naqd) — O'ZGARMAS qayd. Chaqiruvchi: Ulgurji rad oqimi (kuryer
+ * `markWholesaleBuyerRefused` / yakuniy rad), u kuryer kimligini tekshirgan; bu yerda ham
+ * TRANZAKSIYADA qayta tekshiriladi (19-band): oxirgi (yig'uvchi) LEG shu kuryerniki,
+ * `in_progress`, posilka uning qo'lida, naqd holati `pending`.
+ *   input: { shipmentId, legId, courierId, paid: boolean }
+ * Yozadi: `deliveryPayment.status` = `refusal_collected` | `refusal_unpaid`,
+ * `deliveryPayment.refusal` (summalar MUHRLANADI — qaytish jo'natmasi shu `returnFee` bilan
+ * ochilishi kerak), `logistics_audit/cash_refusal_{shipmentId}` (`create` — bir marta).
+ * Takror chaqiruv (xuddi shu `paid`) — avvalgi natija; boshqa `paid` — `cash_refusal_conflict`.
+ * Jo'natma/LEG HOLATI o'zgarmaydi (chiqish LEG'ini yopish — Ulgurji `settleOutboundOnRefusal`ning
+ * pulsiz qismi). Pul — `functions/relay_cash.js` (shu holat o'zgarishidan).
+ */
+async function recordCashRefusal(deps, input) {
+  const { db, now: nowFn } = deps;
+  const now = nowFn ? nowFn() : new Date();
+  const p = input || {};
+  const shipmentId = String(p.shipmentId || '');
+  const legId = String(p.legId || '');
+  const courierId = toCanonicalId(p.courierId || '');
+  if (!shipmentId || !legId || !courierId) throw fail('invalid-argument', 'shipmentId/legId/courierId', 'cash_refusal_input');
+  if (typeof p.paid !== 'boolean') throw fail('invalid-argument', 'paid', 'cash_refusal_input');
+  const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
+  const pre = await shipRef.get();
+  const preDp = pre.exists ? ((pre.data() || {}).deliveryPayment || {}) : {};
+  if (preDp.refusal) {
+    if (preDp.refusal.paid !== p.paid) throw fail('failed-precondition', 'Rad natijasi allaqachon boshqacha yozilgan', 'cash_refusal_conflict');
+    return { recorded: false, idempotent: true, ...preDp.refusal };
+  }
+  const due = await quoteCashRefusalDue(deps, shipmentId);
+  const legRef = db.collection(DEMANDS).doc(legId);
+  const auditRef = db.collection(TARIFF_AUDIT).doc(`cash_refusal_${shipmentId}`);
+  const out = await db.runTransaction(async (tx) => {
+    const [s, l] = await Promise.all([tx.get(shipRef), tx.get(legRef)]);
+    if (!s.exists || !l.exists) throw fail('failed-precondition', 'Jo\'natma ma\'lumoti to\'liq emas', 'shipment_missing');
+    const ship = s.data() || {};
+    const leg = l.data() || {};
+    const dp = ship.deliveryPayment || {};
+    if (!L.isCashShipment(ship)) throw fail('failed-precondition', 'Naqd jo\'natma emas', 'not_cash_shipment');
+    if (dp.refusal) {
+      if (dp.refusal.paid !== p.paid) throw fail('failed-precondition', 'Rad natijasi allaqachon boshqacha yozilgan', 'cash_refusal_conflict');
+      return { idempotent: true, refusal: dp.refusal };
+    }
+    if (dp.status !== L.CASH_STATUS.PENDING) {
+      throw fail('failed-precondition', 'Naqd to\'lov holati mos emas', 'cash_state_invalid', { status: dp.status || null });
+    }
+    if (dp.amount !== due.deliveryFee) throw fail('failed-precondition', 'Naqd summa o\'zgargan', 'cash_amount_invalid');
+    const a = leg.attributes || {};
+    if (a.shipmentId !== shipmentId || (dp.collectorLegId && dp.collectorLegId !== legId)) {
+      throw fail('failed-precondition', 'Naqd haqni faqat oxirgi kuryer oladi', 'cash_collector_mismatch');
+    }
+    if ((leg.assignment || {}).providerId !== courierId) throw fail('permission-denied', 'Bu LEG sizga tayinlanmagan', 'not_assigned');
+    if (leg.status !== sm.STATUS.IN_PROGRESS) {
+      throw fail('failed-precondition', 'Posilka hali olinmagan', 'leg_not_in_progress', { status: leg.status });
+    }
+    const cur = ship.currentCustodian || {};
+    if (ship.status !== L.SHIPMENT_STATUS.IN_TRANSIT || cur.kind !== L.CUSTODIAN_KIND.PROVIDER || cur.id !== courierId) {
+      throw fail('failed-precondition', 'Custody zanjiri mos emas', 'custody_mismatch');
+    }
+    const refusal = {
+      paid: p.paid,
+      deliveryFee: due.deliveryFee,
+      returnFee: due.returnFee,
+      total: due.total,
+      returnTariffVersion: due.returnTariffVersion,
+      currency: 'UZS',
+      collectorId: courierId,
+      legId,
+      collectorLegPayout: Number(a.payout) || 0,
+      at: now,
+    };
+    tx.create(auditRef, {
+      kind: 'cash_refusal', shipmentId, legId, orderId: ship.orderId || null,
+      wholesaleOrderId: ship.wholesaleOrderId || null, source: ship.source || null,
+      ...refusal, by: courierId,
+    });
+    tx.update(shipRef, {
+      'deliveryPayment.status': p.paid ? L.CASH_STATUS.REFUSAL_COLLECTED : L.CASH_STATUS.REFUSAL_UNPAID,
+      'deliveryPayment.refusal': refusal,
+      'deliveryPayment.collectorLegId': legId,
+      'deliveryPayment.collectorLegPayout': Number(a.payout) || 0,
+      ...(p.paid ? { 'deliveryPayment.collectedBy': courierId, 'deliveryPayment.collectedAt': now } : {}),
+      updatedAt: now,
+    });
+    return { idempotent: false, refusal };
+  });
+  console.log(JSON.stringify({
+    action: 'recordCashRefusal', result: out.idempotent ? 'idempotent' : 'ok', shipmentId, legId,
+    paid: p.paid, deliveryFee: out.refusal.deliveryFee, returnFee: out.refusal.returnFee,
+  }));
+  return { recorded: !out.idempotent, idempotent: out.idempotent, ...out.refusal };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2339,6 +2907,11 @@ function makeAdminPlanShipmentRoute(deps) {
         shipPatch['chain.legCount'] = legIds.length;
         shipPatch['chain.selfTransferLegIds'] = [];
       }
+      if (L.isCashShipment(cur)) {
+        // Naqd (S5): yig'uvchi — YANGI rejaning oxirgi LEG'i (uning payout'i naqdda qoladi).
+        shipPatch['deliveryPayment.collectorLegId'] = legIds[legIds.length - 1];
+        shipPatch['deliveryPayment.collectorLegPayout'] = route.legs[route.legs.length - 1].payout;
+      }
       tx.update(shipRef, shipPatch);
       tx.set(shipRef.collection('private').doc('internal'), {
         platformShare: route.split.platformShare,
@@ -2364,7 +2937,8 @@ function makeAdminPlanShipmentRoute(deps) {
 
     // To'langan bo'lsa birinchi LEG darhol ochiladi.
     let first = null;
-    if (paidStatus === L.PAYMENT_STATUS.ESCROW_FUNDED) {
+    if (paidStatus === L.PAYMENT_STATUS.ESCROW_FUNDED
+      || (paidStatus === L.PAYMENT_STATUS.CASH_ON_DELIVERY && L.isCashShipment(ship))) {
       // Zanjir: BARCHA yangi LEG ochiladi (muddat — mavjud chain.deadlineAt).
       first = chainMode ? await activateChain(deps, shipmentId) : await activateLeg(deps, legIds[0]);
     }
@@ -2919,11 +3493,23 @@ function makeAdminSetLogisticsStage(deps) {
 }
 
 module.exports = {
+  // Ichki (Ulgurji) shartnoma — S7/S5, 2026-11-14.
+  quoteParcelForPoints,
+  createShipmentInternal,
+  prepareCancelUnpaidShipmentInTx,
+  closeShipmentMatches,
+  openCashShipment,
+  quoteCashRefusalDue,
+  recordCashRefusal,
+  addShipmentWrites,
+  isWholesaleRecord,
   TARIFF_AUDIT,
   MAX_PARCELS,
   STAGE_TESTERS_MAX,
   CONFIG_REGION,
   validatePoint,
+  // Ulgurji `wholesale_return.js` import qiladi (dimsOptional bilan) — eksport SHART.
+  validateParcel,
   validateParcels,
   validateRecipient,
   buildLegDemand,

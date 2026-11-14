@@ -104,6 +104,13 @@ const logisticsAdapter = {
       toRegionId: (demand.destination || {}).regionId || '',
       // Zanjir (2026-11-07): kuryer olishdan OLDIN «butun zanjir yig'ilgach yuriladi»ni ko'rsin.
       ...(a.chainMode ? { chainMode: a.chainMode } : {}),
+      // NAQD (S5, ega 2026-11-14): kuryer OLISHDAN OLDIN bilsin — oxirgi LEG'da xaridordan
+      // olinadigan to'liq yetkazish haqi (14-band istisnosi: yig'uvchi summani bilishi SHART).
+      // Eskrou LEG'da kalitlar yo'q (proyeksiya shakli o'zgarmagan).
+      ...(a.deliveryPaymentMethod === 'cash' ? {
+        deliveryPaymentMethod: 'cash',
+        cashToCollect: Number(a.cashToCollect) || 0,
+      } : {}),
     };
     return p;
   },

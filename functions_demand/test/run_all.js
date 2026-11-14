@@ -39,6 +39,7 @@ const SUITES = [
   'relay_split.test.js',
   'logistics_chain.test.js',
   'logistics_wholesale_guard.test.js',
+  'logistics_internal_chain.test.js',
   'courier_scopes_leg.test.js',
   'maintenance.test.js',
   'offers.test.js',

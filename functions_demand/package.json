@@ -31,6 +31,7 @@
     "test:logistics-admin-stage": "node test/logistics_admin_stage.test.js",
     "test:relay-split": "node test/relay_split.test.js",
     "test:logistics-chain": "node test/logistics_chain.test.js",
+    "test:logistics-internal": "node test/logistics_internal_chain.test.js",
     "test:maintenance": "node test/maintenance.test.js",
     "test:offers": "node test/offers.test.js",
     "test:dict": "node test/dictionary_fresh.test.js",
@@ -43,7 +44,8 @@
     "test:audit-tx": "firebase emulators:exec --only firestore --project demo-audit-tx \"node test/audit_expired_assignments_emulator.test.js\"",
     "test:logaudit-tx": "firebase emulators:exec --only firestore --project demo-logaudit-tx \"node test/logistics_audit_emulator.test.js\"",
     "test:loss-tx": "firebase emulators:exec --only firestore --project demo-loss-tx \"node test/logistics_loss_emulator.test.js\"",
-    "test:chain-tx": "firebase emulators:exec --only firestore --project demo-chain-tx \"node test/logistics_chain_emulator.test.js\""
+    "test:chain-tx": "firebase emulators:exec --only firestore --project demo-chain-tx \"node test/logistics_chain_emulator.test.js\"",
+    "test:internal-tx": "firebase emulators:exec --only firestore --project demo-internal-tx \"node test/logistics_internal_chain_emulator.test.js\""
   },
   "dependencies": {
     "ajv": "^8.17.1",

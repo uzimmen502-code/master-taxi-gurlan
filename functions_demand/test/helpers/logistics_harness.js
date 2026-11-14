@@ -36,6 +36,13 @@ function makeDb(seedDocs) {
         return ref.get();
       },
       set: (ref, data, opts) => { tx._ops.push(() => ref.set(data, opts)); },
+      // Haqiqiy SDK kabi: hujjat bor bo'lsa butun tranzaksiya rad (ALREADY_EXISTS).
+      create: (ref, data) => {
+        tx._ops.push(async () => {
+          if ((await ref.get()).exists) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 });
+          return ref.set(data);
+        });
+      },
       update: (ref, data) => { tx._ops.push(() => ref.update(data)); },
       delete: (ref) => { tx._ops.push(() => ref.delete()); },
       _ops: [],

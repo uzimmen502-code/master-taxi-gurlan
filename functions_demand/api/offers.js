@@ -37,6 +37,27 @@ function fail(code, message, reason) {
   return e;
 }
 
+/**
+ * Ulgurji buyurtmasi jo'natmasining LEG'i: LEG egasi = sotuvchi, u LEG'ni bekor qila /
+ * taklif qabul qila OLMAYDI (ega, 2026-10-31: sotuvchi buyurtmaga aralashmaydi).
+ * JONLI `cancelDemand`/`acceptOffer` (v11, 2026-10-31, offers.js f656c95d — repoda yo'q edi)
+ * dan AYNAN ko'chirildi (2026-11-14), shu branch'dan deploy qilinsa himoya yo'qolmasin.
+ * Belgi: `attributes.wholesaleOrderId`, yoki jo'natmaning o'zi (`wholesaleOrderId` /
+ * `source` 'wholesale…'). Tranzaksiya ichida, yozuvlardan OLDIN. Oddiy talab o'zgarmagan.
+ */
+async function assertNotWholesaleLegInTx(tx, db, demand) {
+  if (!demand || demand.module !== 'logistics') return;
+  const a = demand.attributes || {};
+  let wholesale = !!a.wholesaleOrderId;
+  if (!wholesale && a.shipmentId) {
+    const s = await tx.get(db.collection('shipments').doc(String(a.shipmentId)));
+    const ship = s.exists ? (s.data() || {}) : {};
+    wholesale = !!ship.wholesaleOrderId
+      || (typeof ship.source === 'string' && ship.source.startsWith('wholesale'));
+  }
+  if (wholesale) throw fail('permission-denied', 'Bu jo\'natmani o\'zgartirib bo\'lmaydi', 'wholesale_managed');
+}
+
 /** Taklifchi shu talabni ko'rish huquqiga egami. */
 async function assertIsMatched(db, demandId, providerId) {
   const snap = await db.collection(MATCHES).doc(`${demandId}_${providerId}`).get();
@@ -227,6 +248,7 @@ function makeAcceptOffer(deps) {
       if (demand.ownerId !== ownerId) {
         throw fail('permission-denied', 'Bu so\'rov sizga tegishli emas');
       }
+      await assertNotWholesaleLegInTx(tx, db, demand);
       // Muddat o'tgan talabda taklif QABUL QILINMAYDI (ega qarori 2026-10-11).
       // SERVER vaqti, AYNI tranzaksiyada o'qilgan talab bo'yicha: sweeper
       // hali yopmagan bo'lsa ham. Avval bu tekshiruv yo'q edi va sweeper
@@ -375,6 +397,7 @@ function makeCancelDemand(deps) {
       if (demand.ownerId !== ownerId) {
         throw fail('permission-denied', 'Bu so\'rov sizga tegishli emas');
       }
+      await assertNotWholesaleLegInTx(tx, db, demand);
       sm.assertTransition(demand.status, sm.STATUS.CANCELLED, 'cancelDemand');
 
       tx.update(demandRef, {

@@ -19,7 +19,9 @@
     "refund_pending",
     "refunded",
     "loss_pending",
-    "loss_settled"
+    "loss_settled",
+    "cash_on_delivery",
+    "wholesale_refund_pending"
   ],
   "orderStatuses": [
     "empty",
@@ -149,7 +151,26 @@
     "incident_missing",
     "loss_not_settled",
     "nothing_outstanding",
-    "op_id_reused"
+    "op_id_reused",
+    "cash_amount_invalid",
+    "cash_collector_mismatch",
+    "cash_confirmation_required",
+    "cash_refusal_conflict",
+    "cash_refusal_input",
+    "cash_state_invalid",
+    "delivery_payment_method",
+    "idempotency_key",
+    "not_cash_shipment",
+    "owner_required",
+    "points_missing",
+    "price_snapshot_invalid",
+    "price_snapshot_mismatch",
+    "recipient_is_owner",
+    "recipient_required",
+    "return_price_invalid",
+    "source_required",
+    "tariff_version_mismatch",
+    "tariff_version_missing"
   ],
   "docs": {
     "createResult": {

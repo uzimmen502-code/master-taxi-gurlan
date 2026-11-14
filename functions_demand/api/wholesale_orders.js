@@ -21,6 +21,9 @@
  *   onWholesaleOrderCreated    (trigger) qaror belgisi `pending` + muddat; ESKI (belgisiz)
  *                              buyurtmalarda — avvalgidek avtomatik jo'natma
  *   reconcileWholesaleShipments (3-bosqich, har 10 daqiqa) yiqilgan yaratishni qayta urinadi
+ *   Bank o'tkazmasi (`bank_transfer`, ega 2026-11-13/14): kvota muhri (bankHold = yetkazish haqi),
+ *                              qabulda `bankPayment: awaiting` + `bankPayDeadlineAt` (5 ish kuni);
+ *                              «Пул тушди» va muddat sweeper'i — `api/wholesale_bank.js`.
  *
  * NEGA SOZLAMA SHU CODEBASE'DA: ulush birinchi bo'lib KVOTADA (shu yerda)
  * muhrlanadi; admin tekshiruvi (`assertStrictAdmin`) va audit naqshi
@@ -186,11 +189,28 @@ function parseQuoteRequest(data) {
   if (!WO.PAYMENT_METHODS.includes(pm)) {
     throw fail('invalid-argument', 'To\'lov usuli noto\'g\'ri', 'payment_method_invalid', { allowed: [...WO.PAYMENT_METHODS] });
   }
+  // Bank o'tkazmasi (ega, 2026-11-14): yetkazish haqini xaridor qanday to'laydi — hozir FAQAT `wallet`
+  // (yo'q/bo'sh = wallet). Naqd kuryerga — keyingi bosqich, hozircha aniq kod bilan rad. Boshqa usullarda
+  // maydon ma'nosiz — berilsa rad (jimgina e'tiborsiz qoldirilmaydi).
+  const rawDpm = d.deliveryPaymentMethod;
+  const dpmEmpty = rawDpm === undefined || rawDpm === null || rawDpm === '';
+  let deliveryPaymentMethod = null;
+  if (pm === WO.PAYMENT_METHOD.BANK) {
+    deliveryPaymentMethod = dpmEmpty ? WO.DELIVERY_PAYMENT_METHOD.WALLET : rawDpm;
+    if (!WO.DELIVERY_PAYMENT_METHODS.includes(deliveryPaymentMethod)) {
+      throw fail('invalid-argument', 'Yetkazish haqini hozircha faqat hamyondan to\'lash mumkin', 'delivery_payment_method_unsupported', {
+        allowed: [...WO.DELIVERY_PAYMENT_METHODS],
+      });
+    }
+  } else if (!dpmEmpty) {
+    throw fail('invalid-argument', 'Bu to\'lov usulida yetkazish to\'lovi alohida tanlanmaydi', 'delivery_payment_method_not_applicable');
+  }
   return {
     productId,
     packId,
     qty,
     paymentMethod: pm,
+    deliveryPaymentMethod,
     destination: {
       regionId: dest.regionId, districtId: dest.districtId, lat: dest.lat, lng: dest.lng, addressText,
     },
@@ -250,6 +270,19 @@ function sellerOrigin(seller) {
     lng: s.lng,
     addressText: String(s.address || ''),
   };
+}
+
+/**
+ * Bank o'tkazmasi shu kvota uchun ochiqmi (sof). Ega (2026-11-14): sotuvchi TASDIQLANGAN bo'lsa
+ * (`wholesale_sellers.approvalStatus == 'approved'`, karta usulidagi bilan bir xil manba) — qo'shimcha
+ * shart yo'q (PROPOSED). Yetkazish haqi musbat bo'lishi shart: u xaridor hamyonidan ushlanadi va
+ * relay eskrouga o'tadi (0 so'mli ushlanma/jo'natma yo'q — default `shipFund` ham musbat talab qiladi).
+ * @returns {{available: boolean, reason: null|'seller_not_approved'|'delivery_fee_invalid'}}
+ */
+function bankAvailability(sellerDoc, deliveryFee) {
+  if (!sellerDoc || sellerDoc.approvalStatus !== 'approved') return { available: false, reason: 'seller_not_approved' };
+  if (!isPosInt(deliveryFee)) return { available: false, reason: 'delivery_fee_invalid' };
+  return { available: true, reason: null };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -316,7 +349,8 @@ function makeQuoteWholesaleOrder(deps) {
       if (!Number.isSafeInteger(weightG)) throw fail('invalid-argument', 'Vazn juda katta', 'over_weight');
 
       const sSnap = await db.collection(SELLERS).doc(sellerId).get();
-      const originRaw = sSnap.exists ? sellerOrigin(sSnap.data()) : null;
+      const sellerDoc = sSnap.exists ? (sSnap.data() || {}) : null;
+      const originRaw = sellerDoc ? sellerOrigin(sellerDoc) : null;
       if (!originRaw) throw fail('failed-precondition', 'Sotuvchi jo\'natish manzilini kiritmagan', 'seller_location_missing');
 
       const fee = await readFeeSettings(db);
@@ -346,6 +380,14 @@ function makeQuoteWholesaleOrder(deps) {
       if (req.paymentMethod === WO.PAYMENT_METHOD.CARD && !card.available) {
         throw fail('failed-precondition', 'Bu buyurtmani karta orqali to\'lab bo\'lmaydi', 'card_unavailable', {
           cardUnavailableReason: card.reason,
+        });
+      }
+      // Bank o'tkazmasi (ega, 2026-11-14): xaridor hamyonidan FAQAT yetkazish haqi ushlanadi
+      // (`bankHold`, default `placeWholesaleOrder` tranzaksiyada balansni tekshiradi).
+      const bank = bankAvailability(sellerDoc, deliveryFee);
+      if (req.paymentMethod === WO.PAYMENT_METHOD.BANK && !bank.available) {
+        throw fail('failed-precondition', 'Bu buyurtmani bank o\'tkazmasi orqali to\'lab bo\'lmaydi', 'bank_transfer_unavailable', {
+          bankUnavailableReason: bank.reason,
         });
       }
 
@@ -381,6 +423,8 @@ function makeQuoteWholesaleOrder(deps) {
         destination: rq.destination,
         paymentMethod: req.paymentMethod,
         ...(req.paymentMethod === WO.PAYMENT_METHOD.CARD ? { cardHold } : {}),
+        ...(req.paymentMethod === WO.PAYMENT_METHOD.BANK
+          ? { bankHold: deliveryFee, deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
         createdAt: now,
         expiresAt,
         used: false,
@@ -390,7 +434,7 @@ function makeQuoteWholesaleOrder(deps) {
       log('quote', {
         result: 'ok', quoteId: ref.id, productId: req.productId, packId: pack.id, qty: req.qty,
         goodsTotal, deliveryFee, tariffVersion: rq.quote.tariffVersion, paymentMethod: req.paymentMethod,
-        cardAvailable: card.available, durationMs: Date.now() - started,
+        cardAvailable: card.available, bankAvailable: bank.available, durationMs: Date.now() - started,
       });
       return {
         quoteId: ref.id,
@@ -406,8 +450,12 @@ function makeQuoteWholesaleOrder(deps) {
         currency: 'UZS',
         expiresAtMs: expiresAt.getTime(),
         paymentMethod: req.paymentMethod,
-        paymentMethods: { wallet: true, card_on_delivery: card.available },
+        paymentMethods: { wallet: true, card_on_delivery: card.available, bank_transfer: bank.available },
         cardUnavailableReason: card.reason,
+        bankUnavailableReason: bank.reason,
+        // Bank o'tkazmasi: xaridor hamyonidan ushlanadigan summa (faqat yetkazish haqi) va usuli.
+        ...(req.paymentMethod === WO.PAYMENT_METHOD.BANK
+          ? { deliveryPaymentMethod: req.deliveryPaymentMethod, walletHold: deliveryFee } : {}),
       };
     } catch (e) {
       log('quote', {
@@ -491,7 +539,22 @@ function makeOrderTransition({ db, now: nowFn }, { actor, to, action }) {
         // 21-band: takror chaqiruv (tarmoq qayta urinishi) — xato emas, ikkinchi yozuv yo'q.
         if (from === to) return { idempotent: true, from };
         WO.assertTransition(actor, from, to);
-        const write = await prepareCancelInTx(tx, db, ref, o, { actor, actorId: callerId, reason });
+        // Bank o'tkazmasi (PROPOSED, 2026-11-14): xaridor sotuvchi «Пул тушди» bosguncha bekor qila oladi;
+        // tasdiqdan keyin — yo'q (tovar puli sotuvchiga tushgan, ilova uni qaytarmaydi). Kutilayotgan
+        // to'lov belgisi `cancelled` bo'ladi (sweeper uni endi ko'rmaydi).
+        let extraPatch;
+        if (WO.methodOf(o) === WO.PAYMENT_METHOD.BANK) {
+          const bps = (o.bankPayment || {}).status;
+          if (bps === WO.BANK_PAYMENT.CONFIRMED) {
+            throw fail('failed-precondition', 'Sotuvchi to\'lovni tasdiqlagan — buyurtmani bekor qilib bo\'lmaydi', 'bank_payment_confirmed');
+          }
+          if (bps === WO.BANK_PAYMENT.AWAITING) {
+            extraPatch = { 'bankPayment.status': WO.BANK_PAYMENT.CANCELLED, 'bankPayment.cancelledAt': now };
+          }
+        }
+        const write = await prepareCancelInTx(tx, db, ref, o, {
+          actor, actorId: callerId, reason, extraPatch,
+        });
         write(now);
         return { idempotent: false, from };
       });
@@ -588,6 +651,10 @@ function makeAcceptWholesaleOrder(deps) {
         const idem = checkSellerDecisionState(o, now.getTime(), WO.SELLER_DECISION.ACCEPTED);
         if (idem) return idem;
         const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+        // Bank o'tkazmasi (ega, 2026-11-14): qabul bilan AYNI tranzaksiyada tovar puli kutilishi
+        // boshlanadi — muddat = qabul + 5 ish kuni. Jo'natma `confirmed` gacha OCHILMAYDI.
+        const isBank = WO.methodOf(o) === WO.PAYMENT_METHOD.BANK;
+        const bankDeadline = isBank ? new Date(WO.bankPayDeadlineFor(now.getTime())) : null;
         tx.update(ref, {
           sellerDecision: WO.SELLER_DECISION.ACCEPTED,
           sellerDecisionAt: now,
@@ -595,16 +662,32 @@ function makeAcceptWholesaleOrder(deps) {
           acceptedBy: callerId,
           historySeq: seq,
           updatedAt: now,
+          ...(isBank ? {
+            bankPayment: {
+              status: WO.BANK_PAYMENT.AWAITING, awaitingSince: now, confirmedAt: null, confirmedBy: null,
+            },
+            bankPayDeadlineAt: bankDeadline,
+          } : {}),
         });
         tx.set(ref.collection(HISTORY).doc(String(seq)), {
           seq, from: o.status, to: o.status, event: 'seller_accepted', actor: WO.ACTOR.SELLER, actorId: callerId,
-          reason: '', meta: { acceptDeadlineAt: o.acceptDeadlineAt || null }, at: now,
+          reason: '',
+          meta: {
+            acceptDeadlineAt: o.acceptDeadlineAt || null,
+            ...(isBank ? { bankPayDeadlineAt: bankDeadline, bankPayBusinessDays: WO.BANK_PAY_BUSINESS_DAYS } : {}),
+          },
+          at: now,
         });
-        return { idempotent: false };
+        return { idempotent: false, bankPayDeadlineAt: bankDeadline };
       });
       log('acceptOrder', { result: out.idempotent ? 'already' : 'ok', orderId, durationMs: Date.now() - started });
       return {
-        ok: true, orderId, status: WO.STATUS.PLACED, sellerDecision: WO.SELLER_DECISION.ACCEPTED, idempotent: out.idempotent,
+        ok: true,
+        orderId,
+        status: WO.STATUS.PLACED,
+        sellerDecision: WO.SELLER_DECISION.ACCEPTED,
+        idempotent: out.idempotent,
+        ...(out.bankPayDeadlineAt ? { bankPayDeadlineMs: out.bankPayDeadlineAt.getTime() } : {}),
       };
     } catch (e) {
       log('acceptOrder', {
@@ -969,13 +1052,21 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
   // Sotuvchi qabuli (ega, 2026-11-13): A) qabul qilingan, jo'natmasi yo'q (faqat tenglik
   // filtrlari — kompozit indeks kerak emas); B) belgisiz ESKI buyurtmalar (avvalgi so'rov) —
   // qaror kutayotgan (`pending`) va boshqa belgililar o'tkaziladi (darvoza `shipmentAllowed`).
-  const accepted = await db.collection(ORDERS)
+  // Bank o'tkazmasi (2026-11-14): qabul qilingan, lekin tovar puli kutilayotgan (`awaiting`, 5 ish
+  // kunigacha) bank buyurtmalari umumiy «accepted» so'rovini TO'LDIRIB qo'ymasin — har usul alohida
+  // so'rov (hammasi tenglik filtri, kompozit indeks kerak emas): hamyon, karta, bank-TASDIQLANGAN.
+  const acceptedBase = db.collection(ORDERS)
     .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null)
-    .where('sellerDecision', '==', WO.SELLER_DECISION.ACCEPTED).limit(limit).get();
+    .where('sellerDecision', '==', WO.SELLER_DECISION.ACCEPTED);
+  const acceptedSnaps = await Promise.all([
+    acceptedBase.where('paymentMethod', '==', WO.PAYMENT_METHOD.WALLET).limit(limit).get(),
+    acceptedBase.where('paymentMethod', '==', WO.PAYMENT_METHOD.CARD).limit(limit).get(),
+    acceptedBase.where('bankPayment.status', '==', WO.BANK_PAYMENT.CONFIRMED).limit(limit).get(),
+  ]);
   const legacy = await db.collection(ORDERS)
     .where('status', '==', WO.STATUS.PLACED).where('shipment', '==', null).limit(limit).get();
   const seen = new Set();
-  for (const d of [...accepted.docs, ...legacy.docs]) {
+  for (const d of [...acceptedSnaps.flatMap((s) => s.docs), ...legacy.docs]) {
     if (seen.has(d.id)) continue;
     seen.add(d.id);
     const o = d.data() || {};
@@ -1136,6 +1227,8 @@ module.exports = {
   resolvePack,
   avaFeeOf,
   parseQuoteRequest,
+  bankAvailability,
+  prepareCancelInTx,
   readFeeSettings,
   requireOrdersGate,
   makeQuoteWholesaleOrder,

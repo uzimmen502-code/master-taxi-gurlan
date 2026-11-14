@@ -249,7 +249,8 @@ ok('kvota (hamyon, standart): paymentMethods javobda; karta yo\'q → seller_no_
   const db = makeDb();
   const r = await q(() => quote(db)(qreq(), ctx(BUYER)));
   assert.strictEqual(r.paymentMethod, 'wallet');
-  assert.deepStrictEqual(r.paymentMethods, { wallet: true, card_on_delivery: false });
+  // bank_transfer (2026-11-14): sotuvchi tasdiqlangan — ochiq (alohida test: wholesale_bank.test.js).
+  assert.deepStrictEqual(r.paymentMethods, { wallet: true, card_on_delivery: false, bank_transfer: true });
   assert.strictEqual(r.cardUnavailableReason, 'seller_no_card');
   const qd = db.dump('wholesale_quotes')[r.quoteId];
   assert.strictEqual(qd.paymentMethod, 'wallet');

@@ -56,6 +56,49 @@ const MESSAGES = {
     uz_Latn: { title: 'Buyurtma muddati o\'tdi — bekor qilindi', body: '{product} × {qty}. Buyurtma {deadline} gacha qabul qilinmagani uchun bekor bo\'ldi.' },
     ru: { title: 'Срок истёк — заказ отменён', body: '{product} × {qty}. Заказ отменён, так как не был принят до {deadline}.' },
   },
+  // ── Банк ўтказмаси (ega, 2026-11-13/14). Товар пули иловадан ТАШҚАРИДА — матнларда товар пулини
+  // «қайтариш» ҳақида гап ЙЎҚ (ega, 2026-11-14). {goods} — товар суммаси, {bankDeadline} — қабул + 5 иш куни
+  // (Тошкент вақти), {refund}/{left} — фақат етказиш ҳақи (йўқолганда, масъул курьердан).
+  ws_bank_await_buyer: {
+    uz_Cyrl: { title: 'Сотувчи қабул қилди — тўловни ўтказинг', body: '{product} × {qty}. Товар суммаси {goods} сўмни сотувчи берадиган ҳисоб-фактура бўйича банк орқали {bankDeadline} гача ўтказинг. Сотувчи пул тушганини тасдиқлагач, етказиш бошланади. Муддатда тасдиқланмаса, буюртма бекор бўлади ва етказиш ҳақи ҳамёнингизга қайтади.' },
+    uz_Latn: { title: 'Sotuvchi qabul qildi — to\'lovni o\'tkazing', body: '{product} × {qty}. Tovar summasi {goods} so\'mni sotuvchi beradigan hisob-faktura bo\'yicha bank orqali {bankDeadline} gacha o\'tkazing. Sotuvchi pul tushganini tasdiqlagach, yetkazish boshlanadi. Muddatda tasdiqlanmasa, buyurtma bekor bo\'ladi va yetkazish haqi hamyoningizga qaytadi.' },
+    ru: { title: 'Продавец принял заказ — оплатите', body: '{product} × {qty}. Переведите {goods} сум за товар банковским переводом по счёту продавца до {bankDeadline}. Доставка начнётся после того, как продавец подтвердит поступление. Если подтверждения не будет в срок, заказ отменится, а стоимость доставки вернётся в кошелёк.' },
+  },
+  ws_bank_await_seller: {
+    uz_Cyrl: { title: 'Банк ўтказмасини кутинг', body: '{product} × {qty}. Харидорга {goods} сўмга ҳисоб-фактура беринг. Пул ҳисобингизга тушгач, {bankDeadline} гача «Пул тушди» ни босинг — шундан кейин етказиш бошланади. Муддатда тасдиқланмаса, буюртма бекор бўлади.' },
+    uz_Latn: { title: 'Bank o\'tkazmasini kuting', body: '{product} × {qty}. Xaridorga {goods} so\'mga hisob-faktura bering. Pul hisobingizga tushgach, {bankDeadline} gacha «Pul tushdi» ni bosing — shundan keyin yetkazish boshlanadi. Muddatda tasdiqlanmasa, buyurtma bekor bo\'ladi.' },
+    ru: { title: 'Ожидайте банковский перевод', body: '{product} × {qty}. Выставьте покупателю счёт на {goods} сум. Когда деньги поступят на ваш счёт, нажмите «Деньги поступили» до {bankDeadline} — после этого начнётся доставка. Без подтверждения в срок заказ будет отменён.' },
+  },
+  ws_bank_confirmed_buyer: {
+    uz_Cyrl: { title: 'Сотувчи тўловни тасдиқлади', body: '{product} × {qty}. Етказиш тайёрланмоқда — ҳолатини буюртма саҳифасида кузатинг.' },
+    uz_Latn: { title: 'Sotuvchi to\'lovni tasdiqladi', body: '{product} × {qty}. Yetkazish tayyorlanmoqda — holatini buyurtma sahifasida kuzating.' },
+    ru: { title: 'Продавец подтвердил оплату', body: '{product} × {qty}. Доставка готовится — следите за статусом на странице заказа.' },
+  },
+  ws_bank_timeout_buyer: {
+    uz_Cyrl: { title: 'Буюртма бекор бўлди', body: '{product} × {qty}. Сотувчи {bankDeadline} гача тўлов тушганини тасдиқламади. Етказиш ҳақи ҳамёнингизга қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma bekor bo\'ldi', body: '{product} × {qty}. Sotuvchi {bankDeadline} gacha to\'lov tushganini tasdiqlamadi. Yetkazish haqi hamyoningizga qaytariladi.' },
+    ru: { title: 'Заказ отменён', body: '{product} × {qty}. Продавец не подтвердил поступление оплаты до {bankDeadline}. Стоимость доставки вернётся в ваш кошелёк.' },
+  },
+  ws_bank_timeout_seller: {
+    uz_Cyrl: { title: 'Буюртма бекор қилинди', body: '{product} × {qty}. Тўлов тушгани {bankDeadline} гача тасдиқланмагани учун буюртма бекор бўлди.' },
+    uz_Latn: { title: 'Buyurtma bekor qilindi', body: '{product} × {qty}. To\'lov tushgani {bankDeadline} gacha tasdiqlanmagani uchun buyurtma bekor bo\'ldi.' },
+    ru: { title: 'Заказ отменён', body: '{product} × {qty}. Заказ отменён, так как поступление оплаты не было подтверждено до {bankDeadline}.' },
+  },
+  ws_bank_buyer_cancelled_seller: {
+    uz_Cyrl: { title: 'Харидор буюртмани бекор қилди', body: '{product} × {qty}. Банк ўтказмаси кутилаётган буюртма ёпилди.' },
+    uz_Latn: { title: 'Xaridor buyurtmani bekor qildi', body: '{product} × {qty}. Bank o\'tkazmasi kutilayotgan buyurtma yopildi.' },
+    ru: { title: 'Покупатель отменил заказ', body: '{product} × {qty}. Заказ, ожидавший банковского перевода, закрыт.' },
+  },
+  ws_bank_lost_buyer: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Етказиш ҳақи {refund} сўм ҳамёнингизга қайтарилди.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Yetkazish haqi {refund} so\'m hamyoningizga qaytarildi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Стоимость доставки {refund} сум возвращена в ваш кошелёк.' },
+  },
+  ws_bank_lost_buyer_partial: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Етказиш ҳақидан {refund} сўм ҳамёнингизга қайтарилди, қолган {left} сўм масъул курьер тўлагач қайтарилади.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Yetkazish haqidan {refund} so\'m hamyoningizga qaytarildi, qolgan {left} so\'m mas\'ul kuryer to\'lagach qaytariladi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Из стоимости доставки в кошелёк возвращено {refund} сум, оставшиеся {left} сум вернутся после оплаты ответственным курьером.' },
+  },
   ws_card_new_order: {
     uz_Cyrl: { title: 'Янги буюртма — тўлов картангизга', body: '{product} × {qty}. Харидор етказилганда {amount} сўмни картангизга ўтказади. Пул тушгач «Пул тушди» тугмасини босинг.' },
     uz_Latn: { title: 'Yangi buyurtma — to\'lov kartangizga', body: '{product} × {qty}. Xaridor yetkazilganda {amount} so\'mni kartangizga o\'tkazadi. Pul tushgach «Pul tushdi» tugmasini bosing.' },

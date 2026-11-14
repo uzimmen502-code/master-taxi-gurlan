@@ -49,6 +49,8 @@ const wholesaleOrdersApi = require('./api/wholesale_orders');
 const wholesaleCardApi = require('./api/wholesale_card');
 const wholesaleEventsApi = require('./api/wholesale_events');
 const wholesaleFailedApi = require('./api/wholesale_failed');
+const wholesaleBankApi = require('./api/wholesale_bank');
+const wholesaleFeeStatementApi = require('./api/wholesale_fee_statement');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -319,6 +321,30 @@ exports.wholesaleSellerDecisionSweeper = fn.pubsub
     await wholesaleOrdersApi.runWholesaleSellerDecisionSweep({ db });
     return null;
   });
+
+// Bank o'tkazmasi (ega, 2026-11-13/14; api/wholesale_bank.js): tovar puli ilovadan tashqarida.
+// Sotuvchi «Пул тушди» → jo'natma ochiladi; 5 ish kunida tasdiqlanmasa — bekor (yetkazish haqi xaridorga).
+exports.confirmWholesaleBankPayment = fn.https.onCall(wrapCallable(
+  wholesaleBankApi.makeConfirmWholesaleBankPayment({ db }),
+));
+/** Kompozit indeks: wholesale_orders (bankPayment.status ASC, bankPayDeadlineAt ASC). */
+exports.wholesaleBankPaymentSweeper = fn.pubsub
+  .schedule('every 15 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    await wholesaleBankApi.runWholesaleBankPaymentSweep({ db });
+    return null;
+  });
+// AVA ulushi hisoboti (ega: «ҳар 10 кунда ... 2% ҳисоботи»; api/wholesale_fee_statement.js) — qat'iy admin.
+exports.adminGetWholesaleFeeStatement = fn.https.onCall(wrapCallable(
+  wholesaleFeeStatementApi.makeAdminGetWholesaleFeeStatement({ db }),
+));
+exports.adminGetWholesaleOrdersReport = fn.https.onCall(wrapCallable(
+  wholesaleFeeStatementApi.makeAdminGetWholesaleOrdersReport({ db }),
+));
+exports.adminMarkWholesaleFeeCollected = fn.https.onCall(wrapCallable(
+  wholesaleFeeStatementApi.makeAdminMarkWholesaleFeeCollected({ db }),
+));
 
 /**
  * Ulgurji buyurtma, 3-bosqich: relay jo'natmasi. Ega, 2026-11-13: yangi buyurtmada onCreate

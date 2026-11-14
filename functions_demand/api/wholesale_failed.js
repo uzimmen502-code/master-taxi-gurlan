@@ -37,6 +37,8 @@
  * qaytish haqi aybdordan) — default `functions/wholesale_orders.js` `settleWalletRefusalInTx` / `fundReturn`
  * (`refusal.reasonCode` ga qarab; ayb jadvali `WALLET_REFUSAL_FAULT` — paritet). Kuryer haqi (ishlangan LEG) —
  * o'zgarmagan `settleOutboundOnRefusal`. Hisoblagich — mavjud `writeRefusal` qoidasi (xaridor sababli).
+ * `bank_transfer` (ega, 2026-11-14) — HAMYON bilan AYNI oqim (`WO.deliveryPaidByBuyer`): yetkazish haqi
+ * xaridor hamyonidan to'langan; tovar puli ilovadan tashqarida — default codebase unga TEGMAYDI.
  */
 
 const {
@@ -186,7 +188,8 @@ function stillRefusable(o, ship) {
 
 /** Shu buyurtmada kuryer tanlay oladigan sabablar (UI uchun; server baribir tekshiradi). */
 function allowedReasonsOf(o) {
-  return WO.methodOf(o) === WO.PAYMENT_METHOD.WALLET ? [...WALLET_REASONS] : [...REASONS];
+  // Bank o'tkazmasi (2026-11-14) — yetkazish/qaytish haqi hamyon qoidasi bilan: sabab ANIQ bo'lishi shart.
+  return WO.deliveryPaidByBuyer(o) ? [...WALLET_REASONS] : [...REASONS];
 }
 
 function stateOf(o) {
@@ -328,7 +331,8 @@ function makeReportWholesaleDeliveryFailed(deps) {
         // Eski (2026-11-01 gacha) darhol rad etilgan buyurtma — avvalgidek idempotent.
         if (o.status === WO.STATUS.REFUSED && sameUser((o.refusal || {}).by, callerId)) return { refused: true, o };
         if (isPending(o)) return { idempotent: true, o };
-        const isWallet = WO.methodOf(o) === WO.PAYMENT_METHOD.WALLET;
+        // Hamyon va bank o'tkazmasi (yetkazish haqi xaridor hamyonidan) — bir xil sabab/holat qoidasi.
+        const isWallet = WO.deliveryPaidByBuyer(o);
         if (isWallet) {
           // Hamyon (ega, 2026-11-01): pul sababga bog'liq — eski APK (sababsiz) va «бошқа» qabul qilinmaydi.
           if (legacy) throw fail('invalid-argument', 'Sababni tanlang', 'reason_required', { allowed: WALLET_REASONS });

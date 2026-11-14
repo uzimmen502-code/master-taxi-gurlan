@@ -23,11 +23,12 @@
  * avvalgidek avtomatik jo'natma (`shipmentAllowed`), qaror so'ralmaydi (26-band).
  *
  * Kim qaysi o'tishni qiladi (19-band: autentifikatsiya ≠ avtorizatsiya):
- *   buyer  : placed → cancelled           (yetkazish hali ochilmagan bo'lsa)
+ *   buyer  : placed → cancelled           (yetkazish hali ochilmagan bo'lsa; bank o'tkazmasida — sotuvchi
+ *                                          «Пул тушди» bosguncha, PROPOSED 2026-11-14)
  *   seller : placed → cancelled           (rad: faqat `sellerDecision == pending`, muddat ichida)
  *   admin  : placed | in_delivery → cancelled (kuryer hali olmagan bo'lsa — 3-bosqich)
  *   system : placed → in_delivery → delivered (relay — 3-bosqich); in_delivery | payment_dispute → lost;
- *            placed → cancelled (sotuvchi muddatda qaror qilmadi)
+ *            placed → cancelled (sotuvchi muddatda qaror qilmadi; bank o'tkazmasi muddatda tasdiqlanmadi)
  *
  * Bu jadval FAQAT SHU YERDA. Default codebase (`functions/wholesale_orders.js`)
  * boshlang'ich `placed` ni yozadi va `cancelled` da pulni qaytaradi —
@@ -112,9 +113,36 @@ const ACTOR_ALLOWED = Object.freeze({
 const REFUND_STATUSES = Object.freeze([STATUS.CANCELLED, STATUS.REFUSED]);
 const REFUND_STATUS = Object.freeze({ PENDING: 'pending', DONE: 'done' });
 
-/** To'lov usuli (kvotada muhrlanadi). Yo'q (eski buyurtma/kvota) = `wallet`. */
-const PAYMENT_METHOD = Object.freeze({ WALLET: 'wallet', CARD: 'card_on_delivery' });
-const PAYMENT_METHODS = Object.freeze([PAYMENT_METHOD.WALLET, PAYMENT_METHOD.CARD]);
+/**
+ * To'lov usuli (kvotada muhrlanadi). Yo'q (eski buyurtma/kvota) = `wallet`.
+ *
+ * ── BANK O'TKAZMASI (`bank_transfer`, ega qarori 2026-11-13/14) ──────────
+ * Tovar puli ILOVADAN TASHQARIDA (hisob-faktura bo'yicha bank o'tkazmasi) — ilova tovar puliga
+ * UMUMAN aralashmaydi (ega, 2026-11-14): ushlamaydi, qaytarmaydi, «ilovadan tashqari qaytaring»
+ * kabi belgi/xabar ham YO'Q. Ilova faqat: kuryer (yetkazish) haqi — XARIDOR hamyonidan
+ * (`deliveryPaymentMethod: 'wallet'`; naqd kuryerga — keyingi bosqich), logistika (jo'natma, rad
+ * bo'lsa qaytish jo'natmasi) va AVA ulushi HISOBOTI (10 kunlik, admin; buyurtma paytida olinmaydi).
+ *   placed (sellerDecision pending) → qabul → `bankPayment.status: awaiting`,
+ *   `bankPayDeadlineAt` = qabul + 5 ISH KUNI → sotuvchi «Пул тушди» (`confirmWholesaleBankPayment`)
+ *   → `confirmed` → FAQAT SHUNDAN KEYIN jo'natma (`shipmentAllowed`) → odatdagi relay oqimi.
+ *   Muddatda tasdiqlanmasa → cancelled (`bank_payment_timeout`) → yetkazish haqi xaridorga
+ *   (default `refundOrder`, hamyon bekor qilish yo'li bilan bir xil).
+ *   Rad / yo'qolish — yetkazish haqi qismi HAMYON usuli ayb qoidalari bilan (default codebase).
+ */
+const PAYMENT_METHOD = Object.freeze({ WALLET: 'wallet', CARD: 'card_on_delivery', BANK: 'bank_transfer' });
+const PAYMENT_METHODS = Object.freeze([PAYMENT_METHOD.WALLET, PAYMENT_METHOD.CARD, PAYMENT_METHOD.BANK]);
+/**
+ * Bank o'tkazmasida yetkazish haqini xaridor qanday to'laydi. Hozir FAQAT `wallet` (buyurtma paytida
+ * AVA hamyonidan ushlanadi); naqd kuryerga — keyingi bosqich (shu ro'yxatga qo'shiladi).
+ */
+const DELIVERY_PAYMENT_METHOD = Object.freeze({ WALLET: 'wallet' });
+const DELIVERY_PAYMENT_METHODS = Object.freeze([DELIVERY_PAYMENT_METHOD.WALLET]);
+/** `order.bankPayment.status`. Maydon yo'q — bank buyurtmasi emas yoki hali qabul qilinmagan. */
+const BANK_PAYMENT = Object.freeze({
+  AWAITING: 'awaiting', CONFIRMED: 'confirmed', TIMEOUT: 'timeout', CANCELLED: 'cancelled',
+});
+/** Qabuldan keyin tovar puli tushishi muddati — ish kunlari (ega: 5 ish kuni). YAGONA joy. */
+const BANK_PAY_BUSINESS_DAYS = 5;
 /** `order.cardPayment.status`. */
 const CARD_PAYMENT = Object.freeze({
   AWAITING: 'awaiting', RECEIPT_SUBMITTED: 'receipt_submitted', CONFIRMED: 'confirmed', DISPUTED: 'disputed',
@@ -151,7 +179,9 @@ const SELLER_DECISION = Object.freeze({
   PENDING: 'pending', ACCEPTED: 'accepted', REJECTED: 'rejected', TIMEOUT: 'timeout',
 });
 /** `order.cancelReason` (sotuvchi qarori bilan bog'liq bekor qilishlar). */
-const CANCEL_REASON = Object.freeze({ SELLER_REJECTED: 'seller_rejected', SELLER_TIMEOUT: 'seller_timeout' });
+const CANCEL_REASON = Object.freeze({
+  SELLER_REJECTED: 'seller_rejected', SELLER_TIMEOUT: 'seller_timeout', BANK_PAYMENT_TIMEOUT: 'bank_payment_timeout',
+});
 /** Qaror muddati — ish kunlari (ega: «2 ish kuni»). YAGONA joy. */
 const ACCEPT_BUSINESS_DAYS = 2;
 /** Asia/Tashkent = UTC+5, yozgi vaqt YO'Q (2026 holatiga). */
@@ -190,16 +220,41 @@ function acceptDeadlineFor(createdAtMs, businessDays = ACCEPT_BUSINESS_DAYS) {
 }
 
 /**
+ * Bank o'tkazmasi muddati: qabul paytidan 5 ish kuni (`acceptDeadlineFor` bilan AYNI ish kuni
+ * qoidasi — Du–Ju, Asia/Tashkent, bayram kalendari yo'q; umumlashtirilgan N kun).
+ */
+function bankPayDeadlineFor(acceptedAtMs) {
+  return acceptDeadlineFor(acceptedAtMs, BANK_PAY_BUSINESS_DAYS);
+}
+
+const methodOf = (doc) => {
+  const m = (doc || {}).paymentMethod;
+  if (m === PAYMENT_METHOD.CARD) return PAYMENT_METHOD.CARD;
+  if (m === PAYMENT_METHOD.BANK) return PAYMENT_METHOD.BANK;
+  return PAYMENT_METHOD.WALLET;
+};
+
+/**
+ * Yetkazish haqini XARIDOR AVA hamyonidan to'laganmi (hamyon va bank o'tkazmasi). Rad/yo'qolishdagi
+ * yetkazish haqi va qaytish haqi qoidalari (ayb sababi, `WALLET_REASONS`) — shu ikkalasida bir xil.
+ */
+const deliveryPaidByBuyer = (doc) => methodOf(doc) !== PAYMENT_METHOD.CARD;
+
+/**
  * Jo'natma ochish mumkinmi (3-bosqich darvozasi). Maydon yo'q — ESKI buyurtma, avvalgidek
  * ruxsat; `accepted` + `acceptedAt` — ruxsat; qolgani (pending/rejected/timeout/noma'lum) — YO'Q.
+ * Bank o'tkazmasi: qo'shimcha — sotuvchi «Пул тушди» bosgan (`bankPayment.status == confirmed`).
  */
 function shipmentAllowed(o) {
   const d = (o || {}).sellerDecision;
   if (d === undefined || d === null) return true;
-  return d === SELLER_DECISION.ACCEPTED && !!o.acceptedAt;
+  if (!(d === SELLER_DECISION.ACCEPTED && !!o.acceptedAt)) return false;
+  if (methodOf(o) === PAYMENT_METHOD.BANK) {
+    const bp = o.bankPayment || {};
+    return bp.status === BANK_PAYMENT.CONFIRMED && !!bp.confirmedAt;
+  }
+  return true;
 }
-
-const methodOf = (doc) => ((doc || {}).paymentMethod === PAYMENT_METHOD.CARD ? PAYMENT_METHOD.CARD : PAYMENT_METHOD.WALLET);
 
 function canTransition(from, to) {
   const allowed = ALLOWED[from];
@@ -242,6 +297,12 @@ module.exports = {
   REFUND_STATUS,
   PAYMENT_METHOD,
   PAYMENT_METHODS,
+  DELIVERY_PAYMENT_METHOD,
+  DELIVERY_PAYMENT_METHODS,
+  BANK_PAYMENT,
+  BANK_PAY_BUSINESS_DAYS,
+  bankPayDeadlineFor,
+  deliveryPaidByBuyer,
   CARD_PAYMENT,
   CARD_REFUSAL_LIMIT,
   RECEIPT_TIMEOUT_MS,

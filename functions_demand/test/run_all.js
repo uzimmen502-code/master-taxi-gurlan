@@ -33,6 +33,7 @@ const SUITES = [
   'wholesale_stock.test.js',
   'wholesale_orders.test.js',
   'wholesale_accept.test.js',
+  'wholesale_bank.test.js',
   'wholesale_shipment.test.js',
   'wholesale_card.test.js',
   'card_crypto.test.js',

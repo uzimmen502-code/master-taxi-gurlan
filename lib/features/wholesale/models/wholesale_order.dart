@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/formatters.dart' show canonicalPhoneId;
-import 'wholesale_quote.dart' show WholesaleDeliveryMethod;
+import 'wholesale_quote.dart' show WholesaleDeliveryMethod, WholesaleDeliveryPaymentMethod;
+
+// S57: нақд етказиш константаси квота моделида; эски импортлар (`wholesale_order.dart`) учун қайта экспорт.
+export 'wholesale_quote.dart' show WholesaleDeliveryPaymentMethod;
 
 /// Улгуржи буюртма ҳолатлари — сервер state machine'и билан бир хил
 /// (`functions_demand/core/wholesale_orders.js` `STATUS` + 3b қўшимчалари).
@@ -54,12 +57,6 @@ abstract final class WholesalePaymentMethod {
   /// Банк ўтказмаси (эга, 2026-11-13/14): товар пули ИЛОВАДАН ТАШҚАРИДА (ҳисоб-фактура),
   /// иловада фақат етказиш ҳақи — харидор ҳамёнидан ушланади.
   static const bankTransfer = 'bank_transfer';
-}
-
-/// Банк ўтказмасида етказиш ҳақини харидор қандай тўлайди (сервер
-/// `DELIVERY_PAYMENT_METHODS`; ҳозир фақат ҳамён).
-abstract final class WholesaleDeliveryPaymentMethod {
-  static const wallet = 'wallet';
 }
 
 /// `bankPayment.status` (сервер `BANK_PAYMENT`). Майдон йўқ — банк буюртмаси
@@ -116,9 +113,16 @@ class WholesaleDeliveryFailed {
     this.escalated = false,
     this.resolutionBy = '',
     this.resolutionDecision = '',
+    this.cashPaid,
+    this.cashTotal = 0,
   });
 
   static const none = WholesaleDeliveryFailed();
+
+  /// S57 нақд: курьер белгиси — харидор эшик олдида етказиш + қайтариш ҳақини тўладими
+  /// (`deliveryFailed.cash.paid`); нақд бўлмаса `null`. [cashTotal] — сервер ҳисоблаган жами (сўм).
+  final bool? cashPaid;
+  final int cashTotal;
 
   /// Сўров очиқ (`deliveryFailed.open == true` ва буюртма етказилмоқда).
   final bool pending;
@@ -146,7 +150,10 @@ class WholesaleDeliveryFailed {
     final m = raw.map((k, v) => MapEntry(k.toString(), v));
     final res = m['resolution'] is Map ? (m['resolution'] as Map) : const {};
     final esc = m['escalateAt'];
+    final cash = m['cash'] is Map ? (m['cash'] as Map) : const {};
     return WholesaleDeliveryFailed(
+      cashPaid: cash['paid'] is bool ? cash['paid'] as bool : null,
+      cashTotal: cash['total'] is num ? (cash['total'] as num).toInt() : 0,
       pending: m['open'] == true && d['status'] == WholesaleOrderStatus.inDelivery,
       seq: m['seq'] is num ? (m['seq'] as num).toInt() : 0,
       reasonCode: m['reasonCode'] is String ? m['reasonCode'] as String : '',
@@ -169,7 +176,28 @@ class WholesaleDeliveryFailedReport {
     this.resolutionDecision = '',
     this.paymentMethod = '',
     this.allowedReasons = const [],
+    this.deliveryPaymentMethod = '',
+    this.cashToCollect,
+    this.cashDueDeliveryFee = 0,
+    this.cashDueReturnFee = 0,
+    this.cashDueTotal = 0,
+    this.cashPaid,
   });
+
+  /// S57 нақд (`getWholesaleDeliveryFailedState`): `deliveryPaymentMethod == 'cash'` ва курьер
+  /// эшик олдида оладиган суммалар — ҲАММАСИ СЕРВЕРДАН (илова ҳисобламайди):
+  ///   [cashToCollect] — етказилса харидордан олинадиган етказиш ҳақи;
+  ///   [cashDueTotal]  — рад этилса: етказиш ([cashDueDeliveryFee]) + қайтариш ([cashDueReturnFee]).
+  /// `markWholesaleBuyerRefused` жавоби ҳам `cashDue` ва `cashPaid` беради.
+  final String deliveryPaymentMethod;
+  final int? cashToCollect;
+  final int cashDueDeliveryFee;
+  final int cashDueReturnFee;
+  final int cashDueTotal;
+  final bool? cashPaid;
+
+  /// Нақд буюртма: жавобда `deliveryPaymentMethod: cash` ёки `cashDue` бор.
+  bool get isCashOrder => deliveryPaymentMethod == WholesaleDeliveryPaymentMethod.cash || cashDueTotal > 0;
 
   /// Буюртма ҳолати (`in_delivery`; эски сервер дарҳол `refused` қайтарарди).
   final String status;
@@ -191,15 +219,21 @@ class WholesaleDeliveryFailedReport {
   /// `deliveryPaidByBuyer`: банк буюртмаси «етказилмади»да ҳамён қоидалари билан).
   /// S6 янги карта (`deliveryPaidBy: buyer`) ҳам шу қоидада — сервер унга ҳамён сабаблари
   /// рўйхатини беради («бошқа» йўқ), тўлов усули эса `card_on_delivery` қолади.
+  /// S57 нақд буюртма бу қоидадан ТАШҚАРИДА (ҳақ ҳамёнда эмас — алоҳида огоҳлантириш).
   bool get isWalletOrder =>
-      paymentMethod == WholesalePaymentMethod.wallet ||
-      paymentMethod == WholesalePaymentMethod.bankTransfer ||
-      (allowedReasons.isNotEmpty && !allowedReasons.contains('other'));
+      !isCashOrder &&
+      (paymentMethod == WholesalePaymentMethod.wallet ||
+          paymentMethod == WholesalePaymentMethod.bankTransfer ||
+          (allowedReasons.isNotEmpty && !allowedReasons.contains('other')));
 
   /// Курьер ойнасидаги сабаблар: сервер рўйхати (маълум кодлар тартибида), бўлмаса — ҳаммаси.
+  /// Нақд буюртмада фақат харидор сабаблари (эга, 2026-11-14: «курьер муаммоси» йўқ; сервер
+  /// `reason_not_allowed_cash` билан ҳам рад этади) — сервер рўйхати бўлмаса ҳам.
   List<String> get reasons {
     final known = wholesaleDeliveryFailedReasons.where(allowedReasons.contains).toList();
-    return known.isEmpty ? wholesaleDeliveryFailedReasons : known;
+    final list = known.isEmpty ? wholesaleDeliveryFailedReasons : known;
+    if (!isCashOrder) return list;
+    return list.where(wholesaleCashDeliveryFailedReasons.contains).toList();
   }
 
   factory WholesaleDeliveryFailedReport.fromMap(Map<String, dynamic> d) {
@@ -207,7 +241,15 @@ class WholesaleDeliveryFailedReport {
     final res = d['resolution'] is Map ? d['resolution'] as Map : const {};
     final pending = d['pending'] == true || d['awaitingBuyer'] == true || d['stage'] == 'awaiting_decision';
     final allowed = d['allowedReasons'];
+    final due = d['cashDue'] is Map ? d['cashDue'] as Map : const {};
+    int n(Object? v) => v is num && v.isFinite ? v.toInt() : 0;
     return WholesaleDeliveryFailedReport(
+      deliveryPaymentMethod: d['deliveryPaymentMethod'] is String ? d['deliveryPaymentMethod'] as String : '',
+      cashToCollect: d['cashToCollect'] is num ? (d['cashToCollect'] as num).toInt() : null,
+      cashDueDeliveryFee: n(due['deliveryFee']),
+      cashDueReturnFee: n(due['returnFee']),
+      cashDueTotal: n(due['total']),
+      cashPaid: d['cashPaid'] is bool ? d['cashPaid'] as bool : null,
       status: d['status'] is String ? d['status'] as String : '',
       pending: pending,
       stage: d['stage'] is String ? d['stage'] as String : '',
@@ -290,6 +332,9 @@ String wholesaleDeliveryFailedReasonKey(String code) => switch (code) {
 /// Сервер сабаб кодлари (`functions_demand/api/wholesale_failed.js` REASONS).
 const wholesaleDeliveryFailedReasons = ['customer_absent', 'customer_refused', 'courier_problem', 'other'];
 
+/// S57 нақд етказиш сабаблари (сервер `CASH_REASONS`): фақат харидор сабаби.
+const wholesaleCashDeliveryFailedReasons = ['customer_absent', 'customer_refused'];
+
 /// `wholesale_orders/{id}` — фақат ўқиш (Rules: харидор/сотувчи/админ;
 /// клиент ёзолмайди). Эски/тўлиқсиз ҳужжатда майдон бўлмаса — хавфсиз
 /// стандарт қиймат (26-банд).
@@ -338,7 +383,36 @@ class WholesaleOrder {
     this.selfStatus = '',
     this.selfDropoff = '',
     this.refundStatus = '',
+    this.deliveryPaymentMethod = WholesaleDeliveryPaymentMethod.wallet,
+    this.cashDeliveryAmount = 0,
+    this.cashRefusalPaid,
+    this.cashRefusalTotal = 0,
+    this.returnDebtKind = '',
+    this.returnDebtStatus = '',
   });
+
+  /// S57 (эга, 2026-11-14): етказиш ҳақини тўлаш усули — `wallet` (майдон йўқ — эски) | `cash`.
+  final String deliveryPaymentMethod;
+
+  /// `cashDelivery.amount` — курьер жўнатмаси очилгач сервер ёзган нақд сумма (0 — ҳали йўқ).
+  final int cashDeliveryAmount;
+
+  /// `cashRefusal{paid, total}` — рад этилган нақд буюртма: харидор курьерга тўладими ва жами.
+  final bool? cashRefusalPaid;
+  final int cashRefusalTotal;
+
+  /// `returnDebt.kind` (`cash_refusal` — нақд рад, тўланмаган етказиш + қайтариш) ва `status` (`open`).
+  final String returnDebtKind;
+  final String returnDebtStatus;
+
+  /// Етказиш ҳақи курьерга нақд (ўз етказишида ҳеч қачон).
+  bool get isCashDelivery => !isSelf && deliveryPaymentMethod == WholesaleDeliveryPaymentMethod.cash;
+
+  /// Эшик олдида курьерга нақд: сервер `cashDelivery.amount`, бўлмаса буюртманинг етказиш ҳақи.
+  int get cashToCourierAmount => !isCashDelivery ? 0 : (cashDeliveryAmount > 0 ? cashDeliveryAmount : deliveryFee);
+
+  /// Харидорнинг нақд рад қарзи (тўланмаган етказиш + қайтариш ҳақи).
+  bool get hasBuyerCashDebt => returnDebt > 0 && returnDebtPayer == 'buyer' && returnDebtKind == 'cash_refusal';
 
   /// S4: `deliveryMethod` — `self` ёки `ava_courier` (майдон йўқ — эски буюртма, курьер).
   final String deliveryMethod;
@@ -367,7 +441,8 @@ class WholesaleOrder {
   int get cardAtDoorAmount => isNewCard ? goodsTotal : total;
 
   /// Харидор ҳамёнидан фақат етказиш ҳақи ушланган (банк ёки янги карта, курьер билан).
-  bool get walletHeldDeliveryOnly => (isBankOrder || isNewCard) && !isSelf && deliveryFee > 0;
+  /// S57: нақд етказишда етказиш ҳақи ҳамёндан ушланмаган.
+  bool get walletHeldDeliveryOnly => (isBankOrder || isNewCard) && !isSelf && !isCashDelivery && deliveryFee > 0;
 
   /// «Етказилмади»/рад: товар пули иловадан ташқарида, етказиш/қайтариш ҳақи — ҳамён айб
   /// қоидаси бўйича (банк ва янги карта; матнлар бир хил).
@@ -607,6 +682,14 @@ class WholesaleOrder {
       selfStatus: _str(self['status']),
       selfDropoff: _str(self['dropoff']),
       refundStatus: _str(d['refundStatus']),
+      deliveryPaymentMethod: _str(d['deliveryPaymentMethod']) == WholesaleDeliveryPaymentMethod.cash
+          ? WholesaleDeliveryPaymentMethod.cash
+          : WholesaleDeliveryPaymentMethod.wallet,
+      cashDeliveryAmount: _int(_map(d['cashDelivery'])['amount']),
+      cashRefusalPaid: _map(d['cashRefusal'])['paid'] is bool ? _map(d['cashRefusal'])['paid'] as bool : null,
+      cashRefusalTotal: _int(_map(d['cashRefusal'])['total']),
+      returnDebtKind: debt is Map ? _str(debt['kind']) : '',
+      returnDebtStatus: debt is Map ? _str(debt['status']) : '',
     );
   }
 }
@@ -645,7 +728,17 @@ class WholesaleOrderActions {
     required this.selfReturnWaitRefund,
     required this.selfAwaitingStart,
     required this.selfCompletedWaiting,
+    required this.showBuyerCashDebt,
+    required this.showCashToCourier,
   });
+
+  // ── S57: нақд етказиш (эга, 2026-11-14) ──
+
+  /// Харидор: нақд рад қарзи (`returnDebt {payer: buyer, kind: cash_refusal}`) — сумма ва «нақд ёпиқ».
+  final bool showBuyerCashDebt;
+
+  /// Харидор: буюртма ҳали етказилмаган — «етказиш ҳақини курьерга нақд тўлайсиз» + рад огоҳлантириши.
+  final bool showCashToCourier;
 
   // ── S4: ўз етказиши (сервер `functions_demand/api/wholesale_self.js`) ──
 
@@ -778,7 +871,13 @@ class WholesaleOrderActions {
       // Сотувчида Storage ўқиш ҳуқуқи ЙЎҚ — фақат сервер ёзган `receiptUrl`.
       showReceipt: seller && o.isCardOrder && o.receiptUrl.isNotEmpty,
       showReturnDebt: seller && o.returnDebt > 0 && (o.returnDebtPayer.isEmpty || o.returnDebtPayer == 'seller'),
-      showBuyerReturnDebt: buyer && o.returnDebt > 0 && o.returnDebtPayer == 'buyer',
+      // Нақд рад қарзи — алоҳида банер ([showBuyerCashDebt]): ҳамённи тўлдириш уни ёпиши тасдиқланмаган.
+      showBuyerReturnDebt: buyer && o.returnDebt > 0 && o.returnDebtPayer == 'buyer' && !o.hasBuyerCashDebt,
+      showBuyerCashDebt: buyer && o.hasBuyerCashDebt,
+      showCashToCourier: buyer &&
+          o.isCashDelivery &&
+          (o.status == WholesaleOrderStatus.placed || inDelivery) &&
+          !o.deliveryFailed.pending,
       answerDeliveryFailed: buyer && o.deliveryFailed.pending,
       decideDeliveryFailed: seller && o.deliveryFailed.pending,
     );

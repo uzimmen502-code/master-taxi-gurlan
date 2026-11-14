@@ -159,17 +159,22 @@ class LogisticsRepository {
       });
 
   /// Қабул қилувчига ТОПШИРДИМ — алоҳида 6 хонали код.
+  /// S57 нақд жўнатма: [cashCollected] — курьер харидордан етказиш ҳақини олганини тасдиқлади
+  /// (сервер тасдиқсиз `cash_confirmation_required` билан рад этади; сумма серверда). Оддий
+  /// (эскроу) жўнатмада юборилмайди.
   Future<Map<String, dynamic>> confirmDelivery({
     required String legId,
     required String deliveryCode,
     required List<String> photoUrls,
     double? lat,
     double? lng,
+    bool cashCollected = false,
   }) =>
       _call(_demand, 'confirmDelivery', {
         'legId': legId,
         'deliveryCode': deliveryCode,
         'photoUrls': photoUrls,
+        if (cashCollected) 'cashCollected': true,
         if (lat != null && lng != null) 'location': {'lat': lat, 'lng': lng},
         'clientRequestId': newRequestId(),
       });

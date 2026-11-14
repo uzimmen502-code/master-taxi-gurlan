@@ -696,7 +696,20 @@ class LegProjection {
     required this.toDistrictId,
     required this.toRegionId,
     this.chainMode = ChainMode.unknown,
+    this.deliveryPaymentMethod = '',
+    this.cashToCollect = 0,
   });
+
+  /// S57 нақд жўнатма (эга, 2026-11-14; сервер `adapters/logistics.js`): `deliveryPaymentMethod: cash`
+  /// ва [cashToCollect] — охирги LEG курьери харидордан оладиган тўлиқ етказиш ҳақи (сўм, сервердан);
+  /// бошқа LEG'ларда 0. Эскроу жўнатмада калитлар йўқ — бўш / 0.
+  final String deliveryPaymentMethod;
+  final int cashToCollect;
+
+  bool get isCash => deliveryPaymentMethod == 'cash';
+
+  /// Шу LEG курьери харидордан нақд олади (охирги LEG, сумма мусбат).
+  bool get collectsCash => isCash && cashToCollect > 0;
 
   /// Йиғиш режими (`attributes.chainMode`). Проекцияда бўлмаса `unknown` —
   /// аниқ ҳолат жўнатма ҳужжатидан ([Shipment.chain]) олинади.
@@ -741,6 +754,8 @@ class LegProjection {
       toDistrictId: (d['toDistrictId'] ?? '').toString(),
       toRegionId: (d['toRegionId'] ?? '').toString(),
       chainMode: ChainMode.parse(d['chainMode']),
+      deliveryPaymentMethod: (d['deliveryPaymentMethod'] ?? '').toString(),
+      cashToCollect: toDemandInt(d['cashToCollect']) ?? 0,
     );
   }
 }

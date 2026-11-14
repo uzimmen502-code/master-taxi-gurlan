@@ -117,7 +117,8 @@ class WholesaleOrdersRepository {
       'qty': qty,
       'destination': destination.toInput(),
       if (paymentMethod != null) 'paymentMethod': paymentMethod,
-      // Фақат банк ўтказмасида (бошқа усулда сервер `delivery_payment_method_not_applicable` билан рад этади).
+      // Фақат курьер етказишида (`wallet` | S57 `cash`, ҳамма тўлов усулида); ўз етказишида сервер
+      // `delivery_payment_method_not_applicable` билан рад этади — юборилмайди.
       if (deliveryPaymentMethod != null) 'deliveryPaymentMethod': deliveryPaymentMethod,
       // S4: йўқ — `ava_courier` (сервер стандарти); фақат `self` юборилади.
       if (deliveryMethod != null) 'deliveryMethod': deliveryMethod,
@@ -203,15 +204,19 @@ class WholesaleOrdersRepository {
   /// «Етказилмади» (эга, 2026-11-01): ўша `markWholesaleBuyerRefused` — энди сервер
   /// буюртмани дарҳол ёпмайди, харидордан тасдиқ сўрайди. [reasonCode] — сервер
   /// `REASONS` (customer_absent | customer_refused | courier_problem | other).
+  /// S57 нақд буюртмада [cashPaid] МАЖБУРИЙ (харидор эшик олдида етказиш + қайтариш ҳақини тўладими;
+  /// сервер `cash_paid_required`); сумма СЕРВЕРДАН, илова юбормайди. Нақд бўлмаса — юборилмайди.
   Future<WholesaleDeliveryFailedReport> reportDeliveryFailed({
     required String orderId,
     required String reasonCode,
     String note = '',
+    bool? cashPaid,
   }) async =>
       WholesaleDeliveryFailedReport.fromMap(await _call(_demand, 'markWholesaleBuyerRefused', {
         'orderId': orderId,
         'reasonCode': reasonCode,
         if (note.trim().isNotEmpty) 'reason': note.trim(),
+        if (cashPaid != null) 'cashPaid': cashPaid,
       }));
 
   /// Курьер учун сўров ҳолати (курьер буюртма ҳужжатини ўқий олмайди).

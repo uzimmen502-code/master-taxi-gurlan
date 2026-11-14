@@ -32,7 +32,11 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../demand_offer/domain/demand_match.dart';
 import '../../wholesale/models/wholesale_order.dart'
-    show WholesaleDeliveryFailedReport, wholesaleDeliveryFailedReasonKey, wholesaleDeliveryFailedReasons;
+    show
+        WholesaleDeliveryFailedReport,
+        wholesaleCashDeliveryFailedReasons,
+        wholesaleDeliveryFailedReasonKey,
+        wholesaleDeliveryFailedReasons;
 import '../../wholesale/models/wholesale_quote.dart' show WholesaleReturnHandoverCode;
 import '../../wholesale/repositories/wholesale_orders_repository.dart';
 import '../../wholesale/utils/wholesale_order_errors.dart';
@@ -174,6 +178,17 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
     }
   }
 
+  /// S57: шу LEG'да харидордан олинадиган нақд — проекция `cashToCollect`, бўлмаса улгуржи
+  /// «етказилмади» ҳолати жавоби (`getWholesaleDeliveryFailedState.cashToCollect`). 0 — нақд йўқ.
+  int _cashToCollect(LegProjection leg) {
+    if (leg.collectsCash) return leg.cashToCollect;
+    final df = _df;
+    return df != null && df.isCashOrder ? (df.cashToCollect ?? 0) : 0;
+  }
+
+  /// Нақд буюртма (проекция ёки сервер ҳолати айтади) — «етказилмади»да `cashPaid` мажбурий.
+  bool _isCashLeg(LegProjection leg) => leg.isCash || (_df?.isCashOrder ?? false);
+
   String get _wholesaleOrderId => _shipment?.wholesaleOrderId ?? '';
   bool get _isWholesaleOutbound => _wholesaleOrderId.isNotEmpty && _shipment?.source == 'wholesale';
   bool get _isWholesaleReturn => _wholesaleOrderId.isNotEmpty && _shipment?.source == 'wholesale_return';
@@ -257,6 +272,12 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
       }
     } else if (status == MatchStatus.inProgress) {
       if (isLast) {
+        // S57 нақд: топширишдан олдин харидордан олинадиган сумма (сервер; далил варағида тасдиқ шарт).
+        final cash = _cashToCollect(leg);
+        if (cash > 0) {
+          children.add(LegCashToCollectBox(amount: cash));
+          children.add(const SizedBox(height: 8));
+        }
         children.add(_primary(context, 'logistics_delivered_btn', () => _proof(delivery: true, leg: leg)));
         // Улгуржи «етказилганда карта» буюртмаси: «Етказилмади» (эга, 2026-11-01) — харидордан
         // тасдиқ сўралади, жавоб бўлмаса сотувчи ҳал қилади (ҳаммаси серверда; ҳамён буюртмасида рад).
@@ -270,7 +291,7 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
               children.add(_hint(context, 'wholesale_courier_failed_continue'));
               children.add(const SizedBox(height: 6));
             }
-            children.add(_secondary(context, 'wholesale_courier_failed_btn', _markRefused,
+            children.add(_secondary(context, 'wholesale_courier_failed_btn', () => _markRefused(leg),
                 key: const ValueKey('wholesale-courier-refused'), danger: true));
             children.add(const SizedBox(height: 4));
             children.add(_hint(context, 'wholesale_courier_failed_hint_all'));
@@ -314,9 +335,20 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.tr('logistics_leg_take')),
-        content: Text(
-          '${ctx.tr('logistics_leg_take_confirm')} '
-          '${logisticsMoney(leg.payout)} ${ctx.tr('sum')}',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${ctx.tr('logistics_leg_take_confirm')} '
+              '${logisticsMoney(leg.payout)} ${ctx.tr('sum')}',
+            ),
+            // S57: нақд оладиган LEG — олишдан олдин суммани яна бир бор кўрсатамиз.
+            if (leg.collectsCash) ...[
+              const SizedBox(height: 10),
+              LegCashToCollectBox(amount: leg.cashToCollect),
+            ],
+          ],
         ),
         actions: [
           TextButton(
@@ -394,6 +426,7 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
         providerId: widget.providerId,
         repository: _repo,
         photos: _photos,
+        cashToCollect: delivery ? _cashToCollect(leg) : 0,
       ),
     );
     if (done == true) {
@@ -416,21 +449,31 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
 
   // ── Улгуржи (3b) ───────────────────────────────────────────────────
 
-  Future<void> _markRefused() async {
-    final picked = await showDialog<(String, String)>(
+  Future<void> _markRefused(LegProjection leg) async {
+    final cash = _isCashLeg(leg);
+    final df = _df;
+    final picked = await showDialog<WholesaleRefusePick>(
       context: context,
       // Ҳамён буюртмаси (2026-11-01): сервер «бошқа» ни рад этади — ойнада ҳам йўқ (эски сервер — ҳаммаси).
+      // S57 нақд: фақат харидор сабаблари + «Харидор тўлади / тўламади» (мажбурий), сумма сервердан.
       builder: (_) => _RefuseReasonDialog(
-        reasons: _df?.reasons ?? wholesaleDeliveryFailedReasons,
-        walletOrder: _df?.isWalletOrder ?? false,
+        reasons: cash
+            ? (df?.reasons ?? wholesaleCashDeliveryFailedReasons)
+                .where(wholesaleCashDeliveryFailedReasons.contains)
+                .toList()
+            : (df?.reasons ?? wholesaleDeliveryFailedReasons),
+        walletOrder: !cash && (df?.isWalletOrder ?? false),
+        cashOrder: cash,
+        cashDue: df,
       ),
     );
     if (picked == null) return; // бекор қилинди
     await _runWholesale(() async {
       final r = await _wholesale.reportDeliveryFailed(
         orderId: _wholesaleOrderId,
-        reasonCode: picked.$1,
-        note: picked.$2,
+        reasonCode: picked.reasonCode,
+        note: picked.note,
+        cashPaid: cash ? picked.cashPaid : null,
       );
       if (mounted) setState(() => _df = r);
       _snack('wholesale_courier_failed_sent');
@@ -647,6 +690,42 @@ class _LogisticsLegActionsState extends State<LogisticsLegActions> {
   }
 }
 
+/// S57 нақд (эга, 2026-11-14): «Харидордан нақд олинг: {сумма}» — LEG карточкасида (олишдан олдин),
+/// етказиш қадамида ва далил варағида бир хил. Сумма СЕРВЕРДАН (`cashToCollect`), илова ҳисобламайди.
+class LegCashToCollectBox extends StatelessWidget {
+  const LegCashToCollectBox({super.key, required this.amount});
+
+  final int amount;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Container(
+      key: const ValueKey('leg-cash-to-collect'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          Icon(Icons.payments_outlined, size: 16, color: c.warn),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              context.tr('logistics_cash_collect'),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.warn),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${logisticsMoney(amount)} ${context.tr('sum')}',
+            key: const ValueKey('leg-cash-amount'),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c.warn),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Custody далили варағи: код (6 рақам) + расм (мажбурий) + ҳолат белгиси.
 ///
 /// Расм аввал Storage'га юкланади (`logistics/{ижрочи}/…`), кейин URL'лар
@@ -660,7 +739,12 @@ class ProofSheet extends StatefulWidget {
     required this.providerId,
     required this.repository,
     required this.photos,
+    this.cashToCollect = 0,
   });
+
+  /// S57 нақд: етказишда харидордан олинадиган сумма (сервердан). > 0 бўлса «Харидордан нақд
+  /// олдим» белгиси МАЖБУРИЙ ва `confirmDelivery`га `cashCollected: true` кетади.
+  final int cashToCollect;
 
   /// `true` — қабул қилувчига топшириш (алоҳида код), `false` — олиш.
   final bool delivery;
@@ -691,7 +775,13 @@ class _ProofSheetState extends State<ProofSheet> {
     super.dispose();
   }
 
-  bool get _canSubmit => !_busy && _code.text.length == 6 && _images.isNotEmpty;
+  /// S57: курьер харидордан нақд олганини белгилади (фақат нақд етказишда кўринади).
+  bool _cashCollected = false;
+
+  bool get _needsCash => widget.delivery && widget.cashToCollect > 0;
+
+  bool get _canSubmit =>
+      !_busy && _code.text.length == 6 && _images.isNotEmpty && (!_needsCash || _cashCollected);
 
   Future<void> _pick(ImageSource source) async {
     try {
@@ -720,6 +810,7 @@ class _ProofSheetState extends State<ProofSheet> {
           legId: widget.legId,
           deliveryCode: _code.text,
           photoUrls: urls,
+          cashCollected: _needsCash && _cashCollected,
         );
       } else {
         await widget.repository.scanHandover(
@@ -853,6 +944,20 @@ class _ProofSheetState extends State<ProofSheet> {
               ),
             ],
 
+            if (_needsCash) ...[
+              const SizedBox(height: 16),
+              LegCashToCollectBox(amount: widget.cashToCollect),
+              CheckboxListTile(
+                key: const ValueKey('proof-cash-collected'),
+                value: _cashCollected,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(context.tr('logistics_cash_collected_check'), style: TextStyle(fontSize: 13, color: c.ink)),
+                onChanged: _busy ? null : (v) => setState(() => _cashCollected = v == true),
+              ),
+            ],
+
             if (_error != null) ...[
               const SizedBox(height: 12),
               Container(
@@ -863,6 +968,7 @@ class _ProofSheetState extends State<ProofSheet> {
             ],
             const SizedBox(height: 16),
             FilledButton(
+              key: const ValueKey('proof-submit'),
               onPressed: _canSubmit ? _submit : null,
               style: FilledButton.styleFrom(
                 backgroundColor: c.brand,
@@ -923,13 +1029,27 @@ class _ProofSheetState extends State<ProofSheet> {
 /// «Етказилмади»: сабаб (мажбурий, 4 та сервер коди) + ихтиёрий изоҳ. Натижа:
 /// (сабаб коди, изоҳ) ёки `null` — бекор. Контроллер шу ойнанинг ўзида (ёпилиш
 /// анимацияси давомида ҳам тирик).
+/// «Етказилмади» ойнаси натижаси: сабаб, изоҳ ва (S57 нақд) харидор эшик олдида тўладими.
+typedef WholesaleRefusePick = ({String reasonCode, String note, bool? cashPaid});
+
 class _RefuseReasonDialog extends StatefulWidget {
-  const _RefuseReasonDialog({required this.reasons, this.walletOrder = false});
+  const _RefuseReasonDialog({
+    required this.reasons,
+    this.walletOrder = false,
+    this.cashOrder = false,
+    this.cashDue,
+  });
 
   final List<String> reasons;
 
   /// Ҳамён орқали тўланган: қайтариш ҳақини ким тўлаши сабабга боғлиқ — курьерга огоҳлантириш.
   final bool walletOrder;
+
+  /// S57 нақд: «Харидор тўлади / Харидор тўламади» танлови мажбурий (сервер `cashPaid`).
+  final bool cashOrder;
+
+  /// Сервер ҳисоблаган суммалар (`cashDue`): етказиш + қайтариш = жами. `null`/0 — сумма кўрсатилмайди.
+  final WholesaleDeliveryFailedReport? cashDue;
 
   @override
   State<_RefuseReasonDialog> createState() => _RefuseReasonDialogState();
@@ -939,10 +1059,74 @@ class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
   final _note = TextEditingController();
   String? _code;
 
+  /// S57: харидор нақд тўладими (`null` — ҳали танланмаган).
+  bool? _paid;
+
   @override
   void dispose() {
     _note.dispose();
     super.dispose();
+  }
+
+  /// «Харидор йўқ» — нақд олинмаган бўлади (сервер `cash_paid_absent`): «тўлади» ёпиқ.
+  bool get _absent => _code == 'customer_absent';
+
+  bool get _ready => _code != null && (!widget.cashOrder || _paid != null);
+
+  void _pickReason(String code) => setState(() {
+        _code = code;
+        if (widget.cashOrder && code == 'customer_absent') _paid = false;
+      });
+
+  Widget _cashSection(BuildContext context) {
+    final c = context.ava;
+    final due = widget.cashDue;
+    String money(int v) => '${logisticsMoney(v)} ${context.tr('sum')}';
+    return Column(
+      key: const ValueKey('wholesale-failed-cash'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Text(context.tr('wholesale_courier_cash_refusal_note'),
+            style: TextStyle(fontSize: 12, color: c.warn, fontWeight: FontWeight.w600)),
+        if (due != null && due.cashDueTotal > 0) ...[
+          const SizedBox(height: 4),
+          Text('${context.tr('wholesale_courier_cash_due_delivery')}: ${money(due.cashDueDeliveryFee)}',
+              style: TextStyle(fontSize: 12, color: c.ink2)),
+          Text('${context.tr('wholesale_courier_cash_due_return')}: ${money(due.cashDueReturnFee)}',
+              style: TextStyle(fontSize: 12, color: c.ink2)),
+          Text(
+            '${context.tr('wholesale_courier_cash_due_total')}: ${money(due.cashDueTotal)}',
+            key: const ValueKey('wholesale-failed-cash-total'),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: c.ink),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            ChoiceChip(
+              key: const ValueKey('wholesale-failed-cash-paid'),
+              label: Text(context.tr('wholesale_courier_cash_paid_btn')),
+              selected: _paid == true,
+              onSelected: _absent ? null : (_) => setState(() => _paid = true),
+            ),
+            ChoiceChip(
+              key: const ValueKey('wholesale-failed-cash-unpaid'),
+              label: Text(context.tr('wholesale_courier_cash_unpaid_btn')),
+              selected: _paid == false,
+              onSelected: (_) => setState(() => _paid = false),
+            ),
+          ],
+        ),
+        if (_paid == false) ...[
+          const SizedBox(height: 4),
+          Text(context.tr('wholesale_courier_cash_unpaid_note'),
+              key: const ValueKey('wholesale-failed-cash-unpaid-note'), style: TextStyle(fontSize: 11.5, color: c.ink2)),
+        ],
+      ],
+    );
   }
 
   @override
@@ -962,8 +1146,9 @@ class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
                 leading: Icon(_code == code ? Icons.radio_button_checked : Icons.radio_button_off,
                     color: _code == code ? context.ava.brand : context.ava.ink3),
                 title: Text(context.tr(wholesaleDeliveryFailedReasonKey(code))),
-                onTap: () => setState(() => _code = code),
+                onTap: () => _pickReason(code),
               ),
+            if (widget.cashOrder) _cashSection(context),
             TextField(
               controller: _note,
               maxLength: 300,
@@ -984,7 +1169,10 @@ class _RefuseReasonDialogState extends State<_RefuseReasonDialog> {
         TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('consent_no'))),
         FilledButton(
           key: const ValueKey('wholesale-courier-refused-yes'),
-          onPressed: _code == null ? null : () => Navigator.of(context).pop((_code!, _note.text)),
+          onPressed: !_ready
+              ? null
+              : () => Navigator.of(context).pop<WholesaleRefusePick>(
+                  (reasonCode: _code!, note: _note.text, cashPaid: widget.cashOrder ? _paid : null)),
           child: Text(context.tr('logistics_confirm')),
         ),
       ],

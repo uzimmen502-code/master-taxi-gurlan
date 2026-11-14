@@ -346,6 +346,19 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             ),
           ),
         ],
+        // S57: нақд рад — харидор курьерга етказиш + қайтариш ҳақини тўлади (сумма сервер қайдидан).
+        if (a.isBuyer && o.isCashDelivery && o.cashRefusalPaid == true && o.cashRefusalTotal > 0) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('wholesale-cash-refusal-paid'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              context.trMsg('wholesale_order_cash_refusal_paid', params: {'total': formatMoney(o.cashRefusalTotal)}),
+              style: TextStyle(fontSize: 12, color: c.ink),
+            ),
+          ),
+        ],
         if (_showsReturn(o)) ...[
           const SizedBox(height: 10),
           _returnCard(context, o),
@@ -368,6 +381,12 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
                 Container(
                   key: const ValueKey('wholesale-order-card-at-door'),
                   child: _line(context, context.tr('wholesale_order_card_at_door'), formatMoney(o.cardAtDoorAmount)),
+                ),
+              // S57: етказиш ҳақи эшик олдида курьерга нақд (сотувчига ҳам — бу ҳақ AVA'да ушланмаган).
+              if (o.isCashDelivery)
+                Container(
+                  key: const ValueKey('wholesale-order-cash-to-courier'),
+                  child: _line(context, context.tr('wholesale_order_cash_to_courier'), formatMoney(o.cashToCourierAmount)),
                 ),
               const SizedBox(height: 4),
               Align(
@@ -433,6 +452,41 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           child: WalletInlineError(
             text: context.trMsg('wholesale_order_return_debt_buyer', params: {'amount': formatMoney(_o.returnDebt)}),
             onTopUp: () => openWalletTopUp(Navigator.of(context), suggestedAmount: _o.returnDebt),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+      // S57: нақд рад қарзи — сумма ва «қарз тўлангунча нақд ёпиқ». Тўлдириш тугмаси ЙЎҚ: ҳамённи
+      // тўлдириш бу қарзни ёпиши серверда тасдиқланмаган (UNKNOWN).
+      if (a.showBuyerCashDebt) ...[
+        Container(
+          key: const ValueKey('wholesale-buyer-cash-debt'),
+          child: WalletInlineError(
+            text: context.trMsg('wholesale_order_cash_debt_buyer', params: {'amount': formatMoney(_o.returnDebt)}),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+      // S57: етказиш ҳақини курьерга нақд + рад огоҳлантириши (жами қайтариш ҳақи курьер белгилагач маълум).
+      if (a.showCashToCourier) ...[
+        Container(
+          key: const ValueKey('wholesale-cash-to-courier-notice'),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.trMsg('wholesale_order_cash_pay_courier', params: {'amount': formatMoney(_o.cashToCourierAmount)}),
+                style: TextStyle(fontSize: 12.5, color: c.warn, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                context.tr('wholesale_order_cash_refusal_notice'),
+                key: const ValueKey('wholesale-cash-refusal-notice'),
+                style: TextStyle(fontSize: 12, color: c.ink),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 10),
@@ -519,8 +573,11 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   // ── Сотувчи қарори (эга, 2026-11-13): 2 иш кунида қабул ёки рад ─────
 
-  /// Ҳамёндан ҳеч нарса ушланмаган: ўз етказиши карта/банк орқали (етказиш ҳақи 0, товар пули ташқарида).
-  static bool _nothingHeld(WholesaleOrder o) => o.isSelf && o.paymentMethod != WholesalePaymentMethod.wallet;
+  /// Ҳамёндан ҳеч нарса ушланмаган: ўз етказиши карта/банк орқали (етказиш ҳақи 0, товар пули ташқарида)
+  /// ёки (S57) банк + нақд етказиш (етказиш курьерга, товар банкда). Карта + нақдда сотувчидан AVA улуши
+  /// ушланган — умумий «ушланган пул қайтарилади».
+  static bool _nothingHeld(WholesaleOrder o) =>
+      (o.isSelf && o.paymentMethod != WholesalePaymentMethod.wallet) || (o.isCashDelivery && o.isBankOrder);
 
   static String? _cancelReasonKey(WholesaleOrder o) {
     if (o.status != WholesaleOrderStatus.cancelled) return null;
@@ -533,12 +590,22 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
       'bank_payment_timeout' => _nothingHeld(o)
           ? 'wholesale_order_cancel_bank_payment_timeout_self'
           : 'wholesale_order_cancel_bank_payment_timeout',
+      // S57 (эга, 2026-11-14): курьерлар занжири 48 соатда йиғилмади — бекор + тўлиқ қайтариш.
+      'courier_chain_expired' => _nothingHeld(o)
+          ? 'wholesale_order_cancel_courier_chain_expired_nohold'
+          : 'wholesale_order_cancel_courier_chain_expired',
       _ => null,
     };
   }
 
   /// Тўлов усули матни: S6 янги карта — етказиш ҳамёндан, товар эшик олдида картага.
   static String _paymentLabelKey(WholesaleOrder o) {
+    // S57: етказиш ҳақи курьерга нақд — товар қандай тўланишига қараб.
+    if (o.isCashDelivery) {
+      if (o.isBankOrder) return 'wholesale_order_payment_bank_cash';
+      if (o.isCardOrder) return 'wholesale_order_payment_card_cash';
+      return 'wholesale_order_payment_wallet_cash';
+    }
     if (o.isBankOrder) return o.isSelf ? 'wholesale_order_payment_bank_self' : 'wholesale_order_payment_bank';
     if (o.isNewCard) return 'wholesale_order_payment_card_new';
     if (o.isCardOrder) return 'wholesale_order_payment_card';
@@ -688,7 +755,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     // S4 ўз етказиши: курьер йўқ — сотувчи ўзи «Йўлга чиқдим»ни босади.
     final bank = _o.isBankOrder ? '_bank' : '';
     final self = _o.isSelf ? '_self' : '';
-    if (!await _confirm(context.tr('wholesale_order_accept_confirm$bank$self'),
+    // S57: нақд етказиш — етказиш ҳақи AVA'да ушланмаган, харидор курьерга тўлайди (48 соат занжир).
+    final cash = _o.isCashDelivery ? '_cash' : '';
+    if (!await _confirm(context.tr('wholesale_order_accept_confirm$bank$self$cash'),
         title: context.tr('wholesale_order_accept_btn'))) {
       return;
     }
@@ -777,6 +846,12 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   /// Тасдиқ ойнаси матни: карта — аввалгидек; ҳамён (эга, 2026-11-01) — пул оқибати сабабга қараб
   /// (харидор сабаби — қайтариш ҳақи қайтадиган суммадан; курьер сабаби — ҳақни курьер тўлайди).
   String get _buyerConfirmDialogKey {
+    // S57 нақд: курьер белгиси бўйича — тўлади (етказиш + қайтариш нақд) / тўламади (қарз бўлади).
+    if (_o.isCashDelivery) {
+      return _o.deliveryFailed.cashPaid == true
+          ? 'wholesale_df_buyer_confirm_dialog_cash_paid'
+          : 'wholesale_df_buyer_confirm_dialog_cash_unpaid';
+    }
     if (_o.isLegacyCard) return 'wholesale_df_buyer_confirm_dialog';
     // Банк ўтказмаси ва S6 янги карта — ҳамён айб қоидаси, лекин товар пули ҳақида гап йўқ
     // (товар пули иловага кирмаган; эга, 2026-11-13/14).
@@ -793,7 +868,11 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   /// Харидор: «Тасдиқлайман» (буюртма ёпилади — тасдиқ ойнаси) ёки «Олмоқчиман».
   Future<void> _answerFailed({required bool confirm}) async {
-    if (confirm && !await _confirm(context.tr(_buyerConfirmDialogKey))) return;
+    if (confirm &&
+        !await _confirm(
+            context.trMsg(_buyerConfirmDialogKey, params: {'total': formatMoney(_o.deliveryFailed.cashTotal)}))) {
+      return;
+    }
     await _run(() async {
       await widget.repository.respondDeliveryFailed(orderId: _o.id, confirm: confirm);
       _snack(confirm ? 'wholesale_df_done_failed' : 'customer_confirm_rejected_done');
@@ -804,10 +883,12 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   Future<void> _decideFailed({required bool failed}) async {
     if (failed &&
         !await _confirm(
-            context.tr(_o.isNewCard
-                ? 'wholesale_df_seller_failed_dialog_newcard'
-                : _dfKey('wholesale_df_seller_failed_dialog', 'wholesale_df_seller_failed_dialog_wallet',
-                    'wholesale_df_seller_failed_dialog_bank')),
+            context.tr(_o.isCashDelivery
+                ? 'wholesale_df_seller_failed_dialog_cash'
+                : _o.isNewCard
+                    ? 'wholesale_df_seller_failed_dialog_newcard'
+                    : _dfKey('wholesale_df_seller_failed_dialog', 'wholesale_df_seller_failed_dialog_wallet',
+                        'wholesale_df_seller_failed_dialog_bank')),
             title: context.tr('delivery_failed_decide_failed_title'))) {
       return;
     }
@@ -900,10 +981,22 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           if (a.answerDeliveryFailed) ...[
             const SizedBox(height: 4),
             Text(
-                context.tr(_dfKey(
-                    'wholesale_df_buyer_body', 'wholesale_df_buyer_body_wallet', 'wholesale_df_buyer_body_bank')),
+                context.tr(_o.isCashDelivery
+                    ? 'wholesale_df_buyer_body_cash'
+                    : _dfKey(
+                        'wholesale_df_buyer_body', 'wholesale_df_buyer_body_wallet', 'wholesale_df_buyer_body_bank')),
                 key: const ValueKey('wholesale-df-buyer-body'),
                 style: TextStyle(fontSize: 12.5, color: c.ink)),
+          ],
+          // S57 нақд: курьер белгилаган эшик олди натижаси ва сервер ҳисоблаган жами (етказиш + қайтариш).
+          if (_o.isCashDelivery && df.cashPaid != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              context.trMsg(df.cashPaid! ? 'wholesale_df_cash_paid_line' : 'wholesale_df_cash_unpaid_line',
+                  params: {'total': formatMoney(df.cashTotal)}),
+              key: const ValueKey('wholesale-df-cash-line'),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.warn),
+            ),
           ],
           const SizedBox(height: 4),
           Text(

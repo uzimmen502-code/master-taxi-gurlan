@@ -121,6 +121,19 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'order_not_refused': 'wholesale_order_err_invalid_transition',
   'refund_pending': 'wholesale_self_return_wait',
   'self_delivery_not_started': 'wholesale_self_err_not_started',
+  // S57 нақд етказиш (2026-11-14, functions_demand wholesale_orders.js / wholesale_failed.js).
+  // `cash_delivery_unavailable` — пастда, сабаби `details.cashUnavailableReason` да.
+  'cash_paid_required': 'wholesale_courier_cash_err_paid_required',
+  'cash_paid_absent': 'wholesale_courier_cash_err_paid_absent',
+  'reason_not_allowed_cash': 'wholesale_courier_failed_err_reason',
+  'cash_state_invalid': 'wholesale_df_err_state',
+  'cash_result_missing': 'wholesale_df_err_state',
+  'cash_refusal_missing': 'wholesale_order_err_retry',
+  'cash_refusal_conflict': 'wholesale_df_err_state',
+  'cash_amount_invalid': 'wholesale_df_err_state',
+  'cash_collector_mismatch': 'wholesale_order_err_not_last_leg_courier',
+  'not_cash_shipment': 'wholesale_order_err_invalid_transition',
+  'order_changed': 'wholesale_order_err_retry',
 };
 
 /// Квота/ўтказишда «буюртма бериш бу фойдаланувчига ёпиқ» маъносидаги
@@ -141,6 +154,9 @@ String wholesaleOrderErrorKey(Object error) {
     }
     if (error.reason == 'self_delivery_unavailable') {
       return wholesaleSelfUnavailableKey('${error.details['selfUnavailableReason'] ?? ''}');
+    }
+    if (error.reason == 'cash_delivery_unavailable') {
+      return wholesaleCashUnavailableKey('${error.details['cashUnavailableReason'] ?? ''}');
     }
     if (error.reason == 'card_number_invalid') {
       return error.details['check'] == 'luhn' ? 'wholesale_order_err_card_luhn' : 'wholesale_seller_card_err_number';
@@ -176,6 +192,13 @@ String wholesaleCardUnavailableKey(String reason) => switch (reason) {
 String wholesaleSelfUnavailableKey(String reason) => switch (reason) {
       'out_of_coverage' => 'wholesale_self_unavailable_out_of_coverage',
       _ => 'wholesale_self_unavailable',
+    };
+
+/// S57: нақд етказиш ёпиқлиги сабаби (квота `cashUnavailableReason`: `cash_disabled` | `buyer_debt` |
+/// `self_delivery`) → матн. Харидорга фақат қарз фарқли («аввал қарзни тўланг»); қолгани — умумий.
+String wholesaleCashUnavailableKey(String reason) => switch (reason) {
+      'buyer_debt' => 'wholesale_cash_unavailable_buyer_debt',
+      _ => 'wholesale_cash_unavailable',
     };
 
 /// Банк ўтказмаси ёпиқлиги сабаби (квота `bankUnavailableReason`: `seller_not_approved` |

@@ -28,8 +28,18 @@ String? logisticsErrorKey(Object error) {
   }
   final chain = kLogisticsChainErrorKeys[error.reason];
   if (chain != null) return chain;
+  final cash = kLogisticsCashErrorKeys[error.reason];
+  if (cash != null) return cash;
   return error.l10nKey;
 }
+
+/// S57 нақд етказиш хатолари (`confirmDelivery`, эга 2026-11-14). Чегара сабаби ҳам шу:
+/// `logistics_err_<reason>` қолипидан ташқарида — паритет фикстураси `callableReasons`ни бузмайди.
+const kLogisticsCashErrorKeys = <String, String>{
+  'cash_confirmation_required': 'logistics_cash_err_confirm',
+  'cash_state_invalid': 'logistics_cash_err_state',
+  'cash_collector_mismatch': 'logistics_cash_err_collector',
+};
 
 /// Йўл бўлакларини йиғиш хатолари (сервер катта ҳарфда, эга 2026-11-07).
 /// `CODE_ATTEMPTS_LOCKED` каби `logistics_err_<reason>` қолипидан ташқарида —

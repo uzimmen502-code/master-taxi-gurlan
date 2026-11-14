@@ -220,6 +220,12 @@ class LegMatchCard extends StatelessWidget {
               ),
             ],
           ),
+          // S57 нақд (эга, 2026-11-14): курьер ОЛИШДАН ОЛДИН билсин — харидордан нақд оладиган сумма
+          // (сервер проекцияси `cashToCollect`; илова ҳисобламайди).
+          if (leg.collectsCash) ...[
+            const SizedBox(height: 8),
+            LegCashToCollectBox(amount: leg.cashToCollect),
+          ],
         ],
       ),
     );

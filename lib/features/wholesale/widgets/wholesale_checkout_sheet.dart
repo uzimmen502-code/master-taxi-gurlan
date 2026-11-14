@@ -11,6 +11,8 @@
 // картасига ФАҚАТ товар суммаси (сервер `payPlan`).
 // S4 (эга, 2026-11-13/14): квота `deliveryMethods.self` деса — «Сотувчи ўзи етказади»
 // танлови; етказиш нархи товар ичида (deliveryFee 0), курьер йўқ.
+// S57 (эга, 2026-11-14): AVA курьери билан ҳамма тўлов усулида етказиш ҳақини «AVA ҳамёнидан /
+// Курьерга нақд» — нақд ФАҚАТ квота `deliveryPaymentMethods.cash` деса (сервер флаги, қарз).
 //
 // НАРХ ФАҚАТ СЕРВЕРДАН (44-банд): ҳар ўзгаришда (debounce) `quoteWholesaleOrder`
 // қайта сўралади, илова ҳеч нарсани ҳисобламайди. `clientRequestId` — ҳар
@@ -120,6 +122,23 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
 
   bool get _isSelf => _delivery == WholesaleDeliveryMethod.self;
 
+  /// S57: етказиш ҳақини тўлаш (`wallet` | `cash`) — фақат курьер етказишида.
+  String _deliveryPay = WholesaleDeliveryPaymentMethod.wallet;
+
+  /// Охирги квотадан: нақд мумкинми ва сабаби (қайта сўров пайтида танлов йўқолмасин).
+  bool _cashAvailable = false;
+  String _cashReason = '';
+
+  bool get _isCash => !_isSelf && _deliveryPay == WholesaleDeliveryPaymentMethod.cash;
+
+  /// Квотага юбориладиган `deliveryPaymentMethod`: ўз етказишида йўқ; нақд — `cash`; банк — `wallet`
+  /// (аввалгидек); ҳамён/карта ҳамёни — юборилмайди (сервер стандарти `wallet`, эски хулқ).
+  String? get _deliveryPayParam {
+    if (_isSelf) return null;
+    if (_isCash) return WholesaleDeliveryPaymentMethod.cash;
+    return _method == WholesalePaymentMethod.bankTransfer ? WholesaleDeliveryPaymentMethod.wallet : null;
+  }
+
   WholesaleQuote? _quote;
   bool _quoting = false;
   String? _quoteError;
@@ -195,14 +214,24 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
           lng: _dest.lng,
         ),
         paymentMethod: _method,
-        // Банк + курьер: етказиш ҳақи ҳамёндан. Ўз етказишида етказиш ҳақи йўқ — майдон юборилмайди.
-        deliveryPaymentMethod:
-            _method == WholesalePaymentMethod.bankTransfer && !_isSelf ? WholesaleDeliveryPaymentMethod.wallet : null,
+        // Курьер: етказиш ҳақи ҳамёндан ёки (S57) нақд. Ўз етказишида майдон юборилмайди.
+        deliveryPaymentMethod: _deliveryPayParam,
         deliveryMethod: _isSelf ? WholesaleDeliveryMethod.self : null,
       );
       if (!mounted || seq != _seq) return;
       _selfAvailable = q.selfAvailable;
       _selfReason = q.selfUnavailableReason;
+      // Ўз етказиши квотасида нақд ҳақида гап йўқ (`self_delivery`) — курьер квотасидаги ҳолат сақланади.
+      if (!q.isSelf) {
+        _cashAvailable = q.cashDeliveryAvailable;
+        _cashReason = q.cashUnavailableReason;
+      }
+      // Нақд танланган, лекин сервер энди «мумкин эмас» деди — ҳамёнга қайтиб қайта сўраймиз.
+      if (_isCash && !q.cashDeliveryAvailable) {
+        setState(() => _deliveryPay = WholesaleDeliveryPaymentMethod.wallet);
+        unawaited(_requote());
+        return;
+      }
       // Ўз етказиши танланган, лекин сервер энди «мумкин эмас» деди — курьерга қайтамиз.
       if (_isSelf && !q.selfAvailable) {
         setState(() => _delivery = WholesaleDeliveryMethod.avaCourier);
@@ -230,6 +259,17 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
           ((e.reason == 'card_unavailable' && _method == WholesalePaymentMethod.cardOnDelivery) ||
               (e.reason == 'bank_transfer_unavailable' && _method == WholesalePaymentMethod.bankTransfer))) {
         setState(() => _method = WholesalePaymentMethod.wallet);
+        unawaited(_requote());
+        return;
+      }
+      // S57: нақд рад этилди (`cash_delivery_unavailable`, масалан қарз пайдо бўлди) — ҳамёнга
+      // қайтамиз, сабаби (`details.cashUnavailableReason`) танлов остида кўрсатилади.
+      if (e is WholesaleOrderException && e.reason == 'cash_delivery_unavailable' && _isCash) {
+        setState(() {
+          _deliveryPay = WholesaleDeliveryPaymentMethod.wallet;
+          _cashAvailable = false;
+          _cashReason = '${e.details['cashUnavailableReason'] ?? ''}';
+        });
         unawaited(_requote());
         return;
       }
@@ -290,6 +330,7 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
               'card_unavailable' ||
               'bank_transfer_unavailable' ||
               'self_delivery_unavailable' ||
+              'cash_delivery_unavailable' ||
               'seller_balance_insufficient':
           // Янги квота — янги калит (эски калит эски квотага боғланган).
           await _requote();
@@ -334,9 +375,19 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
     _scheduleQuote(immediate: true);
   }
 
+  void _setDeliveryPay(String m) {
+    if (m == _deliveryPay) return;
+    setState(() => _deliveryPay = m);
+    _scheduleQuote(immediate: true);
+  }
+
   /// Ҳозир ҳамёндан ушланадиган сумма: ҳамён — жами; карта/банк — сервер `payPlan.walletNow`
   /// (ёки `walletHold`; банкда эски сервер учун етказиш ҳақи). 0 — огоҳлантириш керак эмас.
   int _walletNow(WholesaleQuote q) {
+    // S57 нақд: етказиш ҳақи ҳамёндан ЭМАС — сервер `payPlan.walletNow` (ҳамён — товар; карта/банк — 0).
+    if (q.isCashDelivery) {
+      return q.walletNowAmount ?? (_method == WholesalePaymentMethod.wallet ? q.goodsTotal : 0);
+    }
     if (_method == WholesalePaymentMethod.wallet) return q.total;
     if (_method == WholesalePaymentMethod.bankTransfer) return q.walletNowAmount ?? q.deliveryFee;
     return q.walletNowAmount ?? 0;
@@ -388,6 +439,7 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
                 const SizedBox(height: 14),
                 _deliverySection(context),
                 _paymentSection(context),
+                _deliveryPaySection(context),
                 const SizedBox(height: 12),
                 _quoteSection(context),
                 const SizedBox(height: 10),
@@ -514,6 +566,72 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
     );
   }
 
+  /// S57: «Етказиш ҳақи: AVA ҳамёнидан / Курьерга нақд» — курьер етказишида, ФАҚАТ сервер «нақд мумкин»
+  /// деса (ёки нақд танланган бўлса). Мумкин эмас ва сабаби қарз — тушунтириш (флаг ўчиқ — ҳеч нарса).
+  Widget _deliveryPaySection(BuildContext context) {
+    if (_isSelf) return const SizedBox.shrink();
+    final showChoice = _cashAvailable || _isCash;
+    if (!showChoice) {
+      if (_cashReason != 'buyer_debt') return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          context.tr(wholesaleCashUnavailableKey(_cashReason)),
+          key: const ValueKey('wholesale-cash-unavailable'),
+          style: const TextStyle(fontSize: 11, height: 1.3, color: Color(0xFFF0A868)),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.tr('wholesale_checkout_delivery_pay_title'),
+            style: const TextStyle(fontWeight: FontWeight.w600, color: PdDark.ink),
+          ),
+          RadioGroup<String>(
+            groupValue: _deliveryPay,
+            onChanged: (v) {
+              if (v != null && !_placing) _setDeliveryPay(v);
+            },
+            child: Column(
+              children: [
+                RadioListTile<String>(
+                  key: const ValueKey('wholesale-delivery-pay-wallet'),
+                  value: WholesaleDeliveryPaymentMethod.wallet,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(context.tr('wholesale_delivery_pay_wallet'),
+                      style: const TextStyle(fontSize: 13, color: PdDark.ink)),
+                ),
+                RadioListTile<String>(
+                  key: const ValueKey('wholesale-delivery-pay-cash'),
+                  value: WholesaleDeliveryPaymentMethod.cash,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(context.tr('wholesale_delivery_pay_cash'),
+                      style: const TextStyle(fontSize: 13, color: PdDark.ink)),
+                ),
+              ],
+            ),
+          ),
+          if (_isCash)
+            Container(
+              key: const ValueKey('wholesale-cash-refusal-note'),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: PdDark.surface2, borderRadius: BorderRadius.circular(10)),
+              child: Text(
+                context.tr('wholesale_checkout_cash_refusal_note'),
+                style: const TextStyle(fontSize: 12, height: 1.3, color: PdDark.ink),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _paymentSection(BuildContext context) {
     final q = _quote;
     final cardKnown = q?.paymentMethodsKnown ?? false;
@@ -586,10 +704,12 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: PdDark.surface2, borderRadius: BorderRadius.circular(10)),
             child: Text(
-              // Ўз етказишида ҳамёндан ҳеч нарса ушланмайди — алоҳида матн.
+              // Ўз етказишида ҳамёндан ҳеч нарса ушланмайди — алоҳида матн; S57 нақд — етказиш курьерга.
               _isSelf
                   ? context.tr('wholesale_pay_bank_note_self')
-                  : context.trMsg('wholesale_pay_bank_note', params: {'amount': formatMoney(_walletNow(q))}),
+                  : q.isCashDelivery
+                      ? context.trMsg('wholesale_pay_bank_note_cash', params: {'amount': formatMoney(q.cashToCourier)})
+                      : context.trMsg('wholesale_pay_bank_note', params: {'amount': formatMoney(_walletNow(q))}),
               style: const TextStyle(fontSize: 12, height: 1.3, color: PdDark.ink),
             ),
           ),
@@ -602,9 +722,11 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: PdDark.surface2, borderRadius: BorderRadius.circular(10)),
             child: Text(
-              q.payPlan!.walletNow > 0
-                  ? context.trMsg('wholesale_pay_card_note', params: {'amount': formatMoney(q.payPlan!.walletNow)})
-                  : context.tr('wholesale_pay_card_note_self'),
+              q.isCashDelivery
+                  ? context.trMsg('wholesale_pay_card_note_cash', params: {'amount': formatMoney(q.cashToCourier)})
+                  : q.payPlan!.walletNow > 0
+                      ? context.trMsg('wholesale_pay_card_note', params: {'amount': formatMoney(q.payPlan!.walletNow)})
+                      : context.tr('wholesale_pay_card_note_self'),
               style: const TextStyle(fontSize: 12, height: 1.3, color: PdDark.ink),
             ),
           ),
@@ -667,6 +789,28 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
           ),
           const Divider(height: 10, color: PdDark.line),
           _MoneyLine(label: context.tr('wholesale_quote_total'), value: money(q.total), bold: true),
+          // S57: нақд — етказиш ҳақи эшик олдида курьерга (сервер `cashToCourier`); ҳамён усулида
+          // ҳозир ҳамёндан фақат товар суммаси (`payPlan.walletNow`).
+          if (q.isCashDelivery) ...[
+            const SizedBox(height: 4),
+            if (_method == WholesalePaymentMethod.wallet && _walletNow(q) > 0)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  context.trMsg('wholesale_quote_cash_wallet_now', params: {'amount': money(_walletNow(q))}),
+                  key: const ValueKey('wholesale-cash-wallet-now'),
+                  style: const TextStyle(fontSize: 12, color: PdDark.brand, fontWeight: FontWeight.w600),
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                context.trMsg('wholesale_quote_cash_to_courier', params: {'amount': money(q.cashToCourier)}),
+                key: const ValueKey('wholesale-cash-to-courier'),
+                style: const TextStyle(fontSize: 12, color: PdDark.brand, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
           if (_method == WholesalePaymentMethod.cardOnDelivery) ...[
             const SizedBox(height: 4),
             // S6: ҳозир ҳамёндан — етказиш ҳақи (бўлса); эшик олдида — фақат товар (`payPlan`).

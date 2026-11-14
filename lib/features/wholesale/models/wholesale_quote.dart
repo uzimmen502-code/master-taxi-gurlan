@@ -43,12 +43,20 @@ abstract final class WholesaleDeliveryMethod {
 ///   wallet — ҳозир ҳамёндан: товар + етказиш;
 ///   card   — ҳозир ҳамёндан: етказиш ҳақи; эшик олдида сотувчи картасига: ФАҚАТ товар;
 ///   bank   — ҳозир ҳамёндан: етказиш ҳақи; банк орқали: товар.
+/// S57 (эга, 2026-11-14): нақд етказишда `cashToCourier` — етказиш ҳақи эшик олдида курьерга
+/// (ҳамёндан ушланмайди); ҳамён/эски серверда 0.
 class WholesalePayPlan {
-  const WholesalePayPlan({required this.walletNow, required this.atDoorToSellerCard, required this.bankTransfer});
+  const WholesalePayPlan({
+    required this.walletNow,
+    required this.atDoorToSellerCard,
+    required this.bankTransfer,
+    this.cashToCourier = 0,
+  });
 
   final int walletNow;
   final int atDoorToSellerCard;
   final int bankTransfer;
+  final int cashToCourier;
 
   static WholesalePayPlan? fromMap(Object? raw) {
     if (raw is! Map) return null;
@@ -56,8 +64,18 @@ class WholesalePayPlan {
       walletNow: _int(raw['walletNow']),
       atDoorToSellerCard: _int(raw['atDoorToSellerCard']),
       bankTransfer: _int(raw['bankTransfer']),
+      cashToCourier: _int(raw['cashToCourier']),
     );
   }
+}
+
+/// S57: курьер етказишида етказиш ҳақини тўлаш усули (сервер `DELIVERY_PAYMENT_METHODS`).
+/// Майдон йўқ (эски буюртма/сервер) = `wallet`.
+abstract final class WholesaleDeliveryPaymentMethod {
+  static const wallet = 'wallet';
+
+  /// Эшик олдида курьерга нақд (фақат квота `deliveryPaymentMethods.cash == true` деса).
+  static const cash = 'cash';
 }
 
 class WholesaleQuote {
@@ -85,7 +103,25 @@ class WholesaleQuote {
     this.selfUnavailableReason = '',
     this.selfCoverage = '',
     this.selfDropoff = '',
+    this.deliveryPaymentMethod = WholesaleDeliveryPaymentMethod.wallet,
+    this.cashDeliveryAvailable = false,
+    this.cashUnavailableReason = '',
+    this.cashToCourier = 0,
   });
+
+  /// S57: шу квота етказиш ҳақини қандай тўлаш учун (`wallet` | `cash`).
+  final String deliveryPaymentMethod;
+
+  /// S57: `deliveryPaymentMethods.cash` — нақд мумкинми (сервер ҳал қилади, флаг ўчиқ бўлса `false`).
+  final bool cashDeliveryAvailable;
+
+  /// `cash_disabled` | `buyer_debt` | `self_delivery` | бўш.
+  final String cashUnavailableReason;
+
+  /// Нақд квотада эшик олдида курьерга тўланадиган сумма (= етказиш ҳақи, сервердан); бошқа — 0.
+  final int cashToCourier;
+
+  bool get isCashDelivery => deliveryPaymentMethod == WholesaleDeliveryPaymentMethod.cash;
 
   /// S6: тўлов режаси (эски серверда `null`).
   final WholesalePayPlan? payPlan;
@@ -143,8 +179,16 @@ class WholesaleQuote {
     final methods = d['paymentMethods'];
     final dms = d['deliveryMethods'];
     final self = d['selfDelivery'] is Map ? d['selfDelivery'] as Map : const {};
+    final dpms = d['deliveryPaymentMethods'];
+    final plan = WholesalePayPlan.fromMap(d['payPlan']);
+    final isCash = _str(d['deliveryPaymentMethod']) == WholesaleDeliveryPaymentMethod.cash;
     return WholesaleQuote(
-      payPlan: WholesalePayPlan.fromMap(d['payPlan']),
+      payPlan: plan,
+      deliveryPaymentMethod: isCash ? WholesaleDeliveryPaymentMethod.cash : WholesaleDeliveryPaymentMethod.wallet,
+      cashDeliveryAvailable: dpms is Map && dpms['cash'] == true,
+      cashUnavailableReason: _str(d['cashUnavailableReason']),
+      // Сервер иккала жойда беради: юқори `cashToCourier` ва `payPlan.cashToCourier`.
+      cashToCourier: isCash ? (d['cashToCourier'] is num ? _int(d['cashToCourier']) : (plan?.cashToCourier ?? 0)) : 0,
       deliveryMethod: _str(d['deliveryMethod']) == WholesaleDeliveryMethod.self
           ? WholesaleDeliveryMethod.self
           : WholesaleDeliveryMethod.avaCourier,

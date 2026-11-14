@@ -198,6 +198,33 @@ async function main() {
     await assertFails(create(NEW2, { chinaSellerType: 'boss' }));
   });
 
+  // D. Sotuvchining o'z yetkazishi (S4, ega 2026-11-13/14): `selfDelivery {enabled, coverage, dropoff}`
+  await seed();
+  const sd = (extra) => ({ enabled: true, coverage: 'district', dropoff: 'buyer_address', ...extra });
+  await check('D1 egasi o\'z yetkazishini yoqadi / o\'zgartiradi / o\'chiradi — barcha coverage × dropoff qiymatlari o\'tadi', async () => {
+    for (const coverage of ['district', 'region', 'nation']) {
+      for (const dropoff of ['district_center', 'buyer_address']) {
+        await assertSucceeds(doc(approved, APPROVED).update({ selfDelivery: sd({ coverage, dropoff }), updatedAt: serverTimestamp() }));
+      }
+    }
+    await assertSucceeds(doc(approved, APPROVED).update({ selfDelivery: sd({ enabled: false }), updatedAt: serverTimestamp() }));
+  });
+
+  await check('D2 buzuq shakl rad etiladi: noma\'lum coverage/dropoff, enabled satr, kalit yetishmaydi, ortiqcha kalit, map emas', async () => {
+    await assertFails(doc(approved, APPROVED).update({ selfDelivery: sd({ coverage: 'world' }) }));
+    await assertFails(doc(approved, APPROVED).update({ selfDelivery: sd({ dropoff: 'home' }) }));
+    await assertFails(doc(approved, APPROVED).update({ selfDelivery: sd({ enabled: 'true' }) }));
+    await assertFails(doc(approved, APPROVED).update({ selfDelivery: { enabled: true, coverage: 'district' } }));
+    await assertFails(doc(approved, APPROVED).update({ selfDelivery: sd({ price: 0 }) }));
+    await assertFails(doc(approved, APPROVED).update({ selfDelivery: true }));
+  });
+
+  await check('D3 begona foydalanuvchi boshqaning o\'z yetkazishi sozlamasini o\'zgartira olmaydi', () =>
+    assertFails(doc(other, APPROVED).update({ selfDelivery: sd() })));
+
+  await check('D4 o\'z yetkazishi bilan birga o\'zini tasdiqlash (approvalStatus) — rad', () =>
+    assertFails(doc(pending, PENDING).update({ selfDelivery: sd(), approvalStatus: 'approved' })));
+
   await testEnv.cleanup();
   const failed = results.filter((r) => !r).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);

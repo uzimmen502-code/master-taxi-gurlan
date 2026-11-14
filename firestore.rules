@@ -3205,6 +3205,19 @@ service cloud.firestore {
               ]);
     }
 
+    // Сотувчининг ўз етказиши (S4, эга 2026-11-13/14): ихтиёрий, шакли қатъий. Паритет:
+    // functions_demand/core/wholesale_orders.js SELF_COVERAGES / SELF_DROPOFFS.
+    function wholesaleSelfDeliveryOk() {
+      let d = request.resource.data;
+      return !('selfDelivery' in d)
+          || (d.selfDelivery is map
+              && d.selfDelivery.keys().hasOnly(['enabled', 'coverage', 'dropoff'])
+              && d.selfDelivery.keys().hasAll(['enabled', 'coverage', 'dropoff'])
+              && d.selfDelivery.enabled is bool
+              && d.selfDelivery.coverage in ['district', 'region', 'nation']
+              && d.selfDelivery.dropoff in ['district_center', 'buyer_address']);
+    }
+
     // Эга — компания/эга исми ва жўнатиш манзилини ўзгартиради, ҳеч қачон
     // ўзини тасдиқлай олмайди (`approvalStatus` шу функцияда йўқ).
     function wholesaleSellerOwnerUpdateOk(phone) {
@@ -3213,11 +3226,12 @@ service cloud.firestore {
           && request.resource.data.phone == resource.data.phone
           && changed.hasOnly([
                 'companyName', 'ownerName', 'sellerType', 'chinaSellerType', 'updatedAt',
-                'regionId', 'districtId', 'address', 'lat', 'lng'
+                'regionId', 'districtId', 'address', 'lat', 'lng', 'selfDelivery'
               ])
           && request.resource.data.get('sellerType', '')
               in ['', 'manufacturer', 'wholesaler', 'yatt']
           && wholesaleChinaSellerTypeOk()
+          && wholesaleSelfDeliveryOk()
           && request.resource.data.companyName is string
           && request.resource.data.companyName.size() >= 2
           && request.resource.data.companyName.size() <= 200

@@ -74,7 +74,8 @@ const ALLOWED = Object.freeze({
   [STATUS.PLACED]: [STATUS.IN_DELIVERY, STATUS.CANCELLED],
   [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.CANCELLED, STATUS.REFUSED, STATUS.PAYMENT_DISPUTE, STATUS.LOST],
   [STATUS.PAYMENT_DISPUTE]: [STATUS.IN_DELIVERY, STATUS.REFUSED, STATUS.LOST],
-  [STATUS.REFUSED]: [STATUS.RETURNING],
+  // S4: o'z yetkazishi radi — tovar sotuvchining o'zida, qaytish jo'natmasi yo'q: refused → returned.
+  [STATUS.REFUSED]: [STATUS.RETURNING, STATUS.RETURNED],
   [STATUS.RETURNING]: [STATUS.RETURNED],
   [STATUS.CANCELLED]: [],
   [STATUS.DELIVERED]: [],
@@ -89,7 +90,12 @@ const ACTOR = Object.freeze({
 /** `actor` → `from` → ruxsat etilgan `to` lar. */
 const ACTOR_ALLOWED = Object.freeze({
   [ACTOR.BUYER]: { [STATUS.PLACED]: [STATUS.CANCELLED] },
-  [ACTOR.SELLER]: { [STATUS.PLACED]: [STATUS.CANCELLED] },
+  // S4: in_delivery / refused / returned — FAQAT o'z yetkazishi buyurtmasida (callable'lar `isSelf` tekshiradi).
+  [ACTOR.SELLER]: {
+    [STATUS.PLACED]: [STATUS.CANCELLED, STATUS.IN_DELIVERY],
+    [STATUS.IN_DELIVERY]: [STATUS.REFUSED],
+    [STATUS.REFUSED]: [STATUS.RETURNED],
+  },
   [ACTOR.ADMIN]: {
     [STATUS.PLACED]: [STATUS.CANCELLED],
     [STATUS.IN_DELIVERY]: [STATUS.CANCELLED],
@@ -238,14 +244,56 @@ const methodOf = (doc) => {
  * Yetkazish haqini XARIDOR AVA hamyonidan to'laganmi (hamyon va bank o'tkazmasi). Rad/yo'qolishdagi
  * yetkazish haqi va qaytish haqi qoidalari (ayb sababi, `WALLET_REASONS`) — shu ikkalasida bir xil.
  */
-const deliveryPaidByBuyer = (doc) => methodOf(doc) !== PAYMENT_METHOD.CARD;
+/**
+ * S6 (ega CONFIRMED 2026-11-13): yetkazish haqini HAMMA usulda xaridor to'laydi. Karta buyurtmasida belgi
+ * `deliveryPaidBy: 'buyer'` (kvota muhri → default `placeWholesaleOrder` buyurtmaga ko'chiradi). Belgisiz karta
+ * buyurtmasi (deploydan OLDIN) — ESKI semantika (sotuvchi hamyonidan kuryer haqi + AVA ulushi) oxirigacha.
+ */
+const DELIVERY_PAID_BY = Object.freeze({ BUYER: 'buyer' });
+const isNewCard = (doc) => methodOf(doc) === PAYMENT_METHOD.CARD && (doc || {}).deliveryPaidBy === DELIVERY_PAID_BY.BUYER;
+const deliveryPaidByBuyer = (doc) => methodOf(doc) !== PAYMENT_METHOD.CARD || isNewCard(doc);
+
+/**
+ * ── S4: SOTUVCHINING O'Z YETKAZISHI (ega CONFIRMED 2026-11-13/14) ─────────────────────────────
+ * `deliveryMethod: 'self'` (kvota → buyurtma; yo'q = `ava_courier`). Yetkazish narxi tovar narxi ICHIDA —
+ * deliveryFee 0, kuryer/relay jo'natmasi HECH QACHON ochilmaydi (`shipmentAllowed` false).
+ *   placed (qabul; bank — «Пул тушди» ham) → in_delivery   (seller, `startWholesaleSelfDelivery`)
+ *   in_delivery → delivered (system: default `releaseSelf`, sotuvchi xaridor kodini kiritgach — `selfDelivery.status: completed`)
+ *   in_delivery → refused   (seller, `markWholesaleSelfDeliveryRefused`)
+ *   refused     → returned  (seller, `completeWholesaleSelfReturn` — tovar qaytdi, qoldiq +N)
+ * Sotuvchi o'tishlari FAQAT o'z yetkazishi buyurtmasida (callable'lar `isSelf` ni tekshiradi).
+ * Boshlash muddati — YO'Q (PROPOSED: hozircha timeout qo'yilmaydi).
+ */
+const DELIVERY_METHOD = Object.freeze({ AVA_COURIER: 'ava_courier', SELF: 'self' });
+const DELIVERY_METHODS = Object.freeze([DELIVERY_METHOD.AVA_COURIER, DELIVERY_METHOD.SELF]);
+const deliveryMethodOf = (doc) => ((doc || {}).deliveryMethod === DELIVERY_METHOD.SELF ? DELIVERY_METHOD.SELF : DELIVERY_METHOD.AVA_COURIER);
+const isSelf = (doc) => deliveryMethodOf(doc) === DELIVERY_METHOD.SELF;
+const SELF_STATUS = Object.freeze({
+  PENDING: 'pending', IN_DELIVERY: 'in_delivery', COMPLETED: 'completed', REFUSED: 'refused', RETURNED: 'returned',
+});
+/** Sotuvchi sozlamasi `wholesale_sellers.selfDelivery` qiymatlari (Firestore Rules bilan AYNAN bir xil). */
+const SELF_COVERAGES = Object.freeze(['district', 'region', 'nation']);
+const SELF_DROPOFFS = Object.freeze(['district_center', 'buyer_address']);
+
+/**
+ * AVA ulushi buyurtma paytida OLINMAYDI — 10 kunlik hisobot orqali yig'iladi (`avaFeeCollection: 'statement'`):
+ * bank o'tkazmasi (hamma) va o'z yetkazishi karta orqali (tovar puli ilovaga kirmaydi). O'z yetkazishi hamyon —
+ * RELEASE da ushlanadi (odatdagidek).
+ */
+function feeViaStatement(o) {
+  const m = methodOf(o);
+  if (m === PAYMENT_METHOD.BANK) return true;
+  return m === PAYMENT_METHOD.CARD && isSelf(o);
+}
 
 /**
  * Jo'natma ochish mumkinmi (3-bosqich darvozasi). Maydon yo'q — ESKI buyurtma, avvalgidek
  * ruxsat; `accepted` + `acceptedAt` — ruxsat; qolgani (pending/rejected/timeout/noma'lum) — YO'Q.
  * Bank o'tkazmasi: qo'shimcha — sotuvchi «Пул тушди» bosgan (`bankPayment.status == confirmed`).
+ * O'z yetkazishi (S4) — HECH QACHON (relay jo'natmasi yo'q).
  */
 function shipmentAllowed(o) {
+  if (isSelf(o)) return false;
   const d = (o || {}).sellerDecision;
   if (d === undefined || d === null) return true;
   if (!(d === SELLER_DECISION.ACCEPTED && !!o.acceptedAt)) return false;
@@ -303,6 +351,16 @@ module.exports = {
   BANK_PAY_BUSINESS_DAYS,
   bankPayDeadlineFor,
   deliveryPaidByBuyer,
+  DELIVERY_PAID_BY,
+  isNewCard,
+  DELIVERY_METHOD,
+  DELIVERY_METHODS,
+  deliveryMethodOf,
+  isSelf,
+  SELF_STATUS,
+  SELF_COVERAGES,
+  SELF_DROPOFFS,
+  feeViaStatement,
   CARD_PAYMENT,
   CARD_REFUSAL_LIMIT,
   RECEIPT_TIMEOUT_MS,

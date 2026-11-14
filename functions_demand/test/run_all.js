@@ -51,6 +51,7 @@ const SUITES = [
   'dictionary_fresh.test.js',
   'analytics.test.js',
   'wholesale_admin.test.js',
+  'wholesale_s46.test.js',
 ];
 
 let failed = 0;

@@ -50,6 +50,7 @@ const wholesaleCardApi = require('./api/wholesale_card');
 const wholesaleEventsApi = require('./api/wholesale_events');
 const wholesaleFailedApi = require('./api/wholesale_failed');
 const wholesaleBankApi = require('./api/wholesale_bank');
+const wholesaleSelfApi = require('./api/wholesale_self');
 const wholesaleFeeStatementApi = require('./api/wholesale_fee_statement');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
@@ -321,6 +322,21 @@ exports.wholesaleSellerDecisionSweeper = fn.pubsub
     await wholesaleOrdersApi.runWholesaleSellerDecisionSweep({ db });
     return null;
   });
+
+// Sotuvchining o'z yetkazishi (S4, ega 2026-11-13/14; api/wholesale_self.js): jo'natma yo'q, yetkazish narxi
+// tovar ichida. Boshlash → xaridor kodi bilan yakunlash (pul/«delivered» — default `releaseSelf`) | rad → tovar qaytdi.
+exports.startWholesaleSelfDelivery = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeStartWholesaleSelfDelivery({ db }),
+));
+exports.completeWholesaleSelfDelivery = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeCompleteWholesaleSelfDelivery({ db }),
+));
+exports.markWholesaleSelfDeliveryRefused = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeMarkWholesaleSelfDeliveryRefused({ db }),
+));
+exports.completeWholesaleSelfReturn = fn.https.onCall(wrapCallable(
+  wholesaleSelfApi.makeCompleteWholesaleSelfReturn({ db }),
+));
 
 // Bank o'tkazmasi (ega, 2026-11-13/14; api/wholesale_bank.js): tovar puli ilovadan tashqarida.
 // Sotuvchi «Пул тушди» → jo'natma ochiladi; 5 ish kunida tasdiqlanmasa — bekor (yetkazish haqi xaridorga).

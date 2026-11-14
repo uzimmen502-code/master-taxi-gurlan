@@ -34,8 +34,13 @@ const { assertStrictAdmin } = require('../analytics/access');
 const ORDERS = 'wholesale_orders';
 const PRIVATE = 'private';
 const ADMIN_AUDIT = 'admin_audit';
-/** AVA ulushi buyurtma paytida OLINMAYDIGAN (hisobot orqali yig'iladigan) usullar. O'z yetkazishi — keyin shu yerga. */
-const FEE_STATEMENT_METHODS = Object.freeze([WO.PAYMENT_METHOD.BANK]);
+/**
+ * So'rov filtri (`paymentMethod in`): bank o'tkazmasi (hammasi) va karta (FAQAT o'z yetkazishi — S4, ega 2026-11-13/14:
+ * «харидорларнинг буюртмалари ҳисоботи бўйича 2%»). Kuryerli karta buyurtmasi so'rovga tushadi, lekin
+ * `WO.feeViaStatement` bilan chiqariladi (uning AVA ulushi buyurtma paytida sotuvchi hamyonidan olingan).
+ * Indeks o'zgarmaydi: (paymentMethod, status, deliveredAt).
+ */
+const FEE_STATEMENT_METHODS = Object.freeze([WO.PAYMENT_METHOD.BANK, WO.PAYMENT_METHOD.CARD]);
 const MAX_ORDERS = 5000;
 const GETALL_CHUNK = 100;
 const NOTE_MAX = 300;
@@ -190,9 +195,11 @@ const msOf = (v) => {
 
 /** Bir davr uchun hisobot (callable va «yig'ildi» qayta hisobi uchun umumiy). */
 async function computeStatement(db, period) {
-  const { docs, truncated } = await deliveredIn(db, period.startMs, period.endMs, FEE_STATEMENT_METHODS);
+  const res = await deliveredIn(db, period.startMs, period.endMs, FEE_STATEMENT_METHODS);
+  // Faqat AVA ulushi hisobot orqali yig'iladiganlar (kuryerli karta — yo'q).
+  const docs = res.docs.filter((d) => WO.feeViaStatement(d.o));
   const settlements = await readSettlements(db, docs.map((d) => d.id));
-  return { ...buildStatement(docs, settlements), truncated };
+  return { ...buildStatement(docs, settlements), truncated: res.truncated };
 }
 
 function makeAdminGetWholesaleFeeStatement(deps) {
@@ -252,10 +259,12 @@ function makeAdminGetWholesaleOrdersReport(deps) {
         anomalies.push({ orderId: id, sellerId: sellerKey, code: 'settlement_invalid' });
         continue;
       }
-      const k = `${sellerKey}|${m}`;
+      // S4: o'z yetkazishi alohida qator (karta-o'z yetkazishi — hisobot orqali, kuryerli karta — ushlanma orqali).
+      const dm = WO.deliveryMethodOf(o);
+      const k = `${sellerKey}|${m}|${dm}`;
       const cur = rows.get(k) || {
-        sellerId: sellerKey, paymentMethod: m, count: 0, goodsTotal: 0, deliveryFee: 0, avaFee: 0,
-        avaFeeVia: FEE_STATEMENT_METHODS.includes(m) ? 'statement' : 'release',
+        sellerId: sellerKey, paymentMethod: m, deliveryMethod: dm, count: 0, goodsTotal: 0, deliveryFee: 0, avaFee: 0,
+        avaFeeVia: WO.feeViaStatement(o) ? 'statement' : 'release',
       };
       cur.count += 1;
       cur.goodsTotal += o.goodsTotal;

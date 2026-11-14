@@ -588,7 +588,8 @@ ok('hisobot: faqat davrda YETKAZILGAN bank buyurtmalari (boshi kiradi, oxiri kir
   await delivered(db, 'xInDel', { status: 'in_delivery', deliveredAt: new Date(P.startMs + HOUR) });
   await delivered(db, 'bad', { deliveredAt: new Date(P.startMs + HOUR), settlement: null });
   const r = await q(() => F.makeAdminGetWholesaleFeeStatement({ db, now: () => new Date(P.endMs + DAY) })({ periodStart: '2026-11-11' }, ctx(ADMIN)));
-  assert.deepStrictEqual([r.periodStart, r.periodEnd, r.lastDay, r.closed, r.methods], ['2026-11-11', '2026-11-21', '2026-11-20', true, ['bank_transfer']]);
+  assert.deepStrictEqual([r.periodStart, r.periodEnd, r.lastDay, r.closed, r.methods], ['2026-11-11', '2026-11-21', '2026-11-20', true, ['bank_transfer', 'card_on_delivery']]);
+  // S4: so'rov karta usulini ham oladi, lekin kuryerli karta (`xCard`) hisobotga KIRMAYDI (faqat o'z yetkazishi).
   assert.deepStrictEqual(r.totals, {
     sellers: 2, count: 3, goodsTotal: 180001, avaFeeDue: 3601,
   });

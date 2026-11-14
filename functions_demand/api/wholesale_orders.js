@@ -42,13 +42,15 @@ const WO = require('../core/wholesale_orders');
 const { packIdsOf, STOCK, MAX_QTY, DEFAULT_PACK } = require('./wholesale_stock');
 const { marketOf } = require('./wholesale_admin');
 const {
-  quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx,
+  quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx, validatePoint,
 } = require('./logistics');
 const { assertStrictAdmin } = require('../analytics/access');
 // 3b: «yetkazilganda karta orqali» (ega, 2026-10-31).
 const { cardAvailability } = require('./wholesale_card');
 const { ensureWholesaleReturnShipment, RETURN_MAX_ATTEMPTS } = require('./wholesale_return');
 const { notifySellerDecide } = require('./wholesale_events');
+// S4: o'z yetkazishi kodi (relay hosilasi, `wsself:{orderId}`).
+const { selfDeliveryCodeFor, SECRET_DOC: SELF_SECRET_DOC } = require('./wholesale_self');
 
 const PRODUCTS = 'wholesale_products';
 const SELLERS = 'wholesale_sellers';
@@ -192,10 +194,16 @@ function parseQuoteRequest(data) {
   // Bank o'tkazmasi (ega, 2026-11-14): yetkazish haqini xaridor qanday to'laydi — hozir FAQAT `wallet`
   // (yo'q/bo'sh = wallet). Naqd kuryerga — keyingi bosqich, hozircha aniq kod bilan rad. Boshqa usullarda
   // maydon ma'nosiz — berilsa rad (jimgina e'tiborsiz qoldirilmaydi).
+  // S4: yetkazish usuli — yo'q/bo'sh = `ava_courier` (eski ilova), aks holda faqat ma'lum qiymat.
+  const dm = d.deliveryMethod === undefined || d.deliveryMethod === null || d.deliveryMethod === ''
+    ? WO.DELIVERY_METHOD.AVA_COURIER : d.deliveryMethod;
+  if (!WO.DELIVERY_METHODS.includes(dm)) {
+    throw fail('invalid-argument', 'Yetkazish usuli noto\'g\'ri', 'delivery_method_invalid', { allowed: [...WO.DELIVERY_METHODS] });
+  }
   const rawDpm = d.deliveryPaymentMethod;
   const dpmEmpty = rawDpm === undefined || rawDpm === null || rawDpm === '';
   let deliveryPaymentMethod = null;
-  if (pm === WO.PAYMENT_METHOD.BANK) {
+  if (pm === WO.PAYMENT_METHOD.BANK && dm === WO.DELIVERY_METHOD.AVA_COURIER) {
     deliveryPaymentMethod = dpmEmpty ? WO.DELIVERY_PAYMENT_METHOD.WALLET : rawDpm;
     if (!WO.DELIVERY_PAYMENT_METHODS.includes(deliveryPaymentMethod)) {
       throw fail('invalid-argument', 'Yetkazish haqini hozircha faqat hamyondan to\'lash mumkin', 'delivery_payment_method_unsupported', {
@@ -211,6 +219,7 @@ function parseQuoteRequest(data) {
     qty,
     paymentMethod: pm,
     deliveryPaymentMethod,
+    deliveryMethod: dm,
     destination: {
       regionId: dest.regionId, districtId: dest.districtId, lat: dest.lat, lng: dest.lng, addressText,
     },
@@ -279,10 +288,52 @@ function sellerOrigin(seller) {
  * relay eskrouga o'tadi (0 so'mli ushlanma/jo'natma yo'q — default `shipFund` ham musbat talab qiladi).
  * @returns {{available: boolean, reason: null|'seller_not_approved'|'delivery_fee_invalid'}}
  */
-function bankAvailability(sellerDoc, deliveryFee) {
+function bankAvailability(sellerDoc, deliveryFee, { self = false } = {}) {
   if (!sellerDoc || sellerDoc.approvalStatus !== 'approved') return { available: false, reason: 'seller_not_approved' };
-  if (!isPosInt(deliveryFee)) return { available: false, reason: 'delivery_fee_invalid' };
+  // S4 o'z yetkazishi: yetkazish haqi 0 (narx tovar ichida) — hamyondan hech narsa ushlanmaydi.
+  if (!self && !isPosInt(deliveryFee)) return { available: false, reason: 'delivery_fee_invalid' };
   return { available: true, reason: null };
+}
+
+/**
+ * S4: sotuvchining o'z yetkazishi shu manzilga ochiqmi (sof). Sozlama `wholesale_sellers.selfDelivery`
+ * `{enabled: bool, coverage: district|region|nation, dropoff: district_center|buyer_address}` (sotuvchi yozadi,
+ * Rules shaklni tekshiradi; bu yerda ham qayta tekshiriladi — buzuq sozlama = yopiq).
+ *   district — manzil tumani = sotuvchi tumani (ikkalasi bo'sh emas, viloyat ham bir xil);
+ *   region   — manzil viloyati = sotuvchi viloyati;  nation — istalgan.
+ * `origin`/`destination` — `validatePoint` dan o'tgan (geo ma'lumotnomasida bor) nuqtalar.
+ * @returns {{available: boolean, reason: null|'self_disabled'|'self_settings_invalid'|'out_of_coverage', coverage?, dropoff?}}
+ */
+function selfAvailability(sellerDoc, origin, destination) {
+  const sd = sellerDoc && sellerDoc.selfDelivery && typeof sellerDoc.selfDelivery === 'object' ? sellerDoc.selfDelivery : null;
+  if (!sd || sd.enabled !== true) return { available: false, reason: 'self_disabled' };
+  if (!WO.SELF_COVERAGES.includes(sd.coverage) || !WO.SELF_DROPOFFS.includes(sd.dropoff)) {
+    return { available: false, reason: 'self_settings_invalid' };
+  }
+  const o = origin || {};
+  const t = destination || {};
+  let inside = true;
+  if (sd.coverage === 'region') inside = !!o.regionId && o.regionId === t.regionId;
+  if (sd.coverage === 'district') {
+    inside = !!o.regionId && o.regionId === t.regionId && !!o.districtId && o.districtId === t.districtId;
+  }
+  if (!inside) return { available: false, reason: 'out_of_coverage', coverage: sd.coverage, dropoff: sd.dropoff };
+  return {
+    available: true, reason: null, coverage: sd.coverage, dropoff: sd.dropoff,
+  };
+}
+
+/**
+ * Xaridor qachon qancha to'laydi (sof, ilova ko'rsatadi). S6: yetkazish haqi HAMMA usulda xaridordan.
+ *   wallet — hozir hamyondan: tovar + yetkazish;
+ *   card   — hozir hamyondan: yetkazish haqi; eshik oldida sotuvchi kartasiga: FAQAT tovar summasi;
+ *   bank   — hozir hamyondan: yetkazish haqi; bank orqali (hisob-faktura): tovar summasi.
+ * O'z yetkazishida yetkazish haqi 0.
+ */
+function payPlanOf(paymentMethod, goodsTotal, deliveryFee) {
+  if (paymentMethod === WO.PAYMENT_METHOD.CARD) return { walletNow: deliveryFee, atDoorToSellerCard: goodsTotal, bankTransfer: 0 };
+  if (paymentMethod === WO.PAYMENT_METHOD.BANK) return { walletNow: deliveryFee, atDoorToSellerCard: 0, bankTransfer: goodsTotal };
+  return { walletNow: goodsTotal + deliveryFee, atDoorToSellerCard: 0, bankTransfer: 0 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -342,11 +393,13 @@ function makeQuoteWholesaleOrder(deps) {
         throw fail('invalid-argument', 'Buyurtma summasi juda katta', 'amount_too_large', { max: MAX_GOODS_TOTAL });
       }
 
-      if (!pack.unitWeightG) {
+      const isSelfReq = req.deliveryMethod === WO.DELIVERY_METHOD.SELF;
+      // Kuryer (relay) uchun vazn SHART; o'z yetkazishida — kerak emas (narx tovar ichida).
+      if (!isSelfReq && !pack.unitWeightG) {
         throw fail('failed-precondition', 'Sotuvchi qadoq vaznini kiritmagan', 'no_shipping_data');
       }
-      const weightG = pack.unitWeightG * req.qty;
-      if (!Number.isSafeInteger(weightG)) throw fail('invalid-argument', 'Vazn juda katta', 'over_weight');
+      const weightG = pack.unitWeightG ? pack.unitWeightG * req.qty : null;
+      if (weightG !== null && !Number.isSafeInteger(weightG)) throw fail('invalid-argument', 'Vazn juda katta', 'over_weight');
 
       const sSnap = await db.collection(SELLERS).doc(sellerId).get();
       const sellerDoc = sSnap.exists ? (sSnap.data() || {}) : null;
@@ -358,13 +411,30 @@ function makeQuoteWholesaleOrder(deps) {
       // PROPOSED (hujjat §2): o'lcham faqat 1 dona bo'lsa ma'lum — ko'p donada
       // umumiy quti o'lchami noma'lum, pullik vazn = haqiqiy vazn.
       const dims = req.qty === 1 ? pack.unitDims : null;
-      const parcel = {
-        actualWeightG: weightG,
-        ...(dims ? { lengthCm: dims.l, widthCm: dims.w, heightCm: dims.h } : {}),
-        declaredValue: goodsTotal,
-      };
-      const rq = await quoteParcelForPoints(db, originRaw, req.destination, parcel, { dimsOptional: true });
-      const deliveryFee = rq.quote.customerPrice;
+      let rq = null;
+      let origin;
+      let destination;
+      if (isSelfReq) {
+        // O'z yetkazishi: relay tarifi chaqirilmaydi; nuqtalar geo ma'lumotnomasi bo'yicha tekshiriladi (o'qish).
+        origin = await validatePoint(db, originRaw, 'origin');
+        destination = await validatePoint(db, req.destination, 'destination');
+      } else {
+        const parcel = {
+          actualWeightG: weightG,
+          ...(dims ? { lengthCm: dims.l, widthCm: dims.w, heightCm: dims.h } : {}),
+          declaredValue: goodsTotal,
+        };
+        rq = await quoteParcelForPoints(db, originRaw, req.destination, parcel, { dimsOptional: true });
+        origin = rq.origin;
+        destination = rq.destination;
+      }
+      const self = selfAvailability(sellerDoc, origin, destination);
+      if (isSelfReq && !self.available) {
+        throw fail('failed-precondition', 'Sotuvchi bu manzilga o\'zi yetkazmaydi', 'self_delivery_unavailable', {
+          selfUnavailableReason: self.reason,
+        });
+      }
+      const deliveryFee = isSelfReq ? 0 : rq.quote.customerPrice;
       if (!isInt(deliveryFee) || deliveryFee < 0) {
         throw fail('failed-precondition', 'Yetkazish narxi hisoblanmadi', 'delivery_price_invalid');
       }
@@ -373,23 +443,25 @@ function makeQuoteWholesaleOrder(deps) {
       const avaFee = avaFeeOf(goodsTotal, fee.avaFeeBps);
       const expiresAt = new Date(now.getTime() + QUOTE_TTL_MS);
 
-      // 3b: «yetkazilganda karta orqali» — sotuvchi hamyonidan ushlanadigan summa
-      // (kuryer haqi + AVA ulushi). Mavjudligi har kvotada hisoblanadi (ilova tanlov ko'rsatadi).
-      const cardHold = deliveryFee + avaFee;
-      const card = await cardAvailability(db, { sellerId, buyerId, sellerHold: cardHold });
+      // S6 (ega, 2026-11-13): karta — yetkazish haqi XARIDOR hamyonidan; sotuvchi hamyonidan FAQAT AVA ulushi
+      // (avtomatik yig'iladi). O'z yetkazishi karta — sotuvchidan ham hech narsa ushlanmaydi (AVA ulushi hisobotda).
+      const sellerFeeHold = isSelfReq ? 0 : avaFee;
+      const card = await cardAvailability(db, { sellerId, buyerId, sellerHold: sellerFeeHold });
       if (req.paymentMethod === WO.PAYMENT_METHOD.CARD && !card.available) {
         throw fail('failed-precondition', 'Bu buyurtmani karta orqali to\'lab bo\'lmaydi', 'card_unavailable', {
           cardUnavailableReason: card.reason,
         });
       }
       // Bank o'tkazmasi (ega, 2026-11-14): xaridor hamyonidan FAQAT yetkazish haqi ushlanadi
-      // (`bankHold`, default `placeWholesaleOrder` tranzaksiyada balansni tekshiradi).
-      const bank = bankAvailability(sellerDoc, deliveryFee);
+      // (`bankHold`, default `placeWholesaleOrder` tranzaksiyada balansni tekshiradi). O'z yetkazishida — 0.
+      const bank = bankAvailability(sellerDoc, deliveryFee, { self: isSelfReq });
       if (req.paymentMethod === WO.PAYMENT_METHOD.BANK && !bank.available) {
         throw fail('failed-precondition', 'Bu buyurtmani bank o\'tkazmasi orqali to\'lab bo\'lmaydi', 'bank_transfer_unavailable', {
           bankUnavailableReason: bank.reason,
         });
       }
+      const isCardReq = req.paymentMethod === WO.PAYMENT_METHOD.CARD;
+      const isBankReq = req.paymentMethod === WO.PAYMENT_METHOD.BANK;
 
       const ref = db.collection(QUOTES).doc();
       const quoteDoc = {
@@ -405,7 +477,7 @@ function makeQuoteWholesaleOrder(deps) {
         deliveryFee,
         total,
         currency: 'UZS',
-        delivery: {
+        delivery: isSelfReq ? null : {
           tariffVersion: rq.quote.tariffVersion,
           zone: rq.quote.zone,
           actualWeightG: weightG,
@@ -419,11 +491,14 @@ function makeQuoteWholesaleOrder(deps) {
         sellerPayout: goodsTotal - avaFee,
         pricing: { rule: 'pack_tiers', tiers: pack.tiers, moq: pack.moq },
         stockAtQuote: available,
-        origin: rq.origin,
-        destination: rq.destination,
+        origin,
+        destination,
         paymentMethod: req.paymentMethod,
-        ...(req.paymentMethod === WO.PAYMENT_METHOD.CARD ? { cardHold } : {}),
-        ...(req.paymentMethod === WO.PAYMENT_METHOD.BANK
+        deliveryMethod: req.deliveryMethod,
+        ...(isSelfReq ? { selfDelivery: { coverage: self.coverage, dropoff: self.dropoff } } : {}),
+        // S6: yangi karta belgisi (default `placeWholesaleOrder` shunga qarab ikki ushlanma qiladi).
+        ...(isCardReq && !isSelfReq ? { deliveryPaidBy: WO.DELIVERY_PAID_BY.BUYER, sellerFeeHold } : {}),
+        ...(isBankReq && !isSelfReq
           ? { bankHold: deliveryFee, deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
         createdAt: now,
         expiresAt,
@@ -433,9 +508,13 @@ function makeQuoteWholesaleOrder(deps) {
 
       log('quote', {
         result: 'ok', quoteId: ref.id, productId: req.productId, packId: pack.id, qty: req.qty,
-        goodsTotal, deliveryFee, tariffVersion: rq.quote.tariffVersion, paymentMethod: req.paymentMethod,
+        goodsTotal, deliveryFee, tariffVersion: rq ? rq.quote.tariffVersion : null, paymentMethod: req.paymentMethod,
+        deliveryMethod: req.deliveryMethod, selfAvailable: self.available,
         cardAvailable: card.available, bankAvailable: bank.available, durationMs: Date.now() - started,
       });
+      // Ilova uchun: shu buyurtmada mavjud yetkazish usullari. Kuryer — relay narxi hisoblangan bo'lsa (yoki o'z
+      // yetkazishi so'rovida — qadoq vazni bor bo'lsa; narx alohida kvotada hisoblanadi).
+      const deliveryMethods = { ava_courier: isSelfReq ? !!pack.unitWeightG : true, self: self.available };
       return {
         quoteId: ref.id,
         productId: req.productId,
@@ -453,9 +532,16 @@ function makeQuoteWholesaleOrder(deps) {
         paymentMethods: { wallet: true, card_on_delivery: card.available, bank_transfer: bank.available },
         cardUnavailableReason: card.reason,
         bankUnavailableReason: bank.reason,
+        deliveryMethod: req.deliveryMethod,
+        deliveryMethods,
+        selfUnavailableReason: self.reason,
+        ...(self.available ? { selfDelivery: { coverage: self.coverage, dropoff: self.dropoff } } : {}),
+        // S6: kim qachon qancha to'laydi (karta: hozir hamyondan — yetkazish haqi; eshik oldida — FAQAT tovar).
+        payPlan: payPlanOf(req.paymentMethod, goodsTotal, deliveryFee),
         // Bank o'tkazmasi: xaridor hamyonidan ushlanadigan summa (faqat yetkazish haqi) va usuli.
-        ...(req.paymentMethod === WO.PAYMENT_METHOD.BANK
+        ...(isBankReq && !isSelfReq
           ? { deliveryPaymentMethod: req.deliveryPaymentMethod, walletHold: deliveryFee } : {}),
+        ...(isCardReq ? { walletHold: deliveryFee } : {}),
       };
     } catch (e) {
       log('quote', {
@@ -1089,6 +1175,7 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
   const refused = await db.collection(ORDERS).where('status', '==', WO.STATUS.REFUSED).limit(limit).get();
   for (const d of refused.docs) {
     const o = d.data() || {};
+    if (WO.isSelf(o)) continue; // S4: o'z yetkazishi — qaytish jo'natmasi yo'q
     if ((o.returnShipment || {}).shipmentId) continue;
     const err = o.returnShipmentError || null;
     if (err && (err.final === true || (isInt(err.attempts) && err.attempts >= RETURN_MAX_ATTEMPTS))) {
@@ -1131,6 +1218,19 @@ function makeGetWholesaleDeliveryCode(deps) {
       if (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD
         && (o.cardPayment || {}).status !== WO.CARD_PAYMENT.CONFIRMED) {
         throw fail('failed-precondition', 'Sotuvchi to\'lovni hali tasdiqlamagan', 'card_payment_unconfirmed');
+      }
+      // S4: o'z yetkazishi — jo'natma yo'q; kod buyurtma siridan (`private/self_delivery`), relay bilan AYNI hosila.
+      if (WO.isSelf(o)) {
+        if (o.status !== WO.STATUS.IN_DELIVERY || (o.selfDelivery || {}).status !== WO.SELF_STATUS.IN_DELIVERY) {
+          throw fail('failed-precondition', 'Yetkazish hali boshlanmagan', 'self_delivery_not_started');
+        }
+        const sec = await db.collection(ORDERS).doc(orderId).collection('private').doc(SELF_SECRET_DOC).get();
+        const secret = sec.exists ? (sec.data() || {}).secret : null;
+        if (!secret) throw fail('failed-precondition', 'Yetkazish kodi tayyor emas', 'code_not_ready');
+        log('getDeliveryCode', { result: 'ok', orderId, deliveryMethod: WO.DELIVERY_METHOD.SELF });
+        return {
+          orderId, shipmentId: null, trackingNumber: '', deliveryMethod: WO.DELIVERY_METHOD.SELF, deliveryCode: selfDeliveryCodeFor(orderId, secret),
+        };
       }
       const shipmentId = String((o.shipment || {}).shipmentId || '');
       if (!shipmentId) throw fail('failed-precondition', 'Yetkazish hali ochilmagan', 'shipment_not_ready');
@@ -1228,6 +1328,8 @@ module.exports = {
   avaFeeOf,
   parseQuoteRequest,
   bankAvailability,
+  selfAvailability,
+  payPlanOf,
   prepareCancelInTx,
   readFeeSettings,
   requireOrdersGate,

@@ -259,8 +259,11 @@ async function cardAvailability(db, { sellerId, buyerId, sellerHold }) {
   if (!(await readPayoutCard(db, sellerId))) return { available: false, reason: 'seller_no_card' };
   if (await sellerCardBlocked(db, sellerId)) return { available: false, reason: 'seller_debt' };
   if ((await buyerRefusals(db, buyerId)) >= WO.CARD_REFUSAL_LIMIT) return { available: false, reason: 'buyer_limited' };
-  const bal = await walletBalance(db, await walletUidFor(db, sellerId));
-  if (!isPosInt(sellerHold) || bal < sellerHold) return { available: false, reason: 'seller_balance' };
+  // S6 (2026-11-13): sotuvchidan FAQAT AVA ulushi ushlanadi (0 bo'lishi mumkin — ulush 0 yoki o'z yetkazishi).
+  if (!isInt(sellerHold) || sellerHold < 0) return { available: false, reason: 'seller_balance' };
+  if (sellerHold > 0 && (await walletBalance(db, await walletUidFor(db, sellerId))) < sellerHold) {
+    return { available: false, reason: 'seller_balance' };
+  }
   return { available: true, reason: null };
 }
 
@@ -438,7 +441,9 @@ function makeGetWholesaleCardPaymentInfo(deps) {
       if (!sameUser(o.buyerId, callerId)) throw fail('permission-denied', 'Bu buyurtma sizniki emas', 'not_order_party');
       if (WO.methodOf(o) !== WO.PAYMENT_METHOD.CARD) throw fail('failed-precondition', 'Buyurtma karta orqali emas', 'not_card_order');
       if (o.status !== WO.STATUS.IN_DELIVERY) throw fail('failed-precondition', 'Buyurtma hozir yetkazilmoqda emas', 'order_not_in_delivery');
-      const amount = o.goodsTotal + o.deliveryFee;
+      // S6 (2026-11-13): yangi karta — yetkazish haqi hamyondan to'langan, eshik oldida FAQAT tovar summasi.
+      // Belgisiz (eski) karta buyurtmasi — avvalgidek tovar + yetkazish.
+      const amount = WO.deliveryPaidByBuyer(o) ? o.goodsTotal : o.goodsTotal + o.deliveryFee;
       if (!isPosInt(o.goodsTotal) || !isInt(o.deliveryFee) || !Number.isSafeInteger(amount)) {
         throw fail('failed-precondition', 'Buyurtma summasi yaroqsiz', 'order_amount_invalid');
       }

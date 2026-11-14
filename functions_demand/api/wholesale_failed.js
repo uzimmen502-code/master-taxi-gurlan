@@ -176,9 +176,11 @@ function parcelWith(ship, legId, courierId) {
 function stillRefusable(o, ship) {
   const df = o.deliveryFailed || {};
   if (o.status !== WO.STATUS.IN_DELIVERY) return 'status_changed';
+  // S6 yangi karta (`deliveryPaidBy: buyer`): IKKALA shart — karta to'lovi `awaiting` VA hamyon sabab/ushlanma qoidasi.
   if (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD) {
     if ((o.cardPayment || {}).status !== WO.CARD_PAYMENT.AWAITING) return 'card_payment_progressed';
-  } else {
+  }
+  if (WO.deliveryPaidByBuyer(o)) {
     if (!WALLET_REASONS.includes(df.reasonCode)) return 'reason_not_allowed_wallet';
     if ((o.payment || {}).status !== 'held') return 'wallet_payment_state';
   }
@@ -342,11 +344,11 @@ function makeReportWholesaleDeliveryFailed(deps) {
         }
         if (!parcelWith(ship, lastLeg, callerId)) throw fail('failed-precondition', 'Posilka sizda emas', 'parcel_not_in_hand');
         const cp = o.cardPayment || {};
-        if (isWallet) {
-          if (o.status === WO.STATUS.IN_DELIVERY && (o.payment || {}).status !== 'held') {
-            throw fail('failed-precondition', 'To\'lov holati mos emas', 'wallet_payment_state');
-          }
-        } else if (o.status === WO.STATUS.IN_DELIVERY) {
+        if (isWallet && o.status === WO.STATUS.IN_DELIVERY && (o.payment || {}).status !== 'held') {
+          throw fail('failed-precondition', 'To\'lov holati mos emas', 'wallet_payment_state');
+        }
+        // Karta (eski va S6 yangi): eshik oldidagi tovar to'lovi hali `awaiting` bo'lishi shart.
+        if (WO.methodOf(o) === WO.PAYMENT_METHOD.CARD && o.status === WO.STATUS.IN_DELIVERY) {
           if (cp.status === WO.CARD_PAYMENT.CONFIRMED) throw fail('failed-precondition', 'To\'lov tasdiqlangan', 'card_payment_confirmed');
           if (cp.status === WO.CARD_PAYMENT.RECEIPT_SUBMITTED) {
             throw fail('failed-precondition', 'Xaridor chek yuborgan — sotuvchi yoki admin hal qiladi', 'receipt_submitted');

@@ -99,6 +99,69 @@ const MESSAGES = {
     uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Yetkazish haqidan {refund} so\'m hamyoningizga qaytarildi, qolgan {left} so\'m mas\'ul kuryer to\'lagach qaytariladi.' },
     ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Из стоимости доставки в кошелёк возвращено {refund} сум, оставшиеся {left} сум вернутся после оплаты ответственным курьером.' },
   },
+  // ── Сотувчининг ўз етказиши (S4, ega 2026-11-13/14). Ички атамалар (LEG, зона) кўрсатилмайди (45-банд).
+  // {goods} — товар суммаси, {amount} — картага тўланадиган сумма (фақат товар).
+  ws_self_accepted_buyer: {
+    uz_Cyrl: { title: 'Сотувчи қабул қилди — ўзи етказади', body: '{product} × {qty}. Сотувчи товарни ўзи олиб келади. Йўлга чиққанда хабар келади.' },
+    uz_Latn: { title: 'Sotuvchi qabul qildi — o\'zi yetkazadi', body: '{product} × {qty}. Sotuvchi tovarni o\'zi olib keladi. Yo\'lga chiqqanda xabar keladi.' },
+    ru: { title: 'Продавец принял заказ — доставит сам', body: '{product} × {qty}. Продавец привезёт товар сам. Когда он выедет, придёт уведомление.' },
+  },
+  ws_self_start_seller: {
+    uz_Cyrl: { title: 'Буюртмани ўзингиз етказасиз', body: '{product} × {qty}. Йўлга чиққанда буюртма саҳифасида «Етказишни бошлаш» ни босинг. Топширганда харидор айтган кодни киритинг.' },
+    uz_Latn: { title: 'Buyurtmani o\'zingiz yetkazasiz', body: '{product} × {qty}. Yo\'lga chiqqanda buyurtma sahifasida «Yetkazishni boshlash» ni bosing. Topshirganda xaridor aytgan kodni kiriting.' },
+    ru: { title: 'Вы доставляете заказ сами', body: '{product} × {qty}. Когда выедете, нажмите «Начать доставку» на странице заказа. При передаче введите код, который назовёт покупатель.' },
+  },
+  ws_self_started_buyer: {
+    uz_Cyrl: { title: 'Сотувчи йўлга чиқди', body: '{product} × {qty}. Товарни олганингизда буюртма саҳифасидаги етказиш кодини сотувчига айтинг.' },
+    uz_Latn: { title: 'Sotuvchi yo\'lga chiqdi', body: '{product} × {qty}. Tovarni olganingizda buyurtma sahifasidagi yetkazish kodini sotuvchiga ayting.' },
+    ru: { title: 'Продавец выехал', body: '{product} × {qty}. При получении товара назовите продавцу код со страницы заказа.' },
+  },
+  ws_self_started_buyer_card: {
+    uz_Cyrl: { title: 'Сотувчи йўлга чиқди', body: '{product} × {qty}. Товарни олганда {amount} сўмни сотувчи картасига ўтказинг. Сотувчи пул тушганини тасдиқлагач, етказиш коди буюртма саҳифасида чиқади — уни сотувчига айтинг.' },
+    uz_Latn: { title: 'Sotuvchi yo\'lga chiqdi', body: '{product} × {qty}. Tovarni olganda {amount} so\'mni sotuvchi kartasiga o\'tkazing. Sotuvchi pul tushganini tasdiqlagach, yetkazish kodi buyurtma sahifasida chiqadi — uni sotuvchiga ayting.' },
+    ru: { title: 'Продавец выехал', body: '{product} × {qty}. При получении переведите {amount} сум на карту продавца. После подтверждения оплаты на странице заказа появится код — назовите его продавцу.' },
+  },
+  ws_self_delivered_buyer: {
+    uz_Cyrl: { title: 'Буюртма топширилди', body: '{product} × {qty}. Харидингиз учун раҳмат!' },
+    uz_Latn: { title: 'Buyurtma topshirildi', body: '{product} × {qty}. Xaridingiz uchun rahmat!' },
+    ru: { title: 'Заказ получен', body: '{product} × {qty}. Спасибо за покупку!' },
+  },
+  ws_self_delivered_seller: {
+    uz_Cyrl: { title: 'Буюртма топширилди', body: '{product} × {qty}. Етказиш тасдиқланди.' },
+    uz_Latn: { title: 'Buyurtma topshirildi', body: '{product} × {qty}. Yetkazish tasdiqlandi.' },
+    ru: { title: 'Заказ передан', body: '{product} × {qty}. Доставка подтверждена.' },
+  },
+  ws_self_refused_buyer_wallet: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '{product}: сотувчи товар топширилмади деб белгилади. Товар суммаси ҳамёнингизга қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '{product}: sotuvchi tovar topshirilmadi deb belgiladi. Tovar summasi hamyoningizga qaytariladi.' },
+    ru: { title: 'Заказ закрыт', body: '{product}: продавец отметил, что товар не передан. Сумма за товар вернётся в ваш кошелёк.' },
+  },
+  ws_self_refused_buyer: {
+    uz_Cyrl: { title: 'Буюртма ёпилди', body: '{product}: сотувчи товар топширилмади деб белгилади. Буюртма ёпилди.' },
+    uz_Latn: { title: 'Buyurtma yopildi', body: '{product}: sotuvchi tovar topshirilmadi deb belgiladi. Buyurtma yopildi.' },
+    ru: { title: 'Заказ закрыт', body: '{product}: продавец отметил, что товар не передан. Заказ закрыт.' },
+  },
+  // ── Карта, етказиш ҳақини харидор тўлайди (S6, ega 2026-11-13).
+  ws_refused_seller_newcard: {
+    uz_Cyrl: { title: 'Товар етказилмади — сизга қайтарилади', body: '{product} × {qty}. Қайтариш етказиш ҳақини сиз тўламайсиз, AVA улуши ҳамёнингизга қайтарилади.' },
+    uz_Latn: { title: 'Tovar yetkazilmadi — sizga qaytariladi', body: '{product} × {qty}. Qaytarish yetkazish haqini siz to\'lamaysiz, AVA ulushi hamyoningizga qaytariladi.' },
+    ru: { title: 'Товар не доставлен — возвращается к вам', body: '{product} × {qty}. Обратную доставку вы не оплачиваете, комиссия AVA возвращается в ваш кошелёк.' },
+  },
+  ws_refused_buyer_card_fee: {
+    uz_Cyrl: { title: 'Қайтариш ҳақи ушланди', body: '{product}: товар етказилмади. Қайтариш етказиш ҳақи {returnFee} сўм ҳамёнингиздан ушланди. Етказиш ҳақи қайтарилмайди.' },
+    uz_Latn: { title: 'Qaytarish haqi ushlandi', body: '{product}: tovar yetkazilmadi. Qaytarish yetkazish haqi {returnFee} so\'m hamyoningizdan ushlandi. Yetkazish haqi qaytarilmaydi.' },
+    ru: { title: 'Списана стоимость обратной доставки', body: '{product}: товар не доставлен. С вашего кошелька списано {returnFee} сум за обратную доставку. Стоимость доставки не возвращается.' },
+  },
+  ws_lost_buyer_card_fee: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Буюртма ёпилди — товар учун тўламайсиз. Етказиш ҳақи {feeRefund} сўм ҳамёнингизга қайтарилди.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Buyurtma yopildi — tovar uchun to\'lamaysiz. Yetkazish haqi {feeRefund} so\'m hamyoningizga qaytarildi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Заказ закрыт — за товар платить не нужно. Стоимость доставки {feeRefund} сум возвращена в ваш кошелёк.' },
+  },
+  ws_lost_buyer_card_fee_partial: {
+    uz_Cyrl: { title: 'Товар етказишда йўқолди', body: '{product} × {qty}. Буюртма ёпилди — товар учун тўламайсиз. Етказиш ҳақидан {feeRefund} сўм қайтарилди, қолган {left} сўм масъул курьер тўлагач қайтарилади.' },
+    uz_Latn: { title: 'Tovar yetkazishda yo\'qoldi', body: '{product} × {qty}. Buyurtma yopildi — tovar uchun to\'lamaysiz. Yetkazish haqidan {feeRefund} so\'m qaytarildi, qolgan {left} so\'m mas\'ul kuryer to\'lagach qaytariladi.' },
+    ru: { title: 'Товар утерян при доставке', body: '{product} × {qty}. Заказ закрыт — за товар платить не нужно. Из стоимости доставки возвращено {feeRefund} сум, оставшиеся {left} сум вернутся после оплаты ответственным курьером.' },
+  },
   ws_card_new_order: {
     uz_Cyrl: { title: 'Янги буюртма — тўлов картангизга', body: '{product} × {qty}. Харидор етказилганда {amount} сўмни картангизга ўтказади. Пул тушгач «Пул тушди» тугмасини босинг.' },
     uz_Latn: { title: 'Yangi buyurtma — to\'lov kartangizga', body: '{product} × {qty}. Xaridor yetkazilganda {amount} so\'mni kartangizga o\'tkazadi. Pul tushgach «Pul tushdi» tugmasini bosing.' },

@@ -75,6 +75,8 @@ const RICE = {
 const DEST = { regionId: 'toshkent_shahri', districtId: 'chilonzor', addressText: 'Chilonzor 5-kvartal' };
 // 10 × 14 000 = 140 000; yetkazish 60 000 (10 kg, ZONE_4); AVA 250 bps = 3 500 → sotuvchi ushlanmasi 63 500.
 const HOLD = 63500;
+/** S6 (2026-11-13): sotuvchidan endi FAQAT AVA ulushi (140 000 × 250 bps = 3 500); yetkazish haqi — xaridordan. */
+const SELLER_FEE_HOLD = 3500;
 
 function makeDb(seed = {}) {
   tariffCore.clearCache();
@@ -258,12 +260,13 @@ ok('kvota (hamyon, standart): paymentMethods javobda; karta yo\'q → seller_no_
   for (const k of ['cardHold', 'avaFee', 'sellerPayout']) assert.ok(!(k in r), `${k} xaridorga ko'rinmaydi`);
 });
 
-ok('kvota mavjudlik matritsasi: qarz → seller_debt; rad 1 → ochiq, 2 → buyer_limited; balans hold−1 → seller_balance, hold → ochiq', async () => {
+ok('kvota mavjudlik matritsasi: qarz → seller_debt; rad 1 → ochiq, 2 → buyer_limited; balans AVA ulushi−1 → seller_balance, AVA ulushi → ochiq (S6)', async () => {
   const cases = [
     [withCard({ [`wholesale_seller_stats/${SELLER}`]: { cardBlocked: true } }), false, 'seller_debt'],
     [withCard({ [`wholesale_buyer_stats/${BUYER}`]: { cardRefusals: 1 } }), true, null],
     [withCard({ [`wholesale_buyer_stats/${BUYER}`]: { cardRefusals: 2 } }), false, 'buyer_limited'],
-    [withCard({ [`ledger_accounts/passenger_credit:${SELLER}`]: { balance: HOLD - 1 } }), false, 'seller_balance'],
+    [withCard({ [`ledger_accounts/passenger_credit:${SELLER}`]: { balance: SELLER_FEE_HOLD - 1 } }), false, 'seller_balance'],
+    [withCard({ [`ledger_accounts/passenger_credit:${SELLER}`]: { balance: SELLER_FEE_HOLD } }), true, null],
     [withCard(), true, null],
     [withCard({ [`ledger_accounts/passenger_credit:${SELLER}`]: undefined }), false, 'seller_balance'],
     [withCard({ [`wholesale_seller_stats/${SELLER}`]: { cardBlocked: false } }), true, null],
@@ -276,13 +279,17 @@ ok('kvota mavjudlik matritsasi: qarz → seller_debt; rad 1 → ochiq, 2 → buy
   }
 });
 
-ok('kvota card_on_delivery: ochiq → muhr paymentMethod + cardHold = deliveryFee+avaFee; yopiq → card_unavailable, kvota YOZILMAYDI; noto\'g\'ri usul RAD', async () => {
+ok('kvota card_on_delivery (S6): muhr deliveryPaidBy=buyer + sellerFeeHold = avaFee (cardHold YO\'Q); payPlan: hozir yetkazish, eshikda FAQAT tovar; yopiq → card_unavailable, kvota YOZILMAYDI; noto\'g\'ri usul RAD', async () => {
   let db = makeDb(withCard());
   const r = await q(() => quote(db)(qreq({ paymentMethod: 'card_on_delivery' }), ctx(BUYER)));
   assert.strictEqual(r.paymentMethod, 'card_on_delivery');
-  assert.strictEqual(r.total, 200000, 'eshik oldida: tovar + yetkazish');
+  assert.strictEqual(r.total, 200000, 'jami: tovar + yetkazish');
+  assert.deepStrictEqual(r.payPlan, { walletNow: 60000, atDoorToSellerCard: 140000, bankTransfer: 0 });
+  assert.strictEqual(r.walletHold, 60000);
   const qd = db.dump('wholesale_quotes')[r.quoteId];
-  assert.deepStrictEqual([qd.paymentMethod, qd.cardHold, qd.deliveryFee + qd.avaFee], ['card_on_delivery', HOLD, HOLD]);
+  assert.deepStrictEqual([qd.paymentMethod, qd.cardHold, qd.deliveryPaidBy, qd.sellerFeeHold, qd.avaFee, qd.deliveryMethod],
+    ['card_on_delivery', undefined, 'buyer', SELLER_FEE_HOLD, SELLER_FEE_HOLD, 'ava_courier']);
+  assert.strictEqual(HOLD, qd.deliveryFee + qd.avaFee, 'eski karta ushlanmasi (taqqoslash uchun)');
   db = makeDb(withCard({ [`wholesale_buyer_stats/${BUYER}`]: { cardRefusals: 2 } }));
   const e = await q(() => rejects(quote(db)(qreq({ paymentMethod: 'card_on_delivery' }), ctx(BUYER)), 'failed-precondition', 'card_unavailable'));
   assert.strictEqual(e.details.cardUnavailableReason, 'buyer_limited');
@@ -445,7 +452,12 @@ ok('kuryer chek yuborilgan buyurtmani refused qila olmaydi — holatlar jadvali:
   assert.ok(WO.canActorTransition('system', 'in_delivery', 'payment_dispute'));
   assert.ok(WO.canActorTransition('system', 'refused', 'returning'));
   assert.ok(WO.canActorTransition('system', 'returning', 'returned'));
-  assert.ok(!WO.canTransition('refused', 'returned'), 'qaytish to\'lanmasdan returned yo\'q');
+  // S4 (2026-11-13/14): refused → returned FAQAT sotuvchi (o'z yetkazishi, qaytish jo'natmasi yo'q); kuryerli
+  // buyurtmada system/courier/admin uchun — qaytish to'lanmasdan returned yo'q.
+  assert.ok(!WO.canActorTransition('system', 'refused', 'returned'), 'qaytish to\'lanmasdan returned yo\'q');
+  assert.ok(!WO.canActorTransition('courier', 'refused', 'returned'));
+  assert.ok(!WO.canActorTransition('admin', 'refused', 'returned'));
+  assert.ok(WO.canActorTransition('seller', 'refused', 'returned'));
   assert.ok(!WO.canTransition('refused', 'in_delivery'));
   assert.ok(WO.isTerminal('returned'));
   assert.ok(!WO.canActorTransition('buyer', 'in_delivery', 'refused'));

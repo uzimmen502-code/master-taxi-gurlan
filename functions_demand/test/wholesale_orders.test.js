@@ -244,7 +244,10 @@ ok('holatlar jadvali: ruxsat etilgan va taqiqlangan o\'tishlar (aktor bo\'yicha)
   assert.strictEqual(S.REJECTED, undefined, 'rejected holati yo\'q');
   assert.ok(WO.canActorTransition(A.SELLER, S.PLACED, S.CANCELLED));
   assert.ok(!WO.canActorTransition(A.SELLER, S.IN_DELIVERY, S.CANCELLED), 'yetkazish ochilgach sotuvchi bekor qilmaydi');
-  assert.ok(!WO.canActorTransition(A.SELLER, S.PLACED, S.IN_DELIVERY));
+  // S4 (2026-11-13/14): sotuvchi placed → in_delivery / in_delivery → refused / refused → returned — FAQAT o'z
+  // yetkazishi callable'lari orqali (ular `isSelf` ni tekshiradi; test: wholesale_self.test.js). Delivered — system.
+  assert.ok(WO.canActorTransition(A.SELLER, S.PLACED, S.IN_DELIVERY));
+  assert.ok(!WO.canActorTransition(A.SELLER, S.IN_DELIVERY, S.DELIVERED), 'delivered — faqat system (pul bilan)');
   assert.ok(!WO.canActorTransition('seller', S.PLACED, 'rejected'));
   assert.ok(WO.canActorTransition(A.SYSTEM, S.PLACED, S.CANCELLED), 'qaror muddati o\'tdi');
   assert.ok(!WO.canActorTransition(A.SYSTEM, S.IN_DELIVERY, S.CANCELLED));

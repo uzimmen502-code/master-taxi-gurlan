@@ -347,7 +347,7 @@ ok('getWholesaleDeliveryCode: faqat xaridor; kod relay hosilasi bilan bir xil (c
   } finally { loud(); }
 });
 
-ok('relay getShipmentSecrets (O\'ZGARMAGAN): sotuvchi = egasi — topshirish kodi + QR oladi; xaridor — rad', async () => {
+ok('relay getShipmentSecrets (jonli himoya bilan): sotuvchi = egasi — topshirish kodi + QR oladi, YETKAZISH kodini OLMAYDI; xaridor — rad', async () => {
   const db = makeDb(seedW());
   await placeOrder(db);
   quiet();
@@ -358,24 +358,27 @@ ok('relay getShipmentSecrets (O\'ZGARMAGAN): sotuvchi = egasi — topshirish kod
   const qr = db.docs.get(`shipments/${r.shipmentId}/private/secrets`).qrSecret;
   assert.strictEqual(s.handoverCode, L.handoverCodeFor(r.shipmentId, qr), 'LEG-1 topshirish kodi sotuvchida');
   assert.ok(s.qrPayload.startsWith(`AVA1|${r.shipmentId}|`));
-  // XAVF QULFI: lineage getShipmentSecrets egaga (sotuvchiga) YETKAZISH kodini ham beradi —
-  // sotuvchi + kuryer kelishib xaridorsiz «yetkazildi» qila oladi. Tuzatish: feat/ulg-relay-guards.
-  assert.strictEqual(s.deliveryCode, L.deliveryCodeFor(r.shipmentId, qr));
+  // S57 (2026-11-14): relay zanjiri lineage'i (feat/relay-chain-srv, jonli) himoyasi bilan
+  // birlashtirildi — Ulgurji jo'natmasida egasi (sotuvchi) YETKAZISH kodini olmaydi (avval
+  // bu test eski relay xavfini qulflardi).
+  assert.ok(!s.deliveryCode, 'sotuvchida yetkazish kodi YO\'Q');
   await rejects(secrets({ shipmentId: r.shipmentId }, ctx(BUYER)), 'permission-denied');
   await rejects(secrets({ shipmentId: r.shipmentId }, ctx(STRANGER)), 'permission-denied');
 });
 
-ok('XAVF QULFI (guard\'larsiz relay): sotuvchi cancelLogisticsOrder bilan to\'lanmagan Ulgurji jo\'natmasini bekor qila oladi', async () => {
+ok('relay himoyasi (S57 birlashuv): sotuvchi cancelLogisticsOrder bilan Ulgurji jo\'natmasini bekor QILA OLMAYDI (wholesale_managed)', async () => {
   const db = makeDb(seedW());
   await placeOrder(db);
   quiet();
   let r;
   try { r = await W.ensureWholesaleShipment(deps(db), ORDER_ID); } finally { loud(); }
   const ship = db.dump('shipments')[r.shipmentId];
-  const c = await api.makeCancelLogisticsOrder(deps(db))({ orderId: ship.orderId }, ctx(SELLER));
-  assert.strictEqual(c.ok, true, 'feat/ulg-relay-guards deploy qilinmaguncha — darvoza YOPIQ');
-  assert.strictEqual(db.dump('shipments')[r.shipmentId].status, 'cancelled');
-  assert.strictEqual(orderOf(db).status, 'placed', 'buyurtma qotadi — default SHIP_FUND anomaliya beradi (shipment_not_payable)');
+  quiet();
+  try {
+    await rejects(api.makeCancelLogisticsOrder(deps(db))({ orderId: ship.orderId }, ctx(SELLER)), 'permission-denied', 'wholesale_managed');
+  } finally { loud(); }
+  assert.strictEqual(db.dump('shipments')[r.shipmentId].status, 'awaiting_payment', 'jo\'natmaga tegilmadi');
+  assert.strictEqual(orderOf(db).status, 'placed');
 });
 
 ok('xaridor bekor qilsa (to\'lanmagan) — jo\'natma, LEG va logistika ORDER ham bekor', async () => {

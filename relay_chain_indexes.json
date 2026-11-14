@@ -1,0 +1,13 @@
+{
+  "_doc": "Relay zanjiri (assemble_all, 2026-11-07): legChainSweeper -> sweepExpiredChains so'rovi shipments where chain.state == 'assembling' AND chain.deadlineAt <= now. Asosiy firestore.indexes.json 'indexes' massiviga QO'SHILADI (alohida deploy, --force YO'Q).",
+  "indexes": [
+    {
+      "collectionGroup": "shipments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chain.state", "order": "ASCENDING" },
+        { "fieldPath": "chain.deadlineAt", "order": "ASCENDING" }
+      ]
+    }
+  ]
+}

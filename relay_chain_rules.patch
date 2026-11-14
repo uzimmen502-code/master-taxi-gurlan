@@ -1,0 +1,16 @@
+diff --git a/firestore.rules b/firestore.rules
+index 986990f..d3d88a3 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -4819,6 +4819,11 @@ service cloud.firestore {
+     // SHIPMENT — эгаси, админ ва шу жўнатмага тайинланган ижрочилар
+     // (`assignedProviderIds` — сервер ёзади, канон 12 хонали). Ижрочи
+     // чекланган маълумотни кўради: телефон йўқ, ички нарх қатлами йўқ.
++    // Relay занжири (assemble_all, 2026-11-07): `chain` майдони шу қоида билан
++    // ўқилади (қоида ЎЗГАРМАЙДИ). Занжир жўнатмасида `legAssignments` ЁЗИЛМАЙДИ;
++    // ўзига топшириш учун `chain.selfTransferLegIds` (телефонсиз). Қолган PII:
++    // `ownerId` ва `assignedProviderIds` телефон-ID — field-level яшириш rules'да
++    // мумкин эмас (PROPOSED: ижрочига проекция коллекцияси/callable, алоҳида иш).
+     match /shipments/{shipmentId} {
+       allow read: if isAdmin()
+                   || isOwner(resource.data.ownerId)

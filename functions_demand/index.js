@@ -132,7 +132,12 @@ exports.cancelDemand = fn.https.onCall(wrapCallable(
 
 /** 13.2.8 — ijrochi bekor qiladi, talab qayta ochiladi. */
 exports.cancelAssignment = fn.https.onCall(wrapCallable(
-  offersApi.makeCancelAssignment({ db }),
+  // Relay zanjiri (2026-11-07): yig'ish paytida bo'shatilgan LEG qayta matching.
+  // Boshqa talablar uchun `onLegReopened` hech narsa qilmaydi (not_chain_leg).
+  offersApi.makeCancelAssignment({
+    db,
+    onReopened: (info) => logisticsApi.makeOnLegReopened({ db, keywordIndex, notify: dispatchNotifications })(info),
+  }),
 ));
 
 /** 13.2.10 — baho. */
@@ -248,6 +253,15 @@ exports.adminPlanShipmentRoute = fn.https.onCall(wrapCallable(
 /** ADMIN — muddati tugagan LEG'ni qayta ochish (matching qaytadan, payout o'zgarmaydi). */
 exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminReactivateLeg(logisticsDeps),
+));
+
+/**
+ * ADMIN — qulflangan zanjirda (assemble_all) kuryer tushib qoldi (2026-11-07):
+ * shu LEG qayta ochiladi (matching + push), qolgan LEG'lar kuryerini saqlaydi,
+ * zanjir `locked`da qoladi. Idempotent, `logistics_audit`.
+ */
+exports.adminReopenChainLeg = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminReopenChainLeg(logisticsDeps),
 ));
 
 /**
@@ -520,6 +534,8 @@ exports.expireDemandsSweeper = fn.pubsub
  * Relay zanjiri qotib qolmasin (audit L3c): to'langan jo'natmaning draft
  * LEG'ini (eskrou triggeri / scanHandover / qayta rejalash ochmay qolgan)
  * mavjud idempotent activateLeg bilan ochadi. Har 10 daqiqada; chegarali.
+ * 2026-11-07: `assemble_all` yig'ish muddati o'tgan zanjirni bekor qiladi
+ * (refund_pending) — kompozit indeks `shipments(chain.state, chain.deadlineAt)`.
  */
 exports.legChainSweeper = fn.pubsub
   .schedule('every 10 minutes')

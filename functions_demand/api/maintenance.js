@@ -59,6 +59,20 @@ function makeExpireSweeper(deps) {
 
     if (snap.empty) return { expired: 0 };
 
+    // Relay zanjiri (`assemble_all`, ega qarori 2026-11-07): yig'ish paytidagi
+    // LEG muddati = zanjir muddati va uni `legChainSweeper` BUTUN zanjir bilan
+    // yopadi (jo'natma bekor + refund). Bu yerda yakka `expired` qilinsa,
+    // jo'natma «teshik» zanjir bilan qolib, pul eskrouda qotardi. Admin qulfdan
+    // keyin qayta ochgan LEG (`chainReopenedAt`) — oddiy LEG kabi (legProblem).
+    const docs = snap.docs.filter((d) => {
+      const data = d.data() || {};
+      return !(data.module === L.MODULE
+        && (data.attributes || {}).chainMode === L.CHAIN_MODE.ASSEMBLE_ALL
+        && !data.chainReopenedAt);
+    });
+    const chainSkipped = snap.size - docs.length;
+    if (!docs.length) return { expired: 0, ids: [], legProblems: 0, skipped: 0, chainSkipped };
+
     // Har bir hujjat SHARTLI yopiladi: so'rovdan beri o'zgarmagan bo'lsa
     // (`lastUpdateTime`). 2026-10-10 gacha bitta shartsiz batch edi — so'rov
     // va yozuv orasida mijoz taklifni qabul qilsa / kuryer LEG'ni olsa,
@@ -66,7 +80,7 @@ function makeExpireSweeper(deps) {
     // O'zgargan hujjat o'tkazib yuboriladi: u endi `active` emas yoki
     // muddati yangilangan — keyingi aylanish qaror qiladi.
     const patch = { status: sm.STATUS.EXPIRED, expiredAt: now, updatedAt: now };
-    const outcomes = await Promise.all(snap.docs.map(async (d) => {
+    const outcomes = await Promise.all(docs.map(async (d) => {
       try {
         await (d.updateTime ? d.ref.update(patch, { lastUpdateTime: d.updateTime }) : d.ref.update(patch));
         return true;
@@ -78,7 +92,7 @@ function makeExpireSweeper(deps) {
 
     const ids = [];
     const legProblems = [];
-    snap.docs.forEach((d, i) => {
+    docs.forEach((d, i) => {
       if (!outcomes[i]) return;
       const data = d.data() || {};
       ids.push(d.id);
@@ -88,7 +102,7 @@ function makeExpireSweeper(deps) {
       const shipmentId = String((data.attributes || {}).shipmentId || '');
       if (data.module === L.MODULE && shipmentId) legProblems.push({ legId: d.id, shipmentId });
     });
-    const skipped = snap.size - ids.length;
+    const skipped = docs.length - ids.length;
 
     // `legProblem` TRANZAKSIYADA: LEG hali JORIY rejada va hali `expired`
     // bo'lsa. Aks holda (shu orada admin qayta rejaladi / qayta ochdi)
@@ -138,8 +152,8 @@ function makeExpireSweeper(deps) {
       }
     }
 
-    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblemsWritten ? `, ${legProblemsWritten} ta logistika LEG'i` : ''}${skipped ? `, ${skipped} ta o'zgargan — o'tkazildi` : ''}`);
-    return { expired: ids.length, ids, legProblems: legProblemsWritten, skipped };
+    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblemsWritten ? `, ${legProblemsWritten} ta logistika LEG'i` : ''}${skipped ? `, ${skipped} ta o'zgargan — o'tkazildi` : ''}${chainSkipped ? `, ${chainSkipped} ta zanjir LEG'i — legChainSweeper'ga` : ''}`);
+    return { expired: ids.length, ids, legProblems: legProblemsWritten, skipped, ...(chainSkipped ? { chainSkipped } : {}) };
   };
 }
 

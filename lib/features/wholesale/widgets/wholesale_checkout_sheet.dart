@@ -4,7 +4,9 @@
 // Етказиш манзили — сотувчи манзили формаси билан бир хил виджет
 // ([ShipFromFields]: вилоят → туман → манзил, ихтиёрий GPS).
 // Тўлов: AVA ҳамёндан олдиндан; 3b — етказилганда сотувчи картасига
-// (фақат квота «мумкин» деса).
+// (фақат квота «мумкин» деса); банк ўтказмаси (эга, 2026-11-13/14) — товар
+// пули сотувчига банк орқали (қабулдан кейин, иловадан ташқарида), ҳамёндан
+// ҳозир фақат етказиш ҳақи ушланади (фақат квота `bank_transfer: true` деса).
 //
 // НАРХ ФАҚАТ СЕРВЕРДАН (44-банд): ҳар ўзгаришда (debounce) `quoteWholesaleOrder`
 // қайта сўралади, илова ҳеч нарсани ҳисобламайди. `clientRequestId` — ҳар
@@ -179,11 +181,13 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
           lng: _dest.lng,
         ),
         paymentMethod: _method,
+        deliveryPaymentMethod: _method == WholesalePaymentMethod.bankTransfer ? WholesaleDeliveryPaymentMethod.wallet : null,
       );
       if (!mounted || seq != _seq) return;
-      // Карта танланган, лекин сервер «мумкин эмас» деди — ҳамёнга қайтиб
+      // Карта/банк танланган, лекин сервер «мумкин эмас» деди — ҳамёнга қайтиб
       // нархни шу усул учун қайта сўраймиз.
-      if (_method == WholesalePaymentMethod.cardOnDelivery && !q.cardOnDeliveryAvailable) {
+      if ((_method == WholesalePaymentMethod.cardOnDelivery && !q.cardOnDeliveryAvailable) ||
+          (_method == WholesalePaymentMethod.bankTransfer && !q.bankTransferAvailable)) {
         setState(() => _method = WholesalePaymentMethod.wallet);
         unawaited(_requote());
         return;
@@ -198,8 +202,8 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
       // Сервер карта усулини рад этди (`card_unavailable`) — ҳамёнга қайтиб,
       // нархни қайта сўраймиз; сабаби ҳамён квотасидаги `cardUnavailableReason` да.
       if (e is WholesaleOrderException &&
-          e.reason == 'card_unavailable' &&
-          _method == WholesalePaymentMethod.cardOnDelivery) {
+          ((e.reason == 'card_unavailable' && _method == WholesalePaymentMethod.cardOnDelivery) ||
+              (e.reason == 'bank_transfer_unavailable' && _method == WholesalePaymentMethod.bankTransfer))) {
         setState(() => _method = WholesalePaymentMethod.wallet);
         unawaited(_requote());
         return;
@@ -249,6 +253,7 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
               'quote_not_found' ||
               'quote_invalid' ||
               'card_unavailable' ||
+              'bank_transfer_unavailable' ||
               'seller_balance_insufficient':
           // Янги квота — янги калит (эски калит эски квотага боғланган).
           await _requote();
@@ -347,8 +352,18 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
                     onTopUp: () => _topUp(),
                     onTopUpAmount: _topUp,
                   ),
+                // Банк: ҳамёндан фақат етказиш ҳақи (сервер `walletHold`) — етмаса тўлдириш.
+                if (_quote != null && _method == WholesalePaymentMethod.bankTransfer)
+                  WalletBalanceNotice(
+                    balance: _balance,
+                    price: _quote!.walletHold ?? _quote!.deliveryFee,
+                    onTopUp: () => _topUp(),
+                    onTopUpAmount: _topUp,
+                  ),
                 Text(
-                  context.tr('wholesale_checkout_courier_note'),
+                  context.tr(_method == WholesalePaymentMethod.bankTransfer
+                      ? 'wholesale_checkout_courier_note_bank'
+                      : 'wholesale_checkout_courier_note'),
                   style: const TextStyle(fontSize: 11, height: 1.3, color: PdDark.muted),
                 ),
                 const SizedBox(height: 10),
@@ -385,6 +400,8 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
     final cardKnown = q?.paymentMethodsKnown ?? false;
     final cardOk = q?.cardOnDeliveryAvailable ?? false;
     final reason = q?.cardUnavailableReason ?? '';
+    final bankOk = q?.bankTransferAvailable ?? false;
+    final bankReason = q?.bankUnavailableReason ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -418,6 +435,16 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
                   title: Text(context.tr('wholesale_pay_card'),
                       style: const TextStyle(fontSize: 13, color: PdDark.ink)),
                 ),
+              // Банк ўтказмаси — ФАҚАТ сервер «мумкин» деса (`paymentMethods.bank_transfer`).
+              if (cardKnown && bankOk)
+                RadioListTile<String>(
+                  key: const ValueKey('wholesale-pay-bank'),
+                  value: WholesalePaymentMethod.bankTransfer,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(context.tr('wholesale_pay_bank'),
+                      style: const TextStyle(fontSize: 13, color: PdDark.ink)),
+                ),
             ],
           ),
         ),
@@ -427,6 +454,25 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
             key: const ValueKey('wholesale-card-unavailable'),
             style: const TextStyle(fontSize: 11, color: PdDark.muted),
           ),
+        if (cardKnown && !bankOk && bankReason.isNotEmpty)
+          Text(
+            context.tr(wholesaleBankUnavailableKey(bankReason)),
+            key: const ValueKey('wholesale-bank-unavailable'),
+            style: const TextStyle(fontSize: 11, color: PdDark.muted),
+          ),
+        if (q != null && _method == WholesalePaymentMethod.bankTransfer) ...[
+          const SizedBox(height: 4),
+          Container(
+            key: const ValueKey('wholesale-bank-note'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: PdDark.surface2, borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              context.trMsg('wholesale_pay_bank_note',
+                  params: {'amount': formatMoney(q.walletHold ?? q.deliveryFee)}),
+              style: const TextStyle(fontSize: 12, height: 1.3, color: PdDark.ink),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -489,6 +535,25 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
                 context.trMsg('wholesale_quote_due_on_delivery', params: {'amount': money(q.total)}),
                 key: const ValueKey('wholesale-due-on-delivery'),
                 style: const TextStyle(fontSize: 12, color: PdDark.brand, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+          // Банк: ҳозир ҳамёндан — фақат етказиш ҳақи; товар пули — сотувчига банк орқали.
+          if (_method == WholesalePaymentMethod.bankTransfer) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                context.trMsg('wholesale_quote_bank_hold', params: {'amount': money(q.walletHold ?? q.deliveryFee)}),
+                key: const ValueKey('wholesale-bank-hold'),
+                style: const TextStyle(fontSize: 12, color: PdDark.brand, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                context.trMsg('wholesale_quote_bank_goods', params: {'amount': money(q.goodsTotal)}),
+                style: const TextStyle(fontSize: 12, color: PdDark.muted),
               ),
             ),
           ],

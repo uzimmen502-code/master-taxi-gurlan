@@ -57,6 +57,16 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'order_not_placed': 'wholesale_order_err_invalid_transition',
   'seller_already_accepted': 'wholesale_order_err_decision_done',
   'seller_already_rejected': 'wholesale_order_err_decision_done',
+  // Банк ўтказмаси (эга, 2026-11-13/14; functions_demand wholesale_bank.js, quote, cancel).
+  // `bank_transfer_unavailable` — пастда, сабаби `details.bankUnavailableReason` да.
+  'delivery_payment_method_unsupported': 'wholesale_order_err_payment_method_invalid',
+  'delivery_payment_method_not_applicable': 'wholesale_order_err_payment_method_invalid',
+  'not_bank_order': 'wholesale_order_err_invalid_transition',
+  'seller_not_accepted': 'wholesale_order_err_bank_not_accepted',
+  'bank_payment_state': 'wholesale_order_err_invalid_transition',
+  'bank_pay_deadline_passed': 'wholesale_order_err_bank_deadline_passed',
+  'bank_pay_deadline_missing': 'wholesale_order_err_invalid_transition',
+  'bank_payment_confirmed': 'wholesale_order_err_bank_payment_confirmed',
   // 3b карта (жонли контракт, 2026-10-31)
   'card_payment_unconfirmed': 'wholesale_order_err_card_payment_unconfirmed',
   'card_invalid': 'wholesale_order_err_card_invalid',
@@ -111,6 +121,9 @@ String wholesaleOrderErrorKey(Object error) {
     if (error.reason == 'card_unavailable') {
       return wholesaleCardUnavailableKey('${error.details['cardUnavailableReason'] ?? ''}');
     }
+    if (error.reason == 'bank_transfer_unavailable') {
+      return wholesaleBankUnavailableKey('${error.details['bankUnavailableReason'] ?? ''}');
+    }
     if (error.reason == 'card_number_invalid') {
       return error.details['check'] == 'luhn' ? 'wholesale_order_err_card_luhn' : 'wholesale_seller_card_err_number';
     }
@@ -137,4 +150,11 @@ String wholesaleCardUnavailableKey(String reason) => switch (reason) {
       'buyer_limited' => 'wholesale_pay_card_unavailable_buyer_limited',
       'seller_balance' => 'wholesale_pay_card_unavailable_seller_balance',
       _ => 'wholesale_pay_card_unavailable',
+    };
+
+/// Банк ўтказмаси ёпиқлиги сабаби (квота `bankUnavailableReason`: `seller_not_approved` |
+/// `delivery_fee_invalid`) → матн. Бошқаси — умумий «банк ўтказмаси мавжуд эмас».
+String wholesaleBankUnavailableKey(String reason) => switch (reason) {
+      'seller_not_approved' => 'wholesale_pay_bank_unavailable_seller_not_approved',
+      _ => 'wholesale_pay_bank_unavailable',
     };

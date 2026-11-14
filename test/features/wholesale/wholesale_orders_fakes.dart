@@ -86,8 +86,12 @@ Map<String, dynamic> quoteReply({
   int delivery = 45000,
   Map<String, dynamic>? paymentMethods,
   String? cardReason,
+  String? bankReason,
+  int? walletHold,
 }) =>
     {
+      if (bankReason != null) 'bankUnavailableReason': bankReason,
+      if (walletHold != null) 'walletHold': walletHold,
       'quoteId': quoteId,
       'productId': 'prod1',
       'productTitle': 'Гуруч',

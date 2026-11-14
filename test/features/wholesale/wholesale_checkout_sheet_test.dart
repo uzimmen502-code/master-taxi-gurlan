@@ -123,6 +123,91 @@ void main() {
     expect(find.byKey(const ValueKey('wallet-balance-info')), findsNothing);
   });
 
+  group('банк ўтказмаси (эга, 2026-11-13/14)', () {
+    testWidgets('сервер bank_transfer: false — вариант ЙЎҚ, сабаб матни бор', (tester) async {
+      final h = _Harness();
+      h.demand.handlers['quoteWholesaleOrder'] = (_) => quoteReply(
+            paymentMethods: {'wallet': true, 'card_on_delivery': false, 'bank_transfer': false},
+            bankReason: 'seller_not_approved',
+          );
+      await _open(tester, h: h);
+      expect(find.byKey(const ValueKey('wholesale-pay-bank')), findsNothing);
+      expect(find.text('wholesale_pay_bank_unavailable_seller_not_approved'), findsOneWidget);
+    });
+
+    testWidgets('эски сервер (bank_transfer калити йўқ) — вариант йўқ, сабаб ҳам йўқ', (tester) async {
+      final h = _Harness();
+      h.demand.handlers['quoteWholesaleOrder'] =
+          (_) => quoteReply(paymentMethods: {'wallet': true, 'card_on_delivery': true});
+      await _open(tester, h: h);
+      expect(find.byKey(const ValueKey('wholesale-pay-bank')), findsNothing);
+      expect(find.byKey(const ValueKey('wholesale-bank-unavailable')), findsNothing);
+    });
+
+    testWidgets('танланса: квота bank_transfer + deliveryPaymentMethod wallet; изоҳ ва ушланадиган сумма', (tester) async {
+      final h = _Harness();
+      h.demand.handlers['quoteWholesaleOrder'] = (p) => quoteReply(
+            quoteId: 'q-${p['paymentMethod']}',
+            paymentMethods: {'wallet': true, 'card_on_delivery': false, 'bank_transfer': true},
+            walletHold: p['paymentMethod'] == 'bank_transfer' ? 45000 : null,
+          );
+      h.wallet.handlers['placeWholesaleOrder'] =
+          (_) => {'ok': true, 'orderId': 'o9', 'status': 'placed', 'total': 685000, 'idempotent': false};
+      await _open(tester, h: h, balance: 50000);
+      expect(h.demand.calls.single.$2.containsKey('deliveryPaymentMethod'), isFalse,
+          reason: 'ҳамён квотасида майдон юборилмайди (сервер not_applicable)');
+      await tester.tap(find.byKey(const ValueKey('wholesale-pay-bank')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls.length, 2);
+      expect(h.demand.calls.last.$2['paymentMethod'], 'bank_transfer');
+      expect(h.demand.calls.last.$2['deliveryPaymentMethod'], 'wallet');
+      expect(find.byKey(const ValueKey('wholesale-bank-note')), findsOneWidget);
+      expect(find.byKey(const ValueKey('wholesale-bank-hold')), findsOneWidget);
+      expect(find.text('wholesale_checkout_courier_note_bank'), findsOneWidget);
+      expect(find.byKey(const ValueKey('wholesale-due-on-delivery')), findsNothing);
+      // Баланс 50 000 ≥ ушланадиган 45 000 — «етмайди» огоҳлантириши йўқ (жами 685 000 эмас).
+      expect(find.byKey(const ValueKey('wallet-balance-short')), findsNothing);
+      await _tapConfirm(tester);
+      expect(h.wallet.calls.single.$2['quoteId'], 'q-bank_transfer');
+      expect(h.result, 'o9');
+    });
+
+    testWidgets('ҳамёнда етказиш ҳақига ҳам етмайди — огоҳлантириш; сервер рад этса тўлдириш CTA', (tester) async {
+      final h = _Harness();
+      h.demand.handlers['quoteWholesaleOrder'] = (p) => quoteReply(
+            paymentMethods: {'wallet': true, 'card_on_delivery': false, 'bank_transfer': true},
+            walletHold: p['paymentMethod'] == 'bank_transfer' ? 45000 : null,
+          );
+      h.wallet.handlers['placeWholesaleOrder'] = (_) =>
+          throw fnError('failed-precondition', 'insufficient_balance', {'required': 45000, 'balance': 10000});
+      await _open(tester, h: h, balance: 10000);
+      await tester.tap(find.byKey(const ValueKey('wholesale-pay-bank')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('wallet-balance-short')), findsOneWidget);
+      await _tapConfirm(tester);
+      expect(find.text('wholesale_order_err_insufficient_balance'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('wallet-inline-error-topup')));
+      await tester.pump();
+      expect(h.topUpAmount, 35000);
+    });
+
+    testWidgets('сервер bank_transfer_unavailable — ҳамёнга қайтади ва қайта сўрайди', (tester) async {
+      final h = _Harness();
+      h.demand.handlers['quoteWholesaleOrder'] = (p) {
+        if (p['paymentMethod'] == 'bank_transfer') {
+          throw fnError('failed-precondition', 'bank_transfer_unavailable', {'bankUnavailableReason': 'seller_not_approved'});
+        }
+        return quoteReply(paymentMethods: {'wallet': true, 'card_on_delivery': false, 'bank_transfer': true});
+      };
+      await _open(tester, h: h);
+      await tester.tap(find.byKey(const ValueKey('wholesale-pay-bank')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls.map((c) => c.$2['paymentMethod']).toList(), ['wallet', 'bank_transfer', 'wallet']);
+      expect(find.byKey(const ValueKey('wholesale-bank-note')), findsNothing);
+      expect(find.byKey(const ValueKey('wholesale-quote')), findsOneWidget);
+    });
+  });
+
   testWidgets('ҳамён етмайди — сервер рад этади, «Ҳамённи тўлдириш» етишмаган сумма билан', (tester) async {
     final h = _Harness();
     h.demand.handlers['quoteWholesaleOrder'] = (_) => quoteReply(goods: 640000, delivery: 45000);

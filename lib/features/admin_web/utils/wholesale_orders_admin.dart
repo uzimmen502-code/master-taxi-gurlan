@@ -42,6 +42,9 @@ const kWholesaleOrderFilters = <String, String>{
 /// To'lov usuli (`order.paymentMethod`; yo'q = hamyon — server `methodOf` bilan bir xil).
 const kWholesaleCardMethod = 'card_on_delivery';
 
+/// Банк ўтказмаси (эга, 2026-11-13/14): товар пули иловадан ташқарида.
+const kWholesaleBankMethod = 'bank_transfer';
+
 int? _int(Object? v) => v is num ? v.toInt() : null;
 
 Map<String, dynamic>? _map(Object? v) =>
@@ -99,12 +102,17 @@ class WholesaleOrderAdminView {
     required this.shipmentError,
     required this.historySeq,
     this.lost,
+    this.bankPayment,
   });
+
+  /// Банк ўтказмаси: `{status, awaitingSince, confirmedAt, confirmedBy, ...}` ёки `null`.
+  final Map<String, dynamic>? bankPayment;
+  bool get isBank => paymentMethod == kWholesaleBankMethod;
 
   final String id;
   final String status;
 
-  /// `wallet` | `card_on_delivery` (йўқ — `wallet`).
+  /// `wallet` | `card_on_delivery` | `bank_transfer` (йўқ/номаълум — `wallet`).
   final String paymentMethod;
   final String buyerId;
   final String sellerId;
@@ -174,7 +182,7 @@ class WholesaleOrderAdminView {
     return WholesaleOrderAdminView(
       id: id,
       status: _str(d['status']),
-      paymentMethod: method == kWholesaleCardMethod ? kWholesaleCardMethod : 'wallet',
+      paymentMethod: method == kWholesaleCardMethod || method == kWholesaleBankMethod ? method : 'wallet',
       buyerId: _str(d['buyerId']),
       sellerId: _str(d['sellerId']),
       productTitle: _str(d['productTitle']),
@@ -199,6 +207,7 @@ class WholesaleOrderAdminView {
       shipmentError: _map(d['shipmentError']),
       historySeq: _int(d['historySeq']),
       lost: _map(d['lost']),
+      bankPayment: _map(d['bankPayment']),
     );
   }
 

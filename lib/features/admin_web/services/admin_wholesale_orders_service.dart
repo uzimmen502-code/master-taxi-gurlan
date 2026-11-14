@@ -6,6 +6,8 @@
 //   setWholesaleOrderSettings({avaFeeBps, reason})                — AVA улуши (LIVE, 2-босқич)
 //   adminResolveWholesaleCardDispute({orderId, decision, reason}) — карта тўлови низоси
 //     (3b карта занжири, параллел агент; номи ва шакли ўша агентнинг шартномаси)
+//   adminGetWholesaleFeeStatement / adminGetWholesaleOrdersReport / adminMarkWholesaleFeeCollected
+//     — AVA улуши 10 кунлик ва ойлик ҳисоботи (банк ўтказмаси, эга 2026-11-14)
 //
 // Default codebase (us-central1, `FirebaseFunctions.instance`):
 //   adminRecordWholesaleLostFeePayment({orderId, amount, opId, note}) — йўқолган посилка:
@@ -18,6 +20,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
+import '../utils/wholesale_fee_statement.dart';
 import '../utils/wholesale_orders_admin.dart';
 import 'admin_callable.dart';
 
@@ -76,6 +79,30 @@ class AdminWholesaleOrdersService {
       _demand.call('setWholesaleOrderSettings', {
         'avaFeeBps': avaFeeBps,
         if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+      });
+
+  // ── AVA улуши ҳисоботи (эга, 2026-11-14; demand `api/wholesale_fee_statement.js`, қатъий admin) ──
+
+  /// 10 кунлик давр ҳисоботи — [period] сервер калити `YYYY-MM-DD` (01 | 11 | 21-кун).
+  Future<WholesaleFeeStatement> feeStatement(WholesaleFeePeriod period) async =>
+      WholesaleFeeStatement.fromMap(
+          await _demand.call('adminGetWholesaleFeeStatement', {'periodStart': period.key}));
+
+  /// Ойлик ҳисобот (сотувчи × тўлов усули) — [month] `YYYY-MM`.
+  Future<WholesaleMonthlyReport> monthlyReport(String month) async =>
+      WholesaleMonthlyReport.fromMap(await _demand.call('adminGetWholesaleOrdersReport', {'month': month}));
+
+  /// «Йиғилди» — фақат ёпилган давр; сумма серверда қайта ҳисобланади (клиентдан юборилмайди),
+  /// такрор — idempotent. Жавоб: `{ok, idempotent, periodStart, avaFeeDue}`.
+  Future<Map<String, dynamic>> markFeeCollected({
+    required String sellerId,
+    required WholesaleFeePeriod period,
+    String note = '',
+  }) =>
+      _demand.call('adminMarkWholesaleFeeCollected', {
+        'sellerId': sellerId,
+        'periodStart': period.key,
+        if (note.trim().isNotEmpty) 'note': note.trim(),
       });
 
   /// Карта тўлови низоси: `confirm` — тўлов тасдиқланди, `reject` — рад (сабаб мажбурий).

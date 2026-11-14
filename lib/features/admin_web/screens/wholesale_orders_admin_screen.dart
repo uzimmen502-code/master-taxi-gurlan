@@ -6,6 +6,8 @@
 //   • AVA улуши — `settings/wholesale_orders` + `setWholesaleOrderSettings`.
 //   • Дарвоза ва тестчилар — `adminGet/SetWholesaleOrdersStage`.
 //   • Вилоятлар матрицаси — логистика тарифи қораламасида 14×14 (`adminUpsertLogisticsTariff`).
+//   • 2% ҳисоботи / Ойлик ҳисобот — AVA улуши ҳисоботлари (банк ўтказмаси, эга 2026-11-14;
+//     `widgets/wholesale_fee_statement_panel.dart`).
 // Ҳамма ёзув СЕРВЕРДА (callable); экран фақат ўқийди ва чақиради (44-банд).
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,6 +23,7 @@ import '../widgets/admin_load_more_bar.dart';
 import '../widgets/region_zone_matrix_dialog.dart';
 import '../widgets/wholesale_dispute_dialog.dart';
 import '../widgets/wholesale_fee_card.dart';
+import '../widgets/wholesale_fee_statement_panel.dart';
 import '../widgets/wholesale_lost_fee_dialog.dart';
 import '../widgets/wholesale_stage_panel.dart';
 
@@ -48,6 +51,8 @@ class _WholesaleOrdersAdminScreenState extends State<WholesaleOrdersAdminScreen>
               ButtonSegment(value: 1, label: Text('AVA улуши'), icon: Icon(Icons.percent)),
               ButtonSegment(value: 2, label: Text('Дарвоза ва тестчилар'), icon: Icon(Icons.door_front_door_outlined)),
               ButtonSegment(value: 3, label: Text('Вилоятлар матрицаси'), icon: Icon(Icons.table_chart_outlined)),
+              ButtonSegment(value: 4, label: Text('2% ҳисоботи'), icon: Icon(Icons.request_quote_outlined)),
+              ButtonSegment(value: 5, label: Text('Ойлик ҳисобот'), icon: Icon(Icons.calendar_month_outlined)),
             ],
             selected: {_tab},
             onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -59,6 +64,8 @@ class _WholesaleOrdersAdminScreenState extends State<WholesaleOrdersAdminScreen>
           0 => _WholesaleOrdersList(svc: _svc),
           1 => ListView(padding: const EdgeInsets.all(16), children: [WholesaleFeeCard(svc: _svc)]),
           2 => WholesaleStagePanel(svc: _svc),
+          4 => WholesaleFeeStatementPanel(svc: _svc),
+          5 => WholesaleMonthlyReportPanel(svc: _svc),
           _ => const _MatrixDraftsPanel(),
         },
       ),
@@ -173,7 +180,7 @@ class _WholesaleOrdersListState extends State<_WholesaleOrdersList> {
           '${o.productTitle.isEmpty ? '—' : o.productTitle}${o.packLabel.isEmpty ? '' : ' (${o.packLabel})'} × ${o.qty ?? '?'}',
         ),
         subtitle: Text(
-          '${o.statusLabel} · ${o.isCard ? 'карта (етказилганда)' : 'ҳамён'} · жами: '
+          '${o.statusLabel} · ${o.isCard ? 'карта (етказилганда)' : (o.isBank ? 'банк ўтказмаси' : 'ҳамён')} · жами: '
           '${o.total == null ? '—' : '${wholesaleMoney(o.total!)} сўм'} · ${_fmt(o.createdAt)}'
           '${o.trackingNumber.isNotEmpty ? ' · ${o.trackingNumber}' : ''}'
           '${o.shipmentError != null && !o.shipmentErrorFinal ? ' · жўнатма қайта уринилмоқда' : ''}'
@@ -281,7 +288,15 @@ class _WholesaleOrderDetailDialogState extends State<WholesaleOrderDetailDialog>
                   child: Text(problems.map((p) => '⚠ ${p.text}').join('\n'), style: TextStyle(color: Colors.red.shade900)),
                 ),
               row('Ҳолат', '${o.statusLabel} (${o.status})'),
-              row('Тўлов усули', o.isCard ? 'Карта — етказилганда (card_on_delivery)' : 'Ҳамён — олдиндан'),
+              row(
+                'Тўлов усули',
+                o.isCard
+                    ? 'Карта — етказилганда (card_on_delivery)'
+                    : (o.isBank
+                        ? 'Банк ўтказмаси — товар иловадан ташқарида, етказиш ҳамёндан (bank_transfer)'
+                        : 'Ҳамён — олдиндан'),
+              ),
+              if (o.isBank) row('Банк тўлови', jsonish(o.bankPayment)),
               row('Товар', '${o.productTitle}${o.packLabel.isEmpty ? '' : ' (${o.packLabel})'} × ${o.qty ?? '?'}'),
               row('Дона нархи', money(o.unitPrice)),
               row('Товар суммаси', money(o.goodsTotal)),

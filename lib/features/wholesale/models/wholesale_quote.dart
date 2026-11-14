@@ -48,7 +48,18 @@ class WholesaleQuote {
     this.paymentMethodsKnown = false,
     this.cardOnDeliveryAvailable = false,
     this.cardUnavailableReason = '',
+    this.bankTransferAvailable = false,
+    this.bankUnavailableReason = '',
+    this.walletHold,
   });
+
+  /// Банк ўтказмаси (эга, 2026-11-13/14) — ФАҚАТ сервер `paymentMethods.bank_transfer == true` деса.
+  final bool bankTransferAvailable;
+  final String bankUnavailableReason;
+
+  /// Банк квотасида ҳамёндан ҳозир ушланадиган сумма (= етказиш ҳақи, сервер ҳисоблайди);
+  /// бошқа усулда `null`.
+  final int? walletHold;
 
   final String quoteId;
   final int unitPrice;
@@ -87,6 +98,9 @@ class WholesaleQuote {
       paymentMethodsKnown: methods is Map,
       cardOnDeliveryAvailable: methods is Map && methods['card_on_delivery'] == true,
       cardUnavailableReason: _str(d['cardUnavailableReason']),
+      bankTransferAvailable: methods is Map && methods['bank_transfer'] == true,
+      bankUnavailableReason: _str(d['bankUnavailableReason']),
+      walletHold: d['walletHold'] is num && (d['walletHold'] as num).isFinite ? (d['walletHold'] as num).toInt() : null,
     );
   }
 }

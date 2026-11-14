@@ -108,6 +108,7 @@ class WholesaleOrdersRepository {
     required int qty,
     required WholesaleDestination destination,
     String? paymentMethod,
+    String? deliveryPaymentMethod,
   }) async {
     final d = await _call(_demand, 'quoteWholesaleOrder', {
       'productId': productId,
@@ -115,6 +116,8 @@ class WholesaleOrdersRepository {
       'qty': qty,
       'destination': destination.toInput(),
       if (paymentMethod != null) 'paymentMethod': paymentMethod,
+      // Фақат банк ўтказмасида (бошқа усулда сервер `delivery_payment_method_not_applicable` билан рад этади).
+      if (deliveryPaymentMethod != null) 'deliveryPaymentMethod': deliveryPaymentMethod,
     });
     return WholesaleQuote.fromMap(d);
   }
@@ -152,6 +155,11 @@ class WholesaleOrdersRepository {
   /// 3b: «Пул тушди» (карта буюртмаси).
   Future<void> confirmCardPayment(String orderId) =>
       _call(_demand, 'confirmWholesaleCardPayment', {'orderId': orderId});
+
+  /// Банк ўтказмаси: «Пул тушди» — товар пули банк ҳисобига тушди (эга, 2026-11-13/14);
+  /// шундан кейин курьер чақирилади. Қайта чақириш — idempotent (сервер).
+  Future<void> confirmBankPayment(String orderId) =>
+      _call(_demand, 'confirmWholesaleBankPayment', {'orderId': orderId});
 
   /// 3b: тўлов қабул қилиш картаси → `{ok, last4, unchanged}`; охирги 4 рақам қайтади.
   Future<String> setSellerCard({required String cardNumber, required String holderName}) async {

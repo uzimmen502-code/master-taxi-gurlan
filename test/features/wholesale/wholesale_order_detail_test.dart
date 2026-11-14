@@ -22,8 +22,14 @@ WholesaleOrder _order({
   String? sellerDecision,
   DateTime? deadline,
   String? cancelReason,
+  Map<String, dynamic>? bank,
+  DateTime? bankDeadline,
+  Map<String, dynamic>? deliveryFailed,
 }) =>
     WholesaleOrder.fromMap('o1', {
+      if (bank != null) 'bankPayment': bank,
+      if (bankDeadline != null) 'bankPayDeadlineAt': bankDeadline,
+      if (deliveryFailed != null) 'deliveryFailed': deliveryFailed,
       if (sellerDecision != null) 'sellerDecision': sellerDecision,
       if (deadline != null) 'acceptDeadlineAt': deadline,
       if (cancelReason != null) 'cancelReason': cancelReason,
@@ -312,6 +318,216 @@ void main() {
         expect(find.text(key), findsOneWidget);
       });
     }
+  });
+
+  group('банк ўтказмаси (эга, 2026-11-13/14)', () {
+    final now = DateTime(2026, 11, 16, 10);
+    final bankDeadline = DateTime(2026, 11, 23, 10);
+    const money = ValueKey('wholesale-bank-money-received');
+    WholesaleOrder awaiting({DateTime? deadline, String decision = 'accepted', String bankStatus = 'awaiting'}) =>
+        _order(
+          method: 'bank_transfer',
+          sellerDecision: decision,
+          bank: {'status': bankStatus},
+          bankDeadline: deadline ?? bankDeadline,
+        );
+
+    test('модель: bank_transfer, bankPayment.status, bankPayDeadlineAt ўқилади', () {
+      final o = awaiting();
+      expect(o.isBankOrder, isTrue);
+      expect(o.isCardOrder, isFalse);
+      expect(o.bankPaymentStatus, 'awaiting');
+      expect(o.bankPayDeadlineAt, bankDeadline);
+      expect(o.bankPaymentAwaiting, isTrue);
+      expect(_order().bankPaymentAwaiting, isFalse, reason: 'ҳамён буюртмаси');
+    });
+
+    test('амаллар (соф): муддат чегараси — 1 дақиқа олдин «Пул тушди» бор, муддат вақтида ва кейин йўқ', () {
+      final o = awaiting();
+      final before = WholesaleOrderActions.of(o, _seller, now: bankDeadline.subtract(const Duration(minutes: 1)));
+      expect(before.canConfirmBankPayment, isTrue);
+      expect(before.bankPaymentLate, isFalse);
+      final at = WholesaleOrderActions.of(o, _seller, now: bankDeadline);
+      expect(at.canConfirmBankPayment, isFalse);
+      expect(at.bankPaymentLate, isTrue);
+      expect(WholesaleOrderActions.of(o, _seller, now: bankDeadline.add(const Duration(minutes: 1))).canConfirmBankPayment,
+          isFalse);
+      final buyer = WholesaleOrderActions.of(o, _buyer, now: now);
+      expect(buyer.awaitingBankPayment, isTrue);
+      expect(buyer.canConfirmBankPayment, isFalse, reason: '«Пул тушди» — фақат сотувчи');
+      expect(buyer.canCancel, isTrue, reason: 'тасдиқлангунча харидор бекор қила олади');
+      expect(WholesaleOrderActions.of(o, '998909999999', now: now).awaitingBankPayment, isFalse, reason: 'бегона');
+    });
+
+    test('амаллар (соф): салбий ҳолатлар — қабул қилинмаган, тасдиқланган, муддат йўқ, ҳамён/карта', () {
+      expect(WholesaleOrderActions.of(awaiting(decision: 'pending'), _seller, now: now).canConfirmBankPayment, isFalse);
+      final confirmed = awaiting(bankStatus: 'confirmed');
+      expect(WholesaleOrderActions.of(confirmed, _seller, now: now).canConfirmBankPayment, isFalse);
+      expect(WholesaleOrderActions.of(confirmed, _buyer, now: now).canCancel, isFalse,
+          reason: 'сервер bank_payment_confirmed — бекор йўқ');
+      expect(confirmed.bankConfirmed, isTrue);
+      final noDeadline = _order(method: 'bank_transfer', sellerDecision: 'accepted', bank: {'status': 'awaiting'});
+      final a = WholesaleOrderActions.of(noDeadline, _seller, now: now);
+      expect([a.canConfirmBankPayment, a.bankPaymentLate], [false, false], reason: 'bank_pay_deadline_missing');
+      for (final m in ['wallet', 'card_on_delivery']) {
+        final w = _order(method: m, sellerDecision: 'accepted', bank: {'status': 'awaiting'}, bankDeadline: bankDeadline);
+        final x = WholesaleOrderActions.of(w, _seller, now: now);
+        expect([x.canConfirmBankPayment, x.awaitingBankPayment, x.bankPaymentLate], [false, false, false], reason: m);
+        expect(WholesaleOrderActions.of(w, _buyer, now: now).canCancel, isTrue, reason: '$m — аввалгидек');
+      }
+    });
+
+    testWidgets('сотувчи: муддат матни + «Пул тушди» → тасдиқ → confirmWholesaleBankPayment', (tester) async {
+      final h = _H();
+      h.demand.handlers['confirmWholesaleBankPayment'] = (_) => {'ok': true, 'bankPaymentStatus': 'confirmed'};
+      await _pump(tester, awaiting(), _seller, h: h, now: now);
+      expect(find.byKey(const ValueKey('wholesale-bank-card')), findsOneWidget);
+      expect(find.text('wholesale_order_bank_seller_await'), findsOneWidget);
+      expect(find.byKey(_money), findsNothing, reason: 'карта «Пул тушди» эмас');
+      expect(find.byKey(_cancel), findsNothing);
+      expect(find.text('wholesale_order_payment_bank'), findsOneWidget);
+      await tester.tap(find.byKey(money));
+      await tester.pumpAndSettle();
+      expect(find.text('wholesale_order_bank_confirm_dialog'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('wholesale-confirm-yes')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls.single.$1, 'confirmWholesaleBankPayment');
+      expect(h.demand.calls.single.$2, {'orderId': 'o1'});
+    });
+
+    testWidgets('сотувчи: сервер муддат ўтди деса — тушунарли матн (ички код эмас)', (tester) async {
+      final h = _H();
+      h.demand.handlers['confirmWholesaleBankPayment'] =
+          (_) => throw fnError('failed-precondition', 'bank_pay_deadline_passed');
+      await _pump(tester, awaiting(), _seller, h: h, now: now);
+      await tester.tap(find.byKey(money));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('wholesale-confirm-yes')));
+      await tester.pumpAndSettle();
+      expect(find.text('wholesale_order_err_bank_deadline_passed'), findsOneWidget);
+      expect(find.text('bank_pay_deadline_passed'), findsNothing);
+    });
+
+    testWidgets('сотувчи, муддат ўтган: тугма йўқ, «бекор қилинади» матни', (tester) async {
+      await _pump(tester, awaiting(), _seller, now: bankDeadline.add(const Duration(minutes: 1)));
+      expect(find.byKey(money), findsNothing);
+      expect(find.text('wholesale_order_bank_late'), findsOneWidget);
+    });
+
+    testWidgets('харидор: банк орқали тўлаш изоҳи, бекор қилиш (фақат етказиш ҳақи қайтиши айтилади)', (tester) async {
+      final h = _H();
+      h.demand.handlers['cancelWholesaleOrder'] = (_) => {'ok': true};
+      await _pump(tester, awaiting(), _buyer, h: h, now: now);
+      expect(find.text('wholesale_order_bank_buyer_await'), findsOneWidget);
+      expect(find.byKey(money), findsNothing);
+      expect(find.byKey(_code), findsNothing);
+      await tester.tap(find.byKey(_cancel));
+      await tester.pumpAndSettle();
+      expect(find.text('wholesale_order_cancel_confirm\nwholesale_order_cancel_refund_note_bank'), findsOneWidget,
+          reason: 'товар пули қайтиши ҳақида матн йўқ');
+      await tester.tap(find.byKey(const ValueKey('wholesale-confirm-yes')));
+      await tester.pumpAndSettle();
+      expect(h.demand.calls.single.$1, 'cancelWholesaleOrder');
+    });
+
+    testWidgets('тасдиқланган (ҳали placed): иккала томонга «тасдиқланди», харидорда бекор йўқ', (tester) async {
+      await _pump(tester, awaiting(bankStatus: 'confirmed'), _buyer, now: now);
+      expect(find.byKey(const ValueKey('wholesale-bank-confirmed')), findsOneWidget);
+      expect(find.byKey(_cancel), findsNothing);
+      expect(find.byKey(const ValueKey('wholesale-bank-card')), findsNothing);
+      await _pump(tester, awaiting(bankStatus: 'confirmed'), _seller, now: now);
+      expect(find.byKey(const ValueKey('wholesale-bank-confirmed')), findsOneWidget);
+      expect(find.byKey(money), findsNothing);
+    });
+
+    testWidgets('етказилмоқда: харидорга етказиш коди (ҳамён каби)', (tester) async {
+      await _pump(
+        tester,
+        _order(status: WholesaleOrderStatus.inDelivery, method: 'bank_transfer', sellerDecision: 'accepted',
+            bank: {'status': 'confirmed'}),
+        _buyer,
+        now: now,
+      );
+      expect(find.byKey(_code), findsOneWidget);
+    });
+
+    testWidgets('сотувчи, янги банк буюртмаси: қабул тасдиқида банк матни', (tester) async {
+      await _pump(
+        tester,
+        _order(method: 'bank_transfer', sellerDecision: 'pending', deadline: DateTime(2026, 11, 18, 10)),
+        _seller,
+        now: now,
+      );
+      await tester.tap(find.byKey(const ValueKey('wholesale-order-accept')));
+      await tester.pumpAndSettle();
+      expect(find.text('wholesale_order_accept_confirm_bank'), findsOneWidget);
+    });
+
+    testWidgets('харидор, қарор кутилмоқда: банк варианти (етказиш ҳақи қайтади)', (tester) async {
+      await _pump(
+        tester,
+        _order(method: 'bank_transfer', sellerDecision: 'pending', deadline: DateTime(2026, 11, 18, 10)),
+        _buyer,
+        now: now,
+      );
+      expect(find.text('wholesale_order_decision_wait_bank'), findsOneWidget);
+      expect(find.text('wholesale_order_decision_wait'), findsNothing);
+    });
+
+    for (final (reason, key) in [
+      ('bank_payment_timeout', 'wholesale_order_cancel_bank_payment_timeout'),
+      ('seller_rejected', 'wholesale_order_cancel_seller_rejected_bank'),
+      ('seller_timeout', 'wholesale_order_cancel_seller_timeout_bank'),
+    ]) {
+      testWidgets('бекор қилинди ($reason): банк изоҳи', (tester) async {
+        await _pump(
+          tester,
+          _order(status: WholesaleOrderStatus.cancelled, method: 'bank_transfer', cancelReason: reason),
+          _buyer,
+        );
+        expect(find.text(key), findsOneWidget);
+      });
+    }
+
+    test('товар пули қайтиши ҳақида изоҳ ЙЎҚ: рад / йўқолиш', () {
+      final refused = WholesaleOrder.fromMap('o1', {
+        'buyerId': _buyer,
+        'sellerId': _seller,
+        'status': 'refused',
+        'paymentMethod': 'bank_transfer',
+        'walletRefusal': {'fault': 'buyer', 'goodsRefunded': 640000, 'returnFeeCharged': 20000},
+      });
+      expect(refused.walletRefundNoticeKey(_buyer), isNull);
+      final lost = WholesaleOrder.fromMap('o1', {
+        'buyerId': _buyer,
+        'sellerId': _seller,
+        'status': 'lost',
+        'paymentMethod': 'bank_transfer',
+        'lost': {'refundTo': 'buyer', 'refunded': 640000, 'review': false},
+      });
+      expect(lost.lostNoticeKey(_buyer), 'wholesale_order_status_lost');
+      expect(WholesaleDeliveryFailedReport.fromMap({'paymentMethod': 'bank_transfer'}).isWalletOrder, isTrue,
+          reason: 'курьер ойнаси — ҳамён қоидалари (сервер deliveryPaidByBuyer)');
+      expect(WholesaleDeliveryFailedReport.fromMap({'paymentMethod': 'card_on_delivery'}).isWalletOrder, isFalse);
+    });
+
+    testWidgets('«етказилмади»: харидорга банк матни (товар пули қайтиши йўқ)', (tester) async {
+      await _pump(
+        tester,
+        _order(
+          status: WholesaleOrderStatus.inDelivery,
+          method: 'bank_transfer',
+          bank: {'status': 'confirmed'},
+          deliveryFailed: {'open': true, 'reasonCode': 'customer_absent', 'seq': 1},
+        ),
+        _buyer,
+        now: now,
+      );
+      expect(find.text('wholesale_df_buyer_body_bank'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('wholesale-df-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('wholesale_df_buyer_confirm_dialog_bank_buyer'), findsOneWidget);
+    });
   });
 
   group('сотувчи — ЭСКИ буюртма (қарор майдони йўқ): қабул/рад ЙЎҚ', () {

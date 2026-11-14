@@ -5,15 +5,18 @@
 //   flutter test test/features/admin_web/wholesale_orders_admin_test.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ava_gurlan/features/admin_web/services/admin_callable.dart';
 import 'package:ava_gurlan/features/admin_web/services/admin_wholesale_orders_service.dart';
 import 'package:ava_gurlan/features/admin_web/utils/region_zone_matrix.dart';
+import 'package:ava_gurlan/features/admin_web/utils/wholesale_fee_statement.dart';
 import 'package:ava_gurlan/features/admin_web/utils/wholesale_orders_admin.dart';
 import 'package:ava_gurlan/features/admin_web/widgets/region_zone_matrix_dialog.dart';
 import 'package:ava_gurlan/features/admin_web/widgets/wholesale_dispute_dialog.dart';
 import 'package:ava_gurlan/features/admin_web/widgets/wholesale_fee_card.dart';
+import 'package:ava_gurlan/features/admin_web/widgets/wholesale_fee_statement_panel.dart';
 import 'package:ava_gurlan/features/admin_web/widgets/wholesale_stage_panel.dart';
 
 class _Fake implements AdminCallable {
@@ -438,6 +441,212 @@ void main() {
     expect(bad.matchesFilter('delivered'), isFalse);
     expect(WholesaleOrderAdminView.fromMap('c', {'status': 'returned', 'returnDebt': {'amount': 0}}).hasProblem, isFalse);
     expect(wholesaleMoney(1234567), '1 234 567');
+  });
+
+  // ─── AVA ulushi hisoboti (bank o'tkazmasi, ega 2026-11-14) ─────────────
+  group('10 kunlik davr (Asia/Tashkent)', () {
+    test('1–10 / 11–20 / 21–oy oxiri: 31, 30, 28 va 29 kunlik oylar', () {
+      expect(WholesaleFeePeriod(2026, 11, 1).lastDay, 10);
+      expect(WholesaleFeePeriod(2026, 11, 11).lastDay, 20);
+      expect(WholesaleFeePeriod(2026, 11, 21).lastDay, 30);
+      expect(WholesaleFeePeriod(2026, 12, 21).lastDay, 31);
+      expect(WholesaleFeePeriod(2026, 2, 21).lastDay, 28);
+      expect(WholesaleFeePeriod(2028, 2, 21).lastDay, 29, reason: 'kabisa yili');
+      expect(WholesaleFeePeriod(2026, 2, 21).label, '21.02–28.02.2026');
+      expect(WholesaleFeePeriod(2026, 11, 1).key, '2026-11-01');
+      expect(() => WholesaleFeePeriod(2026, 11, 5), throwsArgumentError, reason: 'server faqat 01/11/21');
+    });
+
+    test('keyingi/oldingi: oy va yil chegarasi; oxiri = keyingi davr boshi (Toshkent 00:00 = 19:00Z)', () {
+      expect(WholesaleFeePeriod(2026, 12, 21).next.key, '2027-01-01');
+      expect(WholesaleFeePeriod(2027, 1, 1).previous.key, '2026-12-21');
+      expect(WholesaleFeePeriod(2026, 3, 1).previous.key, '2026-02-21');
+      expect(WholesaleFeePeriod(2026, 11, 11).previous.key, '2026-11-01');
+      expect(WholesaleFeePeriod(2026, 11, 1).startUtc, DateTime.utc(2026, 10, 31, 19));
+      expect(WholesaleFeePeriod(2026, 2, 21).endUtc, DateTime.utc(2026, 2, 28, 19));
+    });
+
+    test('joriy va oxirgi yopilgan davr — Toshkent vaqti bo\'yicha (UTC kechasi boshqa kun)', () {
+      // 2026-11-10 19:30Z = Toshkentda 11-noyabr 00:30 → joriy 11–20, yopilgan 1–10.
+      final t = DateTime.utc(2026, 11, 10, 19, 30);
+      expect(WholesaleFeePeriod.containing(t).key, '2026-11-11');
+      expect(WholesaleFeePeriod.lastClosed(t).key, '2026-11-01');
+      // 18:59Z = Toshkentda hali 10-noyabr 23:59 → 1–10 hali ochiq.
+      final edge = DateTime.utc(2026, 11, 10, 18, 59);
+      expect(WholesaleFeePeriod.containing(edge).key, '2026-11-01');
+      expect(WholesaleFeePeriod(2026, 11, 1).isClosedAt(edge), isFalse);
+      expect(WholesaleFeePeriod(2026, 11, 1).isClosedAt(DateTime.utc(2026, 11, 10, 19)), isTrue, reason: 'chegara — yopiq');
+      // 1-mart (fevral 21–28 yopilgan).
+      expect(WholesaleFeePeriod.lastClosed(DateTime.utc(2026, 3, 1, 6)).key, '2026-02-21');
+      final list = WholesaleFeePeriod.recent(t, count: 4).map((p) => p.key).toList();
+      expect(list, ['2026-11-11', '2026-11-01', '2026-10-21', '2026-10-11']);
+      expect(wholesaleRecentMonths(DateTime.utc(2026, 1, 15), count: 3), ['2026-01', '2025-12', '2025-11']);
+      expect(wholesalePhoneTail('998901234567'), '…4567');
+      expect(wholesalePhoneTail(''), '—');
+    });
+
+    test('javob o\'qish + CSV (pul butun so\'m, qo\'shtirnoq qochiriladi)', () {
+      final s = WholesaleFeeStatement.fromMap({
+        'periodStart': '2026-11-01', 'lastDay': '2026-11-10', 'closed': true,
+        'sellers': [
+          {'sellerId': '998901234567', 'count': 2, 'goodsTotal': 1000000, 'avaFeeDue': 20000,
+            'collected': {'at': 1763000000000, 'by': '998900000009', 'amount': 20000}},
+          {'sellerId': '998907654321', 'count': 1, 'goodsTotal': 500000, 'avaFeeDue': 10000, 'collected': null},
+        ],
+        'totals': {'sellers': 2, 'count': 3, 'goodsTotal': 1500000, 'avaFeeDue': 30000},
+        'anomalies': [{'orderId': 'bad1', 'code': 'settlement_invalid'}],
+        'truncated': false,
+      });
+      expect(s.sellers.first.isCollected, isTrue);
+      expect(s.sellers.first.collected!.at, isNotNull);
+      expect(s.sellers.last.isCollected, isFalse);
+      expect([s.totalCount, s.totalGoods, s.totalDue], [3, 1500000, 30000]);
+      expect(s.anomalies, ['bad1']);
+      final csv = wholesaleFeeStatementCsv(s, names: {'998901234567': 'Ali "Savdo", MChJ'});
+      final lines = csv.split('\n');
+      expect(lines.first, 'period,sellerId,seller,orders,goodsTotal,avaFeeDue,collected');
+      expect(lines[1], '2026-11-01,998901234567,"Ali ""Savdo"", MChJ",2,1000000,20000,yes');
+      expect(lines.last, '2026-11-01,TOTAL,,3,1500000,30000,');
+    });
+  });
+
+  Map<String, dynamic> statementReply({bool closed = true, String period = '2026-11-01'}) => {
+        'ok': true, 'periodStart': period, 'periodEnd': '2026-11-11', 'lastDay': '2026-11-10', 'closed': closed,
+        'methods': ['bank_transfer'],
+        'sellers': [
+          {'sellerId': '998901234567', 'count': 2, 'goodsTotal': 1000000, 'avaFeeDue': 20000, 'collected': null},
+          {'sellerId': '998907654321', 'count': 1, 'goodsTotal': 500000, 'avaFeeDue': 10000,
+            'collected': {'at': 1763000000000, 'by': 'adm', 'amount': 10000}},
+        ],
+        'totals': {'sellers': 2, 'count': 3, 'goodsTotal': 1500000, 'avaFeeDue': 30000},
+        'anomalies': [], 'truncated': false,
+      };
+
+  testWidgets('2% hisoboti: standart — oxirgi yopilgan davr; jadval, jami; «Yig\'ildi» → tasdiq → server, qayta yuklash',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final demand = _Fake((n, p) async {
+      if (n == 'adminGetWholesaleFeeStatement') return statementReply();
+      return {'ok': true, 'idempotent': false, 'periodStart': p['periodStart'], 'avaFeeDue': 20000};
+    });
+    final svc = AdminWholesaleOrdersService(demand: demand);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WholesaleFeeStatementPanel(
+          svc: svc,
+          now: () => DateTime.utc(2026, 11, 14, 7),
+          sellerNames: (ids) async => {'998901234567': 'Ali Savdo'},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(demand.calls.single.$1, 'adminGetWholesaleFeeStatement');
+    expect(demand.calls.single.$2, {'periodStart': '2026-11-01'}, reason: '14-noyabr → yopilgan 1–10');
+    expect(find.text('Ali Savdo · …4567'), findsOneWidget);
+    expect(find.text('…4321'), findsOneWidget, reason: 'nomi yo\'q — telefon oxiri');
+    expect(find.text('30 000 сўм'), findsOneWidget, reason: 'jami ulush');
+    expect(find.text('✓ йиғилган'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fee-mark-998907654321')), findsNothing, reason: 'yig\'ilgan — tugma yo\'q');
+
+    await tester.tap(find.byKey(const ValueKey('fee-mark-998901234567')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'naqd olindi');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Тасдиқлаш'));
+    await tester.pumpAndSettle();
+    final mark = demand.calls.where((c) => c.$1 == 'adminMarkWholesaleFeeCollected').single;
+    expect(mark.$2, {'sellerId': '998901234567', 'periodStart': '2026-11-01', 'note': 'naqd olindi'});
+    expect(mark.$2.containsKey('avaFeeDue'), isFalse, reason: 'summa klientdan yuborilmaydi');
+    expect(demand.calls.where((c) => c.$1 == 'adminGetWholesaleFeeStatement').length, 2, reason: 'qayta yuklash');
+
+    // CSV — vaqtinchalik bufer (platforma kanali tutiladi).
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied.add((call.arguments as Map)['text'] as String);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.tap(find.byKey(const ValueKey('fee-csv')));
+    await tester.pumpAndSettle();
+    expect(copied.single, startsWith('period,sellerId,seller,orders,goodsTotal,avaFeeDue,collected\n'));
+    expect(copied.single, contains('2026-11-01,998901234567,Ali Savdo,2,1000000,20000,no'));
+  });
+
+  testWidgets('2% hisoboti: ochiq davr — «Yig\'ildi» o\'chiq; server xatosi matni', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var fail = false;
+    final demand = _Fake((n, p) async {
+      if (fail) throw const AdminCallableException('permission-denied', '', 'denied');
+      return statementReply(closed: false, period: '2026-11-11');
+    });
+    final svc = AdminWholesaleOrdersService(demand: demand);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WholesaleFeeStatementPanel(svc: svc, now: () => DateTime.utc(2026, 11, 14, 7), sellerNames: (_) async => {}),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    // Ochiq davrni tanlash.
+    await tester.tap(find.byKey(const ValueKey('fee-period')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('11.11–20.11.2026 (очиқ)').last);
+    await tester.pumpAndSettle();
+    expect(demand.calls.last.$2, {'periodStart': '2026-11-11'});
+    expect(find.byKey(const ValueKey('fee-open-period')), findsOneWidget);
+    final btn = tester.widget<FilledButton>(find.byKey(const ValueKey('fee-mark-998901234567')));
+    expect(btn.onPressed, isNull, reason: 'server period_not_closed — tugma o\'chiq');
+
+    fail = true;
+    await tester.tap(find.byTooltip('Янгилаш'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('fee-error')), findsOneWidget);
+    expect(find.textContaining('Рухсат йўқ'), findsOneWidget);
+  });
+
+  testWidgets('Oylik hisobot: standart — o\'tgan oy; sotuvchi × usul jadvali', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final demand = _Fake((n, p) async => {
+          'ok': true, 'month': p['month'], 'timezone': 'Asia/Tashkent',
+          'rows': [
+            {'sellerId': '998901234567', 'paymentMethod': 'bank_transfer', 'count': 2, 'goodsTotal': 1000000,
+              'deliveryFee': 90000, 'avaFee': 20000, 'avaFeeVia': 'statement'},
+            {'sellerId': '998901234567', 'paymentMethod': 'wallet', 'count': 1, 'goodsTotal': 300000,
+              'deliveryFee': 40000, 'avaFee': 6000, 'avaFeeVia': 'release'},
+          ],
+          'byMethod': {},
+          'totals': {'count': 3, 'goodsTotal': 1300000, 'deliveryFee': 130000, 'avaFee': 26000},
+          'anomalies': [], 'truncated': false,
+        });
+    final svc = AdminWholesaleOrdersService(demand: demand);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WholesaleMonthlyReportPanel(svc: svc, now: () => DateTime.utc(2026, 1, 5), sellerNames: (_) async => {}),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(demand.calls.single.$1, 'adminGetWholesaleOrdersReport');
+    expect(demand.calls.single.$2, {'month': '2025-12'}, reason: 'yanvar → o\'tgan oy dekabr (yil chegarasi)');
+    expect(find.text('Банк ўтказмаси'), findsOneWidget);
+    expect(find.text('Ҳамён (олдиндан)'), findsOneWidget);
+    expect(find.text('ҳисобот'), findsOneWidget);
+    expect(find.text('ledger'), findsOneWidget);
+    expect(find.text('26 000 сўм'), findsOneWidget);
+  });
+
+  test('Buyurtma ko\'rinishi: bank_transfer saqlanadi (hamyonga aylanmaydi), bankPayment o\'qiladi', () {
+    final o = WholesaleOrderAdminView.fromMap('b1', {
+      'status': 'placed', 'paymentMethod': 'bank_transfer', 'bankPayment': {'status': 'awaiting'},
+    });
+    expect(o.isBank, isTrue);
+    expect(o.isCard, isFalse);
+    expect(o.bankPayment, {'status': 'awaiting'});
+    expect(WholesaleOrderAdminView.fromMap('x', {'paymentMethod': 'weird'}).paymentMethod, 'wallet');
   });
 
   test('Darvoza holati: noma\'lum bosqich — internal; javobdan o\'qish', () {

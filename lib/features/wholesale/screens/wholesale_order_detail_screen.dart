@@ -3,7 +3,10 @@
 //
 // Эга қарори (2026-11-13; 31.10 дагисининг ўрнига): янги буюртмани сотувчи 2 иш
 // кунида «Қабул қилиш» ёки «Рад этиш» қилади, курьер фақат қабулдан кейин.
-// Карта буюртмасида «Пул тушди» ҳам бор. Ҳолатни фақат сервер ўзгартиради.
+// Карта буюртмасида «Пул тушди» ҳам бор. Банк ўтказмасида (эга, 2026-11-13/14)
+// қабулдан кейин сотувчи 5 иш кунида «Пул тушди»ни босади, курьер шундан кейин;
+// товар пули иловадан ташқарида — унинг қайтиши ҳақида матн йўқ (эга, 2026-11-14).
+// Ҳолатни фақат сервер ўзгартиради.
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -143,9 +146,13 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   }
 
   Future<void> _cancel() async {
+    // Банк ўтказмаси: товар пули иловада йўқ — фақат ушланган етказиш ҳақи қайтиши айтилади.
     final body = [
       context.tr('wholesale_order_cancel_confirm'),
-      if (!_o.isCardOrder) context.tr('wholesale_order_cancel_refund_note'),
+      if (_o.isBankOrder)
+        context.tr('wholesale_order_cancel_refund_note_bank')
+      else if (!_o.isCardOrder)
+        context.tr('wholesale_order_cancel_refund_note'),
     ].join('\n');
     if (!await _confirm(body)) return;
     await _run(() async {
@@ -203,6 +210,19 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     });
   }
 
+  /// Банк ўтказмаси: «Пул тушди» (товар суммаси сотувчи банк ҳисобига тушди) → курьер.
+  Future<void> _confirmBankMoney() async {
+    final ok = await _confirm(
+      context.trMsg('wholesale_order_bank_confirm_dialog', params: {'amount': formatMoney(_o.goodsTotal)}),
+      title: context.tr('wholesale_order_money_received_btn'),
+    );
+    if (!ok) return;
+    await _run(() async {
+      await widget.repository.confirmBankPayment(_o.id);
+      _snack('wholesale_order_bank_confirmed');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
@@ -247,6 +267,14 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         if (a.canDecide || a.awaitingDecision) ...[
           const SizedBox(height: 10),
           _decisionCard(context, a),
+        ],
+        if (a.canConfirmBankPayment || a.awaitingBankPayment || a.bankPaymentLate) ...[
+          const SizedBox(height: 10),
+          _bankCard(context, a),
+        ],
+        if (o.bankConfirmed && o.status == WholesaleOrderStatus.placed && (a.isBuyer || a.isSeller)) ...[
+          const SizedBox(height: 10),
+          _notice(context, 'wholesale_order_bank_confirmed', ok: true, key: const ValueKey('wholesale-bank-confirmed')),
         ],
         if (_cancelReasonKey(o) != null) ...[
           const SizedBox(height: 10),
@@ -306,7 +334,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  context.tr(o.isCardOrder ? 'wholesale_order_payment_card' : 'wholesale_order_payment_wallet'),
+                  context.tr(o.isBankOrder
+                      ? 'wholesale_order_payment_bank'
+                      : (o.isCardOrder ? 'wholesale_order_payment_card' : 'wholesale_order_payment_wallet')),
                   style: TextStyle(fontSize: 12, color: c.ink2),
                 ),
               ),
@@ -331,7 +361,11 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         ),
         const SizedBox(height: 12),
         // «Етказилмади» ёки қарор картаси кўринса, хато шу карта остида (юқорида) — такрорланмасин.
-        if (_error != null && !a.answerDeliveryFailed && !a.decideDeliveryFailed && !a.canDecide)
+        if (_error != null &&
+            !a.answerDeliveryFailed &&
+            !a.decideDeliveryFailed &&
+            !a.canDecide &&
+            !a.canConfirmBankPayment)
           WalletInlineError(text: _error!),
         ..._buyerActions(context, a),
         ..._sellerActions(context, a),
@@ -438,11 +472,51 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   static String? _cancelReasonKey(WholesaleOrder o) {
     if (o.status != WholesaleOrderStatus.cancelled) return null;
+    // Банк ўтказмаси: фақат етказиш ҳақи қайтиши айтилади (товар пули иловада бўлмаган).
+    final bank = o.isBankOrder ? '_bank' : '';
     return switch (o.cancelReason) {
-      'seller_rejected' => 'wholesale_order_cancel_seller_rejected',
-      'seller_timeout' => 'wholesale_order_cancel_seller_timeout',
+      'seller_rejected' => 'wholesale_order_cancel_seller_rejected$bank',
+      'seller_timeout' => 'wholesale_order_cancel_seller_timeout$bank',
+      'bank_payment_timeout' => 'wholesale_order_cancel_bank_payment_timeout',
       _ => null,
     };
+  }
+
+  /// Банк ўтказмаси картаси: сотувчига — «Пул тушди» (муддат билан), харидорга — банк
+  /// орқали тўлаш изоҳи, муддат ўтган бўлса — бекор бўлиши ҳақида.
+  Widget _bankCard(BuildContext context, WholesaleOrderActions a) {
+    final c = context.ava;
+    final until = _o.bankPayDeadlineAt;
+    final dateText = until == null ? '' : _ddmmHHmm(until);
+    final String key;
+    if (a.bankPaymentLate) {
+      key = 'wholesale_order_bank_late';
+    } else if (a.canConfirmBankPayment) {
+      key = 'wholesale_order_bank_seller_await';
+    } else {
+      key = 'wholesale_order_bank_buyer_await';
+    }
+    return Container(
+      key: const ValueKey('wholesale-bank-card'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            context.tr(key).replaceAll('{date}', dateText),
+            key: const ValueKey('wholesale-bank-text'),
+            style: TextStyle(fontSize: 13, color: c.warn, fontWeight: FontWeight.w600),
+          ),
+          if (a.canConfirmBankPayment) ...[
+            const SizedBox(height: 10),
+            _primary(context, 'wholesale_order_money_received_btn', Icons.account_balance_outlined, _confirmBankMoney,
+                key: const ValueKey('wholesale-bank-money-received')),
+            if (_error != null) ...[const SizedBox(height: 8), WalletInlineError(text: _error!)],
+          ],
+        ],
+      ),
+    );
   }
 
   static String _ddmmHHmm(DateTime t) {
@@ -452,13 +526,15 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   }
 
   Future<void> _accept() async {
-    if (!await _confirm(context.tr('wholesale_order_accept_confirm'),
+    // Банк ўтказмасида курьер қабулдан кейин эмас, «Пул тушди»дан кейин.
+    final bank = _o.isBankOrder ? '_bank' : '';
+    if (!await _confirm(context.tr('wholesale_order_accept_confirm$bank'),
         title: context.tr('wholesale_order_accept_btn'))) {
       return;
     }
     await _run(() async {
       await widget.repository.acceptOrder(_o.id);
-      _snack('wholesale_order_accepted_snack');
+      _snack('wholesale_order_accepted_snack$bank');
     });
   }
 
@@ -480,7 +556,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     final dateText = until == null ? '' : _ddmmHHmm(until);
     final text = a.canDecide
         ? context.tr('wholesale_order_decide_until').replaceAll('{date}', dateText)
-        : context.tr('wholesale_order_decision_wait').replaceAll('{date}', dateText);
+        : context
+            .tr(_o.isBankOrder ? 'wholesale_order_decision_wait_bank' : 'wholesale_order_decision_wait')
+            .replaceAll('{date}', dateText);
     return Container(
       key: const ValueKey('wholesale-decision-card'),
       padding: const EdgeInsets.all(12),
@@ -538,10 +616,16 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   /// (харидор сабаби — қайтариш ҳақи қайтадиган суммадан; курьер сабаби — ҳақни курьер тўлайди).
   String get _buyerConfirmDialogKey {
     if (_o.isCardOrder) return 'wholesale_df_buyer_confirm_dialog';
+    // Банк ўтказмаси — ҳамён айб қоидаси, лекин товар пули ҳақида гап йўқ (эга, 2026-11-14).
+    final m = _o.isBankOrder ? 'bank' : 'wallet';
     return _o.deliveryFailed.reasonCode == 'courier_problem'
-        ? 'wholesale_df_buyer_confirm_dialog_wallet_courier'
-        : 'wholesale_df_buyer_confirm_dialog_wallet_buyer';
+        ? 'wholesale_df_buyer_confirm_dialog_${m}_courier'
+        : 'wholesale_df_buyer_confirm_dialog_${m}_buyer';
   }
+
+  /// «Етказилмади» матнлари калити: карта / ҳамён / банк (банкда товар пули қайтиши айтилмайди).
+  String _dfKey(String card, String wallet, String bank) =>
+      _o.isCardOrder ? card : (_o.isBankOrder ? bank : wallet);
 
   /// Харидор: «Тасдиқлайман» (буюртма ёпилади — тасдиқ ойнаси) ёки «Олмоқчиман».
   Future<void> _answerFailed({required bool confirm}) async {
@@ -555,7 +639,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   /// Сотувчи (муддат ўтгач): «Етказилмади» (тасдиқ ойнаси) ёки «Етказилсин».
   Future<void> _decideFailed({required bool failed}) async {
     if (failed &&
-        !await _confirm(context.tr(_o.isCardOrder ? 'wholesale_df_seller_failed_dialog' : 'wholesale_df_seller_failed_dialog_wallet'),
+        !await _confirm(
+            context.tr(_dfKey('wholesale_df_seller_failed_dialog', 'wholesale_df_seller_failed_dialog_wallet',
+                'wholesale_df_seller_failed_dialog_bank')),
             title: context.tr('delivery_failed_decide_failed_title'))) {
       return;
     }
@@ -647,7 +733,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
           if (a.answerDeliveryFailed) ...[
             const SizedBox(height: 4),
-            Text(context.tr(_o.isCardOrder ? 'wholesale_df_buyer_body' : 'wholesale_df_buyer_body_wallet'),
+            Text(context.tr(_dfKey('wholesale_df_buyer_body', 'wholesale_df_buyer_body_wallet', 'wholesale_df_buyer_body_bank')),
                 key: const ValueKey('wholesale-df-buyer-body'), style: TextStyle(fontSize: 12.5, color: c.ink)),
           ],
           const SizedBox(height: 4),

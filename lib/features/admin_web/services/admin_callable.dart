@@ -69,6 +69,12 @@ String adminErrorText(Object error) {
     'CHAIN_LOCKED': 'Ҳамма бўлакка курьер топилган (қулфланган)',
     'CHAIN_NOT_LOCKED': 'Бўлаклар ҳали йиғилмоқда (қулфланмаган)',
     'CHAIN_EXPIRED': 'Йиғиш муддати тугаган',
+    // Улгуржи AVA улуши ҳисоботи (functions_demand/api/wholesale_fee_statement.js)
+    'period_invalid': 'Давр нотўғри (01, 11 ёки 21-кун)',
+    'month_invalid': 'Ой нотўғри (YYYY-MM)',
+    'period_not_closed': 'Давр ҳали тугамаган — «йиғилди» фақат ёпилган даврга',
+    'nothing_due': 'Бу даврда ушбу сотувчидан олинадиган улуш йўқ',
+    'statement_truncated': 'Даврда буюртмалар жуда кўп — ҳисобот тўлиқ эмас',
   };
   final mapped = byReason[error.reason];
   if (mapped != null) return mapped;

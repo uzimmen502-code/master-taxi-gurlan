@@ -49,6 +49,25 @@ abstract final class WholesalePaymentMethod {
 
   /// 3b: етказилганда сотувчи картасига.
   static const cardOnDelivery = 'card_on_delivery';
+
+  /// Банк ўтказмаси (эга, 2026-11-13/14): товар пули ИЛОВАДАН ТАШҚАРИДА (ҳисоб-фактура),
+  /// иловада фақат етказиш ҳақи — харидор ҳамёнидан ушланади.
+  static const bankTransfer = 'bank_transfer';
+}
+
+/// Банк ўтказмасида етказиш ҳақини харидор қандай тўлайди (сервер
+/// `DELIVERY_PAYMENT_METHODS`; ҳозир фақат ҳамён).
+abstract final class WholesaleDeliveryPaymentMethod {
+  static const wallet = 'wallet';
+}
+
+/// `bankPayment.status` (сервер `BANK_PAYMENT`). Майдон йўқ — банк буюртмаси
+/// эмас ёки сотувчи ҳали қабул қилмаган.
+abstract final class WholesaleBankPaymentStatus {
+  static const awaiting = 'awaiting';
+  static const confirmed = 'confirmed';
+  static const timeout = 'timeout';
+  static const cancelled = 'cancelled';
 }
 
 /// 3b: `cardPayment.status`.
@@ -158,7 +177,10 @@ class WholesaleDeliveryFailedReport {
 
   bool get awaitingDecision => pending && stage == 'awaiting_decision';
   bool get continued => !pending && resolutionDecision == 'continue';
-  bool get isWalletOrder => paymentMethod == WholesalePaymentMethod.wallet;
+  /// Етказиш ҳақини харидор ҳамёндан тўлаганми — ҳамён ВА банк ўтказмаси (сервер
+  /// `deliveryPaidByBuyer`: банк буюртмаси «етказилмади»да ҳамён қоидалари билан).
+  bool get isWalletOrder =>
+      paymentMethod == WholesalePaymentMethod.wallet || paymentMethod == WholesalePaymentMethod.bankTransfer;
 
   /// Курьер ойнасидаги сабаблар: сервер рўйхати (маълум кодлар тартибида), бўлмаса — ҳаммаси.
   List<String> get reasons {
@@ -295,7 +317,26 @@ class WholesaleOrder {
     this.sellerDecision = '',
     this.acceptDeadlineAt,
     this.cancelReason = '',
+    this.bankPaymentStatus = '',
+    this.bankPayDeadlineAt,
   });
+
+  /// Банк ўтказмаси: `bankPayment.status` ([WholesaleBankPaymentStatus]); бўш — қабулдан олдин
+  /// ёки банк буюртмаси эмас.
+  final String bankPaymentStatus;
+
+  /// Сотувчи шу вақтгача «Пул тушди»ни босиши керак (қабул + 5 иш куни, сервер ҳисоблайди).
+  final DateTime? bankPayDeadlineAt;
+
+  bool get isBankOrder => paymentMethod == WholesalePaymentMethod.bankTransfer;
+  bool get bankConfirmed => isBankOrder && bankPaymentStatus == WholesaleBankPaymentStatus.confirmed;
+
+  /// Банк тўлови кутилмоқда: қабул қилинган, ҳали `placed`, сотувчи «Пул тушди» босмаган.
+  bool get bankPaymentAwaiting =>
+      isBankOrder &&
+      status == WholesaleOrderStatus.placed &&
+      sellerDecision == 'accepted' &&
+      bankPaymentStatus == WholesaleBankPaymentStatus.awaiting;
 
   /// Сотувчи қарори (эга, 2026-11-13): `pending` | `accepted` | `rejected` | `timeout`;
   /// бўш — эски буюртма (қабул қадами бўлмаган, аввалгидек автоматик).
@@ -304,7 +345,7 @@ class WholesaleOrder {
   /// Сотувчи шу вақтгача жавоб бериши керак (2 иш куни, сервер ҳисоблайди).
   final DateTime? acceptDeadlineAt;
 
-  /// Бекор сабаби: `seller_rejected` | `seller_timeout` | бўш (харидор/админ).
+  /// Бекор сабаби: `seller_rejected` | `seller_timeout` | `bank_payment_timeout` | бўш (харидор/админ).
   final String cancelReason;
 
   /// Сотувчи жавобини кутяпти: ҳали `placed` ва қарор `pending`.
@@ -371,7 +412,8 @@ class WholesaleOrder {
 
   /// Харидорга ҳамён қайтими изоҳи калити (соф): товар суммаси қайтди (+ ушланган ҳақ ёки «курьер тўлайди»).
   String? walletRefundNoticeKey(String viewerId) {
-    if (isCardOrder || walletRefusalFault.isEmpty || walletRefundGoods <= 0 || !isBuyer(viewerId)) return null;
+    // Банк ўтказмаси (эга, 2026-11-14): товар пули иловадан ташқарида — қайтиш изоҳи йўқ.
+    if (isCardOrder || isBankOrder || walletRefusalFault.isEmpty || walletRefundGoods <= 0 || !isBuyer(viewerId)) return null;
     return walletRefusalFault == 'courier' ? 'wholesale_order_wallet_refund_courier' : 'wholesale_order_wallet_refund';
   }
 
@@ -403,6 +445,8 @@ class WholesaleOrder {
     if (status != WholesaleOrderStatus.lost) return null;
     if (isBuyer(viewerId)) {
       if (lostReview) return 'wholesale_order_lost_review';
+      // Банк ўтказмаси: товар пули ҳақида ҳеч нарса айтилмайди (эга, 2026-11-14).
+      if (isBankOrder) return 'wholesale_order_status_lost';
       if (lostRefundTo == 'buyer' && lostRefunded > 0) return 'wholesale_order_lost_refunded';
       if (isCardOrder) return 'wholesale_order_lost_card_unpaid';
       return 'wholesale_order_status_lost';
@@ -440,6 +484,7 @@ class WholesaleOrder {
     final pay = _map(d['payment']);
     final lost = _map(d['lost']);
     final wr = _map(d['walletRefusal']);
+    final bank = _map(d['bankPayment']);
     final method = _str(d['paymentMethod']);
     return WholesaleOrder(
       id: id,
@@ -479,6 +524,8 @@ class WholesaleOrder {
       sellerDecision: _str(d['sellerDecision']),
       acceptDeadlineAt: _date(d['acceptDeadlineAt']),
       cancelReason: _str(d['cancelReason']),
+      bankPaymentStatus: _str(bank['status']),
+      bankPayDeadlineAt: _date(d['bankPayDeadlineAt']),
     );
   }
 }
@@ -506,7 +553,19 @@ class WholesaleOrderActions {
     required this.showBuyerReturnDebt,
     required this.answerDeliveryFailed,
     required this.decideDeliveryFailed,
+    required this.canConfirmBankPayment,
+    required this.awaitingBankPayment,
+    required this.bankPaymentLate,
   });
+
+  /// Сотувчи (банк ўтказмаси): «Пул тушди» — қабул қилинган, тўлов кутилмоқда ва муддат ўтмаган.
+  final bool canConfirmBankPayment;
+
+  /// Харидор (банк ўтказмаси): «товар пулини банк орқали ўтказинг, сотувчи {муддат} гача тасдиқлайди».
+  final bool awaitingBankPayment;
+
+  /// Иккала томон: банк тўлови муддати ўтди, буюртма бекор қилинади (сервер текширувчиси).
+  final bool bankPaymentLate;
 
   final bool isBuyer;
   final bool isSeller;
@@ -560,14 +619,24 @@ class WholesaleOrderActions {
     final cardOpen = o.cardPaymentOpen;
     final submitted = o.cardPaymentStatus == WholesaleCardPaymentStatus.receiptSubmitted;
     final inDelivery = o.status == WholesaleOrderStatus.inDelivery;
+    final at = now ?? DateTime.now();
     final deadline = o.acceptDeadlineAt;
-    final inTime = deadline == null || (now ?? DateTime.now()).isBefore(deadline);
+    final inTime = deadline == null || at.isBefore(deadline);
+    // Банк тўлови муддати: йўқ — тасдиқ ҳам йўқ (сервер `bank_pay_deadline_missing`);
+    // муддат вақтида ва ундан кейин — текширувчи бекор қилади, тугма кўрсатилмайди.
+    final bankDeadline = o.bankPayDeadlineAt;
+    final bankAwaiting = o.bankPaymentAwaiting;
+    final bankInTime = bankDeadline != null && at.isBefore(bankDeadline);
     return WholesaleOrderActions._(
+      canConfirmBankPayment: seller && bankAwaiting && bankInTime,
+      awaitingBankPayment: buyer && bankAwaiting && bankInTime,
+      bankPaymentLate: (buyer || seller) && bankAwaiting && bankDeadline != null && !bankInTime,
       isBuyer: buyer,
       isSeller: seller,
       canDecide: seller && o.awaitingSellerDecision && inTime,
       awaitingDecision: (buyer || seller) && o.awaitingSellerDecision && !(seller && inTime),
-      canCancel: buyer && o.status == WholesaleOrderStatus.placed,
+      // Банк ўтказмаси: сотувчи «Пул тушди» босгач бекор йўқ (сервер `bank_payment_confirmed`).
+      canCancel: buyer && o.status == WholesaleOrderStatus.placed && !o.bankConfirmed,
       showDeliveryCode: buyer && inDelivery && (!o.isCardOrder || o.cardConfirmed),
       showCardInfo: buyer && cardOpen,
       canUploadReceipt: buyer && cardOpen && !submitted,

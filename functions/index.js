@@ -65,6 +65,10 @@ const { attachRelayEscrow } = require('./relay_escrow');
 attachRelayEscrow(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp, requireCallerRoles,
 });
+// AVA Logistics NAQD yetkazish haqi (S5, ega 2026-11-14): `onRelayCashShipmentUpdate`,
+// `relayCashReconcile` — YANGI nomlar, relay_escrow'ga tegmaydi (relay_cash.js izohi).
+const { attachRelayCash } = require('./relay_cash');
+attachRelayCash(exports, { functions, db, admin, canonicalUid, settlementLedger });
 // Kafe-restoran (D-REST-1…14, 2026-10-08): buyurtma zanjiri, 2 % AVA ulushi
 // (ledger), yetkazish tarifi, kuryer olish/yakun. `courierAuth` va
 // `notifyCourierArrivedToCustomer` — pastdagi hoisted declaration'lar.

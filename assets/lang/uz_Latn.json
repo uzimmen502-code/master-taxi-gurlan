@@ -5253,6 +5253,7 @@
   "wholesale_checkout_confirm": "Tasdiqlash va buyurtma berish",
   "wholesale_checkout_courier_note": "Sotuvchi 2 ish kunida tasdiqlaydi, keyin AVA kuryeri yetkazadi.",
   "wholesale_order_placed": "Buyurtma qabul qilindi",
+  "wholesale_order_status_awaiting_seller": "Sotuvchi javobini kutmoqda",
   "wholesale_order_accept_btn": "Qabul qilish",
   "wholesale_order_reject_btn": "Rad etish",
   "wholesale_order_accept_confirm": "Buyurtmani qabul qilasizmi? Shundan keyin AVA kuryeri tovarni sizdan olib ketadi.",

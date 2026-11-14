@@ -227,7 +227,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Flexible(child: WholesaleOrderStatusChip(status: o.status)),
+                  Flexible(
+                    child: WholesaleOrderStatusChip(status: o.status, awaitingSeller: o.awaitingSellerDecision),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -241,7 +243,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
         ),
         const SizedBox(height: 10),
-        _card(context, WholesaleOrderTimeline(status: o.status)),
+        _card(context, WholesaleOrderTimeline(status: o.status, awaitingSeller: o.awaitingSellerDecision)),
         if (a.canDecide || a.awaitingDecision) ...[
           const SizedBox(height: 10),
           _decisionCard(context, a),

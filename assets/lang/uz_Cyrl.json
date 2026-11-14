@@ -5253,6 +5253,7 @@
   "wholesale_checkout_confirm": "Тасдиқлаш ва буюртма бериш",
   "wholesale_checkout_courier_note": "Сотувчи 2 иш кунида тасдиқлайди, кейин AVA курьери етказади.",
   "wholesale_order_placed": "Буюртма қабул қилинди",
+  "wholesale_order_status_awaiting_seller": "Сотувчи жавобини кутмоқда",
   "wholesale_order_accept_btn": "Қабул қилиш",
   "wholesale_order_reject_btn": "Рад этиш",
   "wholesale_order_accept_confirm": "Буюртмани қабул қиласизми? Шундан кейин AVA курьери товарни сиздан олиб кетади.",

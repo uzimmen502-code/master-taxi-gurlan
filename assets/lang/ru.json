@@ -5253,6 +5253,7 @@
   "wholesale_checkout_confirm": "Подтвердить заказ",
   "wholesale_checkout_courier_note": "Продавец подтвердит в течение 2 рабочих дней, затем курьер AVA доставит.",
   "wholesale_order_placed": "Заказ оформлен",
+  "wholesale_order_status_awaiting_seller": "Ждёт ответа продавца",
   "wholesale_order_accept_btn": "Принять",
   "wholesale_order_reject_btn": "Отклонить",
   "wholesale_order_accept_confirm": "Принять заказ? После этого курьер AVA заберёт товар у вас.",

@@ -286,6 +286,12 @@ void main() {
       expect(find.byKey(_cancel), findsOneWidget);
     });
 
+    testWidgets('ҳолат белгиси ва биринчи қадам: «Сотувчи жавобини кутмоқда» («Қабул қилинди» эмас)', (tester) async {
+      await _pump(tester, pending(), _seller, now: now);
+      expect(find.text('wholesale_order_status_awaiting_seller'), findsNWidgets(2), reason: 'белги + вақт чизиғи');
+      expect(find.text(WholesaleOrderStatus.l10nKey(WholesaleOrderStatus.placed)), findsNothing);
+    });
+
     testWidgets('қабул қилингач (accepted): қарор картаси йўқ', (tester) async {
       await _pump(tester, _order(sellerDecision: 'accepted', deadline: deadline), _seller, now: now);
       expect(find.byKey(const ValueKey('wholesale-decision-card')), findsNothing);

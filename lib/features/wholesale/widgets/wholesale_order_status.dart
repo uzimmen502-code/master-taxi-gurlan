@@ -8,9 +8,15 @@ import '../models/wholesale_order.dart';
 /// Ҳолат чипи — relay'нинг [LogisticsStatusChip] ранглари қайта ишлатилади
 /// (иккинчи палитра ёзилмайди): буюртма ҳолати relay ранг сатрига мосланади.
 class WholesaleOrderStatusChip extends StatelessWidget {
-  const WholesaleOrderStatusChip({super.key, required this.status});
+  const WholesaleOrderStatusChip({super.key, required this.status, this.awaitingSeller = false});
 
   final String status;
+
+  /// Янги буюртма сотувчи қарорини кутяпти (эга, 2026-11-14): «Қабул қилинди»
+  /// ўрнига «Сотувчи жавобини кутмоқда» — сотувчи ҳали қабул қилмаган.
+  final bool awaitingSeller;
+
+  static const awaitingSellerKey = 'wholesale_order_status_awaiting_seller';
 
   static String colorWire(String status) => switch (status) {
         WholesaleOrderStatus.placed => 'pending',
@@ -23,7 +29,7 @@ class WholesaleOrderStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LogisticsStatusChip(
-        labelKey: WholesaleOrderStatus.l10nKey(status),
+        labelKey: awaitingSeller ? awaitingSellerKey : WholesaleOrderStatus.l10nKey(status),
         status: colorWire(status),
       );
 }
@@ -81,9 +87,12 @@ List<WholesaleTimelineStep> wholesaleTimelineSteps(String status) {
 }
 
 class WholesaleOrderTimeline extends StatelessWidget {
-  const WholesaleOrderTimeline({super.key, required this.status});
+  const WholesaleOrderTimeline({super.key, required this.status, this.awaitingSeller = false});
 
   final String status;
+
+  /// Биринчи қадам матни — «Сотувчи жавобини кутмоқда» ([WholesaleOrderStatusChip.awaitingSeller]).
+  final bool awaitingSeller;
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +129,9 @@ class WholesaleOrderTimeline extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  context.tr(WholesaleOrderStatus.l10nKey(step.status)),
+                  context.tr(awaitingSeller && i == 0 && step.status == WholesaleOrderStatus.placed
+                      ? WholesaleOrderStatusChip.awaitingSellerKey
+                      : WholesaleOrderStatus.l10nKey(step.status)),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: step.state == WholesaleStepState.current ? FontWeight.w700 : FontWeight.w500,

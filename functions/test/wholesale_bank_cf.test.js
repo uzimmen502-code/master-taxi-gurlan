@@ -260,9 +260,11 @@ const deliveryEvent = (id, legId, payout) => ({
     assert.strictEqual(await bal(pcOf(BUYER)), FEE - 1);
   });
 
-  await check('place (bank): muhr buzilgan — deliveryPaymentMethod cash → unsupported; bankHold ≠ haq / haq 0 → quote_invalid', async () => {
+  await check('place (bank): muhr buzilgan — naqd + bankHold ≠ 0 → quote_invalid, noma\'lum usul → unsupported; bankHold ≠ haq / haq 0 → quote_invalid', async () => {
     for (const [extra, reason] of [
-      [{ deliveryPaymentMethod: 'cash' }, 'delivery_payment_method_unsupported'],
+      // S57: naqd endi qo'llanadi — lekin naqd muhrida bankHold 0 bo'lishi SHART (haq hamyondan ushlanmaydi).
+      [{ deliveryPaymentMethod: 'cash' }, 'quote_invalid'],
+      [{ deliveryPaymentMethod: 'card' }, 'delivery_payment_method_unsupported'],
       [{ bankHold: FEE - 1 }, 'quote_invalid'],
       [{ deliveryFee: 0, total: G, bankHold: 0 }, 'quote_invalid'],
     ]) {

@@ -209,7 +209,7 @@ class WholesaleOrderTile extends StatelessWidget {
                 child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  WholesaleOrderStatusChip(status: o.status, awaitingSeller: o.awaitingSellerDecision),
+                  WholesaleOrderStatusChip(status: o.status, awaitingSeller: o.awaitingSellerDecision, self: o.isSelf),
                   const SizedBox(height: 4),
                   Text(
                     formatMoney(o.total),

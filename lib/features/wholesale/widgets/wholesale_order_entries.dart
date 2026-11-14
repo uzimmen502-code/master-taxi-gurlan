@@ -13,7 +13,9 @@ import 'package:flutter/services.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_order.dart';
+import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_orders_repository.dart';
+import '../repositories/wholesale_sellers_repository.dart';
 import '../screens/wholesale_orders_screen.dart';
 import '../utils/wholesale_order_errors.dart';
 
@@ -50,9 +52,22 @@ class WholesaleBuyerOrdersAction extends StatelessWidget {
 }
 
 class WholesaleSellerOrdersPanel extends StatelessWidget {
-  const WholesaleSellerOrdersPanel({super.key, required this.sellerPhone, this.cardLast4 = '', this.repository});
+  const WholesaleSellerOrdersPanel({
+    super.key,
+    required this.sellerPhone,
+    this.cardLast4 = '',
+    this.repository,
+    this.selfDelivery = WholesaleSelfDeliverySettings.off,
+    this.saveSelfDelivery,
+  });
 
   final String sellerPhone;
+
+  /// S4: «Ўзим етказаман» жорий созламаси (`wholesale_sellers.selfDelivery`).
+  final WholesaleSelfDeliverySettings selfDelivery;
+
+  /// Тест учун: сақлаш амали (стандарт — [WholesaleSellersRepository.updateSelfDelivery]).
+  final WholesaleSelfDeliverySave? saveSelfDelivery;
 
   /// Жорий тўлов картасининг охирги 4 рақами (`wholesale_sellers.cardLast4`); бўш — йўқ.
   final String cardLast4;
@@ -99,6 +114,25 @@ class WholesaleSellerOrdersPanel extends StatelessWidget {
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => showWholesaleSellerCardSheet(context, repository: repo),
+              ),
+              ListTile(
+                key: const ValueKey('wholesale-self-delivery-row'),
+                leading: const Icon(Icons.local_shipping_outlined),
+                title: Text(context.tr('wholesale_self_title')),
+                subtitle: Text(
+                  selfDelivery.enabled
+                      ? '${context.tr(WholesaleSelfDeliverySettings.coverageLabelKey(selfDelivery.coverage))} · '
+                          '${context.tr(WholesaleSelfDeliverySettings.dropoffLabelKey(selfDelivery.dropoff))}'
+                      : context.tr('wholesale_self_off'),
+                  key: const ValueKey('wholesale-self-delivery-current'),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showWholesaleSelfDeliverySheet(
+                  context,
+                  initial: selfDelivery,
+                  save: saveSelfDelivery ??
+                      (s) => WholesaleSellersRepository().updateSelfDelivery(sellerPhone, s),
+                ),
               ),
               Divider(height: 1, color: AppColors.cardBorderMuted),
             ],
@@ -243,6 +277,140 @@ class _WholesaleSellerCardSheetState extends State<WholesaleSellerCardSheet> {
             ],
             const SizedBox(height: 12),
             FilledButton(
+              onPressed: _busy ? null : _save,
+              child: _busy
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(context.tr('save')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// S4: «Ўзим етказаман» созламасини сақлаш (тестда алмаштирилади).
+typedef WholesaleSelfDeliverySave = Future<void> Function(WholesaleSelfDeliverySettings settings);
+
+/// S4 (эга, 2026-11-13/14): «Ўзим етказаман» варағи — ёқиш, қамров (туман/вилоят/бутун
+/// Ўзбекистон) ва қаергача (туман маркази / харидор манзили). Модерациясиз (сотувчи ўзи).
+/// Сақланса `true` қайтади ва хабар чиқади.
+Future<bool> showWholesaleSelfDeliverySheet(
+  BuildContext context, {
+  required WholesaleSelfDeliverySettings initial,
+  required WholesaleSelfDeliverySave save,
+}) async {
+  final ok = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => WholesaleSelfDeliverySheet(initial: initial, save: save),
+  );
+  if (ok == true && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('wholesale_self_saved'))));
+  }
+  return ok == true;
+}
+
+class WholesaleSelfDeliverySheet extends StatefulWidget {
+  const WholesaleSelfDeliverySheet({super.key, required this.initial, required this.save});
+
+  final WholesaleSelfDeliverySettings initial;
+  final WholesaleSelfDeliverySave save;
+
+  @override
+  State<WholesaleSelfDeliverySheet> createState() => _WholesaleSelfDeliverySheetState();
+}
+
+class _WholesaleSelfDeliverySheetState extends State<WholesaleSelfDeliverySheet> {
+  late WholesaleSelfDeliverySettings _v = widget.initial;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.save(_v);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      debugPrint('[Wholesale] updateSelfDelivery failed: ${e.runtimeType}');
+      if (mounted) setState(() => _error = context.tr('wholesale_action_failed'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = TextStyle(fontSize: 12, color: AppColors.sectionMuted);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              key: const ValueKey('wholesale-self-switch'),
+              contentPadding: EdgeInsets.zero,
+              value: _v.enabled,
+              onChanged: _busy ? null : (on) => setState(() => _v = _v.copyWith(enabled: on)),
+              title: Text(context.tr('wholesale_self_title'),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              subtitle: Text(context.tr('wholesale_self_price_note'), style: muted),
+            ),
+            if (_v.enabled) ...[
+              const SizedBox(height: 6),
+              Text(context.tr('wholesale_self_coverage_title'), style: const TextStyle(fontWeight: FontWeight.w600)),
+              RadioGroup<String>(
+                groupValue: _v.coverage,
+                onChanged: (c) {
+                  if (c != null && !_busy) setState(() => _v = _v.copyWith(coverage: c));
+                },
+                child: Column(
+                  children: [
+                    for (final c in WholesaleSelfDeliverySettings.coverages)
+                      RadioListTile<String>(
+                        key: ValueKey('wholesale-self-coverage-$c'),
+                        value: c,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(context.tr(WholesaleSelfDeliverySettings.coverageLabelKey(c))),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(context.tr('wholesale_self_dropoff_title'), style: const TextStyle(fontWeight: FontWeight.w600)),
+              RadioGroup<String>(
+                groupValue: _v.dropoff,
+                onChanged: (d) {
+                  if (d != null && !_busy) setState(() => _v = _v.copyWith(dropoff: d));
+                },
+                child: Column(
+                  children: [
+                    for (final d in WholesaleSelfDeliverySettings.dropoffs)
+                      RadioListTile<String>(
+                        key: ValueKey('wholesale-self-dropoff-$d'),
+                        value: d,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(context.tr(WholesaleSelfDeliverySettings.dropoffLabelKey(d))),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(_error!, style: TextStyle(fontSize: 12, color: AppColors.error)),
+            ],
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const ValueKey('wholesale-self-save'),
               onPressed: _busy ? null : _save,
               child: _busy
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))

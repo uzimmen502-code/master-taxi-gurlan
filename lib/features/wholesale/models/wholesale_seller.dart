@@ -1,5 +1,62 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// S4 (эга, 2026-11-13/14): сотувчининг ЎЗ етказиши — `wholesale_sellers/{phone}.selfDelivery`
+/// `{enabled, coverage, dropoff}`. Шакл Rules `wholesaleSelfDeliveryOk` ва сервер
+/// `SELF_COVERAGES` / `SELF_DROPOFFS` билан АЙНАН бир хил (учала калит доим бирга).
+/// Ҳал қилувчи — сервер квотаси (`selfAvailability`); бу ерда фақат сақлаш/кўрсатиш.
+class WholesaleSelfDeliverySettings {
+  const WholesaleSelfDeliverySettings({
+    this.enabled = false,
+    this.coverage = coverageDistrict,
+    this.dropoff = dropoffDistrictCenter,
+  });
+
+  static const off = WholesaleSelfDeliverySettings();
+
+  static const coverageDistrict = 'district';
+  static const coverageRegion = 'region';
+  static const coverageNation = 'nation';
+  static const coverages = [coverageDistrict, coverageRegion, coverageNation];
+
+  static const dropoffDistrictCenter = 'district_center';
+  static const dropoffBuyerAddress = 'buyer_address';
+  static const dropoffs = [dropoffDistrictCenter, dropoffBuyerAddress];
+
+  final bool enabled;
+  final String coverage;
+  final String dropoff;
+
+  /// Эски/бузуқ ҳужжат — ўчиқ (сервер ҳам бузуқ созламани «ёпиқ» деб ҳисоблайди).
+  factory WholesaleSelfDeliverySettings.fromMap(Object? raw) {
+    if (raw is! Map) return off;
+    final c = raw['coverage'];
+    final d = raw['dropoff'];
+    final valid = coverages.contains(c) && dropoffs.contains(d);
+    return WholesaleSelfDeliverySettings(
+      enabled: valid && raw['enabled'] == true,
+      coverage: coverages.contains(c) ? c as String : coverageDistrict,
+      dropoff: dropoffs.contains(d) ? d as String : dropoffDistrictCenter,
+    );
+  }
+
+  /// Rules: ФАҚАТ шу уч калит, учаласи ҳам бор.
+  Map<String, dynamic> toFirestore() => {
+        'enabled': enabled,
+        'coverage': coverages.contains(coverage) ? coverage : coverageDistrict,
+        'dropoff': dropoffs.contains(dropoff) ? dropoff : dropoffDistrictCenter,
+      };
+
+  WholesaleSelfDeliverySettings copyWith({bool? enabled, String? coverage, String? dropoff}) =>
+      WholesaleSelfDeliverySettings(
+        enabled: enabled ?? this.enabled,
+        coverage: coverage ?? this.coverage,
+        dropoff: dropoff ?? this.dropoff,
+      );
+
+  static String coverageLabelKey(String c) => 'wholesale_self_coverage_$c';
+  static String dropoffLabelKey(String d) => 'wholesale_self_dropoff_$d';
+}
+
 /// Улгуржи сотувчи (ишлаб чиқарувчи/оптовик/ЯТТ) — `wholesale_sellers/{phone}`.
 ///
 /// Ҳужжат ID — каноник телефон (`canonicalPhoneId`, 998XXXXXXXXX). Рўйхатдан
@@ -23,7 +80,11 @@ class WholesaleSeller {
     this.hasPayoutCard = false,
     this.cardLast4 = '',
     this.chinaSellerType = '',
+    this.selfDelivery = WholesaleSelfDeliverySettings.off,
   });
+
+  /// S4: ўз етказиши созламаси (йўқ — ўчиқ).
+  final WholesaleSelfDeliverySettings selfDelivery;
 
   /// Хитой бозоридаги тури (эга, 2026-11-13, «Б»): Улгуржи [sellerType]дан
   /// АЛОҲИДА — фақат Хитой магазинида кўринади. Rules `wholesaleChinaSellerTypeOk`.
@@ -149,6 +210,7 @@ class WholesaleSeller {
       hasPayoutCard: d['hasPayoutCard'] == true,
       cardLast4: (d['cardLast4'] as String?)?.trim() ?? '',
       chinaSellerType: (d['chinaSellerType'] as String?)?.trim() ?? '',
+      selfDelivery: WholesaleSelfDeliverySettings.fromMap(d['selfDelivery']),
     );
   }
 

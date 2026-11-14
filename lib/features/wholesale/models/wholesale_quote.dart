@@ -33,6 +33,33 @@ class WholesaleDestination {
       };
 }
 
+/// S4: етказиш усули (сервер `DELIVERY_METHOD`; йўқ — `ava_courier`).
+abstract final class WholesaleDeliveryMethod {
+  static const avaCourier = 'ava_courier';
+  static const self = 'self';
+}
+
+/// S6 (эга, 2026-11-13): ким қачон қанча тўлайди — сервер `payPlan` (илова ҳисобламайди).
+///   wallet — ҳозир ҳамёндан: товар + етказиш;
+///   card   — ҳозир ҳамёндан: етказиш ҳақи; эшик олдида сотувчи картасига: ФАҚАТ товар;
+///   bank   — ҳозир ҳамёндан: етказиш ҳақи; банк орқали: товар.
+class WholesalePayPlan {
+  const WholesalePayPlan({required this.walletNow, required this.atDoorToSellerCard, required this.bankTransfer});
+
+  final int walletNow;
+  final int atDoorToSellerCard;
+  final int bankTransfer;
+
+  static WholesalePayPlan? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    return WholesalePayPlan(
+      walletNow: _int(raw['walletNow']),
+      atDoorToSellerCard: _int(raw['atDoorToSellerCard']),
+      bankTransfer: _int(raw['bankTransfer']),
+    );
+  }
+}
+
 class WholesaleQuote {
   const WholesaleQuote({
     required this.quoteId,
@@ -51,14 +78,44 @@ class WholesaleQuote {
     this.bankTransferAvailable = false,
     this.bankUnavailableReason = '',
     this.walletHold,
+    this.payPlan,
+    this.deliveryMethod = WholesaleDeliveryMethod.avaCourier,
+    this.courierAvailable = true,
+    this.selfAvailable = false,
+    this.selfUnavailableReason = '',
+    this.selfCoverage = '',
+    this.selfDropoff = '',
   });
+
+  /// S6: тўлов режаси (эски серверда `null`).
+  final WholesalePayPlan? payPlan;
+
+  /// S4: шу квота қайси усул учун (`ava_courier` | `self`).
+  final String deliveryMethod;
+
+  /// S4: `deliveryMethods` — бу буюртмада мавжуд усуллар (сервер ҳал қилади).
+  final bool courierAvailable;
+  final bool selfAvailable;
+
+  /// `self_disabled` | `self_settings_invalid` | `out_of_coverage` | бўш.
+  final String selfUnavailableReason;
+
+  /// Ўз етказиши мумкин бўлса: `district|region|nation` ва `district_center|buyer_address`.
+  final String selfCoverage;
+  final String selfDropoff;
+
+  bool get isSelf => deliveryMethod == WholesaleDeliveryMethod.self;
+
+  /// Ҳозир ҳамёндан ушланадиган сумма (S6: карта ва банкда — етказиш ҳақи; ўз етказишида 0).
+  /// Сервер `payPlan.walletNow`, бўлмаса `walletHold`; иккаласи ҳам йўқ — `null`.
+  int? get walletNowAmount => payPlan?.walletNow ?? walletHold;
 
   /// Банк ўтказмаси (эга, 2026-11-13/14) — ФАҚАТ сервер `paymentMethods.bank_transfer == true` деса.
   final bool bankTransferAvailable;
   final String bankUnavailableReason;
 
-  /// Банк квотасида ҳамёндан ҳозир ушланадиган сумма (= етказиш ҳақи, сервер ҳисоблайди);
-  /// бошқа усулда `null`.
+  /// Банк ва (S6) карта квотасида ҳамёндан ҳозир ушланадиган сумма (= етказиш ҳақи,
+  /// сервер ҳисоблайди); ҳамён усулида `null`.
   final int? walletHold;
 
   final String quoteId;
@@ -84,7 +141,19 @@ class WholesaleQuote {
     // Жонли сервер `expiresAtMs` (сон) қайтаради; `expiresAt` ҳам қабул.
     final ms = d['expiresAtMs'] ?? d['expiresAt'];
     final methods = d['paymentMethods'];
+    final dms = d['deliveryMethods'];
+    final self = d['selfDelivery'] is Map ? d['selfDelivery'] as Map : const {};
     return WholesaleQuote(
+      payPlan: WholesalePayPlan.fromMap(d['payPlan']),
+      deliveryMethod: _str(d['deliveryMethod']) == WholesaleDeliveryMethod.self
+          ? WholesaleDeliveryMethod.self
+          : WholesaleDeliveryMethod.avaCourier,
+      // Эски сервер (`deliveryMethods` йўқ) — фақат курьер.
+      courierAvailable: dms is Map ? dms['ava_courier'] == true : true,
+      selfAvailable: dms is Map && dms['self'] == true,
+      selfUnavailableReason: _str(d['selfUnavailableReason']),
+      selfCoverage: _str(self['coverage']),
+      selfDropoff: _str(self['dropoff']),
       quoteId: _str(d['quoteId']),
       unitPrice: _int(d['unitPrice']),
       goodsTotal: _int(d['goodsTotal']),

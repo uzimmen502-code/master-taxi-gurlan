@@ -106,6 +106,21 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'reason_required': 'wholesale_courier_failed_err_reason',
   'wallet_payment_state': 'wholesale_df_err_state',
   'decision_invalid': 'wholesale_order_err_generic',
+  // S4 ўз етказиши (2026-11-14, functions_demand wholesale_self.js + квота).
+  // `self_delivery_unavailable` — пастда, сабаби `details.selfUnavailableReason` да.
+  // `seller_not_accepted` (банк билан умумий), `order_not_placed`, `order_not_in_delivery`,
+  // `card_payment_*`, `reason_invalid` — юқорида.
+  'order_required': 'wholesale_order_err_generic',
+  'delivery_method_invalid': 'wholesale_self_unavailable',
+  'not_self_delivery': 'wholesale_order_err_invalid_transition',
+  'bank_payment_unconfirmed': 'wholesale_self_err_bank_unconfirmed',
+  'code_format': 'wholesale_self_code_err',
+  'code_not_ready': 'wholesale_self_err_code_not_ready',
+  'delivery_code_invalid': 'wholesale_self_err_code_invalid',
+  'code_locked': 'wholesale_self_err_code_locked',
+  'order_not_refused': 'wholesale_order_err_invalid_transition',
+  'refund_pending': 'wholesale_self_return_wait',
+  'self_delivery_not_started': 'wholesale_self_err_not_started',
 };
 
 /// Квота/ўтказишда «буюртма бериш бу фойдаланувчига ёпиқ» маъносидаги
@@ -123,6 +138,9 @@ String wholesaleOrderErrorKey(Object error) {
     }
     if (error.reason == 'bank_transfer_unavailable') {
       return wholesaleBankUnavailableKey('${error.details['bankUnavailableReason'] ?? ''}');
+    }
+    if (error.reason == 'self_delivery_unavailable') {
+      return wholesaleSelfUnavailableKey('${error.details['selfUnavailableReason'] ?? ''}');
     }
     if (error.reason == 'card_number_invalid') {
       return error.details['check'] == 'luhn' ? 'wholesale_order_err_card_luhn' : 'wholesale_seller_card_err_number';
@@ -150,6 +168,14 @@ String wholesaleCardUnavailableKey(String reason) => switch (reason) {
       'buyer_limited' => 'wholesale_pay_card_unavailable_buyer_limited',
       'seller_balance' => 'wholesale_pay_card_unavailable_seller_balance',
       _ => 'wholesale_pay_card_unavailable',
+    };
+
+/// S4: ўз етказиши ёпиқлиги сабаби (квота `selfUnavailableReason`: `self_disabled` |
+/// `self_settings_invalid` | `out_of_coverage`) → матн. Харидорга фақат «манзил қамровдан ташқари»
+/// фарқли; қолгани — умумий «мавжуд эмас».
+String wholesaleSelfUnavailableKey(String reason) => switch (reason) {
+      'out_of_coverage' => 'wholesale_self_unavailable_out_of_coverage',
+      _ => 'wholesale_self_unavailable',
     };
 
 /// Банк ўтказмаси ёпиқлиги сабаби (квота `bankUnavailableReason`: `seller_not_approved` |

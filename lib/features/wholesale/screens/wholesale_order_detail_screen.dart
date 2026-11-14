@@ -149,9 +149,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     // Банк ўтказмаси: товар пули иловада йўқ — фақат ушланган етказиш ҳақи қайтиши айтилади.
     final body = [
       context.tr('wholesale_order_cancel_confirm'),
-      if (_o.isBankOrder)
+      if (_o.walletHeldDeliveryOnly)
         context.tr('wholesale_order_cancel_refund_note_bank')
-      else if (!_o.isCardOrder)
+      else if (!_o.isCardOrder && !_nothingHeld(_o))
         context.tr('wholesale_order_cancel_refund_note'),
     ].join('\n');
     if (!await _confirm(body)) return;
@@ -168,7 +168,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     await _run(() async => code = await widget.repository.deliveryCode(_o.id));
     final c = code;
     if (c == null || !mounted) return;
-    await showDialog<void>(context: context, builder: (_) => _DeliveryCodeDialog(code: c));
+    await showDialog<void>(context: context, builder: (_) => _DeliveryCodeDialog(code: c, self: _o.isSelf));
   }
 
   Future<void> _showCardInfo() async {
@@ -179,7 +179,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => _CardInfoSheet(info: i),
+      builder: (_) => _CardInfoSheet(info: i, goodsOnly: _o.isNewCard),
     );
   }
 
@@ -200,7 +200,10 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   Future<void> _confirmMoney() async {
     final ok = await _confirm(
-      context.trMsg('wholesale_order_money_received_confirm', params: {'amount': formatMoney(_o.total)}),
+      // S6: янги картада эшик олдида фақат товар суммаси; эски картада — товар + етказиш.
+      context.trMsg(
+          _o.isSelf ? 'wholesale_order_money_received_confirm_self' : 'wholesale_order_money_received_confirm',
+          params: {'amount': formatMoney(_o.cardAtDoorAmount)}),
       title: context.tr('wholesale_order_money_received_btn'),
     );
     if (!ok) return;
@@ -213,13 +216,14 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   /// Банк ўтказмаси: «Пул тушди» (товар суммаси сотувчи банк ҳисобига тушди) → курьер.
   Future<void> _confirmBankMoney() async {
     final ok = await _confirm(
-      context.trMsg('wholesale_order_bank_confirm_dialog', params: {'amount': formatMoney(_o.goodsTotal)}),
+      context.trMsg(_o.isSelf ? 'wholesale_order_bank_confirm_dialog_self' : 'wholesale_order_bank_confirm_dialog',
+          params: {'amount': formatMoney(_o.goodsTotal)}),
       title: context.tr('wholesale_order_money_received_btn'),
     );
     if (!ok) return;
     await _run(() async {
       await widget.repository.confirmBankPayment(_o.id);
-      _snack('wholesale_order_bank_confirmed');
+      _snack(_o.isSelf ? 'wholesale_order_bank_confirmed_self' : 'wholesale_order_bank_confirmed');
     });
   }
 
@@ -248,7 +252,8 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
                   ),
                   const SizedBox(width: 8),
                   Flexible(
-                    child: WholesaleOrderStatusChip(status: o.status, awaitingSeller: o.awaitingSellerDecision),
+                    child: WholesaleOrderStatusChip(
+                        status: o.status, awaitingSeller: o.awaitingSellerDecision, self: o.isSelf),
                   ),
                 ],
               ),
@@ -263,7 +268,30 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
         ),
         const SizedBox(height: 10),
-        _card(context, WholesaleOrderTimeline(status: o.status, awaitingSeller: o.awaitingSellerDecision)),
+        _card(context,
+            WholesaleOrderTimeline(status: o.status, awaitingSeller: o.awaitingSellerDecision, self: o.isSelf)),
+        if (o.isSelf && _selfNoticeKey(a) != null) ...[
+          const SizedBox(height: 10),
+          _notice(context, _selfNoticeKey(a)!, key: const ValueKey('wholesale-self-notice')),
+        ],
+        if (o.selfRefusedNoticeKey(widget.viewerId) != null) ...[
+          const SizedBox(height: 10),
+          _notice(context, o.selfRefusedNoticeKey(widget.viewerId)!,
+              warn: true, key: const ValueKey('wholesale-self-refused-notice')),
+        ],
+        if (o.cardReturnFeeNoticeKey(widget.viewerId) != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('wholesale-card-return-fee-notice'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: c.warnSoft, borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              context.trMsg(o.cardReturnFeeNoticeKey(widget.viewerId)!,
+                  params: {'fee': formatMoney(o.walletReturnFeeCharged)}),
+              style: TextStyle(fontSize: 12, color: c.warn, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
         if (a.canDecide || a.awaitingDecision) ...[
           const SizedBox(height: 10),
           _decisionCard(context, a),
@@ -274,7 +302,8 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         ],
         if (o.bankConfirmed && o.status == WholesaleOrderStatus.placed && (a.isBuyer || a.isSeller)) ...[
           const SizedBox(height: 10),
-          _notice(context, 'wholesale_order_bank_confirmed', ok: true, key: const ValueKey('wholesale-bank-confirmed')),
+          _notice(context, o.isSelf ? 'wholesale_order_bank_confirmed_self' : 'wholesale_order_bank_confirmed',
+              ok: true, key: const ValueKey('wholesale-bank-confirmed')),
         ],
         if (_cancelReasonKey(o) != null) ...[
           const SizedBox(height: 10),
@@ -287,8 +316,8 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         ],
         if (o.status == WholesaleOrderStatus.paymentDispute) ...[
           const SizedBox(height: 10),
-          _notice(context, 'wholesale_order_status_payment_dispute', warn: true,
-              key: const ValueKey('wholesale-dispute-banner')),
+          _notice(context, 'wholesale_order_status_payment_dispute',
+              warn: true, key: const ValueKey('wholesale-dispute-banner')),
         ],
         if (o.lostNoticeKey(widget.viewerId) != null) ...[
           const SizedBox(height: 10),
@@ -327,20 +356,40 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           Column(
             children: [
               _line(context, context.tr('wholesale_quote_goods'), formatMoney(o.goodsTotal)),
-              _line(context, context.tr('wholesale_quote_delivery'), formatMoney(o.deliveryFee)),
+              // S4: ўз етказишида етказиш нархи товар нархи ичида (сервер deliveryFee 0).
+              _line(context, context.tr('wholesale_quote_delivery'),
+                  o.isSelf ? context.tr('wholesale_self_fee_included') : formatMoney(o.deliveryFee)),
               Divider(height: 10, color: c.line),
               _line(context, context.tr('wholesale_quote_total'), formatMoney(o.total), bold: true),
+              // S6 янги карта: етказиш ҳақи ҳамёндан тўланган, эшик олдида — фақат товар.
+              if (o.isNewCard && o.deliveryFee > 0)
+                _line(context, context.tr('wholesale_order_card_paid_wallet'), formatMoney(o.deliveryFee)),
+              if (o.isCardOrder)
+                Container(
+                  key: const ValueKey('wholesale-order-card-at-door'),
+                  child: _line(context, context.tr('wholesale_order_card_at_door'), formatMoney(o.cardAtDoorAmount)),
+                ),
               const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  context.tr(o.isBankOrder
-                      ? 'wholesale_order_payment_bank'
-                      : (o.isCardOrder ? 'wholesale_order_payment_card' : 'wholesale_order_payment_wallet')),
+                  context.tr(_paymentLabelKey(o)),
+                  key: const ValueKey('wholesale-order-payment-label'),
                   style: TextStyle(fontSize: 12, color: c.ink2),
                 ),
               ),
-              if (o.trackingNumber.isNotEmpty)
+              if (o.isSelf)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    context.tr(o.selfDropoff == 'buyer_address'
+                        ? 'wholesale_order_self_dropoff_buyer_address'
+                        : 'wholesale_order_self_dropoff_district_center'),
+                    key: const ValueKey('wholesale-order-self-dropoff'),
+                    style: TextStyle(fontSize: 12, color: c.ink2),
+                  ),
+                ),
+              if (o.trackingNumber.isNotEmpty && !o.isSelf)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: SelectableText(
@@ -392,7 +441,8 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         _primary(context, 'wholesale_order_delivery_code_btn', Icons.pin_outlined, _showCode,
             key: const ValueKey('wholesale-delivery-code')),
         const SizedBox(height: 4),
-        Text(context.tr('wholesale_order_delivery_code_hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
+        Text(context.tr(_o.isSelf ? 'wholesale_order_delivery_code_hint_self' : 'wholesale_order_delivery_code_hint'),
+            key: const ValueKey('wholesale-delivery-code-hint'), style: TextStyle(fontSize: 12, color: c.ink2)),
         const SizedBox(height: 10),
       ],
       if (a.codeAfterCardConfirm) ...[
@@ -447,13 +497,11 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
         ),
       ],
-      if (a.canConfirmCardPayment &&
-          o.cardPaymentStatus != WholesaleCardPaymentStatus.receiptSubmitted) ...[
+      if (a.canConfirmCardPayment && o.cardPaymentStatus != WholesaleCardPaymentStatus.receiptSubmitted) ...[
         _notice(context, 'wholesale_order_card_awaiting_seller'),
         const SizedBox(height: 8),
       ],
-      if (a.canConfirmCardPayment &&
-          o.cardPaymentStatus == WholesaleCardPaymentStatus.receiptSubmitted) ...[
+      if (a.canConfirmCardPayment && o.cardPaymentStatus == WholesaleCardPaymentStatus.receiptSubmitted) ...[
         _notice(context, 'wholesale_order_receipt_window', warn: true),
         const SizedBox(height: 8),
       ],
@@ -465,21 +513,131 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
         _primary(context, 'wholesale_order_money_received_btn', Icons.payments_outlined, _confirmMoney,
             key: const ValueKey('wholesale-money-received')),
       if (o.isCardOrder && o.cardConfirmed) _notice(context, 'wholesale_order_card_confirmed', ok: true),
+      if (o.isSelf) ...[const SizedBox(height: 8), ..._selfSellerActions(context, a)],
     ];
   }
 
   // ── Сотувчи қарори (эга, 2026-11-13): 2 иш кунида қабул ёки рад ─────
 
+  /// Ҳамёндан ҳеч нарса ушланмаган: ўз етказиши карта/банк орқали (етказиш ҳақи 0, товар пули ташқарида).
+  static bool _nothingHeld(WholesaleOrder o) => o.isSelf && o.paymentMethod != WholesalePaymentMethod.wallet;
+
   static String? _cancelReasonKey(WholesaleOrder o) {
     if (o.status != WholesaleOrderStatus.cancelled) return null;
-    // Банк ўтказмаси: фақат етказиш ҳақи қайтиши айтилади (товар пули иловада бўлмаган).
-    final bank = o.isBankOrder ? '_bank' : '';
+    // Банк ўтказмаси ва S6 янги карта: фақат етказиш ҳақи қайтиши айтилади (товар пули иловада бўлмаган).
+    // Ўз етказиши карта/банк — ҳамёндан ҳеч нарса ушланмаган.
+    final suffix = _nothingHeld(o) ? '_nohold' : (o.walletHeldDeliveryOnly ? '_bank' : '');
     return switch (o.cancelReason) {
-      'seller_rejected' => 'wholesale_order_cancel_seller_rejected$bank',
-      'seller_timeout' => 'wholesale_order_cancel_seller_timeout$bank',
-      'bank_payment_timeout' => 'wholesale_order_cancel_bank_payment_timeout',
+      'seller_rejected' => 'wholesale_order_cancel_seller_rejected$suffix',
+      'seller_timeout' => 'wholesale_order_cancel_seller_timeout$suffix',
+      'bank_payment_timeout' => _nothingHeld(o)
+          ? 'wholesale_order_cancel_bank_payment_timeout_self'
+          : 'wholesale_order_cancel_bank_payment_timeout',
       _ => null,
     };
+  }
+
+  /// Тўлов усули матни: S6 янги карта — етказиш ҳамёндан, товар эшик олдида картага.
+  static String _paymentLabelKey(WholesaleOrder o) {
+    if (o.isBankOrder) return o.isSelf ? 'wholesale_order_payment_bank_self' : 'wholesale_order_payment_bank';
+    if (o.isNewCard) return 'wholesale_order_payment_card_new';
+    if (o.isCardOrder) return 'wholesale_order_payment_card';
+    return 'wholesale_order_payment_wallet';
+  }
+
+  /// S4 ўз етказиши ҳолати изоҳи (иккала томонга, тугмалардан ташқари).
+  String? _selfNoticeKey(WholesaleOrderActions a) {
+    if (a.selfCompletedWaiting) return 'wholesale_self_completed_wait';
+    if (a.selfAwaitingStart) return 'wholesale_self_buyer_wait_start';
+    if (a.isBuyer && _o.status == WholesaleOrderStatus.inDelivery && _o.selfStatus == WholesaleSelfStatus.inDelivery) {
+      return 'wholesale_self_buyer_on_way';
+    }
+    if (a.canStartSelf) return 'wholesale_self_seller_start_hint';
+    if (a.selfCompleteAfterCard) return 'wholesale_self_complete_after_card';
+    if (a.selfReturnWaitRefund) return 'wholesale_self_return_wait';
+    return null;
+  }
+
+  // ── S4: ўз етказиши амаллари ───────────────────────────────────────
+
+  Future<void> _startSelf() async {
+    if (!await _confirm(context.tr('wholesale_self_start_confirm'), title: context.tr('wholesale_self_start_btn'))) {
+      return;
+    }
+    await _run(() async {
+      await widget.repository.startSelfDelivery(_o.id);
+      _snack('wholesale_self_started_snack');
+    });
+  }
+
+  Future<void> _completeSelf() async {
+    final code = await showDialog<String>(context: context, builder: (_) => const WholesaleSelfCodeDialog());
+    if (code == null || !mounted) return;
+    await _run(() async {
+      await widget.repository.completeSelfDelivery(orderId: _o.id, code: code);
+      _snack('wholesale_self_completed_snack');
+    });
+  }
+
+  Future<void> _refuseSelf() async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _RejectReasonDialog(
+        titleKey: 'wholesale_self_refused_title',
+        hintKey: 'wholesale_self_refused_hint',
+        submitKey: 'wholesale_self_refused_btn',
+      ),
+    );
+    if (reason == null || !mounted) return;
+    await _run(() async {
+      await widget.repository.markSelfDeliveryRefused(orderId: _o.id, reason: reason);
+      _snack('wholesale_self_refused_snack');
+    });
+  }
+
+  Future<void> _completeSelfReturn() async {
+    if (!await _confirm(context.tr('wholesale_self_return_confirm'), title: context.tr('wholesale_self_return_btn'))) {
+      return;
+    }
+    await _run(() async {
+      await widget.repository.completeSelfReturn(_o.id);
+      _snack('wholesale_self_returned_snack');
+    });
+  }
+
+  List<Widget> _selfSellerActions(BuildContext context, WholesaleOrderActions a) {
+    final c = context.ava;
+    return [
+      if (a.canStartSelf) ...[
+        _primary(context, 'wholesale_self_start_btn', Icons.local_shipping_outlined, _startSelf,
+            key: const ValueKey('wholesale-self-start')),
+        const SizedBox(height: 8),
+      ],
+      if (a.canCompleteSelf) ...[
+        _primary(context, 'wholesale_self_complete_btn', Icons.pin_outlined, _completeSelf,
+            key: const ValueKey('wholesale-self-complete')),
+        const SizedBox(height: 8),
+      ],
+      if (a.canRefuseSelf) ...[
+        OutlinedButton(
+          key: const ValueKey('wholesale-self-refused'),
+          onPressed: _busy ? null : _refuseSelf,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: c.danger,
+            side: BorderSide(color: c.line),
+            minimumSize: const Size.fromHeight(48),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text(context.tr('wholesale_self_refused_btn')),
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (a.canCompleteSelfReturn) ...[
+        _secondary(context, 'wholesale_self_return_btn', Icons.assignment_return_outlined, _completeSelfReturn,
+            key: const ValueKey('wholesale-self-return')),
+        const SizedBox(height: 8),
+      ],
+    ];
   }
 
   /// Банк ўтказмаси картаси: сотувчига — «Пул тушди» (муддат билан), харидорга — банк
@@ -492,7 +650,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     if (a.bankPaymentLate) {
       key = 'wholesale_order_bank_late';
     } else if (a.canConfirmBankPayment) {
-      key = 'wholesale_order_bank_seller_await';
+      key = _o.isSelf ? 'wholesale_order_bank_seller_await_self' : 'wholesale_order_bank_seller_await';
     } else {
       key = 'wholesale_order_bank_buyer_await';
     }
@@ -527,14 +685,16 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 
   Future<void> _accept() async {
     // Банк ўтказмасида курьер қабулдан кейин эмас, «Пул тушди»дан кейин.
+    // S4 ўз етказиши: курьер йўқ — сотувчи ўзи «Йўлга чиқдим»ни босади.
     final bank = _o.isBankOrder ? '_bank' : '';
-    if (!await _confirm(context.tr('wholesale_order_accept_confirm$bank'),
+    final self = _o.isSelf ? '_self' : '';
+    if (!await _confirm(context.tr('wholesale_order_accept_confirm$bank$self'),
         title: context.tr('wholesale_order_accept_btn'))) {
       return;
     }
     await _run(() async {
       await widget.repository.acceptOrder(_o.id);
-      _snack('wholesale_order_accepted_snack$bank');
+      _snack(_o.isSelf ? 'wholesale_order_accepted_snack_self' : 'wholesale_order_accepted_snack$bank');
     });
   }
 
@@ -557,7 +717,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
     final text = a.canDecide
         ? context.tr('wholesale_order_decide_until').replaceAll('{date}', dateText)
         : context
-            .tr(_o.isBankOrder ? 'wholesale_order_decision_wait_bank' : 'wholesale_order_decision_wait')
+            .tr(_nothingHeld(_o)
+                ? 'wholesale_order_decision_wait_nohold'
+                : (_o.walletHeldDeliveryOnly ? 'wholesale_order_decision_wait_bank' : 'wholesale_order_decision_wait'))
             .replaceAll('{date}', dateText);
     return Container(
       key: const ValueKey('wholesale-decision-card'),
@@ -615,17 +777,19 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   /// Тасдиқ ойнаси матни: карта — аввалгидек; ҳамён (эга, 2026-11-01) — пул оқибати сабабга қараб
   /// (харидор сабаби — қайтариш ҳақи қайтадиган суммадан; курьер сабаби — ҳақни курьер тўлайди).
   String get _buyerConfirmDialogKey {
-    if (_o.isCardOrder) return 'wholesale_df_buyer_confirm_dialog';
-    // Банк ўтказмаси — ҳамён айб қоидаси, лекин товар пули ҳақида гап йўқ (эга, 2026-11-14).
-    final m = _o.isBankOrder ? 'bank' : 'wallet';
+    if (_o.isLegacyCard) return 'wholesale_df_buyer_confirm_dialog';
+    // Банк ўтказмаси ва S6 янги карта — ҳамён айб қоидаси, лекин товар пули ҳақида гап йўқ
+    // (товар пули иловага кирмаган; эга, 2026-11-13/14).
+    final m = _o.goodsOutsideWalletFeeRules ? 'bank' : 'wallet';
     return _o.deliveryFailed.reasonCode == 'courier_problem'
         ? 'wholesale_df_buyer_confirm_dialog_${m}_courier'
         : 'wholesale_df_buyer_confirm_dialog_${m}_buyer';
   }
 
   /// «Етказилмади» матнлари калити: карта / ҳамён / банк (банкда товар пули қайтиши айтилмайди).
+  /// S6 янги карта — банк матнлари (товар пули иловада эмас, ҳақлар ҳамён айб қоидасида).
   String _dfKey(String card, String wallet, String bank) =>
-      _o.isCardOrder ? card : (_o.isBankOrder ? bank : wallet);
+      _o.isLegacyCard ? card : (_o.goodsOutsideWalletFeeRules ? bank : wallet);
 
   /// Харидор: «Тасдиқлайман» (буюртма ёпилади — тасдиқ ойнаси) ёки «Олмоқчиман».
   Future<void> _answerFailed({required bool confirm}) async {
@@ -640,8 +804,10 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   Future<void> _decideFailed({required bool failed}) async {
     if (failed &&
         !await _confirm(
-            context.tr(_dfKey('wholesale_df_seller_failed_dialog', 'wholesale_df_seller_failed_dialog_wallet',
-                'wholesale_df_seller_failed_dialog_bank')),
+            context.tr(_o.isNewCard
+                ? 'wholesale_df_seller_failed_dialog_newcard'
+                : _dfKey('wholesale_df_seller_failed_dialog', 'wholesale_df_seller_failed_dialog_wallet',
+                    'wholesale_df_seller_failed_dialog_bank')),
             title: context.tr('delivery_failed_decide_failed_title'))) {
       return;
     }
@@ -733,8 +899,11 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
           ),
           if (a.answerDeliveryFailed) ...[
             const SizedBox(height: 4),
-            Text(context.tr(_dfKey('wholesale_df_buyer_body', 'wholesale_df_buyer_body_wallet', 'wholesale_df_buyer_body_bank')),
-                key: const ValueKey('wholesale-df-buyer-body'), style: TextStyle(fontSize: 12.5, color: c.ink)),
+            Text(
+                context.tr(_dfKey(
+                    'wholesale_df_buyer_body', 'wholesale_df_buyer_body_wallet', 'wholesale_df_buyer_body_bank')),
+                key: const ValueKey('wholesale-df-buyer-body'),
+                style: TextStyle(fontSize: 12.5, color: c.ink)),
           ],
           const SizedBox(height: 4),
           Text(
@@ -809,12 +978,16 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
       child: Row(
         children: [
           Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: c.ink2))),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: bold ? 15 : 13,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
-              color: bold ? c.brand : c.ink,
+          // Қиймат матн ҳам бўлиши мумкин («Товар нархига киради») — сиғмаса ўралади.
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: bold ? 15 : 13,
+                fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+                color: bold ? c.brand : c.ink,
+              ),
             ),
           ),
         ],
@@ -869,9 +1042,12 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
 }
 
 class _DeliveryCodeDialog extends StatelessWidget {
-  const _DeliveryCodeDialog({required this.code});
+  const _DeliveryCodeDialog({required this.code, this.self = false});
 
   final WholesaleDeliveryCode code;
+
+  /// S4: кодни сотувчига айтилади (курьерга эмас).
+  final bool self;
 
   @override
   Widget build(BuildContext context) {
@@ -888,7 +1064,7 @@ class _DeliveryCodeDialog extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            context.tr('wholesale_order_delivery_code_hint'),
+            context.tr(self ? 'wholesale_order_delivery_code_hint_self' : 'wholesale_order_delivery_code_hint'),
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: c.ink2),
           ),
@@ -909,9 +1085,12 @@ class _DeliveryCodeDialog extends StatelessWidget {
 }
 
 class _CardInfoSheet extends StatelessWidget {
-  const _CardInfoSheet({required this.info});
+  const _CardInfoSheet({required this.info, this.goodsOnly = false});
 
   final WholesaleCardInfo info;
+
+  /// S6 янги карта: сумма (сервердан) — фақат товар, етказиш ҳақи ҳамёндан тўланган.
+  final bool goodsOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -950,6 +1129,9 @@ class _CardInfoSheet extends StatelessWidget {
             ),
             Text(context.trMsg('wholesale_order_card_amount', params: {'amount': formatMoney(info.amount)}),
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.brand)),
+            if (goodsOnly)
+              Text(context.tr('wholesale_order_card_amount_goods_only'),
+                  key: const ValueKey('wholesale-card-goods-only'), style: TextStyle(fontSize: 12, color: c.ink2)),
             if (info.holderName.isNotEmpty)
               Text(context.trMsg('wholesale_order_card_holder', params: {'name': info.holderName}),
                   style: TextStyle(fontSize: 13, color: c.ink2)),
@@ -1004,7 +1186,16 @@ class _ReceiptImage extends StatelessWidget {
 /// Рад этиш сабаби (3..300 белги — сервер ҳам текширади). Сабаб харидорга
 /// хабарномада юборилмайди (шахсий маълумот бўлиши мумкин), буюртмада сақланади.
 class _RejectReasonDialog extends StatefulWidget {
-  const _RejectReasonDialog();
+  const _RejectReasonDialog({
+    this.titleKey = 'wholesale_order_reject_title',
+    this.hintKey = 'wholesale_order_reject_hint',
+    this.submitKey = 'wholesale_order_reject_btn',
+  });
+
+  /// S4 «Харидор воз кечди» ҳам шу ойна (сабаб 3..300 — сервер ҳам текширади).
+  final String titleKey;
+  final String hintKey;
+  final String submitKey;
 
   @override
   State<_RejectReasonDialog> createState() => _RejectReasonDialogState();
@@ -1032,7 +1223,7 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(context.tr('wholesale_order_reject_title')),
+      title: Text(context.tr(widget.titleKey)),
       content: TextField(
         key: const ValueKey('wholesale-reject-reason'),
         controller: _ctrl,
@@ -1043,7 +1234,7 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
           if (_err) setState(() => _err = false);
         },
         decoration: InputDecoration(
-          hintText: context.tr('wholesale_order_reject_hint'),
+          hintText: context.tr(widget.hintKey),
           errorText: _err ? context.tr('wholesale_order_reject_err') : null,
           border: const OutlineInputBorder(),
         ),
@@ -1053,7 +1244,69 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
         FilledButton(
           key: const ValueKey('wholesale-reject-submit'),
           onPressed: _submit,
-          child: Text(context.tr('wholesale_order_reject_btn')),
+          child: Text(context.tr(widget.submitKey)),
+        ),
+      ],
+    );
+  }
+}
+
+/// S4: сотувчи харидорнинг 6 рақамли етказиш кодини киритади (сервер текширади:
+/// 5 хато → қулф). Маҳаллий текширув — фақат шакл (6 рақам).
+class WholesaleSelfCodeDialog extends StatefulWidget {
+  const WholesaleSelfCodeDialog({super.key});
+
+  /// Соф: 6 та рақамми (бўш жой олиб ташланади).
+  static bool isValidCode(String raw) => RegExp(r'^\d{6}$').hasMatch(raw.trim());
+
+  @override
+  State<WholesaleSelfCodeDialog> createState() => _WholesaleSelfCodeDialogState();
+}
+
+class _WholesaleSelfCodeDialogState extends State<WholesaleSelfCodeDialog> {
+  final _ctrl = TextEditingController();
+  bool _err = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final t = _ctrl.text.trim();
+    if (!WholesaleSelfCodeDialog.isValidCode(t)) {
+      setState(() => _err = true);
+      return;
+    }
+    Navigator.of(context).pop(t);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.tr('wholesale_self_complete_btn')),
+      content: TextField(
+        key: const ValueKey('wholesale-self-code'),
+        controller: _ctrl,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+        onChanged: (_) {
+          if (_err) setState(() => _err = false);
+        },
+        decoration: InputDecoration(
+          hintText: context.tr('wholesale_self_code_hint'),
+          errorText: _err ? context.tr('wholesale_self_code_err') : null,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('consent_no'))),
+        FilledButton(
+          key: const ValueKey('wholesale-self-code-submit'),
+          onPressed: _submit,
+          child: Text(context.tr('logistics_confirm')),
         ),
       ],
     );

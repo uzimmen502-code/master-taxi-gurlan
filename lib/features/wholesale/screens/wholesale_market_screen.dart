@@ -700,6 +700,8 @@ class _MyProductsView extends StatelessWidget {
           if (market != WholesaleProduct.marketChina) WholesaleSellerOrdersPanel(
               sellerPhone: seller.phone,
               cardLast4: seller.hasPayoutCard ? seller.cardLast4 : '',
+              // S4: «Ўзим етказаман» (эга, 2026-11-13/14).
+              selfDelivery: seller.selfDelivery,
             ),
           // Эски сотувчи (У1 дан олдин рўйхатдан ўтган) — жўнатиш манзили
           // йўқ: етказиш ҳақи ҳисобланмайди, шунинг учун эслатиб турамиз.

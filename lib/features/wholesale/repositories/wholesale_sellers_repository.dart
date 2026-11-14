@@ -84,6 +84,20 @@ class WholesaleSellersRepository {
     await _col.doc(id).update({'chinaSellerType': t, 'updatedAt': FieldValue.serverTimestamp()});
   }
 
+  /// S4: эга — «Ўзим етказаман» созламаси. Rules `wholesaleSellerOwnerUpdateOk` +
+  /// `wholesaleSelfDeliveryOk`: ФАҚАТ `selfDelivery` (уч калит) ва `updatedAt`.
+  Future<void> updateSelfDelivery(String phone, WholesaleSelfDeliverySettings settings) async {
+    final id = canonicalPhoneId(phone);
+    if (id.isEmpty) return;
+    await _col.doc(id).update(selfDeliveryPatch(settings));
+  }
+
+  /// Ёзиладиган патч (соф, тестланади).
+  static Map<String, dynamic> selfDeliveryPatch(WholesaleSelfDeliverySettings settings) => {
+        'selfDelivery': settings.toFirestore(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
   /// Рад этилган сотувчи маълумотини тузатиб қайта юборади (`rejected` →
   /// `pending`). Rules фақат шу ўтишга рухсат беради; бошқа ҳолатда
   /// (масалан тасдиқланган) `permission-denied` қайтади.

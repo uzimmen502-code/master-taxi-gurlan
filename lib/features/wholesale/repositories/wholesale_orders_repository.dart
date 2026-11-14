@@ -109,6 +109,7 @@ class WholesaleOrdersRepository {
     required WholesaleDestination destination,
     String? paymentMethod,
     String? deliveryPaymentMethod,
+    String? deliveryMethod,
   }) async {
     final d = await _call(_demand, 'quoteWholesaleOrder', {
       'productId': productId,
@@ -118,6 +119,8 @@ class WholesaleOrdersRepository {
       if (paymentMethod != null) 'paymentMethod': paymentMethod,
       // Фақат банк ўтказмасида (бошқа усулда сервер `delivery_payment_method_not_applicable` билан рад этади).
       if (deliveryPaymentMethod != null) 'deliveryPaymentMethod': deliveryPaymentMethod,
+      // S4: йўқ — `ava_courier` (сервер стандарти); фақат `self` юборилади.
+      if (deliveryMethod != null) 'deliveryMethod': deliveryMethod,
     });
     return WholesaleQuote.fromMap(d);
   }
@@ -161,7 +164,25 @@ class WholesaleOrdersRepository {
   Future<void> confirmBankPayment(String orderId) =>
       _call(_demand, 'confirmWholesaleBankPayment', {'orderId': orderId});
 
-  /// 3b: тўлов қабул қилиш картаси → `{ok, last4, unchanged}`; охирги 4 рақам қайтади.
+  // ── S4: сотувчининг ўз етказиши (europe-west1, жонли 2026-11-14) ──
+
+  /// «Йўлга чиқдим» — қабулдан кейин (банк: «Пул тушди»дан кейин). Қайта чақириш — idempotent.
+  Future<void> startSelfDelivery(String orderId) =>
+      _call(_demand, 'startWholesaleSelfDelivery', {'orderId': orderId});
+
+  /// «Етказилди» — харидорнинг 6 рақамли коди (5 хато → 15 дақиқа қулф, сервер).
+  Future<void> completeSelfDelivery({required String orderId, required String code}) =>
+      _call(_demand, 'completeWholesaleSelfDelivery', {'orderId': orderId, 'code': code.trim()});
+
+  /// «Харидор воз кечди» — сабаб 3..300 белги (сервер текширади).
+  Future<void> markSelfDeliveryRefused({required String orderId, required String reason}) =>
+      _call(_demand, 'markWholesaleSelfDeliveryRefused', {'orderId': orderId, 'reason': reason.trim()});
+
+  /// «Товар қайтиб келди» — рад этилган ва ҳисоб-китоб тугаган (қолдиқ +N, сервер).
+  Future<void> completeSelfReturn(String orderId) =>
+      _call(_demand, 'completeWholesaleSelfReturn', {'orderId': orderId});
+
+  /// 3b: тўлов қабул қилиш картаси →`{ok, last4, unchanged}`; охирги 4 рақам қайтади.
   Future<String> setSellerCard({required String cardNumber, required String holderName}) async {
     final d = await _call(_demand, 'setWholesaleSellerCard', {
       'cardNumber': cardNumber.replaceAll(RegExp(r'\D'), ''),

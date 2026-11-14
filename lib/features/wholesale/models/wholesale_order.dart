@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/formatters.dart' show canonicalPhoneId;
+import 'wholesale_quote.dart' show WholesaleDeliveryMethod;
 
 /// Улгуржи буюртма ҳолатлари — сервер state machine'и билан бир хил
 /// (`functions_demand/core/wholesale_orders.js` `STATUS` + 3b қўшимчалари).
@@ -68,6 +69,15 @@ abstract final class WholesaleBankPaymentStatus {
   static const confirmed = 'confirmed';
   static const timeout = 'timeout';
   static const cancelled = 'cancelled';
+}
+
+/// S4: `order.selfDelivery.status` (сервер `SELF_STATUS`).
+abstract final class WholesaleSelfStatus {
+  static const pending = 'pending';
+  static const inDelivery = 'in_delivery';
+  static const completed = 'completed';
+  static const refused = 'refused';
+  static const returned = 'returned';
 }
 
 /// 3b: `cardPayment.status`.
@@ -179,8 +189,12 @@ class WholesaleDeliveryFailedReport {
   bool get continued => !pending && resolutionDecision == 'continue';
   /// Етказиш ҳақини харидор ҳамёндан тўлаганми — ҳамён ВА банк ўтказмаси (сервер
   /// `deliveryPaidByBuyer`: банк буюртмаси «етказилмади»да ҳамён қоидалари билан).
+  /// S6 янги карта (`deliveryPaidBy: buyer`) ҳам шу қоидада — сервер унга ҳамён сабаблари
+  /// рўйхатини беради («бошқа» йўқ), тўлов усули эса `card_on_delivery` қолади.
   bool get isWalletOrder =>
-      paymentMethod == WholesalePaymentMethod.wallet || paymentMethod == WholesalePaymentMethod.bankTransfer;
+      paymentMethod == WholesalePaymentMethod.wallet ||
+      paymentMethod == WholesalePaymentMethod.bankTransfer ||
+      (allowedReasons.isNotEmpty && !allowedReasons.contains('other'));
 
   /// Курьер ойнасидаги сабаблар: сервер рўйхати (маълум кодлар тартибида), бўлмаса — ҳаммаси.
   List<String> get reasons {
@@ -319,7 +333,45 @@ class WholesaleOrder {
     this.cancelReason = '',
     this.bankPaymentStatus = '',
     this.bankPayDeadlineAt,
+    this.deliveryMethod = WholesaleDeliveryMethod.avaCourier,
+    this.deliveryPaidBy = '',
+    this.selfStatus = '',
+    this.selfDropoff = '',
+    this.refundStatus = '',
   });
+
+  /// S4: `deliveryMethod` — `self` ёки `ava_courier` (майдон йўқ — эски буюртма, курьер).
+  final String deliveryMethod;
+
+  /// S6: `deliveryPaidBy` — `buyer` (янги карта буюртмаси: етказиш ҳақи ҳамёндан); бўш — эски.
+  final String deliveryPaidBy;
+
+  /// S4: `selfDelivery.status` ([WholesaleSelfStatus]) ва `selfDelivery.dropoff`.
+  final String selfStatus;
+  final String selfDropoff;
+
+  /// `refundStatus` (`pending` | `done` | бўш) — рад/бекордан кейинги ҳисоб-китоб.
+  final String refundStatus;
+
+  /// S4: сотувчи ўзи етказади (курьер/кузатув йўқ).
+  bool get isSelf => deliveryMethod == WholesaleDeliveryMethod.self;
+
+  /// S6: янги карта — етказиш ҳақини харидор ҳамёндан тўлаган, эшик олдида ФАҚАТ товар.
+  bool get isNewCard => isCardOrder && deliveryPaidBy == 'buyer';
+
+  /// Эски карта (S6 дан олдин): харидор эшик олдида товар + етказишни тўлайди.
+  bool get isLegacyCard => isCardOrder && !isNewCard && !isSelf;
+
+  /// Харидор эшик олдида сотувчи картасига тўлайдиган сумма: янги карта — фақат товар,
+  /// эски — товар + етказиш (ўз етказишида етказиш ҳақи 0, жами = товар).
+  int get cardAtDoorAmount => isNewCard ? goodsTotal : total;
+
+  /// Харидор ҳамёнидан фақат етказиш ҳақи ушланган (банк ёки янги карта, курьер билан).
+  bool get walletHeldDeliveryOnly => (isBankOrder || isNewCard) && !isSelf && deliveryFee > 0;
+
+  /// «Етказилмади»/рад: товар пули иловадан ташқарида, етказиш/қайтариш ҳақи — ҳамён айб
+  /// қоидаси бўйича (банк ва янги карта; матнлар бир хил).
+  bool get goodsOutsideWalletFeeRules => isBankOrder || isNewCard;
 
   /// Банк ўтказмаси: `bankPayment.status` ([WholesaleBankPaymentStatus]); бўш — қабулдан олдин
   /// ёки банк буюртмаси эмас.
@@ -419,12 +471,33 @@ class WholesaleOrder {
 
   /// Қайтиш жараёни матни калити: ҳамён буюртмасида қайтариш ҳақи кимдан кутилаётгани ҳам.
   String? returnStatusKey() {
-    if (returnStatus == WholesaleReturnStatus.awaitingPayment && !isCardOrder) {
+    // S4: ўз етказиши — қайтиш жўнатмаси йўқ, товар сотувчининг ўзида.
+    if (isSelf) {
+      if (status == WholesaleOrderStatus.returned) return 'wholesale_return_status_returned';
+      if (status == WholesaleOrderStatus.refused) return 'wholesale_self_return_pending';
+    }
+    // S6 янги карта ҳам ҳамён айб қоидаси билан (қарз харидор ёки курьерда).
+    if (returnStatus == WholesaleReturnStatus.awaitingPayment && !isLegacyCard) {
       final payer = returnDebtPayer.isNotEmpty ? returnDebtPayer : walletRefusalFault;
       if (payer == 'buyer' || payer == 'courier') return 'wholesale_return_status_awaiting_payment_$payer';
     }
     return WholesaleReturnStatus.l10nKey(returnStatus);
   }
+
+  /// S4: харидорга — сотувчи «харидор воз кечди» деб белгилагани (ҳамён: товар суммаси қайтади).
+  String? selfRefusedNoticeKey(String viewerId) {
+    if (!isSelf || !isBuyer(viewerId)) return null;
+    if (status != WholesaleOrderStatus.refused && status != WholesaleOrderStatus.returned) return null;
+    return paymentMethod == WholesalePaymentMethod.wallet
+        ? 'wholesale_self_refused_buyer_wallet'
+        : 'wholesale_self_refused_buyer';
+  }
+
+  /// S6 янги карта, харидор айби: қайтариш ҳақи ҳамёндан ушланди (сумма сервердан).
+  String? cardReturnFeeNoticeKey(String viewerId) =>
+      isNewCard && isBuyer(viewerId) && walletRefusalFault == 'buyer' && walletReturnFeeCharged > 0
+          ? 'wholesale_order_card_return_fee_charged'
+          : null;
 
   bool get isCardOrder => paymentMethod == WholesalePaymentMethod.cardOnDelivery;
   bool get cardConfirmed => cardPaymentStatus == WholesaleCardPaymentStatus.confirmed;
@@ -485,6 +558,7 @@ class WholesaleOrder {
     final lost = _map(d['lost']);
     final wr = _map(d['walletRefusal']);
     final bank = _map(d['bankPayment']);
+    final self = _map(d['selfDelivery']);
     final method = _str(d['paymentMethod']);
     return WholesaleOrder(
       id: id,
@@ -526,6 +600,13 @@ class WholesaleOrder {
       cancelReason: _str(d['cancelReason']),
       bankPaymentStatus: _str(bank['status']),
       bankPayDeadlineAt: _date(d['bankPayDeadlineAt']),
+      deliveryMethod: _str(d['deliveryMethod']) == WholesaleDeliveryMethod.self
+          ? WholesaleDeliveryMethod.self
+          : WholesaleDeliveryMethod.avaCourier,
+      deliveryPaidBy: _str(d['deliveryPaidBy']),
+      selfStatus: _str(self['status']),
+      selfDropoff: _str(self['dropoff']),
+      refundStatus: _str(d['refundStatus']),
     );
   }
 }
@@ -556,7 +637,41 @@ class WholesaleOrderActions {
     required this.canConfirmBankPayment,
     required this.awaitingBankPayment,
     required this.bankPaymentLate,
+    required this.canStartSelf,
+    required this.canCompleteSelf,
+    required this.selfCompleteAfterCard,
+    required this.canRefuseSelf,
+    required this.canCompleteSelfReturn,
+    required this.selfReturnWaitRefund,
+    required this.selfAwaitingStart,
+    required this.selfCompletedWaiting,
   });
+
+  // ── S4: ўз етказиши (сервер `functions_demand/api/wholesale_self.js`) ──
+
+  /// Сотувчи: «Йўлга чиқдим» — қабул қилинган `placed`; банк — «Пул тушди»дан кейин.
+  final bool canStartSelf;
+
+  /// Сотувчи: «Етказилди — харидор кодини киритинг»; карта — фақат «Пул тушди»дан кейин.
+  final bool canCompleteSelf;
+
+  /// Сотувчи: карта буюртмаси йўлда, «Пул тушди» босилмаган — кодни киритишдан олдин.
+  final bool selfCompleteAfterCard;
+
+  /// Сотувчи: «Харидор воз кечди» — йўлда; карта тўлови тасдиқланган бўлса йўқ.
+  final bool canRefuseSelf;
+
+  /// Сотувчи: «Товар қайтиб келди» — рад этилган ва ҳисоб-китоб тугаган.
+  final bool canCompleteSelfReturn;
+
+  /// Сотувчи: рад этилган, ҳисоб-китоб ҳали тугамаган — «бироздан кейин».
+  final bool selfReturnWaitRefund;
+
+  /// Харидор: қабул қилинган, сотувчи ҳали йўлга чиқмаган.
+  final bool selfAwaitingStart;
+
+  /// Иккала томон: код тасдиқланди, ҳисоб-китоб якунланмоқда (`delivered` ҳали ёзилмаган).
+  final bool selfCompletedWaiting;
 
   /// Сотувчи (банк ўтказмаси): «Пул тушди» — қабул қилинган, тўлов кутилмоқда ва муддат ўтмаган.
   final bool canConfirmBankPayment;
@@ -627,7 +742,23 @@ class WholesaleOrderActions {
     final bankDeadline = o.bankPayDeadlineAt;
     final bankAwaiting = o.bankPaymentAwaiting;
     final bankInTime = bankDeadline != null && at.isBefore(bankDeadline);
+    final self = o.isSelf;
+    final selfOnWay = self && inDelivery && o.selfStatus == WholesaleSelfStatus.inDelivery;
+    final selfStartReady = self &&
+        o.status == WholesaleOrderStatus.placed &&
+        o.sellerDecision == 'accepted' &&
+        (!o.isBankOrder || o.bankConfirmed);
+    final refusedSelf = self && o.status == WholesaleOrderStatus.refused;
     return WholesaleOrderActions._(
+      canStartSelf: seller && selfStartReady,
+      canCompleteSelf: seller && selfOnWay && (!o.isCardOrder || o.cardConfirmed),
+      selfCompleteAfterCard: seller && selfOnWay && o.isCardOrder && !o.cardConfirmed,
+      canRefuseSelf: seller && selfOnWay && !(o.isCardOrder && o.cardConfirmed),
+      canCompleteSelfReturn: seller && refusedSelf && o.refundStatus == 'done',
+      selfReturnWaitRefund: seller && refusedSelf && o.refundStatus != 'done',
+      selfAwaitingStart: buyer && selfStartReady,
+      selfCompletedWaiting:
+          (buyer || seller) && self && inDelivery && o.selfStatus == WholesaleSelfStatus.completed,
       canConfirmBankPayment: seller && bankAwaiting && bankInTime,
       awaitingBankPayment: buyer && bankAwaiting && bankInTime,
       bankPaymentLate: (buyer || seller) && bankAwaiting && bankDeadline != null && !bankInTime,
@@ -637,7 +768,8 @@ class WholesaleOrderActions {
       awaitingDecision: (buyer || seller) && o.awaitingSellerDecision && !(seller && inTime),
       // Банк ўтказмаси: сотувчи «Пул тушди» босгач бекор йўқ (сервер `bank_payment_confirmed`).
       canCancel: buyer && o.status == WholesaleOrderStatus.placed && !o.bankConfirmed,
-      showDeliveryCode: buyer && inDelivery && (!o.isCardOrder || o.cardConfirmed),
+      // S4: ўз етказишида код — сотувчи йўлга чиққач (сервер `self_delivery_not_started`).
+      showDeliveryCode: buyer && inDelivery && (!self || selfOnWay) && (!o.isCardOrder || o.cardConfirmed),
       showCardInfo: buyer && cardOpen,
       canUploadReceipt: buyer && cardOpen && !submitted,
       waitingSeller: buyer && cardOpen && submitted,

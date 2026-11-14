@@ -3172,7 +3172,9 @@ function makeAdminReopenChainLeg(deps) {
  *
  * BITTA tranzaksiya (cancel -> refund_pending -> trigger naqshi bilan bir xil):
  *   - SHIPMENT `in_transit|disputed` -> `lost`, `paymentStatus`
- *     `escrow_funded|escrow_frozen` -> `loss_pending`;
+ *     `escrow_funded|escrow_frozen` -> `loss_pending`; NAQD (S5, ega 2026-11-14): `cash_on_delivery` ->
+ *     `loss_pending` faqat `deliveryPayment.status == pending` (xaridor naqd to'lamagan), aks holda
+ *     `cash_already_recorded`;
  *   - yo'qolgan LEG (`currentLegId`, posilka qo'lidagi ijrochi) `in_progress` -> `disputed`
  *     (LEG state machine'dagi yagona «muammo» holati; `completed` EMAS — haq to'lanmaydi;
  *     `cancelled` EMAS — ish bekor bo'lmadi, yo'qoldi); keyingi LEG'lar `cancelled`;
@@ -3244,8 +3246,17 @@ function makeAdminMarkShipmentLost(deps) {
       if (![L.SHIPMENT_STATUS.IN_TRANSIT, L.SHIPMENT_STATUS.DISPUTED].includes(ship.status)) {
         throw fail('failed-precondition', 'Faqat yo\'lda yoki nizoli jo\'natma yo\'qolgan deb belgilanadi', 'shipment_not_lossable', { status: ship.status });
       }
-      if (![L.PAYMENT_STATUS.ESCROW_FUNDED, L.PAYMENT_STATUS.ESCROW_FROZEN].includes(ship.paymentStatus)) {
+      // NAQD yetkazish haqi (ega CONFIRMED 2026-11-14): eskrou yo'q, lekin yo'qolish qoidasi AYNI — mas'ul kuryer
+      // tovar qiymatini egaga to'laydi (default `relay_escrow.settleCashLoss`). Faqat xaridor hali naqd TO'LAMAGAN
+      // bo'lsa (`deliveryPayment.status == pending`); to'langan/rad qayd etilgan — bu qoida emas (admin qo'lda).
+      const cashLoss = ship.paymentStatus === L.PAYMENT_STATUS.CASH_ON_DELIVERY && L.isCashShipment(ship);
+      if (!cashLoss && ![L.PAYMENT_STATUS.ESCROW_FUNDED, L.PAYMENT_STATUS.ESCROW_FROZEN].includes(ship.paymentStatus)) {
         throw fail('failed-precondition', 'To\'lov holati yo\'qolishga mos emas', 'payment_not_lossable', { paymentStatus: ship.paymentStatus });
+      }
+      if (cashLoss && (ship.deliveryPayment || {}).status !== L.CASH_STATUS.PENDING) {
+        throw fail('failed-precondition', 'Naqd to\'lov allaqachon qayd etilgan — yo\'qolish qo\'lda hal qilinadi', 'cash_already_recorded', {
+          cashStatus: (ship.deliveryPayment || {}).status || null,
+        });
       }
       const cur = ship.currentCustodian || {};
       const courierUid = toCanonicalId(cur.id);
@@ -3314,6 +3325,8 @@ function makeAdminMarkShipmentLost(deps) {
         goodsValue,
         customerPrice: Number((ship.priceSnapshot || {}).customerPrice) || 0,
         tariffVersion: (ship.priceSnapshot || {}).tariffVersion || null,
+        // Naqd: xaridor yetkazish haqini to'lamagan (pending) — u hech narsa to'lamaydi va olmaydi.
+        ...(cashLoss ? { deliveryPaymentMethod: L.DELIVERY_PAYMENT_METHOD.CASH, buyerCashPaid: 0 } : {}),
         /** Default codebase to'ldiradi (relay_escrow.js settleLoss): hisoblangunga qadar null. */
         refundedNow: null,
         outstanding: null,

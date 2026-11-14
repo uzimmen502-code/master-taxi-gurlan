@@ -18,7 +18,7 @@
  *     custody delivery → relay RELEASE + tovar RELEASE (sotuvchi + AVA ulushi), eskroular 0;
  *     takror/parallel hodisa — bir marta; narx mos emas — anomaliya; haq o'tgach to'liq qaytarish
  *     yo'q; reconcile; tovar RELEASE — alohida `onWholesaleCustodyEvent` (relay o'zgarmagan);
- *     guard'larsiz relay xavfi qulflangan (feat/ulg-relay-guards deploy qilinmaguncha)
+ *     relay himoyasi (jonli d105dfde): sotuvchi FUND qila olmaydi, REFUND escrow:wholesale ga
  */
 'use strict';
 const assert = require('assert');
@@ -644,33 +644,25 @@ async function demandFlip(orderId, to) {
     await assertLedgerSound();
   });
 
-  // XAVF QULFI (feat/ulg-relay-guards deploy qilinmaguncha — darvoza YOPIQ turishi shart):
-  // jonli relay o'zgartirilmagan, shuning uchun quyidagi xulq HOZIR shunday. Guard'lar
-  // birlashtirilganda bu test teskarisiga o'zgaradi (feat/ulg-relay-guards dagi test).
-  await check('XAVF (guard\'larsiz relay): sotuvchi o\'zi FUND qila oladi → SHIP_FUND anomaliya (ikki marta pul yo\'q); relay REFUND yetkazish haqini SOTUVCHIGA beradi', async () => {
+  // Relay himoyasi JONLI (relay_escrow.js d105dfde, 2026-10-31; shu branch'da tiklangan): oldingi «XAVF
+  // QULFI» testi teskarisiga o'zgardi (feat/ulg-relay-guards dagi test bilan bir xil).
+  await check('relay: sotuvchi fundShipmentEscrow bilan to\'lay olmaydi; refund_pending — pul escrow:wholesale ga qaytadi (sotuvchiga emas)', async () => {
     await seed();
     await topup(SELLER, 100000);
     const { orderId: id } = await place();
     await seedShipment(id);
-    const f = await relayApi.fund({ shipmentId: SHIP }, ctx(SELLER));
-    assert.strictEqual(f.paymentStatus, 'escrow_funded');
-    assert.strictEqual(await bal(pcOf(SELLER)), 40000, 'sotuvchi o\'z hamyonidan to\'ladi');
-    const { before, after } = await link(id);
-    const r = await api.onStatusChange(before, after, id);
-    assert.deepStrictEqual([r.skipped, r.anomaly], ['shipment_not_payable', true]);
-    assert.strictEqual(await bal(W.escrowAccount(id)), 200000, 'xaridor puli joyida — ikki marta yechilmadi');
-    assert.strictEqual((await orderOf(id)).status, 'placed');
-    // Ikkinchi holat: qonuniy SHIP_FUND dan keyin relay REFUND (masalan sotuvchi cancelLogisticsOrder).
-    await seed();
-    const { orderId: id2 } = await place();
-    await seedShipment(id2);
-    await link(id2);
-    await api.shipFund(id2);
+    const e = await expectErr(relayApi.fund({ shipmentId: SHIP }, ctx(SELLER)), 'permission-denied');
+    assert.strictEqual(e.details.reason, 'wholesale_managed');
+    assert.strictEqual(await bal(pcOf(SELLER)), 100000);
+    await link(id);
+    await api.shipFund(id);
     await db.collection('shipments').doc(SHIP).update({ paymentStatus: 'refund_pending', status: 'cancelled' });
     const rr = await relayApi.refundEscrow(SHIP);
     assert.strictEqual(rr.refunded, 60000);
-    assert.strictEqual(await bal(pcOf(SELLER)), 60000, 'XAVF: xaridorning yetkazish haqi sotuvchi hamyoniga tushadi');
-    assert.strictEqual(await bal(W.escrowAccount(id2)), 140000);
+    assert.strictEqual(await bal(relay.escrowAccount(SHIP)), 0);
+    assert.strictEqual(await bal(W.escrowAccount(id)), 200000, 'xaridorning buyurtma eskrousiga qaytdi');
+    assert.strictEqual(await bal(pcOf(SELLER)), 100000, 'sotuvchi hamyoniga TUSHMADI');
+    assert.strictEqual(await bonusOf(SELLER), 100000);
     await assertLedgerSound();
   });
 

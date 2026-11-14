@@ -18,7 +18,9 @@
  *     buyurtma returning (payer buyer_cash), qarz yo'q
  *   - naqd rad TO'LAMADI (yangi karta): AVA ulushi sotuvchiga, AVA qaytishni qoplaydi, buyurtma returning (ava_cover),
  *     xaridor qarzi (`returnDebt`) SAQLANADI
- *   - yo'qolgan naqd posilka — pul YO'Q, anomaliya `cash_loss_unsupported`
+ *   - yo'qolgan naqd posilka (ega 2026-11-14): demand adminMarkShipmentLost → relay settleCashLoss (G kuryerdan
+ *     sotuvchiga) → settleLost: hamyon — G xaridorga; yangi karta — AVA ulushi sotuvchiga; bank — ledger yo'q;
+ *     yetkazish haqi — xaridor 0 to'laydi/0 oladi; kuryer hamyoni 0 — qarz; jo'natma naqd emas — anomaliya
  *   - Σdr == Σcr, aktiv == passiv, passenger_credit == bonusBalance
  */
 'use strict';
@@ -34,7 +36,9 @@ const db = admin.firestore();
 const settlementLedger = require('../settlement_ledger');
 const W = require('../wholesale_orders');
 const C = require('../relay_cash');
+const relay = require('../relay_escrow');
 const WO = require('../../functions_demand/core/wholesale_orders');
+const DL = require('../../functions_demand/api/logistics');
 
 const BUYER = '998901110001';
 const SELLER = '998901234567';
@@ -49,6 +53,16 @@ const depsCommon = {
 };
 const relayCash = C.attachRelayCash({}, depsCommon);
 const api = W.attachWholesaleOrders({}, { ...depsCommon, requireCallerRoles, relayCash });
+// Yo'qolgan naqd posilka zanjiri: relay (default) + demand adminMarkShipmentLost (haqiqiy kod).
+const ADMIN = '998905550005';
+const adminRoles = async (c, roles, msg) => {
+  const uid = canon(c && c.auth && c.auth.token && c.auth.token.phone_number);
+  const role = ((await db.collection('users').doc(uid).get()).data() || {}).role;
+  if (!roles.includes(role)) throw new functions.https.HttpsError('permission-denied', msg);
+  return uid;
+};
+const relayApi = relay.attachRelayEscrow({}, { ...depsCommon, notifyUserInApp: async () => {}, requireCallerRoles: adminRoles });
+const markLost = DL.makeAdminMarkShipmentLost({ db, now: () => clock });
 const ctx = (phone) => ({ auth: { token: { phone_number: `+${phone}` } } });
 
 const results = [];
@@ -478,17 +492,100 @@ async function linkReturn(orderId) {
     await assertLedgerSound();
   });
 
-  await check('yo\'qolgan naqd posilka: settleLost — pul YO\'Q, anomaliya cash_loss_unsupported', async () => {
+  // ── YO'QOLGAN NAQD POSILKA (ega CONFIRMED 2026-11-14): demand adminMarkShipmentLost → relay settleCashLoss →
+  //    onWholesaleShipmentLoss / settleLost. To'liq zanjir AYNI emulatorda (haqiqiy callable'lar).
+  const lostChain = async (orderId) => {
+    await db.collection('users').doc(ADMIN).set({ role: 'admin' }, { merge: true });
+    const m = await quiet(() => markLost({ shipmentId: SHIP, reason: 'kuryer yo\'qotdi', opId: 'op-cash-lost-1' }, ctx(ADMIN)));
+    assert.deepStrictEqual([m.status, m.paymentStatus, m.goodsValue], ['lost', 'loss_pending', G]);
+    assert.deepStrictEqual(await quiet(() => api.settleLost(orderId)), { skipped: 'shipment_loss_pending' }, 'relay yopmaguncha — hech narsa');
+    const before = await shipOf(SHIP);
+    const rel = await quiet(() => relayApi.settleLoss(SHIP));
+    assert.deepStrictEqual([rel.settled, rel.cash], [true, true], JSON.stringify(rel));
+    const after = await shipOf(SHIP);
+    assert.strictEqual(after.paymentStatus, 'loss_settled');
+    const outs = await Promise.all([
+      quiet(() => api.onShipmentLossUpdate(before, after)), quiet(() => api.onShipmentLossUpdate(before, after)), quiet(() => api.settleLost(orderId)),
+    ]);
+    assert.strictEqual(outs.filter((x) => x.lost === true).length, 1, JSON.stringify(outs));
+    return { rel, won: outs.find((x) => x.lost === true) };
+  };
+
+  await check('yo\'qolgan naqd posilka, HAMYON: sotuvchiga G kuryerdan (relay), xaridorga tovar puli G eskroudan BIR MARTA; yetkazish haqi — xaridor 0 to\'laydi/0 oladi; lost', async () => {
+    await seed({ buyerWallet: G, courierWallet: 200000 });
+    const r = await place();
+    await linkAndOpenCash(r.orderId);
+    const { rel, won } = await lostChain(r.orderId);
+    assert.deepStrictEqual([rel.taken, rel.outstanding, rel.courierDebt], [G, 0, 0]);
+    assert.deepStrictEqual([won.refunded, won.refundTo, won.review, won.feeRefunded, won.feeOutstanding, won.feeDebt], [G, 'buyer', false, 0, 0, 0]);
+    assert.strictEqual(await bal(pcOf(SELLER)), G, 'sotuvchi — kuryer kompensatsiyasi');
+    assert.strictEqual(await bal(pcOf(BUYER)), G, 'xaridor — tovar puli qaytdi; naqd haq to\'lanmagan');
+    assert.strictEqual(await bal(pcOf(K1)), 200000 - G);
+    assert.strictEqual(await bal(W.escrowAccount(r.orderId)), 0);
+    assert.strictEqual((await journal(`bonus:${W.lostFeeKey(r.orderId)}`)).exists, false, 'yetkazish haqi qaytarilmaydi (to\'lanmagan)');
+    const o = await orderOf(r.orderId);
+    assert.deepStrictEqual([o.status, o.payment.status, o.payment.lostRefund, o.payment.lostFeeRefund, o.refundStatus], ['lost', 'refunded_lost', G, 0, 'done']);
+    assert.deepStrictEqual([o.lost.deliveryPaymentMethod, o.lost.buyerCashPaid, o.lost.buyerOwes, o.lost.deliveryFee, o.lost.deliveryFeeOutstanding], ['cash', 0, 0, 0, 0]);
+    assert.deepStrictEqual([o.cashDelivery.status, o.lostAnomaly], ['lost', undefined]);
+    const s = await shipOf(SHIP);
+    assert.strictEqual(s.deliveryPayment.status, 'pending', 'naqd yig\'ilmagan');
+    assert.strictEqual((await stockOf()).packs.p1, 90, 'qoldiq tiklanmaydi');
+    assert.deepStrictEqual(await quiet(() => api.settleLost(r.orderId)), { skipped: 'already_lost' });
+    await assertLedgerSound();
+  });
+
+  await check('yo\'qolgan naqd posilka, HAMYON, kuryer hamyoni 0: sotuvchi kompensatsiyasi — kuryer qarzi (G); xaridor baribir G oladi', async () => {
     await seed({ buyerWallet: G });
     const r = await place();
     await linkAndOpenCash(r.orderId);
-    await db.collection('shipments').doc(SHIP).update({ paymentStatus: 'loss_settled' });
-    const out = await quiet(() => api.settleLost(r.orderId));
-    assert.deepStrictEqual([out.skipped, out.anomaly], ['cash_loss_unsupported', true]);
+    const { rel, won } = await lostChain(r.orderId);
+    assert.deepStrictEqual([rel.taken, rel.outstanding, rel.courierDebt], [0, G, G]);
+    assert.strictEqual(won.refunded, G);
+    assert.strictEqual(await bal(pcOf(SELLER)), 0);
+    assert.strictEqual(await bal(pcOf(BUYER)), G);
+    assert.strictEqual(Number((((await db.collection('provider_capabilities').doc('acc_k1').get()).data() || {}).debt || {}).logistics), G);
+    await assertLedgerSound();
+  });
+
+  await check('yo\'qolgan naqd posilka, S6 YANGI KARTA (to\'lanmagan): sotuvchiga G kuryerdan + AVA ulushi ushlanmasi qaytadi; xaridor hamyoniga tegilmaydi', async () => {
+    await seed({ sellerWallet: AVA, courierWallet: 200000, quote: quoteDoc('card_on_delivery') });
+    const r = await place();
+    await linkAndOpenCash(r.orderId);
+    const { won } = await lostChain(r.orderId);
+    assert.deepStrictEqual([won.refunded, won.refundTo, won.review, won.feeRefunded], [AVA, 'seller', false, 0]);
+    assert.strictEqual(await bal(pcOf(SELLER)), G + AVA);
+    assert.strictEqual(await bal(pcOf(BUYER)), 0);
+    assert.strictEqual(await bal(W.escrowAccount(r.orderId)), 0);
     const o = await orderOf(r.orderId);
-    assert.strictEqual(o.status, 'in_delivery');
-    assert.strictEqual(o.lostAnomaly.code, 'cash_loss_unsupported');
+    assert.deepStrictEqual([o.status, o.payment.status, o.lost.deliveryPaymentMethod], ['lost', 'refunded_lost', 'cash']);
+    await assertLedgerSound();
+  });
+
+  await check('yo\'qolgan naqd posilka, BANK: tovar puli ilovadan tashqarida — ledger yozuvi YO\'Q (faqat relay G sotuvchiga); lost', async () => {
+    await seed({ courierWallet: 200000, quote: quoteDoc('bank_transfer') });
+    const r = await place();
+    await linkAndOpenCash(r.orderId);
+    const { won } = await lostChain(r.orderId);
+    assert.deepStrictEqual([won.refunded, won.refundTo, won.review, won.feeRefunded], [0, null, false, 0]);
+    assert.strictEqual((await journal(`bonus:${W.lostKey(r.orderId)}`)).exists, false);
+    assert.strictEqual(await bal(pcOf(SELLER)), G);
+    assert.strictEqual(await bal(pcOf(BUYER)), 0);
+    const o = await orderOf(r.orderId);
+    assert.deepStrictEqual([o.status, o.payment.status, o.cashDelivery.status], ['lost', 'refunded_lost', 'lost']);
+    await assertLedgerSound();
+  });
+
+  await check('yo\'qolgan naqd posilka: buyurtma naqd, jo\'natma naqd EMAS (buzilgan) — anomaliya shipment_not_cash, pul YO\'Q', async () => {
+    await seed({ buyerWallet: G });
+    const r = await place();
+    await linkAndOpenCash(r.orderId);
+    await db.collection('shipments').doc(SHIP).update({ paymentStatus: 'loss_settled', deliveryPayment: admin.firestore.FieldValue.delete() });
+    const out = await quiet(() => api.settleLost(r.orderId));
+    assert.deepStrictEqual([out.skipped, out.anomaly], ['shipment_not_cash', true]);
+    const o = await orderOf(r.orderId);
+    assert.deepStrictEqual([o.status, o.lostAnomaly.code], ['in_delivery', 'shipment_not_cash']);
     assert.strictEqual(await bal(W.escrowAccount(r.orderId)), G);
+    await assertLedgerSound();
   });
 
   const passed = results.filter((x) => x.pass).length;

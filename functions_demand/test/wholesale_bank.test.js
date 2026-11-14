@@ -158,7 +158,8 @@ ok('core: bank_transfer — uchinchi usul; methodOf; deliveryPaidByBuyer (hamyon
   assert.strictEqual(WO.deliveryPaidByBuyer({ paymentMethod: 'bank_transfer' }), true);
   assert.strictEqual(WO.deliveryPaidByBuyer({}), true);
   assert.strictEqual(WO.deliveryPaidByBuyer({ paymentMethod: 'card_on_delivery' }), false);
-  assert.deepStrictEqual([...WO.DELIVERY_PAYMENT_METHODS], ['wallet']);
+  // S57 (ega 2026-11-14, S5): naqd kuryerga ham.
+  assert.deepStrictEqual([...WO.DELIVERY_PAYMENT_METHODS], ['wallet', 'cash']);
   assert.strictEqual(WO.BANK_PAY_BUSINESS_DAYS, 5);
 });
 
@@ -193,15 +194,22 @@ ok('parseQuoteRequest: bank — deliveryPaymentMethod yo\'q/bo\'sh → wallet; c
   assert.strictEqual(W.parseQuoteRequest({ ...base, paymentMethod: 'bank_transfer' }).deliveryPaymentMethod, 'wallet');
   assert.strictEqual(W.parseQuoteRequest({ ...base, paymentMethod: 'bank_transfer', deliveryPaymentMethod: '' }).deliveryPaymentMethod, 'wallet');
   assert.strictEqual(W.parseQuoteRequest({ ...base, paymentMethod: 'bank_transfer', deliveryPaymentMethod: 'wallet' }).deliveryPaymentMethod, 'wallet');
-  for (const bad of ['cash', 'card', 'WALLET', 1]) {
+  // S57: naqd ham (bank va boshqa usullar); noma'lum qiymat — unsupported.
+  assert.strictEqual(W.parseQuoteRequest({ ...base, paymentMethod: 'bank_transfer', deliveryPaymentMethod: 'cash' }).deliveryPaymentMethod, 'cash');
+  for (const bad of ['card', 'WALLET', 'CASH', 1]) {
     assert.throws(() => W.parseQuoteRequest({ ...base, paymentMethod: 'bank_transfer', deliveryPaymentMethod: bad }),
-      (e) => e.details.reason === 'delivery_payment_method_unsupported' && e.details.allowed.join() === 'wallet', String(bad));
+      (e) => e.details.reason === 'delivery_payment_method_unsupported' && e.details.allowed.join() === 'wallet,cash', String(bad));
   }
-  assert.strictEqual(W.parseQuoteRequest({ ...base }).deliveryPaymentMethod, null);
+  // S57: AVA kuryeri bilan har usulda — yo'q = wallet (eski ilova), wallet/cash qabul qilinadi.
+  assert.strictEqual(W.parseQuoteRequest({ ...base }).deliveryPaymentMethod, 'wallet');
   for (const pm of ['wallet', 'card_on_delivery']) {
-    assert.throws(() => W.parseQuoteRequest({ ...base, paymentMethod: pm, deliveryPaymentMethod: 'wallet' }),
-      (e) => e.details.reason === 'delivery_payment_method_not_applicable', pm);
+    assert.strictEqual(W.parseQuoteRequest({ ...base, paymentMethod: pm, deliveryPaymentMethod: 'wallet' }).deliveryPaymentMethod, 'wallet', pm);
+    assert.strictEqual(W.parseQuoteRequest({ ...base, paymentMethod: pm, deliveryPaymentMethod: 'cash' }).deliveryPaymentMethod, 'cash', pm);
   }
+  // O'z yetkazishida yetkazish haqi yo'q — maydon berilsa rad (jimgina e'tiborsiz qoldirilmaydi).
+  assert.throws(() => W.parseQuoteRequest({ ...base, deliveryMethod: 'self', deliveryPaymentMethod: 'cash' }),
+    (e) => e.details.reason === 'delivery_payment_method_not_applicable');
+  assert.strictEqual(W.parseQuoteRequest({ ...base, deliveryMethod: 'self' }).deliveryPaymentMethod, null);
   assert.throws(() => W.parseQuoteRequest({ ...base, paymentMethod: 'bank' }),
     (e) => e.details.reason === 'payment_method_invalid' && e.details.allowed.includes('bank_transfer'));
 });
@@ -288,8 +296,10 @@ ok('kvota: sotuvchi tasdiqlanmagan — bank yopiq (hamyon kvotasida false + saba
   const e = await q(() => rejects(quote(db)(qreq({ paymentMethod: 'bank_transfer' }), c), 'failed-precondition', 'bank_transfer_unavailable'));
   assert.strictEqual(e.details.bankUnavailableReason, 'seller_not_approved');
   assert.strictEqual(Object.keys(db.dump('wholesale_quotes')).length, before);
-  await q(() => rejects(quote(db)(qreq({ paymentMethod: 'bank_transfer', deliveryPaymentMethod: 'cash' }), c),
-    'invalid-argument', 'delivery_payment_method_unsupported'));
+  // S57: naqd — darvozada `cashDeliveryEnabled` yo'q (standart O'CHIQ) → aniq sabab bilan rad.
+  const ce = await q(() => rejects(quote(db)(qreq({ paymentMethod: 'wallet', deliveryPaymentMethod: 'cash' }), c),
+    'failed-precondition', 'cash_delivery_unavailable'));
+  assert.strictEqual(ce.details.cashUnavailableReason, 'cash_disabled');
 });
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -43,6 +43,7 @@ const { packIdsOf, STOCK, MAX_QTY, DEFAULT_PACK } = require('./wholesale_stock')
 const { marketOf } = require('./wholesale_admin');
 const {
   quoteParcelForPoints, createShipmentInternal, prepareCancelUnpaidShipmentInTx, validatePoint,
+  openCashShipment, closeShipmentMatches,
 } = require('./logistics');
 const { assertStrictAdmin } = require('../analytics/access');
 // 3b: «yetkazilganda karta orqali» (ega, 2026-10-31).
@@ -203,10 +204,12 @@ function parseQuoteRequest(data) {
   const rawDpm = d.deliveryPaymentMethod;
   const dpmEmpty = rawDpm === undefined || rawDpm === null || rawDpm === '';
   let deliveryPaymentMethod = null;
-  if (pm === WO.PAYMENT_METHOD.BANK && dm === WO.DELIVERY_METHOD.AVA_COURIER) {
+  // S57 (ega 2026-11-14, S5): AVA kuryeri bilan HAMMA to'lov usulida (hamyon/karta/bank) yetkazish haqi —
+  // `wallet` (yo'q/bo'sh, eski ilova) yoki `cash` (kuryerga naqd). O'z yetkazishida haq yo'q — maydon rad.
+  if (dm === WO.DELIVERY_METHOD.AVA_COURIER) {
     deliveryPaymentMethod = dpmEmpty ? WO.DELIVERY_PAYMENT_METHOD.WALLET : rawDpm;
     if (!WO.DELIVERY_PAYMENT_METHODS.includes(deliveryPaymentMethod)) {
-      throw fail('invalid-argument', 'Yetkazish haqini hozircha faqat hamyondan to\'lash mumkin', 'delivery_payment_method_unsupported', {
+      throw fail('invalid-argument', 'Yetkazish haqini to\'lash usuli noto\'g\'ri', 'delivery_payment_method_unsupported', {
         allowed: [...WO.DELIVERY_PAYMENT_METHODS],
       });
     }
@@ -265,7 +268,35 @@ async function requireOrdersGate(db, uid) {
   if (!L.isStageAllowed(cfg, uid)) {
     throw fail('unavailable', 'Ulgurji buyurtma hali ishga tushmagan', 'module_internal_only');
   }
-  return { stage: L.stageOf(cfg) };
+  // S57: naqd yetkazish — feature flag (42-band, PROPOSED standart O'CHIQ): faqat aniq `true`.
+  return { stage: L.stageOf(cfg), cashDeliveryEnabled: d.cashDeliveryEnabled === true };
+}
+
+/**
+ * S57 (PROPOSED, ega tasdiqlaydi): xaridorning ochiq Ulgurji qarzi bormi — `returnDebt.payer == 'buyer'`
+ * (hamyon radidagi qaytish haqi qoldig'i yoki naqd raddagi to'lanmagan yetkazish+qaytish haqi). Ikki
+ * tenglik filtri (kompozit indeks shart emas). O'qib bo'lmasa — XAVFSIZ tomon: naqd yopiq (`true`).
+ */
+async function buyerHasOpenDebt(db, buyerId) {
+  try {
+    const q = await db.collection(ORDERS).where('buyerId', '==', buyerId)
+      .where('returnDebt.payer', '==', 'buyer').limit(1).get();
+    return !q.empty;
+  } catch (e) {
+    console.error(JSON.stringify({ module: 'wholesale_orders', action: 'buyerDebtCheck', result: 'failed', errorCode: 'BUYER_DEBT_READ_FAILED' }));
+    return true;
+  }
+}
+
+/**
+ * S57: shu kvotada naqd yetkazish mumkinmi (sof qism + qarz tekshiruvi chaqiruvchida).
+ * @returns {{available: boolean, reason: null|string}}
+ */
+function cashAvailability({ self, enabled, hasDebt }) {
+  if (self) return { available: false, reason: WO.CASH_UNAVAILABLE.SELF_DELIVERY };
+  if (!enabled) return { available: false, reason: WO.CASH_UNAVAILABLE.DISABLED };
+  if (hasDebt) return { available: false, reason: WO.CASH_UNAVAILABLE.BUYER_DEBT };
+  return { available: true, reason: null };
 }
 
 function sellerOrigin(seller) {
@@ -330,10 +361,14 @@ function selfAvailability(sellerDoc, origin, destination) {
  *   bank   — hozir hamyondan: yetkazish haqi; bank orqali (hisob-faktura): tovar summasi.
  * O'z yetkazishida yetkazish haqi 0.
  */
-function payPlanOf(paymentMethod, goodsTotal, deliveryFee) {
-  if (paymentMethod === WO.PAYMENT_METHOD.CARD) return { walletNow: deliveryFee, atDoorToSellerCard: goodsTotal, bankTransfer: 0 };
-  if (paymentMethod === WO.PAYMENT_METHOD.BANK) return { walletNow: deliveryFee, atDoorToSellerCard: 0, bankTransfer: goodsTotal };
-  return { walletNow: goodsTotal + deliveryFee, atDoorToSellerCard: 0, bankTransfer: 0 };
+function payPlanOf(paymentMethod, goodsTotal, deliveryFee, deliveryPaymentMethod) {
+  // S57: naqd — yetkazish haqi hamyondan EMAS, eshik oldida kuryerga (`cashToCourier`).
+  const cash = deliveryPaymentMethod === WO.DELIVERY_PAYMENT_METHOD.CASH;
+  const fee = cash ? 0 : deliveryFee;
+  const extra = cash ? { cashToCourier: deliveryFee } : {};
+  if (paymentMethod === WO.PAYMENT_METHOD.CARD) return { walletNow: fee, atDoorToSellerCard: goodsTotal, bankTransfer: 0, ...extra };
+  if (paymentMethod === WO.PAYMENT_METHOD.BANK) return { walletNow: fee, atDoorToSellerCard: 0, bankTransfer: goodsTotal, ...extra };
+  return { walletNow: goodsTotal + fee, atDoorToSellerCard: 0, bankTransfer: 0, ...extra };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -349,7 +384,7 @@ function makeQuoteWholesaleOrder(deps) {
     if (!buyerId) throw fail('unauthenticated', 'Telefon bilan kirish talab qilinadi');
     const req = parseQuoteRequest(data);
     try {
-      await requireOrdersGate(db, buyerId);
+      const gate = await requireOrdersGate(db, buyerId);
       const now = nowFn ? nowFn() : new Date();
 
       const pSnap = await db.collection(PRODUCTS).doc(req.productId).get();
@@ -462,6 +497,21 @@ function makeQuoteWholesaleOrder(deps) {
       }
       const isCardReq = req.paymentMethod === WO.PAYMENT_METHOD.CARD;
       const isBankReq = req.paymentMethod === WO.PAYMENT_METHOD.BANK;
+      // S57: naqd yetkazish (kuryerga). Qarz tekshiruvi faqat darvoza ochiq va kuryer bo'lsa (ortiqcha o'qish yo'q).
+      const cashGateOpen = gate.cashDeliveryEnabled === true && !isSelfReq;
+      const cash = cashAvailability({
+        self: isSelfReq,
+        enabled: gate.cashDeliveryEnabled === true,
+        hasDebt: cashGateOpen ? await buyerHasOpenDebt(db, buyerId) : false,
+      });
+      const isCashReq = req.deliveryPaymentMethod === WO.DELIVERY_PAYMENT_METHOD.CASH;
+      if (isCashReq && !cash.available) {
+        throw fail('failed-precondition', 'Yetkazish haqini naqd to\'lab bo\'lmaydi', 'cash_delivery_unavailable', {
+          cashUnavailableReason: cash.reason,
+        });
+      }
+      // Hamyondan ushlanadigan yetkazish haqi: naqdda 0 (eshik oldida kuryerga).
+      const walletDeliveryHold = isSelfReq || isCashReq ? 0 : deliveryFee;
 
       const ref = db.collection(QUOTES).doc();
       const quoteDoc = {
@@ -499,7 +549,9 @@ function makeQuoteWholesaleOrder(deps) {
         // S6: yangi karta belgisi (default `placeWholesaleOrder` shunga qarab ikki ushlanma qiladi).
         ...(isCardReq && !isSelfReq ? { deliveryPaidBy: WO.DELIVERY_PAID_BY.BUYER, sellerFeeHold } : {}),
         ...(isBankReq && !isSelfReq
-          ? { bankHold: deliveryFee, deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
+          ? { bankHold: walletDeliveryHold, deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
+        // S57: naqd — muhrda (default `placeWholesaleOrder` yetkazish haqini hamyondan USHLAMAYDI).
+        ...(isCashReq && !isBankReq ? { deliveryPaymentMethod: WO.DELIVERY_PAYMENT_METHOD.CASH } : {}),
         createdAt: now,
         expiresAt,
         used: false,
@@ -510,7 +562,8 @@ function makeQuoteWholesaleOrder(deps) {
         result: 'ok', quoteId: ref.id, productId: req.productId, packId: pack.id, qty: req.qty,
         goodsTotal, deliveryFee, tariffVersion: rq ? rq.quote.tariffVersion : null, paymentMethod: req.paymentMethod,
         deliveryMethod: req.deliveryMethod, selfAvailable: self.available,
-        cardAvailable: card.available, bankAvailable: bank.available, durationMs: Date.now() - started,
+        cardAvailable: card.available, bankAvailable: bank.available,
+        deliveryPaymentMethod: req.deliveryPaymentMethod, cashAvailable: cash.available, durationMs: Date.now() - started,
       });
       // Ilova uchun: shu buyurtmada mavjud yetkazish usullari. Kuryer — relay narxi hisoblangan bo'lsa (yoki o'z
       // yetkazishi so'rovida — qadoq vazni bor bo'lsa; narx alohida kvotada hisoblanadi).
@@ -537,11 +590,15 @@ function makeQuoteWholesaleOrder(deps) {
         selfUnavailableReason: self.reason,
         ...(self.available ? { selfDelivery: { coverage: self.coverage, dropoff: self.dropoff } } : {}),
         // S6: kim qachon qancha to'laydi (karta: hozir hamyondan — yetkazish haqi; eshik oldida — FAQAT tovar).
-        payPlan: payPlanOf(req.paymentMethod, goodsTotal, deliveryFee),
-        // Bank o'tkazmasi: xaridor hamyonidan ushlanadigan summa (faqat yetkazish haqi) va usuli.
-        ...(isBankReq && !isSelfReq
-          ? { deliveryPaymentMethod: req.deliveryPaymentMethod, walletHold: deliveryFee } : {}),
-        ...(isCardReq ? { walletHold: deliveryFee } : {}),
+        payPlan: payPlanOf(req.paymentMethod, goodsTotal, deliveryFee, req.deliveryPaymentMethod),
+        // S57: yetkazish haqini to'lash usullari (kuryer buyurtmasida): hamyon / naqd kuryerga.
+        deliveryPaymentMethods: { wallet: !isSelfReq, cash: cash.available },
+        cashUnavailableReason: cash.reason,
+        ...(!isSelfReq ? { deliveryPaymentMethod: req.deliveryPaymentMethod } : {}),
+        ...(isCashReq ? { cashToCourier: deliveryFee } : {}),
+        // Bank o'tkazmasi: xaridor hamyonidan ushlanadigan summa (faqat yetkazish haqi; naqdda 0).
+        ...(isBankReq && !isSelfReq ? { walletHold: walletDeliveryHold } : {}),
+        ...(isCardReq ? { walletHold: walletDeliveryHold } : {}),
       };
     } catch (e) {
       log('quote', {
@@ -1018,7 +1075,69 @@ function shipmentInputFromOrder(orderId, o, recipientName) {
     pricedAt: o.createdAt || null,
     source: 'wholesale',
     extra: { wholesaleOrderId: orderId },
+    // S57: naqd — relay jo'natmasi `deliveryPayment {method: cash}` bilan (eskrou YO'Q, oxirgi kuryer oladi).
+    // Hamyon usuli — maydon berilmaydi (relay standarti `escrow`, bugungi kirish shakli AYNAN).
+    ...(WO.isCashDelivery(o) ? { deliveryPaymentMethod: 'cash' } : {}),
   };
+}
+
+/**
+ * S57: NAQD buyurtma jo'natmasini ochish — eskrou buyurtmada default SHIP_FUND qiladigan PAYT va VAZIFA:
+ * 1) relay `openCashShipment` (awaiting_payment/pending → ready/cash_on_delivery + LEG(lar) ochiladi;
+ *    idempotent); 2) TRANZAKSIYADA buyurtma placed → in_delivery (system, `cash_shipment_opened`) +
+ *    `cashDelivery {status: opened, shipmentId, amount, openedAt}`. Pul yozuvi YO'Q (yetkazish haqi eskrouga
+ *    TUSHMAYDI — ega shartnomasi 2). Orada buyurtma bekor qilingan bo'lsa — ochilgan naqd jo'natma ham bekor
+ *    (custody boshlanmagan — `prepareCancelUnpaidShipmentInTx`). Yiqilsa — reconcile qayta chaqiradi.
+ */
+async function openWholesaleCashShipment(deps, orderId) {
+  const { db, now: nowFn } = deps;
+  const ref = db.collection(ORDERS).doc(orderId);
+  const s0 = await ref.get();
+  if (!s0.exists) return { skipped: 'order_missing' };
+  const o0 = s0.data() || {};
+  if (!WO.isCashDelivery(o0)) return { skipped: 'not_cash' };
+  const shipmentId = String((o0.shipment || {}).shipmentId || '');
+  if (!shipmentId) return { skipped: 'no_shipment' };
+  if (WO.cashDeliveryOpened(o0)) return { skipped: 'already_opened', shipmentId };
+  if (o0.status !== WO.STATUS.PLACED) return { skipped: `status_${o0.status || 'none'}` };
+  const opened = await openCashShipment(deps, shipmentId);
+  const now = nowFn ? nowFn() : new Date();
+  const out = await db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    const o = s.data() || {};
+    if (WO.cashDeliveryOpened(o)) return { already: true };
+    if (String((o.shipment || {}).shipmentId || '') !== shipmentId) return { skipped: 'shipment_changed' };
+    if (o.status !== WO.STATUS.PLACED) {
+      // Xaridor/sotuvchi orada bekor qildi — ochilgan naqd jo'natma ham bekor (pul yo'q).
+      const cancel = await prepareCancelUnpaidShipmentInTx(tx, db, shipmentId);
+      if (cancel) cancel(now, 'wholesale_order_cancelled');
+      return { cancelledShipment: !!cancel, status: o.status };
+    }
+    WO.assertTransition(WO.ACTOR.SYSTEM, o.status, WO.STATUS.IN_DELIVERY);
+    const seq = (isInt(o.historySeq) ? o.historySeq : 0) + 1;
+    tx.update(ref, {
+      status: WO.STATUS.IN_DELIVERY,
+      statusUpdatedAt: now,
+      updatedAt: now,
+      historySeq: seq,
+      cashDelivery: {
+        status: 'opened', shipmentId, amount: o.deliveryFee, currency: 'UZS', openedAt: now,
+      },
+    });
+    tx.set(ref.collection(HISTORY).doc(String(seq)), {
+      seq, from: WO.STATUS.PLACED, to: WO.STATUS.IN_DELIVERY, event: 'cash_shipment_opened', actor: WO.ACTOR.SYSTEM, actorId: null,
+      reason: '', meta: { shipmentId, amount: o.deliveryFee, deliveryPaymentMethod: WO.DELIVERY_PAYMENT_METHOD.CASH }, at: now,
+    });
+    return { opened: true };
+  });
+  if (out.cancelledShipment) {
+    try { await closeShipmentMatches(db, shipmentId, now); } catch (e) { /* LEG allaqachon cancelled — olib bo'lmaydi */ }
+  }
+  log('openCashShipment', {
+    result: out.opened ? 'ok' : (out.already ? 'already' : (out.skipped || 'cancelled')), orderId, shipmentId,
+    shipmentOpened: opened.opened, cancelledShipment: !!out.cancelledShipment,
+  });
+  return { ...out, shipmentId };
 }
 
 /**
@@ -1068,9 +1187,29 @@ async function ensureWholesaleShipment(deps, orderId) {
     });
     log('ensureShipment', {
       result: out.already ? 'already' : 'ok', orderId, shipmentId: out.shipmentId,
-      duplicateShipment: r.duplicate, cancelled: !!out.cancelled, durationMs: Date.now() - started,
+      duplicateShipment: r.duplicate, cancelled: !!out.cancelled, legCount: r.legCount || 1,
+      chainMode: r.chainMode || null, deliveryPaymentMethod: r.deliveryPaymentMethod || null, durationMs: Date.now() - started,
     });
-    return { linked: !out.already, shipmentId: out.shipmentId, trackingNumber: r.trackingNumber, cancelled: !!out.cancelled };
+    // S57: naqd — eskrou SHIP_FUND o'rniga jo'natmani ochish (xato bo'lsa reconcile qayta uradi).
+    let cashOpen = null;
+    if (!out.cancelled && WO.isCashDelivery(o0)) {
+      try {
+        cashOpen = await openWholesaleCashShipment(deps, orderId);
+      } catch (e) {
+        console.error(JSON.stringify({
+          module: 'wholesale_orders', action: 'openCashShipment', result: 'failed', orderId, errorCode: 'WHOLESALE_CASH_OPEN_FAILED',
+          reason: String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64),
+        }));
+        cashOpen = { failed: true };
+      }
+    }
+    return {
+      linked: !out.already,
+      shipmentId: out.shipmentId,
+      trackingNumber: r.trackingNumber,
+      cancelled: !!out.cancelled,
+      ...(cashOpen ? { cashOpen } : {}),
+    };
   } catch (e) {
     const code = String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64);
     const now = nowFn ? nowFn() : new Date();
@@ -1169,6 +1308,29 @@ async function reconcileWholesaleShipments(deps, { limit = SHIPMENT_RECONCILE_LI
     const r = await ensureWholesaleShipment(deps, d.id);
     if (r.linked) out.linked += 1;
     else if (r.failed) out.failed += 1;
+  }
+  // S57: NAQD buyurtma — jo'natma bog'langan, lekin ochilmagan (open yiqilgan). Ikki tenglik filtri
+  // (kompozit indeks shart emas); o'qish ≈ haqiqatan qotganlar (odatda 0).
+  out.cashOpenChecked = 0; out.cashOpened = 0; out.cashOpenFailed = 0;
+  const cashPlaced = await db.collection(ORDERS)
+    .where('status', '==', WO.STATUS.PLACED).where('deliveryPaymentMethod', '==', WO.DELIVERY_PAYMENT_METHOD.CASH)
+    .limit(limit).get();
+  for (const d of cashPlaced.docs) {
+    const o = d.data() || {};
+    const sh = o.shipment || null;
+    if (!sh || !sh.shipmentId || WO.cashDeliveryOpened(o)) continue;
+    if (nowMs - (msOf(sh.createdAt) || msOf(o.updatedAt) || 0) < minAgeMs) continue;
+    out.cashOpenChecked += 1;
+    try {
+      const r = await openWholesaleCashShipment(deps, d.id);
+      if (r && r.opened) out.cashOpened += 1;
+    } catch (e) {
+      out.cashOpenFailed += 1;
+      console.error(JSON.stringify({
+        module: 'wholesale_orders', action: 'reconcileCashOpen', result: 'failed', orderId: d.id, errorCode: 'WHOLESALE_CASH_OPEN_FAILED',
+        reason: String((e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN').slice(0, 64),
+      }));
+    }
   }
   // 3b: rad etilgan karta buyurtmalarining QAYTISH jo'natmasi (trigger yiqilgan / xato belgisi bor).
   out.returnChecked = 0; out.returnLinked = 0; out.returnFailed = 0; out.returnFinal = 0;
@@ -1345,6 +1507,9 @@ module.exports = {
   SHIPMENT_RECONCILE_MIN_AGE_MS,
   shipmentInputFromOrder,
   ensureWholesaleShipment,
+  openWholesaleCashShipment,
+  buyerHasOpenDebt,
+  cashAvailability,
   onWholesaleOrderCreated,
   reconcileWholesaleShipments,
   makeGetWholesaleDeliveryCode,

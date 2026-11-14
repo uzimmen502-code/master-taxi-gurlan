@@ -270,6 +270,53 @@ const MESSAGES = {
     uz_Latn: { title: 'Kuryer: tovar yetkazilmadi', body: '{product}: kuryer tovarni yetkazib bo\'lmadi deb belgiladi. Buyurtma sahifasida tasdiqlang yoki «Olmoqchiman» ni bosing. {timeout} daqiqada javob bo\'lmasa, sotuvchi hal qiladi.' },
     ru: { title: 'Курьер: товар не доставлен', body: '{product}: по отметке курьера товар не удалось доставить. Подтвердите на странице заказа или нажмите «Хочу получить». Если не ответить за {timeout} минут, решит продавец.' },
   },
+  // ── S57: нақд етказиш ҳақи (ega 2026-11-14). {cashTotal} — етказиш + қайтариш ҳақи (сервер ҳисоби),
+  // {deliveryFee} — етказиш ҳақи, {cashDebt} — тўланмаган қарз, {goodsRefund} — ҳамёнга қайтган товар суммаси.
+  ws_df_buyer_confirm_cash_paid: {
+    uz_Cyrl: { title: 'Курьер: товар етказилмади', body: '{product}: курьер товарни етказиб бўлмади ва сиздан етказиш ҳамда қайтариш ҳақи {cashTotal} сўм нақд олинди деб белгилади. Буюртма саҳифасида тасдиқланг ёки «Олмоқчиман» ни босинг. {timeout} дақиқада жавоб бўлмаса, сотувчи ҳал қилади.' },
+    uz_Latn: { title: 'Kuryer: tovar yetkazilmadi', body: '{product}: kuryer tovarni yetkazib bo\'lmadi va sizdan yetkazish hamda qaytarish haqi {cashTotal} so\'m naqd olindi deb belgiladi. Buyurtma sahifasida tasdiqlang yoki «Olmoqchiman» ni bosing. {timeout} daqiqada javob bo\'lmasa, sotuvchi hal qiladi.' },
+    ru: { title: 'Курьер: товар не доставлен', body: '{product}: по отметке курьера товар не доставлен, с вас наличными получено {cashTotal} сум за доставку и возврат. Подтвердите на странице заказа или нажмите «Хочу получить». Если не ответить за {timeout} минут, решит продавец.' },
+  },
+  ws_df_buyer_confirm_cash_unpaid: {
+    uz_Cyrl: { title: 'Курьер: товар етказилмади', body: '{product}: курьер товарни етказиб бўлмади деб белгилади. Етказиш ва қайтариш ҳақи {cashTotal} сўм тўланмаган — тасдиқласангиз, у сизнинг қарзингиз бўлиб ёзилади. Буюртма саҳифасида тасдиқланг ёки «Олмоқчиман» ни босинг.' },
+    uz_Latn: { title: 'Kuryer: tovar yetkazilmadi', body: '{product}: kuryer tovarni yetkazib bo\'lmadi deb belgiladi. Yetkazish va qaytarish haqi {cashTotal} so\'m to\'lanmagan — tasdiqlasangiz, u sizning qarzingiz bo\'lib yoziladi. Buyurtma sahifasida tasdiqlang yoki «Olmoqchiman» ni bosing.' },
+    ru: { title: 'Курьер: товар не доставлен', body: '{product}: по отметке курьера товар не доставлен. Доставка и возврат ({cashTotal} сум) не оплачены — после подтверждения сумма будет записана как ваш долг. Подтвердите на странице заказа или нажмите «Хочу получить».' },
+  },
+  ws_cash_open_buyer: {
+    uz_Cyrl: { title: 'Етказиш бошланди — ҳақни курьерга нақд тўлайсиз', body: '{product} × {qty}. Товарни олганингизда етказиш ҳақи {deliveryFee} сўмни курьерга нақд тўлайсиз.' },
+    uz_Latn: { title: 'Yetkazish boshlandi — haqni kuryerga naqd to\'laysiz', body: '{product} × {qty}. Tovarni olganingizda yetkazish haqi {deliveryFee} so\'mni kuryerga naqd to\'laysiz.' },
+    ru: { title: 'Доставка началась — оплата курьеру наличными', body: '{product} × {qty}. При получении товара оплатите курьеру доставку {deliveryFee} сум наличными.' },
+  },
+  ws_cash_refusal_paid_buyer: {
+    uz_Cyrl: { title: 'Буюртма рад этилди', body: '{product} × {qty}. Етказиш ва қайтариш ҳақи {cashTotal} сўм курьерга нақд тўланди. Товар сотувчига қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma rad etildi', body: '{product} × {qty}. Yetkazish va qaytarish haqi {cashTotal} so\'m kuryerga naqd to\'landi. Tovar sotuvchiga qaytariladi.' },
+    ru: { title: 'Заказ отклонён', body: '{product} × {qty}. Доставка и возврат ({cashTotal} сум) оплачены курьеру наличными. Товар вернётся продавцу.' },
+  },
+  ws_cash_refused_goods_refund_buyer: {
+    uz_Cyrl: { title: 'Товар суммаси ҳамёнга қайтди', body: '{product} × {qty}. Рад этилган буюртманинг товар суммаси {goodsRefund} сўм ҳамёнингизга қайтарилди.' },
+    uz_Latn: { title: 'Tovar summasi hamyonga qaytdi', body: '{product} × {qty}. Rad etilgan buyurtmaning tovar summasi {goodsRefund} so\'m hamyoningizga qaytarildi.' },
+    ru: { title: 'Сумма за товар возвращена', body: '{product} × {qty}. Сумма за товар отклонённого заказа {goodsRefund} сум возвращена в ваш кошелёк.' },
+  },
+  ws_cash_debt_buyer: {
+    uz_Cyrl: { title: 'Етказиш ҳақи бўйича қарзингиз бор', body: '{product}: рад этилган буюртманинг етказиш ва қайтариш ҳақи {cashDebt} сўм тўланмади. Қарз тўлангунча етказиш ҳақини нақд тўлаш усули ёпиқ.' },
+    uz_Latn: { title: 'Yetkazish haqi bo\'yicha qarzingiz bor', body: '{product}: rad etilgan buyurtmaning yetkazish va qaytarish haqi {cashDebt} so\'m to\'lanmadi. Qarz to\'languncha yetkazish haqini naqd to\'lash usuli yopiq.' },
+    ru: { title: 'У вас долг за доставку', body: '{product}: доставка и возврат отклонённого заказа ({cashDebt} сум) не оплачены. Пока долг не погашен, оплата доставки наличными недоступна.' },
+  },
+  ws_cash_debt_admin: {
+    uz_Cyrl: { title: 'Улгуржи: харидорда нақд етказиш қарзи', body: 'Буюртма {orderId}: харидор рад этди ва {cashDebt} сўм (етказиш + қайтариш) тўламади. AVA олдинги курьерлар ва қайтаришни қоплади.' },
+    uz_Latn: { title: 'Ulgurji: xaridorda naqd yetkazish qarzi', body: 'Buyurtma {orderId}: xaridor rad etdi va {cashDebt} so\'m (yetkazish + qaytarish) to\'lamadi. AVA oldingi kuryerlar va qaytarishni qopladi.' },
+    ru: { title: 'Оптовый рынок: долг покупателя за доставку', body: 'Заказ {orderId}: покупатель отказался и не оплатил {cashDebt} сум (доставка + возврат). AVA покрыла предыдущих курьеров и возврат.' },
+  },
+  ws_chain_expired_buyer: {
+    uz_Cyrl: { title: 'Буюртма бекор бўлди — курьер топилмади', body: '{product} × {qty}. Белгиланган муддатда етказиш занжири учун курьерлар топилмади. Ҳамёндан тўлаган бўлсангиз, пул ҳамёнингизга қайтарилади.' },
+    uz_Latn: { title: 'Buyurtma bekor bo\'ldi — kuryer topilmadi', body: '{product} × {qty}. Belgilangan muddatda yetkazish zanjiri uchun kuryerlar topilmadi. Hamyondan to\'lagan bo\'lsangiz, pul hamyoningizga qaytariladi.' },
+    ru: { title: 'Заказ отменён — курьеры не найдены', body: '{product} × {qty}. За отведённое время не удалось собрать курьеров для доставки. Если вы платили из кошелька, деньги вернутся в кошелёк.' },
+  },
+  ws_chain_expired_seller: {
+    uz_Cyrl: { title: 'Буюртма бекор бўлди — курьер топилмади', body: '{product} × {qty}. Етказиш учун курьерлар муддатда топилмади, буюртма бекор қилинди. Товар қолдиғи тикланади.' },
+    uz_Latn: { title: 'Buyurtma bekor bo\'ldi — kuryer topilmadi', body: '{product} × {qty}. Yetkazish uchun kuryerlar muddatda topilmadi, buyurtma bekor qilindi. Tovar qoldig\'i tiklanadi.' },
+    ru: { title: 'Заказ отменён — курьеры не найдены', body: '{product} × {qty}. Курьеры для доставки не найдены вовремя, заказ отменён. Остаток товара будет восстановлен.' },
+  },
   ws_df_courier_wait: {
     uz_Cyrl: { title: 'Харидор тасдиғи кутилмоқда', body: '{product}: харидор {timeout} дақиқа ичида жавоб беради, кейин сотувчи ҳал қилади. Посилкани ўзингизда сақланг.' },
     uz_Latn: { title: 'Xaridor tasdig\'i kutilmoqda', body: '{product}: xaridor {timeout} daqiqa ichida javob beradi, keyin sotuvchi hal qiladi. Posilkani o\'zingizda saqlang.' },

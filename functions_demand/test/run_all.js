@@ -57,6 +57,7 @@ const SUITES = [
   'analytics.test.js',
   'wholesale_admin.test.js',
   'wholesale_s46.test.js',
+  'wholesale_cash.test.js',
 ];
 
 let failed = 0;

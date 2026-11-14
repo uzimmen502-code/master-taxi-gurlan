@@ -46,6 +46,8 @@ const {
 } = require('../core/ids');
 const L = require('../core/logistics');
 const WO = require('../core/wholesale_orders');
+// S57 naqd rad: summa (`quoteCashRefusalDue`) va o'zgarmas qayd (`recordCashRefusal`) — relay yadrosida (yagona manba).
+const { quoteCashRefusalDue, recordCashRefusal } = require('./logistics');
 const { assertStrictAdmin } = require('../analytics/access');
 const notify = require('../notify/wholesale_notify');
 const C = require('./wholesale_card');
@@ -62,6 +64,12 @@ const REASONS = Object.freeze(['customer_absent', 'customer_refused', 'courier_p
  * sababga bog'liq. Default `WALLET_REFUSAL_FAULT` kalitlari bilan AYNAN bir xil (paritet testi ikkala tomonda).
  */
 const WALLET_REASONS = Object.freeze(['customer_absent', 'customer_refused', 'courier_problem']);
+/**
+ * S57 NAQD yetkazish (ega 2026-11-14: rad etilsa xaridor chiqish + qaytish haqini to'laydi). Faqat XARIDOR
+ * sababi (PROPOSED): `courier_problem` da xaridordan haq olish ega qaroriga zid bo'lardi — rad etiladi
+ * (`reason_not_allowed_cash`; kuryer muammosi — admin/qayta yetkazish). Ochiq savol — hisobotda.
+ */
+const CASH_REASONS = Object.freeze(['customer_absent', 'customer_refused']);
 /** Xaridor hisoblagichi faqat shu sabablarda (ega 4-qarori, 2026-10-31: «faqat hisoblagich»). */
 const STRIKE_REASONS = Object.freeze(['customer_absent', 'customer_refused']);
 /** Eski APK (sabab kodi yo'q, «Харидор тўламади» tugmasi) — INFERRED: xaridor rad etdi. */
@@ -181,15 +189,27 @@ function stillRefusable(o, ship) {
     if ((o.cardPayment || {}).status !== WO.CARD_PAYMENT.AWAITING) return 'card_payment_progressed';
   }
   if (WO.deliveryPaidByBuyer(o)) {
-    if (!WALLET_REASONS.includes(df.reasonCode)) return 'reason_not_allowed_wallet';
-    if ((o.payment || {}).status !== 'held') return 'wallet_payment_state';
+    if (!allowedReasonsOf(o).includes(df.reasonCode)) return WO.isCashDelivery(o) ? 'reason_not_allowed_cash' : 'reason_not_allowed_wallet';
+    if ((o.payment || {}).status !== expectedPaymentStatus(o)) return 'wallet_payment_state';
   }
+  // S57 naqd: kuryer eshik oldidagi natijani (to'ladi / to'lamadi) belgilagan bo'lishi shart.
+  if (WO.isCashDelivery(o) && typeof (df.cash || {}).paid !== 'boolean') return 'cash_result_missing';
   if (!parcelWith(ship || {}, df.legId, df.courierId)) return 'parcel_moved';
   return null;
 }
 
+/**
+ * Yetkazilayotgan buyurtmadagi kutilgan `payment.status`: odatda `held` (hamyon — tovar(+haq), bank/karta —
+ * yetkazish haqi yoki AVA ulushi). S57: bank + NAQD — ilovada pul yo'q (`none`).
+ */
+function expectedPaymentStatus(o) {
+  return WO.isCashDelivery(o) && WO.methodOf(o) === WO.PAYMENT_METHOD.BANK ? 'none' : 'held';
+}
+
 /** Shu buyurtmada kuryer tanlay oladigan sabablar (UI uchun; server baribir tekshiradi). */
 function allowedReasonsOf(o) {
+  // S57: naqd yetkazish — faqat xaridor sabablari (CASH_REASONS, PROPOSED).
+  if (WO.isCashDelivery(o)) return [...CASH_REASONS];
   // Bank o'tkazmasi (2026-11-14) — yetkazish/qaytish haqi hamyon qoidasi bilan: sabab ANIQ bo'lishi shart.
   return WO.deliveryPaidByBuyer(o) ? [...WALLET_REASONS] : [...REASONS];
 }
@@ -227,9 +247,18 @@ function closePatch(by, decision, actorId, now) {
  * O'tish egasi — kuryer xabari (`ACTOR.COURIER: in_delivery → refused`, jadval o'zgarmagan);
  * kim tasdiqladi — tarix `actor` + `refusal.confirmedBy`.
  */
-function finalizeInTx(tx, db, { ref, o, ship, statsSnap, by, actorId, now }) {
+function finalizeInTx(tx, db, {
+  ref, o, ship, statsSnap, by, actorId, now, cashRefusal,
+}) {
   const df = o.deliveryFailed || {};
   const why = stillRefusable(o, ship);
+  // S57 naqd: relay o'zgarmas qaydi (`deliveryPayment.refusal`) AYNI natija bilan yozilgan bo'lishi shart.
+  // Yo'q bo'lsa — HECH NARSA yozilmaydi (so'rov ochiq qoladi, qayta urinish mumkin).
+  const cash = WO.isCashDelivery(o);
+  const rec = cash ? (cashRefusal || ((ship || {}).deliveryPayment || {}).refusal || null) : null;
+  if (!why && cash && (!rec || rec.paid !== (df.cash || {}).paid || !Number.isInteger(rec.total))) {
+    throw fail('failed-precondition', 'Naqd natija qayd etilmagan. Qayta urinib ko\'ring', 'cash_refusal_missing');
+  }
   if (why) {
     const seq = C.historyWrite(tx, ref, o, {
       from: o.status, to: o.status, event: 'delivery_failed_superseded', actor: ACTOR_OF[by] || by, actorId: actorId || null,
@@ -255,11 +284,62 @@ function finalizeInTx(tx, db, { ref, o, ship, statsSnap, by, actorId, now }) {
     countRefusal: STRIKE_REASONS.includes(df.reasonCode),
     refusalExtra: {
       reasonCode: df.reasonCode || null, confirmedBy: by, confirmedById: actorId || null, deliveryFailedSeq: df.seq || null,
+      ...(cash ? { cashPaid: rec.paid } : {}),
     },
-    metaExtra: { deliveryFailedSeq: df.seq || null, reportedBy: df.courierId || null, reasonCode: df.reasonCode || null, confirmedBy: by },
+    metaExtra: {
+      deliveryFailedSeq: df.seq || null,
+      reportedBy: df.courierId || null,
+      reasonCode: df.reasonCode || null,
+      confirmedBy: by,
+      ...(cash ? { cashPaid: rec.paid, cashTotal: rec.total } : {}),
+    },
   });
-  tx.update(ref, closePatch(by, DECISION.FAILED, actorId, now));
+  const extra = {};
+  if (cash) {
+    // Eshik oldidagi naqd natija (summalar relay qaydidan — klientdan EMAS, 18-band).
+    extra.cashRefusal = {
+      paid: rec.paid,
+      deliveryFee: rec.deliveryFee,
+      returnFee: rec.returnFee,
+      total: rec.total,
+      returnTariffVersion: rec.returnTariffVersion || null,
+      collectorId: rec.collectorId || df.courierId || null,
+      at: now,
+    };
+    if (!rec.paid) {
+      // Ega (2026-11-14): to'lamasa — XARIDOR QARZI (yetkazish + qaytish), AVA oldingi kuryerlarni va qaytishni
+      // qoplaydi (functions/relay_cash.js). Qarz yopilguncha naqd usuli yopiq (PROPOSED, `buyer_debt`).
+      extra.returnDebt = {
+        payer: 'buyer',
+        kind: 'cash_refusal',
+        amount: rec.total,
+        deliveryFee: rec.deliveryFee,
+        returnFee: rec.returnFee,
+        status: 'open',
+        shipmentId: df.shipmentId || null,
+        at: now,
+      };
+    }
+  }
+  tx.update(ref, { ...closePatch(by, DECISION.FAILED, actorId, now), ...extra });
   return { superseded: false };
+}
+
+/**
+ * S57 naqd: yakuniy rad OLDIDAN relay o'zgarmas qaydi (`recordCashRefusal`, idempotent). Tranzaksiyadan
+ * TASHQARIDA (relay o'z tranzaksiyasida LEG/custody/holatni qayta tekshiradi); qayd bo'lmasa rad yakunlanmaydi
+ * (`finalizeInTx` → `cash_refusal_missing`). Naqd bo'lmasa / so'rov yopiq — null.
+ */
+async function recordCashRefusalIfNeeded(deps, ref) {
+  const s = await ref.get();
+  const o = s.exists ? (s.data() || {}) : {};
+  if (!WO.isCashDelivery(o) || !isPending(o)) return null;
+  const df = o.deliveryFailed || {};
+  const paid = (df.cash || {}).paid;
+  if (typeof paid !== 'boolean') return null;
+  return recordCashRefusal(deps, {
+    shipmentId: df.shipmentId, legId: df.legId, courierId: df.courierId, paid,
+  });
 }
 
 /** «Давом этсин» (xaridor «Олмоқчиман» yoki sotuvchi/admin «Етказилсин»). Holat va pul o'zgarmaydi. */
@@ -273,11 +353,14 @@ function continueInTx(tx, { ref, o, by, actorId, now }) {
 }
 
 function paramsOf(o, orderId, timeoutMin) {
+  const c = ((o || {}).deliveryFailed || {}).cash || {};
   return {
     orderId,
     product: String(o.productTitle || '').slice(0, 60),
     qty: o.qty,
     timeout: timeoutMin,
+    // S57 naqd: eshik oldidagi jami (yetkazish + qaytish), server hisobi.
+    cashTotal: Number.isInteger(c.total) ? c.total : '',
   };
 }
 
@@ -324,6 +407,22 @@ function makeReportWholesaleDeliveryFailed(deps) {
       if (!shipmentId) throw fail('permission-denied', 'Ruxsat yo\'q', 'not_last_leg_courier');
       const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
       const timeoutMin = await readTimeoutMin(db);
+      // S57 naqd: eshik oldida kuryer xaridordan olgan/olmaganini belgilaydi (`cashPaid`); summa SERVERDAN.
+      const isCash0 = WO.isCashDelivery(pre.data() || {});
+      let cashDue = null;
+      let cashPaid = null;
+      if (isCash0) {
+        cashDue = await quoteCashRefusalDue(deps, shipmentId);
+        cashPaid = (data || {}).cashPaid;
+        if (typeof cashPaid !== 'boolean') {
+          throw fail('invalid-argument', 'Xaridor naqd to\'ladimi — belgilang', 'cash_paid_required', {
+            cashDue: { deliveryFee: cashDue.deliveryFee, returnFee: cashDue.returnFee, total: cashDue.total },
+          });
+        }
+        if (!legacy && reasonCode === 'customer_absent' && cashPaid) {
+          throw fail('invalid-argument', 'Xaridor yo\'q bo\'lsa, naqd olinmagan bo\'ladi', 'cash_paid_absent');
+        }
+      }
       const now = nowFn ? nowFn() : new Date();
       const out = await db.runTransaction(async (tx) => {
         const [s, ss] = await Promise.all([tx.get(ref), tx.get(shipRef)]);
@@ -335,7 +434,16 @@ function makeReportWholesaleDeliveryFailed(deps) {
         if (isPending(o)) return { idempotent: true, o };
         // Hamyon va bank o'tkazmasi (yetkazish haqi xaridor hamyonidan) — bir xil sabab/holat qoidasi.
         const isWallet = WO.deliveryPaidByBuyer(o);
-        if (isWallet) {
+        if (WO.isCashDelivery(o) !== isCash0) throw fail('aborted', 'Qayta urinib ko\'ring', 'order_changed');
+        if (isCash0) {
+          if (legacy) throw fail('invalid-argument', 'Sababni tanlang', 'reason_required', { allowed: CASH_REASONS });
+          if (!CASH_REASONS.includes(reasonCode)) {
+            throw fail('invalid-argument', 'Naqd yetkazishda faqat xaridor sababi tanlanadi', 'reason_not_allowed_cash', { allowed: CASH_REASONS });
+          }
+          if (((ship.deliveryPayment || {}).status) !== L.CASH_STATUS.PENDING) {
+            throw fail('failed-precondition', 'Naqd to\'lov holati mos emas', 'cash_state_invalid');
+          }
+        } else if (isWallet) {
           // Hamyon (ega, 2026-11-01): pul sababga bog'liq — eski APK (sababsiz) va «бошқа» qabul qilinmaydi.
           if (legacy) throw fail('invalid-argument', 'Sababni tanlang', 'reason_required', { allowed: WALLET_REASONS });
           if (!WALLET_REASONS.includes(reasonCode)) {
@@ -344,7 +452,7 @@ function makeReportWholesaleDeliveryFailed(deps) {
         }
         if (!parcelWith(ship, lastLeg, callerId)) throw fail('failed-precondition', 'Posilka sizda emas', 'parcel_not_in_hand');
         const cp = o.cardPayment || {};
-        if (isWallet && o.status === WO.STATUS.IN_DELIVERY && (o.payment || {}).status !== 'held') {
+        if (isWallet && o.status === WO.STATUS.IN_DELIVERY && (o.payment || {}).status !== expectedPaymentStatus(o)) {
           throw fail('failed-precondition', 'To\'lov holati mos emas', 'wallet_payment_state');
         }
         // Karta (eski va S6 yangi): eshik oldidagi tovar to'lovi hali `awaiting` bo'lishi shart.
@@ -375,10 +483,19 @@ function makeReportWholesaleDeliveryFailed(deps) {
           escalateAt,
           escalatedAt: null,
           resolution: null,
+          // S57 naqd: kuryer belgisi + server hisoblagan summa (ko'rsatish uchun; yakuniy summa — relay qaydida).
+          ...(isCash0 ? {
+            cash: {
+              paid: cashPaid, deliveryFee: cashDue.deliveryFee, returnFee: cashDue.returnFee, total: cashDue.total,
+            },
+          } : {}),
         };
         const hseq = C.historyWrite(tx, ref, o, {
           from: o.status, to: o.status, event: 'delivery_failed_requested', actor: WO.ACTOR.COURIER, actorId: callerId, reason: note,
-          meta: { deliveryFailedSeq: seqN, reasonCode, timeoutMin, shipmentId, legId: lastLeg, legacyClient: legacy },
+          meta: {
+            deliveryFailedSeq: seqN, reasonCode, timeoutMin, shipmentId, legId: lastLeg, legacyClient: legacy,
+            ...(isCash0 ? { cashPaid, cashTotal: cashDue.total } : {}),
+          },
         }, now);
         tx.update(ref, {
           deliveryFailed: marker,
@@ -394,8 +511,11 @@ function makeReportWholesaleDeliveryFailed(deps) {
         return { ok: true, orderId, status: WO.STATUS.REFUSED, idempotent: true };
       }
       if (out.created) {
+        // S57 naqd: xaridorga summa bilan (to'ladi / to'lamadi — qarz bo'ladi).
+        let buyerKey = 'ws_df_buyer_confirm';
+        if (isCash0) buyerKey = cashPaid ? 'ws_df_buyer_confirm_cash_paid' : 'ws_df_buyer_confirm_cash_unpaid';
         await send({ db, messaging: deps.messaging, now: nowFn }, orderId, out.o, [
-          { uid: out.o.buyerId, key: 'ws_df_buyer_confirm' },
+          { uid: out.o.buyerId, key: buyerKey },
           { uid: callerId, key: 'ws_df_courier_wait' },
         ]);
       }
@@ -413,6 +533,10 @@ function makeReportWholesaleDeliveryFailed(deps) {
         idempotent: !out.created,
         paymentMethod: WO.methodOf(out.o),
         allowedReasons: allowedReasonsOf(out.o),
+        ...(isCash0 ? {
+          cashDue: { deliveryFee: cashDue.deliveryFee, returnFee: cashDue.returnFee, total: cashDue.total },
+          cashPaid: ((out.o.deliveryFailed || {}).cash || {}).paid,
+        } : {}),
       };
     } catch (e) {
       denied('report', orderId, e);
@@ -446,6 +570,11 @@ function makeRespondWholesaleDeliveryFailed(deps) {
     const decision = answer === 'confirm' ? DECISION.FAILED : DECISION.CONTINUE;
     const ref = db.collection(ORDERS).doc(orderId);
     try {
+      // S57 naqd: tasdiqdan OLDIN relay o'zgarmas qaydi (faqat shu buyurtma xaridori so'raganda).
+      if (decision === DECISION.FAILED) {
+        const p0 = await ref.get();
+        if (p0.exists && sameUser((p0.data() || {}).buyerId, callerId)) await recordCashRefusalIfNeeded(deps, ref);
+      }
       const now = nowFn ? nowFn() : new Date();
       const out = await db.runTransaction(async (tx) => {
         const s = await tx.get(ref);
@@ -513,6 +642,10 @@ function makeResolveWholesaleDeliveryFailed(deps) {
           throw fail('permission-denied', 'Ruxsat yo\'q', 'not_decider');
         }
         by = 'admin';
+      }
+      // S57 naqd: rad qarori (muddat o'tgan bo'lsa) — relay o'zgarmas qaydi OLDIN (idempotent).
+      if (decision === DECISION.FAILED && decisionDue(pre.data() || {}, (nowFn ? nowFn() : new Date()).getTime())) {
+        await recordCashRefusalIfNeeded(deps, ref);
       }
       const now = nowFn ? nowFn() : new Date();
       const out = await db.runTransaction(async (tx) => {
@@ -644,9 +777,20 @@ function makeGetWholesaleDeliveryFailedState(deps) {
       if (!shipmentId) throw fail('permission-denied', 'Ruxsat yo\'q', 'not_last_leg_courier');
       const ss = await db.collection(L.SHIPMENTS).doc(shipmentId).get();
       assertLastLegCourier(o, ss.exists ? (ss.data() || {}) : {}, orderId, shipmentId, callerId);
+      // S57 naqd: kuryerga eshik oldida olinadigan summa (server hisobi; rad etilsa — yetkazish + qaytish).
+      let cash = {};
+      if (WO.isCashDelivery(o)) {
+        const due = await quoteCashRefusalDue(deps, shipmentId);
+        const dp = (ss.data() || {}).deliveryPayment || {};
+        cash = {
+          deliveryPaymentMethod: WO.DELIVERY_PAYMENT_METHOD.CASH,
+          cashToCollect: Number.isInteger(dp.amount) ? dp.amount : null,
+          cashDue: { deliveryFee: due.deliveryFee, returnFee: due.returnFee, total: due.total },
+        };
+      }
       // `paymentMethod` / `allowedReasons` — kuryer oynasi hamyon buyurtmasida «бошқа» ni ko'rsatmasin (PII yo'q).
       return {
-        ok: true, orderId, status: String(o.status || ''), ...stateOf(o), paymentMethod: WO.methodOf(o), allowedReasons: allowedReasonsOf(o),
+        ok: true, orderId, status: String(o.status || ''), ...stateOf(o), paymentMethod: WO.methodOf(o), allowedReasons: allowedReasonsOf(o), ...cash,
       };
     } catch (e) {
       denied('getState', orderId, e);
@@ -718,6 +862,9 @@ async function runWholesaleDeliveryFailedSweep(deps, { limit = SWEEP_LIMIT } = {
 module.exports = {
   REASONS,
   WALLET_REASONS,
+  CASH_REASONS,
+  expectedPaymentStatus,
+  recordCashRefusalIfNeeded,
   STRIKE_REASONS,
   LEGACY_REASON,
   STAGE,

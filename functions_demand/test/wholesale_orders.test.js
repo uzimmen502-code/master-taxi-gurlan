@@ -250,7 +250,9 @@ ok('holatlar jadvali: ruxsat etilgan va taqiqlangan o\'tishlar (aktor bo\'yicha)
   assert.ok(!WO.canActorTransition(A.SELLER, S.IN_DELIVERY, S.DELIVERED), 'delivered — faqat system (pul bilan)');
   assert.ok(!WO.canActorTransition('seller', S.PLACED, 'rejected'));
   assert.ok(WO.canActorTransition(A.SYSTEM, S.PLACED, S.CANCELLED), 'qaror muddati o\'tdi');
-  assert.ok(!WO.canActorTransition(A.SYSTEM, S.IN_DELIVERY, S.CANCELLED));
+  // S57: system in_delivery → cancelled — FAQAT relay zanjiri yig'ilmaganda (default `onChainExpired`).
+  assert.ok(WO.canActorTransition(A.SYSTEM, S.IN_DELIVERY, S.CANCELLED));
+  assert.ok(!WO.canActorTransition(A.BUYER, S.IN_DELIVERY, S.CANCELLED), 'xaridor yetkazish ochilgach bekor qilmaydi');
   assert.ok(!WO.canTransition(S.PLACED, S.DELIVERED), 'placed → delivered to\'g\'ridan-to\'g\'ri yo\'q');
   assert.ok(!WO.canTransition(S.CANCELLED, S.PLACED));
   assert.ok(!WO.canTransition(S.DELIVERED, S.CANCELLED));

@@ -474,8 +474,10 @@ exports.onWholesaleOrderUpdated = fn.firestore
   .document('wholesale_orders/{orderId}')
   .onUpdate(async (change, context) => {
     try {
+      // S57: `logisticsDeps` (keywordIndex + notify) — naqd jo'natma `openCashShipment` LEG'larni shu yerda ochadi
+      // (matching + push relay `onShipmentFunded` bilan AYNI bog'liqliklar bilan).
       await wholesaleEventsApi.onWholesaleOrderUpdated(
-        { db, messaging }, change.before.data() || {}, change.after.data() || {}, context.params.orderId,
+        { ...logisticsDeps, messaging }, change.before.data() || {}, change.after.data() || {}, context.params.orderId,
       );
     } catch (e) {
       console.error(JSON.stringify({
@@ -492,7 +494,7 @@ exports.wholesaleShipmentReconcile = fn.pubsub
   .schedule('every 10 minutes')
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
-    await wholesaleOrdersApi.reconcileWholesaleShipments({ db });
+    await wholesaleOrdersApi.reconcileWholesaleShipments({ ...logisticsDeps, messaging });
     return null;
   });
 

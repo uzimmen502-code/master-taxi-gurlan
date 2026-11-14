@@ -103,7 +103,8 @@ const ACTOR_ALLOWED = Object.freeze({
   },
   [ACTOR.SYSTEM]: {
     [STATUS.PLACED]: [STATUS.IN_DELIVERY, STATUS.CANCELLED],
-    [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.PAYMENT_DISPUTE, STATUS.LOST],
+    // S57: in_delivery → cancelled — FAQAT relay zanjiri yig'ilmaganda (`courier_chain_expired`, default yozadi).
+    [STATUS.IN_DELIVERY]: [STATUS.DELIVERED, STATUS.PAYMENT_DISPUTE, STATUS.LOST, STATUS.CANCELLED],
     [STATUS.PAYMENT_DISPUTE]: [STATUS.LOST],
     [STATUS.REFUSED]: [STATUS.RETURNING],
     [STATUS.RETURNING]: [STATUS.RETURNED],
@@ -141,8 +142,21 @@ const PAYMENT_METHODS = Object.freeze([PAYMENT_METHOD.WALLET, PAYMENT_METHOD.CAR
  * Bank o'tkazmasida yetkazish haqini xaridor qanday to'laydi. Hozir FAQAT `wallet` (buyurtma paytida
  * AVA hamyonidan ushlanadi); naqd kuryerga — keyingi bosqich (shu ro'yxatga qo'shiladi).
  */
-const DELIVERY_PAYMENT_METHOD = Object.freeze({ WALLET: 'wallet' });
-const DELIVERY_PAYMENT_METHODS = Object.freeze([DELIVERY_PAYMENT_METHOD.WALLET]);
+/*
+ * S57 (ega CONFIRMED 2026-11-14, S5): yetkazish haqini xaridor HAMMA usulda (hamyon / karta / bank) AVA
+ * hamyonidan YOKI kuryerga NAQD to'laydi (`ava_courier` buyurtmasida; o'z yetkazishida haq yo'q).
+ *   wallet — buyurtma paytida hamyondan ushlanadi (avvalgidek) → SHIP_FUND → relay eskrou;
+ *   cash   — hamyondan yetkazish haqi USHLANMAYDI; relay jo'natmasi `deliveryPaymentMethod: 'cash'` bilan
+ *            ochiladi (`openCashShipment`), oxirgi LEG kuryeri xaridordan naqd oladi (`functions/relay_cash.js`).
+ * Maydon yo'q (eski buyurtma) = `wallet`. Naqd faqat darvoza `cashDeliveryEnabled === true` bo'lsa (PROPOSED,
+ * standart O'CHIQ) va xaridorning ochiq Ulgurji qarzi yo'q bo'lsa (PROPOSED, sabab `buyer_debt`).
+ */
+const DELIVERY_PAYMENT_METHOD = Object.freeze({ WALLET: 'wallet', CASH: 'cash' });
+const DELIVERY_PAYMENT_METHODS = Object.freeze([DELIVERY_PAYMENT_METHOD.WALLET, DELIVERY_PAYMENT_METHOD.CASH]);
+/** Naqd yetkazish mavjud emaslik sabablari (kvota javobi `cashUnavailableReason`). */
+const CASH_UNAVAILABLE = Object.freeze({
+  DISABLED: 'cash_disabled', BUYER_DEBT: 'buyer_debt', SELF_DELIVERY: 'self_delivery', LEGACY_CARD: 'legacy_card',
+});
 /** `order.bankPayment.status`. Maydon yo'q — bank buyurtmasi emas yoki hali qabul qilinmagan. */
 const BANK_PAYMENT = Object.freeze({
   AWAITING: 'awaiting', CONFIRMED: 'confirmed', TIMEOUT: 'timeout', CANCELLED: 'cancelled',
@@ -186,7 +200,12 @@ const SELLER_DECISION = Object.freeze({
 });
 /** `order.cancelReason` (sotuvchi qarori bilan bog'liq bekor qilishlar). */
 const CANCEL_REASON = Object.freeze({
-  SELLER_REJECTED: 'seller_rejected', SELLER_TIMEOUT: 'seller_timeout', BANK_PAYMENT_TIMEOUT: 'bank_payment_timeout',
+  SELLER_REJECTED: 'seller_rejected',
+  SELLER_TIMEOUT: 'seller_timeout',
+  BANK_PAYMENT_TIMEOUT: 'bank_payment_timeout',
+  // S57 (PROPOSED): relay zanjiri (assemble_all) 48 soatda yig'ilmadi — buyurtma bekor, xaridorga yetkazish
+  // haqi (hamyon) + ushlanma qaytadi (default `onChainExpired` → `refundOrder`).
+  COURIER_CHAIN_EXPIRED: 'courier_chain_expired',
 });
 /** Qaror muddati — ish kunlari (ega: «2 ish kuni»). YAGONA joy. */
 const ACCEPT_BUSINESS_DAYS = 2;
@@ -268,6 +287,10 @@ const DELIVERY_METHOD = Object.freeze({ AVA_COURIER: 'ava_courier', SELF: 'self'
 const DELIVERY_METHODS = Object.freeze([DELIVERY_METHOD.AVA_COURIER, DELIVERY_METHOD.SELF]);
 const deliveryMethodOf = (doc) => ((doc || {}).deliveryMethod === DELIVERY_METHOD.SELF ? DELIVERY_METHOD.SELF : DELIVERY_METHOD.AVA_COURIER);
 const isSelf = (doc) => deliveryMethodOf(doc) === DELIVERY_METHOD.SELF;
+/** S57: yetkazish haqi kuryerga NAQD (`ava_courier` + `deliveryPaymentMethod: 'cash'`). Paritet: default `isCashDelivery`. */
+const isCashDelivery = (doc) => !isSelf(doc) && (doc || {}).deliveryPaymentMethod === DELIVERY_PAYMENT_METHOD.CASH;
+/** S57: naqd buyurtmada relay jo'natmasi ochilganmi (demand `openWholesaleCashShipment` yozadi). */
+const cashDeliveryOpened = (doc) => isCashDelivery(doc) && !!((doc || {}).cashDelivery || {}).openedAt;
 const SELF_STATUS = Object.freeze({
   PENDING: 'pending', IN_DELIVERY: 'in_delivery', COMPLETED: 'completed', REFUSED: 'refused', RETURNED: 'returned',
 });
@@ -347,6 +370,9 @@ module.exports = {
   PAYMENT_METHODS,
   DELIVERY_PAYMENT_METHOD,
   DELIVERY_PAYMENT_METHODS,
+  CASH_UNAVAILABLE,
+  isCashDelivery,
+  cashDeliveryOpened,
   BANK_PAYMENT,
   BANK_PAY_BUSINESS_DAYS,
   bankPayDeadlineFor,

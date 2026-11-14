@@ -307,6 +307,8 @@ async function ensureWholesaleReturnShipment(deps, orderId) {
   const o0 = s0.data() || {};
   if ((o0.returnShipment || {}).shipmentId) return { skipped: 'already_linked', shipmentId: o0.returnShipment.shipmentId };
   if (o0.status !== WO.STATUS.REFUSED) return { skipped: `status_${o0.status || 'none'}` };
+  // S4: o'z yetkazishi — tovar sotuvchining o'zida, qaytish jo'natmasi HECH QACHON ochilmaydi.
+  if (WO.isSelf(o0)) return { skipped: 'self_delivery' };
   try {
     // Posilka qo'lidagi kuryer (asl jo'natmaning joriy custodian'i).
     let courierId = null;

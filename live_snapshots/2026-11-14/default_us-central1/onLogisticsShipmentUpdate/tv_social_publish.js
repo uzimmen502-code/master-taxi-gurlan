@@ -1,0 +1,612 @@
+'use strict';
+
+/**
+ * AVA расмий Instagram / Facebook / YouTube / Telegram — клип active
+ * бўлганда жойлаш. Токенлар: settings/tv_social (CF-only) + env fallback.
+ *
+ * TikTok олиб ташланди (эга қарори, 2026-09-24): токен ҳеч қачон
+ * созланмаган эди, ҳар клипда бекорга уриниб «access token йўқ»
+ * хатосини ёзиб турарди.
+ *
+ * `category === 'ad'` (пуллик реклама) — АЛОҲИДА йўл: модерациядан ўтмайди
+ * (тўлов қилинган заҳоти `active`), ва фойдаланувчи чекбоксларидан қатъи
+ * назар МАЖБУРИЙ фақат Instagram + Facebook + Telegram'га чиқади (YouTube
+ * йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
+ */
+const axios = require('axios');
+
+const GRAPH = 'https://graph.facebook.com/v21.0';
+const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
+const YT_UPLOAD = 'https://www.googleapis.com/upload/youtube/v3/videos';
+const TELEGRAM_API = 'https://api.telegram.org';
+const SETTINGS_PATH = ['settings', 'tv_social'];
+const ORDERED = ['instagram', 'facebook', 'youtube', 'telegram'];
+const AD_FORCED_NETWORKS = ['instagram', 'facebook', 'telegram'];
+const STALE_MS = 12 * 60 * 1000;
+const IG_POLL_MS = 5000;
+const IG_POLL_MAX = 48;
+/// Ролик 60 сониягача сиқилган — амалда 10-30 MB. Ундан каттасини
+/// хотирага олмаймиз (CF 512MB).
+const YT_MAX_BYTES = 128 * 1024 * 1024;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function axiosMsg(e) {
+  const d = e && e.response && e.response.data;
+  if (d && d.error) {
+    if (typeof d.error === 'string') return d.error;
+    return String(d.error.message || d.error.code || JSON.stringify(d.error));
+  }
+  if (d && d.message) return String(d.message);
+  return String((e && e.message) || 'request failed');
+}
+
+function str(v, max) {
+  return String(v == null ? '' : v).trim().slice(0, max || 400);
+}
+
+function requestedNetworks(clip) {
+  // Пуллик реклама — эга танловидан қатъи назар мажбурий 3 та тармоқ.
+  if (clip.category === 'ad') return AD_FORCED_NETWORKS.slice();
+  const raw = Array.isArray(clip.socialNetworks) ? clip.socialNetworks : [];
+  const picked = [];
+  for (const id of ORDERED) {
+    if (raw.map((x) => String(x).toLowerCase()).includes(id)) picked.push(id);
+  }
+  if (picked.length) return picked;
+  // Эга тармоқ танлаган, лекин уларнинг бирортаси ҳозир қўллаб-
+  // қувватланмайди (масалан, TikTok олиб ташланганидан олдинги
+  // `['tiktok']`) — эга бошқа тармоқларга РОЗИЛИК бермаган: ҳеч қаерга
+  // жойламаймиз. Аввал бу ҳолат `socialConsent` орқали тўрттала тармоққа
+  // тушиб кетарди. Эски, `socialNetworks`сиз клиплар учун `socialConsent`
+  // қоидаси ўзгармаган.
+  if (raw.length > 0) return [];
+  if (clip.socialConsent === true) return ORDERED.slice();
+  return [];
+}
+
+function networkState(clip, net) {
+  const sp = clip.socialPost && typeof clip.socialPost === 'object'
+      ? clip.socialPost : {};
+  const nets = sp.networks && typeof sp.networks === 'object' ? sp.networks : {};
+  const row = nets[net] && typeof nets[net] === 'object' ? nets[net] : {};
+  return String(row.status || '');
+}
+
+/**
+ * Ижтимоий тармоққа юбориладиган файл — transcode қилинган 720p варианти,
+ * ХОМ юкланган файл эмас.
+ *
+ * Хом файл (`videoUrl`) телефондан келгани учун ўнлаб МБ бўлиши мумкин:
+ *   • Telegram URL орқали юборишда 20MB лимити бор — катта файлда 400;
+ *   • IG/FB/YouTube'га ҳам ортиқча секин ва узилишга мойил.
+ * 720p — сифат ва ҳажм бўйича ижтимоий тармоқ учун энг мос вариант.
+ * Вариантлар ҳали тайёр бўлмаса (transcode тугамаган), хом файлга
+ * қайтамиз — эски хатти-ҳаракат.
+ */
+function socialVideoUrl(clip) {
+  const v = clip.videoVariants && typeof clip.videoVariants === 'object'
+      ? clip.videoVariants : {};
+  // `share` — AVA сув белгиси босилган нусха (transcode'да ясалади).
+  // У ИЛОВА ИЧИДА ишлатилмайди, айнан ташқарига чиқадиган постлар учун.
+  // Бўлмаса (эски клип ёки share pass йиқилган) — оддий 720p.
+  return str(v.share, 2000)
+      || str(v['720p'], 2000)
+      || str(v['480p'], 2000)
+      || str(v['360p'], 2000)
+      || str(clip.videoUrl, 2000);
+}
+
+/// Подпись узунлиги — тармоқ лимитидан салгина паст (заҳира билан).
+const CAPTION_MAX = {
+  instagram: 2100,
+  facebook: 2100,
+  youtube: 4800,
+  telegram: 1000,
+};
+
+/// Подписдаги ҳавола БОСИЛАДИГАН тармоқлар — уларга URL'нинг ўзи
+/// қўйилади.
+const LINKABLE = ['facebook', 'youtube', 'telegram'];
+
+/// Instagram'да caption ичидаги URL босилмайди (оддий матн бўлиб
+/// қолади) — шунинг учун ҳавола ўрнига био'га кўрсаткич қўйилади.
+/// Шу сабабли `captionPrefix` НЕЙТРАЛ бўлиши керак: ҳавола ҳақидаги
+/// гапни тармоққа қараб мана шу ер қўшади.
+const IG_LINK_HINT = '🔗 Юклаб олиш ҳаволаси — профилда';
+
+/**
+ * Тармоққа мосланган подпись.
+ *
+ * Тузилиши: [CTA префикси] · [сарлавҳа] · [тавсиф] · [ҳудуд · эга] ·
+ * [Play ҳаволаси — фақат LINKABLE] · #AVA
+ *
+ * Лимитга сиғмаса ФАҚАТ ТАВСИФ қисқаради — CTA ва ҳавола ҳар доим
+ * сақланади. Аввал бутун матн охиридан кесиларди, шунда Telegram'нинг
+ * 1024 белгисида айнан ҳавола тушиб қоларди.
+ */
+function buildCaption(clip, prefix, net, playUrl) {
+  const max = CAPTION_MAX[net] || 2100;
+
+  const head = [];
+  if (str(prefix, 200)) head.push(str(prefix, 200));
+  if (str(clip.title, 180)) head.push(str(clip.title, 180));
+
+  const tail = [];
+  const loc = [str(clip.districtLabel, 80), str(clip.ownerName, 80)]
+      .filter(Boolean).join(' · ');
+  if (loc) tail.push(loc);
+  if (LINKABLE.includes(net) && str(playUrl, 300)) {
+    tail.push(str(playUrl, 300));
+  } else if (net === 'instagram') {
+    tail.push(IG_LINK_HINT);
+  }
+  tail.push('#AVA');
+
+  const fixed = head.concat(tail).join('\n');
+  const room = max - fixed.length - 1;
+  const desc = room > 40 ? str(clip.description, Math.min(room, 600)) : '';
+  const lines = desc ? head.concat([desc], tail) : head.concat(tail);
+  return lines.join('\n').slice(0, max);
+}
+
+function publicSettings(s) {
+  return {
+    facebookPageId: str(s.facebookPageId, 40),
+    instagramUserId: str(s.instagramUserId, 40),
+    captionPrefix: str(s.captionPrefix, 200),
+    pageTokenSet: Boolean(str(s.facebookPageAccessToken, 800)),
+    youtubeClientId: str(s.youtubeClientId, 200),
+    youtubeRefreshSet: Boolean(str(s.youtubeRefreshToken, 800)),
+    youtubeSecretSet: Boolean(str(s.youtubeClientSecret, 200)),
+    telegramChannelId: str(s.telegramChannelId, 80),
+    telegramBotTokenSet: Boolean(str(s.telegramBotToken, 200)),
+  };
+}
+
+function attachTvSocialPublish(exports, deps) {
+  const { functions, db, admin, requireCallerRoles } = deps;
+  const playUrl = str(deps.playUrl, 300);
+  const heavy = functions.runWith({ timeoutSeconds: 540, memory: '512MB' });
+
+  async function loadSettings() {
+    const snap = await db.collection(SETTINGS_PATH[0]).doc(SETTINGS_PATH[1]).get();
+    const s = snap.exists ? (snap.data() || {}) : {};
+    return {
+      facebookPageId: str(s.facebookPageId, 40) || str(process.env.META_PAGE_ID, 40),
+      facebookPageAccessToken: str(s.facebookPageAccessToken, 800)
+          || str(process.env.META_PAGE_ACCESS_TOKEN, 800),
+      instagramUserId: str(s.instagramUserId, 40)
+          || str(process.env.INSTAGRAM_USER_ID, 40),
+      captionPrefix: str(s.captionPrefix, 200),
+      youtubeClientId: str(s.youtubeClientId, 200)
+          || str(process.env.YOUTUBE_CLIENT_ID, 200),
+      youtubeClientSecret: str(s.youtubeClientSecret, 200)
+          || str(process.env.YOUTUBE_CLIENT_SECRET, 200),
+      youtubeRefreshToken: str(s.youtubeRefreshToken, 800)
+          || str(process.env.YOUTUBE_REFRESH_TOKEN, 800),
+      telegramBotToken: str(s.telegramBotToken, 200)
+          || str(process.env.TELEGRAM_CHANNEL_BOT_TOKEN, 200),
+      telegramChannelId: str(s.telegramChannelId, 80)
+          || str(process.env.TELEGRAM_CHANNEL_ID, 80),
+    };
+  }
+
+  async function saveSettingsPatch(patch) {
+    await db.collection(SETTINGS_PATH[0]).doc(SETTINGS_PATH[1]).set(
+        Object.assign({ updatedAt: admin.firestore.FieldValue.serverTimestamp() }, patch),
+        { merge: true },
+    );
+  }
+
+  async function postInstagram(videoUrl, caption, s) {
+    if (!s.instagramUserId || !s.facebookPageAccessToken) {
+      throw new Error('Instagram User ID ёки Page token йўқ');
+    }
+    const create = await axios.post(
+        `${GRAPH}/${s.instagramUserId}/media`,
+        null,
+        {
+          params: {
+            media_type: 'REELS',
+            video_url: videoUrl,
+            caption,
+            share_to_feed: true,
+            access_token: s.facebookPageAccessToken,
+          },
+          timeout: 60000,
+        },
+    );
+    const creationId = create.data && create.data.id;
+    if (!creationId) throw new Error('Instagram container id йўқ');
+    let last = '';
+    for (let i = 0; i < IG_POLL_MAX; i += 1) {
+      await sleep(IG_POLL_MS);
+      const st = await axios.get(`${GRAPH}/${creationId}`, {
+        params: {
+          fields: 'status_code,status',
+          access_token: s.facebookPageAccessToken,
+        },
+        timeout: 30000,
+      });
+      last = String((st.data && st.data.status_code) || '');
+      if (last === 'FINISHED' || last === 'PUBLISHED') break;
+      if (last === 'ERROR' || last === 'EXPIRED') {
+        throw new Error(`Instagram container ${last}: ${(st.data && st.data.status) || ''}`);
+      }
+    }
+    if (last !== 'FINISHED' && last !== 'PUBLISHED') {
+      throw new Error(`Instagram тайёр бўлмади (${last || 'timeout'})`);
+    }
+    const pub = await axios.post(
+        `${GRAPH}/${s.instagramUserId}/media_publish`,
+        null,
+        {
+          params: {
+            creation_id: creationId,
+            access_token: s.facebookPageAccessToken,
+          },
+          timeout: 60000,
+        },
+    );
+    const id = String((pub.data && pub.data.id) || creationId);
+    return { id, url: `https://www.instagram.com/reel/${id}/` };
+  }
+
+  async function postFacebook(videoUrl, caption, s) {
+    if (!s.facebookPageId || !s.facebookPageAccessToken) {
+      throw new Error('Facebook Page ID ёки Page token йўқ');
+    }
+    const res = await axios.post(
+        `${GRAPH}/${s.facebookPageId}/videos`,
+        null,
+        {
+          params: {
+            file_url: videoUrl,
+            description: caption,
+            published: true,
+            access_token: s.facebookPageAccessToken,
+          },
+          timeout: 120000,
+        },
+    );
+    const id = String((res.data && (res.data.id || res.data.post_id)) || '');
+    if (!id) throw new Error('Facebook video id йўқ');
+    return { id, url: `https://www.facebook.com/${s.facebookPageId}/videos/${id}` };
+  }
+
+  /**
+   * YouTube — refresh token'дан қисқа муддатли access token. Google
+   * refresh token'ни алмаштирмайди, шунинг учун сақлаб ўтирилмайди.
+   */
+  async function youtubeAccessToken(s) {
+    if (!s.youtubeRefreshToken || !s.youtubeClientId || !s.youtubeClientSecret) {
+      throw new Error('YouTube client id/secret ёки refresh token йўқ');
+    }
+    const body = new URLSearchParams({
+      client_id: s.youtubeClientId,
+      client_secret: s.youtubeClientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: s.youtubeRefreshToken,
+    });
+    const res = await axios.post(GOOGLE_TOKEN, body.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 30000,
+    });
+    const access = str(res.data && res.data.access_token, 2000);
+    if (!access) throw new Error('YouTube access token бўш');
+    return access;
+  }
+
+  /**
+   * YouTube Shorts — resumable upload: сессия очилади, кейин байтлар PUT.
+   * IG/FB'дан фарқли, YouTube URL'дан ўзи тортмайди — файлни
+   * Storage'дан юклаб, ўзимиз юборамиз.
+   */
+  async function postYouTube(videoUrl, caption, s) {
+    const token = await youtubeAccessToken(s);
+
+    const dl = await axios.get(videoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 180000,
+      maxContentLength: YT_MAX_BYTES,
+      maxBodyLength: YT_MAX_BYTES,
+    });
+    const bytes = Buffer.from(dl.data);
+    if (!bytes.length) throw new Error('YouTube: видео бўш юкланди');
+
+    // Сарлавҳа 100 белги, `<` ва `>` тақиқланган; #Shorts — вертикал
+    // 60 сониялик ролик Shorts лентасига тушиши учун.
+    const lines = caption.split('\n');
+    const title = str(lines[0], 90).replace(/[<>]/g, '') || 'AVA';
+    const description = `${caption}\n#Shorts`.slice(0, 4900);
+
+    const init = await axios.post(
+        YT_UPLOAD,
+        {
+          snippet: { title: `${title} #Shorts`.slice(0, 100), description },
+          status: {
+            privacyStatus: 'public',
+            selfDeclaredMadeForKids: false,
+          },
+        },
+        {
+          params: { uploadType: 'resumable', part: 'snippet,status' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+            'X-Upload-Content-Length': String(bytes.length),
+            'X-Upload-Content-Type': 'video/mp4',
+          },
+          timeout: 60000,
+        },
+    );
+    const uploadUrl = str(
+        init.headers && (init.headers.location || init.headers.Location),
+        2000,
+    );
+    if (!uploadUrl) throw new Error('YouTube upload сессия URL йўқ');
+
+    const put = await axios.put(uploadUrl, bytes, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'video/mp4',
+        'Content-Length': String(bytes.length),
+      },
+      timeout: 300000,
+      maxContentLength: YT_MAX_BYTES,
+      maxBodyLength: YT_MAX_BYTES,
+    });
+    const id = str(put.data && put.data.id, 40);
+    if (!id) throw new Error('YouTube video id йўқ');
+    return { id, url: `https://www.youtube.com/shorts/${id}` };
+  }
+
+  /**
+   * Telegram канали — бот `sendVideo`, `video` майдонига тўғридан-тўғри
+   * ошкора Storage URL берилади (IG/FB каби — Telegram ўзи тортиб олади).
+   * Caption лимити 1024 белги.
+   */
+  async function postTelegram(videoUrl, caption, s) {
+    if (!s.telegramBotToken || !s.telegramChannelId) {
+      throw new Error('Telegram bot token ёки канал ID йўқ');
+    }
+    const res = await axios.post(
+        `${TELEGRAM_API}/bot${s.telegramBotToken}/sendVideo`,
+        {
+          chat_id: s.telegramChannelId,
+          video: videoUrl,
+          caption: caption.slice(0, 1024),
+          supports_streaming: true,
+        },
+        { timeout: 120000 },
+    );
+    if (!res.data || res.data.ok !== true) {
+      throw new Error((res.data && res.data.description) || 'Telegram xatolik');
+    }
+    const msg = res.data.result || {};
+    const messageId = msg.message_id;
+    const chatUsername = String(s.telegramChannelId).startsWith('@')
+        ? String(s.telegramChannelId).slice(1)
+        : '';
+    return {
+      id: String(messageId || ''),
+      url: chatUsername && messageId
+          ? `https://t.me/${chatUsername}/${messageId}`
+          : '',
+    };
+  }
+
+  async function publishOne(net, videoUrl, caption, s) {
+    if (net === 'instagram') return postInstagram(videoUrl, caption, s);
+    if (net === 'facebook') return postFacebook(videoUrl, caption, s);
+    if (net === 'youtube') return postYouTube(videoUrl, caption, s);
+    if (net === 'telegram') return postTelegram(videoUrl, caption, s);
+    throw new Error(`unknown network ${net}`);
+  }
+
+  async function claim(clipId, force) {
+    const ref = db.collection('tv_clips').doc(clipId);
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return { skip: 'missing' };
+      const d = snap.data() || {};
+      if (d.status !== 'active') return { skip: 'not_active' };
+      const nets = requestedNetworks(d);
+      if (!nets.length) return { skip: 'no_networks' };
+      const pending = force
+          ? nets.filter((n) => networkState(d, n) !== 'posted')
+          : nets.filter((n) => networkState(d, n) !== 'posted');
+      if (!pending.length) return { skip: 'already_posted' };
+      const sp = d.socialPost && typeof d.socialPost === 'object' ? d.socialPost : {};
+      let startedMs = 0;
+      if (sp.startedAt && typeof sp.startedAt.toMillis === 'function') {
+        startedMs = sp.startedAt.toMillis();
+      }
+      if (
+        sp.status === 'posting'
+        && startedMs
+        && (Date.now() - startedMs) < STALE_MS
+        && !force
+      ) {
+        return { skip: 'in_flight' };
+      }
+      tx.update(ref, {
+        'socialPost.status': 'posting',
+        'socialPost.startedAt': admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { clip: Object.assign({ id: clipId }, d), nets: pending, allNets: nets };
+    });
+  }
+
+  async function publishClipSocial(clipId, opts) {
+    const force = Boolean(opts && opts.force);
+    const claimed = await claim(clipId, force);
+    if (claimed.skip) {
+      return { skipped: claimed.skip, clipId };
+    }
+    const clip = claimed.clip;
+    const videoUrl = socialVideoUrl(clip);
+    const ref = db.collection('tv_clips').doc(clipId);
+    if (!videoUrl) {
+      await ref.update({
+        'socialPost.status': 'error',
+        'socialPost.error': 'videoUrl бўш',
+        'socialPost.finishedAt': admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { skipped: 'no_video', clipId };
+    }
+
+    const s = await loadSettings();
+    const networks = Object.assign(
+        {},
+        (clip.socialPost && clip.socialPost.networks) || {},
+    );
+    const results = {};
+
+    for (const net of claimed.nets) {
+      try {
+        const caption = buildCaption(clip, s.captionPrefix, net, playUrl);
+        const posted = await publishOne(net, videoUrl, caption, s);
+        networks[net] = {
+          status: 'posted',
+          id: posted.id || '',
+          url: posted.url || '',
+          at: admin.firestore.Timestamp.now(),
+        };
+        results[net] = { ok: true, id: posted.id || '' };
+      } catch (e) {
+        const msg = axiosMsg(e).slice(0, 400);
+        console.error(`[tvSocial] ${clipId} ${net}:`, msg);
+        networks[net] = {
+          status: 'error',
+          error: msg,
+          at: admin.firestore.Timestamp.now(),
+        };
+        results[net] = { ok: false, error: msg };
+      }
+    }
+
+    const allNets = claimed.allNets || claimed.nets;
+    const allPosted = allNets.every((n) =>
+      networks[n] && networks[n].status === 'posted');
+    const anyPosted = allNets.some((n) =>
+      networks[n] && networks[n].status === 'posted');
+    const status = allPosted ? 'posted' : (anyPosted ? 'partial' : 'error');
+    const errMsg = status === 'error'
+        ? (Object.values(results).map((r) => r.error).filter(Boolean)[0] || '')
+        : '';
+    const patch = {
+      'socialPost.status': status,
+      'socialPost.finishedAt': admin.firestore.FieldValue.serverTimestamp(),
+      'socialPost.networks': networks,
+      'socialPost.error': errMsg
+          ? errMsg
+          : admin.firestore.FieldValue.delete(),
+    };
+    if (allPosted) {
+      patch.socialPostedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    await ref.update(patch);
+
+    if (allPosted && str(clip.shopItemId, 80)) {
+      try {
+        await db.collection('tv_shop_items').doc(clip.shopItemId).set(
+            { socialPostedAt: admin.firestore.FieldValue.serverTimestamp() },
+            { merge: true },
+        );
+      } catch (e) {
+        console.error('[tvSocial] shop item stamp', e);
+      }
+    }
+    return { clipId, status, results };
+  }
+
+  exports.onTvClipSocialPublish = heavy.firestore
+      .document('tv_clips/{clipId}')
+      .onWrite(async (change, context) => {
+        if (!change.after.exists) return null;
+        const after = change.after.data() || {};
+        const before = change.before.exists ? (change.before.data() || {}) : {};
+        const becameActive = after.status === 'active' && before.status !== 'active';
+        const retryAfter = Number(after.socialRetryAt || 0);
+        const retryBefore = Number(before.socialRetryAt || 0);
+        const retryBump = retryAfter !== retryBefore && retryAfter > 0;
+        if (!becameActive && !retryBump) return null;
+        try {
+          return await publishClipSocial(context.params.clipId, { force: retryBump });
+        } catch (e) {
+          console.error('[tvSocial] trigger', context.params.clipId, e);
+          return null;
+        }
+      });
+
+  exports.adminGetTvSocialSettings = functions.https.onCall(async (data, context) => {
+    await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const s = await loadSettings();
+    return { ok: true, settings: publicSettings(s) };
+  });
+
+  exports.adminSetTvSocialSettings = functions.https.onCall(async (data, context) => {
+    await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const patch = {};
+    if (data && data.facebookPageId != null) {
+      patch.facebookPageId = str(data.facebookPageId, 40);
+    }
+    if (data && data.instagramUserId != null) {
+      patch.instagramUserId = str(data.instagramUserId, 40);
+    }
+    if (data && data.captionPrefix != null) {
+      patch.captionPrefix = str(data.captionPrefix, 200);
+    }
+    if (data && data.facebookPageAccessToken != null
+        && str(data.facebookPageAccessToken, 800)) {
+      patch.facebookPageAccessToken = str(data.facebookPageAccessToken, 800);
+    }
+    if (data && data.youtubeClientId != null) {
+      patch.youtubeClientId = str(data.youtubeClientId, 200);
+    }
+    if (data && data.youtubeClientSecret != null
+        && str(data.youtubeClientSecret, 200)) {
+      patch.youtubeClientSecret = str(data.youtubeClientSecret, 200);
+    }
+    if (data && data.youtubeRefreshToken != null
+        && str(data.youtubeRefreshToken, 800)) {
+      patch.youtubeRefreshToken = str(data.youtubeRefreshToken, 800);
+    }
+    if (data && data.telegramChannelId != null) {
+      patch.telegramChannelId = str(data.telegramChannelId, 80);
+    }
+    if (data && data.telegramBotToken != null && str(data.telegramBotToken, 200)) {
+      patch.telegramBotToken = str(data.telegramBotToken, 200);
+    }
+    if (!Object.keys(patch).length) {
+      throw new functions.https.HttpsError('invalid-argument', 'empty patch');
+    }
+    await saveSettingsPatch(patch);
+    const s = await loadSettings();
+    return { ok: true, settings: publicSettings(s) };
+  });
+
+  exports.adminPublishTvClipSocial = heavy.https.onCall(async (data, context) => {
+    await requireCallerRoles(context, ['admin', 'superadmin'], 'Admin role required');
+    const clipId = str(data && data.clipId, 80);
+    if (!clipId) {
+      throw new functions.https.HttpsError('invalid-argument', 'clipId required');
+    }
+    try {
+      const result = await publishClipSocial(clipId, { force: true });
+      return { ok: true, result };
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      console.error('[tvSocial] adminPublish', clipId, e);
+      throw new functions.https.HttpsError('internal', axiosMsg(e).slice(0, 180));
+    }
+  });
+}
+
+// `buildCaption` / `socialVideoUrl` — тоза функциялар, тест учун
+// очиқ (қаранг: test/tv_social_caption.test.js).
+module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl, requestedNetworks };

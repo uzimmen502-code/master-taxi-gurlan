@@ -16,7 +16,8 @@
  *   - sabablar: courier_problem — rad [PROPOSED]; yo'q xaridor + «to'ladi» — rad; `cashPaid` majburiy
  *   - bekor: jo'natma ochilmasdan xaridor bekor qildi — ochilgan naqd jo'natma ham bekor; custody boshlangach — yo'q
  *   - zanjir muddati (naqd): jo'natma cancelled + chain expired, pul holati o'zgarmaydi (default buyurtmani bekor qiladi)
- *   - yo'qolgan naqd posilka: relay `adminMarkShipmentLost` RAD (`payment_not_lossable`) [hujjatlangan cheklov]
+ *   - yo'qolgan naqd posilka (ega 2026-11-14): `adminMarkShipmentLost` → lost/loss_pending (naqd to'lanmagan bo'lsa);
+ *     naqd qayd etilgan — `cash_already_recorded`; pul — default `relay_escrow.settleCashLoss`
  *   - reconcile: bog'langan, lekin ochilmagan naqd jo'natma ochiladi
  *   - xabarlar: yangi kalitlar × 3 til, o'tish xabarlari
  */
@@ -574,15 +575,62 @@ ok('naqd zanjir muddati: 48 soatda yig\'ilmadi — jo\'natma cancelled + chain e
   assert.deepStrictEqual(keys.filter((k) => k.startsWith('ws_chain')), ['ws_chain_expired_buyer', 'ws_chain_expired_seller']);
 });
 
-ok('yo\'qolgan NAQD posilka: relay adminMarkShipmentLost RAD (payment_not_lossable) — hujjatlangan cheklov, holat o\'zgarmaydi', async () => {
+ok('yo\'qolgan NAQD posilka (ega 2026-11-14): adminMarkShipmentLost — lost + loss_pending, incident (G, mas\'ul K1, naqd, xaridor 0); takror idempotent', async () => {
+  const db = fresh();
+  const { shipmentId, legId, fee } = await cashInHand(db);
+  const mark = api.makeAdminMarkShipmentLost({ db, now: () => NOW });
+  const r = await q(() => mark({ shipmentId, reason: 'yo\'qoldi', opId: 'op-lost-0001' }, ctx(ADMIN)));
+  assert.deepStrictEqual([r.ok, r.idempotent, r.status, r.paymentStatus, r.goodsValue], [true, false, 'lost', 'loss_pending', G]);
+  const s = shipOf(db, shipmentId);
+  assert.deepStrictEqual([s.status, s.paymentStatus, s.lostLegId], ['lost', 'loss_pending', legId]);
+  assert.strictEqual(s.deliveryPayment.status, 'pending', 'naqd holati o\'zgarmaydi (relay_cash triggeri ishlamaydi)');
+  assert.strictEqual(legDoc(db, legId).status, 'disputed');
+  const inc = db.dump('logistics_incidents')[shipmentId];
+  assert.deepStrictEqual(
+    [inc.status, inc.goodsValue, inc.courier.uid, inc.courier.accountId, inc.customer.uid, inc.customerPrice, inc.deliveryPaymentMethod, inc.buyerCashPaid],
+    ['declared', G, K1, `acc${K1}`, SELLER, fee, 'cash', 0],
+  );
+  const again = await q(() => mark({ shipmentId, reason: 'yo\'qoldi', opId: 'op-lost-0002' }, ctx(ADMIN)));
+  assert.strictEqual(again.idempotent, true);
+});
+
+ok('yo\'qolgan NAQD posilka: naqd allaqachon qayd etilgan (collected / refusal_*) — RAD cash_already_recorded, hech narsa yozilmaydi', async () => {
+  for (const st of ['collected', 'refusal_collected', 'refusal_unpaid', 'settled']) {
+    const db = fresh();
+    const { shipmentId } = await cashInHand(db);
+    await db.collection('shipments').doc(shipmentId).update({ 'deliveryPayment.status': st });
+    const e = await q(() => rejects(api.makeAdminMarkShipmentLost({ db, now: () => NOW })({
+      shipmentId, reason: 'yo\'qoldi', opId: 'op-lost-0003',
+    }, ctx(ADMIN)), 'failed-precondition', 'cash_already_recorded'));
+    assert.strictEqual(e.details.cashStatus, st);
+    const s = shipOf(db, shipmentId);
+    assert.deepStrictEqual([s.status, s.paymentStatus], ['in_transit', 'cash_on_delivery'], st);
+    assert.strictEqual(db.dump('logistics_incidents')[shipmentId], undefined, st);
+  }
+});
+
+ok('yo\'qolgan NAQD posilka: cash_on_delivery, lekin deliveryPayment yo\'q (naqd emas) — RAD payment_not_lossable; admin emas — rad', async () => {
   const db = fresh();
   const { shipmentId } = await cashInHand(db);
+  await db.collection('shipments').doc(shipmentId).update({ deliveryPayment: null });
   await q(() => rejects(api.makeAdminMarkShipmentLost({ db, now: () => NOW })({
-    shipmentId, reason: 'yo\'qoldi', opId: 'op-lost-0001',
+    shipmentId, reason: 'yo\'qoldi', opId: 'op-lost-0004',
   }, ctx(ADMIN)), 'failed-precondition', 'payment_not_lossable'));
-  const s = shipOf(db, shipmentId);
-  assert.deepStrictEqual([s.status, s.paymentStatus], ['in_transit', 'cash_on_delivery']);
-  assert.strictEqual(db.dump('logistics_incidents')[shipmentId], undefined);
+  const db2 = fresh();
+  const c2 = await cashInHand(db2);
+  await q(() => rejects(api.makeAdminMarkShipmentLost({ db: db2, now: () => NOW })({
+    shipmentId: c2.shipmentId, reason: 'yo\'qoldi', opId: 'op-lost-0005',
+  }, ctx(K1)), 'permission-denied'));
+  assert.strictEqual(db2.dump('logistics_incidents')[c2.shipmentId], undefined);
+});
+
+ok('to\'lov holatlari mashinasi: cash_on_delivery → loss_pending ruxsat (faqat shu yangi o\'tish); refund_pending/escrow_funded — yo\'q', () => {
+  assert.ok(L.canTransitionPayment('cash_on_delivery', 'loss_pending'));
+  assert.ok(L.canTransitionPayment('cash_on_delivery', 'settled'));
+  assert.ok(!L.canTransitionPayment('cash_on_delivery', 'refund_pending'));
+  assert.ok(!L.canTransitionPayment('cash_on_delivery', 'escrow_funded'));
+  assert.ok(!L.canTransitionPayment('cash_on_delivery', 'loss_settled'), 'to\'g\'ridan-to\'g\'ri loss_settled yo\'q');
+  assert.ok(L.canTransitionPayment('loss_pending', 'loss_settled'));
 });
 
 ok('reconcile: bog\'langan, ochilmagan naqd jo\'natma (2 daqiqadan eski) ochiladi; yosh — kutadi', async () => {

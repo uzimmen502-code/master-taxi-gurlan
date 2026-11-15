@@ -51,6 +51,14 @@ const List<String> kKnownModuleIds = [
   // бош саҳифа бўлими ва «＋ Менинг бизнесим» кирувчи нуқтаси; admin «Ҳудудлар ва хизматлар»да
   // ёқилмагунча яширин (42-банд: OFF → пилот туман → ҳамма).
   'business_map',
+  // «Бозорлар» (эга, 2026-11-15): 4 та алоҳида бозор модули — маълумот
+  // `tv_shop_items` (`market` = livestock/auto/meat/farm; `taxonomy/markets`
+  // даги `moduleId` билан бир хил), admin «Ҳудудлар ва хизматлар»да туман бўйича
+  // ёқилади. Бош саҳифа плиткаси ҲОЗИРЧА ЙЎҚ (кейинги босқич), фақат дарвоза.
+  'livestock_market',
+  'auto_market',
+  'meat_market',
+  'farm_market',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

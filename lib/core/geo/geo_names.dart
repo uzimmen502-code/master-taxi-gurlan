@@ -63,6 +63,21 @@ class GeoNames {
     return fallback;
   }
 
+  /// Туман ТЎЛИҚ номи («Гурлан тумани» / «Gurlan tumani» / рус `nameRu`) —
+  /// ҳужжатдаги ном, «тумани/шаҳри» сақланади. Кешда бўлмаса — [fallback]
+  /// қайтади ва ном фонда юкланади ([revision] ошади).
+  static String districtFull(String id, String lang, {String fallback = ''}) {
+    final key = id.trim();
+    if (key.isEmpty) return fallback;
+    final d = _districts[key];
+    if (d != null) {
+      final s = d.nameFor(lang).trim();
+      return s.isEmpty ? fallback : s;
+    }
+    _load('d', key);
+    return fallback;
+  }
+
   /// Вилоят номи. Номаълум бўлса — [fallback].
   static String region(String id, String lang, {String fallback = ''}) {
     final key = id.trim();

@@ -339,6 +339,11 @@ const _kServiceIcons = <String, IconData>{
   // Плитка йўқ — фақат админ рўйхати ва тест жадвали учун.
   'demand_intent': Icons.support_agent_rounded,
   'business_map': Icons.add_business_rounded,
+  // «Бозорлар» (2026-11-15) — плитка ҳали йўқ, админ рўйхати учун.
+  'livestock_market': Icons.pets_rounded,
+  'auto_market': Icons.directions_car_rounded,
+  'meat_market': Icons.kebab_dining_rounded,
+  'farm_market': Icons.agriculture_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -411,6 +416,16 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFF0E7C72);
     case 'sell':
       return const Color(0xFF7E8CF2);
+    // «Бозорлар» (2026-11-15): мол — жигарранг, мошина — пўлат кўк,
+    // гўшт — тўқ қизил, деҳқон — ўт яшил.
+    case 'livestock_market':
+      return const Color(0xFF8B5E3C);
+    case 'auto_market':
+      return const Color(0xFF3D6FB6);
+    case 'meat_market':
+      return const Color(0xFFC0392B);
+    case 'farm_market':
+      return const Color(0xFF5FA829);
     // ── Медиа ва ижтимоий ───────────────────────────────────────
     case 'tv_market':
       return const Color(0xFFE9497F);

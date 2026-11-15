@@ -82,6 +82,7 @@ async function seedUser() {
   await u.collection('wallet_ledger').doc('l1').set({ type: 'topup', amount: 50000 });
   await u.collection('vehicles').doc('v1').set({ plate: '01A777AA' });
   await u.collection('saved_tv_clips').doc('c1').set({ clipId: 'x' });
+  await u.collection('favorites').doc('ads_a1').set({ collection: 'ads', itemId: 'a1', title: 't' });
   await u.collection('assistant_conversations').doc('c1').collection('assistant_messages').doc('m1').set({ text: 'salom' });
   await u.collection('fcm_tokens').doc('t1').set({ token: 'tok' });
   await db.collection('device_bindings').doc('a'.repeat(64)).set({ phone: U, fingerprint: { androidId: 'x' } });
@@ -217,6 +218,7 @@ async function main() {
     // shaxsiy ost-kolleksiyalar o'chdi
     assert.strictEqual(await countCol(`users/${U}/vehicles`), 0);
     assert.strictEqual(await countCol(`users/${U}/saved_tv_clips`), 0);
+    assert.strictEqual(await countCol(`users/${U}/favorites`), 0);
     assert.strictEqual(await countCol(`users/${U}/fcm_tokens`), 0);
     assert.strictEqual(await countCol(`users/${U}/assistant_conversations/c1/assistant_messages`), 0);
     // qurilma/telegram

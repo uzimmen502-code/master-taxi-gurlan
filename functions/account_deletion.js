@@ -45,7 +45,7 @@ const USER_SUBCOLLECTIONS = Object.freeze([
   'vehicles', 'driverProfiles', 'saved_tv_clips', 'marshrut_state', 'marshrut_block', 'local_taxi_block',
   'dismissed_news', 'relative_join_alerts', 'realty_places', 'realty_prefs', 'realty_matches',
   'realty_alert_meta', 'realty_unlocked', 'assistant_conversations', 'assistant_memory', 'assistant_usage',
-  'assistant_packages', 'fcm_tokens',
+  'assistant_packages', 'fcm_tokens', 'favorites',
 ]);
 
 const clampDays = (v) => {

@@ -951,6 +951,34 @@ service cloud.firestore {
         allow read, create, delete: if isOwner(userId);
         allow update: if false;
       }
+
+      // «Бозорлар» STAGE 10 — ❤ Танланганлар (ega 2026-11-15): saqlangan
+      // ro'yxat (savat emas), barcha bozorlar. Faqat egasi o'qiydi/o'chiradi;
+      // yaratish qat'iy shakl bilan, favId == collection + '_' + itemId
+      // (takror bosish bitta hujjat). Update yo'q (delete + create).
+      // Narx — faqat ko'rsatish uchun snapshot (pul hisobida ishlatilmaydi).
+      // Test: functions/test/user_favorites_rules.test.js
+      match /favorites/{favId} {
+        function favCreateOk() {
+          let d = request.resource.data;
+          return d.keys().hasAll(['collection', 'itemId', 'title', 'addedAt'])
+              && d.keys().hasOnly(['collection', 'itemId', 'title', 'photoUrl',
+                   'price', 'priceUnit', 'market', 'addedAt'])
+              && d.collection in ['tv_shop_items', 'wholesale_products',
+                   'realty_listings', 'ads']
+              && d.itemId is string && d.itemId.size() >= 1 && d.itemId.size() <= 128
+              && favId == d.collection + '_' + d.itemId
+              && d.title is string && d.title.size() <= 200
+              && (!('photoUrl' in d) || (d.photoUrl is string && d.photoUrl.size() <= 1000))
+              && (!('price' in d) || (d.price is int && d.price >= 0 && d.price <= 999999999))
+              && (!('priceUnit' in d) || (d.priceUnit is string && d.priceUnit.size() <= 20))
+              && (!('market' in d) || (d.market is string && d.market.size() <= 20))
+              && d.addedAt == request.time;
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && favCreateOk();
+        allow update: if false;
+      }
     }
 
     // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)

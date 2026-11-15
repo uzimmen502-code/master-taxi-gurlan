@@ -201,7 +201,9 @@ async function main() {
     await assertFails(col(seller).add(appCreatePayload({ unitWeightG: 500, unitDims: [30, 20, 15] })));
   });
   await check('C5 egasi tahrirda vaznni qo\'shadi / o\'zgartiradi / o\'chiradi — o\'tadi; noto\'g\'ri — rad', async () => {
-    await assertSucceeds(col(seller).doc(EXISTING).update({ unitWeightG: 900, unitDims: { l: 10, w: 10, h: 10 }, updatedAt: serverTimestamp() }));
+    // «Бозорлар» 2a (2026-11-15): вазн/ўлчам — контент; active ҳужжатда фақат `pending` билан (илова
+    // `toFirestoreOwnerUpdate` доим `status: 'pending'` юборади). Шартсиз вариант — market_moderation_rules W1.
+    await assertSucceeds(col(seller).doc(EXISTING).update({ unitWeightG: 900, unitDims: { l: 10, w: 10, h: 10 }, status: 'pending', updatedAt: serverTimestamp() }));
     await assertSucceeds(col(seller).doc(EXISTING).update({ unitWeightG: 950, updatedAt: serverTimestamp() }));
     await assertFails(col(seller).doc(EXISTING).update({ unitWeightG: 0, updatedAt: serverTimestamp() }));
     await assertFails(col(seller).doc(EXISTING).update({ unitDims: { l: 10, w: 10 }, updatedAt: serverTimestamp() }));

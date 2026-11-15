@@ -758,9 +758,16 @@ service cloud.firestore {
               && get(/databases/$(database)/documents/businesses/$(d.businessId)).data.get('status', 'active') != 'blocked');
     }
 
+    // «Бозорлар» 2a (эга 2026-11-15): модерация/муддат майдонлари — фақат сервер (functions/market_moderation.js).
+    function tvShopModerationKeys() {
+      return ['moderatedAt', 'moderatedBy', 'rejectReason', 'rejectedAt', 'moderationReason', 'expiresAt',
+              'expiryWarnedAt', 'expiryWarnedFor', 'expiredAt', 'expiresAtPrev', 'submittedAt', 'renewedAt', 'updatedBy'];
+    }
+
     function tvShopItemCreateOk() {
       let d = request.resource.data;
       return !('boostUntil' in d)
+          && !d.keys().hasAny(tvShopModerationKeys())
           && !('socialPostedAt' in d)
           && d.get('viewCount', 0) == 0
           && d.get('status', 'active') in ['active', 'pending']
@@ -775,6 +782,9 @@ service cloud.firestore {
       let d = request.resource.data;
       return notChanged('businessId')
           && notChanged('createdAt')
+          && !d.diff(resource.data).affectedKeys().hasAny(tvShopModerationKeys())
+          // Ҳолат: ўзгармайди ёки 'deleted' (истаган ҳолатдан, жумладан pending/expired/rejected). 'active' — фақат админ/CF;
+          // контент таҳрири ва янгилаш (expired → pending) — сервер (onShopItemModeration / renewMarketListing).
           && (d.get('status', 'active') == resource.data.get('status', 'active')
               || d.get('status', 'active') == 'deleted')
           && tvShopItemShapeOk(d);
@@ -3408,6 +3418,11 @@ service cloud.firestore {
           && request.resource.data.description.size() <= 2000
           && request.resource.data.imageUrls.size() >= 1
           && request.resource.data.imageUrls.size() <= 7
+          // «Бозорлар» 2a (эга 2026-11-15): контент ўзгарса — қайта модерация (`pending`) ёки яширилган (`inactive`).
+          // Жорий илова (`toFirestoreOwnerUpdate`) доим `pending` юборади.
+          && (!changed.hasAny(['title', 'description', 'priceTiers', 'imageUrls', 'packs', 'minOrderQty', 'unit',
+                               'deliveryDays', 'unitWeightG', 'unitDims', 'currency'])
+              || request.resource.data.status in ['pending', 'inactive'])
           && (!changed.hasAny(['status'])
               || (
                 (request.resource.data.status == 'inactive'

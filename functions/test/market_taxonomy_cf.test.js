@@ -70,7 +70,7 @@ async function main() {
   });
 
   await check('C2 нотўғри мазмун → invalid-argument TAXONOMY_INVALID, details.errors (stack йўқ); ёзилмайди', async () => {
-    const bad = clone(); delete bad.markets.meat.names.ru; bad.markets.farm.priceUnits = ['ton'];
+    const bad = clone(); delete bad.markets.meat.names.ru; bad.markets.farm.priceUnits = ['tonne'];
     const e = await expectCode(call({ taxonomy: bad, expectedVersion: 0 }, ADMIN), 'TAXONOMY_INVALID', 'invalid-argument');
     assert.ok(e.details.errors.includes('NAME_MISSING markets.meat.names.ru'), JSON.stringify(e.details.errors));
     assert.ok(e.details.errors.includes('PRICE_UNIT_INVALID markets.farm.priceUnits[0]'));

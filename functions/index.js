@@ -100,6 +100,9 @@ attachRestaurantSeasons(exports, { functions, db, admin, requireCallerRoles });
 // «Бозорлар» таксономияси (1-босқич, эга 2026-11-15): taxonomy/markets — версияли, фақат шу callable, тарих + admin_audit.
 const { attachMarketTaxonomy } = require('./market_taxonomy');
 attachMarketTaxonomy(exports, { functions, db, admin, requireCallerRoles });
+// «Бозорлар» 2a (эга 2026-11-15): олдиндан модерация (ҳамма бозор), 30 кунлик муддат → 'expired', янгилаш → 'pending'.
+const { attachMarketModeration } = require('./market_moderation');
+attachMarketModeration(exports, { functions, db, admin, requireCallerRoles, notifyUserInApp, canonicalUid, callerPhone });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');
@@ -8285,9 +8288,8 @@ exports.adminUpdateMarketAdStatus = functions.https.onCall(async (data, context)
   };
   if (status === 'active') {
     patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
-    patch.expiresAt = admin.firestore.Timestamp.fromDate(
-      new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-    );
+    // «Бозорлар» 2a (эга 2026-11-15): ягона 30 кунлик муддат — константадан (аввал 60 қотирилган эди).
+    patch.expiresAt = marketActiveExpiresAt();
   }
   await ref.update(patch);
   return { ok: true, adId, status };
@@ -8340,9 +8342,7 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
     patch.adminRejected = status === 'inactive';
     if (status === 'active') {
       patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
-      patch.expiresAt = admin.firestore.Timestamp.fromDate(
-        new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-      );
+      patch.expiresAt = marketActiveExpiresAt();
     }
   }
   // phone — owner canonical; админ ҳам ўзгартирмасин
@@ -8356,7 +8356,9 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
 const MARKET_DAILY_AD_LIMIT = 5000;
 const MARKET_MAX_PENDING = 5000;
 const MARKET_MAX_ACTIVE = 5000;
-const MARKET_ACTIVE_TTL_DAYS = 60;
+// «Бозорлар» 2a (эга 2026-11-15): 60 → 30 кун. ⚠️ onAdUpdate/submitMarketAd ЖОНЛИ манбаси бошқа линияда
+// (b7b52700 аудит 2026-10-31) — у ерда ҳам 30 қилинмагунча авто-тасдиқ ёқиқ бўлса 60 кун ишлайди.
+const MARKET_ACTIVE_TTL_DAYS = 30;
 const MARKET_PENDING_TTL_DAYS = 14;
 const MARKET_MAX_PRICE = 100000000;
 const MARKET_DAILY_REPORT_LIMIT = 20;

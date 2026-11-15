@@ -734,7 +734,14 @@ service cloud.firestore {
           && d.get('kind', 'product') in ['product', 'service']
           // S2 (2026-11-03): narx birligi ixtiyoriy; bo'lsa — faqat ro'yxatdagi satr ('' = belgilangan narx).
           // price>=0 avvalgidek (0 = narx ko'rsatilmaydi / «Kelishiladi»).
-          && d.get('priceUnit', '') in ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'm2', 'piece', 'negotiable'];
+          && d.get('priceUnit', '') in ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'm2', 'piece', 'negotiable']
+          // «Бозорлар» 1-босқич (2026-11-15): ихтиёрий бозор майдонлари; category фақат market билан.
+          && d.get('market', 'livestock') in ['livestock', 'auto', 'meat', 'farm']
+          && (!('category' in d) || ('market' in d && d.category is string && d.category.size() >= 1 && d.category.size() <= 40))
+          && (!('attrs' in d) || (d.attrs is map && d.attrs.size() <= 20))
+          && d.get('imported', false) is bool
+          && (!('regionId' in d) || (d.regionId is string && d.regionId.size() >= 1 && d.regionId.size() <= 40))
+          && (!('taxonomyVersion' in d) || (d.taxonomyVersion is int && d.taxonomyVersion >= 1));
     }
 
     // businessId faqat shu foydalanuvchining O'Z ob'ektiga (businesses/{id}.ownerId); mavjud bo'lmagan ob'ektga
@@ -4999,10 +5006,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Ягона категория дарахти. Ҳамма ўқийди, админ ёзади.
+    // Ягона категория дарахти. Ҳамма ўқийди. Ёзиш фақат CF (adminSetMarketTaxonomy: версия + тарих + аудит), 2026-11-15.
     match /taxonomy/{categoryId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
+    }
+
+    // taxonomy/markets версиялари тарихи — фақат CF ёзади.
+    match /taxonomy_history/{versionId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Модул созламалари: тўлқинлар, score чегараси, push лимитлари.

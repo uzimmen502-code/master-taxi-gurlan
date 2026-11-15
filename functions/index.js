@@ -97,6 +97,9 @@ attachRestaurantSectionsConfig(exports, { functions, db, admin, canonicalUid, re
 // Мавсумий бўлимлар ва Рамазон жадвали (D-REST-22/39): settings/restaurant_seasons, settings/restaurant_ramadan — версияли, фақат CF.
 const { attachRestaurantSeasons } = require('./restaurant_seasons');
 attachRestaurantSeasons(exports, { functions, db, admin, requireCallerRoles });
+// «Бозорлар» таксономияси (1-босқич, эга 2026-11-15): taxonomy/markets — версияли, фақат шу callable, тарих + admin_audit.
+const { attachMarketTaxonomy } = require('./market_taxonomy');
+attachMarketTaxonomy(exports, { functions, db, admin, requireCallerRoles });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');

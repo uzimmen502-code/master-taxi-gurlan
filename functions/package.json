@@ -96,7 +96,7 @@
     "test:account-deletion-admin": "firebase emulators:exec --only firestore --project demo-acct-del-admin \"node test/account_deletion_admin_cf.test.js\""
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

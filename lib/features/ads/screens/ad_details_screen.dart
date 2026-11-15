@@ -1,5 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -340,6 +343,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.onPrimary,
             actions: [
+              FavoriteHeart(favorite: FavoriteRef.fromAd(ad), overlay: false),
               IconButton(
                 tooltip: context.tr('ad_report_title'),
                 icon: const Icon(Icons.flag_outlined),

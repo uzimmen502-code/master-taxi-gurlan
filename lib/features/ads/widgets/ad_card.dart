@@ -6,6 +6,8 @@ import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../screens/ad_details_route.dart';
 import 'market_grid.dart';
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 
 /// Grid tile for cheap product listing.
 class AdCard extends StatelessWidget {
@@ -42,7 +44,8 @@ class AdCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: MarketGridMetrics.imageAspect,
-              child: imageUrl != null
+              child: Stack(fit: StackFit.expand, children: [
+                imageUrl != null
                   ? ColoredBox(
                       color: AppColors.cardImageBg,
                       child: CachedNetworkImage(
@@ -66,6 +69,8 @@ class AdCard extends StatelessWidget {
                       color: AppColors.cardImageBg,
                       child: Center(child: Icon(Icons.image, size: 40)),
                     ),
+                FavoriteHeartOverlay(favorite: FavoriteRef.fromAd(ad)),
+              ]),
             ),
             MarketCardText(
               title: ad.title,

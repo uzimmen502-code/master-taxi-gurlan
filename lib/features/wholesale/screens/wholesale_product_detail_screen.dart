@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -313,6 +316,7 @@ class _WholesaleProductDetailViewState
             context.tr('wholesale_title'),
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 0.15),
           ),
+          actions: [FavoriteHeart(favorite: FavoriteRef.fromWholesale(p), overlay: false)],
         ),
         body: ListView(
           physics: kEdgeSwipePhysics,
@@ -463,6 +467,7 @@ class _WholesaleProductDetailViewState
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
           ),
+          actions: [FavoriteHeart(favorite: FavoriteRef.fromWholesale(p), overlay: false)],
         ),
         body: ListView(
           // Контент қисқа бўлса ҳам охиридан ўтиб суриш сезилсин (свайп учун).

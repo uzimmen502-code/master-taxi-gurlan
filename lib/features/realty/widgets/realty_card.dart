@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import '../realty_tabs.dart';
 
 /// Лентадаги битта объект картаси.
@@ -140,6 +142,11 @@ class RealtyCard extends StatelessWidget {
                     ],
                   ),
                 ),
+              ),
+              // ❤ Танланганлар (STAGE 10).
+              Align(
+                alignment: Alignment.topCenter,
+                child: FavoriteHeart(favorite: FavoriteRef.fromRealty(listing), overlay: false),
               ),
             ],
           ),

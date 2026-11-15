@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/geo/geo_name_text.dart';
@@ -249,6 +252,8 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
         // тушунарсиз эди ва пастдаги тугманинг такрори — энди сотувчи
         // карточкаси ([_SellerCard]).
         actions: [
+          // ❤ Танланганлар (STAGE 10).
+          if (_available) FavoriteHeart(favorite: FavoriteRef.fromShopItem(item), overlay: false),
           if (_available)
             IconButton(
               key: const ValueKey('shop_item_report'),

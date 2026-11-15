@@ -5783,5 +5783,19 @@
   "auto_parts_ava_products": "AVA маҳсулотлари",
   "auto_parts_listings": "Эълонлар",
   "auto_hub_parts_market": "Мошина бозори → Эҳтиёт қисмлар",
-  "auto_hub_parts_market_sub": "Одамлар сотаётган эҳтиёт қисмлар"
+  "auto_hub_parts_market_sub": "Одамлар сотаётган эҳтиёт қисмлар",
+  "fav_title": "Танланганлар",
+  "fav_add": "Танланганларга қўшиш",
+  "fav_remove": "Танланганлардан олиб ташлаш",
+  "fav_empty": "Ҳали ҳеч нарса танланмаган. Ёққан эълондаги ❤ ни босинг.",
+  "fav_unavailable": "Мавжуд эмас",
+  "fav_login_required": "Танлаш учун рўйхатдан ўтинг.",
+  "fav_login_cta": "Кабинетга ўтиш",
+  "fav_toggle_failed": "Бажариб бўлмади. Қайта уриниб кўринг.",
+  "fav_src_all": "Барчаси",
+  "fav_src_markets": "Бозорлар",
+  "fav_src_aralash": "Аралаш",
+  "fav_src_ulgurji": "Улгуржи",
+  "fav_src_china": "Хитой",
+  "fav_src_realty": "Уй-жой"
 }

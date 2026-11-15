@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import '../models/wholesale_product.dart';
 import '../utils/wholesale_labels.dart';
 
@@ -122,6 +124,7 @@ class WholesaleProductCard extends StatelessWidget {
                   if (cornerBadge != null && cornerBadge!.trim().isNotEmpty)
                     MarketCornerBadge(text: cornerBadge!),
                   if (locationLabel.isNotEmpty) MarketLocationPill(text: locationLabel),
+                  FavoriteHeartOverlay(favorite: FavoriteRef.fromWholesale(product)),
                 ],
               ),
             ),

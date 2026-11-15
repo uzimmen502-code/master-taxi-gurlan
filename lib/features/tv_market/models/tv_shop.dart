@@ -186,15 +186,18 @@ class TvShopItem {
 
   factory TvShopItem.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    final d = doc.data()!;
+  ) =>
+      TvShopItem.fromMap(doc.id, doc.data()!);
+
+  /// Хом маълумотдан (❤ Танланганлар экрани манба ҳужжатини шундай очади).
+  factory TvShopItem.fromMap(String docId, Map<String, dynamic> d) {
     final rawClips = d['clipIds'];
     final photos = normalizePhotos(
       rawUrls: d['photoUrls'] as List?,
       photoUrl: (d['photoUrl'] ?? '') as String,
     );
     return TvShopItem(
-      id: doc.id,
+      id: docId,
       ownerPhone: (d['ownerPhone'] ?? '') as String,
       ownerName: (d['ownerName'] ?? '') as String,
       title: (d['title'] ?? '') as String,

@@ -5783,5 +5783,19 @@
   "auto_parts_ava_products": "AVA mahsulotlari",
   "auto_parts_listings": "E'lonlar",
   "auto_hub_parts_market": "Mashina bozori → Ehtiyot qismlar",
-  "auto_hub_parts_market_sub": "Odamlar sotayotgan ehtiyot qismlar"
+  "auto_hub_parts_market_sub": "Odamlar sotayotgan ehtiyot qismlar",
+  "fav_title": "Tanlanganlar",
+  "fav_add": "Tanlanganlarga qo'shish",
+  "fav_remove": "Tanlanganlardan olib tashlash",
+  "fav_empty": "Hali hech narsa tanlanmagan. Yoqqan e'londagi ❤ ni bosing.",
+  "fav_unavailable": "Mavjud emas",
+  "fav_login_required": "Tanlash uchun ro'yxatdan o'ting.",
+  "fav_login_cta": "Kabinetga o'tish",
+  "fav_toggle_failed": "Bajarib bo'lmadi. Qayta urinib ko'ring.",
+  "fav_src_all": "Barchasi",
+  "fav_src_markets": "Bozorlar",
+  "fav_src_aralash": "Aralash",
+  "fav_src_ulgurji": "Ulgurji",
+  "fav_src_china": "Xitoy",
+  "fav_src_realty": "Uy-joy"
 }

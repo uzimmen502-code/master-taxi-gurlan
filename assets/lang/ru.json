@@ -5783,5 +5783,19 @@
   "auto_parts_ava_products": "Товары AVA",
   "auto_parts_listings": "Объявления",
   "auto_hub_parts_market": "Авторынок → Запчасти",
-  "auto_hub_parts_market_sub": "Запчасти от продавцов"
+  "auto_hub_parts_market_sub": "Запчасти от продавцов",
+  "fav_title": "Избранное",
+  "fav_add": "Добавить в избранное",
+  "fav_remove": "Убрать из избранного",
+  "fav_empty": "Пока ничего нет. Нажмите ❤ на понравившемся объявлении.",
+  "fav_unavailable": "Недоступно",
+  "fav_login_required": "Чтобы добавлять в избранное, зарегистрируйтесь.",
+  "fav_login_cta": "В кабинет",
+  "fav_toggle_failed": "Не удалось. Попробуйте ещё раз.",
+  "fav_src_all": "Все",
+  "fav_src_markets": "Базары",
+  "fav_src_aralash": "Разное",
+  "fav_src_ulgurji": "Оптом",
+  "fav_src_china": "Китай",
+  "fav_src_realty": "Недвижимость"
 }

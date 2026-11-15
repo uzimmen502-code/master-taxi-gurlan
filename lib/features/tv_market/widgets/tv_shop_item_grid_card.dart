@@ -6,6 +6,8 @@ import 'tv_shop_photo_gallery.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 
 /// Очиқ дўкон / Аҳоли бозори — 2 устунли товар плиткаси.
 class TvShopItemGridCard extends StatelessWidget {
@@ -83,9 +85,11 @@ class TvShopItemGridCard extends StatelessWidget {
                       ),
                     if (cornerBadge.isNotEmpty) MarketCornerBadge(text: cornerBadge),
                     if (locationLabel.isNotEmpty) MarketLocationPill(text: locationLabel),
+                    FavoriteHeartOverlay(favorite: FavoriteRef.fromShopItem(item)),
                     if (photos > 1)
                       Positioned(
-                        right: 6,
+                        // ❤ пастки ўнгда — расм сони унинг чапида.
+                        right: 40,
                         bottom: 6,
                         child: _Pill(
                           text: '$photos',

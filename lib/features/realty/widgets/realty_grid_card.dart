@@ -6,6 +6,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 
 /// Нарх қатори битим тури билан: «450 000 000 сўм · сотиш» / «3 000 000 · ижара» (8-босқич, эга 2026-11-15).
 /// Нарх матни бўш бўлса — фақат битим тури.
@@ -63,6 +65,7 @@ class RealtyGridCard extends StatelessWidget {
                         ),
                   MarketCornerBadge(text: context.tr('aralash_badge_realty')),
                   MarketLocationPill(text: locationLabel),
+                  FavoriteHeartOverlay(favorite: FavoriteRef.fromRealty(listing)),
                 ],
               ),
             ),

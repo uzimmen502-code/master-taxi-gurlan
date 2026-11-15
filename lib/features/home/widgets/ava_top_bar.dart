@@ -5,6 +5,7 @@ import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../favorites/widgets/favorites_top_chip.dart';
 
 /// Бош саҳифанинг юқори қатори: AVA логотипи + ҳудуд тугмаси.
 ///
@@ -48,6 +49,8 @@ class AvaTopBar extends StatelessWidget {
                     ],
                   ),
           ),
+          // ❤ Танланганлар (эга 2026-11-15): фақат N > 0 бўлса.
+          const FavoritesTopChip(),
         ],
       ),
     );

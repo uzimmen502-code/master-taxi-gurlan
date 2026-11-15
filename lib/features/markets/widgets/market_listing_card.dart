@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/widgets/tv_shop_photo_gallery.dart';
 import '../domain/market_taxonomy.dart';
 
 /// Бозор рўйхати карточкаси: расм · сарлавҳа · нарх бирлиги билан («85 000 сўм / кг») · нисбий жой ·
-/// битта қисқа майдонлар қатори. Расмнинг ўнг юқорисида юрак учун жой ҚОЛДИРИЛГАН (севимлилар — кейинги босқич).
+/// битта қисқа майдонлар қатори. Расмнинг ўнг юқорисида ❤ (Танланганлар, STAGE 10).
 class MarketListingCard extends StatelessWidget {
   const MarketListingCard({
     super.key,
@@ -55,11 +57,16 @@ class MarketListingCard extends StatelessWidget {
                         ? const Icon(Icons.image_outlined, size: 32)
                         : TvShopNetworkImage(url: cover, fit: BoxFit.cover),
                   ),
-                  // Юрак тугмаси учун жой (эга 2026-11-15: севимлилар кейин; ҳозир бўш).
+                  // ❤ Танланганлар (STAGE 10, эга 2026-11-15) — олдиндан ажратилган жойда.
                   Positioned(
                     top: 4,
                     right: 4,
-                    child: SizedBox(key: ValueKey('market_card_fav_slot_${item.id}'), width: 32, height: 32),
+                    child: SizedBox(
+                      key: ValueKey('market_card_fav_slot_${item.id}'),
+                      width: 32,
+                      height: 32,
+                      child: FavoriteHeart(favorite: FavoriteRef.fromShopItem(item)),
+                    ),
                   ),
                   if (item.imported == true)
                     Positioned(

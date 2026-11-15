@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../favorites/domain/favorite_ref.dart';
+import '../../favorites/widgets/favorite_heart.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -117,7 +120,10 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
 
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(title: Text(context.tr('realty_detail_title'))),
+      appBar: AppBar(
+        title: Text(context.tr('realty_detail_title')),
+        actions: [FavoriteHeart(favorite: FavoriteRef.fromRealty(r), overlay: false)],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [

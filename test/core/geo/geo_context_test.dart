@@ -107,7 +107,9 @@ void main() {
 
   group('ModuleGeoPolicy жадвали', () {
     test('эга қарорлари', () {
-      expect(geoPolicyFor('china_market').mode, GeoMode.nationwide);
+      // 2026-11-15: Хитой бозори → ҳалқалар (аввал nationwide); levels ўзгармаган.
+      expect(geoPolicyFor('china_market').mode, GeoMode.rings);
+      expect(geoPolicyFor('china_market').levels, [GeoLevel.nation]);
       expect(geoPolicyFor('wholesale_market').persistSelection, isFalse);
       expect(geoPolicyFor('wholesale_market').defaultLevel, GeoLevel.nation);
       expect(geoPolicyFor('yuk_local').levels, [GeoLevel.district, GeoLevel.region]);

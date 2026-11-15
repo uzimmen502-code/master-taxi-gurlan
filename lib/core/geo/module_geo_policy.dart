@@ -29,6 +29,17 @@ enum GeoMode {
 
   /// Ҳудуд ишида қатнашмайди (Танишув — Telegram бот, D-GEO-5).
   none,
+
+  /// «Ҳалқалар» (эга, 2026-11-15): сукут — БАРЧА эълонлар Республика бўйича,
+  /// яқиндан узоққа: 1-ҳалқа фойдаланувчи тумани → 2-ҳалқа вилоятнинг қолган
+  /// туманлари → 3+ бошқа вилоятлар (вилоят марказлари орасидаги масофа бўйича,
+  /// `region_centers.dart`). Фойдаланувчи ҳудудни ўзи танласа — фақат шу ҳудуд.
+  /// Мотор: `ring_query.dart`. Бозорлар + Улгуржи + Хитой + Кўчмас мулк.
+  ///
+  /// ЎТИШ ДАВРИ (3+4-босқич): Улгуржи/Хитой/Кўчмас мулк экранлари ҳали
+  /// `mode`ни ўқимайди — улар `levels`/`defaultLevel`/`persistSelection` бўйича
+  /// аввалгидек ишлайди (қийматлар ўзгармаган). Ҳалқаларга кейинги босқичда ўтади.
+  rings,
 }
 
 class ModuleGeoPolicy {
@@ -60,18 +71,23 @@ class ModuleGeoPolicy {
 
 const _all = [GeoLevel.district, GeoLevel.region, GeoLevel.nation];
 
+/// Бозорлар: `nation` = ҳалқалар (сукут), region/district = аниқ танлов.
+const _marketLevels = [GeoLevel.nation, GeoLevel.region, GeoLevel.district];
+
 /// Модул ID'лари — `kKnownModuleIds` / бош экран модуллари билан бир хил.
 const Map<String, ModuleGeoPolicy> kModuleGeoPolicies = {
+  // 2026-11-15: china/wholesale/realty → `rings` (аввал nationwide/chooser/tiered).
+  // levels/defaultLevel/persistSelection ЎЗГАРМАГАН — экранлар аввалгидек.
   'china_market': ModuleGeoPolicy(
     moduleId: 'china_market',
-    mode: GeoMode.nationwide,
+    mode: GeoMode.rings, // аввал: nationwide
     levels: [GeoLevel.nation],
     defaultLevel: GeoLevel.nation,
     persistSelection: false,
   ),
   'wholesale_market': ModuleGeoPolicy(
     moduleId: 'wholesale_market',
-    mode: GeoMode.chooser,
+    mode: GeoMode.rings, // аввал: chooser
     levels: [GeoLevel.nation, GeoLevel.region, GeoLevel.district],
     defaultLevel: GeoLevel.nation,
     persistSelection: false, // D-GEO-10: ҳар сафар «Бутун Ўзбекистон»
@@ -89,9 +105,39 @@ const Map<String, ModuleGeoPolicy> kModuleGeoPolicies = {
   ),
   'realty': ModuleGeoPolicy(
     moduleId: 'realty',
-    mode: GeoMode.tiered,
+    mode: GeoMode.rings, // аввал: tiered
     levels: _all,
     usesLocation: true, // D-GEO-11/15: истаган ҳудуд, танлов сақланади
+  ),
+  // «Бозорлар» (эга, 2026-11-15): сукут — Республика ҳалқалари; танлов
+  // сақланмайди (PROPOSED: ҳар киришда яна ҳалқалар).
+  'livestock_market': ModuleGeoPolicy(
+    moduleId: 'livestock_market',
+    mode: GeoMode.rings,
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
+  ),
+  'auto_market': ModuleGeoPolicy(
+    moduleId: 'auto_market',
+    mode: GeoMode.rings,
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
+  ),
+  'meat_market': ModuleGeoPolicy(
+    moduleId: 'meat_market',
+    mode: GeoMode.rings,
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
+  ),
+  'farm_market': ModuleGeoPolicy(
+    moduleId: 'farm_market',
+    mode: GeoMode.rings,
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
   ),
   'tv_market': ModuleGeoPolicy(
     moduleId: 'tv_market',

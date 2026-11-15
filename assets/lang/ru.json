@@ -4466,6 +4466,7 @@
   "price_unit_session": "За сеанс",
   "price_unit_person": "С человека",
   "price_unit_kg": "За килограмм",
+  "price_unit_ton": "За тонну",
   "price_unit_m2": "За квадратный метр",
   "price_unit_piece": "За штуку",
   "price_unit_negotiable": "Договорная",
@@ -4475,6 +4476,7 @@
   "price_unit_short_session": "сеанс",
   "price_unit_short_person": "чел.",
   "price_unit_short_kg": "кг",
+  "price_unit_short_ton": "т",
   "price_unit_short_m2": "м²",
   "price_unit_label": "Единица цены",
   "home_create_business_map": "Мои бизнесы",
@@ -5733,5 +5735,14 @@
   "wholesale_debt_err_none": "По этому заказу нет долга к оплате.",
   "wholesale_cash_unavailable_buyer_debt_hint": "Долг можно оплатить из кошелька AVA кнопкой «Оплатить» на странице этого заказа в разделе «Мои заказы».",
   "wlt_l_wholesale_debt_payment": "Опт — долг оплачен",
-  "wlt_l_logistics_cash_debt_payout": "Оплата курьеру (из долга покупателя)"
+  "wlt_l_logistics_cash_debt_payout": "Оплата курьеру (из долга покупателя)",
+  "listing_mod_status_pending": "На проверке",
+  "listing_mod_status_rejected": "Отклонено",
+  "listing_mod_status_expired": "Срок истёк",
+  "listing_mod_days_left": "Осталось дней: {n}",
+  "listing_mod_renew": "Продлить",
+  "listing_mod_submitted": "Объявление отправлено на проверку",
+  "listing_mod_reject_reason": "Причина: {reason}",
+  "listing_mod_renew_failed": "Не удалось продлить объявление. Попробуйте ещё раз.",
+  "listing_mod_renew_not_expired": "Это объявление сейчас нельзя продлить."
 }

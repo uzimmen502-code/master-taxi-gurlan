@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../tv_market/domain/listing_status_view.dart';
 import '../../tv_market/models/tv_ad_prefill.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_publish_screen.dart';
 import '../../tv_market/screens/tv_shop_public_screen.dart';
+import '../../tv_market/services/listing_renew_service.dart';
 import '../../my_shop/widgets/shop_link_sheet.dart';
 import '../domain/business.dart';
 import '../domain/business_type_profile.dart';
@@ -34,7 +36,11 @@ class BusinessProductsScreen extends StatefulWidget {
     this.formScreen,
     this.customerViewScreen,
     this.loadLink,
+    this.renewService,
   }) : _repo = repository;
+
+  /// Тест учун: «Янгилаш» (`renewMarketListing`) хизмати; бўлмаса — [ListingRenewService].
+  final ListingRenewService? renewService;
 
   /// Тест учун: форма экрани ўрнига ([prefill] — шаблон чипидан; «қўшиш» ва таҳрирда `null`).
   final Widget Function(Business business, TvShopItem? existing, BusinessOfferPrefill? prefill)? formScreen;
@@ -183,6 +189,84 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
     }
   }
 
+  /// Янгилаш сўрови кетаётган эълонлар (иккинчи босиш иккинчи чақирув юбормасин).
+  final Set<String> _renewing = {};
+
+  /// «Янгилаш»: муддати тугаган эълон → сервер `pending`га ўтказади (эга ва ҳолатни сервер текширади).
+  Future<void> _renew(TvShopItem item) async {
+    if (_renewing.contains(item.id)) return;
+    setState(() => _renewing.add(item.id));
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await (widget.renewService ?? ListingRenewService()).renew(collection: 'tv_shop_items', id: item.id);
+      if (!mounted) return;
+      messenger?.showSnackBar(SnackBar(content: Text(context.tr('listing_mod_submitted'))));
+      _reload();
+    } catch (e) {
+      // Диагностик код логда (ListingRenewService); фойдаланувчига — умумий матн (25-банд).
+      if (!mounted) return;
+      messenger?.showSnackBar(SnackBar(content: Text(context.tr(renewErrorKey(e)))));
+    } finally {
+      if (mounted) setState(() => _renewing.remove(item.id));
+    }
+  }
+
+  /// Ҳолат қатори (нишон / сабаб / «N кун қолди»); эски ҳужжатда — йўқ.
+  Widget? _statusLine(TvShopItem it) {
+    final v = listingStatusView(it);
+    final key = v.labelKey;
+    if (key == null) {
+      final d = v.daysLeft;
+      if (d == null) return null;
+      return Text(
+        context.tr('listing_mod_days_left').replaceAll('{n}', '$d'),
+        key: ValueKey('bizprod_days_left_${it.id}'),
+        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+      );
+    }
+    final (Color fg, Color bg) = switch (v.badge) {
+      ListingBadge.pending => (Colors.orange.shade900, Colors.orange.shade50),
+      ListingBadge.expired => (Colors.grey.shade800, Colors.grey.shade200),
+      _ => (Colors.red.shade800, Colors.red.shade50),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          key: ValueKey('bizprod_badge_${it.id}'),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+          child: Text(context.tr(key), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+        ),
+        if (v.reason.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              context.tr('listing_mod_reject_reason').replaceAll('{reason}', v.reason),
+              key: ValueKey('bizprod_reject_reason_${it.id}'),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: Colors.red.shade800),
+            ),
+          ),
+        if (v.canRenew)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: OutlinedButton.icon(
+              key: ValueKey('bizprod_renew_${it.id}'),
+              onPressed: _renewing.contains(it.id) ? null : () => _renew(it),
+              icon: _renewing.contains(it.id)
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(context.tr('listing_mod_renew')),
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -306,6 +390,17 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
             itemBuilder: (_, i) {
               final it = items[i];
               final cover = it.coverPhotoUrl;
+              final status = _statusLine(it);
+              final info = Text(
+                [
+                  // Блок нишони энди ҳолат қаторида ([_statusLine]) — икки марта ёзилмайди.
+                  if (it.priceLabel(context.tr).isNotEmpty) it.priceLabel(context.tr),
+                  context.tr(it.kind == 'service' ? 'bizprod_kind_service' : 'bizprod_kind_product'),
+                  if (it.hasVideo) context.tr('bizprod_has_video'),
+                ].join(' · '),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              );
               return Card(
                 margin: EdgeInsets.zero,
                 child: ListTile(
@@ -320,16 +415,14 @@ class _BusinessProductsScreenState extends State<BusinessProductsScreen> {
                     ),
                   ),
                   title: Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                    [
-                      if (it.isBlocked) context.tr('bizprod_status_blocked'),
-                      if (it.priceLabel(context.tr).isNotEmpty) it.priceLabel(context.tr),
-                      context.tr(it.kind == 'service' ? 'bizprod_kind_service' : 'bizprod_kind_product'),
-                      if (it.hasVideo) context.tr('bizprod_has_video'),
-                    ].join(' · '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  subtitle: status == null
+                      ? info
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [info, const SizedBox(height: 4), status],
+                        ),
+                  isThreeLine: status != null,
                   onTap: () => _openForm(it),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

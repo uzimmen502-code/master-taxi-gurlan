@@ -883,6 +883,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final autoApprove = settingsSnap.data()?['tvAutoApprove'] == true;
 
       String shopItemId = _attachItemId;
+      var newShopItem = false;
       // Розилик ва тармоқлар — экранда кўрсатилганлар (тур «Янгилик» бўлса «Менинг каналим»сиз).
       final socialNets = _effectiveSocialNetworks;
       var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;
@@ -914,9 +915,12 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               districtLabel: districtLabel,
               description: description,
               socialConsent: socialNets.isNotEmpty,
-              status: autoApprove ? 'active' : 'pending',
+              // «Бозорлар» 2b (эга 2026-11-15): дўкон товари ДОИМ олдиндан модерацияда; `tvAutoApprove` фақат
+              // клипга тегишли (эга қарори 6 — клип мантиғи ўзгармайди).
+              status: 'pending',
             ),
           );
+          newShopItem = true;
           // Товар яратилди — клип ёзиш кейин йиқилса, қайта уриниш ИККИНЧИ товар
           // яратмасин: шу товарга боғланади (аудит C-2, такрорий юборишга қарши).
           _attachItemId = shopItemId;
@@ -982,6 +986,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       if (!mounted) return;
       final lines = <String>[
         context.tr(autoApprove ? 'tv_publish_success' : 'tv_publish_pending'),
+        if (newShopItem) context.tr('listing_mod_submitted'),
       ];
       if (isNews) {
         lines.add(context.tr('tv_publish_marked_news'));

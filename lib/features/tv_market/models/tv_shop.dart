@@ -64,7 +64,23 @@ class TvShopItem {
     this.createdAt,
     this.businessId = '',
     this.priceUnit = PriceUnit.fixed,
+    this.expiresAt,
+    this.submittedAt,
+    this.rejectReason = '',
+    this.market = '',
   });
+
+  /// «Бозорлар» 2a/2b (эга 2026-11-15): модерация ва 30 кунлик муддат майдонлари — ФАҚАТ сервер ёзади
+  /// (`functions/market_moderation.js`; rules `tvShopModerationKeys`). Клиент уларни ўқийди, [toMap]да ЁЗМАЙДИ.
+  /// Эски ҳужжатларда йўқ — `null`/бўш (аввалги кўриниш ўзгармайди).
+  final DateTime? expiresAt;
+  final DateTime? submittedAt;
+
+  /// Рад этиш сабаби (`status == 'rejected'`); бўлмаса бўш.
+  final String rejectReason;
+
+  /// Бозор идентификатори (`taxonomy/markets`; 1-босқич). Эски ҳужжатда йўқ — бўш.
+  final String market;
 
   /// Эга қарори (2026-10-24): 7 тагача расм (Аҳоли бозори эълони билан бир хил).
   static const maxPhotos = 7;
@@ -96,7 +112,7 @@ class TvShopItem {
   final bool socialConsent;
   final DateTime? socialPostedAt;
 
-  /// `pending` | `active` | `blocked`
+  /// `active` | `pending` | `rejected` | `expired` | `deleted` | `blocked` (2a: `rejected`/`expired` — сервер).
   final String status;
   final DateTime? createdAt;
 
@@ -139,6 +155,9 @@ class TvShopItem {
 
   bool get isActive => status == 'active';
   bool get isBlocked => status == 'blocked';
+  bool get isPending => status == 'pending';
+  bool get isRejected => status == 'rejected';
+  bool get isExpired => status == 'expired';
   bool get hasVideo => clipIds.isNotEmpty;
   bool get hasPrice => price > 0;
 
@@ -183,8 +202,15 @@ class TvShopItem {
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       businessId: (d['businessId'] ?? '') is String ? (d['businessId'] ?? '') as String : '',
       priceUnit: PriceUnit.fromWire(d['priceUnit']),
+      expiresAt: _tsOrNull(d['expiresAt']),
+      submittedAt: _tsOrNull(d['submittedAt']),
+      rejectReason: d['rejectReason'] is String ? (d['rejectReason'] as String).trim() : '',
+      market: d['market'] is String ? (d['market'] as String).trim() : '',
     );
   }
+
+  /// `Timestamp` → `DateTime`; бошқа тур (эски/бузилган ҳужжат) — `null` (crash эмас).
+  static DateTime? _tsOrNull(Object? v) => v is Timestamp ? v.toDate() : null;
 
   Map<String, dynamic> toMap() {
     final photos = normalizePhotos(rawUrls: photoUrls, photoUrl: photoUrl);

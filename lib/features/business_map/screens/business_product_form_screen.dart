@@ -11,6 +11,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../tv_market/domain/listing_status_view.dart';
 import '../../tv_market/domain/price_unit.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
@@ -24,7 +25,8 @@ import '../domain/product_kind.dart';
 /// Объектнинг маҳсулот/хизмати: ном, нарх, тавсиф, 7 тагача расм, ихтиёрий 1 видео (эга қарори, 2026-10-24).
 ///
 /// Маҳсулот — мавжуд АВАГрам витринаси ҳужжати (`tv_shop_items`) + `businessId`: Аҳоли бозорида (расм бор) ва
-/// видео қўшилса АВАГрамда ўзи чиқади. Модерациясиз: эга ўзи жойлайди, админ таҳрирлайди/ўчиради.
+/// видео қўшилса АВАГрамда ўзи чиқади. «Бозорлар» 2b (эга 2026-11-15): олдиндан модерация — янги эълон `pending`,
+/// админ тасдиқлагач `active` (30 кун); контент таҳририда сервер қайта текширувга ўтказади.
 class BusinessProductFormScreen extends StatefulWidget {
   const BusinessProductFormScreen({
     super.key,
@@ -147,8 +149,18 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     });
     try {
       String itemId;
+      var submitted = !_isEdit; // янги эълон — доим текширувга
       if (_isEdit) {
         itemId = widget.existing!.id;
+        // Таҳрирда статус ЮБОРИЛМАЙДИ (rules: эга фақат сақлайди ёки `deleted`); контент ўзгарса сервер
+        // `active`/`expired`ни `pending`га ўтказади (`CONTENT_FIELDS`: title, price, priceUnit, description, …).
+        submitted = editResubmitsForModeration(
+          widget.existing!,
+          title: name,
+          price: price,
+          description: _desc.text.trim(),
+          priceUnit: _unit,
+        );
         await _repo.updateItem(itemId, {
           'title': name,
           'price': price,
@@ -177,7 +189,9 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           // Ўз дўкони (харитасиз): туман номи ҳам ёзилади — лентада кўринади; харита объектида аввалгидек бўш.
           districtLabel: widget.business.isOwnShop ? ServiceConfigHolder.districtLabel.trim() : '',
           description: _desc.text.trim(),
-          status: 'active',
+          // «Бозорлар» 2b (эга 2026-11-15): олдиндан модерация — админ тасдиқлагунча бозорда кўринмайди.
+          // Сервер (`onShopItemModeration`) ҳам `active`ни `pending`га ўтказади; клиент ўзи ҳам `pending` юборади.
+          status: 'pending',
           businessId: widget.business.id,
           priceUnit: _unit,
         ));
@@ -185,7 +199,10 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
       if (!mounted) return;
       // Ҳужжат ёзилди: спиннер тўхтайди (видео сўрови очиқ турганда ҳам «банд» кўринмасин).
       setState(() => _busy = false);
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('bizprod_saved'))));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        key: ValueKey(submitted ? 'bizprod_snack_submitted' : 'bizprod_snack_saved'),
+        content: Text(context.tr(submitted ? 'listing_mod_submitted' : 'bizprod_saved')),
+      ));
       // Видео формадаги ягона жойда танланади (эга, 2026-10-26) — аввалги «Видео қўшасизми?» ойнаси йўқ.
       if (!_isEdit && _wantVideo) await (widget.addVideo ?? _defaultAddVideo)(context, itemId);
       if (!mounted) return;

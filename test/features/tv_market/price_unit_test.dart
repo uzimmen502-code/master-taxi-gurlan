@@ -19,7 +19,7 @@ void main() {
   group('PriceUnit wire', () {
     test('wire қийматлари S2 rules рўйхати билан бир хил', () {
       expect(PriceUnit.wires,
-          ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'm2', 'piece', 'negotiable']);
+          ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'ton', 'm2', 'piece', 'negotiable']);
     });
 
     test('fromWire: ҳар қиймат ўзига қайтади', () {

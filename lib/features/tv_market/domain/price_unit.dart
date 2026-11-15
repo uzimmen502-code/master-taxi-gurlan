@@ -2,7 +2,7 @@
 //
 // Ҳолат: МОДЕЛ + ФОРМАТТЕР. `tv_shop_items.priceUnit` майдони, форма танлови ва Firestore rules — S2 слайсида
 // (бу ерда TvShopItem ва rules ЎЗГАРТИРИЛМАЙДИ). Wire қийматлари S2 rules рўйхати билан бир хил бўлиши шарт:
-//   '' (белгиланган нарх) · from · hour · day · month · session · person · kg · m2 · piece · negotiable
+//   '' (белгиланган нарх) · from · hour · day · month · session · person · kg · ton · m2 · piece · negotiable
 // Бўш/номаълум қиймат → [PriceUnit.fixed]: эски ҳужжат ва эски APK бузилмайди (26-банд).
 // Пул — бутун сўм (8-банд); валюта белгиси — ягона [kCurrencySum] ([formatMoney]).
 //
@@ -22,6 +22,10 @@ enum PriceUnit {
   session('session'),
   person('person'),
   kg('kg'),
+
+  /// Тонна — Деҳқон бозори (эга 2026-11-15; rules `priceUnit` рўйхати ва `functions/market_taxonomy.js`
+  /// `PRICE_UNITS` билан бир хил тартибда: kg дан кейин).
+  ton('ton'),
   m2('m2'),
 
   /// Дона — мавжуд `piece` калити (дона / dona / шт).

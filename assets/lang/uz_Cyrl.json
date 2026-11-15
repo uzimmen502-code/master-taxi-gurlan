@@ -4466,6 +4466,7 @@
   "price_unit_session": "Сеансига",
   "price_unit_person": "Кишига",
   "price_unit_kg": "Килограммига",
+  "price_unit_ton": "Тоннасига",
   "price_unit_m2": "Квадрат метрига",
   "price_unit_piece": "Донасига",
   "price_unit_negotiable": "Келишилади",
@@ -4475,6 +4476,7 @@
   "price_unit_short_session": "сеанс",
   "price_unit_short_person": "киши",
   "price_unit_short_kg": "кг",
+  "price_unit_short_ton": "т",
   "price_unit_short_m2": "м²",
   "price_unit_label": "Нарх бирлиги",
   "home_create_business_map": "Менинг бизнесларим",
@@ -5733,5 +5735,14 @@
   "wholesale_debt_err_none": "Бу буюртмада тўланадиган қарз йўқ.",
   "wholesale_cash_unavailable_buyer_debt_hint": "Қарзни «Менинг буюртмаларим»даги ўша буюртма саҳифасида «Тўлаш» тугмаси билан AVA ҳамёнидан тўлашингиз мумкин.",
   "wlt_l_wholesale_debt_payment": "Улгуржи — қарз тўланди",
-  "wlt_l_logistics_cash_debt_payout": "Курьер ҳақи (харидор қарзидан)"
+  "wlt_l_logistics_cash_debt_payout": "Курьер ҳақи (харидор қарзидан)",
+  "listing_mod_status_pending": "Текширувда",
+  "listing_mod_status_rejected": "Рад этилди",
+  "listing_mod_status_expired": "Муддати тугади",
+  "listing_mod_days_left": "{n} кун қолди",
+  "listing_mod_renew": "Янгилаш",
+  "listing_mod_submitted": "Эълон текширувга юборилди",
+  "listing_mod_reject_reason": "Сабаб: {reason}",
+  "listing_mod_renew_failed": "Эълонни янгилаб бўлмади. Қайта уриниб кўринг.",
+  "listing_mod_renew_not_expired": "Бу эълонни ҳозир янгилаб бўлмайди."
 }

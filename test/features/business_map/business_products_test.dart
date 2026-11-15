@@ -176,7 +176,7 @@ void main() {
       expect(shop.calls, isEmpty);
     });
 
-    testWidgets('яратиш: 7 тадан ортиқ расм кесилади, businessId/эга/тур/нарх тўғри, дарҳол active; видео «кейин»', (tester) async {
+    testWidgets('яратиш: 7 тадан ортиқ расм кесилади, businessId/эга/тур/нарх тўғри, pending (модерация); видео «кейин»', (tester) async {
       final shop = _FakeShop();
       String? uploadedFor;
       List<String>? uploadedPaths;
@@ -212,7 +212,8 @@ void main() {
       expect(c.title, 'Стрижка');
       expect(c.price, 50000);
       expect(c.kind, 'service', reason: 'Шахсий хизматлар — бошланғич «хизмат»');
-      expect(c.status, 'active', reason: 'модерациясиз');
+      expect(c.status, 'pending', reason: 'Бозорлар 2b (эга 2026-11-15): олдиндан модерация');
+      expect(c.toMap().keys, isNot(contains('submittedAt')), reason: 'rules: модерация майдонлари фақат сервер');
       expect(c.districtId, 'gurlan');
       expect(c.photoUrls.length, 7);
       expect(shop.calls, containsAllInOrder(['ensureShop:998901111111:Мой Дўкон', 'create']));

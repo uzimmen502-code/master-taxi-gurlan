@@ -4466,6 +4466,7 @@
   "price_unit_session": "Seansiga",
   "price_unit_person": "Kishiga",
   "price_unit_kg": "Kilogrammiga",
+  "price_unit_ton": "Tonnasiga",
   "price_unit_m2": "Kvadrat metriga",
   "price_unit_piece": "Donasiga",
   "price_unit_negotiable": "Kelishiladi",
@@ -4475,6 +4476,7 @@
   "price_unit_short_session": "seans",
   "price_unit_short_person": "kishi",
   "price_unit_short_kg": "kg",
+  "price_unit_short_ton": "t",
   "price_unit_short_m2": "m²",
   "price_unit_label": "Narx birligi",
   "home_create_business_map": "Mening bizneslarim",
@@ -5733,5 +5735,14 @@
   "wholesale_debt_err_none": "Bu buyurtmada to'lanadigan qarz yo'q.",
   "wholesale_cash_unavailable_buyer_debt_hint": "Qarzni «Mening buyurtmalarim»dagi o'sha buyurtma sahifasida «To'lash» tugmasi bilan AVA hamyonidan to'lashingiz mumkin.",
   "wlt_l_wholesale_debt_payment": "Ulgurji — qarz to'landi",
-  "wlt_l_logistics_cash_debt_payout": "Kuryer haqi (xaridor qarzidan)"
+  "wlt_l_logistics_cash_debt_payout": "Kuryer haqi (xaridor qarzidan)",
+  "listing_mod_status_pending": "Tekshiruvda",
+  "listing_mod_status_rejected": "Rad etildi",
+  "listing_mod_status_expired": "Muddati tugadi",
+  "listing_mod_days_left": "{n} kun qoldi",
+  "listing_mod_renew": "Yangilash",
+  "listing_mod_submitted": "E'lon tekshiruvga yuborildi",
+  "listing_mod_reject_reason": "Sabab: {reason}",
+  "listing_mod_renew_failed": "E'lonni yangilab bo'lmadi. Qayta urinib ko'ring.",
+  "listing_mod_renew_not_expired": "Bu e'lonni hozir yangilab bo'lmaydi."
 }

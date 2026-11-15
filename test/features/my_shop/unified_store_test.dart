@@ -166,7 +166,7 @@ void main() {
       expect(c.ownerPhone, _phone);
       expect(c.price, 420000);
       expect(c.photoUrls.length, 2);
-      expect(c.status, 'active');
+      expect(c.status, 'pending', reason: 'Бозорлар 2b: олдиндан модерация');
       expect(c.districtId, 'gurlan');
       expect(shop.calls, containsAllInOrder(['ensureShop:$_phone:Barakat', 'create']));
     });

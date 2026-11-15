@@ -8365,7 +8365,8 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
 const MARKET_DAILY_AD_LIMIT = 5000;
 const MARKET_MAX_PENDING = 5000;
 const MARKET_MAX_ACTIVE = 5000;
-const MARKET_ACTIVE_TTL_DAYS = 60;
+// Ega 2026-11-15: bozor e'loni faol muddati 60 -> 30 kun (pending 14 kun o'zgarmaydi).
+const MARKET_ACTIVE_TTL_DAYS = 30;
 const MARKET_PENDING_TTL_DAYS = 14;
 const MARKET_MAX_PRICE = 100000000;
 const MARKET_DAILY_REPORT_LIMIT = 20;

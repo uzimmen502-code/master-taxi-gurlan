@@ -419,6 +419,28 @@ async function main() {
     assert.strictEqual((await runAdUpdate('jj', { text: 'Boshqa' })).status, 'pending');
   });
 
+  // Ega 2026-11-15: bozor e'loni FAOL muddati 30 kun (avval 60); pending 14 kun o'zgarmaydi.
+  await check('A5 TTL: AVTO submitMarketAd + onAdUpdate pending→active → ~30 kun; QO\'LDA submit → ~14 kun (chegara 29..31 / 13..15)', async () => {
+    const DAY = 86400000;
+    const near = (ms, days) => ms > Date.now() + (days - 1) * DAY && ms < Date.now() + (days + 1) * DAY;
+    await setDefaults({ cheap_products_home: 'enabled' });
+    await db.doc('settings/app').set({ marketAutoApprove: false }, { merge: true });
+    const p = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: rid() }, U_GURLAN);
+    assert.strictEqual(p.status, 'pending');
+    const pExp = (await db.collection('ads').doc(p.adId).get()).data().expiresAt.toMillis();
+    assert.ok(near(pExp, 14), `pending TTL ${(pExp - Date.now()) / DAY}`);
+    await db.doc('settings/app').set({ marketAutoApprove: true }, { merge: true });
+    const a = await call('submitMarketAd', { ...marketAd(U_GURLAN), requestId: rid() }, U_GURLAN);
+    assert.strictEqual(a.status, 'active');
+    const aExp = (await db.collection('ads').doc(a.adId).get()).data().expiresAt.toMillis();
+    assert.ok(near(aExp, 30), `active TTL (submit) ${(aExp - Date.now()) / DAY}`);
+    assert.ok(aExp < Date.now() + 31 * DAY, 'eski 60 kun emas');
+    await db.collection('ads').doc('md').set({ type: 'cheap_product', ownerId: U_GURLAN, status: 'inactive', title: 'Eski', price: 1 });
+    const d = await runAdUpdate('md', { status: 'pending' });
+    assert.strictEqual(d.status, 'active');
+    assert.ok(near(d.expiresAt.toMillis(), 30), `active TTL (onAdUpdate) ${(d.expiresAt.toMillis() - Date.now()) / DAY}`);
+  });
+
   // ── T: TV klip qayta moderatsiyasi ───────────────────────────────────
   await reset();
   const clipBase = { status: 'active', category: 'product', ownerPhone: U_GURLAN, videoUrl: 'https://example.invalid/v1.mp4', title: 'Non', description: 'Issiq', posterUrl: 'https://example.invalid/p1.jpg' };

@@ -72,6 +72,12 @@ async function main() {
   if (args.apply && !args.project) throw new Error('--apply faqat --project <id> bilan');
   if (!args.project) { console.log('DRY RUN (oflayn) — Firestore\'ga ulanmadi.'); return; }
 
+  // ADC йўқ машинада: GCLOUD_ACCESS_TOKEN (`gcloud auth print-access-token`) → Firestore REST commit
+  // (exists=false шартлари билан, атомар). Токен лог'га чиқмайди.
+  if (!process.env.FIRESTORE_EMULATOR_HOST && process.env.GCLOUD_ACCESS_TOKEN) {
+    await restSeed(args, taxonomy, process.env.GCLOUD_ACCESS_TOKEN);
+    return;
+  }
   const admin = require('firebase-admin');
   if (!admin.apps.length) {
     if (process.env.FIRESTORE_EMULATOR_HOST) admin.initializeApp({ projectId: args.project });
@@ -100,6 +106,53 @@ async function main() {
     t.set(db.collection('admin_audit').doc(), docs.audit);
   });
   console.log('YARATILDI: taxonomy/markets v1');
+}
+
+// JS қиймат → Firestore REST Value (сонлар фақат бутун — таксономияда каср йўқ).
+function toValue(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') {
+    if (!Number.isInteger(v)) throw new Error(`Kasr son taxonomy'da kutilmagan: ${v}`);
+    return { integerValue: String(v) };
+  }
+  if (typeof v === 'string') return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(toValue) } };
+  return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toValue(x)])) } };
+}
+
+async function restSeed(args, taxonomy, token) {
+  const base = `https://firestore.googleapis.com/v1/projects/${args.project}/databases/(default)/documents`;
+  const headers = { Authorization: `Bearer ${token}`, 'x-goog-user-project': args.project, 'Content-Type': 'application/json' };
+  console.log(`${args.apply ? 'APPLY' : 'DRY RUN'} — loyiha ${args.project} (PRODUCTION REST)`);
+  const cur = await fetch(`${base}/${TAXONOMY_DOC.join('/')}`, { headers });
+  if (cur.status === 200) {
+    const d = await cur.json();
+    console.log(`Hujjat BOR (version ${d.fields && d.fields.version && d.fields.version.integerValue}) — tegilmaydi.`);
+    process.exitCode = args.apply ? 1 : 0;
+    return;
+  }
+  if (cur.status !== 404) throw new Error(`O'qish xatosi HTTP ${cur.status}`);
+  if (!args.apply) { console.log('Hujjat yo\'q — --apply bilan v1 yaratiladi.'); return; }
+  const docs = buildVersionDocs({ markets: taxonomy.markets, version: 1, previousVersion: null, actor: ACTOR, ts: null });
+  const name = (p) => `projects/${args.project}/databases/(default)/documents/${p}`;
+  const strip = (o, k) => Object.fromEntries(Object.entries(o).filter(([key]) => key !== k));
+  const write = (path, obj, tsField, mustNotExist) => ({
+    update: { name: name(path), fields: toValue(strip(obj, tsField)).mapValue.fields },
+    updateTransforms: [{ fieldPath: tsField, setToServerValue: 'REQUEST_TIME' }],
+    ...(mustNotExist ? { currentDocument: { exists: false } } : {}),
+  });
+  const auditId = `market_taxonomy_seed_v1`;
+  const body = {
+    writes: [
+      write(TAXONOMY_DOC.join('/'), docs.doc, 'updatedAt', true),
+      write(`${HISTORY_COLLECTION}/v1`, docs.history, 'updatedAt', true),
+      write(`admin_audit/${auditId}`, docs.audit, 'at', true),
+    ],
+  };
+  const res = await fetch(`${base}:commit`, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (res.status !== 200) throw new Error(`Commit xatosi HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  console.log('YARATILDI: taxonomy/markets v1 (+ taxonomy_history/v1, admin_audit/' + auditId + ')');
 }
 
 if (require.main === module) {

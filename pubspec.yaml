@@ -140,6 +140,7 @@ flutter:
     - assets/images/
     - assets/images/services/
     - assets/images/banners/
+    - assets/images/markets/
     - assets/bread_yupqa.png
     - assets/bread_churak.png
     - assets/bread_qovoq.png

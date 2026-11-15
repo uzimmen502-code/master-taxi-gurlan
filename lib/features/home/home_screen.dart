@@ -105,7 +105,6 @@ import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
 import 'widgets/wallet_card.dart';
 import '../realty/screens/realty_detail_screen.dart';
-import '../realty/screens/realty_map_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../my_shop/pending_shop_link.dart';
 import '../tv_market/repositories/tv_shop_repository.dart';
@@ -124,8 +123,8 @@ import '../my_shop/my_shop_presence.dart';
 import '../my_shop/open_my_shop.dart';
 import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
-import 'widgets/home_realty_section.dart';
-import 'widgets/home_wholesale_section.dart';
+import 'widgets/home_markets_block.dart';
+import '../markets/open_market.dart';
 import 'widgets/home_yuk_local_section.dart';
 import 'home_market_nav.dart';
 import 'create_sheet_loop.dart';
@@ -1289,6 +1288,27 @@ class _HomeViewState extends State<_HomeView> {
     await _push(_wholesaleMarketScreen(market));
   }
 
+  /// «Бозорлар» блоки карточкаси (STAGE 12) — мавжуд очиш йўллари, дарвоза текшируви билан:
+  /// янги 4 бозор → [openMarket] (ўзи `canOpen`/`onTapBlocked`); Уй-жой → [_openGated];
+  /// Улгуржи/Хитой → [_openWholesale] (ҳар бири ўз дарвозаси); Аралаш → [_openModule].
+  Future<void> _openHomeMarket(HomeMarketEntry entry) async {
+    final taxonomyId = entry.taxonomyMarketId;
+    if (taxonomyId != null) {
+      await openMarket(context, taxonomyId, push: _push);
+      return;
+    }
+    switch (entry.moduleId) {
+      case 'realty':
+        await _openGated('realty', const RealtyScreen());
+      case 'wholesale_market':
+        await _openWholesale(WholesaleProduct.marketWholesale);
+      case 'china_market':
+        await _openWholesale(WholesaleProduct.marketChina);
+      case 'cheap_products_home':
+        await _openModule(HomeModulesCatalog.byId('cheap_products_home'));
+    }
+  }
+
   /// Аҳоли бозори бўлимидаги қатор — АЙНАН ўша эълоннинг тафсилоти.
   ///
   /// Илгари бу ерда эълон объекти `(_)` билан ташлаб юбориларди ва
@@ -1492,6 +1512,22 @@ class _HomeViewState extends State<_HomeView> {
                                     )
                                   : null,
                             ),
+                            // Қидирув энг юқорида — AvaTopBar тагида (эга, 2026-11-16, STAGE 12).
+                            // Аввал хизматлар қаторидан кейин эди; intent хатти-ҳаракати ўзгармаган.
+                            const SizedBox(height: 2),
+                            HomeGlobalSearchBar(
+                              key: const ValueKey('home_global_search_top'),
+                              // «Уста чақириш» (аудит №4): дарвоза ёпиқ бўлса
+                              // `null` — карточка умуман чиқмайди.
+                              onIntent: ServiceConfigHolder.isOpenable(
+                                      'demand_intent')
+                                  ? _openIntent
+                                  : null,
+                              onOpenEntry: _openSearchEntry,
+                              onOpenClip: (clip) => _push(
+                                TvMarketFeedScreen(initialClip: clip),
+                              ),
+                            ),
                             // Мижоз тасдиғи (D2/D7): курьер «олдим/етказдим»
                             // деганидан кейин мижоз ўз қурилмасида тасдиқлайди.
                             // Бўш бўлса ёки сервер жавобермаса — жой эгалламайди.
@@ -1537,27 +1573,17 @@ class _HomeViewState extends State<_HomeView> {
                             // olx.uz дан жонли олинган). Аввал бу ерда
                             // 6 та иконкали квадрат тугма (`AvaQuickActions`)
                             // турарди — эга қарори, 2026-09-26.
+                            // Улгуржи/Хитой/Уй-жой плиткалари «Бозорлар» блокига ўтди (STAGE 12).
                             HomeServicesOlxRow(
-                              items: buildHomeServices(
+                              items: homeRowServices(buildHomeServices(
                                 context,
                                 a: _serviceActions,
-                              ),
+                              )),
                               onTitleTap: _openAllServices,
                             ),
-                            // Қидирув майдончаси юқоридаги бўлимга 2 px яқин (эга, 2026-10-15).
-                            const SizedBox(height: 2),
-                            HomeGlobalSearchBar(
-                              // «Уста чақириш» (аудит №4): дарвоза ёпиқ бўлса
-                              // `null` — карточка умуман чиқмайди.
-                              onIntent: ServiceConfigHolder.isOpenable(
-                                      'demand_intent')
-                                  ? _openIntent
-                                  : null,
-                              onOpenEntry: _openSearchEntry,
-                              onOpenClip: (clip) => _push(
-                                TvMarketFeedScreen(initialClip: clip),
-                              ),
-                            ),
+                            // «Бозорлар» блоки (эга, 2026-11-16, STAGE 12): 8 бозор карточкаси,
+                            // ҳар бири ўз дарвозаси билан; ҳеч бири кўринмаса — блок йўқ.
+                            HomeMarketsBlock(onOpen: _openHomeMarket),
                             if (HomeModuleGate.showInGrid('dating')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeDatingSection(
@@ -1629,24 +1655,8 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                               ),
                             ),
-                            // Кўчмас мулк — эълонлар оиласининг давоми
-                            // (эга қарори, 2026-09-28): «Яқинингиздаги
-                            // эълонлар» ва «Хизмат таклифлари»дан кейин,
-                            // транспортдан олдин. Сабаби: бу ҳам эълон
-                            // доскаси, бозор бўлимлари эса маҳсулот савдоси.
-                            if (HomeModuleGate.showInGrid('realty')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeRealtySection(
-                                key: _sectionKey(
-                                    'realty_${GeoContext.homeScopeFor('realty').key}'),
-                                onOpenAll: () => _push(const RealtyScreen()),
-                                onOpenMap: () =>
-                                    _push(const RealtyMapScreen()),
-                                onOpenListing: (listing) => _push(
-                                  RealtyDetailScreen(listing: listing),
-                                ),
-                              ),
-                            ],
+                            // Уй-жой бўлими олиб ташланди (эга, 2026-11-16, STAGE 12):
+                            // кириш — «Бозорлар» блокидаги карточка.
                             if (HomeModuleGate.showInGrid('intercity')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeIntercitySection(
@@ -1682,8 +1692,7 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                               ),
                             ],
-                            // Бозор учлиги: Аҳоли бозори → Улгуржи бозори →
-                            // Хитой бозори — эга қарори бўйича кетма-кет.
+                            // Аралаш бозор бўлими қолади (STAGE 12); Улгуржи/Хитой бўлимлари йўқ.
                             if (HomeModuleGate.showInGrid(
                                 'cheap_products_home')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
@@ -1705,39 +1714,8 @@ class _HomeViewState extends State<_HomeView> {
                                 onOpenRealty: _openAralashRealty,
                               ),
                             ],
-                            if (HomeModuleGate.showInGrid(
-                                'wholesale_market')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeWholesaleSection(
-                                key: _sectionKey('wholesale'),
-                                market: WholesaleProduct.marketWholesale,
-                                titleKey: 'home_module_wholesale',
-                                onOpenAll: () => _openWholesale(
-                                    WholesaleProduct.marketWholesale),
-                                onOpenProduct: _openWholesaleProduct,
-                                // AVA товарлари ҳам шу бўлимда (эга қарори
-                                // 2026-10-07: AVA дўкони — Улгуржи бозор).
-                                onOpenPlatformProduct: _openPlatformProduct,
-                              ),
-                            ],
-                            // Хитой бозори. Архитектураси улгуржи билан
-                            // бир хил (эга қарори) — ўша коллекция,
-                            // `market` билан ажралади. Лекин ДАРВОЗАСИ
-                            // алоҳида (эга қарори, 2026-09-28): аввал
-                            // `wholesale_market` га боғланган эди ва
-                            // админ панелда мустақил ёқиб бўлмасди.
-                            if (HomeModuleGate.showInGrid(
-                                'china_market')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeWholesaleSection(
-                                key: _sectionKey('china'),
-                                market: WholesaleProduct.marketChina,
-                                titleKey: 'home_module_china',
-                                onOpenAll: () =>
-                                    _openWholesale(WholesaleProduct.marketChina),
-                                onOpenProduct: _openWholesaleProduct,
-                              ),
-                            ],
+                            // Улгуржи ва Хитой бўлимлари олиб ташланди (эга, 2026-11-16,
+                            // STAGE 12): кириш — «Бозорлар» блоки; маҳсулотлари Аралашда қолади.
                             if (HomeModuleGate.showInGrid('ev_charging')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeEvSection(

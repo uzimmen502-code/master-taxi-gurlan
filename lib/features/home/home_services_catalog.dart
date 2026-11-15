@@ -86,6 +86,17 @@ List<ServiceSpotlightItem> courierConnectedServices(
   ];
 }
 
+/// Бош саҳифа хизматлар ҚАТОРИДА кўрсатилмайдиган плиткалар (STAGE 12, эга 2026-11-16):
+/// улар «Бозорлар» блокига ўтди ([HomeMarketsBlock]). Модул/дарвоза ўзгармайди; «Барча
+/// хизматлар» экрани ва курьер рўйхати [buildHomeServices]ни тўлиқ ишлатаверади.
+const kHomeRowExcludedServiceIds = <String>{'wholesale_market', 'china_market', 'realty'};
+
+/// Бош саҳифа хизматлар қатори учун: [kHomeRowExcludedServiceIds]сиз.
+List<ServiceSpotlightItem> homeRowServices(List<ServiceSpotlightItem> all) => [
+      for (final e in all)
+        if (!kHomeRowExcludedServiceIds.contains(e.moduleId)) e,
+    ];
+
 /// Иловадаги барча хизматлар — тартиби билан.
 ///
 /// Кўринадиганини филтрлаш чақирувчида (`HomeModuleGate.showInGrid`).

@@ -241,6 +241,7 @@ class MarketDef {
     required this.order,
     required this.names,
     this.slogan = const {},
+    this.sloganNoOrder = const {},
     this.categories = const [],
     this.fields = const [],
     this.priceUnits = const [PriceUnit.fixed],
@@ -251,6 +252,9 @@ class MarketDef {
   final int order;
   final Map<String, String> names;
   final Map<String, String> slogan;
+
+  /// Иловада буюртма йўқ пайтдаги шиор (ихтиёрий; сервер валидатори `sloganNoOrder`, ҳозир фақат Гўшт).
+  final Map<String, String> sloganNoOrder;
   final List<MarketCategory> categories;
   final List<MarketField> fields;
 
@@ -316,6 +320,7 @@ class MarketDef {
       order: _int(raw['order']) ?? 0,
       names: _names(raw['names']),
       slogan: _names(raw['slogan']),
+      sloganNoOrder: _names(raw['sloganNoOrder']),
       categories: cats,
       fields: fields,
       priceUnits: units.isEmpty ? const [PriceUnit.fixed] : units,

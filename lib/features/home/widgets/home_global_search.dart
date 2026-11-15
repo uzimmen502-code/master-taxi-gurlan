@@ -255,7 +255,8 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
                     textInputAction: TextInputAction.search,
                     style: AvaText.body.copyWith(color: c.ink),
                     decoration: InputDecoration(
-                      hintText: context.tr('home_search_hint'),
+                      // «AVA'да қидириш…» (эга, 2026-11-16, STAGE 12: қидирув энг юқорида).
+                      hintText: context.tr('home_search_hint_ava'),
                       suffixIcon: empty
                           ? null
                           : IconButton(

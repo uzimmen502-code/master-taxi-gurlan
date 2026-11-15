@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../services/admin_listing_moderation_service.dart';
 import '../utils/listing_moderation.dart';
 import '../widgets/admin_reason_dialog.dart';
+import '../widgets/listing_edit_dialog.dart';
 
 typedef ListingModLoader = Future<List<ListingModItem>> Function(ListingModSource source);
 typedef ListingModAction = Future<void> Function(
@@ -14,15 +15,23 @@ typedef ListingModAction = Future<void> Function(
   String? reason,
 });
 
+/// «Тузатиш ва тасдиқлаш»: `edits` (фақат ўзгарган майдонлар; бўш — оддий тасдиқ) + approve.
+typedef ListingModEditApprove = Future<void> Function(ListingModSource source, String id, Map<String, Object?> edits);
+typedef ListingModCategoriesLoader = Future<Map<String, List<ListingModCategory>>> Function();
+
 /// «Эълонлар модерацияси» (Бозорлар 2b, эга 2026-11-15): барча бозорлардаги `pending` эълонлар бир жойда.
 /// Тасдиқлаш / рад этиш — сервер `adminModerateListing` (audit + сотувчига хабар). Мавжуд модерация
 /// экранлари ўзгармаган — бу экран уларнинг ёнида.
+/// «Админ тузатиб тасдиқлайди» (эга 2026-11-15): tv_shop_items карточкасида «Тузатиш ва тасдиқлаш»;
+/// «Рад этилганлар» таби — рад этилган tv_shop_items (сотувчи қайта юбормайди, админ тузатади).
 class ListingModerationScreen extends StatelessWidget {
-  const ListingModerationScreen({super.key, this.loadPending, this.moderate});
+  const ListingModerationScreen({super.key, this.loadPending, this.moderate, this.editApprove, this.loadCategories});
 
   /// Тест учун алмаштирилади; бўлмаса — [AdminListingModerationService].
   final ListingModLoader? loadPending;
   final ListingModAction? moderate;
+  final ListingModEditApprove? editApprove;
+  final ListingModCategoriesLoader? loadCategories;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +40,10 @@ class ListingModerationScreen extends StatelessWidget {
     final act = moderate ??
         (ListingModSource s, String id, {required bool approve, String? reason}) =>
             service.moderate(source: s, id: id, approve: approve, reason: reason);
+    final edit = editApprove ??
+        (ListingModSource s, String id, Map<String, Object?> edits) =>
+            service.moderate(source: s, id: id, approve: true, edits: edits);
+    final cats = loadCategories ?? service.fetchMarketCategories;
     return DefaultTabController(
       length: ListingModSource.values.length,
       child: Column(
@@ -46,7 +59,10 @@ class ListingModerationScreen extends StatelessWidget {
           ),
           Expanded(
             child: TabBarView(
-              children: [for (final s in ListingModSource.values) _SourceList(source: s, load: load, act: act)],
+              children: [
+                for (final s in ListingModSource.values)
+                  _SourceList(source: s, load: load, act: act, editApprove: edit, loadCategories: cats),
+              ],
             ),
           ),
         ],
@@ -56,11 +72,19 @@ class ListingModerationScreen extends StatelessWidget {
 }
 
 class _SourceList extends StatefulWidget {
-  const _SourceList({required this.source, required this.load, required this.act});
+  const _SourceList({
+    required this.source,
+    required this.load,
+    required this.act,
+    required this.editApprove,
+    required this.loadCategories,
+  });
 
   final ListingModSource source;
   final ListingModLoader load;
   final ListingModAction act;
+  final ListingModEditApprove editApprove;
+  final ListingModCategoriesLoader loadCategories;
 
   @override
   State<_SourceList> createState() => _SourceListState();
@@ -124,17 +148,60 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
         return;
       }
     }
-    // Оптимистик: рўйхатдан дарҳол олинади; хато бўлса жойига қайтади.
+    await _optimistic(
+      item,
+      label: approve ? 'approve' : 'reject',
+      run: () => widget.act(widget.source, item.id, approve: approve, reason: reason),
+      success: approve ? 'Тасдиқланди: ${item.title}' : 'Рад этилди: ${item.title}',
+    );
+  }
+
+  Map<String, List<ListingModCategory>>? _categories;
+
+  /// Бўлимлар бир марта юкланади; хато — бўш (диалогда матн майдони қолади).
+  Future<List<ListingModCategory>> _categoriesFor(String market) async {
+    if (market.isEmpty) return const [];
+    if (_categories == null) {
+      try {
+        _categories = await widget.loadCategories();
+      } catch (e) {
+        debugPrint('[ListingModeration] taxonomy: $e');
+        _categories = const {};
+      }
+    }
+    return _categories![market] ?? const [];
+  }
+
+  Future<void> _editApprove(ListingModItem item) async {
+    final categories = await _categoriesFor(item.market);
+    if (!mounted) return;
+    final edits = await showListingEditDialog(context, item, categories: categories);
+    if (edits == null || !mounted) return;
+    await _optimistic(
+      item,
+      label: 'edit_approve',
+      run: () => widget.editApprove(widget.source, item.id, edits),
+      success: edits.isEmpty ? 'Тасдиқланди: ${item.title}' : 'Тузатилди ва тасдиқланди: ${edits['title'] ?? item.title}',
+    );
+  }
+
+  /// Оптимистик: рўйхатдан дарҳол олинади; хато бўлса жойига қайтади ва код кўрсатилади.
+  Future<void> _optimistic(
+    ListingModItem item, {
+    required String label,
+    required Future<void> Function() run,
+    required String success,
+  }) async {
     final index = _items.indexWhere((i) => i.id == item.id);
     if (index < 0) return;
     setState(() => _items = [..._items]..removeAt(index));
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
-      await widget.act(widget.source, item.id, approve: approve, reason: reason);
+      await run();
       messenger?.hideCurrentSnackBar();
-      messenger?.showSnackBar(SnackBar(content: Text(approve ? 'Тасдиқланди: ${item.title}' : 'Рад этилди: ${item.title}')));
+      messenger?.showSnackBar(SnackBar(content: Text(success)));
     } catch (e) {
-      debugPrint('[ListingModeration] ${approve ? 'approve' : 'reject'} ${widget.source.collection}/${item.id}: $e');
+      debugPrint('[ListingModeration] $label ${widget.source.collection}/${item.id}: $e');
       if (!mounted) return;
       setState(() {
         final list = [..._items];
@@ -162,7 +229,7 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
         ]),
       );
     }
-    final markets = widget.source == ListingModSource.shop
+    final markets = widget.source.editable
         ? (_items.map((i) => i.market).where((m) => m.isNotEmpty).toSet().toList()..sort())
         : const <String>[];
     final visible = _market == null ? _items : _items.where((i) => i.market == _market).toList();
@@ -174,7 +241,7 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
           Row(children: [
             Expanded(
               child: Text(
-                'Текширувда: ${visible.length}${_items.length >= kListingModPageLimit ? ' (биринчи $kListingModPageLimit та)' : ''}',
+                '${widget.source.canReject ? 'Текширувда' : 'Рад этилган'}: ${visible.length}${_items.length >= kListingModPageLimit ? ' (биринчи $kListingModPageLimit та)' : ''}',
                 key: ValueKey('lmod_count_${widget.source.name}'),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
@@ -201,9 +268,11 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
               ]),
             ),
           if (visible.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: Text('Текширувни кутаётган эълон йўқ')),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: Text(widget.source.canReject ? 'Текширувни кутаётган эълон йўқ' : 'Рад этилган эълон йўқ'),
+              ),
             ),
           for (final it in visible) _card(it),
         ],
@@ -243,6 +312,8 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
               if (it.priceText.isNotEmpty) Text(it.priceText),
               const SizedBox(height: 2),
               Text(meta, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+              if (it.rejectReason.isNotEmpty && !widget.source.canReject)
+                Text('Рад этиш сабаби: ${it.rejectReason}', style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 FilledButton.icon(
@@ -252,12 +323,20 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
                   label: const Text('Тасдиқлаш'),
                   style: FilledButton.styleFrom(backgroundColor: Colors.green.shade700),
                 ),
-                OutlinedButton.icon(
-                  key: ValueKey('lmod_reject_${it.id}'),
-                  onPressed: () => _decide(it, approve: false),
-                  icon: Icon(Icons.block, size: 18, color: Colors.red.shade700),
-                  label: Text('Рад этиш', style: TextStyle(color: Colors.red.shade700)),
-                ),
+                if (widget.source.editable)
+                  OutlinedButton.icon(
+                    key: ValueKey('lmod_edit_${it.id}'),
+                    onPressed: () => _editApprove(it),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Тузатиш ва тасдиқлаш'),
+                  ),
+                if (widget.source.canReject)
+                  OutlinedButton.icon(
+                    key: ValueKey('lmod_reject_${it.id}'),
+                    onPressed: () => _decide(it, approve: false),
+                    icon: Icon(Icons.block, size: 18, color: Colors.red.shade700),
+                    label: Text('Рад этиш', style: TextStyle(color: Colors.red.shade700)),
+                  ),
               ]),
             ]),
           ),

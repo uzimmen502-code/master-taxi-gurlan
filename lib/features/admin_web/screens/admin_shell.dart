@@ -35,6 +35,7 @@ import 'realty_moderation_screen.dart';
 import 'jobs_moderation_screen.dart';
 import 'logistics_admin_screen.dart';
 import 'restaurants_admin_screen.dart';
+import 'listing_moderation_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'wholesale_orders_admin_screen.dart';
@@ -326,6 +327,15 @@ class _AdminShellState extends State<AdminShell> {
     // «Аҳоли бозори» (аввал «Онлайн бозор», тавсифи «Арзон маҳсулот») —
     // иловадаги ном билан бир хил (`cheap_product` эълонлари); эга қарори
     // 2026-10-08: номи ўзгарди ва «Улгуржи бозор» тепасида.
+    // «Бозорлар» 2b (эга 2026-11-15): олдиндан модерация — барча бозорлардаги `pending` эълонлар бир жойда.
+    // Сервер `adminModerateListing` — фақат admin/superadmin, шунинг учун `users`.
+    _AdminSection(
+      group: 'Бозорлар ва эълонлар',
+      label: 'Эълонлар модерацияси',
+      icon: Icons.fact_check_outlined,
+      description: 'Аралаш/дўкон, Улгуржи, Хитой, Уй-жой, эски эълонлар — тасдиқлаш ёки рад этиш',
+      access: _SectionAccess.users,
+    ),
     _AdminSection(
       group: 'Бозорлар ва эълонлар',
       label: 'Аралаш бозор',
@@ -646,6 +656,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Эълонлар ва хизматлар') {
       return const JobsModerationScreen();
+    }
+    if (section.label == 'Эълонлар модерацияси') {
+      return const ListingModerationScreen();
     }
     if (section.label == 'Аралаш бозор') {
       return const MarketModerationScreen();
@@ -1254,6 +1267,15 @@ class _Sidebar extends StatelessWidget {
             .collection('ads')
             .where('status', isEqualTo: 'pending')
             .where('type', whereIn: JobAd.jobsBoardTypes)
+            .limit(200)
+            .snapshots()
+            .map((s) => s.docs.length);
+      // Фақат дўкон товарлари (`tv_shop_items`): Улгуржи/Хитой/Уй-жой/эски эълонлар ўз бўлимлари нишонида
+      // аллақачон саналади. Битта майдонли сўров — автоматик индекс.
+      case 'Эълонлар модерацияси':
+        return db
+            .collection('tv_shop_items')
+            .where('status', isEqualTo: 'pending')
             .limit(200)
             .snapshots()
             .map((s) => s.docs.length);

@@ -134,6 +134,29 @@ const Map<String, String> kWholesaleOrderReasonKeys = {
   'cash_collector_mismatch': 'wholesale_order_err_not_last_leg_courier',
   'not_cash_shipment': 'wholesale_order_err_invalid_transition',
   'order_changed': 'wholesale_order_err_retry',
+  // Харидор қарзини ҳамёндан тўлаш (эга 2026-11-15, default `payWholesaleBuyerDebt`). `insufficient_balance`,
+  // `order_required`, `order_not_found`, `not_order_party` — юқорида (умумий). Аномалия кодлари (пул ўтмайди) —
+  // битта «ҳозир тўлаб бўлмайди» матни.
+  'debt_not_open': 'wholesale_debt_err_none',
+  'debt_not_ready': 'wholesale_debt_err_not_ready',
+  'debt_changed': 'wholesale_order_err_retry',
+  'debt_payment_unavailable': 'wholesale_debt_err_unavailable',
+  'debt_payment_failed': 'wholesale_debt_err_unavailable',
+  'debt_kind_mismatch': 'wholesale_debt_err_unavailable',
+  'debt_shipment_mismatch': 'wholesale_debt_err_unavailable',
+  'debt_state_mismatch': 'wholesale_debt_err_unavailable',
+  'debt_components_mismatch': 'wholesale_debt_err_unavailable',
+  'debt_amount_invalid': 'wholesale_debt_err_unavailable',
+  'debt_amounts_invalid': 'wholesale_debt_err_unavailable',
+  'debt_accounts_invalid': 'wholesale_debt_err_unavailable',
+  'debt_total_mismatch': 'wholesale_debt_err_unavailable',
+  'debt_collector_mismatch': 'wholesale_debt_err_unavailable',
+  'debt_ava_cover_mismatch': 'wholesale_debt_err_unavailable',
+  'cash_split_mismatch': 'wholesale_debt_err_unavailable',
+  'cash_service_fee_invalid': 'wholesale_debt_err_unavailable',
+  'collector_wallet_missing': 'wholesale_debt_err_unavailable',
+  'fee_config_invalid': 'wholesale_debt_err_unavailable',
+  'buyer_wallet_missing': 'wholesale_debt_err_unavailable',
 };
 
 /// Квота/ўтказишда «буюртма бериш бу фойдаланувчига ёпиқ» маъносидаги

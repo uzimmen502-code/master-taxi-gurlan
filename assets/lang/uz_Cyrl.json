@@ -5722,5 +5722,16 @@
   "wholesale_courier_cash_unpaid_btn": "Харидор тўламади",
   "wholesale_courier_cash_unpaid_note": "Харидор тўламаса, сумма унинг қарзи бўлиб ёзилади.",
   "wholesale_courier_cash_err_paid_required": "Харидор нақд тўладими — белгиланг.",
-  "wholesale_courier_cash_err_paid_absent": "Харидор йўқ бўлса, «Харидор тўламади»ни танланг."
+  "wholesale_courier_cash_err_paid_absent": "Харидор йўқ бўлса, «Харидор тўламади»ни танланг.",
+  "wholesale_debt_pay_btn": "Тўлаш ({amount})",
+  "wholesale_debt_pay_title": "Қарзни тўлаш",
+  "wholesale_debt_pay_confirm": "{amount} AVA ҳамёнингиздан ечилади ва қарз ёпилади.",
+  "wholesale_debt_paid": "Қарз тўланди",
+  "wholesale_debt_pay_insufficient": "Ҳамёнда маблағ етарли эмас. Яна {amount} тўлдиринг.",
+  "wholesale_debt_err_not_ready": "Қарз ҳисоби ҳали якунланмади. Бироздан кейин уриниб кўринг.",
+  "wholesale_debt_err_unavailable": "Қарзни ҳозир тўлаб бўлмайди. Қўллаб-қувватлаш хизматига ёзинг.",
+  "wholesale_debt_err_none": "Бу буюртмада тўланадиган қарз йўқ.",
+  "wholesale_cash_unavailable_buyer_debt_hint": "Қарзни «Менинг буюртмаларим»даги ўша буюртма саҳифасида «Тўлаш» тугмаси билан AVA ҳамёнидан тўлашингиз мумкин.",
+  "wlt_l_wholesale_debt_payment": "Улгуржи — қарз тўланди",
+  "wlt_l_logistics_cash_debt_payout": "Курьер ҳақи (харидор қарзидан)"
 }

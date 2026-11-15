@@ -33,7 +33,7 @@ class WholesaleOrderException implements Exception {
 ///
 /// Икки codebase (ҳужжат `docs/ulgurji_buyurtma_zanjiri_uz.md` §2):
 ///   europe-west1 (`functions_demand`) — квота, бекор, етказиш коди, 3b карта
-///   us-central1 (default, ҳамён/ledger) — `placeWholesaleOrder`
+///   us-central1 (default, ҳамён/ledger) — `placeWholesaleOrder`, `payWholesaleBuyerDebt`
 class WholesaleOrdersRepository {
   WholesaleOrdersRepository({
     FirebaseFirestore? firestore,
@@ -136,6 +136,12 @@ class WholesaleOrdersRepository {
       }));
 
   Future<void> cancel(String orderId) => _call(_demand, 'cancelWholesaleOrder', {'orderId': orderId});
+
+  /// Харидор қарзини AVA ҳамёнидан тўлаш (эга, 2026-11-15, A вариант): нақд рад қарзи ёки ҳамён радидаги
+  /// қайтариш ҳақи қолдиғи. Default codebase (us-central1, ledger) — `placeWholesaleOrder` каби [_wallet].
+  /// Сумма СЕРВЕРДАН (илова юбормайди). Етмаса — `insufficient_balance` (`details.amount`, `details.balance`);
+  /// қайта босиш — бир марта тўланади (сервер idempotent).
+  Future<void> payBuyerDebt(String orderId) => _call(_wallet, 'payWholesaleBuyerDebt', {'orderId': orderId});
 
   Future<WholesaleDeliveryCode> deliveryCode(String orderId) async =>
       WholesaleDeliveryCode.fromMap(await _call(_demand, 'getWholesaleDeliveryCode', {'orderId': orderId}));

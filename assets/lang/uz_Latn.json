@@ -5722,5 +5722,16 @@
   "wholesale_courier_cash_unpaid_btn": "Xaridor to'lamadi",
   "wholesale_courier_cash_unpaid_note": "Xaridor to'lamasa, summa uning qarzi bo'lib yoziladi.",
   "wholesale_courier_cash_err_paid_required": "Xaridor naqd to'ladimi — belgilang.",
-  "wholesale_courier_cash_err_paid_absent": "Xaridor yo'q bo'lsa, «Xaridor to'lamadi»ni tanlang."
+  "wholesale_courier_cash_err_paid_absent": "Xaridor yo'q bo'lsa, «Xaridor to'lamadi»ni tanlang.",
+  "wholesale_debt_pay_btn": "To'lash ({amount})",
+  "wholesale_debt_pay_title": "Qarzni to'lash",
+  "wholesale_debt_pay_confirm": "{amount} AVA hamyoningizdan yechiladi va qarz yopiladi.",
+  "wholesale_debt_paid": "Qarz to'landi",
+  "wholesale_debt_pay_insufficient": "Hamyonda mablag' yetarli emas. Yana {amount} to'ldiring.",
+  "wholesale_debt_err_not_ready": "Qarz hisobi hali yakunlanmadi. Birozdan keyin urinib ko'ring.",
+  "wholesale_debt_err_unavailable": "Qarzni hozir to'lab bo'lmaydi. Qo'llab-quvvatlash xizmatiga yozing.",
+  "wholesale_debt_err_none": "Bu buyurtmada to'lanadigan qarz yo'q.",
+  "wholesale_cash_unavailable_buyer_debt_hint": "Qarzni «Mening buyurtmalarim»dagi o'sha buyurtma sahifasida «To'lash» tugmasi bilan AVA hamyonidan to'lashingiz mumkin.",
+  "wlt_l_wholesale_debt_payment": "Ulgurji — qarz to'landi",
+  "wlt_l_logistics_cash_debt_payout": "Kuryer haqi (xaridor qarzidan)"
 }

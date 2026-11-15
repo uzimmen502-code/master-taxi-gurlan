@@ -54,6 +54,9 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
     case 'wholesale_lost_fee_refund':
     case 'wholesale_lost_fee_charge':
     case 'wholesale_lost_fee_payment':
+    // Харидор қарзини ҳамёндан тўлаш (`payWholesaleBuyerDebt`, 2026-11-15): харидор (−) ва йиғувчи курьер (+).
+    case 'wholesale_debt_payment':
+    case 'logistics_cash_debt_payout':
       return tr('wlt_l_${e.type}');
     // Relay `functions/relay_escrow.js` (`mirrorBonus`): бир хил тур ИККИ ҳамёнга
     // ёзилади — мижоз (+, қоплама) ва масъул курьер (−, ундирилди).

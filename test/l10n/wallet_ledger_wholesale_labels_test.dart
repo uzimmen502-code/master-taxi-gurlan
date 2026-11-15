@@ -27,6 +27,9 @@ const _wholesaleTypes = <String>[
   'wholesale_lost_fee_refund',
   'wholesale_lost_fee_charge',
   'wholesale_lost_fee_payment',
+  // payWholesaleBuyerDebt (2026-11-15): xaridor (−) va yig'uvchi kuryer (+).
+  'wholesale_debt_payment',
+  'logistics_cash_debt_payout',
 ];
 
 String _tr(String key, [Map<String, String>? params]) => '<$key>';

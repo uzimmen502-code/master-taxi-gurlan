@@ -104,6 +104,9 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
   bool _busy = false;
   String? _error;
 
+  /// Қарзни тўлашга ҳамён етмади — етишмаётган сумма (сервер `details`) → «Ҳамённи тўлдириш».
+  int? _debtShortfall;
+
   WholesaleOrder get _o => widget.order;
 
   Future<void> _run(Future<void> Function() body) async {
@@ -211,6 +214,67 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
       await widget.repository.confirmCardPayment(_o.id);
       _snack('wholesale_order_card_confirmed');
     });
+  }
+
+  /// Харидор қарзи (нақд рад ёки ҳамён радидаги қайтариш ҳақи қолдиғи) — AVA ҳамёнидан (эга, 2026-11-15,
+  /// A вариант). Сумма сервердан; етмаса — етишмаётган сумма билан «Ҳамённи тўлдириш».
+  Future<void> _payDebt() async {
+    final amount = _o.returnDebt;
+    if (_busy || amount <= 0) return;
+    final ok = await _confirm(
+      context.trMsg('wholesale_debt_pay_confirm', params: {'amount': formatMoney(amount)}),
+      title: context.tr('wholesale_debt_pay_title'),
+    );
+    if (!ok || !mounted) return;
+    setState(() => _debtShortfall = null);
+    await _run(() async {
+      try {
+        await widget.repository.payBuyerDebt(_o.id);
+        _snack('wholesale_debt_paid');
+      } on WholesaleOrderException catch (e) {
+        if (e.reason != 'insufficient_balance') rethrow;
+        final need = e.detailInt('amount') ?? amount;
+        final have = e.detailInt('balance') ?? 0;
+        if (mounted) setState(() => _debtShortfall = need > have ? need - have : need);
+      }
+    });
+  }
+
+  Widget _debtPayBlock(BuildContext context) {
+    final c = context.ava;
+    final short = _debtShortfall;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          key: const ValueKey('wholesale-debt-pay'),
+          onPressed: _busy ? null : _payDebt,
+          icon: _busy
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.account_balance_wallet_outlined, size: 18),
+          label: Text(
+            context.trMsg('wholesale_debt_pay_btn', params: {'amount': formatMoney(_o.returnDebt)}),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: c.brand,
+            foregroundColor: c.brandInk,
+            minimumSize: const Size.fromHeight(48),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        if (short != null && short > 0) ...[
+          const SizedBox(height: 8),
+          Container(
+            key: const ValueKey('wholesale-debt-pay-insufficient'),
+            child: WalletInlineError(
+              text: context.trMsg('wholesale_debt_pay_insufficient', params: {'amount': formatMoney(short)}),
+              onTopUp: () => openWalletTopUp(Navigator.of(context), suggestedAmount: short),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   /// Банк ўтказмаси: «Пул тушди» (товар суммаси сотувчи банк ҳисобига тушди) → курьер.
@@ -454,10 +518,12 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             onTopUp: () => openWalletTopUp(Navigator.of(context), suggestedAmount: _o.returnDebt),
           ),
         ),
+        // Ҳамён тўлдирилгач сервер 10 дақиқада ўзи ёпади; «Тўлаш» — дарҳол (эга, 2026-11-15).
+        _debtPayBlock(context),
         const SizedBox(height: 10),
       ],
-      // S57: нақд рад қарзи — сумма ва «қарз тўлангунча нақд ёпиқ». Тўлдириш тугмаси ЙЎҚ: ҳамённи
-      // тўлдириш бу қарзни ёпиши серверда тасдиқланмаган (UNKNOWN).
+      // S57: нақд рад қарзи — сумма ва «қарз тўлангунча нақд ёпиқ». Ҳамённи тўлдириш ўзи ЁПМАЙДИ — фақат
+      // «Тўлаш» тугмаси (эга, 2026-11-15, A вариант: `payWholesaleBuyerDebt`).
       if (a.showBuyerCashDebt) ...[
         Container(
           key: const ValueKey('wholesale-buyer-cash-debt'),
@@ -465,6 +531,7 @@ class _WholesaleOrderDetailViewState extends State<WholesaleOrderDetailView> {
             text: context.trMsg('wholesale_order_cash_debt_buyer', params: {'amount': formatMoney(_o.returnDebt)}),
           ),
         ),
+        _debtPayBlock(context),
         const SizedBox(height: 10),
       ],
       // S57: етказиш ҳақини курьерга нақд + рад огоҳлантириши (жами қайтариш ҳақи курьер белгилагач маълум).

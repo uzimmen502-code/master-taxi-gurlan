@@ -5722,5 +5722,16 @@
   "wholesale_courier_cash_unpaid_btn": "Покупатель не оплатил",
   "wholesale_courier_cash_unpaid_note": "Если покупатель не оплатил, сумма запишется как его долг.",
   "wholesale_courier_cash_err_paid_required": "Отметьте, оплатил ли покупатель наличными.",
-  "wholesale_courier_cash_err_paid_absent": "Если покупателя нет, выберите «Покупатель не оплатил»."
+  "wholesale_courier_cash_err_paid_absent": "Если покупателя нет, выберите «Покупатель не оплатил».",
+  "wholesale_debt_pay_btn": "Оплатить ({amount})",
+  "wholesale_debt_pay_title": "Оплата долга",
+  "wholesale_debt_pay_confirm": "{amount} будет списано с вашего кошелька AVA, долг будет закрыт.",
+  "wholesale_debt_paid": "Долг оплачен",
+  "wholesale_debt_pay_insufficient": "Недостаточно средств в кошельке. Пополните ещё на {amount}.",
+  "wholesale_debt_err_not_ready": "Расчёт долга ещё не завершён. Попробуйте чуть позже.",
+  "wholesale_debt_err_unavailable": "Сейчас нельзя оплатить долг. Напишите в службу поддержки.",
+  "wholesale_debt_err_none": "По этому заказу нет долга к оплате.",
+  "wholesale_cash_unavailable_buyer_debt_hint": "Долг можно оплатить из кошелька AVA кнопкой «Оплатить» на странице этого заказа в разделе «Мои заказы».",
+  "wlt_l_wholesale_debt_payment": "Опт — долг оплачен",
+  "wlt_l_logistics_cash_debt_payout": "Оплата курьеру (из долга покупателя)"
 }

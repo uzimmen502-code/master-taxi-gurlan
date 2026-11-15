@@ -573,12 +573,25 @@ class _WholesaleCheckoutSheetState extends State<WholesaleCheckoutSheet> {
     final showChoice = _cashAvailable || _isCash;
     if (!showChoice) {
       if (_cashReason != 'buyer_debt') return const SizedBox.shrink();
+      // Квота қарзли буюртма ID'сини қайтармайди (фақат сабаб) — шу ерда тўлов тугмаси йўқ, қаерда тўлаш айтилади
+      // (буюртма саҳифасидаги «Тўлаш», эга 2026-11-15).
       return Padding(
         padding: const EdgeInsets.only(top: 6),
-        child: Text(
-          context.tr(wholesaleCashUnavailableKey(_cashReason)),
-          key: const ValueKey('wholesale-cash-unavailable'),
-          style: const TextStyle(fontSize: 11, height: 1.3, color: Color(0xFFF0A868)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.tr(wholesaleCashUnavailableKey(_cashReason)),
+              key: const ValueKey('wholesale-cash-unavailable'),
+              style: const TextStyle(fontSize: 11, height: 1.3, color: Color(0xFFF0A868)),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              context.tr('wholesale_cash_unavailable_buyer_debt_hint'),
+              key: const ValueKey('wholesale-cash-debt-pay-hint'),
+              style: const TextStyle(fontSize: 11, height: 1.3, color: PdDark.muted),
+            ),
+          ],
         ),
       );
     }

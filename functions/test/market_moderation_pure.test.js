@@ -133,6 +133,64 @@ check('P14 migrate needsExpiry: active + expiresAt йўқ; ads фақат cheap_
   assert.strictEqual(parseArgs(['--project']).project, '');
 });
 
+// ── «Админ тузатиб тасдиқлайди» (эга 2026-11-15) ──
+const { PRICE_UNITS } = require('../market_taxonomy');
+const editCode = (fn) => { try { fn(); return 'OK'; } catch (e) { return `${e.code}:${e.field || ''}`; } };
+const CUR = { title: 'Qo\'y', description: 'd', price: 100, priceUnit: '', market: 'livestock', category: 'sheep', photoUrls: ['a', 'b', 'c'], photoUrl: 'a', attrs: { age: 2 }, imported: false };
+
+check('P15 validateListingEdits: ҳар бир майдон (positive) — фақат ўзгарганлари patch/changes; null/undefined → бўш', () => {
+  const r = m.validateListingEdits('tv_shop_items', {
+    title: '  Qo\'chqor ', description: 'yangi', price: 0, priceUnit: 'ton', category: 'ram', attrs: { age: 3 }, imported: true, photoUrls: ['b', 'c'],
+  }, CUR, PRICE_UNITS);
+  assert.deepStrictEqual(r.patch, {
+    title: 'Qo\'chqor', description: 'yangi', price: 0, priceUnit: 'ton', category: 'ram', attrs: { age: 3 }, imported: true, photoUrls: ['b', 'c'], photoUrl: 'b',
+  });
+  assert.deepStrictEqual(r.changes.map((x) => x.field), ['title', 'description', 'price', 'priceUnit', 'category', 'attrs', 'imported', 'photoUrls', 'photoUrl']);
+  assert.deepStrictEqual(r.changes[0], { field: 'title', before: 'Qo\'y', after: 'Qo\'chqor' });
+  const same = m.validateListingEdits('tv_shop_items', { title: 'Qo\'y', price: 100, photoUrls: ['a', 'b', 'c'] }, CUR, PRICE_UNITS);
+  assert.deepStrictEqual(same, { patch: {}, changes: [] });
+  assert.deepStrictEqual(m.validateListingEdits('tv_shop_items', undefined, CUR, PRICE_UNITS), { patch: {}, changes: [] });
+  assert.deepStrictEqual(m.validateListingEdits('ads', null, CUR, PRICE_UNITS), { patch: {}, changes: [] });
+});
+check('P16 validateListingEdits: negative — номаълум калит, турлар, чегаралар, янги URL, такрор, category marketсиз, ads', () => {
+  const v = (e, cur = CUR, col = 'tv_shop_items') => editCode(() => m.validateListingEdits(col, e, cur, PRICE_UNITS));
+  assert.strictEqual(v({ status: 'active' }), 'INVALID_EDITS:status');
+  assert.strictEqual(v({ ownerPhone: '1' }), 'INVALID_EDITS:ownerPhone');
+  assert.strictEqual(v([]), 'INVALID_EDITS:');
+  assert.strictEqual(v('x'), 'INVALID_EDITS:');
+  assert.strictEqual(v({ title: '   ' }), 'INVALID_EDITS:title');
+  assert.strictEqual(v({ title: 5 }), 'INVALID_EDITS:title');
+  assert.strictEqual(v({ description: 'x'.repeat(2001) }), 'INVALID_EDITS:description');
+  assert.strictEqual(v({ price: 1.5 }), 'INVALID_EDITS:price');
+  assert.strictEqual(v({ price: -1 }), 'INVALID_EDITS:price');
+  assert.strictEqual(v({ price: '100' }), 'INVALID_EDITS:price');
+  assert.strictEqual(v({ price: 1000000000 }), 'INVALID_EDITS:price');
+  assert.strictEqual(v({ priceUnit: 'tonna' }), 'INVALID_EDITS:priceUnit');
+  assert.strictEqual(v({ category: 'x'.repeat(41) }), 'INVALID_EDITS:category');
+  assert.strictEqual(v({ category: 'ram' }, { ...CUR, market: undefined }), 'INVALID_EDITS:category');
+  const many = {}; for (let i = 0; i < 21; i += 1) many[`k${i}`] = i;
+  assert.strictEqual(v({ attrs: many }), 'INVALID_EDITS:attrs');
+  assert.strictEqual(v({ attrs: { a: { nested: 1 } } }), 'INVALID_EDITS:attrs');
+  assert.strictEqual(v({ imported: 'yes' }), 'INVALID_EDITS:imported');
+  assert.strictEqual(v({ photoUrls: ['a', 'https://evil/x.jpg'] }), 'INVALID_EDITS:photoUrls');
+  assert.strictEqual(v({ photoUrls: ['a', 'a'] }), 'INVALID_EDITS:photoUrls');
+  assert.strictEqual(v({ photoUrls: 'a' }), 'INVALID_EDITS:photoUrls');
+  assert.strictEqual(v({ title: 'x' }, CUR, 'ads'), 'EDITS_NOT_SUPPORTED:');
+  assert.strictEqual(v({ title: 'x' }, CUR, 'wholesale_products'), 'EDITS_NOT_SUPPORTED:');
+});
+check('P17 boundary: title 200 / description 2000 / price 999999999 / attrs 20 — ўтади; барча расм олинса photoUrl ""; аудит 300 белги', () => {
+  const twenty = {}; for (let i = 0; i < 20; i += 1) twenty[`k${i}`] = 'v';
+  const r = m.validateListingEdits('tv_shop_items', {
+    title: 't'.repeat(200), description: 'd'.repeat(2000), price: 999999999, attrs: twenty, photoUrls: [],
+  }, CUR, PRICE_UNITS);
+  assert.strictEqual(r.patch.photoUrl, '');
+  const desc = r.changes.find((x) => x.field === 'description');
+  assert.strictEqual(desc.after.length, 301, ' 300 + «…»');
+  assert.strictEqual(m.auditValue(undefined), null);
+  assert.deepStrictEqual(m.APPROVE_FROM.tv_shop_items, ['pending', 'rejected']);
+  assert.deepStrictEqual(m.APPROVE_FROM.wholesale_products, ['pending']);
+});
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

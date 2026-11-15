@@ -13,6 +13,10 @@
  *     админ бошқа йўл билан `active` қилганда (`tv_clips_moderation_screen`, `adminUpdateBusinessProduct`) муддат йўқ
  *     бўлса — `expiresAt` = +30 кун. Ўз ёзувларини ва админ таҳририни (moderatedAt / admin_audit) ўтказиб юборади.
  *   - `adminModerateListing` — approve/reject, транзакция + `admin_audit` (kind `listing_moderation`).
+ *     2026-11-15 (эга): «админ тузатиб тасдиқлайди» — tv_shop_items учун ихтиёрий `edits` (фақат approve билан;
+ *     title/description/price/priceUnit/category/attrs/imported/photoUrls-қисм-тўплам) ва `rejected → active`.
+ *     Таҳрир + тасдиқ бир ёзувда (статус ўзгаради, moderatedAt янгиланади) — триггер уни эга таҳрири деб олмайди.
+ *     Аудитда `edits: [{field, before, after}]` (сатрлар 300 белгигача).
  *   - `renewMarketListing` — эга: `expired → pending` (ads: муддати ўзи тугаган `inactive` → `pending`).
  *   - `marketListingsExpirySweep` (ҳар соат :10) — `active` + `expiresAt <= now` → `expired`.
  *   - `marketListingsExpiryWarning` (ҳар куни 10:00) — 24 соат ичида тугайдиганларга огоҳлантириш.
@@ -29,7 +33,7 @@
  */
 'use strict';
 
-const { stableStringify } = require('./market_taxonomy');
+const { stableStringify, PRICE_UNITS } = require('./market_taxonomy');
 const { normalizeLang, langOfPhone } = require('./notif_i18n');
 
 const MODULE = 'market_moderation';
@@ -231,6 +235,137 @@ function needsExpiryWarning(data, nowMs) {
   return millisOf(d.expiryWarnedFor) !== exp;
 }
 
+// ── «Админ тузатиб тасдиқлайди» (эга 2026-11-15) ──
+// Рад этилган tv_shop_items сотувчи томонидан қайта юборилмайди; админ модерация экранида тузатиб тасдиқлайди.
+// Фақат tv_shop_items (ads/wholesale/realty — ҳозирча йўқ, EDITS_NOT_SUPPORTED). Расм фақат олиб ташланади.
+const EDIT_COLLECTIONS = Object.freeze(['tv_shop_items']);
+const EDITABLE_FIELDS = Object.freeze(['title', 'description', 'price', 'priceUnit', 'category', 'attrs', 'imported', 'photoUrls']);
+/** approve қайси ҳолатлардан мумкин (рад этилганни тузатиб тасдиқлаш — фақат tv_shop_items). */
+const APPROVE_FROM = Object.freeze({
+  tv_shop_items: ['pending', 'rejected'],
+  wholesale_products: ['pending'],
+  realty_listings: ['pending'],
+  ads: ['pending'],
+});
+const AUDIT_VALUE_MAX = 300;
+const ATTRS_MAX = 20;
+const ATTR_KEY_MAX = 40;
+const ATTR_STR_MAX = 200;
+
+const editsError = (code, field) => Object.assign(new Error(code), { code, field });
+
+function isPlainObj(v) {
+  return v != null && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
+}
+
+/** Аудит учун қиймат: узун сатрлар 300 белгигача; undefined → null. */
+function auditValue(v) {
+  if (v === undefined) return null;
+  if (typeof v === 'string') return v.length > AUDIT_VALUE_MAX ? `${v.slice(0, AUDIT_VALUE_MAX)}…` : v;
+  if (Array.isArray(v)) return v.map(auditValue);
+  if (isPlainObj(v)) {
+    const o = {};
+    Object.keys(v).forEach((k) => { o[k] = auditValue(v[k]); });
+    return o;
+  }
+  return v;
+}
+
+/**
+ * Админ таҳрирларини текшириш (тоза). Хато — `Error` (`code`: INVALID_EDITS | EDITS_NOT_SUPPORTED, `field`).
+ * Қайтаради `{ patch, changes }`: patch — Firestore'га ёзиладиган майдонлар (фақат ҳақиқатан ўзгарганлари),
+ * changes — `[{ field, before, after }]` (аудит учун, қисқартирилган).
+ * `priceUnits` — market_taxonomy.PRICE_UNITS (rules билан бир хил рўйхат).
+ */
+function validateListingEdits(collection, edits, cur, priceUnits) {
+  if (edits === undefined || edits === null) return { patch: {}, changes: [] };
+  if (!EDIT_COLLECTIONS.includes(collection)) throw editsError('EDITS_NOT_SUPPORTED');
+  if (!isPlainObj(edits)) throw editsError('INVALID_EDITS');
+  const c = cur || {};
+  const out = {};
+  for (const k of Object.keys(edits)) {
+    if (!EDITABLE_FIELDS.includes(k)) throw editsError('INVALID_EDITS', k);
+    const v = edits[k];
+    switch (k) {
+      case 'title': {
+        if (typeof v !== 'string') throw editsError('INVALID_EDITS', k);
+        const s = v.trim();
+        if (s.length < 1 || s.length > 200) throw editsError('INVALID_EDITS', k);
+        out.title = s;
+        break;
+      }
+      case 'description': {
+        if (typeof v !== 'string') throw editsError('INVALID_EDITS', k);
+        const s = v.trim();
+        if (s.length > 2000) throw editsError('INVALID_EDITS', k);
+        out.description = s;
+        break;
+      }
+      case 'price':
+        if (!Number.isSafeInteger(v) || v < 0 || v > 999999999) throw editsError('INVALID_EDITS', k);
+        out.price = v;
+        break;
+      case 'priceUnit':
+        if (typeof v !== 'string' || !priceUnits.includes(v)) throw editsError('INVALID_EDITS', k);
+        out.priceUnit = v;
+        break;
+      case 'category': {
+        if (typeof v !== 'string') throw editsError('INVALID_EDITS', k);
+        const s = v.trim();
+        // rules: category фақат market билан (tvShopItemShapeOk).
+        if (s.length < 1 || s.length > 40 || !c.market) throw editsError('INVALID_EDITS', k);
+        out.category = s;
+        break;
+      }
+      case 'attrs': {
+        if (!isPlainObj(v)) throw editsError('INVALID_EDITS', k);
+        const keys = Object.keys(v);
+        if (keys.length > ATTRS_MAX) throw editsError('INVALID_EDITS', k);
+        for (const ak of keys) {
+          const av = v[ak];
+          const okVal = (typeof av === 'string' && av.length <= ATTR_STR_MAX)
+            || (typeof av === 'number' && Number.isFinite(av)) || typeof av === 'boolean';
+          if (!ak || ak.length > ATTR_KEY_MAX || !okVal) throw editsError('INVALID_EDITS', k);
+        }
+        out.attrs = v;
+        break;
+      }
+      case 'imported':
+        if (typeof v !== 'boolean') throw editsError('INVALID_EDITS', k);
+        out.imported = v;
+        break;
+      case 'photoUrls': {
+        // Фақат олиб ташлаш: жорий рўйхатнинг қисм-тўплами, такрорсиз, янги URL йўқ.
+        const curList = Array.isArray(c.photoUrls) ? c.photoUrls : [];
+        if (!Array.isArray(v) || v.some((u) => typeof u !== 'string' || !curList.includes(u))
+            || new Set(v).size !== v.length) {
+          throw editsError('INVALID_EDITS', k);
+        }
+        out.photoUrls = v;
+        break;
+      }
+      default:
+        throw editsError('INVALID_EDITS', k);
+    }
+  }
+  const patch = {};
+  const changes = [];
+  for (const k of Object.keys(out)) {
+    if (stableStringify(out[k]) === stableStringify(c[k])) continue; // ўзгармаган — ёзилмайди
+    patch[k] = out[k];
+    changes.push({ field: k, before: auditValue(c[k]), after: auditValue(out[k]) });
+  }
+  // Мижоз `photoUrl` = photos.first (tv_shop.dart) — муқова олиб ташланган расмга қолиб кетмасин.
+  if (patch.photoUrls) {
+    const first = patch.photoUrls.length ? patch.photoUrls[0] : '';
+    if ((c.photoUrl || '') !== first) {
+      patch.photoUrl = first;
+      changes.push({ field: 'photoUrl', before: auditValue(c.photoUrl), after: first });
+    }
+  }
+  return { patch, changes };
+}
+
 function screenOf(collection) {
   if (collection === 'realty_listings') return 'realty_my';
   if (collection === 'ads') return 'my_ads';
@@ -365,6 +500,20 @@ function attachMarketModeration(exportsObj, deps) {
       reason = normalizeReason(data && data.reason);
       if (!reason) throw fail('invalid-argument', 'REASON_REQUIRED');
     }
+    // «Админ тузатиб тасдиқлайди»: ихтиёрий `edits` фақат approve билан.
+    const rawEdits = data ? data.edits : undefined;
+    const hasEdits = rawEdits !== undefined && rawEdits !== null;
+    if (hasEdits && decision !== 'approve') throw fail('invalid-argument', 'EDITS_REQUIRE_APPROVE');
+    if (hasEdits && !EDIT_COLLECTIONS.includes(collection)) throw fail('invalid-argument', 'EDITS_NOT_SUPPORTED');
+    if (hasEdits) {
+      // Шакл (калитлар/турлар) — ҳужжатсиз олдиндан; photoUrls/category жорий ҳужжатга қарши транзакцияда.
+      try {
+        validateListingEdits(collection, rawEdits, { market: 'x', photoUrls: Array.isArray(rawEdits.photoUrls) ? rawEdits.photoUrls : [] }, PRICE_UNITS);
+      } catch (e) {
+        log({ action: 'adminModerateListing', collection, listingId: id, userId: actor, decision, result: 'error', errorCode: e.code || 'INVALID_EDITS', field: e.field || null });
+        throw fail('invalid-argument', e.code || 'INVALID_EDITS', { field: e.field || null });
+      }
+    }
     let result;
     try {
       result = await db.runTransaction(async (t) => {
@@ -372,14 +521,35 @@ function attachMarketModeration(exportsObj, deps) {
         if (!snap.exists) throw fail('not-found', 'LISTING_NOT_FOUND');
         const cur = snap.data() || {};
         if (collection === 'ads' && cur.type !== 'cheap_product') throw fail('invalid-argument', 'COLLECTION_INVALID');
-        if (cur.status !== 'pending') throw fail('failed-precondition', 'LISTING_NOT_PENDING', { status: String(cur.status || '') });
-        const patch = buildModerationPatch(collection, decision, { cur, actor, reason, nowMs: Date.now(), fv });
+        const allowedFrom = decision === 'approve' ? APPROVE_FROM[collection] : ['pending'];
+        if (!allowedFrom.includes(cur.status)) throw fail('failed-precondition', 'LISTING_NOT_PENDING', { status: String(cur.status || '') });
+        let edit = { patch: {}, changes: [] };
+        if (hasEdits) {
+          try {
+            edit = validateListingEdits(collection, rawEdits, cur, PRICE_UNITS);
+          } catch (e) {
+            throw fail('invalid-argument', e.code || 'INVALID_EDITS', { field: e.field || null });
+          }
+        }
+        // Контент + статус БИТТА ёзувда: статус ўзгаради ва moderatedAt янгиланади — триггер (planShopItemWrite)
+        // буни эга таҳрири деб ҳисобламайди (edit_pending фақат статус ўзгармаганда).
+        const patch = {
+          ...edit.patch,
+          ...buildModerationPatch(collection, decision, { cur, actor, reason, nowMs: Date.now(), fv }),
+        };
+        // Ҳужжатга қўшимча «adminEdited*» майдони ёзилмайди (rules'да ҳимояланмаган бўлар эди) — тарих admin_audit'да.
         t.update(ref, patch);
         t.set(db.collection(ADMIN_AUDIT).doc(), {
           kind: AUDIT_KIND, collection, id, target: id, decision, actor, at: fv.ts(),
-          previousStatus: 'pending', nextStatus: patch.status, ...(reason ? { reason } : {}),
+          previousStatus: String(cur.status || ''), nextStatus: patch.status, ...(reason ? { reason } : {}),
+          ...(edit.changes.length ? { edits: edit.changes, editedFields: edit.changes.map((x) => x.field) } : {}),
         });
-        return { cur, nextStatus: patch.status, expiresAt: patch.expiresAt ? millisOf(patch.expiresAt) : null };
+        const merged = { ...cur, ...edit.patch };
+        return {
+          cur: merged, nextStatus: patch.status, previousStatus: cur.status,
+          editedFields: edit.changes.map((x) => x.field),
+          expiresAt: patch.expiresAt ? millisOf(patch.expiresAt) : null,
+        };
       });
     } catch (e) {
       const code = (e && e.details && e.details.code) || 'INTERNAL';
@@ -395,8 +565,8 @@ function attachMarketModeration(exportsObj, deps) {
         ? await notify(collection, id, phone, 'listing_approved', { title: titleOf(result.cur) }, 'listing_approved')
         : await notify(collection, id, phone, 'listing_rejected', { title: titleOf(result.cur), reason }, 'listing_rejected');
     }
-    log({ action: 'adminModerateListing', collection, listingId: id, userId: actor, decision, result: 'ok', status: result.nextStatus, notified, duration: Date.now() - started });
-    return { ok: true, collection, id, status: result.nextStatus, expiresAt: result.expiresAt };
+    log({ action: 'adminModerateListing', collection, listingId: id, userId: actor, decision, result: 'ok', status: result.nextStatus, previousStatus: result.previousStatus, editedFields: result.editedFields, notified, duration: Date.now() - started });
+    return { ok: true, collection, id, status: result.nextStatus, expiresAt: result.expiresAt, editedFields: result.editedFields };
   });
 
   // ── 3. Эга: янгилаш ──
@@ -589,6 +759,11 @@ module.exports = {
   planShopItemWrite,
   normalizeReason,
   buildModerationPatch,
+  validateListingEdits,
+  auditValue,
+  EDITABLE_FIELDS,
+  EDIT_COLLECTIONS,
+  APPROVE_FROM,
   planExpiry,
   needsExpiryWarning,
   renderMessage,

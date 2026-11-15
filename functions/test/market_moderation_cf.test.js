@@ -214,6 +214,93 @@ async function main() {
     assert.strictEqual(a2.status, 'inactive'); assert.strictEqual(a2.adminRejected, true); assert.strictEqual(a2.adminNote, 'Takror');
   });
 
+  // ── «Админ тузатиб тасдиқлайди» (эга 2026-11-15) ──
+  const fixItem = (extra = {}) => item({
+    status: 'rejected', title: 'Sigir yomon', description: 'eski', price: 500, priceUnit: '', market: 'livestock', category: 'cow',
+    photoUrls: ['p1', 'p2', 'p3'], photoUrl: 'p1', rejectReason: 'Rasm', rejectedAt: TS.now(), moderatedAt: TS.fromMillis(Date.now() - 60000), ...extra,
+  });
+  await check('E1 rejected + edits → active: контент + статус бир ёзувда, photoUrl янгиланади, rejectReason олинади, audit edits, хабар', async () => {
+    await items.doc('e_fix').set(fixItem());
+    const n0 = (await news(OWNER)).length;
+    const before = await items.doc('e_fix').get();
+    const r = await moderate({
+      collection: 'tv_shop_items', id: 'e_fix', decision: 'approve',
+      edits: { title: 'Sigir', description: 'x'.repeat(400), price: 7000000, priceUnit: 'ton', category: 'heifer', photoUrls: ['p2', 'p3'], imported: true, attrs: { age: 3 } },
+    });
+    assert.strictEqual(r.status, 'active');
+    assert.deepStrictEqual(r.editedFields.sort(), ['attrs', 'category', 'description', 'imported', 'photoUrl', 'photoUrls', 'price', 'priceUnit', 'title']);
+    const after = await items.doc('e_fix').get();
+    const d = after.data();
+    assert.strictEqual(d.status, 'active'); assert.strictEqual(d.title, 'Sigir'); assert.strictEqual(d.price, 7000000);
+    assert.strictEqual(d.priceUnit, 'ton'); assert.strictEqual(d.category, 'heifer'); assert.strictEqual(d.imported, true);
+    assert.deepStrictEqual(d.photoUrls, ['p2', 'p3']); assert.strictEqual(d.photoUrl, 'p2');
+    assert.strictEqual(d.rejectReason, undefined); assert.strictEqual(d.moderatedBy, ADMIN);
+    assert.ok(Math.abs(d.expiresAt.toMillis() - (Date.now() + 30 * DAY)) < 60000);
+    // Триггер: таҳрир + тасдиқ ёзуви эга таҳрири деб олинмайди (pending'га қайтмайди, loop йўқ).
+    await fns.onShopItemModeration.run({ before, after }, { params: { itemId: 'e_fix' } });
+    const again = await items.doc('e_fix').get();
+    assert.strictEqual(again.updateTime.toMillis(), after.updateTime.toMillis(), 'триггер ёзмади');
+    assert.strictEqual(again.data().status, 'active');
+    const a = (await audits()).filter((x) => x.id === 'e_fix');
+    assert.strictEqual(a.length, 1);
+    assert.strictEqual(a[0].previousStatus, 'rejected'); assert.strictEqual(a[0].nextStatus, 'active'); assert.strictEqual(a[0].actor, ADMIN);
+    const t = a[0].edits.find((x) => x.field === 'title');
+    assert.deepStrictEqual(t, { field: 'title', before: 'Sigir yomon', after: 'Sigir' });
+    const ds = a[0].edits.find((x) => x.field === 'description');
+    assert.strictEqual(ds.after.length, 301, 'audit 300 белгигача қисқартирилган');
+    assert.deepStrictEqual(a[0].edits.find((x) => x.field === 'photoUrls'), { field: 'photoUrls', before: ['p1', 'p2', 'p3'], after: ['p2', 'p3'] });
+    assert.ok(a[0].editedFields.includes('priceUnit'));
+    const n = await news(OWNER);
+    assert.strictEqual(n.length - n0, 1);
+    assert.ok(n.some((x) => x.body.includes('«Sigir»')), 'хабарда тузатилган сарлавҳа');
+  });
+  await check('E2 photoUrls: янги URL / такрор — INVALID_EDITS (ҳужжат ва аудит ўзгармайди); қисм-тўплам — ўтади', async () => {
+    await items.doc('e_ph').set(fixItem());
+    const t0 = (await items.doc('e_ph').get()).updateTime.toMillis();
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_ph', decision: 'approve', edits: { photoUrls: ['p1', 'https://evil/x.jpg'] } }), 'INVALID_EDITS', 'invalid-argument');
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_ph', decision: 'approve', edits: { photoUrls: ['p1', 'p1'] } }), 'INVALID_EDITS', 'invalid-argument');
+    assert.strictEqual((await items.doc('e_ph').get()).updateTime.toMillis(), t0);
+    assert.strictEqual((await audits()).filter((x) => x.id === 'e_ph').length, 0);
+    await moderate({ collection: 'tv_shop_items', id: 'e_ph', decision: 'approve', edits: { photoUrls: ['p3'] } });
+    const d = await get('tv_shop_items', 'e_ph');
+    assert.deepStrictEqual(d.photoUrls, ['p3']); assert.strictEqual(d.photoUrl, 'p3'); assert.strictEqual(d.status, 'active');
+  });
+  await check('E3 нотўғри: priceUnit / номаълум калит / reject+edits / ads+edits / category marketсиз — рад, ёзув йўқ', async () => {
+    await items.doc('e_bad').set(fixItem({ status: 'pending' }));
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_bad', decision: 'approve', edits: { priceUnit: 'tonna' } }), 'INVALID_EDITS', 'invalid-argument');
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_bad', decision: 'approve', edits: { status: 'active' } }), 'INVALID_EDITS');
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_bad', decision: 'approve', edits: { ownerPhone: OTHER } }), 'INVALID_EDITS');
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_bad', decision: 'approve', edits: { price: 1.5 } }), 'INVALID_EDITS');
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_bad', decision: 'reject', reason: 'x', edits: { title: 'y' } }), 'EDITS_REQUIRE_APPROVE');
+    await db.collection('ads').doc('e_ad').set({ type: 'cheap_product', ownerId: OTHER, title: 'Olma', status: 'pending' });
+    await expectCode(moderate({ collection: 'ads', id: 'e_ad', decision: 'approve', edits: { title: 'y' } }), 'EDITS_NOT_SUPPORTED');
+    await items.doc('e_nomk').set(item({ status: 'pending' }));
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_nomk', decision: 'approve', edits: { category: 'cow' } }), 'INVALID_EDITS');
+    assert.strictEqual((await get('tv_shop_items', 'e_bad')).status, 'pending');
+    assert.strictEqual((await get('ads', 'e_ad')).status, 'pending');
+    assert.strictEqual((await audits()).filter((x) => ['e_bad', 'e_ad', 'e_nomk'].includes(x.id)).length, 0);
+  });
+  await check('E4 оддий фойдаланувчи (эга ҳам) edits билан — permission-denied; rejected ўзгармайди', async () => {
+    await items.doc('e_own').set(fixItem());
+    await assert.rejects(moderate({ collection: 'tv_shop_items', id: 'e_own', decision: 'approve', edits: { title: 'Men' } }, OWNER), (e) => e.code === 'permission-denied');
+    await assert.rejects(fns.adminModerateListing.run({ collection: 'tv_shop_items', id: 'e_own', decision: 'approve', edits: { title: 'Men' } }, {}), (e) => e.code === 'unauthenticated');
+    const d = await get('tv_shop_items', 'e_own');
+    assert.strictEqual(d.status, 'rejected'); assert.strictEqual(d.title, 'Sigir yomon');
+  });
+  await check('E5 rejected edits сиз approve — мумкин; rejected reject — LISTING_NOT_PENDING; wholesale inactive approve — LISTING_NOT_PENDING', async () => {
+    await items.doc('e_plain').set(fixItem());
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 'e_plain', decision: 'reject', reason: 'yana' }), 'LISTING_NOT_PENDING', 'failed-precondition');
+    const r = await moderate({ collection: 'tv_shop_items', id: 'e_plain', decision: 'approve' });
+    assert.strictEqual(r.status, 'active'); assert.deepStrictEqual(r.editedFields, []);
+    const a = (await audits()).find((x) => x.id === 'e_plain');
+    assert.strictEqual(a.edits, undefined); assert.strictEqual(a.previousStatus, 'rejected');
+    await db.collection('wholesale_products').doc('e_w').set({ sellerId: OWNER, title: 'Un', status: 'inactive' });
+    await expectCode(moderate({ collection: 'wholesale_products', id: 'e_w', decision: 'approve' }), 'LISTING_NOT_PENDING');
+    // Кейин эга контентни ўзгартирса — одатдагидек pending (админ таҳрири белгиси кейинги ёзувга «юқмайди»).
+    const s = await writeAndTrigger('e_fix', (ref) => ref.update({ title: 'Egasi o\'zgartirdi' }));
+    assert.strictEqual(s.data.status, 'pending');
+  });
+
   // ── renewMarketListing ──
   await check('R1 renew: бегона — NOT_OWNER; эга expired → pending; такрор → changed:false; active → LISTING_NOT_EXPIRED', async () => {
     await items.doc('e1').set(item({ status: 'expired' }));

@@ -135,7 +135,7 @@
         { "key": "harvest_date", "type": "date", "required": false,
           "names": { "uz_Cyrl": "Ҳосил вақти", "uz_Latn": "Hosil vaqti", "ru": "Время сбора" } }
       ],
-      "priceUnits": ["kg", "piece"]
+      "priceUnits": ["kg", "ton", "piece"]
     }
   }
 }

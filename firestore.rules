@@ -734,7 +734,8 @@ service cloud.firestore {
           && d.get('kind', 'product') in ['product', 'service']
           // S2 (2026-11-03): narx birligi ixtiyoriy; bo'lsa — faqat ro'yxatdagi satr ('' = belgilangan narx).
           // price>=0 avvalgidek (0 = narx ko'rsatilmaydi / «Kelishiladi»).
-          && d.get('priceUnit', '') in ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'm2', 'piece', 'negotiable']
+          // 'ton' — Деҳқон бозори (эга 2026-11-15).
+          && d.get('priceUnit', '') in ['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'ton', 'm2', 'piece', 'negotiable']
           // «Бозорлар» 1-босқич (2026-11-15): ихтиёрий бозор майдонлари; category фақат market билан.
           && d.get('market', 'livestock') in ['livestock', 'auto', 'meat', 'farm']
           && (!('category' in d) || ('market' in d && d.category is string && d.category.size() >= 1 && d.category.size() <= 40))

@@ -42,7 +42,7 @@ check('P1 v1 JSON ўтади (4 бозор, moduleId лар)', () => {
 check('P2 v1: гўштда «Барчаси»/«Импорт» бўлим ЭМАС; деҳқонда тонна йўқ', () => {
   const ids = V1.markets.meat.categories.map((c) => c.id);
   assert.deepStrictEqual(ids, ['beef', 'mutton', 'poultry', 'fish', 'other']);
-  assert.deepStrictEqual(V1.markets.farm.priceUnits, ['kg', 'piece']);
+  assert.deepStrictEqual(V1.markets.farm.priceUnits, ['kg', 'ton', 'piece']);
   assert.deepStrictEqual(V1.markets.meat.priceUnits, ['kg']);
 });
 check('P3 PRICE_UNITS = firestore.rules priceUnit рўйхати', () => {
@@ -112,8 +112,8 @@ check('N6b бошқа бозорнинг бўлими ҳам номаълум (m
   const o = clone(); o.markets.auto.fields[0].categories = ['beef'];
   expectError(o, 'FIELD_CATEGORY_UNKNOWN markets.auto.fields[0].categories[0]');
 });
-check('N7 нотўғри нарх бирлиги \'ton\' → PRICE_UNIT_INVALID; бўш рўйхат → PRICE_UNITS_EMPTY', () => {
-  const o = clone(); o.markets.farm.priceUnits = ['kg', 'ton'];
+check('N7 нотўғри нарх бирлиги \'tonne\' → PRICE_UNIT_INVALID; бўш рўйхат → PRICE_UNITS_EMPTY', () => {
+  const o = clone(); o.markets.farm.priceUnits = ['kg', 'tonne'];
   expectError(o, 'PRICE_UNIT_INVALID markets.farm.priceUnits[1]');
   const o2 = clone(); o2.markets.farm.priceUnits = [];
   expectError(o2, 'PRICE_UNITS_EMPTY markets.farm.priceUnits');

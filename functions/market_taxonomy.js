@@ -24,7 +24,7 @@ const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 
 const LANGS = Object.freeze(['uz_Cyrl', 'uz_Latn', 'ru']);
 const FIELD_TYPES = Object.freeze(['int', 'text', 'select', 'bool', 'date']);
-const PRICE_UNITS = Object.freeze(['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'm2', 'piece', 'negotiable']);
+const PRICE_UNITS = Object.freeze(['', 'from', 'hour', 'day', 'month', 'session', 'person', 'kg', 'ton', 'm2', 'piece', 'negotiable']);
 
 const MARKET_ID_RE = /^[a-z][a-z_]{1,29}$/;
 const MODULE_ID_RE = /^[a-z][a-z_]{1,39}$/;

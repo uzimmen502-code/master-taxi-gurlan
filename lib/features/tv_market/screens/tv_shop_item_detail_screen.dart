@@ -10,6 +10,8 @@ import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../shared/widgets/product_mini_tile.dart';
 import '../../business_orders/widgets/business_order_entry.dart';
 import '../../deal_chat/open_deal_chat.dart';
+import '../../markets/domain/market_taxonomy.dart';
+import '../../markets/widgets/market_attrs_section.dart';
 import '../domain/similar_items.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
@@ -40,7 +42,11 @@ class TvShopItemDetailScreen extends StatefulWidget {
     this.loadLatest,
     this.submitComplaint,
     this.source = 'other',
+    this.loadTaxonomy,
   });
+
+  /// Тест учун: бозор таксономияси (бўлмаса сеанс кешидан, [MarketAttrsSection]).
+  final Future<MarketTaxonomy> Function()? loadTaxonomy;
 
   /// Статистика манбаи (`ShopStatsRecorder.sources`).
   final String source;
@@ -272,6 +278,16 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
                   item: item,
                   onVideo: item.hasVideo ? () => _openClip(context) : null,
                 ),
+                // «Бозорлар» 6-босқич: бозор майдонлари (таксономия номлари билан; Аралаш/эски ҳужжатда йўқ).
+                if (item.market.isNotEmpty)
+                  MarketAttrsSection(
+                    key: ValueKey('market_attrs_${item.id}'),
+                    market: item.market,
+                    category: item.category,
+                    attrs: item.attrs,
+                    imported: item.imported,
+                    loadTaxonomy: widget.loadTaxonomy,
+                  ),
                 // «Буюртма бериш» (AVA курьери, «Менинг бизнесим» буюртмаси): фақат дарвоза очиқ ва маҳсулот/объект
                 // мос бўлса кўринади ([BusinessOrderEntry] ўзи текширади; бўлмаса — ҳеч нарса).
                 if (item.businessId.isNotEmpty)

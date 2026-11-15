@@ -11,6 +11,10 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../markets/data/market_listings_source.dart' show resolveRegionIdForDistrict;
+import '../../markets/data/market_taxonomy_repository.dart';
+import '../../markets/domain/market_taxonomy.dart';
+import '../../markets/widgets/market_form_fields.dart';
 import '../../tv_market/domain/listing_status_view.dart';
 import '../../tv_market/domain/price_unit.dart';
 import '../../tv_market/models/tv_shop.dart';
@@ -38,7 +42,31 @@ class BusinessProductFormScreen extends StatefulWidget {
     this.uploadPhotos,
     this.addVideo,
     this.initialOffer,
+    this.initialMarket,
+    this.initialCategory,
+    this.showMarketChoice,
+    this.loadTaxonomy,
+    this.isModuleOpenable,
+    this.resolveRegionId,
   }) : _repo = repository;
+
+  /// «Бозорлар» 5-босқич (эга 2026-11-15). Бозор ичидаги қизил «+» — бозор ва жорий бўлим олдиндан танланган
+  /// (бозор чиплари кўрсатилмайди). Бўш/`null` — Аралаш (бозор майдонисиз).
+  final String? initialMarket;
+  final String? initialCategory;
+
+  /// «Қаерда сотасиз?» чиплари (Аралаш · Мол · Мошина · Гўшт · Деҳқон). `null` — ўзи: янги маҳсулот, эганинг ўз
+  /// дўкони («＋» → Онлайн дўкон, Аралаш «+») ва бозор олдиндан танланмаган. Харита объекти — кўрсатилмайди.
+  final bool? showMarketChoice;
+
+  /// Тест учун: таксономия (бўлмаса [MarketTaxonomyRepository.load] — сеансда бир марта).
+  final Future<MarketTaxonomy> Function()? loadTaxonomy;
+
+  /// Тест учун: модул дарвозаси (бўлмаса [ServiceConfigHolder.isOpenable] — фаол туман бўйича).
+  final bool Function(String moduleId)? isModuleOpenable;
+
+  /// Тест учун: туман → вилоят (бўлмаса [resolveRegionIdForDistrict]).
+  final Future<String> Function(String districtId)? resolveRegionId;
 
   /// Янги таклиф учун олдиндан тўлдириш (каталогдаги «Тез бошлаш» шаблони, S5): ном (жорий тилда), тур
   /// (`product`/`service`) ва нарх бирлиги wire қиймати (`PriceUnit.wire`; S2 форма танлови ўқийди).
@@ -91,10 +119,81 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
       (widget.initialOffer != null
           ? PriceUnit.fromWire(widget.initialOffer!.priceUnitWire) // '' = аниқ нарх
           : _profile.defaultPriceUnit);
-  late final List<PriceUnit> _units = [
+  late final List<PriceUnit> _profileUnits = [
     for (final u in PriceUnit.values)
       if (_profile.priceUnits.contains(u) || u == widget.existing?.priceUnit) u,
   ];
+
+  /// Бозор танланган бўлса — таксономиядаги бирликлар (Гўшт: фақат `kg` — танлов йўқ, мажбурий); акс ҳолда профил.
+  List<PriceUnit> get _units {
+    final m = _marketDef;
+    if (m == null) return _profileUnits;
+    final saved = widget.existing?.priceUnit;
+    return [...m.priceUnits, if (saved != null && widget.existing!.market == m.id && !m.priceUnits.contains(saved)) saved];
+  }
+
+  // ── «Бозорлар» (5-босқич) ──
+  MarketTaxonomy? _taxonomy;
+  bool _taxonomyFailed = false;
+  late String _market = widget.existing?.market ?? (widget.initialMarket ?? '').trim();
+  late String _category = widget.existing?.category ?? (widget.initialCategory ?? '').trim();
+  final Map<String, Object?> _attrValues = {};
+  late bool _imported = widget.existing?.imported ?? false;
+  Map<String, MarketFieldError> _fieldErrors = const {};
+
+  bool get _showMarketChoice =>
+      widget.showMarketChoice ??
+      (!_isEdit && widget.business.isOwnShop && (widget.initialMarket ?? '').trim().isEmpty);
+  bool get _needsTaxonomy => _showMarketChoice || _market.isNotEmpty;
+  MarketDef? get _marketDef => _market.isEmpty ? null : _taxonomy?.market(_market);
+
+  /// Ҳозирги бўлим: битта бўлимли бозорда — ўзи (`all`).
+  String get _effectiveCategory => _marketDef?.autoCategory ?? _category;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_needsTaxonomy) _loadTaxonomy();
+  }
+
+  Future<void> _loadTaxonomy() async {
+    setState(() => _taxonomyFailed = false);
+    try {
+      final t = await (widget.loadTaxonomy ?? MarketTaxonomyRepository.load)();
+      if (!mounted) return;
+      setState(() {
+        _taxonomy = t;
+        if (_isEdit) {
+          final m = _marketDef;
+          if (m != null) {
+            for (final f in m.fields) {
+              _attrValues[f.key] = f.toFormValue(widget.existing!.attrs[f.key]);
+            }
+          }
+        } else if (_market.isNotEmpty) {
+          _applyMarket(_market, keepCategory: true);
+        }
+      });
+    } catch (e) {
+      debugPrint('[BusinessProductForm] taxonomy: $e');
+      if (mounted) setState(() => _taxonomyFailed = true);
+    }
+  }
+
+  /// Бозор танланди ([id] бўш — Аралаш): бўлим ва нарх бирлиги бозорга мосланади. setState ичида чақирилади.
+  void _applyMarket(String id, {bool keepCategory = false}) {
+    if (id != _market) _attrValues.clear();
+    _market = id;
+    _fieldErrors = const {};
+    final m = _marketDef;
+    if (m == null) {
+      _category = '';
+      if (id.isEmpty || !_profileUnits.contains(_unit)) _unit = _profile.defaultPriceUnit;
+      return;
+    }
+    if (!keepCategory || m.category(_category) == null) _category = m.autoCategory ?? '';
+    if (!m.priceUnits.contains(_unit)) _unit = m.priceUnits.first;
+  }
 
   /// Янги маҳсулот: «Видео (ихтиёрий)» белгиланган — сақлангандан кейин видео экрани дарров очилади.
   bool _wantVideo = false;
@@ -142,16 +241,38 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     if (price == null) return setState(() => _error = context.tr('bizprod_err_price'));
     if (!_isEdit && _photos.isEmpty) return setState(() => _error = context.tr('tv_shop_photo_required'));
     if (_phone.isEmpty) return setState(() => _error = context.tr('bizprod_err_generic'));
+    // «Бозорлар»: бозор танланган — таксономия, бўлим ва динамик майдонлар текширилади.
+    final market = _marketDef;
+    if (_market.isNotEmpty && market == null) {
+      return setState(() => _error = context.tr('market_err_taxonomy'));
+    }
+    final category = _effectiveCategory;
+    Map<String, Object> attrs = const {};
+    if (market != null) {
+      if (market.category(category) == null) return setState(() => _error = context.tr('market_err_category'));
+      final errors = validateAttrs(market, category, _attrValues);
+      if (errors.isNotEmpty) {
+        return setState(() {
+          _fieldErrors = errors;
+          _error = context.tr('market_err_fields');
+        });
+      }
+      attrs = serializeAttrs(market, category, _attrValues);
+    }
 
     setState(() {
       _busy = true;
       _error = null;
+      _fieldErrors = const {};
     });
     try {
       String itemId;
       var submitted = !_isEdit; // янги эълон — доим текширувга
       if (_isEdit) {
         itemId = widget.existing!.id;
+        final old = widget.existing!;
+        final marketChanged = market != null &&
+            (old.category != category || !mapEquals(old.attrs, attrs) || (market.hasImported && (old.imported ?? false) != _imported));
         // Таҳрирда статус ЮБОРИЛМАЙДИ (rules: эга фақат сақлайди ёки `deleted`); контент ўзгарса сервер
         // `active`/`expired`ни `pending`га ўтказади (`CONTENT_FIELDS`: title, price, priceUnit, description, …).
         submitted = editResubmitsForModeration(
@@ -160,8 +281,15 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           price: price,
           description: _desc.text.trim(),
           priceUnit: _unit,
+          marketChanged: marketChanged,
         );
         await _repo.updateItem(itemId, {
+          // Бозор эълони: бўлим/майдонлар/импорт (бозорнинг ўзи таҳрирда ўзгармайди).
+          if (market != null) ...{
+            'category': category,
+            if (attrs.isNotEmpty) 'attrs': attrs else if (old.attrs.isNotEmpty) 'attrs': FieldValue.delete(),
+            if (market.hasImported) 'imported': _imported,
+          },
           'title': name,
           'price': price,
           'description': _desc.text.trim(),
@@ -176,6 +304,10 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
         final urls = await (widget.uploadPhotos ?? _defaultUpload)(_phone, List.of(_photos));
         if (urls.isEmpty) throw StateError('no photos uploaded');
         await _repo.ensureShop(ownerPhone: _phone, name: widget.business.name);
+        // Ҳалқалар ва нисбий жой учун эълон туманининг вилояти (фақат бозор эълонида).
+        final regionId = market == null
+            ? ''
+            : await (widget.resolveRegionId ?? resolveRegionIdForDistrict)(widget.business.districtId);
         itemId = await _repo.createItem(TvShopItem(
           id: '',
           ownerPhone: _phone,
@@ -194,6 +326,12 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           status: 'pending',
           businessId: widget.business.id,
           priceUnit: _unit,
+          market: market?.id ?? '',
+          category: market == null ? '' : category,
+          attrs: attrs,
+          imported: (market?.hasImported ?? false) ? _imported : null,
+          regionId: regionId,
+          taxonomyVersion: market == null ? 0 : (_taxonomy?.version ?? 0),
         ));
       }
       if (!mounted) return;
@@ -322,6 +460,89 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     );
   }
 
+  /// Форма тепаси: таксономия юкланиши/хатоси, «Қаерда сотасиз?» ва бўлим чиплари.
+  List<Widget> _marketHeader() {
+    if (!_needsTaxonomy) return const [];
+    if (_taxonomyFailed) {
+      return [
+        Row(
+          key: const ValueKey('market_tax_error'),
+          children: [
+            Expanded(child: Text(context.tr('market_err_taxonomy'), style: TextStyle(color: Colors.red.shade700))),
+            TextButton(
+              key: const ValueKey('market_tax_retry'),
+              onPressed: _busy ? null : _loadTaxonomy,
+              child: Text(context.tr('err_retry')),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    final t = _taxonomy;
+    if (t == null) return const [LinearProgressIndicator(key: ValueKey('market_tax_loading')), SizedBox(height: 12)];
+    final out = <Widget>[];
+    if (_showMarketChoice) {
+      final markets = openableMarkets(t, widget.isModuleOpenable ?? ServiceConfigHolder.isOpenable);
+      // Бирорта бозор очиқ бўлмаса — чиплар йўқ (аввалги Аралаш формаси).
+      if (markets.isNotEmpty) {
+        out
+          ..add(MarketChoiceChips(
+            markets: markets,
+            selected: _market,
+            enabled: !_busy,
+            onChanged: (id) => setState(() => _applyMarket(id)),
+          ))
+          ..add(const SizedBox(height: 12));
+      }
+    }
+    final m = _marketDef;
+    if (m != null && m.hasCategoryChoice) {
+      out
+        ..add(MarketCategoryChips(
+          market: m,
+          selected: _category,
+          enabled: !_busy,
+          onChanged: (c) => setState(() {
+            _category = c;
+            _fieldErrors = const {};
+          }),
+        ))
+        ..add(const SizedBox(height: 12));
+    }
+    return out;
+  }
+
+  /// Нархдан кейин: «Импорт» (Гўшт) ва бўлим майдонлари (таксономиядан).
+  List<Widget> _marketBody() {
+    final m = _marketDef;
+    if (m == null) return const [];
+    final category = _effectiveCategory;
+    return [
+      if (m.hasImported)
+        CheckboxListTile(
+          key: const ValueKey('market_imported'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: _imported,
+          title: Text(context.tr('market_imported')),
+          onChanged: _busy ? null : (v) => setState(() => _imported = v == true),
+        ),
+      if (m.category(category) != null)
+        MarketFieldsEditor(
+          key: ValueKey('market_fields_${m.id}_$category'),
+          fields: m.fieldsFor(category),
+          values: _attrValues,
+          errors: _fieldErrors,
+          enabled: !_busy,
+          onChanged: (k, v) => setState(() {
+            _attrValues[k] = v;
+            if (_fieldErrors.containsKey(k)) _fieldErrors = {..._fieldErrors}..remove(k);
+          }),
+        ),
+    ];
+  }
+
   Widget _thumb(String path) {
     Widget broken(BuildContext _, Object __, StackTrace? ___) => const ColoredBox(color: Color(0x11000000), child: Icon(Icons.broken_image_outlined));
     final img = kIsWeb
@@ -339,6 +560,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          ..._marketHeader(),
           if (_showKindChoice) ...[
             SegmentedButton<String>(
               key: const ValueKey('bizprod_kind'),
@@ -373,6 +595,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             ),
           ),
           if (_units.length > 1) _unitSection(),
+          ..._marketBody(),
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey('bizprod_desc'),

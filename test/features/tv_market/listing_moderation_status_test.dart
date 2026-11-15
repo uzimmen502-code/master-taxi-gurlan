@@ -104,9 +104,11 @@ void main() {
       expect(item.rejectReason, 'Нархи нотўғри');
       expect(item.market, 'farm');
       final m = item.toMap();
-      for (final k in ['expiresAt', 'submittedAt', 'rejectReason', 'moderatedAt', 'market']) {
+      for (final k in ['expiresAt', 'submittedAt', 'rejectReason', 'moderatedAt']) {
         expect(m.containsKey(k), isFalse, reason: k);
       }
+      // «Бозорлар» 5 (эга 2026-11-15): `market` энди клиент ёзади (rules рухсат беради) — фақат бор бўлса.
+      expect(m['market'], 'farm');
 
       final old = TvShopItem.fromFirestore(_Doc('b', {'title': 'Эски', 'expiresAt': 'бузилган'}));
       expect((old.status, old.expiresAt, old.submittedAt, old.rejectReason, old.market), ('active', null, null, '', ''));

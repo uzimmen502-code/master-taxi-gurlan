@@ -68,6 +68,11 @@ class TvShopItem {
     this.submittedAt,
     this.rejectReason = '',
     this.market = '',
+    this.category = '',
+    this.attrs = const {},
+    this.imported,
+    this.regionId = '',
+    this.taxonomyVersion = 0,
   });
 
   /// «Бозорлар» 2a/2b (эга 2026-11-15): модерация ва 30 кунлик муддат майдонлари — ФАҚАТ сервер ёзади
@@ -81,6 +86,15 @@ class TvShopItem {
 
   /// Бозор идентификатори (`taxonomy/markets`; 1-босқич). Эски ҳужжатда йўқ — бўш.
   final String market;
+
+  /// «Бозорлар» 5+6 (эга 2026-11-15): бозор бўлими (`taxonomy/markets.markets.{market}.categories[].id`);
+  /// динамик майдонлар (`attrs`, турли қийматлар; сана — `yyyy-mm-dd`); «Импорт» (Гўшт; `null` — ёзилмайди);
+  /// эълон туманининг вилояти; ёзилган пайтдаги таксономия версияси (0 — ёзилмайди). Эски ҳужжатда йўқ.
+  final String category;
+  final Map<String, Object?> attrs;
+  final bool? imported;
+  final String regionId;
+  final int taxonomyVersion;
 
   /// Эга қарори (2026-10-24): 7 тагача расм (Аҳоли бозори эълони билан бир хил).
   static const maxPhotos = 7;
@@ -206,6 +220,13 @@ class TvShopItem {
       submittedAt: _tsOrNull(d['submittedAt']),
       rejectReason: d['rejectReason'] is String ? (d['rejectReason'] as String).trim() : '',
       market: d['market'] is String ? (d['market'] as String).trim() : '',
+      category: d['category'] is String ? (d['category'] as String).trim() : '',
+      attrs: d['attrs'] is Map
+          ? {for (final e in (d['attrs'] as Map).entries) '${e.key}': e.value as Object?}
+          : const {},
+      imported: d['imported'] is bool ? d['imported'] as bool : null,
+      regionId: d['regionId'] is String ? (d['regionId'] as String).trim() : '',
+      taxonomyVersion: d['taxonomyVersion'] is int ? d['taxonomyVersion'] as int : 0,
     );
   }
 
@@ -225,6 +246,13 @@ class TvShopItem {
       'photoUrl': photos.isNotEmpty ? photos.first : photoUrl,
       'photoUrls': photos,
       'kind': kind,
+      // «Бозорлар» майдонлари — фақат бор бўлса (Аралаш/эски шакл ўзгармайди, 26-банд).
+      if (market.isNotEmpty) 'market': market,
+      if (market.isNotEmpty && category.isNotEmpty) 'category': category,
+      if (attrs.isNotEmpty) 'attrs': attrs,
+      if (imported != null) 'imported': imported,
+      if (regionId.isNotEmpty) 'regionId': regionId,
+      if (taxonomyVersion >= 1) 'taxonomyVersion': taxonomyVersion,
       'districtId': districtId,
       'districtLabel': districtLabel,
       'description': description,

@@ -52,10 +52,13 @@ bool editResubmitsForModeration(
   required int price,
   required String description,
   required PriceUnit priceUnit,
+  // «Бозорлар»: бўлим/`attrs`/`imported` ҳам сервер CONTENT_FIELDS'ида (ўзгаргани — чақирувчи ҳисоблайди).
+  bool marketChanged = false,
 }) {
   const statuses = {'active', 'expired', 'pending'};
   if (!statuses.contains(existing.status)) return false;
-  return existing.title != title ||
+  return marketChanged ||
+      existing.title != title ||
       existing.price != price ||
       existing.description != description ||
       existing.priceUnit != priceUnit;

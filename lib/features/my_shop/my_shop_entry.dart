@@ -25,9 +25,13 @@ void _needPhone(BuildContext context) {
 }
 
 /// Янги маҳсулот формаси (эганинг ўз дўкони). Телефон йўқ бўлса — содда хабар.
+/// «Бозорлар» (эга 2026-11-15): [market] берилса (бозор ичидаги қизил «+») — бозор ва [category] олдиндан
+/// танланган; бўлмаса (Аралаш «+») форма «Қаерда сотасиз?» чиплари билан, Аралаш танланган ҳолда очилади.
 /// `ownPhone`, `loadName`, `push` — тест учун.
 Future<void> openNewProduct(
   BuildContext context, {
+  String? market,
+  String? category,
   Future<String> Function()? ownPhone,
   Future<String> Function(String phone)? loadName,
   MyShopPush? push,
@@ -52,6 +56,8 @@ Future<void> openNewProduct(
       name: name.isNotEmpty ? name : context.tr('my_shop_title'),
       districtId: ServiceConfigHolder.districtId.trim(),
     ),
+    initialMarket: market,
+    initialCategory: category,
   );
   await (push ?? (s) => _push(context, s))(screen);
 }

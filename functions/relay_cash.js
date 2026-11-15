@@ -131,6 +131,44 @@ function planUnpaidRefusal({
   };
 }
 
+/**
+ * C (davomi) — XARIDOR QARZINI HAMYONDAN TO'LASH (ega CONFIRMED 2026-11-15, A varianti; Ulgurji callable
+ * `payWholesaleBuyerDebt`). Qarz = deliveryFee + R = platformShare + avaCovered + owedToCollector, bu yerda
+ * avaCovered = (providerPool − keep) + R (AVA qoplagan oldingi kuryerlar + qaytish), owedToCollector = keep
+ * (yig'uvchining o'z LEG haqi — to'lanmay qolgan). Komponentlar (relay_cash A yo'li bilan bir xil natija):
+ *   Dr passenger_credit:{xaridor}           amount
+ *   Cr admin_clearing                       avaCovered          (AVA qoplamasi qaytadi)
+ *   Cr passenger_credit:{yig'uvchi}         keep − serviceFee   (A: yig'uvchi sof = keep − serviceFee)
+ *   Cr earnings:ava_courier_service_fee     serviceFee          (`courier_payout.computeFee`, AYNI sozlama)
+ *   Cr earnings:ava_logistics_fee           platformShare
+ * Har qanday nomuvofiqlik (muhrlangan summalar, Σ ≠ amount) → Error(code), PUL YO'Q.
+ */
+function planBuyerDebtPayment({
+  amount, deliveryFee, returnFee, platformShare, providerPool, keep, avaCovered, owedToCollector, serviceFee,
+  buyerAccount, collectorAccount,
+}) {
+  const nums = [amount, deliveryFee, returnFee, platformShare, providerPool, keep, avaCovered, owedToCollector, serviceFee];
+  if (!nums.every(isNonNeg) || amount <= 0 || deliveryFee <= 0 || returnFee <= 0) throw anomalyErr('debt_amounts_invalid');
+  if (!buyerAccount || (owedToCollector - serviceFee > 0 && !collectorAccount)) throw anomalyErr('debt_accounts_invalid');
+  if (amount !== deliveryFee + returnFee) throw anomalyErr('debt_total_mismatch');
+  if (platformShare + providerPool !== deliveryFee) throw anomalyErr('cash_split_mismatch');
+  if (keep > providerPool || owedToCollector !== keep) throw anomalyErr('debt_collector_mismatch');
+  if (avaCovered !== providerPool - keep + returnFee) throw anomalyErr('debt_ava_cover_mismatch');
+  if (serviceFee > owedToCollector) throw anomalyErr('cash_service_fee_invalid');
+  const collectorNet = owedToCollector - serviceFee;
+  if (platformShare + avaCovered + collectorNet + serviceFee !== amount) throw anomalyErr('debt_components_mismatch');
+  const legs = [{ account: buyerAccount, dr: amount }];
+  if (avaCovered > 0) legs.push({ account: AVA_COVER_ACCOUNT, cr: avaCovered });
+  if (collectorNet > 0) legs.push({ account: collectorAccount, cr: collectorNet });
+  if (serviceFee > 0) legs.push({ account: SERVICE_FEE_ACCOUNT, cr: serviceFee });
+  if (platformShare > 0) legs.push({ account: PLATFORM_FEE_ACCOUNT, cr: platformShare });
+  const crSum = legs.reduce((s, l) => s + (l.cr || 0), 0);
+  if (crSum !== amount) throw anomalyErr('debt_components_mismatch');
+  return {
+    amount, avaCovered, collectorNet, serviceFee, platformShare, legs,
+  };
+}
+
 function attachRelayCash(exportsObj, deps) {
   const {
     functions, db, admin, canonicalUid, settlementLedger, now: nowFn,
@@ -513,7 +551,8 @@ function attachRelayCash(exportsObj, deps) {
     .onRun(async () => { await reconcile(); return null; });
 
   return {
-    processShipment, reconcile, settleOutbound, coverOutbound, fundReturn,
+    // `userOf` / `serviceFeeOf` — Ulgurji xaridor qarzi to'lovi (`payWholesaleBuyerDebt`) AYNI qoidani ishlatsin.
+    processShipment, reconcile, settleOutbound, coverOutbound, fundReturn, userOf, serviceFeeOf,
   };
 }
 
@@ -521,6 +560,9 @@ module.exports = {
   ST,
   SETTLE_STATUSES,
   AVA_COVER_ACCOUNT,
+  PLATFORM_FEE_ACCOUNT,
+  SERVICE_FEE_ACCOUNT,
+  planBuyerDebtPayment,
   settleKey,
   coverKey,
   returnFundKey,

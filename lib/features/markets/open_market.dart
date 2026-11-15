@@ -8,13 +8,14 @@ import 'screens/market_screen.dart';
 
 /// Бозор экранига кириш — ЯГОНА йўл (бош экран кейинги босқичда шуни чақиради). Модул дарвозаси (фаол туман)
 /// таксономиядаги `moduleId` бўйича: ёпиқ бўлса — мавжуд «Тез кунда / мавжуд эмас» хабари.
-/// `loadTaxonomy`, `canOpen`, `push` — тест учун.
+/// `loadTaxonomy`, `canOpen`, `push` — тест учун. [initialCategory] — очилишда танланган бўлим (9-босқич).
 Future<void> openMarket(
   BuildContext context,
   String marketId, {
   Future<MarketTaxonomy> Function()? loadTaxonomy,
   bool Function(String moduleId)? canOpen,
   Future<void> Function(Widget screen)? push,
+  String initialCategory = '',
 }) async {
   MarketTaxonomy t;
   try {
@@ -37,6 +38,6 @@ Future<void> openMarket(
     HomeModuleGate.onTapBlocked(context, def.moduleId);
     return;
   }
-  final screen = MarketScreen(marketId: marketId, loadTaxonomy: loadTaxonomy);
+  final screen = MarketScreen(marketId: marketId, loadTaxonomy: loadTaxonomy, initialCategory: initialCategory);
   await (push ?? (s) => Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => s)))(screen);
 }

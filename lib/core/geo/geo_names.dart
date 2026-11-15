@@ -78,6 +78,17 @@ class GeoNames {
     return fallback;
   }
 
+  /// Туманнинг вилояти (кешдан; йўқ бўлса — бўш, туман фонда юкланади ва
+  /// [revision] ошади). Ҳужжатида `regionId` йўқ эълонлар учун (Улгуржи — фақат `districtId`).
+  static String regionIdOfDistrict(String id) {
+    final key = id.trim();
+    if (key.isEmpty) return '';
+    final d = _districts[key];
+    if (d != null) return d.regionId.trim();
+    _load('d', key);
+    return '';
+  }
+
   /// Вилоят номи. Номаълум бўлса — [fallback].
   static String region(String id, String lang, {String fallback = ''}) {
     final key = id.trim();

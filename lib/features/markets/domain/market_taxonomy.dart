@@ -42,6 +42,11 @@ const Set<String> kMarketsWithImported = {'meat'};
 /// бозорлар — «Барчаси» + чиплар. Таксономияда белги йўқ (очиқ масала).
 const Set<String> kMarketsWithoutAllTab = {'auto'};
 
+/// Мошина бозорининг «Эҳтиёт қисмлар» бўлими (таксономия v1, `functions/tools/data/market_taxonomy_v1.json`) —
+/// тепасида туман AVA сервиси ва AVA маҳсулотлари (9-босқич, эга 2026-11-15).
+const String kAutoMarketId = 'auto';
+const String kAutoPartsCategory = 'parts';
+
 enum MarketFieldType { int, text, select, bool, date }
 
 MarketFieldType? _fieldType(String s) {

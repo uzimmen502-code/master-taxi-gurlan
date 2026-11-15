@@ -81,7 +81,8 @@ const Map<String, ModuleGeoPolicy> kModuleGeoPolicies = {
   'china_market': ModuleGeoPolicy(
     moduleId: 'china_market',
     mode: GeoMode.rings, // аввал: nationwide
-    levels: [GeoLevel.nation],
+    // 7-босқич (эга, 2026-11-15): вилоят/туман танлови ҳам (сотувчининг жўнатиш тумани бўйича).
+    levels: _marketLevels,
     defaultLevel: GeoLevel.nation,
     persistSelection: false,
   ),
@@ -106,8 +107,12 @@ const Map<String, ModuleGeoPolicy> kModuleGeoPolicies = {
   'realty': ModuleGeoPolicy(
     moduleId: 'realty',
     mode: GeoMode.rings, // аввал: tiered
-    levels: _all,
-    usesLocation: true, // D-GEO-11/15: истаган ҳудуд, танлов сақланади
+    // 7-босқич (эга, 2026-11-15): сукут — Республика ҳалқалари, танлов САҚЛАНМАЙДИ (аввал: туман, сақланарди).
+    // Бош саҳифа бўлими аввалгидек туман — home_realty_section.dart аниқ туман scope беради.
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
+    usesLocation: true,
   ),
   // «Бозорлар» (эга, 2026-11-15): сукут — Республика ҳалқалари; танлов
   // сақланмайди (PROPOSED: ҳар киришда яна ҳалқалар).

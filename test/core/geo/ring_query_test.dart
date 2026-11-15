@@ -197,16 +197,14 @@ void main() {
       expect(geoPolicyFor('jobs').mode, GeoMode.tiered);
     });
 
-    test('Улгуржи/Хитой/Кўчмас мулк экран қийматлари аввалгидек', () {
-      final w = geoPolicyFor('wholesale_market');
-      expect(w.levels, [GeoLevel.nation, GeoLevel.region, GeoLevel.district]);
-      expect(w.defaultLevel, GeoLevel.nation);
-      expect(w.persistSelection, isFalse);
-      final r = geoPolicyFor('realty');
-      expect(r.levels, [GeoLevel.district, GeoLevel.region, GeoLevel.nation]);
-      expect(r.defaultLevel, GeoLevel.district);
-      expect(r.persistSelection, isTrue);
-      expect(r.usesLocation, isTrue);
+    test('7-босқич (эга 2026-11-15): Улгуржи/Хитой/Уй-жой — сукут Республика ҳалқалари, вилоят/туман танлови, сақланмайди', () {
+      for (final id in ['wholesale_market', 'china_market', 'realty']) {
+        final p = geoPolicyFor(id);
+        expect(p.levels, [GeoLevel.nation, GeoLevel.region, GeoLevel.district], reason: id);
+        expect(p.defaultLevel, GeoLevel.nation, reason: id);
+        expect(p.persistSelection, isFalse, reason: id);
+      }
+      expect(geoPolicyFor('realty').usesLocation, isTrue);
     });
 
     test('янги бозорлар: сукут Республика (ҳалқалар), танлов сақланмайди', () {

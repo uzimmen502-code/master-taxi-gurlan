@@ -15,6 +15,7 @@ import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
 import '../data/market_listings_source.dart';
 import '../data/market_taxonomy_repository.dart';
 import '../domain/market_taxonomy.dart';
+import '../widgets/auto_parts_header.dart';
 import '../widgets/market_listing_card.dart';
 
 /// «Бозорлар» умумий экрани (6-босқич, эга 2026-11-15) — битта экран, таксономия бошқаради (Мол / Мошина /
@@ -36,7 +37,16 @@ class MarketScreen extends StatefulWidget {
     this.openAdd,
     this.openDetail,
     this.pageSize = 20,
+    this.initialCategory = '',
+    this.partsHeader,
   });
+
+  /// Очилишда танланган бўлим (мас. «Менинг машинам» → Мошина бозори «Эҳтиёт қисмлар», 9-босқич).
+  /// Таксономияда йўқ бўлса — сукут (биринчи таб / «Барчаси»).
+  final String initialCategory;
+
+  /// Тест учун: «Эҳтиёт қисмлар» тепасидаги AVA блоки (бўлмаса [AutoPartsAvaHeader]).
+  final WidgetBuilder? partsHeader;
 
   final String marketId;
 
@@ -104,7 +114,9 @@ class _MarketScreenState extends State<MarketScreen> {
       setState(() {
         _taxonomy = t;
         if (m != null) {
-          _category = m.usesTabs ? m.categories.first.id : '';
+          final initial = widget.initialCategory.trim();
+          final hasInitial = initial.isNotEmpty && m.categories.any((c) => c.id == initial);
+          _category = hasInitial ? initial : (m.usesTabs ? m.categories.first.id : '');
           _scope = GeoContext.scopeFor(m.moduleId);
         }
       });
@@ -342,27 +354,36 @@ class _MarketScreenState extends State<MarketScreen> {
   Widget _list(MarketDef m) {
     final visible = _visible;
     final hasMore = _pager?.hasMore ?? false;
+    // Мошина бозори «Эҳтиёт қисмлар»: тепада AVA сервис + AVA маҳсулотлари, остида эълонлар (9-босқич).
+    final header = showsAutoPartsHeader(m.id, _category)
+        ? (widget.partsHeader?.call(context) ?? const AutoPartsAvaHeader())
+        : null;
     if (visible.isEmpty && _pageError != null) {
-      return LoadErrorView(error: _pageError!, onRetry: _loadMore);
+      final err = LoadErrorView(error: _pageError!, onRetry: _loadMore);
+      if (header == null) return err;
+      return ListView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 24), children: [header, err]);
     }
     if (visible.isEmpty && !hasMore && !_loading) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(context.tr('market_empty'),
-              key: const ValueKey('market_empty'),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade700)),
-        ),
+      final empty = Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(context.tr('market_empty'),
+            key: const ValueKey('market_empty'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade700)),
       );
+      if (header == null) return Center(child: empty);
+      return ListView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 24), children: [header, empty]);
     }
+    final lead = header == null ? 0 : 1;
     final lang = context.contentLang;
     final user = GeoContext.active;
     return ListView.builder(
       key: const ValueKey('market_list'),
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      itemCount: visible.length + 1,
-      itemBuilder: (context, i) {
+      itemCount: visible.length + 1 + lead,
+      itemBuilder: (context, index) {
+        if (header != null && index == 0) return header;
+        final i = index - lead;
         if (i < visible.length) {
           final item = visible[i];
           return MarketListingCard(

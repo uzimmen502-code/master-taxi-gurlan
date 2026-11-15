@@ -20,6 +20,15 @@ String marketShortLabel(BuildContext context, MarketDef m) {
   return s == key ? m.label(context.contentLang) : s;
 }
 
+/// Аралаш бозор карточкасидаги бозор белгиси (8-босқич): `market_short_<id>`; бозорсиз ёки калит йўқ — бўш.
+String marketShortBadge(String Function(String key) tr, String marketId) {
+  final id = marketId.trim();
+  if (id.isEmpty) return '';
+  final key = 'market_short_$id';
+  final s = tr(key);
+  return s == key ? '' : s;
+}
+
 /// Хато коди → матн.
 String marketFieldErrorText(BuildContext context, MarketField f, MarketFieldError e) {
   String fill(String key, Object? v) => context.tr(key).replaceAll('{value}', '${v ?? ''}');

@@ -37,11 +37,14 @@ void main() {
     }
   });
 
-  test('Улгуржи экрани: ҳудуд фильтри йўқ — доим бутун мамлакат (эга 2026-11-03, «А»)', () {
+  // 2026-11-03 «А» (ҳудуд фильтри йўқ) → 2026-11-15 эга: ҲАЛҚАЛАР (сукут Республика, яқиндан узоққа).
+  // «Барча ҳудудларда» сотувчилар ҳар доим рўйхат бошида — ҳеч бир ҳудуд танловида йўқолмайди.
+  test('Улгуржи экрани: ҳалқалар + «Барча ҳудудларда» доим бирлаштирилади (эга 2026-11-15)', () {
     final src = File('lib/features/wholesale/screens/wholesale_market_screen.dart').readAsStringSync();
-    expect(src.contains('GeoTierBar('), isFalse, reason: 'ҳудуд чиплари қайтмасин');
-    expect(src.contains('getActiveProducts(market: widget.market)'), isTrue);
-    expect(RegExp(r'getActiveProducts\([^)]*geo:').hasMatch(src), isFalse);
+    expect(src.contains('GeoTierBar('), isTrue);
+    expect(src.contains('ringPlanFor(_scope)'), isTrue);
+    expect(src.contains('mergeAllAreas(_allAreas'), isTrue);
+    expect(src.contains('_source.allAreas(_filter)'), isTrue);
   });
 
   group('Аралаш бозорга чиқадиган AVA товари (marketEligible)', () {

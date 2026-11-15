@@ -156,6 +156,8 @@ void main() {
           source: src,
           loadTaxonomy: () async => kTaxonomyV1,
           openAdd: (_, m, c) async => added.add('$m/$c'),
+          // «Эҳтиёт қисмлар» тепасидаги AVA блоки (9-босқич) — Firebase'сиз ўринбосар.
+          partsHeader: (_) => const SizedBox(key: ValueKey('parts_header_stub'), height: 40),
         ));
     expect(find.byKey(const ValueKey('market_tabs')), findsOneWidget);
     expect(find.byKey(const ValueKey('market_cat_all')), findsNothing);
@@ -165,6 +167,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('market_tab_parts')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('market_card_p1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('parts_header_stub')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('market-add-ad')));
     await tester.pumpAndSettle();
     expect(added, ['auto/parts']);

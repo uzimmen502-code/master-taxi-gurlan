@@ -9,17 +9,24 @@ import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_districts_cache.dart';
 import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/geo/module_geo_policy.dart';
+import '../../../core/geo/relative_location.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
+import '../../../models/realty_listing.dart';
 import '../../../models/search_index_entry.dart';
 import '../../../repositories/platform_products_repository.dart';
+import '../../../repositories/realty_repository.dart';
 import '../../../repositories/search_index_repository.dart';
 import '../../../core/utils/formatters.dart';
 import '../../home/home_market_nav.dart';
+import '../../markets/widgets/market_form_fields.dart' show marketShortBadge;
 import '../../my_shop/my_shop_entry.dart';
+import '../../realty/screens/realty_detail_screen.dart';
+import '../../realty/screens/realty_screen.dart';
+import '../../realty/widgets/realty_grid_card.dart';
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../../wholesale/screens/wholesale_market_screen.dart';
@@ -99,6 +106,11 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   /// билан, орқага Улгуржи бозорга (эга, 2026-11-13).
   List<WholesaleProduct> _ulgurji = const [];
 
+  /// Уй-жой бозори эълонлари (8-босқич, эга 2026-11-15) — «Уй-жой» белгиси билан; босилса — Уй-жой бозори
+  /// устида тафсилот. Аралашнинг ҳудуд танлови бўйича, бир марта юкланади (ҳудуд ўзгарса — қайта).
+  List<RealtyListing> _realty = const [];
+  static const _realtyLimit = 40;
+
   /// Улгуржи/Хитой бозор экранига узатиш учун (HomeController бу маршрутда йўқ).
   String _myPhone = '';
 
@@ -140,6 +152,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   void _setScope(GeoScope s) {
     setState(() => _scope = s);
     unawaited(_loadRegionDistricts());
+    unawaited(_loadRealty());
   }
 
   Future<void> _loadRegionDistricts() async {
@@ -193,6 +206,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     unawaited(_loadShopItems());
     unawaited(_loadChina());
     unawaited(_loadUlgurji());
+    unawaited(_loadRealty());
     unawaited(_loadMyPhone());
     unawaited(_loadRegionDistricts());
     if (CatalogSearch.normalize(_streamQuery).isNotEmpty) unawaited(_runShopSearch(_streamQuery));
@@ -257,6 +271,18 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     }
   }
 
+  /// Фаол Уй-жой эълонлари (муддати ўтганлари репозиторийда чиқарилади), Аралаш ҳудуди бўйича.
+  Future<void> _loadRealty() async {
+    final scope = _scope;
+    try {
+      final list = await RealtyRepository().watchScoped(scope, limit: _realtyLimit).first;
+      if (mounted && identical(scope, _scope)) setState(() => _realty = list);
+    } catch (e) {
+      // Юкланмаса ҳам Аралаш бозор ишлайверсин.
+      debugPrint('[CheapProducts] ARALASH_REALTY_LOAD_FAILED: $e');
+    }
+  }
+
   Future<void> _loadMyPhone() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -283,6 +309,16 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       detail: MaterialPageRoute<void>(
         builder: (_) => WholesaleProductDetailScreen(product: p, catalog: catalog),
       ),
+    ));
+  }
+
+  /// Уй-жой эълони: Аралаш стекдан олинади, ўрнига Уй-жой бозори, тафсилот унинг устида (Улгуржи каби;
+  /// орқага — Уй-жой бозори, яна орқага — асосий экран).
+  void _openRealty(RealtyListing r) {
+    unawaited(openDetailOverOtherMarket(
+      Navigator.of(context),
+      market: const RealtyScreen(),
+      detail: MaterialPageRoute<void>(builder: (_) => RealtyDetailScreen(listing: r)),
     ));
   }
 
@@ -340,6 +376,15 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     return list;
   }
 
+  /// Қидирувга мос Уй-жой эълонлари (сарлавҳа, матн, нарх).
+  List<RealtyListing> _filteredRealty() {
+    final q = _query;
+    if (CatalogSearch.normalize(q).isEmpty) return _realty;
+    return _realty
+        .where((r) => CatalogSearch.matches(q, [r.titleOrText, r.text, r.priceText]))
+        .toList(growable: false);
+  }
+
   List<TvShopItem> _filteredShop() {
     var list = marketShopPool(_shopItems, _searchedItems, _scope, _regionDistricts);
     final q = _query;
@@ -377,6 +422,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     List<TvShopItem> shop,
     List<WholesaleProduct> china,
     List<WholesaleProduct> ulgurji,
+    List<RealtyListing> realty,
   ) {
     final q = _query;
     if (CatalogSearch.normalize(q).isEmpty) {
@@ -386,6 +432,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
         shop.map(_MarketEntry.shop).toList(growable: false),
         china.map(_MarketEntry.wholesale).toList(growable: false),
         ulgurji.map(_MarketEntry.wholesale).toList(growable: false),
+        realty.map(_MarketEntry.realty).toList(growable: false),
       ]);
     }
 
@@ -395,12 +442,17 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       ...shop.map(_MarketEntry.shop),
       ...china.map(_MarketEntry.wholesale),
       ...ulgurji.map(_MarketEntry.wholesale),
+      ...realty.map(_MarketEntry.realty),
     ];
     return FairMix.byScoreThenFair(
       scored,
       (e) {
         if (e.platform != null) {
           return CatalogSearch.scoreProduct(e.platform!, q);
+        }
+        if (e.realty != null) {
+          final r = e.realty!;
+          return CatalogSearch.score(q, title: r.titleOrText, extra: [r.text, r.priceText]);
         }
         if (e.wholesale != null) {
           final c = e.wholesale!;
@@ -425,6 +477,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
         if (e.platform != null) return 'platform';
         if (e.shop != null) return 'shop';
         if (e.wholesale != null) return e.wholesale!.market;
+        if (e.realty != null) return 'realty';
         return 'ad';
       },
     );
@@ -559,7 +612,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                 // Босилган Хитой маҳсулоти рўйхат юкланмасдан ҳам кўринсин.
                 final china = WholesaleProductsRepository.filterBySearch(_china, _query, limit: _china.length);
                 final ulgurji = WholesaleProductsRepository.filterBySearch(_ulgurji, _query, limit: _ulgurji.length);
-                final found = platform.length + ads.length + shop.length + china.length + ulgurji.length;
+                final realty = _filteredRealty();
+                final found = platform.length + ads.length + shop.length + china.length + ulgurji.length + realty.length;
 
                 // Эълонлар келди, платформа/дўкон ҳали юкланяпти: бирорта ҳам
                 // карта йўқ бўлса «бўш» эмас — юкланиш (аввал учаласи
@@ -598,7 +652,9 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                final mixed = _mixedEntries(platform, ads, shop, china, ulgurji);
+                final mixed = _mixedEntries(platform, ads, shop, china, ulgurji, realty);
+                final lang = context.contentLang;
+                final user = GeoContext.active;
                 // Босилган эълон / AVA маҳсулоти — аралаш тўрнинг БИРИНЧИ катагида.
                 final pinnedAva = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedPlatform : null;
                 final entries = pinned != null
@@ -661,11 +717,28 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                               onTap: () => _openWholesale(w, isChina ? china : ulgurji),
                             );
                           }
+                          if (e.realty != null) {
+                            final r = e.realty!;
+                            return RealtyGridCard(
+                              listing: r,
+                              locationLabel: realtyLocationLabel(r, user, lang),
+                              onTap: () => _openRealty(r),
+                            );
+                          }
                           if (e.shop != null) {
                             final item = e.shop!;
                             return TvShopItemGridCard(
                               item: item,
                               showShopBadge: true,
+                              cornerBadge: marketShortBadge(context.tr, item.market),
+                              locationLabel: relativeLocationLabel(
+                                itemDistrictId: item.districtId,
+                                itemRegionId: item.regionId,
+                                userDistrictId: user.districtId,
+                                userRegionId: user.regionId,
+                                lang: lang,
+                                districtFallback: item.districtLabel,
+                              ),
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -743,12 +816,16 @@ class _ShopHitsStrip extends StatelessWidget {
 }
 
 class _MarketEntry {
-  const _MarketEntry._({this.ad, this.platform, this.shop, this.wholesale});
+  const _MarketEntry._({this.ad, this.platform, this.shop, this.wholesale, this.realty});
   factory _MarketEntry.ad(AdModel ad) => _MarketEntry._(ad: ad);
   factory _MarketEntry.platform(PlatformProduct p) =>
       _MarketEntry._(platform: p);
   factory _MarketEntry.shop(TvShopItem item) => _MarketEntry._(shop: item);
   factory _MarketEntry.wholesale(WholesaleProduct p) => _MarketEntry._(wholesale: p);
+  factory _MarketEntry.realty(RealtyListing r) => _MarketEntry._(realty: r);
+
+  /// Уй-жой бозори эълони (8-босқич).
+  final RealtyListing? realty;
 
   final AdModel? ad;
   final PlatformProduct? platform;

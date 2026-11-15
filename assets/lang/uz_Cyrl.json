@@ -2674,9 +2674,9 @@
   "update_required_title": "Илова янгиланди",
   "update_required_body": "Давом этиш учун янги версияни ўрнатинг. Бу бир марталик иш.",
   "update_required_button": "Янгилаш",
-  "home_module_realty": "Кўчмас мулк кластери",
-  "home_section_realty": "Кўчмас мулк кластери:",
-  "realty_title": "Кўчмас мулк кластери",
+  "home_module_realty": "Уй-жой бозори",
+  "home_section_realty": "Уй-жой бозори:",
+  "realty_title": "Уй-жой бозори",
   "realty_detail_title": "Объект",
   "realty_add_title": "Янги объект",
   "realty_add_cta": "Эълон қўшиш",
@@ -5778,5 +5778,10 @@
   "market_empty": "Ҳозирча эълон йўқ",
   "market_add": "Эълон қўшиш",
   "market_load_more": "Яна кўрсатиш",
-  "market_unavailable": "Бу бозор ҳозир мавжуд эмас"
+  "market_unavailable": "Бу бозор ҳозир мавжуд эмас",
+  "aralash_badge_realty": "Уй-жой",
+  "auto_parts_ava_products": "AVA маҳсулотлари",
+  "auto_parts_listings": "Эълонлар",
+  "auto_hub_parts_market": "Мошина бозори → Эҳтиёт қисмлар",
+  "auto_hub_parts_market_sub": "Одамлар сотаётган эҳтиёт қисмлар"
 }

@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
 
 /// Очиқ дўкон / Аҳоли бозори — 2 устунли товар плиткаси.
@@ -14,7 +15,15 @@ class TvShopItemGridCard extends StatelessWidget {
     this.highlight = false,
     this.showShopBadge = false,
     required this.onTap,
+    this.cornerBadge = '',
+    this.locationLabel = '',
   });
+
+  /// Тепа ўнгда бозор белгиси (Аралашда «Мол»/«Мошина»/«Гўшт»/«Деҳқон», 8-босқич). Бўш — йўқ.
+  final String cornerBadge;
+
+  /// Пастки чапда нисбий жой (туман/вилоят). Бўш — йўқ.
+  final String locationLabel;
 
   final TvShopItem item;
   final bool highlight;
@@ -72,6 +81,8 @@ class TvShopItemGridCard extends StatelessWidget {
                           fg: Colors.white,
                         ),
                       ),
+                    if (cornerBadge.isNotEmpty) MarketCornerBadge(text: cornerBadge),
+                    if (locationLabel.isNotEmpty) MarketLocationPill(text: locationLabel),
                     if (photos > 1)
                       Positioned(
                         right: 6,

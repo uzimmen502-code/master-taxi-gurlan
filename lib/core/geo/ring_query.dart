@@ -166,9 +166,14 @@ class RingItem<T> {
 /// Бир бўлак сўров натижаси. [cursor] — кейинги саҳифа учун (Firestore'да
 /// охирги ҳужжат).
 class RingFetchResult<T> {
-  const RingFetchResult(this.items, this.cursor);
+  const RingFetchResult(this.items, this.cursor, {int? rawCount}) : _rawCount = rawCount;
   final List<T> items;
   final Object? cursor;
+
+  /// Сервер қайтарган ХОМ ҳужжатлар сони (адаптер клиентда филтрласа, [items] ундан кам бўлади —
+  /// пейжер бўлак тугаганини шу сон бўйича аниқлайди). Сукут — [items] узунлиги.
+  final int? _rawCount;
+  int get rawCount => _rawCount ?? items.length;
 }
 
 /// [districtIds] (≤ chunkSize) бўйича [limit] тагача, [startAfter]дан кейин.
@@ -230,7 +235,7 @@ class RingPager<T> {
       final want = pageSize - out.length;
       final res = await fetch(chunks[_chunk], _cursor, want);
       out.addAll(res.items.map((i) => RingItem<T>(i, spec.ring)));
-      if (res.items.length < want) {
+      if (res.rawCount < want) {
         _chunk++;
         _cursor = null;
       } else {

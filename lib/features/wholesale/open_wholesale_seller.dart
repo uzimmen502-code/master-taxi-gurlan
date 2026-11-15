@@ -12,10 +12,18 @@ import 'screens/wholesale_product_form_screen.dart';
 /// дўкондаги «Улгуржи» таби эди). Ичи — мавжуд [WholesaleSellerArea]: рўйхатдан
 /// ўтиш, ҳолат, ўз маҳсулотлари, келган буюртмалар.
 class WholesaleSellerScreen extends StatelessWidget {
-  const WholesaleSellerScreen({super.key, required this.phone, @visibleForTesting this.body});
+  const WholesaleSellerScreen({
+    super.key,
+    required this.phone,
+    this.market = WholesaleProduct.marketWholesale,
+    @visibleForTesting this.body,
+  });
 
   /// Каноник телефон — чақирувчи текширади.
   final String phone;
+
+  /// Улгуржи (сукут) ёки Хитой — бозор экранидаги қизил «+» (7-босқич, 2026-11-15).
+  final String market;
 
   /// Тест учун: Firestore'га уланадиган [WholesaleSellerArea] ўрнига.
   final Widget? body;
@@ -23,14 +31,17 @@ class WholesaleSellerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('home_create_wholesale'))),
-      body: body ??
-          WholesaleSellerArea(phone: phone, market: WholesaleProduct.marketWholesale),
+      appBar: AppBar(
+        title: Text(context.tr(market == WholesaleProduct.marketChina
+            ? 'wholesale_screen_title_china'
+            : 'home_create_wholesale')),
+      ),
+      body: body ?? WholesaleSellerArea(phone: phone, market: market),
     );
   }
 }
 
-/// Тасдиқланган ва жўнатиш манзили бор сотувчи — маҳсулот формаси ДАРҲОЛ
+/// Тасдиқланган ва жўнатиш манзили бор сотувчи — [market] бозори маҳсулот формаси ДАРҲОЛ
 /// (rules ҳам шуни талаб қилади: `wholesaleProductCreateOk`). Форма [WholesaleSellerScreen]
 /// устида очилади: ёпилгач ёки сақлангач — ўз маҳсулотлари рўйхати, яна орқага —
 /// чақирган экран. Бошқа ҳолатда (рўйхатдан ўтмаган, текширувда, рад этилган,
@@ -40,6 +51,7 @@ class WholesaleSellerScreen extends StatelessWidget {
 Future<void> openWholesaleSeller(
   BuildContext context, {
   required String phone,
+  String market = WholesaleProduct.marketWholesale,
   @visibleForTesting Future<WholesaleSeller?> Function(String phone)? loadSeller,
   @visibleForTesting WholesaleSellerScreen Function()? screenBuilder,
   @visibleForTesting Widget Function(WholesaleSeller seller)? formBuilder,
@@ -51,7 +63,7 @@ Future<void> openWholesaleSeller(
     debugPrint('[WholesaleSeller] load failed: $e');
   }
   if (!context.mounted) return;
-  final screen = screenBuilder?.call() ?? WholesaleSellerScreen(phone: phone);
+  final screen = screenBuilder?.call() ?? WholesaleSellerScreen(phone: phone, market: market);
   final s = seller;
   if (s != null && s.isApproved && s.hasShipFrom) {
     await pushDetailOverMarket(
@@ -60,7 +72,7 @@ Future<void> openWholesaleSeller(
       openDetail: () => Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (_) =>
             formBuilder?.call(s) ??
-            WholesaleProductFormScreen(seller: s, market: WholesaleProduct.marketWholesale),
+            WholesaleProductFormScreen(seller: s, market: market),
       )),
     );
     return;

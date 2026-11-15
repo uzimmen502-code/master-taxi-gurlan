@@ -13,7 +13,11 @@ class WholesaleProductCard extends StatelessWidget {
     required this.onTap,
     this.onSellerTap,
     this.cornerBadge,
+    this.locationLabel = '',
   });
+
+  /// Нисбий жой (сотувчининг жўнатиш тумани; 7-босқич) — расмнинг пастки чапида. Бўш — чизилмайди.
+  final String locationLabel;
 
   /// Тепа ўнгдаги бозор белгиси (Аралаш бозорда «Хитой», эга 2026-11-13).
   final String? cornerBadge;
@@ -117,6 +121,7 @@ class WholesaleProductCard extends StatelessWidget {
                     ),
                   if (cornerBadge != null && cornerBadge!.trim().isNotEmpty)
                     MarketCornerBadge(text: cornerBadge!),
+                  if (locationLabel.isNotEmpty) MarketLocationPill(text: locationLabel),
                 ],
               ),
             ),

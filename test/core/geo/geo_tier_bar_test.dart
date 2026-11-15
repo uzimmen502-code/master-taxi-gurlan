@@ -43,13 +43,13 @@ void main() {
     expect(find.byKey(const ValueKey('geo_tier_region')), findsOneWidget);
   });
 
-  testWidgets('Хитой — битта даража, тугмалар йўқ', (tester) async {
+  testWidgets('Хитой (7-босқич, 2026-11-15) — Республика/вилоят/туман: 3 тугма', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: GeoTierBar(moduleId: 'china_market', scope: GeoContext.scopeFor('china_market'), onChanged: (_) {}),
       ),
     ));
-    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(ChoiceChip), findsNWidgets(3));
   });
 
   testWidgets('кенгроқ таклиф: туманда — вилоят ва Республика; Республикада — йўқ', (tester) async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/module_geo_policy.dart' show GeoLevel;
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
@@ -130,9 +131,11 @@ class _HomeRealtySectionState extends State<HomeRealtySection> {
   void _listen() {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
-    // Кўчмас мулк модул танлови (D-GEO-15) — лента ва харита билан бир хил.
+    // Бош саҳифа — фаол туман (аввалги сукут). 2026-11-15 дан `realty` модули сукути Республика ҳалқалари
+    // (лента/харита), бош саҳифа бўлими эса ЎЗГАРМАДИ — шунинг учун туман аниқ берилади.
     _sub = _repo
-        .watchScoped(GeoContext.homeScopeFor('realty'), limit: HomeRealtySection.limit)
+        .watchScoped(GeoScope(level: GeoLevel.district, area: GeoContext.active),
+            limit: HomeRealtySection.limit)
         .listen(
       (list) {
         if (!mounted) return;

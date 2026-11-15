@@ -9,17 +9,21 @@ import '../../../core/brand_labels.dart';
 import '../../../core/geo/geo_names.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/relative_location.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../../models/platform_product.dart';
+import '../../../models/realty_listing.dart';
 import '../../../repositories/platform_products_repository.dart';
+import '../../../repositories/realty_repository.dart';
 import '../../ads/models/ad_model.dart';
 import '../../ads/repositories/ads_repository.dart';
 import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/platform_market_card.dart' show platformShelfPrice;
+import '../../realty/widgets/realty_grid_card.dart' show realtyPriceWithDeal;
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import 'home_wholesale_section.dart' show formatShelfPrice;
@@ -37,7 +41,15 @@ class HomeMarketSection extends StatefulWidget {
     required this.onOpenAd,
     this.onOpenPlatform,
     this.onOpenWholesale,
+    this.onOpenRealty,
   });
+
+  /// Уй-жой бозори эълони босилди (8-босқич, эга 2026-11-15): Уй-жой бозори устида тафсилот, орқага —
+  /// Уй-жой бозори, яна орқага — асосий экран. `null` — Уй-жой эълонлари бўлимда кўрсатилмайди.
+  final void Function(RealtyListing listing)? onOpenRealty;
+
+  /// Бўлимдаги Уй-жой эълонлари сони (енгил, 37-банд).
+  static const realtyLimit = 10;
 
   /// Улгуржи / Хитой бозори маҳсулоти босилди (эга, 2026-11-13: улар бош
   /// саҳифадаги Аралаш бўлимида ҳам; босилса — ўша бозор, орқага — асосий
@@ -91,6 +103,25 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     if (widget.onOpenWholesale != null) {
       unawaited(_loadWholesale(WholesaleProduct.marketChina));
       unawaited(_loadWholesale(WholesaleProduct.marketWholesale));
+    }
+    if (widget.onOpenRealty != null) unawaited(_loadRealty());
+  }
+
+  List<RealtyListing> _realty = const [];
+
+  /// Фаол Уй-жой эълонлари — бўлимнинг ҳудуд танлови бўйича (эълонлар билан бир хил).
+  Future<void> _loadRealty() async {
+    try {
+      final list = await RealtyRepository()
+          .watchScoped(GeoContext.homeScopeFor('cheap_products_home'), limit: HomeMarketSection.realtyLimit)
+          .first;
+      if (!mounted) return;
+      setState(() {
+        _realty = list;
+        if (list.isNotEmpty && _status == AvaSectionStatus.empty) _status = AvaSectionStatus.ready;
+      });
+    } catch (e) {
+      debugPrint('[HomeMarket] HOME_ARALASH_REALTY_FAILED: $e');
     }
   }
 
@@ -167,7 +198,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             random: _rnd,
           );
           _endReached = list.length < _limit;
-          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty && _ulgurji.isEmpty
+          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty && _ulgurji.isEmpty && _realty.isEmpty
               ? AvaSectionStatus.empty
               : AvaSectionStatus.ready;
         });
@@ -203,8 +234,9 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       _platform,
       _china,
       _ulgurji,
+      _realty,
     ]);
-    final hasWholesale = _china.isNotEmpty || _ulgurji.isNotEmpty;
+    final hasWholesale = _china.isNotEmpty || _ulgurji.isNotEmpty || _realty.isNotEmpty;
     final hasFoot = _platform.isNotEmpty ||
         hasWholesale ||
         _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
@@ -231,6 +263,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
           final e = entries[i];
           if (e is PlatformProduct) return _platformTile(e);
           if (e is WholesaleProduct) return _wholesaleTile(e);
+          if (e is RealtyListing) return _realtyTile(e);
           final ad = e as AdModel;
           final cover = ad.imageUrls.isEmpty ? '' : ad.imageUrls.first;
           return AvaTileCard(
@@ -313,6 +346,33 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       footnote: p.sellerCompanyName,
       onTap: () => widget.onOpenWholesale?.call(p, List<WholesaleProduct>.of(isChina ? _china : _ulgurji)),
       image: _withBadge(image, context.tr(isChina ? 'wholesale_screen_title_china' : 'wholesale_screen_title')),
+    );
+  }
+
+  /// Уй-жой эълони — тепа ўнгда «Уй-жой», нарх битим тури билан, изоҳда фақат туман/вилоят (нисбий).
+  Widget _realtyTile(RealtyListing r) {
+    final cover = r.imageUrls.isEmpty ? '' : r.imageUrls.first;
+    final image = cover.startsWith('http')
+        ? ColoredBox(
+            color: context.ava.surface2,
+            child: CachedNetworkImage(imageUrl: cover, fit: BoxFit.contain),
+          )
+        : null;
+    final user = GeoContext.active;
+    return AvaTileCard(
+      key: ValueKey('home_aralash_realty_${r.id}'),
+      titleMaxLines: 1,
+      title: r.titleOrText,
+      price: realtyPriceWithDeal(context.tr, r),
+      footnote: relativeLocationLabel(
+        itemDistrictId: r.districtId,
+        itemRegionId: r.regionId,
+        userDistrictId: user.districtId,
+        userRegionId: user.regionId,
+        lang: context.contentLang,
+      ),
+      onTap: () => widget.onOpenRealty?.call(r),
+      image: _withBadge(image, context.tr('aralash_badge_realty')),
     );
   }
 

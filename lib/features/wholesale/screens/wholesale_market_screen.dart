@@ -5,15 +5,25 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_names.dart';
+import '../../../core/geo/geo_tier_bar.dart';
+import '../../../core/geo/relative_location.dart';
+import '../../../core/geo/ring_feed.dart';
+import '../../../core/geo/ring_query.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/formatters.dart';
+import '../../../shared/widgets/load_error_view.dart';
+import '../../../shared/widgets/market_add_button.dart';
 import '../../china_inquiry/widgets/china_inquiry_entry.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../ads/widgets/platform_market_card.dart';
+import '../data/wholesale_ring_source.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
+import '../open_wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../repositories/wholesale_sellers_repository.dart';
 import '../services/wholesale_storage_service.dart';
@@ -32,9 +42,17 @@ import 'wholesale_product_form_screen.dart';
 import 'wholesale_seller_products_screen.dart';
 import '../wholesale_celebrations.dart';
 
+/// Улгуржи маҳсулотининг НИСБИЙ жойи (сотувчининг жўнатиш тумани). Ҳужжатда `regionId` йўқ — вилоят
+/// [GeoNames] кешидан (туман ҳужжати фонда юкланади).
+String wholesaleLocationLabel(WholesaleProduct p, GeoArea user, String lang) => relativeLocationLabel(
+      itemDistrictId: p.districtId,
+      itemRegionId: GeoNames.regionIdOfDistrict(p.districtId),
+      userDistrictId: user.districtId,
+      userRegionId: user.regionId,
+      lang: lang,
+    );
+
 /// Улгуржи/кичик улгуржи бозор — умумий кириш нуқтаси.
-/// "Бозор" (ҳамма кўради) + "Мен сотувчиман" (рўйхатдан ўтиш → admin
-/// тасдиғи → маҳсулот қўшиш).
 ///
 /// Хитой бозори ҳам ШУ экран — архитектураси бир хил (эга қарори), фақат
 /// [market] билан ажралади: ўша коллекция, ўша сотувчи рўйхати, ўша
@@ -43,11 +61,21 @@ import '../wholesale_celebrations.dart';
 /// «Сотувчи» таби олиб ташланди (эга, 2026-11-01): бозор экрани — фақат харидор учун. Сотувчи
 /// бўлиш, ҳолат ва маҳсулот қўшиш — «＋» → «Менинг дўконим» → «Улгуржи бозор» / «Хитой бозори»
 /// ([WholesaleSellerArea], [MainShopScreen]).
+///
+/// «Бозорлар» 7-босқич (эга, 2026-11-15): бозор кўриниши — сарлавҳада қизил «+» (тасдиқланган, жўнатиш
+/// манзили бор сотувчига — шу бозор маҳсулот формаси; бошқаларга — сотувчи бўлиш оқими,
+/// [openWholesaleSeller]), ҳудуд қатори (сукут — Республика ҳалқалари, яқиндан узоққа; вилоят/туман
+/// танланса — фақат шу ҳудуд; танлов сақланмайди), «N та эълон» (`count()`), карточкада нисбий жой.
+/// «Барча ҳудудларда» сотувчилар доим рўйхат бошида ([mergeAllAreas]). 11-03 даги «ҳудуд фильтри йўқ»
+/// қарори шу билан АЛМАШТИРИЛДИ.
 class WholesaleMarketScreen extends StatefulWidget {
   const WholesaleMarketScreen({
     super.key,
     required this.userPhone,
     this.market = WholesaleProduct.marketWholesale,
+    this.source,
+    this.openAdd,
+    this.pageSize = 30,
   });
 
   /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
@@ -58,15 +86,32 @@ class WholesaleMarketScreen extends StatefulWidget {
   /// ишламайди — ProviderNotFound, қурилмада бўш экран бўлган).
   final String userPhone;
 
+  /// Тест учун (бўлмаса [FirestoreWholesaleListingSource]).
+  final WholesaleListingSource? source;
+
+  /// Тест учун: қизил «+» (бўлмаса [openWholesaleSeller] шу бозор билан).
+  final Future<void> Function(BuildContext context, String market)? openAdd;
+
+  final int pageSize;
+
   @override
   State<WholesaleMarketScreen> createState() => _WholesaleMarketScreenState();
 }
 
 class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
   final _searchCtrl = TextEditingController();
-  final _productsRepo = WholesaleProductsRepository();
-  final _platformRepo = PlatformProductsRepository();
+  late final WholesaleListingSource _source = widget.source ?? FirestoreWholesaleListingSource();
+  late final _feed = RingFeed<WholesaleProduct>(pageSize: widget.pageSize, tag: 'WholesaleFeed')
+    ..addListener(_changed);
   String _query = '';
+
+  /// Ҳудуд (GeoMode.rings): сукут — Республика ҳалқалари; танлов фақат экран очиқ турганда.
+  late GeoScope _scope = GeoContext.scopeFor(_geoModule);
+
+  /// «Барча ҳудудларда» сотувчилар маҳсулотлари — бир марта ўқилади (кам ўзгаради).
+  List<WholesaleProduct> _allAreas = const [];
+  late final WholesaleRingFilter _filter = WholesaleRingFilter(market: widget.market);
+  Future<int>? _count;
 
   /// AVA дўконининг улгуржи товарлари — эга қарори (2026-09-29):
   /// «АВА дўкони бундан кейин Улгуржи бозор мақомида». Лентада улар
@@ -83,11 +128,45 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
   void initState() {
     super.initState();
     if (_showPlatform) unawaited(_loadPlatform());
+    unawaited(_loadAllAreas());
+    _count = _source.count(_filter).catchError((Object e) {
+      debugPrint('[Wholesale] WHOLESALE_COUNT_FAILED market=${widget.market}: $e');
+      return -1;
+    });
+    _restart();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  void _restart() {
+    _feed.restart(
+      RingPager<WholesaleProduct>(
+        plan: ringPlanFor(_scope),
+        fetch: _source.fetcher(_filter),
+        districtsOf: _source.districtsOf,
+      ),
+      visibleWhere: _matchesQuery,
+    );
+  }
+
+  bool _matchesQuery(WholesaleProduct p) =>
+      WholesaleProductsRepository.filterBySearch([p], _query).isNotEmpty;
+
+  Future<void> _loadAllAreas() async {
+    try {
+      final list = await _source.allAreas(_filter);
+      if (mounted) setState(() => _allAreas = list);
+    } catch (e) {
+      // Ўқилмаса — ҳалқа рўйхати ишлайверсин.
+      debugPrint('[Wholesale] WHOLESALE_ALL_AREAS_FAILED market=${widget.market}: $e');
+    }
   }
 
   Future<void> _loadPlatform() async {
     try {
-      final list = await _platformRepo.fetchForWholesale();
+      final list = await PlatformProductsRepository().fetchForWholesale();
       if (!mounted) return;
       setState(() => _platform = list);
     } catch (e) {
@@ -111,17 +190,38 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
 
   @override
   void dispose() {
-    // D-GEO-10: кейинги сафар яна «Бутун Ўзбекистон»дан очилсин.
+    // Кейинги сафар яна Республика ҳалқаларидан очилсин (танлов сақланмайди).
     GeoContext.clearSessionScope(_geoModule);
+    _feed.removeListener(_changed);
+    _feed.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   bool get _isChina => widget.market == WholesaleProduct.marketChina;
 
+  String get _geoModule => _isChina ? 'china_market' : 'wholesale_market';
+
+  void _setQuery(String v) {
+    setState(() => _query = v);
+    _feed.setVisibleWhere(_matchesQuery);
+  }
+
   void _clearSearch() {
     _searchCtrl.clear();
-    setState(() => _query = '');
+    _setQuery('');
+  }
+
+  void _setScope(GeoScope s) {
+    _scope = s;
+    // Сон Республика бўйича — ҳудуд ўзгарганда қайта саналмайди.
+    _restart();
+  }
+
+  Future<void> _openAdd() async {
+    final custom = widget.openAdd;
+    if (custom != null) return custom(context, widget.market);
+    await openWholesaleSeller(context, phone: widget.userPhone, market: widget.market);
   }
 
   /// 0 — маҳсулотлар, 1 — «Сотувчилар» (эга, 2026-11-13; фақат Улгуржида).
@@ -140,19 +240,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
     );
   }
 
-  /// Улгуржи ҳам, Хитой ҳам — доим бутун мамлакат (эга, 2026-11-03, «А
-  /// вариант»: Улгуржи маҳсулотлари админ очган барча ҳудудларда кўринсин,
-  /// вилоят/туман фильтри ҳеч нарсани яширмасин). Аввал Улгуржида ҳудуд
-  /// чиплари бор эди (D-GEO-10). Модул ҳудуд бўйича ёпилса — дарвоза
-  /// (`ServiceConfigHolder`) экранни очмайди.
-  static const _geoModule = 'wholesale_market';
-
-  Stream<List<WholesaleProduct>>? _stream;
-
-  Stream<List<WholesaleProduct>> _productsStream() {
-    // Қидирув клиентда филтрланади — ҳар ҳарфда янги Firestore сўрови йўқ.
-    return _stream ??= _productsRepo.getActiveProducts(market: widget.market);
-  }
+  /// Юкланган маҳсулотлар («Барча ҳудудларда» + ҳалқалар), қидирувсиз — «Сотувчилар» таби учун.
+  List<WholesaleProduct> get _loaded => mergeAllAreas(_allAreas, [for (final r in _feed.items) r.item]);
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +256,11 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
         // Харидор буюртмалари (4-босқич) — Хитой бозорида буюртма йўқ.
         actions: [
           if (!_isChina) WholesaleBuyerOrdersAction(userPhone: widget.userPhone),
+          MarketAddButton(
+            key: const ValueKey('wholesale-add-ad'),
+            onTap: _openAdd,
+            tooltip: context.tr('wholesale_new_product'),
+          ),
         ],
       ),
       body: _marketTab(),
@@ -174,13 +268,19 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
   }
 
   Widget _marketTab() {
+    final loaded = _loaded;
+    // «Сотувчилар» таби: Улгуржида доим; Хитойда фақат 2+ сотувчи бўлса
+    // (эга, 2026-11-13 — битта сотувчи бўлса таб фойда бермайди).
+    final showTabs = !_isChina ||
+        distinctActiveSellers(loaded, market: widget.market) >= kChinaSellersTabMin;
+    final tab = showTabs ? _tab : 0;
     return Column(children: [
       Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
         child: TextField(
           controller: _searchCtrl,
           textInputAction: TextInputAction.search,
-          onChanged: (v) => setState(() => _query = v),
+          onChanged: _setQuery,
           decoration: InputDecoration(
             hintText: context.tr(_tab == 1 ? 'wholesale_sellers_search_hint' : 'wholesale_search_hint'),
             prefixIcon: const Icon(Icons.search),
@@ -197,62 +297,74 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
           ),
         ),
       ),
-      if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
-      Expanded(
-        child: WholesaleStreamBuilder<List<WholesaleProduct>>(
-          stream: _productsStream(),
-          // Firestore stream хатодан кейин ёпилади: кэшни ташлаб қайта улаймиз.
-          onRetry: () => setState(() => _stream = null),
-          builder: (context, data) {
-            final all = data ?? const <WholesaleProduct>[];
-            // «Сотувчилар» таби: Улгуржида доим; Хитойда фақат 2+ сотувчи бўлса
-            // (эга, 2026-11-13 — битта сотувчи бўлса таб фойда бермайди).
-            final showTabs = !_isChina ||
-                distinctActiveSellers(all, market: widget.market) >= kChinaSellersTabMin;
-            final tab = showTabs ? _tab : 0;
-            return Column(children: [
-              if (showTabs)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: SegmentedButton<int>(
-                      key: const ValueKey('wholesale-market-tabs'),
-                      showSelectedIcon: false,
-                      segments: [
-                        ButtonSegment(value: 0, label: Text(context.tr('wholesale_tab_products'))),
-                        ButtonSegment(value: 1, label: Text(context.tr('wholesale_tab_sellers'))),
-                      ],
-                      selected: {tab},
-                      onSelectionChanged: (s) => setState(() => _tab = s.first),
-                    ),
-                  ),
-                ),
-              Expanded(
-                child: tab == 1
-                    ? WholesaleSellersList(
-                        products: all,
-                        market: widget.market,
-                        query: _query,
-                        onOpen: (s) => _openStore(s.phone, s.companyName),
-                      )
-                    : _productsGrid(all),
+      GeoTierBar(moduleId: _geoModule, scope: _scope, onChanged: _setScope),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+        child: FutureBuilder<int>(
+          future: _count,
+          builder: (context, snap) {
+            final n = snap.data;
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                n == null || n < 0 ? ' ' : context.tr('market_count').replaceAll('{count}', formatPrice(n)),
+                key: const ValueKey('wholesale_count'),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
               ),
-            ]);
+            );
           },
         ),
+      ),
+      if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
+      if (showTabs)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<int>(
+              key: const ValueKey('wholesale-market-tabs'),
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(value: 0, label: Text(context.tr('wholesale_tab_products'))),
+                ButtonSegment(value: 1, label: Text(context.tr('wholesale_tab_sellers'))),
+              ],
+              selected: {tab},
+              onSelectionChanged: (s) => setState(() => _tab = s.first),
+            ),
+          ),
+        ),
+      Expanded(
+        child: tab == 1
+            ? WholesaleSellersList(
+                products: loaded,
+                market: widget.market,
+                query: _query,
+                onOpen: (s) => _openStore(s.phone, s.companyName),
+              )
+            : _productsGrid(),
       ),
     ]);
   }
 
-  /// Маҳсулотлар лентаси (таб 0).
-  Widget _productsGrid(List<WholesaleProduct> data) {
-    final items = WholesaleProductsRepository.filterBySearch(data, _query);
+  /// Маҳсулотлар лентаси (таб 0): «Барча ҳудудларда» + ҳалқалар, қидирув клиентда.
+  Widget _productsGrid() {
+    final items = mergeAllAreas(
+      _allAreas.where(_matchesQuery).toList(growable: false),
+      _feed.visible(),
+    );
     final platform = _filteredPlatform();
+    final busy = _feed.loading || !_feed.started || (_feed.hasMore && !_feed.needsManualMore);
     if (items.isEmpty && platform.isEmpty) {
+      if (_feed.error != null) return LoadErrorView(error: _feed.error!, onRetry: _feed.loadMore);
+      if (busy) {
+        if (!_feed.loading && _feed.hasMore) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _feed.loadMore());
+        }
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (_feed.needsManualMore) return Center(child: RingFeedFooter(feed: _feed));
       return WholesaleEmptyMarket(
         hasQuery: _query.trim().isNotEmpty,
-        // Ҳудуд фильтри йўқ (2026-11-03) — «бошқа ҳудуд» таклифи керак эмас.
         narrowedArea: false,
         onClearSearch: _clearSearch,
       );
@@ -263,37 +375,53 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
       platform.map(_MarketEntry.platform).toList(growable: false),
       items.map(_MarketEntry.seller).toList(growable: false),
     ]);
-    return MarketProductGrid(
-      itemCount: entries.length,
-      itemBuilder: (_, i) {
-        final e = entries[i];
-        final avaProduct = e.platform;
-        if (avaProduct != null) {
-          return PlatformMarketCard(
-            product: avaProduct,
-            catalog: platform,
-            wholesale: true,
-          );
-        }
-        final p = e.seller!;
-        return WholesaleProductCard(
-          product: p,
-          // Сотувчи номи → магазини (эга, 2026-11-13; Улгуржи ва Хитой).
-          onSellerTap: p.sellerId.trim().isEmpty
-              ? null
-              : () => _openStore(p.sellerId, p.sellerCompanyName),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => WholesaleProductDetailScreen(
-                product: p,
-                catalog: items,
+    final lang = context.contentLang;
+    final user = GeoContext.active;
+    return Column(children: [
+      Expanded(
+        // Лента охирига яқинлашганда кейинги саҳифа (тўрда футер доим кўринади — у автоматик юкламайди).
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (n) {
+            if (n.metrics.extentAfter < 600 && _feed.hasMore && !_feed.needsManualMore) _feed.loadMore();
+            return false;
+          },
+          child: MarketProductGrid(
+          itemCount: entries.length,
+          itemBuilder: (_, i) {
+            final e = entries[i];
+            final avaProduct = e.platform;
+            if (avaProduct != null) {
+              return PlatformMarketCard(
+                product: avaProduct,
+                catalog: platform,
+                wholesale: true,
+              );
+            }
+            final p = e.seller!;
+            return WholesaleProductCard(
+              product: p,
+              locationLabel: wholesaleLocationLabel(p, user, lang),
+              // Сотувчи номи → магазини (эга, 2026-11-13; Улгуржи ва Хитой).
+              onSellerTap: p.sellerId.trim().isEmpty
+                  ? null
+                  : () => _openStore(p.sellerId, p.sellerCompanyName),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => WholesaleProductDetailScreen(
+                    product: p,
+                    catalog: items,
+                  ),
+                ),
               ),
-            ),
+            );
+          },
           ),
-        );
-      },
-    );
+        ),
+      ),
+      // Кейинги саҳифа: юкланмоқда / хато / «Яна кўрсатиш».
+      if (_feed.hasMore || _feed.error != null) RingFeedFooter(feed: _feed, auto: false),
+    ]);
   }
 }
 

@@ -2674,9 +2674,9 @@
   "update_required_title": "Ilova yangilandi",
   "update_required_body": "Davom etish uchun yangi versiyani o'rnating. Bu bir martalik ish.",
   "update_required_button": "Yangilash",
-  "home_module_realty": "Ko'chmas mulk klasteri",
-  "home_section_realty": "Ko'chmas mulk klasteri:",
-  "realty_title": "Ko'chmas mulk klasteri",
+  "home_module_realty": "Uy-joy bozori",
+  "home_section_realty": "Uy-joy bozori:",
+  "realty_title": "Uy-joy bozori",
   "realty_detail_title": "Obyekt",
   "realty_add_title": "Yangi obyekt",
   "realty_add_cta": "E'lon qo'shish",
@@ -5778,5 +5778,10 @@
   "market_empty": "Hozircha e'lon yo'q",
   "market_add": "E'lon qo'shish",
   "market_load_more": "Yana ko'rsatish",
-  "market_unavailable": "Bu bozor hozir mavjud emas"
+  "market_unavailable": "Bu bozor hozir mavjud emas",
+  "aralash_badge_realty": "Uy-joy",
+  "auto_parts_ava_products": "AVA mahsulotlari",
+  "auto_parts_listings": "E'lonlar",
+  "auto_hub_parts_market": "Mashina bozori → Ehtiyot qismlar",
+  "auto_hub_parts_market_sub": "Odamlar sotayotgan ehtiyot qismlar"
 }

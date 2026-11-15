@@ -32,6 +32,7 @@ class RealtyMapView extends StatefulWidget {
     this.selectedId,
     this.onSelectionChanged,
     this.fitToken = 0,
+    this.focusIds = const {},
     this.centerLat = 41.2995,
     this.centerLng = 69.2401,
     this.initialZoom = 10,
@@ -56,6 +57,10 @@ class RealtyMapView extends StatefulWidget {
   /// ҳаракатланмас, Сотиш'дан Ижара'га ўтилганда экранда эски жой
   /// қолиб кетар эди.
   final int fitToken;
+
+  /// Бўш бўлмаса — камера фақат шу эълонларга мосланади (Республика ҳалқаларида фойдаланувчи тумани,
+  /// 7-босқич 2026-11-15); қолганлари ҳам харитада, лекин камера уларни қамраб олиш учун узоқлашмайди.
+  final Set<String> focusIds;
 
   final double centerLat;
   final double centerLng;
@@ -256,7 +261,11 @@ class RealtyMapViewState extends State<RealtyMapView> {
   // ───────────────────────────── Камера ─────────────────────────────
 
   LatLngBounds? _bounds() {
-    final pts = _allPoints;
+    final focus = [
+      for (final r in widget.listings)
+        if (widget.focusIds.contains(r.id)) _pointOf(r),
+    ];
+    final pts = focus.isNotEmpty ? focus : _allPoints;
     if (pts.isEmpty) return null;
     double? minLat, maxLat, minLng, maxLng;
     for (final p in pts) {

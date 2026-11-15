@@ -20,6 +20,7 @@ import '../../models/home_module.dart';
 import '../../models/user_model.dart';
 import '../../models/home_ticker_ad.dart';
 import '../../models/platform_product.dart';
+import '../../models/realty_listing.dart';
 import '../../repositories/platform_products_repository.dart';
 import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
@@ -1332,6 +1333,15 @@ class _HomeViewState extends State<_HomeView> {
     );
   }
 
+  /// Аралаш бўлимидаги Уй-жой эълони: орқага — Уй-жой бозори, яна орқага — асосий экран (8-босқич).
+  Future<void> _openAralashRealty(RealtyListing listing) async {
+    if (!ServiceConfigHolder.isOpenable('realty')) {
+      _showTezKundaSnack();
+      return;
+    }
+    await _pushOverMarket(const RealtyScreen(), () => _push(RealtyDetailScreen(listing: listing)));
+  }
+
   Widget _wholesaleMarketScreen(String market) => WholesaleMarketScreen(
         userPhone: canonicalPhoneId(context.read<HomeController>().phone),
         market: market,
@@ -1691,6 +1701,8 @@ class _HomeViewState extends State<_HomeView> {
                                 // Улгуржи/Хитой маҳсулоти — ўша бозор устида тафсилот,
                                 // орқага бозор, яна орқага асосий экран (эга, 2026-11-13).
                                 onOpenWholesale: _openWholesaleProduct,
+                                // Уй-жой эълони — Уй-жой бозори устида (8-босқич, 2026-11-15).
+                                onOpenRealty: _openAralashRealty,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid(

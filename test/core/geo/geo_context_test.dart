@@ -74,13 +74,24 @@ void main() {
       expect(s.regionFilter, 'toshkent_shahri');
     });
 
-    test('модулда атайлаб танланган ҳудуд (pinned) — сақланади (Кўчмас мулк, D-GEO-15)', () async {
-      await GeoContext.setScope('realty', const GeoScope(level: GeoLevel.district, area: chilonzor, pinned: true));
+    // 2026-11-15: Кўчмас мулк (Уй-жой бозори) энди сақламайди (ҳалқалар) — мисол «Эълонлар» (jobs) модулида.
+    test('модулда атайлаб танланган ҳудуд (pinned) — сақланади (jobs; аввал Кўчмас мулк, D-GEO-15)', () async {
+      await GeoContext.setScope('jobs', const GeoScope(level: GeoLevel.district, area: chilonzor, pinned: true));
       await GeoContext.setActive(gurlan, GeoAreaSource.manual);
       GeoContext.resetForTest();
       GeoContext.homeOverride = () => gurlan;
       await GeoContext.load();
-      expect(GeoContext.scopeFor('realty').area, chilonzor);
+      expect(GeoContext.scopeFor('jobs').area, chilonzor);
+    });
+
+    test('Уй-жой бозори (7-босқич): сукут Республика ҳалқалари, танлов фақат экран очиқ турганда', () async {
+      expect(GeoContext.scopeFor('realty').level, GeoLevel.nation);
+      await GeoContext.setScope('realty', const GeoScope(level: GeoLevel.district, area: chilonzor, pinned: true));
+      expect(GeoContext.scopeFor('realty').level, GeoLevel.district);
+      GeoContext.clearSessionScope('realty');
+      expect(GeoContext.scopeFor('realty').level, GeoLevel.nation);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getKeys().where((k) => k.contains('realty')), isEmpty);
     });
 
     test('Улгуржи: ҳар сафар «Бутун Ўзбекистон», танлов сақланмайди (D-GEO-10)', () async {
@@ -93,8 +104,15 @@ void main() {
       expect(prefs.getKeys().where((k) => k.contains('wholesale')), isEmpty);
     });
 
-    test('рухсат этилмаган даража ёзилмайди (Хитой — фақат Республика)', () async {
+    test('рухсат этилмаган даража ёзилмайди (yuk_local — Республика йўқ)', () async {
+      await GeoContext.setScope('yuk_local', const GeoScope(level: GeoLevel.nation, area: gurlan));
+      expect(GeoContext.scopeFor('yuk_local').level, GeoLevel.district);
+    });
+
+    test('Хитой (7-босқич): вилоят/туман танлови рухсат, сақланмайди', () async {
       await GeoContext.setScope('china_market', const GeoScope(level: GeoLevel.district, area: gurlan));
+      expect(GeoContext.scopeFor('china_market').level, GeoLevel.district);
+      GeoContext.clearSessionScope('china_market');
       expect(GeoContext.scopeFor('china_market').level, GeoLevel.nation);
     });
 
@@ -107,16 +125,18 @@ void main() {
 
   group('ModuleGeoPolicy жадвали', () {
     test('эга қарорлари', () {
-      // 2026-11-15: Хитой бозори → ҳалқалар (аввал nationwide); levels ўзгармаган.
+      // 2026-11-15: Хитой бозори → ҳалқалар (аввал nationwide); 7-босқич: вилоят/туман танлови ҳам.
       expect(geoPolicyFor('china_market').mode, GeoMode.rings);
-      expect(geoPolicyFor('china_market').levels, [GeoLevel.nation]);
+      expect(geoPolicyFor('china_market').levels, [GeoLevel.nation, GeoLevel.region, GeoLevel.district]);
       expect(geoPolicyFor('wholesale_market').persistSelection, isFalse);
       expect(geoPolicyFor('wholesale_market').defaultLevel, GeoLevel.nation);
       expect(geoPolicyFor('yuk_local').levels, [GeoLevel.district, GeoLevel.region]);
       expect(geoPolicyFor('courier').mode, GeoMode.distance);
       expect(geoPolicyFor('restaurants').mode, GeoMode.distance);
       expect(geoPolicyFor('dating').mode, GeoMode.none);
-      expect(geoPolicyFor('realty').persistSelection, isTrue);
+      // 7-босқич (эга 2026-11-15): Уй-жой бозори — сукут Республика ҳалқалари, сақланмайди.
+      expect(geoPolicyFor('realty').persistSelection, isFalse);
+      expect(geoPolicyFor('realty').defaultLevel, GeoLevel.nation);
       expect(geoPolicyFor('intercity').mode, GeoMode.route);
     });
 

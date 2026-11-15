@@ -10,10 +10,13 @@ import '../realty_tabs.dart';
 /// Чап четдаги тасма — TAB ранги, шунда лентада ҳам, харитада ҳам
 /// объектнинг даражаси бир хил ранг билан ўқилади.
 class RealtyCard extends StatelessWidget {
-  const RealtyCard({super.key, required this.listing, required this.onTap});
+  const RealtyCard({super.key, required this.listing, required this.onTap, this.locationLabel = ''});
 
   final RealtyListing listing;
   final VoidCallback onTap;
+
+  /// Нисбий жой (туман/вилоят, 7-босқич) — бўш бўлса чизилмайди. Аниқ манзил ЭМАС.
+  final String locationLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +73,24 @@ class RealtyCard extends StatelessWidget {
                             fontSize: AppText.bodySmall,
                             color: c.ink2,
                           ),
+                        ),
+                      ],
+                      if (locationLabel.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          key: ValueKey('realty_card_loc_${listing.id}'),
+                          children: [
+                            Icon(Icons.place_outlined, size: 14, color: c.ink3),
+                            const SizedBox(width: 3),
+                            Expanded(
+                              child: Text(
+                                locationLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: AppText.bodySmall, color: c.ink2),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                       const SizedBox(height: 6),

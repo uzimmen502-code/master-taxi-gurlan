@@ -1,23 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/geo/geo_context.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/utils/map_launcher.dart';
-import '../../../core/utils/phone_launcher.dart';
-import '../../../models/oil_vehicle.dart';
 import '../../../models/platform_product.dart';
-import '../../../repositories/oil_change_repository.dart';
 import '../../../repositories/platform_products_repository.dart';
-import '../../../repositories/settings_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/car/car_edit_dialog.dart';
 import '../../ads/widgets/market_grid.dart';
 import '../../ads/widgets/platform_market_card.dart';
+import '../../markets/domain/market_taxonomy.dart' show kAutoPartsCategory;
+import '../../markets/open_market.dart';
 import '../incentive_offers_flow.dart';
 import '../incentive_service.dart';
+import '../widgets/ava_service_center_card.dart';
 
 /// «Менинг машинам» (аввалги «Авто шина» белгиси, эга 2026-11-02):
 /// машина маълумоти · AVA бонуси (туркумлар бўйича) · AVA сервис (устунлик) · AVA дўконидаги
@@ -27,7 +24,6 @@ const List<String> kAutoHubCategories = ['tire', 'oil', 'battery', 'insurance'];
 
 /// Экрандаги маҳсулотлар: фаол, нархи бор, рағбат туркуми белгиланган.
 /// [category] бўш — барча машина туркумлари.
-@visibleForTesting
 List<PlatformProduct> autoHubProducts(List<PlatformProduct> all, String category) {
   return [
     for (final p in all)
@@ -67,11 +63,14 @@ List<PlatformProduct> autoHubProducts(List<PlatformProduct> all, String category
 }
 
 class AutoHubScreen extends StatefulWidget {
-  const AutoHubScreen({super.key, required this.uid, this.initialCategory = ''});
+  const AutoHubScreen({super.key, required this.uid, this.initialCategory = '', this.openPartsMarket});
 
   /// Телефон (исталган формат) — ичида `canonicalPhoneId`.
   final String uid;
   final String initialCategory;
+
+  /// Тест учун: «Мошина бозори → Эҳтиёт қисмлар» (бўлмаса openMarket(context, 'auto', parts)).
+  final Future<void> Function(BuildContext context)? openPartsMarket;
 
   @override
   State<AutoHubScreen> createState() => _AutoHubScreenState();
@@ -84,15 +83,7 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
   late Future<Map<String, String>?> _car;
   late final Future<List<PlatformProduct>> _products = PlatformProductsRepository().fetchCatalog();
   /// Фаол (тепада кўрсатилган) туманнинг AVA Сервис маркази; йўқ бўлса — диспетчер телефони.
-  late final Future<({OilServicePoint? center, String fallbackPhone})> _avaService = _loadService();
-
-  Future<({OilServicePoint? center, String fallbackPhone})> _loadService() async {
-    final results = await Future.wait<Object?>([
-      OilChangeRepository().fetchAvaCenter(GeoContext.active.districtId),
-      SettingsRepository().getDispatcherPhone(),
-    ]);
-    return (center: results[0] as OilServicePoint?, fallbackPhone: (results[1] as String?) ?? '');
-  }
+  late final Future<AvaServiceInfo> _avaService = loadAvaServiceInfo();
   late Future<List<IncentiveOffer>> _offers;
 
   String get _phone => canonicalPhoneId(widget.uid);
@@ -152,6 +143,7 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
               SliverToBoxAdapter(child: _carCard(context)),
               SliverToBoxAdapter(child: _bonusCard(context)),
               SliverToBoxAdapter(child: _serviceCard(context)),
+              SliverToBoxAdapter(child: _partsMarketEntry(context)),
               SliverToBoxAdapter(child: _chips(context)),
               if (snap.connectionState != ConnectionState.done)
                 const SliverToBoxAdapter(
@@ -323,73 +315,29 @@ class _AutoHubScreenState extends State<AutoHubScreen> {
   }
 
   /// AVA сервис — биринчи ўринда (эга 2026-11-02: «устунлик АВА сервисга йўналтиришга»).
-  Widget _serviceCard(BuildContext context) {
-    return FutureBuilder<({OilServicePoint? center, String fallbackPhone})>(
-      future: _avaService,
-      builder: (context, snap) {
-        final center = snap.data?.center;
-        final phone = (center != null && center.phone.trim().isNotEmpty
-                ? center.phone
-                : (snap.data?.fallbackPhone ?? ''))
-            .trim();
-        final name = center != null && center.name.trim().isNotEmpty
-            ? center.name.trim()
-            : context.tr('auto_hub_service_title');
-        final address = center?.address.trim() ?? '';
-        return _section(
-          key: const ValueKey('auto_hub_service'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.build_circle, size: 34, color: AppColors.primary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                        Text(
-                          address.isNotEmpty ? address : context.tr('auto_hub_service_sub'),
-                          key: const ValueKey('auto_hub_service_address'),
-                          style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (phone.isNotEmpty || (center?.hasLocation ?? false)) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    if (phone.isNotEmpty)
-                      FilledButton.tonalIcon(
-                        key: const ValueKey('auto_hub_call'),
-                        onPressed: () => callPhone(phone),
-                        icon: const Icon(Icons.phone),
-                        label: Text(context.tr('auto_hub_call')),
-                      ),
-                    if (center != null && center.hasLocation)
-                      OutlinedButton.icon(
-                        key: const ValueKey('auto_hub_route'),
-                        onPressed: () => openMapsNavigation(lat: center.lat!, lng: center.lng!, label: name),
-                        icon: const Icon(Icons.directions),
-                        label: Text(context.tr('auto_hub_route')),
-                      ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        );
-      },
+  /// Карта — умумий [AvaServiceCenterCard] (Мошина бозори «Эҳтиёт қисмлар» таби ҳам ишлатади).
+  Widget _serviceCard(BuildContext context) => AvaServiceCenterCard(info: _avaService);
+
+  /// «Мошина бозори → Эҳтиёт қисмлар» (9-босқич, эга 2026-11-15): одамлар сотаётган эҳтиёт қисмлар.
+  Widget _partsMarketEntry(BuildContext context) {
+    return Card(
+      key: const ValueKey('auto_hub_parts_market'),
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        leading: Icon(Icons.car_repair, color: AppColors.primary, size: 30),
+        title: Text(context.tr('auto_hub_parts_market'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(context.tr('auto_hub_parts_market_sub')),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => (widget.openPartsMarket ?? _openPartsMarket)(context),
+      ),
     );
   }
 
+  static Future<void> _openPartsMarket(BuildContext context) =>
+      openMarket(context, 'auto', initialCategory: kAutoPartsCategory);
   Widget _chips(BuildContext context) {
     final cats = ['', ...kAutoHubCategories];
     return SizedBox(

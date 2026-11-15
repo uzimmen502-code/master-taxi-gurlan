@@ -5,9 +5,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
 import '../../../core/geo/geo_tier_bar.dart';
+import '../../../core/geo/module_geo_policy.dart' show GeoLevel;
+import '../../../core/geo/region_centers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
+import '../data/realty_ring_source.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_controls.dart';
 import '../widgets/realty_map_view.dart';
@@ -26,10 +29,13 @@ import 'realty_detail_screen.dart';
 /// Очилмаган объектлар тахминий нуқтада, пакетдан очилганлари аниқ
 /// жойида кўринади — иккови ҳам нарх ёрлиғи билан.
 class RealtyMapScreen extends StatefulWidget {
-  const RealtyMapScreen({super.key, this.deal});
+  const RealtyMapScreen({super.key, this.deal, this.source});
 
   /// Лента экранидан келган филтр — харита ҳам шунга бўйсунсин.
   final RealtyDeal? deal;
+
+  /// Тест учун (бўлмаса [FirestoreRealtyListingSource]).
+  final RealtyListingSource? source;
 
   @override
   State<RealtyMapScreen> createState() => _RealtyMapScreenState();
@@ -37,6 +43,7 @@ class RealtyMapScreen extends StatefulWidget {
 
 class _RealtyMapScreenState extends State<RealtyMapScreen> {
   final _repo = RealtyRepository();
+  late final RealtyListingSource _source = widget.source ?? FirestoreRealtyListingSource();
   final _mapKey = GlobalKey<RealtyMapViewState>();
   final _searchCtrl = TextEditingController();
 
@@ -50,6 +57,30 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
   /// ҳудуд; лента билан умумий танлов, сақланади. Аввал икки ҳолатли
   /// «менинг туманим / ҳаммаси» калити эди ва эсда қолмасди.
   GeoScope _scope = GeoContext.scopeFor('realty');
+
+  /// Эълонлар оқими — state'да (калит: ҳудуд + битим), ҳар rebuild'да янги сўров очилмасин.
+  /// Республика (ҳалқалар, 7-босқич): энг яқин 300 таси ҳалқа тартибида; камера фойдаланувчи туманидаги
+  /// (энг яқин бўш бўлмаган ҳалқа) эълонларга қаратилади. Аниқ ҳудуд — аввалги жонли оқим.
+  Stream<List<RealtyListing>>? _stream;
+  String _streamKey = '';
+  Set<String> _focusIds = const {};
+
+  Stream<List<RealtyListing>> _listingsStream() {
+    final key = '${_scope.key}|${_deal?.key}';
+    final cached = _stream;
+    if (cached != null && key == _streamKey) return cached;
+    _streamKey = key;
+    if (_scope.level != GeoLevel.nation) {
+      _focusIds = const {};
+      return _stream = _repo.watchScoped(_scope, deal: _deal, limit: 300);
+    }
+    return _stream = Stream.fromFuture(
+      loadRealtyRings(_source, _scope, deal: _deal).then((items) {
+        _focusIds = nearestRingIds(items);
+        return [for (final r in items) r.item];
+      }),
+    );
+  }
 
   /// Камерани қайта мослаш белгиси — филтр ёки ҳудуд алмашганда ошади.
   int _fitToken = 0;
@@ -179,8 +210,9 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
               builder: (context, unlockedSnap) {
                 final unlocked = unlockedSnap.data ?? const <String>{};
                 return StreamBuilder<List<RealtyListing>>(
-                  stream: _repo.watchScoped(_scope, deal: _deal, limit: 300),
+                  stream: _listingsStream(),
                   builder: (context, snap) {
+                    if (snap.hasError) debugPrint('[RealtyMap] REALTY_MAP_LOAD_FAILED: ${snap.error}');
                     final all = snap.data ?? const <RealtyListing>[];
                     final listings = _filtered(all);
                     final visibleUnlocked = listings
@@ -200,6 +232,11 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
                           exactPoints: _exact,
                           selectedId: _selectedId,
                           fitToken: _fitToken,
+                          focusIds: _focusIds,
+                          // Бошланғич камера — фойдаланувчи вилояти маркази (аввал доим Тошкент).
+                          centerLat: kRegionCenters[GeoContext.active.regionId]?.$1 ?? 41.2995,
+                          centerLng: kRegionCenters[GeoContext.active.regionId]?.$2 ?? 69.2401,
+                          initialZoom: kRegionCenters.containsKey(GeoContext.active.regionId) ? 9 : 10,
                           onSelectionChanged: (r) =>
                               setState(() => _selectedId = r.id),
                           onListingTap: (r) => _onPinTap(r, unlocked),

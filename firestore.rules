@@ -761,7 +761,9 @@ service cloud.firestore {
     // «Бозорлар» 2a (эга 2026-11-15): модерация/муддат майдонлари — фақат сервер (functions/market_moderation.js).
     function tvShopModerationKeys() {
       return ['moderatedAt', 'moderatedBy', 'rejectReason', 'rejectedAt', 'moderationReason', 'expiresAt',
-              'expiryWarnedAt', 'expiryWarnedFor', 'expiredAt', 'expiresAtPrev', 'submittedAt', 'renewedAt', 'updatedBy'];
+              'expiryWarnedAt', 'expiryWarnedFor', 'expiredAt', 'expiresAtPrev', 'submittedAt', 'renewedAt', 'updatedBy',
+              // Сервер қидируви (2026-11-16): фақат onShopItemSearchTokens (functions/market_search_tokens.js).
+              'searchTokens'];
     }
 
     function tvShopItemCreateOk() {

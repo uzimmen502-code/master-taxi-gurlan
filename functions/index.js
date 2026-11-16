@@ -103,6 +103,9 @@ attachMarketTaxonomy(exports, { functions, db, admin, requireCallerRoles });
 // «Бозорлар» 2a (эга 2026-11-15): олдиндан модерация (ҳамма бозор), 30 кунлик муддат → 'expired', янгилаш → 'pending'.
 const { attachMarketModeration } = require('./market_moderation');
 attachMarketModeration(exports, { functions, db, admin, requireCallerRoles, notifyUserInApp, canonicalUid, callerPhone });
+// Сервер қидируви (2026-11-16): tv_shop_items + realty_listings `searchTokens` — фақат шу триггерлар ёзади.
+const { attachMarketSearchTokens } = require('./market_search_tokens');
+attachMarketSearchTokens(exports, { functions, db });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');

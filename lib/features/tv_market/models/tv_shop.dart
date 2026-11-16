@@ -12,6 +12,9 @@ class TvShop {
     this.pickupLat,
     this.pickupLng,
     this.pickupAddress = '',
+    this.areaLat,
+    this.areaLng,
+    this.showExactLocation = false,
   });
 
   final String ownerPhone;
@@ -21,21 +24,28 @@ class TvShop {
   /// `active` | `blocked` — фақат админ ўрнатади (`adminSetShopStatus`); эски ҳужжатларда йўқ (= `active`).
   final String status;
 
-  /// «Маҳсулотни топшириш жойи» («Бозорлар» STAGE 11): курьер шу ердан олади (сервер `tv_shops/{phone}`
-  /// `pickupLat`/`pickupLng` — сон, `pickupAddress`). Эски ҳужжатларда йўқ → буюртма қилиб бўлмайди.
+  /// ЭСКИ оммавий «Маҳсулотни топшириш жойи» (STAGE 11 биринчи шакли). Эга 2026-11-16: аниқ нуқта энди
+  /// `tv_shops/{phone}/private/pickup` да ([ShopPickup]); бу майдонлар фақат ўқилади (сервер fallback'и) ва
+  /// сотувчи қайта сақлаганда ўчирилади. Янги код уларни ЁЗМАЙДИ.
   final double? pickupLat;
   final double? pickupLng;
   final String pickupAddress;
 
+  /// Оммавий ТАХМИНИЙ нуқта (~500 м, [approxShopCoord]); [showExactLocation] да — аниқ. Эски ҳужжатда йўқ.
+  final double? areaLat;
+  final double? areaLng;
+
+  /// Сотувчи «Аниқ жойимни кўрсат»ни ёққан (сукут — йўқ).
+  final bool showExactLocation;
+
   bool get isBlocked => status == 'blocked';
 
-  /// Топшириш жойи белгиланган (сервер `validLatLng` кўзгуси: 0,0 — йўқ).
-  bool get hasPickup =>
-      pickupLat != null &&
-      pickupLng != null &&
-      pickupLat!.abs() <= 90 &&
-      pickupLng!.abs() <= 180 &&
-      !(pickupLat == 0 && pickupLng == 0);
+  /// Топшириш жойи белгиланган — оммавий белги: тахминий нуқта ёки эски аниқ майдонлар (сервер `validLatLng`
+  /// кўзгуси: 0,0 — йўқ). Аниқ нуқтани сервер private ҳужжатдан ўзи текширади.
+  bool get hasPickup => validLatLng(areaLat, areaLng) || validLatLng(pickupLat, pickupLng);
+
+  static bool validLatLng(double? lat, double? lng) =>
+      lat != null && lng != null && lat.abs() <= 90 && lng.abs() <= 180 && !(lat == 0 && lng == 0);
 
   factory TvShop.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) =>
       TvShop.fromMap(doc.id, doc.data() ?? const <String, dynamic>{});
@@ -52,6 +62,9 @@ class TvShop {
       pickupLat: lat is num ? lat.toDouble() : null,
       pickupLng: lng is num ? lng.toDouble() : null,
       pickupAddress: addr is String ? addr : '',
+      areaLat: d['areaLat'] is num ? (d['areaLat'] as num).toDouble() : null,
+      areaLng: d['areaLng'] is num ? (d['areaLng'] as num).toDouble() : null,
+      showExactLocation: d['showExactLocation'] == true,
     );
   }
 
@@ -62,6 +75,31 @@ class TvShop {
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
       };
+}
+
+/// Тахминий оммавий нуқта қадами — 0.005° (~550 м кенглик бўйича; 3 хона ≈ 110 м жуда аниқ, эга 2026-11-16).
+const double kShopAreaStepDeg = 0.005;
+
+/// Координатани [kShopAreaStepDeg] тўрига яхлитлайди (float шовқинисиз, 3 хона).
+double approxShopCoord(double v) => double.parse(((v / kShopAreaStepDeg).round() * kShopAreaStepDeg).toStringAsFixed(3));
+
+/// Ўз дўконининг АНИҚ олиб кетиш нуқтаси — `tv_shops/{phone}/private/pickup` (фақат эгаси ўқийди/ёзади;
+/// сервер Admin SDK билан ўқиб буюртмага кўчиради). [legacy] — эски оммавий майдонлардан олинган.
+class ShopPickup {
+  const ShopPickup({required this.lat, required this.lng, this.address = '', this.legacy = false});
+
+  final double lat;
+  final double lng;
+  final String address;
+  final bool legacy;
+
+  static ShopPickup? fromMap(Map<String, dynamic>? d) {
+    if (d == null) return null;
+    final lat = d['lat'];
+    final lng = d['lng'];
+    if (lat is! num || lng is! num || !TvShop.validLatLng(lat.toDouble(), lng.toDouble())) return null;
+    return ShopPickup(lat: lat.toDouble(), lng: lng.toDouble(), address: d['address'] is String ? d['address'] as String : '');
+  }
 }
 
 /// Витрина товар/хизмати — `tv_shop_items/{id}`.

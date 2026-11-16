@@ -35,6 +35,7 @@ import 'realty_moderation_screen.dart';
 import 'jobs_moderation_screen.dart';
 import 'logistics_admin_screen.dart';
 import 'restaurants_admin_screen.dart';
+import 'business_orders_admin_screen.dart';
 import 'listing_moderation_screen.dart';
 import 'delivery_quotes_admin_screen.dart';
 import 'market_moderation_screen.dart';
@@ -223,6 +224,14 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Кафе-ресторанлар',
       icon: Icons.restaurant_outlined,
       description: 'Аризалар, буюртмалар, етказиш тарифи (версияли), босқич',
+    ),
+    // «Бозорлар» STAGE 11 (эга 2026-11-16): бизнес/ўз дўкони буюртмалари босқичи. Сервер admin/superadmin — `users`.
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'Бозор буюртмалари',
+      icon: Icons.storefront_outlined,
+      description: 'Бизнес ва ўз дўкони буюртмалари: босқич, синовчилар, пилот туманлар; етказиш тарифи',
+      access: _SectionAccess.users,
     ),
 
     // ── Маиший хизмат ва йиғиш ──────────────────────────────────────
@@ -723,6 +732,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Кафе-ресторанлар') {
       return const RestaurantsAdminScreen();
+    }
+    if (section.label == 'Бозор буюртмалари') {
+      return const BusinessOrdersAdminScreen();
     }
     if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();

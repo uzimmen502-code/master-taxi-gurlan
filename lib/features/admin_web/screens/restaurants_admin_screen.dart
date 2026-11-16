@@ -68,9 +68,12 @@ Future<String?> _askReason(BuildContext context, {required String title, String 
 }
 
 class RestaurantsAdminScreen extends StatefulWidget {
-  const RestaurantsAdminScreen({super.key, this.service});
+  const RestaurantsAdminScreen({super.key, this.service, this.initialTab = 0});
 
   final AdminRestaurantsService? service;
+
+  /// Очилганда танланган таб (0 Ресторанлар, 1 Буюртмалар, 2 Етказиш тарифи, 3 Созламалар) — «Бозор буюртмалари»дан тарифга.
+  final int initialTab;
 
   @override
   State<RestaurantsAdminScreen> createState() => _RestaurantsAdminScreenState();
@@ -83,6 +86,7 @@ class _RestaurantsAdminScreenState extends State<RestaurantsAdminScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 4,
+      initialIndex: widget.initialTab.clamp(0, 3),
       child: Scaffold(
         backgroundColor: AppColors.scaffold,
         appBar: AppBar(

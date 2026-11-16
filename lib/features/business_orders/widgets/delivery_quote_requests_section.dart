@@ -218,7 +218,7 @@ class _QuoteCard extends StatelessWidget {
                 key: ValueKey('dq_price_${q.id}'),
                 controller: controller,
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(kQuotePriceMaxDigits)],
                 decoration: InputDecoration(
                   labelText: context.tr('dq_price_label'),
                   isDense: true,

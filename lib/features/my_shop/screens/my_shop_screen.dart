@@ -8,6 +8,7 @@ import '../../business_map/domain/business_category.dart';
 import '../../business_map/screens/business_form_screen.dart';
 import '../../business_map/screens/business_products_screen.dart';
 import '../../business_map/screens/my_businesses_screen.dart' show waitForMyBusiness;
+import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../my_shop_presence.dart';
 import '../seller_tg_channel.dart';
 import '../shop_opened_celebration.dart';
@@ -210,6 +211,15 @@ class _MyShopScreenState extends State<MyShopScreen> {
     if (ok != true || !mounted) return;
     try {
       await (widget.deleteMainShop ?? BusinessRepository().deleteMainShop)();
+      // Аниқ олиб кетиш нуқтаси (private) — сервер подколлекцияни ўчирмайди; PII қолмасин (40-банд). Хато ютилади:
+      // дўкон аллақачон ўчди, қолган ҳужжат кейинги сақлашда қайта ёзилади.
+      if (widget.deleteMainShop == null) {
+        try {
+          await TvShopRepository().deletePickup(widget.phone);
+        } catch (e) {
+          debugPrint('[MyShop] deletePickup failed: $e');
+        }
+      }
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('my_shop_main_deleted'))));
       setState(() => _nameFuture = _loadName());

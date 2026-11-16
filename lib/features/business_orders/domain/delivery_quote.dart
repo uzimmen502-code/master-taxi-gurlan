@@ -219,10 +219,13 @@ class OpenDeliveryQuotes {
   bool get isAdmin => viewer == 'admin';
 }
 
-/// Нарх киритиш (курьер/админ): фақат рақамлар, бутун сўм > 0. Нотўғри — `null` (сервер барибир текширади).
+/// Нарх киритиш (курьер/админ): фақат рақамлар, бутун сўм > 0, юқори чегара ЙЎҚ (эга 2026-11-16). 15 рақамгача —
+/// web'да ҳам аниқ бутун сон (< 2^53). Нотўғри — `null` (сервер барибир текширади).
+const int kQuotePriceMaxDigits = 15;
+
 int? parseQuotePrice(String raw) {
   final digits = raw.replaceAll(RegExp(r'[\s,.]'), '');
-  if (digits.isEmpty || !RegExp(r'^\d{1,9}$').hasMatch(digits)) return null;
+  if (digits.isEmpty || digits.length > kQuotePriceMaxDigits || !RegExp(r'^\d+$').hasMatch(digits)) return null;
   final v = int.parse(digits);
   return v > 0 ? v : null;
 }

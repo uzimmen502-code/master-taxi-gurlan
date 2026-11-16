@@ -34,13 +34,17 @@ class MainShopScreen extends StatefulWidget {
     @visibleForTesting this.loadShop,
     @visibleForTesting this.savePickup,
     @visibleForTesting this.pickPickup,
+    @visibleForTesting this.loadPickup,
   });
+
+  /// Тест учун: эганинг аниқ нуқтаси (private; бўлмаса — [TvShopRepository.fetchPickup]).
+  final Future<ShopPickup?> Function()? loadPickup;
 
   /// Тест учун: дўкон ҳужжати (топшириш жойи; бўлмаса — [TvShopRepository.fetchShop]).
   final Future<TvShop?> Function()? loadShop;
 
   /// Тест учун: топшириш жойини сақлаш (бўлмаса — [TvShopRepository.savePickup]).
-  final Future<void> Function(double lat, double lng, String address)? savePickup;
+  final Future<void> Function(double lat, double lng, String address, bool showExact)? savePickup;
 
   /// Тест учун: харитада танлаш (бўлмаса — мавжуд [MapPickerScreen]).
   final Future<MapPickerResult?> Function(BuildContext context)? pickPickup;
@@ -93,20 +97,30 @@ class _MainShopScreenState extends State<MainShopScreen>
   String _pickupAddress = '';
   bool _savingPickup = false;
 
+  /// «Аниқ жойимни кўрсат» (оммавий `tv_shops.showExactLocation`; сукут — йўқ, тахминий ~500 м).
+  bool _showExact = false;
+
   Future<void> _loadPickup() async {
     try {
       final shop = await (widget.loadShop?.call() ?? TvShopRepository().fetchShop(widget.phone));
+      // Аниқ нуқта — эганинг private ҳужжати (эски оммавий майдонлар fallback). Тестда loadShop берилиб,
+      // loadPickup берилмаса — Firestore'га борилмайди.
+      final ShopPickup? pickup = widget.loadPickup != null
+          ? await widget.loadPickup!()
+          : (widget.loadShop != null ? null : await TvShopRepository().fetchPickup(widget.phone));
       if (!mounted) return;
       setState(() {
-        _hasPickup = shop?.hasPickup ?? false;
-        _pickupAddress = shop?.pickupAddress ?? '';
+        _hasPickup = pickup != null || (shop?.hasPickup ?? false);
+        _pickupAddress = pickup?.address ?? shop?.pickupAddress ?? '';
+        _showExact = shop?.showExactLocation ?? false;
       });
     } catch (e) {
       debugPrint('[MainShop] loadPickup failed: $e');
     }
   }
 
-  /// Харитада нуқта → манзил матни (таҳрирлаш мумкин) → `tv_shops/{телефон}` (pickupLat/pickupLng/pickupAddress).
+  /// Харитада нуқта → манзил матни + «Аниқ жойимни кўрсат» → аниқ нуқта `tv_shops/{телефон}/private/pickup`,
+  /// оммавий `tv_shops/{телефон}` да фақат тахминий `areaLat/areaLng` ([TvShopRepository.savePickup]).
   Future<void> _setPickup() async {
     if (_savingPickup) return;
     final custom = widget.pickPickup;
@@ -121,18 +135,20 @@ class _MainShopScreenState extends State<MainShopScreen>
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_pickup_err_point'))));
       return;
     }
-    final address = await _askAddress(r.label);
-    if (!mounted || address == null) return;
+    final answer = await _askAddress(r.label);
+    if (!mounted || answer == null) return;
+    final address = answer.address;
     setState(() => _savingPickup = true);
     try {
       final save = widget.savePickup ??
-          (double lat, double lng, String a) =>
-              TvShopRepository().savePickup(ownerPhone: widget.phone, lat: lat, lng: lng, address: a);
-      await save(r.lat, r.lng, address);
+          (double lat, double lng, String a, bool exact) => TvShopRepository()
+              .savePickup(ownerPhone: widget.phone, lat: lat, lng: lng, address: a, showExact: exact);
+      await save(r.lat, r.lng, address, answer.showExact);
       if (!mounted) return;
       setState(() {
         _hasPickup = true;
         _pickupAddress = address;
+        _showExact = answer.showExact;
       });
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_pickup_saved'))));
     } catch (e) {
@@ -145,31 +161,44 @@ class _MainShopScreenState extends State<MainShopScreen>
     }
   }
 
-  Future<String?> _askAddress(String initial) async {
+  Future<({String address, bool showExact})?> _askAddress(String initial) async {
     final ctrl = TextEditingController(text: initial.trim());
+    var exact = _showExact;
     try {
-      return await showDialog<String>(
+      return await showDialog<({String address, bool showExact})>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(ctx.tr('shop_pickup_title')),
-          content: TextField(
-            key: const ValueKey('shop_pickup_address'),
-            controller: ctrl,
-            maxLength: 200,
-            maxLines: 2,
-            decoration: InputDecoration(labelText: ctx.tr('shop_pickup_address_label')),
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            title: Text(ctx.tr('shop_pickup_title')),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                key: const ValueKey('shop_pickup_address'),
+                controller: ctrl,
+                maxLength: 200,
+                maxLines: 2,
+                decoration: InputDecoration(labelText: ctx.tr('shop_pickup_address_label')),
+              ),
+              SwitchListTile(
+                key: const ValueKey('shop_pickup_exact'),
+                contentPadding: EdgeInsets.zero,
+                value: exact,
+                onChanged: (v) => setLocal(() => exact = v),
+                title: Text(ctx.tr('shop_pickup_exact_toggle')),
+                subtitle: Text(ctx.tr('shop_pickup_exact_hint'), style: const TextStyle(fontSize: 12)),
+              ),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
+              FilledButton(
+                key: const ValueKey('shop_pickup_save'),
+                onPressed: () {
+                  final v = ctrl.text.trim();
+                  if (v.length >= 3) Navigator.pop(ctx, (address: v, showExact: exact));
+                },
+                child: Text(ctx.tr('save')),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
-            FilledButton(
-              key: const ValueKey('shop_pickup_save'),
-              onPressed: () {
-                final v = ctrl.text.trim();
-                if (v.length >= 3) Navigator.pop(ctx, v);
-              },
-              child: Text(ctx.tr('save')),
-            ),
-          ],
         ),
       );
     } finally {

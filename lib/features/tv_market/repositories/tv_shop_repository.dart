@@ -98,31 +98,88 @@ class TvShopRepository {
     }
   }
 
-  /// «Маҳсулотни топшириш жойи» (STAGE 11): `pickupLat`/`pickupLng` (сон) ва `pickupAddress`. Ҳужжат бўлмаса —
-  /// [ensureShop] шаклида яратилади. Rules: эга блок майдонларидан бошқасини ўзгартира олади (`tv_shops/{phone}`).
+  DocumentReference<Map<String, dynamic>> _pickupRef(String id) => _shops.doc(id).collection('private').doc('pickup');
+
+  /// Эганинг АНИҚ олиб кетиш нуқтаси: `tv_shops/{phone}/private/pickup` (rules: фақат эгаси). Йўқ бўлса — эски
+  /// оммавий `pickupLat/Lng/Address` ([ShopPickup.legacy]); иккаласи ҳам йўқ — `null`.
+  Future<ShopPickup?> fetchPickup(String ownerPhone) async {
+    final id = canonicalPhoneId(ownerPhone);
+    if (id.isEmpty) return null;
+    final priv = ShopPickup.fromMap((await _pickupRef(id).get()).data());
+    if (priv != null) return priv;
+    final shop = await fetchShop(id);
+    if (shop == null || !TvShop.validLatLng(shop.pickupLat, shop.pickupLng)) return null;
+    return ShopPickup(lat: shop.pickupLat!, lng: shop.pickupLng!, address: shop.pickupAddress, legacy: true);
+  }
+
+  /// [savePickup] ёзадиган ҳужжатлар (соф — тест учун): private (аниқ) ва оммавий (тахминий + эски майдонларни
+  /// ўчириш). [shopExists] `false` — оммавий ҳужжат [ensureShop] шаклида яратилади (FieldValue.delete'сиз).
+  static ({Map<String, Object> private, Map<String, Object> public}) pickupWrites({
+    required String ownerPhone,
+    required double lat,
+    required double lng,
+    required String address,
+    required bool showExact,
+    required bool shopExists,
+  }) {
+    final clean = address.trim();
+    final public = <String, Object>{
+      'areaLat': showExact ? lat : approxShopCoord(lat),
+      'areaLng': showExact ? lng : approxShopCoord(lng),
+      'showExactLocation': showExact,
+      if (shopExists) ...{
+        'pickupLat': FieldValue.delete(),
+        'pickupLng': FieldValue.delete(),
+        'pickupAddress': FieldValue.delete(),
+      } else ...{
+        'ownerPhone': ownerPhone,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+    };
+    return (
+      private: <String, Object>{
+        'lat': lat,
+        'lng': lng,
+        'address': clean.length > 200 ? clean.substring(0, 200) : clean,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      public: public,
+    );
+  }
+
+  /// «Маҳсулотни топшириш жойи» (эга 2026-11-16): АНИҚ нуқта → `private/pickup`; оммавий `tv_shops/{phone}` га
+  /// фақат тахминий `areaLat/areaLng` (~500 м; [showExact] да аниқ) + `showExactLocation`, эски оммавий
+  /// `pickupLat/Lng/Address` ўчирилади. Битта batch (иккаласи бирга ёзилади ёки ҳеч бири).
   Future<void> savePickup({
     required String ownerPhone,
     required double lat,
     required double lng,
     required String address,
+    bool showExact = false,
   }) async {
     final id = canonicalPhoneId(ownerPhone);
-    final clean = address.trim();
-    if (id.isEmpty || lat.abs() > 90 || lng.abs() > 180 || (lat == 0 && lng == 0)) {
+    if (id.isEmpty || !TvShop.validLatLng(lat, lng)) {
       throw ArgumentError('invalid pickup location');
     }
-    final fields = <String, Object>{
-      'pickupLat': lat,
-      'pickupLng': lng,
-      'pickupAddress': clean.length > 200 ? clean.substring(0, 200) : clean,
-    };
     final ref = _shops.doc(id);
-    final snap = await ref.get();
-    if (snap.exists) {
-      await ref.update(fields);
+    final exists = (await ref.get()).exists;
+    final w = pickupWrites(ownerPhone: id, lat: lat, lng: lng, address: address, showExact: showExact, shopExists: exists);
+    final batch = _db.batch();
+    batch.set(_pickupRef(id), w.private);
+    if (exists) {
+      batch.update(ref, w.public);
     } else {
-      await ref.set({...fields, 'ownerPhone': id, 'createdAt': FieldValue.serverTimestamp()});
+      batch.set(ref, w.public);
     }
+    await batch.commit();
+  }
+
+  /// Дўконни ўчиришдан олдин: аниқ нуқта ҳужжатини ўчиради (`deleteMyMainShop` подколлекцияни ўчирмайди; PII
+  /// қолмасин, 40-банд). Хато — ютилмайди, чақирувчи ҳал қилади.
+  Future<void> deletePickup(String ownerPhone) async {
+    final id = canonicalPhoneId(ownerPhone);
+    if (id.isEmpty) return;
+    await _pickupRef(id).delete();
   }
 
   /// Сотувчининг ФАОЛ маҳсулотлари сони (битта `count()`; «Сотувчининг бошқа маҳсулотлари», эга 2026-11-16).

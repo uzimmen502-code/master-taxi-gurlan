@@ -212,6 +212,11 @@ void main() {
   group('нарх ва қават киритиш', () {
     test('parseQuotePrice', () {
       expect(parseQuotePrice('45 000'), 45000);
+      // Юқори чегара йўқ (эга 2026-11-16): 10 млн дан катта ҳам; 15 рақамгача (web'да ҳам аниқ).
+      expect(parseQuotePrice('25 000 000'), 25000000);
+      expect(parseQuotePrice('999999999999999'), 999999999999999);
+      expect(parseQuotePrice('1'), 1);
+      expect(parseQuotePrice('1000000000000000'), isNull);
       expect(parseQuotePrice('0'), isNull);
       expect(parseQuotePrice('abc'), isNull);
       expect(parseQuotePrice(''), isNull);
@@ -375,7 +380,7 @@ void main() {
     });
 
     testWidgets('«Менинг дўконим»: топшириш жойи йўқ → огоҳлантириш → харита → манзил → сақланади', (tester) async {
-      final saved = <(double, double, String)>[];
+      final saved = <(double, double, String, bool)>[];
       tester.view.physicalSize = const Size(420 * 3, 1400 * 3);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
@@ -388,17 +393,47 @@ void main() {
           chinaView: (_) => const SizedBox(),
           loadShop: () async => _shop(pickup: false),
           pickPickup: (_) async => const MapPickerResult(lat: 41.5, lng: 60.3, label: 'Бозор 1'),
-          savePickup: (lat, lng, a) async => saved.add((lat, lng, a)),
+          savePickup: (lat, lng, a, exact) async => saved.add((lat, lng, a, exact)),
         ),
       ));
       await tester.pumpAndSettle();
       expect(find.text('shop_pickup_missing'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('shop_pickup_banner')));
       await tester.pumpAndSettle();
+      expect(find.text('shop_pickup_exact_toggle'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('shop_pickup_save')));
       await tester.pumpAndSettle();
-      expect(saved, [(41.5, 60.3, 'Бозор 1')]);
+      expect(saved, [(41.5, 60.3, 'Бозор 1', false)], reason: 'сукут — тахминий');
       expect(find.text('shop_pickup_missing'), findsNothing);
+      // Иккинчи марта: «Аниқ жойимни кўрсат» ёқилади.
+      await tester.tap(find.byKey(const ValueKey('shop_pickup_banner')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop_pickup_exact')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('shop_pickup_save')));
+      await tester.pumpAndSettle();
+      expect(saved.last, (41.5, 60.3, 'Бозор 1', true));
+    });
+
+    testWidgets('«Менинг дўконим»: private нуқта бор (оммавийда фақат тахминий) → манзил кўринади, огоҳлантириш йўқ', (tester) async {
+      tester.view.physicalSize = const Size(420 * 3, 1400 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light,
+        home: MainShopScreen(
+          phone: _seller,
+          loadName: () async => 'Дўконим',
+          retailView: (_) => const SizedBox(),
+          chinaView: (_) => const SizedBox(),
+          loadShop: () async => const TvShop(ownerPhone: _seller, name: 'Д', areaLat: 41.5, areaLng: 60.3),
+          loadPickup: () async => const ShopPickup(lat: 41.5012, lng: 60.3021, address: 'Махфий 9'),
+          pickPickup: (_) async => null,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('shop_pickup_missing'), findsNothing);
+      expect(find.textContaining('Махфий 9'), findsOneWidget);
     });
 
     testWidgets('курьер: рухсат йўқ (хато) — бўлим кўринмайди', (tester) async {

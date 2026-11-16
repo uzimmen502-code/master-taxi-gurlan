@@ -217,9 +217,12 @@ class _MarketCard extends StatelessWidget {
     return Material(
       key: ValueKey('home_market_card_${entry.id}'),
       color: c.surface,
-      shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: c.line)),
+      shape: RoundedRectangleBorder(borderRadius: radius),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
+      // Эга 2026-11-16: чегара расм ОСТИДА чизилади — расм устида кулранг чизиқ кўринмайди, матн томонида қолади.
+      child: DecoratedBox(
+        decoration: BoxDecoration(borderRadius: radius, border: Border.all(color: c.line)),
+        child: InkWell(
         onTap: onTap,
         // Эга 2026-11-16: карта баландлиги = расм баландлиги (64), ички чет йўқ — расм карта четига тегади;
         // сарлавҳа ↔ карта чегараси 1 px, сарлавҳа ↔ шиор 1 px; матн катта тизим шрифтида ҳам сиғсин.
@@ -271,6 +274,7 @@ class _MarketCard extends StatelessWidget {
             ],
           ),
           ),
+        ),
         ),
       ),
     );

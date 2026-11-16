@@ -3509,6 +3509,14 @@ service cloud.firestore {
     match /wholesale_orders/{id} {
       allow read: if isAdmin() || isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId);
     }
+    // Бозорлар 11 (2026-11-16): катта техника етказиш нархи сўрови — фақат CF ёзади; харидор ва админ ўқийди.
+    match /delivery_quotes/{id} {
+      allow get: if isAdmin() || isOwner(resource.data.buyerUid);
+      allow list: if isAdmin();
+      allow write: if false;
+      match /events/{e} { allow read, write: if false; }
+    }
+    match /delivery_quote_locks/{id} { allow read, write: if false; }
 
     // ══════════════════════════════════════════════════════════════════
     // КАФЕ-РЕСТОРАНЛАР (D-REST-1…14, 2026-10-08; functions/restaurant_orders.js)

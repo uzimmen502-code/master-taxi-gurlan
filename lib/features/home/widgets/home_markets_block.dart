@@ -47,6 +47,7 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     titleKey: 'home_module_livestock_market',
     imagePath: 'assets/images/markets/market_livestock.webp',
     taxonomyMarketId: 'livestock',
+    sloganKey: 'home_market_livestock_slogan',
   ),
   HomeMarketEntry(
     id: 'auto',
@@ -54,6 +55,7 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     titleKey: 'home_module_auto_market',
     imagePath: 'assets/images/markets/market_auto.webp',
     taxonomyMarketId: 'auto',
+    sloganKey: 'home_market_auto_slogan',
   ),
   HomeMarketEntry(
     id: 'meat',
@@ -61,6 +63,7 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     titleKey: 'home_module_meat_market',
     imagePath: 'assets/images/markets/market_meat.webp',
     taxonomyMarketId: 'meat',
+    sloganKey: 'home_market_meat_slogan',
   ),
   HomeMarketEntry(
     id: 'farm',
@@ -68,6 +71,7 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     titleKey: 'home_module_farm_market',
     imagePath: 'assets/images/markets/market_farm.webp',
     taxonomyMarketId: 'farm',
+    sloganKey: 'home_market_farm_slogan',
   ),
   HomeMarketEntry(
     id: 'realty',
@@ -185,9 +189,10 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
               if (i > 0) const SizedBox(height: AvaSpace.gap),
               _MarketCard(
                 entry: items[i],
-                slogan: items[i].taxonomyMarketId != null
-                    ? taxonomyMarketSlogan(_taxonomy?.market(items[i].taxonomyMarketId!), lang)
-                    : context.tr(items[i].sloganKey!),
+                // Эга 2026-11-16: 8 та картанинг ҳаммасида қисқа шиор тил калитидан (таксономия шиори — фақат калит йўқ бўлса).
+                slogan: items[i].sloganKey != null
+                    ? context.tr(items[i].sloganKey!)
+                    : taxonomyMarketSlogan(_taxonomy?.market(items[i].taxonomyMarketId!), lang),
                 onTap: () => widget.onOpen(items[i]),
               ),
             ],
@@ -218,7 +223,12 @@ class _MarketCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Row(
+          // Эга 2026-11-16: карта баландлиги = расм баландлиги (64); матн катта тизим шрифтида ҳам сиғсин.
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.0,
+            child: SizedBox(
+            height: 64,
+            child: Row(
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -235,18 +245,21 @@ class _MarketCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       context.tr(entry.titleKey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
                     ),
                     if (slogan.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      // Тўлиқ матн, қирқилмайди (эга).
                       Text(
                         slogan,
                         key: ValueKey('home_market_slogan_${entry.id}'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 11, height: 1.3, color: c.ink2),
                       ),
                     ],
@@ -256,6 +269,8 @@ class _MarketCard extends StatelessWidget {
               const SizedBox(width: 4),
               Icon(Icons.chevron_right_rounded, size: 20, color: c.ink3),
             ],
+          ),
+          ),
           ),
         ),
       ),

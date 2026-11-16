@@ -111,25 +111,27 @@ void main() {
       expect(opened.map((e) => e.id).toList(), ['china', 'meat']);
     });
 
-    testWidgets('шиор: 4 бозор — таксономиядан (Гўшт sloganNoOrder), қолганлари — lang калити', (t) async {
+    // Эга 2026-11-16: 8 та картанинг ҳаммасида қисқа шиор — lang калитидан; карта баландлиги = расм (64), шиор ≤ 2 қатор.
+    testWidgets('шиор: 8 та карта — lang калити; ≤ 2 қатор, баландлик 64', (t) async {
       await _pump(t, isVisible: (_) => true);
       String slogan(String id) => t.widget<Text>(find.byKey(ValueKey('home_market_slogan_$id'))).data!;
-      // Тест MaterialApp'и — en-US → localizedName uz_Cyrl'га тушади.
-      expect(slogan('livestock'), 'livestock-slogan-cyr');
-      expect(slogan('meat'), 'meat-noorder-cyr');
-      expect(slogan('realty'), 'home_market_realty_slogan');
-      expect(slogan('wholesale'), 'home_market_wholesale_slogan');
-      expect(slogan('china'), 'home_market_china_slogan');
-      expect(slogan('aralash'), 'home_market_aralash_slogan');
+      for (final id in ['livestock', 'auto', 'meat', 'farm', 'realty', 'wholesale', 'china', 'aralash']) {
+        expect(slogan(id), 'home_market_${id}_slogan');
+      }
       final s = t.widget<Text>(find.byKey(const ValueKey('home_market_slogan_meat')));
-      expect(s.overflow, isNull);
-      expect(s.maxLines, isNull);
+      expect(s.overflow, TextOverflow.ellipsis);
+      expect(s.maxLines, 2);
+      final row = find.descendant(
+        of: find.byKey(const ValueKey('home_market_card_meat')),
+        matching: find.byWidgetPredicate((w) => w is SizedBox && w.height == 64 && w.child is Row),
+      );
+      expect(row, findsOneWidget);
     });
 
-    testWidgets('таксономия юкланмаса — карточкалар шиорсиз қолади (crash йўқ)', (t) async {
+    testWidgets('таксономия юкланмаса ҳам — шиорлар (lang) қолади, crash йўқ', (t) async {
       await _pump(t, isVisible: (_) => true, load: () async => throw StateError('offline'));
       expect(find.byKey(const ValueKey('home_market_card_livestock')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home_market_slogan_livestock')), findsNothing);
+      expect(find.byKey(const ValueKey('home_market_slogan_livestock')), findsOneWidget);
       expect(find.byKey(const ValueKey('home_market_slogan_realty')), findsOneWidget);
     });
   });

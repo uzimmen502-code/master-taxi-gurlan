@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../markets/data/market_search.dart';
 import '../models/tv_shop.dart';
 
 /// [TvShopRepository.fetchOwnerPage] натижаси.
@@ -210,14 +211,21 @@ class TvShopRepository {
 
   /// Аҳоли бозори қидируви: сервер ёзган `searchTokens` бўйича (охирги 80 та билан чекланмайди). Битта
   /// `array-contains` — автоматик индекс; ҳолат ва қоплама расм клиентда (2026-10-25, 4-босқич).
-  Future<List<TvShopItem>> searchForMarket(String token, {int limit = 60}) async {
-    final t = token.trim().toLowerCase();
-    if (t.length < 2) return const [];
-    final snap = await _items.where('searchTokens', arrayContains: t).limit(limit).get();
-    return snap.docs
-        .map(TvShopItem.fromFirestore)
-        .where((i) => i.isActive && i.coverPhotoUrl.isNotEmpty)
-        .toList(growable: false);
+  ///
+  /// 2026-11-16: сервер `searchTokens` (onShopItemSearchTokens) — `status == active` + `createdAt desc` композит
+  /// индекс билан энг янгилари ([searchAllMarkets]); индекс хатосида — аввалги оддий сўров. Токен —
+  /// [marketServerSearchToken] (сўровнинг биринчи сўзи).
+  Future<List<TvShopItem>> searchForMarket(String query, {int limit = kMarketSearchLimit}) async {
+    final items = await searchAllMarkets(
+      query,
+      limit: limit,
+      primary: (r) => fetchMarketSearchPage(_items, r),
+      legacy: (t, l) async {
+        final snap = await _items.where('searchTokens', arrayContains: t).limit(l).get();
+        return snap.docs.map(TvShopItem.fromFirestore).toList(growable: false);
+      },
+    );
+    return items.where((i) => i.coverPhotoUrl.isNotEmpty).toList(growable: false);
   }
 
   /// Аҳоли бозори лентаси: фаол товарлар (қоплама расм бор).

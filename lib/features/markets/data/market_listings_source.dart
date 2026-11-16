@@ -9,6 +9,7 @@ import '../../../core/service_config_holder.dart';
 import '../../../models/geo_area.dart' show GeoDistrict;
 import '../../../repositories/service_config_repository.dart';
 import '../../tv_market/models/tv_shop.dart';
+import 'market_search.dart';
 
 /// Бозор экранидаги сервер филтри: бозор + (ихтиёрий) бўлим + «Импорт».
 /// Нарх филтри — КЛИЕНТДА (юкланган саҳифалар устида; сервер индекси кўпаймаслиги учун).
@@ -44,6 +45,9 @@ class MarketFilter {
 abstract class MarketListingSource {
   RingFetcher<TvShopItem> fetcher(MarketFilter filter);
   Future<List<String>> districtsOf(String regionId);
+
+  /// Сервер қидируви (searchTokens, энг янгиси олдин) — [MarketSearchRequest].
+  Future<MarketSearchPage> search(MarketSearchRequest request, {Object? startAfter});
 }
 
 class FirestoreMarketListingSource implements MarketListingSource {
@@ -73,6 +77,10 @@ class FirestoreMarketListingSource implements MarketListingSource {
 
   @override
   Future<List<String>> districtsOf(String regionId) => GeoDistrictsCache.districtIdsOf(regionId);
+
+  @override
+  Future<MarketSearchPage> search(MarketSearchRequest request, {Object? startAfter}) =>
+      fetchMarketSearchPage(_col, request, startAfter: startAfter);
 }
 
 /// Эълон туманининг вилояти (`regionId` майдони учун). Тартиб: профил тумани → фаол ҳудуд → `geo_districts/{id}`

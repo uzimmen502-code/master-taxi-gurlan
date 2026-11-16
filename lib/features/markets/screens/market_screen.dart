@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_query.dart';
+import '../../../core/geo/module_geo_policy.dart';
 import '../../../core/geo/geo_tier_bar.dart';
 import '../../../core/geo/relative_location.dart';
 import '../../../core/geo/ring_query.dart';
@@ -15,6 +19,7 @@ import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
 import '../data/market_listings_source.dart';
+import '../data/market_search.dart';
 import '../data/market_taxonomy_repository.dart';
 import '../domain/market_taxonomy.dart';
 import '../widgets/auto_parts_header.dart';
@@ -30,8 +35,10 @@ import '../widgets/market_listing_card.dart';
 ///   Танлов САҚЛАНМАЙДИ (модул қоидаси `persistSelection: false`; экран ёпилганда тозаланади).
 /// * Нарх филтри — КЛИЕНТДА (юкланган саҳифалар устида); тартиб — «Янгилар» (ҳалқа ичида `createdAt desc`).
 /// * Сон («N та эълон») ва унинг `count()` сўрови олиб ташланди (эга, 2026-11-16).
-/// * Қидирув (эга, 2026-11-16): шу бозор ичида, сарлавҳа/тавсиф бўйича — КЛИЕНТДА, юкланган саҳифалар устида
-///   (`tv_shop_items` бозор эълонларида `searchTokens` ёзилмайди; сервер қидируви янги композит индекс талаб қиларди).
+/// * Қидирув (эга, 2026-11-16): шу бозор ичида. ≥2 белги — 350 мс дан кейин СЕРВЕР сўрови (`searchTokens`, биринчи
+///   сўз, энг янгиси олдин, 40 тадан саҳифа; [MarketSearchRequest]) + юкланган саҳифалардаги клиент мослари, id бўйича
+///   бирлаштирилади (эски эълонларда токен бўлмаслиги мумкин). Бўлим/«Импорт»/нарх/ҳудуд ва қолган сўзлар — клиентда.
+///   Индекс хатоси — шу сессияда фақат клиент қидируви; бошқа хато — умумий хабар + лог.
 /// * Тепа қисм ихчам: паст AppBar, қидирув, чиплар, ҳудуд ва филтр қаторлари орасида 1 px.
 class MarketScreen extends StatefulWidget {
   const MarketScreen({
@@ -96,9 +103,22 @@ class _MarketScreenState extends State<MarketScreen> {
   int _emptyStreak = 0;
   int _gen = 0;
 
-  /// Бозор ичидаги қидирув (клиентда).
+  /// Бозор ичидаги қидирув: клиент филтри дарҳол ([_query]), сервер сўрови — debounce'дан кейин.
   final _searchCtrl = TextEditingController();
   String _query = '';
+  Timer? _searchTimer;
+  int _searchGen = 0;
+  MarketSearchRequest? _searchReq;
+  final List<TvShopItem> _serverHits = [];
+  Object? _serverCursor;
+  bool _serverHasMore = false;
+  bool _serverLoading = false;
+
+  /// Индекс йўқ (`failed-precondition`) — шу экран сессиясида фақат клиент қидируви.
+  bool _serverSearchOff = false;
+
+  /// Вилоят танланганда сервер натижаларини ҳудуд бўйича филтрлаш учун ([inGeoScope]).
+  Set<String> _regionDistricts = const {};
 
   @override
   void initState() {
@@ -110,6 +130,7 @@ class _MarketScreenState extends State<MarketScreen> {
   void dispose() {
     final m = _def;
     if (m != null) GeoContext.clearSessionScope(m.moduleId);
+    _searchTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -155,6 +176,98 @@ class _MarketScreenState extends State<MarketScreen> {
     );
     setState(() {});
     _loadMore();
+    unawaited(_loadRegionDistricts(scope));
+    if (_searchReq != null || _serverHits.isNotEmpty) _startServerSearch(_query);
+  }
+
+  Future<void> _loadRegionDistricts(GeoScope scope) async {
+    final rid = scope.area.regionId.trim();
+    if (scope.level != GeoLevel.region || rid.isEmpty) {
+      _regionDistricts = const {};
+      return;
+    }
+    try {
+      final ids = await _source.districtsOf(rid);
+      if (mounted && identical(scope, _scope)) setState(() => _regionDistricts = ids.toSet());
+    } catch (e) {
+      debugPrint('[MarketScreen] MARKET_REGION_DISTRICTS_FAILED region=$rid: $e');
+    }
+  }
+
+  bool get _searchActive => _searchReq != null;
+
+  /// Сервер қидирувини янгидан бошлайди (сўров/филтр/ҳудуд ўзгарди). Токен чиқмаса ёки индекс йўқ бўлса —
+  /// фақат клиент.
+  void _startServerSearch(String q) {
+    _searchTimer?.cancel();
+    _searchGen++;
+    _serverHits.clear();
+    _serverCursor = null;
+    _serverLoading = false;
+    _serverHasMore = false;
+    _searchReq = _serverSearchOff ? null : MarketSearchRequest.forQuery(q, market: widget.marketId);
+    if (mounted) setState(() {});
+    if (_searchReq != null) {
+      _serverHasMore = true;
+      _loadServerPage();
+    }
+  }
+
+  Future<void> _loadServerPage() async {
+    final req = _searchReq;
+    if (_serverLoading || req == null || !_serverHasMore) return;
+    final gen = _searchGen;
+    setState(() => _serverLoading = true);
+    try {
+      final page = await _source.search(req, startAfter: _serverCursor);
+      if (!mounted || gen != _searchGen) return;
+      final visibleAdded = page.items.where(_serverShows).length;
+      setState(() {
+        _serverHits.addAll(page.items);
+        _serverCursor = page.cursor;
+        _serverHasMore = page.hasMore;
+        _serverLoading = false;
+        _emptyStreak = visibleAdded == 0 ? _emptyStreak + 1 : 0;
+      });
+    } catch (e) {
+      final code = marketSearchErrorCode(e);
+      debugPrint('[MarketScreen] $code market=${widget.marketId} tokenLen=${req.token.length}: $e');
+      if (!mounted || gen != _searchGen) return;
+      final indexMissing = isMarketSearchIndexError(e);
+      setState(() {
+        _serverLoading = false;
+        _serverHasMore = false;
+        if (indexMissing) _serverSearchOff = true;
+      });
+      // Индекс хатоси — жим (клиент натижалари қолади); бошқа хато — умумий хабар.
+      if (!indexMissing) {
+        ScaffoldMessenger.maybeOf(context)
+            ?.showSnackBar(SnackBar(content: Text(context.tr('search_error_internet'))));
+      }
+    }
+  }
+
+  /// Сервер топган эълон шу экран филтрларига мосми (бўлим/«Импорт»/ҳудуд/нарх/барча сўзлар — клиентда).
+  bool _serverShows(TvShopItem i) {
+    final scope = _scope;
+    if (!i.isActive || i.market != widget.marketId) return false;
+    if (_category.isNotEmpty && i.category != _category) return false;
+    if (_importedOnly && i.imported != true) return false;
+    if (scope != null &&
+        !(inGeoScope(i.districtId, scope, _regionDistricts) ||
+            (scope.level == GeoLevel.region && i.regionId.isNotEmpty && i.regionId == scope.area.regionId))) {
+      return false;
+    }
+    return priceInRange(i.price, _minPrice, _maxPrice) && marketServerItemMatches(i, _query);
+  }
+
+  /// Рўйхат охири: қидирувда аввал сервер саҳифалари, кейин одатий ҳалқа саҳифалари (токенсиз эски эълонлар).
+  void _loadNext() {
+    if (_searchActive && _serverHasMore) {
+      _loadServerPage();
+    } else {
+      _loadMore();
+    }
   }
 
   Future<void> _loadMore() async {
@@ -189,15 +302,29 @@ class _MarketScreenState extends State<MarketScreen> {
   bool _shows(TvShopItem i) =>
       priceInRange(i.price, _minPrice, _maxPrice) && marketItemMatchesQuery(i, _query);
 
-  List<TvShopItem> get _visible => [
-        for (final r in _items)
-          if (_shows(r.item)) r.item,
-      ];
+  List<TvShopItem> get _visible {
+    final local = [
+      for (final r in _items)
+        if (_shows(r.item)) r.item,
+    ];
+    if (!_searchActive) return local;
+    // Қидирувда ҳалқа тартиби эмас — энг янгиси олдин (клиент + сервер, такрорсиз).
+    return mergeMarketSearch(local, _serverHits.where(_serverShows));
+  }
 
   void _onQuery(String v) {
     setState(() {
       _query = v;
       _emptyStreak = 0;
+    });
+    _searchTimer?.cancel();
+    if (v.trim().length < kMarketSearchMinChars) {
+      // Қисқа/бўш сўров — фақат клиент; эски сервер натижалари дарҳол тозаланади.
+      if (_searchReq != null || _serverHits.isNotEmpty) _startServerSearch('');
+      return;
+    }
+    _searchTimer = Timer(kMarketSearchDebounce, () {
+      if (mounted) _startServerSearch(_query);
     });
   }
 
@@ -377,7 +504,8 @@ class _MarketScreenState extends State<MarketScreen> {
 
   Widget _list(MarketDef m) {
     final visible = _visible;
-    final hasMore = _pager?.hasMore ?? false;
+    final hasMore = (_pager?.hasMore ?? false) || (_searchActive && _serverHasMore);
+    final loading = _loading || _serverLoading;
     // Мошина бозори «Эҳтиёт қисмлар»: тепада AVA сервис + AVA маҳсулотлари, остида эълонлар (9-босқич).
     final header = showsAutoPartsHeader(m.id, _category)
         ? (widget.partsHeader?.call(context) ?? const AutoPartsAvaHeader())
@@ -387,7 +515,7 @@ class _MarketScreenState extends State<MarketScreen> {
       if (header == null) return err;
       return ListView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 24), children: [header, err]);
     }
-    if (visible.isEmpty && !hasMore && !_loading) {
+    if (visible.isEmpty && !hasMore && !loading) {
       final empty = Padding(
         padding: const EdgeInsets.all(24),
         child: Text(context.tr('market_empty'),
@@ -431,7 +559,7 @@ class _MarketScreenState extends State<MarketScreen> {
             child: LoadErrorView(error: _pageError!, onRetry: _loadMore),
           );
         }
-        if (_loading) {
+        if (loading) {
           return const Padding(
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator()),
@@ -444,14 +572,14 @@ class _MarketScreenState extends State<MarketScreen> {
               key: const ValueKey('market_load_more'),
               onPressed: () {
                 _emptyStreak = 0;
-                _loadMore();
+                _loadNext();
               },
               child: Text(context.tr('market_load_more')),
             ),
           );
         }
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _loadMore();
+          if (mounted) _loadNext();
         });
         return const SizedBox(height: 48);
       },

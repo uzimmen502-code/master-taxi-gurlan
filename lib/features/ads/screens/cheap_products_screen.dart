@@ -184,8 +184,9 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       return;
     }
     final results = await Future.wait<Object>([
-      _shopRepo.searchForMarket(token).catchError((Object e) {
-        debugPrint('[CheapProducts] item search: $e');
+      // Сервер `searchTokens` (status=active, энг янгилари; индекс хатосида — аввалги сўров), 2026-11-16.
+      _shopRepo.searchForMarket(q).catchError((Object e) {
+        debugPrint('[CheapProducts] MARKET_SEARCH_FAILED scope=all: $e');
         return const <TvShopItem>[];
       }),
       _searchIndex.searchShops(q).catchError((Object e) {

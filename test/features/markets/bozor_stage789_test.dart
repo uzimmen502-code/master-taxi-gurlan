@@ -9,6 +9,7 @@ import 'package:ava_gurlan/core/geo/ring_query.dart';
 import 'package:ava_gurlan/core/service_config_holder.dart';
 import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/markets/data/market_listings_source.dart';
+import 'package:ava_gurlan/features/markets/data/market_search.dart';
 import 'package:ava_gurlan/features/markets/domain/market_taxonomy.dart';
 import 'package:ava_gurlan/features/markets/open_market.dart';
 import 'package:ava_gurlan/features/markets/screens/market_screen.dart';
@@ -404,4 +405,7 @@ class _FakeMarketSource implements MarketListingSource {
 
   @override
   Future<List<String>> districtsOf(String regionId) async => regionId == 'xorazm' ? ['gurlan'] : const [];
+
+  @override
+  Future<MarketSearchPage> search(MarketSearchRequest request, {Object? startAfter}) async => MarketSearchPage.empty;
 }

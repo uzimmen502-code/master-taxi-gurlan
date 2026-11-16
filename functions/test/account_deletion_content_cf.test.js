@@ -76,6 +76,10 @@ async function seed() {
   await db.collection('wholesale_products').doc('w1').set({ sellerId: U, status: 'active' });
   await db.collection('wholesale_products').doc('wX').set({ sellerId: OTHER, status: 'active' });
   await db.collection('tv_shops').doc(U).set({ ownerPhone: U, name: 'Do\'kon' });
+  // aniq olib ketish nuqtasi — private (ega 2026-11-16); U9 — virtual ota (eski 9 raqamli id)
+  await db.collection('tv_shops').doc(U).collection('private').doc('pickup').set({ lat: 41.84, lng: 60.39, address: 'aniq' });
+  await db.collection('tv_shops').doc(U9).collection('private').doc('pickup').set({ lat: 41.84, lng: 60.39, address: 'eski' });
+  await db.collection('tv_shops').doc(OTHER).collection('private').doc('pickup').set({ lat: 41.5, lng: 60.6, address: 'begona' });
   await db.collection('tv_public_profiles').doc(U).set({ name: 'Ali' });
   await db.collection('tv_public_profiles').doc(U).collection('followers').doc(OTHER).set({ at: 1 });
   await db.collection('tv_public_profiles').doc(OTHER).set({ name: 'Vali' });
@@ -119,11 +123,12 @@ async function main() {
     assert.strictEqual(r.status, 'DONE', JSON.stringify(r));
     for (const p of ['ads/a1', 'ads/a4', 'tv_clips/c1', 'tv_clips/c1/comments/k1', 'tv_clips/c3', 'tv_shop_items/i1', 'businesses/b1',
       'yuk_listings/y1', 'yuk_local_drivers/yl1', 'realty_listings/r1', 'realty_listings/r1/private/detail', 'wholesale_products/w1',
-      `tv_shops/${U}`, `tv_public_profiles/${U}`, `tv_public_profiles/${U}/followers/${OTHER}`, `wholesale_sellers/${U}`]) {
+      `tv_shops/${U}`, `tv_shops/${U}/private/pickup`, `tv_shops/${U9}/private/pickup`,
+      `tv_public_profiles/${U}`, `tv_public_profiles/${U}/followers/${OTHER}`, `wholesale_sellers/${U}`]) {
       assert.strictEqual(await exists(p), false, `${p} o'chmadi`);
     }
     for (const p of ['ads/aX', 'tv_clips/cX', 'tv_shop_items/iX', 'businesses/bX', 'realty_listings/rX', 'wholesale_products/wX',
-      `tv_public_profiles/${OTHER}`, `drivers/${OTHER}`, 'schedules/sX', `support_chats/${OTHER}`, 'orders/oX']) {
+      `tv_shops/${OTHER}/private/pickup`, `tv_public_profiles/${OTHER}`, `drivers/${OTHER}`, 'schedules/sX', `support_chats/${OTHER}`, 'orders/oX']) {
       assert.strictEqual(await exists(p), true, `begona ${p} o'chib ketdi`);
     }
   });

@@ -29,6 +29,10 @@
  * acceptTimeoutMin, version }. Ҳужжат йўқ → OFF. Фақат ЯНГИ буюртма (quote/place) тўсилади; бошланган
  * буюртмалар якунланади (custody узилмасин).
  *
+ * «БОЗОРЛАР» STAGE 11 (эга 2026-11-16): `businessId`сиз ўз дўкони маҳсулоти ҳам (сотувчи = `ownerPhone`,
+ * `sellerKind: 'shop'`) ва бозор эълони фақат `taxonomy/markets` бўлими `orderable` бўлса (`ITEM_NOT_ORDERABLE`).
+ * Сотувчи рухсати аввалгидек `sellerUid` орқали (ҳар икки тур). Улгуржи/Хитой/уй-жой — бу занжирда ЭМАС.
+ *
  * Ҳолатлар — `business_order_states.js` (ягона манба). Ҳар ўтиш транзакцияда ва `orders/{id}/order_events`
  * (append-only) га ёзилади. Structured log: orderId, businessId, userId (охирги 4), action, result,
  * errorCode, durationMs — телефон/манзил ЙЎҚ (24, 40-қоида). Хато коди `details.code` да (25-қоида).
@@ -54,6 +58,12 @@ const ROUTES = 'delivery_routes';
 const IDEMPOTENCY = 'wallet_idempotency';
 const BUSINESSES = 'businesses';
 const ITEMS = 'tv_shop_items';
+/** STAGE 11: ўз дўкони (`tv_shops/{ownerPhone}`) — блок ҳолати ва олиб кетиш нуқтаси. */
+const TV_SHOPS = 'tv_shops';
+/** STAGE 11: «Бозорлар» таксономияси (functions/market_taxonomy.js `TAXONOMY_DOC` билан бир хил). */
+const TAXONOMY_DOC = Object.freeze(['taxonomy', 'markets']);
+const TAXONOMY_CACHE_MS_DEFAULT = 60 * 1000;
+const SELLER_KINDS = Object.freeze(['business', 'shop']);
 const COURIER_PREFS = 'restaurant_courier_prefs';
 const COURIER_LIVE = 'order_courier_live';
 const CUSTODY = 'custody_events';
@@ -190,22 +200,55 @@ function parseWanted(itemsIn, bad) {
 }
 
 /**
- * Нарх ФАҚАТ каталогдан (18-қоида): клиент нархи эътиборсиз. Ҳар қатор — шу объектнинг (`businessId`),
- * шу эганинг (`ownerPhone`), фаол, `kind == 'product'`, қатъий нархли маҳсулоти.
+ * «Бозорлар» STAGE 11 (эга 2026-11-16): бозор эълони (`market` бор) фақат `taxonomy/markets` да шу бўлим
+ * `orderable === true` бўлса буюртма қилинади (матрица — ягона манба, 7/10-қоида; бозор/бўлим номлари коддда
+ * ЙЎҚ). `market` йўқ маҳсулот (Аралаш ўз дўкони, объект маҳсулоти) — аввалгидек. Таксономия йўқ/бузуқ,
+ * бозор ёки бўлим топилмади → рад (fail closed).
+ * @returns {{ ok: true, market: string|null, category: string|null } | { ok: false, reason: string }}
+ */
+function taxonomyOrderable(m, taxonomy) {
+  if (m.market === undefined || m.market === null || m.market === '') return { ok: true, market: null, category: null };
+  const market = typeof m.market === 'string' ? m.market : '';
+  const markets = taxonomy && typeof taxonomy.markets === 'object' && taxonomy.markets ? taxonomy.markets : null;
+  if (!markets) return { ok: false, reason: 'TAXONOMY_UNAVAILABLE' };
+  const def = Object.prototype.hasOwnProperty.call(markets, market) ? markets[market] : null;
+  if (!def || !Array.isArray(def.categories)) return { ok: false, reason: 'MARKET_UNKNOWN' };
+  const category = typeof m.category === 'string' ? m.category : '';
+  const cat = category ? def.categories.find((c) => c && c.id === category) : null;
+  if (!cat) return { ok: false, reason: 'CATEGORY_UNKNOWN' };
+  if (cat.orderable !== true) return { ok: false, reason: 'CATEGORY_NOT_ORDERABLE' };
+  return { ok: true, market, category };
+}
+
+/**
+ * Нарх ФАҚАТ каталогдан (18-қоида): клиент нархи эътиборсиз. Ҳар қатор — фаол, `kind == 'product'`,
+ * қатъий нархли маҳсулот ва:
+ *   - `sellerKind 'business'`: шу объектнинг (`businessId`), шу эганинг (`ownerPhone`) маҳсулоти;
+ *   - `sellerKind 'shop'` (STAGE 11): `businessId`сиз, шу эганинг (`ownerPhone` = сотувчи) ўз дўкони маҳсулоти.
+ * Бозор эълони — `taxonomyOrderable` (рад → `ITEM_NOT_ORDERABLE`); бозор эълонида `status` АНИҚ 'active'
+ * бўлиши шарт (модерация), бозорсиз эски ҳужжатда майдон йўқ → 'active' (аввалгидек).
  * @param {Map<string, number>} wanted
  * @param {Map<string, object|null>} docs itemId → маълумот (йўқ бўлса null)
  */
-function priceLines({ wanted, docs, businessId, sellerUid, canon, bad }) {
+function priceLines({ wanted, docs, businessId, sellerUid, canon, bad, sellerKind = 'business', taxonomy = null }) {
   const items = [];
   let itemsTotal = 0;
   for (const [itemId, qty] of wanted) {
     const m = docs.get(itemId);
     if (!m) throw bad('ITEM_NOT_FOUND', { itemId });
-    if (String(m.businessId || '') !== businessId || canon(String(m.ownerPhone || '')) !== sellerUid) {
+    if (sellerKind === 'shop') {
+      if (String(m.businessId || '') !== '' || canon(String(m.ownerPhone || '')) !== sellerUid) {
+        throw bad('ITEM_NOT_IN_SHOP', { itemId });
+      }
+    } else if (String(m.businessId || '') !== businessId || canon(String(m.ownerPhone || '')) !== sellerUid) {
       throw bad('ITEM_NOT_IN_BUSINESS', { itemId });
     }
-    if (String(m.status || 'active') !== 'active') throw bad('ITEM_UNAVAILABLE', { itemId });
+    const hasMarket = typeof m.market === 'string' && m.market !== '';
+    const status = hasMarket ? String(m.status == null ? '' : m.status) : String(m.status || 'active');
+    if (status !== 'active') throw bad('ITEM_UNAVAILABLE', { itemId });
     if (String(m.kind || 'product') !== 'product') throw bad('ITEM_NOT_PRODUCT', { itemId });
+    const tx = taxonomyOrderable(m, taxonomy);
+    if (!tx.ok) throw bad('ITEM_NOT_ORDERABLE', { itemId, reason: tx.reason });
     const priceUnit = typeof m.priceUnit === 'string' ? m.priceUnit : '';
     if (!ORDERABLE_PRICE_UNITS.includes(priceUnit)) throw bad('PRICE_NOT_FIXED', { itemId, priceUnit });
     // Фақат ҲАҚИҚИЙ бутун сон (`'5000'` сатри ҳам рад): ҳужжатни эгаси ёзади (клиент маълумоти).
@@ -213,7 +256,11 @@ function priceLines({ wanted, docs, businessId, sellerUid, canon, bad }) {
     if (!Number.isInteger(price) || price <= 0 || price > MAX_PRICE) throw bad('ITEM_PRICE_INVALID', { itemId });
     const lineTotal = price * qty;
     itemsTotal += lineTotal;
-    items.push({ itemId, title: str(m.title, 120), unitPrice: price, priceUnit, qty, lineTotal });
+    items.push({
+      itemId, title: str(m.title, 120), unitPrice: price, priceUnit, qty, lineTotal,
+      // Бозор snapshot (STAGE 11): кейин таксономия ўзгарса ҳам буюртма ўзгармайди (9-қоида руҳи).
+      ...(tx.market ? { market: tx.market, category: tx.category } : {}),
+    });
   }
   if (!Number.isSafeInteger(itemsTotal)) throw bad('ITEMS_TOTAL_INVALID', {});
   return { items, itemsTotal };
@@ -273,6 +320,36 @@ function attachBusinessOrders(exportsObj, deps) {
     const s = await db.collection(TARIFF_DOC[0]).doc(TARIFF_DOC[1]).get();
     return s.exists ? (s.data() || {}) : {};
   }
+
+  /**
+   * `taxonomy/markets` — инстанс хотирасида TTL кеш (сукут 60 с, `BUSINESS_ORDERS_TAXONOMY_CACHE_MS`;
+   * тестда 0). Фақат бозор эълони бўлганда ўқилади (37-қоида). Ҳужжат йўқ → null (рад, fail closed).
+   */
+  let taxonomyCache = null;
+  async function readTaxonomy() {
+    const envMs = Number(process.env.BUSINESS_ORDERS_TAXONOMY_CACHE_MS);
+    const ttl = Number.isFinite(envMs) && envMs >= 0 ? envMs : TAXONOMY_CACHE_MS_DEFAULT;
+    const nowMs = Date.now();
+    if (taxonomyCache && ttl > 0 && nowMs - taxonomyCache.at < ttl) return taxonomyCache.data;
+    const s = await db.collection(TAXONOMY_DOC[0]).doc(TAXONOMY_DOC[1]).get();
+    const data = s.exists ? (s.data() || null) : null;
+    taxonomyCache = { at: nowMs, data };
+    return data;
+  }
+
+  /**
+   * Ўз дўкони олиб кетиш нуқтаси (PROPOSED, эга тасдиғи керак): `tv_shops/{ownerPhone}`
+   * `pickupLat`/`pickupLng` (сон), `pickupAddress`. Майдон йўқ → `SELLER_PICKUP_LOCATION_MISSING`.
+   */
+  function shopPickupOf(shop) {
+    const s = shop || {};
+    if (typeof s.pickupLat !== 'number' || typeof s.pickupLng !== 'number' || !validLatLng(s.pickupLat, s.pickupLng)) {
+      return null;
+    }
+    return { lat: s.pickupLat, lng: s.pickupLng, address: str(s.pickupAddress, 200) };
+  }
+
+  const sellerKindOf = (od) => (SELLER_KINDS.includes(od && od.sellerKind) ? od.sellerKind : 'business');
 
   // ── Умумий ёзувлар ───────────────────────────────────────────────────
   function statusPatch(bs, extra = {}) {
@@ -492,9 +569,79 @@ function attachBusinessOrders(exportsObj, deps) {
    * quote ва place учун УМУМИЙ тайёрлов (7-қоида): босқич, объект, сотувчи, маҳсулотлар, нарх,
    * етказиш тарифи, AVA улуши. Ёзув ЙЎҚ.
    */
+  /** Бозор эълони бўлса таксономия (бир марта), акс ҳолда null — ўқиш йўқ. */
+  async function taxonomyFor(docs) {
+    for (const m of docs.values()) {
+      if (m && m.market !== undefined && m.market !== null && m.market !== '') return readTaxonomy();
+    }
+    return null;
+  }
+
+  function avaFeeOf(cfg, itemsTotal) {
+    // Ресторан ҳужжатидаги `avaFeeBps` — ресторан улуши (D9), бизнес буюртмасига ТЕГИШЛИ ЭМАС:
+    // эга 2026-11-03 — бизнес буюртмасидан AVA улуши йўқ. Муҳр версияси = босқич конфиги версияси.
+    const ava = resolveAvaFee({ version: cfg.version });
+    if (!ava.ok) throw fail('failed-precondition', ava.code);
+    return {
+      rateBps: ava.rateBps,
+      basis: itemsTotal,
+      amount: tariff.computeAvaFee(itemsTotal, { rateBps: ava.rateBps }).amount,
+      version: AVA_FEE_LEDGER_VERSION,
+      settingsVersion: ava.settingsVersion,
+      rateSource: ava.source,
+      charged: false,
+    };
+  }
+
+  /**
+   * STAGE 11 — ўз дўкони (`businessId`сиз) маҳсулотлари: сотувчи = маҳсулот `ownerPhone` (ҳамма қатор бир
+   * эгадан), дўкон блокланмаган, олиб кетиш нуқтаси `tv_shops/{ownerPhone}` да (PROPOSED манба).
+   */
+  async function prepareShopOrder(uid, d, cfg, wanted) {
+    const toLat = d.lat != null ? Number(d.lat) : Number.NaN;
+    const toLng = d.lng != null ? Number(d.lng) : Number.NaN;
+    const ids = [...wanted.keys()];
+    const snaps = await db.getAll(...ids.map((id) => db.collection(ITEMS).doc(id)));
+    const docs = new Map(snaps.map((s) => [s.id, s.exists ? (s.data() || {}) : null]));
+    const first = docs.get(ids[0]);
+    if (!first) throw fail('failed-precondition', 'ITEM_NOT_FOUND', { itemId: ids[0] });
+    const sellerUid = canon(first.ownerPhone);
+    if (!TESTER_RE.test(sellerUid)) throw fail('failed-precondition', 'SHOP_NO_OWNER');
+    const districtId = str(first.districtId, 64);
+    const access = accessOf(cfg, uid, districtId);
+    if (!access.allowed) throw fail('failed-precondition', access.reason, { stage: access.stage });
+    if (sellerUid === uid) throw fail('failed-precondition', 'OWN_BUSINESS');
+    const shopSnap = await db.collection(TV_SHOPS).doc(sellerUid).get();
+    const shop = shopSnap.exists ? (shopSnap.data() || {}) : {};
+    if (String(shop.status || 'active') === 'blocked') throw fail('failed-precondition', 'SHOP_BLOCKED');
+    const taxonomy = await taxonomyFor(docs);
+    const { items, itemsTotal } = priceLines({
+      wanted, docs, businessId: '', sellerUid, canon, bad: bad('failed-precondition'), sellerKind: 'shop', taxonomy,
+    });
+    const pickup = shopPickupOf(shop);
+    if (!pickup) throw fail('failed-precondition', 'SELLER_PICKUP_LOCATION_MISSING');
+    if (!validLatLng(toLat, toLng)) throw fail('invalid-argument', 'DELIVERY_ADDRESS_REQUIRED');
+    const avaFee = avaFeeOf(cfg, itemsTotal);
+    const quote = await quoteDelivery({ fromLat: pickup.lat, fromLng: pickup.lng, toLat, toLng }, await readTariffDoc());
+    const b = {
+      name: str(shop.name || first.ownerName, 80),
+      address: pickup.address,
+      regionId: str(first.regionId, 64),
+    };
+    return {
+      cfg, sellerKind: 'shop', businessId: null, b, districtId, sellerUid,
+      fromLat: pickup.lat, fromLng: pickup.lng, toLat, toLng, items, itemsTotal, quote, avaFee,
+      taxonomyVersion: taxonomy && Number.isInteger(taxonomy.version) ? taxonomy.version : null,
+    };
+  }
+
   async function prepareOrder(uid, d) {
     const cfg = await readConfig();
     if (cfg.stage === 'off') throw fail('failed-precondition', 'MODULE_OFF', { stage: 'off' });
+    // STAGE 11: `businessId` берилмаган (null/'' ) → ўз дўкони режими; эски клиент ҳар доим юборади.
+    if (d.businessId === undefined || d.businessId === null || d.businessId === '') {
+      return prepareShopOrder(uid, d, cfg, parseWanted(d.items, bad('invalid-argument')));
+    }
     const businessId = str(d.businessId, 128);
     if (!businessId || !DOC_ID_RE.test(businessId)) throw fail('invalid-argument', 'BUSINESS_ID_REQUIRED');
     const toLat = d.lat != null ? Number(d.lat) : Number.NaN;
@@ -522,26 +669,19 @@ function attachBusinessOrders(exportsObj, deps) {
     const ids = [...wanted.keys()];
     const snaps = await db.getAll(...ids.map((id) => db.collection(ITEMS).doc(id)));
     const docs = new Map(snaps.map((s) => [s.id, s.exists ? (s.data() || {}) : null]));
+    const taxonomy = await taxonomyFor(docs);
     const { items, itemsTotal } = priceLines({
-      wanted, docs, businessId, sellerUid, canon, bad: bad('failed-precondition'),
+      wanted, docs, businessId, sellerUid, canon, bad: bad('failed-precondition'), sellerKind: 'business', taxonomy,
     });
 
     const tariffDoc = await readTariffDoc();
-    // Ресторан ҳужжатидаги `avaFeeBps` — ресторан улуши (D9), бизнес буюртмасига ТЕГИШЛИ ЭМАС:
-    // эга 2026-11-03 — бизнес буюртмасидан AVA улуши йўқ. Муҳр версияси = босқич конфиги версияси.
-    const ava = resolveAvaFee({ version: cfg.version });
-    if (!ava.ok) throw fail('failed-precondition', ava.code);
+    const avaFee = avaFeeOf(cfg, itemsTotal);
     const quote = await quoteDelivery({ fromLat, fromLng, toLat, toLng }, tariffDoc);
-    const avaFee = {
-      rateBps: ava.rateBps,
-      basis: itemsTotal,
-      amount: tariff.computeAvaFee(itemsTotal, { rateBps: ava.rateBps }).amount,
-      version: AVA_FEE_LEDGER_VERSION,
-      settingsVersion: ava.settingsVersion,
-      rateSource: ava.source,
-      charged: false,
+    return {
+      cfg, sellerKind: 'business', businessId, b, districtId, sellerUid, fromLat, fromLng, toLat, toLng,
+      items, itemsTotal, quote, avaFee,
+      taxonomyVersion: taxonomy && Number.isInteger(taxonomy.version) ? taxonomy.version : null,
     };
-    return { cfg, businessId, b, districtId, sellerUid, fromLat, fromLng, toLat, toLng, items, itemsTotal, quote, avaFee };
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -554,8 +694,13 @@ function attachBusinessOrders(exportsObj, deps) {
     const cfg = await readConfig();
     let districtId = '';
     const businessId = str(data && data.businessId, 128);
+    const itemId = str(data && data.itemId, 128);
     if (cfg.stage === 'pilot' && businessId && DOC_ID_RE.test(businessId)) {
       const s = await db.collection(BUSINESSES).doc(businessId).get();
+      districtId = s.exists ? str((s.data() || {}).districtId, 64) : '';
+    } else if (cfg.stage === 'pilot' && !businessId && itemId && DOC_ID_RE.test(itemId)) {
+      // STAGE 11: ўз дўкони — маҳсулот тумани (prepareShopOrder билан бир хил манба).
+      const s = await db.collection(ITEMS).doc(itemId).get();
       districtId = s.exists ? str((s.data() || {}).districtId, 64) : '';
     }
     const a = accessOf(cfg, uid, districtId);
@@ -621,10 +766,15 @@ function attachBusinessOrders(exportsObj, deps) {
       const payload = {
         type: ORDER_TYPE, module: MODULE_ID,
         businessId: p.businessId,
+        // STAGE 11: 'business' (объект) | 'shop' (ўз дўкони; businessId null, олиб кетиш нуқтаси —
+        // businessLat/Lng майдонларида, курьер оқими ўзгармасин).
+        sellerKind: p.sellerKind,
         businessName: str(p.b.name, 80),
         businessAddress: str(p.b.address, 200),
         businessLat: p.fromLat, businessLng: p.fromLng,
         sellerUid: p.sellerUid,
+        // Бозор snapshot: қаторларда market/category; таксономия версияси (бозор эълони йўқ → null).
+        taxonomyVersion: p.taxonomyVersion,
         regionId: str(p.b.regionId, 64) || null,
         districtId: p.districtId || null,
         ...statusPatch(BS.placed),
@@ -714,9 +864,17 @@ function attachBusinessOrders(exportsObj, deps) {
       if (od.businessStatus === BS.accepted) return { ok: true, idempotent: true };
       assertTransition(od, BS.accepted, orderId);
       // Объект админ томонидан блокланган/ўчирилган бўлса — янги иш олинмайди (рад этиш мумкин).
-      const bSnap = await t.get(db.collection(BUSINESSES).doc(String(od.businessId || '_')));
-      if (!bSnap.exists || String((bSnap.data() || {}).status || 'active') !== 'active') {
-        throw fail('failed-precondition', 'BUSINESS_NOT_ACTIVE');
+      if (sellerKindOf(od) === 'shop') {
+        // STAGE 11: ўз дўкони — admin блоклаган дўкон (`tv_shops.status == 'blocked'`) янги иш олмайди.
+        const sSnap = await t.get(db.collection(TV_SHOPS).doc(canon(od.sellerUid) || '_'));
+        if (sSnap.exists && String((sSnap.data() || {}).status || 'active') === 'blocked') {
+          throw fail('failed-precondition', 'SHOP_BLOCKED');
+        }
+      } else {
+        const bSnap = await t.get(db.collection(BUSINESSES).doc(String(od.businessId || '_')));
+        if (!bSnap.exists || String((bSnap.data() || {}).status || 'active') !== 'active') {
+          throw fail('failed-precondition', 'BUSINESS_NOT_ACTIVE');
+        }
       }
       t.update(orderRef, statusPatch(BS.accepted, { acceptedAt: ts(), acceptedBy: uid, acceptDeadlineAt: null }));
       addEvent(t, orderRef, { from: BS.placed, to: BS.accepted, actor: 'seller', actorId: uid });
@@ -1243,7 +1401,8 @@ module.exports = {
   MODULE_ID, CC_MODULE, CONFIG_DOC, TARIFF_DOC, TARIFF_HISTORY, STAGES,
   ACCEPT_TIMEOUT_MIN_DEFAULT, MAX_ITEMS, MAX_QTY, ORDERABLE_PRICE_UNITS, GOODS_PAYMENT, DELIVERY_PAYMENT,
   PICKUP_CODE_ATTEMPTS,
-  parseConfig, accessOf, resolveAvaFee, parseWanted, priceLines,
+  parseConfig, accessOf, resolveAvaFee, parseWanted, priceLines, taxonomyOrderable,
+  TV_SHOPS, TAXONOMY_DOC, SELLER_KINDS,
   // Ҳолатлар — business_order_states.js (қайта экспорт, қулайлик учун)
   ...states,
 };

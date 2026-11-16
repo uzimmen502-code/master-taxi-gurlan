@@ -732,7 +732,15 @@ function attachDeliveryFailed(exportsObj, deps) {
     const modules = MODULES.filter((m) => DECIDER_ROLES[m].includes(role));
     if (!modules.includes('business')) {
       const own = await db.collection('businesses').where('ownerId', '==', uid).limit(1).get();
-      if (!own.empty) modules.push('business');
+      if (!own.empty) {
+        modules.push('business');
+      } else {
+        // «Бозорлар» STAGE 11: ўз дўкони сотувчиси (объекти йўқ) — фақат ЎЗИНИНГ очиқ «етказилмади»
+        // буюртмаси бўлса (иккита тенглик филтри — композит индекс керак эмас).
+        const mine = await db.collection(SPECS.business.collection)
+          .where(OPEN, '==', true).where('sellerUid', '==', uid).limit(1).get();
+        if (!mine.empty) modules.push('business');
+      }
     }
     if (modules.length === 0) throw fail('permission-denied', 'DF_NOT_ALLOWED');
     const nowMs = now().getTime();

@@ -91,6 +91,21 @@ const MAX_PRICE = 999999999;
  * 'from' (… дан бошлаб) ва 'negotiable' — қатъий нарх эмас; соат/кун/ой/сеанс/киши — хизмат бирликлари.
  */
 const ORDERABLE_PRICE_UNITS = Object.freeze(['', 'piece', 'kg', 'm2']);
+/**
+ * «Катта» товарлар (эга 2026-11-16): етказиш нархи тарифдан ЭМАС — сўров орқали (delivery_quotes.js;
+ * биринчи жавоб берган админ/курьер нархи). Ягона манба — шу константа (бозор → бўлимлар).
+ * Оддий quote/place бундай қаторни `DELIVERY_QUOTE_REQUIRED` билан рад этади.
+ */
+const LARGE_DELIVERY_CATEGORIES = Object.freeze({
+  appliances: Object.freeze(['fridges', 'washers', 'stoves', 'air_conditioners']),
+});
+/** priceLines қатори (market/category snapshot) катта товарми. */
+function isLargeDeliveryLine(line) {
+  const cats = line && typeof line.market === 'string'
+    && Object.prototype.hasOwnProperty.call(LARGE_DELIVERY_CATEGORIES, line.market)
+    ? LARGE_DELIVERY_CATEGORIES[line.market] : null;
+  return !!cats && cats.includes(line.category);
+}
 const GOODS_PAYMENT = Object.freeze(['cash_buyout']);
 const DELIVERY_PAYMENT = Object.freeze(['cash', 'wallet']);
 const PICKUP_CODE_ATTEMPTS = 5;
@@ -570,6 +585,36 @@ function attachBusinessOrders(exportsObj, deps) {
    * етказиш тарифи, AVA улуши. Ёзув ЙЎҚ.
    */
   /** Бозор эълони бўлса таксономия (бир марта), акс ҳолда null — ўқиш йўқ. */
+  /**
+   * Етказиш нархи режими (STAGE 11, катта товар): `opts.delivery`
+   *   - йўқ → масофа тарифи (аввалгидек); катта товар → `DELIVERY_QUOTE_REQUIRED`;
+   *   - `{ mode: 'request' }` → нарх ҲИСОБЛАНМАЙДИ (сўров яратиш; quote = null);
+   *   - `{ mode: 'quote', fee, quoteId }` → сервердаги сўров нархи (клиент эмас — 18-қоида).
+   * Сўров режимлари фақат битта катта товар қатори учун (`DELIVERY_QUOTE_NOT_NEEDED`).
+   */
+  async function resolveDelivery(opts, items, from, to) {
+    const delivery = opts && opts.delivery ? opts.delivery : null;
+    const large = items.some(isLargeDeliveryLine);
+    if (!delivery) {
+      if (large) throw fail('failed-precondition', 'DELIVERY_QUOTE_REQUIRED');
+      return quoteDelivery({ fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng }, await readTariffDoc());
+    }
+    if (!large || items.length !== 1) throw fail('failed-precondition', 'DELIVERY_QUOTE_NOT_NEEDED');
+    if (delivery.mode === 'request') return null;
+    if (delivery.mode !== 'quote' || !Number.isSafeInteger(delivery.fee) || delivery.fee <= 0) {
+      throw fail('failed-precondition', 'QUOTE_NOT_ANSWERED');
+    }
+    return {
+      deliveryFee: delivery.fee,
+      deliveryTariffVersion: null,
+      deliveryTariffSnapshot: null,
+      deliveryFeeSource: 'delivery_quote',
+      deliveryQuoteId: String(delivery.quoteId || ''),
+      distanceMeters: Math.round(tariff.haversineMeters(from.lat, from.lng, to.lat, to.lng)),
+      distanceSource: 'straight',
+    };
+  }
+
   async function taxonomyFor(docs) {
     for (const m of docs.values()) {
       if (m && m.market !== undefined && m.market !== null && m.market !== '') return readTaxonomy();
@@ -597,7 +642,7 @@ function attachBusinessOrders(exportsObj, deps) {
    * STAGE 11 — ўз дўкони (`businessId`сиз) маҳсулотлари: сотувчи = маҳсулот `ownerPhone` (ҳамма қатор бир
    * эгадан), дўкон блокланмаган, олиб кетиш нуқтаси `tv_shops/{ownerPhone}` да (PROPOSED манба).
    */
-  async function prepareShopOrder(uid, d, cfg, wanted) {
+  async function prepareShopOrder(uid, d, cfg, wanted, opts) {
     const toLat = d.lat != null ? Number(d.lat) : Number.NaN;
     const toLng = d.lng != null ? Number(d.lng) : Number.NaN;
     const ids = [...wanted.keys()];
@@ -622,7 +667,7 @@ function attachBusinessOrders(exportsObj, deps) {
     if (!pickup) throw fail('failed-precondition', 'SELLER_PICKUP_LOCATION_MISSING');
     if (!validLatLng(toLat, toLng)) throw fail('invalid-argument', 'DELIVERY_ADDRESS_REQUIRED');
     const avaFee = avaFeeOf(cfg, itemsTotal);
-    const quote = await quoteDelivery({ fromLat: pickup.lat, fromLng: pickup.lng, toLat, toLng }, await readTariffDoc());
+    const quote = await resolveDelivery(opts, items, pickup, { lat: toLat, lng: toLng });
     const b = {
       name: str(shop.name || first.ownerName, 80),
       address: pickup.address,
@@ -635,12 +680,12 @@ function attachBusinessOrders(exportsObj, deps) {
     };
   }
 
-  async function prepareOrder(uid, d) {
+  async function prepareOrder(uid, d, opts = {}) {
     const cfg = await readConfig();
     if (cfg.stage === 'off') throw fail('failed-precondition', 'MODULE_OFF', { stage: 'off' });
     // STAGE 11: `businessId` берилмаган (null/'' ) → ўз дўкони режими; эски клиент ҳар доим юборади.
     if (d.businessId === undefined || d.businessId === null || d.businessId === '') {
-      return prepareShopOrder(uid, d, cfg, parseWanted(d.items, bad('invalid-argument')));
+      return prepareShopOrder(uid, d, cfg, parseWanted(d.items, bad('invalid-argument')), opts);
     }
     const businessId = str(d.businessId, 128);
     if (!businessId || !DOC_ID_RE.test(businessId)) throw fail('invalid-argument', 'BUSINESS_ID_REQUIRED');
@@ -674,9 +719,8 @@ function attachBusinessOrders(exportsObj, deps) {
       wanted, docs, businessId, sellerUid, canon, bad: bad('failed-precondition'), sellerKind: 'business', taxonomy,
     });
 
-    const tariffDoc = await readTariffDoc();
     const avaFee = avaFeeOf(cfg, itemsTotal);
-    const quote = await quoteDelivery({ fromLat, fromLng, toLat, toLng }, tariffDoc);
+    const quote = await resolveDelivery(opts, items, { lat: fromLat, lng: fromLng }, { lat: toLat, lng: toLng });
     return {
       cfg, sellerKind: 'business', businessId, b, districtId, sellerUid, fromLat, fromLng, toLat, toLng,
       items, itemsTotal, quote, avaFee,
@@ -734,12 +778,13 @@ function attachBusinessOrders(exportsObj, deps) {
    * Нарх фақат серверда (18), идемпотент (`wallet_idempotency/{key}` — транзакциядан олдин ва ичида, 21),
    * `placed` + `acceptDeadlineAt`. Пул ҳаракати ЙЎҚ (етказиш ҳақи — якунда).
    */
-  exportsObj.placeBusinessOrder = functions
-    .runWith({ secrets: ['DIRECTIONS_API_KEY'] })
-    .https.onCall(async (data, context) => {
+  /**
+   * Умумий жойлаштириш (7-қоида): `placeBusinessOrder` ва `acceptDeliveryQuote` (delivery_quotes.js).
+   * `opts.delivery` — resolveDelivery; `opts.txCheck(t)` — транзакцияда ЎҚИЙДИ (ёзувдан олдин) ва
+   * `(t, orderId) => void` ёзувчини қайтаради (масалан сўровни `used` қилиш — буюртма билан атомар).
+   */
+  async function placeOrder(uid, d, opts = {}) {
       const t0 = Date.now();
-      const uid = requirePhoneUid(context);
-      const d = data || {};
       const idempotencyKey = str(d.idempotencyKey, 80);
       if (!IDEM_RE.test(idempotencyKey)) throw fail('invalid-argument', 'IDEMPOTENCY_KEY_INVALID');
       const deliveryPaymentMethod = d.deliveryPaymentMethod == null ? 'cash' : d.deliveryPaymentMethod;
@@ -756,7 +801,7 @@ function attachBusinessOrders(exportsObj, deps) {
         return { ...(ed.result || { ok: true }), duplicate: true };
       }
 
-      const p = await prepareOrder(uid, d);
+      const p = await prepareOrder(uid, d, opts);
       const userSnap = await db.collection('users').doc(uid).get();
       const ud = userSnap.exists ? (userSnap.data() || {}) : {};
       const at = now();
@@ -789,7 +834,9 @@ function attachBusinessOrders(exportsObj, deps) {
         deliveryFee,
         total: p.itemsTotal + deliveryFee,
         fulfillmentMode: 'delivery', deliveryMode: 'ava_courier',
-        deliveryFeeSource: 'ava_tariff',
+        deliveryFeeSource: p.quote.deliveryFeeSource || 'ava_tariff',
+        // Катта товар: сервердаги сўров нархи (delivery_quotes/{id}); тариф версияси йўқ (null).
+        ...(p.quote.deliveryQuoteId ? { deliveryQuoteId: p.quote.deliveryQuoteId } : {}),
         deliveryTariffVersion: p.quote.deliveryTariffVersion,
         deliveryTariffSnapshot: p.quote.deliveryTariffSnapshot,
         distanceMeters: p.quote.distanceMeters,
@@ -808,6 +855,7 @@ function attachBusinessOrders(exportsObj, deps) {
       const txRes = await db.runTransaction(async (t) => {
         const again = await t.get(idemRef);
         if (again.exists) return { dup: (again.data() || {}).result || { ok: true } };
+        const extraWrite = opts.txCheck ? await opts.txCheck(t) : null;
         t.set(orderRef, payload);
         t.set(orderRef.collection(PRIVATE).doc('secrets'), { pickupCode: pickupCode(), pickupAttempts: 0, createdAt: ts() });
         addEvent(t, orderRef, {
@@ -815,6 +863,7 @@ function attachBusinessOrders(exportsObj, deps) {
           meta: { itemsTotal: p.itemsTotal, deliveryFee, deliveryTariffVersion: p.quote.deliveryTariffVersion, deliveryPaymentMethod, goodsPaymentMethod },
         });
         t.set(idemRef, { type: 'placeBusinessOrder', uid, result, createdAt: ts() });
+        if (typeof extraWrite === 'function') extraWrite(t, orderRef.id);
         return { created: true };
       });
       if (txRes.dup) return { ...txRes.dup, duplicate: true };
@@ -824,7 +873,11 @@ function attachBusinessOrders(exportsObj, deps) {
       });
       await notifySeller(p.sellerUid, 'business_order_new', { amount: groupThousands(p.itemsTotal), min: p.cfg.acceptTimeoutMin }, orderRef.id, p.businessId);
       return result;
-    });
+  }
+
+  exportsObj.placeBusinessOrder = functions
+    .runWith({ secrets: ['DIRECTIONS_API_KEY'] })
+    .https.onCall(async (data, context) => placeOrder(requirePhoneUid(context), data || {}));
 
   /** Мижоз бекор қилади — ФАҚАТ `placed` (сотувчи қабул қилмаган). */
   exportsObj.customerCancelBusinessOrder = functions.https.onCall(async (data, context) => {
@@ -1393,7 +1446,8 @@ function attachBusinessOrders(exportsObj, deps) {
     };
   });
 
-  return { expireUnaccepted, readConfig };
+  // Ички API (delivery_quotes.js): ягона тайёрлов/жойлаштириш йўли (7-қоида).
+  return { expireUnaccepted, readConfig, prepareOrder, placeOrder };
 }
 
 module.exports = {
@@ -1402,6 +1456,7 @@ module.exports = {
   ACCEPT_TIMEOUT_MIN_DEFAULT, MAX_ITEMS, MAX_QTY, ORDERABLE_PRICE_UNITS, GOODS_PAYMENT, DELIVERY_PAYMENT,
   PICKUP_CODE_ATTEMPTS,
   parseConfig, accessOf, resolveAvaFee, parseWanted, priceLines, taxonomyOrderable,
+  LARGE_DELIVERY_CATEGORIES, isLargeDeliveryLine, DOC_ID_RE,
   TV_SHOPS, TAXONOMY_DOC, SELLER_KINDS,
   // Ҳолатлар — business_order_states.js (қайта экспорт, қулайлик учун)
   ...states,

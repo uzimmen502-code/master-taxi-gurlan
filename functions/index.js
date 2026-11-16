@@ -116,11 +116,18 @@ attachRestaurantOrders(exports, {
 // Босқич `server_config/business_orders` (сукут OFF). Эски `orders` callable'лари уни ресторан каби четлайди.
 const businessOrdersLib = require('./business_orders');
 const isBusinessOrder = businessOrdersLib.isBusinessOrder;
-businessOrdersLib.attachBusinessOrders(exports, {
+const businessOrdersApi = businessOrdersLib.attachBusinessOrders(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, axios,
   requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES, customerConfirm, courierPush,
   get courierAuth() { return courierAuth; },
   notifyCourierArrivedToCustomer: (phone, extra) => notifyCourierArrivedToCustomer(phone, extra),
+});
+// «Бозорлар» STAGE 11 (эга 2026-11-16): катта маиший техника етказиш нархи СЎРОВИ — биринчи жавоб берган
+// админ/курьер нархи; буюртма шу placeOrder йўли орқали (delivery_quotes.js).
+require('./delivery_quotes').attachDeliveryQuotes(exports, {
+  functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp, COURIER_AUTH_MODES, courierPush,
+  get courierAuth() { return courierAuth; },
+  businessOrders: businessOrdersApi,
 });
 // Таом кухналари умумий рўйхати (D-REST-24, 2026-10-19): сотувчи ўз кухна номини
 // дубликатсиз қўшади; админ яширади.

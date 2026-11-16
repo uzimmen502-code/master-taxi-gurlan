@@ -765,7 +765,10 @@ service cloud.firestore {
           && (!('attrs' in d) || (d.attrs is map && d.attrs.size() <= 20))
           && d.get('imported', false) is bool
           && (!('regionId' in d) || (d.regionId is string && d.regionId.size() >= 1 && d.regionId.size() <= 40))
-          && (!('taxonomyVersion' in d) || (d.taxonomyVersion is int && d.taxonomyVersion >= 1));
+          && (!('taxonomyVersion' in d) || (d.taxonomyVersion is int && d.taxonomyVersion >= 1))
+          // AVA AI нарх қидируви (эга 2026-11-17, А вариант): ихтиёрий «тахминий вазн» — бир бирлик, бутун грамм,
+          // wholesale_products.unitWeightG билан бир хил чегара (1 г .. 10 т). Йўқ — эски ҳужжатлар ўзгармайди.
+          && (!('unitWeightG' in d) || (d.unitWeightG is int && d.unitWeightG >= 1 && d.unitWeightG <= 10000000));
     }
 
     // businessId faqat shu foydalanuvchining O'Z ob'ektiga (businesses/{id}.ownerId); mavjud bo'lmagan ob'ektga

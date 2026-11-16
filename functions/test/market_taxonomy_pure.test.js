@@ -94,6 +94,44 @@ check('P9 upgrade decide: WRITE v2 / CONFLICT / NOOP (қайта) / REMOVE_REFUS
   assert.strictEqual(decide({ exists: false }, 1, V2.markets).action, 'MISSING');
   assert.deepStrictEqual(fromValue(toValue(V2.markets)), V2.markets);
 });
+const V3_RAW = fs.readFileSync(path.join(__dirname, '..', 'tools', 'data', 'market_taxonomy_v3.json'), 'utf8');
+const V3 = JSON.parse(V3_RAW);
+check('P10 v3 ўтади; 4 эски бозор v2 билан БАЙТМА-БАЙТ бир хил; electronics/appliances янги бўлимлар (эга 2026-11-16)', () => {
+  expectOk(V3);
+  assert.deepStrictEqual(Object.keys(V3.markets), Object.keys(V2.markets));
+  for (const id of ['livestock', 'auto', 'meat', 'farm']) {
+    assert.strictEqual(JSON.stringify(V3.markets[id]), JSON.stringify(V2.markets[id]), id);
+  }
+  const e = V3.markets.electronics;
+  const a = V3.markets.appliances;
+  assert.deepStrictEqual(e.categories.map((c) => c.id),
+    ['phones', 'laptops', 'computers', 'tv', 'tablets', 'smartwatches', 'audio_video', 'accessories', 'other']);
+  assert.deepStrictEqual(a.categories.map((c) => c.id),
+    ['fridges', 'washers', 'stoves', 'air_conditioners', 'vacuums', 'kitchen', 'heaters', 'other']);
+  assert.ok([...e.categories, ...a.categories].every((c) => c.orderable === true));
+  assert.deepStrictEqual(e.categories[0].names, { uz_Cyrl: 'Смартфонлар', uz_Latn: 'Smartfonlar', ru: 'Смартфоны' });
+  assert.deepStrictEqual(a.categories[3].names, { uz_Cyrl: 'Кондиционерлар', uz_Latn: 'Konditsionerlar', ru: 'Кондиционеры' });
+  assert.deepStrictEqual(e.fields.find((f) => f.key === 'storage_gb').categories, ['phones', 'laptops', 'computers', 'tablets']);
+  // Бўлимлардан бошқа ҳамма нарса v2 билан бир хил.
+  for (const id of ['electronics', 'appliances']) {
+    const strip = (m) => JSON.stringify({ ...m, categories: null,
+      fields: m.fields.map((f) => (f.key === 'storage_gb' ? { ...f, categories: null } : f)) });
+    assert.strictEqual(strip(V3.markets[id]), strip(V2.markets[id]), id);
+  }
+  // Эски id лар қолмади.
+  const ids = [...e.categories, ...a.categories].map((c) => c.id);
+  for (const old of ['gadgets', 'large', 'small', 'climate']) assert.ok(!ids.includes(old), old);
+});
+check('P11 upgrade v2 → v3: бўлим олиб ташлаш = changed (WRITE v3), бозор олиб ташлаш эмас', () => {
+  const { decide, diffMarkets } = require('../tools/upgrade_market_taxonomy');
+  assert.deepStrictEqual(diffMarkets(V2.markets, V3.markets),
+    { added: [], changed: ['electronics', 'appliances'], removed: [], unchanged: ['livestock', 'auto', 'meat', 'farm'] });
+  const v2doc = { exists: true, version: 2, markets: V2.markets };
+  const d = decide(v2doc, 2, V3.markets);
+  assert.deepStrictEqual([d.action, d.version], ['WRITE', 3]);
+  assert.strictEqual(decide({ exists: true, version: 3, markets: V3.markets }, 2, V3.markets).action, 'NOOP');
+  assert.strictEqual(decide(v2doc, 1, V3.markets).action, 'TAXONOMY_VERSION_CONFLICT');
+});
 check('P4 normalizeTaxonomy сатрларни trim қилади, бошқа қийматга тегмайди', () => {
   const n = t.normalizeTaxonomy({ a: '  x ', b: [' y', 3, true, null], c: { d: ' z' } });
   assert.deepStrictEqual(n, { a: 'x', b: ['y', 3, true, null], c: { d: 'z' } });

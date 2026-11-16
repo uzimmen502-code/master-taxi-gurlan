@@ -344,6 +344,8 @@ const _kServiceIcons = <String, IconData>{
   'auto_market': Icons.directions_car_rounded,
   'meat_market': Icons.kebab_dining_rounded,
   'farm_market': Icons.agriculture_rounded,
+  'electronics_market': Icons.devices_rounded,
+  'appliances_market': Icons.local_laundry_service_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -426,6 +428,11 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFFC0392B);
     case 'farm_market':
       return const Color(0xFF5FA829);
+    // Эга 2026-11-16: электроника — индиго, маиший техника — денгиз кўк.
+    case 'electronics_market':
+      return const Color(0xFF5B4FCF);
+    case 'appliances_market':
+      return const Color(0xFF0F8FB8);
     // ── Медиа ва ижтимоий ───────────────────────────────────────
     case 'tv_market':
       return const Color(0xFFE9497F);

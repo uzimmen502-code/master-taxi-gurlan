@@ -180,12 +180,14 @@ void main() {
       'auto_market',
       'meat_market',
       'farm_market',
+      'electronics_market',
+      'appliances_market',
       'wholesale_market',
       'china_market',
       'realty',
     ];
 
-    test('7 модул — rings', () {
+    test('9 модул — rings', () {
       for (final id in ids) {
         expect(geoPolicyFor(id).mode, GeoMode.rings, reason: id);
       }

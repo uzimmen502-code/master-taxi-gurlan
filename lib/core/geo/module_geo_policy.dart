@@ -144,6 +144,21 @@ const Map<String, ModuleGeoPolicy> kModuleGeoPolicies = {
     defaultLevel: GeoLevel.nation,
     persistSelection: false,
   ),
+  // Эга 2026-11-16: Электроника ва Маиший техника бозорлари — бошқа бозорлар каби.
+  'electronics_market': ModuleGeoPolicy(
+    moduleId: 'electronics_market',
+    mode: GeoMode.rings,
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
+  ),
+  'appliances_market': ModuleGeoPolicy(
+    moduleId: 'appliances_market',
+    mode: GeoMode.rings,
+    levels: _marketLevels,
+    defaultLevel: GeoLevel.nation,
+    persistSelection: false,
+  ),
   'tv_market': ModuleGeoPolicy(
     moduleId: 'tv_market',
     mode: GeoMode.tiered,

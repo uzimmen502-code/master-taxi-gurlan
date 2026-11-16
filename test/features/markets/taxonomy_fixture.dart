@@ -95,3 +95,37 @@ final Map<String, dynamic> kTaxonomyDocV1 = {
 };
 
 MarketTaxonomy get kTaxonomyV1 => MarketTaxonomy.fromMap(kTaxonomyDocV1);
+
+/// v2 (эга 2026-11-16, functions/tools/data/market_taxonomy_v2.json): v1 + Электроника (50) ва Маиший техника (60).
+final Map<String, dynamic> kTaxonomyDocV2 = {
+  'version': 2,
+  'markets': {
+    ...(kTaxonomyDocV1['markets'] as Map<String, dynamic>),
+    'electronics': {
+      'moduleId': 'electronics_market',
+      'order': 50,
+      'names': _n('Электроника бозори', 'Elektronika bozori', 'Рынок электроники'),
+      'categories': [
+        {'id': 'phones', 'names': _n('Телефонлар')},
+        {'id': 'computers', 'names': _n('Компьютерлар')},
+        {'id': 'tv', 'names': _n('Телевизорлар')},
+        {'id': 'gadgets', 'names': _n('Гаджетлар')},
+        {'id': 'accessories', 'names': _n('Аксессуарлар')},
+      ],
+      'priceUnits': ['', 'piece'],
+    },
+    'appliances': {
+      'moduleId': 'appliances_market',
+      'order': 60,
+      'names': _n('Маиший техника бозори', 'Maishiy texnika bozori', 'Рынок бытовой техники'),
+      'categories': [
+        {'id': 'large', 'names': _n('Йирик техника')},
+        {'id': 'small', 'names': _n('Кичик техника')},
+        {'id': 'climate', 'names': _n('Иқлим техникаси')},
+      ],
+      'priceUnits': ['', 'piece'],
+    },
+  },
+};
+
+MarketTaxonomy get kTaxonomyV2 => MarketTaxonomy.fromMap(kTaxonomyDocV2);

@@ -9,11 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// йўқ ID бўлса — `ServiceConfigHolder.statusOf` уни ЯШИРИН деб ҳисоблайди
 /// ва админ «Ҳудудлар ва хизматлар»да ҳам кўринмайди.
 void main() {
-  test('kKnownModuleIds — такрорсиз; 4 бозор модули бор', () {
+  test('kKnownModuleIds — такрорсиз; 6 бозор модули бор', () {
     expect(kKnownModuleIds.toSet().length, kKnownModuleIds.length);
     expect(
       kKnownModuleIds,
-      containsAll(['livestock_market', 'auto_market', 'meat_market', 'farm_market']),
+      containsAll(['livestock_market', 'auto_market', 'meat_market', 'farm_market', 'electronics_market', 'appliances_market']),
     );
   });
 
@@ -57,7 +57,7 @@ void main() {
     }
     // Эга, 2026-11-15: бозор модуллари учун бош саҳифа плиткаси ҲОЗИРЧА ЙЎҚ.
     final ids = items.map((e) => e.moduleId).toSet();
-    for (final m in ['livestock_market', 'auto_market', 'meat_market', 'farm_market']) {
+    for (final m in ['livestock_market', 'auto_market', 'meat_market', 'farm_market', 'electronics_market', 'appliances_market']) {
       expect(ids.contains(m), isFalse, reason: m);
     }
   });

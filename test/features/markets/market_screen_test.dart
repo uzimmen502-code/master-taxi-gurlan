@@ -110,6 +110,41 @@ void main() {
     expect(find.byKey(const ValueKey('market_card_f1')), findsOneWidget);
   });
 
+  // Эга 2026-11-16: Электроника ва Маиший техника — таксономия v2; «Барчаси» + бўлим чиплари, Импорт ЙЎҚ, таб ЭМАС.
+  testWidgets('Электроника/Маиший техника: Барчаси + бўлим чиплари, Импорт йўқ, бўлим филтри', (tester) async {
+    final src = _FakeSource([
+      _it('e1', 'electronics', category: 'phones', unit: PriceUnit.piece),
+      _it('e2', 'electronics', category: 'tv'),
+      _it('a1', 'appliances', category: 'climate'),
+    ]);
+    await _pump(tester, MarketScreen(marketId: 'electronics', source: src, loadTaxonomy: () async => kTaxonomyV2));
+    expect(find.text('Электроника бозори'), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_cat_all')), findsOneWidget);
+    for (final c in ['phones', 'computers', 'tv', 'gadgets', 'accessories']) {
+      expect(find.byKey(ValueKey('market_cat_$c')), findsOneWidget, reason: c);
+    }
+    expect(find.byKey(const ValueKey('market_imported_chip')), findsNothing);
+    expect(find.byKey(const ValueKey('market_card_e1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_card_e2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_card_a1')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('market_cat_tv')));
+    await tester.pumpAndSettle();
+    expect(src.fetched.last, const MarketFilter(market: 'electronics', category: 'tv'));
+    expect(find.byKey(const ValueKey('market_card_e1')), findsNothing);
+    expect(find.byKey(const ValueKey('market_card_e2')), findsOneWidget);
+
+    await _pump(tester, const SizedBox()); // янги State (бошқа бозор)
+    await _pump(tester, MarketScreen(marketId: 'appliances', source: src, loadTaxonomy: () async => kTaxonomyV2));
+    expect(find.text('Маиший техника бозори'), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_cat_all')), findsOneWidget);
+    for (final c in ['large', 'small', 'climate']) {
+      expect(find.byKey(ValueKey('market_cat_$c')), findsOneWidget, reason: c);
+    }
+    expect(find.byKey(const ValueKey('market_imported_chip')), findsNothing);
+    expect(find.byKey(const ValueKey('market_card_a1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_card_e1')), findsNothing);
+  });
+
   testWidgets('Гўшт: «Импорт» барча турлар бўйича imported == true', (tester) async {
     final src = _FakeSource(meatItems);
     await _pump(tester, MarketScreen(marketId: 'meat', source: src, loadTaxonomy: () async => kTaxonomyV1));
@@ -244,6 +279,37 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(pushed.single, isA<MarketScreen>());
+  });
+
+  testWidgets('openMarket v2: electronics/appliances — ўз moduleId дарвозаси бўйича', (tester) async {
+    final pushed = <Widget>[];
+    final asked = <String>[];
+    await _pump(
+        tester,
+        Scaffold(
+          body: Builder(
+            builder: (c) => Column(children: [
+              for (final id in ['electronics', 'appliances'])
+                TextButton(
+                  onPressed: () => openMarket(c, id,
+                      loadTaxonomy: () async => kTaxonomyV2,
+                      canOpen: (m) {
+                        asked.add(m);
+                        return m == 'electronics_market';
+                      },
+                      push: (s) async => pushed.add(s)),
+                  child: Text('open_$id'),
+                ),
+            ]),
+          ),
+        ));
+    await tester.tap(find.text('open_appliances'));
+    await tester.pumpAndSettle();
+    expect(pushed, isEmpty);
+    await tester.tap(find.text('open_electronics'));
+    await tester.pumpAndSettle();
+    expect(asked, ['appliances_market', 'electronics_market']);
+    expect((pushed.single as MarketScreen).marketId, 'electronics');
   });
 
   group('детал: бозор майдонлари', () {

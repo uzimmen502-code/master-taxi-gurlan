@@ -33,6 +33,19 @@ void main() {
   final farm = t.market('farm')!;
 
   group('модел', () {
+    // Эга 2026-11-16: v2 — 6 бозор; Электроника/Маиший техника: «Барчаси»+чиплар, Импорт йўқ, таб эмас.
+    test('v2: 6 бозор тартибда; electronics/appliances шакли', () {
+      final v2 = kTaxonomyV2;
+      expect(v2.ordered.map((m) => m.id), ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances']);
+      for (final id in ['electronics', 'appliances']) {
+        final m = v2.market(id)!;
+        expect(m.moduleId, '${id}_market');
+        expect(m.hasCategoryChoice, isTrue, reason: id);
+        expect(m.usesTabs, isFalse, reason: id);
+        expect(m.hasImported, isFalse, reason: id);
+        expect(m.priceUnits, [PriceUnit.fixed, PriceUnit.piece], reason: id);
+      }
+    });
     test('версия, тартиб, бирликлар, битта бўлим', () {
       expect(t.version, 1);
       expect(t.ordered.map((m) => m.id), ['livestock', 'auto', 'meat', 'farm']);

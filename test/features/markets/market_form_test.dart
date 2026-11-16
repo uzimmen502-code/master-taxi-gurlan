@@ -91,6 +91,17 @@ void main() {
       expect(find.byKey(const ValueKey('market_choice_auto')), findsNothing);
     });
 
+    testWidgets('v2: Электроника ва Маиший техника чиплари — фақат модули очиқ бўлса', (tester) async {
+      await _pump(tester,
+          _form(_FakeShop(), open: {'electronics_market', 'appliances_market'}, load: () async => kTaxonomyV2));
+      expect(find.byKey(const ValueKey('market_choice_electronics')), findsOneWidget);
+      expect(find.byKey(const ValueKey('market_choice_appliances')), findsOneWidget);
+      expect(find.byKey(const ValueKey('market_choice_meat')), findsNothing);
+      await _pump(tester, _form(_FakeShop(), open: {'electronics_market'}, load: () async => kTaxonomyV2));
+      expect(find.byKey(const ValueKey('market_choice_electronics')), findsOneWidget);
+      expect(find.byKey(const ValueKey('market_choice_appliances')), findsNothing);
+    });
+
     testWidgets('бирорта бозор очиқ эмас — чиплар йўқ; харита объекти — чиплар йўқ', (tester) async {
       await _pump(tester, _form(_FakeShop(), open: const {}));
       expect(find.byKey(const ValueKey('market_choice')), findsNothing);

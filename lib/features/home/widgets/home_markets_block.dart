@@ -39,7 +39,7 @@ class HomeMarketEntry {
   final String? sloganKey;
 }
 
-/// Эга тартиби: Мол, Мошина, Гўшт, Деҳқон, Уй-жой, Улгуржи, Хитой, Аралаш.
+/// Эга тартиби: Мол, Мошина, Гўшт, Деҳқон, Электроника, Маиший техника, Уй-жой, Улгуржи, Хитой, Аралаш.
 const kHomeMarketEntries = <HomeMarketEntry>[
   HomeMarketEntry(
     id: 'livestock',
@@ -72,6 +72,23 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     imagePath: 'assets/images/markets/market_farm_v2.webp',
     taxonomyMarketId: 'farm',
     sloganKey: 'home_market_farm_slogan',
+  ),
+  // Эга 2026-11-16: Деҳқондан кейин, Уй-жойдан олдин — 2 та янги бозор.
+  HomeMarketEntry(
+    id: 'electronics',
+    moduleId: 'electronics_market',
+    titleKey: 'home_module_electronics_market',
+    imagePath: 'assets/images/markets/market_electronics_v2.webp',
+    taxonomyMarketId: 'electronics',
+    sloganKey: 'home_market_electronics_slogan',
+  ),
+  HomeMarketEntry(
+    id: 'appliances',
+    moduleId: 'appliances_market',
+    titleKey: 'home_module_appliances_market',
+    imagePath: 'assets/images/markets/market_appliances_v2.webp',
+    taxonomyMarketId: 'appliances',
+    sloganKey: 'home_market_appliances_slogan',
   ),
   HomeMarketEntry(
     id: 'realty',
@@ -189,7 +206,7 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
               if (i > 0) const SizedBox(height: AvaSpace.gap),
               _MarketCard(
                 entry: items[i],
-                // Эга 2026-11-16: 8 та картанинг ҳаммасида қисқа шиор тил калитидан (таксономия шиори — фақат калит йўқ бўлса).
+                // Эга 2026-11-16: барча карталарда ҳаммасида қисқа шиор тил калитидан (таксономия шиори — фақат калит йўқ бўлса).
                 slogan: items[i].sloganKey != null
                     ? context.tr(items[i].sloganKey!)
                     : taxonomyMarketSlogan(_taxonomy?.market(items[i].taxonomyMarketId!), lang),

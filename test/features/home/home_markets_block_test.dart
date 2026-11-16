@@ -17,7 +17,7 @@ Map<String, String> _n(String s) => {'uz_Cyrl': '$s-cyr', 'uz_Latn': '$s-lat', '
 final _taxonomy = MarketTaxonomy.fromMap({
   'version': 1,
   'markets': {
-    for (final id in ['livestock', 'auto', 'farm'])
+    for (final id in ['livestock', 'auto', 'farm', 'electronics', 'appliances'])
       id: {'moduleId': '${id}_market', 'order': 1, 'names': _n(id), 'slogan': _n('$id-slogan')},
     'meat': {
       'moduleId': 'meat_market',
@@ -34,6 +34,8 @@ const _allIds = [
   'auto_market',
   'meat_market',
   'farm_market',
+  'electronics_market',
+  'appliances_market',
   'realty',
   'wholesale_market',
   'china_market',
@@ -65,11 +67,11 @@ void main() {
   tearDown(ServiceConfigHolder.resetForTest);
 
   group('HomeMarketsBlock', () {
-    testWidgets('ҳаммаси кўринса — 8 карточка эга тартибида', (t) async {
+    testWidgets('ҳаммаси кўринса — 10 карточка эга тартибида', (t) async {
       await _pump(t, isVisible: (_) => true);
       expect(find.byKey(const ValueKey('home_markets_block')), findsOneWidget);
       expect(find.text('home_markets_block_title:'), findsOneWidget);
-      final ids = ['livestock', 'auto', 'meat', 'farm', 'realty', 'wholesale', 'china', 'aralash'];
+      final ids = ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'china', 'aralash'];
       final ys = [for (final id in ids) t.getTopLeft(find.byKey(ValueKey('home_market_card_$id'))).dy];
       for (var i = 1; i < ys.length; i++) {
         expect(ys[i], greaterThan(ys[i - 1]), reason: ids[i]);
@@ -81,7 +83,7 @@ void main() {
       await _pump(t, isVisible: (id) => id == 'meat_market' || id == 'china_market');
       expect(find.byKey(const ValueKey('home_market_card_meat')), findsOneWidget);
       expect(find.byKey(const ValueKey('home_market_card_china')), findsOneWidget);
-      for (final id in ['livestock', 'auto', 'farm', 'realty', 'wholesale', 'aralash']) {
+      for (final id in ['livestock', 'auto', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'aralash']) {
         expect(find.byKey(ValueKey('home_market_card_$id')), findsNothing, reason: id);
       }
       await _pump(t, isVisible: (_) => false);
@@ -106,16 +108,21 @@ void main() {
 
     testWidgets('босилганда — шу карточка ёзуви чақирувчига', (t) async {
       final opened = await _pump(t, isVisible: (_) => true);
+      // 10 карта — тест экранидан пастга чиқади.
+      await t.ensureVisible(find.byKey(const ValueKey('home_market_card_china')));
+      await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('home_market_card_china')));
+      await t.ensureVisible(find.byKey(const ValueKey('home_market_card_meat')));
+      await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('home_market_card_meat')));
       expect(opened.map((e) => e.id).toList(), ['china', 'meat']);
     });
 
-    // Эга 2026-11-16: 8 та картанинг ҳаммасида қисқа шиор — lang калитидан; карта баландлиги = расм (64).
-    testWidgets('шиор: 8 та карта — lang калити; баландлик 64', (t) async {
+    // Эга 2026-11-16: 10 та картанинг ҳаммасида қисқа шиор — lang калитидан; карта баландлиги = расм (64).
+    testWidgets('шиор: 10 та карта — lang калити; баландлик 64', (t) async {
       await _pump(t, isVisible: (_) => true);
       String slogan(String id) => t.widget<Text>(find.byKey(ValueKey('home_market_slogan_$id'))).data!;
-      for (final id in ['livestock', 'auto', 'meat', 'farm', 'realty', 'wholesale', 'china', 'aralash']) {
+      for (final id in ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'china', 'aralash']) {
         expect(slogan(id), 'home_market_${id}_slogan');
       }
       final row = find.descendant(
@@ -242,6 +249,23 @@ void main() {
     expect(lat['home_search_hint_ava'], "AVA'da qidirish…");
     expect(ru['home_search_hint_ava'], 'Поиск в AVA…');
     expect(ru['home_market_aralash_title'], 'Смешанный рынок');
+    // Эга 2026-11-16: Электроника ва Маиший техника бозорлари.
+    expect(cyr['home_module_electronics_market'], 'Электроника бозори');
+    expect(lat['home_module_electronics_market'], 'Elektronika bozori');
+    expect(ru['home_module_electronics_market'], 'Рынок электроники');
+    expect(cyr['home_module_appliances_market'], 'Маиший техника бозори');
+    expect(lat['home_module_appliances_market'], 'Maishiy texnika bozori');
+    expect(ru['home_module_appliances_market'], 'Рынок бытовой техники');
+    expect(cyr['home_market_electronics_slogan'], 'Замонавий технологиялар — бир жойда!');
+    expect(lat['home_market_electronics_slogan'], 'Zamonaviy texnologiyalar — bir joyda!');
+    expect(ru['home_market_electronics_slogan'], 'Современные технологии — в одном месте!');
+    expect(cyr['home_market_appliances_slogan'], 'Уйингизга қулайлик олиб келинг!');
+    expect(lat['home_market_appliances_slogan'], 'Uyingizga qulaylik olib keling!');
+    expect(ru['home_market_appliances_slogan'], 'Комфорт для вашего дома!');
+    expect([cyr['market_short_electronics'], lat['market_short_electronics'], ru['market_short_electronics']],
+        ['Электроника', 'Elektronika', 'Электроника']);
+    expect([cyr['market_short_appliances'], lat['market_short_appliances'], ru['market_short_appliances']],
+        ['Маиший техника', 'Maishiy texnika', 'Бытовая техника']);
     // Карточка расмлари мавжуд.
     for (final e in kHomeMarketEntries) {
       expect(File(e.imagePath).existsSync(), isTrue, reason: e.imagePath);

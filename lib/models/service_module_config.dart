@@ -59,6 +59,9 @@ const List<String> kKnownModuleIds = [
   'auto_market',
   'meat_market',
   'farm_market',
+  // Эга 2026-11-16: яна 2 та алоҳида бозор (таксономия v2: electronics/appliances).
+  'electronics_market',
+  'appliances_market',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

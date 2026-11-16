@@ -221,31 +221,29 @@ class _MarketCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          // Эга 2026-11-16: карта баландлиги = расм баландлиги (64); матн катта тизим шрифтида ҳам сиғсин.
-          child: MediaQuery.withClampedTextScaling(
+        // Эга 2026-11-16: карта баландлиги = расм баландлиги (64), ички чет йўқ — расм карта четига тегади;
+        // сарлавҳа ↔ карта чегараси 1 px, сарлавҳа ↔ шиор 1 px; матн катта тизим шрифтида ҳам сиғсин.
+        child: MediaQuery.withClampedTextScaling(
             maxScaleFactor: 1.0,
             child: SizedBox(
             height: 64,
             child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.asset(
-                  entry.imagePath,
-                  width: 100,
-                  height: 64,
-                  fit: BoxFit.cover,
-                  cacheWidth: 300,
-                  errorBuilder: (_, __, ___) => Container(width: 100, height: 64, color: c.surface2),
-                ),
+              Image.asset(
+                entry.imagePath,
+                width: 100,
+                height: 64,
+                fit: BoxFit.cover,
+                cacheWidth: 300,
+                errorBuilder: (_, __, ___) => Container(width: 100, height: 64, color: c.surface2),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Column(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     Text(
                       context.tr(entry.titleKey),
@@ -254,7 +252,7 @@ class _MarketCard extends StatelessWidget {
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
                     ),
                     if (slogan.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       Text(
                         slogan,
                         key: ValueKey('home_market_slogan_${entry.id}'),
@@ -265,11 +263,12 @@ class _MarketCard extends StatelessWidget {
                     ],
                   ],
                 ),
+                ),
               ),
               const SizedBox(width: 4),
               Icon(Icons.chevron_right_rounded, size: 20, color: c.ink3),
+              const SizedBox(width: 4),
             ],
-          ),
           ),
           ),
         ),

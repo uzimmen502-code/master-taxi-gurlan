@@ -45,6 +45,34 @@ void main() {
       }
     });
 
+    test('«Бозорлар» учун янги турлар (2026-11-16) — 3 тилда', () {
+      String at(BusinessCategory c, String uz, String l) => BusinessSubtypes.display(uz, l, category: c);
+      const added = {
+        BusinessCategory.retail: [
+          ('Гўшт дўкони (қассоб)', "Go'sht do'koni (qassob)", 'Мясная лавка'),
+          ('Товуқ гўшти дўкони', "Tovuq go'shti do'koni", 'Магазин мяса птицы'),
+          ('Балиқ дўкони', "Baliq do'koni", 'Рыбный магазин'),
+          ('Мева-сабзавот дўкони', "Meva-sabzavot do'koni", 'Фрукты и овощи'),
+          ('Компьютер ва ноутбуклар', 'Kompyuter va noutbuklar', 'Компьютеры и ноутбуки'),
+          ('Телефон аксессуарлари', 'Telefon aksessuarlari', 'Аксессуары для телефонов'),
+          ('Кондиционер ва иситгичлар', 'Konditsioner va isitgichlar', 'Кондиционеры и обогреватели'),
+        ],
+        BusinessCategory.auto: [
+          ('Автосалон', 'Avtosalon', 'Автосалон'),
+          ('Мотоцикл савдоси', 'Mototsikl savdosi', 'Продажа мотоциклов'),
+          ('Махсус техника савдоси', 'Maxsus texnika savdosi', 'Продажа спецтехники'),
+        ],
+      };
+      for (final e in added.entries) {
+        for (final (cyr, lat, ru) in e.value) {
+          expect(BusinessSubtypes.of(e.key, 'uz_Cyrl'), contains(cyr));
+          expect(at(e.key, cyr, 'uz_Latn'), lat);
+          expect(at(e.key, cyr, 'ru'), ru);
+          expect(at(e.key, ru, 'uz_Cyrl'), cyr);
+        }
+      }
+    });
+
     test('лотин номи кириллдан ўгирилади (alohida yozilmaydi)', () {
       expect(BusinessSubtypes.of(BusinessCategory.retail, 'uz_Latn').first, "Oziq-ovqat do'koni");
       expect(BusinessSubtypes.of(BusinessCategory.auto, 'uz_Latn'), contains("G'ildirak balansirovkasi"));

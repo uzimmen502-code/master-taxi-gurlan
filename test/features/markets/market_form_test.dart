@@ -93,21 +93,78 @@ void main() {
 
     testWidgets('v2: Электроника ва Маиший техника чиплари — фақат модули очиқ бўлса', (tester) async {
       await _pump(tester,
-          _form(_FakeShop(), open: {'electronics_market', 'appliances_market'}, load: () async => kTaxonomyV2));
+          _form(_FakeShop(), open: {'electronics_market', 'appliances_market'}, load: () async => kTaxonomyV3));
       expect(find.byKey(const ValueKey('market_choice_electronics')), findsOneWidget);
       expect(find.byKey(const ValueKey('market_choice_appliances')), findsOneWidget);
       expect(find.byKey(const ValueKey('market_choice_meat')), findsNothing);
-      await _pump(tester, _form(_FakeShop(), open: {'electronics_market'}, load: () async => kTaxonomyV2));
+      await _pump(tester, _form(_FakeShop(), open: {'electronics_market'}, load: () async => kTaxonomyV3));
       expect(find.byKey(const ValueKey('market_choice_electronics')), findsOneWidget);
       expect(find.byKey(const ValueKey('market_choice_appliances')), findsNothing);
     });
 
-    testWidgets('бирорта бозор очиқ эмас — чиплар йўқ; харита объекти — чиплар йўқ', (tester) async {
+    testWidgets('бирорта бозор очиқ эмас — чиплар йўқ', (tester) async {
       await _pump(tester, _form(_FakeShop(), open: const {}));
       expect(find.byKey(const ValueKey('market_choice')), findsNothing);
-      final biz = Business(
-          id: 'b1', ownerId: '998901111111', name: 'O', category: BusinessCategory.retail, phone: '1', lat: 0, lng: 0);
-      await _pump(tester, _form(_FakeShop(), business: biz));
+    });
+  });
+
+  group('харита объекти (2026-11-16): чиплар + фаолият туридан олдиндан танлов', () {
+    Business biz(BusinessCategory c, [String subtype = '']) => Business(
+        id: 'b1', ownerId: '998901111111', name: 'O', category: c, subtype: subtype, phone: '1', lat: 0, lng: 0,
+        districtId: 'gurlan');
+    const allOpen = {
+      'livestock_market', 'auto_market', 'meat_market', 'farm_market', 'electronics_market', 'appliances_market'
+    };
+    bool sel(WidgetTester t, String key) => t.widget<ChoiceChip>(find.byKey(ValueKey(key))).selected;
+
+    testWidgets('мос тури йўқ (retail, бўш) — чиплар бор, Аралаш танланган', (tester) async {
+      await _pump(tester, _form(_FakeShop(), business: biz(BusinessCategory.retail), open: allOpen,
+          load: () async => kTaxonomyV3));
+      expect(find.byKey(const ValueKey('market_choice_aralash')), findsOneWidget);
+      expect(sel(tester, 'market_choice_aralash'), isTrue);
+      expect(find.byKey(const ValueKey('market_choice_electronics')), findsOneWidget);
+    });
+
+    testWidgets('«Телефон» дўкони → Электроника · Телефонлар; сақланганда ёзилади', (tester) async {
+      final shop = _FakeShop();
+      await _pump(tester, _form(shop, business: biz(BusinessCategory.retail, 'Телефоны'), open: allOpen,
+          load: () async => kTaxonomyV3));
+      expect(sel(tester, 'market_choice_electronics'), isTrue);
+      expect(sel(tester, 'market_cat_phones'), isTrue);
+      expect(sel(tester, 'market_choice_aralash'), isFalse);
+      await _fillBasics(tester);
+      await _save(tester);
+      final c = shop.created!;
+      expect((c.market, c.category, c.businessId, c.regionId, c.status), ('electronics', 'phones', 'b1', 'xorazm', 'pending'));
+    });
+
+    testWidgets('«Балиқ дўкони» → Гўшт · Балиқ; сотувчи Аралашга алмаштира олади', (tester) async {
+      final shop = _FakeShop();
+      await _pump(tester, _form(shop, business: biz(BusinessCategory.retail, 'Балиқ дўкони'), open: allOpen,
+          load: () async => kTaxonomyV3));
+      expect(sel(tester, 'market_choice_meat'), isTrue);
+      expect(sel(tester, 'market_cat_fish'), isTrue);
+      await tester.tap(find.byKey(const ValueKey('market_choice_aralash')));
+      await tester.pumpAndSettle();
+      await _fillBasics(tester);
+      await _save(tester);
+      expect(shop.created!.market, '');
+      expect(shop.created!.businessId, 'b1');
+    });
+
+    testWidgets('бозор туманда очилмаса — олдиндан танланмайди', (tester) async {
+      await _pump(tester, _form(_FakeShop(), business: biz(BusinessCategory.auto, 'Автосалон'),
+          open: const {'farm_market'}, load: () async => kTaxonomyV3));
+      expect(find.byKey(const ValueKey('market_choice_auto')), findsNothing);
+      expect(sel(tester, 'market_choice_aralash'), isTrue);
+    });
+
+    testWidgets('таҳрирда чиплар йўқ ва бозор тегилмайди', (tester) async {
+      final existing = TvShopItem(
+          id: 'i1', ownerPhone: '998901111111', ownerName: 'O', title: 'X', price: 1, photoUrl: '', businessId: 'b1',
+          kind: 'product', districtId: 'gurlan', districtLabel: '');
+      await _pump(tester, _form(_FakeShop(), business: biz(BusinessCategory.retail, 'Телефон'), existing: existing,
+          open: allOpen, load: () async => kTaxonomyV3));
       expect(find.byKey(const ValueKey('market_choice')), findsNothing);
     });
 

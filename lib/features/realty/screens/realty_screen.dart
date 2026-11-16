@@ -9,7 +9,6 @@ import '../../../core/geo/ring_feed.dart';
 import '../../../core/geo/ring_query.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/catalog_search.dart';
 import '../../../models/realty_alert.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
@@ -37,7 +36,7 @@ import 'realty_map_screen.dart';
 ///
 /// «Бозорлар» 7-босқич (эга, 2026-11-15): бозор кўриниши — қизил «+», ҳудуд қатори (сукут — Республика
 /// ҳалқалари, яқиндан узоққа; вилоят/туман танланса — фақат шу ҳудуд; танлов САҚЛАНМАЙДИ), карточкада нисбий жой.
-/// 2026-11-16: «N та эълон» (`count()`) олиб ташланди; қидирув (клиентда) ва ихчам тепа қўшилди. Таблар ва Сотиш/Ижара — аввалгидек.
+/// 2026-11-16: «N та эълон» (`count()`) олиб ташланди; ихчам тепа қўшилди; қидирув йўқ (эга 2026-11-16: филтрлар орқали). Таблар ва Сотиш/Ижара — аввалгидек.
 ///
 /// Кириш қоидаси (9-бўлим): лентани меҳмон ҳам кўради, харита ва эълон
 /// жойлаштириш — фақат рўйхатдан ўтганлар учун.
@@ -65,10 +64,6 @@ class _RealtyScreenState extends State<RealtyScreen>
   /// Ҳудуд (GeoMode.rings): сукут — Республика ҳалқалари; танлов фақат экран очиқ турганда.
   GeoScope _scope = GeoContext.scopeFor('realty');
 
-  /// Қидирув (эга, 2026-11-16): сарлавҳа/матн/нарх бўйича, КЛИЕНТДА — юкланган ҳалқа саҳифалари устида.
-  final _searchCtrl = TextEditingController();
-  String _query = '';
-
   bool get _isGuest =>
       FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
 
@@ -78,7 +73,6 @@ class _RealtyScreenState extends State<RealtyScreen>
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
     GeoContext.clearSessionScope('realty');
     _tabs.removeListener(_onTab);
     _tabs.dispose();
@@ -193,20 +187,10 @@ class _RealtyScreenState extends State<RealtyScreen>
           ],
         ),
       ),
-      // Ихчам тепа (эга, 2026-11-16): қидирув, Сотиш/Ижара, ҳудуд — орасида 1 px; «N та эълон» олиб ташланди.
+      // Ихчам тепа (эга, 2026-11-16): Сотиш/Ижара, ҳудуд — орасида 1 px; «N та эълон» олиб ташланди.
+      // Қидирув йўқ (эга, 2026-11-16: уй-жой филтрлар орқали топилади) — бошқа бозорларда қидирув қолади.
       body: Column(
         children: [
-          MarketSearchField(
-            fieldKey: const ValueKey('realty_search'),
-            controller: _searchCtrl,
-            hintText: context.tr('realty_search_hint'),
-            onChanged: (v) => setState(() => _query = v),
-            onClear: () {
-              _searchCtrl.clear();
-              setState(() => _query = '');
-            },
-          ),
-          const SizedBox(height: kMarketTopRowGap),
           RealtyDealFilter(
             compact: true,
             deal: _deal,
@@ -230,7 +214,6 @@ class _RealtyScreenState extends State<RealtyScreen>
                     source: _source,
                     filter: RealtyRingFilter(tier: tier, deal: _deal),
                     scope: _scope,
-                    query: _query,
                     onOpen: _openDetail,
                     onScope: (s) => setState(() => _scope = s),
                   ),
@@ -251,15 +234,11 @@ class _TierFeed extends StatefulWidget {
     required this.scope,
     required this.onOpen,
     required this.onScope,
-    this.query = '',
   });
 
   final RealtyListingSource source;
   final RealtyRingFilter filter;
   final GeoScope scope;
-
-  /// Қидирув сўрови (клиентда; ўзгарса лента қайта юкланмайди — фақат кўринадиганлар филтри).
-  final String query;
   final ValueChanged<RealtyListing> onOpen;
   final ValueChanged<GeoScope> onScope;
 
@@ -277,16 +256,8 @@ class _TierFeedState extends State<_TierFeed> {
         fetch: widget.source.fetcher(widget.filter),
         districtsOf: widget.source.districtsOf,
       ),
-      visibleWhere: _shows,
+      visibleWhere: widget.filter.shows,
     );
-
-  bool _shows(RealtyListing r) => widget.filter.shows(r) && realtyMatchesQuery(r, widget.query);
-
-  @override
-  void didUpdateWidget(covariant _TierFeed old) {
-    super.didUpdateWidget(old);
-    if (old.query != widget.query) _feed.setVisibleWhere(_shows);
-  }
 
   void _changed() {
     if (mounted) setState(() {});
@@ -359,12 +330,6 @@ class _TierFeedState extends State<_TierFeed> {
       },
     );
   }
-}
-
-/// Уй-жой қидируви (клиентда, эга 2026-11-16) — Аралашдаги Уй-жой қидируви билан бир хил майдонлар.
-bool realtyMatchesQuery(RealtyListing r, String query) {
-  if (CatalogSearch.normalize(query).isEmpty) return true;
-  return CatalogSearch.matches(query, [r.titleOrText, r.text, r.priceText]);
 }
 
 /// Уй-жой эълонининг НИСБИЙ жойи — фақат туман/вилоят даражаси (аниқ манзил ЭМАС: у пуллик ахборот).

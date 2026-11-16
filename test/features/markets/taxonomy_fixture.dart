@@ -96,9 +96,10 @@ final Map<String, dynamic> kTaxonomyDocV1 = {
 
 MarketTaxonomy get kTaxonomyV1 => MarketTaxonomy.fromMap(kTaxonomyDocV1);
 
-/// v2 (эга 2026-11-16, functions/tools/data/market_taxonomy_v2.json): v1 + Электроника (50) ва Маиший техника (60).
-final Map<String, dynamic> kTaxonomyDocV2 = {
-  'version': 2,
+/// v3 (эга 2026-11-16, functions/tools/data/market_taxonomy_v3.json): v1 + Электроника (50, 9 бўлим) ва
+/// Маиший техника (60, 8 бўлим). v2 даги gadgets/large/small/climate бўлимлари v3 да йўқ.
+final Map<String, dynamic> kTaxonomyDocV3 = {
+  'version': 3,
   'markets': {
     ...(kTaxonomyDocV1['markets'] as Map<String, dynamic>),
     'electronics': {
@@ -106,11 +107,15 @@ final Map<String, dynamic> kTaxonomyDocV2 = {
       'order': 50,
       'names': _n('Электроника бозори', 'Elektronika bozori', 'Рынок электроники'),
       'categories': [
-        {'id': 'phones', 'names': _n('Телефонлар')},
-        {'id': 'computers', 'names': _n('Компьютерлар')},
-        {'id': 'tv', 'names': _n('Телевизорлар')},
-        {'id': 'gadgets', 'names': _n('Гаджетлар')},
-        {'id': 'accessories', 'names': _n('Аксессуарлар')},
+        {'id': 'phones', 'names': _n('Смартфонлар', 'Smartfonlar', 'Смартфоны')},
+        {'id': 'laptops', 'names': _n('Ноутбуклар', 'Noutbuklar', 'Ноутбуки')},
+        {'id': 'computers', 'names': _n('Компьютерлар', 'Kompyuterlar', 'Компьютеры')},
+        {'id': 'tv', 'names': _n('Телевизорлар', 'Televizorlar', 'Телевизоры')},
+        {'id': 'tablets', 'names': _n('Планшетлар', 'Planshetlar', 'Планшеты')},
+        {'id': 'smartwatches', 'names': _n('Смарт соатлар', 'Smart soatlar', 'Смарт-часы')},
+        {'id': 'audio_video', 'names': _n('Аудио ва видео ускуналар', 'Audio va video uskunalar', 'Аудио- и видеотехника')},
+        {'id': 'accessories', 'names': _n('Аксессуарлар', 'Aksessuarlar', 'Аксессуары')},
+        {'id': 'other', 'names': _n('Бошқа', 'Boshqa', 'Другое')},
       ],
       'priceUnits': ['', 'piece'],
     },
@@ -119,13 +124,18 @@ final Map<String, dynamic> kTaxonomyDocV2 = {
       'order': 60,
       'names': _n('Маиший техника бозори', 'Maishiy texnika bozori', 'Рынок бытовой техники'),
       'categories': [
-        {'id': 'large', 'names': _n('Йирик техника')},
-        {'id': 'small', 'names': _n('Кичик техника')},
-        {'id': 'climate', 'names': _n('Иқлим техникаси')},
+        {'id': 'fridges', 'names': _n('Музлаткичлар', 'Muzlatkichlar', 'Холодильники')},
+        {'id': 'washers', 'names': _n('Кир ювиш машиналари', 'Kir yuvish mashinalari', 'Стиральные машины')},
+        {'id': 'stoves', 'names': _n('Газ ва электр плиталар', 'Gaz va elektr plitalar', 'Газовые и электроплиты')},
+        {'id': 'air_conditioners', 'names': _n('Кондиционерлар', 'Konditsionerlar', 'Кондиционеры')},
+        {'id': 'vacuums', 'names': _n('Чангюткичлар', 'Changyutkichlar', 'Пылесосы')},
+        {'id': 'kitchen', 'names': _n('Ошхона техникалари', 'Oshxona texnikalari', 'Кухонная техника')},
+        {'id': 'heaters', 'names': _n('Иситгич ва бойлерлар', 'Isitgich va boylerlar', 'Обогреватели и бойлеры')},
+        {'id': 'other', 'names': _n('Бошқа', 'Boshqa', 'Другое')},
       ],
       'priceUnits': ['', 'piece'],
     },
   },
 };
 
-MarketTaxonomy get kTaxonomyV2 => MarketTaxonomy.fromMap(kTaxonomyDocV2);
+MarketTaxonomy get kTaxonomyV3 => MarketTaxonomy.fromMap(kTaxonomyDocV3);

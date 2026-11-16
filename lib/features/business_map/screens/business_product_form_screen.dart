@@ -23,6 +23,7 @@ import '../../tv_market/screens/tv_publish_screen.dart';
 import '../../tv_market/screens/tv_shop_item_photos_screen.dart';
 import '../../tv_market/services/tv_storage_service.dart';
 import '../domain/business.dart';
+import '../domain/business_market_map.dart';
 import '../domain/business_type_profile.dart';
 import '../domain/product_kind.dart';
 
@@ -55,8 +56,8 @@ class BusinessProductFormScreen extends StatefulWidget {
   final String? initialMarket;
   final String? initialCategory;
 
-  /// «Қаерда сотасиз?» чиплари (Аралаш · Мол · Мошина · Гўшт · Деҳқон). `null` — ўзи: янги маҳсулот, эганинг ўз
-  /// дўкони («＋» → Онлайн дўкон, Аралаш «+») ва бозор олдиндан танланмаган. Харита объекти — кўрсатилмайди.
+  /// «Қаерда сотасиз?» чиплари (Аралаш + очиқ бозорлар). `null` — ўзи: янги маҳсулот ва бозор олдиндан
+  /// танланмаган (ўз дўкони ҳам, харита объекти ҳам; объектда бозор фаолият туридан олдиндан танланади, 2026-11-16).
   final bool? showMarketChoice;
 
   /// Тест учун: таксономия (бўлмаса [MarketTaxonomyRepository.load] — сеансда бир марта).
@@ -141,9 +142,9 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   late bool _imported = widget.existing?.imported ?? false;
   Map<String, MarketFieldError> _fieldErrors = const {};
 
+  // 2026-11-16: харита объекти учун ҳам (аввал фақат ўз дўкони) — бозор фаолият туридан олдиндан танланади.
   bool get _showMarketChoice =>
-      widget.showMarketChoice ??
-      (!_isEdit && widget.business.isOwnShop && (widget.initialMarket ?? '').trim().isEmpty);
+      widget.showMarketChoice ?? (!_isEdit && (widget.initialMarket ?? '').trim().isEmpty);
   bool get _needsTaxonomy => _showMarketChoice || _market.isNotEmpty;
   MarketDef? get _marketDef => _market.isEmpty ? null : _taxonomy?.market(_market);
 
@@ -172,12 +173,26 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           }
         } else if (_market.isNotEmpty) {
           _applyMarket(_market, keepCategory: true);
+        } else {
+          _preselectFromBusiness(t);
         }
       });
     } catch (e) {
       debugPrint('[BusinessProductForm] taxonomy: $e');
       if (mounted) setState(() => _taxonomyFailed = true);
     }
+  }
+
+  /// Харита объектига янги маҳсулот: фаолият туридан бозор/бўлим таклифи ([marketForBusiness]). Бозор таксономияда
+  /// йўқ ёки шу туманда очилмаса — танланмайди (Аралаш). Сотувчи чиплар орқали алмаштира олади. setState ичида.
+  void _preselectFromBusiness(MarketTaxonomy t) {
+    if (!_showMarketChoice || widget.business.isOwnShop) return;
+    final match = marketForBusiness(widget.business.category, widget.business.subtype);
+    if (match == null) return;
+    final open = openableMarkets(t, widget.isModuleOpenable ?? ServiceConfigHolder.isOpenable);
+    if (!open.any((m) => m.id == match.marketId)) return;
+    _category = match.categoryId ?? '';
+    _applyMarket(match.marketId, keepCategory: true);
   }
 
   /// Бозор танланди ([id] бўш — Аралаш): бўлим ва нарх бирлиги бозорга мосланади. setState ичида чақирилади.

@@ -34,11 +34,11 @@ void main() {
 
   group('модел', () {
     // Эга 2026-11-16: v2 — 6 бозор; Электроника/Маиший техника: «Барчаси»+чиплар, Импорт йўқ, таб эмас.
-    test('v2: 6 бозор тартибда; electronics/appliances шакли', () {
-      final v2 = kTaxonomyV2;
-      expect(v2.ordered.map((m) => m.id), ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances']);
+    test('v3: 6 бозор тартибда; electronics/appliances шакли', () {
+      final v3 = kTaxonomyV3;
+      expect(v3.ordered.map((m) => m.id), ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances']);
       for (final id in ['electronics', 'appliances']) {
-        final m = v2.market(id)!;
+        final m = v3.market(id)!;
         expect(m.moduleId, '${id}_market');
         expect(m.hasCategoryChoice, isTrue, reason: id);
         expect(m.usesTabs, isFalse, reason: id);

@@ -307,6 +307,12 @@ final _petGoods = [
   _p('Мушук учун ем', 'Корм для кошек', PriceUnit.kg),
   _p('Ҳайвон ўйинчоғи', 'Игрушка для животных', PriceUnit.piece),
 ];
+// «Бозорлар» билан мослаш (2026-11-16): автосалон / мото / махсус техника савдоси (PROPOSED).
+final _vehicles = [
+  _p('Автомобиль', 'Автомобиль', PriceUnit.negotiable),
+  _p('Мотоцикл', 'Мотоцикл', PriceUnit.negotiable),
+  _p('Трактор', 'Трактор', PriceUnit.negotiable),
+];
 final _livestock = [
   _p('Қўй', 'Овца', PriceUnit.negotiable),
   _p('Бузоқ', 'Телёнок', PriceUnit.negotiable),
@@ -509,6 +515,8 @@ final Map<BusinessCategory, Map<String, _Override>> _overrides = {
   BusinessCategory.auto: {
     for (final s in const ['Автомобиль эҳтиёт қисмлари', 'Аккумулятор', 'Шина савдоси'])
       s: _Override(kind: OfferKind.product, unit: PriceUnit.piece, templates: _autoParts, courier: true),
+    for (final s in const ['Автосалон', 'Мотоцикл савдоси', 'Махсус техника савдоси'])
+      s: _Override(kind: OfferKind.product, unit: PriceUnit.negotiable, templates: _vehicles, courier: false),
     'Электромобиль қувватлаш станцияси': const _Override(bridge: BusinessModuleBridge.evStation),
   },
   BusinessCategory.energy: {

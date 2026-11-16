@@ -12,6 +12,8 @@ import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.da
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../markets/taxonomy_fixture.dart';
+
 /// Эга қарори (2026-10-24): объект маҳсулотлари = мавжуд витрина ҳужжати + `businessId`; сони чекланмаган;
 /// модерациясиз (дарҳол `active`); 7 тагача расм; видео ихтиёрий.
 class _FakeShop implements TvShopRepository {
@@ -194,13 +196,28 @@ void main() {
             return [for (final p in paths) 'https://cdn/$p'];
           },
           addVideo: (ctx, id) async => videoFor = id,
+          // 2026-11-16 (эга): харита объектида ҳам «Қаерда сотасиз?» чиплари — таксономия юкланади. Тест Firebase'га
+          // боғлиқ бўлмасин (аввал юклаш йиқилиб, хато қатори формани узайтириб, сақлаш тугмаси экрандан чиқиб кетарди).
+          loadTaxonomy: () async => kTaxonomyV3,
+          isModuleOpenable: (_) => true,
         ),
       );
+      // Шахсий хизматлар — мос бозор йўқ → Аралаш танланган.
+      expect(tester.widget<ChoiceChip>(find.byKey(const ValueKey('market_choice_aralash'))).selected, isTrue);
       await tester.enterText(find.byKey(const ValueKey('bizprod_name')), 'Стрижка');
       await tester.enterText(find.byKey(const ValueKey('bizprod_price')), '50 000');
       await tester.enterText(find.byKey(const ValueKey('bizprod_desc')), 'Тавсиф');
+      // ListView ленивий: форма узунлигидан қатъи назар тугмаларгача айлантирилади.
+      Future<void> reveal(String key) async {
+        final f = find.byKey(ValueKey(key));
+        await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first); // қурилсин
+        await tester.ensureVisible(f); // экранга чиқсин
+        await tester.pumpAndSettle();
+      }
+      await reveal('bizprod_add_photos');
       await tester.tap(find.byKey(const ValueKey('bizprod_add_photos')));
       await tester.pumpAndSettle();
+      await reveal('bizprod_save');
       await tester.tap(find.byKey(const ValueKey('bizprod_save')));
       await tester.pumpAndSettle();
 
@@ -215,6 +232,7 @@ void main() {
       expect(c.status, 'pending', reason: 'Бозорлар 2b (эга 2026-11-15): олдиндан модерация');
       expect(c.toMap().keys, isNot(contains('submittedAt')), reason: 'rules: модерация майдонлари фақат сервер');
       expect(c.districtId, 'gurlan');
+      expect(c.market, '', reason: 'Аралаш — бозор майдонлари ёзилмайди');
       expect(c.photoUrls.length, 7);
       expect(shop.calls, containsAllInOrder(['ensureShop:998901111111:Мой Дўкон', 'create']));
 

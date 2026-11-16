@@ -9,8 +9,6 @@ import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
 import 'package:ava_gurlan/features/home/widgets/home_services_olx_row.dart';
 import 'package:ava_gurlan/features/home/widgets/service_spotlight_item.dart';
 import 'package:ava_gurlan/features/markets/domain/market_taxonomy.dart';
-import 'package:ava_gurlan/features/realty/screens/realty_screen.dart';
-import 'package:ava_gurlan/models/realty_listing.dart';
 import 'package:ava_gurlan/models/service_module_config.dart';
 import 'package:ava_gurlan/shared/widgets/seller_other_products_row.dart';
 import 'package:flutter/material.dart';
@@ -243,30 +241,14 @@ void main() {
     });
   });
 
-  group('Уй-жой қидируви', () {
-    RealtyListing r(String id, String title) => RealtyListing.fromMap(id, {
-          'title': title,
-          'text': 'Гурланда',
-          'priceText': '',
-          'status': 'active',
-        });
-
-    test('бўш — ҳаммаси; сарлавҳа/матн бўйича', () {
-      final a = r('a', 'Уч хонали уй');
-      expect(realtyMatchesQuery(a, ''), isTrue);
-      expect(realtyMatchesQuery(a, 'хонали'), isTrue);
-      expect(realtyMatchesQuery(a, 'гурлан'), isTrue);
-      expect(realtyMatchesQuery(a, 'офис'), isFalse);
-    });
-
-    test('калит 3 тилда; экранда ягона майдон, «N та эълон» йўқ', () {
+  group('Бозорлар қидируви (Уй-жойда йўқ — эга 2026-11-16: филтрлар орқали)', () {
+    test('калит 3 тилда; бозорларда ягона майдон, «N та эълон» йўқ; Уй-жойда қидирув йўқ', () {
       for (final l in ['uz_Cyrl', 'uz_Latn', 'ru']) {
-        expect((_lang(l)['realty_search_hint'] as String?)?.isNotEmpty, isTrue);
         expect((_lang(l)['market_search_hint'] as String?)?.isNotEmpty, isTrue);
         expect(_lang(l).containsKey('market_count'), isFalse);
+        expect(_lang(l).containsKey('realty_search_hint'), isFalse);
       }
       for (final f in [
-        'lib/features/realty/screens/realty_screen.dart',
         'lib/features/wholesale/screens/wholesale_market_screen.dart',
         'lib/features/ads/screens/cheap_products_screen.dart',
         'lib/features/markets/screens/market_screen.dart',
@@ -277,6 +259,11 @@ void main() {
         expect(src.contains('market_count'), isFalse, reason: f);
         expect(src.contains('.count('), isFalse, reason: f);
       }
+      final realty = File('lib/features/realty/screens/realty_screen.dart').readAsStringSync();
+      expect(realty.contains('MarketSearchField('), isFalse);
+      expect(realty.contains('realty_search'), isFalse);
+      expect(realty.contains('kMarketAppBarHeight'), isTrue);
+      expect(realty.contains('.count('), isFalse);
     });
   });
 }

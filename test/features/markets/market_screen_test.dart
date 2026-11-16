@@ -110,17 +110,17 @@ void main() {
     expect(find.byKey(const ValueKey('market_card_f1')), findsOneWidget);
   });
 
-  // Эга 2026-11-16: Электроника ва Маиший техника — таксономия v2; «Барчаси» + бўлим чиплари, Импорт ЙЎҚ, таб ЭМАС.
+  // Эга 2026-11-16: Электроника ва Маиший техника — таксономия v3 (9/8 бўлим); «Барчаси» + бўлим чиплари, Импорт ЙЎҚ, таб ЭМАС.
   testWidgets('Электроника/Маиший техника: Барчаси + бўлим чиплари, Импорт йўқ, бўлим филтри', (tester) async {
     final src = _FakeSource([
       _it('e1', 'electronics', category: 'phones', unit: PriceUnit.piece),
       _it('e2', 'electronics', category: 'tv'),
-      _it('a1', 'appliances', category: 'climate'),
+      _it('a1', 'appliances', category: 'air_conditioners'),
     ]);
-    await _pump(tester, MarketScreen(marketId: 'electronics', source: src, loadTaxonomy: () async => kTaxonomyV2));
+    await _pump(tester, MarketScreen(marketId: 'electronics', source: src, loadTaxonomy: () async => kTaxonomyV3));
     expect(find.text('Электроника бозори'), findsOneWidget);
     expect(find.byKey(const ValueKey('market_cat_all')), findsOneWidget);
-    for (final c in ['phones', 'computers', 'tv', 'gadgets', 'accessories']) {
+    for (final c in ['phones', 'laptops', 'computers', 'tv', 'tablets', 'smartwatches', 'audio_video', 'accessories', 'other']) {
       expect(find.byKey(ValueKey('market_cat_$c')), findsOneWidget, reason: c);
     }
     expect(find.byKey(const ValueKey('market_imported_chip')), findsNothing);
@@ -134,10 +134,10 @@ void main() {
     expect(find.byKey(const ValueKey('market_card_e2')), findsOneWidget);
 
     await _pump(tester, const SizedBox()); // янги State (бошқа бозор)
-    await _pump(tester, MarketScreen(marketId: 'appliances', source: src, loadTaxonomy: () async => kTaxonomyV2));
+    await _pump(tester, MarketScreen(marketId: 'appliances', source: src, loadTaxonomy: () async => kTaxonomyV3));
     expect(find.text('Маиший техника бозори'), findsOneWidget);
     expect(find.byKey(const ValueKey('market_cat_all')), findsOneWidget);
-    for (final c in ['large', 'small', 'climate']) {
+    for (final c in ['fridges', 'washers', 'stoves', 'air_conditioners', 'vacuums', 'kitchen', 'heaters', 'other']) {
       expect(find.byKey(ValueKey('market_cat_$c')), findsOneWidget, reason: c);
     }
     expect(find.byKey(const ValueKey('market_imported_chip')), findsNothing);
@@ -292,7 +292,7 @@ void main() {
               for (final id in ['electronics', 'appliances'])
                 TextButton(
                   onPressed: () => openMarket(c, id,
-                      loadTaxonomy: () async => kTaxonomyV2,
+                      loadTaxonomy: () async => kTaxonomyV3,
                       canOpen: (m) {
                         asked.add(m);
                         return m == 'electronics_market';

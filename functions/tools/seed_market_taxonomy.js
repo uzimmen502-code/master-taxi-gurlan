@@ -159,4 +159,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e.message || e); process.exit(1); });
 }
 
-module.exports = { parseArgs, loadTaxonomy, DATA_FILE };
+module.exports = { parseArgs, loadTaxonomy, summarize, toValue, DATA_FILE };

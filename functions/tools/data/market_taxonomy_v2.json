@@ -1,0 +1,775 @@
+{
+  "markets": {
+    "livestock": {
+      "moduleId": "livestock_market",
+      "order": 10,
+      "names": {
+        "uz_Cyrl": "Мол бозори",
+        "uz_Latn": "Mol bozori",
+        "ru": "Рынок скота"
+      },
+      "slogan": {
+        "uz_Cyrl": "Қорамол ва паррандаларни эгасидан тўғридан-тўғри топинг — танланг, солиштиринг ва сотувчи билан келишинг.",
+        "uz_Latn": "Qoramol va parrandalarni egasidan to'g'ridan-to'g'ri toping — tanlang, solishtiring va sotuvchi bilan kelishing.",
+        "ru": "Скот и птица напрямую от владельцев — выбирайте, сравнивайте и договаривайтесь с продавцом."
+      },
+      "imageUrl": "",
+      "categories": [
+        {
+          "id": "all",
+          "names": {
+            "uz_Cyrl": "Барчаси",
+            "uz_Latn": "Barchasi",
+            "ru": "Все"
+          },
+          "orderable": false
+        }
+      ],
+      "fields": [
+        {
+          "key": "breed",
+          "type": "text",
+          "maxLen": 60,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Зоти",
+            "uz_Latn": "Zoti",
+            "ru": "Порода"
+          }
+        },
+        {
+          "key": "age_months",
+          "type": "int",
+          "min": 0,
+          "max": 600,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Ёши (ой)",
+            "uz_Latn": "Yoshi (oy)",
+            "ru": "Возраст (мес.)"
+          }
+        },
+        {
+          "key": "sex",
+          "type": "select",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Жинси",
+            "uz_Latn": "Jinsi",
+            "ru": "Пол"
+          },
+          "options": [
+            {
+              "id": "male",
+              "names": {
+                "uz_Cyrl": "Эркак",
+                "uz_Latn": "Erkak",
+                "ru": "Самец"
+              }
+            },
+            {
+              "id": "female",
+              "names": {
+                "uz_Cyrl": "Урғочи",
+                "uz_Latn": "Urg'ochi",
+                "ru": "Самка"
+              }
+            }
+          ]
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "min": 1,
+          "max": 100000,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Сони",
+            "uz_Latn": "Soni",
+            "ru": "Количество"
+          }
+        },
+        {
+          "key": "weight_kg",
+          "type": "int",
+          "min": 1,
+          "max": 5000,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Тахминий вазни (кг)",
+            "uz_Latn": "Taxminiy vazni (kg)",
+            "ru": "Примерный вес (кг)"
+          }
+        },
+        {
+          "key": "pregnant",
+          "type": "bool",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Бўғоз",
+            "uz_Latn": "Bo'g'oz",
+            "ru": "Стельная"
+          }
+        }
+      ],
+      "priceUnits": [
+        "",
+        "piece"
+      ]
+    },
+    "auto": {
+      "moduleId": "auto_market",
+      "order": 20,
+      "names": {
+        "uz_Cyrl": "Мошина бозори",
+        "uz_Latn": "Mashina bozori",
+        "ru": "Авторынок"
+      },
+      "slogan": {
+        "uz_Cyrl": "Мошина, мото, бошқа техникалар ва эҳтиёт қисмларни нарх ва сифат бўйича танлаб, мос вариантни топинг.",
+        "uz_Latn": "Mashina, moto, boshqa texnikalar va ehtiyot qismlarni narx va sifat bo'yicha tanlab, mos variantni toping.",
+        "ru": "Автомобили, мото, другая техника и запчасти — выбирайте по цене и качеству и находите подходящий вариант."
+      },
+      "imageUrl": "",
+      "categories": [
+        {
+          "id": "cars",
+          "names": {
+            "uz_Cyrl": "Мошиналар",
+            "uz_Latn": "Mashinalar",
+            "ru": "Автомобили"
+          },
+          "orderable": false
+        },
+        {
+          "id": "moto",
+          "names": {
+            "uz_Cyrl": "Мото",
+            "uz_Latn": "Moto",
+            "ru": "Мото"
+          },
+          "orderable": false
+        },
+        {
+          "id": "tech",
+          "names": {
+            "uz_Cyrl": "Техника",
+            "uz_Latn": "Texnika",
+            "ru": "Техника"
+          },
+          "orderable": false
+        },
+        {
+          "id": "parts",
+          "names": {
+            "uz_Cyrl": "Эҳтиёт қисмлар",
+            "uz_Latn": "Ehtiyot qismlar",
+            "ru": "Запчасти"
+          },
+          "orderable": true
+        }
+      ],
+      "fields": [
+        {
+          "key": "brand",
+          "type": "text",
+          "maxLen": 40,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Марка",
+            "uz_Latn": "Marka",
+            "ru": "Марка"
+          },
+          "categories": [
+            "cars",
+            "moto",
+            "tech"
+          ]
+        },
+        {
+          "key": "model",
+          "type": "text",
+          "maxLen": 40,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Модель",
+            "uz_Latn": "Model",
+            "ru": "Модель"
+          },
+          "categories": [
+            "cars",
+            "moto",
+            "tech"
+          ]
+        },
+        {
+          "key": "year",
+          "type": "int",
+          "min": 1950,
+          "max": 2100,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Йили",
+            "uz_Latn": "Yili",
+            "ru": "Год"
+          },
+          "categories": [
+            "cars",
+            "moto",
+            "tech"
+          ]
+        },
+        {
+          "key": "mileage_km",
+          "type": "int",
+          "min": 0,
+          "max": 3000000,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Пробег (км)",
+            "uz_Latn": "Probeg (km)",
+            "ru": "Пробег (км)"
+          },
+          "categories": [
+            "cars",
+            "moto",
+            "tech"
+          ]
+        },
+        {
+          "key": "fuel",
+          "type": "select",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Ёқилғи",
+            "uz_Latn": "Yoqilg'i",
+            "ru": "Топливо"
+          },
+          "options": [
+            {
+              "id": "petrol",
+              "names": {
+                "uz_Cyrl": "Бензин",
+                "uz_Latn": "Benzin",
+                "ru": "Бензин"
+              }
+            },
+            {
+              "id": "methane",
+              "names": {
+                "uz_Cyrl": "Метан",
+                "uz_Latn": "Metan",
+                "ru": "Метан"
+              }
+            },
+            {
+              "id": "propane",
+              "names": {
+                "uz_Cyrl": "Пропан",
+                "uz_Latn": "Propan",
+                "ru": "Пропан"
+              }
+            },
+            {
+              "id": "diesel",
+              "names": {
+                "uz_Cyrl": "Дизел",
+                "uz_Latn": "Dizel",
+                "ru": "Дизель"
+              }
+            },
+            {
+              "id": "electric",
+              "names": {
+                "uz_Cyrl": "Электр",
+                "uz_Latn": "Elektr",
+                "ru": "Электро"
+              }
+            },
+            {
+              "id": "hybrid",
+              "names": {
+                "uz_Cyrl": "Гибрид",
+                "uz_Latn": "Gibrid",
+                "ru": "Гибрид"
+              }
+            }
+          ],
+          "categories": [
+            "cars",
+            "moto",
+            "tech"
+          ]
+        },
+        {
+          "key": "fits_car",
+          "type": "text",
+          "maxLen": 80,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Қайси машинага",
+            "uz_Latn": "Qaysi mashinaga",
+            "ru": "Для какого авто"
+          },
+          "categories": [
+            "parts"
+          ]
+        },
+        {
+          "key": "condition",
+          "type": "select",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Ҳолати",
+            "uz_Latn": "Holati",
+            "ru": "Состояние"
+          },
+          "options": [
+            {
+              "id": "new",
+              "names": {
+                "uz_Cyrl": "Янги",
+                "uz_Latn": "Yangi",
+                "ru": "Новое"
+              }
+            },
+            {
+              "id": "used",
+              "names": {
+                "uz_Cyrl": "Ишлатилган",
+                "uz_Latn": "Ishlatilgan",
+                "ru": "Б/у"
+              }
+            }
+          ],
+          "categories": [
+            "parts"
+          ]
+        }
+      ],
+      "priceUnits": [
+        ""
+      ]
+    },
+    "meat": {
+      "moduleId": "meat_market",
+      "order": 30,
+      "names": {
+        "uz_Cyrl": "Гўшт бозори",
+        "uz_Latn": "Go'sht bozori",
+        "ru": "Мясной рынок"
+      },
+      "slogan": {
+        "uz_Cyrl": "Маҳаллий ва импорт гўштлар, парранда ва балиқларни яқин сотувчилардан танланг — нархларни солиштиринг ва етказиб беришдан фойдаланинг.",
+        "uz_Latn": "Mahalliy va import go'shtlar, parranda va baliqlarni yaqin sotuvchilardan tanlang — narxlarni solishtiring va yetkazib berishdan foydalaning.",
+        "ru": "Местное и импортное мясо, птица и рыба от ближайших продавцов — сравнивайте цены и пользуйтесь доставкой."
+      },
+      "sloganNoOrder": {
+        "uz_Cyrl": "Маҳаллий ва импорт гўштлар, парранда ва балиқларни яқин сотувчилардан танланг — нархларни солиштиринг ва сотувчи билан келишинг.",
+        "uz_Latn": "Mahalliy va import go'shtlar, parranda va baliqlarni yaqin sotuvchilardan tanlang — narxlarni solishtiring va sotuvchi bilan kelishing.",
+        "ru": "Местное и импортное мясо, птица и рыба от ближайших продавцов — сравнивайте цены и договаривайтесь с продавцом."
+      },
+      "imageUrl": "",
+      "categories": [
+        {
+          "id": "beef",
+          "names": {
+            "uz_Cyrl": "Мол",
+            "uz_Latn": "Mol",
+            "ru": "Говядина"
+          },
+          "orderable": true
+        },
+        {
+          "id": "mutton",
+          "names": {
+            "uz_Cyrl": "Қўй",
+            "uz_Latn": "Qo'y",
+            "ru": "Баранина"
+          },
+          "orderable": true
+        },
+        {
+          "id": "poultry",
+          "names": {
+            "uz_Cyrl": "Парранда",
+            "uz_Latn": "Parranda",
+            "ru": "Птица"
+          },
+          "orderable": true
+        },
+        {
+          "id": "fish",
+          "names": {
+            "uz_Cyrl": "Балиқ",
+            "uz_Latn": "Baliq",
+            "ru": "Рыба"
+          },
+          "orderable": true
+        },
+        {
+          "id": "other",
+          "names": {
+            "uz_Cyrl": "Бошқа",
+            "uz_Latn": "Boshqa",
+            "ru": "Другое"
+          },
+          "orderable": true
+        }
+      ],
+      "fields": [
+        {
+          "key": "slaughter_date",
+          "type": "date",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Сўйилган санаси",
+            "uz_Latn": "So'yilgan sanasi",
+            "ru": "Дата забоя"
+          }
+        }
+      ],
+      "priceUnits": [
+        "kg"
+      ]
+    },
+    "farm": {
+      "moduleId": "farm_market",
+      "order": 40,
+      "names": {
+        "uz_Cyrl": "Деҳқон бозори",
+        "uz_Latn": "Dehqon bozori",
+        "ru": "Фермерский рынок"
+      },
+      "slogan": {
+        "uz_Cyrl": "Сабзавот, мева, полиз ва донни деҳқондан тўғридан-тўғри олинг — янги маҳсулотни яхши нархда топинг.",
+        "uz_Latn": "Sabzavot, meva, poliz va donni dehqondan to'g'ridan-to'g'ri oling — yangi mahsulotni yaxshi narxda toping.",
+        "ru": "Овощи, фрукты, бахчевые и зерно напрямую от фермеров — свежие продукты по хорошей цене."
+      },
+      "imageUrl": "",
+      "categories": [
+        {
+          "id": "vegetables",
+          "names": {
+            "uz_Cyrl": "Сабзавот",
+            "uz_Latn": "Sabzavot",
+            "ru": "Овощи"
+          },
+          "orderable": true
+        },
+        {
+          "id": "fruits",
+          "names": {
+            "uz_Cyrl": "Мева",
+            "uz_Latn": "Meva",
+            "ru": "Фрукты"
+          },
+          "orderable": true
+        },
+        {
+          "id": "melons",
+          "names": {
+            "uz_Cyrl": "Полиз",
+            "uz_Latn": "Poliz",
+            "ru": "Бахчевые"
+          },
+          "orderable": true
+        },
+        {
+          "id": "grain",
+          "names": {
+            "uz_Cyrl": "Дон",
+            "uz_Latn": "Don",
+            "ru": "Зерно"
+          },
+          "orderable": true
+        },
+        {
+          "id": "other",
+          "names": {
+            "uz_Cyrl": "Бошқа",
+            "uz_Latn": "Boshqa",
+            "ru": "Другое"
+          },
+          "orderable": true
+        }
+      ],
+      "fields": [
+        {
+          "key": "harvest_date",
+          "type": "date",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Ҳосил вақти",
+            "uz_Latn": "Hosil vaqti",
+            "ru": "Время сбора"
+          }
+        }
+      ],
+      "priceUnits": [
+        "kg",
+        "ton",
+        "piece"
+      ]
+    },
+    "electronics": {
+      "moduleId": "electronics_market",
+      "order": 50,
+      "names": {
+        "uz_Cyrl": "Электроника бозори",
+        "uz_Latn": "Elektronika bozori",
+        "ru": "Рынок электроники"
+      },
+      "slogan": {
+        "uz_Cyrl": "Замонавий технологиялар — бир жойда!",
+        "uz_Latn": "Zamonaviy texnologiyalar — bir joyda!",
+        "ru": "Современные технологии — в одном месте!"
+      },
+      "imageUrl": "",
+      "categories": [
+        {
+          "id": "phones",
+          "names": {
+            "uz_Cyrl": "Телефонлар",
+            "uz_Latn": "Telefonlar",
+            "ru": "Телефоны"
+          },
+          "orderable": true
+        },
+        {
+          "id": "computers",
+          "names": {
+            "uz_Cyrl": "Ноутбук ва компьютерлар",
+            "uz_Latn": "Noutbuk va kompyuterlar",
+            "ru": "Ноутбуки и компьютеры"
+          },
+          "orderable": true
+        },
+        {
+          "id": "tv",
+          "names": {
+            "uz_Cyrl": "Телевизорлар",
+            "uz_Latn": "Televizorlar",
+            "ru": "Телевизоры"
+          },
+          "orderable": true
+        },
+        {
+          "id": "gadgets",
+          "names": {
+            "uz_Cyrl": "Гаджетлар",
+            "uz_Latn": "Gadjetlar",
+            "ru": "Гаджеты"
+          },
+          "orderable": true
+        },
+        {
+          "id": "accessories",
+          "names": {
+            "uz_Cyrl": "Аксессуарлар",
+            "uz_Latn": "Aksessuarlar",
+            "ru": "Аксессуары"
+          },
+          "orderable": true
+        }
+      ],
+      "fields": [
+        {
+          "key": "brand",
+          "type": "text",
+          "maxLen": 40,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Марка",
+            "uz_Latn": "Marka",
+            "ru": "Марка"
+          }
+        },
+        {
+          "key": "model",
+          "type": "text",
+          "maxLen": 60,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Модель",
+            "uz_Latn": "Model",
+            "ru": "Модель"
+          }
+        },
+        {
+          "key": "condition",
+          "type": "select",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Ҳолати",
+            "uz_Latn": "Holati",
+            "ru": "Состояние"
+          },
+          "options": [
+            {
+              "id": "new",
+              "names": {
+                "uz_Cyrl": "Янги",
+                "uz_Latn": "Yangi",
+                "ru": "Новое"
+              }
+            },
+            {
+              "id": "used",
+              "names": {
+                "uz_Cyrl": "Ишлатилган",
+                "uz_Latn": "Ishlatilgan",
+                "ru": "Б/у"
+              }
+            }
+          ]
+        },
+        {
+          "key": "warranty_months",
+          "type": "int",
+          "min": 0,
+          "max": 120,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Кафолат (ой)",
+            "uz_Latn": "Kafolat (oy)",
+            "ru": "Гарантия (мес.)"
+          }
+        },
+        {
+          "key": "storage_gb",
+          "type": "int",
+          "min": 1,
+          "max": 4096,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Хотира (ГБ)",
+            "uz_Latn": "Xotira (GB)",
+            "ru": "Память (ГБ)"
+          },
+          "categories": [
+            "phones",
+            "computers",
+            "gadgets"
+          ]
+        }
+      ],
+      "priceUnits": [
+        "",
+        "piece"
+      ]
+    },
+    "appliances": {
+      "moduleId": "appliances_market",
+      "order": 60,
+      "names": {
+        "uz_Cyrl": "Маиший техника бозори",
+        "uz_Latn": "Maishiy texnika bozori",
+        "ru": "Рынок бытовой техники"
+      },
+      "slogan": {
+        "uz_Cyrl": "Уйингизга қулайлик олиб келинг!",
+        "uz_Latn": "Uyingizga qulaylik olib keling!",
+        "ru": "Комфорт для вашего дома!"
+      },
+      "imageUrl": "",
+      "categories": [
+        {
+          "id": "large",
+          "names": {
+            "uz_Cyrl": "Катта техника",
+            "uz_Latn": "Katta texnika",
+            "ru": "Крупная техника"
+          },
+          "orderable": true
+        },
+        {
+          "id": "small",
+          "names": {
+            "uz_Cyrl": "Кичик техника",
+            "uz_Latn": "Kichik texnika",
+            "ru": "Мелкая техника"
+          },
+          "orderable": true
+        },
+        {
+          "id": "climate",
+          "names": {
+            "uz_Cyrl": "Иқлим техникаси",
+            "uz_Latn": "Iqlim texnikasi",
+            "ru": "Климатическая техника"
+          },
+          "orderable": true
+        }
+      ],
+      "fields": [
+        {
+          "key": "brand",
+          "type": "text",
+          "maxLen": 40,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Марка",
+            "uz_Latn": "Marka",
+            "ru": "Марка"
+          }
+        },
+        {
+          "key": "model",
+          "type": "text",
+          "maxLen": 60,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Модель",
+            "uz_Latn": "Model",
+            "ru": "Модель"
+          }
+        },
+        {
+          "key": "condition",
+          "type": "select",
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Ҳолати",
+            "uz_Latn": "Holati",
+            "ru": "Состояние"
+          },
+          "options": [
+            {
+              "id": "new",
+              "names": {
+                "uz_Cyrl": "Янги",
+                "uz_Latn": "Yangi",
+                "ru": "Новое"
+              }
+            },
+            {
+              "id": "used",
+              "names": {
+                "uz_Cyrl": "Ишлатилган",
+                "uz_Latn": "Ishlatilgan",
+                "ru": "Б/у"
+              }
+            }
+          ]
+        },
+        {
+          "key": "warranty_months",
+          "type": "int",
+          "min": 0,
+          "max": 120,
+          "required": false,
+          "names": {
+            "uz_Cyrl": "Кафолат (ой)",
+            "uz_Latn": "Kafolat (oy)",
+            "ru": "Гарантия (мес.)"
+          }
+        }
+      ],
+      "priceUnits": [
+        "",
+        "piece"
+      ]
+    }
+  }
+}

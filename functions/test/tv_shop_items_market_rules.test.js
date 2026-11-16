@@ -116,6 +116,17 @@ async function main() {
   });
 
   // ── taxonomy ──
+  await check('M12 янги бозорлар electronics / appliances (эга 2026-11-16) — яратилади ва таҳрирда ўтади', async () => {
+    await assertSucceeds(items().doc('m_e').set(item(marketFields({ market: 'electronics', category: 'phones', attrs: { brand: 'Samsung', condition: 'new', warranty_months: 12, storage_gb: 256 }, taxonomyVersion: 2 }))));
+    await assertSucceeds(items().doc('m_ap').set(item(marketFields({ market: 'appliances', category: 'climate', attrs: { brand: 'Artel', condition: 'used' }, priceUnit: '', taxonomyVersion: 2 }))));
+    await assertSucceeds(items().doc('m_f').update({ market: 'appliances', category: 'large' }));
+  });
+  await check('M13 номаълум бозор (furniture, Electronics, electronics_market) — рад, таҳрирда ҳам', async () => {
+    await assertFails(items().doc('x_e1').set(item(marketFields({ market: 'furniture' }))));
+    await assertFails(items().doc('x_e2').set(item(marketFields({ market: 'Electronics' }))));
+    await assertFails(items().doc('x_e3').set(item(marketFields({ market: 'electronics_market' }))));
+    await assertFails(items().doc('m_e').update({ market: 'furniture' }));
+  });
   await check('T1 taxonomy: ҳамма ўқийди (меҳмон, user, admin)', async () => {
     await assertSucceeds(testEnv.unauthenticatedContext().firestore().collection('taxonomy').doc('markets').get());
     await assertSucceeds(as(USER).collection('taxonomy').doc('markets').get());

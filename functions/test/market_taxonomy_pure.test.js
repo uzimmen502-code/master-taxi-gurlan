@@ -52,6 +52,48 @@ check('P3 PRICE_UNITS = firestore.rules priceUnit рўйхати', () => {
   const list = m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
   assert.deepStrictEqual(list, [...t.PRICE_UNITS]);
 });
+const V2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'data', 'market_taxonomy_v2.json'), 'utf8'));
+check('P6 v2 JSON ўтади; 4 эски бозор v1 билан АЙНАН бир хил; +electronics/appliances (эга 2026-11-16)', () => {
+  expectOk(t.normalizeTaxonomy(V2));
+  assert.deepStrictEqual(Object.keys(V2.markets), ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances']);
+  for (const id of Object.keys(V1.markets)) assert.deepStrictEqual(V2.markets[id], V1.markets[id], id);
+  const e = V2.markets.electronics;
+  const a = V2.markets.appliances;
+  assert.deepStrictEqual([e.moduleId, e.order, a.moduleId, a.order], ['electronics_market', 50, 'appliances_market', 60]);
+  assert.deepStrictEqual(e.categories.map((c) => c.id), ['phones', 'computers', 'tv', 'gadgets', 'accessories']);
+  assert.deepStrictEqual(a.categories.map((c) => c.id), ['large', 'small', 'climate']);
+  assert.ok([...e.categories, ...a.categories].every((c) => c.orderable === true));
+  assert.deepStrictEqual(e.fields.map((f) => f.key), ['brand', 'model', 'condition', 'warranty_months', 'storage_gb']);
+  assert.deepStrictEqual(a.fields.map((f) => f.key), ['brand', 'model', 'condition', 'warranty_months']);
+  assert.deepStrictEqual(e.fields[4].categories, ['phones', 'computers', 'gadgets']);
+  assert.deepStrictEqual([e.priceUnits, a.priceUnits], [['', 'piece'], ['', 'piece']]);
+});
+check('P7 v2 бозор id лари = firestore.rules tvShopItemShapeOk market рўйхати', () => {
+  const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
+  const m = rules.match(/d\.get\('market', 'livestock'\) in \[([^\]]*)\]/);
+  assert.ok(m, 'rules ichida market ro\'yxati topilmadi');
+  const list = m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
+  assert.deepStrictEqual(list, Object.keys(V2.markets));
+});
+check('P8 upgrade diffMarkets: added/changed/removed/unchanged', () => {
+  const { diffMarkets } = require('../tools/upgrade_market_taxonomy');
+  const d = diffMarkets(V1.markets, V2.markets);
+  assert.deepStrictEqual(d, { added: ['electronics', 'appliances'], changed: [], removed: [], unchanged: ['livestock', 'auto', 'meat', 'farm'] });
+  const m2 = JSON.parse(JSON.stringify(V1.markets)); m2.meat.order = 31; delete m2.farm;
+  assert.deepStrictEqual(diffMarkets(V1.markets, m2), { added: [], changed: ['meat'], removed: ['farm'], unchanged: ['livestock', 'auto'] });
+});
+check('P9 upgrade decide: WRITE v2 / CONFLICT / NOOP (қайта) / REMOVE_REFUSED / MISSING; fromValue(toValue) айнан', () => {
+  const { decide, fromValue } = require('../tools/upgrade_market_taxonomy');
+  const { toValue } = require('../tools/seed_market_taxonomy');
+  const v1doc = { exists: true, version: 1, markets: V1.markets };
+  assert.deepStrictEqual([decide(v1doc, 1, V2.markets).action, decide(v1doc, 1, V2.markets).version], ['WRITE', 2]);
+  assert.strictEqual(decide(v1doc, 2, V2.markets).action, 'TAXONOMY_VERSION_CONFLICT');
+  assert.strictEqual(decide({ exists: true, version: 2, markets: V2.markets }, 1, V2.markets).action, 'NOOP');
+  assert.strictEqual(decide({ exists: true, version: 3, markets: V2.markets }, 1, V2.markets).action, 'TAXONOMY_VERSION_CONFLICT');
+  assert.strictEqual(decide({ exists: true, version: 2, markets: V2.markets }, 2, V1.markets).action, 'REMOVE_REFUSED');
+  assert.strictEqual(decide({ exists: false }, 1, V2.markets).action, 'MISSING');
+  assert.deepStrictEqual(fromValue(toValue(V2.markets)), V2.markets);
+});
 check('P4 normalizeTaxonomy сатрларни trim қилади, бошқа қийматга тегмайди', () => {
   const n = t.normalizeTaxonomy({ a: '  x ', b: [' y', 3, true, null], c: { d: ' z' } });
   assert.deepStrictEqual(n, { a: 'x', b: ['y', 3, true, null], c: { d: 'z' } });

@@ -28,7 +28,6 @@ class _StubL10n extends AppLocalizations {
     'wholesale_price_tiers': 'Улгуржи нарх поғоналари',
     'wholesale_title': 'Улгуржи бозор',
     'platform_store_stock_left': 'Қолдиқ',
-    'product_swipe_next_up': 'Кейинги маҳсулот учун юқорига суринг',
   };
 
   @override

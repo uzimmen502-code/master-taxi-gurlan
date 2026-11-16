@@ -40,9 +40,6 @@ class WholesaleRingFilter {
 abstract class WholesaleListingSource {
   RingFetcher<WholesaleProduct> fetcher(WholesaleRingFilter filter);
 
-  /// Республика бўйича фаол маҳсулотлар сони ([WholesaleProduct.belongsToMarket] қоидасига мос).
-  Future<int> count(WholesaleRingFilter filter);
-
   /// «Барча ҳудудларда» сотувчилар маҳсулотлари (бозор бўйича филтрланган).
   Future<List<WholesaleProduct>> allAreas(WholesaleRingFilter filter);
 
@@ -79,24 +76,6 @@ class FirestoreWholesaleListingSource implements WholesaleListingSource {
       // [RingPager] уни «ҳалқа тугади» деб тушунмаслиги учун хом ҳужжатлар сони узатилади.
       return RingFetchResult(out, res.cursor, rawCount: res.items.length);
     };
-  }
-
-  @override
-  Future<int> count(WholesaleRingFilter filter) async {
-    final china = await _count([('status', WholesaleProduct.statusActive), ('market', WholesaleProduct.marketChina)]);
-    if (filter.isChina) return china;
-    // Улгуржи = барча фаол − Хитой (эски ҳужжатларда `market` йўқ — улар Улгуржи).
-    final all = await _count([('status', WholesaleProduct.statusActive)]);
-    return all > china ? all - china : 0;
-  }
-
-  Future<int> _count(List<(String, Object)> filters) async {
-    Query<Map<String, dynamic>> q = _col;
-    for (final (field, value) in filters) {
-      q = q.where(field, isEqualTo: value);
-    }
-    final agg = await q.count().get();
-    return agg.count ?? 0;
   }
 
   @override

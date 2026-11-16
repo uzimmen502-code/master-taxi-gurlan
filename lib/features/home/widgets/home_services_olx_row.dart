@@ -4,69 +4,44 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../home_module_gate.dart';
-import 'service_circle_tile.dart';
 import 'service_spotlight_item.dart';
 
-/// Бош саҳифадаги хизматлар блоки — OLX'нинг «Разделы на сервисе OLX»
-/// жойлашуви: **2 қатор, ёнга скролл**.
+/// Бош саҳифадаги «Барча хизматларни кўриш» сарлавҳаси (эга, 2026-11-16).
 ///
-/// olx.uz дан 2026-09-26 да ЖОНЛИ ўлчанган (мобил 375px, DOM):
-/// ```
-/// display: grid;  grid-auto-flow: row;
-/// grid-template-rows: 196px 0px 216px;      // 2 қатор, оралиқ 0
-/// grid-template-columns: 100px 131.6px 100px 117px 100px …  // 9 устун
-/// ```
-/// 13 та банд шундай жойлашган: **1–9 юқори қаторда, 10–13 пастда** —
-/// яъни тўлдириш УСТУН бўйлаб эмас, ҚАТОР бўйлаб; устунлар иккала
-/// қаторда бир хил `x` да турибди.
+/// Аввал бу ерда OLX услубидаги 2 қаторли доира плиткалар қатори (`HomeServicesOlxRow`)
+/// турарди; эга қарори билан плиткалар бош саҳифадан олиб ташланди — хизматларга фақат
+/// шу сарлавҳа орқали «Барча хизматлар» экранида ([AllServicesScreen]) кирилади.
+/// Плиткалар у экранда сақланган.
 ///
-/// ФАРҚ (атайлаб): OLX устун энини ёрлиқ матнига қараб ўстиради
-/// (камида 100px). Бизда ёзув ўзбекча ва катта ҳарфли — «ШАҲАРЛАРАРО
-/// ТАКСИ» каби, узунлиги жуда ҳар хил. Шунинг учун устун эни ҚАТЪИЙ
-/// ([_colWidth]): шунда иккала қатор аниқ бир-бирининг остига тушади
-/// ва узун ёзув 3 қаторга ўралади — OLX'да ҳам ёзув 3 қаторгача
-/// ўралади («Хобби, отдых и спорт»).
-///
-/// Автоматик айланиш ЙЎҚ — OLX'да ҳам йўқ, бу оддий скролл.
-class HomeServicesOlxRow extends StatefulWidget {
-  const HomeServicesOlxRow({
+/// Дарвоза: аввалгидек — [items] ичида [HomeModuleGate.showInGrid] бўйича биронта ҳам
+/// кўринадиган хизмат бўлмаса, сарлавҳа ҳам чиқмайди. Админ модулни ёқиб/ўчирганда
+/// ўзи янгиланади.
+class HomeAllServicesHeader extends StatefulWidget {
+  const HomeAllServicesHeader({
     super.key,
     required this.items,
-    this.onTitleTap,
+    this.onTap,
   });
 
   final List<ServiceSpotlightItem> items;
 
-  /// Сарлавҳа босилса — «Барча хизматлар» экрани.
-  final VoidCallback? onTitleTap;
+  /// Босилса — «Барча хизматлар» экрани.
+  final VoidCallback? onTap;
 
-  /// Устун эни. Доира 20% кичрайгандан кейин ҳам ЎЗГАРМАДИ: ёрлиқ
-  /// («ШАҲАРЛАРАРО ТАКСИ») сиғиши учун кенглик керак, доиранинг ёнидаги
-  /// ҳаво эса зарар қилмайди — OLX'да ҳам доира устун энидан кичик
-  /// (88 доира / 100–132 устун).
-  static const double _colWidth = 104;
-
-  /// Қаторлар оралиғи — **0** (эга қарори, 2026-09-27: «қаторлар орасини
-  /// максимал қисқартир»). OLX'нинг ўзида ҳам 0 (`grid-template-rows:
-  /// 196px 0px 216px`).
-  ///
-  /// Олдин 6px заҳира бор эди, чунки ёзув 3 қаторга чиқиши мумкин деб
-  /// ҳисобланган. Ёрлиқ шрифти 2 баробар кичрайгач бу заҳира керак
-  /// бўлмай қолди: ўралиш ўрни катакнинг ўз ичида
-  /// ([ServiceCircleTile.tileHeight]) ҳисобга олинган.
-  static const double _rowGap = 0;
+  /// Сарлавҳа услуби: [AvaText.homeSectionTitle] (14 px), қалинроқ — w800 (эга, 2026-11-16).
+  static final TextStyle titleStyle =
+      AvaText.homeSectionTitle.copyWith(fontWeight: FontWeight.w800);
 
   @override
-  State<HomeServicesOlxRow> createState() => _HomeServicesOlxRowState();
+  State<HomeAllServicesHeader> createState() => _HomeAllServicesHeaderState();
 }
 
-class _HomeServicesOlxRowState extends State<HomeServicesOlxRow> {
+class _HomeAllServicesHeaderState extends State<HomeAllServicesHeader> {
   VoidCallback? _configListener;
 
   @override
   void initState() {
     super.initState();
-    // Админ модулни ёқиб/ўчирганда қатор ўзи янгиланади.
     _configListener = () {
       if (mounted) setState(() {});
     };
@@ -84,82 +59,33 @@ class _HomeServicesOlxRowState extends State<HomeServicesOlxRow> {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final visible = widget.items
-        .where((e) => HomeModuleGate.showInGrid(e.gate))
-        .toList(growable: false);
-    if (visible.isEmpty) return const SizedBox.shrink();
+    final anyVisible =
+        widget.items.any((e) => HomeModuleGate.showInGrid(e.gate));
+    if (!anyVisible) return const SizedBox.shrink();
 
-    // ҚАТОР бўйлаб тўлдириш: биринчи ярми юқорида, қолгани пастда.
-    final cols = (visible.length + 1) ~/ 2;
-    final top = visible.take(cols).toList(growable: false);
-    final bottom = visible.skip(cols).toList(growable: false);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.onTitleTap,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    context.tr('home_services_spotlight_title'),
-                    style: AvaText.homeSectionTitle.copyWith(color: c.ink),
-                  ),
-                  Icon(Icons.chevron_right_rounded, size: 22, color: c.ink),
-                ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('home_all_services_header'),
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 36),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  context.tr('home_services_spotlight_title'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HomeAllServicesHeader.titleStyle.copyWith(color: c.ink),
+                ),
               ),
-            ),
+              Icon(Icons.chevron_right_rounded, size: 22, color: c.ink),
+            ],
           ),
         ),
-        const SizedBox(height: AvaSpace.sectionHeaderGap),
-        SizedBox(
-          height: ServiceCircleTile.tileHeight * 2 +
-              HomeServicesOlxRow._rowGap,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Row(items: top),
-                const SizedBox(height: HomeServicesOlxRow._rowGap),
-                _Row(items: bottom),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row({required this.items});
-
-  final List<ServiceSpotlightItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: ServiceCircleTile.tileHeight,
-      child: Row(
-        // Устки қаторга тираб қўйилади: 2 қаторли ёрлиқли катак марказлаштирилса
-        // доираси бошқалардан юқорида қолади (ёрлиқ-доира оралиғи 2 px бўлгач
-        // қурилмада кўринди).
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final item in items)
-            SizedBox(
-              width: HomeServicesOlxRow._colWidth,
-              child: ServiceCircleTile(item: item),
-            ),
-        ],
       ),
     );
   }

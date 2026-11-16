@@ -11,9 +11,9 @@ import '../../../core/geo/relative_location.dart';
 import '../../../core/geo/ring_feed.dart';
 import '../../../core/geo/ring_query.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/load_error_view.dart';
 import '../../../shared/widgets/market_add_button.dart';
+import '../../../shared/widgets/market_search_field.dart';
 import '../../china_inquiry/widgets/china_inquiry_entry.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/fair_mix.dart';
@@ -65,7 +65,7 @@ String wholesaleLocationLabel(WholesaleProduct p, GeoArea user, String lang) => 
 /// «Бозорлар» 7-босқич (эга, 2026-11-15): бозор кўриниши — сарлавҳада қизил «+» (тасдиқланган, жўнатиш
 /// манзили бор сотувчига — шу бозор маҳсулот формаси; бошқаларга — сотувчи бўлиш оқими,
 /// [openWholesaleSeller]), ҳудуд қатори (сукут — Республика ҳалқалари, яқиндан узоққа; вилоят/туман
-/// танланса — фақат шу ҳудуд; танлов сақланмайди), «N та эълон» (`count()`), карточкада нисбий жой.
+/// танланса — фақат шу ҳудуд; танлов сақланмайди), карточкада нисбий жой («N та эълон» 2026-11-16 да олиб ташланди).
 /// «Барча ҳудудларда» сотувчилар доим рўйхат бошида ([mergeAllAreas]). 11-03 даги «ҳудуд фильтри йўқ»
 /// қарори шу билан АЛМАШТИРИЛДИ.
 class WholesaleMarketScreen extends StatefulWidget {
@@ -111,7 +111,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
   /// «Барча ҳудудларда» сотувчилар маҳсулотлари — бир марта ўқилади (кам ўзгаради).
   List<WholesaleProduct> _allAreas = const [];
   late final WholesaleRingFilter _filter = WholesaleRingFilter(market: widget.market);
-  Future<int>? _count;
 
   /// AVA дўконининг улгуржи товарлари — эга қарори (2026-09-29):
   /// «АВА дўкони бундан кейин Улгуржи бозор мақомида». Лентада улар
@@ -129,10 +128,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
     super.initState();
     if (_showPlatform) unawaited(_loadPlatform());
     unawaited(_loadAllAreas());
-    _count = _source.count(_filter).catchError((Object e) {
-      debugPrint('[Wholesale] WHOLESALE_COUNT_FAILED market=${widget.market}: $e');
-      return -1;
-    });
     _restart();
   }
 
@@ -214,7 +209,6 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
 
   void _setScope(GeoScope s) {
     _scope = s;
-    // Сон Республика бўйича — ҳудуд ўзгарганда қайта саналмайди.
     _restart();
   }
 
@@ -247,7 +241,8 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 48,
+        // Ихчам тепа (эга, 2026-11-16; аввал 48).
+        toolbarHeight: kMarketAppBarHeight,
         // Сарлавҳада «бозор» сўзи йўқ (эга, 2026-11-01: «мантиқан ортиқча»): «Улгуржи» / «Хитой».
         // `wholesale_title` бошқа жойларда (буюртма карточкаси, AVA маҳсулоти, форма) ўзгармаган.
         title: Text(
@@ -274,56 +269,33 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen> {
     final showTabs = !_isChina ||
         distinctActiveSellers(loaded, market: widget.market) >= kChinaSellersTabMin;
     final tab = showTabs ? _tab : 0;
+    // Ихчам тепа (эга, 2026-11-16): ягона қидирув майдони, ҳудуд, таблар — орасида 1 px; «N та эълон» олиб ташланди.
     return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-        child: TextField(
-          controller: _searchCtrl,
-          textInputAction: TextInputAction.search,
-          onChanged: _setQuery,
-          decoration: InputDecoration(
-            hintText: context.tr(_tab == 1 ? 'wholesale_sellers_search_hint' : 'wholesale_search_hint'),
-            prefixIcon: const Icon(Icons.search),
-            // Тозалаш: матн бор бўлсагина (48 dp босиладиган майдон).
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: context.tr('wholesale_empty_clear_search'),
-                    icon: const Icon(Icons.close),
-                    onPressed: _clearSearch,
-                  ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            isDense: true,
-          ),
-        ),
+      MarketSearchField(
+        fieldKey: const ValueKey('wholesale_search'),
+        controller: _searchCtrl,
+        hintText: context.tr(_tab == 1 ? 'wholesale_sellers_search_hint' : 'wholesale_search_hint'),
+        clearTooltip: context.tr('wholesale_empty_clear_search'),
+        onChanged: _setQuery,
+        onClear: _clearSearch,
       ),
-      GeoTierBar(moduleId: _geoModule, scope: _scope, onChanged: _setScope),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-        child: FutureBuilder<int>(
-          future: _count,
-          builder: (context, snap) {
-            final n = snap.data;
-            return Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                n == null || n < 0 ? ' ' : context.tr('market_count').replaceAll('{count}', formatPrice(n)),
-                key: const ValueKey('wholesale_count'),
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-              ),
-            );
-          },
-        ),
-      ),
+      const SizedBox(height: kMarketTopRowGap),
+      GeoTierBar(compact: true, moduleId: _geoModule, scope: _scope, onChanged: _setScope),
+      const SizedBox(height: kMarketTopRowGap),
       if (_isChina) ChinaInquiryEntry(phone: widget.userPhone),
       if (showTabs)
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, kMarketTopRowGap),
           child: SizedBox(
             width: double.infinity,
+            height: kMarketTopRowHeight,
             child: SegmentedButton<int>(
               key: const ValueKey('wholesale-market-tabs'),
               showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               segments: [
                 ButtonSegment(value: 0, label: Text(context.tr('wholesale_tab_products'))),
                 ButtonSegment(value: 1, label: Text(context.tr('wholesale_tab_sellers'))),

@@ -111,16 +111,13 @@ void main() {
       expect(opened.map((e) => e.id).toList(), ['china', 'meat']);
     });
 
-    // Эга 2026-11-16: 8 та картанинг ҳаммасида қисқа шиор — lang калитидан; карта баландлиги = расм (64), шиор ≤ 2 қатор.
-    testWidgets('шиор: 8 та карта — lang калити; ≤ 2 қатор, баландлик 64', (t) async {
+    // Эга 2026-11-16: 8 та картанинг ҳаммасида қисқа шиор — lang калитидан; карта баландлиги = расм (64).
+    testWidgets('шиор: 8 та карта — lang калити; баландлик 64', (t) async {
       await _pump(t, isVisible: (_) => true);
       String slogan(String id) => t.widget<Text>(find.byKey(ValueKey('home_market_slogan_$id'))).data!;
       for (final id in ['livestock', 'auto', 'meat', 'farm', 'realty', 'wholesale', 'china', 'aralash']) {
         expect(slogan(id), 'home_market_${id}_slogan');
       }
-      final s = t.widget<Text>(find.byKey(const ValueKey('home_market_slogan_meat')));
-      expect(s.overflow, TextOverflow.ellipsis);
-      expect(s.maxLines, 2);
       final row = find.descendant(
         of: find.byKey(const ValueKey('home_market_card_meat')),
         matching: find.byWidgetPredicate((w) => w is SizedBox && w.height == 64 && w.child is Row),
@@ -173,6 +170,7 @@ void main() {
       }),
     ));
     final row = homeRowServices(all).map((e) => e.moduleId).toSet();
+    // «Барча хизматлар» экрани (плиткалар) — тўлиқ рўйхат ўзгармаган.
     final full = all.map((e) => e.moduleId).toSet();
     for (final id in ['wholesale_market', 'china_market', 'realty']) {
       expect(row.contains(id), isFalse, reason: id);
@@ -184,18 +182,22 @@ void main() {
 
   group('home_screen.dart манбаси', () {
     final src = File('lib/features/home/home_screen.dart').readAsStringSync();
-    test('қидирув AvaTopBar тагида, тасдиқ/буюртма/ҳамён ундан кейин, блок хизматлардан кейин', () {
+    // Эга 2026-11-16: қидирув аввалги жойига — хизматлар сарлавҳасидан кейин, «Бозорлар»дан олдин;
+    // тасдиқ/буюртма/ҳамён AvaTopBar тагида қолади; доира плиткалар қатори бош саҳифада йўқ.
+    test('тартиб: AvaTopBar → тасдиқ/буюртма/ҳамён → «Барча хизматларни кўриш» → қидирув → «Бозорлар»', () {
       final top = RegExp(r'AvaTopBar\(\s*onPickRegion').firstMatch(src)?.start ?? -1;
       final searchRe = RegExp(r'HomeGlobalSearchBar\(\s*key:');
       final search = searchRe.firstMatch(src)?.start ?? -1;
       final confirm = src.indexOf('const CustomerConfirmBanner()');
       final order = src.indexOf('_ActiveOrderSlot(onOpen:');
       final ticker = src.indexOf('HomeWalletTickerSlot(');
-      final row = src.indexOf('HomeServicesOlxRow(');
+      final header = src.indexOf('HomeAllServicesHeader(');
       final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket)');
-      expect([top, search, confirm, order, ticker, row, block].every((i) => i > 0), isTrue);
-      expect(top < search && search < confirm && confirm < order && order < ticker, isTrue);
-      expect(ticker < row && row < block, isTrue);
+      expect([top, search, confirm, order, ticker, header, block].every((i) => i > 0), isTrue);
+      expect(top < confirm && confirm < order && order < ticker, isTrue);
+      expect(ticker < header && header < search && search < block, isTrue);
+      expect(src.contains('HomeServicesOlxRow('), isFalse, reason: 'доира плиткалар бош саҳифада йўқ');
+      expect(src.contains('onTap: _openAllServices'), isTrue);
       // Виджет фақат бир жойда (изоҳдаги `HomeGlobalSearchBar(onIntent: …)` ҳисобга кирмайди).
       expect(RegExp(r'^\s*HomeGlobalSearchBar\(', multiLine: true).allMatches(src).length, 1);
       expect(searchRe.allMatches(src).length, 1);

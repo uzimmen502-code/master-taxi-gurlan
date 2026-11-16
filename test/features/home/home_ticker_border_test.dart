@@ -5,7 +5,7 @@ import 'package:ava_gurlan/models/home_ticker_ad.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Бош экран баннери — 3 px қора хошия (эга, 2026-10-31).
+/// Бош экран баннери — 2 px қора хошия (эга, 2026-10-31: 3 px; 2026-11-16: 2 px).
 HomeTickerAd _ad(String id, String text) => HomeTickerAd(
       id: id, text: text, audience: 'all', durationSec: 6, scrollSpeed: 45,
       animationStyle: 'auto', fontSize: 13, priority: 0, active: true,
@@ -22,15 +22,15 @@ BoxDecoration _decoration(WidgetTester t) => t
     .decoration! as BoxDecoration;
 
 void main() {
-  testWidgets('хошия: қора, 3 px, сариқ фон ва 8 px бурчак сақланган', (t) async {
+  testWidgets('хошия: қора, 2 px, сариқ фон ва 8 px бурчак сақланган', (t) async {
     await t.pumpWidget(_app('Тошкентга такси? -- Шаҳарлараро такси!'));
     final d = _decoration(t);
     final b = d.border! as Border;
     expect(b.top.color, const Color(0xFF000000));
-    expect(b.top.width, 3);
-    expect(b.left.width, 3);
-    expect(b.bottom.width, 3);
-    expect(b.right.width, 3);
+    expect(b.top.width, 2);
+    expect(b.left.width, 2);
+    expect(b.bottom.width, 2);
+    expect(b.right.width, 2);
     expect(d.color, const Color(0xFFFFFF00));
     expect(d.borderRadius, BorderRadius.circular(8));
     expect(t.getSize(find.byType(HomeInfoTicker)).height, HomeInfoTicker.height, reason: 'баландлик 86 px ўзгармайди');

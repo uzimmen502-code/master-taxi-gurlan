@@ -250,6 +250,19 @@ class WholesaleProductsRepository {
   /// рухсат беради, шунинг учун бегона сотувчининг рўйхат сўрови шу
   /// шартсиз рад этилади. Тартиб клиентда (янгиси биринчи): `orderBy`
   /// қўшилса таркибий индекс керак бўлади.
+  /// Сотувчининг ФАОЛ маҳсулотлари сони — [watchActiveBySeller] филтри (индекс ўша), битта `count()`
+  /// («Сотувчининг бошқа маҳсулотлари» қатори, эга 2026-11-16). Бозор (Улгуржи/Хитой) бўйича ажратилмайди.
+  Future<int> countActiveBySeller(String sellerId) async {
+    final id = canonicalPhoneId(sellerId);
+    if (id.isEmpty) return 0;
+    final agg = await _col
+        .where('sellerId', isEqualTo: id)
+        .where('status', isEqualTo: WholesaleProduct.statusActive)
+        .count()
+        .get();
+    return agg.count ?? 0;
+  }
+
   Stream<List<WholesaleProduct>> watchActiveBySeller(
     String sellerId, {
     String? market,

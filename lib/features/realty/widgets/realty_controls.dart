@@ -161,10 +161,14 @@ class RealtyDealFilter extends StatelessWidget {
     super.key,
     required this.deal,
     required this.onChanged,
+    this.compact = false,
   });
 
   final RealtyDeal? deal;
   final ValueChanged<RealtyDeal?> onChanged;
+
+  /// Бозор экрани (эга, 2026-11-16): вертикал чет йўқ, қатор 36 px, чиплар ихчам.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -186,13 +190,16 @@ class RealtyDealFilter extends StatelessWidget {
           backgroundColor: c.chip,
           side: BorderSide(color: c.line),
           showCheckmark: false,
+          visualDensity: compact ? VisualDensity.compact : null,
+          materialTapTargetSize: compact ? MaterialTapTargetSize.shrinkWrap : null,
         ),
       );
     }
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      height: compact ? 36 : null,
+      padding: compact ? const EdgeInsets.symmetric(horizontal: 12) : const EdgeInsets.fromLTRB(12, 10, 12, 6),
       color: c.bg,
       child: Row(
         children: [

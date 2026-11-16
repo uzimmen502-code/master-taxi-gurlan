@@ -76,7 +76,8 @@ class _TvShopItemSwipeScreenState extends State<TvShopItemSwipeScreen> {
             itemCount: items.length,
             initialIndex: _index,
             controller: _pager,
-            onPageChanged: (i) => setState(() => _index = i),
+            // Қобиқ қайта қурилмайди — оғир саҳифалар свайпда қайта чизилмасин (2026-11-16).
+            onPageChanged: (i) => _index = i,
             itemBuilder: (_, i) => _page(items[i]),
           ),
           // «‹ N / M ›» тугмаси олиб ташланди (эга, 2026-11-01) — ўтиш суриш билан.

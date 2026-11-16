@@ -7,8 +7,10 @@ import '../../../core/geo/relative_location.dart';
 import '../../../core/geo/ring_query.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/load_error_view.dart';
+import '../../../shared/widgets/market_search_field.dart';
 import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
@@ -27,7 +29,10 @@ import '../widgets/market_listing_card.dart';
 /// * Ҳудуд: сукут — Республика ҳалқалари (яқиндан узоққа, [RingPager]); вилоят/туман танланса — фақат шу ҳудуд.
 ///   Танлов САҚЛАНМАЙДИ (модул қоидаси `persistSelection: false`; экран ёпилганда тозаланади).
 /// * Нарх филтри — КЛИЕНТДА (юкланган саҳифалар устида); тартиб — «Янгилар» (ҳалқа ичида `createdAt desc`).
-/// * Сон: «N та эълон» — Республика бўйича битта `count()` (status + market [+ category/imported]).
+/// * Сон («N та эълон») ва унинг `count()` сўрови олиб ташланди (эга, 2026-11-16).
+/// * Қидирув (эга, 2026-11-16): шу бозор ичида, сарлавҳа/тавсиф бўйича — КЛИЕНТДА, юкланган саҳифалар устида
+///   (`tv_shop_items` бозор эълонларида `searchTokens` ёзилмайди; сервер қидируви янги композит индекс талаб қиларди).
+/// * Тепа қисм ихчам: паст AppBar, қидирув, чиплар, ҳудуд ва филтр қаторлари орасида 1 px.
 class MarketScreen extends StatefulWidget {
   const MarketScreen({
     super.key,
@@ -90,7 +95,10 @@ class _MarketScreenState extends State<MarketScreen> {
   /// тўхтайди, «Яна кўрсатиш» тугмаси чиқади (чексиз ўқиш бўлмасин, 37-банд).
   int _emptyStreak = 0;
   int _gen = 0;
-  Future<int>? _count;
+
+  /// Бозор ичидаги қидирув (клиентда).
+  final _searchCtrl = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
@@ -102,6 +110,7 @@ class _MarketScreenState extends State<MarketScreen> {
   void dispose() {
     final m = _def;
     if (m != null) GeoContext.clearSessionScope(m.moduleId);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -130,8 +139,8 @@ class _MarketScreenState extends State<MarketScreen> {
   MarketFilter get _filter =>
       MarketFilter(market: widget.marketId, category: _category, importedOnly: _importedOnly);
 
-  /// Филтр ёки ҳудуд ўзгарди — рўйхат ва сон қайтадан.
-  void _restart({bool recount = true}) {
+  /// Филтр ёки ҳудуд ўзгарди — рўйхат қайтадан.
+  void _restart() {
     final scope = _scope;
     if (scope == null) return;
     _gen++;
@@ -144,7 +153,6 @@ class _MarketScreenState extends State<MarketScreen> {
       fetch: _source.fetcher(_filter),
       districtsOf: _source.districtsOf,
     );
-    if (recount) _count = _source.count(_filter);
     setState(() {});
     _loadMore();
   }
@@ -160,7 +168,7 @@ class _MarketScreenState extends State<MarketScreen> {
     try {
       final page = await pager.next(widget.pageSize);
       if (!mounted || gen != _gen) return;
-      final visibleAdded = page.where((r) => priceInRange(r.item.price, _minPrice, _maxPrice)).length;
+      final visibleAdded = page.where((r) => _shows(r.item)).length;
       setState(() {
         _items.addAll(page);
         _loading = false;
@@ -177,10 +185,26 @@ class _MarketScreenState extends State<MarketScreen> {
     }
   }
 
+  /// Нарх ва қидирув филтри (иккаласи ҳам клиентда).
+  bool _shows(TvShopItem i) =>
+      priceInRange(i.price, _minPrice, _maxPrice) && marketItemMatchesQuery(i, _query);
+
   List<TvShopItem> get _visible => [
         for (final r in _items)
-          if (priceInRange(r.item.price, _minPrice, _maxPrice)) r.item,
+          if (_shows(r.item)) r.item,
       ];
+
+  void _onQuery(String v) {
+    setState(() {
+      _query = v;
+      _emptyStreak = 0;
+    });
+  }
+
+  void _clearQuery() {
+    _searchCtrl.clear();
+    _onQuery('');
+  }
 
   void _setCategory(String c) {
     if (c == _category) return;
@@ -274,6 +298,8 @@ class _MarketScreenState extends State<MarketScreen> {
         backgroundColor: c.chip,
         side: BorderSide(color: selected ? c.brand : c.line, width: selected ? 1.5 : 1),
         labelStyle: TextStyle(fontSize: 13, color: c.ink, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
@@ -284,10 +310,12 @@ class _MarketScreenState extends State<MarketScreen> {
       if (!m.hasImported) return null;
     }
     final lang = context.contentLang;
-    return SingleChildScrollView(
+    return SizedBox(
+      height: kMarketTopRowHeight,
+      child: SingleChildScrollView(
       key: const ValueKey('market_categories'),
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+      padding: const EdgeInsets.fromLTRB(12, 0, 4, 0),
       child: Row(children: [
         if (m.hasCategoryChoice && !m.usesTabs) ...[
           _chip('market_cat_all', context.tr('market_all'), _category.isEmpty, () => _setCategory('')),
@@ -297,6 +325,7 @@ class _MarketScreenState extends State<MarketScreen> {
         if (m.hasImported)
           _chip('market_imported_chip', context.tr('market_imported'), _importedOnly, _toggleImported),
       ]),
+      ),
     );
   }
 
@@ -305,48 +334,43 @@ class _MarketScreenState extends State<MarketScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SizedBox(height: kMarketTopRowGap),
         GeoTierBar(
+          compact: true,
           moduleId: m.moduleId,
           scope: scope,
           onChanged: (s) {
             _scope = s;
-            // Сон Республика бўйича — ҳудуд ўзгарганда қайта саналмайди.
-            _restart(recount: false);
+            _restart();
           },
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(children: [
-            ActionChip(
-              key: const ValueKey('market_price_chip'),
-              avatar: const Icon(Icons.payments_outlined, size: 16),
-              label: Text(_priceChipLabel()),
-              onPressed: _editPrice,
-            ),
-            const SizedBox(width: 8),
-            Chip(
-              key: const ValueKey('market_sort_new'),
-              avatar: const Icon(Icons.sort, size: 16),
-              label: Text(context.tr('market_sort_new')),
-            ),
-          ]),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-          child: FutureBuilder<int>(
-            future: _count,
-            builder: (context, snap) {
-              if (snap.hasError) debugPrint('[MarketScreen] MARKET_COUNT_FAILED: ${snap.error}');
-              final n = snap.data;
-              return Text(
-                n == null ? ' ' : context.tr('market_count').replaceAll('{count}', formatPrice(n)),
-                key: const ValueKey('market_count'),
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-              );
-            },
+        const SizedBox(height: kMarketTopRowGap),
+        SizedBox(
+          height: kMarketTopRowHeight,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(children: [
+              ActionChip(
+                key: const ValueKey('market_price_chip'),
+                avatar: const Icon(Icons.payments_outlined, size: 16),
+                label: Text(_priceChipLabel()),
+                onPressed: _editPrice,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              const SizedBox(width: 8),
+              Chip(
+                key: const ValueKey('market_sort_new'),
+                avatar: const Icon(Icons.sort, size: 16),
+                label: Text(context.tr('market_sort_new')),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ]),
           ),
         ),
+        const SizedBox(height: kMarketTopRowGap),
       ],
     );
   }
@@ -451,7 +475,17 @@ class _MarketScreenState extends State<MarketScreen> {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (chips != null) chips,
+          MarketSearchField(
+            fieldKey: const ValueKey('market_search'),
+            controller: _searchCtrl,
+            hintText: context.tr('market_search_hint'),
+            onChanged: _onQuery,
+            onClear: _clearQuery,
+          ),
+          if (chips != null) ...[
+            const SizedBox(height: kMarketTopRowGap),
+            chips,
+          ],
           _filterRow(m),
           Expanded(child: _list(m)),
         ],
@@ -461,6 +495,8 @@ class _MarketScreenState extends State<MarketScreen> {
     final scaffold = Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
+        // Ихчам тепа (эга, 2026-11-16).
+        toolbarHeight: kMarketAppBarHeight,
         title: Text(title),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
@@ -475,7 +511,8 @@ class _MarketScreenState extends State<MarketScreen> {
                 indicatorColor: AppColors.onPrimary,
                 onTap: (i) => _setCategory(m.categories[i].id),
                 tabs: [
-                  for (final c in m.categories) Tab(key: ValueKey('market_tab_${c.id}'), text: c.label(lang)),
+                  for (final c in m.categories)
+                    Tab(key: ValueKey('market_tab_${c.id}'), height: kMarketTabHeight, text: c.label(lang)),
                 ],
               )
             : null,
@@ -489,6 +526,13 @@ class _MarketScreenState extends State<MarketScreen> {
       child: scaffold,
     );
   }
+}
+
+/// Бозор ичидаги қидирув (клиентда, эга 2026-11-16): сарлавҳа, тавсиф, сотувчи номи — [CatalogSearch]
+/// (кирилл/лотин шакллари). Бўш сўров — ҳаммаси.
+bool marketItemMatchesQuery(TvShopItem i, String query) {
+  if (CatalogSearch.normalize(query).isEmpty) return true;
+  return CatalogSearch.matches(query, [i.title, i.description, i.ownerName]);
 }
 
 /// Нарх филтри (дан / гача, бутун сўм).

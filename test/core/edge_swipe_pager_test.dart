@@ -70,9 +70,9 @@ void main() {
     await t.pumpWidget(_app(count: 3));
     final before = t.getTopLeft(find.text('page 0')).dy;
     final g = await t.startGesture(t.getCenter(find.byType(Scaffold)));
-    // Чегарадан (56) кам: ўтиш юз бермайди, лекин сурилиш сезилади.
+    // Чегарадан (36) кам: ўтиш юз бермайди, лекин сурилиш сезилади.
     for (var i = 0; i < 6; i++) {
-      await g.moveBy(const Offset(0, -8));
+      await g.moveBy(const Offset(0, -5));
       await t.pump(const Duration(milliseconds: 16));
     }
     final during = t.getTopLeft(find.text('page 0')).dy;
@@ -90,7 +90,7 @@ void main() {
     final before = t.getTopLeft(find.text('page 1')).dy;
     final g = await t.startGesture(t.getCenter(find.byType(Scaffold)));
     for (var i = 0; i < 6; i++) {
-      await g.moveBy(const Offset(0, 8));
+      await g.moveBy(const Offset(0, 5));
       await t.pump(const Duration(milliseconds: 16));
     }
     expect(t.getTopLeft(find.text('page 1')).dy, greaterThan(before));
@@ -128,7 +128,7 @@ void main() {
 
   testWidgets('кичик суриш (чегара остида) ўтказмайди', (t) async {
     await t.pumpWidget(_app(count: 3));
-    await _dragSlow(t, const Offset(0, -50)); // slop + 56 дан кам
+    await _dragSlow(t, const Offset(0, -28)); // 36 дан кам
     expect(find.text('page 0'), findsOneWidget);
   });
 
@@ -170,5 +170,26 @@ void main() {
     await t.drag(find.byType(Scaffold), const Offset(-300, 0));
     await t.pumpAndSettle();
     expect(find.text('page 0'), findsOneWidget);
+  });
+
+  // 2026-11-16 (эга: свайп силлиқроқ): чегара 56 → 36, анимация 320 ms easeOutQuart.
+  test('енгил чегара ва юмшоқ анимация константалари', () {
+    expect(kEdgeSwipeThreshold, 36);
+    expect(kEdgeSwipeDuration, const Duration(milliseconds: 320));
+    expect(kEdgeSwipeCurve, Curves.easeOutQuart);
+  });
+
+  testWidgets('ўртача суриш (slop + ~50 px) энди кейинги саҳифага ўтказади (аввал 56 да ўтмасди)', (t) async {
+    await t.pumpWidget(_app(count: 3));
+    await _dragSlow(t, const Offset(0, -70));
+    expect(find.text('page 1'), findsOneWidget);
+  });
+
+  testWidgets('саҳифа RepaintBoundary ичида (сурилишда қайта чизилмайди)', (t) async {
+    await t.pumpWidget(_app(count: 3));
+    expect(
+      find.ancestor(of: find.text('page 0'), matching: find.byType(RepaintBoundary)),
+      findsWidgets,
+    );
   });
 }

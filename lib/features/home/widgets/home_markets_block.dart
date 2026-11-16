@@ -203,6 +203,75 @@ class _HomeMarketsBlockState extends State<HomeMarketsBlock> {
   }
 }
 
+/// Карта ўлчамлари (эга, 2026-11-16).
+const double kHomeMarketCardHeight = 64;
+const double kHomeMarketSloganMinFont = 9;
+const double kHomeMarketSloganMaxFont = 22;
+const double kHomeMarketSloganLineHeight = 1.1;
+
+/// Сарлавҳа: 15 px w700, ҳарф оралиғи 0.2, устун ўртасида (эга, 2026-11-16).
+const double kHomeMarketTitleFont = 15;
+const double kHomeMarketTitleLetterSpacing = 0.2;
+
+/// Шиор ↔ карта пастки чети (эга, 2026-11-16: 2 px).
+const double kHomeMarketSloganBottomGap = 2;
+
+/// Стрелка: катта қалин шеврон (CustomPaint), ўнг четдан 2 px; матн устуни стрелкагача 1 px.
+const double kHomeMarketArrowWidth = 16;
+const double kHomeMarketArrowHeight = 30;
+const double kHomeMarketArrowStroke = 3.5;
+const double kHomeMarketArrowRightGap = 2;
+
+/// Шиорни авто-мослаш натижаси.
+class MarketSloganFit {
+  const MarketSloganFit(this.fontSize, {required this.fits, required this.maxLines});
+
+  final double fontSize;
+
+  /// `true` — бутун шиор шу ўлчамда қутига сиғади (кесилмайди).
+  final bool fits;
+
+  /// [fits] бўлса — `null` (чеклов йўқ); акс ҳолда 9 px да қутига сиғадиган қаторлар сони (ellipsis).
+  final int? maxLines;
+}
+
+/// Эга 2026-11-16: шиор учун ЭНГ КАТТА шрифт ([kHomeMarketSloganMinFont]..[kHomeMarketSloganMaxFont],
+/// 0.5 px қадам, line height 1.1) — бутун шиор `maxWidth × maxHeight` қутига кесилмасдан сиғадиган.
+/// Сўз ўртасидан бўлинмаслиги ҳам шарт (энг узун сўз ≤ кенглик). 9 px да ҳам сиғмаса — 9 px + ellipsis.
+/// [baseStyle] — Text виджети ишлатадиган тўлиқ услуб (DefaultTextStyle билан бирлаштирилган).
+MarketSloganFit fitMarketSloganFont({
+  required String text,
+  required double maxWidth,
+  required double maxHeight,
+  required TextScaler textScaler,
+  TextStyle baseStyle = const TextStyle(),
+  TextDirection textDirection = TextDirection.ltr,
+}) {
+  TextPainter paint(double fs) => TextPainter(
+        text: TextSpan(
+          text: text,
+          style: baseStyle.copyWith(fontSize: fs, height: kHomeMarketSloganLineHeight),
+        ),
+        textDirection: textDirection,
+        textScaler: textScaler,
+      )..layout(maxWidth: maxWidth);
+
+  if (maxWidth > 0 && maxHeight > 0) {
+    for (var fs = kHomeMarketSloganMaxFont; fs >= kHomeMarketSloganMinFont; fs -= 0.5) {
+      final tp = paint(fs);
+      final ok = tp.height <= maxHeight + 0.01 && tp.minIntrinsicWidth <= maxWidth + 0.01;
+      tp.dispose();
+      if (ok) return MarketSloganFit(fs, fits: true, maxLines: null);
+    }
+  }
+  final tp = paint(kHomeMarketSloganMinFont);
+  final lines = tp.computeLineMetrics();
+  final lineH = lines.isEmpty ? 1.0 : lines.first.height;
+  tp.dispose();
+  final n = lineH <= 0 ? 1 : (maxHeight / lineH).floor();
+  return MarketSloganFit(kHomeMarketSloganMinFont, fits: false, maxLines: n < 1 ? 1 : n);
+}
+
 class _MarketCard extends StatelessWidget {
   const _MarketCard({required this.entry, required this.slogan, required this.onTap});
 
@@ -223,60 +292,125 @@ class _MarketCard extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(borderRadius: radius, border: Border.all(color: c.line)),
         child: InkWell(
-        onTap: onTap,
-        // Эга 2026-11-16: карта баландлиги = расм баландлиги (64), ички чет йўқ — расм карта четига тегади;
-        // сарлавҳа ↔ карта чегараси 1 px, сарлавҳа ↔ шиор 1 px; матн катта тизим шрифтида ҳам сиғсин.
-        child: MediaQuery.withClampedTextScaling(
+          onTap: onTap,
+          // Эга 2026-11-16: карта баландлиги = расм баландлиги (64), ички чет йўқ — расм карта четига тегади;
+          // сарлавҳа ↔ чегара 1 px, сарлавҳа ↔ шиор 1 px, шиор ↔ пастки чегара 2 px; матн устуни
+          // стрелкагача 1 px; шиор шрифти ҳар карта учун авто-мосланади ([fitMarketSloganFont]).
+          child: MediaQuery.withClampedTextScaling(
             maxScaleFactor: 1.0,
             child: SizedBox(
-            height: 64,
-            child: Row(
-            children: [
-              Image.asset(
-                entry.imagePath,
-                width: 100,
-                height: 64,
-                fit: BoxFit.cover,
-                cacheWidth: 300,
-                errorBuilder: (_, __, ___) => Container(width: 100, height: 64, color: c.surface2),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr(entry.titleKey),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
-                    ),
-                    if (slogan.isNotEmpty) ...[
-                      const SizedBox(height: 1),
-                      Text(
-                        slogan,
-                        key: ValueKey('home_market_slogan_${entry.id}'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11, height: 1.1, color: c.ink2),
+              height: kHomeMarketCardHeight,
+              child: Row(
+                children: [
+                  Image.asset(
+                    entry.imagePath,
+                    width: 100,
+                    height: kHomeMarketCardHeight,
+                    fit: BoxFit.cover,
+                    cacheWidth: 300,
+                    errorBuilder: (_, __, ___) =>
+                        Container(width: 100, height: kHomeMarketCardHeight, color: c.surface2),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Padding(
+                      key: ValueKey('home_market_text_${entry.id}'),
+                      padding: const EdgeInsets.only(top: 1, right: 1, bottom: kHomeMarketSloganBottomGap),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr(entry.titleKey),
+                            key: ValueKey('home_market_title_${entry.id}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            // Эга 2026-11-16: сарлавҳа устун ўртасида, каттароқ ва кенгроқ — ҳамма картада бир хил.
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: kHomeMarketTitleFont,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: kHomeMarketTitleLetterSpacing,
+                              color: c.ink,
+                            ),
+                          ),
+                          if (slogan.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, box) {
+                                  final style = DefaultTextStyle.of(context)
+                                      .style
+                                      .merge(TextStyle(color: c.ink2));
+                                  final fit = fitMarketSloganFont(
+                                    text: slogan,
+                                    maxWidth: box.maxWidth,
+                                    maxHeight: box.maxHeight,
+                                    textScaler: MediaQuery.textScalerOf(context),
+                                    baseStyle: style,
+                                    textDirection: Directionality.of(context),
+                                  );
+                                  return Text(
+                                    slogan,
+                                    key: ValueKey('home_market_slogan_${entry.id}'),
+                                    maxLines: fit.maxLines,
+                                    overflow: fit.fits ? TextOverflow.clip : TextOverflow.ellipsis,
+                                    style: style.copyWith(
+                                      fontSize: fit.fontSize,
+                                      height: kHomeMarketSloganLineHeight,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-                ),
+                    ),
+                  ),
+                  // Эга 2026-11-16 (охирги): стрелка КАТТА ва ЖУДА ҚАЛИН (CustomPaint, 3.5 px, юмалоқ учлар, c.ink),
+                  // вертикал марказда, карта ўнг четидан 2 px; матн устуни стрелкагача 1 px — шиор кенглиги шундан.
+                  SizedBox(
+                    key: ValueKey('home_market_arrow_${entry.id}'),
+                    width: kHomeMarketArrowWidth,
+                    height: kHomeMarketArrowHeight,
+                    child: CustomPaint(painter: HomeMarketChevronPainter(color: c.ink)),
+                  ),
+                  const SizedBox(width: kHomeMarketArrowRightGap),
+                ],
               ),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right_rounded, size: 20, color: c.ink3),
-              const SizedBox(width: 4),
-            ],
+            ),
           ),
-          ),
-        ),
         ),
       ),
     );
   }
+}
+
+/// Карта стрелкаси — қалин шеврон «›» ([kHomeMarketArrowStroke] px, юмалоқ учлар).
+class HomeMarketChevronPainter extends CustomPainter {
+  const HomeMarketChevronPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const s = kHomeMarketArrowStroke;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final h = size.height * 0.62; // шеврон баландлиги
+    final top = (size.height - h) / 2;
+    final path = Path()
+      ..moveTo(s / 2 + 1, top)
+      ..lineTo(size.width - s / 2 - 1, size.height / 2)
+      ..lineTo(s / 2 + 1, top + h);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(HomeMarketChevronPainter old) => old.color != color;
 }

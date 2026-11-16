@@ -196,10 +196,7 @@ void main() {
   });
 
   group('сўров филтрлари', () {
-    test('count(): status + market (+ category / imported)', () {
-      expect(const MarketFilter(market: 'meat').countFilters, [('status', 'active'), ('market', 'meat')]);
-      expect(const MarketFilter(market: 'meat', category: 'beef', importedOnly: true).countFilters,
-          [('status', 'active'), ('market', 'meat'), ('category', 'beef'), ('imported', true)]);
+    test('ҳалқа сўрови тенглик филтрлари (count() 2026-11-16 да олиб ташланди)', () {
       expect(const MarketFilter(market: 'farm', category: 'fruits').equals, {'market': 'farm', 'category': 'fruits'});
       expect(const MarketFilter(market: 'meat', importedOnly: true).equals, {'market': 'meat', 'imported': true});
     });

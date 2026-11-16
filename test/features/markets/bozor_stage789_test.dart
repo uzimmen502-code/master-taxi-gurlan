@@ -64,9 +64,6 @@ class _FakeRealty implements RealtyListingSource {
   }
 
   @override
-  Future<int> count(RealtyRingFilter filter) async => items.length;
-
-  @override
   Future<List<String>> districtsOf(String regionId) async => switch (regionId) {
         'xorazm' => ['gurlan', 'hazorasp'],
         'toshkent_shahri' => ['chilonzor'],
@@ -102,7 +99,6 @@ void main() {
       expect(const RealtyRingFilter(tier: RealtyTier.urgent, deal: RealtyDeal.rent).equals, {'tier': 'urgent'},
           reason: 'Сотиш/Ижара клиентда — янги индекс керак эмас');
       expect(const RealtyRingFilter().equals, isEmpty);
-      expect(const RealtyRingFilter(tier: RealtyTier.promo).countFilters, [('status', 'active'), ('tier', 'promo')]);
     });
 
     test('клиент филтри: битим тури ва муддати ўтганлар', () {
@@ -139,10 +135,11 @@ void main() {
       expect(items.map((e) => e.item.id), ['h']);
     });
 
-    test('экран: қизил «+», «N та эълон», ҳалқа ленталари; эски GeoWiderHint/stream оқими йўқ', () {
+    test('экран: қизил «+», «N та эълон» ЙЎҚ, ҳалқа ленталари; эски GeoWiderHint/stream оқими йўқ', () {
       final src = File('lib/features/realty/screens/realty_screen.dart').readAsStringSync();
       expect(src.contains("ValueKey('realty-add-ad')"), isTrue);
-      expect(src.contains("ValueKey('realty_count')"), isTrue);
+      expect(src.contains("ValueKey('realty_count')"), isFalse, reason: '«N та эълон» олиб ташланди (2026-11-16)');
+      expect(src.contains('.count('), isFalse);
       expect(src.contains('ringPlanFor(widget.scope)'), isTrue);
       expect(src.contains('watchScoped('), isFalse);
       expect(src.contains("GeoContext.clearSessionScope('realty')"), isTrue);
@@ -404,9 +401,6 @@ class _FakeMarketSource implements MarketListingSource {
         final page = all.skip(start).take(limit).toList();
         return RingFetchResult(page, start + page.length);
       };
-
-  @override
-  Future<int> count(MarketFilter filter) async => items.length;
 
   @override
   Future<List<String>> districtsOf(String regionId) async => regionId == 'xorazm' ? ['gurlan'] : const [];

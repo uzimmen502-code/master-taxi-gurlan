@@ -29,14 +29,6 @@ class MarketFilter {
         if (importedOnly) 'imported': true,
       };
 
-  /// `count()` сўрови филтрлари (тартиб — сўровдаги тартиб). Республика бўйича — туман филтри йўқ.
-  List<(String, Object)> get countFilters => [
-        ('status', 'active'),
-        ('market', market),
-        if (category.isNotEmpty) ('category', category),
-        if (importedOnly) ('imported', true),
-      ];
-
   @override
   bool operator ==(Object other) =>
       other is MarketFilter &&
@@ -51,7 +43,6 @@ class MarketFilter {
 /// Бозор эълонлари манбаи (тестда алмаштирилади).
 abstract class MarketListingSource {
   RingFetcher<TvShopItem> fetcher(MarketFilter filter);
-  Future<int> count(MarketFilter filter);
   Future<List<String>> districtsOf(String regionId);
 }
 
@@ -78,16 +69,6 @@ class FirestoreMarketListingSource implements MarketListingSource {
       }
       return RingFetchResult(items, res.cursor);
     };
-  }
-
-  @override
-  Future<int> count(MarketFilter filter) async {
-    Query<Map<String, dynamic>> q = _col;
-    for (final (field, value) in filter.countFilters) {
-      q = q.where(field, isEqualTo: value);
-    }
-    final agg = await q.count().get();
-    return agg.count ?? 0;
   }
 
   @override

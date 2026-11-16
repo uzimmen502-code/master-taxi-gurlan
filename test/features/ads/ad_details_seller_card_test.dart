@@ -3,6 +3,7 @@
 import 'package:ava_gurlan/features/ads/models/ad_model.dart';
 import 'package:ava_gurlan/features/ads/repositories/ads_repository.dart';
 import 'package:ava_gurlan/features/ads/screens/ad_details_screen.dart';
+import 'package:ava_gurlan/shared/widgets/seller_other_products_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -56,14 +57,28 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  testWidgets('сотувчи карточкаси: битта қатор «Сотувчининг барча маҳсулотлари», ном такрорланмайди', (tester) async {
+  // Эга 2026-11-16: ягона қатор «<Сотувчи> · Сотувчининг бошқа маҳсулотлари →» — фақат 1 тадан кўп фаол эълон бўлса.
+  testWidgets('сотувчида 2 та фаол эълон — «<Сотувчи> · бошқа маҳсулотлари» қатори', (tester) async {
+    SellerOtherProductsRow.debugSeed('ads:998901112233', true);
+    addTearDown(SellerOtherProductsRow.debugReset);
     await pump(tester, _ad());
-    expect(find.byKey(const ValueKey('ad_seller_all')), findsOneWidget);
-    // «Сотувчи» номи фақат сарлавҳа остида — бир марта.
-    expect(find.text('Сотувчи'), findsOneWidget);
-    // Ихчам: майдон баландлиги ≈ шрифт баландлиги (эга, 2026-11-01).
-    final box = tester.getSize(find.byKey(const ValueKey('ad_seller_all_box'))).height;
-    expect(box, lessThanOrEqualTo(26));
+    expect(find.byKey(const ValueKey('seller_other_products_row')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ad_seller_all')), findsNothing, reason: 'эски карточка йўқ (иккита эмас)');
+    // Навигация мақсади (SellerAdsScreen) — home_ui_batch тестида манбадан текширилади.
+    expect(find.text('Сотувчи · seller_other_products').evaluate().isNotEmpty || find.textContaining('Сотувчи ·').evaluate().isNotEmpty, isTrue);
+  });
+
+  testWidgets('сотувчида 1 та эълон ёки текширув хатоси — қатор йўқ', (tester) async {
+    SellerOtherProductsRow.debugSeed('ads:998901112233', false);
+    addTearDown(SellerOtherProductsRow.debugReset);
+    await pump(tester, _ad());
+    expect(find.byKey(const ValueKey('seller_other_products_row')), findsNothing);
+    SellerOtherProductsRow.debugReset();
+    // Fake репозиторийда count йўқ → хато → қатор чиқмайди.
+    await tester.pumpWidget(const SizedBox());
+    await pump(tester, _ad());
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const ValueKey('seller_other_products_row')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

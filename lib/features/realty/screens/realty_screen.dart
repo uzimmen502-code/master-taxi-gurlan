@@ -9,11 +9,12 @@ import '../../../core/geo/ring_feed.dart';
 import '../../../core/geo/ring_query.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../../../models/realty_alert.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../../../shared/widgets/market_add_button.dart';
+import '../../../shared/widgets/market_search_field.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../data/realty_ring_source.dart';
 import '../realty_tabs.dart';
@@ -35,8 +36,8 @@ import 'realty_map_screen.dart';
 /// бош саҳифадаги харита расмидан очилади.
 ///
 /// «Бозорлар» 7-босқич (эга, 2026-11-15): бозор кўриниши — қизил «+», ҳудуд қатори (сукут — Республика
-/// ҳалқалари, яқиндан узоққа; вилоят/туман танланса — фақат шу ҳудуд; танлов САҚЛАНМАЙДИ), «N та эълон»
-/// (`count()`, Республика бўйича), карточкада нисбий жой. Таблар ва Сотиш/Ижара — аввалгидек.
+/// ҳалқалари, яқиндан узоққа; вилоят/туман танланса — фақат шу ҳудуд; танлов САҚЛАНМАЙДИ), карточкада нисбий жой.
+/// 2026-11-16: «N та эълон» (`count()`) олиб ташланди; қидирув (клиентда) ва ихчам тепа қўшилди. Таблар ва Сотиш/Ижара — аввалгидек.
 ///
 /// Кириш қоидаси (9-бўлим): лентани меҳмон ҳам кўради, харита ва эълон
 /// жойлаштириш — фақат рўйхатдан ўтганлар учун.
@@ -64,11 +65,9 @@ class _RealtyScreenState extends State<RealtyScreen>
   /// Ҳудуд (GeoMode.rings): сукут — Республика ҳалқалари; танлов фақат экран очиқ турганда.
   GeoScope _scope = GeoContext.scopeFor('realty');
 
-  /// Жорий таб бўйича сон (Республика). Таб/битим ўзгарса қайта саналади, ҳудуд ўзгарса — йўқ.
-  Future<int>? _count;
-  String _countKey = '';
-
-  RealtyTier get _tier => RealtyTabs.order[_tabs.index];
+  /// Қидирув (эга, 2026-11-16): сарлавҳа/матн/нарх бўйича, КЛИЕНТДА — юкланган ҳалқа саҳифалари устида.
+  final _searchCtrl = TextEditingController();
+  String _query = '';
 
   bool get _isGuest =>
       FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
@@ -77,20 +76,9 @@ class _RealtyScreenState extends State<RealtyScreen>
     if (!_tabs.indexIsChanging && mounted) setState(() {});
   }
 
-  Future<int> _countFor(RealtyRingFilter f) {
-    final key = '${f.tier?.key}|${f.deal?.key}';
-    if (_count == null || key != _countKey) {
-      _countKey = key;
-      _count = _source.count(f).catchError((Object e) {
-        debugPrint('[Realty] REALTY_COUNT_FAILED tier=${f.tier?.key}: $e');
-        return -1;
-      });
-    }
-    return _count!;
-  }
-
   @override
   void dispose() {
+    _searchCtrl.dispose();
     GeoContext.clearSessionScope('realty');
     _tabs.removeListener(_onTab);
     _tabs.dispose();
@@ -132,6 +120,7 @@ class _RealtyScreenState extends State<RealtyScreen>
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
+        toolbarHeight: kMarketAppBarHeight,
         title: Text(context.tr('realty_title')),
         actions: [
           // Пакетни олдиндан ҳам олиш мумкин — объект очишда кутиб
@@ -200,40 +189,37 @@ class _RealtyScreenState extends State<RealtyScreen>
           ),
           tabs: [
             for (final tier in RealtyTabs.order)
-              Tab(text: context.tr(RealtyTabs.labelKey(tier))),
+              Tab(height: kMarketTabHeight, text: context.tr(RealtyTabs.labelKey(tier))),
           ],
         ),
       ),
+      // Ихчам тепа (эга, 2026-11-16): қидирув, Сотиш/Ижара, ҳудуд — орасида 1 px; «N та эълон» олиб ташланди.
       body: Column(
         children: [
+          MarketSearchField(
+            fieldKey: const ValueKey('realty_search'),
+            controller: _searchCtrl,
+            hintText: context.tr('realty_search_hint'),
+            onChanged: (v) => setState(() => _query = v),
+            onClear: () {
+              _searchCtrl.clear();
+              setState(() => _query = '');
+            },
+          ),
+          const SizedBox(height: kMarketTopRowGap),
           RealtyDealFilter(
+            compact: true,
             deal: _deal,
             onChanged: (d) => setState(() => _deal = d),
           ),
+          const SizedBox(height: kMarketTopRowGap),
           GeoTierBar(
+            compact: true,
             moduleId: 'realty',
             scope: _scope,
             onChanged: (s) => setState(() => _scope = s),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-            child: FutureBuilder<int>(
-              future: _countFor(RealtyRingFilter(tier: _tier, deal: _deal)),
-              builder: (context, snap) {
-                final n = snap.data;
-                return Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    n == null || n < 0
-                        ? ' '
-                        : context.tr('market_count').replaceAll('{count}', formatPrice(n)),
-                    key: const ValueKey('realty_count'),
-                    style: TextStyle(fontSize: 13, color: c.ink2, fontWeight: FontWeight.w600),
-                  ),
-                );
-              },
-            ),
-          ),
+          const SizedBox(height: kMarketTopRowGap),
           Expanded(
             child: TabBarView(
               controller: _tabs,
@@ -244,6 +230,7 @@ class _RealtyScreenState extends State<RealtyScreen>
                     source: _source,
                     filter: RealtyRingFilter(tier: tier, deal: _deal),
                     scope: _scope,
+                    query: _query,
                     onOpen: _openDetail,
                     onScope: (s) => setState(() => _scope = s),
                   ),
@@ -264,11 +251,15 @@ class _TierFeed extends StatefulWidget {
     required this.scope,
     required this.onOpen,
     required this.onScope,
+    this.query = '',
   });
 
   final RealtyListingSource source;
   final RealtyRingFilter filter;
   final GeoScope scope;
+
+  /// Қидирув сўрови (клиентда; ўзгарса лента қайта юкланмайди — фақат кўринадиганлар филтри).
+  final String query;
   final ValueChanged<RealtyListing> onOpen;
   final ValueChanged<GeoScope> onScope;
 
@@ -286,8 +277,16 @@ class _TierFeedState extends State<_TierFeed> {
         fetch: widget.source.fetcher(widget.filter),
         districtsOf: widget.source.districtsOf,
       ),
-      visibleWhere: (r) => widget.filter.shows(r),
+      visibleWhere: _shows,
     );
+
+  bool _shows(RealtyListing r) => widget.filter.shows(r) && realtyMatchesQuery(r, widget.query);
+
+  @override
+  void didUpdateWidget(covariant _TierFeed old) {
+    super.didUpdateWidget(old);
+    if (old.query != widget.query) _feed.setVisibleWhere(_shows);
+  }
 
   void _changed() {
     if (mounted) setState(() {});
@@ -360,6 +359,12 @@ class _TierFeedState extends State<_TierFeed> {
       },
     );
   }
+}
+
+/// Уй-жой қидируви (клиентда, эга 2026-11-16) — Аралашдаги Уй-жой қидируви билан бир хил майдонлар.
+bool realtyMatchesQuery(RealtyListing r, String query) {
+  if (CatalogSearch.normalize(query).isEmpty) return true;
+  return CatalogSearch.matches(query, [r.titleOrText, r.text, r.priceText]);
 }
 
 /// Уй-жой эълонининг НИСБИЙ жойи — фақат туман/вилоят даражаси (аниқ манзил ЭМАС: у пуллик ахборот).

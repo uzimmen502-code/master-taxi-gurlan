@@ -12,6 +12,7 @@ import '../../../core/theme/product_detail_dark.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
+import '../../../shared/widgets/seller_other_products_row.dart';
 import '../../ads/widgets/ad_image_slider.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../widgets/wholesale_detail_actions.dart';
@@ -88,21 +89,21 @@ class _WholesaleProductDetailScreenState
     }
     // Фон қора мавзу рангида: судраганда саҳифа сал сурилади, орқада
     // бошқа ранг кўринмасин. «‹ N / M ›» тугмаси олиб ташланди (эга, 2026-11-01:
-    // суринганда нарх устига тушиб, матнни ёпарди) — ўтиш суриш билан ва
-    // «Кейинги маҳсулот учун юқорига суринг» кўрсатмаси билан.
+    // суринганда нарх устига тушиб, матнни ёпарди) — ўтиш суриш билан; «юқорига суринг»
+    // кўрсатмаси ҳам олиб ташланди (эга, 2026-11-16).
     return ColoredBox(
       color: PdDark.bg,
       child: EdgeSwipePager(
         controller: _pageCtrl,
         itemCount: list.length,
         initialIndex: _index,
-        onPageChanged: (i) => setState(() => _index = i),
+        // Саҳифа алмашганда қобиқ қайта қурилмайди (оғир саҳифалар қайта чизилмасин, 2026-11-16).
+        onPageChanged: (i) => _index = i,
         itemBuilder: (_, i) => WholesaleProductDetailView(
           // Калит бўлмаса саҳифа ҳолати (миқдор) қайта ишлатилиб кетади.
           key: ValueKey(list[i].id),
           product: list[i],
           catalog: widget.catalog,
-          showNextHint: i < list.length - 1,
         ),
       ),
     );
@@ -115,14 +116,11 @@ class WholesaleProductDetailView extends StatefulWidget {
     super.key,
     required this.product,
     this.catalog = const [],
-    this.showNextHint = false,
   });
 
   final WholesaleProduct product;
   final List<WholesaleProduct> catalog;
 
-  /// Охирида «кейинги маҳсулот учун юқорига суринг» кўрсатилсинми.
-  final bool showNextHint;
 
   @override
   State<WholesaleProductDetailView> createState() =>
@@ -393,10 +391,6 @@ class _WholesaleProductDetailViewState
                       onTap: _openProduct,
                     ),
                   ],
-                  if (widget.showNextHint) ...[
-                    const SizedBox(height: 8),
-                    const _NextHint(),
-                  ],
                 ],
               ),
             ),
@@ -578,11 +572,6 @@ class _WholesaleProductDetailViewState
                       onTap: _openProduct,
                     ),
                   ],
-                  // Маълумот тугади — энди суриш кейинги маҳсулотга ўтади.
-                  if (widget.showNextHint) ...[
-                    const SizedBox(height: 16),
-                    const _NextHint(),
-                  ],
                 ],
               ),
             ),
@@ -611,7 +600,9 @@ class _WholesaleProductDetailViewState
   }
 }
 
-/// Сотувчи номи — босилса «Сотувчининг барча маҳсулотлари» (алоҳида катта тугма ўрнига).
+/// Сотувчи (эга, 2026-11-16): сотувчида 1 тадан кўп фаол маҳсулот бўлса — ягона қатор
+/// «<Сотувчи> · Сотувчининг бошқа маҳсулотлари →» ([SellerOtherProductsRow], у дўконини очади);
+/// акс ҳолда (номаълум / битта / хато) — оддий сотувчи номи (босилмайди).
 class _SellerLink extends StatelessWidget {
   const _SellerLink({required this.product});
 
@@ -623,7 +614,8 @@ class _SellerLink extends StatelessWidget {
     final name = p.sellerCompanyName.trim().isEmpty
         ? context.tr('wholesale_seller_label')
         : p.sellerCompanyName.trim();
-    final row = Row(
+    final plain = Row(
+      key: const ValueKey('wholesale_seller_name'),
       mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(Icons.storefront_outlined, size: 16, color: PdDark.muted),
@@ -636,54 +628,25 @@ class _SellerLink extends StatelessWidget {
             style: const TextStyle(fontSize: 13, height: 1.2, fontWeight: FontWeight.w600, color: PdDark.ink),
           ),
         ),
-        if (p.sellerId.isNotEmpty) const Icon(Icons.chevron_right, size: 18, color: PdDark.muted),
       ],
     );
-    if (p.sellerId.isEmpty) return row;
-    return Semantics(
-      button: true,
-      label: '$name — ${context.tr('shop_item_seller_all')}',
-      child: InkWell(
-        key: const ValueKey('wholesale_go_seller'),
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => WholesaleSellerProductsScreen(
-              sellerId: p.sellerId,
-              sellerName: p.sellerCompanyName,
-              market: p.isChina ? WholesaleProduct.marketChina : WholesaleProduct.marketWholesale,
-            ),
+    if (p.sellerId.isEmpty) return plain;
+    return SellerOtherProductsRow(
+      cacheKey: 'wholesale:${canonicalPhoneId(p.sellerId)}',
+      sellerName: name,
+      color: PdDark.ink,
+      fallback: plain,
+      countActive: () => WholesaleProductsRepository().countActiveBySeller(p.sellerId),
+      onOpen: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WholesaleSellerProductsScreen(
+            sellerId: p.sellerId,
+            sellerName: p.sellerCompanyName,
+            market: p.isChina ? WholesaleProduct.marketChina : WholesaleProduct.marketWholesale,
           ),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 40),
-          child: Align(alignment: Alignment.centerLeft, child: row),
         ),
       ),
-    );
-  }
-}
-
-/// «Кейинги маҳсулот учун юқорига суринг» — ихчам кулранг ёзув (эга, 2026-11-01).
-class _NextHint extends StatelessWidget {
-  const _NextHint();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.keyboard_arrow_up_rounded, color: PdDark.muted, size: 18),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            context.tr('product_swipe_next_up'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: PdDark.muted),
-          ),
-        ),
-      ],
     );
   }
 }

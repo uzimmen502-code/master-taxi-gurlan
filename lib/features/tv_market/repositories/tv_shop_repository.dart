@@ -97,6 +97,22 @@ class TvShopRepository {
     }
   }
 
+  /// Сотувчининг ФАОЛ маҳсулотлари сони (битта `count()`; «Сотувчининг бошқа маҳсулотлари», эга 2026-11-16).
+  /// [businessId] берилса — шу объект маҳсулотлари (дўкон саҳифаси ҳам объект бўйича очилади), акс ҳолда эга бўйича.
+  /// Фақат тенглик филтрлари — композит индекс талаб қилинмайди.
+  Future<int> countActiveByOwner(String ownerPhone, {String businessId = ''}) async {
+    Query<Map<String, dynamic>> q;
+    if (businessId.isNotEmpty) {
+      q = _items.where('businessId', isEqualTo: businessId);
+    } else {
+      final id = canonicalPhoneId(ownerPhone);
+      if (id.isEmpty) return 0;
+      q = _items.where('ownerPhone', isEqualTo: id);
+    }
+    final agg = await q.where('status', isEqualTo: 'active').count().get();
+    return agg.count ?? 0;
+  }
+
   Future<List<TvShopItem>> fetchByOwner(String ownerPhone, {int limit = 80}) async {
     final id = canonicalPhoneId(ownerPhone);
     if (id.isEmpty) return const [];

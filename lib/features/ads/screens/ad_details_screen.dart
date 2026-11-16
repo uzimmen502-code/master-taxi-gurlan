@@ -15,6 +15,7 @@ import '../../../core/utils/user_error.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/product_mini_tile.dart';
+import '../../../shared/widgets/seller_other_products_row.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
@@ -431,18 +432,24 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   ],
                   // Сотувчи ўзи қўшган видеоролик (бор бўлсагина кўринади).
                   LinkedVideoButton(linkId: ad.id, ownerPhone: ad.ownerId),
-                  // «Сотувчининг барча маҳсулотлари» (OLX каби, эга 2026-11-01).
-                  if (phoneDigits(ad.ownerId).length >= 9) ...[
-                    const SizedBox(height: 12),
-                    _SellerAdsCard(
-                      onOpen: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => SellerAdsScreen(ownerId: ad.ownerId, sellerName: ad.sellerName),
+                  // «<Сотувчи> · Сотувчининг бошқа маҳсулотлари →» — ягона қатор, фақат 1 тадан кўп фаол эълон бўлса
+                  // (эга, 2026-11-16; аввалги «барча маҳсулотлари» карточкаси ўрнига).
+                  if (phoneDigits(ad.ownerId).length >= 9)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: SellerOtherProductsRow(
+                        cacheKey: 'ads:${phoneDigits(ad.ownerId)}',
+                        sellerName: ad.sellerName,
+                        color: AppColors.primaryText,
+                        countActive: () => context.read<AdsRepository>().countSellerActiveAds(ad.ownerId),
+                        onOpen: () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => SellerAdsScreen(ownerId: ad.ownerId, sellerName: ad.sellerName),
+                          ),
                         ),
                       ),
                     ),
-                  ],
                   const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
                     Row(
@@ -560,56 +567,6 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// «Сотувчининг барча маҳсулотлари →». Сотувчи номи бу ерда ЙЎҚ — у сарлавҳа остида бор; номи
-/// оддий «Сотувчи» бўлган эълонда «Сотувчи / Сотувчининг…» такрори чиқарди (эга, 2026-11-01).
-class _SellerAdsCard extends StatelessWidget {
-  const _SellerAdsCard({required this.onOpen});
-
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onOpen,
-        // Ихчам (эга, 2026-11-01): майдон баландлиги ≈ шрифт баландлиги.
-        child: Container(
-          key: const ValueKey('ad_seller_all_box'),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.storefront_outlined, size: 16, color: AppColors.primaryText),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  context.tr('shop_item_seller_all'),
-                  key: const ValueKey('ad_seller_all'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontWeight: FontWeight.w600,
-                    fontSize: AppText.bodyMedium,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-              const Icon(Icons.chevron_right, size: 16, color: AppColors.primaryText),
-            ],
-          ),
-        ),
       ),
     );
   }

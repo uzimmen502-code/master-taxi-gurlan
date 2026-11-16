@@ -14,6 +14,7 @@ import 'package:ava_gurlan/features/tv_market/repositories/tv_shop_repository.da
 import 'package:ava_gurlan/features/tv_market/screens/tv_shop_item_detail_screen.dart';
 import 'package:ava_gurlan/features/tv_market/widgets/tv_clip_overlay.dart';
 import 'package:flutter/material.dart';
+import 'package:ava_gurlan/shared/widgets/seller_other_products_row.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 3-босқич (эга қарори 2026-10-25): харидор Аҳоли бозори, АВАГрам ва харитадан АЙНАН тегишли дўкон/маҳсулотга ўтади.
@@ -168,13 +169,19 @@ void main() {
       final pool = [_item('a', 'Қизил кўйлак'), _item('b', 'Кўк кўйлак')];
       await _pump(
         tester,
-        TvShopItemDetailScreen(item: pool.first, showShopButton: true, similarPool: pool, loadLatest: (_) async => pool.first),
+        TvShopItemDetailScreen(
+          item: pool.first,
+          showShopButton: true,
+          similarPool: pool,
+          loadLatest: (_) async => pool.first,
+          countSellerActive: () async => 2,
+        ),
       );
-      expect(find.byKey(const ValueKey('shop_item_go_shop')), findsOneWidget);
-      // Тепадаги дўкон иконкаси олиб ташланди (2026-10-31) — сотувчи карточкаси.
+      // Эга 2026-11-16: сотувчи карточкаси ўрнига ягона «<Сотувчи> · Сотувчининг бошқа маҳсулотлари →» қатори
+      // (сотувчида 1 тадан кўп фаол маҳсулот бўлса; натижа сеанс кешидан).
+      expect(find.byKey(const ValueKey('seller_other_products_row')), findsOneWidget);
+      expect(find.byKey(const ValueKey('shop_item_go_shop')), findsNothing);
       expect(find.byKey(const ValueKey('shop_item_open_shop')), findsNothing);
-      expect(find.byKey(const ValueKey('shop_item_seller_name')), findsOneWidget);
-      expect(find.text('shop_item_seller_all'), findsOneWidget);
       expect(find.byKey(const ValueKey('shop_item_similar')), findsOneWidget);
       expect(find.text('Кўк кўйлак'), findsOneWidget);
     });
@@ -183,7 +190,28 @@ void main() {
       final it = _item('a', 'Самолёт');
       await _pump(tester, TvShopItemDetailScreen(item: it, similarPool: [it], loadLatest: (_) async => it));
       expect(find.byKey(const ValueKey('shop_item_go_shop')), findsNothing);
+      expect(find.byKey(const ValueKey('seller_other_products_row')), findsNothing);
       expect(find.byKey(const ValueKey('shop_item_similar')), findsNothing);
+    });
+
+    testWidgets('сотувчида 1 та фаол маҳсулот — «бошқа маҳсулотлари» қатори йўқ; 2 та — босилса дўкон саҳифаси', (tester) async {
+      SellerOtherProductsRow.debugReset();
+      addTearDown(SellerOtherProductsRow.debugReset);
+      final one = _item('solo', 'Ягона');
+      await _pump(
+        tester,
+        TvShopItemDetailScreen(item: one, showShopButton: true, loadLatest: (_) async => one, countSellerActive: () async => 1),
+      );
+      expect(find.byKey(const ValueKey('seller_other_products_row')), findsNothing);
+      SellerOtherProductsRow.debugReset();
+      await tester.pumpWidget(const SizedBox());
+      var opened = 0;
+      await _pump(
+        tester,
+        TvShopItemDetailScreen(item: one, onOpenShop: () => opened++, loadLatest: (_) async => one, countSellerActive: () async => 2),
+      );
+      await tester.tap(find.byKey(const ValueKey('seller_other_products_row')));
+      expect(opened, 1);
     });
   });
 

@@ -40,7 +40,6 @@ class _FakeSource implements MarketListingSource {
   _FakeSource(this.items);
   final List<TvShopItem> items;
   final List<MarketFilter> fetched = [];
-  final List<MarketFilter> counted = [];
 
   bool _match(TvShopItem i, MarketFilter f) =>
       i.market == f.market &&
@@ -56,12 +55,6 @@ class _FakeSource implements MarketListingSource {
       final page = all.skip(start).take(limit).toList();
       return RingFetchResult(page, start + page.length);
     };
-  }
-
-  @override
-  Future<int> count(MarketFilter filter) async {
-    counted.add(filter);
-    return items.where((i) => _match(i, filter)).length;
   }
 
   @override
@@ -89,7 +82,7 @@ void main() {
     _it('x1', 'farm', category: 'fruits'),
   ];
 
-  testWidgets('Гўшт: номи, «+», Барчаси/бўлим/Импорт чиплари, сон ва бўлим филтри', (tester) async {
+  testWidgets('Гўшт: номи, «+», Барчаси/бўлим/Импорт чиплари, бўлим филтри; сон ЙЎҚ (2026-11-16)', (tester) async {
     final src = _FakeSource(meatItems);
     await _pump(tester, MarketScreen(marketId: 'meat', source: src, loadTaxonomy: () async => kTaxonomyV1));
     expect(find.text('Гўшт бозори'), findsOneWidget);
@@ -99,8 +92,11 @@ void main() {
     expect(find.byKey(const ValueKey('market_card_b1')), findsOneWidget);
     expect(find.byKey(const ValueKey('market_card_f1')), findsOneWidget);
     expect(find.byKey(const ValueKey('market_card_x1')), findsNothing);
-    expect(find.text('market_count'), findsOneWidget); // калит матни (тестда tr = калит)
-    expect(src.counted.last, const MarketFilter(market: 'meat'));
+    // «N та эълон» ва унинг count() сўрови олиб ташланди (эга, 2026-11-16).
+    expect(find.text('market_count'), findsNothing);
+    expect(find.byKey(const ValueKey('market_count')), findsNothing);
+    // Ягона қидирув майдони тепада.
+    expect(find.byKey(const ValueKey('market_search')), findsOneWidget);
     // Нарх бирлиги билан: «85 000 сўм / кг» (тестда «price_unit_short_kg»).
     expect(find.textContaining('price_unit_short_kg'), findsWidgets);
     expect(find.byKey(const ValueKey('market_card_attrs_b1')), findsOneWidget);
@@ -110,7 +106,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('market_cat_fish')));
     await tester.pumpAndSettle();
     expect(src.fetched.last, const MarketFilter(market: 'meat', category: 'fish'));
-    expect(src.counted.last, const MarketFilter(market: 'meat', category: 'fish'));
     expect(find.byKey(const ValueKey('market_card_b1')), findsNothing);
     expect(find.byKey(const ValueKey('market_card_f1')), findsOneWidget);
   });
@@ -121,7 +116,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('market_imported_chip')));
     await tester.pumpAndSettle();
     expect(src.fetched.last, const MarketFilter(market: 'meat', importedOnly: true));
-    expect(src.counted.last.countFilters.last, ('imported', true));
     expect(find.byKey(const ValueKey('market_card_b1')), findsNothing);
     expect(find.byKey(const ValueKey('market_card_b2')), findsOneWidget);
     expect(find.byKey(const ValueKey('market_card_f1')), findsOneWidget);
@@ -141,6 +135,41 @@ void main() {
     expect(find.byKey(const ValueKey('market_card_b1')), findsOneWidget);
     expect(find.byKey(const ValueKey('market_card_b2')), findsNothing);
     expect(find.byKey(const ValueKey('market_card_f1')), findsNothing);
+  });
+
+  testWidgets('қидирув: бозор ичида клиентда (сарлавҳа/тавсиф/сотувчи), сервер сўрови ўзгармайди; тозалаш', (tester) async {
+    final src = _FakeSource([
+      _it('b1', 'meat', category: 'beef'),
+      _TitledItem.of('q1', 'meat', 'Қўй гўшти янги'),
+    ]);
+    await _pump(tester, MarketScreen(marketId: 'meat', source: src, loadTaxonomy: () async => kTaxonomyV1));
+    final fetches = src.fetched.length;
+    await tester.enterText(find.byKey(const ValueKey('market_search')), 'қўй');
+    await tester.pumpAndSettle();
+    expect(src.fetched.length, fetches);
+    expect(find.byKey(const ValueKey('market_card_q1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_card_b1')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('market_search_clear')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('market_card_b1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('market_card_q1')), findsOneWidget);
+  });
+
+  test('marketItemMatchesQuery: бўш — ҳаммаси; сарлавҳа/тавсиф/сотувчи', () {
+    final i = _TitledItem.of('z', 'farm', 'Олма', description: 'Наманган олмаси');
+    expect(marketItemMatchesQuery(i, ''), isTrue);
+    expect(marketItemMatchesQuery(i, 'олма'), isTrue);
+    expect(marketItemMatchesQuery(i, 'наманган'), isTrue);
+    expect(marketItemMatchesQuery(i, 'сотувчи'), isTrue);
+    expect(marketItemMatchesQuery(i, 'мошина'), isFalse);
+  });
+
+  testWidgets('ихчам тепа: AppBar 44, қаторлар оралиғи 1 px', (tester) async {
+    await _pump(tester, MarketScreen(marketId: 'meat', source: _FakeSource(meatItems), loadTaxonomy: () async => kTaxonomyV1));
+    expect(tester.getSize(find.byType(AppBar)).height, lessThanOrEqualTo(44 + 0.1));
+    final search = tester.getRect(find.byKey(const ValueKey('market_search')));
+    final chips = tester.getRect(find.byKey(const ValueKey('market_categories')));
+    expect(chips.top - search.bottom, closeTo(1, 0.6));
   });
 
   testWidgets('Мошина: 4 таб («Барчаси»сиз), биринчиси танланган; «+» жорий бўлим билан', (tester) async {
@@ -270,4 +299,21 @@ extension on Scaffold {
       ),
     );
   }
+}
+
+/// Сарлавҳа/тавсифи берилган эълон (қидирув тестлари учун).
+class _TitledItem {
+  static TvShopItem of(String id, String market, String title, {String description = ''}) => TvShopItem(
+        id: id,
+        ownerPhone: '998901111111',
+        ownerName: 'Сотувчи',
+        title: title,
+        description: description,
+        price: 100000,
+        photoUrl: '',
+        kind: 'product',
+        districtId: 'gurlan',
+        districtLabel: 'Гурлан',
+        market: market,
+      );
 }

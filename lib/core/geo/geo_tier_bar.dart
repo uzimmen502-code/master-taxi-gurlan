@@ -18,12 +18,16 @@ class GeoTierBar extends StatelessWidget {
     required this.scope,
     required this.onChanged,
     this.showOtherArea = true,
+    this.compact = false,
   });
 
   final String moduleId;
   final GeoScope scope;
   final ValueChanged<GeoScope> onChanged;
   final bool showOtherArea;
+
+  /// Бозор экранлари (эга, 2026-11-16): вертикал чет йўқ, қатор 36 px, чиплар ихчам.
+  final bool compact;
 
   String _label(BuildContext context, GeoLevel l) {
     switch (l) {
@@ -63,9 +67,11 @@ class GeoTierBar extends StatelessWidget {
   Widget _build(BuildContext context) {
     final policy = geoPolicyFor(moduleId);
     if (policy.levels.length < 2) return const SizedBox.shrink();
-    return SingleChildScrollView(
+    final density = compact ? VisualDensity.compact : null;
+    final tap = compact ? MaterialTapTargetSize.shrinkWrap : null;
+    final bar = SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: compact ? 0 : 4),
       child: Row(
         children: [
           for (final l in policy.levels) ...[
@@ -76,6 +82,8 @@ class GeoTierBar extends StatelessWidget {
                 size: 16,
               ),
               label: Text(_label(context, l)),
+              visualDensity: density,
+              materialTapTargetSize: tap,
               selected: scope.level == l,
               onSelected: (_) async {
                 if (scope.level == l) return;
@@ -91,11 +99,15 @@ class GeoTierBar extends StatelessWidget {
               key: const ValueKey('geo_tier_other'),
               avatar: const Icon(Icons.travel_explore, size: 16),
               label: Text(context.tr('geo_other_area')),
+              visualDensity: density,
+              materialTapTargetSize: tap,
               onPressed: () => _pickOther(context),
             ),
         ],
       ),
     );
+    if (!compact) return bar;
+    return SizedBox(height: 36, child: Align(alignment: Alignment.centerLeft, child: bar));
   }
 }
 

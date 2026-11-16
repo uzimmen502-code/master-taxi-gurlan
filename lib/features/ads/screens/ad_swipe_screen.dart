@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../models/ad_model.dart';
@@ -71,7 +70,8 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
             itemCount: ads.length,
             initialIndex: _index,
             controller: _pager,
-            onPageChanged: (i) => setState(() => _index = i),
+            // Қобиқ қайта қурилмайди — оғир саҳифалар свайпда қайта чизилмасин (2026-11-16).
+            onPageChanged: (i) => _index = i,
             itemBuilder: (_, i) => AdDetailsScreen(
               // Калит бўлмаса Flutter саҳифа ҳолатини қайта ишлатиб
               // юборади — бир эълоннинг «ўхшашлари» бошқасида кўриниб
@@ -81,50 +81,8 @@ class _AdSwipeScreenState extends State<AdSwipeScreen> {
             ),
           ),
           // «‹ N / M ›» тугмаси олиб ташланди (эга, 2026-11-01): тепада қотиб туриб,
-          // сурилганда матн устига тушарди. Ўтиш — суриш билан.
-          // Сурса бўлишини биринчи эълондагина айтамиз — кейин халақит
-          // бермасин.
-          if (_index == 0)
-            Positioned(
-              left: 0,
-              right: 0,
-              // «Қўнғироқ қилиш» панелидан ЮҚОРИДА (панел ≈ 68 px) — аввал
-              // тугма устига чиқиб қоларди (қурилмада кўрилган, 2026-10-17).
-              bottom: MediaQuery.of(context).padding.bottom + 80,
-              child: IgnorePointer(
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.keyboard_double_arrow_up_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          context.tr('product_swipe_next_up'),
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          // сурилганда матн устига тушарди. Ўтиш — суриш билан. «Юқорига суринг» кўрсатмаси ҳам
+          // олиб ташланди (эга, 2026-11-16).
         ],
       ),
     );

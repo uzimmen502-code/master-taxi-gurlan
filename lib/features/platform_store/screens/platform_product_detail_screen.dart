@@ -163,7 +163,8 @@ class _PlatformProductDetailScreenState
         body: EdgeSwipePager(
           itemCount: _catalog.length,
           initialIndex: _index,
-          onPageChanged: (i) => setState(() => _index = i),
+          // Саҳифа алмашганда Scaffold қайта қурилмайди (2026-11-16: свайп силлиқроқ).
+          onPageChanged: (i) => _index = i,
           itemBuilder: (context, i) {
             final raw = _catalog[i];
             final live = c.productOf(raw.id) ?? raw;
@@ -287,7 +288,6 @@ class _ProductPageState extends State<_ProductPage>
           formatPrice(product.priceForQty(qty > 0 ? qty : product.minQty)),
         );
     final similar = _similar();
-    final hasNext = widget.pageIndex < widget.pageCount - 1;
     final h = MediaQuery.sizeOf(context).height;
 
     void openGallery(int index) {
@@ -465,31 +465,6 @@ class _ProductPageState extends State<_ProductPage>
                           ),
                         ),
                       ],
-                      if (hasNext)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.keyboard_double_arrow_up_rounded,
-                                color: _S.muted,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  context.tr('product_swipe_next_up'),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: _S.muted,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
                 ),

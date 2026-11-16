@@ -289,6 +289,19 @@ class AdsRepository {
   /// `status == active`): янги индекс керак эмас; `firestore.rules` `ads`
   /// list шохи `status == 'active'` ни сўров фильтридан исботлайди.
   /// Тартиб — клиентда, янгилари олдин.
+  /// Сотувчининг ФАОЛ эълонлари сони — [watchSellerActiveAds] билан айнан бир хил филтр (индекс ўша),
+  /// битта `count()` агрегат («Сотувчининг бошқа маҳсулотлари» қатори, эга 2026-11-16).
+  Future<int> countSellerActiveAds(String ownerId) async {
+    final aliases = _ownerAliases(ownerId);
+    if (aliases.isEmpty) return 0;
+    final agg = await _cheapQuery()
+        .where('ownerId', whereIn: aliases)
+        .where('status', isEqualTo: 'active')
+        .count()
+        .get();
+    return agg.count ?? 0;
+  }
+
   Stream<List<AdModel>> watchSellerActiveAds(String ownerId, {int limit = feedLimit}) {
     final aliases = _ownerAliases(ownerId);
     if (aliases.isEmpty) return Stream.value(const []);

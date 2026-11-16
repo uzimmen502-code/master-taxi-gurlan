@@ -13,6 +13,7 @@ import '../../../core/geo/relative_location.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
+import '../../../shared/widgets/market_search_field.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
 import '../../../models/realty_listing.dart';
@@ -490,6 +491,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
+        toolbarHeight: kMarketAppBarHeight,
         title: Text(context.tr('cheap_products_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
@@ -533,41 +535,20 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
           ),
         ],
       ),
+      // Ихчам тепа (эга, 2026-11-16): ягона қидирув майдони (барча манбалар: эълонлар, дўкон/бозор
+      // маҳсулотлари, Улгуржи/Хитой, AVA, Уй-жой — мавжуд қидирув мантиғи), ҳудуд — орасида 1 px.
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    onChanged: _onQueryChanged,
-                    decoration: InputDecoration(
-                      hintText: context.tr('platform_store_search_hint'),
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _query.trim().isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip:
-                                  context.tr('platform_store_search_clear'),
-                              icon: const Icon(Icons.clear),
-                              onPressed: _clearSearch,
-                            ),
-                      filled: true,
-                      fillColor: AppColors.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          MarketSearchField(
+            fieldKey: const ValueKey('cheap_search'),
+            controller: _searchCtrl,
+            hintText: context.tr('platform_store_search_hint'),
+            onChanged: _onQueryChanged,
+            onClear: _clearSearch,
           ),
-          GeoTierBar(moduleId: _moduleId, scope: _scope, onChanged: _setScope),
+          const SizedBox(height: kMarketTopRowGap),
+          GeoTierBar(compact: true, moduleId: _moduleId, scope: _scope, onChanged: _setScope),
+          const SizedBox(height: kMarketTopRowGap),
           Expanded(
             child: StreamBuilder<List<AdModel>>(
               stream: _adsFor(repo),

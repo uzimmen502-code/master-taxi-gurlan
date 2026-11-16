@@ -23,14 +23,6 @@ class RealtyRingFilter {
 
   Map<String, Object> get equals => {if (tier != null) 'tier': tier!.key};
 
-  /// `count()` — Республика бўйича (туман филтрисиз), тенглик филтрлари. Битим тури бу ерда ЙЎҚ:
-  /// `deal` майдони бўлмаган ҳужжат «Сотиш» деб ўқилади ([RealtyDealX.parse]), шунинг учун
-  /// Сотиш = жами − Ижара ([FirestoreRealtyListingSource.count]).
-  List<(String, Object)> get countFilters => [
-        ('status', 'active'),
-        if (tier != null) ('tier', tier!.key),
-      ];
-
   /// Клиент филтри — лентада кўринадими.
   bool shows(RealtyListing r, {DateTime? now}) {
     final exp = r.expiresAt;
@@ -47,7 +39,6 @@ class RealtyRingFilter {
 
 abstract class RealtyListingSource {
   RingFetcher<RealtyListing> fetcher(RealtyRingFilter filter);
-  Future<int> count(RealtyRingFilter filter);
   Future<List<String>> districtsOf(String regionId);
 }
 
@@ -74,26 +65,6 @@ class FirestoreRealtyListingSource implements RealtyListingSource {
       // Курсор — сервер ҳужжати (клиент филтри саҳифа ҳажмини бузмасин: тўлиқ саҳифа қайтади).
       return RingFetchResult(out, res.cursor);
     };
-  }
-
-  @override
-  Future<int> count(RealtyRingFilter filter) async {
-    final base = filter.countFilters;
-    final deal = filter.deal;
-    if (deal == null) return _count(base);
-    final rent = await _count([...base, ('deal', RealtyDeal.rent.key)]);
-    if (deal == RealtyDeal.rent) return rent;
-    final total = await _count(base);
-    return total > rent ? total - rent : 0;
-  }
-
-  Future<int> _count(List<(String, Object)> filters) async {
-    Query<Map<String, dynamic>> q = _col;
-    for (final (field, value) in filters) {
-      q = q.where(field, isEqualTo: value);
-    }
-    final agg = await q.count().get();
-    return agg.count ?? 0;
   }
 
   @override

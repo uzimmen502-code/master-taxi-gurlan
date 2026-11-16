@@ -4,13 +4,12 @@ import '../../favorites/domain/favorite_ref.dart';
 import '../../favorites/widgets/favorite_heart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/geo/geo_name_text.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../shared/widgets/product_mini_tile.dart';
+import '../../../shared/widgets/seller_other_products_row.dart';
 import '../../business_orders/widgets/business_order_entry.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../../markets/domain/market_taxonomy.dart';
@@ -46,7 +45,11 @@ class TvShopItemDetailScreen extends StatefulWidget {
     this.submitComplaint,
     this.source = 'other',
     this.loadTaxonomy,
+    this.countSellerActive,
   });
+
+  /// Тест учун: сотувчининг фаол маҳсулотлари сони (бўлмаса [TvShopRepository.countActiveByOwner]).
+  final Future<int> Function()? countSellerActive;
 
   /// Тест учун: бозор таксономияси (бўлмаса сеанс кешидан, [MarketAttrsSection]).
   final Future<MarketTaxonomy> Function()? loadTaxonomy;
@@ -250,7 +253,7 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
         elevation: 0.4,
         // Дўкон иконкаси олиб ташланди (эга, 2026-10-31): нимани очиши
         // тушунарсиз эди ва пастдаги тугманинг такрори — энди сотувчи
-        // карточкаси ([_SellerCard]).
+        // қатори ([SellerOtherProductsRow], 2026-11-16).
         actions: [
           // ❤ Танланганлар (STAGE 10).
           if (_available) FavoriteHeart(favorite: FavoriteRef.fromShopItem(item), overlay: false),
@@ -292,16 +295,27 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
                     attrs: item.attrs,
                     imported: item.imported,
                     loadTaxonomy: widget.loadTaxonomy,
+                  ),                // «<Сотувчи> · Сотувчининг бошқа маҳсулотлари →» — маҳсулот маълумоти остида ягона қатор; фақат
+                // сотувчида 1 тадан кўп фаол маҳсулот бўлса (эга, 2026-11-16; аввалги сотувчи карточкаси ўрнига).
+                if (openShop != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: SellerOtherProductsRow(
+                      cacheKey: item.businessId.isNotEmpty
+                          ? 'tv_biz:${item.businessId}'
+                          : 'tv:${canonicalPhoneId(item.ownerPhone)}',
+                      sellerName: item.ownerName.trim().isEmpty ? context.tr('tv_vitrine_seller') : item.ownerName,
+                      color: Colors.black87,
+                      countActive: widget.countSellerActive ??
+                          () => TvShopRepository().countActiveByOwner(item.ownerPhone, businessId: item.businessId),
+                      onOpen: openShop,
+                    ),
                   ),
                 // «Буюртма бериш» (AVA курьери, «Менинг бизнесим» буюртмаси): фақат дарвоза очиқ ва маҳсулот/объект
                 // мос бўлса кўринади ([BusinessOrderEntry] ўзи текширади; бўлмаса — ҳеч нарса).
                 if (item.businessId.isNotEmpty)
                   BusinessOrderEntry(key: ValueKey('biz_order_entry_${item.id}'), item: item, myUid: _myUid),
-                if (openShop != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: _SellerCard(item: item, onOpenShop: openShop),
-                  ),
+
                 if (similar.isNotEmpty) _similarStrip(similar),
               ],
             ),
@@ -314,93 +328,6 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
               writeBusy: _writeBusy,
             )
           : null,
-    );
-  }
-}
-
-/// Сотувчи карточкаси (OLX андозаси, эга 2026-10-31): исм/дўкон, туман ва
-/// «Сотувчининг барча маҳсулотлари →» — дўкон саҳифасини очади. Маҳсулотлар
-/// сони кўрсатилмайди: у ҳар очилишда қўшимча Firestore ўқиш талаб қиларди.
-class _SellerCard extends StatelessWidget {
-  const _SellerCard({required this.item, required this.onOpenShop});
-
-  final TvShopItem item;
-  final VoidCallback onOpenShop;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = item.ownerName.trim().isEmpty ? context.tr('tv_vitrine_seller') : item.ownerName.trim();
-    final initial = name.characters.first.toUpperCase();
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AvaLight.ok.withValues(alpha: 0.14),
-                  child: Text(
-                    initial,
-                    style: const TextStyle(color: AvaLight.ok, fontWeight: FontWeight.w800, fontSize: 16),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        key: const ValueKey('shop_item_seller_name'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, height: 1.2),
-                      ),
-                      if (item.districtLabel.trim().isNotEmpty || item.districtId.isNotEmpty)
-                        Row(
-                          children: [
-                            Icon(Icons.location_on_outlined, size: 13, color: Colors.grey.shade600),
-                            const SizedBox(width: 2),
-                            Flexible(
-                              child: GeoDistrictText(
-                                item.districtId,
-                                fallback: item.districtLabel,
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.2),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              key: const ValueKey('shop_item_go_shop'),
-              onPressed: onOpenShop,
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(child: Text(context.tr('shop_item_seller_all'), overflow: TextOverflow.ellipsis)),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.arrow_forward_rounded, size: 18),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

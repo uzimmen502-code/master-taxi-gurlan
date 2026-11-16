@@ -1512,22 +1512,6 @@ class _HomeViewState extends State<_HomeView> {
                                     )
                                   : null,
                             ),
-                            // Қидирув энг юқорида — AvaTopBar тагида (эга, 2026-11-16, STAGE 12).
-                            // Аввал хизматлар қаторидан кейин эди; intent хатти-ҳаракати ўзгармаган.
-                            const SizedBox(height: 2),
-                            HomeGlobalSearchBar(
-                              key: const ValueKey('home_global_search_top'),
-                              // «Уста чақириш» (аудит №4): дарвоза ёпиқ бўлса
-                              // `null` — карточка умуман чиқмайди.
-                              onIntent: ServiceConfigHolder.isOpenable(
-                                      'demand_intent')
-                                  ? _openIntent
-                                  : null,
-                              onOpenEntry: _openSearchEntry,
-                              onOpenClip: (clip) => _push(
-                                TvMarketFeedScreen(initialClip: clip),
-                              ),
-                            ),
                             // Мижоз тасдиғи (D2/D7): курьер «олдим/етказдим»
                             // деганидан кейин мижоз ўз қурилмасида тасдиқлайди.
                             // Бўш бўлса ёки сервер жавобермаса — жой эгалламайди.
@@ -1567,19 +1551,31 @@ class _HomeViewState extends State<_HomeView> {
                             ),
                             // Карусель ва «Барча хизматлар» сарлавҳаси орасидаги масофа 2 px (эга, 2026-10-15).
                             const SizedBox(height: 2),
-                            // Хизматлар — OLX бош экранидаги жойлашув:
-                            // 2 қатор, ёнга скролл, ранг доира ичида расм
-                            // (қаранг: [HomeServicesOlxRow] — ўлчамлар
-                            // olx.uz дан жонли олинган). Аввал бу ерда
-                            // 6 та иконкали квадрат тугма (`AvaQuickActions`)
-                            // турарди — эга қарори, 2026-09-26.
-                            // Улгуржи/Хитой/Уй-жой плиткалари «Бозорлар» блокига ўтди (STAGE 12).
-                            HomeServicesOlxRow(
+                            // «Барча хизматларни кўриш» сарлавҳаси (эга, 2026-11-16): доира плиткалар
+                            // қатори бош саҳифадан олиб ташланди — хизматлар фақат шу сарлавҳа орқали
+                            // «Барча хизматлар» экранида. Дарвоза: биронта кўринадиган хизмат бўлмаса — йўқ.
+                            HomeAllServicesHeader(
                               items: homeRowServices(buildHomeServices(
                                 context,
                                 a: _serviceActions,
                               )),
-                              onTitleTap: _openAllServices,
+                              onTap: _openAllServices,
+                            ),
+                            // Қидирув — хизматлар сарлавҳасидан кейин, «Бозорлар» блокидан олдин
+                            // (эга, 2026-11-16: аввалги жойига қайтарилди; STAGE 12 да AvaTopBar тагида эди).
+                            const SizedBox(height: 2),
+                            HomeGlobalSearchBar(
+                              key: const ValueKey('home_global_search_top'),
+                              // «Уста чақириш» (аудит №4): дарвоза ёпиқ бўлса
+                              // `null` — карточка умуман чиқмайди.
+                              onIntent: ServiceConfigHolder.isOpenable(
+                                      'demand_intent')
+                                  ? _openIntent
+                                  : null,
+                              onOpenEntry: _openSearchEntry,
+                              onOpenClip: (clip) => _push(
+                                TvMarketFeedScreen(initialClip: clip),
+                              ),
                             ),
                             // «Бозорлар» блоки (эга, 2026-11-16, STAGE 12): 8 бозор карточкаси,
                             // ҳар бири ўз дарвозаси билан; ҳеч бири кўринмаса — блок йўқ.

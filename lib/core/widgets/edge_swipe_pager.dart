@@ -24,6 +24,13 @@ import 'package:flutter/services.dart';
 const ScrollPhysics kEdgeSwipePhysics =
     AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics());
 
+/// Ўтиш учун чегарадан ортиқча суриш (px). 2026-11-16: 56 → 36 — свайп енгилроқ (эга: «силлиқроқ»).
+const double kEdgeSwipeThreshold = 36;
+
+/// Саҳифа алмашиш анимацияси (2026-11-16: 280 ms easeOutCubic → 320 ms easeOutQuart — юмшоқроқ тўхташ).
+const Duration kEdgeSwipeDuration = Duration(milliseconds: 320);
+const Curve kEdgeSwipeCurve = Curves.easeOutQuart;
+
 class EdgeSwipePager extends StatefulWidget {
   const EdgeSwipePager({
     super.key,
@@ -31,7 +38,7 @@ class EdgeSwipePager extends StatefulWidget {
     required this.itemBuilder,
     this.initialIndex = 0,
     this.onPageChanged,
-    this.threshold = 56,
+    this.threshold = kEdgeSwipeThreshold,
     this.controller,
   });
 
@@ -120,8 +127,8 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager>
     }
     _ctrl.animateToPage(
       target,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
+      duration: kEdgeSwipeDuration,
+      curve: kEdgeSwipeCurve,
     );
   }
 
@@ -177,8 +184,9 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager>
       // бармоқ ишораси йўқ (саҳифа ичидаги скролл билан тўқнашмасин).
       physics: const NeverScrollableScrollPhysics(),
       itemCount: widget.itemCount,
+      // setState ЙЎҚ (2026-11-16): индекс фақат [_go] да ўқилади; қайта қуриш саҳифаларни қайта чизарди.
       onPageChanged: (i) {
-        setState(() => _index = i);
+        _index = i;
         widget.onPageChanged?.call(i);
       },
       itemBuilder: (context, i) => NotificationListener<ScrollNotification>(
@@ -189,7 +197,8 @@ class _EdgeSwipePagerState extends State<EdgeSwipePager>
           behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
           child: ValueListenableBuilder<double>(
             valueListenable: _pull,
-            child: widget.itemBuilder(context, i),
+            // RepaintBoundary: сурилиш (Transform) пайтида саҳифа ичи қайта чизилмайди.
+            child: RepaintBoundary(child: widget.itemBuilder(context, i)),
             builder: (context, dy, page) =>
                 Transform.translate(offset: Offset(0, dy), child: page),
           ),

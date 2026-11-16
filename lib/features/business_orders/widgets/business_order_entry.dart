@@ -1,11 +1,14 @@
 // Харидор: маҳсулот варағидаги «Буюртма бериш» (AVA курьери билан етказиш) — «Менинг бизнесим» буюртмаси.
 //
 // Тугма ФАҚАТ ҳаммаси мос бўлса кўринади (ўлик тугма йўқ):
-//  1) таклиф буюртма қилиса бўладиган маҳсулот ([businessItemOrderable]: объектга боғланган, фаол, қатъий нарх);
+//  1) таклиф буюртма қилиса бўладиган маҳсулот ([offerItemOrderable]: фаол, қатъий нарх — дона/кг/м²/белгиланган);
 //  2) ўз маҳсулоти эмас;
-//  3) объект харитада (онлайн эмас), блокланмаган ва тури курьер етказишига мос
-//     ([BusinessTypeProfile.courierDeliveryApplies] — ягона манба);
-//  4) сервер дарвозаси очиқ (`getBusinessOrdersAccess{businessId}` — босқич off/internal/pilot/public).
+//  3) бозор эълони бўлса — таксономияда бўлим `orderable` ([marketCategoryOrderable]; Аралаш — ҳа);
+//  4) сотувчи: объект — харитада (онлайн эмас), блокланмаган ва тури курьер етказишига мос
+//     ([BusinessTypeProfile.courierDeliveryApplies] — ягона манба); ўз дўкони («Бозорлар» STAGE 11) — дўкон
+//     блокланмаган ва «Маҳсулотни топшириш жойи» белгиланган ([TvShop.hasPickup]);
+//  5) сервер дарвозаси очиқ (`getBusinessOrdersAccess{businessId}` ёки `{itemId}` — off/internal/pilot/public).
+// Йирик техника ([isLargeDeliveryItem]) — «Етказиш нархини сўраш» (сўров → нарх → тасдиқлаш).
 // Сервер барибир ҳаммасини қайта текширади (18-қоида).
 
 import 'dart:async';
@@ -18,11 +21,17 @@ import '../../../core/utils/formatters.dart';
 import '../../business_map/data/business_repository.dart';
 import '../../business_map/domain/business.dart';
 import '../../business_map/domain/business_type_profile.dart';
+import '../../markets/data/market_taxonomy_repository.dart';
+import '../../markets/domain/market_taxonomy.dart';
 import '../../tv_market/models/tv_shop.dart';
+import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../data/business_order_session.dart';
 import '../data/business_orders_repository.dart';
 import '../domain/business_order.dart';
+import '../domain/delivery_quote.dart';
+import '../screens/business_cart_screen.dart';
 import '../screens/business_checkout_sheet.dart';
+import '../screens/delivery_quote_screens.dart';
 import 'business_order_widgets.dart';
 
 /// Объект курьер етказишига мосми (харитада, блокланмаган, тур профили рухсат беради).
@@ -32,6 +41,18 @@ bool businessAcceptsCourierOrders(Business b) =>
     !b.online &&
     BusinessTypeProfile.forBusiness(b).courierDeliveryApplies(kind: OfferKind.product, online: b.online);
 
+/// Маҳсулот варағидаги тугма тури.
+enum OfferOrderMode { none, cart, deliveryQuote }
+
+/// Тармоқсиз олдиндан қарор (сотувчи ва дарвоза кейин текширилади): [OfferOrderMode.none] — тугма йўқ.
+OfferOrderMode offerOrderPrecheck(TvShopItem item, {required String myUid, MarketTaxonomy? taxonomy}) {
+  if (!offerItemOrderable(item)) return OfferOrderMode.none;
+  if (myUid.isNotEmpty && phonesMatch(myUid, item.ownerPhone)) return OfferOrderMode.none;
+  if (item.businessId.isEmpty && canonicalPhoneId(item.ownerPhone).isEmpty) return OfferOrderMode.none;
+  if (!marketCategoryOrderable(item, taxonomy)) return OfferOrderMode.none;
+  return isLargeDeliveryItem(item) ? OfferOrderMode.deliveryQuote : OfferOrderMode.cart;
+}
+
 class BusinessOrderEntry extends StatefulWidget {
   const BusinessOrderEntry({
     super.key,
@@ -39,9 +60,13 @@ class BusinessOrderEntry extends StatefulWidget {
     required this.myUid,
     this.repository,
     this.loadBusiness,
+    this.loadShop,
+    this.loadTaxonomy,
     this.store,
     this.accessCache,
     @visibleForTesting this.openCheckout,
+    @visibleForTesting this.openCart,
+    @visibleForTesting this.openQuote,
   });
 
   final TvShopItem item;
@@ -52,11 +77,23 @@ class BusinessOrderEntry extends StatefulWidget {
 
   /// Тест учун: объектни ўқиш (бўлмаса — [BusinessRepository.fetchById]).
   final Future<Business?> Function(String businessId)? loadBusiness;
+
+  /// Тест учун: ўз дўкони ҳужжати (бўлмаса — [TvShopRepository.fetchShop]).
+  final Future<TvShop?> Function(String ownerPhone)? loadShop;
+
+  /// Тест учун: таксономия (бўлмаса — [MarketTaxonomyRepository.load], сеанс кеши).
+  final Future<MarketTaxonomy> Function()? loadTaxonomy;
   final BusinessCartStore? store;
   final BusinessOrdersAccessCache? accessCache;
 
   /// Тест учун: расмийлаштириш варағи ўрнига.
   final Future<void> Function(BuildContext context, BusinessCart cart)? openCheckout;
+
+  /// Тест учун: «Сават» экрани ўрнига.
+  final Future<void> Function(BuildContext context)? openCart;
+
+  /// Тест учун: етказиш нархи сўрови ўрнига.
+  final Future<void> Function(BuildContext context, TvShopItem item)? openQuote;
 
   @override
   State<BusinessOrderEntry> createState() => _BusinessOrderEntryState();
@@ -67,9 +104,9 @@ class _BusinessOrderEntryState extends State<BusinessOrderEntry> {
   late final BusinessCartStore _store = widget.store ?? BusinessCartStore.instance;
   late final BusinessOrdersAccessCache _cache = widget.accessCache ?? BusinessOrdersAccessCache.instance;
 
-  /// `null` — текширилмоқда; `true` — кўрсатилади.
-  bool? _visible;
-  String _businessName = '';
+  /// `none` — тугма йўқ (ёки текширилмоқда).
+  OfferOrderMode _mode = OfferOrderMode.none;
+  String _sellerName = '';
 
   TvShopItem get _item => widget.item;
 
@@ -77,6 +114,7 @@ class _BusinessOrderEntryState extends State<BusinessOrderEntry> {
   void initState() {
     super.initState();
     _store.addListener(_onCart);
+    unawaited(_store.ensureLoaded());
     unawaited(_resolve());
   }
 
@@ -98,33 +136,61 @@ class _BusinessOrderEntryState extends State<BusinessOrderEntry> {
     if (mounted) setState(() {});
   }
 
-  bool get _own => widget.myUid.isNotEmpty && phonesMatch(widget.myUid, _item.ownerPhone);
+  void _set(OfferOrderMode m, TvShopItem item) {
+    if (mounted && item.id == _item.id) setState(() => _mode = m);
+  }
 
   Future<void> _resolve() async {
     final item = _item;
-    if (!businessItemOrderable(item) || _own) {
-      if (mounted) setState(() => _visible = false);
-      return;
+    // 1) Тармоқсиз қисм (таксономия — фақат бозор эълонида, сеанс кешидан).
+    var mode = offerOrderPrecheck(item, myUid: widget.myUid, taxonomy: MarketTaxonomy.empty);
+    if (mode == OfferOrderMode.none && item.market.isNotEmpty && offerItemOrderable(item)) {
+      try {
+        final tax = await (widget.loadTaxonomy?.call() ?? MarketTaxonomyRepository.load());
+        mode = offerOrderPrecheck(item, myUid: widget.myUid, taxonomy: tax);
+      } catch (e) {
+        debugPrint('[BizOrderEntry] taxonomy: $e');
+        mode = OfferOrderMode.none;
+      }
     }
+    if (mode == OfferOrderMode.none) return _set(OfferOrderMode.none, item);
+
+    // 2) Сотувчи + сервер дарвозаси.
     var ok = false;
     try {
-      final load = widget.loadBusiness ?? BusinessRepository().fetchById;
-      final results = await Future.wait<Object?>([
-        load(item.businessId),
-        _cache.get(item.businessId, () => _repo.access(businessId: item.businessId)),
-      ]);
-      final b = results[0] as Business?;
-      final access = results[1] as BusinessOrdersAccess;
-      ok = b != null && access.allowed && businessAcceptsCourierOrders(b) && !phonesMatch(widget.myUid, b.ownerId);
-      if (b != null) _businessName = b.name;
+      if (item.businessId.isNotEmpty) {
+        final load = widget.loadBusiness ?? BusinessRepository().fetchById;
+        final results = await Future.wait<Object?>([
+          load(item.businessId),
+          _cache.get(item.businessId, () => _repo.access(businessId: item.businessId)),
+        ]);
+        final b = results[0] as Business?;
+        final access = results[1] as BusinessOrdersAccess;
+        ok = b != null && access.allowed && businessAcceptsCourierOrders(b) && !phonesMatch(widget.myUid, b.ownerId);
+        if (b != null) _sellerName = b.name;
+      } else {
+        final load = widget.loadShop ?? TvShopRepository().fetchShop;
+        final results = await Future.wait<Object?>([
+          load(item.ownerPhone),
+          _cache.get('item:${item.id}', () => _repo.access(itemId: item.id)),
+        ]);
+        final shop = results[0] as TvShop?;
+        final access = results[1] as BusinessOrdersAccess;
+        ok = shop != null && !shop.isBlocked && shop.hasPickup && access.allowed;
+        final shopName = shop?.name.trim() ?? '';
+        _sellerName = shopName.isNotEmpty ? shopName : item.ownerName.trim();
+      }
     } catch (e) {
-      debugPrint('[BizOrderEntry] gate ${item.businessId}: $e');
+      debugPrint('[BizOrderEntry] gate ${item.id}: $e');
       ok = false;
     }
-    if (mounted && item.id == _item.id) setState(() => _visible = ok);
+    _set(ok ? mode : OfferOrderMode.none, item);
   }
 
-  BusinessCart get _cart => _store.cartFor(_item.businessId, businessName: _businessName);
+  BusinessCart get _cart => _store.cartForItem(_item, sellerName: _sellerName);
+
+  BusinessCart? get _existingCart =>
+      _store.existing(businessCartKey(businessId: _item.businessId, ownerPhone: _item.ownerPhone));
 
   Future<void> _checkout() async {
     final cart = _cart;
@@ -133,13 +199,25 @@ class _BusinessOrderEntryState extends State<BusinessOrderEntry> {
     await showBusinessCheckoutSheet(context, cart: cart, repository: _repo, store: _store);
   }
 
+  Future<void> _openCart() async {
+    final custom = widget.openCart;
+    if (custom != null) return custom(context);
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => BusinessCartScreen(store: _store)));
+  }
+
+  Future<void> _quote() async {
+    final custom = widget.openQuote;
+    if (custom != null) return custom(context, _item);
+    await openDeliveryQuoteRequest(context, item: _item, repository: _repo);
+  }
+
   Future<void> _order() async {
     final action = await showModalBottomSheet<_AddAction>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       backgroundColor: context.ava.surface,
-      builder: (_) => _AddToCartSheet(item: _item, inCart: _store.existing(_item.businessId)?.qtyOf(_item.id) ?? 0),
+      builder: (_) => _AddToCartSheet(item: _item, inCart: _existingCart?.qtyOf(_item.id) ?? 0),
     );
     if (action == null || !mounted) return;
     final added = _cart.add(_item, action.qty);
@@ -161,19 +239,23 @@ class _BusinessOrderEntryState extends State<BusinessOrderEntry> {
 
   @override
   Widget build(BuildContext context) {
-    if (_visible != true) return const SizedBox.shrink();
+    if (_mode == OfferOrderMode.none) return const SizedBox.shrink();
     final c = context.ava;
-    final cart = _store.existing(_item.businessId);
+    final quote = _mode == OfferOrderMode.deliveryQuote;
+    final total = _store.linesCount;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilledButton.icon(
-            key: const ValueKey('biz_order_cta'),
-            onPressed: _order,
-            icon: const Icon(Icons.delivery_dining_rounded),
-            label: Text(context.tr('biz_order_cta'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            key: ValueKey(quote ? 'dq_cta' : 'biz_order_cta'),
+            onPressed: quote ? _quote : _order,
+            icon: Icon(quote ? Icons.local_shipping_outlined : Icons.add_shopping_cart_rounded),
+            label: Text(
+              context.tr(quote ? 'dq_cta' : 'biz_order_add_to_cart'),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
             style: FilledButton.styleFrom(
               backgroundColor: c.brand,
               foregroundColor: c.brandInk,
@@ -182,17 +264,18 @@ class _BusinessOrderEntryState extends State<BusinessOrderEntry> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(context.tr('biz_order_cta_hint'), textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: c.ink2)),
-          if (cart != null && cart.isNotEmpty)
+          Text(context.tr(quote ? 'dq_cta_hint' : 'biz_order_cta_hint'),
+              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: c.ink2)),
+          if (total > 0)
             TextButton.icon(
               key: const ValueKey('biz_order_cart_bar'),
-              onPressed: _checkout,
+              onPressed: _openCart,
               icon: const Icon(Icons.shopping_basket_outlined, size: 18),
               label: Text(
                 context
                     .tr('biz_order_cart_bar')
-                    .replaceAll('{count}', '${cart.lines.length}')
-                    .replaceAll('{amount}', formatMoney(cart.itemsTotal)),
+                    .replaceAll('{count}', '$total')
+                    .replaceAll('{amount}', formatMoney(_store.carts.fold<int>(0, (s, c) => s + c.itemsTotal))),
               ),
               style: TextButton.styleFrom(foregroundColor: c.brandText, minimumSize: const Size.fromHeight(AvaTap.minSize)),
             ),

@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../domain/business_order.dart';
+import '../domain/delivery_quote.dart';
 
 /// Callable хатоси: [reason] — сервер `details.code` (масалан `DELIVERY_TOO_FAR`), [code] — Firebase коди.
 class BusinessOrderException implements Exception {
@@ -68,10 +69,14 @@ class BusinessOrdersRepository {
   // ── Дарвоза ────────────────────────────────────────────────────────────────────────────────────
 
   /// Хато — ЁПИҚ томонга ([BusinessOrdersAccess.closed]): дарвоза ёпиқ бўлса тугма кўринмайди.
-  Future<BusinessOrdersAccess> access({String businessId = ''}) async {
+  /// [itemId] — ўз дўкони маҳсулоти (объектсиз; пилот тумани маҳсулот бўйича, STAGE 11).
+  Future<BusinessOrdersAccess> access({String businessId = '', String itemId = ''}) async {
     try {
       return BusinessOrdersAccess.fromMap(
-        await _call('getBusinessOrdersAccess', {if (businessId.isNotEmpty) 'businessId': businessId}),
+        await _call('getBusinessOrdersAccess', {
+          if (businessId.isNotEmpty) 'businessId': businessId,
+          if (businessId.isEmpty && itemId.isNotEmpty) 'itemId': itemId,
+        }),
       );
     } catch (e) {
       debugPrint('[BusinessOrders] access: $e');
@@ -81,6 +86,7 @@ class BusinessOrdersRepository {
 
   // ── Мижоз ──────────────────────────────────────────────────────────────────────────────────────
 
+  /// [businessId] бўш — ўз дўкони маҳсулотлари (сервер STAGE 11: `businessId` юборилмайди).
   Future<BusinessOrderQuote> quote({
     required String businessId,
     required List<Map<String, Object>> items,
@@ -88,7 +94,7 @@ class BusinessOrdersRepository {
     required double lng,
   }) async =>
       BusinessOrderQuote.fromMap(await _call('quoteBusinessOrder', {
-        'businessId': businessId,
+        if (businessId.isNotEmpty) 'businessId': businessId,
         'items': items,
         'lat': lat,
         'lng': lng,
@@ -107,7 +113,7 @@ class BusinessOrdersRepository {
   }) async =>
       BusinessPlaceResult.fromMap(await _call('placeBusinessOrder', {
         'idempotencyKey': idempotencyKey,
-        'businessId': businessId,
+        if (businessId.isNotEmpty) 'businessId': businessId,
         'items': items,
         'lat': lat,
         'lng': lng,
@@ -146,6 +152,67 @@ class BusinessOrdersRepository {
   }
 
   Future<void> claim(String orderId) => _call('courierClaimBusinessOrder', {'orderId': orderId});
+
+  // ── Етказиш нархи сўрови (йирик техника, STAGE 11) ─────────────────────────────────────────────────
+
+  /// Харидор: сўров (идемпотент — шу маҳсулот учун очиқ сўров бўлса ўшаниси, `duplicate: true`).
+  Future<DeliveryQuoteRequestResult> requestDeliveryQuote({
+    required String itemId,
+    required int qty,
+    required double lat,
+    required double lng,
+    required String address,
+    int? floor,
+    String note = '',
+  }) async =>
+      DeliveryQuoteRequestResult.fromMap(await _call('requestDeliveryQuote', {
+        'itemId': itemId,
+        'qty': qty,
+        'lat': lat,
+        'lng': lng,
+        'address': address,
+        'floor': floor,
+        if (note.isNotEmpty) 'note': note,
+      }));
+
+  /// Админ ёки тасдиқланган курьер: нарх (бутун сўм). Биринчи жавоб ғолиб (`QUOTE_ALREADY_ANSWERED`).
+  Future<DeliveryQuoteRespondResult> respondDeliveryQuote({required String quoteId, required int priceUzs}) async =>
+      DeliveryQuoteRespondResult.fromMap(
+        await _call('respondDeliveryQuote', {'quoteId': quoteId, 'priceUzs': priceUzs}),
+      );
+
+  /// Харидор: нархни тасдиқлаш → буюртма (`placeBusinessOrder` натижаси; сўров бўйича идемпотент).
+  Future<BusinessPlaceResult> acceptDeliveryQuote({
+    required String quoteId,
+    required String deliveryPaymentMethod,
+    String note = '',
+  }) async =>
+      BusinessPlaceResult.fromMap(await _call('acceptDeliveryQuote', {
+        'quoteId': quoteId,
+        'deliveryPaymentMethod': deliveryPaymentMethod,
+        if (note.isNotEmpty) 'note': note,
+      }));
+
+  /// Курьер/админ: очиқ сўровлар (курьерга мижоз манзили ва телефони берилмайди — сервер).
+  Future<OpenDeliveryQuotes> listOpenDeliveryQuotes({double? lat, double? lng, int? radiusKm}) async {
+    final d = await _call('listOpenDeliveryQuotes', {
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (radiusKm != null) 'radiusKm': radiusKm,
+    });
+    final raw = d['quotes'] is List ? d['quotes'] as List : const [];
+    return OpenDeliveryQuotes(
+      [for (final m in raw.whereType<Map>()) OpenDeliveryQuote.fromMap(Map<String, dynamic>.from(m))],
+      viewer: d['viewer'] is String ? d['viewer'] as String : '',
+    );
+  }
+
+  /// Харидор: ўз сўрови ҳолати (rules — `buyerUid == ўз телефони`). Йўқ/рухсат йўқ — `null`.
+  Stream<DeliveryQuote?> watchDeliveryQuote(String quoteId) =>
+      _db.collection('delivery_quotes').doc(quoteId).snapshots().map((s) {
+        final d = s.data();
+        return s.exists && d != null ? DeliveryQuote.fromMap(s.id, d) : null;
+      });
 
   Future<void> pickup(String orderId, {required String pickupCode}) =>
       _call('courierPickupBusinessOrder', {'orderId': orderId, 'pickupCode': pickupCode});

@@ -52,6 +52,7 @@ Future<({FakeBusinessOrdersRepository repo, BusinessCartStore store, List<Busine
           accessCache: BusinessOrdersAccessCache(),
           loadBusiness: (id) async => business ?? _biz(),
           openCheckout: (ctx, cart) async => opened.add(cart),
+          openCart: (ctx) async => opened.addAll(store.carts),
         ),
       ]),
     ),

@@ -36,6 +36,7 @@ import 'jobs_moderation_screen.dart';
 import 'logistics_admin_screen.dart';
 import 'restaurants_admin_screen.dart';
 import 'listing_moderation_screen.dart';
+import 'delivery_quotes_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'wholesale_orders_admin_screen.dart';
@@ -334,6 +335,15 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Эълонлар модерацияси',
       icon: Icons.fact_check_outlined,
       description: 'Аралаш/дўкон, Улгуржи, Хитой, Уй-жой, эски эълонлар — тасдиқлаш ёки рад этиш',
+      access: _SectionAccess.users,
+    ),
+    // «Бозорлар» STAGE 11 (эга 2026-11-16): йирик техника — етказиш нархини админ ёки курьер белгилайди.
+    // Сервер `respondDeliveryQuote` — admin/superadmin (ёки тасдиқланган курьер), шунинг учун `users`.
+    _AdminSection(
+      group: 'Бозорлар ва эълонлар',
+      label: 'Етказиш нархи сўровлари',
+      icon: Icons.local_shipping_outlined,
+      description: 'Йирик маиший техника: харидор сўрови → етказиш нархини юбориш',
       access: _SectionAccess.users,
     ),
     _AdminSection(
@@ -659,6 +669,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Эълонлар модерацияси') {
       return const ListingModerationScreen();
+    }
+    if (section.label == 'Етказиш нархи сўровлари') {
+      return const DeliveryQuotesAdminScreen();
     }
     if (section.label == 'Аралаш бозор') {
       return const MarketModerationScreen();

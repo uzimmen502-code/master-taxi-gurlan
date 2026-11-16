@@ -5,6 +5,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/service_config_holder.dart';
 import '../../business_map/domain/business.dart';
 import '../../business_map/screens/business_products_screen.dart';
+import '../../../models/map_picker_result.dart';
+import '../../map_picker/screens/map_picker_screen.dart';
+import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/screens/wholesale_market_screen.dart';
@@ -28,7 +31,19 @@ class MainShopScreen extends StatefulWidget {
     @visibleForTesting this.saveName,
     @visibleForTesting this.retailView,
     @visibleForTesting this.chinaView,
+    @visibleForTesting this.loadShop,
+    @visibleForTesting this.savePickup,
+    @visibleForTesting this.pickPickup,
   });
+
+  /// Тест учун: дўкон ҳужжати (топшириш жойи; бўлмаса — [TvShopRepository.fetchShop]).
+  final Future<TvShop?> Function()? loadShop;
+
+  /// Тест учун: топшириш жойини сақлаш (бўлмаса — [TvShopRepository.savePickup]).
+  final Future<void> Function(double lat, double lng, String address)? savePickup;
+
+  /// Тест учун: харитада танлаш (бўлмаса — мавжуд [MapPickerScreen]).
+  final Future<MapPickerResult?> Function(BuildContext context)? pickPickup;
 
   /// Каноник телефон (`canonicalPhoneId`) — чақирувчи 9+ рақам эканини текширади.
   final String phone;
@@ -70,6 +85,130 @@ class _MainShopScreenState extends State<MainShopScreen>
       initialIndex: widget.initialSegment.clamp(0, 1),
     );
     _loadName();
+    _loadPickup();
+  }
+
+  /// «Маҳсулотни топшириш жойи» (STAGE 11): `null` — ҳали ўқилмаган ёки ўқиб бўлмади (огоҳлантириш кўрсатилмайди).
+  bool? _hasPickup;
+  String _pickupAddress = '';
+  bool _savingPickup = false;
+
+  Future<void> _loadPickup() async {
+    try {
+      final shop = await (widget.loadShop?.call() ?? TvShopRepository().fetchShop(widget.phone));
+      if (!mounted) return;
+      setState(() {
+        _hasPickup = shop?.hasPickup ?? false;
+        _pickupAddress = shop?.pickupAddress ?? '';
+      });
+    } catch (e) {
+      debugPrint('[MainShop] loadPickup failed: $e');
+    }
+  }
+
+  /// Харитада нуқта → манзил матни (таҳрирлаш мумкин) → `tv_shops/{телефон}` (pickupLat/pickupLng/pickupAddress).
+  Future<void> _setPickup() async {
+    if (_savingPickup) return;
+    final custom = widget.pickPickup;
+    final Future<MapPickerResult?> pending = custom != null
+        ? custom(context)
+        : Navigator.of(context).push<MapPickerResult>(
+            MaterialPageRoute(builder: (_) => MapPickerScreen(title: context.tr('shop_pickup_title'))),
+          );
+    final r = await pending;
+    if (!mounted || r == null) return;
+    if (r.lat.abs() > 90 || r.lng.abs() > 180 || (r.lat == 0 && r.lng == 0)) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_pickup_err_point'))));
+      return;
+    }
+    final address = await _askAddress(r.label);
+    if (!mounted || address == null) return;
+    setState(() => _savingPickup = true);
+    try {
+      final save = widget.savePickup ??
+          (double lat, double lng, String a) =>
+              TvShopRepository().savePickup(ownerPhone: widget.phone, lat: lat, lng: lng, address: a);
+      await save(r.lat, r.lng, address);
+      if (!mounted) return;
+      setState(() {
+        _hasPickup = true;
+        _pickupAddress = address;
+      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_pickup_saved'))));
+    } catch (e) {
+      debugPrint('[MainShop] savePickup failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(context.tr('shop_pickup_err_save'))));
+      }
+    } finally {
+      if (mounted) setState(() => _savingPickup = false);
+    }
+  }
+
+  Future<String?> _askAddress(String initial) async {
+    final ctrl = TextEditingController(text: initial.trim());
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(ctx.tr('shop_pickup_title')),
+          content: TextField(
+            key: const ValueKey('shop_pickup_address'),
+            controller: ctrl,
+            maxLength: 200,
+            maxLines: 2,
+            decoration: InputDecoration(labelText: ctx.tr('shop_pickup_address_label')),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
+            FilledButton(
+              key: const ValueKey('shop_pickup_save'),
+              onPressed: () {
+                final v = ctrl.text.trim();
+                if (v.length >= 3) Navigator.pop(ctx, v);
+              },
+              child: Text(ctx.tr('save')),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
+  Widget _pickupBanner(BuildContext context) {
+    final c = context.ava;
+    final missing = _hasPickup == false;
+    return Material(
+      color: missing ? c.warnSoft : c.surface2,
+      child: InkWell(
+        key: const ValueKey('shop_pickup_banner'),
+        onTap: _setPickup,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AvaSpace.screen, vertical: 10),
+          child: Row(children: [
+            Icon(Icons.place_outlined, size: 20, color: missing ? c.warn : c.ink2),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                missing
+                    ? context.tr('shop_pickup_missing')
+                    : '${context.tr('shop_pickup_title')}: $_pickupAddress',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: missing ? c.warn : c.ink),
+              ),
+            ),
+            const SizedBox(width: 6),
+            _savingPickup
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(context.tr(missing ? 'shop_pickup_set' : 'biz_order_address_change'),
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.brandText)),
+          ]),
+        ),
+      ),
+    );
   }
 
 
@@ -146,19 +285,27 @@ class _MainShopScreenState extends State<MainShopScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        // Ичида ҳам табли рўйхат бор (Фаол · Текширувда · Яширилган): ён томонга
-        // суриш иккита жестни тўқнаштирар эди — сегмент фақат босиш билан алмашади.
-        physics: const NeverScrollableScrollPhysics(),
+      body: Column(
         children: [
-          _retail(context),
-          // Хитой маҳсулотини қўшиш (бозор экранидаги «Сотувчи» таби ўрнига, эга 2026-11-01).
-          widget.chinaView?.call(context) ??
-              WholesaleSellerArea(
-                phone: widget.phone,
-                market: WholesaleProduct.marketChina,
-              ),
+          // «Маҳсулотни топшириш жойи» — мажбурий (STAGE 11): белгиланмаса AVA курьери буюртмаси ишламайди.
+          if (_hasPickup != null) _pickupBanner(context),
+          Expanded(
+            child: TabBarView(
+              controller: _tabCtrl,
+              // Ичида ҳам табли рўйхат бор (Фаол · Текширувда · Яширилган): ён томонга
+              // суриш иккита жестни тўқнаштирар эди — сегмент фақат босиш билан алмашади.
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _retail(context),
+                // Хитой маҳсулотини қўшиш (бозор экранидаги «Сотувчи» таби ўрнига, эга 2026-11-01).
+                widget.chinaView?.call(context) ??
+                    WholesaleSellerArea(
+                      phone: widget.phone,
+                      market: WholesaleProduct.marketChina,
+                    ),
+              ],
+            ),
+          ),
         ],
       ),
     );

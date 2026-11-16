@@ -98,6 +98,33 @@ class TvShopRepository {
     }
   }
 
+  /// «Маҳсулотни топшириш жойи» (STAGE 11): `pickupLat`/`pickupLng` (сон) ва `pickupAddress`. Ҳужжат бўлмаса —
+  /// [ensureShop] шаклида яратилади. Rules: эга блок майдонларидан бошқасини ўзгартира олади (`tv_shops/{phone}`).
+  Future<void> savePickup({
+    required String ownerPhone,
+    required double lat,
+    required double lng,
+    required String address,
+  }) async {
+    final id = canonicalPhoneId(ownerPhone);
+    final clean = address.trim();
+    if (id.isEmpty || lat.abs() > 90 || lng.abs() > 180 || (lat == 0 && lng == 0)) {
+      throw ArgumentError('invalid pickup location');
+    }
+    final fields = <String, Object>{
+      'pickupLat': lat,
+      'pickupLng': lng,
+      'pickupAddress': clean.length > 200 ? clean.substring(0, 200) : clean,
+    };
+    final ref = _shops.doc(id);
+    final snap = await ref.get();
+    if (snap.exists) {
+      await ref.update(fields);
+    } else {
+      await ref.set({...fields, 'ownerPhone': id, 'createdAt': FieldValue.serverTimestamp()});
+    }
+  }
+
   /// Сотувчининг ФАОЛ маҳсулотлари сони (битта `count()`; «Сотувчининг бошқа маҳсулотлари», эга 2026-11-16).
   /// [businessId] берилса — шу объект маҳсулотлари (дўкон саҳифаси ҳам объект бўйича очилади), акс ҳолда эга бўйича.
   /// Фақат тенглик филтрлари — композит индекс талаб қилинмайди.

@@ -202,7 +202,7 @@ class _BusinessCheckoutSheetState extends State<BusinessCheckoutSheet> {
   String get _scope {
     final co = _coords;
     return [
-      _cart.businessId,
+      _cart.key,
       _cart.signature,
       co == null ? '' : '${co.$1},${co.$2}',
       _deliveryPayment,
@@ -241,7 +241,7 @@ class _BusinessCheckoutSheetState extends State<BusinessCheckoutSheet> {
       );
       _keys.settled(scope);
       if (!mounted) return;
-      _store.clear(_cart.businessId);
+      _store.clear(_cart.key);
       _cart.clear();
       final custom = widget.onPlaced;
       if (custom != null) return custom(context, res);
@@ -291,7 +291,7 @@ class _BusinessCheckoutSheetState extends State<BusinessCheckoutSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(context.tr('biz_order_cart_empty'), style: TextStyle(color: c.ink2)),
               ),
-            for (final l in _cart.lines) _CartRow(line: l, onQty: (n) => _setQty(l, n)),
+            for (final l in _cart.lines) BusinessCartRow(line: l, onQty: (n) => _setQty(l, n)),
             const SizedBox(height: 8),
 
             // 2. Манзил
@@ -392,8 +392,9 @@ class _BusinessCheckoutSheetState extends State<BusinessCheckoutSheet> {
   }
 }
 
-class _CartRow extends StatelessWidget {
-  const _CartRow({required this.line, required this.onQty});
+/// Сават қатори: ном, сумма, − миқдор + (расмийлаштириш варағи ва «Сават» экрани).
+class BusinessCartRow extends StatelessWidget {
+  const BusinessCartRow({super.key, required this.line, required this.onQty});
 
   final BusinessCartLine line;
   final ValueChanged<int> onQty;

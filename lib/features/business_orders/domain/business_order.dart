@@ -9,9 +9,12 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../../models/delivery_failed.dart';
+import '../../markets/domain/market_taxonomy.dart';
 import '../../tv_market/domain/price_unit.dart';
 import '../../tv_market/models/tv_shop.dart';
+import 'delivery_quote.dart';
 
 /// `businessStatus` қийматлари ва ўтишлар (сервер `BS` / `TRANSITIONS` нусхаси — фақат кўрсатиш учун).
 abstract final class BusinessOrderStatus {
@@ -405,14 +408,30 @@ abstract final class BusinessOrderLimits {
   static const orderableUnits = {PriceUnit.fixed, PriceUnit.piece, PriceUnit.kg, PriceUnit.m2};
 }
 
-/// Таклифни саватга қўшиш мумкинми (фақат кўриниш учун; сервер барибир текширади): объектга боғланган,
-/// фаол МАҲСУЛОТ, қатъий нарх (белгиланган / дона / кг / м²) ва нарх > 0.
-bool businessItemOrderable(TvShopItem item) =>
-    item.businessId.isNotEmpty &&
+/// Фаол МАҲСУЛОТ, қатъий нарх (белгиланган / дона / кг / м²; тонна — йўқ) ва нарх > 0 — объект ва ўз дўкони
+/// маҳсулоти учун умумий шарт (сервер `priceLines` кўзгуси; фақат кўриниш учун, сервер барибир текширади).
+bool offerItemOrderable(TvShopItem item) =>
     item.isActive &&
     item.kind == 'product' &&
     item.price > 0 &&
     BusinessOrderLimits.orderableUnits.contains(item.priceUnit);
+
+/// Таклифни саватга қўшиш мумкинми: объектга боғланган ва [offerItemOrderable].
+bool businessItemOrderable(TvShopItem item) => item.businessId.isNotEmpty && offerItemOrderable(item);
+
+/// «Бозорлар» STAGE 11: бозор эълони (`market` бор) фақат таксономияда шу бўлим `orderable: true` бўлса
+/// (сервер `taxonomyOrderable` кўзгуси). `market` йўқ (Аралаш ўз дўкони, объект маҳсулоти) — ҳа. Таксономия
+/// ўқилмаган/бўлим номаълум — ЙЎҚ (ёпиқ томонга; сервер ҳам рад этади).
+bool marketCategoryOrderable(TvShopItem item, MarketTaxonomy? taxonomy) {
+  if (item.market.isEmpty) return true;
+  final cat = taxonomy?.market(item.market)?.category(item.category);
+  return cat?.orderable ?? false;
+}
+
+/// Сават калити: объект — `businessId`; ўз дўкони (объектсиз) — `shop:<канон телефон>` (бир сотувчи — бир
+/// буюртма, сервер шарти: «items of ONE seller per order»).
+String businessCartKey({required String businessId, required String ownerPhone}) =>
+    businessId.isNotEmpty ? businessId : 'shop:${canonicalPhoneId(ownerPhone)}';
 
 /// Миқдор ёнидаги бирлик калити (`null` — бирликсиз, «× 2»).
 String? businessQtyUnitKey(PriceUnit u) => switch (u) {
@@ -441,15 +460,54 @@ class BusinessCartLine {
   final String photoUrl;
 
   int get lineTotal => unitPrice * qty;
+
+  /// Қурилмада сақлаш учун (нарх фақат кўрсатиш учун — сервер каталогдан қайта ҳисоблайди, 18-қоида).
+  Map<String, Object> toJson() => {
+        'itemId': itemId,
+        'title': title,
+        'unitPrice': unitPrice,
+        'priceUnit': priceUnit.wire,
+        'qty': qty,
+        if (photoUrl.isNotEmpty) 'photoUrl': photoUrl,
+      };
+
+  /// Бузилган қатор — `null` (ташланади).
+  static BusinessCartLine? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['itemId'];
+    final qty = raw['qty'];
+    if (id is! String || id.isEmpty || qty is! int || qty < 1) return null;
+    return BusinessCartLine(
+      itemId: id,
+      title: _str(raw['title']),
+      unitPrice: _int(raw['unitPrice']),
+      priceUnit: PriceUnit.fromWire(raw['priceUnit']),
+      qty: BusinessCart.clampQty(qty),
+      photoUrl: _str(raw['photoUrl']),
+    );
+  }
 }
 
-/// Битта объект савати. Миқдор 1..[BusinessOrderLimits.maxQtyPerItem], қаторлар ≤ [BusinessOrderLimits.maxItems].
+/// Битта сотувчи савати: объект (`businessId`) ёки ўз дўкони (`businessId` бўш, сотувчи = [ownerPhone]).
+/// Миқдор 1..[BusinessOrderLimits.maxQtyPerItem], қаторлар ≤ [BusinessOrderLimits.maxItems].
 class BusinessCart {
-  BusinessCart({required this.businessId, this.businessName = ''});
+  BusinessCart({required this.businessId, this.businessName = '', String ownerPhone = ''})
+      : ownerPhone = canonicalPhoneId(ownerPhone);
 
+  /// Бўш — ўз дўкони (объектсиз) савати.
   final String businessId;
   String businessName;
+
+  /// Ўз дўкони сотувчиси (канон телефон); объект саватида ихтиёрий.
+  final String ownerPhone;
   final Map<String, BusinessCartLine> _lines = {};
+
+  /// `business` | `shop` (сервер `sellerKind`).
+  String get sellerKind => businessId.isNotEmpty ? 'business' : 'shop';
+  bool get isShop => businessId.isEmpty;
+
+  /// [BusinessCartStore] калити ([businessCartKey]).
+  String get key => businessCartKey(businessId: businessId, ownerPhone: ownerPhone);
 
   List<BusinessCartLine> get lines => List.unmodifiable(_lines.values);
   bool get isEmpty => _lines.isEmpty;
@@ -463,7 +521,7 @@ class BusinessCart {
   /// Қўшиш (бор бўлса миқдор қўшилади, чегарада тўхтайди). Бошқа объект маҳсулоти ёки буюртма қилиб
   /// бўлмайдиган таклиф, ёки 30 қатордан ошиш — `false`.
   bool add(TvShopItem item, int qty) {
-    if (item.businessId != businessId || !businessItemOrderable(item) || qty < 1) return false;
+    if (!accepts(item) || qty < 1) return false;
     final cur = _lines[item.id];
     if (cur != null) {
       cur.qty = clampQty(cur.qty + qty);
@@ -500,4 +558,38 @@ class BusinessCart {
 
   /// Мазмун имзоси — идемпотентлик ниятини аниқлаш учун (сават ўзгарса — янги калит).
   String get signature => [for (final l in _lines.values) '${l.itemId}x${l.qty}'].join(',');
+
+  /// Таклиф шу саватга тушадими: шу сотувчиники, буюртма қилиса бўладиган ва йирик ЭМАС (йирик техника —
+  /// «Етказиш нархини сўраш» орқали, сервер `DELIVERY_QUOTE_REQUIRED`).
+  bool accepts(TvShopItem item) {
+    if (!offerItemOrderable(item) || isLargeDeliveryItem(item)) return false;
+    if (isShop) return item.businessId.isEmpty && canonicalPhoneId(item.ownerPhone) == ownerPhone && ownerPhone.isNotEmpty;
+    return item.businessId == businessId;
+  }
+
+  Map<String, Object> toJson() => {
+        'businessId': businessId,
+        if (businessName.isNotEmpty) 'businessName': businessName,
+        if (ownerPhone.isNotEmpty) 'ownerPhone': ownerPhone,
+        'lines': [for (final l in _lines.values) l.toJson()],
+      };
+
+  /// Бузилган ёзув — `null`; бузилган қаторлар ташланади, лимитдан ортиғи кесилади.
+  static BusinessCart? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final businessId = _str(raw['businessId']);
+    final ownerPhone = _str(raw['ownerPhone']);
+    if (businessId.isEmpty && canonicalPhoneId(ownerPhone).isEmpty) return null;
+    final cart = BusinessCart(businessId: businessId, businessName: _str(raw['businessName']), ownerPhone: ownerPhone);
+    final lines = raw['lines'];
+    if (lines is List) {
+      for (final e in lines) {
+        final l = BusinessCartLine.fromJson(e);
+        if (l == null || cart._lines.containsKey(l.itemId)) continue;
+        if (cart._lines.length >= BusinessOrderLimits.maxItems) break;
+        cart._lines[l.itemId] = l;
+      }
+    }
+    return cart;
+  }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:ava_gurlan/features/business_orders/data/business_orders_repository.dart';
 import 'package:ava_gurlan/features/business_orders/domain/business_order.dart';
+import 'package:ava_gurlan/features/business_orders/domain/delivery_quote.dart';
 
 /// Қатъий сохта репозиторий: фақат тест ўзи берган жавобни қайтаради, ҳар чақирув журналга ёзилади.
 class FakeBusinessOrdersRepository implements BusinessOrdersRepository {
@@ -36,8 +37,8 @@ class FakeBusinessOrdersRepository implements BusinessOrdersRepository {
   }
 
   @override
-  Future<BusinessOrdersAccess> access({String businessId = ''}) async {
-    calls.add('access:$businessId');
+  Future<BusinessOrdersAccess> access({String businessId = '', String itemId = ''}) async {
+    calls.add(businessId.isNotEmpty || itemId.isEmpty ? 'access:$businessId' : 'access:item:$itemId');
     return accessResult;
   }
 
@@ -121,4 +122,60 @@ class FakeBusinessOrdersRepository implements BusinessOrdersRepository {
 
   @override
   Stream<String?> watchPickupCode(String orderId) => Stream.value(codes[orderId]);
+
+  // ── Етказиш нархи сўрови (STAGE 11) ──
+  OpenDeliveryQuotes openQuotes = const OpenDeliveryQuotes([], viewer: 'courier');
+  Object? openQuotesError;
+  final respondArgs = <(String, int)>[];
+  final quoteCtrls = <String, StreamController<DeliveryQuote?>>{};
+  Object? requestQuoteError;
+  final requestQuoteArgs = <Map<String, Object?>>[];
+
+  StreamController<DeliveryQuote?> quoteCtrl(String id) =>
+      quoteCtrls.putIfAbsent(id, () => StreamController<DeliveryQuote?>.broadcast());
+
+  @override
+  Future<DeliveryQuoteRequestResult> requestDeliveryQuote({
+    required String itemId,
+    required int qty,
+    required double lat,
+    required double lng,
+    required String address,
+    int? floor,
+    String note = '',
+  }) async {
+    calls.add('requestQuote:$itemId:$qty');
+    requestQuoteArgs.add({'itemId': itemId, 'qty': qty, 'lat': lat, 'address': address, 'floor': floor, 'note': note});
+    final e = requestQuoteError;
+    if (e != null) throw e;
+    return const DeliveryQuoteRequestResult(quoteId: 'q1', status: 'open');
+  }
+
+  @override
+  Future<DeliveryQuoteRespondResult> respondDeliveryQuote({required String quoteId, required int priceUzs}) async {
+    await _action('respond:$quoteId:$priceUzs');
+    respondArgs.add((quoteId, priceUzs));
+    return DeliveryQuoteRespondResult(quoteId: quoteId, priceUzs: priceUzs, responderRole: openQuotes.viewer);
+  }
+
+  @override
+  Future<BusinessPlaceResult> acceptDeliveryQuote({
+    required String quoteId,
+    required String deliveryPaymentMethod,
+    String note = '',
+  }) async {
+    await _action('acceptQuote:$quoteId:$deliveryPaymentMethod');
+    return const BusinessPlaceResult(orderId: 'o1');
+  }
+
+  @override
+  Future<OpenDeliveryQuotes> listOpenDeliveryQuotes({double? lat, double? lng, int? radiusKm}) async {
+    calls.add('openQuotes');
+    final e = openQuotesError;
+    if (e != null) throw e;
+    return openQuotes;
+  }
+
+  @override
+  Stream<DeliveryQuote?> watchDeliveryQuote(String quoteId) => quoteCtrl(quoteId).stream;
 }

@@ -9,6 +9,9 @@ class TvShop {
     required this.name,
     this.createdAt,
     this.status = 'active',
+    this.pickupLat,
+    this.pickupLng,
+    this.pickupAddress = '',
   });
 
   final String ownerPhone;
@@ -18,15 +21,37 @@ class TvShop {
   /// `active` | `blocked` — фақат админ ўрнатади (`adminSetShopStatus`); эски ҳужжатларда йўқ (= `active`).
   final String status;
 
+  /// «Маҳсулотни топшириш жойи» («Бозорлар» STAGE 11): курьер шу ердан олади (сервер `tv_shops/{phone}`
+  /// `pickupLat`/`pickupLng` — сон, `pickupAddress`). Эски ҳужжатларда йўқ → буюртма қилиб бўлмайди.
+  final double? pickupLat;
+  final double? pickupLng;
+  final String pickupAddress;
+
   bool get isBlocked => status == 'blocked';
 
-  factory TvShop.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? const <String, dynamic>{};
+  /// Топшириш жойи белгиланган (сервер `validLatLng` кўзгуси: 0,0 — йўқ).
+  bool get hasPickup =>
+      pickupLat != null &&
+      pickupLng != null &&
+      pickupLat!.abs() <= 90 &&
+      pickupLng!.abs() <= 180 &&
+      !(pickupLat == 0 && pickupLng == 0);
+
+  factory TvShop.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      TvShop.fromMap(doc.id, doc.data() ?? const <String, dynamic>{});
+
+  factory TvShop.fromMap(String id, Map<String, dynamic> d) {
+    final lat = d['pickupLat'];
+    final lng = d['pickupLng'];
+    final addr = d['pickupAddress'];
     return TvShop(
-      ownerPhone: doc.id,
-      name: (d['name'] ?? '') as String,
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      ownerPhone: id,
+      name: d['name'] is String ? d['name'] as String : '',
+      createdAt: d['createdAt'] is Timestamp ? (d['createdAt'] as Timestamp).toDate() : null,
       status: d['status'] == 'blocked' ? 'blocked' : 'active',
+      pickupLat: lat is num ? lat.toDouble() : null,
+      pickupLng: lng is num ? lng.toDouble() : null,
+      pickupAddress: addr is String ? addr : '',
     );
   }
 

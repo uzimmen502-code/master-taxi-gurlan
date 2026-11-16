@@ -40,6 +40,24 @@ const Map<String, String> bizOrderErrorKeys = {
   'PICKUP_CODE_MISMATCH': 'biz_order_err_pickup_code_mismatch',
   'PICKUP_CODE_LOCKED': 'biz_order_err_pickup_code_locked',
   'CONTENTION_RETRY': 'biz_order_err_contention_retry',
+  // «Бозорлар» STAGE 11 — ўз дўкони / бозор эълони ва етказиш нархи сўрови (эга 2026-11-16).
+  'SHOP_BLOCKED': 'biz_order_err_shop_blocked',
+  'ITEM_NOT_IN_SHOP': 'biz_order_err_item_not_found',
+  'SHOP_NO_OWNER': 'biz_order_err_shop_blocked',
+  'SELLER_PICKUP_LOCATION_MISSING': 'biz_order_err_seller_pickup_missing',
+  'ITEM_NOT_ORDERABLE': 'biz_order_err_item_not_orderable',
+  'DELIVERY_QUOTE_REQUIRED': 'biz_order_err_delivery_quote_required',
+  'DELIVERY_QUOTE_NOT_NEEDED': 'biz_order_err_delivery_quote_not_needed',
+  'QUOTE_ALREADY_ANSWERED': 'dq_err_already_answered',
+  'QUOTE_NOT_FOUND': 'dq_err_not_found',
+  'QUOTE_EXPIRED': 'dq_err_expired',
+  'QUOTE_NOT_ANSWERED': 'dq_err_not_answered',
+  'QUOTE_ALREADY_USED': 'dq_err_already_used',
+  'PRICE_INVALID': 'dq_err_price_invalid',
+  'NOT_QUOTE_OWNER': 'dq_err_not_found',
+  'QUOTE_RESPONDER_NOT_ALLOWED': 'dq_err_responder_not_allowed',
+  'QUOTE_SELF_RESPOND': 'dq_err_self_respond',
+  'FLOOR_INVALID': 'dq_err_floor_invalid',
 };
 
 /// Умумий (номаълум) хато матни.
@@ -56,6 +74,7 @@ Map<String, String> bizOrderErrorParams(String code, Map<String, dynamic>? detai
     'DELIVERY_TOO_FAR' => {'km': n(d['maxKm'], '—')},
     'QTY_LIMIT_EXCEEDED' => {'max': n(d['maxQty'], '100')},
     'PICKUP_CODE_MISMATCH' => {'n': n(d['attemptsLeft'], '—')},
+    'FLOOR_INVALID' => {'max': n(d['max'], '60')},
     _ => const {},
   };
 }

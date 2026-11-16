@@ -10,6 +10,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../core/widgets/edge_swipe_pager.dart';
 import '../../../shared/widgets/product_mini_tile.dart';
 import '../../../shared/widgets/seller_other_products_row.dart';
+import '../../business_orders/screens/business_cart_screen.dart';
 import '../../business_orders/widgets/business_order_entry.dart';
 import '../../deal_chat/open_deal_chat.dart';
 import '../../markets/domain/market_taxonomy.dart';
@@ -255,6 +256,8 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
         // тушунарсиз эди ва пастдаги тугманинг такрори — энди сотувчи
         // қатори ([SellerOtherProductsRow], 2026-11-16).
         actions: [
+          // «Сават» (STAGE 11) — саватда нарса бўлса.
+          const BusinessCartButton(color: Colors.black87),
           // ❤ Танланганлар (STAGE 10).
           if (_available) FavoriteHeart(favorite: FavoriteRef.fromShopItem(item), overlay: false),
           if (_available)
@@ -311,10 +314,9 @@ class _TvShopItemDetailScreenState extends State<TvShopItemDetailScreen> {
                       onOpen: openShop,
                     ),
                   ),
-                // «Буюртма бериш» (AVA курьери, «Менинг бизнесим» буюртмаси): фақат дарвоза очиқ ва маҳсулот/объект
-                // мос бўлса кўринади ([BusinessOrderEntry] ўзи текширади; бўлмаса — ҳеч нарса).
-                if (item.businessId.isNotEmpty)
-                  BusinessOrderEntry(key: ValueKey('biz_order_entry_${item.id}'), item: item, myUid: _myUid),
+                // «Саватга қўшиш» / «Етказиш нархини сўраш» (AVA курьери): объект ва ўз дўкони маҳсулоти (STAGE 11); фақат
+                // дарвоза очиқ ва маҳсулот/сотувчи мос бўлса кўринади ([BusinessOrderEntry] ўзи текширади; бўлмаса — ҳеч нарса).
+                BusinessOrderEntry(key: ValueKey('biz_order_entry_${item.id}'), item: item, myUid: _myUid),
 
                 if (similar.isNotEmpty) _similarStrip(similar),
               ],

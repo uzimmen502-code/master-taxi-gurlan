@@ -14,6 +14,7 @@ import '../../restaurants/widgets/restaurant_row.dart' show formatDistanceLabel;
 import '../data/business_orders_repository.dart';
 import '../domain/business_order.dart';
 import '../widgets/business_order_widgets.dart';
+import '../widgets/delivery_quote_requests_section.dart';
 
 typedef BizCourierLocate = Future<({double lat, double lng})?> Function();
 
@@ -39,6 +40,12 @@ class _BusinessNearbyOrdersScreenState extends State<BusinessNearbyOrdersScreen>
   late Future<NearbyBusinessOrders> _future = _load();
   String? _claimingId;
 
+  /// «Етказиш нархи сўровлари» бўлимини қайта юклаш учун.
+  int _tick = 0;
+
+  /// Жой аниқланди (ёки GPS йўқ) — сўровлар бўлими шундан кейин юкланади.
+  bool _posReady = false;
+
   Future<({double lat, double lng})?> _locate() async {
     if (_located) return _pos;
     _located = true;
@@ -53,6 +60,7 @@ class _BusinessNearbyOrdersScreenState extends State<BusinessNearbyOrdersScreen>
     } catch (_) {
       _pos = null;
     }
+    if (mounted) setState(() => _posReady = true);
     return _pos;
   }
 
@@ -65,6 +73,7 @@ class _BusinessNearbyOrdersScreenState extends State<BusinessNearbyOrdersScreen>
     final next = _load();
     setState(() {
       _future = next;
+      _tick++;
     });
     try {
       await next;
@@ -131,6 +140,15 @@ class _BusinessNearbyOrdersScreenState extends State<BusinessNearbyOrdersScreen>
               Text(context.tr('restaurants_courier_no_gps'), style: TextStyle(fontSize: 12, color: c.warn)),
             ],
             const SizedBox(height: 10),
+            // «Бозорлар» STAGE 11: йирик техника — етказиш нархи сўровлари (бўш/рухсат йўқ — кўринмайди).
+            if (_posReady)
+              DeliveryQuoteRequestsSection(
+                repository: _repo,
+                lat: _pos?.lat,
+                lng: _pos?.lng,
+                radiusKm: _radiusKm,
+                refreshTick: _tick,
+              ),
             FutureBuilder<NearbyBusinessOrders>(
               future: _future,
               builder: (context, snap) {

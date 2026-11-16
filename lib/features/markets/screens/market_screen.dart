@@ -15,6 +15,7 @@ import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/load_error_view.dart';
 import '../../../shared/widgets/market_search_field.dart';
+import '../../business_orders/screens/business_cart_screen.dart';
 import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
@@ -628,7 +629,8 @@ class _MarketScreenState extends State<MarketScreen> {
         title: Text(title),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
-        actions: [if (m != null) _addButton()],
+        // «Сават» (STAGE 11) — саватда нарса бўлса кўринади.
+        actions: [const BusinessCartButton(color: AppColors.onPrimary), if (m != null) _addButton()],
         bottom: tabs
             ? TabBar(
                 key: const ValueKey('market_tabs'),

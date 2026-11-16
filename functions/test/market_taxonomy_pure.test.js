@@ -132,6 +132,32 @@ check('P11 upgrade v2 → v3: бўлим олиб ташлаш = changed (WRITE 
   assert.strictEqual(decide({ exists: true, version: 3, markets: V3.markets }, 2, V3.markets).action, 'NOOP');
   assert.strictEqual(decide(v2doc, 1, V3.markets).action, 'TAXONOMY_VERSION_CONFLICT');
 });
+const V4 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'data', 'market_taxonomy_v4.json'), 'utf8'));
+check('P12 v4 ўтади; v3 дан ФАҚАТ showInNearbyAds:true фарқ (livestock.all, auto.cars/moto/tech) (эга 2026-11-16)', () => {
+  expectOk(V4);
+  const on = [];
+  for (const [mid, m] of Object.entries(V4.markets)) {
+    for (const c of m.categories) if (c.showInNearbyAds !== undefined) on.push(`${mid}.${c.id}=${c.showInNearbyAds}`);
+  }
+  assert.deepStrictEqual(on, ['livestock.all=true', 'auto.cars=true', 'auto.moto=true', 'auto.tech=true']);
+  const strip = (x) => JSON.parse(JSON.stringify(x, (k, v) => (k === 'showInNearbyAds' ? undefined : v)));
+  assert.deepStrictEqual(strip(V4), V3);
+  const { decide, diffMarkets, fromValue } = require('../tools/upgrade_market_taxonomy');
+  const { toValue } = require('../tools/seed_market_taxonomy');
+  assert.deepStrictEqual(diffMarkets(V3.markets, V4.markets),
+    { added: [], changed: ['livestock', 'auto'], removed: [], unchanged: ['meat', 'farm', 'electronics', 'appliances'] });
+  const d = decide({ exists: true, version: 3, markets: V3.markets }, 3, V4.markets);
+  assert.deepStrictEqual([d.action, d.version], ['WRITE', 4]);
+  assert.deepStrictEqual(fromValue(toValue(V4.markets)), V4.markets);
+});
+check('N16 showInNearbyAds bool эмас → SHOW_IN_NEARBY_ADS_INVALID; false/йўқ → ўтади', () => {
+  const o = clone(); o.markets.auto.categories[0].showInNearbyAds = 'yes';
+  expectError(o, 'SHOW_IN_NEARBY_ADS_INVALID markets.auto.categories[0].showInNearbyAds');
+  const o2 = clone(); o2.markets.auto.categories[0].showInNearbyAds = false;
+  expectOk(o2);
+  const o3 = clone(); o3.markets.auto.categories[0].showInNearbyAdz = true;
+  expectError(o3, 'UNKNOWN_KEY markets.auto.categories[0].showInNearbyAdz');
+});
 check('P4 normalizeTaxonomy сатрларни trim қилади, бошқа қийматга тегмайди', () => {
   const n = t.normalizeTaxonomy({ a: '  x ', b: [' y', 3, true, null], c: { d: ' z' } });
   assert.deepStrictEqual(n, { a: 'x', b: ['y', 3, true, null], c: { d: 'z' } });

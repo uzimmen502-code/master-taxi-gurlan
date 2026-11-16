@@ -44,7 +44,8 @@ const LIMITS = Object.freeze({
 });
 
 const MARKET_KEYS = Object.freeze(['moduleId', 'order', 'names', 'slogan', 'sloganNoOrder', 'imageUrl', 'categories', 'fields', 'priceUnits']);
-const CATEGORY_KEYS = Object.freeze(['id', 'names', 'orderable']);
+// `showInNearbyAds` (ихтиёрий bool, эга 2026-11-16): шу бўлим эълонлари уйдаги «Яқиндаги эълонлар» тасмасида ҳам чиқади.
+const CATEGORY_KEYS = Object.freeze(['id', 'names', 'orderable', 'showInNearbyAds']);
 const FIELD_KEYS = Object.freeze(['key', 'type', 'names', 'required', 'min', 'max', 'maxLen', 'options', 'categories']);
 const OPTION_KEYS = Object.freeze(['id', 'names']);
 
@@ -147,6 +148,7 @@ function validateMarketTaxonomy(obj) {
         else catIds.add(c.id);
         localized(c.names, `${cp}.names`, 'NAME', LIMITS.categoryName);
         if (typeof c.orderable !== 'boolean') err('ORDERABLE_INVALID', `${cp}.orderable`);
+        if (has(c, 'showInNearbyAds') && typeof c.showInNearbyAds !== 'boolean') err('SHOW_IN_NEARBY_ADS_INVALID', `${cp}.showInNearbyAds`);
       });
     }
 

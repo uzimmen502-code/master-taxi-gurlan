@@ -308,6 +308,7 @@ async function main() {
   db._store.set('settings/assistant', {});
   const dst = await handlers.assistantGetStatus({}, ctx(UID));
   assert.deepStrictEqual(dst.packages, [{ id: 'day', days: 1, price: 25000, promo: false, oneTime: false }]);
+  assert.deepStrictEqual(dst.priceSearch, { enabled: false, dailyLimit: 30, usedToday: 0 }, 'priceSearchStage yo\'q = off');
 
   // 12b) 24 soatlik pass: eski ilova (pricingAck yo'q) — rad; yangi — Pro 24 soat; faol paytda — joriy muddatdan uzayadi
   const P2 = '998901112233';
@@ -329,6 +330,22 @@ async function main() {
   db._store.set(`users/${P2}`, { ...db._store.get(`users/${P2}`), assistantPaidUntil: new FakeTs(Date.now()) });
   assert.strictEqual((await handlers.assistantGetStatus({}, ctx(P2))).pro, false, 'tugagan pass — Pro emas');
 
+  // 12c) Нарх қидириш darvozalari (emulator kerak bo'lmagan qismi)
+  await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: 'gurlan' }, ctx(P2)), 'failed-precondition', 'price_search_off');
+  db._store.set('settings/assistant', { priceSearchStage: 'INTERNAL', priceSearchTesterIds: ['+998 90 111 22 33'] });
+  const ist = await handlers.assistantGetStatus({}, ctx(P2));
+  assert.strictEqual(ist.priceSearch.enabled, true, 'internal: tester');
+  assert.strictEqual((await handlers.assistantGetStatus({}, ctx(UID))).priceSearch.enabled, false, 'internal: tester emas');
+  const np = await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: 'gurlan' }, ctx(P2)), 'permission-denied', 'plus_required');
+  assert.ok(np.details.requestId, 'requestId');
+  await expectError(handlers.assistantPriceSearch({ query: 'o', districtId: 'gurlan' }, ctx(P2)), 'invalid-argument', 'query_too_short');
+  await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: '' }, ctx(P2)), 'invalid-argument', 'location_required');
+  db._store.set('settings/assistant', { priceSearchStage: 'public', priceSearchDailyLimit: 0 });
+  db._store.set(`users/${P2}`, { ...db._store.get(`users/${P2}`), assistantPaidUntil: new FakeTs(Date.now() + 3600000) });
+  await expectError(handlers.assistantPriceSearch({ query: 'olma', districtId: 'gurlan' }, ctx(P2)), 'resource-exhausted', 'price_search_limit');
+  db._store.set('settings/assistant', { priceSearchStage: 'bogus' });
+  assert.strictEqual((await handlers.assistantGetStatus({}, ctx(P2))).priceSearch.enabled, false, 'noto\'g\'ri qiymat = off');
+  db._store.set('settings/assistant', {});
 
   // 12) freeProPhones — paketsiz doimiy Pro
   const OWNER = '998912778777';
@@ -349,7 +366,7 @@ async function main() {
   assert.strictEqual(needsCyrillicFix('Python ва JavaScript фарқи?', 'Python ва JavaScript фарқлари:\n```js\nconst a = 1;\n```\n- Python динамик'), false, 'kod bloki hisobga olinmaydi');
   assert.strictEqual(needsCyrillicFix('Salom, qanday?', 'Salom! Yaxshi.'), false, 'lotin savol — tegilmaydi');
 
-  console.log('assistant_chat.test.js: OK (14 bo\'lim)');
+  console.log('assistant_chat.test.js: OK (15 bo\'lim)');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

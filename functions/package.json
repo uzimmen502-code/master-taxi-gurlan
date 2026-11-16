@@ -21,6 +21,8 @@
     "test:seller-tg-rules": "firebase emulators:exec --only firestore --project demo-seller-tg-rules \"node test/seller_tg_channel_rules.test.js\"",
     "test:intercity": "node test/intercity_rules.test.js",
     "test:assistant": "node test/assistant_chat.test.js",
+    "test:price-search": "node test/price_search_pure.test.js && node test/logistics_tariff_parity.test.js",
+    "test:price-search-cf": "firebase emulators:exec --only firestore --project demo-price-search \"node test/price_search_cf.test.js\"",
     "test:ev-static-map": "node test/ev_static_map.test.js",
     "test:geo-parity": "node test/geo_hash_parity.test.js",
     "test:geo-names-ru": "node test/geo_names_ru.test.js",

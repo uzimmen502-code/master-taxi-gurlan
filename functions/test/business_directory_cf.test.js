@@ -712,12 +712,17 @@ async function main() {
   await msItem('ms_inner', { businessId: msShop });
   await msItem('ms_cafe', { businessId: msCafe });
   await msItem('ms_other', { ownerPhone: OTHER });
+  const pickupRef = (p) => db.collection('tv_shops').doc(p).collection('private').doc('pickup');
+  await pickupRef(MS).set({ lat: 41.84, lng: 60.39, address: 'Gurlan, aniq' });
+  await pickupRef(OTHER).set({ lat: 41.5, lng: 60.6, address: 'begona' });
   const st = async (id) => (await db.collection('tv_shop_items').doc(id).get()).data();
 
   await check('M1 hammasi o\'chadi: asosiy do\'kon + ichki do\'kon (+mahsulotlari), kafe va begona tegilmaydi', async () => {
     const r = await call('deleteMyMainShop', {}, MS);
     assert.deepStrictEqual([r.ok, r.deleted, r.innerShops, r.products], [true, true, 1, 2]);
     assert.strictEqual((await db.collection('tv_shops').doc(MS).get()).exists, false);
+    assert.strictEqual((await pickupRef(MS).get()).exists, false, 'private/pickup ham o\'chdi');
+    assert.strictEqual((await pickupRef(OTHER).get()).exists, true, 'begona private/pickup tegilmaydi');
     assert.strictEqual(await biz(msShop), undefined, 'ichki do\'kon o\'chdi');
     assert.ok(await biz(msCafe), 'do\'kon bo\'lmagan obyekt (kafe) qoladi');
     assert.deepStrictEqual([(await st('ms_own1')).status, (await st('ms_own1')).deletedBy], ['deleted', 'system:main_shop_deleted']);
@@ -738,10 +743,12 @@ async function main() {
     const IB = '998912000079';
     await db.collection('users').doc(IB).set({ role: 'user' });
     await db.collection('tv_shops').doc(IB).set({ ownerPhone: IB, name: 'Asosiy2' });
+    await pickupRef(IB).set({ lat: 41.8, lng: 60.3, address: 'x' });
     const inner = (await call('upsertMyBusiness', { ...BASE, category: 'wholesale', name: 'Ombor', clientRequestId: 'ib-req-1' }, IB)).businessId;
     await call('adminSetBusinessStatus', { businessId: inner, status: 'blocked', reason: 'sinov' }, ADMIN);
     await expectCode(call('deleteMyMainShop', {}, IB), 'SHOP_BLOCKED');
     assert.ok((await db.collection('tv_shops').doc(IB).get()).exists);
+    assert.ok((await pickupRef(IB).get()).exists, 'blokda private/pickup ham qoladi');
     assert.ok(await biz(inner));
   });
 

@@ -84,7 +84,7 @@
     "test:carpet-agro-tasks": "firebase emulators:exec --only firestore --project demo-carpet-agro-tasks \"node test/carpet_agro_courier_tasks_cf.test.js\""
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

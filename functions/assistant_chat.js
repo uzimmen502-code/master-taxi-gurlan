@@ -32,6 +32,9 @@
  *   users/{uid}/assistant_packages/{idem}               — сотиб олинган пакетлар
  *   wallet_idempotency/{idem}                           — debitForOrder билан бир хил
  *
+ * Plus (эга 2026-11-17): 25 000 сўм = тўлов пайтидан 24 соат (`day` пакети);
+ * доимий Plus сотилмайди.
+ *
  * Callables: assistantGetStatus, assistantChat, assistantBuyPackage,
  *   assistantDeleteConversation, assistantRenameConversation,
  *   assistantDeleteMemory. Trigger: onAssistantMessageCreated.
@@ -76,13 +79,18 @@ const ASSISTANT_DEFAULTS = {
   // Пакетсиз доимий Pro (эга/синов рақамлари). `settings/assistant.freeProPhones`
   // массиви билан кенгайтирилади (998… рақамли формат).
   freeProPhones: ['998912778777'],
-  // Эга қарори (2026-09-22): бир марталик тўлов 25 000 сўм → доимий Plus
-  // (10 йил). Кунлик пакетлар керак бўлса — settings/assistant.packages:
-  // [{id:'d7',days:7,price:15000},{id:'d15',days:15,price:25000},{id:'d30',days:30,price:30000,promo:true}]
+  // Эга қарори (2026-11-17, CONFIRMED): БУТУН AVA AI Plus (чат + нарх қидируви) =
+  // 25 000 сўм тўлов пайтидан 24 СОАТ; фаол бўлганда сотиб олинса — жорий тугаш
+  // вақтидан узаяди (assistantBuyPackage мантиғи ўзгармаган). Доимий Plus
+  // (аввалги `once`, 3650 кун, 2026-09-22) ЭНДИ СОТИЛМАЙДИ. settings/assistant.packages
+  // бўлса — у устун (2026-11-17 prod'да ҳужжат йўқ эди).
   packages: [
-    { id: 'once', days: 3650, price: 25000, promo: false, oneTime: true },
+    { id: 'day', days: 1, price: 25000, promo: false, oneTime: false },
   ],
 };
+
+/** Янги илова 24 соатлик пакет матнини кўрсатади — эски илова («доимий» матни) сотиб ололмасин. */
+const PRICING_ACK = 'pass_v2';
 
 /** Тошкент вақти бўйича кун калити (`YYYY-MM-DD`). */
 function tashkentDayKey(nowMs = Date.now()) {
@@ -728,6 +736,11 @@ function attachAssistant(exportsObj, deps) {
     if (!pkg) {
       throw new HttpsError('invalid-argument', 'unknown_package');
     }
+    // Эски илова (2026-11-17 гача) варақасида «бир марталик / доимий Plus» матни бор — у 24 соатлик
+    // пакетни нотўғри матн билан сотиб олмасин (истеъмолчи алданмасин). Янги илова `pricingAck` юборади.
+    if (!pkg.oneTime && String((data && data.pricingAck) || '') !== PRICING_ACK) {
+      throw new HttpsError('failed-precondition', 'app_update_required', { reason: 'app_update_required' });
+    }
 
     const idemKey = `assistant_pkg_${uid}_${idempotencyKey}`;
     const idemRef = db.collection('wallet_idempotency').doc(idemKey);
@@ -891,6 +904,7 @@ function attachAssistant(exportsObj, deps) {
 module.exports = {
   attachAssistant,
   ASSISTANT_DEFAULTS,
+  PRICING_ACK,
   tashkentDayKey,
   parseResponsesOutput,
   normalizePackages,

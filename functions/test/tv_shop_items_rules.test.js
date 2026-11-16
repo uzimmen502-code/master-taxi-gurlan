@@ -114,6 +114,18 @@ async function main() {
     await assertSucceeds(as(SELLER).doc('tv_shop_items/old1').update({ title: 'Eski yangilandi' }));
   });
 
+  await check('A7 ixtiyoriy taxminiy vazn unitWeightG (AVA AI, 2026-11-17): yo\'q / 1 g / 10 t chegarasi; egasi qo\'shadi, o\'zgartiradi, o\'chiradi', async () => {
+    await assertSucceeds(as(SELLER).collection('tv_shop_items').add(appItem({ unitWeightG: 1 })));
+    await assertSucceeds(as(SELLER).collection('tv_shop_items').add(appItem({ unitWeightG: 10000000 })));
+    await assertSucceeds(as(SELLER).collection('tv_shop_items').add(appItem({ unitWeightG: 1500, status: 'pending' })));
+    await reset('w1', {});
+    const ref = as(SELLER).doc('tv_shop_items/w1');
+    await assertSucceeds(ref.update({ unitWeightG: 750 }));
+    await assertSucceeds(ref.update({ unitWeightG: 2000, title: 'Og\'irroq' }));
+    const { deleteField } = require('firebase/firestore');
+    await assertSucceeds(ref.update({ unitWeightG: deleteField() }));
+  });
+
   // ───────── B. Suiiste'mollar rad etiladi ─────────
   const createFails = async (name, extra) =>
     check(`B create: ${name}`, async () => assertFails(as(SELLER).collection('tv_shop_items').add(appItem(extra))));
@@ -138,6 +150,11 @@ async function main() {
   await createFails('egasiz (admin) obyektga businessId', { businessId: BIZ_ADMIN });
   await createFails('bo\'sh businessId', { businessId: '' });
   await createFails('businessId matn emas', { businessId: 123 });
+  await createFails('vazn 0', { unitWeightG: 0 });
+  await createFails('vazn manfiy', { unitWeightG: -5 });
+  await createFails('vazn kasr', { unitWeightG: 1.5 });
+  await createFails('vazn matn', { unitWeightG: '500' });
+  await createFails('vazn 10 t dan og\'ir', { unitWeightG: 10000001 });
 
   await check('B create: boshqa odam nomidan (ownerPhone begona) yaratib bo\'lmaydi; loginsiz ham', async () => {
     await assertFails(as(SELLER).collection('tv_shop_items').add(appItem({ ownerPhone: OTHER })));
@@ -166,6 +183,8 @@ async function main() {
   await updateFails('51 ta klip', 'u13', {}, { clipIds: Array.from({ length: 51 }, (_, i) => `c${i}`) });
   await updateFails('tur weapon', 'u14', {}, { kind: 'weapon' });
   await updateFails('createdAt ni o\'zgartirish', 'u15', {}, { createdAt: Timestamp.fromMillis(1) });
+  await updateFails('vaznni 0 qilish', 'u16', { unitWeightG: 500 }, { unitWeightG: 0 });
+  await updateFails('vazn matn', 'u17', {}, { unitWeightG: 'og\'ir' });
 
   await check('B delete: boshqa eganing hujjatini o\'chirib bo\'lmaydi', async () => {
     await reset('d1', {});

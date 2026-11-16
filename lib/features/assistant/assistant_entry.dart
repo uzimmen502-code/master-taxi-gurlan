@@ -10,6 +10,7 @@ import 'models/assistant_status.dart';
 import 'screens/assistant_chat_screen.dart';
 import 'services/assistant_service.dart';
 import 'widgets/assistant_gpt_colors.dart';
+import 'widgets/assistant_pro_sheet.dart' show assistantBuyConfirmText;
 import '../../core/theme/ava_tokens.dart';
 
 /// Home'даги «ChatGPT + AVA AI» тугмаси — кириш нуқтаси (эга қарори,
@@ -23,9 +24,9 @@ import '../../core/theme/ava_tokens.dart';
 ///    даражасини илова била олмайди — фақат илова ўрнатилганини текширади.
 /// 3. Рўйхатдан ўтган, ChatGPT иловаси йўқ — тўғридан AVA чат.
 ///
-/// Тариф (эга қарори, 2026-09-22): оддий — бепул 10 хабар/кун; тўлиқ
-/// фойдаланиш — БИР МАРТАЛИК 25 000 сўм (ҳамёндан, `assistantBuyPackage`
-/// `once` пакети) → доимий Plus. Варақада қисқа жумла + кичик «Тўлаш» тугмаси.
+/// Тариф (эга қарори, 2026-11-17; аввалги «бир марталик → доимий» бекор): оддий — бепул
+/// 10 хабар/кун; AVA AI Plus (чат + нарх қидириш) — 25 000 сўм ТЎЛОВ ПАЙТИДАН 24 СОАТ
+/// (ҳамёндан, `assistantBuyPackage` `day` пакети). Фаол бўлса «… гача фаол», тугаса яна «Тўлаш».
 /// Дизайн — ChatGPT услуби ([GptColors], Inter).
 Future<void> openAssistantEntry(
   BuildContext context, {
@@ -76,9 +77,9 @@ Future<void> openAssistantEntry(
 
 enum _EntryChoice { ava, register, chatGpt, topUp }
 
-/// Бир марталик тўлов нархи — сервер default'и билан бир хил (ҳақиқий нарх
+/// 24 соатлик Plus нархи — сервер default'и билан бир хил (ҳақиқий нарх
 /// статусдан келади; бу фақат статус юкланмагунча кўрсатиш учун).
-const _kOneTimePriceFallback = 25000;
+const _kPassPriceFallback = 25000;
 
 class _EntrySheet extends StatefulWidget {
   const _EntrySheet({required this.registered, required this.chatGptInstalled});
@@ -111,15 +112,9 @@ class _EntrySheetState extends State<_EntrySheet> {
     } catch (_) {}
   }
 
-  AssistantPackage? get _oneTimePkg {
-    final pkgs = _status?.packages ?? const <AssistantPackage>[];
-    for (final p in pkgs) {
-      if (p.oneTime) return p;
-    }
-    return pkgs.isNotEmpty ? pkgs.first : null;
-  }
+  AssistantPackage? get _passPkg => _status?.passPackage;
 
-  int get _price => _oneTimePkg?.price ?? _kOneTimePriceFallback;
+  int get _price => _passPkg?.price ?? _kPassPriceFallback;
 
   void _snack(String text, {SnackBarAction? action}) {
     ScaffoldMessenger.of(context)
@@ -130,7 +125,7 @@ class _EntrySheetState extends State<_EntrySheet> {
   /// Тўлаш: тасдиқ → ҳамёндан ечиш → чатни очиш.
   Future<void> _pay() async {
     if (_paying) return;
-    final pkg = _oneTimePkg;
+    final pkg = _passPkg;
     if (pkg == null) {
       _snack(context.tr('assistant_err_unavailable'));
       return;
@@ -139,8 +134,7 @@ class _EntrySheetState extends State<_EntrySheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.tr('assistant_pro_sheet_title')),
-        content: Text(ctx.trMsg('assistant_buy_confirm_once',
-            params: {'price': formatPrice(pkg.price)})),
+        content: Text(assistantBuyConfirmText(ctx, pkg)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -189,6 +183,8 @@ class _EntrySheetState extends State<_EntrySheet> {
   Widget build(BuildContext context) {
     final c = GptColors.of(context);
     final paid = _status?.pro == true;
+    final until = _status?.paidUntil;
+    final unlimited = _status?.unlimited == true;
     final bottom = MediaQuery.paddingOf(context).bottom;
     // Катта тизим шрифтида ҳам ихчам қолсин (ChatGPT варақалари каби).
     final mq = MediaQuery.of(context);
@@ -292,13 +288,19 @@ class _EntrySheetState extends State<_EntrySheet> {
                   const SizedBox(height: 8),
                   Divider(height: 1, color: c.border),
                   const SizedBox(height: 10),
-                  // Бир марталик тўлов: жумла + кичик тугма (ChatGPT'дек ихчам).
+                  // 24 соатлик Plus: жумла + кичик тугма (ChatGPT'дек ихчам); фаол бўлса — «… гача фаол».
                   Row(
                     children: [
                       Expanded(
                         child: Text(
-                          context.trMsg('assistant_onetime_text',
-                              params: {'price': formatPrice(_price)}),
+                          registered && paid && unlimited
+                              ? context.tr('assistant_pro_unlimited')
+                              : registered && paid && until != null
+                                  ? context.trMsg('assistant_pro_until',
+                                      params: {'date': formatDateShort(until)})
+                                  : context.trMsg('assistant_pass_text',
+                                      params: {'price': formatPrice(_price)}),
+                          key: const ValueKey('assistant_entry_plan_text'),
                           style: GoogleFonts.inter(
                               fontSize: 13, color: c.text, height: 1.35),
                         ),
@@ -319,7 +321,7 @@ class _EntrySheetState extends State<_EntrySheet> {
                                   size: 14, color: AvaLight.ok),
                               const SizedBox(width: 4),
                               Text(
-                                context.tr('assistant_paid'),
+                                context.tr(unlimited ? 'assistant_paid' : 'assistant_active'),
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,

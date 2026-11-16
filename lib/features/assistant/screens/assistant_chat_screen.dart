@@ -19,6 +19,7 @@ import '../widgets/assistant_drawer.dart';
 import '../widgets/assistant_gpt_colors.dart';
 import '../widgets/assistant_pro_sheet.dart';
 import 'assistant_memory_screen.dart';
+import 'price_search_screen.dart';
 
 /// «AVA ёрдамчиси» — илова ичидаги AI чат (В-1).
 ///
@@ -229,7 +230,34 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     }
   }
 
-  Future<void> _openProSheet({bool limitReached = false}) async {
+  /// «Нарх қидириш» (Plus). Plus йўқ — аввал Plus варақаси (изоҳ билан); олинса — экран очилади.
+  Future<void> _openPriceSearch() async {
+    var s = _status;
+    if (s == null) {
+      await _refreshStatus();
+      s = _status;
+    }
+    if (!mounted || s == null) return;
+    if (!s.pro) {
+      await _openProSheet(priceSearchRequired: true);
+      if (!mounted || _status?.pro != true) return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PriceSearchScreen(
+          phone: widget.phone,
+          service: _service,
+          onPlusRequired: () async {
+            await _refreshStatus();
+            if (mounted) await _openProSheet(priceSearchRequired: true);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openProSheet({bool limitReached = false, bool priceSearchRequired = false}) async {
     AssistantStatus? status = _status;
     if (status == null) {
       try {
@@ -250,6 +278,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
         status: sheetStatus,
         service: _service,
         limitReached: limitReached,
+        priceSearchRequired: priceSearchRequired,
         onTopUp: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => WalletScreen(phone: widget.phone)),
@@ -338,6 +367,8 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
         _openMemory();
       case 'pro':
         await _openProSheet();
+      case 'price_search':
+        await _openPriceSearch();
     }
   }
 
@@ -525,6 +556,13 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                   ),
                 ),
               ),
+            if (s != null && s.priceSearchEnabled)
+              IconButton(
+                key: const ValueKey('assistant_price_search_btn'),
+                tooltip: context.tr('ps_title'),
+                icon: Icon(Icons.price_check_rounded, size: 24, color: c.text),
+                onPressed: _openPriceSearch,
+              ),
             IconButton(
               tooltip: context.tr('assistant_new_chat'),
               icon: Icon(Icons.edit_square, size: 22, color: c.text),
@@ -554,6 +592,9 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                     ctx.tr('assistant_memory')),
                 _menuItem(ctx, 'pro', Icons.workspace_premium_rounded,
                     ctx.tr('assistant_pro_sheet_title')),
+                if (s != null && s.priceSearchEnabled)
+                  _menuItem(ctx, 'price_search', Icons.price_check_rounded,
+                      ctx.tr('ps_title')),
                 if (_convId != null) ...[
                   const PopupMenuDivider(),
                   _menuItem(ctx, 'delete', Icons.delete_outline,
@@ -580,7 +621,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                             const _ThinkingDot(),
                           ],
                         )
-                      : _EmptyState(onTap: (q) => _send(q)))
+                      : _EmptyState(onTap: (q) => _send(q), onPriceSearch: (_status?.priceSearchEnabled ?? false) ? _openPriceSearch : null))
                   : StreamBuilder<List<AssistantMessage>>(
                 key: ValueKey(_convId),
                 stream: _service.watchMessages(_uid, _convId!),
@@ -603,7 +644,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                     return const SizedBox.shrink();
                   }
                   if (list.isEmpty && !_sending) {
-                    return _EmptyState(onTap: (q) => _send(q));
+                    return _EmptyState(onTap: (q) => _send(q), onPriceSearch: (_status?.priceSearchEnabled ?? false) ? _openPriceSearch : null);
                   }
                   if (snap.hasData && _revealId == null) _scrollToEnd();
                   // Сарлавҳа сервер (trigger) томонидан кейинроқ келади.
@@ -1015,9 +1056,12 @@ class _Composer extends StatelessWidget {
 
 /// Бўш ҳолат — ChatGPT'дек марказда сарлавҳа + таклиф чиплари.
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onTap});
+  const _EmptyState({required this.onTap, this.onPriceSearch});
 
   final ValueChanged<String> onTap;
+
+  /// «Нарх қидириш» чипи (босқич очиқ бўлса).
+  final VoidCallback? onPriceSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -1055,6 +1099,17 @@ class _EmptyState extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (onPriceSearch != null)
+                  ActionChip(
+                    key: const ValueKey('assistant_price_search_chip'),
+                    avatar: Icon(Icons.price_check_rounded, size: 18, color: c.text),
+                    label: Text(context.tr('ps_title'),
+                        style: GoogleFonts.inter(fontSize: 13, color: c.text, fontWeight: FontWeight.w600)),
+                    onPressed: onPriceSearch,
+                    backgroundColor: c.bubble,
+                    side: BorderSide(color: c.border),
+                    shape: const StadiumBorder(),
+                  ),
                 for (final q in starters)
                   ActionChip(
                     label: Text(q,

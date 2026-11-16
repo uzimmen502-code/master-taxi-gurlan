@@ -136,7 +136,13 @@ class TvShopItem {
     this.imported,
     this.regionId = '',
     this.taxonomyVersion = 0,
+    this.unitWeightG,
   });
+
+  /// AVA AI нарх қидируви (эга 2026-11-17, А вариант): ихтиёрий «тахминий вазн» — бир бирлик, грамм
+  /// (1..10 000 000, rules `tvShopItemShapeOk`). Йўқ — `null` (етказиш «≈ … дан»). Эски ҳужжатда йўқ.
+  final int? unitWeightG;
+  static const maxUnitWeightG = 10000000;
 
   /// «Бозорлар» 2a/2b (эга 2026-11-15): модерация ва 30 кунлик муддат майдонлари — ФАҚАТ сервер ёзади
   /// (`functions/market_moderation.js`; rules `tvShopModerationKeys`). Клиент уларни ўқийди, [toMap]да ЁЗМАЙДИ.
@@ -293,6 +299,9 @@ class TvShopItem {
       imported: d['imported'] is bool ? d['imported'] as bool : null,
       regionId: d['regionId'] is String ? (d['regionId'] as String).trim() : '',
       taxonomyVersion: d['taxonomyVersion'] is int ? d['taxonomyVersion'] as int : 0,
+      unitWeightG: d['unitWeightG'] is int && (d['unitWeightG'] as int) >= 1 && (d['unitWeightG'] as int) <= maxUnitWeightG
+          ? d['unitWeightG'] as int
+          : null,
     );
   }
 
@@ -319,6 +328,7 @@ class TvShopItem {
       if (imported != null) 'imported': imported,
       if (regionId.isNotEmpty) 'regionId': regionId,
       if (taxonomyVersion >= 1) 'taxonomyVersion': taxonomyVersion,
+      if (unitWeightG != null) 'unitWeightG': unitWeightG,
       'districtId': districtId,
       'districtLabel': districtLabel,
       'description': description,

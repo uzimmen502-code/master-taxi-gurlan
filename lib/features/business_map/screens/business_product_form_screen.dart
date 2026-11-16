@@ -22,6 +22,7 @@ import '../../tv_market/repositories/tv_shop_repository.dart';
 import '../../tv_market/screens/tv_publish_screen.dart';
 import '../../tv_market/screens/tv_shop_item_photos_screen.dart';
 import '../../tv_market/services/tv_storage_service.dart';
+import '../../wholesale/models/shipping_dims.dart' show parseWeightKgToGrams, weightKgFieldText;
 import '../domain/business.dart';
 import '../domain/business_market_map.dart';
 import '../domain/business_type_profile.dart';
@@ -102,6 +103,10 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   late final TextEditingController _price = TextEditingController(
       text: (widget.existing?.price ?? 0) > 0 ? '${widget.existing!.price}' : '');
   late final TextEditingController _desc = TextEditingController(text: widget.existing?.description ?? '');
+
+  /// AVA AI нарх қидируви (эга 2026-11-17, А вариант): ихтиёрий «тахминий вазн», кг → unitWeightG (грамм).
+  late final TextEditingController _weight = TextEditingController(
+      text: widget.existing?.unitWeightG != null ? weightKgFieldText(widget.existing!.unitWeightG!) : '');
   late String _kind = widget.existing?.kind ??
       (sellsOnlyProducts(widget.business)
           ? 'product'
@@ -222,6 +227,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     _name.dispose();
     _price.dispose();
     _desc.dispose();
+    _weight.dispose();
     super.dispose();
   }
 
@@ -256,6 +262,11 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     if (price == null) return setState(() => _error = context.tr('bizprod_err_price'));
     if (!_isEdit && _photos.isEmpty) return setState(() => _error = context.tr('tv_shop_photo_required'));
     if (_phone.isEmpty) return setState(() => _error = context.tr('bizprod_err_generic'));
+    // Тахминий вазн — ихтиёрий; киритилса тўғри бўлиши шарт (хизматда ёзилмайди).
+    final int? weightG = _kind == 'product' && _weight.text.trim().isNotEmpty ? parseWeightKgToGrams(_weight.text) : null;
+    if (_kind == 'product' && _weight.text.trim().isNotEmpty && weightG == null) {
+      return setState(() => _error = context.tr('bizprod_err_weight'));
+    }
     // «Бозорлар»: бозор танланган — таксономия, бўлим ва динамик майдонлар текширилади.
     final market = _marketDef;
     if (_market.isNotEmpty && market == null) {
@@ -309,6 +320,10 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           'price': price,
           'description': _desc.text.trim(),
           'kind': _kind,
+          if (weightG != null)
+            'unitWeightG': weightG
+          else if (old.unitWeightG != null)
+            'unitWeightG': FieldValue.delete(),
           // Белгиланган нарх — майдон ёзилмайди; аввал бирлик бор эди — ўчирилади (эски ҳужжат шакли).
           if (_unit != PriceUnit.fixed)
             'priceUnit': _unit.wire
@@ -347,6 +362,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           imported: (market?.hasImported ?? false) ? _imported : null,
           regionId: regionId,
           taxonomyVersion: market == null ? 0 : (_taxonomy?.version ?? 0),
+          unitWeightG: weightG,
         ));
       }
       if (!mounted) return;
@@ -610,6 +626,21 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             ),
           ),
           if (_units.length > 1) _unitSection(),
+          if (_kind == 'product') ...[
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('bizprod_weight'),
+              controller: _weight,
+              enabled: !_busy,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+              decoration: InputDecoration(
+                labelText: context.tr('bizprod_f_weight'),
+                helperText: context.tr('bizprod_weight_help'),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
           ..._marketBody(),
           const SizedBox(height: 12),
           TextField(

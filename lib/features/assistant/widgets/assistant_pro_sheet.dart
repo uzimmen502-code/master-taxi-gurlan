@@ -7,7 +7,15 @@ import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../models/assistant_status.dart';
 import '../services/assistant_service.dart';
 
-/// Pro пакетлар (7/15/30 кун) — ҳамёндан сотиб олиш.
+/// Тасдиқ матни: 24 соатлик пасс / кунлик пакет / эски бир марталик (settings бўлса).
+String assistantBuyConfirmText(BuildContext ctx, AssistantPackage pkg) {
+  final price = formatPrice(pkg.price);
+  if (pkg.isDayPass) return ctx.trMsg('assistant_buy_confirm_pass', params: {'price': price});
+  if (pkg.oneTime) return ctx.trMsg('assistant_buy_confirm_once', params: {'price': price});
+  return ctx.trMsg('assistant_buy_confirm', params: {'price': price, 'days': '${pkg.days}'});
+}
+
+/// Plus пакет(лар)и — ҳамёндан сотиб олиш (эга 2026-11-17: битта 24 соатлик пасс 25 000 сўм).
 ///
 /// `Navigator.pop(context, AssistantPurchaseResult)` — муваффақиятли харид.
 class AssistantProSheet extends StatefulWidget {
@@ -17,12 +25,16 @@ class AssistantProSheet extends StatefulWidget {
     required this.service,
     required this.onTopUp,
     this.limitReached = false,
+    this.priceSearchRequired = false,
   });
 
   final AssistantStatus status;
   final AssistantService service;
   final VoidCallback onTopUp;
   final bool limitReached;
+
+  /// «Нарх қидириш» Plus'сиз очилди — варақа тепасида изоҳ.
+  final bool priceSearchRequired;
 
   @override
   State<AssistantProSheet> createState() => _AssistantProSheetState();
@@ -55,13 +67,8 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.tr('assistant_pro_sheet_title')),
-        content: Text(pkg.oneTime
-            ? ctx.trMsg('assistant_buy_confirm_once',
-                params: {'price': formatPrice(pkg.price)})
-            : ctx.trMsg('assistant_buy_confirm', params: {
-                'price': formatPrice(pkg.price),
-                'days': '${pkg.days}',
-              })),
+        content: Text(assistantBuyConfirmText(ctx, pkg)),
+
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -133,7 +140,7 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
               ),
             ),
             const SizedBox(height: 14),
-            if (widget.limitReached) ...[
+            if (widget.limitReached || widget.priceSearchRequired) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -144,13 +151,17 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      context.tr('assistant_limit_title'),
+                      context.tr(widget.priceSearchRequired ? 'ps_plus_title' : 'assistant_limit_title'),
+                      key: const ValueKey('assistant_pro_note_title'),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      context.trMsg('assistant_limit_body',
-                          params: {'count': '${s.freeDailyLimit}'}),
+                      widget.priceSearchRequired
+                          ? context.trMsg('ps_plus_body',
+                              params: {'price': formatPrice(s.passPackage?.price ?? 25000)})
+                          : context.trMsg('assistant_limit_body',
+                              params: {'count': '${s.freeDailyLimit}'}),
                       style: const TextStyle(fontSize: 13),
                     ),
                   ],
@@ -269,13 +280,17 @@ class _PackageTile extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          pkg.oneTime
-                              ? context.tr('assistant_onetime_label')
-                              : context.trMsg('assistant_days',
-                                  params: {'count': '${pkg.days}'}),
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w700),
+                        Flexible(
+                          child: Text(
+                            pkg.isDayPass
+                                ? context.tr('assistant_pass_label')
+                                : pkg.oneTime
+                                    ? context.tr('assistant_onetime_label')
+                                    : context.trMsg('assistant_days',
+                                        params: {'count': '${pkg.days}'}),
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
                         ),
                         if (pkg.promo) ...[
                           const SizedBox(width: 8),
@@ -300,7 +315,9 @@ class _PackageTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      pkg.oneTime
+                      pkg.isDayPass
+                          ? context.tr('assistant_pass_sub')
+                          : pkg.oneTime
                           ? context.tr('assistant_onetime_sub')
                           : context.trMsg('assistant_per_day',
                               params: {'amount': formatPrice(perDay)}),

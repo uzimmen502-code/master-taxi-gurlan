@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../models/assistant_conversation.dart';
 import '../models/assistant_message.dart';
 import '../models/assistant_status.dart';
+import '../models/price_offer.dart';
 
 /// «AVA ёрдамчиси» — Cloud Functions wrapper (`functions/assistant_chat.js`).
 ///
@@ -80,11 +81,16 @@ class AssistantService {
     );
   }
 
+  /// Сервер `PRICING_ACK` — бу илова 24 соатлик пасс матнини кўрсатади (эски «доимий» матнли
+  /// илова сотиб ололмайди, `app_update_required`).
+  static const pricingAck = 'pass_v2';
+
   /// Pro пакетни ҳамёндан сотиб олиш (идемпотент).
   Future<AssistantPurchaseResult> buyPackage(String packageId) async {
     final res = await _call('assistantBuyPackage', {
       'packageId': packageId,
       'idempotencyKey': _uuid.v4(),
+      'pricingAck': pricingAck,
     });
     return AssistantPurchaseResult(
       paidUntil: DateTime.fromMillisecondsSinceEpoch(
@@ -92,6 +98,23 @@ class AssistantService {
       balance: (res['balance'] as num?)?.toInt() ?? 0,
       debited: (res['debited'] as num?)?.toInt() ?? 0,
     );
+  }
+
+  /// «Нарх қидириш» (Plus). [districtId] — харидор тумани (тепадаги ҳудуд); [lat]/[lng] — бўлса
+  /// шу туман ичидаги етказишни ҳисоблаш учун (бўлмаса сервер «нарх ҳали йўқ» қайтаради).
+  Future<PriceSearchResult> priceSearch({
+    required String query,
+    required String districtId,
+    double? lat,
+    double? lng,
+  }) async {
+    final res = await _call('assistantPriceSearch', {
+      'query': query.trim(),
+      'districtId': districtId,
+      if (lat != null && lng != null) 'lat': lat,
+      if (lat != null && lng != null) 'lng': lng,
+    });
+    return PriceSearchResult.fromMap(res);
   }
 
   Future<void> deleteConversation(String conversationId) async {
@@ -174,6 +197,7 @@ class AssistantException implements Exception {
 
   bool get isDailyLimit => code == 'daily_limit';
   bool get isInsufficientBalance => code == 'insufficient_balance';
+  bool get isPlusRequired => code == 'plus_required';
 
   @override
   String toString() => 'AssistantException($code)';

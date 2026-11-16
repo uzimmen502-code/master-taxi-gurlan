@@ -12,7 +12,16 @@ class AssistantStatus {
     required this.webSearchLimit,
     required this.balance,
     required this.packages,
+    this.priceSearchEnabled = false,
+    this.priceSearchDailyLimit = 0,
+    this.priceSearchUsedToday = 0,
   });
+
+  /// «Нарх қидириш» босқичи шу фойдаланувчига очиқ (`settings/assistant.priceSearchStage`).
+  /// Plus алоҳида ([pro]) — Plus йўқ бўлса бўлим кўринади, лекин «Plus олинг» варақаси очилади.
+  final bool priceSearchEnabled;
+  final int priceSearchDailyLimit;
+  final int priceSearchUsedToday;
 
   final bool enabled;
   final bool pro;
@@ -38,10 +47,22 @@ class AssistantStatus {
   int get remainingToday =>
       (dailyLimit - usedToday) < 0 ? 0 : dailyLimit - usedToday;
 
+  /// Сотиладиган пакет (эга 2026-11-17: битта 24 соатлик пасс); бўлмаса биринчиси.
+  AssistantPackage? get passPackage {
+    for (final p in packages) {
+      if (!p.oneTime) return p;
+    }
+    return packages.isNotEmpty ? packages.first : null;
+  }
+
   factory AssistantStatus.fromMap(Map<String, dynamic> m) {
     final paidUntilMs = (m['paidUntil'] as num?)?.toInt();
     final rawPkgs = m['packages'];
+    final ps = m['priceSearch'] is Map ? Map<String, dynamic>.from(m['priceSearch'] as Map) : const <String, dynamic>{};
     return AssistantStatus(
+      priceSearchEnabled: ps['enabled'] == true,
+      priceSearchDailyLimit: (ps['dailyLimit'] as num?)?.toInt() ?? 0,
+      priceSearchUsedToday: (ps['usedToday'] as num?)?.toInt() ?? 0,
       enabled: m['enabled'] != false,
       pro: m['pro'] == true,
       unlimited: m['unlimited'] == true,
@@ -80,6 +101,9 @@ class AssistantStatus {
         webSearchLimit: webSearchLimit,
         balance: balance ?? this.balance,
         packages: packages,
+        priceSearchEnabled: priceSearchEnabled,
+        priceSearchDailyLimit: priceSearchDailyLimit,
+        priceSearchUsedToday: priceSearchUsedToday,
       );
 }
 
@@ -98,8 +122,11 @@ class AssistantPackage {
   final int price;
   final bool promo;
 
-  /// Бир марталик тўлов — доимий Plus (муддат кўрсатилмайди).
+  /// Эски «бир марталик» (доимий) пакет — 2026-11-17 дан сотилмайди; эски `settings` учун қолди.
   final bool oneTime;
+
+  /// 24 соатлик пасс (`days == 1`, эга 2026-11-17).
+  bool get isDayPass => !oneTime && days == 1;
 
   factory AssistantPackage.fromMap(Map<String, dynamic> m) => AssistantPackage(
         id: (m['id'] ?? '') as String,

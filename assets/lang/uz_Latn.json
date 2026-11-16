@@ -5866,5 +5866,7 @@
   "shop_pickup_err_save": "Saqlab bo'lmadi. Qayta urinib ko'ring.",
   "shop_pickup_err_point": "Nuqtani xaritada belgilang.",
   "shop_pickup_exact_toggle": "Aniq joyimni ko'rsat",
-  "shop_pickup_exact_hint": "O'chiq bo'lsa, xaridorlarga taxminiy joy (~500 m) ko'rinadi. Aniq manzil faqat buyurtmada kuryerga beriladi."
+  "shop_pickup_exact_hint": "O'chiq bo'lsa, xaridorlarga taxminiy joy (~500 m) ko'rinadi. Aniq manzil faqat buyurtmada kuryerga beriladi.",
+  "home_badge_home_food": "Uy taomi",
+  "home_ads_new_home_cook": "Yangi: {name} uy taomlari"
 }

@@ -240,7 +240,11 @@ class Restaurant {
     this.bookingNote = '',
     this.bookingsDisabled = false,
     this.isDemo = false,
+    this.createdAt,
   });
+
+  /// Яратилган вақт (`restaurantRegister` `createdAt`); эски/намуна ҳужжатда бўлмаслиги мумкин — `null`.
+  final DateTime? createdAt;
 
   /// Намуна ресторан (`isDemo`, сервер ёзади): буюртма серверда блокланади (`RESTAURANT_DEMO`), масофадан қатъи назар
   /// кўрсатилади, биринчи 3 та ҳақиқий субъектдан кейин сервер ўчиради (`restaurantDemoCleanup`).
@@ -366,6 +370,7 @@ class Restaurant {
       bookingNote: _str(d['bookingNote']),
       bookingsDisabled: d['bookingsDisabledReason'] == 'cancel_limit',
       isDemo: d['isDemo'] == true,
+      createdAt: _ts(d['createdAt']),
     );
   }
 

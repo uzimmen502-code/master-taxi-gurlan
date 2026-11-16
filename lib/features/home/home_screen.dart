@@ -107,6 +107,7 @@ import 'widgets/wallet_card.dart';
 import '../realty/screens/realty_detail_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../my_shop/pending_shop_link.dart';
+import '../tv_market/models/tv_shop.dart';
 import '../tv_market/repositories/tv_shop_repository.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import '../tv_market/screens/tv_shop_item_detail_screen.dart';
@@ -125,6 +126,9 @@ import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
 import 'widgets/home_markets_block.dart';
 import '../markets/open_market.dart';
+import '../markets/data/market_taxonomy_repository.dart';
+import '../markets/domain/market_taxonomy.dart';
+import '../markets/screens/market_screen.dart';
 import 'widgets/home_yuk_local_section.dart';
 import 'home_market_nav.dart';
 import 'create_sheet_loop.dart';
@@ -1362,6 +1366,37 @@ class _HomeViewState extends State<_HomeView> {
     await _pushOverMarket(const RealtyScreen(), () => _push(RealtyDetailScreen(listing: listing)));
   }
 
+  /// Уй тасмаларидаги `tv_shop_items` маҳсулоти: тафсилот ЎЗ бозори устида (орқага — бозор, яна орқага — асосий
+  /// экран). Бозорсиз (ўз дўкони) — Аралаш бозор устида. Дарвоза: таксономиядаги `moduleId` ([openMarket] каби).
+  Future<void> _openHomeShopItem(TvShopItem item, List<TvShopItem> shelf) async {
+    Future<void> detail() => _push(
+          TvShopItemDetailScreen(item: item, showShopButton: true, similarPool: shelf, source: 'home'),
+        );
+    final marketId = item.market.trim();
+    MarketDef? def;
+    if (marketId.isNotEmpty) {
+      try {
+        def = (await MarketTaxonomyRepository.load()).market(marketId);
+      } catch (e) {
+        debugPrint('[Home] MARKET_TAXONOMY_LOAD_FAILED market=$marketId: $e');
+      }
+      if (!mounted) return;
+    }
+    if (def == null) {
+      if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
+        _showTezKundaSnack();
+        return;
+      }
+      await _pushOverMarket(const CheapProductsScreen(), detail);
+      return;
+    }
+    if (!HomeModuleGate.canOpen(def.moduleId)) {
+      HomeModuleGate.onTapBlocked(context, def.moduleId);
+      return;
+    }
+    await _pushOverMarket(MarketScreen(marketId: marketId), detail);
+  }
+
   Widget _wholesaleMarketScreen(String market) => WholesaleMarketScreen(
         userPhone: canonicalPhoneId(context.read<HomeController>().phone),
         market: market,
@@ -1611,6 +1646,17 @@ class _HomeViewState extends State<_HomeView> {
                                     highlightAdId: ad.id,
                                   ),
                                 ),
+                                // Қўшимчалар (эга 2026-11-16/17): бозор маҳсулоти — ўз бозори устида, уй-жой —
+                                // Уй-жой бозори устида, янги уй ошпази — ресторан саҳифаси.
+                                onOpenShopItem: _openHomeShopItem,
+                                onOpenRealty: _openAralashRealty,
+                                onOpenRestaurant: (r) => _push(
+                                  RestaurantScreen(
+                                    restaurant: r,
+                                    userLat: user?.address.lat,
+                                    userLng: user?.address.lng,
+                                  ),
+                                ),
                               ),
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
@@ -1708,6 +1754,8 @@ class _HomeViewState extends State<_HomeView> {
                                 onOpenWholesale: _openWholesaleProduct,
                                 // Уй-жой эълони — Уй-жой бозори устида (8-босқич, 2026-11-15).
                                 onOpenRealty: _openAralashRealty,
+                                // Бозорлар / ўз дўкони маҳсулоти — ўз бозори устида (эга 2026-11-16).
+                                onOpenShopItem: _openHomeShopItem,
                               ),
                             ],
                             // Улгуржи ва Хитой бўлимлари олиб ташланди (эга, 2026-11-16,

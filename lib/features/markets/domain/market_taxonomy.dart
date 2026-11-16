@@ -64,10 +64,15 @@ class MarketOption {
 }
 
 class MarketCategory {
-  const MarketCategory({required this.id, required this.names, this.orderable = false});
+  const MarketCategory({required this.id, required this.names, this.orderable = false, this.showInNearbyAds});
   final String id;
   final Map<String, String> names;
   final bool orderable;
+
+  /// Уйдаги «Яқиндаги эълонлар» тасмасида ҳам чиқадими (таксономия v4, эга 2026-11-16). `null` — калит йўқ
+  /// (эски таксономия; чақирувчи `kNearbyAdsFallbackCategories` га тушади).
+  final bool? showInNearbyAds;
+
   String label(String lang) => localizedName(names, lang, fallback: id);
 }
 
@@ -292,7 +297,13 @@ class MarketDef {
         if (c is! Map) continue;
         final cid = _str(c['id']);
         if (cid.isEmpty || cats.any((x) => x.id == cid)) continue;
-        cats.add(MarketCategory(id: cid, names: _names(c['names']), orderable: c['orderable'] == true));
+        final nearby = c['showInNearbyAds'];
+        cats.add(MarketCategory(
+          id: cid,
+          names: _names(c['names']),
+          orderable: c['orderable'] == true,
+          showInNearbyAds: nearby is bool ? nearby : null,
+        ));
       }
     }
     final fields = <MarketField>[];

@@ -20,6 +20,7 @@ import '../../restaurants/domain/restaurants_access.dart';
 import '../../restaurants/widgets/restaurant_row.dart';
 import '../../tv_market/services/shop_stats_recorder.dart';
 import 'ava_section.dart';
+import 'home_row_badge.dart';
 
 class HomeRestaurantsSection extends StatefulWidget {
   const HomeRestaurantsSection({
@@ -255,6 +256,9 @@ class _RestaurantTextRow extends StatelessWidget {
               style: AvaText.feedRow.copyWith(color: textColor),
             ),
           ),
+          // Уй ошпази (`legalType: individual`, [Restaurant.isHomeCook]) — «Уй таоми» (эга 2026-11-16).
+          // Flexible: тор экранда белги қисқаради, қатор тошмайди.
+          if (r.isHomeCook) Flexible(child: HomeRowBadge(context.tr('home_badge_home_food'))),
           if (cuisine.isNotEmpty)
             Flexible(
               child: Text(

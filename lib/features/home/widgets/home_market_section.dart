@@ -22,6 +22,9 @@ import '../../../repositories/realty_repository.dart';
 import '../../ads/models/ad_model.dart';
 import '../../ads/repositories/ads_repository.dart';
 import '../../ads/widgets/market_corner_badge.dart';
+import '../../markets/widgets/market_form_fields.dart' show marketShortBadge;
+import '../../tv_market/models/tv_shop.dart';
+import '../home_strip_mix.dart';
 import '../../ads/widgets/platform_market_card.dart' show platformShelfPrice;
 import '../../realty/widgets/realty_grid_card.dart' show realtyPriceWithDeal;
 import '../../wholesale/models/wholesale_product.dart';
@@ -42,7 +45,15 @@ class HomeMarketSection extends StatefulWidget {
     this.onOpenPlatform,
     this.onOpenWholesale,
     this.onOpenRealty,
+    this.onOpenShopItem,
   });
+
+  /// Бозорлар / ўз дўкони маҳсулоти (`tv_shop_items`, эга 2026-11-16) босилди: тегишли бозор устида тафсилот.
+  /// [shelf] — бўлимдаги маҳсулотлар («ўхшашлар» учун, янги ўқиш йўқ). `null` — маҳсулотлар кўрсатилмайди.
+  final void Function(TvShopItem item, List<TvShopItem> shelf)? onOpenShopItem;
+
+  /// Бўлимдаги `tv_shop_items` сони (яқиндан узоққа).
+  static const shopLimit = 10;
 
   /// Уй-жой бозори эълони босилди (8-босқич, эга 2026-11-15): Уй-жой бозори устида тафсилот, орқага —
   /// Уй-жой бозори, яна орқага — асосий экран. `null` — Уй-жой эълонлари бўлимда кўрсатилмайди.
@@ -105,6 +116,32 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       unawaited(_loadWholesale(WholesaleProduct.marketWholesale));
     }
     if (widget.onOpenRealty != null) unawaited(_loadRealty());
+    if (widget.onOpenShopItem != null) unawaited(_loadShop());
+  }
+
+  List<TvShopItem> _shop = const [];
+
+  /// `tv_shop_items` (фаол, бозорли ва ўз дўкони) — иккала уй тасмаси бўлишадиган битта сўров ([HomeShopFeed]),
+  /// бўлим ҳудуди, яқиндан узоққа.
+  Future<void> _loadShop() async {
+    try {
+      final all = await HomeShopFeed.recent();
+      if (!mounted) return;
+      final user = GeoContext.active;
+      final list = aralashShopItems(
+        all,
+        scope: GeoContext.homeScopeFor('cheap_products_home'),
+        userDistrictId: user.districtId,
+        userRegionId: user.regionId,
+        limit: HomeMarketSection.shopLimit,
+      );
+      setState(() {
+        _shop = list;
+        if (list.isNotEmpty && _status == AvaSectionStatus.empty) _status = AvaSectionStatus.ready;
+      });
+    } catch (e) {
+      debugPrint('[HomeMarket] HOME_ARALASH_SHOP_FAILED: $e');
+    }
   }
 
   List<RealtyListing> _realty = const [];
@@ -198,7 +235,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
             random: _rnd,
           );
           _endReached = list.length < _limit;
-          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty && _ulgurji.isEmpty && _realty.isEmpty
+          _status = _items.isEmpty && _platform.isEmpty && _china.isEmpty && _ulgurji.isEmpty && _realty.isEmpty && _shop.isEmpty
               ? AvaSectionStatus.empty
               : AvaSectionStatus.ready;
         });
@@ -231,12 +268,13 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     // Навбатма-навбат: эълон ва AVA маҳсулоти (Аралаш бозор экранидаги каби).
     final entries = FairMix.roundRobin<Object>([
       _items,
+      _shop,
       _platform,
       _china,
       _ulgurji,
       _realty,
     ]);
-    final hasWholesale = _china.isNotEmpty || _ulgurji.isNotEmpty || _realty.isNotEmpty;
+    final hasWholesale = _china.isNotEmpty || _ulgurji.isNotEmpty || _realty.isNotEmpty || _shop.isNotEmpty;
     final hasFoot = _platform.isNotEmpty ||
         hasWholesale ||
         _items.any((a) => (_districtNote(a.districtId) ?? '').isNotEmpty);
@@ -264,6 +302,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
           if (e is PlatformProduct) return _platformTile(e);
           if (e is WholesaleProduct) return _wholesaleTile(e);
           if (e is RealtyListing) return _realtyTile(e);
+          if (e is TvShopItem) return _shopTile(e);
           final ad = e as AdModel;
           final cover = ad.imageUrls.isEmpty ? '' : ad.imageUrls.first;
           return AvaTileCard(
@@ -373,6 +412,35 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       ),
       onTap: () => widget.onOpenRealty?.call(r),
       image: _withBadge(image, context.tr('aralash_badge_realty')),
+    );
+  }
+
+  /// Бозор / ўз дўкони маҳсулоти — тепа ўнгда бозор белгиси (`market_short_*`; бозорсиз — белгисиз).
+  Widget _shopTile(TvShopItem item) {
+    final cover = item.coverPhotoUrl.trim();
+    final image = cover.startsWith('http')
+        ? ColoredBox(
+            color: context.ava.surface2,
+            child: CachedNetworkImage(imageUrl: cover, fit: BoxFit.contain),
+          )
+        : null;
+    final user = GeoContext.active;
+    final badge = marketShortBadge(context.tr, item.market);
+    return AvaTileCard(
+      key: ValueKey('home_aralash_shop_${item.id}'),
+      titleMaxLines: 1,
+      title: item.title,
+      price: item.priceLabel(context.tr).isEmpty ? null : item.priceLabel(context.tr),
+      footnote: relativeLocationLabel(
+        itemDistrictId: item.districtId,
+        itemRegionId: item.regionId,
+        userDistrictId: user.districtId,
+        userRegionId: user.regionId,
+        lang: context.contentLang,
+        districtFallback: item.districtLabel,
+      ),
+      onTap: () => widget.onOpenShopItem?.call(item, List<TvShopItem>.of(_shop)),
+      image: badge.isEmpty ? (image ?? ColoredBox(color: context.ava.surface2)) : _withBadge(image, badge),
     );
   }
 

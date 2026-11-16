@@ -59,6 +59,21 @@ class BusinessRepository {
     return d.exists && data != null ? Business.tryFromMap(d.id, data) : null;
   }
 
+  /// Объект тури (`id → category wire`) — `whereIn` бўлаклари ≤30 та (Firestore чеклови). Топилмаган/яроқсиз id
+  /// натижада йўқ. Уйдаги «Яқиндаги эълонлар» (Деҳқон: дўкон эмаслигини билиш, эга 2026-11-17).
+  Future<Map<String, String>> fetchCategoriesByIds(Iterable<String> ids) async {
+    final list = <String>{for (final i in ids) if (i.trim().isNotEmpty) i.trim()}.toList();
+    final out = <String, String>{};
+    for (var i = 0; i < list.length; i += 30) {
+      final end = i + 30 < list.length ? i + 30 : list.length;
+      final snap = await _col.where(FieldPath.documentId, whereIn: list.sublist(i, end)).get();
+      for (final b in _parse(snap.docs)) {
+        out[b.id] = b.category.wire;
+      }
+    }
+    return out;
+  }
+
   List<Business> _parse(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final out = <Business>[];
     for (final d in docs) {

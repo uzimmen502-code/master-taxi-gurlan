@@ -92,6 +92,20 @@ void main() {
     expect(all, 1);
   });
 
+  testWidgets('«Уй таоми» белгиси фақат уй ошпазида (legalType individual), кафеда йўқ (эга 2026-11-16)', (tester) async {
+    const cafe = Restaurant(id: 'cafe', name: 'cafe', status: 'approved', legalType: 'llc');
+    await tester.pumpWidget(_host(HomeRestaurantsSection(
+      repository: _FakeRepo([_r('uy'), cafe]),
+      onOpenAll: () {},
+      onOpenRestaurant: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('uy'), findsOneWidget);
+    expect(find.text('cafe'), findsOneWidget);
+    expect(find.text('home_badge_home_food'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('modul yashirin → bo\'lim umuman chizilmaydi', (tester) async {
     ServiceConfigHolder.setForTest(defaults: ServiceModuleConfig.allEnabled(['bread']));
     await tester.pumpWidget(_host(HomeRestaurantsSection(

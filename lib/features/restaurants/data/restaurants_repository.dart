@@ -8,6 +8,7 @@
 import '../../../core/service_config_holder.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/merged_stream.dart';
@@ -196,6 +197,29 @@ class RestaurantsRepository {
       .limit(limit)
       .snapshots()
       .map((s) => s.docs.map(Restaurant.fromDoc).toList(growable: false));
+
+  /// [since] дан кейин яратилган тасдиқланган ресторанлар, энг янгиси олдин (уйдаги «Янги уй ошпази» карточкаси,
+  /// эга 2026-11-16). Индекс: (status ASC, createdAt DESC). Индекс ҳали йўқ (`failed-precondition`) — мавжуд
+  /// [watchApproved] сўрови (биринчи жавоб) + клиент филтри.
+  Future<List<Restaurant>> fetchRecentApproved({required DateTime since, int limit = 10}) async {
+    try {
+      final snap = await _restaurants
+          .where('status', isEqualTo: 'approved')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map(Restaurant.fromDoc).toList(growable: false);
+    } on FirebaseException catch (e) {
+      if (e.code != 'failed-precondition') rethrow;
+      debugPrint('[Restaurants] RESTAURANTS_RECENT_INDEX_MISSING: fallback watchApproved');
+      final all = await watchApproved(limit: 50).first;
+      return [
+        for (final r in all)
+          if (r.createdAt != null && !r.createdAt!.isBefore(since)) r,
+      ];
+    }
+  }
 
   /// «Яқиндаги» радиуси (D-GEO-4, геo 4-босқич). PROPOSED: етказиб бериш
   /// тарифи стандарти 15 км (`DEFAULT_MAX_KM`) + олиб кетиш учун захира.

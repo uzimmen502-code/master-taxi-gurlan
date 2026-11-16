@@ -723,6 +723,29 @@ service cloud.firestore {
           // Doimiy havola ID'si (getMyShopLink) — faqat server; egasi boshqa do'konning havolasini egallay olmasin.
           && tvShopSame('publicId');
     }
+    // Bozorlar 11 (ega 2026-11-16): ochiq TAXMINIY nuqta (areaLat/areaLng ~500 m, showExactLocation=true bo'lsa aniq).
+    function tvShopAreaOk() {
+      let d = request.resource.data;
+      return (!d.keys().hasAny(['areaLat', 'areaLng'])
+              || (d.get('areaLat', null) is number && d.get('areaLng', null) is number
+                  && d.areaLat >= -90 && d.areaLat <= 90 && d.areaLng >= -180 && d.areaLng <= 180))
+          && (!('showExactLocation' in d) || d.showExactLocation is bool);
+    }
+    // ANIQ olib ketish nuqtasi endi ochiq emas: eski pickupLat/Lng/Address ni ega faqat o'chiradi (qo'sha/o'zgartira olmaydi).
+    function tvShopLegacyPickupNotSet() {
+      return !request.resource.data.diff(resource.data).addedKeys().hasAny(['pickupLat', 'pickupLng', 'pickupAddress'])
+          && !request.resource.data.diff(resource.data).changedKeys().hasAny(['pickupLat', 'pickupLng', 'pickupAddress']);
+    }
+    // tv_shops/{phone}/private/pickup — aniq nuqta (faqat ega; server Admin SDK bilan o'qiydi).
+    function tvShopPickupPrivOk() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['lat', 'lng', 'address', 'updatedAt'])
+          && d.keys().hasAll(['lat', 'lng', 'address', 'updatedAt'])
+          && d.lat is number && d.lng is number
+          && d.lat >= -90 && d.lat <= 90 && d.lng >= -180 && d.lng <= 180
+          && d.address is string && d.address.size() <= 200
+          && d.updatedAt == request.time;
+    }
     // Vitrina hujjati o'lchami/qiymati (yaratish va eganing tahriri uchun umumiy). Joriy ilova yozadigan hamma
     // shakl o'tadi: title<=200, description<=2000, price butun 0..999999999, photoUrls<=7, clipIds<=50, tur product|service.
     function tvShopItemShapeOk(d) {
@@ -4466,15 +4489,28 @@ service cloud.firestore {
       // (adminSetShopStatus); bloklangan do'konni egasi o'chirib, qayta ocha olmaydi.
       allow create: if isAuth()
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
-          && !request.resource.data.keys().hasAny(['status', 'blockedAt', 'blockedBy', 'blockReason', 'publicId']);
+          && !request.resource.data.keys().hasAny(['status', 'blockedAt', 'blockedBy', 'blockReason', 'publicId',
+              'pickupLat', 'pickupLng', 'pickupAddress'])
+          && tvShopAreaOk();
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
-              && tvShopBlockFieldsLocked());
+              && tvShopBlockFieldsLocked()
+              && tvShopLegacyPickupNotSet()
+              && tvShopAreaOk());
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
               && resource.data.get('status', 'active') != 'blocked');
+
+      // Bozorlar 11 (ega 2026-11-16): aniq olib ketish nuqtasi — faqat ega (o'qish/yozish, shakl), boshqa hech kim.
+      match /private/{docId} {
+        allow read, delete: if docId == 'pickup' && isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone);
+        allow create, update: if docId == 'pickup' && isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+            && tvShopPickupPrivOk();
+      }
     }
 
     // Sotuvchi statistikasi (2026-10-25, 6-bosqich): faqat EGASI o'z kunlik hujjatini o'qiydi (get, hujjat ID bilan);

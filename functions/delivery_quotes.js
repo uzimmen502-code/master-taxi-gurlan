@@ -12,7 +12,8 @@
  *
  * Муддат: 24 соат — ЛЕНИВ (status 'open'/'answered' + `expiresAt` ўтган = муддати тугаган; рўйхатларда
  * кўрсатилмайди, жавоб/тасдиқ рад этилади). Алоҳида scheduler ЙЎҚ.
- * Нарх чегаралари `PRICE_MIN_UZS..PRICE_MAX_UZS` — PROPOSED (эга тасдиғи керак).
+ * Нарх: ҳар қандай мусбат бутун сўм (safe integer) — юқори чегара ЙЎҚ (эга 2026-11-16, AVA_DECIDED);
+ * фақат itemsTotal + priceUzs safe integer бўлиши шарт (пул float эмас — 8-қоида).
  */
 const tariff = require('./restaurant_delivery_tariff');
 const i18n = require('./notif_i18n');
@@ -27,8 +28,8 @@ const ITEMS = 'tv_shop_items';
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 const QS = Object.freeze({ open: 'open', answered: 'answered', used: 'used' });
 const EXPIRY_MS = 24 * 60 * 60 * 1000;
-const PRICE_MIN_UZS = 1000; // PROPOSED
-const PRICE_MAX_UZS = 10000000; // PROPOSED
+const PRICE_MIN_UZS = 1; // эга 2026-11-16: мусбат
+const PRICE_MAX_UZS = Number.MAX_SAFE_INTEGER; // эга 2026-11-16: юқори чегара йўқ
 const FLOOR_MAX = 60;
 const NEARBY_RADIUS_KM_DEFAULT = 15;
 const COURIER_PUSH_MAX = 30;
@@ -233,8 +234,8 @@ function attachDeliveryQuotes(exportsObj, deps) {
     const uid = requirePhoneUid(context);
     const quoteId = quoteIdOf(data);
     const priceUzs = data && data.priceUzs;
-    if (!Number.isInteger(priceUzs) || priceUzs < PRICE_MIN_UZS || priceUzs > PRICE_MAX_UZS) {
-      throw fail('invalid-argument', 'PRICE_INVALID', { min: PRICE_MIN_UZS, max: PRICE_MAX_UZS });
+    if (!Number.isSafeInteger(priceUzs) || priceUzs < PRICE_MIN_UZS) {
+      throw fail('invalid-argument', 'PRICE_INVALID', { min: PRICE_MIN_UZS });
     }
     const role = await responderRoleOf(context, uid);
     const ref = db.collection(QUOTES).doc(quoteId);
@@ -255,6 +256,7 @@ function attachDeliveryQuotes(exportsObj, deps) {
         if (role === 'courier' && (canon(q.buyerUid) === uid || canon(q.sellerUid) === uid)) {
           throw fail('permission-denied', 'QUOTE_SELF_RESPOND');
         }
+        if (!Number.isSafeInteger(Number(q.itemsTotal || 0) + priceUzs)) throw fail('invalid-argument', 'PRICE_INVALID', { min: PRICE_MIN_UZS });
         const same = decide(q);
         if (same) return same;
         t.update(ref, {

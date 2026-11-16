@@ -74,6 +74,8 @@ async function clearEmulator() {
     process.env.GCLOUD_PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`emulator clear: HTTP ${res.status}`);
 }
+const PICKUP_PRIV = { lat: S_LOC.lat, lng: S_LOC.lng, address: 'Gurlan bozor 7' };
+const pickupRef = () => db.collection('tv_shops').doc(SHOP).collection('private').doc('pickup');
 const quote = async (id) => (await db.collection('delivery_quotes').doc(id).get()).data() || {};
 
 const base = { ownerPhone: SHOP, kind: 'product', status: 'active', districtId: 'gurlan', priceUnit: 'piece' };
@@ -98,9 +100,9 @@ async function reset() {
       identity: { accountId: ACC[c], primaryUid: c }, courier: { active: true }, status: { courier: 'approved' },
     });
   }
-  await db.collection('tv_shops').doc(SHOP).set({
-    ownerPhone: SHOP, name: 'Texnika uyi', pickupLat: S_LOC.lat, pickupLng: S_LOC.lng, pickupAddress: 'Gurlan bozor 7',
-  });
+  // Эга 2026-11-16: аниқ олиб кетиш нуқтаси фақат private ҳужжатда (оммавий tv_shops'да эмас).
+  await db.collection('tv_shops').doc(SHOP).set({ ownerPhone: SHOP, name: 'Texnika uyi', areaLat: 41.84, areaLng: 60.39 });
+  await pickupRef().set({ ...PICKUP_PRIV, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   for (const [id, d] of Object.entries(ITEMS)) await db.collection('tv_shop_items').doc(id).set(d);
 }
 
@@ -147,11 +149,11 @@ async function main() {
     await expectCode(request('fridge', { floor: 61 }), 'FLOOR_INVALID');
     await expectCode(request('fridge', { qty: 0 }), 'ITEM_INVALID');
     await expectCode(request('nope'), 'ITEM_NOT_FOUND');
-    await db.collection('tv_shops').doc(SHOP).update({ pickupLat: admin.firestore.FieldValue.delete() });
+    await pickupRef().delete();
     try {
       await expectCode(request('fridge'), 'SELLER_PICKUP_LOCATION_MISSING');
     } finally {
-      await db.collection('tv_shops').doc(SHOP).update({ pickupLat: S_LOC.lat });
+      await pickupRef().set(PICKUP_PRIV);
     }
     await expectCode(request('fridge', {}, SHOP), 'OWN_BUSINESS');
   });
@@ -178,11 +180,11 @@ async function main() {
     assert.strictEqual(r2.duplicate, true);
   });
 
-  await check('A1 рухсат: бегона/мижоз жавоб ва рўйхат → QUOTE_RESPONDER_NOT_ALLOWED; нарх 0 / каср / 10M+ → PRICE_INVALID; жавобсиз тасдиқ → QUOTE_NOT_ANSWERED', async () => {
+  await check('A1 рухсат: бегона/мижоз жавоб ва рўйхат → QUOTE_RESPONDER_NOT_ALLOWED; нарх 0 / манфий / каср / сатр / unsafe → PRICE_INVALID; жавобсиз тасдиқ → QUOTE_NOT_ANSWERED', async () => {
     await expectCode(call('respondDeliveryQuote', { quoteId: qid, priceUzs: 50000 }, STRANGER), 'QUOTE_RESPONDER_NOT_ALLOWED');
     await expectCode(call('respondDeliveryQuote', { quoteId: qid, priceUzs: 50000 }, BUYER), 'QUOTE_RESPONDER_NOT_ALLOWED');
     await expectCode(call('listOpenDeliveryQuotes', {}, BUYER), 'QUOTE_RESPONDER_NOT_ALLOWED');
-    for (const p of [0, 50000.5, '50000', 10000001]) {
+    for (const p of [0, -5, 50000.5, '50000', 2 ** 53, Infinity]) {
       await expectCode(call('respondDeliveryQuote', { quoteId: qid, priceUzs: p }, ADMIN), 'PRICE_INVALID');
     }
     await expectCode(call('respondDeliveryQuote', { quoteId: 'nope123', priceUzs: 50000 }, ADMIN), 'QUOTE_NOT_FOUND');
@@ -292,6 +294,19 @@ async function main() {
     await call('respondDeliveryQuote', { quoteId: r2.quoteId, priceUzs: 45000 }, COURIER_A);
     await db.collection('delivery_quotes').doc(r2.quoteId).update({ expiresAt: past });
     await expectCode(call('acceptDeliveryQuote', { quoteId: r2.quoteId }, BUYER), 'QUOTE_EXPIRED');
+  });
+
+  await check('L2 нарх юқори чегараси ЙЎҚ (эга 2026-11-16): 25 000 000 қабул; itemsTotal+нарх unsafe → PRICE_INVALID; буюртма total тўғри', async () => {
+    const r = await request('ac', {}, STRANGER);
+    await expectCode(call('respondDeliveryQuote', { quoteId: r.quoteId, priceUzs: Number.MAX_SAFE_INTEGER }, ADMIN), 'PRICE_INVALID');
+    assert.strictEqual((await quote(r.quoteId)).status, 'open');
+    const a = await call('respondDeliveryQuote', { quoteId: r.quoteId, priceUzs: 25000000 }, ADMIN);
+    assert.strictEqual(a.priceUzs, 25000000);
+    const o = await call('acceptDeliveryQuote', { quoteId: r.quoteId, deliveryPaymentMethod: 'cash' }, STRANGER);
+    const od = (await db.collection('orders').doc(o.orderId).get()).data();
+    assert.strictEqual(od.deliveryFee, 25000000);
+    assert.strictEqual(od.total, 5000000 + 25000000);
+    assert.strictEqual(od.businessLat, S_LOC.lat, 'курьерга аниқ нуқта буюртма орқали (private манбадан)');
   });
 
   await check('G2 босқич тасдиқдан олдин OFF бўлса → MODULE_OFF (буюртма йўқ, сўров answered қолади)', async () => {

@@ -266,6 +266,21 @@ async function main() {
     assert.ok(!JSON.stringify(a).includes(BUYER2), 'audit\'да тўлиқ телефон йўқ');
     await expectCode(call('adminSetBusinessOrdersConfig', { stage: 'beta', reason: 'xx1' }, ADMIN), 'STAGE_INVALID');
   });
+  await check('F5 adminGetBusinessOrdersConfig (эга 2026-11-16): фақат админ; жорий қийматлар (тестерлар тўлиқ), ёзув йўқ', async () => {
+    await expectCode(call('adminGetBusinessOrdersConfig', {}, BUYER), 'Admin role required');
+    await expectCode(call('adminGetBusinessOrdersConfig', {}, STRANGER), 'Admin role required');
+    const before = (await db.collection('server_config').doc('business_orders').get()).data();
+    const g = await call('adminGetBusinessOrdersConfig', {}, ADMIN);
+    assert.strictEqual(g.ok, true);
+    assert.strictEqual(g.exists, true);
+    assert.strictEqual(g.stage, 'public');
+    assert.deepStrictEqual(g.testerIds, [BUYER2]);
+    assert.ok(Array.isArray(g.pilotDistrictIds));
+    assert.strictEqual(g.version, before.version);
+    assert.ok(Number.isInteger(g.updatedAtMs));
+    const after = (await db.collection('server_config').doc('business_orders').get()).data();
+    assert.strictEqual(after.version, before.version, 'ўқиш ёзмайди');
+  });
   // ── 3. Жойлаш ───────────────────────────────────────────────────────
   let o1;
   await check('P1 нарх ФАҚАТ каталогдан (клиент price/total эътиборсиз), снимок, тариф версияси, avaFee 0, placed, код, ҳодиса', async () => {

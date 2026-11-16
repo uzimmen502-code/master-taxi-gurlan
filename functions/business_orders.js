@@ -60,6 +60,8 @@ const BUSINESSES = 'businesses';
 const ITEMS = 'tv_shop_items';
 /** STAGE 11: ўз дўкони (`tv_shops/{ownerPhone}`) — блок ҳолати ва олиб кетиш нуқтаси. */
 const TV_SHOPS = 'tv_shops';
+/** Эга 2026-11-16: аниқ олиб кетиш нуқтаси — `tv_shops/{phone}/private/pickup` (оммавий эмас). */
+const SHOP_PICKUP_DOC = 'pickup';
 /** STAGE 11: «Бозорлар» таксономияси (functions/market_taxonomy.js `TAXONOMY_DOC` билан бир хил). */
 const TAXONOMY_DOC = Object.freeze(['taxonomy', 'markets']);
 const TAXONOMY_CACHE_MS_DEFAULT = 60 * 1000;
@@ -353,15 +355,21 @@ function attachBusinessOrders(exportsObj, deps) {
   }
 
   /**
-   * Ўз дўкони олиб кетиш нуқтаси (PROPOSED, эга тасдиғи керак): `tv_shops/{ownerPhone}`
-   * `pickupLat`/`pickupLng` (сон), `pickupAddress`. Майдон йўқ → `SELLER_PICKUP_LOCATION_MISSING`.
+   * Ўз дўкони олиб кетиш нуқтаси (эга 2026-11-16 — АНИҚ нуқта оммавий эмас, 40-қоида):
+   *   1) `tv_shops/{ownerPhone}/private/pickup` { lat, lng, address } — асосий манба (фақат эгаси + Admin SDK);
+   *   2) fallback: эски оммавий `tv_shops.pickupLat/pickupLng/pickupAddress` (эски ҳужжатлар бузилмасин, 26-қоида).
+   * Иккаласи ҳам йўқ/нотўғри → null (`SELLER_PICKUP_LOCATION_MISSING`).
    */
-  function shopPickupOf(shop) {
+  function shopPickupOf(priv, shop) {
+    const p = priv || {};
+    if (typeof p.lat === 'number' && typeof p.lng === 'number' && validLatLng(p.lat, p.lng)) {
+      return { lat: p.lat, lng: p.lng, address: str(p.address, 200), source: 'private' };
+    }
     const s = shop || {};
     if (typeof s.pickupLat !== 'number' || typeof s.pickupLng !== 'number' || !validLatLng(s.pickupLat, s.pickupLng)) {
       return null;
     }
-    return { lat: s.pickupLat, lng: s.pickupLng, address: str(s.pickupAddress, 200) };
+    return { lat: s.pickupLat, lng: s.pickupLng, address: str(s.pickupAddress, 200), source: 'legacy' };
   }
 
   const sellerKindOf = (od) => (SELLER_KINDS.includes(od && od.sellerKind) ? od.sellerKind : 'business');
@@ -604,6 +612,9 @@ function attachBusinessOrders(exportsObj, deps) {
     if (delivery.mode !== 'quote' || !Number.isSafeInteger(delivery.fee) || delivery.fee <= 0) {
       throw fail('failed-precondition', 'QUOTE_NOT_ANSWERED');
     }
+    // Нархда юқори чегара йўқ (эга 2026-11-16) — фақат жами safe integer (8-қоида).
+    const itemsSum = items.reduce((a, it) => a + it.lineTotal, 0);
+    if (!Number.isSafeInteger(itemsSum + delivery.fee)) throw fail('failed-precondition', 'ORDER_TOTAL_INVALID');
     return {
       deliveryFee: delivery.fee,
       deliveryTariffVersion: null,
@@ -656,14 +667,16 @@ function attachBusinessOrders(exportsObj, deps) {
     const access = accessOf(cfg, uid, districtId);
     if (!access.allowed) throw fail('failed-precondition', access.reason, { stage: access.stage });
     if (sellerUid === uid) throw fail('failed-precondition', 'OWN_BUSINESS');
-    const shopSnap = await db.collection(TV_SHOPS).doc(sellerUid).get();
+    const shopRef = db.collection(TV_SHOPS).doc(sellerUid);
+    const [shopSnap, privSnap] = await db.getAll(shopRef, shopRef.collection(PRIVATE).doc(SHOP_PICKUP_DOC));
     const shop = shopSnap.exists ? (shopSnap.data() || {}) : {};
+    const shopPriv = privSnap.exists ? (privSnap.data() || {}) : null;
     if (String(shop.status || 'active') === 'blocked') throw fail('failed-precondition', 'SHOP_BLOCKED');
     const taxonomy = await taxonomyFor(docs);
     const { items, itemsTotal } = priceLines({
       wanted, docs, businessId: '', sellerUid, canon, bad: bad('failed-precondition'), sellerKind: 'shop', taxonomy,
     });
-    const pickup = shopPickupOf(shop);
+    const pickup = shopPickupOf(shopPriv, shop);
     if (!pickup) throw fail('failed-precondition', 'SELLER_PICKUP_LOCATION_MISSING');
     if (!validLatLng(toLat, toLng)) throw fail('invalid-argument', 'DELIVERY_ADDRESS_REQUIRED');
     const avaFee = avaFeeOf(cfg, itemsTotal);
@@ -1446,6 +1459,25 @@ function attachBusinessOrders(exportsObj, deps) {
     };
   });
 
+  /**
+   * Админ ЎҚИШ (эга 2026-11-16, «Бозор буюртмалари» экрани): `server_config/business_orders` клиентга ёпиқ
+   * (rules'да match йўқ), шунинг учун фақат шу callable орқали. data: {} → { ok, exists, stage, testerIds,
+   * pilotDistrictIds, acceptTimeoutMin, version, updatedAtMs }. Тестер телефонлари фақат админга (40-қоида).
+   */
+  exportsObj.adminGetBusinessOrdersConfig = functions.https.onCall(async (data, context) => {
+    const actor = await requireCallerRoles(context, ADMIN_ROLES, 'Admin role required');
+    const snap = await db.collection(CONFIG_DOC[0]).doc(CONFIG_DOC[1]).get();
+    const raw = snap.exists ? (snap.data() || {}) : null;
+    const cur = parseConfig(raw, canon);
+    const at = raw && raw.updatedAt && typeof raw.updatedAt.toMillis === 'function' ? raw.updatedAt.toMillis() : null;
+    log('admin_config_read', { userId: tail4(actor), version: cur.version, result: 'ok' });
+    return {
+      ok: true, exists: snap.exists, stage: cur.stage, testerIds: cur.testerIds,
+      pilotDistrictIds: cur.pilotDistrictIds, acceptTimeoutMin: cur.acceptTimeoutMin,
+      version: cur.version, updatedAtMs: at,
+    };
+  });
+
   // Ички API (delivery_quotes.js): ягона тайёрлов/жойлаштириш йўли (7-қоида).
   return { expireUnaccepted, readConfig, prepareOrder, placeOrder };
 }
@@ -1457,7 +1489,7 @@ module.exports = {
   PICKUP_CODE_ATTEMPTS,
   parseConfig, accessOf, resolveAvaFee, parseWanted, priceLines, taxonomyOrderable,
   LARGE_DELIVERY_CATEGORIES, isLargeDeliveryLine, DOC_ID_RE,
-  TV_SHOPS, TAXONOMY_DOC, SELLER_KINDS,
+  TV_SHOPS, SHOP_PICKUP_DOC, TAXONOMY_DOC, SELLER_KINDS,
   // Ҳолатлар — business_order_states.js (қайта экспорт, қулайлик учун)
   ...states,
 };

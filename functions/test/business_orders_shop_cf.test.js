@@ -245,6 +245,32 @@ async function main() {
     await db.collection('tv_shops').doc(SHOP).update({ pickupLat: S_LOC.lat });
   });
 
+  await check('S8 private/pickup (эга 2026-11-16): асосий манба; нотўғри private → эски оммавий fallback; оммавийсиз ҳам ишлайди', async () => {
+    const priv = db.collection('tv_shops').doc(SHOP).collection('private').doc('pickup');
+    const P = { lat: 41.8450, lng: 60.3950, address: 'Maxfiy nuqta 9' };
+    try {
+      await priv.set(P);
+      const r = await shopPlace([{ itemId: 's1', qty: 1 }]);
+      const o = await order(r.orderId);
+      assert.strictEqual(o.businessLat, P.lat);
+      assert.strictEqual(o.businessLng, P.lng);
+      assert.strictEqual(o.businessAddress, 'Maxfiy nuqta 9');
+      await priv.set({ lat: '41.8', lng: 60.39, address: 'x' });
+      const o2 = await order((await shopPlace([{ itemId: 's1', qty: 1 }])).orderId);
+      assert.strictEqual(o2.businessLat, S_LOC.lat, 'нотўғри private → legacy');
+      assert.strictEqual(o2.businessAddress, 'Gurlan bozor 5');
+      await priv.set(P);
+      const del = admin.firestore.FieldValue.delete();
+      await db.collection('tv_shops').doc(SHOP).update({ pickupLat: del, pickupLng: del, pickupAddress: del });
+      assert.strictEqual((await shopQuote([{ itemId: 's1', qty: 1 }])).ok, true, 'фақат private');
+      await priv.delete();
+      await expectCode(shopQuote([{ itemId: 's1', qty: 1 }]), 'SELLER_PICKUP_LOCATION_MISSING');
+    } finally {
+      await priv.delete();
+      await db.collection('tv_shops').doc(SHOP).update({ pickupLat: S_LOC.lat, pickupLng: S_LOC.lng, pickupAddress: 'Gurlan bozor 5' });
+    }
+  });
+
   await check('A1 сотувчи рухсати: бегона/объект эгаси рад (NOT_ORDER_SELLER), ownerPhone қабул + тайёр', async () => {
     await expectCode(call('businessAcceptOrder', { orderId: shopOrderId }, STRANGER), 'NOT_ORDER_SELLER', 'permission-denied');
     await expectCode(call('businessAcceptOrder', { orderId: shopOrderId }, BIZ_SELLER), 'NOT_ORDER_SELLER');

@@ -260,7 +260,7 @@ class _MarketCard extends StatelessWidget {
                         key: ValueKey('home_market_slogan_${entry.id}'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11, height: 1.3, color: c.ink2),
+                        style: TextStyle(fontSize: 11, height: 1.1, color: c.ink2),
                       ),
                     ],
                   ],

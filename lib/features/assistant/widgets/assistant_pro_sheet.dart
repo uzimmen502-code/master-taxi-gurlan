@@ -7,15 +7,15 @@ import '../../../shared/widgets/wallet_topup_ui.dart';
 import '../models/assistant_status.dart';
 import '../services/assistant_service.dart';
 
-/// Тасдиқ матни: 24 соатлик пасс / кунлик пакет / эски бир марталик (settings бўлса).
+/// Тасдиқ матни: муддатли пасс / кунлик пакет / эски бир марталик (settings бўлса).
 String assistantBuyConfirmText(BuildContext ctx, AssistantPackage pkg) {
   final price = formatPrice(pkg.price);
-  if (pkg.isDayPass) return ctx.trMsg('assistant_buy_confirm_pass', params: {'price': price});
+  if (pkg.isPass) return ctx.trMsg('assistant_buy_confirm_pass', params: {'price': price, 'days': '${pkg.days}'});
   if (pkg.oneTime) return ctx.trMsg('assistant_buy_confirm_once', params: {'price': price});
   return ctx.trMsg('assistant_buy_confirm', params: {'price': price, 'days': '${pkg.days}'});
 }
 
-/// Plus пакет(лар)и — ҳамёндан сотиб олиш (эга 2026-11-17: битта 24 соатлик пасс 25 000 сўм).
+/// Plus пакет(лар)и — ҳамёндан сотиб олиш (эга 2026-11-17: битта пасс 25 000 сўм = 10 кун).
 ///
 /// `Navigator.pop(context, AssistantPurchaseResult)` — муваффақиятли харид.
 class AssistantProSheet extends StatefulWidget {
@@ -159,7 +159,7 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
                     Text(
                       widget.priceSearchRequired
                           ? context.trMsg('ps_plus_body',
-                              params: {'price': formatPrice(s.passPackage?.price ?? 25000)})
+                              params: {'price': formatPrice(s.passPackage?.price ?? 25000), 'days': '${s.passPackage?.days ?? 10}'})
                           : context.trMsg('assistant_limit_body',
                               params: {'count': '${s.freeDailyLimit}'}),
                       style: const TextStyle(fontSize: 13),
@@ -282,8 +282,8 @@ class _PackageTile extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            pkg.isDayPass
-                                ? context.tr('assistant_pass_label')
+                            pkg.isPass
+                                ? context.trMsg('assistant_pass_label', params: {'days': '${pkg.days}'})
                                 : pkg.oneTime
                                     ? context.tr('assistant_onetime_label')
                                     : context.trMsg('assistant_days',
@@ -315,8 +315,8 @@ class _PackageTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      pkg.isDayPass
-                          ? context.tr('assistant_pass_sub')
+                      pkg.isPass
+                          ? context.trMsg('assistant_pass_sub', params: {'days': '${pkg.days}'})
                           : pkg.oneTime
                           ? context.tr('assistant_onetime_sub')
                           : context.trMsg('assistant_per_day',

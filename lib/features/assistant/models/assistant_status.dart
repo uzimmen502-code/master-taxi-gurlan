@@ -47,7 +47,7 @@ class AssistantStatus {
   int get remainingToday =>
       (dailyLimit - usedToday) < 0 ? 0 : dailyLimit - usedToday;
 
-  /// Сотиладиган пакет (эга 2026-11-17: битта 24 соатлик пасс); бўлмаса биринчиси.
+  /// Сотиладиган пакет (эга 2026-11-17: битта муддатли пасс, 10 кун); бўлмаса биринчиси.
   AssistantPackage? get passPackage {
     for (final p in packages) {
       if (!p.oneTime) return p;
@@ -125,8 +125,8 @@ class AssistantPackage {
   /// Эски «бир марталик» (доимий) пакет — 2026-11-17 дан сотилмайди; эски `settings` учун қолди.
   final bool oneTime;
 
-  /// 24 соатлик пасс (`days == 1`, эга 2026-11-17).
-  bool get isDayPass => !oneTime && days == 1;
+  /// Муддатли пасс (эга 2026-11-17: 25 000 сўм = 10 кун; кунлар сервердаги пакетдан, илова ҳардкод қилмайди).
+  bool get isPass => !oneTime && days > 0;
 
   factory AssistantPackage.fromMap(Map<String, dynamic> m) => AssistantPackage(
         id: (m['id'] ?? '') as String,

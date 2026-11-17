@@ -87,35 +87,36 @@ String _km(String k, Map<String, String> p) => '$k:${p.values.join(',')}';
 
 void main() {
   group('AssistantStatus — 24 соатлик пасс ва нарх қидириш ҳолати', () {
-    test('day пакети: passPackage, isDayPass; priceSearch майдонлари', () {
+    test('d10 пакети (10 кун): passPackage, isPass; priceSearch майдонлари', () {
       final s = AssistantStatus.fromMap({
         'pro': true,
         'paidUntil': DateTime(2026, 11, 18, 9, 30).millisecondsSinceEpoch,
         'packages': [
-          {'id': 'day', 'days': 1, 'price': 25000, 'promo': false, 'oneTime': false},
+          {'id': 'd10', 'days': 10, 'price': 25000, 'promo': false, 'oneTime': false},
         ],
         'priceSearch': {'enabled': true, 'dailyLimit': 30, 'usedToday': 2},
       });
-      expect(s.passPackage!.id, 'day');
-      expect(s.passPackage!.isDayPass, isTrue);
-      expect(s.lifetime, isFalse, reason: '24 соат — «чекловсиз» эмас');
+      expect(s.passPackage!.id, 'd10');
+      expect(s.passPackage!.days, 10);
+      expect(s.passPackage!.isPass, isTrue);
+      expect(s.lifetime, isFalse, reason: '10 кун — «чекловсиз» эмас');
       expect(s.priceSearchEnabled, isTrue);
       expect(s.priceSearchDailyLimit, 30);
       expect(s.priceSearchUsedToday, 2);
     });
 
-    test('эски сервер жавоби (priceSearch йўқ) — ёпиқ; эски once пакети isDayPass эмас', () {
+    test('эски сервер жавоби (priceSearch йўқ) — ёпиқ; эски once пакети isPass эмас', () {
       final s = AssistantStatus.fromMap({
         'packages': [
           {'id': 'once', 'days': 3650, 'price': 25000, 'oneTime': true},
         ],
       });
       expect(s.priceSearchEnabled, isFalse);
-      expect(s.passPackage!.isDayPass, isFalse);
+      expect(s.passPackage!.isPass, isFalse);
     });
 
     test('buyPackage pricingAck сервер PRICING_ACK билан бир хил', () {
-      expect(AssistantService.pricingAck, 'pass_v2');
+      expect(AssistantService.pricingAck, 'pass_v3');
     });
   });
 
@@ -218,11 +219,11 @@ void main() {
     });
   });
 
-  group('AssistantProSheet — 24 соатлик пасс', () {
-    testWidgets('пакет «Plus — 24 соат», нарх; нарх қидириш изоҳи', (tester) async {
+  group('AssistantProSheet — 10 кунлик пасс', () {
+    testWidgets('пакет «Plus — {days} кун», нарх; нарх қидириш изоҳи', (tester) async {
       final status = AssistantStatus.fromMap({
         'packages': [
-          {'id': 'day', 'days': 1, 'price': 25000},
+          {'id': 'd10', 'days': 10, 'price': 25000},
         ],
         'balance': 1000,
       });

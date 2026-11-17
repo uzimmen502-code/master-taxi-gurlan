@@ -25,8 +25,8 @@ import '../../core/theme/ava_tokens.dart';
 /// 3. Рўйхатдан ўтган, ChatGPT иловаси йўқ — тўғридан AVA чат.
 ///
 /// Тариф (эга қарори, 2026-11-17; аввалги «бир марталик → доимий» бекор): оддий — бепул
-/// 10 хабар/кун; AVA AI Plus (чат + нарх қидириш) — 25 000 сўм ТЎЛОВ ПАЙТИДАН 24 СОАТ
-/// (ҳамёндан, `assistantBuyPackage` `day` пакети). Фаол бўлса «… гача фаол», тугаса яна «Тўлаш».
+/// 10 хабар/кун; AVA AI Plus (чат + нарх қидириш) — 25 000 сўм ТЎЛОВ ПАЙТИДАН 10 КУН (кунлар — сервер пакетидан)
+/// (ҳамёндан, `assistantBuyPackage` `d10` пакети). Фаол бўлса «… гача фаол», тугаса яна «Тўлаш».
 /// Дизайн — ChatGPT услуби ([GptColors], Inter).
 Future<void> openAssistantEntry(
   BuildContext context, {
@@ -77,9 +77,12 @@ Future<void> openAssistantEntry(
 
 enum _EntryChoice { ava, register, chatGpt, topUp }
 
-/// 24 соатлик Plus нархи — сервер default'и билан бир хил (ҳақиқий нарх
+/// Муддатли Plus нархи — сервер default'и билан бир хил (ҳақиқий нарх
 /// статусдан келади; бу фақат статус юкланмагунча кўрсатиш учун).
 const _kPassPriceFallback = 25000;
+
+/// Пасс муддати (кун) — статус юкланмагунча; ҳақиқий қиймат сервер пакетидан (эга 2026-11-17: 10 кун).
+const _kPassDaysFallback = 10;
 
 class _EntrySheet extends StatefulWidget {
   const _EntrySheet({required this.registered, required this.chatGptInstalled});
@@ -288,7 +291,7 @@ class _EntrySheetState extends State<_EntrySheet> {
                   const SizedBox(height: 8),
                   Divider(height: 1, color: c.border),
                   const SizedBox(height: 10),
-                  // 24 соатлик Plus: жумла + кичик тугма (ChatGPT'дек ихчам); фаол бўлса — «… гача фаол».
+                  // Муддатли Plus (кунлар — сервер пакетидан): жумла + кичик тугма (ChatGPT'дек ихчам); фаол бўлса — «… гача фаол».
                   Row(
                     children: [
                       Expanded(
@@ -298,8 +301,10 @@ class _EntrySheetState extends State<_EntrySheet> {
                               : registered && paid && until != null
                                   ? context.trMsg('assistant_pro_until',
                                       params: {'date': formatDateShort(until)})
-                                  : context.trMsg('assistant_pass_text',
-                                      params: {'price': formatPrice(_price)}),
+                                  : context.trMsg('assistant_pass_text', params: {
+                                      'price': formatPrice(_price),
+                                      'days': '${_passPkg?.days ?? _kPassDaysFallback}',
+                                    }),
                           key: const ValueKey('assistant_entry_plan_text'),
                           style: GoogleFonts.inter(
                               fontSize: 13, color: c.text, height: 1.35),

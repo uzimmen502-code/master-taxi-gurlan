@@ -81,9 +81,9 @@ class AssistantService {
     );
   }
 
-  /// Сервер `PRICING_ACK` — бу илова 24 соатлик пасс матнини кўрсатади (эски «доимий» матнли
+  /// Сервер `PRICING_ACK` — бу илова муддатли пасс матнини (кунлар сервер пакетидан) кўрсатади; pass_v3 — 10 кун (эски «доимий» матнли
   /// илова сотиб ололмайди, `app_update_required`).
-  static const pricingAck = 'pass_v2';
+  static const pricingAck = 'pass_v3';
 
   /// Pro пакетни ҳамёндан сотиб олиш (идемпотент).
   Future<AssistantPurchaseResult> buyPackage(String packageId) async {

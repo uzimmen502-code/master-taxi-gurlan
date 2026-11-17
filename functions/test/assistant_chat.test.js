@@ -307,24 +307,25 @@ async function main() {
   // 12a) default paket — 24 soatlik Plus 25 000 (ega 2026-11-17; doimiy `once` sotilmaydi)
   db._store.set('settings/assistant', {});
   const dst = await handlers.assistantGetStatus({}, ctx(UID));
-  assert.deepStrictEqual(dst.packages, [{ id: 'day', days: 1, price: 25000, promo: false, oneTime: false }]);
+  assert.deepStrictEqual(dst.packages, [{ id: 'd10', days: 10, price: 25000, promo: false, oneTime: false }]);
   assert.deepStrictEqual(dst.priceSearch, { enabled: false, dailyLimit: 30, usedToday: 0 }, 'priceSearchStage yo\'q = off');
 
-  // 12b) 24 soatlik pass: eski ilova (pricingAck yo'q) — rad; yangi — Pro 24 soat; faol paytda — joriy muddatdan uzayadi
+  // 12b) 10 kunlik pass (ega 2026-11-17): eski ilova (pricingAck yo'q / noma'lum) — rad; pass_v3 (yangi) va pass_v2 (o'tish) — 10 kun; faol paytda +10 kun
   const P2 = '998901112233';
   db._store.set(`users/${P2}`, { phone: P2, bonusBalance: 60000 });
-  const old = await expectError(handlers.assistantBuyPackage({ packageId: 'day', idempotencyKey: 'p2a' }, ctx(P2)), 'failed-precondition', 'app_update_required');
+  const old = await expectError(handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2a' }, ctx(P2)), 'failed-precondition', 'app_update_required');
+  await expectError(handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2x', pricingAck: 'pass_v1' }, ctx(P2)), 'failed-precondition', 'app_update_required');
   assert.strictEqual(old.details.reason, 'app_update_required');
   assert.strictEqual(db._store.get(`users/${P2}`).bonusBalance, 60000, 'eski ilovada pul yechilmaydi');
   const tb = Date.now();
-  const b1 = await handlers.assistantBuyPackage({ packageId: 'day', idempotencyKey: 'p2b', pricingAck: 'pass_v2' }, ctx(P2));
+  const b1 = await handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2b', pricingAck: 'pass_v3' }, ctx(P2));
   assert.strictEqual(b1.debited, 25000);
   assert.strictEqual(b1.balance, 35000);
-  assert.ok(b1.paidUntil >= tb + 86400000 - 5 && b1.paidUntil <= Date.now() + 86400000, '24 soat to\'lov paytidan');
-  const b2 = await handlers.assistantBuyPackage({ packageId: 'day', idempotencyKey: 'p2c', pricingAck: 'pass_v2' }, ctx(P2));
-  assert.strictEqual(b2.paidUntil, b1.paidUntil + 86400000, 'faol bo\'lsa joriy tugash vaqtidan +24 soat');
+  assert.ok(b1.paidUntil >= tb + 10 * 86400000 - 5 && b1.paidUntil <= Date.now() + 10 * 86400000, '10 kun to\'lov paytidan');
+  const b2 = await handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2c', pricingAck: 'pass_v2' }, ctx(P2));
+  assert.strictEqual(b2.paidUntil, b1.paidUntil + 10 * 86400000, 'faol bo\'lsa joriy tugash vaqtidan +10 kun (pass_v2 ham qabul)');
   assert.strictEqual(b2.balance, 10000);
-  const b2dup = await handlers.assistantBuyPackage({ packageId: 'day', idempotencyKey: 'p2c', pricingAck: 'pass_v2' }, ctx(P2));
+  const b2dup = await handlers.assistantBuyPackage({ packageId: 'd10', idempotencyKey: 'p2c', pricingAck: 'pass_v2' }, ctx(P2));
   assert.strictEqual(b2dup.balance, 10000, 'idempotent — ikki marta yechilmaydi');
   // muddat o'tgan — Pro emas (chegara: aynan hozir tugagan)
   db._store.set(`users/${P2}`, { ...db._store.get(`users/${P2}`), assistantPaidUntil: new FakeTs(Date.now()) });

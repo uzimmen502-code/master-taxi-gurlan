@@ -132,7 +132,7 @@ check('зона: тариф фаол эмас / draft → null tariff_not_active
   assert.strictEqual(ps.zoneDelivery({ tariff: TARIFF, origin: { regionId: 'xorazm' }, dest: { regionId: 'andijon' }, offer }).reason, 'zone_not_found');
 });
 
-check('deliveryFor: чакана шу туман → local; чакана бошқа туман → zone; улгуржи шу туманда ҳам → zone; катта товар → сўров', () => {
+check('deliveryFor: чакана шу туман → local; чакана бошқа туман → zone; улгуржи шу туман → local, бошқа туман → zone (эга 2026-11-17); катта товар → сўров', () => {
   const buyer = { districtId: 'gurlan', regionId: 'xorazm', ...GURLAN_B };
   const seller = { districtId: 'gurlan', regionId: 'xorazm', ...GURLAN_A };
   const retail = { kind: 'retail', qty: 1, unitWeightG: 1000, goodsTotal: 5000, market: '', category: '' };
@@ -142,8 +142,12 @@ check('deliveryFor: чакана шу туман → local; чакана бош�
   assert.strictEqual(other.fee, 34000 + 50, 'xorazm↔xorazm ZONE_1');
   const ws = { kind: 'wholesale', qty: 10, unitWeightG: 100, goodsTotal: 50000 };
   const wsd = ps.deliveryFor({ offer: ws, seller, buyer, tariffDoc: LOCAL_DOC, tariff: TARIFF, now: DAY });
-  assert.strictEqual(wsd.method, 'zone');
-  assert.strictEqual(wsd.fee, 29000 + 500, 'gurlan↔gurlan ZONE_0 (туман матрицаси устун)');
+  assert.strictEqual(wsd.method, 'local', 'улгуржи шу туманда — маҳаллий тариф (вазнга боғлиқ эмас)');
+  assert.strictEqual(wsd.fee, ps.localDelivery({ tariffDoc: LOCAL_DOC, from: seller, to: buyer, now: DAY }).fee);
+  const wso = ps.deliveryFor({ offer: ws, seller: { ...seller, districtId: 'urganch' }, buyer, tariffDoc: LOCAL_DOC, tariff: TARIFF, now: DAY });
+  assert.strictEqual(wso.method, 'zone');
+  assert.strictEqual(wso.fee, 34000 + 500, 'улгуржи бошқа туман: xorazm↔xorazm ZONE_1, 1 кг + 1%');
+  assert.strictEqual(ps.deliveryFor({ offer: ws, seller, buyer: { ...buyer, lat: null, lng: null }, tariffDoc: LOCAL_DOC, tariff: TARIFF, now: DAY }).reason, 'buyer_location_missing');
   const fridge = ps.deliveryFor({ offer: { ...retail, market: 'appliances', category: 'fridges' }, seller, buyer, tariffDoc: LOCAL_DOC, tariff: TARIFF, now: DAY });
   assert.strictEqual(fridge.fee, null);
   assert.strictEqual(fridge.reason, 'delivery_quote_required');

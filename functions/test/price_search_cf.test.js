@@ -96,6 +96,11 @@ async function seed() {
     status: 'active', market: 'wholesale', title: 'Олма (улгуржи)', sellerId: WS_SELLER, sellerCompanyName: 'Боғ',
     priceTiers: [{ minQty: 10, price: 4000 }], unit: 'кг', unitWeightG: 1000, searchTokens: ['olma', 'олма'], districtId: 'gurlan',
   });
+  b.set(db.doc('wholesale_sellers/998935200002'), { regionId: 'xorazm', districtId: 'urganch', lat: 41.55, lng: 60.63, status: 'approved' });
+  b.set(db.doc('wholesale_products/ws2'), {
+    status: 'active', title: 'Олма Урганч', sellerId: '998935200002', sellerCompanyName: 'У',
+    priceTiers: [{ minQty: 10, price: 4500 }], unit: 'кг', unitWeightG: 1000, searchTokens: ['olma', 'олма'], districtId: 'urganch',
+  });
   b.set(db.doc('wholesale_products/cn1'), {
     status: 'active', market: 'china', title: 'Olma', sellerId: WS_SELLER, priceTiers: [{ minQty: 1, price: 1 }], searchTokens: ['olma'],
   });
@@ -119,7 +124,7 @@ async function main() {
     assert.ok(res.requestId);
     const ids = res.offers.map((o) => o.id);
     for (const bad of ['pending', 'service', 'blocked', 'nok', 'cn1']) assert.ok(!ids.includes(bad), `${bad} кирмаслиги керак`);
-    for (const good of ['near', 'far', 'farNoW', 'ws1']) assert.ok(ids.includes(good), `${good} бўлиши керак`);
+    for (const good of ['near', 'far', 'farNoW', 'ws1', 'ws2']) assert.ok(ids.includes(good), `${good} бўлиши керак`);
     const by = Object.fromEntries(res.offers.map((o) => [o.id, o]));
     assert.strictEqual(by.near.delivery.method, 'local');
     assert.ok(by.near.delivery.fee > 0 && by.near.delivery.fee % 500 === 0);
@@ -133,8 +138,12 @@ async function main() {
     assert.strictEqual(by.ws1.kind, 'wholesale');
     assert.strictEqual(by.ws1.moq, 10);
     assert.strictEqual(by.ws1.goodsTotal, 40000);
-    assert.strictEqual(by.ws1.delivery.method, 'zone');
-    assert.strictEqual(by.ws1.delivery.fee, 59000 + 400, 'gurlan ZONE_0, 10 кг (≤10 кг поғонаси) + 1%');
+    assert.strictEqual(by.ws1.delivery.method, 'local', 'улгуржи шу туман — маҳаллий тариф (эга 2026-11-17)');
+    assert.ok(by.ws1.delivery.fee > 0 && by.ws1.delivery.fee % 500 === 0);
+    assert.strictEqual(by.ws1.delivery.tariffVersion, 2);
+    assert.strictEqual(by.ws2.delivery.method, 'zone', 'улгуржи бошқа туман — зона');
+    assert.strictEqual(by.ws2.delivery.fee, 110000 + 450, 'xorazm↔xorazm ZONE_1, 10 кг + 1%');
+    assert.strictEqual(by.ws2.delivery.tariffVersion, 1);
     const totals = res.offers.filter((o) => o.total != null).map((o) => o.total);
     assert.deepStrictEqual(totals, [...totals].sort((a, b) => a - b), 'жами бўйича ўсиш');
     assert.strictEqual(res.zoneTariffVersion, 1);

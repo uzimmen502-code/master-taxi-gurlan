@@ -11,20 +11,21 @@
  *   toCyrillic`) билан, `array-contains-any`. Қатъий мослаштириш йўқ — бир нечта мос таклиф. LLM ЙЎҚ (1-босқич:
  *   оддий токен қидируви); нарх/етказиш ҳисоби — фақат шу детерминистик код.
  * ЕТКАЗИШ (нарх ўйлаб топилмайди — тариф йўқ/тўлиқ эмас бўлса `delivery.fee = null` + `reason`):
- *   - чакана, ШУ ТУМАН: бизнес буюртмаларининг МАВЖУД маҳаллий тарифи (`settings/restaurant_delivery`,
+ *   - ШУ ТУМАН (чакана ҳам, улгуржи ҳам — эга 2026-11-17, CONFIRMED): бизнес буюртмаларининг МАВЖУД маҳаллий тарифи (`settings/restaurant_delivery`,
  *     `restaurant_delivery_tariff.js` соф функциялари — quoteBusinessOrder билан БИТТА манба). Масофа — тўғри чизиқ ×
  *     тарифдаги `roadFactor` (quoteBusinessOrder'нинг маршрутсиз «estimate» йўли; ҳар таклиф учун Directions API
  *     чақирилмайди — нарх 37). Вазнга боғлиқ эмас.
- *   - чакана, БОШҚА ТУМАН/ВИЛОЯТ ва барча УЛГУРЖИ: AVA Logistics зона тарифи — ФАОЛ версия (`module_tariffs/logistics`
+ *   - БОШҚА ТУМАН/ВИЛОЯТ (чакана ва улгуржи): AVA Logistics зона тарифи — ФАОЛ версия (`module_tariffs/logistics`
  *     кўрсаткичи → `logistics_v{N}`, status active; админ «AVA Logistics → Тариф» да фаоллаштирган). Ҳисоб —
  *     `logistics_tariff.js` (= functions_demand/core/tariff.js нусхаси, паритет тести) `quoteParcel`, Улгуржи
- *     буюртмасидаги каби `dimsOptional` + `declaredValue = товар суммаси`. Улгуржи шу туманда ҳам зона тарифи —
- *     унинг ҳақиқий буюртма занжири (`quoteWholesaleOrder`) шундай ҳисоблайди (INFERRED, эга тасдиғи сўралади).
+ *     буюртмасидаги каби `dimsOptional` + `declaredValue = товар суммаси`.
+ *     ФАРҚ (эгага маълум қилинди): ҳақиқий Улгуржи буюртмаси (`quoteWholesaleOrder`, ЎЗГАРТИРИЛМАДИ) шу туманда ҳам
+ *     зона тарифини олади — қидирувдаги маҳаллий нарх буюртмадагидан фарқ қилиши мумкин.
  *   - Вазн: маҳсулотда `unitWeightG` (tv_shop_items — ихтиёрий «тахминий вазн», Улгуржида — мавжуд майдон) бўлса аниқ
  *     поғона; бўлмаса энг кичик поғона (1 г) → «≈ X сўмдан» (`fromPrice: true`).
  *   - Якуний нарх ҲАР ДОИМ буюртма пайтида серверда (мавжуд буюртма занжирлари ўзгармайди).
  * РЕКЛАМА: `boostUntil` тартибга ТАЪСИР ҚИЛМАЙДИ — фақат `sponsored: true` белгиси (PROPOSED).
- * ЖАМИ: чакана — 1 бирлик; улгуржи — минимал буюртма (MOQ) миқдори (PROPOSED).
+ * ЖАМИ: чакана — 1 бирлик; улгуржи — минимал буюртма (MOQ) миқдори (CONFIRMED, эга 2026-11-17).
  */
 'use strict';
 
@@ -297,7 +298,7 @@ function zoneDelivery({ tariff, origin, dest, offer }) {
 
 /**
  * Таклифга етказиш усулини танлаш (эга 2026-11-17):
- *   улгуржи → зона; чакана: шу туман → маҳаллий, бошқа → зона; катта маиший техника → нарх сўрови (тарифсиз).
+ *   шу туман → маҳаллий, бошқа туман/вилоят → зона (чакана ва улгуржи бир хил); катта маиший техника → нарх сўрови.
  */
 function deliveryFor({ offer, seller, buyer, tariffDoc, tariff, now }) {
   if (offer.kind === RETAIL && isLargeDeliveryLine({ market: offer.market, category: offer.category })) {
@@ -307,7 +308,7 @@ function deliveryFor({ offer, seller, buyer, tariffDoc, tariff, now }) {
   if (!sellerDistrict && !(seller && seller.regionId)) {
     return { method: null, fee: null, fromPrice: false, tariffVersion: null, reason: REASONS.SELLER_LOCATION_MISSING };
   }
-  if (offer.kind === RETAIL && sellerDistrict && sellerDistrict === buyer.districtId) {
+  if (sellerDistrict && sellerDistrict === buyer.districtId) {
     return localDelivery({ tariffDoc, from: seller, to: buyer, now });
   }
   return zoneDelivery({ tariff, origin: seller, dest: buyer, offer });
@@ -492,7 +493,8 @@ function createPriceSearch({ db, now = () => new Date() }) {
     const partial = full.length === 0 && offers.length > 0;
     offers = (partial ? offers : full).map((o) => ({ ...o, matchedAll: !partial }));
 
-    const needsLocal = offers.some((o) => o.kind === RETAIL && o.districtId && o.districtId === buyer.districtId);
+    // Улгуржида туман сотувчи ҳужжатидан аниқланади — шу туман эҳтимоли бўлса тариф ўқилади (1 ўқиш).
+    const needsLocal = offers.some((o) => o.kind === WHOLESALE || (o.districtId && o.districtId === buyer.districtId));
     const [points, tariffDocSnap, tariff] = await Promise.all([
       sellerPoints(offers),
       needsLocal ? db.collection('settings').doc('restaurant_delivery').get() : Promise.resolve(null),

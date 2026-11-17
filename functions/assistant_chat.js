@@ -32,7 +32,7 @@
  *   users/{uid}/assistant_packages/{idem}               — сотиб олинган пакетлар
  *   wallet_idempotency/{idem}                           — debitForOrder билан бир хил
  *
- * Plus (эга 2026-11-17): 25 000 сўм = тўлов пайтидан 24 соат (`day` пакети);
+ * Plus (эга 2026-11-17, иккинчи қарор): 25 000 сўм = тўлов пайтидан 10 КУН (`d10` пакети);
  * доимий Plus сотилмайди. Plus'га «Нарх қидириш» ҳам киради (price_search.js).
  *
  * Callables: assistantGetStatus, assistantChat, assistantBuyPackage,
@@ -80,13 +80,14 @@ const ASSISTANT_DEFAULTS = {
   // Пакетсиз доимий Pro (эга/синов рақамлари). `settings/assistant.freeProPhones`
   // массиви билан кенгайтирилади (998… рақамли формат).
   freeProPhones: ['998912778777'],
-  // Эга қарори (2026-11-17, CONFIRMED): БУТУН AVA AI Plus (чат + нарх қидируви) =
-  // 25 000 сўм тўлов пайтидан 24 СОАТ; фаол бўлганда сотиб олинса — жорий тугаш
+  // Эга қарори (2026-11-17, CONFIRMED; шу куннинг ўзида 24 соат → 10 кун): БУТУН AVA AI Plus
+  // (чат + нарх қидируви) = 25 000 сўм тўлов пайтидан 10 КУН; фаол бўлганда сотиб олинса — жорий тугаш
   // вақтидан узаяди (assistantBuyPackage мантиғи ўзгармаган). Доимий Plus
   // (аввалги `once`, 3650 кун, 2026-09-22) ЭНДИ СОТИЛМАЙДИ. settings/assistant.packages
   // бўлса — у устун (2026-11-17 prod'да ҳужжат йўқ эди).
   packages: [
-    { id: 'day', days: 1, price: 25000, promo: false, oneTime: false },
+    // Янги id (day эмас): 24 соатлик пакет билан адаштирилмасин (ledger refId/assistant_packages да аниқ).
+    { id: 'd10', days: 10, price: 25000, promo: false, oneTime: false },
   ],
   // «Нарх қидириш» (эга 2026-11-17): settings/assistant.priceSearchStage
   // off | internal (priceSearchTesterIds + freeProPhones) | public; йўқ → off.
@@ -95,8 +96,13 @@ const ASSISTANT_DEFAULTS = {
   priceSearchFetchLimit: 60,
 };
 
-/** Янги илова 24 соатлик пакет матнини кўрсатади — эски илова («доимий» матни) сотиб ололмасин. */
-const PRICING_ACK = 'pass_v2';
+/**
+ * Янги илова муддатли пакет матнини (кунлар сервердаги пакетдан) кўрсатади — pass_v3. Ўтиш даврида
+ * pass_v2 (24 соат матнли веб) ҳам қабул: харидор кўпроқ олади (10 кун), зарарсиз. Ack ЙЎҚ («доимий»
+ * матнли эски APK) — рад.
+ */
+const PRICING_ACK = 'pass_v3';
+const PRICING_ACKS_ACCEPTED = ['pass_v2', 'pass_v3'];
 const PRICE_SEARCH_STAGES = ['off', 'internal', 'public'];
 
 /** Тошкент вақти бўйича кун калити (`YYYY-MM-DD`). */
@@ -764,9 +770,9 @@ function attachAssistant(exportsObj, deps) {
     if (!pkg) {
       throw new HttpsError('invalid-argument', 'unknown_package');
     }
-    // Эски илова (2026-11-17 гача) варақасида «бир марталик / доимий Plus» матни бор — у 24 соатлик
+    // Эски илова (2026-11-17 гача) варақасида «бир марталик / доимий Plus» матни бор — у муддатли (10 кунлик)
     // пакетни нотўғри матн билан сотиб олмасин (истеъмолчи алданмасин). Янги илова `pricingAck` юборади.
-    if (!pkg.oneTime && String((data && data.pricingAck) || '') !== PRICING_ACK) {
+    if (!pkg.oneTime && !PRICING_ACKS_ACCEPTED.includes(String((data && data.pricingAck) || ''))) {
       throw new HttpsError('failed-precondition', 'app_update_required', { reason: 'app_update_required' });
     }
 
@@ -1006,6 +1012,7 @@ module.exports = {
   attachAssistant,
   ASSISTANT_DEFAULTS,
   PRICING_ACK,
+  PRICING_ACKS_ACCEPTED,
   tashkentDayKey,
   parseResponsesOutput,
   normalizePackages,

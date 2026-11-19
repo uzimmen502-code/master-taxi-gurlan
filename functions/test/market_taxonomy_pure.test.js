@@ -158,6 +158,76 @@ check('N16 showInNearbyAds bool эмас → SHOW_IN_NEARBY_ADS_INVALID; false/�
   const o3 = clone(); o3.markets.auto.categories[0].showInNearbyAdz = true;
   expectError(o3, 'UNKNOWN_KEY markets.auto.categories[0].showInNearbyAdz');
 });
+const V5 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'data', 'market_taxonomy_v5.json'), 'utf8'));
+check('P13 v5 ўтади; v4 дан ФАҚАТ: livestock бўлимлари (all → 5 та), auto cars/tech номлари, electronics/appliances box_*_cm (эга 2026-11-19)', () => {
+  expectOk(V5);
+  expectOk(t.normalizeTaxonomy(V5));
+  const L = V5.markets.livestock.categories;
+  assert.deepStrictEqual(L.map((c) => c.id), ['cattle', 'sheep_goat', 'horse', 'poultry', 'other']);
+  assert.deepStrictEqual(L.map((c) => c.names.uz_Cyrl), ['Қорамол', 'Қўй-эчки', 'От', 'Парранда', 'Бошқа']);
+  assert.deepStrictEqual(L.map((c) => c.names.uz_Latn), ['Qoramol', 'Qo\'y-echki', 'Ot', 'Parranda', 'Boshqa']);
+  assert.deepStrictEqual(L.map((c) => c.names.ru), ['КРС', 'Овцы и козы', 'Лошади', 'Птица', 'Другое']);
+  // Эски `all` билан бир хил майдонлар (orderable), showInNearbyAds true.
+  const oldAll = V4.markets.livestock.categories[0];
+  for (const c of L) {
+    assert.deepStrictEqual(Object.keys(c), Object.keys(oldAll));
+    assert.strictEqual(c.orderable, oldAll.orderable); assert.strictEqual(c.showInNearbyAds, true);
+  }
+  const A = Object.fromEntries(V5.markets.auto.categories.map((c) => [c.id, c.names]));
+  assert.deepStrictEqual(A.cars, { uz_Cyrl: 'Авто', uz_Latn: 'Avto', ru: 'Авто' });
+  assert.deepStrictEqual(A.tech, { uz_Cyrl: 'Махсус техникалар', uz_Latn: 'Maxsus texnikalar', ru: 'Спецтехника' });
+  const BOX = [
+    { key: 'box_w_cm', type: 'int', min: 1, max: 1000, required: false, names: { uz_Cyrl: 'Эни', uz_Latn: 'Eni', ru: 'Ширина' } },
+    { key: 'box_l_cm', type: 'int', min: 1, max: 1000, required: false, names: { uz_Cyrl: 'Узунлиги', uz_Latn: 'Uzunligi', ru: 'Длина' } },
+    { key: 'box_h_cm', type: 'int', min: 1, max: 1000, required: false, names: { uz_Cyrl: 'Баландлиги', uz_Latn: 'Balandligi', ru: 'Высота' } },
+  ];
+  for (const m of ['electronics', 'appliances']) {
+    assert.deepStrictEqual(V5.markets[m].fields.slice(-3), BOX, m);
+    assert.deepStrictEqual(V5.markets[m].fields.slice(0, -3), V4.markets[m].fields, `${m} эски майдонлар`);
+  }
+  // Қолган ҳамма нарса v4 билан АЙНАН бир хил: юқоридаги ўзгаришларни v4 га қўлласак — v5.
+  const exp = JSON.parse(JSON.stringify(V4));
+  exp.markets.livestock.categories = L;
+  exp.markets.auto.categories.find((c) => c.id === 'cars').names = A.cars;
+  exp.markets.auto.categories.find((c) => c.id === 'tech').names = A.tech;
+  for (const m of ['electronics', 'appliances']) exp.markets[m].fields.push(...BOX);
+  assert.deepStrictEqual(V5, exp);
+  assert.strictEqual(JSON.stringify(V5.markets.meat), JSON.stringify(V4.markets.meat));
+  assert.strictEqual(JSON.stringify(V5.markets.farm), JSON.stringify(V4.markets.farm));
+});
+check('P14 v5 ↔ rules: ҳар бозор майдонлари ≤ 20 (attrs.size() <= 20); бозор id лари rules рўйхатида', () => {
+  const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
+  assert.ok(rules.includes('d.attrs is map && d.attrs.size() <= 20'), 'rules attrs чеклови ўзгарган');
+  // category — ихтиёрий сатр 1..40 (рўйхат эмас): эски `all` ҳам ўтади.
+  assert.ok(rules.includes("d.category is string && d.category.size() >= 1 && d.category.size() <= 40"));
+  for (const [id, m] of Object.entries(V5.markets)) assert.ok(m.fields.length <= 20, `${id}: ${m.fields.length}`);
+  const mm = rules.match(/d\.get\('market', 'livestock'\) in \[([^\]]*)\]/);
+  assert.deepStrictEqual(mm[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')), Object.keys(V5.markets));
+});
+check('P15 upgrade v4 → v5: changed livestock/auto/electronics/appliances, WRITE 5; қайта — NOOP; v3 кутилса — CONFLICT', () => {
+  const { decide, diffMarkets, fromValue } = require('../tools/upgrade_market_taxonomy');
+  const { toValue } = require('../tools/seed_market_taxonomy');
+  assert.deepStrictEqual(diffMarkets(V4.markets, V5.markets),
+    { added: [], changed: ['livestock', 'auto', 'electronics', 'appliances'], removed: [], unchanged: ['meat', 'farm'] });
+  const v4doc = { exists: true, version: 4, markets: V4.markets };
+  const d = decide(v4doc, 4, V5.markets);
+  assert.deepStrictEqual([d.action, d.version], ['WRITE', 5]);
+  assert.strictEqual(decide({ exists: true, version: 5, markets: V5.markets }, 4, V5.markets).action, 'NOOP');
+  assert.strictEqual(decide(v4doc, 3, V5.markets).action, 'TAXONOMY_VERSION_CONFLICT');
+  assert.deepStrictEqual(fromValue(toValue(V5.markets)), V5.markets);
+});
+check('N17 v5 box майдони: калитда рақам → FIELD_KEY_INVALID; min>max → MIN_GT_MAX; text турда min → MIN_MAX_NOT_ALLOWED; min==max — ўтади', () => {
+  const c5 = () => JSON.parse(JSON.stringify(V5));
+  const i = V5.markets.electronics.fields.findIndex((f) => f.key === 'box_w_cm');
+  const o = c5(); o.markets.electronics.fields[i].key = 'box_w1_cm';
+  expectError(o, `FIELD_KEY_INVALID markets.electronics.fields[${i}].key`);
+  const o2 = c5(); o2.markets.electronics.fields[i].min = 1001;
+  expectError(o2, `MIN_GT_MAX markets.electronics.fields[${i}]`);
+  const o3 = c5(); o3.markets.electronics.fields[i].type = 'text';
+  expectError(o3, `MIN_MAX_NOT_ALLOWED markets.electronics.fields[${i}]`);
+  const o4 = c5(); o4.markets.electronics.fields[i].min = 1000;
+  expectOk(o4);
+});
 check('P4 normalizeTaxonomy сатрларни trim қилади, бошқа қийматга тегмайди', () => {
   const n = t.normalizeTaxonomy({ a: '  x ', b: [' y', 3, true, null], c: { d: ' z' } });
   assert.deepStrictEqual(n, { a: 'x', b: ['y', 3, true, null], c: { d: 'z' } });

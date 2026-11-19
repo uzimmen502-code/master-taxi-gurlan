@@ -127,6 +127,16 @@ async function main() {
     await assertFails(items().doc('x_e3').set(item(marketFields({ market: 'electronics_market' }))));
     await assertFails(items().doc('m_e').update({ market: 'furniture' }));
   });
+  await check('M14 taxonomy v5 (эга 2026-11-19): мол янги бўлимлари + эски `all` таҳрирда қолади; box_*_cm int attrs — ўтади', async () => {
+    await assertSucceeds(items().doc('m_v5l').set(item(marketFields({ category: 'sheep_goat', attrs: { age_months: 14, count: 3 }, taxonomyVersion: 5 }))));
+    await assertSucceeds(items().doc('m_l').update({ title: 'Eski all', category: 'all' }));
+    await assertSucceeds(items().doc('m_l').update({ category: 'cattle', taxonomyVersion: 5 }));
+    await assertSucceeds(items().doc('m_v5e').set(item(marketFields({
+      market: 'electronics', category: 'tv', priceUnit: '', taxonomyVersion: 5,
+      attrs: { brand: 'LG', model: 'X', condition: 'new', warranty_months: 12, storage_gb: 8, box_w_cm: 1, box_l_cm: 1000, box_h_cm: 70 },
+    }))));
+    await assertSucceeds(items().doc('m_ap').update({ attrs: { brand: 'Artel', box_w_cm: 60, box_l_cm: 60, box_h_cm: 180 } }));
+  });
   await check('T1 taxonomy: ҳамма ўқийди (меҳмон, user, admin)', async () => {
     await assertSucceeds(testEnv.unauthenticatedContext().firestore().collection('taxonomy').doc('markets').get());
     await assertSucceeds(as(USER).collection('taxonomy').doc('markets').get());

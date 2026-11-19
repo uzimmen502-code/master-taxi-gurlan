@@ -47,6 +47,90 @@ const Set<String> kMarketsWithoutAllTab = {'auto'};
 const String kAutoMarketId = 'auto';
 const String kAutoPartsCategory = 'parts';
 
+/// Эга 2026-11-19 (AVA_DECIDED): Мошина бозорининг шу бўлимларида «Номи» майдони йўқ — марка ва модель тепада,
+/// сарлавҳа ўзи тузилади ([composeAutoTitle]). Эҳтиёт қисмларда — аввалгидек «Номи».
+const Set<String> kAutoTitleCategories = {'cars', 'moto', 'tech'};
+const String kAutoOwnCarCategory = 'cars';
+
+/// Эга 2026-11-19: шу бозорларда умумий «Тахминий вазн» (`unitWeightG`) майдони йўқ (Мол бозорида ўз `weight_kg`
+/// майдони бор — дубликат; Гўшт/Деҳқон — эга олиб ташлади). Электроника/Маиший техникада қолади.
+const Set<String> kMarketsWithoutUnitWeight = {'livestock', 'meat', 'farm'};
+
+/// Ёш майдони (Мол бозори): ҳужжатда бутун ой (`attrs.age_months`), формада «йил + ой», кўрсатишда «1 йилу 7 ойлик».
+const String kAgeMonthsKey = 'age_months';
+
+/// Каробка ўлчамлари (таксономия v5, Электроника/Маиший техника): учаласи бир қаторда; ё учаласи, ё ҳеч бири.
+const List<String> kBoxDimKeys = ['box_w_cm', 'box_l_cm', 'box_h_cm'];
+
+/// [fields] ичида учала каробка майдони борми (v4 да йўқ — махсус қатор кўрсатилмайди).
+bool hasBoxDims(Iterable<MarketField> fields) {
+  final keys = {for (final f in fields) f.key};
+  return kBoxDimKeys.every(keys.contains);
+}
+
+/// Мошина сарлавҳаси: «<марка> <модель> <йил>» (йил тўлдирилган бўлса), ортиқча бўшлиқсиз.
+String composeAutoTitle({required String brand, required String model, Object? year}) {
+  final y = '${year ?? ''}'.trim();
+  return [brand.trim(), model.trim(), if (y.isNotEmpty && y != '0') y]
+      .where((s) => s.isNotEmpty)
+      .join(' ')
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+/// Профилдаги ёқилғи (`users.carFuelType`: petrol/cng/lpg/ev — `OilVehicle.fuelLabelUz`) → таксономия option id.
+const Map<String, String> _profileFuelAlias = {'cng': 'methane', 'lpg': 'propane', 'ev': 'electric'};
+
+/// «Ўз автомобилим» (эга 2026-11-19): профиль ([UserRepository.getCarInfo] харитаси) → форма қийматлари
+/// (`brand`, `model`, `year`, `fuel`) — фақат шу бўлимда бор майдонларга ва бўш бўлмаган қийматлар. Ёқилғи —
+/// таксономия вариантига мос келса (тўғридан-тўғри ёки [_profileFuelAlias]), акс ҳолда ёзилмайди.
+Map<String, Object?> ownCarFormValues(MarketDef market, String category, Map<String, String> car) {
+  final out = <String, Object?>{};
+  for (final f in market.fieldsFor(category)) {
+    switch (f.key) {
+      case 'brand':
+      case 'model':
+        final v = (car[f.key == 'brand' ? 'carBrand' : 'carModel'] ?? '').trim();
+        if (v.isNotEmpty) out[f.key] = v;
+      case 'year':
+        final y = int.tryParse((car['carYear'] ?? '').trim());
+        if (y != null && y > 0) out[f.key] = '$y';
+      case 'fuel':
+        final raw = (car['carFuelType'] ?? '').trim().toLowerCase();
+        final id = f.option(raw) != null ? raw : (_profileFuelAlias[raw] ?? '');
+        if (id.isNotEmpty && f.option(id) != null) out[f.key] = id;
+    }
+  }
+  return out;
+}
+
+/// Марка + модель биргаликда камида 2 белги (бўшлиқсиз).
+bool autoBrandModelValid(String brand, String model) => (brand.trim().length + model.trim().length) >= 2;
+
+/// Рус тили кўплик шакли: 1 год · 2–4 года · 5+ лет (11–14 — `many`).
+String _ruPlural(int n) {
+  final m10 = n % 10, m100 = n % 100;
+  if (m10 == 1 && m100 != 11) return 'one';
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'few';
+  return 'many';
+}
+
+/// Ой → «1 йилу 7 ойлик» / «2 ёшли» / «7 ойлик» (матнлар lang файлларида: `market_age_*`). Манфий — бўш.
+String formatAgeMonths(int months, String Function(String key) tr) {
+  if (months < 0) return '';
+  final y = months ~/ 12, m = months % 12;
+  if (y == 0) return tr('market_age_m').replaceAll('{m}', '$m');
+  final form = _ruPlural(y);
+  if (m == 0) return tr('market_age_y_$form').replaceAll('{y}', '$y');
+  return tr('market_age_ym_$form').replaceAll('{y}', '$y').replaceAll('{m}', '$m');
+}
+
+/// Учала каробка ўлчами тўлдирилган бўлса — «40 × 30 × 25 см», акс ҳолда бўш.
+String formatBoxDims(Map<String, Object?> attrs, String Function(String key) tr) {
+  final v = [for (final k in kBoxDimKeys) _int(attrs[k])];
+  if (v.any((x) => x == null)) return '';
+  return tr('market_box_value').replaceAll('{w}', '${v[0]}').replaceAll('{l}', '${v[1]}').replaceAll('{h}', '${v[2]}');
+}
+
 enum MarketFieldType { int, text, select, bool, date }
 
 MarketFieldType? _fieldType(String s) {
@@ -77,7 +161,8 @@ class MarketCategory {
 }
 
 /// Майдон текширув хатоси (кодлар — lang калитларига `market_err_*` орқали боғланади).
-enum MarketFieldError { required, number, min, max, maxLen, option }
+/// [incomplete] — гуруҳ майдони (каробка ўлчамлари) қисман тўлдирилган.
+enum MarketFieldError { required, number, min, max, maxLen, option, incomplete }
 
 class MarketField {
   const MarketField({
@@ -396,21 +481,56 @@ Map<String, Object> serializeAttrs(MarketDef market, String category, Map<String
 /// Барча майдон хатолари (калит → хато). Бўш — тўғри.
 Map<String, MarketFieldError> validateAttrs(MarketDef market, String category, Map<String, Object?> values) {
   final out = <String, MarketFieldError>{};
-  for (final f in market.fieldsFor(category)) {
+  final fields = market.fieldsFor(category);
+  for (final f in fields) {
     final e = f.validate(values[f.key]);
     if (e != null) out[f.key] = e;
+  }
+  // Каробка ўлчамлари: ё учаласи, ё ҳеч бири (эга 2026-11-19) — бўш қолганлари белгиланади.
+  if (hasBoxDims(fields)) {
+    bool filled(String k) => '${values[k] ?? ''}'.trim().isNotEmpty;
+    final n = kBoxDimKeys.where(filled).length;
+    if (n > 0 && n < kBoxDimKeys.length) {
+      for (final k in kBoxDimKeys) {
+        if (!filled(k)) out[k] ??= MarketFieldError.incomplete;
+      }
+    }
   }
   return out;
 }
 
+/// Махсус кўриниш (эга 2026-11-19): ёш — «1 йилу 7 ойлик», каробка — «40 × 30 × 25 см» (учала майдон битта
+/// бўлак). [tr] берилмаса — аввалги умумий кўриниш. Қайтаради: (ном, қиймат) ёки `null` (умумий йўл); бўш қиймат —
+/// ташланади. [fields] — бўлим майдонлари.
+(String, String)? _specialDisplay(MarketField f, List<MarketField> fields, Map<String, Object?> attrs,
+    String Function(String key)? tr) {
+  if (tr == null) return null;
+  if (f.key == kAgeMonthsKey && f.type == MarketFieldType.int) {
+    final n = _int(attrs[f.key]);
+    return (tr('market_age_label'), n == null ? '' : formatAgeMonths(n, tr));
+  }
+  if (kBoxDimKeys.contains(f.key) && hasBoxDims(fields)) {
+    // Бўлак биринчи каробка майдонида; қолган иккитаси ташланади.
+    return (tr('market_box_dims'), f.key == kBoxDimKeys.first ? formatBoxDims(attrs, tr) : '');
+  }
+  return null;
+}
+
 /// Карточкадаги битта қисқа қатор: биринчи [maxParts] та тўлдирилган майдон («Зоти: Ҳисори · Ёши (ой): 24»).
-/// bool — фақат номи («Бўғоз»). Номаълум майдонлар ташланади.
-String marketAttrsLine(MarketDef market, String category, Map<String, Object?> attrs, String lang, {int maxParts = 3}) {
+/// bool — фақат номи («Бўғоз»). Номаълум майдонлар ташланади. [tr] — ёш/каробка махсус кўриниши (фақат қиймат).
+String marketAttrsLine(MarketDef market, String category, Map<String, Object?> attrs, String lang,
+    {int maxParts = 3, String Function(String key)? tr}) {
   final parts = <String>[];
-  for (final f in market.fieldsFor(category)) {
+  final fields = market.fieldsFor(category);
+  for (final f in fields) {
     if (parts.length >= maxParts) break;
     final stored = attrs[f.key];
     if (stored == null) continue;
+    final special = _specialDisplay(f, fields, attrs, tr);
+    if (special != null) {
+      if (special.$2.isNotEmpty) parts.add(special.$2);
+      continue;
+    }
     if (f.type == MarketFieldType.bool) {
       if (stored == true) parts.add(f.label(lang));
       continue;
@@ -423,9 +543,15 @@ String marketAttrsLine(MarketDef market, String category, Map<String, Object?> a
 
 /// Детал экрани учун қаторлар (ном, қиймат) — таксономия тартибида; [yes] — bool учун матн.
 List<(String, String)> marketAttrRows(MarketDef market, String category, Map<String, Object?> attrs, String lang,
-    {required String yes}) {
+    {required String yes, String Function(String key)? tr}) {
   final rows = <(String, String)>[];
-  for (final f in market.fieldsFor(category)) {
+  final fields = market.fieldsFor(category);
+  for (final f in fields) {
+    final special = _specialDisplay(f, fields, attrs, tr);
+    if (special != null) {
+      if (special.$2.isNotEmpty) rows.add(special);
+      continue;
+    }
     final s = f.display(attrs[f.key], lang, yes: yes);
     if (s.isNotEmpty) rows.add((f.label(lang), s));
   }

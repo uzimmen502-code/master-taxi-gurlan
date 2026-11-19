@@ -11,6 +11,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../repositories/user_repository.dart';
 import '../../markets/data/market_listings_source.dart' show resolveRegionIdForDistrict;
 import '../../markets/data/market_taxonomy_repository.dart';
 import '../../markets/domain/market_taxonomy.dart';
@@ -50,7 +51,11 @@ class BusinessProductFormScreen extends StatefulWidget {
     this.loadTaxonomy,
     this.isModuleOpenable,
     this.resolveRegionId,
+    this.loadCarInfo,
   }) : _repo = repository;
+
+  /// Тест учун: профилдаги автомобиль («Ўз автомобилим», эга 2026-11-19; бўлмаса [UserRepository.getCarInfo]).
+  final Future<Map<String, String>?> Function(String phone)? loadCarInfo;
 
   /// «Бозорлар» 5-босқич (эга 2026-11-15). Бозор ичидаги қизил «+» — бозор ва жорий бўлим олдиндан танланган
   /// (бозор чиплари кўрсатилмайди). Бўш/`null` — Аралаш (бозор майдонисиз).
@@ -156,6 +161,38 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   /// Ҳозирги бўлим: битта бўлимли бозорда — ўзи (`all`).
   String get _effectiveCategory => _marketDef?.autoCategory ?? _category;
 
+  /// Мошина (мошиналар/мото/техника, эга 2026-11-19): «Номи» ўрнида тепада марка ва модель, сарлавҳа ўзи
+  /// тузилади. Таҳрирда — фақат attrs да марка/модель бор бўлса (бўлмаса аввалгидек «Номи»).
+  List<MarketField> get _autoTopFields {
+    final m = _marketDef;
+    final cat = _effectiveCategory;
+    if (m == null || m.id != kAutoMarketId || !kAutoTitleCategories.contains(cat)) return const [];
+    final top = [for (final f in m.fieldsFor(cat)) if (f.key == 'brand' || f.key == 'model') f];
+    if (top.isEmpty) return const [];
+    if (_isEdit) {
+      final a = widget.existing!.attrs;
+      if (!['brand', 'model'].any((k) => '${a[k] ?? ''}'.trim().isNotEmpty)) return const [];
+    }
+    return top;
+  }
+
+  bool get _autoTitleMode => _autoTopFields.isNotEmpty;
+
+  /// «Ўз автомобилим» / «Бошқа автомобил» — фақат янги эълон, «Мошиналар» бўлими.
+  bool get _showOwnCarChoice =>
+      !_isEdit && _marketDef?.id == kAutoMarketId && _effectiveCategory == kAutoOwnCarCategory && _autoTitleMode;
+
+  /// Умумий «Тахминий вазн» майдони — маҳсулотда ва шу бозорда бўлса ([kMarketsWithoutUnitWeight]).
+  bool get _weightHiddenByMarket => kMarketsWithoutUnitWeight.contains(_market);
+  bool get _showWeight => _kind == 'product' && !_weightHiddenByMarket;
+
+  bool? _ownCar; // null — танланмаган
+  bool _carLoading = false;
+  bool _carMissing = false;
+
+  /// Ташқаридан (профилдан) тўлдирилганда майдонлар муҳаррири контроллерларини қайта қурсин.
+  int _fieldsGen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -215,6 +252,77 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     if (!m.priceUnits.contains(_unit)) _unit = m.priceUnits.first;
   }
 
+  /// «Ўз автомобилим»: профилдан марка/модель/йил/ёқилғи; профилда автомобиль йўқ — изоҳ.
+  Future<void> _useOwnCar() async {
+    setState(() {
+      _ownCar = true;
+      _carLoading = true;
+      _carMissing = false;
+    });
+    Map<String, String>? car;
+    try {
+      car = await (widget.loadCarInfo ?? UserRepository().getCarInfo)(_phone);
+    } catch (e) {
+      debugPrint('[BusinessProductForm] car: $e');
+    }
+    if (!mounted || _ownCar != true) return;
+    final m = _marketDef;
+    final pre = (car == null || m == null) ? const <String, Object?>{} : ownCarFormValues(m, _effectiveCategory, car);
+    setState(() {
+      _carLoading = false;
+      if (pre.isEmpty) {
+        _carMissing = true;
+        return;
+      }
+      _attrValues.addAll(pre);
+      _fieldErrors = const {};
+      _fieldsGen++;
+    });
+  }
+
+  /// «Бошқа автомобил»: профилдан тўлдирилган майдонлар тозаланади.
+  void _useOtherCar() => setState(() {
+        if (_ownCar == true) {
+          for (final k in const ['brand', 'model', 'year', 'fuel']) {
+            _attrValues.remove(k);
+          }
+          _fieldsGen++;
+        }
+        _ownCar = false;
+        _carLoading = false;
+        _carMissing = false;
+      });
+
+  Widget _ownCarChoice() {
+    Widget chip(String key, String label, bool selected, VoidCallback onTap) => marketChip(context,
+        key: ValueKey(key), label: label, selected: selected, onSelected: _busy ? null : (_) => onTap());
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            key: const ValueKey('market_car_choice'),
+            spacing: kMarketChipSpacing,
+            runSpacing: kMarketChipRunSpacing,
+            children: [
+              chip('market_car_own', context.tr('market_car_own'), _ownCar == true, _useOwnCar),
+              chip('market_car_other', context.tr('market_car_other'), _ownCar == false, _useOtherCar),
+            ],
+          ),
+          if (_carLoading) const Padding(padding: EdgeInsets.only(top: 4), child: LinearProgressIndicator()),
+          if (_carMissing)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(context.tr('market_car_none'),
+                  key: const ValueKey('market_car_none'),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Янги маҳсулот: «Видео (ихтиёрий)» белгиланган — сақлангандан кейин видео экрани дарров очилади.
   bool _wantVideo = false;
   bool _busy = false;
@@ -256,15 +364,24 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   Future<void> _save() async {
     // Қайта кириш ҳимояси (C-2): бир кадр ичидаги иккинчи босиш иккинчи маҳсулот ёзмасин.
     if (_busy) return;
-    final name = _name.text.trim();
-    if (name.length < 2) return setState(() => _error = context.tr('bizprod_err_name'));
+    // Мошина (эга 2026-11-19): «Номи» йўқ — сарлавҳа «<марка> <модель> <йил>» дан; марка+модель ≥ 2 белги.
+    final String name;
+    if (_autoTitleMode) {
+      final brand = '${_attrValues['brand'] ?? ''}', model = '${_attrValues['model'] ?? ''}';
+      if (!autoBrandModelValid(brand, model)) return setState(() => _error = context.tr('market_err_brand_model'));
+      final t = composeAutoTitle(brand: brand, model: model, year: _attrValues['year']);
+      name = t.length > 120 ? t.substring(0, 120).trim() : t; // «Номи» майдони чегараси (maxLength 120)
+    } else {
+      name = _name.text.trim();
+      if (name.length < 2) return setState(() => _error = context.tr('bizprod_err_name'));
+    }
     final price = parseProductPrice(_price.text);
     if (price == null) return setState(() => _error = context.tr('bizprod_err_price'));
     if (!_isEdit && _photos.isEmpty) return setState(() => _error = context.tr('tv_shop_photo_required'));
     if (_phone.isEmpty) return setState(() => _error = context.tr('bizprod_err_generic'));
-    // Тахминий вазн — ихтиёрий; киритилса тўғри бўлиши шарт (хизматда ёзилмайди).
-    final int? weightG = _kind == 'product' && _weight.text.trim().isNotEmpty ? parseWeightKgToGrams(_weight.text) : null;
-    if (_kind == 'product' && _weight.text.trim().isNotEmpty && weightG == null) {
+    // Тахминий вазн — ихтиёрий; киритилса тўғри бўлиши шарт (хизматда ва [kMarketsWithoutUnitWeight]да ёзилмайди).
+    final int? weightG = _showWeight && _weight.text.trim().isNotEmpty ? parseWeightKgToGrams(_weight.text) : null;
+    if (_showWeight && _weight.text.trim().isNotEmpty && weightG == null) {
       return setState(() => _error = context.tr('bizprod_err_weight'));
     }
     // «Бозорлар»: бозор танланган — таксономия, бўлим ва динамик майдонлар текширилади.
@@ -320,9 +437,10 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
           'price': price,
           'description': _desc.text.trim(),
           'kind': _kind,
+          // Майдон бу бозорда кўрсатилмайди — эски қиймат тегилмайди (яширин ўчириш йўқ).
           if (weightG != null)
             'unitWeightG': weightG
-          else if (old.unitWeightG != null)
+          else if (old.unitWeightG != null && !_weightHiddenByMarket)
             'unitWeightG': FieldValue.delete(),
           // Белгиланган нарх — майдон ёзилмайди; аввал бирлик бор эди — ўчирилади (эски ҳужжат шакли).
           if (_unit != PriceUnit.fixed)
@@ -386,54 +504,141 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
     }
   }
 
-  /// Видео — расмлардан кейин, ЯГОНА жойда (эга, 2026-10-26: «расм ва видео жойлаштириш битта жойда бўлгани
-  /// яхши», «дубликат бўлмасин»). Янги маҳсулотда — белгилаш (ҳужжат ҳали йўқ, видео сақлангандан кейин уланади);
-  /// таҳрирда — видео экрани дарров очилади. Аввалги «Видео қўшасизми?» ойнаси ва алоҳида тугма олиб ташланди.
-  Widget _videoSection() {
-    final hasVideo = widget.existing?.hasVideo ?? false;
+  static const double _tile = 72;
+
+  /// Видео — расмлар билан БИР қаторда (эга 2026-10-26: «расм ва видео жойлаштириш битта жойда»; 2026-11-19:
+  /// ихчам, ёнма-ён). Янги маҳсулотда — белгилаш (ҳужжат ҳали йўқ, сақлангандан кейин [TvPublishScreen] очилади:
+  /// тармоқларга жойлаш ва розилик ўша ерда); таҳрирда — видео экрани дарров очилади.
+  Widget _videoTile() {
     final selected = !_isEdit && _wantVideo;
     final c = AppColors.primaryDark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        Text(context.tr('bizprod_video_label'), style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        if (hasVideo)
-          Row(children: [
-            Icon(Icons.check_circle_rounded, color: c, size: 20),
-            const SizedBox(width: 6),
-            Text(context.tr('bizprod_has_video')),
-          ])
-        else
-          InkWell(
-            key: const ValueKey('bizprod_video_tile'),
-            onTap: _busy
-                ? null
-                : () => _isEdit
-                    ? (widget.addVideo ?? _defaultAddVideo)(context, widget.existing!.id)
-                    : setState(() => _wantVideo = !_wantVideo),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: 84,
-              height: 84,
-              decoration: BoxDecoration(
-                border: Border.all(color: selected ? c : Colors.grey.shade400, width: selected ? 2 : 1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(selected ? Icons.check_circle_rounded : Icons.videocam_outlined, color: selected ? c : null),
-                  const SizedBox(height: 4),
-                  Text(context.tr('bizprod_video_add'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
-                ],
+    if (widget.existing?.hasVideo ?? false) {
+      return SizedBox(
+        height: _tile,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.check_circle_rounded, color: c, size: 20),
+          const SizedBox(width: 6),
+          Text(context.tr('bizprod_has_video')),
+        ]),
+      );
+    }
+    return InkWell(
+      key: const ValueKey('bizprod_video_tile'),
+      onTap: _busy
+          ? null
+          : () => _isEdit
+              ? (widget.addVideo ?? _defaultAddVideo)(context, widget.existing!.id)
+              : setState(() => _wantVideo = !_wantVideo),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: _tile,
+        height: _tile,
+        decoration: BoxDecoration(
+          border: Border.all(color: selected ? c : Colors.grey.shade400, width: selected ? 2 : 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(selected ? Icons.check_circle_rounded : Icons.videocam_outlined, size: 20, color: selected ? c : null),
+            const SizedBox(height: 2),
+            Text(context.tr('bizprod_video_add'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _photoThumb(int i) => SizedBox(
+        width: _tile,
+        height: _tile,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _thumb(_photos[i]),
+            Positioned(
+              top: 2,
+              right: 2,
+              child: InkWell(
+                key: ValueKey('bizprod_photo_remove_$i'),
+                onTap: _busy ? null : () => setState(() => _photos.removeAt(i)),
+                child: const CircleAvatar(
+                  radius: 10,
+                  backgroundColor: Colors.black54,
+                  child: Icon(Icons.close, size: 13, color: Colors.white),
+                ),
               ),
             ),
+          ],
+        ),
+      );
+
+  Widget _addPhotoTile() => InkWell(
+        key: const ValueKey('bizprod_add_photos'),
+        onTap: _busy ? null : _pick,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: _tile,
+          height: _tile,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.add_a_photo_outlined, size: 20),
+              const SizedBox(height: 2),
+              Text(context.tr('bizprod_add_photos'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 10)),
+            ],
+          ),
+        ),
+      );
+
+  /// Расмлар + видео — битта ихчам қатор (эга 2026-11-19).
+  Widget _mediaSection() {
+    final selected = !_isEdit && _wantVideo;
+    return Column(
+      key: const ValueKey('bizprod_media'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_isEdit)
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                key: const ValueKey('bizprod_edit_photos'),
+                onPressed: _busy
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(builder: (_) => TvShopItemPhotosScreen(item: widget.existing!)),
+                        ),
+                icon: const Icon(Icons.photo_library_outlined),
+                label: Text(context.tr('bizprod_edit_photos')),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _videoTile(),
+          ])
+        else ...[
+          Text(
+            '${context.tr('bizprod_photos')} ${_photos.length}/${TvShopItem.maxPhotos} · ${context.tr('bizprod_video_label')}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (var i = 0; i < _photos.length; i++) _photoThumb(i),
+              if (_photos.length < TvShopItem.maxPhotos) _addPhotoTile(),
+              _videoTile(),
+            ],
+          ),
+        ],
         if (selected)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.only(top: 4),
             child: Text(
               context.tr('bizprod_video_after_save'),
               key: const ValueKey('bizprod_video_after_save'),
@@ -455,34 +660,25 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
 
   /// Нарх бирлиги — тур профилидаги рўйхат (чиплар). «Келишилади»да нарх бўш қолиши мумкин (майдон ихтиёрий).
   Widget _unitSection() {
-    final c = context.ava;
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(context.tr('price_unit_label'), style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Wrap(
             key: const ValueKey('bizprod_unit'),
-            spacing: 8,
-            runSpacing: 8,
+            spacing: kMarketChipSpacing,
+            runSpacing: kMarketChipRunSpacing,
             children: [
               for (final u in _units)
-                ChoiceChip(
+                marketChip(
+                  context,
                   key: ValueKey('bizprod_unit_${u.name}'),
-                  label: Text(context.tr(u.labelKey)),
+                  label: context.tr(u.labelKey),
                   selected: _unit == u,
-                  showCheckmark: false,
                   onSelected: _busy ? null : (_) => setState(() => _unit = u),
-                  selectedColor: c.brandSoft,
-                  backgroundColor: c.chip,
-                  side: BorderSide(color: _unit == u ? c.brand : c.line, width: _unit == u ? 1.5 : 1),
-                  labelStyle: TextStyle(
-                    fontSize: 13,
-                    color: c.ink,
-                    fontWeight: _unit == u ? FontWeight.w700 : FontWeight.w500,
-                  ),
                 ),
             ],
           ),
@@ -507,11 +703,11 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
       ];
     }
     final t = _taxonomy;
-    if (t == null) return const [LinearProgressIndicator(key: ValueKey('market_tax_loading')), SizedBox(height: 12)];
+    if (t == null) return const [LinearProgressIndicator(key: ValueKey('market_tax_loading')), SizedBox(height: 8)];
     final out = <Widget>[];
     if (_showMarketChoice) {
       final markets = openableMarkets(t, widget.isModuleOpenable ?? ServiceConfigHolder.isOpenable);
@@ -524,7 +720,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             enabled: !_busy,
             onChanged: (id) => setState(() => _applyMarket(id)),
           ))
-          ..add(const SizedBox(height: 12));
+          ..add(const SizedBox(height: 8));
       }
     }
     final m = _marketDef;
@@ -539,21 +735,65 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             _fieldErrors = const {};
           }),
         ))
-        ..add(const SizedBox(height: 12));
+        ..add(const SizedBox(height: 8));
     }
     return out;
   }
 
-  /// Нархдан кейин: «Импорт» (Гўшт) ва бўлим майдонлари (таксономиядан).
+  void _onAttrChanged(String k, Object? v) => setState(() {
+        _attrValues[k] = v;
+        if (_fieldErrors.containsKey(k)) _fieldErrors = {..._fieldErrors}..remove(k);
+      });
+
+  /// «Номи» ўрни: Мошина бўлимларида — («Ўз/Бошқа автомобил» +) марка ва модель; акс ҳолда «Номи» майдони
+  /// (Мол бозорида мисол изоҳи билан).
+  List<Widget> _nameSection() {
+    final top = _autoTopFields;
+    final m = _marketDef;
+    if (top.isNotEmpty && m != null) {
+      return [
+        if (_showOwnCarChoice) _ownCarChoice(),
+        MarketFieldsEditor(
+          key: ValueKey('market_top_fields_${m.id}_${_effectiveCategory}_$_fieldsGen'),
+          fields: top,
+          values: _attrValues,
+          errors: _fieldErrors,
+          enabled: !_busy,
+          onChanged: _onAttrChanged,
+          topGap: 0,
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    return [
+      TextField(
+        key: const ValueKey('bizprod_name'),
+        controller: _name,
+        enabled: !_busy,
+        maxLength: 120,
+        decoration: InputDecoration(
+          labelText: context.tr('bizprod_f_name'),
+          hintText: _market == 'livestock' ? context.tr('market_livestock_name_hint') : null,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 4),
+    ];
+  }
+
+  /// Нархдан кейин: «Импорт» (Гўшт) ва бўлим майдонлари (таксономиядан; тепадаги марка/модель бундан ташқари).
   List<Widget> _marketBody() {
     final m = _marketDef;
     if (m == null) return const [];
     final category = _effectiveCategory;
+    final topKeys = {for (final f in _autoTopFields) f.key};
     return [
       if (m.hasImported)
         CheckboxListTile(
           key: const ValueKey('market_imported'),
           contentPadding: EdgeInsets.zero,
+          dense: true,
+          visualDensity: VisualDensity.compact,
           controlAffinity: ListTileControlAffinity.leading,
           value: _imported,
           title: Text(context.tr('market_imported')),
@@ -561,15 +801,12 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
         ),
       if (m.category(category) != null)
         MarketFieldsEditor(
-          key: ValueKey('market_fields_${m.id}_$category'),
-          fields: m.fieldsFor(category),
+          key: ValueKey('market_fields_${m.id}_${category}_$_fieldsGen'),
+          fields: [for (final f in m.fieldsFor(category)) if (!topKeys.contains(f.key)) f],
           values: _attrValues,
           errors: _fieldErrors,
           enabled: !_busy,
-          onChanged: (k, v) => setState(() {
-            _attrValues[k] = v;
-            if (_fieldErrors.containsKey(k)) _fieldErrors = {..._fieldErrors}..remove(k);
-          }),
+          onChanged: _onAttrChanged,
         ),
     ];
   }
@@ -586,7 +823,8 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(context.tr(_isEdit ? 'bizprod_edit' : (_showKindChoice ? 'bizprod_new' : 'bizprod_new_product'))),
+        // Эга 2026-11-19: янги маҳсулот — «Майдонларни тўлдиринг».
+        title: Text(context.tr(_isEdit ? 'bizprod_edit' : (_showKindChoice ? 'bizprod_new' : 'bizprod_fill_fields'))),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -604,14 +842,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          TextField(
-            key: const ValueKey('bizprod_name'),
-            controller: _name,
-            enabled: !_busy,
-            maxLength: 120,
-            decoration: InputDecoration(labelText: context.tr('bizprod_f_name'), border: const OutlineInputBorder()),
-          ),
-          const SizedBox(height: 4),
+          ..._nameSection(),
           TextField(
             key: const ValueKey('bizprod_price'),
             controller: _price,
@@ -626,7 +857,7 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             ),
           ),
           if (_units.length > 1) _unitSection(),
-          if (_kind == 'product') ...[
+          if (_showWeight) ...[
             const SizedBox(height: 12),
             TextField(
               key: const ValueKey('bizprod_weight'),
@@ -651,78 +882,8 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             maxLength: 1000,
             decoration: InputDecoration(labelText: context.tr('bizprod_f_desc'), border: const OutlineInputBorder()),
           ),
-          const SizedBox(height: 8),
-          if (_isEdit) ...[
-            OutlinedButton.icon(
-              key: const ValueKey('bizprod_edit_photos'),
-              onPressed: _busy
-                  ? null
-                  : () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => TvShopItemPhotosScreen(item: widget.existing!)),
-                      ),
-              icon: const Icon(Icons.photo_library_outlined),
-              label: Text(context.tr('bizprod_edit_photos')),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            ),
-          ] else ...[
-            Text('${context.tr('bizprod_photos')} ${_photos.length}/${TvShopItem.maxPhotos}',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (var i = 0; i < _photos.length; i++)
-                  SizedBox(
-                    width: 84,
-                    height: 84,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _thumb(_photos[i]),
-                        Positioned(
-                          top: 2,
-                          right: 2,
-                          child: InkWell(
-                            key: ValueKey('bizprod_photo_remove_$i'),
-                            onTap: _busy ? null : () => setState(() => _photos.removeAt(i)),
-                            child: const CircleAvatar(
-                              radius: 11,
-                              backgroundColor: Colors.black54,
-                              child: Icon(Icons.close, size: 14, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (_photos.length < TvShopItem.maxPhotos)
-                  InkWell(
-                    key: const ValueKey('bizprod_add_photos'),
-                    onTap: _busy ? null : _pick,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: 84,
-                      height: 84,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.add_a_photo_outlined),
-                          const SizedBox(height: 4),
-                          Text(context.tr('bizprod_add_photos'),
-                              textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-          _videoSection(),
+          const SizedBox(height: 4),
+          _mediaSection(),
           const SizedBox(height: 12),
           if (_error != null)
             Padding(

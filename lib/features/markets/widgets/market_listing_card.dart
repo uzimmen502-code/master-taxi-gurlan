@@ -33,7 +33,7 @@ class MarketListingCard extends StatelessWidget {
     final lang = context.contentLang;
     final price = item.priceLabel(context.tr);
     final m = market;
-    final attrsLine = m == null ? '' : marketAttrsLine(m, m.autoCategory ?? item.category, item.attrs, lang);
+    final attrsLine = m == null ? '' : marketAttrsLine(m, m.autoCategory ?? item.category, item.attrs, lang, tr: context.tr);
     final cover = item.coverPhotoUrl;
     return Card(
       key: ValueKey('market_card_${item.id}'),

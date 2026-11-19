@@ -39,10 +39,12 @@ String marketFieldErrorText(BuildContext context, MarketField f, MarketFieldErro
     MarketFieldError.max => fill('market_err_max', f.max),
     MarketFieldError.maxLen => fill('market_err_max_len', f.maxLen),
     MarketFieldError.option => context.tr('market_err_required'),
+    MarketFieldError.incomplete => context.tr('market_err_box_all'),
   };
 }
 
-Widget _chip(BuildContext context,
+/// Ихчам танлов чипи (бозор/бўлим/бирлик/автомобиль; ягона кўриниш).
+Widget marketChip(BuildContext context,
     {required Key key, required String label, required bool selected, required ValueChanged<bool>? onSelected}) {
   final c = context.ava;
   return ChoiceChip(
@@ -55,8 +57,17 @@ Widget _chip(BuildContext context,
     backgroundColor: c.chip,
     side: BorderSide(color: selected ? c.brand : c.line, width: selected ? 1.5 : 1),
     labelStyle: TextStyle(fontSize: 13, color: c.ink, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+    // Ихчам (эга 2026-11-19): форма қисқароқ бўлсин.
+    visualDensity: VisualDensity.compact,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    labelPadding: kMarketChipLabelPadding,
   );
 }
+
+/// Ихчам чип ички чеккаси ва Wrap оралиқлари (бозор/бўлим/бирлик чиплари учун ягона қиймат, эга 2026-11-19).
+const EdgeInsets kMarketChipLabelPadding = EdgeInsets.symmetric(horizontal: 6);
+const double kMarketChipSpacing = 6;
+const double kMarketChipRunSpacing = 4;
 
 /// «Қаерда сотасиз?»: Аралаш · [markets]. [selected] бўш — Аралаш.
 class MarketChoiceChips extends StatelessWidget {
@@ -79,19 +90,19 @@ class MarketChoiceChips extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(context.tr('market_where_sell'), style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Wrap(
           key: const ValueKey('market_choice'),
-          spacing: 8,
-          runSpacing: 8,
+          spacing: kMarketChipSpacing,
+          runSpacing: kMarketChipRunSpacing,
           children: [
-            _chip(context,
+            marketChip(context,
                 key: const ValueKey('market_choice_aralash'),
                 label: context.tr('market_aralash'),
                 selected: selected.isEmpty,
                 onSelected: enabled ? (_) => onChanged('') : null),
             for (final m in markets)
-              _chip(context,
+              marketChip(context,
                   key: ValueKey('market_choice_${m.id}'),
                   label: marketShortLabel(context, m),
                   selected: selected == m.id,
@@ -103,7 +114,7 @@ class MarketChoiceChips extends StatelessWidget {
   }
 }
 
-/// Бўлим чиплари (битта бўлимли бозорда чақирилмайди).
+/// Бўлим чиплари (битта бўлимли бозорда чақирилмайди). «Бўлим» сарлавҳаси йўқ (эга 2026-11-19) — чиплар ўзи.
 class MarketCategoryChips extends StatelessWidget {
   const MarketCategoryChips({
     super.key,
@@ -121,24 +132,17 @@ class MarketCategoryChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = context.contentLang;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      key: const ValueKey('market_category'),
+      spacing: kMarketChipSpacing,
+      runSpacing: kMarketChipRunSpacing,
       children: [
-        Text(context.tr('market_category'), style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Wrap(
-          key: const ValueKey('market_category'),
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final c in market.categories)
-              _chip(context,
-                  key: ValueKey('market_cat_${c.id}'),
-                  label: c.label(lang),
-                  selected: selected == c.id,
-                  onSelected: enabled ? (_) => onChanged(c.id) : null),
-          ],
-        ),
+        for (final c in market.categories)
+          marketChip(context,
+              key: ValueKey('market_cat_${c.id}'),
+              label: c.label(lang),
+              selected: selected == c.id,
+              onSelected: enabled ? (_) => onChanged(c.id) : null),
       ],
     );
   }
@@ -155,6 +159,7 @@ class MarketFieldsEditor extends StatefulWidget {
     required this.onChanged,
     this.enabled = true,
     this.pickDate,
+    this.topGap = 12,
   });
 
   final List<MarketField> fields;
@@ -165,6 +170,9 @@ class MarketFieldsEditor extends StatefulWidget {
 
   /// Тест учун (бўлмаса `showDatePicker`).
   final Future<DateTime?> Function(BuildContext context, DateTime? initial)? pickDate;
+
+  /// Биринчи майдон устидаги оралиқ (форма тепасидаги марка/модель блокида 0).
+  final double topGap;
 
   @override
   State<MarketFieldsEditor> createState() => _MarketFieldsEditorState();
@@ -267,18 +275,159 @@ class _MarketFieldsEditorState extends State<MarketFieldsEditor> {
     }
   }
 
+  /// Ёш (эга 2026-11-19): «йил» + «ой (0–11)» бир қаторда; қиймат — бутун ой матни ([kAgeMonthsKey]).
+  Widget _ageRow(BuildContext context, MarketField f) {
+    final err = widget.errors[f.key];
+    final errText = err == null ? null : marketFieldErrorText(context, f, err);
+    final yCtrl = _ctrl['${f.key}__y'] ??= TextEditingController(text: _agePart(widget.values[f.key], years: true));
+    final mCtrl = _ctrl['${f.key}__m'] ??= TextEditingController(text: _agePart(widget.values[f.key], years: false));
+    void emit() {
+      final y = yCtrl.text.trim(), m = mCtrl.text.trim();
+      if (y.isEmpty && m.isEmpty) return widget.onChanged(f.key, '');
+      widget.onChanged(f.key, '${(int.tryParse(y) ?? 0) * 12 + (int.tryParse(m) ?? 0)}');
+    }
+
+    InputDecoration deco(String labelKey) => InputDecoration(
+          labelText: context.tr(labelKey),
+          border: const OutlineInputBorder(),
+          isDense: true,
+        );
+    return Column(
+      key: ValueKey('market_field_${f.key}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(f.required ? '${context.tr('market_age_label')} *' : context.tr('market_age_label'),
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(
+            child: TextField(
+              key: ValueKey('market_field_${f.key}_y'),
+              controller: yCtrl,
+              enabled: widget.enabled,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(2)],
+              onChanged: (_) => emit(),
+              decoration: deco('market_age_years'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              key: ValueKey('market_field_${f.key}_m'),
+              controller: mCtrl,
+              enabled: widget.enabled,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, const MaxIntInputFormatter(11)],
+              onChanged: (_) => emit(),
+              decoration: deco('market_age_months'),
+            ),
+          ),
+        ]),
+        if (errText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 12),
+            child: Text(errText, style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+          ),
+      ],
+    );
+  }
+
+  static String _agePart(Object? v, {required bool years}) {
+    final n = int.tryParse('${v ?? ''}'.trim());
+    if (n == null || n < 0) return '';
+    final part = years ? n ~/ 12 : n % 12;
+    // 0 йил — бўш; 0 ой — фақат умумий қиймат 0 бўлса кўрсатилади.
+    if (part == 0 && (years || n != 0)) return '';
+    return '$part';
+  }
+
+  /// Каробка ўлчамлари (эга 2026-11-19): эни × узунлиги × баландлиги — бир қаторда учта кичик майдон.
+  Widget _boxRow(BuildContext context, List<MarketField> boxFields) {
+    const labels = {'box_w_cm': 'market_box_w', 'box_l_cm': 'market_box_l', 'box_h_cm': 'market_box_h'};
+    String? errText;
+    for (final f in boxFields) {
+      final e = widget.errors[f.key];
+      if (e != null) {
+        errText = marketFieldErrorText(context, f, e);
+        break;
+      }
+    }
+    return Column(
+      key: const ValueKey('market_box_dims'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(context.tr('market_box_dims_label'), style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Row(children: [
+          for (var i = 0; i < boxFields.length; i++) ...[
+            if (i > 0)
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text('×')),
+            Expanded(
+              child: TextField(
+                key: ValueKey('market_field_${boxFields[i].key}'),
+                controller: _controller(boxFields[i].key),
+                enabled: widget.enabled,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                onChanged: (v) => widget.onChanged(boxFields[i].key, v),
+                decoration: InputDecoration(
+                  labelText: context.tr(labels[boxFields[i].key] ?? boxFields[i].key),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  errorText: widget.errors[boxFields[i].key] == null ? null : '',
+                  errorStyle: const TextStyle(height: 0, fontSize: 0),
+                ),
+              ),
+            ),
+          ],
+        ]),
+        if (errText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 12),
+            child: Text(errText, style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.fields.isEmpty) return const SizedBox.shrink();
+    final box = hasBoxDims(widget.fields)
+        ? [for (final k in kBoxDimKeys) widget.fields.firstWhere((f) => f.key == k)]
+        : const <MarketField>[];
     return Column(
       key: const ValueKey('market_fields'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final f in widget.fields) ...[
-          const SizedBox(height: 12),
-          _field(context, f),
-        ],
+        for (var i = 0; i < widget.fields.length; i++)
+          if (box.isNotEmpty && kBoxDimKeys.contains(widget.fields[i].key)) ...[
+            // Учала майдон биринчисининг ўрнида битта қатор бўлиб чиқади.
+            if (widget.fields[i].key == kBoxDimKeys.first) ...[
+              SizedBox(height: i == 0 ? widget.topGap : 12),
+              _boxRow(context, box),
+            ],
+          ] else ...[
+            SizedBox(height: i == 0 ? widget.topGap : 12),
+            widget.fields[i].key == kAgeMonthsKey && widget.fields[i].type == MarketFieldType.int
+                ? _ageRow(context, widget.fields[i])
+                : _field(context, widget.fields[i]),
+          ],
       ],
     );
+  }
+}
+
+/// Рақамни [max] дан оширмайди (ортиқ бўлса — аввалги қиймат қолади). Масалан ой: 0–11.
+class MaxIntInputFormatter extends TextInputFormatter {
+  const MaxIntInputFormatter(this.max);
+  final int max;
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.isEmpty) return newValue;
+    final n = int.tryParse(newValue.text);
+    return n == null || n > max ? oldValue : newValue;
   }
 }

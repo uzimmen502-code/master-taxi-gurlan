@@ -42,7 +42,7 @@ class _MarketAttrsSectionState extends State<MarketAttrsSection> {
         final lang = context.contentLang;
         final category = m.autoCategory ?? widget.category;
         final cat = m.hasCategoryChoice ? m.category(category) : null;
-        final rows = marketAttrRows(m, category, widget.attrs, lang, yes: context.tr('yes'));
+        final rows = marketAttrRows(m, category, widget.attrs, lang, yes: context.tr('yes'), tr: context.tr);
         final header = [m.label(lang), if (cat != null) cat.label(lang)].join(' · ');
         return Container(
           key: const ValueKey('market_attrs'),

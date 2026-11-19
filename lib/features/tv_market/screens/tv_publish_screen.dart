@@ -109,7 +109,7 @@ class TvPublishScreen extends StatefulWidget {
   /// Таом видеосида (`restaurant_item`) — таом id, клипга `linkItemId` бўлиб ёзилади.
   final String linkItemId;
 
-  /// `true` — фақат оддий видео (Товар/Хизмат): пуллик реклама ва 48 соатлик
+  /// `true` — фақат оддий видео (Товар/Хизмат): пуллик реклама ва 24 соатлик
   /// «Янгилик» сегментлари кўринмайди ва матндан автотаклиф ишламайди. Боғланган
   /// видео эълон каби узоқ яшаши ва реклама тўловига тушмаслиги учун.
   final bool organicOnly;
@@ -1125,7 +1125,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 const SizedBox(height: 16),
               ],
               if (!_isEdit && _category != 'ad') ...[
-                // Дўкон/маҳсулот — «Янгилик»га тегишли эмас (48 соатда
+                // Дўкон/маҳсулот — «Янгилик»га тегишли эмас (24 соатда
                 // ўзи ўчади, витринага боғланмайди).
                 if (_category != 'news' && !widget.hideShopOption)
                   ..._shopSection(context),

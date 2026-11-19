@@ -114,9 +114,14 @@ function testTabs() {
   check('T6 news: эски товар, реклама, activatedAt йўқ — йўқ',
       !clipInFeedTab(old, 'news', NOW) && !clipInFeedTab(ad, 'news', NOW) &&
       !clipInFeedTab(legacy, 'news', NOW));
-  check('T7 market: ўзгармаган (товар/хизмат/реклама, янгисиям)',
-      clipInFeedTab(fresh, 'market', NOW) && clipInFeedTab(old, 'market', NOW) &&
+  check('T7 market (пуллик режим): эски товар/хизмат, activatedAt йўқ, реклама — бор; янгилик йўқ',
+      clipInFeedTab(old, 'market', NOW) && clipInFeedTab(legacy, 'market', NOW) &&
       clipInFeedTab(ad, 'market', NOW) && !clipInFeedTab(news, 'market', NOW));
+  check('T7b market: ЯНГИ товар 24 соат ЙЎҚ (эга 2026-11-19)', clipInFeedTab(fresh, 'market', NOW) === false);
+  const edge = (age) => ({category: 'service', status: 'active', activatedAt: ts(NOW - age)});
+  check('T7c market чегара: 23:59 йўқ, 24:00 ва 24:01 бор',
+      !clipInFeedTab(edge(24 * H - M), 'market', NOW) && clipInFeedTab(edge(24 * H), 'market', NOW) &&
+      clipInFeedTab(edge(24 * H + M), 'market', NOW));
   check('T8 нотаниш таб — false', clipInFeedTab(old, 'zzz', NOW) === false);
 }
 

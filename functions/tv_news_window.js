@@ -7,7 +7,7 @@
  *      кўчмас мулк ва ҳ.к. боғланганлари ҳам шу категорияларда) —
  *      фаоллашгандан кейинги 24 соат ФАҚАТ «Кун янгиликлари»да, кейин
  *      фақат AVAGram'да. Пуллик реклама (`ad`) бу қоидага кирмайди.
- *      «Реклама ва Эълонлар» (market) таби ЎЗГАРМАЙДИ.
+ *      «Реклама ва Эълонлар» (market, пуллик режим) — янги органик клип у ерда ҳам 24 соат йўқ.
  *   c) 24 соат ФАОЛЛАШУВДАН (модерация тасдиғи ёки авто-тасдиқ) —
  *      `activatedAt`, уни фақат сервер ёзади (`onTvClipSocialPublish`).
  *
@@ -101,7 +101,7 @@ function isNewsExpired(clip, nowMs) {
  * Клип шу табга тушадими (`tv_feed.js` FEED_TABS калитлари).
  *   all    — ҳамма, ЯНГИ товар/хизматдан ташқари;
  *   news   — янгилик + янги товар/хизмат;
- *   market — product/service/ad (ўзгармаган).
+ *   market — product/service/ad, ЯНГИ товар/хизматдан ташқари (эга 2026-11-19).
  * @param {object} clip клип.
  * @param {string} tab таб калити.
  * @param {number} nowMs ҳозирги вақт.
@@ -116,7 +116,10 @@ function clipInFeedTab(clip, tab, nowMs) {
     case 'news':
       return cat === 'news' || isFreshNonNews(d, nowMs);
     case 'market':
-      return cat === 'product' || cat === 'service' || cat === 'ad';
+      // Эга 2026-11-19 (2-жавоб): бу таб — ПУЛЛИК режим; янги (24 соат) органик товар/хизмат
+      // бу ерда ҳам йўқ (фақат «Кун янгиликлари»да). 24 соатдан кейинги ҳолат ўзгармаган.
+      return cat === 'ad' ||
+          ((cat === 'product' || cat === 'service') && !isFreshNonNews(d, nowMs));
     default:
       return false;
   }

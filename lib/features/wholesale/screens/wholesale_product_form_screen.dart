@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../product_badges/product_promo_sheet.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
@@ -502,6 +503,8 @@ class _WholesaleProductFormScreenState
                 border: const OutlineInputBorder(),
               ),
             ),
+            // «Акция» (эга 2026-11-19): фақат сақланган товарда.
+            if (_isEdit) ProductPromoTile(collection: 'wholesale_products', docId: widget.existing!.id),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _saving ? null : _save,

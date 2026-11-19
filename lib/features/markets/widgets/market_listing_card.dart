@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../favorites/domain/favorite_ref.dart';
 import '../../favorites/widgets/favorite_heart.dart';
+import '../../product_badges/product_badge.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/widgets/tv_shop_photo_gallery.dart';
 import '../domain/market_taxonomy.dart';
@@ -57,6 +58,8 @@ class MarketListingCard extends StatelessWidget {
                         ? const Icon(Icons.image_outlined, size: 32)
                         : TvShopNetworkImage(url: cover, fit: BoxFit.cover),
                   ),
+                  // Белги (эга 2026-11-19): тепа чап, битта.
+                  ProductBadgeOverlay(data: item.badge, top: 4, left: 4),
                   // ❤ Танланганлар (STAGE 10, эга 2026-11-15) — олдиндан ажратилган жойда.
                   Positioned(
                     top: 4,

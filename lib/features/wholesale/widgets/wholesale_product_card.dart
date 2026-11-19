@@ -5,6 +5,7 @@ import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
 import '../../favorites/domain/favorite_ref.dart';
 import '../../favorites/widgets/favorite_heart.dart';
+import '../../product_badges/product_badge.dart';
 import '../models/wholesale_product.dart';
 import '../utils/wholesale_labels.dart';
 
@@ -123,6 +124,8 @@ class WholesaleProductCard extends StatelessWidget {
                     ),
                   if (cornerBadge != null && cornerBadge!.trim().isNotEmpty)
                     MarketCornerBadge(text: cornerBadge!),
+                  // Белги (эга 2026-11-19): тепа чап, битта.
+                  ProductBadgeOverlay(data: product.badge),
                   if (locationLabel.isNotEmpty) MarketLocationPill(text: locationLabel),
                   FavoriteHeartOverlay(favorite: FavoriteRef.fromWholesale(product)),
                 ],

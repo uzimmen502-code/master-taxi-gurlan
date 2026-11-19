@@ -8,6 +8,7 @@ import '../../ads/widgets/market_corner_badge.dart';
 import '../../ads/widgets/market_grid.dart';
 import '../../favorites/domain/favorite_ref.dart';
 import '../../favorites/widgets/favorite_heart.dart';
+import '../../product_badges/product_badge.dart';
 
 /// Очиқ дўкон / Аҳоли бозори — 2 устунли товар плиткаси.
 class TvShopItemGridCard extends StatelessWidget {
@@ -84,6 +85,8 @@ class TvShopItemGridCard extends StatelessWidget {
                         ),
                       ),
                     if (cornerBadge.isNotEmpty) MarketCornerBadge(text: cornerBadge),
+                    // Белги (эга 2026-11-19): тепа чап, «Меники» бўлса — унинг остида.
+                    ProductBadgeOverlay(data: item.badge, top: showShopBadge ? 30 : 6),
                     if (locationLabel.isNotEmpty) MarketLocationPill(text: locationLabel),
                     FavoriteHeartOverlay(favorite: FavoriteRef.fromShopItem(item)),
                     if (photos > 1)

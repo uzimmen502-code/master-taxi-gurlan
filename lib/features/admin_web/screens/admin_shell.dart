@@ -37,6 +37,7 @@ import 'logistics_admin_screen.dart';
 import 'restaurants_admin_screen.dart';
 import 'business_orders_admin_screen.dart';
 import 'listing_moderation_screen.dart';
+import 'promo_moderation_screen.dart';
 import 'delivery_quotes_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
@@ -344,6 +345,14 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Эълонлар модерацияси',
       icon: Icons.fact_check_outlined,
       description: 'Аралаш/дўкон, Улгуржи, Хитой, Уй-жой, эски эълонлар — тасдиқлаш ёки рад этиш',
+      access: _SectionAccess.users,
+    ),
+    // Карточка белгиси (эга 2026-11-19): «−N%» сўровлари. Сервер dminModeratePromo — admin/superadmin.
+    _AdminSection(
+      group: 'Бозорлар ва эълонлар',
+      label: 'Чегирмалар модерацияси',
+      icon: Icons.local_offer_outlined,
+      description: 'Сотувчи сўраган «−N%» белгиларини тасдиқлаш ёки рад этиш',
       access: _SectionAccess.users,
     ),
     // «Бозорлар» STAGE 11 (эга 2026-11-16): йирик техника — етказиш нархини админ ёки курьер белгилайди.
@@ -678,6 +687,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Эълонлар модерацияси') {
       return const ListingModerationScreen();
+    }
+    if (section.label == 'Чегирмалар модерацияси') {
+      return const PromoModerationScreen();
     }
     if (section.label == 'Етказиш нархи сўровлари') {
       return const DeliveryQuotesAdminScreen();

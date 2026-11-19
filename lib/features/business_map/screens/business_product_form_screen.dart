@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../product_badges/product_promo_sheet.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -723,6 +724,8 @@ class _BusinessProductFormScreenState extends State<BusinessProductFormScreen> {
             ),
           ],
           _videoSection(),
+          // «Акция» (эга 2026-11-19): фақат сақланган товарда.
+          if (_isEdit) ProductPromoTile(collection: 'tv_shop_items', docId: widget.existing!.id),
           const SizedBox(height: 12),
           if (_error != null)
             Padding(

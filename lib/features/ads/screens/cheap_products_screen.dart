@@ -23,6 +23,7 @@ import '../../../repositories/realty_repository.dart';
 import '../../../repositories/search_index_repository.dart';
 import '../../../core/utils/formatters.dart';
 import '../../home/home_market_nav.dart';
+import '../../home/home_strip_mix.dart' show HomeShopFeed;
 import '../../markets/widgets/market_form_fields.dart' show marketShortBadge;
 import '../../my_shop/my_shop_entry.dart';
 import '../../realty/screens/realty_detail_screen.dart';
@@ -204,6 +205,10 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   @override
   void initState() {
     super.initState();
+    // Уй тасмаси аллақачон юклаган маҳсулотлар (бир хил `fetchForMarket` сўрови, 60 та) — дарҳол чизиш учун;
+    // 80 талик тўлиқ рўйхат келгач алмаштирилади (эга 2026-11-19, тезлик).
+    final cachedShop = HomeShopFeed.cachedItems();
+    if (cachedShop != null) _shopItems = cachedShop;
     unawaited(_loadPlatform());
     unawaited(_loadShopItems());
     unawaited(_loadChina());
@@ -554,13 +559,28 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
             child: StreamBuilder<List<AdModel>>(
               stream: _adsFor(repo),
               builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting &&
-                    !snap.hasData &&
-                    !snap.hasError) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  _logFirestoreError(snap.error!, snap.stackTrace);
+                // Эълонлар оқими бутун рўйхатни тўсмайди (эга 2026-11-19, тезлик): қайси манба аввал келса —
+                // шу кўрсатилади; эълонлар келгач қўшилади.
+                final adsWaiting =
+                    snap.connectionState == ConnectionState.waiting && !snap.hasData && !snap.hasError;
+                final platform = _filteredPlatform();
+                final shop = _filteredShop();
+                // Босилган Хитой маҳсулоти рўйхат юкланмасдан ҳам кўринсин.
+                final china = WholesaleProductsRepository.filterBySearch(_china, _query, limit: _china.length);
+                final ulgurji = WholesaleProductsRepository.filterBySearch(_ulgurji, _query, limit: _ulgurji.length);
+                final realty = _filteredRealty();
+                final others = platform.length + shop.length + china.length + ulgurji.length + realty.length;
+                if (snap.hasError) _logFirestoreError(snap.error!, snap.stackTrace);
+                // Эълонлар хатоси — бошқа манбалар бўлса улар кўрсатилади (хато логда).
+                final view = aralashListView(
+                  adsWaiting: adsWaiting,
+                  adsError: snap.hasError,
+                  ads: snap.data?.length ?? 0,
+                  others: others,
+                  platformLoaded: _platformLoaded,
+                  shopLoaded: _shopLoaded,
+                );
+                if (view == AralashListView.error) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -589,18 +609,12 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
                 final pinned = CatalogSearch.normalize(_query).isEmpty ? widget.pinnedAd : null;
                 final ads = withPinnedFirst(snap.data ?? const <AdModel>[], pinned, (a) => a.id);
-                final platform = _filteredPlatform();
-                final shop = _filteredShop();
-                // Босилган Хитой маҳсулоти рўйхат юкланмасдан ҳам кўринсин.
-                final china = WholesaleProductsRepository.filterBySearch(_china, _query, limit: _china.length);
-                final ulgurji = WholesaleProductsRepository.filterBySearch(_ulgurji, _query, limit: _ulgurji.length);
-                final realty = _filteredRealty();
-                final found = platform.length + ads.length + shop.length + china.length + ulgurji.length + realty.length;
+                final found = others + ads.length;
 
                 // Эълонлар келди, платформа/дўкон ҳали юкланяпти: бирорта ҳам
                 // карта йўқ бўлса «бўш» эмас — юкланиш (аввал учаласи
                 // кутилар эди; энди биринчи келган кўрсатилади).
-                if (found == 0 && (!_platformLoaded || !_shopLoaded)) {
+                if (view == AralashListView.loading && found == 0) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
@@ -815,4 +829,23 @@ class _MarketEntry {
 
   /// Улгуржи ёки Хитой бозори маҳсулоти (`market` майдони бўйича).
   final WholesaleProduct? wholesale;
+}
+
+/// Аралаш рўйхати ҳолати (эга 2026-11-19, тезлик): эълонлар оқими бутун рўйхатни тўсмайди — бирорта манбада
+/// элемент бўлса рўйхат; эълонлар хатоси фақат бошқа ҳеч нарса бўлмаса кўрсатилади; ҳали келмаган манба бўлса —
+/// юкланиш; акс ҳолда бўш.
+enum AralashListView { loading, error, empty, list }
+
+AralashListView aralashListView({
+  required bool adsWaiting,
+  required bool adsError,
+  required int ads,
+  required int others,
+  required bool platformLoaded,
+  required bool shopLoaded,
+}) {
+  if (adsError && others == 0) return AralashListView.error;
+  if (ads + others > 0) return AralashListView.list;
+  if (adsWaiting || !platformLoaded || !shopLoaded) return AralashListView.loading;
+  return AralashListView.empty;
 }

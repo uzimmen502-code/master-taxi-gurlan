@@ -1,4 +1,5 @@
 import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
+import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
 import 'package:ava_gurlan/features/tv_market/services/tv_publish_rules.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -98,6 +99,27 @@ void main() {
       expect(withPost({'consent': {'basis': 'explicit', 'version': 1}}).socialConsentBasis, 'explicit');
       expect(withPost({'status': 'posting'}).socialConsentBasis, '');
       expect(withPost(const {}).socialConsentBasis, '');
+    });
+  });
+
+  group('pickableItems — формадан янги (pending) товарга видео (2026-11-19)', () {
+    TvShopItem it(String id, String status, {String kind = 'product'}) => TvShopItem(
+        id: id, ownerPhone: '998901111111', ownerName: 'O', title: 'T$id', price: 1, photoUrl: '', kind: kind,
+        districtId: 'gurlan', districtLabel: '', status: status);
+    final all = [it('a', 'active'), it('p', 'pending', kind: 'service'), it('q', 'pending'), it('d', 'deleted'),
+      it('b', 'blocked'), it('e', 'expired')];
+    List<String> ids(String attach) => [for (final i in TvPublishRules.pickableItems(all, attach)) i.id];
+
+    test('боғланган pending товар рўйхатда (бошқа pending — йўқ)', () {
+      expect(ids('p'), ['a', 'p']);
+    });
+    test('боғланмаган — фақат фаол', () {
+      expect(ids(''), ['a']);
+    });
+    test('ўчирилган/блокланган боғланса ҳам қўшилмайди; expired — қўшилади', () {
+      expect(ids('d'), ['a']);
+      expect(ids('b'), ['a']);
+      expect(ids('e'), ['a', 'e']);
     });
   });
 }

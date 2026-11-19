@@ -1,3 +1,4 @@
+import '../models/tv_shop.dart';
 import 'tv_social.dart';
 
 /// Видео жойлаш экрани ([TvPublishScreen]) қоидалари — СОФ мантиқ (тестланади).
@@ -68,4 +69,13 @@ abstract final class TvPublishRules {
   static int socialConsentVersion(Set<String> networks) => networks.contains(TvSocial.sellerTelegram)
       ? TvSocial.sellerChannelConsentVersion
       : TvSocial.consentVersion;
+
+  /// «Мавжуд товар» рўйхати: фаол товарлар + боғланаётган ([attachItemId]) ЎЗ товари, у ҳали `pending` (ёки
+  /// бошқа фаол бўлмаган ҳолатда) бўлса ҳам — формада янги қўшилган маҳсулот текширувда (2026-11-19 bug: prefill
+  /// бўлмасди, тур `product`да қоларди). Ўчирилган/блокланган — қўшилмайди.
+  static List<TvShopItem> pickableItems(Iterable<TvShopItem> items, String attachItemId) => [
+        for (final i in items)
+          if (i.isActive || (attachItemId.isNotEmpty && i.id == attachItemId && i.status != 'deleted' && !i.isBlocked))
+            i,
+      ];
 }

@@ -139,3 +139,75 @@ final Map<String, dynamic> kTaxonomyDocV3 = {
 };
 
 MarketTaxonomy get kTaxonomyV3 => MarketTaxonomy.fromMap(kTaxonomyDocV3);
+
+/// v5 (эга 2026-11-19, functions/tools/data/market_taxonomy_v5.json): v3 + Мол бозори 5 бўлим (cattle, sheep_goat,
+/// horse, poultry, other; `all` йўқ — эски эълонлар `all` да қолади), Мошина бўлим номлари («Авто», «Махсус
+/// техникалар») + model/fuel, Электроника/Маиший техникага каробка ўлчамлари (box_w_cm/box_l_cm/box_h_cm 1..1000).
+Map<String, dynamic> _boxField(String key, String c, String l, String r) =>
+    {'key': key, 'type': 'int', 'min': 1, 'max': 1000, 'names': _n(c, l, r)};
+
+final List<Map<String, dynamic>> _techFieldsV5 = [
+  {'key': 'brand', 'type': 'text', 'maxLen': 40, 'names': _n('Марка', 'Marka', 'Марка')},
+  {'key': 'model', 'type': 'text', 'maxLen': 60, 'names': _n('Модель', 'Model', 'Модель')},
+  {
+    'key': 'condition',
+    'type': 'select',
+    'names': _n('Ҳолати', 'Holati', 'Состояние'),
+    'options': [
+      {'id': 'new', 'names': _n('Янги', 'Yangi', 'Новый')},
+      {'id': 'used', 'names': _n('Ишлатилган', 'Ishlatilgan', 'Б/у')},
+    ],
+  },
+  _boxField('box_w_cm', 'Эни', 'Eni', 'Ширина'),
+  _boxField('box_l_cm', 'Узунлиги', 'Uzunligi', 'Длина'),
+  _boxField('box_h_cm', 'Баландлиги', 'Balandligi', 'Высота'),
+];
+
+final Map<String, dynamic> kTaxonomyDocV5 = () {
+  final markets = <String, dynamic>{...(kTaxonomyDocV3['markets'] as Map<String, dynamic>)};
+  final livestock = Map<String, dynamic>.of(markets['livestock'] as Map<String, dynamic>);
+  livestock['categories'] = [
+    {'id': 'cattle', 'names': _n('Қорамол', 'Qoramol', 'КРС'), 'showInNearbyAds': true},
+    {'id': 'sheep_goat', 'names': _n('Қўй-эчки', "Qo'y-echki", 'Овцы и козы'), 'showInNearbyAds': true},
+    {'id': 'horse', 'names': _n('От', 'Ot', 'Лошади'), 'showInNearbyAds': true},
+    {'id': 'poultry', 'names': _n('Парранда', 'Parranda', 'Птица'), 'showInNearbyAds': true},
+    {'id': 'other', 'names': _n('Бошқа', 'Boshqa', 'Другое'), 'showInNearbyAds': true},
+  ];
+  final auto = Map<String, dynamic>.of(markets['auto'] as Map<String, dynamic>);
+  auto['categories'] = [
+    {'id': 'cars', 'names': _n('Авто', 'Avto', 'Авто')},
+    {'id': 'moto', 'names': _n('Мото', 'Moto', 'Мото')},
+    {'id': 'tech', 'names': _n('Махсус техникалар', 'Maxsus texnikalar', 'Спецтехника')},
+    {'id': 'parts', 'names': _n('Эҳтиёт қисмлар', 'Ehtiyot qismlar', 'Запчасти'), 'orderable': true},
+  ];
+  const vehicle = ['cars', 'moto', 'tech'];
+  auto['fields'] = [
+    {'key': 'brand', 'type': 'text', 'maxLen': 40, 'names': _n('Марка', 'Marka', 'Марка'), 'categories': vehicle},
+    {'key': 'model', 'type': 'text', 'maxLen': 40, 'names': _n('Модель', 'Model', 'Модель'), 'categories': vehicle},
+    {'key': 'year', 'type': 'int', 'min': 1950, 'max': 2100, 'names': _n('Йили', 'Yili', 'Год'), 'categories': vehicle},
+    {
+      'key': 'fuel',
+      'type': 'select',
+      'names': _n('Ёқилғи', "Yoqilg'i", 'Топливо'),
+      'categories': vehicle,
+      'options': [
+        for (final id in ['petrol', 'methane', 'propane', 'diesel', 'electric', 'hybrid']) {'id': id, 'names': _n(id)},
+      ],
+    },
+    {'key': 'fits_car', 'type': 'text', 'maxLen': 80, 'names': _n('Қайси машинага'), 'categories': ['parts']},
+  ];
+  final electronics = Map<String, dynamic>.of(markets['electronics'] as Map<String, dynamic>)..['fields'] = _techFieldsV5;
+  final appliances = Map<String, dynamic>.of(markets['appliances'] as Map<String, dynamic>)..['fields'] = _techFieldsV5;
+  return <String, dynamic>{
+    'version': 5,
+    'markets': {
+      ...markets,
+      'livestock': livestock,
+      'auto': auto,
+      'electronics': electronics,
+      'appliances': appliances,
+    },
+  };
+}();
+
+MarketTaxonomy get kTaxonomyV5 => MarketTaxonomy.fromMap(kTaxonomyDocV5);

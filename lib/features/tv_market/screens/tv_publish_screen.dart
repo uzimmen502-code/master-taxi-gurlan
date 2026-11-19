@@ -313,7 +313,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       setState(() {
         _districtPreview = geo.districtLabel;
         _districtPreviewId = geo.districtId;
-        _myItems = items.where((i) => i.isActive).toList();
+        // Боғланаётган ўз товари `pending` бўлса ҳам рўйхатда (prefill ва тур шундан; 2026-11-19).
+        _myItems = TvPublishRules.pickableItems(items, _attachItemId);
         // Дўкон блоки яширин бўлса (боғланган видео) режим ҳам ёқилмайди.
         if (exists && !widget.hideShopOption) _openShop = true;
         if (_attachItemId.isNotEmpty) _openShop = true;
@@ -1296,7 +1297,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         subtitle: Text(context.tr('tv_shop_open_hint')),
       ),
       if (shopOn) ...[
-        if (_myItems.isNotEmpty) ...[
+        // Боғланган товар рўйхатда топилмаса (масалан эски саҳифадан ташқарида) — Dropdown қиймати рўйхатда
+        // бўлмаслиги assert'га олиб келарди; танлов кўрсатилмайди, боғланиш ўзи сақланади.
+        if (_myItems.isNotEmpty && (_attachItemId.isEmpty || _myItems.any((e) => e.id == _attachItemId))) ...[
           const SizedBox(height: 8),
           Text(
             context.tr('tv_shop_existing_item'),

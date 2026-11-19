@@ -414,11 +414,11 @@ void main() {
       expect(find.text('Нон'), findsNothing);
       expect(find.text('bizprod_empty'), findsOneWidget);
     });
-    testWidgets('қўшиш тугмаси форма экранини очади (дўкон — «Янги маҳсулот»)', (tester) async {
+    testWidgets('қўшиш тугмаси форма экранини очади (дўкон — «Майдонларни тўлдиринг»)', (tester) async {
       await _pump(tester, BusinessProductsScreen(business: _biz(), repository: _FakeShop()));
       await tester.tap(find.byKey(const ValueKey('bizprod_fab')));
       await tester.pumpAndSettle();
-      expect(find.text('bizprod_new_product'), findsOneWidget);
+      expect(find.text('bizprod_fill_fields'), findsOneWidget);
     });
   });
 
@@ -434,7 +434,7 @@ void main() {
       expect(sellsOnlyProducts(_biz(c: BusinessCategory.food)), isFalse, reason: 'кафе — объект, дўкон эмас');
     });
 
-    testWidgets('чакана дўкон: «Маҳсулот/Хизмат» танлови йўқ, сарлавҳа «Янги маҳсулот», сақланган тур — маҳсулот', (tester) async {
+    testWidgets('чакана дўкон: «Маҳсулот/Хизмат» танлови йўқ, сарлавҳа «Майдонларни тўлдиринг» (эга 2026-11-19), сақланган тур — маҳсулот', (tester) async {
       final shop = _FakeShop();
       await _pump(
         tester,
@@ -449,7 +449,7 @@ void main() {
       );
       expect(find.byKey(const ValueKey('bizprod_kind')), findsNothing);
       expect(find.text('bizprod_kind_service'), findsNothing);
-      expect(find.text('bizprod_new_product'), findsOneWidget);
+      expect(find.text('bizprod_fill_fields'), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('bizprod_name')), 'Tilla');
       await tester.tap(find.byKey(const ValueKey('bizprod_add_photos')));
       await tester.pumpAndSettle();

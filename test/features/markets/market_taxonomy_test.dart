@@ -1,5 +1,8 @@
 // «Бозорлар» 5+6: таксономия модели, динамик майдон текшируви, attrs сериализацияси, карточка қатори,
 // сўров филтрлари (count/ring), туман → вилоят.
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:ava_gurlan/core/geo/geo_context.dart';
 import 'package:ava_gurlan/core/service_config_holder.dart';
 import 'package:ava_gurlan/features/markets/data/market_listings_source.dart';
@@ -261,6 +264,105 @@ void main() {
       expect(identical(await a, await b), isTrue);
       await MarketTaxonomyRepository.load();
       expect(reads, 2);
+    });
+  });
+
+  // Эга 2026-11-19: ёш «йил + ой», мошина сарлавҳаси, каробка ўлчамлари, «Ўз автомобилим», v5 таксономия.
+  group('2026-11-19', () {
+    String Function(String) trOf(String lang) {
+      final m = jsonDecode(File('assets/lang/$lang.json').readAsStringSync()) as Map<String, dynamic>;
+      return (k) => (m[k] as String?) ?? k;
+    }
+
+    final cyr = trOf('uz_Cyrl'), lat = trOf('uz_Latn'), ru = trOf('ru');
+
+    test('formatAgeMonths: «1 йилу 7 ойлик», «2 ёшли», «7 ойлик» (3 тил)', () {
+      expect(formatAgeMonths(19, cyr), '1 йилу 7 ойлик');
+      expect(formatAgeMonths(24, cyr), '2 ёшли');
+      expect(formatAgeMonths(7, cyr), '7 ойлик');
+      expect(formatAgeMonths(19, lat), '1 yilu 7 oylik');
+      expect(formatAgeMonths(24, lat), '2 yoshli');
+      expect(formatAgeMonths(7, lat), '7 oylik');
+      expect(formatAgeMonths(19, ru), '1 год 7 мес.');
+      expect(formatAgeMonths(7, ru), '7 мес.');
+    });
+
+    test('formatAgeMonths: рус кўплиги 1 год · 2–4 года · 5+ лет · 11–14 лет · 21 год; чегаралар', () {
+      expect(formatAgeMonths(12, ru), '1 год');
+      expect(formatAgeMonths(24, ru), '2 года');
+      expect(formatAgeMonths(48, ru), '4 года');
+      expect(formatAgeMonths(60, ru), '5 лет');
+      expect(formatAgeMonths(11 * 12, ru), '11 лет');
+      expect(formatAgeMonths(14 * 12 + 3, ru), '14 лет 3 мес.');
+      expect(formatAgeMonths(21 * 12, ru), '21 год');
+      expect(formatAgeMonths(22 * 12 + 1, ru), '22 года 1 мес.');
+      expect(formatAgeMonths(0, cyr), '0 ойлик');
+      expect(formatAgeMonths(11, cyr), '11 ойлик');
+      expect(formatAgeMonths(-1, cyr), '');
+    });
+
+    test('карточка/детал: ёш махсус кўриниш; tr берилмаса — аввалги', () {
+      final v5 = kTaxonomyV5.market('livestock')!;
+      expect(marketAttrsLine(v5, 'cattle', {'breed': 'Ҳисори', 'age_months': 19}, 'uz_Cyrl', tr: cyr),
+          'Зоти: Ҳисори · 1 йилу 7 ойлик');
+      expect(marketAttrRows(v5, 'cattle', {'age_months': 24}, 'ru', yes: 'Да', tr: ru), [('Возраст (лет, мес.)', '2 года')]);
+      expect(marketAttrsLine(v5, 'cattle', {'age_months': 19}, 'uz_Cyrl'), 'Ёши (ой): 19');
+    });
+
+    test('каробка: детал «40 × 30 × 25 см» битта қатор; қисман — кўрсатилмайди', () {
+      final el = kTaxonomyV5.market('electronics')!;
+      final full = {'brand': 'Samsung', 'box_w_cm': 40, 'box_l_cm': 30, 'box_h_cm': 25};
+      expect(marketAttrRows(el, 'phones', full, 'uz_Cyrl', yes: 'Ҳа', tr: cyr),
+          [('Марка', 'Samsung'), ('Каробка ўлчамлари', '40 × 30 × 25 см')]);
+      expect(marketAttrRows(el, 'phones', full, 'uz_Latn', yes: 'Ha', tr: lat).last, ("Karobka o'lchamlari", '40 × 30 × 25 sm'));
+      expect(marketAttrRows(el, 'phones', {'box_w_cm': 40, 'box_l_cm': 30}, 'ru', yes: 'Да', tr: ru), isEmpty);
+      expect(marketAttrsLine(el, 'phones', full, 'ru', tr: ru), 'Марка: Samsung · 40 × 30 × 25 см');
+    });
+
+    test('validateAttrs: каробка ё учаласи, ё ҳеч бири (incomplete); v4 да қоида йўқ', () {
+      final el = kTaxonomyV5.market('electronics')!;
+      expect(validateAttrs(el, 'phones', const {}), isEmpty);
+      expect(validateAttrs(el, 'phones', {'box_w_cm': '40', 'box_l_cm': '30', 'box_h_cm': '25'}), isEmpty);
+      expect(validateAttrs(el, 'phones', {'box_w_cm': '40'}),
+          {'box_l_cm': MarketFieldError.incomplete, 'box_h_cm': MarketFieldError.incomplete});
+      expect(validateAttrs(el, 'phones', {'box_w_cm': '0', 'box_l_cm': '1', 'box_h_cm': '1000'}),
+          {'box_w_cm': MarketFieldError.min});
+      expect(hasBoxDims(el.fields), isTrue);
+      expect(hasBoxDims(kTaxonomyV3.market('electronics')!.fields), isFalse);
+    });
+
+    test('composeAutoTitle / autoBrandModelValid', () {
+      expect(composeAutoTitle(brand: ' Chevrolet ', model: 'Cobalt', year: '2021'), 'Chevrolet Cobalt 2021');
+      expect(composeAutoTitle(brand: 'Lada', model: '', year: ''), 'Lada');
+      expect(composeAutoTitle(brand: 'Kia  Motors', model: 'K5', year: null), 'Kia Motors K5');
+      expect(autoBrandModelValid('', ''), isFalse);
+      expect(autoBrandModelValid('A', ' '), isFalse);
+      expect(autoBrandModelValid('A', 'B'), isTrue);
+      expect(autoBrandModelValid('', 'K5'), isTrue);
+    });
+
+    test('ownCarFormValues: марка/модель/йил/ёқилғи; cng→methane, petrol; номаълум ёқилғи — ёзилмайди', () {
+      final auto = kTaxonomyV5.market('auto')!;
+      expect(
+          ownCarFormValues(auto, 'cars',
+              {'carBrand': 'Chevrolet', 'carModel': 'Cobalt', 'carYear': '2021', 'carFuelType': 'cng'}),
+          {'brand': 'Chevrolet', 'model': 'Cobalt', 'year': '2021', 'fuel': 'methane'});
+      expect(ownCarFormValues(auto, 'cars', {'carModel': 'Nexia', 'carFuelType': 'petrol'}),
+          {'model': 'Nexia', 'fuel': 'petrol'});
+      expect(ownCarFormValues(auto, 'cars', {'carBrand': 'X', 'carYear': '', 'carFuelType': 'kerosene'}), {'brand': 'X'});
+      expect(ownCarFormValues(auto, 'parts', {'carBrand': 'X'}), isEmpty, reason: 'эҳтиёт қисмда марка майдони йўқ');
+    });
+
+    test('v5 таксономия: Мол 5 бўлим (all йўқ), Мошина номлари, v4 мослиги', () {
+      final v5 = kTaxonomyV5;
+      expect([for (final c in v5.market('livestock')!.categories) c.id], ['cattle', 'sheep_goat', 'horse', 'poultry', 'other']);
+      expect(v5.market('livestock')!.hasCategoryChoice, isTrue);
+      expect(v5.market('auto')!.category('cars')!.label('uz_Cyrl'), 'Авто');
+      expect(v5.market('auto')!.category('tech')!.label('ru'), 'Спецтехника');
+      // v4/v1: Мол битта бўлим (`all`) — аввалгидек.
+      expect(livestock.autoCategory, 'all');
+      // Эски `all` эълони v5 карточкасида майдонлари билан кўринади (бўлим чекловисиз майдонлар).
+      expect(marketAttrsLine(v5.market('livestock')!, 'all', {'breed': 'Ҳисори'}, 'uz_Cyrl'), 'Зоти: Ҳисори');
     });
   });
 }

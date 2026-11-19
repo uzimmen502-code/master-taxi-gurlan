@@ -49,7 +49,10 @@ void main() {
     test('бўш рўйхат -> all', () => expect(TvFeedCdn.tabFor([]), 'all'));
     test("['news'] -> news",
         () => expect(TvFeedCdn.tabFor(['news']), 'news'));
-    test("['product','service','ad'] -> market", () {
+    test("['ad'] -> market (эга 2026-11-19: фақат пуллик реклама)", () {
+      expect(TvFeedCdn.tabFor(['ad']), 'market');
+    });
+    test("['product','service','ad'] (эски) -> market", () {
       expect(TvFeedCdn.tabFor(['product', 'service', 'ad']), 'market');
     });
     test('нотаниш комбинация -> null (CDN’да ҳовуз йўқ)', () {

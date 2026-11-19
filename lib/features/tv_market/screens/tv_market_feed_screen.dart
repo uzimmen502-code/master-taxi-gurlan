@@ -214,7 +214,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       case 1:
         return const ['news'];
       case 2:
-        return const ['product', 'service', 'ad'];
+        // Эга 2026-11-19: «Реклама ва Эълонлар» — ФАҚАТ пуллик реклама (аввал product/service/ad).
+        // Мавжуд индекслар (`category` whereIn билан) шу сўровни ҳам қоплайди.
+        return const ['ad'];
       default:
         return null;
     }

@@ -97,21 +97,21 @@ void main() {
       }
     });
 
-    test('Реклама ва Эълонлар (2, пуллик режим): эски товар/хизмат, эски ҳужжат, реклама — бор; янгилик йўқ', () {
-      for (final c in [old, legacy, ad]) {
-        expect(tvClipInFeedTab(c, kTvTabMarket, now), isTrue, reason: c.id);
+    test('Реклама ва Эълонлар (2): ФАҚАТ пуллик реклама — органик товар/хизмат (янги, эски, эски ҳужжат) ва янгилик йўқ', () {
+      expect(tvClipInFeedTab(ad, kTvTabMarket, now), isTrue);
+      expect(tvClipInFeedTab(_clip('ad_old', category: 'ad', activatedAt: ago(h * 30)), kTvTabMarket, now), isTrue);
+      for (final c in [fresh, old, legacy, news]) {
+        expect(tvClipInFeedTab(c, kTvTabMarket, now), isFalse, reason: c.id);
       }
-      expect(tvClipInFeedTab(news, kTvTabMarket, now), isFalse);
     });
 
-    test('Реклама ва Эълонлар (2): ЯНГИ органик товар/хизмат 24 соат йўқ (23:59 йўқ, 24:00/24:01 бор)', () {
-      expect(tvClipInFeedTab(fresh, kTvTabMarket, now), isFalse);
+    test('24 соатдан кейин органик клип фақат AVAGram табида (2-табда ҳам, янгиликларда ҳам йўқ)', () {
       Duration d(int hh, int mm) => Duration(hours: hh, minutes: mm);
-      expect(tvClipInFeedTab(_clip('s1', category: 'service', activatedAt: ago(d(23, 59))), kTvTabMarket, now), isFalse);
-      expect(tvClipInFeedTab(_clip('s2', category: 'service', activatedAt: ago(d(24, 0))), kTvTabMarket, now), isTrue);
-      expect(tvClipInFeedTab(_clip('s3', category: 'service', activatedAt: ago(d(24, 1))), kTvTabMarket, now), isTrue);
-      expect(tvClipInFeedTab(_clip('ad2', category: 'ad', activatedAt: ago(m)), kTvTabMarket, now), isTrue,
-          reason: 'пуллик реклама 1-дақиқадан кўринади');
+      for (final age in [d(23, 59), d(24, 0), d(24, 1)]) {
+        expect(tvClipInFeedTab(_clip('s', category: 'service', activatedAt: ago(age)), kTvTabMarket, now), isFalse);
+      }
+      final after = _clip('s3', category: 'service', activatedAt: ago(d(24, 1)));
+      expect(tvClipInFeedTab(after, kTvTabAll, now) && !tvClipInFeedTab(after, kTvTabNews, now), isTrue);
     });
 
     test("24 соат ўтгач товар янгиликлардан AVAGram'га ўтади (23:59 / 24:01)", () {

@@ -43,9 +43,9 @@ function testTabs() {
   check('news tabi faqat news',
       clipMatchesTab(clip('news'), FEED_TABS.news) &&
       !clipMatchesTab(clip('product'), FEED_TABS.news));
-  check('market tabi product/service/ad',
-      clipMatchesTab(clip('product'), FEED_TABS.market) &&
-      clipMatchesTab(clip('service'), FEED_TABS.market) &&
+  check('market tabi faqat ad (ega 2026-11-19: pullik reklama)',
+      !clipMatchesTab(clip('product'), FEED_TABS.market) &&
+      !clipMatchesTab(clip('service'), FEED_TABS.market) &&
       clipMatchesTab(clip('ad'), FEED_TABS.market) &&
       !clipMatchesTab(clip('news'), FEED_TABS.market));
   check('kategoriyasiz klip market tabiga tushmaydi',
@@ -121,7 +121,7 @@ function testPages() {
 }
 
 // Эга қарори 2026-11-19: янги товар/хизмат 24 соат фақат «Кун янгиликлари»
-// ҳовузида; AVAGram (all) ҳовузида йўқ; market ўзгармайди.
+// ҳовузида; AVAGram (all) ҳовузида йўқ; market — фақат пуллик реклама.
 function testNewsWindowPools() {
   const H = 3600 * 1000;
   const now = 1800000000000;
@@ -147,8 +147,8 @@ function testNewsWindowPools() {
       JSON.stringify(ids('all')) === '["legacy","ad","news","old"]');
   check('news: янгилик + янги товар, чиққан вақт бўйича',
       JSON.stringify(ids('news')) === '["news","fresh"]');
-  check('market (пуллик режим): янги товарсиз (эга 2026-11-19)',
-      JSON.stringify(ids('market')) === '["legacy","ad","old"]');
+  check('market: фақат пуллик реклама (эга 2026-11-19)',
+      JSON.stringify(ids('market')) === '["ad"]');
 }
 
 function main() {

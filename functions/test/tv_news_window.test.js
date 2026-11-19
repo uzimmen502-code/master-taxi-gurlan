@@ -114,14 +114,17 @@ function testTabs() {
   check('T6 news: эски товар, реклама, activatedAt йўқ — йўқ',
       !clipInFeedTab(old, 'news', NOW) && !clipInFeedTab(ad, 'news', NOW) &&
       !clipInFeedTab(legacy, 'news', NOW));
-  check('T7 market (пуллик режим): эски товар/хизмат, activatedAt йўқ, реклама — бор; янгилик йўқ',
-      clipInFeedTab(old, 'market', NOW) && clipInFeedTab(legacy, 'market', NOW) &&
+  check('T7 market (фақат пуллик реклама, эга 2026-11-19): реклама бор, янгилик йўқ',
       clipInFeedTab(ad, 'market', NOW) && !clipInFeedTab(news, 'market', NOW));
-  check('T7b market: ЯНГИ товар 24 соат ЙЎҚ (эга 2026-11-19)', clipInFeedTab(fresh, 'market', NOW) === false);
+  check('T7b market: органик товар/хизмат ҲЕЧ ҚАЧОН (янги, эски, activatedAt йўқ)',
+      !clipInFeedTab(fresh, 'market', NOW) && !clipInFeedTab(old, 'market', NOW) &&
+      !clipInFeedTab(legacy, 'market', NOW));
   const edge = (age) => ({category: 'service', status: 'active', activatedAt: ts(NOW - age)});
-  check('T7c market чегара: 23:59 йўқ, 24:00 ва 24:01 бор',
-      !clipInFeedTab(edge(24 * H - M), 'market', NOW) && clipInFeedTab(edge(24 * H), 'market', NOW) &&
-      clipInFeedTab(edge(24 * H + M), 'market', NOW));
+  check('T7c market: 23:59 / 24:01 ҳам йўқ; 24 соатдан кейин фақат AVAGram',
+      !clipInFeedTab(edge(24 * H - M), 'market', NOW) && !clipInFeedTab(edge(24 * H + M), 'market', NOW) &&
+      clipInFeedTab(edge(24 * H + M), 'all', NOW) && !clipInFeedTab(edge(24 * H + M), 'news', NOW));
+  check('T7d эски реклама (25 соат) ҳам market\'да',
+      clipInFeedTab({category: 'ad', status: 'active', activatedAt: ts(NOW - 25 * H)}, 'market', NOW));
   check('T8 нотаниш таб — false', clipInFeedTab(old, 'zzz', NOW) === false);
 }
 

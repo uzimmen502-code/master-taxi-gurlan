@@ -4371,9 +4371,11 @@ service cloud.firestore {
                   // Видео устидаги «жойланган сана» (эга, 2026-11-02) — фақат
                   // сервер вақти. Ilova 2026-08-15'dan beri serverTimestamp() yozadi.
                   && request.resource.data.createdAt == request.time
+                  // `activatedAt` (эга 2026-11-19) — фаоллашув вақти, «Кун янгиликлари»
+                  // 24 соати шундан; фақат сервер (`onTvClipSocialPublish`) ёзади.
                   && !request.resource.data.keys().hasAny([
                       'socialPost', 'socialPostedAt', 'socialRetryAt',
-                      'socialVideoUrl', 'socialNoticeVersion'])
+                      'socialVideoUrl', 'socialNoticeVersion', 'activatedAt'])
                   && tvClipSocialConsentOk(request.resource.data)
                   && tvClipOwnMediaOk(request.resource.data)
                   && !request.resource.data.keys().hasAny(tvClipServerMediaKeys())
@@ -4396,7 +4398,7 @@ service cloud.firestore {
                            'regionId', 'status', 'rejectReason',
                            'socialPost', 'socialPostedAt', 'socialRetryAt',
                            'socialVideoUrl', 'socialConsentAt',
-                           'socialConsentVersion', 'socialNoticeVersion'])
+                           'socialConsentVersion', 'socialNoticeVersion', 'activatedAt'])
               && !request.resource.data.diff(resource.data).affectedKeys()
                   .hasAny(tvClipServerMediaKeys().concat(['likeCount', 'viewCount',
                            'commentCount', 'playbackStats']))

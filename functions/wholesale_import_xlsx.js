@@ -140,7 +140,7 @@ async function buildTemplate(market) {
     { header: 'Устун / Ustun / Колонка', key: 'col', width: 34 },
     { header: 'Мажбурий / Majburiy / Обязательно', key: 'req', width: 14 },
     { header: 'Ўзбекча (кирилл)', key: 'cyr', width: 50 },
-    { header: "O'zbekcha (lotin)", key: 'lat', width: 50 },
+    { header: 'Özbekça (lotin)', key: 'lat', width: 50 },
     { header: 'Русский', key: 'ru', width: 50 },
   ];
   help.getRow(1).font = { bold: true };
@@ -149,10 +149,10 @@ async function buildTemplate(market) {
   }
   help.addRow({});
   const notes = [
-    ['«#» билан бошланган артикул — намуна, юкланмайди.', "«#» bilan boshlangan artikul — namuna, yuklanmaydi.", 'Артикул, начинающийся с «#», — образец, не загружается.'],
+    ['«#» билан бошланган артикул — намуна, юкланмайди.', "«#» bilan boşlangan artikul — namuna, yuklanmaydi.", 'Артикул, начинающийся с «#», — образец, не загружается.'],
     [`Бир файлда ≤ ${R.LIMITS.maxRows} қатор, ≤ 5 МБ; кунига ≤ ${R.LIMITS.maxUploadsPerDay} марта.`, `Bir faylda ≤ ${R.LIMITS.maxRows} qator, ≤ 5 MB; kuniga ≤ ${R.LIMITS.maxUploadsPerDay} marta.`, `В файле ≤ ${R.LIMITS.maxRows} строк, ≤ 5 МБ; ≤ ${R.LIMITS.maxUploadsPerDay} загрузок в день.`],
-    ['Шу артикул билан қайта юкласангиз — товар янгиланади ва қайта текширувга тушади.', "Shu artikul bilan qayta yuklasangiz — tovar yangilanadi va qayta tekshiruvga tushadi.", 'Повторная загрузка с тем же артикулом обновит товар и отправит его на повторную проверку.'],
-    ['Расм ҳаволаси очиқ бўлсин (JPG/PNG/WebP, ≤ 10 МБ).', "Rasm havolasi ochiq bo'lsin (JPG/PNG/WebP, ≤ 10 MB).", 'Ссылка на фото должна быть открытой (JPG/PNG/WebP, ≤ 10 МБ).'],
+    ['Шу артикул билан қайта юкласангиз — товар янгиланади ва қайта текширувга тушади.', "Şu artikul bilan qayta yuklasangiz — tovar yangilanadi va qayta tekşiruvga tuşadi.", 'Повторная загрузка с тем же артикулом обновит товар и отправит его на повторную проверку.'],
+    ['Расм ҳаволаси очиқ бўлсин (JPG/PNG/WebP, ≤ 10 МБ).', "Rasm havolasi oçiq bölsin (JPG/PNG/WebP, ≤ 10 MB).", 'Ссылка на фото должна быть открытой (JPG/PNG/WebP, ≤ 10 МБ).'],
   ];
   for (const n of notes) help.addRow({ col: '', req: '', cyr: n[0], lat: n[1], ru: n[2] });
   help.getColumn('cyr').alignment = { wrapText: true };

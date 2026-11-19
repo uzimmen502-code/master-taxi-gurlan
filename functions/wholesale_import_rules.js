@@ -45,7 +45,7 @@ const MARKETS = Object.freeze(['wholesale', 'china']);
 
 /** Хитой валютаси: Excel'даги ёзув → модел қиймати ('' = сўм). */
 const CURRENCY_ALIASES = Object.freeze({
-  '': '', uzs: '', sum: '', "so'm": '', 'сўм': '', 'сум': '', som: '',
+  '': '', uzs: '', sum: '', "so'm": '', 'söm': '', 'сўм': '', 'сум': '', som: '',
   usd: '$', $: '$', dollar: '$', 'доллар': '$',
   cny: '¥', rmb: '¥', '¥': '¥', yuan: '¥', 'юань': '¥',
 });
@@ -54,7 +54,7 @@ const CURRENCY_ALIASES = Object.freeze({
 const IMAGE_KEYS = Object.freeze(Array.from({ length: LIMITS.maxImages }, (_, i) => `image_${i + 1}`));
 const COLUMNS = Object.freeze([
   { key: 'sku', required: true, h: ['Артикул (SKU)', 'Artikul (SKU)', 'Артикул (SKU)'],
-    help: ['Сизнинг товар кодингиз. Қайта юкласангиз шу код бўйича янгиланади.', 'Sizning tovar kodingiz. Qayta yuklasangiz shu kod bo\'yicha yangilanadi.', 'Ваш код товара. При повторной загрузке товар обновится по этому коду.'] },
+    help: ['Сизнинг товар кодингиз. Қайта юкласангиз шу код бўйича янгиланади.', 'Sizning tovar kodingiz. Qayta yuklasangiz şu kod böyiça yangilanadi.', 'Ваш код товара. При повторной загрузке товар обновится по этому коду.'] },
   { key: 'title', required: true, h: ['Номи', 'Nomi', 'Название'],
     help: ['3–120 белги', '3–120 belgi', '3–120 символов'] },
   { key: 'description', required: true, h: ['Тавсиф', 'Tavsif', 'Описание'],
@@ -62,18 +62,18 @@ const COLUMNS = Object.freeze([
   { key: 'price', required: true, h: ['Нарх', 'Narx', 'Цена'],
     help: ['Бутун сон, 0 дан катта (1 бирлик нархи)', 'Butun son, 0 dan katta (1 birlik narxi)', 'Целое число больше 0 (цена за 1 единицу)'] },
   { key: 'currency', markets: ['china'], h: ['Валюта', 'Valyuta', 'Валюта'],
-    help: ['USD, CNY ёки бўш (сўм)', 'USD, CNY yoki bo\'sh (so\'m)', 'USD, CNY или пусто (сум)'] },
+    help: ['USD, CNY ёки бўш (сўм)', 'USD, CNY yoki böş (söm)', 'USD, CNY или пусто (сум)'] },
   { key: 'unit', h: ['Бирлик', 'Birlik', 'Единица'],
-    help: ['Масалан: дона, кг, қоп. Бўш — дона', 'Masalan: dona, kg, qop. Bo\'sh — dona', 'Например: шт, кг, мешок. Пусто — штука'] },
+    help: ['Масалан: дона, кг, қоп. Бўш — дона', 'Masalan: dona, kg, qop. Böş — dona', 'Например: шт, кг, мешок. Пусто — штука'] },
   { key: 'moq', h: ['Минимал буюртма', 'Minimal buyurtma', 'Минимальный заказ'],
-    help: ['Бутун сон 1–1 000 000. Бўш — 1', 'Butun son 1–1 000 000. Bo\'sh — 1', 'Целое 1–1 000 000. Пусто — 1'] },
+    help: ['Бутун сон 1–1 000 000. Бўш — 1', 'Butun son 1–1 000 000. Böş — 1', 'Целое 1–1 000 000. Пусто — 1'] },
   { key: 'weight_kg', h: ['Вазн, кг (1 бирлик)', 'Vazn, kg (1 birlik)', 'Вес, кг (1 единица)'],
-    help: ['Масалан 1,5. Етказиш ҳақи учун', 'Masalan 1,5. Yetkazish haqi uchun', 'Например 1,5. Для расчёта доставки'] },
+    help: ['Масалан 1,5. Етказиш ҳақи учун', 'Masalan 1,5. Yetkaziş haqi uçun', 'Например 1,5. Для расчёта доставки'] },
   { key: 'length_cm', h: ['Узунлик, см', 'Uzunlik, sm', 'Длина, см'],
-    help: ['1–1000, учала ўлчам бирга', '1–1000, uchala o\'lcham birga', '1–1000, все три размера вместе'] },
+    help: ['1–1000, учала ўлчам бирга', '1–1000, uçala ölçam birga', '1–1000, все три размера вместе'] },
   { key: 'width_cm', h: ['Эни, см', 'Eni, sm', 'Ширина, см'], help: ['1–1000', '1–1000', '1–1000'] },
   { key: 'height_cm', h: ['Баландлик, см', 'Balandlik, sm', 'Высота, см'], help: ['1–1000', '1–1000', '1–1000'] },
-  { key: 'delivery_days', markets: ['china'], h: ['Етказиш, кун', 'Yetkazish, kun', 'Доставка, дней'],
+  { key: 'delivery_days', markets: ['china'], h: ['Етказиш, кун', 'Yetkaziş, kun', 'Доставка, дней'],
     help: ['1–365, ихтиёрий', '1–365, ixtiyoriy', '1–365, необязательно'] },
   ...IMAGE_KEYS.map((key, i) => ({
     key,

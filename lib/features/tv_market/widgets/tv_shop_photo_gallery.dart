@@ -541,6 +541,29 @@ class _GalleryZoomPaneState extends State<_GalleryZoomPane>
   }
 }
 
+/// Рўйхат карточкаси расмининг декод кенглиги: кўринадиган кенглик × devicePixelRatio, [min]..[max] оралиғида
+/// (900 px ўрнига — хотира ва декод вақти камаяди; ўлчам номаълум бўлса — [max]).
+int cardDecodeWidth(double logicalWidth, double devicePixelRatio, {int min = 64, int max = 900}) {
+  if (!logicalWidth.isFinite || logicalWidth <= 0 || devicePixelRatio <= 0) return max;
+  return (logicalWidth * devicePixelRatio).round().clamp(min, max);
+}
+
+/// Биринчи [count] та карточка расмини олдиндан юклаш ([TvShopNetworkImage.card] билан бир хил декод кенглиги —
+/// хотира кеши калити мос). Хатолар жим (карточка ўзи хато расмини кўрсатади).
+void precacheCardCovers(BuildContext context, Iterable<String> urls, double logicalWidth, {int count = 6}) {
+  final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+  final w = cardDecodeWidth(logicalWidth, dpr);
+  for (final raw in urls.take(count)) {
+    final u = raw.trim();
+    if (!isHttpImageUrl(u)) continue;
+    precacheImage(
+      ResizeImage.resizeIfNeeded(w, null, CachedNetworkImageProvider(u)),
+      context,
+      onError: (_, __) {},
+    );
+  }
+}
+
 class TvShopNetworkImage extends StatelessWidget {
   const TvShopNetworkImage({
     super.key,
@@ -548,15 +571,49 @@ class TvShopNetworkImage extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.memCacheWidth = 900,
     this.expand = true,
-  });
+  }) : card = false;
+
+  /// Рўйхат карточкаси (эга 2026-11-19, тезлик): декод кенглиги — карточка кенглиги × DPR ([cardDecodeWidth]),
+  /// юкланаётганда спиннер эмас — оддий ранг.
+  const TvShopNetworkImage.card({
+    super.key,
+    required this.url,
+    this.fit = BoxFit.cover,
+  })  : memCacheWidth = 900,
+        expand = true,
+        card = true;
 
   final String url;
   final BoxFit fit;
   final int memCacheWidth;
   final bool expand;
+  final bool card;
 
   @override
   Widget build(BuildContext context) {
+    final u = url.trim();
+    if (card && u.isNotEmpty && isHttpImageUrl(u)) {
+      return LayoutBuilder(builder: (context, c) {
+        final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+        return CachedNetworkImage(
+          imageUrl: u,
+          fit: fit,
+          width: double.infinity,
+          height: double.infinity,
+          memCacheWidth: cardDecodeWidth(c.maxWidth, dpr),
+          fadeInDuration: const Duration(milliseconds: 120),
+          placeholder: (_, __) => ColoredBox(color: Colors.grey.shade200),
+          errorWidget: (_, __, ___) => ColoredBox(
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.broken_image_outlined, size: 32),
+          ),
+        );
+      });
+    }
+    return _build(context);
+  }
+
+  Widget _build(BuildContext context) {
     final u = url.trim();
     if (u.startsWith('assets/')) {
       return Image.asset(u, fit: fit);

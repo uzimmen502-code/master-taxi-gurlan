@@ -82,6 +82,28 @@ void main() {
       expect(nearbyAdsCategories(t), kNearbyAdsFallbackCategories);
       expect(nearbyAdsCategories(null), {'livestock.all', 'auto.cars', 'auto.moto', 'auto.tech'});
     });
+    test('v5: Мол all ўрнига бўлимлар — эски livestock.all ҳам чиқади; Мол белгиланмаса — йўқ', () {
+      final v5 = tax({
+        'livestock': m('livestock_market', [
+          for (final id in ['cattle', 'sheep_goat', 'horse', 'poultry', 'other']) {'id': id, 'showInNearbyAds': true},
+        ]),
+      });
+      final cats = nearbyAdsCategories(v5);
+      expect(cats, containsAll(['livestock.cattle', 'livestock.other', 'livestock.all']));
+      expect(showsInNearbyAds(item('legacy', market: 'livestock', category: 'all', businessId: 'B1'), cats), isTrue,
+          reason: 'prod: эски all ёзуви (бизнес бўлса ҳам — бўлим қоидаси)');
+      expect(showsInNearbyAds(item('new', market: 'livestock', category: 'horse', businessId: 'B1'), cats), isTrue);
+      // negative: Мол бўлимлари белгиланмаган — эски all ҳам қўшилмайди.
+      final off = tax({
+        'livestock': m('livestock_market', [
+          {'id': 'cattle', 'showInNearbyAds': false},
+        ]),
+        'auto': m('auto_market', [
+          {'id': 'cars', 'showInNearbyAds': true},
+        ]),
+      });
+      expect(nearbyAdsCategories(off), {'auto.cars'});
+    });
     test('MarketCategory.fromMap: bool эмас → null', () {
       final t = tax({
         'auto': m('auto_market', [
@@ -97,17 +119,46 @@ void main() {
     test('мол/мошина бўлими — ҳа; эҳтиёт қисм / гўшт — йўқ; нофаол — йўқ', () {
       expect(showsInNearbyAds(item('a', market: 'livestock', category: 'all'), cats), isTrue);
       expect(showsInNearbyAds(item('b', market: 'auto', category: 'tech'), cats), isTrue);
-      expect(showsInNearbyAds(item('c', market: 'auto', category: 'parts'), cats), isFalse);
+      // Бизнес объекти (хусусий эмас) — 11-19 дан хусусий эҳтиёт қисм чиқади, шунинг учун businessId билан.
+      expect(showsInNearbyAds(item('c', market: 'auto', category: 'parts', businessId: 'B1'), cats), isFalse);
       expect(showsInNearbyAds(item('d', market: 'meat', category: 'beef'), cats), isFalse);
       expect(showsInNearbyAds(item('e', market: 'livestock', category: 'all', status: 'blocked'), cats), isFalse);
     });
-    test('электроника/маиший: хусусий + used — ҳа; бизнес ёки new — йўқ', () {
+    test('электроника/маиший: хусусий — ҳа (used ҳам, new ҳам — эга 2026-11-19); бизнес — йўқ', () {
       expect(showsInNearbyAds(item('a', market: 'electronics', attrs: {'condition': 'used'}), cats), isTrue);
       expect(showsInNearbyAds(item('b', market: 'appliances', attrs: {'condition': 'used'}), cats), isTrue);
       expect(showsInNearbyAds(item('c', market: 'electronics', businessId: 'B1', attrs: {'condition': 'used'}), cats),
           isFalse);
-      expect(showsInNearbyAds(item('d', market: 'electronics', attrs: {'condition': 'new'}), cats), isFalse);
-      expect(showsInNearbyAds(item('e', market: 'electronics'), cats), isFalse);
+      expect(showsInNearbyAds(item('c2', market: 'electronics', businessId: 'B1', attrs: {'condition': 'new'}), cats),
+          isFalse);
+      // Аввал (11-16) хусусий new/шартсиз — йўқ эди; 11-19 дан хусусий сотувчи ҳар қандай бозорда — ҳа.
+      expect(showsInNearbyAds(item('d', market: 'electronics', attrs: {'condition': 'new'}), cats), isTrue);
+      expect(showsInNearbyAds(item('e', market: 'electronics'), cats), isTrue);
+    });
+    test('хусусий сотувчи (эга 2026-11-19): ҳар бозор ва Аралаш — ҳа; гўшт — йўқ; бизнес белгиланмаган бозорда — йўқ',
+        () {
+      // positive
+      expect(showsInNearbyAds(item('p1'), cats), isTrue, reason: 'Аралаш (market бўш), хусусий');
+      expect(showsInNearbyAds(item('p2', market: 'clothes', category: 'women'), cats), isTrue);
+      expect(showsInNearbyAds(item('p3', market: 'auto', category: 'parts'), cats), isTrue,
+          reason: 'хусусий эҳтиёт қисм ҳам');
+      expect(isNearbyPrivateItem(item('p4', businessId: '   ')), isTrue, reason: 'бўшлиқ businessId — хусусий');
+      // negative
+      expect(showsInNearbyAds(item('n1', market: 'meat', category: 'beef'), cats), isFalse, reason: 'гўшт хусусий');
+      expect(showsInNearbyAds(item('n1b', market: ' meat '), cats), isFalse, reason: 'гўшт (бўшлиқ билан)');
+      expect(showsInNearbyAds(item('n2', market: 'clothes', category: 'women', businessId: 'B1'), cats), isFalse);
+      expect(showsInNearbyAds(item('n3', businessId: 'B1'), cats), isFalse, reason: 'Аралаш, бизнес');
+      expect(showsInNearbyAds(item('n4', status: 'blocked'), cats), isFalse, reason: 'нофаол хусусий');
+      expect(showsInNearbyAds(item('n5', status: 'pending'), cats), isFalse);
+      // boundary: бизнес, лекин белгиланган бўлим — аввалгидек ҳа (мавжуд қоида сақланди)
+      expect(showsInNearbyAds(item('b1', market: 'livestock', category: 'all', businessId: 'B1'), cats), isTrue);
+      expect(showsInNearbyAds(item('b2', market: 'meat', category: 'beef', businessId: 'B1'), cats), isFalse);
+    });
+    test('қатор матни: сарлавҳа · нарх · туман; бўшлари ташланади', () {
+      expect(nearbyShopRowText(title: ' Сигир ', price: '7 000 000 сўм', district: 'Гурлан'),
+          'Сигир · 7 000 000 сўм · Гурлан');
+      expect(nearbyShopRowText(title: 'Сигир', price: '', district: 'Гурлан'), 'Сигир · Гурлан');
+      expect(nearbyShopRowText(title: 'Сигир', price: ' ', district: ''), 'Сигир');
     });
     test('деҳқон: хусусий — ҳа; қишлоқ хўжалиги объекти — ҳа; дўкон (retail) — йўқ; аниқланмаган — йўқ', () {
       final bc = <String, String?>{'farmB': 'agriculture', 'shopB': 'retail', 'goneB': null};
@@ -269,6 +320,10 @@ void main() {
       expect('onOpenShopItem: _openHomeShopItem'.allMatches(home).length, 2);
       final ads = File('lib/features/home/widgets/home_ads_section.dart').readAsStringSync();
       expect(ads.contains("bool get _withExtras => widget.adType == 'ad'"), isTrue);
+      // Маҳсулот қатори: сарлавҳа · нарх (+бирлик) · туман (эга 2026-11-19).
+      expect(ads.contains('nearbyShopRowText('), isTrue);
+      expect(ads.contains('priceLabel(context.tr)'), isTrue);
+      expect(ads.contains('GeoNames.district(entry.shop!.districtId'), isTrue);
     });
   });
 }

@@ -17,17 +17,24 @@ Future<void> openMarket(
   Future<void> Function(Widget screen)? push,
   String initialCategory = '',
 }) async {
+  // Сеанс кешида бор бўлса — кутмасдан (эга 2026-11-19, тезлик: экран дарҳол очилади). Дарвоза учун
+  // `moduleId` таксономиядан — кеш совуқ бўлса аввалгидек юкланади.
   MarketTaxonomy t;
-  try {
-    t = await (loadTaxonomy ?? MarketTaxonomyRepository.load)();
-  } catch (e) {
-    debugPrint('[OpenMarket] MARKET_TAXONOMY_LOAD_FAILED market=$marketId: $e');
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('market_err_taxonomy'))));
+  final cached = loadTaxonomy == null ? MarketTaxonomyRepository.cached : null;
+  if (cached != null) {
+    t = cached;
+  } else {
+    try {
+      t = await (loadTaxonomy ?? MarketTaxonomyRepository.load)();
+    } catch (e) {
+      debugPrint('[OpenMarket] MARKET_TAXONOMY_LOAD_FAILED market=$marketId: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('market_err_taxonomy'))));
+      }
+      return;
     }
-    return;
+    if (!context.mounted) return;
   }
-  if (!context.mounted) return;
   final def = t.market(marketId);
   if (def == null) {
     debugPrint('[OpenMarket] MARKET_UNKNOWN market=$marketId');

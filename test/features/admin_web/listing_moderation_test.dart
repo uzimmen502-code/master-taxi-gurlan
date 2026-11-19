@@ -1,6 +1,8 @@
 // «Эълонлар модерацияси» (Бозорлар 2b, эга 2026-11-15): соф мантиқ ва экран (рад этиш сабабсиз юборилмайди,
 // оптимистик олиб ташлаш, хатода жойига қайтиш + код).
 
+import 'dart:async';
+
 import 'package:ava_gurlan/features/admin_web/screens/listing_moderation_screen.dart';
 import 'package:ava_gurlan/features/admin_web/services/admin_callable.dart';
 import 'package:ava_gurlan/features/admin_web/services/admin_listing_moderation_service.dart';
@@ -238,6 +240,7 @@ void main() {
   group('экран', () {
     late List<String> calls;
     late Map<ListingModSource, List<ListingModItem>> data;
+    late StreamController<bool> autoCtrl;
     Object? failWith;
 
     Future<void> pump(WidgetTester tester) async {
@@ -260,6 +263,13 @@ void main() {
             },
             loadCategories: () async => {
               'livestock': const [ListingModCategory('cow', 'Қорамол'), ListingModCategory('heifer', 'Ғунажин')],
+            },
+            watchShopAutoApprove: () => autoCtrl.stream,
+            setShopAutoApprove: (enabled) async {
+              calls.add('auto:$enabled');
+              final f = failWith;
+              if (f != null) throw f;
+              autoCtrl.add(enabled);
             },
           ),
         ),
@@ -349,6 +359,7 @@ void main() {
     setUp(() {
       calls = [];
       failWith = null;
+      autoCtrl = StreamController<bool>.broadcast();
       data = {
         ListingModSource.shop: [
           _li('s1', at: DateTime(2026, 11, 15, 9), market: 'farm'),
@@ -399,6 +410,52 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('lmod_card_s1')), findsOneWidget);
       expect(find.byKey(const ValueKey('lmod_card_s2')), findsNothing);
+    });
+
+    testWidgets('«Авто тасдиқ / Қўлда»: майдон йўқ — Қўлда; Автога тасдиқ диалоги (бекор — ёзилмайди); Қўлдага дарҳол', (tester) async {
+      await pump(tester);
+      // Ҳужжатда майдон йўқ (оқим ҳали ҳеч нарса бермаган) — Қўлда.
+      expect(find.byKey(const ValueKey('lmod_auto_bar')), findsOneWidget);
+      expect(find.textContaining('Қўлда тасдиқ'), findsOneWidget);
+      expect(find.textContaining('бозорлардаги янги ва таҳрирланган'), findsOneWidget);
+      final manualBtn = find.byKey(const ValueKey('lmod_auto_manual'));
+      final autoBtn = find.byKey(const ValueKey('lmod_auto_on'));
+      expect(tester.widget<OutlinedButton>(manualBtn).onPressed, isNull);
+
+      await tester.tap(autoBtn);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('lmod_auto_confirm')), findsOneWidget);
+      await tester.tap(find.text('Бекор'));
+      await tester.pumpAndSettle();
+      expect(calls, isEmpty, reason: 'бекор — ёзилмайди');
+
+      await tester.tap(autoBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('lmod_auto_confirm')));
+      await tester.pumpAndSettle();
+      expect(calls, ['auto:true']);
+      expect(find.textContaining('Авто тасдиқ'), findsWidgets);
+      expect(tester.widget<FilledButton>(find.byKey(const ValueKey('lmod_auto_on'))).onPressed, isNull);
+
+      // Қўлдага қайтиш — диалогсиз.
+      await tester.tap(find.byKey(const ValueKey('lmod_auto_manual')));
+      await tester.pumpAndSettle();
+      expect(calls, ['auto:true', 'auto:false']);
+      expect(find.textContaining('Қўлда тасдиқ'), findsOneWidget);
+    });
+
+    testWidgets('«Авто тасдиқ»: ёзиш хатоси — код кўринади, ҳолат Қўлда қолади', (tester) async {
+      await pump(tester);
+      autoCtrl.add(false);
+      await tester.pump();
+      failWith = StateError('boom');
+      await tester.tap(find.byKey(const ValueKey('lmod_auto_on')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('lmod_auto_confirm')));
+      await tester.pumpAndSettle();
+      expect(calls, ['auto:true']);
+      expect(find.textContaining('CLIENT_ERROR'), findsOneWidget);
+      expect(find.textContaining('Қўлда тасдиқ'), findsOneWidget);
     });
 
     testWidgets('бошқа таб (Хитой) ўз манбасини юклайди; бўш — матн', (tester) async {

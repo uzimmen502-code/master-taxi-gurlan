@@ -67,7 +67,7 @@ class TvShopItemGridCard extends StatelessWidget {
                           )
                         : ColoredBox(
                             color: AppColors.cardImageBg,
-                            child: TvShopNetworkImage(
+                            child: TvShopNetworkImage.card(
                               url: cover,
                               fit: BoxFit.contain,
                             ),

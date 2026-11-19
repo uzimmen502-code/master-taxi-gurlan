@@ -35,8 +35,15 @@ Set<String> nearbyAdsCategories(MarketTaxonomy? t) {
       if (c.showInNearbyAds == true) out.add('${m.id}.${c.id}');
     }
   }
-  return anyKey ? out : kNearbyAdsFallbackCategories;
+  if (!anyKey) return kNearbyAdsFallbackCategories;
+  // Taxonomy v5 (2026-11-19): Мол бозорида `all` ўрнига cattle/sheep_goat/horse/poultry/other. Эски
+  // `livestock.all` ёзувлари (prod'да бор) — Мол бўлимларидан бирортаси белгиланган бўлса, аввалгидек чиқади.
+  if (out.any((k) => k.startsWith('$kNearbyAdsLivestockMarket.'))) out.add(kNearbyAdsLegacyLivestockKey);
+  return out;
 }
+
+const kNearbyAdsLivestockMarket = 'livestock';
+const kNearbyAdsLegacyLivestockKey = 'livestock.all';
 
 /// Электроника / маиший техника: сотувчи бизнес объекти эмас (`businessId` бўш) ВА `attrs.condition == used`.
 bool isUsedPrivateGadget(TvShopItem i) =>
@@ -64,12 +71,26 @@ Set<String> farmBusinessIds(Iterable<TvShopItem> items) => {
         if (i.isActive && i.market.trim() == kNearbyAdsFarmMarket && i.businessId.trim().isNotEmpty) i.businessId.trim(),
     };
 
+/// Хусусий сотувчи маҳсулоти ҳам «Яқиндаги эълонлар»га чиқмайдиган бозорлар (эга 2026-11-19).
+const kNearbyAdsPrivateExcludedMarkets = {'meat'};
+
+/// Эга 2026-11-19: хусусий сотувчи (`businessId` бўш) маҳсулоти — ИСТАЛГАН бозорда, жумладан Аралаш
+/// (`market == ''`); фақат [kNearbyAdsPrivateExcludedMarkets] (гўшт) — йўқ.
+bool isNearbyPrivateItem(TvShopItem i) =>
+    i.businessId.trim().isEmpty && !kNearbyAdsPrivateExcludedMarkets.contains(i.market.trim());
+
 /// Маҳсулот «Яқиндаги эълонлар»га тушадими.
 bool showsInNearbyAds(TvShopItem i, Set<String> categories, {Map<String, String?> businessCategories = const {}}) =>
     i.isActive &&
     (categories.contains('${i.market.trim()}.${i.category.trim()}') ||
         isUsedPrivateGadget(i) ||
-        isNearbyFarmItem(i, businessCategories));
+        isNearbyFarmItem(i, businessCategories) ||
+        isNearbyPrivateItem(i));
+
+/// «Яқиндаги эълонлар» маҳсулот қатори: сарлавҳа · нарх (+бирлик) · туман — бўшлари ташланади
+/// (янги сақланган матн йўқ, эга 2026-11-19).
+String nearbyShopRowText({required String title, required String price, required String district}) =>
+    [title.trim(), price.trim(), district.trim()].where((s) => s.isNotEmpty).join(' · ');
 
 /// 0 — фойдаланувчи тумани, 1 — вилояти, 2 — бошқа / номаълум.
 int proximityRank({
@@ -271,6 +292,13 @@ class HomeShopFeed {
   static Future<List<TvShopItem>>? _future;
   static DateTime? _at;
 
+  /// Охирги муваффақиятли натижа ва вақти — бозор экранларида дарҳол чизиш учун ([cachedItems]).
+  static List<TvShopItem>? _value;
+  static DateTime? _valueAt;
+
+  /// [cachedItems] шундан эски бўлса — ишлатилмайди.
+  static const instantPaintMaxAge = Duration(minutes: 10);
+
   @visibleForTesting
   static Future<List<TvShopItem>> Function()? debugLoader;
 
@@ -278,6 +306,24 @@ class HomeShopFeed {
   static void debugReset() {
     _future = null;
     _at = null;
+    _value = null;
+    _valueAt = null;
+  }
+
+  @visibleForTesting
+  static void debugSetCached(List<TvShopItem>? items, {DateTime? at}) {
+    _value = items;
+    _valueAt = items == null ? null : (at ?? DateTime.now());
+  }
+
+  /// Сўровсиз: уйда аллақачон юкланган маҳсулотлар ([instantPaintMaxAge] дан янги) ёки `null`. Фақат дарҳол
+  /// чизиш учун — сервер натижаси келгач алмаштирилади (эга 2026-11-19, тезлик).
+  static List<TvShopItem>? cachedItems({DateTime? now}) {
+    final v = _value;
+    final at = _valueAt;
+    if (v == null || at == null) return null;
+    if ((now ?? DateTime.now()).difference(at) > instantPaintMaxAge) return null;
+    return v;
   }
 
   static Future<List<TvShopItem>> recent() {
@@ -287,8 +333,16 @@ class HomeShopFeed {
     _at = now;
     final next = (debugLoader ?? () => TvShopRepository().fetchForMarket(limit: limit))();
     _future = next;
-    unawaited(next.then((_) {}, onError: (Object e) {
-      if (identical(_future, next)) debugReset();
+    unawaited(next.then((v) {
+      if (identical(_future, next)) {
+        _value = v;
+        _valueAt = DateTime.now();
+      }
+    }, onError: (Object e) {
+      if (identical(_future, next)) {
+        _future = null;
+        _at = null;
+      }
     }));
     return next;
   }

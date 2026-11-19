@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/geo/geo_context.dart';
+import '../../../core/geo/geo_names.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../core/utils/session_shuffle.dart';
@@ -43,7 +44,8 @@ class HomeAdsSection extends StatefulWidget {
   });
 
   /// «Яқиндаги эълонлар» қўшимчалари (фақат `adType == 'ad'`, эга 2026-11-16/17): мол/мошина (таксономия
-  /// `showInNearbyAds`), деҳқон (дўкон эмас), ишлатилган хусусий электроника/маиший техника — `tv_shop_items`;
+  /// `showInNearbyAds`), деҳқон (дўкон эмас), ишлатилган хусусий электроника/маиший техника, ҳар қандай
+  /// хусусий сотувчи маҳсулоти (гўштдан ташқари, Аралаш ҳам — эга 2026-11-19) — `tv_shop_items`;
   /// фаол уй-жой; янги уй ошпазлари. `null` — шу манба кўрсатилмайди.
   final void Function(TvShopItem item, List<TvShopItem> shelf)? onOpenShopItem;
   final void Function(RealtyListing listing)? onOpenRealty;
@@ -257,7 +259,14 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
               if (entry is NearbyAdExtra)
                 _AdTitleRow(
                   key: ValueKey('home_ads_extra_${entry.id}'),
-                  title: entry.title,
+                  title: entry.shop == null
+                      ? entry.title
+                      : nearbyShopRowText(
+                          title: entry.title,
+                          price: entry.shop!.priceLabel(context.tr),
+                          district: GeoNames.district(entry.shop!.districtId, context.contentLang,
+                              fallback: entry.shop!.districtLabel),
+                        ),
                   badge: context.tr(entry.badgeKey) == entry.badgeKey ? '' : context.tr(entry.badgeKey),
                   onTap: () => _openExtra(entry),
                 )

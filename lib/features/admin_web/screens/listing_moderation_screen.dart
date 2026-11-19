@@ -1,7 +1,9 @@
-import 'package:firebase_core/firebase_core.dart' show FirebaseException;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../services/admin_auth_service.dart';
 import '../services/admin_listing_moderation_service.dart';
 import '../utils/listing_moderation.dart';
 import '../widgets/admin_reason_dialog.dart';
@@ -19,19 +21,51 @@ typedef ListingModAction = Future<void> Function(
 typedef ListingModEditApprove = Future<void> Function(ListingModSource source, String id, Map<String, Object?> edits);
 typedef ListingModCategoriesLoader = Future<Map<String, List<ListingModCategory>>> Function();
 
+/// `settings/app.shopItemAutoApprove` оқими (майдон йўқ = `false` = Қўлда).
+typedef ShopAutoApproveWatch = Stream<bool> Function();
+typedef ShopAutoApproveSet = Future<void> Function(bool enabled);
+
+/// Firestore'дан: `settings/app.shopItemAutoApprove == true` — Авто.
+Stream<bool> watchShopItemAutoApproveFirestore() => FirebaseFirestore.instance
+    .collection('settings')
+    .doc('app')
+    .snapshots()
+    .map((s) => s.data()?['shopItemAutoApprove'] == true);
+
+/// Админ тўғридан-тўғри ёзади (rules: `settings/{docId}` — isAdmin; `realtyAutoApprove` билан бир хил нақш).
+/// Ким ва қачон ўзгартирди — шу ҳужжатда (41-банд).
+Future<void> setShopItemAutoApproveFirestore(bool enabled, {required String adminPhone}) =>
+    FirebaseFirestore.instance.collection('settings').doc('app').set({
+      'shopItemAutoApprove': enabled,
+      'shopItemAutoApproveUpdatedAt': FieldValue.serverTimestamp(),
+      'shopItemAutoApproveUpdatedBy': adminPhone,
+    }, SetOptions(merge: true));
+
 /// «Эълонлар модерацияси» (Бозорлар 2b, эга 2026-11-15): барча бозорлардаги `pending` эълонлар бир жойда.
 /// Тасдиқлаш / рад этиш — сервер `adminModerateListing` (audit + сотувчига хабар). Мавжуд модерация
 /// экранлари ўзгармаган — бу экран уларнинг ёнида.
 /// «Админ тузатиб тасдиқлайди» (эга 2026-11-15): tv_shop_items карточкасида «Тузатиш ва тасдиқлаш»;
 /// «Рад этилганлар» таби — рад этилган tv_shop_items (сотувчи қайта юбормайди, админ тузатади).
 class ListingModerationScreen extends StatelessWidget {
-  const ListingModerationScreen({super.key, this.loadPending, this.moderate, this.editApprove, this.loadCategories});
+  const ListingModerationScreen({
+    super.key,
+    this.loadPending,
+    this.moderate,
+    this.editApprove,
+    this.loadCategories,
+    this.watchShopAutoApprove,
+    this.setShopAutoApprove,
+  });
 
   /// Тест учун алмаштирилади; бўлмаса — [AdminListingModerationService].
   final ListingModLoader? loadPending;
   final ListingModAction? moderate;
   final ListingModEditApprove? editApprove;
   final ListingModCategoriesLoader? loadCategories;
+
+  /// «Авто тасдиқ / Қўлда» (эга 2026-11-19) — тест учун; бўлмаса Firestore `settings/app`.
+  final ShopAutoApproveWatch? watchShopAutoApprove;
+  final ShopAutoApproveSet? setShopAutoApprove;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +82,16 @@ class ListingModerationScreen extends StatelessWidget {
       length: ListingModSource.values.length,
       child: Column(
         children: [
+          _ShopAutoApproveBar(
+            watch: watchShopAutoApprove ?? watchShopItemAutoApproveFirestore,
+            set: setShopAutoApprove ??
+                (enabled) {
+                  final phone = context.read<AdminAuthService>().phoneDigits ?? '';
+                  // Ким ўзгартиргани ёзилмаса — ёзмаймиз (41-банд).
+                  if (phone.isEmpty) throw StateError('ADMIN_PHONE_MISSING');
+                  return setShopItemAutoApproveFirestore(enabled, adminPhone: phone);
+                },
+          ),
           Material(
             color: Colors.white,
             child: TabBar(
@@ -342,6 +386,131 @@ class _SourceListState extends State<_SourceList> with AutomaticKeepAliveClientM
           ),
         ]),
       ),
+    );
+  }
+}
+
+/// «Авто тасдиқ / Қўлда» (эга 2026-11-19): `settings/app.shopItemAutoApprove` — фақат бозорлардаги
+/// маҳсулотлар (`tv_shop_items`). Серверда `onShopItemModeration` ўқийди. Майдон йўқ — Қўлда.
+/// Кўриниш `market_moderation_screen.dart` даги `_MarketAutoApproveBar` билан бир хил.
+class _ShopAutoApproveBar extends StatefulWidget {
+  const _ShopAutoApproveBar({required this.watch, required this.set});
+
+  final ShopAutoApproveWatch watch;
+  final ShopAutoApproveSet set;
+
+  @override
+  State<_ShopAutoApproveBar> createState() => _ShopAutoApproveBarState();
+}
+
+class _ShopAutoApproveBarState extends State<_ShopAutoApproveBar> {
+  late final Stream<bool> _stream = widget.watch();
+  bool _busy = false;
+
+  Future<void> _setAuto(bool enabled) async {
+    if (enabled) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Авто тасдиқни ёқасизми?'),
+          content: const Text(
+            'Бозорлардаги янги ва таҳрирланган маҳсулотлар текширувсиз дарҳол кўринади. '
+            'Рад этиш кейин ҳам мумкин.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Бекор')),
+            FilledButton(
+              key: const ValueKey('lmod_auto_confirm'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Ёқиш'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await widget.set(enabled);
+    } catch (e) {
+      debugPrint('[ListingModeration] shopItemAutoApprove=$enabled: $e');
+      final text = e is FirebaseException
+          ? 'Сақлаб бўлмади (${e.code}).'
+          : listingModErrorText(e);
+      messenger?.hideCurrentSnackBar();
+      messenger?.showSnackBar(SnackBar(backgroundColor: Colors.red.shade700, content: Text(text)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<bool>(
+      stream: _stream,
+      builder: (context, snap) {
+        final auto = snap.data == true;
+        final fg = auto ? AvaLight.ok : Colors.orange.shade900;
+        return Container(
+          key: const ValueKey('lmod_auto_bar'),
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: auto ? AvaLight.ok : Colors.orange.shade200),
+          ),
+          child: Row(children: [
+            Icon(auto ? Icons.flash_on : Icons.admin_panel_settings,
+                color: auto ? AvaLight.ok : Colors.orange.shade800, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(
+                  auto
+                      ? 'Авто тасдиқ: ЁҚИҚ — маҳсулотлар дарҳол актив'
+                      : 'Қўлда тасдиқ — маҳсулотлар «Текширувда»га тушади',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: fg),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Фақат бозорлардаги янги ва таҳрирланган маҳсулотларга таъсир қилади.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+              ]),
+            ),
+            if (_busy)
+              const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+            else ...[
+              OutlinedButton(
+                key: const ValueKey('lmod_auto_manual'),
+                onPressed: auto ? () => _setAuto(false) : null,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange.shade800,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 36),
+                ),
+                child: const Text('Қўлда', style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                key: const ValueKey('lmod_auto_on'),
+                onPressed: auto ? null : () => _setAuto(true),
+                icon: const Icon(Icons.flash_on, size: 16),
+                label: const Text('Авто тасдиқ', style: TextStyle(fontSize: 12)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.button,
+                  foregroundColor: AppColors.onPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 36),
+                ),
+              ),
+            ],
+          ]),
+        );
+      },
     );
   }
 }

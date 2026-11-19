@@ -172,6 +172,75 @@ void main() {
       expect(r[0].map((e) => e.item), ['g1', 'g2']);
       expect(r[1].map((e) => e.item), ['g3', 'u1']);
     });
+
+    // Эга 2026-11-19 (тезлик): биринчи саҳифа биринчи бўш бўлмаган сўровдан кейиноқ.
+    test('firstNonEmpty: биринчи бўш бўлмаган ҳалқадан кейин қайтади; давоми тартибда, такрорсиз', () async {
+      final p = pager(buildRingPlan(userDistrictId: 'gurlan', userRegionId: 'xorazm'));
+      final first = await p.next(8, firstNonEmpty: true);
+      expect(first.map((e) => e.item), ['g1', 'g2', 'g3'], reason: 'ring 0 тўлиқ, ring 1 кутилмайди');
+      expect(calls.length, 1);
+      expect(regionLoads, 0);
+      final rest = await p.next(50);
+      expect(rest.map((e) => e.item), ['u1', 'n1', 'n2']);
+      expect(rest.map((e) => e.ring), [1, 2, 2]);
+      final all = [...first, ...rest].map((e) => e.item).toList();
+      expect(all.toSet().length, all.length, reason: 'такрорсиз');
+    });
+
+    test('firstNonEmpty: бўш ҳалқалар ўтказиб юборилади (ring 0 бўш → ring 1)', () async {
+      final p = pager(buildRingPlan(userDistrictId: 'xiva', userRegionId: 'xorazm'));
+      final first = await p.next(8, firstNonEmpty: true);
+      expect(first.map((e) => e.item), ['g1', 'g2', 'g3', 'u1']);
+      expect(first.every((e) => e.ring == 1), isTrue);
+      expect(calls.first, ['xiva']);
+    });
+
+    test('firstNonEmpty: pageSize дан кўп бўлса — pageSize билан чекланади (чегара)', () async {
+      final p = pager(buildRingPlan(userDistrictId: 'gurlan', userRegionId: 'xorazm'));
+      final first = await p.next(2, firstNonEmpty: true);
+      expect(first.map((e) => e.item), ['g1', 'g2']);
+      expect((await p.next(2, firstNonEmpty: true)).map((e) => e.item), ['g3']);
+      expect(p.currentRing, 1);
+    });
+
+    test('firstNonEmpty: ҳаммаси бўш — бўш рўйхат, hasMore=false', () async {
+      final p = pager(const [RingStepSpec(ring: 0, regionId: 'xorazm', onlyDistrictId: 'xiva')]);
+      expect(await p.next(8, firstNonEmpty: true), isEmpty);
+      expect(p.hasMore, isFalse);
+    });
+  });
+
+  group('ringOfItem / mergeRingSeed (кешдан дарҳол чизиш)', () {
+    final plan = buildRingPlan(userDistrictId: 'gurlan', userRegionId: 'xorazm');
+
+    test('туман → 0; вилоятнинг бошқа тумани → 1; бошқа вилоят → масофа ҳалқаси; туман ID йўқ → null', () {
+      expect(ringOfItem(plan, districtId: 'gurlan', regionId: 'xorazm'), 0);
+      expect(ringOfItem(plan, districtId: 'gurlan', regionId: ''), 0);
+      expect(ringOfItem(plan, districtId: 'xiva', regionId: 'xorazm'), 1);
+      expect(ringOfItem(plan, districtId: 'nukus', regionId: 'qoraqalpogiston'), 2);
+      expect(ringOfItem(plan, districtId: 'xiva', regionId: ''), isNull, reason: 'вилояти ёзилмаган — фақат туман');
+      expect(ringOfItem(plan, districtId: '', regionId: 'xorazm'), isNull);
+    });
+
+    test('аниқ танлов: ҳудуддан ташқари → null', () {
+      final d = explicitRingPlan(districtId: 'gurlan', regionId: 'xorazm');
+      expect(ringOfItem(d, districtId: 'gurlan', regionId: 'xorazm'), 0);
+      expect(ringOfItem(d, districtId: 'xiva', regionId: 'xorazm'), isNull);
+      final r = explicitRingPlan(districtId: '', regionId: 'xorazm');
+      expect(ringOfItem(r, districtId: 'xiva', regionId: 'xorazm'), 0);
+      expect(ringOfItem(r, districtId: 'nukus', regionId: 'qoraqalpogiston'), isNull);
+    });
+
+    test('mergeRingSeed: тугаган ҳалқа кеши ташланади, такрорсиз, сервердан кейин', () {
+      const loaded = [RingItem('a', 0), RingItem('b', 1)];
+      const seed = [RingItem('a', 0), RingItem('z', 0), RingItem('b', 1), RingItem('c', 1), RingItem('d', 2)];
+      expect(mergeRingSeed(loaded, seed, currentRing: 1, idOf: (s) => s).map((r) => r.item), ['a', 'b', 'c', 'd']);
+      expect(mergeRingSeed(const <RingItem<String>>[], seed, currentRing: 0, idOf: (s) => s).map((r) => r.item),
+          ['a', 'z', 'b', 'c', 'd']);
+      expect(mergeRingSeed(loaded, seed, currentRing: null, idOf: (s) => s).map((r) => r.item), ['a', 'b'],
+          reason: 'пейжер тугади — фақат сервер');
+      expect(mergeRingSeed(loaded, const <RingItem<String>>[], currentRing: 0, idOf: (s) => s), same(loaded));
+    });
   });
 
   group('GeoMode.rings сиёсати', () {

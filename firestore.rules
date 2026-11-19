@@ -796,7 +796,7 @@ service cloud.firestore {
     function productPromoServerKeys() {
       return ['priceTracked', 'priceSince', 'priceHistory', 'promo', 'promoState', 'firstActiveAt', 'stockLeft'];
     }
-    // Сотувчи сўрови (эга 2026-11-20): kind discount (percent — бутун 1..90, жорий нархдан) | promo (percent йўқ);
+    // Сотувчи сўрови (эга 2026-11-20): kind discount (percent — бутун 1..50 (эга 2026-11-20), жорий нархдан) | promo (percent йўқ);
     // until ≤ 30 кун; requestedAt == request.time. Чегирмали нархни нарх майдонларига фақат сервер ёзади.
     // Фоиз, 7 кун қоидаси ва модерация — серверда. Эркин матн йўқ.
     function productPromoRequestOk(d) {
@@ -810,7 +810,7 @@ service cloud.firestore {
               && d.promoRequest.get('requestedAt', null) == request.time
               && ((d.promoRequest.kind == 'promo' && !('percent' in d.promoRequest))
                   || (d.promoRequest.kind == 'discount' && d.promoRequest.get('percent', 0) is int
-                      && d.promoRequest.percent >= 1 && d.promoRequest.percent <= 90)));
+                      && d.promoRequest.percent >= 1 && d.promoRequest.percent <= 50)));
     }
     // Тегилмаган эски сўров (requestedAt эски) — қайта текширилмайди.
     function productPromoRequestChangeOk(d) {

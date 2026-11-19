@@ -65,10 +65,10 @@ async function main() {
   await check('T5 until in the past — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ until: until(-1) }) })));
   await check('T6 client requestedAt (not server time) — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ requestedAt: Timestamp.now() }) })));
   await check('T7 free text key — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ label: 'MEGA' }) })));
-  await check('T8 discount without percent / float / 0 / 91 percent — denied', async () => {
+  await check('T8 discount without percent / float / 0 / 51 / 90 percent — denied; 50 ok (max, ega 2026-11-20)', async () => {
     await assertFails(shop(owner).doc('s1').update({ promoRequest: { kind: 'discount', until: until(5), requestedAt: serverTimestamp() } }));
-    for (const pc of [10.5, 0, 91]) await assertFails(shop(owner).doc('s1').update({ promoRequest: discount({ percent: pc }) }));
-    await assertSucceeds(shop(owner).doc('s1').update({ promoRequest: discount({ percent: 90 }) }));
+    for (const pc of [10.5, 0, 51, 90]) await assertFails(shop(owner).doc('s1').update({ promoRequest: discount({ percent: pc }) }));
+    await assertSucceeds(shop(owner).doc('s1').update({ promoRequest: discount({ percent: 50 }) }));
   });
   await check('T9 promo with percent / legacy oldPrice key — denied', async () => {
     await assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ percent: 10 }) }));

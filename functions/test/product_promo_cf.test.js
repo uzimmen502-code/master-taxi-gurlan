@@ -248,11 +248,11 @@ async function main() {
     assert.strictEqual(d.price, 2000);
     assert.deepStrictEqual(d.priceTiers, [{ minQty: 1, price: 2100 }]);
   });
-  await check('AVA: price held 6 d → PRICE_NOT_7_DAYS; until > 30 d → UNTIL_TOO_FAR; percent 91 → PERCENT_INVALID', async () => {
+  await check('AVA: price held 6 d → PRICE_NOT_7_DAYS; until > 30 d → UNTIL_TOO_FAR; percent 51 → PERCENT_INVALID (max 50, ega 2026-11-20)', async () => {
     await db.collection('platform_products').doc('pl2').set({ name: 'X', price: 2000, priceTracked: 2000, ...held(6) });
     await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 10, untilMs: Date.now() + DAY }), 'PRICE_NOT_7_DAYS');
     await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 10, untilMs: Date.now() + 31 * DAY }), 'UNTIL_TOO_FAR');
-    await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 91, untilMs: Date.now() + DAY }), 'PERCENT_INVALID');
+    await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 51, untilMs: Date.now() + DAY }), 'PERCENT_INVALID');
   });
 
   await check('backfill tool: dry-run nothing; apply only docs without priceTracked (incl. platform); rollback', async () => {

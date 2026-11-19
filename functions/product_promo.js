@@ -15,7 +15,7 @@
  *     янги нарх == асос → бекор; янги нарх > асос → бекор (PROPOSED, эгага ҳисобот).
  *     Муддат тугаса (productPromoExpirySweep): нарх ҳали сервер қўйган чегирмали нарх бўлса — асос тикланади;
  *     сотувчи ўзгартирган бўлса — унинг нархи қолади, фақат белги олинади. Идемпотент.
- * PROPOSED: фоиз 1..90; эски нархлар даври фақат промо бўлмаган даврлардан; Акция суиистеъмоли — очиқ масала.
+ * Фоиз 1..50 — AVA_DECIDED (эга 2026-11-20). PROPOSED: эски нархлар даври фақат промо бўлмаган даврлардан; Акция суиистеъмоли — очиқ масала.
  *
  * Маълумот (мижоз ёзади фақат `promoRequest` {kind: discount|promo, percent?, until, requestedAt}):
  *   ФАҚАТ сервер: priceTracked, priceSince, priceHistory[{price, from, to, promo?}] (≤ 10),
@@ -34,7 +34,7 @@ const REFERENCE_WINDOW_DAYS = 30;
 const HISTORY_MAX = 10;
 const PRICE_MAX = 999999999;
 const PERCENT_MIN = 1;
-const PERCENT_MAX = 90; // PROPOSED
+const PERCENT_MAX = 50; // AVA_DECIDED (эга 2026-11-20; аввал 90 PROPOSED эди)
 const REASON_MAX = 300;
 const PAGE = 300;
 const MAX_ROUNDS = 20;

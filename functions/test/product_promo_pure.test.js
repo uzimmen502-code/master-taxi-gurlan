@@ -57,8 +57,9 @@ check('request: until > 30d → UNTIL_TOO_FAR; exactly 30d ok', () => {
   assert.strictEqual(P.validatePromoRequest('tv_shop_items', shop(), req({ until: NOW + 30 * DAY }), NOW).ok, true);
 });
 check('request: until past → UNTIL_INVALID', () => assert.strictEqual(P.validatePromoRequest('tv_shop_items', shop(), req({ until: NOW - 1 }), NOW).reason, 'UNTIL_INVALID'));
-check('request: percent 0 / 91 / float → PERCENT_INVALID', () => {
-  [0, 91, 10.5].forEach((p) => assert.strictEqual(P.validatePromoRequest('tv_shop_items', shop(), req({ percent: p }), NOW).reason, 'PERCENT_INVALID'));
+check('request: percent 0 / 51 / 90 / float → PERCENT_INVALID; 50 ok (max, ega 2026-11-20)', () => {
+  [0, 51, 90, 10.5].forEach((p) => assert.strictEqual(P.validatePromoRequest('tv_shop_items', shop(), req({ percent: p }), NOW).reason, 'PERCENT_INVALID'));
+  assert.strictEqual(P.validatePromoRequest('tv_shop_items', shop(), req({ percent: 50 }), NOW).ok, true);
 });
 check('request: price 6 days → PRICE_NOT_7_DAYS', () => assert.strictEqual(P.validatePromoRequest('tv_shop_items', shop({ priceSince: fv.at(NOW - 6 * DAY) }), req(), NOW).reason, 'PRICE_NOT_7_DAYS'));
 check('request: price 0 / negotiable → PRICE_REQUIRED', () => {

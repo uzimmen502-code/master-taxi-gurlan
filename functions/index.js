@@ -106,6 +106,9 @@ attachMarketModeration(exports, { functions, db, admin, requireCallerRoles, noti
 // Сервер қидируви (2026-11-16): tv_shop_items + realty_listings `searchTokens` — фақат шу триггерлар ёзади.
 const { attachMarketSearchTokens } = require('./market_search_tokens');
 attachMarketSearchTokens(exports, { functions, db });
+// Карточка белгиси (эга 2026-11-19): «−N%» (модерация) · «Акция» · «Сўнгги доналар» · «Янги» — нарх тарихи сервери.
+const { attachProductPromo } = require('./product_promo');
+attachProductPromo(exports, { functions, db, admin, requireCallerRoles, notifyUserInApp });
 // Админ ўчириши (2026-10-19; торайтирилди 2026-10-20): ҳақиқий ўчириш фақат superadmin — support_chat (шахсий маълумот талаби) ва
 // 365 кундан эски resolved risk_event; admin_news — қайтариб олинади, чат — архивга олинади. Ҳаммаси callable, audit билан (§41).
 const { attachAdminDeleteRecord } = require('./admin_delete_record');
@@ -139,6 +142,9 @@ const { attachChinaInquiries } = require('./china_inquiries');
 attachChinaInquiries(exports, {
   functions, db, admin, callerPhone, canonicalUid, requireCallerRoles, notifyUserInApp,
 });
+// Улгуржи/Хитой Excel юклаш (эга 2026-11-19): wholesaleImportTemplate/Preview/Confirm — янги, фақат тасдиқланган сотувчи.
+const { attachWholesaleImport } = require('./wholesale_import');
+attachWholesaleImport(exports, { functions, db, admin, callerPhone, canonicalUid });
 // Бизнес харитаси (2026-10-23, ega): объектни эгаси қўшади, админ фақат таҳрирлайди/ўчиради. Дарвоза — мижозда (`business_map` модули).
 const { attachBusinessDirectory } = require('./business_directory');
 attachBusinessDirectory(exports, {

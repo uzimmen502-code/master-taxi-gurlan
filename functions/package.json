@@ -75,6 +75,8 @@
     "test:search-tokens": "node test/market_search_tokens_pure.test.js",
     "test:search-tokens-cf": "firebase emulators:exec --only firestore --project demo-search-tokens \"node test/market_search_tokens_cf.test.js\"",
     "test:search-tokens-rules": "firebase emulators:exec --only firestore --project demo-search-tokens-rules \"node test/market_search_tokens_rules.test.js\"",
+    "test:wholesale-import": "node test/wholesale_import_rules.test.js",
+    "test:wholesale-import-cf": "firebase emulators:exec --only firestore --project demo-ulg-import \"node test/wholesale_import_cf.test.js\"",
     "test:wholesale-rules": "firebase emulators:exec --only firestore --project demo-wholesale-rules \"node test/wholesale_products_rules.test.js\"",
     "test:realty": "node test/realty_expiry.test.js",
     "test:wallet-topup-support": "node test/wallet_topup_support.test.js",
@@ -88,7 +90,6 @@
     "test:migrate-ads-address": "firebase emulators:exec --only firestore --project demo-ads-migrate \"node test/migrate_ads_address.test.js\"",
     "test:job-ad-submit-cf": "firebase emulators:exec --only firestore --project demo-job-ad-submit \"node test/job_ad_submit_cf.test.js\"",
     "test:order-news": "firebase emulators:exec --only firestore --project demo-order-news \"node test/order_news_flow_cf.test.js\"",
-    "test:carpet-agro-courier-rules": "node test/carpet_agro_courier_rules.test.js",
     "test:china-inquiry-rules": "firebase emulators:exec --only firestore --project demo-china-rules \"node test/china_inquiries_rules.test.js\"",
     "test:china-inquiry-cf": "firebase emulators:exec --only firestore --project demo-china-cf \"node test/china_inquiries_cf.test.js\"",
     "test:restaurant-demo-cf": "firebase emulators:exec --only firestore --project demo-restaurant-demo \"node test/restaurant_demo_cf.test.js\"",
@@ -111,11 +112,13 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",
     "axios": "^1.6.0",
+    "exceljs": "^4.4.0",
     "ffmpeg-static": "^5.3.0",
     "firebase-admin": "^11.11.1",
     "firebase-functions": "^4.0.0",
     "googleapis": "^173.0.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2"

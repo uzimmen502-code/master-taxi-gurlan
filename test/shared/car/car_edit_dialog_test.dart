@@ -39,6 +39,11 @@ class _FakeUserRepo implements UserRepository {
       'color': carColor,
       'plate': carPlate,
       'seats': carSeats,
+      'brand': carBrand,
+      'year': carYear,
+      'engine': carEngine,
+      'fuel': carFuelType,
+      'tags': carUsageTags,
     });
   }
 
@@ -89,6 +94,56 @@ void main() {
       expect(repo.saved, hasLength(1));
       expect(repo.saved.single['color'], 'Qora');
       expect(repo.saved.single['uid'], '998901234567');
+    });
+
+    // Bug (2026-11-19): ойна фақат model/color/plate/seats юборарди — марка, йил, двигатель, ёқилғи ва
+    // фойдаланиш теглари ''/0 га ёзилиб кетарди (saveCarInfo уларни сукут билан ҳам ёзади).
+    testWidgets('сақлаш марка/йил/двигатель/ёқилғи/тегларни ЎЧИРМАЙДИ (regression)', (t) async {
+      final repo = _FakeUserRepo(car: {
+        'carModel': 'Cobalt',
+        'carColor': 'Oq',
+        'carPlate': '01A123BC',
+        'carSeats': '4',
+        'carBrand': 'Chevrolet',
+        'carYear': '2021',
+        'carEngine': '1.5',
+        'carFuelType': 'methane',
+        'carUsageTags': 'taxi,family',
+      });
+      await _host(t, (c) async {
+        await showCarEditDialog(c, uid: '998901234567', repository: repo);
+      });
+      await t.enterText(find.widgetWithText(TextField, 'Oq'), 'Qora');
+      await t.tap(find.text('save'));
+      await t.pumpAndSettle();
+      final s = repo.saved.single;
+      expect(s['color'], 'Qora');
+      expect(s['brand'], 'Chevrolet');
+      expect(s['year'], 2021);
+      expect(s['engine'], '1.5');
+      expect(s['fuel'], 'methane');
+      expect(s['tags'], ['taxi', 'family']);
+    });
+
+    testWidgets('профилда марка/йил йўқ — бўш/0 қолади (чегара)', (t) async {
+      final repo = _FakeUserRepo(car: {
+        'carModel': 'Cobalt',
+        'carColor': 'Oq',
+        'carPlate': '01A123BC',
+        'carSeats': '4',
+        'carYear': '',
+        'carUsageTags': '',
+      });
+      await _host(t, (c) async {
+        await showCarEditDialog(c, uid: '998901234567', repository: repo);
+      });
+      await t.tap(find.text('save'));
+      await t.pumpAndSettle();
+      final s = repo.saved.single;
+      expect(s['brand'], '');
+      expect(s['year'], 0);
+      expect(s['fuel'], '');
+      expect(s['tags'], isEmpty);
     });
 
     testWidgets('бўш майдон билан сақланмайди (ойна очиқ қолади)', (t) async {

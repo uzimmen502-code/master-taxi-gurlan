@@ -111,6 +111,9 @@ class _CarEditDialogState extends State<_CarEditDialog> {
     if (_saving) return;
     setState(() => _saving = true);
     var ok = false;
+    // Ойнада йўқ майдонлар (марка, йил, двигатель, ёқилғи, теглар) — мавжуд қиймати сақланади: saveCarInfo
+    // уларни сукут (''/0) билан ҳам ёзади (bug 2026-11-19: марка/йил ўчиб кетарди).
+    final initial = widget.initial ?? const <String, String>{};
     try {
       await widget.repo.saveCarInfo(
         uid: widget.uid,
@@ -118,6 +121,14 @@ class _CarEditDialogState extends State<_CarEditDialog> {
         carColor: color,
         carPlate: plate,
         carSeats: seats,
+        carBrand: initial['carBrand'] ?? '',
+        carYear: int.tryParse(initial['carYear'] ?? '') ?? 0,
+        carEngine: initial['carEngine'] ?? '',
+        carFuelType: initial['carFuelType'] ?? '',
+        carUsageTags: [
+          for (final t in (initial['carUsageTags'] ?? '').split(','))
+            if (t.trim().isNotEmpty) t.trim(),
+        ],
       );
       ok = true;
     } catch (_) {

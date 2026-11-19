@@ -127,6 +127,22 @@ function quoteDoc(extra = {}) {
   };
 }
 
+/**
+ * Kvota (`quoteDoc`) bilan MOS mahsulot: p1 — 10 dan 14 000 (place narxni qayta hisoblaydi, ega 2026-11-20).
+ * `p1Tiers` — kvotadan keyin narx o'zgarishini simulyatsiya qilish uchun.
+ */
+function riceProduct({ p1Tiers = [{ minQty: 1, price: 15000 }, { minQty: 10, price: 14000 }] } = {}) {
+  return {
+    sellerId: SELLER,
+    status: 'active',
+    market: 'wholesale',
+    packs: [
+      { id: 'p1', label: '1 кг', priceTiers: p1Tiers, unitWeightG: 1000 },
+      { id: 'p2', label: '5 кг', priceTiers: [{ minQty: 1, price: 60000 }], unitWeightG: 5000 },
+    ],
+  };
+}
+
 async function seed({ wallet = 300000, stock = 100, buyerDocId = BUYER } = {}) {
   clock = T0;
   await resetAll();
@@ -134,7 +150,7 @@ async function seed({ wallet = 300000, stock = 100, buyerDocId = BUYER } = {}) {
   await db.collection('users').doc(buyerDocId).set({ bonusBalance: 0 });
   await db.collection('users').doc(SELLER).set({ bonusBalance: 0 });
   await db.collection('users').doc(OTHER).set({ bonusBalance: 0 });
-  await db.collection('wholesale_products').doc('rice').set({ sellerId: SELLER, status: 'active', market: 'wholesale' });
+  await db.collection('wholesale_products').doc('rice').set(riceProduct());
   await db.collection('wholesale_stock').doc('rice').set({ productId: 'rice', sellerId: SELLER, packs: { p1: stock, p2: 7 }, version: 1 });
   await db.collection('wholesale_quotes').doc('q1').set(quoteDoc());
   if (wallet > 0) await topup(buyerDocId, wallet);
@@ -331,6 +347,103 @@ async function demandFlip(orderId, to) {
     await expectErr(place(), 'failed-precondition', 'quote_invalid');
     assert.strictEqual(await bal(pcOf(BUYER)), 300000);
     assert.strictEqual(await count('wholesale_orders'), 0);
+  });
+
+  // ── Narx kvotadan keyin o'zgarsa — eskirgan kvota bilan pul yechilmaydi (ega, 2026-11-20) ──
+  await check('requote paritet: default currentPackUnitPrice == demand resolvePack+tierUnitPrice', async () => {
+    const demandApi = require('../../functions_demand/api/wholesale_orders');
+    const demandPrice = (p, packId, qty) => {
+      const pack = demandApi.resolvePack(p, packId);
+      return pack && pack.tiers.length ? demandApi.tierUnitPrice(pack.tiers, qty) : null;
+    };
+    const products = [
+      riceProduct(),
+      riceProduct({ p1Tiers: [{ minQty: 50, price: '9000' }, { minQty: 1, price: 16000.7 }, { minQty: 0, price: 1 }, null] }),
+      riceProduct({ p1Tiers: [] }),
+      { priceTiers: [{ minQty: 1, price: 5000 }, { minQty: 20, price: 4500 }] }, // eski qadoqsiz (`default`)
+      { priceTiers: [], price: 7000 }, // narxsiz eski
+      { packs: [{ id: 'default', label: 'x', priceTiers: [{ minQty: 1, price: 1 }] }], priceTiers: [{ minQty: 1, price: 2 }] },
+      { packs: [{ id: 'p1', label: '', priceTiers: [{ minQty: 1, price: 3 }] }], priceTiers: [{ minQty: 1, price: 4 }] }, // yorliqsiz qadoq — e'tiborsiz
+      null,
+    ];
+    for (const p of products) {
+      for (const packId of ['p1', 'p2', 'p3', 'default']) {
+        for (const qty of [1, 9, 10, 19, 20, 49, 50, 120]) {
+          assert.strictEqual(W.currentPackUnitPrice(p, packId, qty), demandPrice(p, packId, qty),
+            `${JSON.stringify(p)} ${packId} ${qty}`);
+        }
+      }
+    }
+  });
+
+  await check('requote: narx o\'zgarmagan — o\'tadi; boshqa pog\'ona (qty ga ta\'sirsiz) o\'zgargan — ham o\'tadi', async () => {
+    await seed();
+    await db.collection('wholesale_products').doc('rice').set(riceProduct({
+      p1Tiers: [{ minQty: 1, price: 15500 }, { minQty: 10, price: 14000 }, { minQty: 50, price: 12000 }],
+    }));
+    const r = await place();
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual((await orderOf(r.orderId)).goodsTotal, 140000);
+    await assertLedgerSound();
+  });
+
+  for (const [label, tiers, unit] of [
+    ['tushgan (chegirma boshlandi)', [{ minQty: 1, price: 15000 }, { minQty: 10, price: 12600 }], 12600],
+    ['ko\'tarilgan (chegirma tugadi)', [{ minQty: 1, price: 15000 }, { minQty: 10, price: 14001 }], 14001],
+  ]) {
+    await check(`requote: narx ${label} — rad (quote_expired + priceChanged, QUOTE_PRICE_CHANGED), HECH NARSA yozilmaydi`, async () => {
+      await seed();
+      await db.collection('wholesale_products').doc('rice').set(riceProduct({ p1Tiers: tiers }));
+      const e = await expectErr(place(), 'failed-precondition', 'quote_expired');
+      assert.strictEqual(e.details.priceChanged, true);
+      assert.strictEqual(e.details.errorCode, 'QUOTE_PRICE_CHANGED');
+      assert.deepStrictEqual(
+        [e.details.quoteUnitPrice, e.details.quoteGoodsTotal, e.details.unitPrice, e.details.goodsTotal],
+        [14000, 140000, unit, unit * 10],
+      );
+      assert.strictEqual(await count('wholesale_orders'), 0);
+      assert.strictEqual(await count('wallet_idempotency'), 0);
+      assert.strictEqual((await quoteOf('q1')).used, false);
+      assert.deepStrictEqual((await stockOf()).packs, { p1: 100, p2: 7 });
+      assert.strictEqual(await bal(pcOf(BUYER)), 300000);
+      assert.strictEqual(await bonusOf(BUYER), 300000);
+      await assertLedgerSound();
+    });
+  }
+
+  await check('requote: qadoq olib tashlangan / narxi yo\'q — rad (goodsTotal null)', async () => {
+    await seed();
+    await db.collection('wholesale_products').doc('rice').set(riceProduct({ p1Tiers: [] }));
+    const e = await expectErr(place(), 'failed-precondition', 'quote_expired');
+    assert.strictEqual(e.details.priceChanged, true);
+    assert.strictEqual(e.details.goodsTotal, null);
+    assert.strictEqual(await count('wholesale_orders'), 0);
+  });
+
+  await check('requote: eski qadoqsiz mahsulot (`default`) — mahsulot narxi; o\'zgarsa rad', async () => {
+    await seed();
+    await db.collection('wholesale_quotes').doc('q1').set(quoteDoc({ packId: 'default' }));
+    await db.collection('wholesale_stock').doc('rice').set({ productId: 'rice', sellerId: SELLER, packs: { default: 50 }, version: 1 });
+    await db.collection('wholesale_products').doc('rice').set({
+      sellerId: SELLER, status: 'active', market: 'wholesale', priceTiers: [{ minQty: 1, price: 13000 }],
+    });
+    await expectErr(place(), 'failed-precondition', 'quote_expired');
+    await db.collection('wholesale_products').doc('rice').update({ priceTiers: [{ minQty: 1, price: 14000 }] });
+    const r = await place();
+    assert.strictEqual(r.ok, true);
+    await assertLedgerSound();
+  });
+
+  await check('requote: muvaffaqiyatli buyurtmadan keyin narx o\'zgarsa — takror chaqiruv o\'sha buyurtma (idempotent)', async () => {
+    await seed();
+    const r1 = await place();
+    await db.collection('wholesale_products').doc('rice').set(riceProduct({ p1Tiers: [{ minQty: 1, price: 9000 }] }));
+    const r2 = await place();
+    assert.strictEqual(r2.idempotent, true);
+    assert.strictEqual(r2.orderId, r1.orderId);
+    assert.strictEqual(await count('wholesale_orders'), 1);
+    assert.strictEqual(await bal(pcOf(BUYER)), 100000);
+    await assertLedgerSound();
   });
 
   await check('eski 9 xonali users hujjati — hamyon o\'sha hujjatda', async () => {

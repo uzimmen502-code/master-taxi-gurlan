@@ -153,6 +153,8 @@
 
 const { planBuyerDebtPayment } = require('./relay_cash');
 const i18n = require('./notif_i18n');
+// Narx qoidasi — YAGONA manba (demand `quoteWholesaleOrder` nusxasi shunga paritet-testlangan).
+const platformPricing = require('./platform_pricing');
 
 const ORDERS = 'wholesale_orders';
 const QUOTES = 'wholesale_quotes';
@@ -417,6 +419,45 @@ function quoteAmountsOk(q) {
     && isInt(d.avaFeeBps) && isInt(d.feeVersion);
 }
 
+/**
+ * Qadoqning HOZIRGI bir dona narxi (ega, 2026-11-20: kvotadan keyin narx o'zgarsa — eskirgan kvota bilan
+ * pul yechilmaydi, narx qayta hisoblanadi). Qadoq tanlash — demand `resolvePack` (`packIdsOf`) bilan AYNAN
+ * bir xil: haqiqiy qadoq = id p1..p9 (default emas), yorliq va pog'ona bor, takrorsiz, ko'pi bilan 5; qadoqsiz
+ * eski mahsulotda faqat `default` (mahsulot darajasidagi `priceTiers`). Narx — `platform_pricing`
+ * (`cleanTiers` + `unitPriceForQty`, pog'onali). Paritet testi: test/wholesale_orders.test.js.
+ * @returns {number|null} qadoq/narx yo'q bo'lsa null.
+ */
+const WS_PACK_ID_RE = /^(p[1-9]|default)$/;
+const WS_DEFAULT_PACK = 'default';
+const WS_MAX_PACKS = 5;
+function currentPackUnitPrice(product, packId, qty) {
+  const p = product || {};
+  const raw = Array.isArray(p.packs) ? p.packs : [];
+  const valid = [];
+  for (const x of raw) {
+    const id = x && typeof x.id === 'string' ? x.id.trim() : '';
+    const label = x && typeof x.label === 'string' ? x.label.trim() : '';
+    const tiers = x && Array.isArray(x.priceTiers) ? x.priceTiers : [];
+    if (!WS_PACK_ID_RE.test(id) || id === WS_DEFAULT_PACK || !label || !tiers.length) continue;
+    if (valid.includes(id)) continue;
+    valid.push(id);
+    if (valid.length >= WS_MAX_PACKS) break;
+  }
+  let rawTiers;
+  if (!valid.length) {
+    if (packId !== WS_DEFAULT_PACK) return null;
+    rawTiers = p.priceTiers;
+  } else {
+    if (!valid.includes(packId)) return null;
+    // demand `resolvePack` kabi: shu ID li BIRINCHI yozuv.
+    const hit = raw.find((x) => x && typeof x.id === 'string' && x.id.trim() === packId);
+    rawTiers = (hit || {}).priceTiers;
+  }
+  const tiers = platformPricing.cleanTiers(rawTiers);
+  if (!tiers.length) return null;
+  return platformPricing.unitPriceForQty({ priceTiers: tiers }, qty, platformPricing.PRICING_VERSION_TIERED);
+}
+
 function attachWholesaleOrders(exportsObj, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, settlementLedger, requireCallerRoles, now: nowFn,
@@ -608,6 +649,23 @@ function attachWholesaleOrders(exportsObj, deps) {
         // ── TEKSHIRUVLAR (kvota eskirgan bo'lishi mumkin) ──
         if (!pSnap.exists || (pSnap.data() || {}).status !== 'active') {
           throw fail('failed-precondition', 'Mahsulot hozir sotuvda emas', 'product_unavailable');
+        }
+        // Ega (2026-11-20): kvotadan keyin narx o'zgargan bo'lsa (chegirma boshlandi/tugadi, sotuvchi tahriri) —
+        // eskirgan kvota bilan pul YECHILMAYDI. Narx tranzaksiyada o'qilgan mahsulotdan kvota bilan AYNI qoida
+        // bo'yicha qayta hisoblanadi. Sabab kodi ataylab `quote_expired`: eski va hozirgi ilova uni allaqachon
+        // «kvota eskirdi → qayta hisoblash» deb ishlaydi (yangi kvota yangi narxni ko'rsatadi); yangi ilova
+        // `details.priceChanged` / `errorCode: QUOTE_PRICE_CHANGED` bo'yicha «Нарх ўзгарди» matnini ko'rsatadi.
+        const nowUnitPrice = currentPackUnitPrice(pSnap.data(), String(q.packId), q.qty);
+        const nowGoodsTotal = nowUnitPrice === null ? null : nowUnitPrice * q.qty;
+        if (nowGoodsTotal !== q.goodsTotal) {
+          throw fail('failed-precondition', 'Narx o\'zgardi. Yangi narx bilan qayta tasdiqlang', 'quote_expired', {
+            priceChanged: true,
+            errorCode: 'QUOTE_PRICE_CHANGED',
+            quoteUnitPrice: q.unitPrice,
+            quoteGoodsTotal: q.goodsTotal,
+            unitPrice: nowUnitPrice,
+            goodsTotal: Number.isSafeInteger(nowGoodsTotal) ? nowGoodsTotal : null,
+          });
         }
         const st = sSnap.exists ? (sSnap.data() || {}) : {};
         const packs = st.packs && typeof st.packs === 'object' ? st.packs : {};
@@ -877,7 +935,10 @@ function attachWholesaleOrders(exportsObj, deps) {
     } catch (e) {
       log('place', {
         result: 'denied', quoteId,
-        errorCode: (e && e.details && e.details.reason) || (e && e.code) || 'UNKNOWN',
+        errorCode: (e && e.details && (e.details.errorCode || e.details.reason)) || (e && e.code) || 'UNKNOWN',
+        ...(e && e.details && e.details.priceChanged ? {
+          quoteGoodsTotal: e.details.quoteGoodsTotal, goodsTotal: e.details.goodsTotal,
+        } : {}),
         durationMs: Date.now() - started,
       });
       if (e instanceof HttpsError) throw e;
@@ -4099,6 +4160,7 @@ module.exports = {
   RETURN_SOURCE,
   methodOf,
   quoteAmountsOk,
+  currentPackUnitPrice,
   payoutDocHasCard,
   attachWholesaleOrders,
 };

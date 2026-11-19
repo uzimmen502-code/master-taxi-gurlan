@@ -57,6 +57,10 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
   final _productsRepo = WholesaleProductsRepository();
   String _productStatusFilter = 'all';
 
+  /// Excel юклаш бўйича фильтр (эга, 2026-11-19): `importBatchId`; бўш — ҳаммаси.
+  /// Юкланган рўйхат ичида (янги сўров/индекс йўқ).
+  String _batchFilter = '';
+
   static const _blue = AppColors.primary;
 
   bool get _isChina => widget.market == WholesaleProduct.marketChina;
@@ -472,9 +476,12 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           failed: _products.loadMoreError != null,
           onPressed: _products.loadMore,
         );
-        final filtered = _productStatusFilter == 'all'
-            ? all
-            : all.where((p) => p.status == _productStatusFilter).toList();
+        final batches = wholesaleImportBatches(all);
+        final batch = batches.containsKey(_batchFilter) ? _batchFilter : '';
+        final filtered = all
+            .where((p) => _productStatusFilter == 'all' || p.status == _productStatusFilter)
+            .where((p) => batch.isEmpty || p.importBatchId == batch)
+            .toList();
         int count(String s) => all.where((e) => e.status == s).length;
         return Column(children: [
           // `settings/app` даги битта майдон — иккала бозор учун умумий.
@@ -511,6 +518,20 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
                   selected: _productStatusFilter == item.$1,
                   onSelected: (_) =>
                       setState(() => _productStatusFilter = item.$1),
+                ),
+              if (batches.isNotEmpty)
+                DropdownButton<String>(
+                  key: const ValueKey('wholesale-admin-batch-filter'),
+                  value: batch,
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('Excel юклаш: барчаси')),
+                    for (final e in batches.entries)
+                      DropdownMenuItem(
+                        value: e.key,
+                        child: Text('Excel ${e.key.length > 12 ? e.key.substring(4, 12) : e.key} (${e.value})'),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _batchFilter = v ?? ''),
                 ),
             ]),
           ),
@@ -550,6 +571,10 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             _badge(_productStatusLabel(p.status), color),
+            if (p.sku.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              _badge('Excel · ${p.sku}', Colors.teal),
+            ],
             // Бозор белгиси энди керак эмас: ҳар бўлим фақат ўз бозорини
             // кўрсатади ([WholesaleModerationScreen.market]).
             const Spacer(),
@@ -819,6 +844,16 @@ String _dateText(DateTime? d) {
   if (d == null) return '';
   String two(int v) => v.toString().padLeft(2, '0');
   return '${two(d.day)}.${two(d.month)}.${d.year}';
+}
+
+/// Юкланган маҳсулотлардаги Excel юклашлари: `importBatchId` → сони (биринчи учраш тартибида).
+Map<String, int> wholesaleImportBatches(Iterable<WholesaleProduct> items) {
+  final out = <String, int>{};
+  for (final p in items) {
+    if (p.importBatchId.isEmpty) continue;
+    out[p.importBatchId] = (out[p.importBatchId] ?? 0) + 1;
+  }
+  return out;
 }
 
 Color _sellerStatusColor(String status) {

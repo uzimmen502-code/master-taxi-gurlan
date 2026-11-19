@@ -8,9 +8,14 @@ import '../../../models/price_tier.dart';
 import '../models/wholesale_product.dart';
 import 'wholesale_field_error.dart';
 
-/// Формадаги битта қадоқнинг таҳрир ҳолати (контроллерлар). Нарх
-/// поғоналари — тайёр оралиқлар 1–9 / 10–49 / 50+ ([kStandardTierBrackets]),
-/// тўлдириш ихтиёрий, камида биттаси шарт.
+/// Формадаги битта қадоқнинг таҳрир ҳолати (контроллерлар).
+///
+/// Нарх (эга, 2026-11-19, B): ЯНГИ/таҳрирланган товарда БИТТА нарх ([price]) + ихтиёрий
+/// минимал буюртма ([minQty]); аввалги 3 майдон (1–9 / 10–49 / 50+) олиб ташланди.
+/// Орқага мослик: эски товардаги 2–5 поғонанинг биринчиси [price] га тушади (унинг `minQty`
+/// си [firstMinQty] да сақланади), қолганлари [extraTiers] да ЎЗГАРИШСИЗ қолади ва сақлашда
+/// қайта ёзилади — сотувчи «Олиб ташлаш»ни босмагунча (аввалги форма уларни 3 оралиққа
+/// «сиқиб» юборарди — энди йўқотилмайди). Буюртма/квота қоидаси (сервер) ўзгармаган.
 class WholesalePackDraft {
   WholesalePackDraft({required this.id, this.existingPhotoUrl = ''});
 
@@ -21,9 +26,11 @@ class WholesalePackDraft {
       existingPhotoUrl: p.photoUrl,
     );
     d.label.text = p.label;
-    for (final t in p.priceTiers) {
-      final idx = t.minQty >= kPlatformHighMinQty ? 2 : (t.minQty >= kPlatformMidMinQty ? 1 : 0);
-      d.prices[idx].text = '${t.price}';
+    final tiers = sortPriceTiers(p.priceTiers);
+    if (tiers.isNotEmpty) {
+      d.price.text = '${tiers.first.price}';
+      d.firstMinQty = tiers.first.minQty;
+      d.extraTiers = tiers.skip(1).toList();
     }
     d.weight.text = weightKgFieldText(p.unitWeightG ?? 0);
     if (p.unitDims != null) {
@@ -38,7 +45,14 @@ class WholesalePackDraft {
 
   final String id;
   final label = TextEditingController();
-  final prices = List.generate(kStandardTierBrackets.length, (_) => TextEditingController());
+  /// Бир бирлик нархи (бутун сон, валюта — маҳсулотники).
+  final price = TextEditingController();
+
+  /// Биринчи поғона бошланиши — янги товарда 1, эски товарда сақланган қиймат.
+  int firstMinQty = 1;
+
+  /// Эски товардаги қўшимча поғоналар (2-дан бошлаб) — тегилмайди, фақат олиб ташлаш мумкин.
+  List<PriceTier> extraTiers = const [];
   final weight = TextEditingController();
   final dimL = TextEditingController();
   final dimW = TextEditingController();
@@ -63,9 +77,7 @@ class WholesalePackDraft {
 
   void dispose() {
     label.dispose();
-    for (final c in prices) {
-      c.dispose();
-    }
+    price.dispose();
     weight.dispose();
     dimL.dispose();
     dimW.dispose();
@@ -82,9 +94,12 @@ class WholesalePackDraft {
     return n == null ? (qty: null, error: 'wholesale_err_min_qty_invalid') : (qty: n, error: null);
   }
 
-  /// Тўлдирилган поғоналар (бўш ёки нотўғри майдон ўтказиб юборилади).
-  List<PriceTier> collectTiers() =>
-      collectStandardTiers([for (final c in prices) c.text]);
+  /// Поғоналар: асосий нарх (бўш/нол/нотўғри — бўш рўйхат = хато) + сақланган қўшимчалар.
+  List<PriceTier> collectTiers() {
+    final p = int.tryParse(price.text.trim().replaceAll(' ', ''));
+    if (p == null || p <= 0) return const [];
+    return sortPriceTiers([PriceTier(minQty: firstMinQty, price: p), ...extraTiers]);
+  }
 
   /// Вазн/ўлчам: иккаласи ихтиёрий; ўлчам — учаласи бирга ёки бўш;
   /// ўлчам бор, вазн йўқ — мумкин эмас (ҳажмий вазн ёлғиз маъносиз).
@@ -220,53 +235,55 @@ class WholesalePackCard extends StatelessWidget {
               if (draft.labelErr) const WholesaleFieldError(textKey: 'wholesale_err_pack_label'),
             ],
             const SizedBox(height: 8),
-            for (var i = 0; i < kStandardTierBrackets.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(children: [
-                  SizedBox(
-                    width: 92,
-                    child: Text(
-                      '${kStandardTierBrackets[i].$2} $unitLabel',
-                      style: const TextStyle(fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600),
-                    ),
+            // Нарх + минимал буюртма — бир қаторда (эга, 2026-11-19, B: битта нарх).
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  key: ValueKey('wholesale-pack-price-${draft.id}'),
+                  controller: draft.price,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(11)],
+                  onChanged: (_) {
+                    if (draft.tiersErr) draft.tiersErr = false;
+                    onChanged();
+                  },
+                  decoration: _deco(
+                    context
+                        .tr('wholesale_field_unit_price')
+                        .replaceAll('{unit}', draft.firstMinQty > 1 ? '${draft.firstMinQty}+ $unitLabel' : '1 $unitLabel')
+                        .replaceAll('{currency}', currencyLabel),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      key: ValueKey('wholesale-pack-price-${draft.id}-$i'),
-                      controller: draft.prices[i],
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      onChanged: (_) {
-                        if (draft.tiersErr) draft.tiersErr = false;
-                        onChanged();
-                      },
-                      decoration: _deco(
-                        context.tr('wholesale_field_tier_price').replaceAll('{currency}', currencyLabel),
-                      ),
-                    ),
-                  ),
-                ]),
+                ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  key: ValueKey('wholesale-pack-minqty-${draft.id}'),
+                  controller: draft.minQty,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(7)],
+                  onChanged: (_) {
+                    if (draft.minQtyErrKey != null) draft.minQtyErrKey = null;
+                    onChanged();
+                  },
+                  decoration: _deco(
+                    context.tr('wholesale_min_qty_field').replaceAll('{unit}', unitLabel),
+                    hint: context.tr('wholesale_min_qty_hint'),
+                  ),
+                ),
+              ),
+            ]),
             if (draft.tiersErr) const WholesaleFieldError(textKey: 'wholesale_err_tier_required'),
-            const SizedBox(height: 4),
-            TextField(
-              key: ValueKey('wholesale-pack-minqty-${draft.id}'),
-              controller: draft.minQty,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(7)],
-              onChanged: (_) {
-                if (draft.minQtyErrKey != null) draft.minQtyErrKey = null;
-                onChanged();
-              },
-              decoration: _deco(
-                context.tr('wholesale_min_qty_field').replaceAll('{unit}', unitLabel),
-                hint: context.tr('wholesale_min_qty_hint'),
-              ),
-            ),
             if (draft.minQtyErrKey != null) WholesaleFieldError(textKey: draft.minQtyErrKey!),
-            const SizedBox(height: 8),
+            if (draft.extraTiers.isNotEmpty) _ExtraTiersNote(draft: draft, unitLabel: unitLabel, currencyLabel: currencyLabel, onChanged: onChanged),
+            const SizedBox(height: 12),
+            Text(
+              context.tr('wholesale_shipping_group'),
+              style: TextStyle(fontSize: AppText.bodySmall, fontWeight: FontWeight.w600, color: AppColors.sectionMuted),
+            ),
+            const SizedBox(height: 6),
             TextField(
               key: ValueKey('wholesale-pack-weight-${draft.id}'),
               controller: draft.weight,
@@ -322,6 +339,53 @@ class WholesalePackCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Эски товардаги қўшимча поғоналар — фақат кўрсатилади; «Олиб ташлаш» уларни ўчиради
+/// (сақлангандан кейин товар битта нархли бўлади).
+class _ExtraTiersNote extends StatelessWidget {
+  const _ExtraTiersNote({
+    required this.draft,
+    required this.unitLabel,
+    required this.currencyLabel,
+    required this.onChanged,
+  });
+
+  final WholesalePackDraft draft;
+  final String unitLabel;
+  final String currencyLabel;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = draft.extraTiers.map((t) => t.label(unitLabel, currencyLabel)).join(' · ');
+    return Container(
+      key: ValueKey('wholesale-pack-extra-tiers-${draft.id}'),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+            context.tr('wholesale_extra_tiers').replaceAll('{list}', list),
+            style: const TextStyle(fontSize: AppText.bodySmall),
+          ),
+        ),
+        TextButton(
+          key: ValueKey('wholesale-pack-extra-tiers-remove-${draft.id}'),
+          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: () {
+            draft.extraTiers = const [];
+            onChanged();
+          },
+          child: Text(context.tr('wholesale_extra_tiers_remove')),
+        ),
+      ]),
     );
   }
 }

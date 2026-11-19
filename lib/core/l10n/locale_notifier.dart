@@ -8,14 +8,22 @@ import 'user_lang_sync.dart';
 
 /// Ilova tili — qurilma + qo‘lda tanlov.
 class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
+  /// [initialLocale] — `main()` da allaqachon yuklangan prefs'dan sinxron
+  /// hisoblangan til (`LocaleUtils.effectiveLocaleFrom`). Berilsa, birinchi
+  /// kadrdanoq `MaterialApp` shu tilda chiqadi (null oyna yo'q).
+  LocaleNotifier({Locale? initialLocale}) : _locale = initialLocale;
+
   Locale? _locale;
 
   Locale? get locale => _locale;
 
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
-    _locale = await LocaleUtils.effectiveLocale();
-    notifyListeners();
+    final effective = await LocaleUtils.effectiveLocale();
+    if (effective != _locale) {
+      _locale = effective;
+      notifyListeners();
+    }
   }
 
   @override

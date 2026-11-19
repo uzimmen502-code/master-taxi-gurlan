@@ -28,6 +28,7 @@ import '../../../services/fcm_service.dart';
 import '../../../services/location_service.dart';
 import '../../../services/profile_photo_storage.dart';
 import '../../../services/user_role_sync.dart';
+import '../../../utils/locale_utils.dart';
 import '../../relatives/services/tree_service.dart';
 import '../../tv_market/services/tv_owner_name.dart';
 
@@ -873,6 +874,8 @@ class ProfileController extends ChangeNotifier {
     }
     await FirebaseAuth.instance.signOut();
     await prefs.remove('phone_reverified');
-    await prefs.clear();
+    // Til tanlovi saqlanadi — chiqishda til qurilma tiliga qaytmasin
+    // (ega 2026-11-19).
+    await LocaleUtils.clearPrefsKeepingLanguage(prefs);
   }
 }

@@ -55,17 +55,53 @@ class LocaleUtils {
 
   static Future<Locale?> getSavedLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final languageCode = prefs.getString(_savedLanguageKey);
-    final scriptCode = prefs.getString(_savedScriptKey);
+    return savedLocaleFrom(prefs);
+  }
 
-    if (languageCode == null) return null;
-    if (languageCode == followDeviceSentinel) return null;
+  /// Sinxron: allaqachon yuklangan prefs'dan saqlangan qo'lda tanlov.
+  /// Eski/boshqa ko'rinishdagi qiymatlar (`uz_Latn`, `uz-Cyrl`, `ru_RU`)
+  /// ham normallashtiriladi. Tanlov yo'q yoki qurilma sentinel → null.
+  static Locale? savedLocaleFrom(SharedPreferences prefs) {
+    final raw = prefs.getString(_savedLanguageKey)?.trim();
+    var scriptCode = prefs.getString(_savedScriptKey)?.trim();
+
+    if (raw == null || raw.isEmpty) return null;
+    if (raw == followDeviceSentinel) return null;
+    final parts = raw.split(RegExp('[_-]'));
+    final languageCode = parts.first.toLowerCase();
+    if (parts.length > 1 && (scriptCode == null || scriptCode.isEmpty)) {
+      scriptCode = parts[1];
+    }
     if (languageCode == 'ru') return ru;
     if (languageCode == 'uz') {
-      if (scriptCode == 'Latn') return uzLatn;
+      if (scriptCode?.toLowerCase() == 'latn') return uzLatn;
       return uzCyrl;
     }
     return Locale(languageCode, scriptCode);
+  }
+
+  /// Sinxron `effectiveLocale` — saqlangan tanlov yoki qurilma tili.
+  /// Ishga tushishda `MaterialApp` locale'i null bo'lmasligi uchun.
+  static Locale effectiveLocaleFrom(SharedPreferences prefs) {
+    final saved = savedLocaleFrom(prefs);
+    if (saved != null) return _normalize(saved);
+    return resolveFromDevice();
+  }
+
+  /// `prefs.clear()` o'rniga: hamma kalitni o'chiradi, lekin til tanlovi
+  /// (`saved_language`/`saved_script`) saqlanadi — chiqishda (logout) til
+  /// qurilma tiliga qaytib ketmasligi uchun (ega 2026-11-19).
+  static Future<void> clearPrefsKeepingLanguage(
+      SharedPreferences prefs) async {
+    final language = prefs.getString(_savedLanguageKey);
+    final script = prefs.getString(_savedScriptKey);
+    await prefs.clear();
+    if (language != null) {
+      await prefs.setString(_savedLanguageKey, language);
+    }
+    if (script != null) {
+      await prefs.setString(_savedScriptKey, script);
+    }
   }
 
   static Future<void> saveLocale(Locale locale) async {
@@ -106,9 +142,8 @@ class LocaleUtils {
 
   /// Saqlangan til yoki (saqlanmagan bo'lsa) qurilma tili — hech qachon avtomatik saqlamaydi.
   static Future<Locale> effectiveLocale() async {
-    final saved = await getSavedLocale();
-    if (saved != null) return _normalize(saved);
-    return resolveFromDevice();
+    final prefs = await SharedPreferences.getInstance();
+    return effectiveLocaleFrom(prefs);
   }
 
   static Future<Locale> getInitialLocale() async => effectiveLocale();

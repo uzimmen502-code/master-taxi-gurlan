@@ -112,6 +112,8 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
   final languageSelected = prefs.containsKey('saved_language');
+  // Til sinxron — MaterialApp birinchi kadrdanoq to'g'ri tilda (null oyna yo'q).
+  final initialLocale = LocaleUtils.effectiveLocaleFrom(prefs);
   final onboarding = prefs.getBool('onboarding_done') ?? false;
   final firebaseUser = FirebaseAuth.instance.currentUser;
   final hasFirebaseAuth = firebaseUser != null;
@@ -166,6 +168,7 @@ void main() async {
     analyticsRepo: analyticsRepo,
     reportService: reportService,
     deferRoleSync: onboarding,
+    initialLocale: initialLocale,
   ));
 }
 
@@ -251,7 +254,11 @@ class MyApp extends StatefulWidget {
     required this.analyticsRepo,
     required this.reportService,
     this.deferRoleSync = false,
+    this.initialLocale,
   });
+
+  /// `main()` da prefs'dan sinxron hisoblangan til (LocaleNotifier boshlang'ich qiymati).
+  final Locale? initialLocale;
 
   final bool isReturningUser;
   final bool languageSelected;
@@ -311,7 +318,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => LocaleNotifier()..init(),
+          create: (_) =>
+              LocaleNotifier(initialLocale: widget.initialLocale)..init(),
         ),
         Provider<UserRepository>(create: (_) => UserRepository()),
         Provider<OrdersRepository>(create: (_) => OrdersRepository()),

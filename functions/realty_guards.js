@@ -84,7 +84,8 @@ function isOwnAdsImageUrl(url, uid, canon, buckets) {
 /**
  * Расм рўйхатини текширади. [allowed] — аллақачон эълонда турган URL'лар
  * (таҳрирда эски расмлар ўз ҳолича қолади: орқага мослик). Қайтаради:
- * `{urls}` (энг кўпи 5) ёки `{invalid: [...]}`.
+ * `{urls}` (энг кўпи [max]; эълонлар `realty_fields.MAX_IMAGES` = 10 юборади,
+ * эга 2026-11-19) ёки `{invalid: [...]}`.
  */
 function checkImageUrls(raw, { uid, canon, buckets, allowed = [], max = 5 }) {
   const list = Array.isArray(raw) ? raw : [];

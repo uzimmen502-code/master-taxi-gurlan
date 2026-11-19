@@ -7,6 +7,10 @@ const {
   isValidIdemKey, idemDocId, idemMatches, storageBucketsFor,
   checkImageUrls, countActiveFromDocs,
 } = require('./realty_guards');
+// Ихтиёрий қўшимча майдонлар (эга 2026-11-19): тур, сотих, таъмир, валюта…
+const {
+  parseRealtyExtras, extrasForCreate, extrasForUpdate, MAX_IMAGES,
+} = require('./realty_fields');
 // Объект сонлари — `settings/app` (админ панел); код фақат бошланғич ва чегара.
 const {
   freeLimitFrom, packageSizesFrom, parseCounts, CountsError,
@@ -306,7 +310,9 @@ function attachRealty(exports, deps) {
    * мумкин эди. Фарқ қиладиган нарсалар — даража, статус, муддат ва
    * нуқта силкитиши — чақирувчиларнинг ўзида қолади.
    */
-  function parseListingInput(d, { addressFallback = '', uid = '', allowedImages = [] } = {}) {
+  function parseListingInput(d, {
+    addressFallback = '', uid = '', allowedImages = [], currentPropertyType = null,
+  } = {}) {
     const title = String(d.title || '').trim().slice(0, 120);
     if (title.length < 3) throw fail('invalid-argument', 'title_required');
     const text = String(d.text || '').trim().slice(0, 2000);
@@ -358,11 +364,19 @@ function attachRealty(exports, deps) {
       canon: canonicalUid,
       buckets: imageBuckets(),
       allowed: allowedImages,
+      max: MAX_IMAGES,
     });
     if (images.invalid) throw fail('invalid-argument', 'image_invalid');
 
+    const deal = d.deal === 'rent' ? 'rent' : 'sale';
+    // Қўшимча майдонлар — ҳаммаси ихтиёрий; калит келмаса таҳрирда
+    // эски қиймат тегилмайди (эски APK). Нотўғриси — диагностик код.
+    const ex = parseRealtyExtras(d, { deal, currentPropertyType });
+    if (ex.error) throw fail('invalid-argument', ex.error);
+    const landBase = new Set(ex.clearBase);
+
     return {
-      deal: d.deal === 'rent' ? 'rent' : 'sale',
+      deal,
       title,
       text,
       lat,
@@ -378,10 +392,13 @@ function attachRealty(exports, deps) {
       // ўзи кўрсатиш пайтида созламадан ўқилади.
       contactMode: d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner',
       imageUrls: images.urls,
-      rooms: optionalInt(d.rooms, 1, 99),
-      floor: optionalInt(d.floor, -5, 200),
-      totalFloors: optionalInt(d.totalFloors, 1, 200),
+      // Ер участкасида хона/қават маъносиз — тозаланади (realty_fields).
+      rooms: landBase.has('rooms') ? null : optionalInt(d.rooms, 1, 99),
+      floor: landBase.has('floor') ? null : optionalInt(d.floor, -5, 200),
+      totalFloors: landBase.has('totalFloors')
+        ? null : optionalInt(d.totalFloors, 1, 200),
       areaM2: optionalNum(d.areaM2, 1, 100000),
+      extras: ex.values,
     };
   }
 
@@ -507,6 +524,8 @@ function attachRealty(exports, deps) {
       ...(f.floor === null ? {} : { floor: f.floor }),
       ...(f.totalFloors === null ? {} : { totalFloors: f.totalFloors }),
       ...(f.areaM2 === null ? {} : { areaM2: f.areaM2 }),
+      // Қўшимча майдонлар — фақат тўлдирилганлари (эга 2026-11-19).
+      ...extrasForCreate(f.extras),
       imageUrls: f.imageUrls,
       areaLat: cell.lat,
       areaLng: cell.lng,
@@ -608,6 +627,8 @@ function attachRealty(exports, deps) {
       addressFallback: String(prev.addressText || current.addressText || ''),
       uid,
       allowedImages: Array.isArray(current.imageUrls) ? current.imageUrls : [],
+      currentPropertyType: typeof current.propertyType === 'string'
+        ? current.propertyType : null,
     });
 
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
@@ -653,6 +674,9 @@ function attachRealty(exports, deps) {
       floor: f.floor === null ? del : f.floor,
       totalFloors: f.totalFloors === null ? del : f.totalFloors,
       areaM2: f.areaM2 === null ? del : f.areaM2,
+      // Қўшимча майдонлар: келган калит ёзилади/ўчирилади, келмагани
+      // (эски APK) тегилмайди.
+      ...extrasForUpdate(f.extras, del),
       imageUrls: f.imageUrls,
       // Очиқ ҳужжатда фақат тахминий марказ (қаранг: `jitteredPoint`).
       areaLat: cell.lat,

@@ -728,6 +728,98 @@ async function main() {
     console.log('✓ 8) Манзил ёпиқ ҳужжатда (флаг), эскиси кўчади; рақамли нарх бутун сўм');
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // 9) Қўшимча майдонлар (эга 2026-11-19): ихтиёрий, текширилади; эски
+  //    APK (калитсиз) таҳрири уларни ЎЧИРМАЙДИ; 10 тагача расм
+  // ─────────────────────────────────────────────────────────────────
+  {
+    const db = makeDb();
+    const h = {};
+    db._store.set(`users/${OWNER}`, { phone: OWNER, name: 'Эга' });
+    attachRealty(h, {
+      functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
+      assertAdmin, notifyUserInApp, settlementLedger,
+    });
+    const img = (i) => 'https://firebasestorage.googleapis.com/v0/b/demo/o/'
+      + `ads%2F${OWNER}%2Fp${i}.jpg?alt=media`;
+    const base = {
+      deal: 'rent', tier: 'plain', title: 'Ҳовли-уй', text: 'Боғи бор',
+      lat: 41.5, lng: 60.6, addressText: 'Гурлан, Боғ кўча 3',
+    };
+
+    // Нотўғри тур — рад, эълон яратилмайди.
+    await expectError(
+      h.submitRealtyListing({ ...base, propertyType: 'castle' }, ctx(OWNER)),
+      'invalid-argument', 'property_type_invalid',
+    );
+    await expectError(
+      h.submitRealtyListing({ ...base, priceCurrency: 'EUR' }, ctx(OWNER)),
+      'invalid-argument', 'currency_invalid',
+    );
+
+    const res = await h.submitRealtyListing({
+      ...base,
+      propertyType: 'house', landSotix: 6, rooms: 4, renovation: 'euro',
+      buildingType: 'brick', yearBuilt: 2015, utilities: ['water', 'gas'],
+      documents: 'ready', furnished: true, bathroom: null, parking: true,
+      priceAmount: 500, priceCurrency: 'USD', rentPeriod: 'month', deposit: 500,
+      negotiable: true,
+      imageUrls: Array.from({ length: 12 }, (_, i) => img(i)),
+    }, ctx(OWNER));
+    const id = res.listingId;
+    let pub = db._store.get(`realty_listings/${id}`);
+    assert.strictEqual(pub.propertyType, 'house');
+    assert.strictEqual(pub.landSotix, 6);
+    assert.deepStrictEqual(pub.utilities, ['gas', 'water']);
+    assert.strictEqual(pub.priceCurrency, 'USD');
+    assert.strictEqual(pub.priceAmount, 500);
+    assert.strictEqual(pub.deposit, 500);
+    assert.strictEqual(pub.rentPeriod, 'month');
+    assert.ok(!('bathroom' in pub), 'бўш майдон ёзилмайди');
+    assert.ok(!('barter' in pub), 'юборилмаган майдон ёзилмайди');
+    assert.strictEqual(pub.imageUrls.length, 10, 'расм чегараси 10');
+
+    // Эски APK таҳрири: қўшимча калитлар йўқ → эски қийматлар сақланади.
+    const old = {
+      listingId: id, deal: 'rent', title: 'Ҳовли-уй', text: 'Боғи бор',
+      lat: 41.5, lng: 60.6, addressText: 'Гурлан, Боғ кўча 3', rooms: 4,
+      imageUrls: pub.imageUrls,
+    };
+    await h.updateRealtyListing(old, ctx(OWNER));
+    pub = db._store.get(`realty_listings/${id}`);
+    assert.strictEqual(pub.propertyType, 'house');
+    assert.strictEqual(pub.renovation, 'euro');
+    assert.strictEqual(pub.priceCurrency, 'USD');
+    assert.strictEqual(pub.deposit, 500);
+
+    // Сотувга ўтса ижара шартлари тозаланади (эски APK ҳам).
+    await h.updateRealtyListing({ ...old, deal: 'sale' }, ctx(OWNER));
+    pub = db._store.get(`realty_listings/${id}`);
+    assert.ok(!('deposit' in pub) && !('rentPeriod' in pub));
+    assert.strictEqual(pub.renovation, 'euro');
+
+    // Янги илова: ер участкаси — хона/таъмир тозаланади; null — ўчади.
+    await h.updateRealtyListing({
+      ...old, deal: 'sale', propertyType: 'land', landSotix: 12,
+      priceCurrency: null, negotiable: null,
+    }, ctx(OWNER));
+    pub = db._store.get(`realty_listings/${id}`);
+    assert.strictEqual(pub.propertyType, 'land');
+    assert.strictEqual(pub.landSotix, 12);
+    assert.ok(!('rooms' in pub), 'ерда хона йўқ');
+    assert.ok(!('renovation' in pub) && !('furnished' in pub));
+    assert.ok(!('priceCurrency' in pub) && !('negotiable' in pub));
+    assert.strictEqual(pub.parking, true, 'тегилмаган майдон қолади');
+
+    // Нотўғри йил — таҳрир рад, ҳужжат ўзгармайди.
+    await expectError(
+      h.updateRealtyListing({ ...old, yearBuilt: 1800 }, ctx(OWNER)),
+      'invalid-argument', 'year_built_invalid',
+    );
+    assert.strictEqual(db._store.get(`realty_listings/${id}`).propertyType, 'land');
+    console.log('✓ 9) Қўшимча майдонлар: текширув, эски APK сақлайди, ер, 10 расм');
+  }
+
   console.log('\nҲаммаси ўтди: realty_expiry.test.js');
 }
 

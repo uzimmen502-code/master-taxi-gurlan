@@ -191,6 +191,55 @@ check('P17 boundary: title 200 / description 2000 / price 999999999 / attrs 20 �
   assert.deepStrictEqual(m.APPROVE_FROM.wholesale_products, ['pending']);
 });
 
-const failed = results.filter((x) => !x).length;
-console.log(`\n${results.length - failed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+// ── Авто-тасдиқ (эга 2026-11-19) ──
+check('P18 shopItemAutoApproveOf: фақат аниқ true; йўқ/false/"true"/1/null/marketAutoApprove — false', () => {
+  assert.strictEqual(m.AUTO_APPROVE_KEY, 'shopItemAutoApprove');
+  assert.strictEqual(m.shopItemAutoApproveOf({ shopItemAutoApprove: true }), true);
+  for (const s of [undefined, null, {}, { shopItemAutoApprove: false }, { shopItemAutoApprove: 'true' }, { shopItemAutoApprove: 1 }, { marketAutoApprove: true }, { tvAutoApprove: true }]) {
+    assert.strictEqual(m.shopItemAutoApproveOf(s), false, JSON.stringify(s));
+  }
+});
+check('P19 buildAutoApprovePatch = approve патчи + submittedAt + moderationReason auto (moderatedBy auto, +30 кун)', () => {
+  const p = m.buildAutoApprovePatch({ nowMs: NOW, fv });
+  const approve = m.buildModerationPatch('tv_shop_items', 'approve', { cur: {}, actor: 'auto', nowMs: NOW, fv });
+  assert.deepStrictEqual(p, { ...approve, submittedAt: 'TS', moderationReason: 'auto' });
+  assert.strictEqual(p.status, 'active'); assert.strictEqual(p.moderatedBy, 'auto'); assert.strictEqual(p.moderatedAt, 'TS');
+  assert.deepStrictEqual(p.expiresAt, { at: NOW + 30 * DAY });
+  assert.strictEqual(p.rejectReason, 'DEL'); assert.strictEqual(p.expiryWarnedFor, 'DEL'); assert.strictEqual(p.expiredAt, 'DEL');
+});
+check('P20 planShopItemWrite renew_pending: expired → pending (renew) — ҳа; бошқа сабаб/ҳолат — йўқ; авто патч ёзуви loop бермайди', () => {
+  const b = { status: 'expired', ownerPhone: '998901112233', title: 'a' };
+  assert.deepStrictEqual(m.planShopItemWrite(b, { ...b, status: 'pending', moderationReason: 'renew', submittedAt: ts(1) }, NOW), { kind: 'renew_pending' });
+  assert.strictEqual(m.planShopItemWrite(b, { ...b, status: 'pending', moderationReason: 'owner_edit' }, NOW), null);
+  assert.strictEqual(m.planShopItemWrite({ ...b, status: 'active' }, { ...b, status: 'pending', moderationReason: 'renew' }, NOW), null);
+  // Авто ёзувдан кейинги триггер: pending/active/expired → active + яроқли expiresAt + moderatedAt → null.
+  const auto = { status: 'active', submittedAt: ts(1), moderatedAt: ts(2), moderationReason: 'auto', expiresAt: ts(NOW + 30 * DAY) };
+  assert.strictEqual(m.planShopItemWrite({ ...b, status: 'pending', moderationReason: 'renew' }, { ...b, ...auto }, NOW), null);
+  assert.strictEqual(m.planShopItemWrite({ ...b, status: 'active' }, { ...b, ...auto }, NOW), null, 'create active → auto');
+  assert.strictEqual(m.planShopItemWrite({ ...b, status: 'expired', price: 5 }, { ...b, price: 5, ...auto }, NOW), null, 'expired таҳрир → auto');
+});
+const asyncChecks = [];
+asyncChecks.push(['P21 createTtlCache: TTL ичида loader қайта чақирилмайди; чегарада (=TTL) янгиланади; хато кешланмайди; reset', () => {
+  let t = 0; let calls = 0; let fail = false;
+  const c = m.createTtlCache(async () => { calls += 1; if (fail) throw new Error('x'); return calls; }, 60000, () => t);
+  return (async () => {
+    assert.strictEqual(await c.get(), 1);
+    t = 59999; assert.strictEqual(await c.get(), 1); assert.strictEqual(calls, 1);
+    t = 60000; assert.strictEqual(await c.get(), 2);
+    fail = true; t = 200000; await assert.rejects(c.get()); fail = false;
+    assert.strictEqual(await c.get(), 4, 'хатодан кейин қайта ўқийди');
+    c.reset(); assert.strictEqual(await c.get(), 5);
+    assert.strictEqual(m.AUTO_APPROVE_TTL_MS, 60000);
+  })();
+}]);
+
+(async () => {
+  for (const [name, fn] of asyncChecks) {
+    try { await fn(); results.push(true); console.log(`PASS - ${name}`); } catch (e) {
+      results.push(false); console.log(`FAIL - ${name} :: ${e.message}`);
+    }
+  }
+  const failed = results.filter((x) => !x).length;
+  console.log(`\n${results.length - failed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();

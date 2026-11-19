@@ -12,6 +12,8 @@
  *   - `onShopItemModeration` (tv_shop_items onWrite): янги → `pending`; эга контент таҳрири → `pending`;
  *     админ бошқа йўл билан `active` қилганда (`tv_clips_moderation_screen`, `adminUpdateBusinessProduct`) муддат йўқ
  *     бўлса — `expiresAt` = +30 кун. Ўз ёзувларини ва админ таҳририни (moderatedAt / admin_audit) ўтказиб юборади.
+ *     2026-11-19 (эга): `settings/app.shopItemAutoApprove == true` → янги / expired таҳрири / renew — дарҳол `active`
+ *     (+30 кун, moderatedBy 'auto', moderationReason 'auto'); active таҳрири — active қолади. Калит 60 с кешланади.
  *   - `adminModerateListing` — approve/reject, транзакция + `admin_audit` (kind `listing_moderation`).
  *     2026-11-15 (эга): «админ тузатиб тасдиқлайди» — tv_shop_items учун ихтиёрий `edits` (фақат approve билан;
  *     title/description/price/priceUnit/category/attrs/imported/photoUrls-қисм-тўплам) ва `rejected → active`.
@@ -161,7 +163,57 @@ function planShopItemWrite(before, after, nowMs) {
     const exp = millisOf(after.expiresAt);
     if (exp == null || exp <= nowMs) return { kind: 'activate_stamp' };
   }
+  // Эга `renewMarketListing` орқали expired → pending қилди. Фақат авто-тасдиқ ёқилганда ишланади (ўчиқ — ёзув йўқ).
+  if (before.status === 'expired' && after.status === 'pending' && after.moderationReason === 'renew') {
+    return { kind: 'renew_pending' };
+  }
   return null;
+}
+
+// ── Авто-тасдиқ (эга 2026-11-19): `settings/app.shopItemAutoApprove` ──
+// true → эга эълони модерациясиз `active` (create / expired таҳрири / renew); active таҳрири — active қолади.
+// Йўқ/false/бошқа тур → аввалги қўлда модерация. `marketAutoApprove` (ads cheap_product) — БОШҚА калит, тегилмайди.
+// Калитни админ клиенти тўғридан-тўғри ёзади (rules: settings/app — isAdmin).
+const AUTO_APPROVE_KEY = 'shopItemAutoApprove';
+const AUTO_APPROVE_TTL_MS = 60 * 1000;
+const AUTO_ACTOR = 'auto';
+/** attachMarketModeration ичида яратилади; тест (эмулятор) калитни ўзгартиргач `resetAutoApproveCache()`. */
+let autoApproveCache = null;
+function resetAutoApproveCache() {
+  if (autoApproveCache) autoApproveCache.reset();
+}
+
+/** Созламалар ҳужжатидан қиймат (тоза): фақат аниқ `true` ёқади. */
+function shopItemAutoApproveOf(settings) {
+  return !!settings && settings[AUTO_APPROVE_KEY] === true;
+}
+
+/**
+ * Авто-тасдиқ патчи (тоза): `buildModerationPatch` approve билан БИР ХИЛ майдонлар (status active, moderatedAt,
+ * expiresAt +30 кун, эски муддат белгилари олинади) + submittedAt + moderationReason 'auto'; moderatedBy = 'auto'.
+ */
+function buildAutoApprovePatch({ nowMs, fv }) {
+  return {
+    ...buildModerationPatch('tv_shop_items', 'approve', { cur: {}, actor: AUTO_ACTOR, reason: null, nowMs, fv }),
+    submittedAt: fv.ts(),
+    moderationReason: 'auto',
+  };
+}
+
+/** Оддий TTL кеш (тоза; `now` — тест учун). Хато бўлса кешланмайди. */
+function createTtlCache(loader, ttlMs, now = () => Date.now()) {
+  let value;
+  let at = -Infinity;
+  return {
+    async get() {
+      const t = now();
+      if (t - at < ttlMs) return value;
+      value = await loader();
+      at = t;
+      return value;
+    },
+    reset() { at = -Infinity; value = undefined; },
+  };
 }
 
 /** Рад этиш сабаби: 1..300 белги, акс ҳолда null. */
@@ -435,6 +487,26 @@ function attachMarketModeration(exportsObj, deps) {
 
   const titleOf = (d) => String((d && d.title) || '').trim().slice(0, 60);
 
+  // Авто-тасдиқ калити: инстансда 60 с кешланади (ҳар ёзувда settings/app ўқилмасин, 37-банд).
+  // Ўқиш хатоси — қўлда модерация (хавфсиз йўл) ва кешланмайди.
+  async function readAutoApprove() {
+    try {
+      return shopItemAutoApproveOf((await db.collection('settings').doc('app').get()).data());
+    } catch (e) {
+      log({ action: 'onShopItemModeration', result: 'error', errorCode: 'AUTO_APPROVE_READ_FAILED', error: String(e.message || e) });
+      throw e;
+    }
+  }
+  autoApproveCache = createTtlCache(readAutoApprove, AUTO_APPROVE_TTL_MS);
+  const cache = autoApproveCache;
+  async function autoApproveOn() {
+    try {
+      return await cache.get();
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ── 1. Триггер ──
   exportsObj.onShopItemModeration = functions.firestore
     .document('tv_shop_items/{itemId}')
@@ -446,6 +518,15 @@ function attachMarketModeration(exportsObj, deps) {
       if (!plan) return null;
       const itemId = context.params.itemId;
       const ref = change.after.ref;
+
+      // activate_stamp калитга боғлиқ эмас — settings ўқилмайди.
+      const auto = plan.kind === 'activate_stamp' ? false : await autoApproveOn();
+      if (plan.kind === 'renew_pending' && !auto) return null; // қўлда режим: renew → pending қолади (аввалгидек)
+      if (plan.kind === 'edit_pending' && auto && plan.fromStatus === 'active') {
+        // Авто режим: active эълон таҳрири — active қолади, expiresAt ўзгармайди, ёзув йўқ.
+        log({ action: 'onShopItemModeration', itemId, plan: plan.kind, result: 'auto_keep_active' });
+        return null;
+      }
 
       // Админ CF таҳрири (`adminUpdateBusinessProduct`): ўша транзакцияда admin_audit ёзади, `at` == `updatedAt`.
       if (plan.kind === 'edit_pending' && after.updatedBy && tsChanged(before.updatedAt, after.updatedAt)) {
@@ -464,16 +545,31 @@ function attachMarketModeration(exportsObj, deps) {
         const cur = snap.data() || {};
         if (plan.kind === 'create_pending') {
           if (!nextStatusOnCreate(cur)) return 'noop';
+          if (auto) {
+            t.update(ref, buildAutoApprovePatch({ nowMs: Date.now(), fv }));
+            return 'auto_active';
+          }
           t.update(ref, { status: 'pending', submittedAt: fv.ts(), moderationReason: 'new' });
           return 'pending';
         }
         if (plan.kind === 'edit_pending') {
           // Орада модерация бўлмаган ва ҳолат ўзгармаган бўлса (кейинги ёзув таҳрирни «яшира» олмасин).
           if (cur.status !== plan.fromStatus || tsChanged(cur.moderatedAt, after.moderatedAt)) return 'noop';
+          if (auto) {
+            // Фақат expired шу ерга етади (active — юқорида): қайта юбориш = тасдиқ, янги 30 кун.
+            t.update(ref, buildAutoApprovePatch({ nowMs: Date.now(), fv }));
+            return 'auto_active';
+          }
           t.update(ref, {
             status: 'pending', submittedAt: fv.ts(), moderationReason: 'owner_edit', rejectReason: fv.del(),
           });
           return 'pending';
+        }
+        if (plan.kind === 'renew_pending') {
+          // Орада админ тасдиқлаган/рад этган бўлса — тегилмайди.
+          if (cur.status !== 'pending' || cur.moderationReason !== 'renew' || tsChanged(cur.moderatedAt, after.moderatedAt)) return 'noop';
+          t.update(ref, buildAutoApprovePatch({ nowMs: Date.now(), fv }));
+          return 'auto_active';
         }
         // activate_stamp
         const exp = millisOf(cur.expiresAt);
@@ -484,7 +580,7 @@ function attachMarketModeration(exportsObj, deps) {
         });
         return 'stamped';
       });
-      log({ action: 'onShopItemModeration', itemId, plan: plan.kind, result: outcome });
+      log({ action: 'onShopItemModeration', itemId, plan: plan.kind, auto, result: outcome });
       return null;
     });
 
@@ -757,6 +853,12 @@ module.exports = {
   nextStatusOnCreate,
   expiryDate,
   planShopItemWrite,
+  shopItemAutoApproveOf,
+  buildAutoApprovePatch,
+  createTtlCache,
+  resetAutoApproveCache,
+  AUTO_APPROVE_KEY,
+  AUTO_APPROVE_TTL_MS,
   normalizeReason,
   buildModerationPatch,
   validateListingEdits,

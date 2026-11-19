@@ -19,6 +19,7 @@ if (!/^demo-/.test(process.env.GCLOUD_PROJECT)) throw new Error('demo-* loyiha k
 const fns = require('../index');
 const admin = require('firebase-admin');
 const migrate = require('../tools/migrate_market_expiry');
+const { resetAutoApproveCache } = require('../market_moderation');
 
 const db = admin.firestore();
 const FV = admin.firestore.FieldValue;
@@ -133,6 +134,79 @@ async function main() {
     const r = await writeAndTrigger('t6', (ref) => ref.update({ status: 'active' }));
     const exp = r.data.expiresAt.toMillis();
     assert.ok(Math.abs(exp - (Date.now() + 30 * DAY)) < 60000, `expiresAt ${new Date(exp).toISOString()}`);
+  });
+
+  // ── Авто-тасдиқ: settings/app.shopItemAutoApprove (эга 2026-11-19) ──
+  const setAuto = async (v) => {
+    if (v === undefined) await db.collection('settings').doc('app').set({ marketAutoApprove: true });
+    else await db.collection('settings').doc('app').set({ shopItemAutoApprove: v, marketAutoApprove: true });
+    resetAutoApproveCache();
+  };
+  await check('A1 калит true: create → active (+submittedAt, moderatedAt, moderatedBy auto, reason auto, +30 кун); loop/такрор йўқ', async () => {
+    await setAuto(true);
+    const r = await writeAndTrigger('a1', (ref) => ref.set(item()));
+    assert.strictEqual(r.data.status, 'active');
+    assert.ok(r.data.submittedAt && r.data.moderatedAt);
+    assert.strictEqual(r.data.moderatedBy, 'auto'); assert.strictEqual(r.data.moderationReason, 'auto');
+    assert.ok(Math.abs(r.data.expiresAt.toMillis() - (Date.now() + 30 * DAY)) < 60000);
+    const snap = await items.doc('a1').get();
+    await fns.onShopItemModeration.run({ before: r.after, after: snap }, { params: { itemId: 'a1' } });
+    assert.strictEqual((await items.doc('a1').get()).updateTime.toMillis(), snap.updateTime.toMillis(), 'ўз ёзувидан кейин loop йўқ');
+    await fns.onShopItemModeration.run({ before: r.before, after: r.after }, { params: { itemId: 'a1' } });
+    assert.strictEqual((await items.doc('a1').get()).updateTime.toMillis(), snap.updateTime.toMillis(), 'create қайта етказилса — идемпотент');
+    const p = await writeAndTrigger('a1p', (ref) => ref.set(item({ status: 'pending' })));
+    assert.strictEqual(p.data.status, 'active', 'pending яратилса ҳам');
+    assert.strictEqual((await audits()).filter((x) => ['a1', 'a1p'].includes(x.id)).length, 0, 'admin_audit ёзилмайди');
+  });
+  await check('A2 калит true: active таҳрири — active қолади, expiresAt ўзгармайди, триггер ёзмайди', async () => {
+    const exp = TS.fromMillis(Date.now() + 10 * DAY);
+    await items.doc('a2').set(item({ status: 'active', expiresAt: exp, moderatedAt: TS.fromMillis(Date.now() - DAY) }));
+    const r = await writeAndTrigger('a2', (ref) => ref.update({ price: 999 }));
+    assert.strictEqual(r.data.status, 'active'); assert.strictEqual(r.data.expiresAt.toMillis(), exp.toMillis());
+    assert.strictEqual((await items.doc('a2').get()).updateTime.toMillis(), r.after.updateTime.toMillis(), 'ёзув йўқ');
+  });
+  await check('A3 калит true: expired таҳрири → active (+30 кун); renew → active; қайта триггер — ёзув йўқ', async () => {
+    await items.doc('a3').set(item({ status: 'expired', expiresAtPrev: TS.fromMillis(Date.now() - DAY) }));
+    const r = await writeAndTrigger('a3', (ref) => ref.update({ title: 'Yangi' }));
+    assert.strictEqual(r.data.status, 'active'); assert.strictEqual(r.data.moderationReason, 'auto');
+    assert.strictEqual(r.data.expiresAtPrev, undefined);
+    assert.ok(Math.abs(r.data.expiresAt.toMillis() - (Date.now() + 30 * DAY)) < 60000);
+    await items.doc('a3r').set(item({ status: 'expired' }));
+    const before = await items.doc('a3r').get();
+    await renew({ collection: 'tv_shop_items', id: 'a3r' });
+    const after = await items.doc('a3r').get();
+    assert.strictEqual(after.data().status, 'pending');
+    await fns.onShopItemModeration.run({ before, after }, { params: { itemId: 'a3r' } });
+    const d = await items.doc('a3r').get();
+    assert.strictEqual(d.data().status, 'active'); assert.strictEqual(d.data().moderatedBy, 'auto');
+    await fns.onShopItemModeration.run({ before, after }, { params: { itemId: 'a3r' } });
+    assert.strictEqual((await items.doc('a3r').get()).updateTime.toMillis(), d.updateTime.toMillis(), 'renew қайта етказилса — идемпотент');
+  });
+  await check('A4 калит false / йўқ (marketAutoApprove true бўлса ҳам) — қўлда: create → pending, renew → pending қолади', async () => {
+    for (const [i, v] of [[0, false], [1, undefined], [2, 'true']]) {
+      await setAuto(v);
+      const r = await writeAndTrigger(`a4_${i}`, (ref) => ref.set(item()));
+      assert.strictEqual(r.data.status, 'pending', `калит ${v}`);
+      assert.strictEqual(r.data.moderationReason, 'new');
+    }
+    await items.doc('a4r').set(item({ status: 'expired' }));
+    const before = await items.doc('a4r').get();
+    await renew({ collection: 'tv_shop_items', id: 'a4r' });
+    const after = await items.doc('a4r').get();
+    await fns.onShopItemModeration.run({ before, after }, { params: { itemId: 'a4r' } });
+    const d = await items.doc('a4r').get();
+    assert.strictEqual(d.data().status, 'pending'); assert.strictEqual(d.updateTime.toMillis(), after.updateTime.toMillis());
+  });
+  await check('A5 кеш: калит ёқилгач reset қилинмаса — 60 с ичида эски қиймат (қўлда) ишлатилади', async () => {
+    await setAuto(false);
+    await writeAndTrigger('a5_warm', (ref) => ref.set(item()));
+    await db.collection('settings').doc('app').set({ shopItemAutoApprove: true }); // reset йўқ
+    const r = await writeAndTrigger('a5', (ref) => ref.set(item()));
+    assert.strictEqual(r.data.status, 'pending', 'кешдаги false');
+    resetAutoApproveCache();
+    assert.strictEqual((await writeAndTrigger('a5b', (ref) => ref.set(item()))).data.status, 'active');
+    await db.collection('settings').doc('app').delete();
+    resetAutoApproveCache();
   });
 
   // ── adminModerateListing ──

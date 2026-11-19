@@ -380,6 +380,7 @@ class RealtyRepository {
     String ownerName = '',
     String districtId = '',
     String? idempotencyKey,
+    Map<String, Object?> extras = const {},
   }) async {
     final data = await _call(
       'submitRealtyListing',
@@ -402,6 +403,8 @@ class RealtyRepository {
           areaM2: areaM2,
           imageUrls: imageUrls,
         ),
+        // Қўшимча майдонлар (эга 2026-11-19): `null` — тозалаш.
+        ...extras,
         'idempotencyKey': idempotencyKey ?? _uuid.v4(),
         'tier': tier.key,
         if (ownerName.trim().isNotEmpty) 'ownerName': ownerName.trim(),
@@ -477,6 +480,7 @@ class RealtyRepository {
     num? areaM2,
     List<String> imageUrls = const [],
     String districtId = '',
+    Map<String, Object?> extras = const {},
   }) async {
     final data = await _call(
       'updateRealtyListing',
@@ -498,6 +502,7 @@ class RealtyRepository {
           areaM2: areaM2,
           imageUrls: imageUrls,
         ),
+        ...extras,
         'listingId': listingId,
       },
       timeout: _payTimeout,

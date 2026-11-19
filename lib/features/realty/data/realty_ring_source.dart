@@ -13,7 +13,7 @@ import '../../../models/realty_listing.dart';
 /// Сотиш/Ижара ва муддати ўтганлар — КЛИЕНТДА (аввалги `_live` қоидаси; янги индекс керак эмас).
 @immutable
 class RealtyRingFilter {
-  const RealtyRingFilter({this.tier, this.deal});
+  const RealtyRingFilter({this.tier, this.deal, this.propertyType});
 
   /// `null` — барча даражалар (харита; индекс `status+districtId+createdAt`).
   final RealtyTier? tier;
@@ -21,20 +21,30 @@ class RealtyRingFilter {
   /// `null` — Сотиш ҳам, Ижара ҳам.
   final RealtyDeal? deal;
 
+  /// `null` — барча турлар. Сотиш/Ижара каби КЛИЕНТДА (эга 2026-11-19):
+  /// янги индекс керак эмас; тури кўрсатилмаган эски эълонлар тур
+  /// танланганда кўринмайди.
+  final String? propertyType;
+
   Map<String, Object> get equals => {if (tier != null) 'tier': tier!.key};
 
   /// Клиент филтри — лентада кўринадими.
   bool shows(RealtyListing r, {DateTime? now}) {
     final exp = r.expiresAt;
     if (exp != null && exp.isBefore(now ?? DateTime.now())) return false;
+    if (propertyType != null && r.extras.propertyType != propertyType) return false;
     return deal == null || r.deal == deal;
   }
 
   @override
-  bool operator ==(Object other) => other is RealtyRingFilter && other.tier == tier && other.deal == deal;
+  bool operator ==(Object other) =>
+      other is RealtyRingFilter &&
+      other.tier == tier &&
+      other.deal == deal &&
+      other.propertyType == propertyType;
 
   @override
-  int get hashCode => Object.hash(tier, deal);
+  int get hashCode => Object.hash(tier, deal, propertyType);
 }
 
 abstract class RealtyListingSource {

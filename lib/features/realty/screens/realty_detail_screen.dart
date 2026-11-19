@@ -15,6 +15,7 @@ import '../../tv_market/widgets/tv_clip_link_widgets.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_controls.dart';
 import '../widgets/realty_feedback.dart';
+import '../widgets/realty_field_labels.dart';
 import '../widgets/realty_package_sheet.dart';
 import '../widgets/realty_video_open.dart';
 
@@ -115,7 +116,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
     final c = context.ava;
     final r = widget.listing;
     final tierColor = RealtyTabs.colorFor(r.displayTier);
-    final specs = r.specsLabel;
+    final specs = realtyCardSpecs(context.tr, r);
     final detail = _detail;
 
     return Scaffold(
@@ -209,6 +210,9 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
               ),
             ),
           const SizedBox(height: 14),
+
+          // Қўшимча маълумотлар (эга 2026-11-19) — фақат тўлдирилганлари.
+          RealtyExtrasSection(listing: r),
 
           // «Видеони кўриш» — фақат эга видео боғлаган бўлса (3-бўлим).
           // Видео БЕПУЛ кўрилади: ахборот пакети аниқ манзил ва алоқа

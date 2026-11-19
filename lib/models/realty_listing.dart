@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show immutable;
 
 /// Битим тури — Сотиш ёки Ижара.
 enum RealtyDeal { sale, rent }
@@ -76,6 +77,155 @@ extension RealtyContactModeX on RealtyContactMode {
           : RealtyContactMode.owner;
 }
 
+/// Қўшимча майдонларнинг рухсат этилган қийматлари (эга 2026-11-19).
+///
+/// Сервердаги `functions/realty_fields.js` билан БИР ХИЛ бўлиши шарт —
+/// ҳақиқий текширув серверда (нотўғри қиймат `<field>_invalid` билан рад
+/// этилади), бу ерда фақат танлов рўйхати ва ўқишда нотаниш қийматни
+/// ташлаб юбориш учун.
+abstract final class RealtyFieldOptions {
+  static const propertyTypes = [
+    'apartment', 'house', 'land', 'commercial', 'office', 'other',
+  ];
+  static const renovations = ['none', 'cosmetic', 'euro', 'design'];
+  static const buildingTypes = [
+    'brick', 'panel', 'monolith', 'block', 'wood', 'other',
+  ];
+  static const utilities = [
+    'gas', 'water', 'electricity', 'sewer', 'heating', 'internet',
+  ];
+  static const documents = ['ready', 'in_progress', 'none'];
+  static const bathrooms = ['separate', 'combined'];
+  static const currencies = ['UZS', 'USD'];
+  static const rentPeriods = ['month', 'day'];
+
+  /// Сотих фақат ҳовли ва ерда маъноли.
+  static const sotixTypes = {'house', 'land'};
+
+  /// Эълондаги расмлар чегараси (эга 2026-11-19: 5 → 10; сервер
+  /// `MAX_IMAGES` билан бир хил).
+  static const maxImages = 10;
+
+  static const landSotixMin = 0.1;
+  static const landSotixMax = 10000;
+  static const yearMin = 1900;
+  static int get yearMax => DateTime.now().year + 2;
+
+  /// Ер участкасида хона/қават/таъмир/бино тури кўрсатилмайди.
+  static bool isLand(String? type) => type == 'land';
+  static bool hasSotix(String? type) => type == null || sotixTypes.contains(type);
+}
+
+/// Эълоннинг ИХТИЁРИЙ қўшимча маълумотлари — ҳаммаси бўш бўлиши мумкин
+/// (эски ёзувларда йўқ). Пул — бутун сон ([deposit]); [priceCurrency]
+/// `priceAmount` нинг валютаси, йўқ бўлса — UZS.
+@immutable
+class RealtyExtras {
+  const RealtyExtras({
+    this.propertyType,
+    this.landSotix,
+    this.renovation,
+    this.buildingType,
+    this.yearBuilt,
+    this.utilities = const [],
+    this.documents,
+    this.furnished = false,
+    this.bathroom,
+    this.balcony = false,
+    this.parking = false,
+    this.priceCurrency = 'UZS',
+    this.rentPeriod,
+    this.deposit,
+    this.negotiable = false,
+    this.mortgage = false,
+    this.barter = false,
+  });
+
+  final String? propertyType;
+  final num? landSotix;
+  final String? renovation;
+  final String? buildingType;
+  final int? yearBuilt;
+  final List<String> utilities;
+  final String? documents;
+  final bool furnished;
+  final String? bathroom;
+  final bool balcony;
+  final bool parking;
+  final String priceCurrency;
+  final String? rentPeriod;
+  final int? deposit;
+  final bool negotiable;
+  final bool mortgage;
+  final bool barter;
+
+  static const empty = RealtyExtras();
+
+  bool get isUsd => priceCurrency == 'USD';
+
+  static String? _pick(Object? raw, List<String> allowed) {
+    final s = raw is String ? raw : null;
+    return s != null && allowed.contains(s) ? s : null;
+  }
+
+  factory RealtyExtras.fromMap(Map<String, dynamic> d) {
+    final rawUtil = d['utilities'];
+    return RealtyExtras(
+      propertyType: _pick(d['propertyType'], RealtyFieldOptions.propertyTypes),
+      landSotix: d['landSotix'] is num ? d['landSotix'] as num : null,
+      renovation: _pick(d['renovation'], RealtyFieldOptions.renovations),
+      buildingType: _pick(d['buildingType'], RealtyFieldOptions.buildingTypes),
+      yearBuilt: (d['yearBuilt'] is num) ? (d['yearBuilt'] as num).toInt() : null,
+      utilities: rawUtil is List
+          ? RealtyFieldOptions.utilities.where(rawUtil.contains).toList()
+          : const [],
+      documents: _pick(d['documents'], RealtyFieldOptions.documents),
+      furnished: d['furnished'] == true,
+      bathroom: _pick(d['bathroom'], RealtyFieldOptions.bathrooms),
+      balcony: d['balcony'] == true,
+      parking: d['parking'] == true,
+      priceCurrency:
+          _pick(d['priceCurrency'], RealtyFieldOptions.currencies) ?? 'UZS',
+      rentPeriod: _pick(d['rentPeriod'], RealtyFieldOptions.rentPeriods),
+      deposit: (d['deposit'] is num) ? (d['deposit'] as num).toInt() : null,
+      negotiable: d['negotiable'] == true,
+      mortgage: d['mortgage'] == true,
+      barter: d['barter'] == true,
+    );
+  }
+
+  /// Серверга юбориладиган майдонлар. ҲАММА калит юборилади: `null` —
+  /// «тозалаш» (таҳрирда сервер майдонни ўчиради), шунда эга олиб
+  /// ташлаган белги эски қиймат бўлиб қолмайди. Сервер ҳам шу қоидаларни
+  /// қайта текширади (18-қоида) — бу ер фақат ортиқча юбормаслик учун.
+  Map<String, Object?> toPayload({
+    required RealtyDeal deal,
+    required bool hasPriceAmount,
+  }) {
+    final land = RealtyFieldOptions.isLand(propertyType);
+    final rent = deal == RealtyDeal.rent;
+    return {
+      'propertyType': propertyType,
+      'landSotix': RealtyFieldOptions.hasSotix(propertyType) ? landSotix : null,
+      'renovation': land ? null : renovation,
+      'buildingType': land ? null : buildingType,
+      'yearBuilt': land ? null : yearBuilt,
+      'utilities': utilities.isEmpty ? null : utilities,
+      'documents': documents,
+      'furnished': !land && furnished ? true : null,
+      'bathroom': land ? null : bathroom,
+      'balcony': !land && balcony ? true : null,
+      'parking': parking ? true : null,
+      'priceCurrency': hasPriceAmount ? priceCurrency : null,
+      'rentPeriod': rent ? rentPeriod : null,
+      'deposit': rent ? deposit : null,
+      'negotiable': negotiable ? true : null,
+      'mortgage': mortgage ? true : null,
+      'barter': barter ? true : null,
+    };
+  }
+}
+
 /// `realty_listings` ҳужжати — «Кўчмас мулк Кластери»нинг битта объекти.
 ///
 /// Концепциянинг 6-бўлими: бир уй ОДДИЙ, РЕКЛАМА ва СРОЧНО учун уч марта
@@ -113,6 +263,7 @@ class RealtyListing {
     this.adClipId = '',
     this.districtId = '',
     this.regionId = '',
+    this.extras = RealtyExtras.empty,
     this.tierUntil,
     this.createdAt,
     this.updatedAt,
@@ -178,6 +329,9 @@ class RealtyListing {
 
   final String districtId;
   final String regionId;
+
+  /// Ихтиёрий қўшимча маълумотлар (тур, сотих, таъмир, валюта…).
+  final RealtyExtras extras;
 
   /// РЕКЛАМА/СРОЧНО муддати тугайдиган вақт. [RealtyTier.plain] да null.
   final DateTime? tierUntil;
@@ -271,6 +425,7 @@ class RealtyListing {
       status: (d['status'] ?? 'active') as String,
       districtId: ((d['districtId'] ?? '') as String).trim(),
       regionId: ((d['regionId'] ?? '') as String).trim(),
+      extras: RealtyExtras.fromMap(d),
       tierUntil: _parseDate(d['tierUntil']),
       createdAt: _parseDate(d['createdAt']),
       updatedAt: _parseDate(d['updatedAt']),

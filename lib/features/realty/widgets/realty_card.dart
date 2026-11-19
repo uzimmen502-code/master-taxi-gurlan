@@ -6,6 +6,7 @@ import '../../../models/realty_listing.dart';
 import '../../favorites/domain/favorite_ref.dart';
 import '../../favorites/widgets/favorite_heart.dart';
 import '../realty_tabs.dart';
+import 'realty_field_labels.dart';
 
 /// Лентадаги битта объект картаси.
 ///
@@ -24,7 +25,8 @@ class RealtyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     final tierColor = RealtyTabs.colorFor(listing.displayTier);
-    final specs = listing.specsLabel;
+    // Тур + хона/қават/майдон + сотих (эга 2026-11-19).
+    final specs = realtyCardSpecs(context.tr, listing);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),

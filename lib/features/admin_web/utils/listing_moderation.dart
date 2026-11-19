@@ -166,7 +166,12 @@ ListingModItem listingModItemFromRaw(ListingModSource source, String id, Map<Str
         source: source,
         id: id,
         title: _str(d['title']),
-        priceText: text.isNotEmpty ? text : (amount > 0 ? formatMoney(amount) : ''),
+        // USD эълон (эга 2026-11-19) — «сўм» деб кўрсатилмасин.
+        priceText: text.isNotEmpty
+            ? text
+            : (amount > 0
+                ? (d['priceCurrency'] == 'USD' ? '\$${formatPrice(amount)}' : formatMoney(amount))
+                : ''),
         photoUrl: _firstUrl(d, const ['imageUrls']),
         seller: _str(d['ownerName']),
         market: '',

@@ -792,10 +792,35 @@ service cloud.firestore {
               'searchTokens'];
     }
 
+    // Карточка белгиси (эга 2026-11-19): нарх тарихи / тасдиқланган белги / қолдиқ — фақат сервер (functions/product_promo.js).
+    function productPromoServerKeys() {
+      return ['priceTracked', 'priceSince', 'priceHistory', 'promo', 'promoState', 'firstActiveAt', 'stockLeft'];
+    }
+    // Сотувчи сўрови: kind discount (oldPrice — бутун) | promo (oldPrice йўқ); until ≤ 30 кун; requestedAt == request.time.
+    // Фоиз, 7 кун қоидаси ва модерация — серверда. Эркин матн йўқ.
+    function productPromoRequestOk(d) {
+      return !('promoRequest' in d)
+          || (d.promoRequest is map
+              && d.promoRequest.keys().hasOnly(['kind', 'oldPrice', 'until', 'requestedAt'])
+              && d.promoRequest.get('kind', '') in ['discount', 'promo']
+              && d.promoRequest.get('until', null) is timestamp
+              && d.promoRequest.until > request.time
+              && d.promoRequest.until <= request.time + duration.value(30, 'd')
+              && d.promoRequest.get('requestedAt', null) == request.time
+              && ((d.promoRequest.kind == 'promo' && !('oldPrice' in d.promoRequest))
+                  || (d.promoRequest.kind == 'discount' && d.promoRequest.get('oldPrice', 0) is int
+                      && d.promoRequest.oldPrice >= 1 && d.promoRequest.oldPrice <= 999999999)));
+    }
+    // Тегилмаган эски сўров (requestedAt эски) — қайта текширилмайди.
+    function productPromoRequestChangeOk(d) {
+      return !d.diff(resource.data).affectedKeys().hasAny(['promoRequest']) || productPromoRequestOk(d);
+    }
     function tvShopItemCreateOk() {
       let d = request.resource.data;
       return !('boostUntil' in d)
           && !d.keys().hasAny(tvShopModerationKeys())
+          && !d.keys().hasAny(productPromoServerKeys())
+          && productPromoRequestOk(d)
           && !('socialPostedAt' in d)
           && d.get('viewCount', 0) == 0
           && d.get('status', 'active') in ['active', 'pending']
@@ -811,6 +836,8 @@ service cloud.firestore {
       return notChanged('businessId')
           && notChanged('createdAt')
           && !d.diff(resource.data).affectedKeys().hasAny(tvShopModerationKeys())
+          && !d.diff(resource.data).affectedKeys().hasAny(productPromoServerKeys())
+          && productPromoRequestChangeOk(d)
           // Ҳолат: ўзгармайди ёки 'deleted' (истаган ҳолатдан, жумладан pending/expired/rejected). 'active' — фақат админ/CF;
           // контент таҳрири ва янгилаш (expired → pending) — сервер (onShopItemModeration / renewMarketListing).
           && (d.get('status', 'active') == resource.data.get('status', 'active')
@@ -3446,8 +3473,9 @@ service cloud.firestore {
                 'createdAt', 'updatedAt', 'publishedAt', 'moderatedAt',
                 'moderatedBy',
                 'market', 'currency', 'deliveryDays',
-                'unitWeightG', 'unitDims', 'packs', 'minOrderQty'
-              ]);
+                'unitWeightG', 'unitDims', 'packs', 'minOrderQty', 'promoRequest'
+              ])
+          && productPromoRequestOk(request.resource.data);
     }
 
     // Эга — контент таҳрири (қайта `pending`га тушади) ёки фақат
@@ -3462,8 +3490,9 @@ service cloud.firestore {
                 'title', 'titleLower', 'searchTokens', 'description',
                 'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt',
                 'currency', 'deliveryDays', 'unitWeightG', 'unitDims', 'packs',
-                'minOrderQty'
+                'minOrderQty', 'promoRequest'
               ])
+          && productPromoRequestChangeOk(request.resource.data)
           && wholesaleProductShippingOk()
           && request.resource.data.priceTiers is list
           && request.resource.data.priceTiers.size() >= 1

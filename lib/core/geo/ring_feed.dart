@@ -76,10 +76,26 @@ class RingFeed<T> extends ChangeNotifier {
     _error = null;
     _notify();
     try {
-      final page = await pager.next(pageSize);
-      if (_disposed || gen != _gen) return;
-      final added = page.where((r) => _visible(r.item)).length;
-      _items.addAll(page);
+      var added = 0;
+      if (_items.isEmpty) {
+        // Биринчи саҳифа (эга 2026-11-19, тезлик): ҳар бўш бўлмаган ҳалқа келиши билан чизилади
+        // (`firstNonEmpty`), [pageSize] тўлгунча шу юклаш ичида давом этади — жами ҳажм аввалгидек.
+        var got = 0;
+        while (true) {
+          final page = await pager.next(pageSize - got, firstNonEmpty: true);
+          if (_disposed || gen != _gen) return;
+          got += page.length;
+          added += page.where((r) => _visible(r.item)).length;
+          _items.addAll(page);
+          if (page.isEmpty || got >= pageSize || !pager.hasMore) break;
+          _notify();
+        }
+      } else {
+        final page = await pager.next(pageSize);
+        if (_disposed || gen != _gen) return;
+        added = page.where((r) => _visible(r.item)).length;
+        _items.addAll(page);
+      }
       _loading = false;
       _emptyStreak = added == 0 ? _emptyStreak + 1 : 0;
       _notify();

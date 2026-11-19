@@ -16,9 +16,11 @@ import '../../../core/utils/formatters.dart';
 import '../../../shared/widgets/load_error_view.dart';
 import '../../../shared/widgets/market_search_field.dart';
 import '../../business_orders/screens/business_cart_screen.dart';
+import '../../home/home_strip_mix.dart' show HomeShopFeed;
 import '../../my_shop/my_shop_entry.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../../tv_market/widgets/tv_shop_photo_gallery.dart' show precacheCardCovers;
 import '../data/market_listings_source.dart';
 import '../data/market_search.dart';
 import '../data/market_taxonomy_repository.dart';
@@ -52,7 +54,12 @@ class MarketScreen extends StatefulWidget {
     this.pageSize = 20,
     this.initialCategory = '',
     this.partsHeader,
+    this.cachedItems,
   });
+
+  /// Дарҳол чизиш учун аллақачон юкланган маҳсулотлар (бўлмаса [HomeShopFeed.cachedItems] — уй тасмаси
+  /// кеши). Сервер саҳифалари келгач алмаштирилади (эга 2026-11-19, тезлик).
+  final List<TvShopItem>? Function()? cachedItems;
 
   /// Очилишда танланган бўлим (мас. «Менинг машинам» → Мошина бозори «Эҳтиёт қисмлар», 9-босқич).
   /// Таксономияда йўқ бўлса — сукут (биринчи таб / «Барчаси»).
@@ -75,6 +82,9 @@ class MarketScreen extends StatefulWidget {
 
   final int pageSize;
 
+  /// Биринчи саҳифа кичик ва биринчи бўш бўлмаган ҳалқадан кейиноқ қайтади ([RingPager.next] `firstNonEmpty`).
+  static const firstPageSize = 8;
+
   @override
   State<MarketScreen> createState() => _MarketScreenState();
 }
@@ -96,6 +106,9 @@ class _MarketScreenState extends State<MarketScreen> {
 
   RingPager<TvShopItem>? _pager;
   final List<RingItem<TvShopItem>> _items = [];
+
+  /// Кешдан дарҳол чизилган элементлар ([marketSeedItems]); сервер ўша ҳалқани тугатгач — олиб ташланади.
+  List<RingItem<TvShopItem>> _seed = const [];
   bool _loading = false;
   Object? _pageError;
 
@@ -124,7 +137,13 @@ class _MarketScreenState extends State<MarketScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTaxonomy();
+    // Сеанс кешида таксономия бор — спиннерсиз, биринчи кадрдаёқ (эга 2026-11-19, тезлик).
+    final cached = widget.loadTaxonomy == null ? MarketTaxonomyRepository.cached : null;
+    if (cached != null) {
+      _applyTaxonomy(cached);
+    } else {
+      _loadTaxonomy();
+    }
   }
 
   @override
@@ -141,21 +160,34 @@ class _MarketScreenState extends State<MarketScreen> {
     try {
       final t = await (widget.loadTaxonomy ?? MarketTaxonomyRepository.load)();
       if (!mounted) return;
-      final m = t.market(widget.marketId);
-      setState(() {
-        _taxonomy = t;
-        if (m != null) {
-          final initial = widget.initialCategory.trim();
-          final hasInitial = initial.isNotEmpty && m.categories.any((c) => c.id == initial);
-          _category = hasInitial ? initial : (m.usesTabs ? m.categories.first.id : '');
-          _scope = GeoContext.scopeFor(m.moduleId);
-        }
-      });
-      if (m != null) _restart();
+      _applyTaxonomy(t);
     } catch (e) {
       debugPrint('[MarketScreen] MARKET_TAXONOMY_LOAD_FAILED market=${widget.marketId}: $e');
       if (mounted) setState(() => _taxonomyError = e);
     }
+  }
+
+  void _applyTaxonomy(MarketTaxonomy t) {
+    final m = t.market(widget.marketId);
+    setState(() {
+      _taxonomy = t;
+      if (m != null) {
+        final initial = widget.initialCategory.trim();
+        final hasInitial = initial.isNotEmpty && m.categories.any((c) => c.id == initial);
+        _category = hasInitial ? initial : (m.usesTabs ? m.categories.first.id : '');
+        _scope = GeoContext.scopeFor(m.moduleId);
+      }
+    });
+    if (m != null) _restart();
+  }
+
+  /// Биринчи ~6 муқова олдиндан юкланади (карточка ўлчамида).
+  void _precacheCovers(Iterable<TvShopItem> items) {
+    final urls = [for (final i in items) i.coverPhotoUrl].where((u) => u.trim().isNotEmpty).toList();
+    if (urls.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) precacheCardCovers(context, urls, MarketListingCard.photoSize);
+    });
   }
 
   MarketFilter get _filter =>
@@ -170,11 +202,18 @@ class _MarketScreenState extends State<MarketScreen> {
     _pageError = null;
     _loading = false;
     _emptyStreak = 0;
+    final plan = ringPlanFor(scope);
     _pager = RingPager<TvShopItem>(
-      plan: ringPlanFor(scope),
+      plan: plan,
       fetch: _source.fetcher(_filter),
       districtsOf: _source.districtsOf,
     );
+    _seed = marketSeedItems(
+      (widget.cachedItems ?? HomeShopFeed.cachedItems)() ?? const [],
+      filter: _filter,
+      plan: plan,
+    );
+    _precacheCovers(_seed.map((r) => r.item));
     setState(() {});
     _loadMore();
     unawaited(_loadRegionDistricts(scope));
@@ -280,9 +319,14 @@ class _MarketScreenState extends State<MarketScreen> {
       _pageError = null;
     });
     try {
-      final page = await pager.next(widget.pageSize);
+      final first = _items.isEmpty;
+      final page = await pager.next(
+        first && widget.pageSize > MarketScreen.firstPageSize ? MarketScreen.firstPageSize : widget.pageSize,
+        firstNonEmpty: first,
+      );
       if (!mounted || gen != _gen) return;
       final visibleAdded = page.where((r) => _shows(r.item)).length;
+      if (first && _seed.isEmpty) _precacheCovers(page.map((r) => r.item));
       setState(() {
         _items.addAll(page);
         _loading = false;
@@ -305,7 +349,7 @@ class _MarketScreenState extends State<MarketScreen> {
 
   List<TvShopItem> get _visible {
     final local = [
-      for (final r in _items)
+      for (final r in mergeRingSeed(_items, _seed, currentRing: _pager?.currentRing, idOf: (i) => i.id))
         if (_shows(r.item)) r.item,
     ];
     if (!_searchActive) return local;
@@ -656,6 +700,34 @@ class _MarketScreenState extends State<MarketScreen> {
       child: scaffold,
     );
   }
+}
+
+/// Кешдаги маҳсулотлардан дарҳол чизиш (эга 2026-11-19, тезлик): фаол, шу бозор (+бўлим, «Импорт»), режа
+/// ҳалқасига тушадиганлар ([ringOfItem]); ҳалқа бўйича, ҳалқа ичида энг янгиси олдин; id бўйича такрорсиз.
+List<RingItem<TvShopItem>> marketSeedItems(
+  Iterable<TvShopItem> items, {
+  required MarketFilter filter,
+  required List<RingStepSpec> plan,
+}) {
+  final seen = <String>{};
+  final out = <RingItem<TvShopItem>>[];
+  for (final i in items) {
+    if (!i.isActive || i.market.trim() != filter.market) continue;
+    if (filter.category.isNotEmpty && i.category.trim() != filter.category) continue;
+    if (filter.importedOnly && i.imported != true) continue;
+    final ring = ringOfItem(plan, districtId: i.districtId, regionId: i.regionId);
+    if (ring == null || !seen.add(i.id)) continue;
+    out.add(RingItem<TvShopItem>(i, ring));
+  }
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+  out.sort((a, b) {
+    final byRing = a.ring.compareTo(b.ring);
+    if (byRing != 0) return byRing;
+    final byTime = (b.item.createdAt ?? epoch).compareTo(a.item.createdAt ?? epoch);
+    if (byTime != 0) return byTime;
+    return a.item.id.compareTo(b.item.id);
+  });
+  return out;
 }
 
 /// Бозор ичидаги қидирув (клиентда, эга 2026-11-16): сарлавҳа, тавсиф, сотувчи номи — [CatalogSearch]

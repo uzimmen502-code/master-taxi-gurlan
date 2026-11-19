@@ -156,11 +156,47 @@ Map<String, List<String>> districtsByRegionOf(Iterable<GeoDistrict> districts) {
   return m;
 }
 
+/// Тоза: ҳужжат режанинг қайси ҳалқасига тушади (кешдан дарҳол чизиш учун, эга 2026-11-19). Туман бўйича
+/// `onlyDistrictId` қадами; бўлмаса `regionId` мос ва чиқарилган туман эмас. Ҳеч бирига тушмаса (ёки туман ID'си
+/// йўқ — бу режимда кўринмайди) — `null`. Вилояти ёзилмаган ҳужжат фақат туман қадамига тушади.
+int? ringOfItem(List<RingStepSpec> plan, {required String districtId, required String regionId}) {
+  final d = districtId.trim();
+  final r = regionId.trim();
+  if (d.isEmpty) return null;
+  for (final s in plan) {
+    if (s.onlyDistrictId.isNotEmpty) {
+      if (s.onlyDistrictId == d) return s.ring;
+      continue;
+    }
+    if (r.isNotEmpty && s.regionId == r && d != s.excludeDistrictId) return s.ring;
+  }
+  return null;
+}
+
 /// Ҳалқа рақами билан элемент.
 class RingItem<T> {
   const RingItem(this.item, this.ring);
   final T item;
   final int ring;
+}
+
+/// Тоза: сервер элементлари ([loaded], ҳалқа тартибида) + кешдан олдиндан чизилганлар ([seed]) — фақат
+/// сервер ҳали ТУГАТМАГАН ҳалқалардагилари (`ring >= currentRing`), id бўйича такрорсиз, ҳалқа тартибида
+/// сервернинг охиридан кейин. [currentRing] `null` (пейжер тугаган) — фақат [loaded].
+List<RingItem<T>> mergeRingSeed<T>(
+  List<RingItem<T>> loaded,
+  List<RingItem<T>> seed, {
+  required int? currentRing,
+  required String Function(T item) idOf,
+}) {
+  if (seed.isEmpty || currentRing == null) return loaded;
+  final seen = {for (final r in loaded) idOf(r.item)};
+  final rest = [
+    for (final r in seed)
+      if (r.ring >= currentRing && seen.add(idOf(r.item))) r,
+  ];
+  if (rest.isEmpty) return loaded;
+  return [...loaded, ...rest];
 }
 
 /// Бир бўлак сўров натижаси. [cursor] — кейинги саҳифа учун (Firestore'да
@@ -211,15 +247,18 @@ class RingPager<T> {
   /// Жорий ҳалқа (тугаган бўлса — `null`).
   int? get currentRing => hasMore ? plan[_step].ring : null;
 
-  Future<List<RingItem<T>>> next(int pageSize) {
-    final run = _queue.then((_) => _next(pageSize));
+  /// [firstNonEmpty] (эга 2026-11-19, тезлик): биринчи бўш бўлмаган сўровдан кейиноқ қайтади ([pageSize]
+  /// тўлишини кутмайди) — экран биринчи ҳалқа натижасини дарҳол чизади. Ҳолат (қадам/бўлак/курсор) аввалгидек
+  /// сақланади: кейинги [next] шу жойдан давом этади — тартиб ва такрорсизлик ўзгармайди.
+  Future<List<RingItem<T>>> next(int pageSize, {bool firstNonEmpty = false}) {
+    final run = _queue.then((_) => _next(pageSize, firstNonEmpty));
     _queue = run.then((_) {}, onError: (_) {});
     return run;
   }
 
-  Future<List<RingItem<T>>> _next(int pageSize) async {
+  Future<List<RingItem<T>>> _next(int pageSize, bool firstNonEmpty) async {
     final out = <RingItem<T>>[];
-    while (out.length < pageSize && hasMore) {
+    while (out.length < pageSize && hasMore && !(firstNonEmpty && out.isNotEmpty)) {
       final spec = plan[_step];
       final chunks = _chunks ??= chunksOf(
         spec.resolve(spec.needsRegionDistricts ? await districtsOf(spec.regionId) : const []),
@@ -238,6 +277,13 @@ class RingPager<T> {
       if (res.rawCount < want) {
         _chunk++;
         _cursor = null;
+        // Охирги бўлак тугади — ҳалқани дарҳол ёпамиз ([currentRing]/[hasMore] аниқ бўлсин; ҳалқа ичидаги
+        // кейинги чақириқда қилинадиган ўтишнинг ўзи, фақат олдинроқ).
+        if (_chunk >= chunks.length) {
+          _step++;
+          _chunks = null;
+          _chunk = 0;
+        }
       } else {
         _cursor = res.cursor;
       }

@@ -13,9 +13,41 @@ class GeoDistrictsCache {
 
   static final Map<String, Future<List<String>>> _cache = {};
 
-  /// Тест учун манба.
+  /// Барча вилоятлар туманлари — сеансда БИР сўров (эга 2026-11-19, тезлик: «ҳалқалар» ҳар вилоят учун алоҳида
+  /// `geo_districts` сўрови қилмасин). Бўш/хато — кешланмайди, вилоят бўйича эски йўлга қайтади.
+  static Future<Map<String, List<String>>>? _all;
+
+  /// Тест учун манба (вилоят бўйича).
   @visibleForTesting
   static Future<List<String>> Function(String regionId)? loaderOverride;
+
+  /// Тест учун манба (барча туманлар: вилоят → туман ID'лари).
+  @visibleForTesting
+  static Future<Map<String, List<String>>> Function()? allLoaderOverride;
+
+  static Future<Map<String, List<String>>> _loadAll() {
+    return _all ??= () async {
+      Map<String, List<String>> m;
+      try {
+        final allLoader = allLoaderOverride;
+        if (allLoader != null) {
+          m = await allLoader();
+        } else {
+          final list = await ServiceConfigRepository().fetchAllDistricts();
+          m = <String, List<String>>{};
+          for (final d in list) {
+            if (d.regionId.isEmpty || d.id.isEmpty) continue;
+            (m[d.regionId] ??= <String>[]).add(d.id);
+          }
+        }
+      } catch (e) {
+        debugPrint('GeoDistrictsCache(all): $e');
+        m = const {};
+      }
+      if (m.isEmpty) _all = null;
+      return m;
+    }();
+  }
 
   static Future<List<String>> districtIdsOf(String regionId) {
     final id = regionId.trim();
@@ -24,6 +56,9 @@ class GeoDistrictsCache {
       try {
         final loader = loaderOverride;
         if (loader != null) return await loader(id);
+        final all = await _loadAll();
+        // Барча туманлар юкланган — вилоят йўқ бўлса ҳам қўшимча сўров йўқ (туманлари йўқ).
+        if (all.isNotEmpty) return List<String>.unmodifiable(all[id] ?? const <String>[]);
         final list = await ServiceConfigRepository().fetchDistricts(id);
         return list.map((d) => d.id).toList(growable: false);
       } catch (e) {
@@ -37,7 +72,9 @@ class GeoDistrictsCache {
   @visibleForTesting
   static void clear() {
     _cache.clear();
+    _all = null;
     loaderOverride = null;
+    allLoaderOverride = null;
   }
 }
 

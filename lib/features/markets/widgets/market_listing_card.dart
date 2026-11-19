@@ -55,7 +55,7 @@ class MarketListingCard extends StatelessWidget {
                     color: AppColors.cardImageBg,
                     child: cover.isEmpty
                         ? const Icon(Icons.image_outlined, size: 32)
-                        : TvShopNetworkImage(url: cover, fit: BoxFit.cover),
+                        : TvShopNetworkImage.card(url: cover, fit: BoxFit.cover),
                   ),
                   // ❤ Танланганлар (STAGE 10, эга 2026-11-15) — олдиндан ажратилган жойда.
                   Positioned(

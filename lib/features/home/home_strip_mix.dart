@@ -292,6 +292,13 @@ class HomeShopFeed {
   static Future<List<TvShopItem>>? _future;
   static DateTime? _at;
 
+  /// Охирги муваффақиятли натижа ва вақти — бозор экранларида дарҳол чизиш учун ([cachedItems]).
+  static List<TvShopItem>? _value;
+  static DateTime? _valueAt;
+
+  /// [cachedItems] шундан эски бўлса — ишлатилмайди.
+  static const instantPaintMaxAge = Duration(minutes: 10);
+
   @visibleForTesting
   static Future<List<TvShopItem>> Function()? debugLoader;
 
@@ -299,6 +306,24 @@ class HomeShopFeed {
   static void debugReset() {
     _future = null;
     _at = null;
+    _value = null;
+    _valueAt = null;
+  }
+
+  @visibleForTesting
+  static void debugSetCached(List<TvShopItem>? items, {DateTime? at}) {
+    _value = items;
+    _valueAt = items == null ? null : (at ?? DateTime.now());
+  }
+
+  /// Сўровсиз: уйда аллақачон юкланган маҳсулотлар ([instantPaintMaxAge] дан янги) ёки `null`. Фақат дарҳол
+  /// чизиш учун — сервер натижаси келгач алмаштирилади (эга 2026-11-19, тезлик).
+  static List<TvShopItem>? cachedItems({DateTime? now}) {
+    final v = _value;
+    final at = _valueAt;
+    if (v == null || at == null) return null;
+    if ((now ?? DateTime.now()).difference(at) > instantPaintMaxAge) return null;
+    return v;
   }
 
   static Future<List<TvShopItem>> recent() {
@@ -308,8 +333,16 @@ class HomeShopFeed {
     _at = now;
     final next = (debugLoader ?? () => TvShopRepository().fetchForMarket(limit: limit))();
     _future = next;
-    unawaited(next.then((_) {}, onError: (Object e) {
-      if (identical(_future, next)) debugReset();
+    unawaited(next.then((v) {
+      if (identical(_future, next)) {
+        _value = v;
+        _valueAt = DateTime.now();
+      }
+    }, onError: (Object e) {
+      if (identical(_future, next)) {
+        _future = null;
+        _at = null;
+      }
     }));
     return next;
   }

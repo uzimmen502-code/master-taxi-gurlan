@@ -27,6 +27,13 @@ check('P1 contentChanged: ҳар бир контент майдони (+ ўчи�
     assert.strictEqual(m.contentChanged(base, del), true, `${k} delete`);
   }
 });
+check('P1b contentChanged: narx-faqat (price, priceUnit) - false (ega 2026-11-20: narx qayta moderatsiyasiz)', () => {
+  const base = { title: 'a', price: 1, priceUnit: 'kg' };
+  assert.strictEqual(m.contentChanged(base, { ...base, price: 2 }), false);
+  assert.strictEqual(m.contentChanged(base, { ...base, priceUnit: 'ton' }), false);
+  assert.strictEqual(m.contentChanged(base, { ...base, price: 2, title: 'b' }), true);
+  assert.ok(!m.CONTENT_FIELDS.includes('price') && !m.CONTENT_FIELDS.includes('priceUnit'));
+});
 check('P2 contentChanged: контент эмас (clipIds, viewCount, kind, status, boostUntil) ва attrs калит тартиби — false', () => {
   const b = { title: 'a', attrs: { x: 1, y: 2 }, clipIds: [], viewCount: 1, kind: 'product', status: 'active' };
   const a = { title: 'a', attrs: { y: 2, x: 1 }, clipIds: ['c'], viewCount: 9, kind: 'service', status: 'deleted', boostUntil: ts(1) };
@@ -50,7 +57,8 @@ check('P5 planShopItemWrite: create / edit / activate / no-op', () => {
   assert.strictEqual(m.planShopItemWrite(null, { socialPostedAt: ts(1) }, NOW), null, 'ownerPhone сиз — тегилмайди');
   const b = { status: 'active', title: 'a', moderatedAt: ts(5) };
   assert.deepStrictEqual(m.planShopItemWrite(b, { ...b, title: 'b' }, NOW), { kind: 'edit_pending', fromStatus: 'active' });
-  assert.deepStrictEqual(m.planShopItemWrite({ ...b, status: 'expired' }, { ...b, status: 'expired', price: 3 }, NOW), { kind: 'edit_pending', fromStatus: 'expired' });
+  assert.deepStrictEqual(m.planShopItemWrite({ ...b, status: 'expired' }, { ...b, status: 'expired', title: 'c' }, NOW), { kind: 'edit_pending', fromStatus: 'expired' });
+  assert.strictEqual(m.planShopItemWrite(b, { ...b, price: 3 }, NOW), null, 'narx-faqat active - moderatsiyasiz');
   assert.strictEqual(m.planShopItemWrite({ ...b, status: 'rejected' }, { ...b, status: 'rejected', title: 'b' }, NOW), null, 'rejected — эга қарорида йўқ');
   assert.strictEqual(m.planShopItemWrite({ ...b, status: 'pending' }, { ...b, status: 'pending', title: 'b' }, NOW), null);
   assert.strictEqual(m.planShopItemWrite(b, { ...b, title: 'b', moderatedAt: ts(6) }, NOW), null, 'админ (moderatedAt ўзгарди)');

@@ -329,7 +329,7 @@ function attachWholesaleImport(exportsObj, deps) {
         return { status: 'error', codes: ['SKU_HAS_PACKS'] };
       }
       if (!R.contentChanged(cur, r.fields, r.imageSources)) return { status: 'unchanged' };
-      const patch = { ...common, status: R.statusAfterUpdate(cur.status) };
+      const patch = { ...common, status: R.statusAfterUpdate(cur.status, !R.moderationChanged(cur, r.fields, r.imageSources)) };
       // Файлда йўқ ихтиёрий майдон — ўчирилади (файл = нарх-варақ манбаи).
       for (const k of ['currency', 'deliveryDays', 'unitWeightG', 'unitDims', 'minOrderQty']) {
         if (!(k in r.fields) && k in cur) patch[k] = FieldValue.delete();

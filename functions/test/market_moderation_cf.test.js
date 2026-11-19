@@ -95,7 +95,9 @@ async function main() {
     await items.doc('t3').set(item({ status: 'active', rejectReason: 'eski', expiresAt: TS.fromMillis(Date.now() + 10 * DAY) }));
     const n = await writeAndTrigger('t3', (ref) => ref.update({ clipIds: ['c1'] }));
     assert.strictEqual(n.data.status, 'active');
-    const r = await writeAndTrigger('t3', (ref) => ref.update({ price: 200 }));
+    // Narx-faqat (ega 2026-11-20) - active qoladi.
+    assert.strictEqual((await writeAndTrigger('t3', (ref) => ref.update({ price: 200, priceUnit: 'kg' }))).data.status, 'active');
+    const r = await writeAndTrigger('t3', (ref) => ref.update({ title: 'Qo\'y 2' }));
     assert.strictEqual(r.data.status, 'pending');
     assert.strictEqual(r.data.moderationReason, 'owner_edit');
     assert.strictEqual(r.data.rejectReason, undefined);
@@ -161,7 +163,7 @@ async function main() {
   await check('A2 калит true: active таҳрири — active қолади, expiresAt ўзгармайди, триггер ёзмайди', async () => {
     const exp = TS.fromMillis(Date.now() + 10 * DAY);
     await items.doc('a2').set(item({ status: 'active', expiresAt: exp, moderatedAt: TS.fromMillis(Date.now() - DAY) }));
-    const r = await writeAndTrigger('a2', (ref) => ref.update({ price: 999 }));
+    const r = await writeAndTrigger('a2', (ref) => ref.update({ title: 'Boshqa' }));
     assert.strictEqual(r.data.status, 'active'); assert.strictEqual(r.data.expiresAt.toMillis(), exp.toMillis());
     assert.strictEqual((await items.doc('a2').get()).updateTime.toMillis(), r.after.updateTime.toMillis(), 'ёзув йўқ');
   });

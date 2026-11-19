@@ -184,6 +184,10 @@ async function main() {
     assert.deepStrictEqual(imageCalls, []);
     assert.strictEqual((await product('A-1')).status, 'active');
 
+    // Ega 2026-11-20: narx-faqat - updated, active qoladi.
+    const po = await call('wholesaleImportPreview', { market: 'wholesale', fileBase64: await xlsxB64('wholesale', [row({ price: 360000 })]), clientRequestId: rid() }, SELLER);
+    assert.strictEqual((await call('wholesaleImportConfirm', { batchId: po.batchId }, SELLER)).counts.updated, 1);
+    assert.strictEqual((await product('A-1')).status, 'active');
     const upd = await call('wholesaleImportPreview', { market: 'wholesale', fileBase64: await xlsxB64('wholesale', [row({ price: 360000, moq: '' })]), clientRequestId: rid() }, SELLER);
     assert.strictEqual(upd.counts.update, 1);
     const c2 = await call('wholesaleImportConfirm', { batchId: upd.batchId }, SELLER);

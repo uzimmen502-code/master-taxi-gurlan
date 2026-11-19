@@ -1,9 +1,10 @@
 /**
- * Маҳсулот белгиси (эга 2026-11-19) — ҲАҚИҚИЙ `functions/index.js`, Firestore Emulator.
+ * Маҳсулот белгиси (эга 2026-11-19/20) — ҲАҚИҚИЙ `functions/index.js`, Firestore Emulator.
  *
  *   firebase emulators:exec --only firestore --project demo-product-promo "node test/product_promo_cf.test.js"
  *
- * onShopItemPromoWrite, onWholesaleProductPromoWrite, onWholesaleStockBadge, adminModeratePromo.
+ * onShopItemPromoWrite, onWholesaleProductPromoWrite, onPlatformProductPromoWrite, onWholesaleStockBadge,
+ * adminModeratePromo, adminSetProductDiscount, productPromoExpirySweep (runPromoExpirySweep), onShopItemModeration билан мослик.
  */
 'use strict';
 const assert = require('assert');
@@ -23,7 +24,6 @@ const TS = admin.firestore.Timestamp;
 const DAY = 24 * 60 * 60 * 1000;
 const ADMIN = '998915000001';
 const OWNER = '998901112233';
-const OTHER = '998912000001';
 const ctxOf = (p) => ({ auth: { uid: `uid_${p}`, token: { phone_number: `+${p}` } } });
 
 const results = [];
@@ -44,163 +44,227 @@ async function clearEmulator() {
   if (!res.ok) throw new Error(`emulator clear: HTTP ${res.status}`);
 }
 const get = async (col, id) => (await db.collection(col).doc(id).get()).data();
+const TRIG = { tv_shop_items: 'onShopItemPromoWrite', wholesale_products: 'onWholesaleProductPromoWrite', platform_products: 'onPlatformProductPromoWrite' };
 
-async function writeAndRun(fnName, col, id, writeFn) {
+async function writeAndRun(col, id, writeFn) {
   const ref = db.collection(col).doc(id);
   const before = await ref.get();
   await writeFn(ref);
   const after = await ref.get();
-  await fns[fnName].run({ before, after }, { params: { docId: id }, timestamp: new Date().toISOString() });
+  await fns[TRIG[col]].run({ before, after }, { params: { docId: id }, timestamp: new Date().toISOString() });
   return (await ref.get()).data();
 }
-const shopW = (id, w) => writeAndRun('onShopItemPromoWrite', 'tv_shop_items', id, w);
-const wsW = (id, w) => writeAndRun('onWholesaleProductPromoWrite', 'wholesale_products', id, w);
+/** Сервер ёзувидан кейин триггер қайта ишласа — ҳеч нарса ёзилмаслиги (updateTime ўзгармайди). */
+async function rerunIsNoop(col, id) {
+  const ref = db.collection(col).doc(id);
+  const s = await ref.get();
+  await fns[TRIG[col]].run({ before: s, after: s }, { params: { docId: id } });
+  return (await ref.get()).updateTime.toMillis() === s.updateTime.toMillis();
+}
+const shopW = (id, w) => writeAndRun('tv_shop_items', id, w);
+const wsW = (id, w) => writeAndRun('wholesale_products', id, w);
 const moderate = (data, who = ADMIN) => fns.adminModeratePromo.run(data, ctxOf(who));
-const item = (extra = {}) => ({ ownerPhone: OWNER, title: 'Qo\'y', price: 100000, status: 'active', moderatedAt: TS.now(), ...extra });
-const promoReq = (extra = {}) => ({ kind: 'discount', oldPrice: 100000, until: TS.fromMillis(Date.now() + 10 * DAY), requestedAt: TS.now(), ...extra });
+const setDisc = (data, who = ADMIN) => fns.adminSetProductDiscount.run(data, ctxOf(who));
+const held = (days) => ({ priceSince: TS.fromMillis(Date.now() - days * DAY) });
+const item = (extra = {}) => ({ ownerPhone: OWNER, title: 'Qo\'y', price: 10000, priceTracked: 10000, ...held(10), status: 'active', moderatedAt: TS.now(), ...extra });
+const discReq = (extra = {}) => ({ kind: 'discount', percent: 10, until: TS.fromMillis(Date.now() + 10 * DAY), requestedAt: TS.now(), ...extra });
+
+async function approved(id, extra = {}) {
+  await db.collection('tv_shop_items').doc(id).set(item(extra));
+  await shopW(id, (r) => r.update({ promoRequest: discReq() }));
+  await moderate({ collection: 'tv_shop_items', id, decision: 'approve' });
+  return get('tv_shop_items', id);
+}
 
 async function main() {
   await clearEmulator();
   await db.collection('users').doc(ADMIN).set({ role: 'admin' });
   await db.collection('users').doc(OWNER).set({ role: 'user', appLang: 'uz_Latn' });
-  await db.collection('users').doc(OTHER).set({ role: 'user' });
 
-  await check('create → priceTracked + priceSince, no firstActiveAt for pending', async () => {
-    const d = await shopW('s1', (r) => r.set({ ...item({ status: 'pending' }), moderatedAt: null }));
-    assert.strictEqual(d.priceTracked, 100000);
-    assert.ok(d.priceSince);
+  await check('create → priceTracked + priceSince; first approval → firstActiveAt', async () => {
+    const d = await shopW('s1', (r) => r.set({ ownerPhone: OWNER, title: 'x', price: 500, status: 'pending', moderatedAt: null }));
+    assert.strictEqual(d.priceTracked, 500);
     assert.ok(!d.firstActiveAt);
+    assert.ok((await shopW('s1', (r) => r.update({ status: 'active', moderatedAt: TS.now() }))).firstActiveAt);
   });
-  await check('first approval → firstActiveAt stamped', async () => {
-    const d = await shopW('s1', (r) => r.update({ status: 'active', moderatedAt: TS.now() }));
-    assert.ok(d.firstActiveAt);
-  });
-  await check('re-run on same doc → no-op (no updateTime change)', async () => {
-    const ref = db.collection('tv_shop_items').doc('s1');
-    const s = await ref.get();
-    await fns.onShopItemPromoWrite.run({ before: s, after: s }, { params: { docId: 's1' } });
-    const s2 = await ref.get();
-    assert.strictEqual(s2.updateTime.toMillis(), s.updateTime.toMillis());
-  });
-  await check('price changed → priceSince reset, history entry', async () => {
-    // eski narx 8 kun turgan (sun'iy priceSince).
-    await db.collection('tv_shop_items').doc('s2').set(item({ priceTracked: 100000, priceSince: TS.fromMillis(Date.now() - 8 * DAY) }));
-    const d = await shopW('s2', (r) => r.update({ price: 80000, promoRequest: promoReq() }));
-    assert.strictEqual(d.priceTracked, 80000);
-    assert.ok(d.priceSince.toMillis() > Date.now() - 60000);
-    assert.strictEqual(d.priceHistory.length, 1);
-    assert.strictEqual(d.priceHistory[0].price, 100000);
+
+  await check('discount request (−10% of 10 000, held 10 d) → pending, price unchanged', async () => {
+    await db.collection('tv_shop_items').doc('s2').set(item());
+    const d = await shopW('s2', (r) => r.update({ promoRequest: discReq() }));
     assert.strictEqual(d.promoState.status, 'pending');
-    assert.strictEqual(d.promoState.percent, 20);
-    assert.ok(!d.promo);
+    assert.strictEqual(d.promoState.newPrice, 9000);
+    assert.strictEqual(d.price, 10000);
   });
-  await check('non-admin cannot moderate', async () => {
+  await check('non-admin cannot moderate / set', async () => {
     await assert.rejects(moderate({ collection: 'tv_shop_items', id: 's2', decision: 'approve' }, OWNER));
+    await assert.rejects(setDisc({ collection: 'platform_products', id: 'x', action: 'clear' }, OWNER));
   });
-  await check('admin approve → promo active + audit + seller notified', async () => {
+  await check('approve → REAL price 9000 (buyer pays), promo.basePrice 10000, audit, notified; trigger re-run no-op', async () => {
     const r = await moderate({ collection: 'tv_shop_items', id: 's2', decision: 'approve' });
     assert.strictEqual(r.status, 'active');
     const d = await get('tv_shop_items', 's2');
-    assert.strictEqual(d.promo.kind, 'discount');
-    assert.strictEqual(d.promo.percent, 20);
-    assert.strictEqual(d.promo.oldPrice, 100000);
+    assert.strictEqual(d.price, 9000);
+    assert.strictEqual(d.priceTracked, 9000);
+    assert.strictEqual(d.promo.basePrice, 10000);
+    assert.strictEqual(d.promo.percent, 10);
     assert.strictEqual(d.promo.approvedBy, ADMIN);
-    assert.strictEqual(d.promoState.status, 'active');
     const a = (await db.collection('admin_audit').where('kind', '==', 'promo_moderation').get()).docs.map((x) => x.data());
     assert.strictEqual(a.length, 1);
-    assert.strictEqual(a[0].decision, 'approve');
-    const n = (await db.collection('admin_news').where('targetUserId', '==', OWNER).get()).docs;
-    assert.ok(n.length >= 1, 'xabar');
+    assert.strictEqual(a[0].newPrice, 9000);
+    assert.ok((await db.collection('admin_news').where('targetUserId', '==', OWNER).get()).size >= 1);
+    assert.ok(await rerunIsNoop('tv_shop_items', 's2'));
   });
-  await check('approve again → PROMO_NOT_PENDING', async () => {
-    await expectCode(moderate({ collection: 'tv_shop_items', id: 's2', decision: 'approve' }), 'PROMO_NOT_PENDING');
+  await check('server price write does NOT re-moderate (onShopItemModeration on same change)', async () => {
+    const ref = db.collection('tv_shop_items').doc('s2');
+    const before = await ref.get();
+    await ref.update({ price: 9000 }); // o'zgarmagan qiymat — haqiqiy yozuvni taqlid
+    const s = await ref.get();
+    const b2 = { ...before.data(), price: 10000 };
+    // Narx-faqat diff (10000 → 9000): moderatsiya rejasi yo'q.
+    const { planShopItemWrite } = require('../market_moderation');
+    assert.strictEqual(planShopItemWrite(b2, s.data(), Date.now()), null);
+    assert.strictEqual(s.data().status, 'active');
   });
-  await check('price changes after approval → discount cleared', async () => {
-    const d = await shopW('s2', (r) => r.update({ price: 70000 }));
+  await check('seller lowers price during promo (≠ base) → continues, % from base (floor)', async () => {
+    const d = await shopW('s2', (r) => r.update({ price: 8550 }));
+    assert.strictEqual(d.promo.percent, 14);
+    assert.strictEqual(d.promo.sellerChanged, true);
+    assert.strictEqual(d.price, 8550);
+  });
+  await check('expiry after seller change → seller price kept, badge dropped', async () => {
+    await db.collection('tv_shop_items').doc('s2').update({ 'promo.until': TS.fromMillis(Date.now() - 1000) });
+    await fns.productPromoExpirySweep.run({}, {});
+    const d = await get('tv_shop_items', 's2');
+    assert.strictEqual(d.price, 8550);
     assert.ok(!d.promo);
-    assert.strictEqual(d.promoState.status, 'cleared');
-    assert.strictEqual(d.promoState.reason, 'PRICE_CHANGED');
+    assert.strictEqual(d.promoState.status, 'expired');
+    assert.ok(await rerunIsNoop('tv_shop_items', 's2'), 'eski so\'rov qayta ko\'rilmaydi');
   });
-  await check('6 days old price → rejected OLD_PRICE_NOT_7_DAYS', async () => {
-    await db.collection('tv_shop_items').doc('s3').set(item({ priceTracked: 100000, priceSince: TS.fromMillis(Date.now() - 6 * DAY) }));
-    const d = await shopW('s3', (r) => r.update({ price: 80000, promoRequest: promoReq() }));
-    assert.strictEqual(d.promoState.status, 'rejected');
-    assert.strictEqual(d.promoState.reason, 'OLD_PRICE_NOT_7_DAYS');
-  });
-  await check('until > 30 days → rejected UNTIL_TOO_FAR', async () => {
-    const d = await shopW('s3', (r) => r.update({ promoRequest: { kind: 'promo', until: TS.fromMillis(Date.now() + 31 * DAY), requestedAt: TS.now() } }));
-    assert.strictEqual(d.promoState.reason, 'UNTIL_TOO_FAR');
-  });
-  await check('Aksiya (promo) → active without moderation', async () => {
-    const d = await shopW('s3', (r) => r.update({ promoRequest: { kind: 'promo', until: TS.fromMillis(Date.now() + 5 * DAY), requestedAt: TS.now() } }));
-    assert.strictEqual(d.promo.kind, 'promo');
-    assert.strictEqual(d.promoState.status, 'active');
-  });
-  await check('cancel (delete request) → badge removed', async () => {
-    const d = await shopW('s3', (r) => r.update({ promoRequest: FV.delete() }));
+  await check('expiry with server-set price → base restored (10 000); second sweep idempotent', async () => {
+    await approved('s3');
+    await db.collection('tv_shop_items').doc('s3').update({ 'promo.until': TS.fromMillis(Date.now() - 1000) });
+    await fns.productPromoExpirySweep.run({}, {});
+    const d = await get('tv_shop_items', 's3');
+    assert.strictEqual(d.price, 10000);
+    assert.strictEqual(d.priceTracked, 10000);
     assert.ok(!d.promo);
+    const u1 = (await db.collection('tv_shop_items').doc('s3').get()).updateTime.toMillis();
+    await fns.productPromoExpirySweep.run({}, {});
+    assert.strictEqual((await db.collection('tv_shop_items').doc('s3').get()).updateTime.toMillis(), u1);
+    assert.ok(await rerunIsNoop('tv_shop_items', 's3'));
+  });
+  await check('seller sets price == base during promo → cancelled', async () => {
+    await approved('s4');
+    const d = await shopW('s4', (r) => r.update({ price: 10000 }));
+    assert.ok(!d.promo);
+    assert.strictEqual(d.promoState.reason, 'PRICE_RESTORED');
+    assert.strictEqual(d.price, 10000);
+  });
+  await check('seller cancels request during promo → base restored', async () => {
+    await approved('s5');
+    const d = await shopW('s5', (r) => r.update({ promoRequest: FV.delete() }));
+    assert.strictEqual(d.price, 10000);
     assert.strictEqual(d.promoState.reason, 'CANCELLED');
   });
-  await check('admin reject requires reason; reject → rejected + audit', async () => {
-    await db.collection('tv_shop_items').doc('s4').set(item({ priceTracked: 100000, priceSince: TS.fromMillis(Date.now() - 9 * DAY) }));
-    await shopW('s4', (r) => r.update({ price: 90000, promoRequest: promoReq() }));
-    await expectCode(moderate({ collection: 'tv_shop_items', id: 's4', decision: 'reject' }), 'REASON_REQUIRED');
-    const r = await moderate({ collection: 'tv_shop_items', id: 's4', decision: 'reject', reason: 'Eski narx shubhali' });
-    assert.strictEqual(r.status, 'rejected');
-    const d = await get('tv_shop_items', 's4');
-    assert.strictEqual(d.promoState.status, 'rejected');
-    assert.strictEqual(d.promoState.reason, 'ADMIN_REJECTED');
-    assert.ok(!d.promo);
+  await check('price held 6 days → rejected PRICE_NOT_7_DAYS', async () => {
+    await db.collection('tv_shop_items').doc('s6').set(item(held(6)));
+    const d = await shopW('s6', (r) => r.update({ promoRequest: discReq() }));
+    assert.strictEqual(d.promoState.reason, 'PRICE_NOT_7_DAYS');
+  });
+  await check('Aksiya → active without moderation, price untouched; until > 30 d rejected', async () => {
+    const d = await shopW('s6', (r) => r.update({ promoRequest: { kind: 'promo', until: TS.fromMillis(Date.now() + 5 * DAY), requestedAt: TS.now() } }));
+    assert.strictEqual(d.promo.kind, 'promo');
+    assert.strictEqual(d.price, 10000);
+    const d2 = await shopW('s6', (r) => r.update({ promoRequest: { kind: 'promo', until: TS.fromMillis(Date.now() + 31 * DAY), requestedAt: TS.now() } }));
+    assert.strictEqual(d2.promoState.reason, 'UNTIL_TOO_FAR');
+  });
+  await check('admin reject requires reason; stale → PROMO_STALE', async () => {
+    await db.collection('tv_shop_items').doc('s7').set(item());
+    await shopW('s7', (r) => r.update({ promoRequest: discReq() }));
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 's7', decision: 'reject' }), 'REASON_REQUIRED');
+    await db.collection('tv_shop_items').doc('s7').update({ 'promoRequest.until': TS.fromMillis(Date.now() + 3 * DAY) });
+    await expectCode(moderate({ collection: 'tv_shop_items', id: 's7', decision: 'approve' }), 'PROMO_STALE');
   });
   await check('approve when price changed before trigger → auto reject PRICE_CHANGED', async () => {
-    await db.collection('tv_shop_items').doc('s5').set(item({ priceTracked: 100000, priceSince: TS.fromMillis(Date.now() - 9 * DAY) }));
-    await shopW('s5', (r) => r.update({ price: 90000, promoRequest: promoReq() }));
-    await db.collection('tv_shop_items').doc('s5').update({ price: 85000 }); // trigger hali ishlamagan
-    const r = await moderate({ collection: 'tv_shop_items', id: 's5', decision: 'approve' });
-    assert.strictEqual(r.status, 'rejected');
+    await db.collection('tv_shop_items').doc('s8').set(item());
+    await shopW('s8', (r) => r.update({ promoRequest: discReq() }));
+    await db.collection('tv_shop_items').doc('s8').update({ price: 9500 });
+    const r = await moderate({ collection: 'tv_shop_items', id: 's8', decision: 'approve' });
     assert.strictEqual(r.reason, 'PRICE_CHANGED');
+    assert.strictEqual((await get('tv_shop_items', 's8')).price, 9500);
   });
-  await check('stale request (seller changed it) → PROMO_STALE', async () => {
-    await db.collection('tv_shop_items').doc('s6').set(item({ priceTracked: 100000, priceSince: TS.fromMillis(Date.now() - 9 * DAY) }));
-    await shopW('s6', (r) => r.update({ price: 90000, promoRequest: promoReq() }));
-    await db.collection('tv_shop_items').doc('s6').update({ 'promoRequest.until': TS.fromMillis(Date.now() + 3 * DAY) });
-    await expectCode(moderate({ collection: 'tv_shop_items', id: 's6', decision: 'approve' }), 'PROMO_STALE');
+
+  // ── wholesale ──
+  const wsDoc = (extra = {}) => ({
+    sellerId: OWNER, title: 'Un', status: 'active', publishedAt: TS.now(), priceTracked: 10000, ...held(10),
+    priceTiers: [{ minQty: 1, price: 10000 }, { minQty: 10, price: 9999 }],
+    packs: [{ id: 'p1', label: '1 kg', priceTiers: [{ minQty: 1, price: 10000 }, { minQty: 10, price: 9999 }] },
+      { id: 'p2', label: '5 kg', priceTiers: [{ minQty: 1, price: 45001 }] }],
+    ...extra,
   });
-  await check('wholesale: price = smallest tier; discount pending', async () => {
-    await db.collection('wholesale_products').doc('w1').set({ sellerId: OWNER, title: 'Un', status: 'active', publishedAt: TS.now(),
-      priceTiers: [{ minQty: 1, price: 50000 }, { minQty: 10, price: 45000 }], priceTracked: 50000, priceSince: TS.fromMillis(Date.now() - 10 * DAY) });
-    const d = await wsW('w1', (r) => r.update({ priceTiers: [{ minQty: 1, price: 40000 }], promoRequest: promoReq({ oldPrice: 50000 }) }));
-    assert.strictEqual(d.priceTracked, 40000);
-    assert.strictEqual(d.promoState.status, 'pending');
-    assert.strictEqual(d.promoState.percent, 20);
-    assert.strictEqual(requestKeyOf(d.promoRequest), d.promoState.requestKey);
+  await check('wholesale approve → every tier + pack tier discounted (floor); cancel → all restored', async () => {
+    await db.collection('wholesale_products').doc('w1').set(wsDoc());
+    await wsW('w1', (r) => r.update({ promoRequest: discReq() }));
+    await moderate({ collection: 'wholesale_products', id: 'w1', decision: 'approve' });
+    let d = await get('wholesale_products', 'w1');
+    assert.deepStrictEqual(d.priceTiers, [{ minQty: 1, price: 9000 }, { minQty: 10, price: 8999 }]);
+    assert.deepStrictEqual(d.packs[1].priceTiers, [{ minQty: 1, price: 40500 }]);
+    assert.strictEqual(d.status, 'active');
+    assert.ok(await rerunIsNoop('wholesale_products', 'w1'));
+    d = await wsW('w1', (r) => r.update({ promoRequest: FV.delete() }));
+    assert.deepStrictEqual(d.priceTiers, wsDoc().priceTiers);
+    assert.deepStrictEqual(d.packs, wsDoc().packs);
   });
-  await check('wholesale stock → stockLeft (sum), unknown pack → removed', async () => {
-    await db.collection('wholesale_stock').doc('w1').set({ packs: { default: 3 } });
-    await fns.onWholesaleStockBadge.run({ before: null, after: null }, { params: { productId: 'w1' } });
-    assert.strictEqual((await get('wholesale_products', 'w1')).stockLeft, 3);
-    // qadoqlar qo'shildi → p1/p2 qoldig'i yo'q → noma'lum.
-    const d = await wsW('w1', (r) => r.update({ packs: [{ id: 'p1', label: '1 kg', priceTiers: [{ minQty: 1, price: 40000 }] }] }));
-    assert.ok(!('stockLeft' in d));
+  await check('wholesale active: pack label edit → server pending; price-only edit → stays active', async () => {
+    await db.collection('wholesale_products').doc('w2').set(wsDoc());
+    let d = await wsW('w2', (r) => r.update({ packs: [{ ...wsDoc().packs[0], priceTiers: [{ minQty: 1, price: 11000 }] }, wsDoc().packs[1]] }));
+    assert.strictEqual(d.status, 'active');
+    d = await wsW('w2', (r) => r.update({ packs: [{ ...d.packs[0], label: '2 kg' }, d.packs[1]] }));
+    assert.strictEqual(d.status, 'pending');
   });
-  await check('wholesale created active (auto-approve) → firstActiveAt', async () => {
-    const d = await wsW('w2', (r) => r.set({ sellerId: OWNER, title: 'Yog\'', status: 'active', priceTiers: [{ minQty: 1, price: 1000 }] }));
+  await check('wholesale stock → stockLeft; created active → firstActiveAt', async () => {
+    await db.collection('wholesale_stock').doc('w3').set({ packs: { default: 3 } });
+    await db.collection('wholesale_products').doc('w3').set({ sellerId: OWNER, title: 'Yog\'', status: 'active', priceTiers: [{ minQty: 1, price: 1000 }] });
+    await fns.onWholesaleStockBadge.run({ before: null, after: null }, { params: { productId: 'w3' } });
+    assert.strictEqual((await get('wholesale_products', 'w3')).stockLeft, 3);
+    const d = await wsW('w4', (r) => r.set({ sellerId: OWNER, title: 'Yog\'', status: 'active', priceTiers: [{ minQty: 1, price: 1000 }] }));
     assert.ok(d.firstActiveAt);
   });
 
-  await check('backfill tool: dry-run writes nothing; apply only docs without priceTracked; rollback', async () => {
+  // ── AVA (platform_products) — admin bevosita ──
+  await check('AVA: adminSetProductDiscount set → price + priceTiers discounted, audit; clear → restored', async () => {
+    await db.collection('platform_products').doc('pl1').set({ name: 'Un', price: 2000, priceTiers: [{ minQty: 1, price: 2100 }], priceTracked: 2000, ...held(8) });
+    const r = await setDisc({ collection: 'platform_products', id: 'pl1', action: 'set', percent: 50, untilMs: Date.now() + 5 * DAY });
+    assert.strictEqual(r.newPrice, 1000);
+    let d = await get('platform_products', 'pl1');
+    assert.strictEqual(d.price, 1000);
+    assert.deepStrictEqual(d.priceTiers, [{ minQty: 1, price: 1050 }]);
+    const a = (await db.collection('admin_audit').where('kind', '==', 'promo_admin_set').get()).docs.map((x) => x.data());
+    assert.strictEqual(a.length, 1);
+    assert.ok(await rerunIsNoop('platform_products', 'pl1'));
+    await expectCode(setDisc({ collection: 'platform_products', id: 'pl1', action: 'set', percent: 10, untilMs: Date.now() + DAY }), 'PROMO_ACTIVE');
+    await setDisc({ collection: 'platform_products', id: 'pl1', action: 'clear' });
+    d = await get('platform_products', 'pl1');
+    assert.strictEqual(d.price, 2000);
+    assert.deepStrictEqual(d.priceTiers, [{ minQty: 1, price: 2100 }]);
+  });
+  await check('AVA: price held 6 d → PRICE_NOT_7_DAYS; until > 30 d → UNTIL_TOO_FAR; percent 91 → PERCENT_INVALID', async () => {
+    await db.collection('platform_products').doc('pl2').set({ name: 'X', price: 2000, priceTracked: 2000, ...held(6) });
+    await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 10, untilMs: Date.now() + DAY }), 'PRICE_NOT_7_DAYS');
+    await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 10, untilMs: Date.now() + 31 * DAY }), 'UNTIL_TOO_FAR');
+    await expectCode(setDisc({ collection: 'platform_products', id: 'pl2', action: 'set', percent: 91, untilMs: Date.now() + DAY }), 'PERCENT_INVALID');
+  });
+
+  await check('backfill tool: dry-run nothing; apply only docs without priceTracked (incl. platform); rollback', async () => {
     const tool = require('../tools/backfill_price_since');
-    await db.collection('tv_shop_items').doc('legacy1').set(item({ price: 777 }));
+    await db.collection('tv_shop_items').doc('legacy1').set({ ownerPhone: OWNER, title: 'L', price: 777, status: 'active' });
+    await db.collection('platform_products').doc('legacy2').set({ name: 'L', price: 55 });
     const dry = await tool.run({ db, apply: false, log: () => {} });
-    assert.strictEqual(dry.touched.length, 1);
+    assert.ok(dry.touched.some((x) => x.id === 'legacy1') && dry.touched.some((x) => x.col === 'platform_products' && x.id === 'legacy2'));
     assert.ok(!('priceTracked' in (await get('tv_shop_items', 'legacy1'))));
-    const s2before = (await get('tv_shop_items', 's2')).priceSince.toMillis();
     const res = await tool.run({ db, apply: true, log: () => {} });
-    assert.deepStrictEqual(res.touched, [{ col: 'tv_shop_items', id: 'legacy1' }]);
-    const l = await get('tv_shop_items', 'legacy1');
-    assert.strictEqual(l.priceTracked, 777);
-    assert.ok(l.priceSince);
-    assert.strictEqual((await get('tv_shop_items', 's2')).priceSince.toMillis(), s2before);
+    assert.strictEqual((await get('tv_shop_items', 'legacy1')).priceTracked, 777);
+    assert.strictEqual((await get('platform_products', 'legacy2')).priceTracked, 55);
     const f = require('path').join(require('os').tmpdir(), `pp_rb_${Date.now()}.json`);
     require('fs').writeFileSync(f, JSON.stringify(res.touched));
     await tool.rollback({ db, file: f });

@@ -1,30 +1,26 @@
 /**
- * Маҳсулот карточкаси белгиси (эга 2026-11-19): «−N%» · «Акция» · «Сўнгги доналар» · «Янги».
+ * Маҳсулот карточкаси белгиси: «−N%» · «Акция» · «Сўнгги доналар» · «Янги».
  *
- * Эга қарорлари (CONFIRMED, 2026-11-19):
- *   - карточкада БИТТА белги (устунлик: chegirma → aksiya → сўнгги доналар → янги); сотувчи эркин матн ёзмайди;
- *   - «−N%»: сотувчи эски нархни киритади, фоиз серверда (бутун сон, floor); эски нарх ≥ 7 кун ҳақиқатан
- *     нарх бўлган бўлиши шарт (сервер ёзадиган нарх тарихи); муддат ≤ 30 кун; «−N%» МОДЕРАЦИЯДАН ўтади;
- *   - «Янги» — фаоллашгандан 7 кун (автомат); «Сўнгги доналар» — қолдиқ < 5 (автомат).
- * PROPOSED (бу модулда, эга тасдиғи керак):
- *   - «Акция» (фоизсиз) — модерациясиз (эркин матн йўқ, фақат муддат ≤ 30 кун); суиистеъмол (ҳар 30 кунда қайта) —
- *     очиқ масала;
- *   - эски нарх даври тугаганига 30 кундан ошмаган бўлиши керак (`HISTORY_LOOKBACK_DAYS`) — бир йил олдинги
- *     нархни «эски нарх» деб кўрсатиб бўлмасин;
- *   - нарх ўзгарса тасдиқланган/кутилаётган «−N%» бекор (фоиз эскиради); сотувчи қайта юборади.
+ * Эга қарорлари (CONFIRMED):
+ *   2026-11-19 — карточкада БИТТА белги (устунлик: −% → Акция → сўнгги доналар → янги); эркин матн йўқ;
+ *     «Янги» — фаоллашгандан 7 кун; «Сўнгги доналар» — қолдиқ < 5; «Акция» — модерациясиз, ≤ 30 кун.
+ *   2026-11-20 — «−N%» = ЖОРИЙ нархдан фоиз (эски нарх қўлда ёзилмайди). Мисол: 10 000, −10% → карточкада 10 000
+ *     чизилган ва 9 000 қизил. Асос нарх охирги 30 кун ичида ≥ 7 кун товарнинг нархи бўлган бўлиши шарт; ≤ 30 кун.
+ *     AVA дўкони (platform_products ва AVA'нинг ўз ulgurji товарлари) — админ панелдан бевосита (adminSetProductDiscount);
+ *     бошқа сотувчилар — ўзлари сўрайди, «−%» модерациядан ўтади (adminModeratePromo).
+ *     Харидор чегирмали нархни ТЎЛАЙДИ: тасдиқда сервер ҳақиқий нарх майдонларини чегирмали қийматга ёзади
+ *     (tv_shop_items.price; wholesale priceTiers + packs[].priceTiers; platform price + priceTiers) ва асосни
+ *     `promo.base` да сақлайди — мавжуд quote/order коди ўзгармасдан тўғри нархни олади.
+ *     Акция пайтида сотувчи нархни ўзгартирса: янги нарх < асос → акция давом этади (фоиз асосдан қайта, floor);
+ *     янги нарх == асос → бекор; янги нарх > асос → бекор (PROPOSED, эгага ҳисобот).
+ *     Муддат тугаса (productPromoExpirySweep): нарх ҳали сервер қўйган чегирмали нарх бўлса — асос тикланади;
+ *     сотувчи ўзгартирган бўлса — унинг нархи қолади, фақат белги олинади. Идемпотент.
+ * PROPOSED: фоиз 1..90; эски нархлар даври фақат промо бўлмаган даврлардан; Акция суиистеъмоли — очиқ масала.
  *
- * Маълумот модели (коллекциялар: tv_shop_items `price`; wholesale_products — энг кичик minQty поғонасининг нархи):
- *   Мижоз ёзади:   promoRequest {kind: 'discount'|'promo', oldPrice?: int, until: Timestamp, requestedAt: request.time}
- *   ФАҚАТ сервер:  priceTracked, priceSince, priceHistory[{price, from, to}] (≤10),
- *                  promo {kind, percent?, oldPrice?, until, approvedAt, approvedBy} — карточкада кўринадиган белги,
- *                  promoState {status: pending|rejected|active|cleared, reason?, requestKey, ...},
- *                  firstActiveAt (биринчи фаоллашув), stockLeft (wholesale: қадоқлар қолдиғи йиғиндиси).
- *
- * Функциялар (ЯНГИ — мавжуд функциялар ўзгармади):
- *   - onShopItemPromoWrite / onWholesaleProductPromoWrite (onWrite): нарх тарихи, сўровни текшириш, firstActiveAt;
- *   - onWholesaleStockBadge (wholesale_stock onWrite): stockLeft;
- *   - adminModeratePromo (callable): «−N%» тасдиқлаш/рад этиш, транзакция + admin_audit (kind `promo_moderation`).
- * Идемпотентлик: ҳолат ҳужжатнинг ўзида (priceTracked, promoState.requestKey) — триггер қайта ишласа ҳам ёзув йўқ.
+ * Маълумот (мижоз ёзади фақат `promoRequest` {kind: discount|promo, percent?, until, requestedAt}):
+ *   ФАҚАТ сервер: priceTracked, priceSince, priceHistory[{price, from, to, promo?}] (≤ 10),
+ *     promo {kind, percent, basePrice, price, base{...}, applied{...}, sellerChanged?, until, approvedAt, approvedBy},
+ *     promoState {status: pending|rejected|active|cleared|expired, reason?, requestKey, ...}, firstActiveAt, stockLeft.
  */
 'use strict';
 
@@ -34,30 +30,39 @@ const MODULE = 'product_promo';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PROMO_MAX_DAYS = 30;
 const MIN_PRICE_DAYS = 7;
-const HISTORY_LOOKBACK_DAYS = 30; // PROPOSED
+const REFERENCE_WINDOW_DAYS = 30;
 const HISTORY_MAX = 10;
 const PRICE_MAX = 999999999;
-const LOW_STOCK_LIMIT = 5; // мижоз белгиси: 1..4 (маълумот учун; сервер фақат stockLeft ёзади)
+const PERCENT_MIN = 1;
+const PERCENT_MAX = 90; // PROPOSED
 const REASON_MAX = 300;
+const PAGE = 300;
+const MAX_ROUNDS = 20;
 const ADMIN_ROLES = Object.freeze(['admin', 'superadmin']);
 const AUDIT_KIND = 'promo_moderation';
-const COLLECTIONS = Object.freeze(['tv_shop_items', 'wholesale_products']);
+const AUDIT_KIND_DIRECT = 'promo_admin_set';
+/** Сотувчи сўрови мумкин бўлган коллекциялар; platform_products — фақат админ. */
+const REQUEST_COLLECTIONS = Object.freeze(['tv_shop_items', 'wholesale_products']);
+const COLLECTIONS = Object.freeze(['tv_shop_items', 'wholesale_products', 'platform_products']);
 const SERVER_KEYS = Object.freeze(['priceTracked', 'priceSince', 'priceHistory', 'promo', 'promoState', 'firstActiveAt', 'stockLeft']);
 
-/** Рад этиш/бекор сабаблари (мижоз шу кодлар бўйича 3 тилда тушунтиради). */
 const REASONS = Object.freeze({
   UNTIL_INVALID: 'UNTIL_INVALID',
   UNTIL_TOO_FAR: 'UNTIL_TOO_FAR',
   PRICE_REQUIRED: 'PRICE_REQUIRED',
-  OLD_PRICE_INVALID: 'OLD_PRICE_INVALID',
-  OLD_PRICE_NOT_HIGHER: 'OLD_PRICE_NOT_HIGHER',
+  PERCENT_INVALID: 'PERCENT_INVALID',
   DISCOUNT_TOO_SMALL: 'DISCOUNT_TOO_SMALL',
-  OLD_PRICE_NOT_7_DAYS: 'OLD_PRICE_NOT_7_DAYS',
+  PRICE_NOT_7_DAYS: 'PRICE_NOT_7_DAYS',
   KIND_INVALID: 'KIND_INVALID',
   PRICE_CHANGED: 'PRICE_CHANGED',
+  PRICE_RESTORED: 'PRICE_RESTORED',
+  PRICE_ABOVE_BASE: 'PRICE_ABOVE_BASE',
   CANCELLED: 'CANCELLED',
   EXPIRED: 'EXPIRED',
   ADMIN_REJECTED: 'ADMIN_REJECTED',
+  ADMIN_CLEARED: 'ADMIN_CLEARED',
+  REPLACED: 'REPLACED',
+  PROMO_ACTIVE: 'PROMO_ACTIVE',
 });
 
 const MESSAGES = Object.freeze({
@@ -89,9 +94,17 @@ function millisOf(v) {
   return null;
 }
 
+function stable(v) {
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`;
+  if (v && typeof v === 'object' && typeof v.toMillis !== 'function') {
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
+
 const isPrice = (v) => Number.isSafeInteger(v) && v >= 0 && v <= PRICE_MAX;
 
-/** Жорий нарх (int ёки null). wholesale — энг кичик minQty поғонаси (мижоз `basePrice` билан бир хил). */
+/** Асосий (солиштириладиган) нарх: tv/platform `price`; wholesale — энг кичик minQty поғонаси. */
 function priceOf(collection, d) {
   const x = d || {};
   if (collection === 'wholesale_products') {
@@ -106,139 +119,283 @@ function priceOf(collection, d) {
   return isPrice(x.price) ? x.price : null;
 }
 
-/** Чегирма фоизи: floor((old − price) × 100 / old), бутун сонлар. */
-function discountPercent(oldPrice, price) {
-  if (!Number.isSafeInteger(oldPrice) || !Number.isSafeInteger(price) || oldPrice <= 0 || price < 0 || price >= oldPrice) return 0;
-  return Math.floor(((oldPrice - price) * 100) / oldPrice);
+/** Чегирмали нарх: floor(p × (100 − pct) / 100), камида 1. */
+function discountedPrice(p, pct) {
+  if (!Number.isSafeInteger(p) || p <= 0) return p;
+  return Math.max(1, Math.floor((p * (100 - pct)) / 100));
 }
 
-/** Сўров калити (идемпотентлик): бир хил сўров икки марта текширилмайди. */
+/** Асосдан фоиз: floor((base − price) × 100 / base). */
+function discountPercent(base, price) {
+  if (!Number.isSafeInteger(base) || !Number.isSafeInteger(price) || base <= 0 || price < 0 || price >= base) return 0;
+  return Math.floor(((base - price) * 100) / base);
+}
+
+const mapTiers = (tiers, f) => (Array.isArray(tiers)
+  ? tiers.map((t) => (t && isPrice(t.price) ? { ...t, price: f(t.price) } : t)) : tiers);
+
+/** Нарх майдонлари нусхаси (тиклаш учун). */
+function priceFieldsOf(collection, d) {
+  const x = d || {};
+  if (collection === 'tv_shop_items') return { price: x.price === undefined ? null : x.price };
+  if (collection === 'platform_products') {
+    return { price: x.price === undefined ? null : x.price, priceTiers: Array.isArray(x.priceTiers) ? x.priceTiers : null };
+  }
+  return { priceTiers: Array.isArray(x.priceTiers) ? x.priceTiers : null, packs: Array.isArray(x.packs) ? x.packs : null };
+}
+
+/** Ҳар бир нархга фоиз (int floor) — tv/platform price, барча поғоналар, барча қадоқ поғоналари. */
+function applyPercentToFields(collection, fields, pct) {
+  const f = (p) => discountedPrice(p, pct);
+  const out = {};
+  if ('price' in fields) out.price = isPrice(fields.price) ? f(fields.price) : fields.price;
+  if ('priceTiers' in fields) out.priceTiers = fields.priceTiers == null ? null : mapTiers(fields.priceTiers, f);
+  if ('packs' in fields) {
+    out.packs = fields.packs == null ? null
+      : fields.packs.map((p) => (p && Array.isArray(p.priceTiers) ? { ...p, priceTiers: mapTiers(p.priceTiers, f) } : p));
+  }
+  return out;
+}
+
+/** Нусхани ҳужжат патчига: null — майдон ўчирилади. */
+function fieldsToPatch(fields, fv) {
+  const p = {};
+  Object.keys(fields).forEach((k) => { p[k] = fields[k] == null ? fv.del() : fields[k]; });
+  return p;
+}
+
+const sameFields = (collection, d, fields) => stable(priceFieldsOf(collection, d)) === stable(fields || {});
+
+/** Қадоқларнинг нархдан бошқа майдонлари ўзгардими (wholesale: нарх-фақат таҳрир модерациясиз). */
+function packsNonPriceChanged(a, b) {
+  const strip = (packs) => (Array.isArray(packs)
+    ? packs.map((p) => {
+      if (!p || typeof p !== 'object') return p;
+      // Поғоналар (нарх ва миқдор чегаралари) — нарх маълумоти, модерациясиз (эга 2026-11-20).
+      const { priceTiers, ...rest } = p; // eslint-disable-line no-unused-vars
+      return rest;
+    }) : null);
+  return stable(strip(a && a.packs)) !== stable(strip(b && b.packs));
+}
+
+/** Сўров калити (идемпотентлик). */
 function requestKeyOf(req) {
   if (!req || typeof req !== 'object') return null;
-  return [String(req.kind || ''), Number.isSafeInteger(req.oldPrice) ? req.oldPrice : '', millisOf(req.until) || '', millisOf(req.requestedAt) || '']
+  return [String(req.kind || ''), Number.isSafeInteger(req.percent) ? req.percent : '', millisOf(req.until) || '', millisOf(req.requestedAt) || '']
     .join('|');
 }
 
-/** [oldPrice] нархи ≥ 7 кун бўлган ва якинда (≤ 30 кун олдин) тугаган давр борми. */
-function oldPriceHeld(history, oldPrice, nowMs) {
-  const list = Array.isArray(history) ? history : [];
-  return list.some((h) => {
-    if (!h || h.price !== oldPrice) return false;
-    const from = millisOf(h.from);
-    const to = millisOf(h.to);
-    if (from == null || to == null) return false;
-    return to - from >= MIN_PRICE_DAYS * DAY_MS && to >= nowMs - HISTORY_LOOKBACK_DAYS * DAY_MS;
-  });
+const activeDiscount = (d) => !!(d && d.promo && d.promo.kind === 'discount' && Number.isSafeInteger(d.promo.basePrice));
+
+/**
+ * [price] охирги 30 кун ичида ≥ 7 кун товарнинг нархи бўлганми: ҳар бир (промо бўлмаган) даврнинг [now−30d, now]
+ * билан кесишмаси ≥ 7 кун. Жорий давр (priceSince → now) — промо пайтида ҳисобланмайди.
+ */
+function referenceHeld(d, price, nowMs) {
+  const x = d || {};
+  const winStart = nowMs - REFERENCE_WINDOW_DAYS * DAY_MS;
+  const periods = (Array.isArray(x.priceHistory) ? x.priceHistory : [])
+    .filter((h) => h && h.promo !== true)
+    .map((h) => ({ price: h.price, from: millisOf(h.from), to: millisOf(h.to) }));
+  if (!activeDiscount(x) && x.priceTracked === price) periods.push({ price, from: millisOf(x.priceSince), to: nowMs });
+  return periods.some((p) => p.price === price && p.from != null && p.to != null
+    && Math.min(p.to, nowMs) - Math.max(p.from, winStart) >= MIN_PRICE_DAYS * DAY_MS);
+}
+
+function untilCheck(untilMs, baseMs, nowMs) {
+  if (untilMs == null || untilMs <= nowMs) return REASONS.UNTIL_INVALID;
+  if (untilMs > baseMs + PROMO_MAX_DAYS * DAY_MS) return REASONS.UNTIL_TOO_FAR;
+  return null;
+}
+
+/** «−N%» шартлари (сўров, тасдиқ ва админ учун бир хил). `null` — яроқли, акс ҳолда сабаб. */
+function discountProblem(collection, d, percent, nowMs) {
+  const x = d || {};
+  const price = priceOf(collection, x);
+  if (!Number.isSafeInteger(percent) || percent < PERCENT_MIN || percent > PERCENT_MAX) return REASONS.PERCENT_INVALID;
+  // Амалдаги чегирма устига иккинчиси йўқ (асос чегирмали нарх бўлиб қоларди): аввал бекор — асос тикланади.
+  if (activeDiscount(x)) return REASONS.PROMO_ACTIVE;
+  if (price == null || price <= 0 || x.priceUnit === 'negotiable') return REASONS.PRICE_REQUIRED;
+  if (discountedPrice(price, percent) >= price) return REASONS.DISCOUNT_TOO_SMALL;
+  if (!referenceHeld(x, price, nowMs)) return REASONS.PRICE_NOT_7_DAYS;
+  return null;
+}
+
+/** Сотувчи сўровини текшириш (тоза). */
+function validatePromoRequest(collection, d, req, nowMs) {
+  const r = req || {};
+  const reqAt = millisOf(r.requestedAt);
+  const baseMs = reqAt != null ? Math.min(reqAt, nowMs) : nowMs;
+  if (r.kind !== 'discount' && r.kind !== 'promo') return { ok: false, reason: REASONS.KIND_INVALID };
+  const u = untilCheck(millisOf(r.until), baseMs, nowMs);
+  if (u) return { ok: false, reason: u };
+  if (r.kind === 'promo') return { ok: true, kind: 'promo', untilMs: millisOf(r.until) };
+  const pr = discountProblem(collection, d, r.percent, nowMs);
+  if (pr) return { ok: false, reason: pr };
+  return { ok: true, kind: 'discount', percent: r.percent, untilMs: millisOf(r.until) };
+}
+
+/** Тарихга давр қўшиш (≤ 10). */
+function pushHistory(d, entry, fv) {
+  const list = (Array.isArray(d.priceHistory) ? d.priceHistory : []).slice();
+  list.push({ price: entry.price, from: fv.at(entry.from), to: fv.at(entry.to), ...(entry.promo ? { promo: true } : {}) });
+  return list.slice(-HISTORY_MAX);
+}
+
+/** Жорий давр ёпилиши (жорий нарх майдони кузатилаётган бўлса). */
+function closeCurrentPeriod(d, atMs, fv) {
+  const from = millisOf(d.priceSince);
+  if (!Number.isSafeInteger(d.priceTracked) || from == null) return null;
+  return pushHistory(d, { price: d.priceTracked, from, to: atMs, promo: activeDiscount(d) }, fv);
 }
 
 /**
- * Сўровни текшириш (тоза). `{ok: true, kind, percent?, oldPrice?, untilMs}` ёки `{ok: false, reason}`.
- * history — нарх ўзгариши қайд қилингандан КЕЙИНГИ тарих (бир ёзувда нарх тушириш + сўров ҳам ишлайди).
+ * Чегирмани қўллаш патчи: нарх майдонлари чегирмали, `promo` асос + қўлланган нусха, нарх кузатуви янги давр.
  */
-function validatePromoRequest({ req, price, history, nowMs, priceUnit }) {
-  const r = req || {};
-  const untilMs = millisOf(r.until);
-  const baseMs = millisOf(r.requestedAt) != null ? Math.min(millisOf(r.requestedAt), nowMs) : nowMs;
-  if (r.kind !== 'discount' && r.kind !== 'promo') return { ok: false, reason: REASONS.KIND_INVALID };
-  if (untilMs == null || untilMs <= nowMs) return { ok: false, reason: REASONS.UNTIL_INVALID };
-  if (untilMs > baseMs + PROMO_MAX_DAYS * DAY_MS) return { ok: false, reason: REASONS.UNTIL_TOO_FAR };
-  if (r.kind === 'promo') return { ok: true, kind: 'promo', untilMs };
-  if (price == null || price <= 0 || priceUnit === 'negotiable') return { ok: false, reason: REASONS.PRICE_REQUIRED };
-  if (!Number.isSafeInteger(r.oldPrice) || r.oldPrice <= 0 || r.oldPrice > PRICE_MAX) return { ok: false, reason: REASONS.OLD_PRICE_INVALID };
-  if (r.oldPrice <= price) return { ok: false, reason: REASONS.OLD_PRICE_NOT_HIGHER };
-  const percent = discountPercent(r.oldPrice, price);
-  if (percent < 1) return { ok: false, reason: REASONS.DISCOUNT_TOO_SMALL };
-  if (!oldPriceHeld(history, r.oldPrice, nowMs)) return { ok: false, reason: REASONS.OLD_PRICE_NOT_7_DAYS };
-  return { ok: true, kind: 'discount', percent, oldPrice: r.oldPrice, untilMs };
+function buildApplyPatch(collection, d, { percent, untilMs, actor, nowMs, fv, requestKey, extraState }) {
+  const base = priceFieldsOf(collection, d);
+  const applied = applyPercentToFields(collection, base, percent);
+  const basePrice = priceOf(collection, d);
+  const price = priceOf(collection, applied);
+  const patch = {
+    ...fieldsToPatch(applied, fv),
+    promo: {
+      kind: 'discount', percent, basePrice, price, base, applied, until: fv.at(untilMs), approvedAt: fv.ts(), approvedBy: actor,
+    },
+    promoState: { status: 'active', kind: 'discount', percent, requestKey: requestKey || null, at: fv.ts(), ...(extraState || {}) },
+    priceTracked: price,
+    priceSince: fv.at(nowMs),
+  };
+  const h = closeCurrentPeriod(d, nowMs, fv);
+  if (h) patch.priceHistory = h;
+  return patch;
 }
 
-/** Биринчи фаоллашув: янги ҳужжат active, ёки ҳеч қачон тасдиқланмаган ҳужжат active бўлди. */
+/**
+ * Акцияни якунлаш патчи (муддат, бекор, админ): чегирма бўлса ва нарх ҳали сервер қўйгани бўлса — асос тикланади;
+ * сотувчи ўзгартирган бўлса — унинг нархи қолади. Белги доим олинади.
+ */
+function buildEndPatch(collection, d, { status, reason, nowMs, fv }) {
+  const st = d.promoState || {};
+  const patch = {
+    promo: fv.del(),
+    promoState: { status, reason, requestKey: st.requestKey || null, at: fv.ts() },
+  };
+  let restored = false;
+  if (activeDiscount(d) && !d.promo.sellerChanged && d.promo.base && sameFields(collection, d, d.promo.applied)) {
+    Object.assign(patch, fieldsToPatch(d.promo.base, fv));
+    const h = closeCurrentPeriod(d, nowMs, fv);
+    if (h) patch.priceHistory = h;
+    patch.priceTracked = d.promo.basePrice;
+    patch.priceSince = fv.at(nowMs);
+    restored = true;
+  }
+  return { patch, restored };
+}
+
+/** Биринчи фаоллашув. platform_products — статус йўқ (`active` bool), «Янги» мижозда createdAt'дан. */
 function shouldStampFirstActive(collection, before, cur) {
+  if (collection === 'platform_products') return false;
   if (!cur || cur.status !== 'active' || cur.firstActiveAt) return false;
   if (!before) return true;
   if (before.status === 'active') return false;
-  // Эски (аввал тасдиқланган) ҳужжат қайта фаоллашса — «янги» эмас.
   return collection === 'wholesale_products' ? !before.publishedAt && !before.moderatedAt : !before.moderatedAt;
 }
 
 /**
- * Режа (тоза): жорий ҳужжат бўйича патч. `fv` — { ts(), del(), at(ms) }. Ўзгариш бўлмаса — null.
- * `eventMs` — шу ёзув вақти (нарх даврлари чегараси), `before` — ҳодисадан олдинги ҳолат (firstActiveAt учун).
+ * Триггер режаси (тоза). `{ patch, decision }` ёки null.
  */
 function planPromoWrite(collection, before, cur, { nowMs, eventMs, fv }) {
   if (!cur) return null;
   const at = eventMs != null ? Math.min(eventMs, nowMs) : nowMs;
-  const patch = {};
-  const out = { patch, decision: null, priceChanged: false };
   const price = priceOf(collection, cur);
-  let history = Array.isArray(cur.priceHistory) ? cur.priceHistory.slice() : [];
+  const patch = {};
+  let decision = null;
+  let view = cur; // кейинги қадамлар учун ҳолат (нарх кузатуви янгиланган)
 
-  // 1. Нарх тарихи.
+  // 1. Нарх кузатуви / сотувчи (ёки админ) нархни ўзгартирди.
   if (!('priceTracked' in cur) || cur.priceTracked === undefined) {
     patch.priceTracked = price;
     patch.priceSince = fv.at(at);
+    view = { ...cur, priceTracked: price, priceSince: at };
   } else if (cur.priceTracked !== price) {
-    out.priceChanged = true;
-    const from = millisOf(cur.priceSince);
-    if (Number.isSafeInteger(cur.priceTracked) && from != null) {
-      history.push({ price: cur.priceTracked, from: fv.at(from), to: fv.at(at), fromMs: from, toMs: at });
-      history = history.slice(-HISTORY_MAX);
-      patch.priceHistory = history.map((h) => ({ price: h.price, from: h.fromMs != null ? fv.at(h.fromMs) : h.from, to: h.toMs != null ? fv.at(h.toMs) : h.to }));
-    }
+    const h = closeCurrentPeriod(cur, at, fv);
+    if (h) patch.priceHistory = h;
     patch.priceTracked = price;
     patch.priceSince = fv.at(at);
+    const st = cur.promoState || {};
+    if (activeDiscount(cur)) {
+      const base = cur.promo.basePrice;
+      const pct = price == null ? 0 : discountPercent(base, price);
+      if (price == null || price >= base || pct < 1) {
+        patch.promo = fv.del();
+        const reason = price === base ? REASONS.PRICE_RESTORED : (price != null && price > base ? REASONS.PRICE_ABOVE_BASE : REASONS.DISCOUNT_TOO_SMALL);
+        patch.promoState = { status: 'cleared', reason, requestKey: st.requestKey || null, at: fv.ts() };
+        decision = `cancelled:${reason}`;
+        view = { ...cur, promo: null, promoState: patch.promoState };
+      } else {
+        patch.promo = { ...cur.promo, percent: pct, sellerChanged: true };
+        patch.promoState = { ...st, percent: pct };
+        decision = 'continued';
+        view = { ...cur, promo: patch.promo, promoState: patch.promoState };
+      }
+    } else if (st.status === 'pending') {
+      patch.promoState = { status: 'cleared', reason: REASONS.PRICE_CHANGED, requestKey: st.requestKey || null, at: fv.ts() };
+      decision = 'pending_cleared';
+      view = { ...cur, promoState: patch.promoState };
+    }
+    view = { ...view, priceTracked: price, priceSince: at, priceHistory: h || cur.priceHistory };
   }
-  const histForCheck = history.map((h) => ({ price: h.price, from: h.fromMs != null ? h.fromMs : h.from, to: h.toMs != null ? h.toMs : h.to }));
 
-  const state = cur.promoState || {};
-  const req = cur.promoRequest && typeof cur.promoRequest === 'object' ? cur.promoRequest : null;
-  const key = requestKeyOf(req);
-  const stateKey = state.requestKey || null;
-
-  // 2. Нарх ўзгарди — «−N%» эскирди.
-  if (out.priceChanged) {
-    const activeDiscount = cur.promo && cur.promo.kind === 'discount';
-    const pendingDiscount = state.status === 'pending';
-    if (activeDiscount) patch.promo = fv.del();
-    if (activeDiscount || pendingDiscount) {
-      patch.promoState = { status: 'cleared', reason: REASONS.PRICE_CHANGED, requestKey: stateKey, at: fv.ts() };
-      out.decision = 'cleared_price';
+  // 2. Сотувчи сўрови (platform — йўқ).
+  if (REQUEST_COLLECTIONS.includes(collection)) {
+    const st = view.promoState || {};
+    const req = view.promoRequest && typeof view.promoRequest === 'object' ? view.promoRequest : null;
+    const key = requestKeyOf(req);
+    const stateKey = st.requestKey || null;
+    if (!req) {
+      if (stateKey && (st.status === 'pending' || st.status === 'active')) {
+        const end = view.promo ? buildEndPatch(collection, view, { status: 'cleared', reason: REASONS.CANCELLED, nowMs, fv }) : null;
+        if (end) Object.assign(patch, end.patch);
+        else patch.promoState = { status: 'cleared', reason: REASONS.CANCELLED, requestKey: null, at: fv.ts() };
+        patch.promoState.requestKey = null;
+        decision = end && end.restored ? 'cancelled_restored' : 'cancelled';
+      }
+    } else if (key !== stateKey) {
+      const v = validatePromoRequest(collection, view, req, nowMs);
+      if (!v.ok) {
+        patch.promoState = { status: 'rejected', reason: v.reason, requestKey: key, at: fv.ts() };
+        decision = `rejected:${v.reason}`;
+      } else if (v.kind === 'promo') {
+        if (activeDiscount(view)) Object.assign(patch, buildEndPatch(collection, view, { status: 'cleared', reason: REASONS.REPLACED, nowMs, fv }).patch);
+        patch.promo = { kind: 'promo', until: fv.at(v.untilMs), approvedAt: fv.ts(), approvedBy: 'auto' };
+        patch.promoState = { status: 'active', kind: 'promo', requestKey: key, until: fv.at(v.untilMs), at: fv.ts() };
+        decision = 'promo_active';
+      } else {
+        // Амалдаги белги (чегирма/акция) — модерация қароригача қолади.
+        patch.promoState = {
+          status: 'pending', kind: 'discount', requestKey: key, percent: v.percent, price,
+          newPrice: discountedPrice(price, v.percent), until: fv.at(v.untilMs), at: fv.ts(),
+        };
+        decision = 'discount_pending';
+      }
     }
   }
 
-  // 3. Бекор қилиш (сўров ўчирилди).
-  if (!req) {
-    if (stateKey && (state.status === 'pending' || state.status === 'active')) {
-      if (cur.promo) patch.promo = fv.del();
-      patch.promoState = { status: 'cleared', reason: REASONS.CANCELLED, requestKey: null, at: fv.ts() };
-      out.decision = 'cancelled';
-    }
-  } else if (key !== stateKey) {
-    // 4. Янги сўров.
-    const v = validatePromoRequest({ req, price, history: histForCheck, nowMs, priceUnit: cur.priceUnit });
-    if (!v.ok) {
-      patch.promoState = { status: 'rejected', reason: v.reason, requestKey: key, at: fv.ts() };
-      out.decision = `rejected:${v.reason}`;
-    } else if (v.kind === 'promo') {
-      patch.promo = { kind: 'promo', until: fv.at(v.untilMs), approvedAt: fv.ts(), approvedBy: 'auto' };
-      patch.promoState = { status: 'active', kind: 'promo', requestKey: key, until: fv.at(v.untilMs), at: fv.ts() };
-      out.decision = 'promo_active';
-    } else {
-      patch.promoState = {
-        status: 'pending', kind: 'discount', requestKey: key, percent: v.percent, oldPrice: v.oldPrice, price,
-        until: fv.at(v.untilMs), at: fv.ts(),
-      };
-      out.decision = 'discount_pending';
-    }
+  // 3. Ulgurji: нарх-фақат таҳрир active қолади (rules); қадоқларнинг бошқа майдони ўзгарса — сервер модерацияга.
+  if (collection === 'wholesale_products' && before && before.status === 'active' && cur.status === 'active'
+      && packsNonPriceChanged(before, cur)) {
+    patch.status = 'pending';
+    decision = decision ? `${decision}+packs_pending` : 'packs_pending';
   }
 
-  // 5. Биринчи фаоллашув.
+  // 4. Биринчи фаоллашув.
   if (shouldStampFirstActive(collection, before, cur)) patch.firstActiveAt = fv.ts();
 
-  return Object.keys(patch).length ? out : null;
+  return Object.keys(patch).length ? { patch, decision } : null;
 }
 
-/** Қадоқ ID'лари — functions_demand/api/wholesale_stock.js `packIdsOf` нусхаси (бошқа codebase; паритет тести бор). */
+/** Қадоқ ID'лари — functions_demand/api/wholesale_stock.js `packIdsOf` нусхаси (бошқа codebase). */
 const PACK_ID_RE = /^(p[1-9]|default)$/;
 function packIdsOf(product) {
   const raw = product && Array.isArray(product.packs) ? product.packs : [];
@@ -255,7 +412,6 @@ function packIdsOf(product) {
   return ids.length ? ids : ['default'];
 }
 
-/** Қолдиқ йиғиндиси: ҲАР қадоқ учун қолдиқ бўлса — йиғинди, акс ҳолда null (номаълум → белги йўқ). */
 function stockLeftOf(product, stockDoc) {
   const packs = stockDoc && stockDoc.packs && typeof stockDoc.packs === 'object' ? stockDoc.packs : null;
   if (!packs) return null;
@@ -301,7 +457,6 @@ function attachProductPromo(exportsObj, deps) {
       const before = change.before.exists ? (change.before.data() || {}) : null;
       const after = change.after.data() || {};
       const eventMs = millisOf(change.after.updateTime) || Date.parse(context.timestamp) || started;
-      // Арзон олдиндан текшириш: ўзгариш йўқ бўлса — ўқиш/ёзув йўқ (viewCount каби ёзувлар).
       const pre = planPromoWrite(collection, before, after, { nowMs: started, eventMs, fv });
       let decision = null;
       if (pre) {
@@ -328,6 +483,7 @@ function attachProductPromo(exportsObj, deps) {
 
   exportsObj.onShopItemPromoWrite = promoTrigger('tv_shop_items', 'onShopItemPromoWrite');
   exportsObj.onWholesaleProductPromoWrite = promoTrigger('wholesale_products', 'onWholesaleProductPromoWrite');
+  exportsObj.onPlatformProductPromoWrite = promoTrigger('platform_products', 'onPlatformProductPromoWrite');
 
   exportsObj.onWholesaleStockBadge = functions.firestore.document('wholesale_stock/{productId}').onWrite(async (change, context) => {
     const id = context.params.productId;
@@ -339,19 +495,42 @@ function attachProductPromo(exportsObj, deps) {
     return null;
   });
 
+  function parseTarget(d, allowed) {
+    const collection = String((d && d.collection) || '');
+    if (!allowed.includes(collection)) throw fail('invalid-argument', 'COLLECTION_INVALID');
+    const id = d && typeof d.id === 'string' ? d.id.trim() : '';
+    if (!id || id.length > 128 || id.includes('/')) throw fail('invalid-argument', 'ID_INVALID');
+    return { collection, id, ref: db.collection(collection).doc(id) };
+  }
+
+  async function notifySeller(collection, cur, id, key, params) {
+    try {
+      const raw = collection === 'tv_shop_items' ? cur.ownerPhone : cur.sellerId;
+      const digits = String(raw || '').replace(/\D/g, '');
+      const uid = digits.length === 9 ? `998${digits}` : digits;
+      if (uid.length < 12) return false;
+      const lang = await langOfPhone(db, uid);
+      const msg = renderMessage(key, lang, params);
+      await notifyUserInApp({
+        userId: uid, title: msg.title, body: msg.body, category: 'info', source: 'promo_moderation',
+        dataType: key, screen: 'news', extraData: { collection, listingId: id },
+      });
+      return true;
+    } catch (e) {
+      log({ action: 'notifySeller', collection, docId: id, result: 'error', errorCode: 'NOTIFY_FAILED', error: String(e.message || e) });
+      return false;
+    }
+  }
+
+  // ── Сотувчи «−N%» сўрови модерацияси ──
   exportsObj.adminModeratePromo = functions.https.onCall(async (data, context) => {
     const started = Date.now();
     const actor = await requireCallerRoles(context, ADMIN_ROLES, 'Admin role required');
-    const d = data || {};
-    const collection = String(d.collection || '');
-    if (!COLLECTIONS.includes(collection)) throw fail('invalid-argument', 'COLLECTION_INVALID');
-    const id = typeof d.id === 'string' ? d.id.trim() : '';
-    if (!id || id.length > 128 || id.includes('/')) throw fail('invalid-argument', 'ID_INVALID');
-    const decision = String(d.decision || '');
+    const { collection, id, ref } = parseTarget(data, REQUEST_COLLECTIONS);
+    const decision = String((data && data.decision) || '');
     if (decision !== 'approve' && decision !== 'reject') throw fail('invalid-argument', 'DECISION_INVALID');
-    const note = decision === 'reject' ? normalizeReason(d.reason) : null;
+    const note = decision === 'reject' ? normalizeReason(data && data.reason) : null;
     if (decision === 'reject' && !note) throw fail('invalid-argument', 'REASON_REQUIRED');
-    const ref = db.collection(collection).doc(id);
     let res;
     try {
       res = await db.runTransaction(async (t) => {
@@ -363,23 +542,26 @@ function attachProductPromo(exportsObj, deps) {
         if (requestKeyOf(cur.promoRequest) !== st.requestKey) throw fail('failed-precondition', 'PROMO_STALE');
         const nowMs = Date.now();
         let outcome = decision;
-        let reasonCode = null;
+        let reasonCode = decision === 'reject' ? REASONS.ADMIN_REJECTED : null;
         if (decision === 'approve') {
-          if (priceOf(collection, cur) !== st.price || cur.priceTracked !== st.price) { outcome = 'reject'; reasonCode = REASONS.PRICE_CHANGED; }
-          else if ((millisOf(st.until) || 0) <= nowMs) { outcome = 'reject'; reasonCode = REASONS.EXPIRED; }
-        } else {
-          reasonCode = REASONS.ADMIN_REJECTED;
+          if (priceOf(collection, cur) !== st.price || cur.priceTracked !== st.price) reasonCode = REASONS.PRICE_CHANGED;
+          else if ((millisOf(st.until) || 0) <= nowMs) reasonCode = REASONS.EXPIRED;
+          else reasonCode = discountProblem(collection, cur, st.percent, nowMs);
+          if (reasonCode) outcome = 'reject';
         }
         const audit = {
           kind: AUDIT_KIND, collection, id, target: id, decision: outcome, actor, at: fv.ts(),
-          percent: st.percent || null, oldPrice: st.oldPrice || null, price: st.price || null, until: st.until || null,
+          percent: st.percent || null, price: st.price || null, newPrice: st.newPrice || null, until: st.until || null,
           ...(reasonCode ? { reasonCode } : {}), ...(note ? { reason: note } : {}),
         };
         if (outcome === 'approve') {
-          t.update(ref, {
-            promo: { kind: 'discount', percent: st.percent, oldPrice: st.oldPrice, until: st.until, approvedAt: fv.ts(), approvedBy: actor },
-            promoState: { ...st, status: 'active', decidedAt: fv.ts(), decidedBy: actor },
+          // Аввалги белги (акция) бўлса — ўрнига (асос жорий нарх, чунки чегирма йўқ).
+          const patch = buildApplyPatch(collection, cur, {
+            percent: st.percent, untilMs: millisOf(st.until), actor, nowMs, fv, requestKey: st.requestKey,
+            extraState: { decidedAt: fv.ts(), decidedBy: actor },
           });
+          t.update(ref, patch);
+          audit.newPrice = patch.promo.price;
         } else {
           t.update(ref, {
             promoState: { ...st, status: 'rejected', reason: reasonCode, ...(note ? { note } : {}), decidedAt: fv.ts(), decidedBy: actor },
@@ -394,38 +576,118 @@ function attachProductPromo(exportsObj, deps) {
       if (e instanceof HttpsError) throw e;
       throw fail('internal', 'PROMO_MODERATION_FAILED');
     }
-    let notified = false;
-    try {
-      const phone = String(collection === 'tv_shop_items' ? res.cur.ownerPhone || '' : res.cur.sellerId || '').replace(/\D/g, '');
-      const uid = phone.length === 9 ? `998${phone}` : phone;
-      if (uid.length >= 12) {
-        const lang = await langOfPhone(db, uid);
-        const title = String(res.cur.title || '').trim().slice(0, 60);
-        const msg = res.outcome === 'approve'
-          ? renderMessage('promo_approved', lang, { title, percent: res.st.percent })
-          : renderMessage('promo_rejected', lang, { title, reason: note || res.reasonCode });
-        await notifyUserInApp({
-          userId: uid, title: msg.title, body: msg.body, category: 'info', source: 'promo_moderation',
-          dataType: res.outcome === 'approve' ? 'promo_approved' : 'promo_rejected', screen: 'news',
-          extraData: { collection, listingId: id },
-        });
-        notified = true;
-      }
-    } catch (e) {
-      log({ action: 'adminModeratePromo', collection, docId: id, result: 'error', errorCode: 'NOTIFY_FAILED', error: String(e.message || e) });
-    }
+    const title = String(res.cur.title || '').trim().slice(0, 60);
+    const notified = res.outcome === 'approve'
+      ? await notifySeller(collection, res.cur, id, 'promo_approved', { title, percent: res.st.percent })
+      : await notifySeller(collection, res.cur, id, 'promo_rejected', { title, reason: note || res.reasonCode });
     log({ action: 'adminModeratePromo', collection, docId: id, userId: actor, decision, result: res.outcome, reasonCode: res.reasonCode, notified, duration: Date.now() - started });
     return { ok: true, collection, id, status: res.outcome === 'approve' ? 'active' : 'rejected', reason: res.reasonCode };
   });
+
+  // ── AVA дўкони: админ «−N%» ни бевосита қўяди / олади ──
+  exportsObj.adminSetProductDiscount = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const actor = await requireCallerRoles(context, ADMIN_ROLES, 'Admin role required');
+    const { collection, id, ref } = parseTarget(data, COLLECTIONS);
+    const action = String((data && data.action) || '');
+    if (action !== 'set' && action !== 'clear') throw fail('invalid-argument', 'ACTION_INVALID');
+    const percent = data && data.percent;
+    const untilMs = data && Number.isSafeInteger(data.untilMs) ? data.untilMs : null;
+    let res;
+    try {
+      res = await db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        if (!snap.exists) throw fail('not-found', 'LISTING_NOT_FOUND');
+        const cur = snap.data() || {};
+        const nowMs = Date.now();
+        let patch;
+        const audit = { kind: AUDIT_KIND_DIRECT, collection, id, target: id, action, actor, at: fv.ts() };
+        if (action === 'clear') {
+          if (!cur.promo) throw fail('failed-precondition', 'PROMO_NONE');
+          const end = buildEndPatch(collection, cur, { status: 'cleared', reason: REASONS.ADMIN_CLEARED, nowMs, fv });
+          patch = end.patch;
+          Object.assign(audit, { restored: end.restored, percent: (cur.promo && cur.promo.percent) || null });
+        } else {
+          const u = untilCheck(untilMs, nowMs, nowMs);
+          if (u) throw fail('invalid-argument', u);
+          const pr = discountProblem(collection, cur, percent, nowMs);
+          if (pr) throw fail('failed-precondition', pr);
+          patch = buildApplyPatch(collection, cur, { percent, untilMs, actor, nowMs, fv, requestKey: requestKeyOf(cur.promoRequest) });
+          Object.assign(audit, { percent, price: priceOf(collection, cur), newPrice: patch.promo.price, until: fv.at(untilMs) });
+        }
+        t.update(ref, patch);
+        t.set(db.collection('admin_audit').doc(), audit);
+        return { newPrice: patch.promo && patch.promo.price ? patch.promo.price : null };
+      });
+    } catch (e) {
+      const code = (e && e.details && e.details.code) || 'INTERNAL';
+      log({ action: 'adminSetProductDiscount', collection, docId: id, userId: actor, op: action, result: 'error', errorCode: code, duration: Date.now() - started });
+      if (e instanceof HttpsError) throw e;
+      throw fail('internal', 'PROMO_SET_FAILED');
+    }
+    log({ action: 'adminSetProductDiscount', collection, docId: id, userId: actor, op: action, result: 'ok', duration: Date.now() - started });
+    return { ok: true, collection, id, action, newPrice: res.newPrice };
+  });
+
+  // ── Муддат супуриш ──
+  async function runPromoExpirySweep(nowMs = Date.now()) {
+    const stats = {};
+    const cutoff = admin.firestore.Timestamp.fromMillis(nowMs);
+    for (const collection of COLLECTIONS) {
+      const s = { ended: 0, restored: 0 };
+      for (let round = 0; round < MAX_ROUNDS; round += 1) {
+        const snap = await db.collection(collection).where('promo.until', '<=', cutoff).orderBy('promo.until').limit(PAGE).get();
+        if (snap.empty) break;
+        for (const doc of snap.docs) {
+          try {
+            const r = await db.runTransaction(async (t) => {
+              const cur = await t.get(doc.ref);
+              const d = cur.exists ? (cur.data() || {}) : null;
+              if (!d || !d.promo || (millisOf(d.promo.until) || 0) > nowMs) return null;
+              const end = buildEndPatch(collection, d, { status: 'expired', reason: REASONS.EXPIRED, nowMs: Date.now(), fv });
+              t.update(doc.ref, end.patch);
+              return end.restored;
+            });
+            if (r !== null) { s.ended += 1; if (r) s.restored += 1; }
+          } catch (e) {
+            log({ action: 'productPromoExpirySweep', collection, docId: doc.id, result: 'error', errorCode: 'SWEEP_DOC_FAILED', error: String(e.message || e) });
+          }
+        }
+        if (snap.size < PAGE) break;
+      }
+      stats[collection] = s;
+    }
+    return stats;
+  }
+
+  exportsObj.productPromoExpirySweep = functions
+    .runWith({ timeoutSeconds: 540 })
+    .pubsub.schedule('every 15 minutes')
+    .onRun(async () => {
+      const started = Date.now();
+      const stats = await runPromoExpirySweep(started);
+      log({ action: 'productPromoExpirySweep', result: 'ok', stats, duration: Date.now() - started });
+      return null;
+    });
+
+  return { runPromoExpirySweep };
 }
 
 module.exports = {
   attachProductPromo,
   priceOf,
+  discountedPrice,
   discountPercent,
+  priceFieldsOf,
+  applyPercentToFields,
+  sameFields,
+  packsNonPriceChanged,
   requestKeyOf,
-  oldPriceHeld,
+  referenceHeld,
+  discountProblem,
   validatePromoRequest,
+  buildApplyPatch,
+  buildEndPatch,
   shouldStampFirstActive,
   planPromoWrite,
   packIdsOf,
@@ -434,11 +696,14 @@ module.exports = {
   REASONS,
   SERVER_KEYS,
   COLLECTIONS,
+  REQUEST_COLLECTIONS,
   PROMO_MAX_DAYS,
   MIN_PRICE_DAYS,
-  HISTORY_LOOKBACK_DAYS,
+  REFERENCE_WINDOW_DAYS,
+  PERCENT_MIN,
+  PERCENT_MAX,
   HISTORY_MAX,
-  LOW_STOCK_LIMIT,
   AUDIT_KIND,
+  AUDIT_KIND_DIRECT,
   DAY_MS,
 };

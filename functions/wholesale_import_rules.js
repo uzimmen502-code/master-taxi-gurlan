@@ -360,8 +360,16 @@ function contentChanged(existing, fields, imageSources) {
  * Янгилашдаги ҳолат — эга таҳрири қоидаси билан бир хил (`wholesaleProductOwnerUpdateOk`):
  * контент ўзгарса — қайта модерация (`pending`); сотувчи яширган (`inactive`) бўлса — яширин қолади.
  */
-function statusAfterUpdate(existingStatus) {
+function statusAfterUpdate(existingStatus, priceOnly = false) {
+  if (priceOnly) return existingStatus; // эга 2026-11-20: нарх-фақат — қайта модерациясиз
   return existingStatus === 'inactive' ? 'inactive' : 'pending';
+}
+
+/** Модерацияга тегишли ўзгариш (нархдан ташқари контент ёки расм). Эга 2026-11-20: нарх — модерациясиз. */
+function moderationChanged(existing, fields, imageSources) {
+  const e = existing || {};
+  const f = fields || {};
+  return contentChanged({ ...e, priceTiers: f.priceTiers }, f, imageSources);
 }
 
 module.exports = {
@@ -389,5 +397,6 @@ module.exports = {
   tashkentDay,
   quotaStep,
   contentChanged,
+  moderationChanged,
   statusAfterUpdate,
 };

@@ -53,9 +53,12 @@ const REALTY_DELETE_GUARD_MS = 15 * 60 * 1000;
 const COLLECTIONS = Object.freeze(['tv_shop_items', 'wholesale_products', 'realty_listings', 'ads']);
 /** Муддатли коллекциялар (эга қарори 2). */
 const EXPIRING = Object.freeze(['tv_shop_items', 'realty_listings', 'ads']);
-/** Эга таҳрирлаганда қайта модерацияга тушадиган майдонлар (эга қарори 4). */
+/**
+ * Эга таҳрирлаганда қайта модерацияга тушадиган майдонлар (эга қарори 4).
+ * 2026-11-20 (эга): нарх ўзгариши қайта модерация ЭМАС — price/priceUnit олиб ташланди (сервер чегирма ёзуви ҳам).
+ */
 const CONTENT_FIELDS = Object.freeze([
-  'title', 'photoUrls', 'photoUrl', 'description', 'price', 'priceUnit', 'market', 'category', 'attrs', 'imported',
+  'title', 'photoUrls', 'photoUrl', 'description', 'market', 'category', 'attrs', 'imported',
 ]);
 /** Контент таҳририда `pending`га қайтадиган ҳолатлар (эга қарори 4: active/expired). */
 const EDIT_RESUBMIT_STATUSES = Object.freeze(['active', 'expired']);

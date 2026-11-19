@@ -1,5 +1,5 @@
 /**
- * Карточка белгиси (эга 2026-11-19): мавжуд tv_shop_items / wholesale_products да нарх кузатувини бошлаш.
+ * Карточка белгиси (эга 2026-11-19/20): мавжуд tv_shop_items / wholesale_products / platform_products да нарх кузатувини бошлаш.
  *
  * НЕГА: «−N%» учун эски нарх ≥ 7 кун турган бўлиши керак. Триггер (onShopItemPromoWrite / onWholesaleProductPromoWrite)
  * кузатувни ҳужжатнинг БИРИНЧИ ёзувида бошлайди; ёзилмаган эски ҳужжатларда соат ҳеч қачон бошланмайди. Бу скрипт
@@ -18,7 +18,7 @@ const path = require('path');
 const admin = require('firebase-admin');
 const { priceOf } = require('../product_promo');
 
-const COLLECTIONS = ['tv_shop_items', 'wholesale_products'];
+const COLLECTIONS = ['tv_shop_items', 'wholesale_products', 'platform_products'];
 const PAGE = 400;
 
 async function run({ db, apply, nowMs = Date.now(), log = console.log }) {

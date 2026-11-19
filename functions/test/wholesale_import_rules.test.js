@@ -166,6 +166,13 @@ async function main() {
     assert.strictEqual(R.statusAfterUpdate('active'), 'pending');
     assert.strictEqual(R.statusAfterUpdate('inactive'), 'inactive');
     assert.strictEqual(R.statusAfterUpdate('pending'), 'pending');
+    // Ega 2026-11-20: narx-faqat o'zgarish - qayta moderatsiyasiz (holat saqlanadi).
+    assert.strictEqual(R.moderationChanged({ ...existing, priceTiers: [{ minQty: 1, price: 1 }] }, v.fields, v.imageSources), false);
+    assert.strictEqual(R.moderationChanged({ ...existing, title: 'Boshqa' }, v.fields, v.imageSources), true);
+    assert.strictEqual(R.moderationChanged(existing, v.fields, ['https://other/x.jpg']), true);
+    assert.strictEqual(R.statusAfterUpdate('active', true), 'active');
+    assert.strictEqual(R.statusAfterUpdate('pending', true), 'pending');
+    assert.strictEqual(R.statusAfterUpdate('inactive', true), 'inactive');
   });
 
   await check('C2 qidiruv tokenlari = klient AdSearchText.buildTokens (≤48)', () => {

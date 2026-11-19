@@ -79,11 +79,11 @@ void main() {
     final h = _Harness();
     await h.pump(t);
     expect(_text('0 / 4'), findsOneWidget);
-    for (final title in ['Porsiya', 'Tarkibi (KBJU)', 'Oshxona', 'Belgilar']) {
+    for (final title in ['Porsiya', 'Tarkibi (KBJU)', 'Oşxona', 'Belgilar']) {
       expect(_text(title), findsOneWidget, reason: title);
     }
-    expect(_text('Mijoz uchun qo\'shimcha ma\'lumot'), findsOneWidget);
-    expect(_field('Necha kishilik porsiya'), findsNothing);
+    expect(_text('Mijoz uçun qöşimça ma\'lumot'), findsOneWidget);
+    expect(_field('Neça kişilik porsiya'), findsNothing);
     expect(_field('Kaloriya (kkal)'), findsNothing);
     expect(h.cuisineLoads, 0, reason: 'кухналар карточка очилмагунча юкланмайди (ўқишлар тежалади)');
     expect(h.last, isNull, reason: 'ҳеч нарса ўзгармади — onChanged чақирилмайди');
@@ -98,21 +98,21 @@ void main() {
     await t.tap(find.widgetWithText(ChoiceChip, '4'));
     await t.pumpAndSettle();
     expect(h.last!.servings, 4);
-    expect(_text('Bir kishilik narx: 8 750 so\'m'), findsOneWidget);
-    expect((t.widget(_field('Necha kishilik porsiya')) as TextField).controller!.text, '4');
+    expect(_text('Bir kişilik narx: 8 750 söm'), findsOneWidget);
+    expect((t.widget(_field('Neça kişilik porsiya')) as TextField).controller!.text, '4');
 
     h.priceController.text = '10000';
     await t.pumpAndSettle();
-    expect(_text('Bir kishilik narx: 2 500 so\'m'), findsOneWidget, reason: 'нарх таом майдонидан жонли');
+    expect(_text('Bir kişilik narx: 2 500 söm'), findsOneWidget, reason: 'нарх таом майдонидан жонли');
 
-    await t.enterText(_field('Necha kishilik porsiya'), '3');
+    await t.enterText(_field('Neça kişilik porsiya'), '3');
     await t.pumpAndSettle();
-    expect(_text('Bir kishilik narx: 3 334 so\'m'), findsOneWidget, reason: 'юқорига яхлитланади');
+    expect(_text('Bir kişilik narx: 3 334 söm'), findsOneWidget, reason: 'юқорига яхлитланади');
 
-    await t.enterText(_field('Porsiya og\'irligi (gramm)'), '450');
+    await t.enterText(_field('Porsiya oğirligi (gramm)'), '450');
     await t.pumpAndSettle();
     expect(h.last!.weightG, 450);
-    expect(_text('3 kishilik · 450 g'), findsOneWidget, reason: 'ёпиқ карточка қисқача мазмуни');
+    expect(_text('3 kişilik · 450 g'), findsOneWidget, reason: 'ёпиқ карточка қисқача мазмуни');
     expect(_text('1 / 4'), findsOneWidget);
   });
 
@@ -121,13 +121,13 @@ void main() {
     await h.pump(t);
     await t.tap(_text('Porsiya'));
     await t.pumpAndSettle();
-    await t.enterText(_field('Necha kishilik porsiya'), '51');
+    await t.enterText(_field('Neça kişilik porsiya'), '51');
     await t.pumpAndSettle();
-    expect(_text('Porsiya soni 1 dan 50 gacha bo\'lishi kerak'), findsOneWidget);
+    expect(_text('Porsiya soni 1 dan 50 gaça bölişi kerak'), findsOneWidget);
     expect(h.last!.validate(), [DishFactsError.servings]);
-    await t.enterText(_field('Necha kishilik porsiya'), '50');
+    await t.enterText(_field('Neça kişilik porsiya'), '50');
     await t.pumpAndSettle();
-    expect(_text('Porsiya soni 1 dan 50 gacha bo\'lishi kerak'), findsNothing);
+    expect(_text('Porsiya soni 1 dan 50 gaça bölişi kerak'), findsNothing);
   });
 
   testWidgets('КБЖУ: тўғри → «мос» ёзуви ва диаграмма ёзуви; калория мос эмас → хато (тахминий 585 билан); тузатилса йўқолади', (t) async {
@@ -138,26 +138,26 @@ void main() {
 
     await t.enterText(_field('Kaloriya (kkal)'), '600');
     await t.enterText(_field('Oqsil (g)'), '30');
-    await t.enterText(_field('Yog\' (g)'), '25');
+    await t.enterText(_field('Yoğ (g)'), '25');
     await t.enterText(_field('Uglevod (g)'), '60');
     await t.pumpAndSettle();
     expect(h.last!.hasNutrition, isTrue);
-    expect(_text('Makroelementlar bo\'yicha ≈ 585 kkal — mos'), findsOneWidget);
+    expect(_text('Makroelementlar böyiça ≈ 585 kkal — mos'), findsOneWidget);
     // Диаграмма легендаси — РАҚАМ билан (ранг ягона белги эмас)
     expect(_text('Oqsil 30 g'), findsOneWidget);
-    expect(_text('Yog\' 25 g'), findsOneWidget);
+    expect(_text('Yoğ 25 g'), findsOneWidget);
     expect(_text('Uglevod 60 g'), findsOneWidget);
     expect(_text('600 kkal'), findsOneWidget, reason: 'ёпиқ карточка мазмуни (очиқда ҳам сарлавҳа остида)');
 
     await t.enterText(_field('Kaloriya (kkal)'), '800');
     await t.pumpAndSettle();
-    expect(find.textContaining('taxminan 585 kkal chiqadi'), findsOneWidget);
-    expect(_text('Makroelementlar bo\'yicha ≈ 585 kkal — mos'), findsNothing);
+    expect(find.textContaining('taxminan 585 kkal çiqadi'), findsOneWidget);
+    expect(_text('Makroelementlar böyiça ≈ 585 kkal — mos'), findsNothing);
     expect(h.last!.validate(), [DishFactsError.nutritionMismatch]);
 
     await t.enterText(_field('Kaloriya (kkal)'), '600');
     await t.pumpAndSettle();
-    expect(find.textContaining('taxminan 585 kkal chiqadi'), findsNothing);
+    expect(find.textContaining('taxminan 585 kkal çiqadi'), findsNothing);
   });
 
   testWidgets('КБЖУ диаграммаси ЧИЗИЛАДИ (қурилмада сегментлар 0 баландликда кўринмай қолган эди): баландлик 10, эни калорияга ҳисса (О120 : Ё225 : У240)', (t) async {
@@ -212,7 +212,7 @@ void main() {
     await t.pumpAndSettle();
     await t.enterText(_field('Kaloriya (kkal)'), '300');
     await t.pumpAndSettle();
-    expect(find.textContaining('to\'rttasi ham kiritilishi kerak'), findsNothing, reason: 'ёзаётганда безовта қилмайди');
+    expect(find.textContaining('törttasi ham kiritilişi kerak'), findsNothing, reason: 'ёзаётганда безовта қилмайди');
     expect(h.last!.validate(), [DishFactsError.nutritionIncomplete]);
 
     // Карточкани ёпамиз, кейин сақлаш уриниши
@@ -220,13 +220,13 @@ void main() {
     await t.pumpAndSettle();
     h.showErrors.value = true;
     await t.pumpAndSettle();
-    expect(find.textContaining('to\'rttasi ham kiritilishi kerak'), findsOneWidget, reason: 'хатоли карточка автомат очилди');
+    expect(find.textContaining('törttasi ham kiritilişi kerak'), findsOneWidget, reason: 'хатоли карточка автомат очилди');
   });
 
   testWidgets('кухна: аввал гуруҳ; гуруҳ бўйича чиплар; танлаш; гуруҳ алмашса кухна тозаланади; қайта босилса бекор', (t) async {
     final h = _Harness();
     await h.pump(t);
-    await t.tap(_text('Oshxona'));
+    await t.tap(_text('Oşxona'));
     await t.pumpAndSettle();
     expect(h.cuisineLoads, 1);
     expect(_text('Avval «Milliy» yoki «Dunyo»ni tanlang'), findsOneWidget);
@@ -266,32 +266,32 @@ void main() {
       addResult: (name, group) => Cuisine(id: 'national_qashqadaryo-milliy-taomlari', name: name, group: group),
     );
     await h.pump(t);
-    await t.tap(_text('Oshxona'));
+    await t.tap(_text('Oşxona'));
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(SegmentedButton<String>), matching: find.text('Milliy')));
     await t.pumpAndSettle();
 
-    await t.tap(find.widgetWithText(ActionChip, 'O\'z nomimni qo\'shish'));
+    await t.tap(find.widgetWithText(ActionChip, 'Öz nomimni qöşiş'));
     await t.pumpAndSettle();
     expect(_text('Yangi nom'), findsOneWidget);
-    FilledButton okButton() => t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Qo\'shish'));
+    FilledButton okButton() => t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Qöşiş'));
     expect(okButton().onPressed, isNull, reason: 'бўш ном');
     await t.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Q');
     await t.pumpAndSettle();
     expect(okButton().onPressed, isNull, reason: '1 ҳарф');
     await t.enterText(
       find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
-      '  Qashqadaryo   milliy taomlari ',
+      '  Qaşqadaryo   milliy taomlari ',
     );
     await t.pumpAndSettle();
-    await t.tap(find.widgetWithText(FilledButton, 'Qo\'shish'));
+    await t.tap(find.widgetWithText(FilledButton, 'Qöşiş'));
     await t.pumpAndSettle();
 
-    expect(h.added, [('Qashqadaryo milliy taomlari', 'national')], reason: 'бўшлиқлар тозаланган');
+    expect(h.added, [('Qaşqadaryo milliy taomlari', 'national')], reason: 'бўшлиқлар тозаланган');
     expect(h.last!.cuisineId, 'national_qashqadaryo-milliy-taomlari');
     expect(h.last!.cuisineGroup, 'national');
-    expect(find.widgetWithText(ChoiceChip, 'Qashqadaryo milliy taomlari'), findsOneWidget, reason: 'янги чип рўйхатга тушди');
-    expect(t.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Qashqadaryo milliy taomlari')).selected, isTrue);
+    expect(find.widgetWithText(ChoiceChip, 'Qaşqadaryo milliy taomlari'), findsOneWidget, reason: 'янги чип рўйхатга тушди');
+    expect(t.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Qaşqadaryo milliy taomlari')).selected, isTrue);
   });
 
   testWidgets('ўз номини қўшиш хато берса (кунлик лимит) — тушунарли хабар, танлов ўзгармайди', (t) async {
@@ -299,18 +299,18 @@ void main() {
       addError: const RestaurantsException('resource-exhausted', 'CUISINE_RATE_LIMIT', 'x'),
     );
     await h.pump(t);
-    await t.tap(_text('Oshxona'));
+    await t.tap(_text('Oşxona'));
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(SegmentedButton<String>), matching: find.text('Dunyo')));
     await t.pumpAndSettle();
-    await t.tap(find.widgetWithText(ActionChip, 'O\'z nomimni qo\'shish'));
+    await t.tap(find.widgetWithText(ActionChip, 'Öz nomimni qöşiş'));
     await t.pumpAndSettle();
     await t.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Gruzin');
     await t.pumpAndSettle();
-    await t.tap(find.widgetWithText(FilledButton, 'Qo\'shish'));
+    await t.tap(find.widgetWithText(FilledButton, 'Qöşiş'));
     await t.pumpAndSettle();
     expect(h.added, [('Gruzin', 'world')]);
-    expect(find.textContaining('Bugun juda ko\'p yangi nom'), findsOneWidget);
+    expect(find.textContaining('Bugun juda köp yangi nom'), findsOneWidget);
     expect(h.last?.cuisineId, isNull);
   });
 
@@ -341,13 +341,13 @@ void main() {
       ),
     );
     await t.pumpAndSettle();
-    await t.tap(_text('Oshxona'));
+    await t.tap(_text('Oşxona'));
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(SegmentedButton<String>), matching: find.text('Milliy')));
     await t.pumpAndSettle();
     expect(calls, 2);
-    expect(_text('Ro\'yxatni yuklab bo\'lmadi'), findsOneWidget);
-    await t.tap(find.widgetWithText(TextButton, 'Qayta urinish'));
+    expect(_text('Röyxatni yuklab bölmadi'), findsOneWidget);
+    await t.tap(find.widgetWithText(TextButton, 'Qayta uriniş'));
     await t.pumpAndSettle();
     expect(calls, 3);
     expect(find.widgetWithText(ChoiceChip, 'Xorazm'), findsOneWidget);
@@ -359,11 +359,11 @@ void main() {
     await t.tap(_text('Belgilar'));
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilterChip, 'Parhezli taomlar'));
-    await t.tap(find.widgetWithText(FilterChip, 'Bolalar uchun'));
+    await t.tap(find.widgetWithText(FilterChip, 'Bolalar uçun'));
     await t.pumpAndSettle();
     expect(h.last!.tags, ['kids', 'light'], reason: 'босилиш тартибидан мустақил');
-    expect(_text('Bolalar uchun · Parhezli taomlar'), findsOneWidget);
-    await t.tap(find.widgetWithText(FilterChip, 'Bolalar uchun'));
+    expect(_text('Bolalar uçun · Parhezli taomlar'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilterChip, 'Bolalar uçun'));
     await t.pumpAndSettle();
     expect(h.last!.tags, ['light']);
   });
@@ -383,11 +383,11 @@ void main() {
     final h = _Harness(initial: full);
     await h.pump(t);
     expect(_text('4 / 4'), findsOneWidget);
-    expect((t.widget(_field('Necha kishilik porsiya')) as TextField).controller!.text, '4');
+    expect((t.widget(_field('Neça kişilik porsiya')) as TextField).controller!.text, '4');
     expect((t.widget(_field('Kaloriya (kkal)')) as TextField).controller!.text, '600');
-    expect(_text('Bir kishilik narx: 8 750 so\'m'), findsOneWidget);
+    expect(_text('Bir kişilik narx: 8 750 söm'), findsOneWidget);
     expect(t.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'O\'zbek')).selected, isTrue, reason: 'танланган кухна');
-    expect(t.widget<FilterChip>(find.widgetWithText(FilterChip, 'Bolalar uchun')).selected, isTrue);
+    expect(t.widget<FilterChip>(find.widgetWithText(FilterChip, 'Bolalar uçun')).selected, isTrue);
     expect(h.last, isNull, reason: 'фойдаланувчи тегмагунча onChanged чақирилмайди');
   });
 
@@ -425,7 +425,7 @@ void main() {
       await t.enterText(_field('Kaloriya (kkal)'), '900');
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
-      expect(find.textContaining('taxminan 585 kkal chiqadi'), findsOneWidget);
+      expect(find.textContaining('taxminan 585 kkal çiqadi'), findsOneWidget);
     });
   }
 

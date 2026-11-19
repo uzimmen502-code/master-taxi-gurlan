@@ -59,14 +59,14 @@ void main() {
   final keys = _usedKeys();
 
   for (final lang in _langs) {
-    test('$lang: barcha customer_confirm kalitlari bor va bo\'sh emas', () {
+    test('$lang: barça customer_confirm kalitlari bor va böş emas', () {
       final m = _load(lang);
       for (final k in keys) {
         expect((m[k] ?? '').toString().trim(), isNotEmpty, reason: '$lang: $k');
       }
     });
 
-    test('$lang: ichki terminlar yo\'q (45-qoida)', () {
+    test('$lang: içki terminlar yöq (45-qoida)', () {
       final m = _load(lang);
       final text = [for (final k in keys) m[k].toString()].join(' ').toLowerCase();
       for (final bad in ['leg', 'escrow', 'settlement', 'zone', 'reason', 'not_awaiting']) {
@@ -90,6 +90,6 @@ void main() {
     expect(latn['customer_confirm_btn_handover'], 'Kuryerga berdim');
     expect(latn['customer_confirm_btn_received'], 'Oldim');
     expect(latn['customer_confirm_btn_confirm'], 'Tasdiqlayman');
-    expect(latn['customer_confirm_waiting'], 'Mijoz tasdig\'i kutilmoqda');
+    expect(latn['customer_confirm_waiting'], 'Mijoz tasdiği kutilmoqda');
   });
 }

@@ -1,3 +1,5 @@
+import '../../../core/utils/uz_script.dart';
+
 /// Maktab nomini (erkin matn) barqaror kalitga aylantiradi — avto-qo'shilish
 /// uchun deterministik davra ID hosil qilish maqsadida.
 ///
@@ -21,7 +23,8 @@ class SchoolNormalizer {
 
   /// Maktab matnidan barqaror kalit. Masalan: "Gurlan 1-son maktab" → "school-1".
   static String normalizeKey(String raw) {
-    var s = raw.toLowerCase().trim();
+    // Янги лотин ҳарфлари (ö ğ ş ç) эски шаклга — калит алифбодан қатъи назар бир хил (эга 2026-11-19).
+    var s = UzScript.foldLatin(raw.toLowerCase().trim());
     // Apostrof variantlari (oʻ/o' → o).
     s = s.replaceAll(RegExp("[’'`ʼ]"), '');
     // Yil ko'rinishidagi 4 xonali sonlarni olib tashlaymiz (19xx/20xx).

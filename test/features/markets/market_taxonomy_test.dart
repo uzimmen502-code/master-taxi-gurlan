@@ -281,7 +281,7 @@ void main() {
       expect(formatAgeMonths(24, cyr), '2 ёшли');
       expect(formatAgeMonths(7, cyr), '7 ойлик');
       expect(formatAgeMonths(19, lat), '1 yilu 7 oylik');
-      expect(formatAgeMonths(24, lat), '2 yoshli');
+      expect(formatAgeMonths(24, lat), '2 yoşli');
       expect(formatAgeMonths(7, lat), '7 oylik');
       expect(formatAgeMonths(19, ru), '1 год 7 мес.');
       expect(formatAgeMonths(7, ru), '7 мес.');
@@ -314,7 +314,7 @@ void main() {
       final full = {'brand': 'Samsung', 'box_w_cm': 40, 'box_l_cm': 30, 'box_h_cm': 25};
       expect(marketAttrRows(el, 'phones', full, 'uz_Cyrl', yes: 'Ҳа', tr: cyr),
           [('Марка', 'Samsung'), ('Каробка ўлчамлари', '40 × 30 × 25 см')]);
-      expect(marketAttrRows(el, 'phones', full, 'uz_Latn', yes: 'Ha', tr: lat).last, ("Karobka o'lchamlari", '40 × 30 × 25 sm'));
+      expect(marketAttrRows(el, 'phones', full, 'uz_Latn', yes: 'Ha', tr: lat).last, ('Karobka ölçamlari', '40 × 30 × 25 sm'));
       expect(marketAttrRows(el, 'phones', {'box_w_cm': 40, 'box_l_cm': 30}, 'ru', yes: 'Да', tr: ru), isEmpty);
       expect(marketAttrsLine(el, 'phones', full, 'ru', tr: ru), 'Марка: Samsung · 40 × 30 × 25 см');
     });

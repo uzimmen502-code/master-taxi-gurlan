@@ -253,6 +253,7 @@ class ProfileController extends ChangeNotifier {
       const fake = {
         'фойдаланувчи',
         'foydalanuvchi',
+        'foydalanuvçi', // янги лотин алифбоси (эга 2026-11-19)
         'пользователь',
         'user',
       };

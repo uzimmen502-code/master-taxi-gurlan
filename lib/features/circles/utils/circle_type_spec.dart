@@ -1,3 +1,4 @@
+import '../../../core/utils/uz_script.dart';
 import '../../../models/circle.dart';
 import 'school_normalizer.dart';
 
@@ -47,7 +48,8 @@ class CircleTypeSpec {
 
   /// Erkin matn → barqaror slug (raqam ustunligisiz — umumiy nomlar uchun).
   static String slug(String raw) {
-    var s = raw.toLowerCase().trim();
+    // Янги лотин ҳарфлари (ö ğ ş ç) эски шаклга — slug алифбодан қатъи назар бир хил (эга 2026-11-19).
+    var s = UzScript.foldLatin(raw.toLowerCase().trim());
     s = s.replaceAll(RegExp("[’'`ʼ]"), '');
     s = s
         .replaceAll(RegExp(r'[^a-z0-9а-яёўқғҳ]+', unicode: true), '-')

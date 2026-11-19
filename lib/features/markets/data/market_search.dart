@@ -68,7 +68,8 @@ bool marketServerItemMatches(TvShopItem i, String query) {
   final words = AdSearchText.foldMarks(query).split(_wordSplit).where((w) => w.isNotEmpty).toList();
   if (words.isEmpty) return true;
   final hay = <String>{};
-  for (final w in '${i.title} ${i.description} ${i.ownerName}'.toLowerCase().split(_wordSplit)) {
+  // foldMarks: янги лотин ҳарфлари (ö ğ ş ç) ҳам эски шаклга — акс ҳолда _wordSplit сўзни бўлиб юборади.
+  for (final w in AdSearchText.foldMarks('${i.title} ${i.description} ${i.ownerName}').split(_wordSplit)) {
     if (w.isNotEmpty) hay.addAll(_forms(w));
   }
   for (final w in words) {

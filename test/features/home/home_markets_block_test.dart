@@ -246,7 +246,7 @@ void main() {
     expect(lat['home_markets_block_title'], 'Bozorlar');
     expect(ru['home_markets_block_title'], 'Рынки');
     expect(cyr['home_search_hint_ava'], "AVA'да қидириш…");
-    expect(lat['home_search_hint_ava'], "AVA'da qidirish…");
+    expect(lat['home_search_hint_ava'], "AVA'da qidiriş…");
     expect(ru['home_search_hint_ava'], 'Поиск в AVA…');
     expect(ru['home_market_aralash_title'], 'Смешанный рынок');
     // Эга 2026-11-16: Электроника ва Маиший техника бозорлари.
@@ -254,7 +254,7 @@ void main() {
     expect(lat['home_module_electronics_market'], 'Elektronika bozori');
     expect(ru['home_module_electronics_market'], 'Рынок электроники');
     expect(cyr['home_module_appliances_market'], 'Маиший техника бозори');
-    expect(lat['home_module_appliances_market'], 'Maishiy texnika bozori');
+    expect(lat['home_module_appliances_market'], 'Maişiy texnika bozori');
     expect(ru['home_module_appliances_market'], 'Рынок бытовой техники');
     expect(cyr['home_market_electronics_slogan'], 'Замонавий технологиялар — бир жойда!');
     expect(lat['home_market_electronics_slogan'], 'Zamonaviy texnologiyalar — bir joyda!');
@@ -265,7 +265,7 @@ void main() {
     expect([cyr['market_short_electronics'], lat['market_short_electronics'], ru['market_short_electronics']],
         ['Электроника', 'Elektronika', 'Электроника']);
     expect([cyr['market_short_appliances'], lat['market_short_appliances'], ru['market_short_appliances']],
-        ['Маиший техника', 'Maishiy texnika', 'Бытовая техника']);
+        ['Маиший техника', 'Maişiy texnika', 'Бытовая техника']);
     // Карточка расмлари мавжуд.
     for (final e in kHomeMarketEntries) {
       expect(File(e.imagePath).existsSync(), isTrue, reason: e.imagePath);

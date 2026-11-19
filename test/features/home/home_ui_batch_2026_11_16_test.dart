@@ -145,7 +145,7 @@ void main() {
 
     test('матн 3 тилда', () {
       expect(_lang('uz_Cyrl')['home_services_spotlight_title'], 'Барча хизматларни кўриш');
-      expect(_lang('uz_Latn')['home_services_spotlight_title'], "Barcha xizmatlarni ko'rish");
+      expect(_lang('uz_Latn')['home_services_spotlight_title'], 'Barça xizmatlarni köriş');
       expect(_lang('ru')['home_services_spotlight_title'], 'Посмотреть все услуги');
     });
   });
@@ -221,7 +221,7 @@ void main() {
 
     test('матн 3 тилда', () {
       expect(_lang('uz_Cyrl')['seller_other_products'], 'Сотувчининг бошқа маҳсулотлари');
-      expect(_lang('uz_Latn')['seller_other_products'], 'Sotuvchining boshqa mahsulotlari');
+      expect(_lang('uz_Latn')['seller_other_products'], 'Sotuvçining boşqa mahsulotlari');
       expect(_lang('ru')['seller_other_products'], 'Другие товары продавца');
     });
 

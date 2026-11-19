@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../features/ads/utils/ad_search_text.dart';
+import '../core/utils/uz_script.dart';
 import 'home_ticker_animation_style.dart';
 
 /// Bosh ekran — duo ostidagi begushchaya reklama qatori.
@@ -170,11 +170,11 @@ class HomeTickerAd {
   }
 
   /// Илова тилидаги матн (`context.contentLang`): `uz_Latn` — [textLatn] ёки кирилл матндан автоматик ўгирилгани
-  /// (баннер катта ҳарфда кўрсатади, ўгирувчининг кичик ҳарфи муҳим эмас); `ru` — [textRu] ёки кирилл; бошқаси — [text].
+  /// (ўгирувчи [UzScript.toLatin] — янги лотин алифбоси, ҳарф катталиги сақланади); `ru` — [textRu] ёки кирилл; бошқаси — [text].
   String textFor(String lang) {
     switch (lang) {
       case 'uz_Latn':
-        return textLatn.isNotEmpty ? textLatn : AdSearchText.toLatin(text);
+        return textLatn.isNotEmpty ? textLatn : UzScript.toLatin(text);
       case 'ru':
         return textRu.isNotEmpty ? textRu : text;
       default:

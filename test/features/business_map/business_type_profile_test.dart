@@ -168,7 +168,7 @@ void main() {
       final p = BusinessTypeProfile.forBusiness(_biz(BusinessCategory.personal, subtype: 'Сартарошхона'));
       expect(p.defaultKind, OfferKind.service);
       expect(p.templateTitles('uz_Cyrl'), contains('Соч олиш'));
-      expect(p.templateTitles('uz_Latn'), contains('Soch olish'));
+      expect(p.templateTitles('uz_Latn'), contains('Soç oliş'));
       expect(p.templateTitles('ru'), contains('Стрижка'));
       expect(p.emptyStateKey, 'biz_empty_services');
     });

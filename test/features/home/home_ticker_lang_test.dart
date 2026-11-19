@@ -32,15 +32,15 @@ String _shown(WidgetTester t) =>
 void main() {
   group('HomeTickerAd.textFor', () {
     test('кирилл — асосий матн; лотин/рус киритилган бўлса ўшаси', () {
-      final a = _ad(latn: 'Toshkentga taksi?', ru: 'Такси в Ташкент?');
+      final a = _ad(latn: 'Toşkentga taksi?', ru: 'Такси в Ташкент?');
       expect(a.textFor('uz_Cyrl'), 'Тошкентга такси?');
-      expect(a.textFor('uz_Latn'), 'Toshkentga taksi?');
+      expect(a.textFor('uz_Latn'), 'Toşkentga taksi?');
       expect(a.textFor('ru'), 'Такси в Ташкент?');
     });
 
     test('лотин бўш — кирилл автоматик ўгирилади; рус бўш — кирилл қолади; нотаниш тил — кирилл', () {
       final a = _ad(text: 'Ўз ишингизни устасимисиз?');
-      expect(a.textFor('uz_Latn'), "o'z ishingizni ustasimisiz?");
+      expect(a.textFor('uz_Latn'), 'Öz işingizni ustasimisiz?'); // янги алифбо (эга 2026-11-19)
       expect(a.textFor('ru'), 'Ўз ишингизни устасимисиз?');
       expect(a.textFor('en'), 'Ўз ишингизни устасимисиз?');
     });
@@ -56,14 +56,14 @@ void main() {
   });
 
   group('Баннер илова тилида', () {
-    final ad = _ad(latn: 'Toshkentga taksi?', ru: 'Такси в Ташкент?');
+    final ad = _ad(latn: 'Toşkentga taksi?', ru: 'Такси в Ташкент?');
     testWidgets('uz_Cyrl', (t) async {
       await _pump(t, const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Cyrl'), ad);
       expect(_shown(t), contains('ТОШКЕНТГА ТАКСИ?'));
     });
     testWidgets('uz_Latn', (t) async {
       await _pump(t, const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn'), ad);
-      expect(_shown(t), contains('TOSHKENTGA TAKSI?'));
+      expect(_shown(t), contains('TOŞKENTGA TAKSI?'));
     });
     testWidgets('ru', (t) async {
       await _pump(t, const Locale('ru'), ad);
@@ -118,7 +118,7 @@ void main() {
 
     testWidgets('uz_Latn, лотин киритилмаган — ўгирилган кирилл', (t) async {
       await _pump(t, const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn'), _ad());
-      expect(_shown(t), contains('TOSHKENTGA TAKSI?'));
+      expect(_shown(t), contains('TOŞKENTGA TAKSI?'));
     });
   });
 }

@@ -181,9 +181,9 @@ String _chipText(WidgetTester tester) => tester
 void main() {
   setUpAll(loadInterFont);
 
-  group('chegaradan ko\'p to\'xtash bloklanmaydi', () {
-    testWidgets('5 ta tanlangan, limit 3: birinchi 3 ta yuboriladi, manzil '
-        'oxirgi manzil, xabar chiqadi, chip "2 ta"', (tester) async {
+  group('çegaradan köp töxtaş bloklanmaydi', () {
+    testWidgets('5 ta tanlangan, limit 3: birinçi 3 ta yuboriladi, manzil '
+        'oxirgi manzil, xabar çiqadi, chip "2 ta"', (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
 
@@ -201,17 +201,17 @@ void main() {
       expect(
           find.text(_tr('ev_trip_nav_sent_first', {'n': '3'})), findsOneWidget);
       expect(find.text(
-              "Google Maps'ga dastlabki 3 ta to'xtash yuborildi. "
+              "Google Maps'ga dastlabki 3 ta töxtaş yuborildi. "
               'Qolganlari keyin taklif qilinadi'),
           findsOneWidget);
 
       // Chip: qolgan 2 ta; katta karta hali yo'q.
       expect(find.byKey(_chip), findsOneWidget);
-      expect(_chipText(tester), "Keyingi to'xtashlar: 2 ta");
+      expect(_chipText(tester), "Keyingi töxtaşlar: 2 ta");
       expect(find.byKey(_card), findsNothing);
     });
 
-    testWidgets('chegaradan oshmasa: bitta chaqiruv, xabar ham, chip ham yo\'q',
+    testWidgets('çegaradan oşmasa: bitta çaqiruv, xabar ham, chip ham yöq',
         (tester) async {
       final h = await _pump(tester, alongs: const [100, 200, 300]);
       await _tapNavigate(tester);
@@ -222,7 +222,7 @@ void main() {
       expect(find.byKey(_card), findsNothing);
     });
 
-    testWidgets('hech narsa tanlanmagan: faqat manzilga, chip yo\'q',
+    testWidgets('heç narsa tanlanmagan: faqat manzilga, chip yöq',
         (tester) async {
       final h = await _pump(tester, alongs: const []);
       await _tapNavigate(tester);
@@ -230,8 +230,8 @@ void main() {
       expect(find.byKey(_chip), findsNothing);
     });
 
-    testWidgets('birinchi chaqiruv ochilmasa: do\'stona xabar, qolgan to\'xtash '
-        'chipi paydo bo\'lmaydi', (tester) async {
+    testWidgets('birinçi çaqiruv oçilmasa: döstona xabar, qolgan töxtaş '
+        'çipi paydo bölmaydi', (tester) async {
       final h = await _pump(tester);
       h.result = false;
       await _tapNavigate(tester);
@@ -241,7 +241,7 @@ void main() {
       expect(find.byKey(_notice), findsNothing);
     });
 
-    testWidgets('qayta "Navigatsiya": bo\'laklash boshidan (hozirgi joydan '
+    testWidgets('qayta "Navigatsiya": bölaklaş boşidan (hozirgi joydan '
         'oldindagilar bilan)', (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
@@ -249,11 +249,11 @@ void main() {
       await _tapNavigate(tester);
       expect(h.calls, hasLength(2));
       expect(h.calls[1].lats, [_lat(100), _lat(200), _lat(300)]);
-      expect(_chipText(tester), "Keyingi to'xtashlar: 2 ta");
+      expect(_chipText(tester), "Keyingi töxtaşlar: 2 ta");
     });
 
-    testWidgets('mashina yo\'lda (250 km): boshlanish nuqtasi = GPS, ortda '
-        'qolgan stansiyalar qo\'shilmaydi', (tester) async {
+    testWidgets('maşina yölda (250 km): boşlaniş nuqtasi = GPS, ortda '
+        'qolgan stansiyalar qöşilmaydi', (tester) async {
       final h = await _pump(tester);
       await _drive(tester, h, 250);
       await _tapNavigate(tester);
@@ -266,9 +266,9 @@ void main() {
     });
   });
 
-  group('"Kelgusi to\'xtashlar" kartasi: oxirgi yuborilgandan o\'tgach', () {
-    testWidgets('o\'tmaguncha faqat chip; +1.5 km dan keyin katta karta '
-        '(chipning o\'rniga)', (tester) async {
+  group('"Kelgusi töxtaşlar" kartasi: oxirgi yuborilgandan ötgaç', () {
+    testWidgets('ötmagunça faqat chip; +1.5 km dan keyin katta karta '
+        '(çipning örniga)', (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
 
@@ -284,13 +284,13 @@ void main() {
       expect(find.byKey(_card), findsOneWidget);
       expect(find.byKey(_chip), findsNothing);
       expect(tester.widget<Text>(find.byKey(const ValueKey('ev_trip_next_card_title'))).data,
-          "Keyingi to'xtashlar: 2 ta");
+          "Keyingi töxtaşlar: 2 ta");
       expect(find.byKey(_continue), findsOneWidget);
-      expect(find.text('Davom etish'), findsOneWidget);
+      expect(find.text('Davom etiş'), findsOneWidget);
     });
 
-    testWidgets('"Davom etish": hozirgi GPS dan, oxirgi manzilgacha, keyingi '
-        'to\'xtashlar bilan; tugagach hammasi yo\'qoladi', (tester) async {
+    testWidgets('"Davom etiş": hozirgi GPS dan, oxirgi manzilgaça, keyingi '
+        'töxtaşlar bilan; tugagaç hammasi yöqoladi', (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
       await _drive(tester, h, 301.6);
@@ -308,7 +308,7 @@ void main() {
       expect(find.byKey(_chip), findsNothing);
     });
 
-    testWidgets('limit 3, 7 ta: 3 + 3 + 1, har safar oxirgi o\'tgach',
+    testWidgets('limit 3, 7 ta: 3 + 3 + 1, har safar oxirgi ötgaç',
         (tester) async {
       final h = await _pump(tester,
           alongs: const [60, 120, 180, 240, 300, 360, 420]);
@@ -324,7 +324,7 @@ void main() {
           findsOneWidget);
       // Yangi bo'lakdan keyin karta yana chipga qaytadi, yangi chegara kutiladi.
       expect(find.byKey(_card), findsNothing);
-      expect(_chipText(tester), "Keyingi to'xtashlar: 1 ta");
+      expect(_chipText(tester), "Keyingi töxtaşlar: 1 ta");
 
       await _drive(tester, h, 361);
       expect(find.byKey(_card), findsNothing);
@@ -345,7 +345,7 @@ void main() {
       await _tapNavigate(tester);
       expect(h.calls.single.stops, hasLength(9));
       expect(h.calls.single.lats.last, _lat(450));
-      expect(_chipText(tester), "Keyingi to'xtashlar: 2 ta");
+      expect(_chipText(tester), "Keyingi töxtaşlar: 2 ta");
 
       await _drive(tester, h, 452);
       await tester.tap(find.byKey(_continue));
@@ -354,8 +354,8 @@ void main() {
       expect(find.byKey(_chip), findsNothing);
     });
 
-    testWidgets('GPS yo\'q: faqat chip (karta o\'zi chiqmaydi); chip bosilsa '
-        'karta, "Davom etish" dastlabki nuqtadan', (tester) async {
+    testWidgets('GPS yöq: faqat chip (karta özi çiqmaydi); chip bosilsa '
+        'karta, "Davom etiş" dastlabki nuqtadan', (tester) async {
       final h = await _pump(tester, gps: false);
       await _tapNavigate(tester);
       expect(find.byKey(_chip), findsOneWidget);
@@ -370,12 +370,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(h.calls, hasLength(2));
       expect(h.calls[1].originLat, closeTo(_lat(0), 1e-12),
-          reason: 'GPS yo\'q: asl boshlanish nuqtasi');
+          reason: 'GPS yöq: asl boşlaniş nuqtasi');
       expect(h.calls[1].lats, [_lat(400), _lat(500)]);
     });
 
-    testWidgets('chip qo\'lda bosilsa mashina o\'tmagan bo\'lsa ham karta '
-        'ochiladi; yopilsa chipga qaytadi va o\'zi qayta chiqmaydi',
+    testWidgets('chip qölda bosilsa maşina ötmagan bölsa ham karta '
+        'oçiladi; yopilsa çipga qaytadi va özi qayta çiqmaydi',
         (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
@@ -399,7 +399,7 @@ void main() {
       expect(find.byKey(_card), findsOneWidget);
     });
 
-    testWidgets('ilova fonda bo\'lganda yurildi: qaytganda karta shu yerda',
+    testWidgets('ilova fonda bölganda yurildi: qaytganda karta şu yerda',
         (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
@@ -421,17 +421,17 @@ void main() {
       expect(find.byKey(_card), findsOneWidget);
     });
 
-    testWidgets('haydovchi kutilayotgan stansiyani rejadan olib tashlasa '
-        'soni kamayadi; hammasi tugasa chip ham yo\'qoladi', (tester) async {
+    testWidgets('haydovçi kutilayotgan stansiyani rejadan olib taşlasa '
+        'soni kamayadi; hammasi tugasa chip ham yöqoladi', (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
-      expect(_chipText(tester), "Keyingi to'xtashlar: 2 ta");
+      expect(_chipText(tester), "Keyingi töxtaşlar: 2 ta");
 
       h.last!.onStationTap('s500');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(_toggle));
       await tester.pumpAndSettle();
-      expect(_chipText(tester), "Keyingi to'xtashlar: 1 ta");
+      expect(_chipText(tester), "Keyingi töxtaşlar: 1 ta");
 
       h.last!.onStationTap('s400');
       await tester.pumpAndSettle();
@@ -440,8 +440,8 @@ void main() {
       expect(find.byKey(_chip), findsNothing);
     });
 
-    testWidgets('"Davom etish" ochilmasa: xabar, holat saqlanadi (qayta '
-        'urinish mumkin)', (tester) async {
+    testWidgets('"Davom etiş" oçilmasa: xabar, holat saqlanadi (qayta '
+        'uriniş mumkin)', (tester) async {
       final h = await _pump(tester);
       await _tapNavigate(tester);
       await _drive(tester, h, 302);
@@ -460,12 +460,12 @@ void main() {
     });
   });
 
-  group('katta shrift (1.3), haqiqiy matn va Inter shrifti', () {
+  group('katta şrift (1.3), haqiqiy matn va Inter şrifti', () {
     const locales = {'uz_Cyrl': evUzCyrl, 'uz_Latn': evUzLatn, 'ru': evRu};
 
     for (final entry in locales.entries) {
-      testWidgets('${entry.key}: xabar, chip va karta sig\'adi, kesilmaydi, '
-          'overflow yo\'q', (tester) async {
+      testWidgets('${entry.key}: xabar, chip va karta siğadi, kesilmaydi, '
+          'overflow yöq', (tester) async {
         final h = await _pump(tester,
             locale: entry.value, scale: 1.3, size: const Size(360, 640));
         await _tapNavigate(tester);

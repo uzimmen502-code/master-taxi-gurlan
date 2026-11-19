@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/utils/uz_script.dart';
 import 'locale_utils.dart';
 
 /// Шаҳарлараро такси учун Ўзбекистон бўйича қишлоқ ва туманлар рўйхати.
@@ -87,7 +88,7 @@ class IntercityPlaces {
 
   /// Қидирув — танланган til/алифбода + транслитерация (GurlanPlaces qoidasi).
   static List<String> search(String query, {Locale? locale}) {
-    final q = query.toLowerCase().trim();
+    final q = _f(query.trim());
     if (q.isEmpty) return const [];
 
     final preferLatin = locale != null
@@ -95,15 +96,15 @@ class IntercityPlaces {
         : !_isCyrillic(q);
     final primary = preferLatin ? _allLatn : allLocations;
     final secondary = preferLatin ? allLocations : _allLatn;
-    final queryAlt = _isCyrillic(q) ? _toLatinRaw(q) : _toCyrillic(q);
+    final queryAlt = _isCyrillic(q) ? _f(_toLatinRaw(q)) : _toCyrillic(q);
 
     final results = <String>[];
     for (final item in primary) {
-      if (item.toLowerCase().contains(q)) results.add(item);
+      if (_f(item).contains(q)) results.add(item);
     }
     if (results.length < 3) {
       for (final item in secondary) {
-        if (item.toLowerCase().contains(queryAlt) && !results.contains(item)) {
+        if (_f(item).contains(queryAlt) && !results.contains(item)) {
           results.add(item);
         }
       }
@@ -116,15 +117,15 @@ class IntercityPlaces {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return '';
 
-    final lower = trimmed.toLowerCase();
+    final lower = _f(trimmed);
     for (var i = 0; i < allLocations.length; i++) {
       final cy = allLocations[i].toLowerCase();
-      final la = _allLatn[i].toLowerCase();
+      final la = _f(_allLatn[i]);
       if (lower == cy || lower == la) return allLocations[i];
     }
     for (var i = 0; i < allLocations.length; i++) {
       final cy = allLocations[i].toLowerCase();
-      final la = _allLatn[i].toLowerCase();
+      final la = _f(_allLatn[i]);
       if (cy.contains(lower) ||
           la.contains(lower) ||
           lower.contains(cy) ||
@@ -156,7 +157,7 @@ class IntercityPlaces {
     required String regionLabel,
     required String districtLabel,
   }) {
-    String n(String s) => s.trim().toLowerCase();
+    String n(String s) => _f(s.trim());
     final d = n(districtLabel);
     final r = n(regionLabel);
     if (d.isEmpty) return '';
@@ -285,11 +286,11 @@ class IntercityPlaces {
   }) {
     final short = shortStopName(canonical, lastInRoute: lastInRoute);
     if (locale == null || !LocaleUtils.isLatin(locale)) return short;
-    if (short == 'Тошкент') return 'Toshkent';
+    if (short == 'Тошкент') return 'Toşkent';
     for (var i = 0; i < allLocations.length; i++) {
       if (allLocations[i] == canonical) {
         final lat = _allLatn[i];
-        if (lastInRoute && _isTashkentArea(allLocations[i])) return 'Toshkent';
+        if (lastInRoute && _isTashkentArea(allLocations[i])) return 'Toşkent';
         if (lat.contains('•')) return lat.split('•').last.trim();
         return lat;
       }
@@ -377,6 +378,10 @@ class IntercityPlaces {
   static bool _isCyrillic(String s) =>
       s.runes.any((r) => r >= 0x0400 && r <= 0x04FF);
 
+  /// Солиштириш шакли: кичик ҳарф + янги лотин ҳарфлари эски шаклга ([UzScript.foldLatin], эга 2026-11-19) —
+  /// эски (Toshkent) ва янги (Toşkent) ёзувдаги ном/сўров бир-бирига мос келади.
+  static String _f(String s) => UzScript.foldLatin(s.toLowerCase());
+
   static String _toLatinDisplay(String s) {
     final buf = StringBuffer();
     for (final c in s.split('')) {
@@ -400,15 +405,16 @@ class IntercityPlaces {
       'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
       'ж': 'j', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
       'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
-      'ф': 'f', 'х': 'x', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sh', 'ъ': '\'',
+      // Янги лотин алифбоси (эга 2026-11-19): ч→ç, ш→ş, ғ→ğ, ў→ö.
+      'ф': 'f', 'х': 'x', 'ц': 'ts', 'ч': 'ç', 'ш': 'ş', 'щ': 'ş', 'ъ': '\'',
       'ы': 'i', 'ь': '\'', 'э': 'e', 'ю': 'yu', 'я': 'ya',
-      'ҳ': 'h', 'қ': 'q', 'ғ': 'g\'', 'ў': 'o\'', 'ң': 'ng',
+      'ҳ': 'h', 'қ': 'q', 'ғ': 'ğ', 'ў': 'ö', 'ң': 'ng',
     };
     return s.toLowerCase().split('').map((c) => map[c] ?? c).join('');
   }
 
   static String _toCyrillic(String s) {
-    var result = s.toLowerCase();
+    var result = _f(s);
     const map = {
       'sh': 'ш', 'ch': 'ч', 'yo': 'ё', 'yu': 'ю', 'ya': 'я', 'ts': 'ц',
       'ng': 'ң', 'o\'': 'ў', 'g\'': 'ғ', 'q': 'қ', 'h': 'ҳ',

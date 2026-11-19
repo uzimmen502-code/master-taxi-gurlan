@@ -71,7 +71,7 @@ void main() {
     test('қадоқ билан ва қадоқсиз; 3 тилда калит бор', () {
       expect(
         wholesaleOrderDraft(template: d.tr('deal_chat_order_draft'), title: ' Un ', packLabel: '25 kg qop', qty: 1200, unitLabel: 'dona', totalText: '12 000 000 сўм'),
-        'Assalomu alaykum! Un (25 kg qop): 1 200 dona olmoqchiman (≈ 12 000 000 сўм).',
+        'Assalomu alaykum! Un (25 kg qop): 1 200 dona olmoqçiman (≈ 12 000 000 сўм).',
       );
       expect(
         wholesaleOrderDraft(template: '{product}|{qty}|{unit}|{total}', title: 'Un', packLabel: '  ', qty: 5, unitLabel: 'kg', totalText: 'T'),

@@ -1,4 +1,9 @@
+import '../../../core/utils/uz_script.dart';
+
 /// Нормализация ва қидирув токенлари (кирилл ↔ лотин) — Арзон маҳсулотлар.
+///
+/// Янги лотин алифбоси (эга 2026-11-19): ö ğ ş ç ҳар доим ЭСКИ шаклга (o' g' sh ch) йиғилади
+/// ([UzScript.foldLatin]) — токенлар аввалгидек, эски ва янги ёзувдаги сўров иккаласи ҳам топади.
 class AdSearchText {
   AdSearchText._();
 
@@ -11,9 +16,9 @@ class AdSearchText {
   static bool isCyrillic(String s) =>
       s.runes.any((r) => r >= 0x0400 && r <= 0x04FF);
 
-  /// oʻ / gʻ / `'` / ‘’ — ASCII `'` (кирилл ў/ғ диграфлари учун).
+  /// oʻ / gʻ / `'` / ‘’ — ASCII `'` (кирилл ў/ғ диграфлари учун); ö ğ ş ç → o' g' sh ch.
   static String foldMarks(String s) {
-    return s.toLowerCase().replaceAll(
+    return UzScript.foldLatin(s.toLowerCase()).replaceAll(
           RegExp('[\u02BB\u02BC\u02BD\u02C8\u0060\u00B4\u2018\u2019\u2032]'),
           "'",
         );
@@ -119,8 +124,7 @@ class AdSearchText {
   }
 
   static List<String> _words(String text) {
-    return text
-        .toLowerCase()
+    return UzScript.foldLatin(text.toLowerCase())
         .split(_wordSplit)
         .map((w) => w.trim())
         .where((w) => w.length >= minTokenLen)
@@ -148,7 +152,7 @@ class AdSearchText {
 
   /// Қидирув сўрови токенлари (ҳар икки скрипт).
   static List<String> queryTokens(String query) {
-    final q = query.trim().toLowerCase();
+    final q = UzScript.foldLatin(query.trim().toLowerCase());
     if (q.length < minTokenLen) return const [];
     final out = <String>{};
     for (final w in _words(q)) {
@@ -171,7 +175,7 @@ class AdSearchText {
       ad.description.toLowerCase(),
       ...ad.searchTokens,
     ];
-    final joined = parts.join(' ');
+    final joined = UzScript.foldLatin(parts.join(' '));
     return '$joined ${toLatin(joined)} ${toCyrillic(joined)}';
   }
 
@@ -199,10 +203,10 @@ class AdSearchText {
   /// Релевантлик (каттароқ = яхшироқ).
   /// Эълон/каталог жойлаштириш учун [CatalogSearch.score] ишлатинг.
   static int score(AdSearchable ad, String query) {
-    final q = query.trim().toLowerCase();
+    final q = UzScript.foldLatin(query.trim().toLowerCase());
     if (q.length < minTokenLen) return 0;
     var s = 0;
-    final title = ad.titleLower;
+    final title = UzScript.foldLatin(ad.titleLower);
     final titleLat = toLatin(title);
     final titleCyr = toCyrillic(title);
     if (title.contains(q) ||
@@ -220,7 +224,7 @@ class AdSearchText {
           ad.searchTokens.contains(latin) ||
           ad.searchTokens.contains(cyrl)) {
         s += 25;
-      } else if (ad.description.toLowerCase().contains(w) ||
+      } else if (UzScript.foldLatin(ad.description.toLowerCase()).contains(w) ||
           toLatin(ad.description).contains(latin)) {
         s += 10;
       }

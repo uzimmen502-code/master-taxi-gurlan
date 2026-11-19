@@ -88,29 +88,29 @@ void main() {
     }
   });
 
-  test('har bir kalit 3 tilda bor va bo\'sh emas', () {
+  test('har bir kalit 3 tilda bor va böş emas', () {
     for (final l in langs) {
       for (final k in keys) {
         final v = dict[l]![k];
-        expect(v, isA<String>(), reason: '$l/$k yo\'q');
-        expect((v as String).trim(), isNotEmpty, reason: '$l/$k bo\'sh');
+        expect(v, isA<String>(), reason: '$l/$k yöq');
+        expect((v as String).trim(), isNotEmpty, reason: '$l/$k böş');
       }
     }
   });
 
-  test('"Navigatsiya" tugmasi matni uch tilda to\'g\'ri', () {
+  test('"Navigatsiya" tugmasi matni uç tilda töğri', () {
     expect(dict['uz_Cyrl']!['ev_trip_navigate'], 'Навигация');
     expect(dict['uz_Latn']!['ev_trip_navigate'], 'Navigatsiya');
     expect(dict['ru']!['ev_trip_navigate'], 'Навигация');
   });
 
-  test('qidiruv maydoni matni tumanni ham eslatadi (faqat shahar emas)', () {
+  test('qidiruv maydoni matni tumanni ham eslatadi (faqat şahar emas)', () {
     expect(dict['uz_Cyrl']!['ev_trip_search_hint'], contains('туман'));
     expect(dict['uz_Latn']!['ev_trip_search_hint'], contains('tuman'));
     expect(dict['ru']!['ev_trip_search_hint'], contains('район'));
   });
 
-  test('qidiruv maydoni matni qisqa (katta shriftda 1.3 qirqilmaydi)', () {
+  test('qidiruv maydoni matni qisqa (katta şriftda 1.3 qirqilmaydi)', () {
     for (final l in langs) {
       expect((dict[l]!['ev_trip_search_hint'] as String).length,
           lessThanOrEqualTo(18),
@@ -118,11 +118,11 @@ void main() {
     }
   });
 
-  test('rus "yo\'l topilmadi" matni "shahar" bilan cheklanmagan', () {
+  test('rus "yöl topilmadi" matni "şahar" bilan çeklanmagan', () {
     expect(dict['ru']!['ev_trip_error_geometry'], isNot(contains('города')));
   });
 
-  test('"Tavsiya" / "Zaxira" belgilari va tugma matnlari uch tilda to\'g\'ri',
+  test('"Tavsiya" / "Zaxira" belgilari va tugma matnlari uç tilda töğri',
       () {
     expect(dict['uz_Cyrl']!['ev_trip_badge_recommended'], 'Тавсия');
     expect(dict['uz_Latn']!['ev_trip_badge_recommended'], 'Tavsiya');
@@ -133,7 +133,7 @@ void main() {
     expect(dict['uz_Cyrl']!['ev_trip_remove_stop'], 'Режадан олиб ташлаш');
   });
 
-  test('o\'rinbosarlar ({n}, {t}) uch tilda bor', () {
+  test('örinbosarlar ({n}, {t}) uç tilda bor', () {
     for (final l in langs) {
       expect(dict[l]!['ev_trip_sel_full'], contains('{n}'), reason: l);
       for (final k in const [
@@ -153,9 +153,9 @@ void main() {
     }
   });
 
-  test('"Zaryadni yangilash" matnlari uch tilda to\'g\'ri', () {
+  test('"Zaryadni yangilaş" matnlari uç tilda töğri', () {
     expect(dict['uz_Cyrl']!['ev_soc_update'], 'Зарядни янгилаш');
-    expect(dict['uz_Latn']!['ev_soc_update'], 'Zaryadni yangilash');
+    expect(dict['uz_Latn']!['ev_soc_update'], 'Zaryadni yangilaş');
     expect(dict['ru']!['ev_soc_update'], 'Обновить заряд');
     expect(dict['uz_Cyrl']!['ev_soc_update_apply'], 'Қайта ҳисоблаш');
     for (final l in langs) {
@@ -164,14 +164,14 @@ void main() {
     }
   });
 
-  test('yo\'l rejimi matnlari uch tilda to\'g\'ri; tugma/chip matnlari qisqa', () {
+  test('yöl rejimi matnlari uç tilda töğri; tugma/chip matnlari qisqa', () {
     expect(dict['uz_Cyrl']!['ev_drive_next'], 'Кейинги зарядлаш: {d}');
-    expect(dict['uz_Latn']!['ev_drive_next'], 'Keyingi zaryadlash: {d}');
+    expect(dict['uz_Latn']!['ev_drive_next'], 'Keyingi zaryadlaş: {d}');
     expect(dict['uz_Cyrl']!['ev_drive_arrival_soc'], 'Келишда ~{p}%');
     expect(dict['uz_Cyrl']!['ev_drive_arrived'], 'Етиб келдингиз');
     expect(dict['uz_Cyrl']!['ev_drive_charging_started'], 'Зарядлаш бошланди');
     expect(dict['uz_Cyrl']!['ev_drive_mode'], 'Йўл режими');
-    expect(dict['uz_Latn']!['ev_drive_mode'], "Yo'l rejimi");
+    expect(dict['uz_Latn']!['ev_drive_mode'], 'Yöl rejimi');
     expect(dict['uz_Cyrl']!['ev_mark_busy'], 'Банд');
     for (final l in langs) {
       for (final k in const ['ev_drive_mode', 'ev_mark_busy']) {
@@ -181,12 +181,12 @@ void main() {
     }
   });
 
-  test('"Almashtirish" va "Qaytarish" matnlari uch tilda to\'g\'ri va qisqa', () {
+  test('"Almaştiriş" va "Qaytariş" matnlari uç tilda töğri va qisqa', () {
     expect(dict['uz_Cyrl']!['ev_alt_swap'], 'Алмаштириш');
-    expect(dict['uz_Latn']!['ev_alt_swap'], 'Almashtirish');
+    expect(dict['uz_Latn']!['ev_alt_swap'], 'Almaştiriş');
     expect(dict['ru']!['ev_alt_swap'], 'Заменить');
     expect(dict['uz_Cyrl']!['ev_undo'], 'Қайтариш');
-    expect(dict['uz_Latn']!['ev_undo'], 'Qaytarish');
+    expect(dict['uz_Latn']!['ev_undo'], 'Qaytariş');
     for (final l in langs) {
       for (final k in const ['ev_alt_swap', 'ev_undo', 'ev_alt_choose']) {
         expect((dict[l]![k] as String).length, lessThanOrEqualTo(14),
@@ -195,19 +195,19 @@ void main() {
     }
   });
 
-  test('"dastlabki N ta to\'xtash yuborildi" matni uch tilda to\'g\'ri', () {
+  test('"dastlabki N ta töxtaş yuborildi" matni uç tilda töğri', () {
     expect(
         dict['uz_Cyrl']!['ev_trip_nav_sent_first'],
         "Google Maps'га дастлабки {n} та тўхташ юборилди. "
         'Қолганлари кейин таклиф қилинади');
     expect(
         dict['uz_Latn']!['ev_trip_nav_sent_first'],
-        "Google Maps'ga dastlabki {n} ta to'xtash yuborildi. "
+        "Google Maps'ga dastlabki {n} ta töxtaş yuborildi. "
         'Qolganlari keyin taklif qilinadi');
     expect(dict['ru']!['ev_trip_nav_sent_first'], contains('{n}'));
   });
 
-  test('vaqt birliklari 3 tilda alohida (qattiq h/min yo\'q)', () {
+  test('vaqt birliklari 3 tilda alohida (qattiq h/min yöq)', () {
     expect(dict['uz_Cyrl']!['ev_trip_unit_h'], 'с');
     expect(dict['uz_Cyrl']!['ev_trip_unit_min'], 'дақ');
     expect(dict['uz_Latn']!['ev_trip_unit_h'], 's');
@@ -216,7 +216,7 @@ void main() {
     expect(dict['ru']!['ev_trip_unit_min'], 'мин');
   });
 
-  test('"Davom etish" va "Keyingi to\'xtashlar" matnlari qisqa', () {
+  test('"Davom etiş" va "Keyingi töxtaşlar" matnlari qisqa', () {
     for (final l in langs) {
       expect((dict[l]!['ev_trip_continue'] as String).length,
           lessThanOrEqualTo(14),
@@ -224,7 +224,7 @@ void main() {
     }
   });
 
-  test('eski zaxira tanlash varag\'i kalitlari olib tashlangan (uch tilda)', () {
+  test('eski zaxira tanlaş varaği kalitlari olib taşlangan (uç tilda)', () {
     for (final l in langs) {
       for (final k in const [
         'ev_trip_nav_backups_title',

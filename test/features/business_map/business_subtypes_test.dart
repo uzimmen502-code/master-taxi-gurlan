@@ -49,13 +49,13 @@ void main() {
       String at(BusinessCategory c, String uz, String l) => BusinessSubtypes.display(uz, l, category: c);
       const added = {
         BusinessCategory.retail: [
-          ('Гўшт дўкони (қассоб)', "Go'sht do'koni (qassob)", 'Мясная лавка'),
-          ('Товуқ гўшти дўкони', "Tovuq go'shti do'koni", 'Магазин мяса птицы'),
-          ('Балиқ дўкони', "Baliq do'koni", 'Рыбный магазин'),
-          ('Мева-сабзавот дўкони', "Meva-sabzavot do'koni", 'Фрукты и овощи'),
+          ('Гўшт дўкони (қассоб)', 'Göşt dökoni (qassob)', 'Мясная лавка'),
+          ('Товуқ гўшти дўкони', 'Tovuq göşti dökoni', 'Магазин мяса птицы'),
+          ('Балиқ дўкони', 'Baliq dökoni', 'Рыбный магазин'),
+          ('Мева-сабзавот дўкони', 'Meva-sabzavot dökoni', 'Фрукты и овощи'),
           ('Компьютер ва ноутбуклар', 'Kompyuter va noutbuklar', 'Компьютеры и ноутбуки'),
           ('Телефон аксессуарлари', 'Telefon aksessuarlari', 'Аксессуары для телефонов'),
-          ('Кондиционер ва иситгичлар', 'Konditsioner va isitgichlar', 'Кондиционеры и обогреватели'),
+          ('Кондиционер ва иситгичлар', 'Konditsioner va isitgiçlar', 'Кондиционеры и обогреватели'),
         ],
         BusinessCategory.auto: [
           ('Автосалон', 'Avtosalon', 'Автосалон'),
@@ -74,8 +74,8 @@ void main() {
     });
 
     test('лотин номи кириллдан ўгирилади (alohida yozilmaydi)', () {
-      expect(BusinessSubtypes.of(BusinessCategory.retail, 'uz_Latn').first, "Oziq-ovqat do'koni");
-      expect(BusinessSubtypes.of(BusinessCategory.auto, 'uz_Latn'), contains("G'ildirak balansirovkasi"));
+      expect(BusinessSubtypes.of(BusinessCategory.retail, 'uz_Latn').first, 'Oziq-ovqat dökoni');
+      expect(BusinessSubtypes.of(BusinessCategory.auto, 'uz_Latn'), contains('Ğildirak balansirovkasi'));
       expect(BusinessSubtypes.of(BusinessCategory.retail, 'ru').first, 'Продуктовый магазин');
     });
   });

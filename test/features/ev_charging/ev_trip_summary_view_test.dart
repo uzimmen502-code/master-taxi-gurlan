@@ -122,7 +122,7 @@ void main() {
   setUpAll(loadInterFont);
 
   group('A. reja xulosasi (kalitlar)', () {
-    testWidgets('yo\'l vaqti: "13 s 10 daq" shaklida, birliklar kalitdan',
+    testWidgets('yöl vaqti: "13 s 10 daq" şaklida, birliklar kalitdan',
         (tester) async {
       await _pumpView(tester, _plan([_stop('a', 200, powerKw: 120)]),
           routeMinutes: 790, car: _car);
@@ -130,21 +130,21 @@ void main() {
           'ev_trip_drive_time: 13 ev_trip_unit_h 10 ev_trip_unit_min');
     });
 
-    testWidgets('yo\'l vaqti noma\'lum (0) - qator yo\'q', (tester) async {
+    testWidgets('yöl vaqti noma\'lum (0) - qator yöq', (tester) async {
       await _pumpView(tester, _plan([_stop('a', 200, powerKw: 120)]),
           routeMinutes: 0, car: _car);
       expect(find.byKey(_driveKey), findsNothing);
     });
 
-    testWidgets('zaryadlash vaqti va izoh: quvvat ma\'lum bo\'lsa', (tester) async {
+    testWidgets('zaryadlaş vaqti va izoh: quvvat ma\'lum bölsa', (tester) async {
       await _pumpView(tester, _plan([_stop('a', 200, powerKw: 120)]),
           routeMinutes: 100, car: _car);
       expect(find.byKey(_chargeKey), findsOneWidget);
       expect(find.byKey(_noteKey), findsOneWidget);
     });
 
-    testWidgets('hech bir to\'xtashda quvvat noma\'lum - vaqt ham, izoh ham '
-        'yo\'q (o\'ylab topilmaydi); energiya baribir ko\'rinadi',
+    testWidgets('heç bir töxtaşda quvvat noma\'lum - vaqt ham, izoh ham '
+        'yöq (öylab topilmaydi); energiya baribir körinadi',
         (tester) async {
       await _pumpView(
           tester, _plan([_stop('a', 200), _stop('b', 400)]),
@@ -155,7 +155,7 @@ void main() {
       expect(_text(tester, find.byKey(_stopChargeKey).first), '+37 kWh');
     });
 
-    testWidgets('avtomobil yo\'q - energiya ham, zaryadlash vaqti ham yo\'q',
+    testWidgets('avtomobil yöq - energiya ham, zaryadlaş vaqti ham yöq',
         (tester) async {
       await _pumpView(tester, _plan([_stop('a', 200, powerKw: 120)]),
           routeMinutes: 100);
@@ -164,7 +164,7 @@ void main() {
       expect(find.byKey(_driveKey), findsOneWidget);
     });
 
-    testWidgets('to\'xtash kartochkasi: energiya + kamida vaqt kalitlari',
+    testWidgets('töxtaş kartoçkasi: energiya + kamida vaqt kalitlari',
         (tester) async {
       await _pumpView(tester, _plan([_stop('a', 200, powerKw: 120)]),
           car: _car);
@@ -173,7 +173,7 @@ void main() {
     });
   });
 
-  group('B. haqiqiy matnlar, 1.3 shrift', () {
+  group('B. haqiqiy matnlar, 1.3 şrift', () {
     final plan = _plan([
       _stop('a', 200, powerKw: 120), // 37.2 kWh / 120 kW -> 19 daq
       _stop('b', 400, powerKw: 60), // 37.2 kWh / 60 kW -> 38 daq
@@ -187,8 +187,8 @@ void main() {
         stop: '+37 kWh · камида ~19 дақ',
       ),
       'uz_Latn': (
-        drive: "Yo'l vaqti: 13 s 10 daq",
-        charge: 'Zaryadlash vaqti: kamida ~57 daq',
+        drive: 'Yöl vaqti: 13 s 10 daq',
+        charge: 'Zaryadlaş vaqti: kamida ~57 daq',
         stop: '+37 kWh · kamida ~19 daq',
       ),
       'ru': (
@@ -200,7 +200,7 @@ void main() {
     const locales = {'uz_Cyrl': _uzCyrl, 'uz_Latn': _uzLatn, 'ru': _ru};
 
     for (final entry in locales.entries) {
-      testWidgets('${entry.key}: matnlar to\'g\'ri, overflow yo\'q, izoh bor',
+      testWidgets('${entry.key}: matnlar töğri, overflow yöq, izoh bor',
           (tester) async {
         await _pumpReal(
             tester, entry.value, () => _viewHome(plan, 790, _car));
@@ -216,7 +216,7 @@ void main() {
       });
     }
 
-    testWidgets('1.3 shrift: ogohlantirish va xulosa matnlari kesilmaydi',
+    testWidgets('1.3 şrift: ogohlantiriş va xulosa matnlari kesilmaydi',
         (tester) async {
       final warnPlan = EvTripPlan(
         status: EvTripPlanStatus.ok,
@@ -248,7 +248,7 @@ void main() {
     });
   });
 
-  group('C. xarita varag\'ining yig\'iq satri (peek), 1.3 shrift', () {
+  group('C. xarita varağining yiğiq satri (peek), 1.3 şrift', () {
     Widget screen(EvTripPlan plan, int minutes) => EvTripMapScreen(
           plan: plan,
           route: [
@@ -275,8 +275,8 @@ void main() {
         time: 'Йўл вақти: 13 с 10 дақ',
       ),
       'uz_Latn': (
-        peek: '3 marta zaryadlash kerak · 640 km',
-        time: "Yo'l vaqti: 13 s 10 daq",
+        peek: '3 marta zaryadlaş kerak · 640 km',
+        time: 'Yöl vaqti: 13 s 10 daq',
       ),
       'ru': (
         peek: '3 раз нужно зарядиться · 640 км',
@@ -286,7 +286,7 @@ void main() {
     const locales = {'uz_Cyrl': _uzCyrl, 'uz_Latn': _uzLatn, 'ru': _ru};
 
     for (final entry in locales.entries) {
-      testWidgets('${entry.key}: yo\'l vaqti peek da, hammasi kesilmaydi',
+      testWidgets('${entry.key}: yöl vaqti peek da, hammasi kesilmaydi',
           (tester) async {
         final plan = _plan(
             [_stop('a', 100, powerKw: 120), _stop('b', 300), _stop('c', 500)]);
@@ -307,7 +307,7 @@ void main() {
       });
     }
 
-    testWidgets('yo\'l vaqti noma\'lum (0): eski matn, vaqtsiz', (tester) async {
+    testWidgets('yöl vaqti noma\'lum (0): eski matn, vaqtsiz', (tester) async {
       final plan = _plan([_stop('a', 100, powerKw: 120)]);
       await _pumpReal(tester, _uzCyrl, () => screen(plan, 0),
           size: const Size(360, 640));

@@ -15,6 +15,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../utils/uz_script.dart';
+
 @immutable
 class DistrictCandidate {
   const DistrictCandidate({
@@ -55,7 +57,8 @@ const _dropWords = <String>{
 
 /// Кирилл → лотин, кичик ҳарф, апостроф ва белгиларсиз.
 String latinize(String raw) {
-  final lower = raw.toLowerCase();
+  // Янги лотин ҳарфлари (ö ğ ş ç) эски шаклга — акс ҳолда [^a-z0-9 ] уларни ўчириб юборади (эга 2026-11-19).
+  final lower = UzScript.foldLatin(raw.toLowerCase());
   final b = StringBuffer();
   for (final ch in lower.split('')) {
     b.write(_cyr[ch] ?? ch);

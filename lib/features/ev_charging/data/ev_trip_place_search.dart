@@ -13,6 +13,7 @@
 // ҳарфга бефарқ: кирилл фойдаланувчи лотинда ёзса ҳам топилади.
 
 import '../../../core/geo/geo_names.dart';
+import '../../../core/utils/uz_script.dart';
 import '../../../models/geo_area.dart';
 import 'ev_trip_destinations.dart';
 
@@ -24,8 +25,8 @@ const List<String> evTripLangs = ['uz_Cyrl', 'uz_Latn', 'ru'];
 /// Қидирув учун ёзув: кичик ҳарф, апостроф турлари олиб ташланади
 /// (`Qo'qon` = `Qoqon` = `Qo‘qon`), `ё` = `е`, ортиқча бўшлиқлар йиғилади.
 String evTripNormalize(String raw) {
-  return raw
-      .toLowerCase()
+  // Янги лотин ҳарфлари (ö ğ ş ç) эски шаклга — «Qöqon» = «Qo'qon» = «Qoqon» (эга 2026-11-19).
+  return UzScript.foldLatin(raw.toLowerCase())
       .replaceAll(RegExp("[ʻʼ’‘`´']"), '')
       .replaceAll('ё', 'е')
       .replaceAll(RegExp(r'\s+'), ' ')
@@ -35,7 +36,7 @@ String evTripNormalize(String raw) {
 /// Шаҳар типидаги туман ҳужжати ("… шаҳри", "… shahri", "город …").
 bool _isCityDistrict(GeoDistrict d) {
   for (final n in [d.name, d.nameUz, d.nameRu]) {
-    final s = n.trim().toLowerCase();
+    final s = UzScript.foldLatin(n.trim().toLowerCase());
     if (s.endsWith(' шаҳри') ||
         s.endsWith(' shahri') ||
         s.endsWith(' шахри') ||

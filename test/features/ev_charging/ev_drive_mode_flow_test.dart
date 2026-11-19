@@ -175,8 +175,8 @@ String _titleText(WidgetTester tester) =>
 void main() {
   setUpAll(loadInterFont);
 
-  group('yoqilishi va og\'ir varaqaning yashirinishi', () {
-    testWidgets('to\'xtab turganda: reja varaqasi bor, yo\'l kartochkasi yo\'q',
+  group('yoqilişi va oğir varaqaning yaşirinişi', () {
+    testWidgets('töxtab turganda: reja varaqasi bor, yöl kartoçkasi yöq',
         (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 50, 0);
@@ -184,7 +184,7 @@ void main() {
       expect(find.byKey(_header), findsOneWidget);
     });
 
-    testWidgets('harakat: 3 ta tez nuqtadan keyin kartochka chiqadi, varaqa yashirin',
+    testWidgets('harakat: 3 ta tez nuqtadan keyin kartoçka çiqadi, varaqa yaşirin',
         (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 50, 60);
@@ -196,11 +196,11 @@ void main() {
 
       expect(find.byKey(_card), findsOneWidget);
       expect(find.byKey(_header), findsNothing,
-          reason: 'og\'ir reja varaqasi yo\'l rejimida yashirin');
+          reason: 'oğir reja varaqasi yöl rejimida yaşirin');
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('kartochka: masofa, kelishdagi zaryad (reja qiymati), nom, band belgisi',
+    testWidgets('kartoçka: masofa, kelişdagi zaryad (reja qiymati), nom, band belgisi',
         (tester) async {
       final h = await _pump(tester, bOccupancy: 'free');
       await _startDriving(tester, h);
@@ -209,16 +209,16 @@ void main() {
       final b = plan.stops.first;
       expect(b.station.id, 'b');
       final title = _titleText(tester);
-      expect(title, startsWith("Keyingi zaryadlash: 21"));
+      expect(title, startsWith("Keyingi zaryadlaş: 21"));
       expect(title, endsWith('km'));
-      expect(find.text('Kelishda ~${b.arriveSocPercent}%'), findsOneWidget);
+      expect(find.text('Kelişda ~${b.arriveSocPercent}%'), findsOneWidget);
       expect(find.byKey(const ValueKey('ev_drive_station_name')), findsOneWidget);
       expect(find.text('ST-b'), findsOneWidget);
       expect(find.byKey(const ValueKey('ev_occupancy_free')), findsOneWidget,
-          reason: 'yangi "Bo\'sh" belgisi ko\'rinadi');
+          reason: 'yangi "Böş" belgisi körinadi');
     });
 
-    testWidgets('to\'xtagach (3 ta sekin nuqta) kartochka yo\'qoladi, varaqa qaytadi',
+    testWidgets('töxtagaç (3 ta sekin nuqta) kartoçka yöqoladi, varaqa qaytadi',
         (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
@@ -231,7 +231,7 @@ void main() {
       expect(find.byKey(_header), findsOneWidget);
     });
 
-    testWidgets('yangi nuqta kelmasa 20 soniyadan keyin o\'chadi (davriy tekshiruv)',
+    testWidgets('yangi nuqta kelmasa 20 soniyadan keyin öçadi (davriy tekşiruv)',
         (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
@@ -244,8 +244,8 @@ void main() {
       expect(find.byKey(_header), findsOneWidget);
     });
 
-    testWidgets('yo\'l rejimi boshlanganda ochiq varaqa yig\'iladi, to\'xtagach '
-        'yig\'iq holatda qaytadi', (tester) async {
+    testWidgets('yöl rejimi boşlanganda oçiq varaqa yiğiladi, töxtagaç '
+        'yiğiq holatda qaytadi', (tester) async {
       final h = await _pump(tester);
       await tester.tap(find.byKey(_header)); // varaqani ochamiz
       await tester.pumpAndSettle();
@@ -261,10 +261,10 @@ void main() {
       expect(find.byKey(_header), findsOneWidget);
       expect(tester.getTopLeft(find.byKey(const ValueKey('ev_stop_replace_1'))).dy,
           greaterThanOrEqualTo(800),
-          reason: 'varaqa yig\'iq qaytdi (kartochkalar ekrandan pastda)');
+          reason: 'varaqa yiğiq qaytdi (kartoçkalar ekrandan pastda)');
     });
 
-    testWidgets('GPS yo\'q: yo\'l rejimi ham, chip ham ko\'rsatilmaydi',
+    testWidgets('GPS yöq: yöl rejimi ham, chip ham körsatilmaydi',
         (tester) async {
       await _pump(tester, gps: false);
       expect(find.byKey(_chip), findsNothing);
@@ -272,10 +272,10 @@ void main() {
       expect(find.byKey(_header), findsOneWidget);
     });
 
-    testWidgets('qo\'lda chip: yoqadi va o\'chiradi (tezlik bo\'lmasa ham)',
+    testWidgets('qölda chip: yoqadi va öçiradi (tezlik bölmasa ham)',
         (tester) async {
       final h = await _pump(tester);
-      expect(find.byKey(_chip), findsNothing, reason: 'GPS nuqtasi hali yo\'q');
+      expect(find.byKey(_chip), findsNothing, reason: 'GPS nuqtasi hali yöq');
       await _fix(tester, h, 50, 0);
       expect(find.byKey(_chip), findsOneWidget);
       expect(find.byKey(_card), findsNothing);
@@ -292,9 +292,9 @@ void main() {
     });
   });
 
-  group('kartochka tugmalari', () {
-    testWidgets('aynan ikkita katta tugma (>= 56 dp), matn kiritish yo\'q, '
-        '1.3 shriftda sig\'adi', (tester) async {
+  group('kartoçka tugmalari', () {
+    testWidgets('aynan ikkita katta tugma (>= 56 dp), matn kiritiş yöq, '
+        '1.3 şriftda siğadi', (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
 
@@ -326,8 +326,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('katta "Navigatsiya" tugmasi, orqaga tugmasi va qayta markazlash '
-        'o\'z joyida (karta tugma ustida)', (tester) async {
+    testWidgets('katta "Navigatsiya" tugmasi, orqaga tugmasi va qayta markazlaş '
+        'öz joyida (karta tugma ustida)', (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
       final nav = tester.getRect(find.byKey(_navBtn));
@@ -339,7 +339,7 @@ void main() {
       expect(find.byType(EvMapBackButton), findsOneWidget);
     });
 
-    testWidgets('"Band": repozitoriy bir marta chaqiriladi, minnatdorchilik xabari',
+    testWidgets('"Band": repozitoriy bir marta çaqiriladi, minnatdorçilik xabari',
         (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
@@ -349,7 +349,7 @@ void main() {
       expect(find.text(_tr('ev_occupancy_saved')), findsOneWidget);
     });
 
-    testWidgets('"Band" yuborilayotganda qayta bosilmaydi (bitta chaqiruv)',
+    testWidgets('"Band" yuborilayotganda qayta bosilmaydi (bitta çaqiruv)',
         (tester) async {
       final h = await _pump(tester);
       h.busyHold = Completer<void>();
@@ -359,7 +359,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(_busy), warnIfMissed: false);
       await tester.pump();
-      expect(h.busyCalls, ['b'], reason: 'ikkinchi bosish e\'tiborga olinmaydi');
+      expect(h.busyCalls, ['b'], reason: 'ikkinçi bosiş e\'tiborga olinmaydi');
 
       h.busyHold!.complete();
       await tester.pumpAndSettle();
@@ -372,7 +372,7 @@ void main() {
       expect(h.busyCalls, ['b', 'b']);
     });
 
-    testWidgets('tarmoq yo\'q: do\'stona xabar, ilova qotmaydi, qayta urinish mumkin',
+    testWidgets('tarmoq yöq: döstona xabar, ilova qotmaydi, qayta uriniş mumkin',
         (tester) async {
       final h = await _pump(tester);
       h.busyThrows = true;
@@ -381,7 +381,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(_tr('ev_drive_busy_failed')), findsOneWidget);
       expect(find.textContaining('StateError'), findsNothing,
-          reason: 'texnik matn ko\'rsatilmaydi');
+          reason: 'texnik matn körsatilmaydi');
       expect(tester.takeException(), isNull);
 
       h.busyThrows = false;
@@ -390,8 +390,8 @@ void main() {
       expect(h.busyCalls, hasLength(2));
     });
 
-    testWidgets('internet yo\'q (javob kelmaydi): 8 soniyadan keyin do\'stona xabar, '
-        'tugma yana ishlaydi', (tester) async {
+    testWidgets('internet yöq (javob kelmaydi): 8 soniyadan keyin döstona xabar, '
+        'tugma yana işlaydi', (tester) async {
       final h = await _pump(tester);
       h.busyHold = Completer<void>(); // hech qachon tugamaydi
       await _startDriving(tester, h);
@@ -399,7 +399,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 7));
       expect(find.text(_tr('ev_drive_busy_failed')), findsNothing,
-          reason: '8 soniya o\'tmadi');
+          reason: '8 soniya ötmadi');
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
       expect(find.text(_tr('ev_drive_busy_failed')), findsOneWidget);
@@ -410,8 +410,8 @@ void main() {
       expect(h.busyCalls, hasLength(2));
     });
 
-    testWidgets('"Almashtirish": ro\'yxat ochiladi, tanlansa karta yangi stansiyani '
-        'ko\'rsatadi', (tester) async {
+    testWidgets('"Almaştiriş": röyxat oçiladi, tanlansa karta yangi stansiyani '
+        'körsatadi', (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
       await tester.tap(find.byKey(_alt));
@@ -422,7 +422,7 @@ void main() {
       await tester.ensureVisible(choose);
       await tester.pumpAndSettle();
       expect(tester.getSize(choose).height, greaterThanOrEqualTo(56),
-          reason: 'yo\'lda tanlash tugmasi katta');
+          reason: 'yölda tanlaş tugmasi katta');
       await tester.tap(choose);
       await tester.pumpAndSettle();
 
@@ -433,8 +433,8 @@ void main() {
   });
 
   group('Yetib keldingiz', () {
-    testWidgets('150 m ichida: "Yetib keldingiz" va "Zaryadlash boshlandi"; '
-        'tasdiqlansa shu to\'xtash uchun karta yo\'qoladi', (tester) async {
+    testWidgets('150 m içida: "Yetib keldingiz" va "Zaryadlaş boşlandi"; '
+        'tasdiqlansa şu töxtaş uçun karta yöqoladi', (tester) async {
       final h = await _pump(tester);
       await _startDriving(tester, h);
       await _fix(tester, h, 264.9, 60);
@@ -453,11 +453,11 @@ void main() {
       expect(find.byKey(_started), findsNothing);
       expect(find.text('ST-b'), findsNothing);
       expect(find.text('ST-c'), findsOneWidget);
-      expect(_titleText(tester), startsWith('Keyingi zaryadlash'));
+      expect(_titleText(tester), startsWith('Keyingi zaryadlaş'));
     });
 
-    testWidgets('to\'xtab turgan bo\'lsa ham, yetib kelganda holat ko\'rinib turadi; '
-        'tasdiqlangach varaqa qaytadi', (tester) async {
+    testWidgets('töxtab turgan bölsa ham, yetib kelganda holat körinib turadi; '
+        'tasdiqlangaç varaqa qaytadi', (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 264.9, 0);
       await tester.pumpAndSettle();
@@ -471,13 +471,13 @@ void main() {
     });
   });
 
-  group('uch tilda va katta shrift', () {
+  group('uç tilda va katta şrift', () {
     for (final entry in {
       'uz_Cyrl': evUzCyrl,
       'uz_Latn': evUzLatn,
       'ru': evRu,
     }.entries) {
-      testWidgets('${entry.key}: kartochka xatosiz, tugma matnlari o\'z tilida',
+      testWidgets('${entry.key}: kartoçka xatosiz, tugma matnlari öz tilida',
           (tester) async {
         final h = await _pump(tester, locale: entry.value);
         await _startDriving(tester, h);

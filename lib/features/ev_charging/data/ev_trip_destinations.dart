@@ -14,6 +14,8 @@
 // `UzbekistanPlaces` рўйхатидан фойдаланилмади — унда координата йўқ,
 // фақат номлар бор.
 
+import '../../../core/utils/uz_script.dart';
+
 class EvTripDestination {
   const EvTripDestination({
     required this.id,
@@ -40,11 +42,12 @@ class EvTripDestination {
 
   /// Қидирувда учта ёзувнинг ҳаммаси бўйича мос келиш — фойдаланувчи
   /// «Samarqand» деб ёзса ҳам, «Самарқанд» деб ёзса ҳам топилади.
+  /// Лотинда эски (o‘, sh, ch) ва янги (ö, ş, ç) ёзув иккаласи ҳам топади ([UzScript.foldLatin], эга 2026-11-19).
   bool matches(String query) {
-    final q = query.trim().toLowerCase();
+    final q = UzScript.foldLatin(query.trim().toLowerCase()).replaceAll(RegExp('[ʻʼ‘’`]'), "'");
     if (q.isEmpty) return true;
     return nameCyrl.toLowerCase().contains(q) ||
-        nameLatn.toLowerCase().contains(q) ||
+        UzScript.foldLatin(nameLatn.toLowerCase()).contains(q) ||
         nameRu.toLowerCase().contains(q);
   }
 
@@ -52,7 +55,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'tashkent',
       nameCyrl: 'Тошкент',
-      nameLatn: 'Toshkent',
+      nameLatn: 'Toşkent',
       nameRu: 'Ташкент',
       lat: 41.2995,
       lng: 69.2401,
@@ -68,7 +71,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'urganch',
       nameCyrl: 'Урганч',
-      nameLatn: 'Urganch',
+      nameLatn: 'Urganç',
       nameRu: 'Ургенч',
       lat: 41.5500,
       lng: 60.6333,
@@ -108,7 +111,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'zarafshon',
       nameCyrl: 'Зарафшон',
-      nameLatn: 'Zarafshon',
+      nameLatn: 'Zarafşon',
       nameRu: 'Зарафшан',
       lat: 41.5872,
       lng: 64.2017,
@@ -116,7 +119,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'uchquduq',
       nameCyrl: 'Учқудуқ',
-      nameLatn: 'Uchquduq',
+      nameLatn: 'Uçquduq',
       nameRu: 'Учкудук',
       lat: 42.1569,
       lng: 63.5567,
@@ -124,7 +127,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'qarshi',
       nameCyrl: 'Қарши',
-      nameLatn: 'Qarshi',
+      nameLatn: 'Qarşi',
       nameRu: 'Карши',
       lat: 38.8606,
       lng: 65.7847,
@@ -132,7 +135,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'shahrisabz',
       nameCyrl: 'Шаҳрисабз',
-      nameLatn: 'Shahrisabz',
+      nameLatn: 'Şahrisabz',
       nameRu: 'Шахрисабз',
       lat: 39.0578,
       lng: 66.8306,
@@ -164,7 +167,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'nurafshon',
       nameCyrl: 'Нурафшон',
-      nameLatn: 'Nurafshon',
+      nameLatn: 'Nurafşon',
       nameRu: 'Нурафшан',
       lat: 41.0431,
       lng: 69.3611,
@@ -172,7 +175,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'chirchiq',
       nameCyrl: 'Чирчиқ',
-      nameLatn: 'Chirchiq',
+      nameLatn: 'Çirçiq',
       nameRu: 'Чирчик',
       lat: 41.4689,
       lng: 69.5822,
@@ -196,7 +199,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'fargona',
       nameCyrl: 'Фарғона',
-      nameLatn: 'Farg\'ona',
+      nameLatn: 'Farğona',
       nameRu: 'Фергана',
       lat: 40.3864,
       lng: 71.7864,
@@ -204,7 +207,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'qoqon',
       nameCyrl: 'Қўқон',
-      nameLatn: 'Qo\'qon',
+      nameLatn: 'Qöqon',
       nameRu: 'Коканд',
       lat: 40.5283,
       lng: 70.9425,
@@ -212,7 +215,7 @@ class EvTripDestination {
     EvTripDestination(
       id: 'margilon',
       nameCyrl: 'Марғилон',
-      nameLatn: 'Marg\'ilon',
+      nameLatn: 'Marğilon',
       nameRu: 'Маргилан',
       lat: 40.4714,
       lng: 71.7247,

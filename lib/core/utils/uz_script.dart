@@ -7,15 +7,29 @@
 /// Хавфсизлик қоидаси: ЛОТИН → кирилл фақат соф ўзбек лотини сўзларига
 /// (`c`, `w` йўқ) қўлланади — «Coca-Cola», «KFC» каби бренд номлари
 /// бузилмасин. Кирилл → лотин ҳамма сўзга қўлланади (рус сўзи ҳам ўқилади).
+///
+/// Лотин алифбоси (эга 2026-11-19): ў → ö, ғ → ğ, ш → ş, ч → ç. Лотин → кирилл янги ҳарфларни ҳам,
+/// эски шакл (o‘, g‘, sh, ch) ни ҳам қабул қилади. Солиштириш/қидирув учун [foldLatin] — иккала шаклни
+/// битта (ЭСКИ) шаклга келтиради, шунда аввал сақланган матн ва токенлар мос келаверади.
 abstract final class UzScript {
   static const _toLat = <String, String>{
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ё': 'yo', 'ж': 'j',
     'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n',
     'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f',
-    'х': 'x', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ъ': "'",
-    'ь': '', 'ы': 'i', 'э': 'e', 'ю': 'yu', 'я': 'ya', 'ў': "o'", 'қ': 'q',
-    'ғ': "g'", 'ҳ': 'h', 'ң': 'ng',
+    'х': 'x', 'ц': 'ts', 'ч': 'ç', 'ш': 'ş', 'щ': 'şç', 'ъ': "'",
+    'ь': '', 'ы': 'i', 'э': 'e', 'ю': 'yu', 'я': 'ya', 'ў': 'ö', 'қ': 'q',
+    'ғ': 'ğ', 'ҳ': 'h', 'ң': 'ng',
   };
+
+  static const _newToOld = <String, String>{
+    'ö': "o'", 'Ö': "O'", 'ğ': "g'", 'Ğ': "G'", 'ş': 'sh', 'Ş': 'Sh', 'ç': 'ch', 'Ç': 'Ch',
+  };
+  static final _newLetters = RegExp('[öÖğĞşŞçÇ]');
+
+  /// Янги лотин ҳарфларини эски шаклга: ö→o', ğ→g', ş→sh, ç→ch (катта ҳарф ҳам). Фақат СОЛИШТИРИШ ва
+  /// қидирув учун (кўрсатиш учун эмас). Бошқа белгилар ўзгармайди.
+  static String foldLatin(String s) =>
+      _newLetters.hasMatch(s) ? s.replaceAllMapped(_newLetters, (m) => _newToOld[m[0]!]!) : s;
 
   static const _toCyr = <String, String>{
     'a': 'а', 'b': 'б', 'd': 'д', 'f': 'ф', 'g': 'г', 'h': 'ҳ', 'i': 'и',
@@ -27,8 +41,8 @@ abstract final class UzScript {
   static const _cyrVowels = 'аеёиоуэюяўы';
   static const _marks = 'ʻʼʽˈ`´‘’′';
 
-  static final _word = RegExp("[A-Za-zЀ-ӿ'$_marks]+");
-  static final _pureLatin = RegExp("^[abdefghijklmnopqrstuvxyz'$_marks]+\$", caseSensitive: false);
+  static final _word = RegExp("[A-Za-zöÖğĞşŞçÇЀ-ӿ'$_marks]+");
+  static final _pureLatin = RegExp("^[abdefghijklmnopqrstuvxyzöğşç'$_marks]+\$", caseSensitive: false);
 
   static bool hasCyrillic(String s) => s.runes.any((r) => r >= 0x0400 && r <= 0x04FF);
 
@@ -82,7 +96,10 @@ abstract final class UzScript {
           final prevUpper = i > 0 && _isUpper(src[i - 1]);
           String out;
           var take = 1;
-          if (two == "o'") {
+          const newSingle = {'ö': 'ў', 'ğ': 'ғ', 'ş': 'ш', 'ç': 'ч'};
+          if (newSingle.containsKey(low[i])) {
+            out = newSingle[low[i]]!;
+          } else if (two == "o'") {
             out = 'ў';
             take = 2;
           } else if (two == "g'") {

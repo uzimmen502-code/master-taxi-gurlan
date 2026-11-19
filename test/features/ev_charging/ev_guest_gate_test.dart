@@ -21,7 +21,7 @@ void main() {
 
   test('эга матни uz_Cyrl / uz_Latn / ru да аниқ шундай (2026-10-23)', () {
     expect(_lang('uz_Cyrl')['ev_guest_gate_message'], 'EV станциялари базасини кўриш учун рўйхатдан ўтинг');
-    expect(_lang('uz_Latn')['ev_guest_gate_message'], "EV stansiyalari bazasini ko'rish uchun ro'yxatdan o'ting");
+    expect(_lang('uz_Latn')['ev_guest_gate_message'], "EV stansiyalari bazasini köriş uçun röyxatdan öting");
     expect(_lang('ru')['ev_guest_gate_message'], 'Зарегистрируйтесь, чтобы просматривать базу EV-станций');
   });
 

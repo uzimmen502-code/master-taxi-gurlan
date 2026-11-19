@@ -58,7 +58,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
   }
 
   static const _options = [
-    (label: "O'zbekcha", flag: '🇺🇿', locale: LocaleUtils.uzLatn),
+    (label: 'Özbekça', flag: '🇺🇿', locale: LocaleUtils.uzLatn),
     (label: 'Ўзбекча', flag: '🇺🇿', locale: LocaleUtils.uzCyrl),
     (label: 'Русский', flag: '🇷🇺', locale: LocaleUtils.ru),
   ];

@@ -17,18 +17,19 @@ abstract final class MenuCategoryNames {
   /// Тил кодлари: `uz_Cyrl` · `uz_Latn` · `ru`.
   static const presets = <String, Map<String, String>>{
     'hot': {'uz_Cyrl': 'Иссиқ таомлар', 'uz_Latn': 'Issiq taomlar', 'ru': 'Горячие блюда'},
-    'sweets': {'uz_Cyrl': 'Ширинликлар', 'uz_Latn': 'Shirinliklar', 'ru': 'Десерты'},
-    'drinks': {'uz_Cyrl': 'Ичимликлар', 'uz_Latn': 'Ichimliklar', 'ru': 'Напитки'},
+    'sweets': {'uz_Cyrl': 'Ширинликлар', 'uz_Latn': 'Şirinliklar', 'ru': 'Десерты'},
+    'drinks': {'uz_Cyrl': 'Ичимликлар', 'uz_Latn': 'Içimliklar', 'ru': 'Напитки'},
     'bread': {'uz_Cyrl': 'Нон ва хамир таомлари', 'uz_Latn': 'Non va xamir taomlari', 'ru': 'Хлеб и выпечка'},
-    'first': {'uz_Cyrl': 'Биринчи таомлар', 'uz_Latn': 'Birinchi taomlar', 'ru': 'Первые блюда'},
-    'second': {'uz_Cyrl': 'Иккинчи таомлар', 'uz_Latn': 'Ikkinchi taomlar', 'ru': 'Вторые блюда'},
+    'first': {'uz_Cyrl': 'Биринчи таомлар', 'uz_Latn': 'Birinçi taomlar', 'ru': 'Первые блюда'},
+    'second': {'uz_Cyrl': 'Иккинчи таомлар', 'uz_Latn': 'Ikkinçi taomlar', 'ru': 'Вторые блюда'},
     'salads': {'uz_Cyrl': 'Салатлар', 'uz_Latn': 'Salatlar', 'ru': 'Салаты'},
-    'shashlik': {'uz_Cyrl': 'Шашлик', 'uz_Latn': 'Shashlik', 'ru': 'Шашлык'},
+    'shashlik': {'uz_Cyrl': 'Шашлик', 'uz_Latn': 'Şaşlik', 'ru': 'Шашлык'},
     'fastfood': {'uz_Cyrl': 'Фастфуд', 'uz_Latn': 'Fastfud', 'ru': 'Фастфуд'},
   };
 
-  static String _norm(String s) =>
-      s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase().replaceAll(RegExp('[ʻʼʽˈ`´‘’′]'), "'");
+  // Янги ва эски лотин шакли битта шаклга ([UzScript.foldLatin], эга 2026-11-19).
+  static String _norm(String s) => UzScript.foldLatin(s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase())
+      .replaceAll(RegExp('[ʻʼʽˈ`´‘’′]'), "'");
 
   static final Map<String, String> _index = () {
     final m = <String, String>{};

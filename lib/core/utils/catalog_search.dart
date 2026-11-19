@@ -1,5 +1,6 @@
 import '../../features/ads/utils/ad_search_text.dart';
 import '../../models/platform_product.dart';
+import 'uz_script.dart';
 
 /// Платформа дўкони / онлайн бозор / эълонлар / глобал қидирув.
 ///
@@ -68,7 +69,9 @@ class CatalogSearch {
   static final _wordSplit =
       RegExp(r"[^0-9a-zA-Zа-яёўқғҳА-ЯЁЎҚҒҲʻʼ']+", unicode: true);
 
-  static String normalize(String s) => s.trim().toLowerCase().replaceAll(
+  /// Янги лотин ҳарфлари (ö ğ ş ç) эски шаклга (o' g' sh ch) — иккала алифбода ёзилган сўров ва матн бир-бирини
+  /// топади, сақланган токенлар ўзгармайди (эга 2026-11-19).
+  static String normalize(String s) => UzScript.foldLatin(s.trim().toLowerCase()).replaceAll(
         RegExp(r'\s+'),
         ' ',
       );

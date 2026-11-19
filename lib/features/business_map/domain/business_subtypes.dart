@@ -704,7 +704,8 @@ abstract final class BusinessSubtypes {
       };
 
   /// Солиштириш учун: кичик ҳарф, лотин ёзуви, апостроф турлари битта, ортиқча бўшлиқсиз.
-  static String norm(String s) => UzScript.toLatin(s.trim().toLowerCase())
+  /// Янги ва эски лотин шакли (ö/o‘, ş/sh …) битта шаклга — [UzScript.foldLatin] (эга 2026-11-19).
+  static String norm(String s) => UzScript.foldLatin(UzScript.toLatin(s.trim().toLowerCase()))
       .toLowerCase()
       .replaceAll(RegExp('[ʻʼʽˈ`´‘’′]'), "'")
       .replaceAll(RegExp(r'\s+'), ' ');

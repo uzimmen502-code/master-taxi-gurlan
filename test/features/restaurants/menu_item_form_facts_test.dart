@@ -289,7 +289,7 @@ void main() {
     expect(t.widget<ChoiceChip>(find.byKey(const ValueKey('category-suggest-first'))).selected, isTrue);
     expect(repo.createdCategories, isEmpty, reason: 'танлаш ўзи ҳужжат яратмайди');
     await _tapSave(t);
-    expect(repo.createdCategories, [('Birinchi taomlar', 0)]);
+    expect(repo.createdCategories, [('Birinçi taomlar', 0)]);
     expect(repo.saved.single.categoryId, 'cat_1');
   });
 

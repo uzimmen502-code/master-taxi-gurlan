@@ -96,46 +96,46 @@ void main() {
     expect(find.textContaining('15:30'), findsOneWidget);
     expect(find.textContaining('08:00'), findsNothing);
 
-    await tester.tap(find.text('Tasdiqlash'));
+    await tester.tap(find.text('Tasdiqlaş'));
     await tester.pumpAndSettle();
     expect(flow.calls, hasLength(1));
     expect(flow.calls.single, DateTime(2026, 10, 16, 15, 30));
   });
 
-  testWidgets('oyna ochiq turganda vaqt o\'tib ketsa: to\'lov oqimi chaqirilmaydi, sodda xabar',
+  testWidgets('oyna oçiq turganda vaqt ötib ketsa: tölov oqimi çaqirilmaydi, sodda xabar',
       (tester) async {
     await pumpSheet(tester);
     expect(find.textContaining('15:30'), findsOneWidget);
 
     now = DateTime(2026, 10, 16, 16, 0); // foydalanuvchi o'ylab turdi
-    await tester.tap(find.text('Tasdiqlash'));
+    await tester.tap(find.text('Tasdiqlaş'));
     await tester.pumpAndSettle();
 
     expect(flow.calls, isEmpty);
     expect(
       find.text(
-          "Jo'nash vaqti o'tib ketgan. Keyingi vaqtni yoki «Ertaga»ni tanlang."),
+          "Jönaş vaqti ötib ketgan. Keyingi vaqtni yoki «Ertaga»ni tanlang."),
       findsOneWidget,
     );
   });
 
-  testWidgets('kech (23:40): standart "Ertaga" va 08:00', (tester) async {
+  testWidgets('keç (23:40): standart "Ertaga" va 08:00', (tester) async {
     now = DateTime(2026, 10, 16, 23, 40);
     await pumpSheet(tester);
     expect(find.textContaining('08:00'), findsOneWidget);
 
-    await tester.tap(find.text('Tasdiqlash'));
+    await tester.tap(find.text('Tasdiqlaş'));
     await tester.pumpAndSettle();
     expect(flow.calls.single, DateTime(2026, 10, 17, 8, 0));
   });
 
-  testWidgets('bo\'sh "Qaerdan": xabar uz_Latn da, Kirill qattiq yozuv emas',
+  testWidgets('böş "Qaerdan": xabar uz_Latn da, Kirill qattiq yozuv emas',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpSheet(tester);
-    await tester.tap(find.text('Tasdiqlash'));
+    await tester.tap(find.text('Tasdiqlaş'));
     await tester.pumpAndSettle();
-    expect(find.text('Qaerdan — shaharni kiriting'), findsOneWidget);
+    expect(find.text('Qaerdan — şaharni kiriting'), findsOneWidget);
     expect(flow.calls, isEmpty);
   });
 }

@@ -58,7 +58,7 @@ void main() {
         existing: existing,
       );
       expect(entries.map((e) => e.key), ['first', 'second', 'salads', 'shashlik', 'fastfood', 'sweets'], reason: 'drinks бор (лотин ёзувда) — чиқмайди');
-      expect(entries.first.name, 'Birinchi taomlar');
+      expect(entries.first.name, 'Birinçi taomlar');
       expect(
         MenuCategorySuggestions.missingNames(keys: MenuCategorySuggestions.cafe, lang: 'uz_Latn', existing: existing),
         entries.map((e) => e.name).toList(),

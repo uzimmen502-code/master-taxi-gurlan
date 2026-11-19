@@ -74,11 +74,11 @@ const _barSpecs = <OilBarVariant, _BarSpec>{
         _legGreen,
         L3(
           'Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~10 000 км · хавфсиз',
-          'O‘zbekiston sharoitida METAN/PROPANda · ~10 000 km · xavfsiz',
+          'Özbekiston şaroitida METAN/PROPANda · ~10 000 km · xavfsiz',
           'В условиях Узбекистана на МЕТАНЕ/ПРОПАНЕ · ~10 000 км · безопасно',
         )
       ),
-      (_legGreen, L3('10–12k яшил', '10–12k yashil', '10–12k зелёный')),
+      (_legGreen, L3('10–12k яшил', '10–12k yaşil', '10–12k зелёный')),
       (_legYellow, L3('12–13k сариқ', '12–13k sariq', '12–13k жёлтый')),
       (_legOrange, L3('13–15k огоҳлик', '13–15k ogohlik', '13–15k предупреждение')),
     ],
@@ -97,7 +97,7 @@ const _barSpecs = <OilBarVariant, _BarSpec>{
         _legGreen,
         L3(
           'Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~7 000 км · хавфсиз',
-          'O‘zbekiston sharoitida METAN/PROPANda · ~7 000 km · xavfsiz',
+          'Özbekiston şaroitida METAN/PROPANda · ~7 000 km · xavfsiz',
           'В условиях Узбекистана на МЕТАНЕ/ПРОПАНЕ · ~7 000 км · безопасно',
         )
       ),
@@ -119,7 +119,7 @@ const _barSpecs = <OilBarVariant, _BarSpec>{
         _legGreen,
         L3(
           'Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~5 000 км · хавфсиз',
-          'O‘zbekiston sharoitida METAN/PROPANda · ~5 000 km · xavfsiz',
+          'Özbekiston şaroitida METAN/PROPANda · ~5 000 km · xavfsiz',
           'В условиях Узбекистана на МЕТАНЕ/ПРОПАНЕ · ~5 000 км · безопасно',
         )
       ),

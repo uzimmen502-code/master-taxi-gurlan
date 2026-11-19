@@ -35,7 +35,7 @@ void main() {
   group('MenuCategoryNames.display — мижоз ўз тилида кўради', () {
     test('REGRESSION: кирилда сақланган тайёр ном — рус мижозга русча, лотин мижозга лотинча', () {
       expect(MenuCategoryNames.display('Ичимликлар', 'ru'), 'Напитки');
-      expect(MenuCategoryNames.display('Ичимликлар', 'uz_Latn'), 'Ichimliklar');
+      expect(MenuCategoryNames.display('Ичимликлар', 'uz_Latn'), 'Içimliklar');
       expect(MenuCategoryNames.display('Ичимликлар', 'uz_Cyrl'), 'Ичимликлар');
     });
 
@@ -47,7 +47,7 @@ void main() {
     });
 
     test('эганинг ўз номи: ўзбек кирилл ↔ лотин, рус учун кирилл', () {
-      expect(MenuCategoryNames.display('Чойхона таомлари', 'uz_Latn'), 'Choyxona taomlari');
+      expect(MenuCategoryNames.display('Чойхона таомлари', 'uz_Latn'), 'Çoyxona taomlari');
       expect(MenuCategoryNames.display("Choyxona taomlari", 'uz_Cyrl'), 'Чойхона таомлари');
       expect(MenuCategoryNames.display("Choyxona taomlari", 'ru'), 'Чойхона таомлари');
       expect(MenuCategoryNames.display('Чойхона таомлари', 'ru'), 'Чойхона таомлари');

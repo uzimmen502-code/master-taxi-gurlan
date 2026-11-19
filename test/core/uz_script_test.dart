@@ -4,26 +4,29 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('UzScript.toLatin', () {
     const cases = {
-      'Ичимликлар': 'Ichimliklar',
-      'Шашлик': 'Shashlik',
-      'Ўзбек таомлари': "O'zbek taomlari",
-      'Ғалла': "G'alla",
+      // Янги алифбо (эга 2026-11-19): ў→ö, ғ→ğ, ш→ş, ч→ç.
+      'Ичимликлар': 'Içimliklar',
+      'Шашлик': 'Şaşlik',
+      'Ўзбек таомлари': 'Özbek taomlari',
+      'Ғалла': 'Ğalla',
       'Қуйма': 'Quyma',
       'Ҳалим': 'Halim',
-      'Чойхона': 'Choyxona',
+      'Чойхона': 'Çoyxona',
       'Эски': 'Eski',
-      'Еттинчи': 'Yettinchi',
+      'Еттинчи': 'Yettinçi',
       'Маъно': "Ma'no",
-      'Ёнғоқ': "Yong'oq",
+      'Ёнғоқ': 'Yonğoq',
+      'Борщ': 'Borşç',
       'Нон ва хамир таомлари': 'Non va xamir taomlari',
       'Иссиқ таомлар': 'Issiq taomlar',
     };
     cases.forEach((cyr, lat) => test('$cyr → $lat', () => expect(UzScript.toLatin(cyr), lat)));
 
     test('ҳарф катталиги сақланади: ҲАММАСИ КАТТА → ҲАММАСИ КАТТА', () {
-      expect(UzScript.toLatin('ШАШЛИК'), 'SHASHLIK');
-      expect(UzScript.toLatin('ЧОЙ'), 'CHOY');
-      expect(UzScript.toLatin('шашлик'), 'shashlik');
+      expect(UzScript.toLatin('ШАШЛИК'), 'ŞAŞLIK');
+      expect(UzScript.toLatin('ЧОЙ'), 'ÇOY');
+      expect(UzScript.toLatin('ЎЗБЕК'), 'ÖZBEK');
+      expect(UzScript.toLatin('шашлик'), 'şaşlik');
     });
 
     test('лотин сўз, рақам ва тиниш белгилари ўзгармайди; аралашмада фақат кирилл сўз', () {
@@ -34,7 +37,7 @@ void main() {
 
     test('рус сўзи ўқилади', () {
       expect(UzScript.toLatin('Напитки'), 'Napitki');
-      expect(UzScript.toLatin('Горячие блюда'), 'Goryachiye blyuda');
+      expect(UzScript.toLatin('Горячие блюда'), 'Goryaçiye blyuda');
     });
   });
 
@@ -51,6 +54,13 @@ void main() {
       'Yettinchi': 'Еттинчи',
       "Ma'no": 'Маъно',
       "Sho'rva": 'Шўрва',
+      // Янги алифбо ҳарфлари ҳам (эга 2026-11-19).
+      'Içimliklar': 'Ичимликлар',
+      'Şaşlik': 'Шашлик',
+      'Özbek taomlari': 'Ўзбек таомлари',
+      'Ğalla': 'Ғалла',
+      'Şörva': 'Шўрва',
+      'Çoyxona': 'Чойхона',
       'Non va xamir taomlari': 'Нон ва хамир таомлари',
       'Issiq taomlar': 'Иссиқ таомлар',
     };
@@ -60,6 +70,12 @@ void main() {
       expect(UzScript.toCyrillic('SHASHLIK'), 'ШАШЛИК');
       expect(UzScript.toCyrillic('CHOY'), 'ЧОЙ');
       expect(UzScript.toCyrillic('shashlik'), 'шашлик');
+      expect(UzScript.toCyrillic('ŞAŞLIK'), 'ШАШЛИК');
+      expect(UzScript.toCyrillic('ÇOY'), 'ЧОЙ');
+    });
+
+    test("ажратувчи: Is'hoq — s ва h алоҳида (ш эмас)", () {
+      expect(UzScript.toCyrillic("Is'hoq"), 'Исъҳоқ');
     });
 
     test('бренд (c/w ҳарфли) ва кирилл сўзлар ўзгармайди', () {
@@ -77,6 +93,20 @@ void main() {
 
     test('аралаш жумлада фақат соф ўзбек лотин сўзи ўгирилади', () {
       expect(UzScript.toCyrillic('Fanta va Coca-Cola'), 'Фанта ва Coca-Cola');
+    });
+  });
+
+  group('UzScript.foldLatin (қидирув/солиштириш, эга 2026-11-19)', () {
+    test('янги ҳарфлар эски шаклга; эски шакл ўзгармайди', () {
+      expect(UzScript.foldLatin('Özbekça şahar ğişt'), "O'zbekcha shahar g'isht");
+      expect(UzScript.foldLatin('ŞÖĞÇ'), "ShO'G'Ch");
+      expect(UzScript.foldLatin("O'zbekcha shahar"), "O'zbekcha shahar");
+      expect(UzScript.foldLatin('Ўзбек'), 'Ўзбек');
+      expect(UzScript.foldLatin(''), '');
+    });
+    test('toLatin натижаси fold қилинса — эски лотин шаклига тенг', () {
+      expect(UzScript.foldLatin(UzScript.toLatin('Ширинликлар')), 'Shirinliklar');
+      expect(UzScript.foldLatin(UzScript.toLatin('Гўшт')), "Go'sht");
     });
   });
 

@@ -159,7 +159,7 @@ void main() {
   setUpAll(loadInterFont);
 
   group('EvSocSliderCard', () {
-    test('snap: 5 qadamga, 5..100 oralig\'ida', () {
+    test('snap: 5 qadamga, 5..100 oraliğida', () {
       expect(EvSocSliderCard.snap(83), 85);
       expect(EvSocSliderCard.snap(82), 80);
       expect(EvSocSliderCard.snap(3), 5);
@@ -170,7 +170,7 @@ void main() {
       expect(EvSocSliderCard.divisions, 19);
     });
 
-    testWidgets('qiymat va foiz ko\'rsatiladi, o\'zgarish xabar beriladi',
+    testWidgets('qiymat va foiz körsatiladi, özgariş xabar beriladi',
         (tester) async {
       double value = 60;
       await tester.pumpWidget(evL10nApp(
@@ -196,8 +196,8 @@ void main() {
     });
   });
 
-  group('Zaryadni yangilash - reja varaqasidan', () {
-    testWidgets('tugma bor; varaq boshlang\'ich zaryadga o\'rnatilgan (GPS yo\'q)',
+  group('Zaryadni yangilaş - reja varaqasidan', () {
+    testWidgets('tugma bor; varaq boşlanğiç zaryadga örnatilgan (GPS yöq)',
         (tester) async {
       await _pump(tester);
       await _openFromPlanSheet(tester);
@@ -206,7 +206,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('boshlang\'ich qiymat - mashinaning hozirgi joyidagi KUTILGAN '
+    testWidgets('boşlanğiç qiymat - maşinaning hozirgi joyidagi KUTILGAN '
         'zaryad (50 km: 83% -> 85)', (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 50, 0);
@@ -215,7 +215,7 @@ void main() {
       expect(value.data, '85%');
     });
 
-    testWidgets('matn kiritish yo\'q, "Qayta hisoblash" tugmasi >= 56 dp, 1.3 da sig\'adi',
+    testWidgets('matn kiritiş yöq, "Qayta hisoblaş" tugmasi >= 56 dp, 1.3 da siğadi',
         (tester) async {
       await _pump(tester);
       await _openFromPlanSheet(tester);
@@ -228,8 +228,8 @@ void main() {
   });
 
   group('Qayta hisob', () {
-    testWidgets('mashina 52 km da, haqiqiy zaryad 30%: qolgan yo\'l shu joydan, '
-        'tanlov yangi rejaga ergashadi', (tester) async {
+    testWidgets('maşina 52 km da, haqiqiy zaryad 30%: qolgan yöl şu joydan, '
+        'tanlov yangi rejaga ergaşadi', (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 52, 0);
       expect(_ids(h), ['b', 'c']);
@@ -242,20 +242,20 @@ void main() {
       final plan = h.last!.plan;
       expect(plan.startSocPercent, 30);
       expect(plan.fromAlongKm, closeTo(52, 0.5),
-          reason: 'qayta hisob mashinaning hozirgi joyidan');
+          reason: 'qayta hisob maşinaning hozirgi joyidan');
       expect(plan.stops.every((s) => s.alongKm > plan.fromAlongKm), isTrue);
       // 30% da ~60 km yetadi: birinchi to'xtash 100 km dagi 'a'.
       expect(_ids(h).first, 'a');
       expect(h.last!.selectedNumbers.containsKey('a'), isTrue);
       expect(h.last!.selectedNumbers.containsKey('b'), isFalse,
-          reason: 'eski tavsiya endi rejada yo\'q');
+          reason: 'eski tavsiya endi rejada yöq');
       for (final s in plan.stops) {
         expect(h.last!.selectedNumbers.containsKey(s.station.id), isTrue);
       }
       expect(find.byKey(const ValueKey('ev_trip_undo_chip')), findsOneWidget);
     });
 
-    testWidgets('qo\'lda qo\'shilgan to\'xtash qayta hisobdan keyin ham qoladi',
+    testWidgets('qölda qöşilgan töxtaş qayta hisobdan keyin ham qoladi',
         (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 52, 0);
@@ -270,7 +270,7 @@ void main() {
       expect(h.last!.selectedNumbers.containsKey('a2'), isTrue);
     });
 
-    testWidgets('"Qaytarish" avvalgi rejani va tanlovni qaytaradi', (tester) async {
+    testWidgets('"Qaytariş" avvalgi rejani va tanlovni qaytaradi', (tester) async {
       final h = await _pump(tester);
       await _fix(tester, h, 52, 0);
       final before = h.last!.plan;
@@ -286,7 +286,7 @@ void main() {
       expect(h.last!.selectedNumbers.containsKey('a'), isFalse);
     });
 
-    testWidgets('GPS yo\'q: reja o\'z boshlang\'ich joyidan yangi zaryad bilan '
+    testWidgets('GPS yöq: reja öz boşlanğiç joyidan yangi zaryad bilan '
         'qayta hisoblanadi', (tester) async {
       final h = await _pump(tester);
       await _openFromPlanSheet(tester);
@@ -296,7 +296,7 @@ void main() {
       expect(plan.fromAlongKm, 0);
     });
 
-    testWidgets('yo\'l rejimida: "Zaryadni yangilash" kartochkada, raqamlar yangi '
+    testWidgets('yöl rejimida: "Zaryadni yangilaş" kartoçkada, raqamlar yangi '
         'rejadan', (tester) async {
       final h = await _pump(tester);
       for (var i = 0; i < 3; i++) {
@@ -317,7 +317,7 @@ void main() {
       expect(next.station.id, 'a');
       // Kartochkadagi barcha raqamlar yangi rejadan.
       expect(find.text('ST-a'), findsOneWidget);
-      expect(find.text('Kelishda ~${next.arriveSocPercent}%'), findsOneWidget);
+      expect(find.text('Kelişda ~${next.arriveSocPercent}%'), findsOneWidget);
       final title =
           tester.widget<Text>(find.byKey(const ValueKey('ev_drive_title'))).data!;
       final km = int.parse(RegExp(r'(\d+)(?:\.\d+)? km').firstMatch(title)!.group(1)!);
@@ -326,13 +326,13 @@ void main() {
     });
   });
 
-  group('uch tilda, katta shrift', () {
+  group('uç tilda, katta şrift', () {
     for (final entry in {
       'uz_Cyrl': evUzCyrl,
       'uz_Latn': evUzLatn,
       'ru': evRu,
     }.entries) {
-      testWidgets('${entry.key}: varaq xatosiz, matnlar o\'z tilida', (tester) async {
+      testWidgets('${entry.key}: varaq xatosiz, matnlar öz tilida', (tester) async {
         await _pump(tester, locale: entry.value);
         await _openFromPlanSheet(tester);
         expect(tester.takeException(), isNull);

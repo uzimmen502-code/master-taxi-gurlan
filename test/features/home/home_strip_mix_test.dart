@@ -82,6 +82,28 @@ void main() {
       expect(nearbyAdsCategories(t), kNearbyAdsFallbackCategories);
       expect(nearbyAdsCategories(null), {'livestock.all', 'auto.cars', 'auto.moto', 'auto.tech'});
     });
+    test('v5: Мол all ўрнига бўлимлар — эски livestock.all ҳам чиқади; Мол белгиланмаса — йўқ', () {
+      final v5 = tax({
+        'livestock': m('livestock_market', [
+          for (final id in ['cattle', 'sheep_goat', 'horse', 'poultry', 'other']) {'id': id, 'showInNearbyAds': true},
+        ]),
+      });
+      final cats = nearbyAdsCategories(v5);
+      expect(cats, containsAll(['livestock.cattle', 'livestock.other', 'livestock.all']));
+      expect(showsInNearbyAds(item('legacy', market: 'livestock', category: 'all', businessId: 'B1'), cats), isTrue,
+          reason: 'prod: эски all ёзуви (бизнес бўлса ҳам — бўлим қоидаси)');
+      expect(showsInNearbyAds(item('new', market: 'livestock', category: 'horse', businessId: 'B1'), cats), isTrue);
+      // negative: Мол бўлимлари белгиланмаган — эски all ҳам қўшилмайди.
+      final off = tax({
+        'livestock': m('livestock_market', [
+          {'id': 'cattle', 'showInNearbyAds': false},
+        ]),
+        'auto': m('auto_market', [
+          {'id': 'cars', 'showInNearbyAds': true},
+        ]),
+      });
+      expect(nearbyAdsCategories(off), {'auto.cars'});
+    });
     test('MarketCategory.fromMap: bool эмас → null', () {
       final t = tax({
         'auto': m('auto_market', [

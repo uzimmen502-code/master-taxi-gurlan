@@ -35,8 +35,15 @@ Set<String> nearbyAdsCategories(MarketTaxonomy? t) {
       if (c.showInNearbyAds == true) out.add('${m.id}.${c.id}');
     }
   }
-  return anyKey ? out : kNearbyAdsFallbackCategories;
+  if (!anyKey) return kNearbyAdsFallbackCategories;
+  // Taxonomy v5 (2026-11-19): Мол бозорида `all` ўрнига cattle/sheep_goat/horse/poultry/other. Эски
+  // `livestock.all` ёзувлари (prod'да бор) — Мол бўлимларидан бирортаси белгиланган бўлса, аввалгидек чиқади.
+  if (out.any((k) => k.startsWith('$kNearbyAdsLivestockMarket.'))) out.add(kNearbyAdsLegacyLivestockKey);
+  return out;
 }
+
+const kNearbyAdsLivestockMarket = 'livestock';
+const kNearbyAdsLegacyLivestockKey = 'livestock.all';
 
 /// Электроника / маиший техника: сотувчи бизнес объекти эмас (`businessId` бўш) ВА `attrs.condition == used`.
 bool isUsedPrivateGadget(TvShopItem i) =>

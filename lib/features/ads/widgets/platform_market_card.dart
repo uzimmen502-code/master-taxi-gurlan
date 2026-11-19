@@ -11,6 +11,7 @@ import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
 import 'market_corner_badge.dart';
+import '../../product_badges/product_badge.dart';
 import 'market_grid.dart';
 import '../../platform_store/controllers/platform_store_controller.dart';
 import '../../platform_store/screens/platform_product_detail_screen.dart';
@@ -90,6 +91,8 @@ class PlatformMarketCard extends StatelessWidget {
                   ),
                   if (cornerBadge != null && cornerBadge!.trim().isNotEmpty)
                     MarketCornerBadge(text: cornerBadge!),
+                  // Белги (эга 2026-11-19): «AVA» остида; AVA товари — фақат автомат (қолдиқ / янги).
+                  ProductBadgeOverlay(data: ProductBadgeData.forPlatform(product), top: 26),
                 ],
               ),
             ),
@@ -100,6 +103,7 @@ class PlatformMarketCard extends StatelessWidget {
               price: wholesale
                   ? _wholesalePriceLine(context, product)
                   : formatMoney(product.displayPrice),
+              oldPrice: ProductBadgeData.forPlatform(product).strikePrice(DateTime.now()),
               caption: wholesale
                   ? _wholesaleSubLine(context, product)
                   : BrandLabels.brand,

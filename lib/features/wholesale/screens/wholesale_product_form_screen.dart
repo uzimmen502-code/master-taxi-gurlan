@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../product_badges/product_promo_sheet.dart';
+import '../utils/wholesale_price_only.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
@@ -321,7 +323,10 @@ class _WholesaleProductFormScreenState
       String productId;
       if (_isEdit) {
         productId = widget.existing!.id;
-        await _repo.ownerUpdate(productId, product);
+        // Эга 2026-11-20: фақат нарх ўзгарса — фаол товар фаол қолади (қайта модерациясиз).
+        final old = widget.existing!;
+        await _repo.ownerUpdate(productId, product,
+            keepActive: old.status == WholesaleProduct.statusActive && wholesaleOnlyPriceChanged(old, product));
         // Эга олиб ташлаган расмлар Storage'да эгасиз қолмасин
         // (2026-09-29). Аввал улар у ерда абадий қолиб кетар эди.
         final removed = [
@@ -504,6 +509,11 @@ class _WholesaleProductFormScreenState
             ],
             const SizedBox(height: 16),
             KeyedSubtree(key: _tiersKey, child: _packsSection()),
+            // «Акция» (эга 2026-11-19): фақат сақланган товарда.
+            if (_isEdit) ...[
+              const SizedBox(height: 12),
+              ProductPromoTile(collection: 'wholesale_products', docId: widget.existing!.id),
+            ],
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving ? null : _save,

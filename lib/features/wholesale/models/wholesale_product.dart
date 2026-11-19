@@ -5,6 +5,7 @@ import '../../../models/price_tier.dart';
 import '../../ads/utils/ad_search_text.dart';
 import 'shipping_dims.dart';
 import 'wholesale_pack.dart';
+import '../../product_badges/product_badge.dart';
 
 export '../../../models/price_tier.dart' show PriceTier;
 export 'shipping_dims.dart';
@@ -47,6 +48,7 @@ class WholesaleProduct implements AdSearchable {
     this.publishedAt,
     this.adminNote = '',
     this.moderatedAt,
+    this.badge = ProductBadgeData.empty,
     this.moderatedBy = '',
     this.market = marketWholesale,
     this.currency = '',
@@ -156,6 +158,9 @@ class WholesaleProduct implements AdSearchable {
   final DateTime? publishedAt;
   final String adminNote;
   final DateTime? moderatedAt;
+
+  /// Карточка белгиси (сервер майдонлари: promo, firstActiveAt, stockLeft; эга 2026-11-19).
+  final ProductBadgeData badge;
   final String moderatedBy;
 
   /// `wholesale` | `china`. Эски ёзувларда бўш — улар улгуржи бозор.
@@ -275,6 +280,7 @@ class WholesaleProduct implements AdSearchable {
       publishedAt: _parseDate(d['publishedAt']),
       adminNote: (d['adminNote'] as String?) ?? '',
       moderatedAt: _parseDate(d['moderatedAt']),
+      badge: ProductBadgeData.fromMap(d),
       moderatedBy: (d['moderatedBy'] as String?) ?? '',
       market: (d['market'] as String?)?.trim().isNotEmpty == true
           ? (d['market'] as String).trim()
@@ -370,7 +376,8 @@ class WholesaleProduct implements AdSearchable {
 
   /// Эга томонидан таҳрирлаш — контент майдонлари + `pending`га қайтариш.
   /// Rules эгага ҳеч қачон `active`га ўтишга рухсат бермайди.
-  Map<String, dynamic> toFirestoreOwnerUpdate() {
+  /// [keepActive] (эга 2026-11-20): фақат нарх ўзгарган фаол товар — ctive қолади (wholesaleOnlyPriceChanged).
+  Map<String, dynamic> toFirestoreOwnerUpdate({bool keepActive = false}) {
     final tiers = sortWholesalePriceTiers(_mirrorTiers);
     return {
       'title': title,
@@ -380,7 +387,7 @@ class WholesaleProduct implements AdSearchable {
       'unit': unit,
       'imageUrls': imageUrls.take(maxImages).toList(growable: false),
       'searchTokens': AdSearchText.buildTokens(title, description),
-      'status': statusPending,
+      'status': keepActive ? statusActive : statusPending,
       'updatedAt': FieldValue.serverTimestamp(),
       // `market` бу ерда ЙЎҚ — Rules эгага маҳсулотни бир бозордан
       // бошқасига кўчиришга рухсат бермайди. Валюта ва етказиш муддати

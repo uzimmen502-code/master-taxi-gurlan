@@ -59,7 +59,11 @@ class MarketCardText extends StatelessWidget {
     this.price,
     this.caption,
     this.priceColor = AppColors.primaryText,
+    this.oldPrice,
   });
+
+  /// Чегирма (эга 2026-11-20): асос нарх чизилган ҳолда, жорий (чегирмали) нарх қизил ва бир оз баландда.
+  final String? oldPrice;
 
   final String title;
   final int titleLines;
@@ -90,17 +94,20 @@ class MarketCardText extends StatelessWidget {
               ),
               if (price != null && price!.isNotEmpty) ...[
                 const SizedBox(height: MarketGridMetrics.lineGap),
-                Text(
-                  price!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: priceColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: MarketGridMetrics.priceSize,
-                    height: MarketGridMetrics.lineHeight,
-                  ),
-                ),
+                if (oldPrice == null || oldPrice!.isEmpty)
+                  Text(
+                    price!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: priceColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: MarketGridMetrics.priceSize,
+                      height: MarketGridMetrics.lineHeight,
+                    ),
+                  )
+                else
+                  DiscountPriceLine(price: price!, oldPrice: oldPrice!),
               ],
               if (caption != null && caption!.isNotEmpty) ...[
                 const SizedBox(height: MarketGridMetrics.lineGap),
@@ -155,6 +162,48 @@ class MarketProductGrid extends StatelessWidget {
           itemBuilder: itemBuilder,
         );
       },
+    );
+  }
+}
+
+/// Чегирмали нарх қатори (эга 2026-11-20): «9 000» қизил (катта, бир оз баланд) + «10 000» чизилган (кичик, кул ранг).
+/// Битта қатор — карточка баландлиги ([MarketGridMetrics]) ўзгармайди.
+class DiscountPriceLine extends StatelessWidget {
+  const DiscountPriceLine({super.key, required this.price, required this.oldPrice, this.fontSize = MarketGridMetrics.priceSize});
+
+  final String price;
+  final String oldPrice;
+  final double fontSize;
+
+  static const Color red = Color(0xFFE53935);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: const ValueKey('discount_price_line'),
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Flexible(
+          child: Text(
+            price,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: red, fontWeight: FontWeight.w800, fontSize: fontSize, height: MarketGridMetrics.lineHeight),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          oldPrice,
+          key: const ValueKey('discount_old_price'),
+          maxLines: 1,
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: fontSize - 3,
+            height: MarketGridMetrics.lineHeight,
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+      ],
     );
   }
 }

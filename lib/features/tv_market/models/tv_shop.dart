@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../domain/price_unit.dart';
+import '../../product_badges/product_badge.dart';
 
 /// Сотувчи мини-дўкони — `tv_shops/{ownerPhone}`.
 class TvShop {
@@ -126,6 +127,7 @@ class TvShopItem {
     this.status = 'active',
     this.createdAt,
     this.businessId = '',
+    this.badge = ProductBadgeData.empty,
     this.priceUnit = PriceUnit.fixed,
     this.expiresAt,
     this.submittedAt,
@@ -194,6 +196,9 @@ class TvShopItem {
   final DateTime? boostUntil;
   final bool socialConsent;
   final DateTime? socialPostedAt;
+
+  /// Карточка белгиси (сервер майдонлари: promo, firstActiveAt, stockLeft; эга 2026-11-19).
+  final ProductBadgeData badge;
 
   /// `active` | `pending` | `rejected` | `expired` | `deleted` | `blocked` (2a: `rejected`/`expired` — сервер).
   final String status;
@@ -285,6 +290,7 @@ class TvShopItem {
       socialConsent: d['socialConsent'] == true,
       socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
       status: (d['status'] ?? 'active') as String,
+      badge: ProductBadgeData.fromMap(d),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       businessId: (d['businessId'] ?? '') is String ? (d['businessId'] ?? '') as String : '',
       priceUnit: PriceUnit.fromWire(d['priceUnit']),

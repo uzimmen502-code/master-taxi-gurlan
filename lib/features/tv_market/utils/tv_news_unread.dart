@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart' show phonesMatch;
 import '../models/tv_clip.dart';
+import 'tv_news_window.dart';
 
 /// «Кун янгиликлари» табидаги ўқилмаганлик нуқтаси (эга қарори, 2026-10-24).
 ///
@@ -10,7 +11,11 @@ import '../models/tv_clip.dart';
 /// мумкин — онгли чекланиш. Ҳисоб бўйича синхрон керак бўлса, кейин алоҳида қарор.
 
 /// Кўриниши мумкин энг сўнгги янгилик вақти: фаол, ўйнатиладиган, муддати тугамаган, ўзимники эмас.
-/// Қайтарилган вақт — СЕРВЕР вақти (`createdAt`), телефон соати эмас.
+/// Қайтарилган вақт — СЕРВЕР вақти: фаоллашув (`activatedAt`, эга 2026-11-19 — модерацияда турган
+/// янгилик тасдиқланганда «янги» бўлади), бўлмаса `createdAt`; телефон соати эмас.
+/// Муддат: `activatedAt` бор бўлса — ундан 24 соат (сервер шу бўйича тугатади; клиент ёзган
+/// `expiresAt` юклаш пайтидан ҳисобланган); йўқ бўлса — аввалгидек `expiresAt`.
+/// Нуқта фақат `news` учун: янги товар/хизмат ҳам табда кўринади, лекин нуқтани ёқмайди.
 DateTime? newestVisibleNewsAt(
   Iterable<TvClip> clips, {
   required String mePhone,
@@ -19,10 +24,15 @@ DateTime? newestVisibleNewsAt(
   DateTime? best;
   for (final c in clips) {
     if (!c.isNews || !c.isActive || !c.isPlayable) continue;
-    final exp = c.expiresAt;
-    if (exp != null && !exp.isAfter(now)) continue;
+    final act = c.activatedAt;
+    if (act != null) {
+      if (now.difference(act) >= kTvNewsWindow) continue;
+    } else {
+      final exp = c.expiresAt;
+      if (exp != null && !exp.isAfter(now)) continue;
+    }
     if (mePhone.isNotEmpty && phonesMatch(c.ownerPhone, mePhone)) continue;
-    final at = c.createdAt;
+    final at = tvClipShownAt(c);
     if (at == null) continue;
     if (best == null || at.isAfter(best)) best = at;
   }

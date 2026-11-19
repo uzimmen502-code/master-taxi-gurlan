@@ -1119,7 +1119,7 @@
   "tv_publish_submit": "E'lon qilish",
   "tv_publish_success": "Video muvaffaqiyatli joylandi!",
   "tv_publish_pending": "Video yuborildi — tekshiruvdan keyin chiqadi",
-  "tv_publish_marked_news": "\"Kun yangiliklari\"ga belgilandi — 48 soatdan keyin avto-o'chadi",
+  "tv_publish_marked_news": "\"Kun yangiliklari\"ga belgilandi — 24 soatdan keyin avto-o'chadi",
   "tv_publish_compressing": "Video siqilmoqda...",
   "tv_publish_will_trim": "Video {minutes} daqiqadan uzun — yuklanayotganda {minutes} daqiqaga qisqartiriladi",
   "tv_publish_thumbnail": "Rasm tayyorlanmoqda...",

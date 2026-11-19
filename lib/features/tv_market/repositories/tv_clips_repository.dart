@@ -8,6 +8,7 @@ import '../models/tv_comment.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
 import '../utils/tv_clip_shuffle.dart';
+import '../utils/tv_news_window.dart';
 import '../utils/tv_playback_sampling.dart';
 import 'tv_shop_repository.dart';
 
@@ -228,6 +229,47 @@ class TvClipsRepository {
       return [for (final l in lists) ...l];
     }
     return top(active, perQuery);
+  }
+
+  /// «Кун янгиликлари» таби учун: фаоллашгандан кейинги 24 соат ичидаги товар/хизмат клиплари
+  /// (эга 2026-11-19, `tv_news_window.dart`). Саҳифаланмайди — ойна 24 соат, рўйхат кичик
+  /// ([perQuery] билан чекланган); фақат биринчи саҳифага қўшилади ([_fetchScopedAds] нақши).
+  /// Туман — 1 сўров; вилоят — ҳар туманга 1 сўров (асосий вилоят сўрови каби); республика — 1.
+  /// Индекслар: `status, districtId, category, activatedAt desc` ва `status, category, activatedAt desc`.
+  /// Индекс ҳали йўқ ёки тармоқ хатоси бўлса — бўш рўйхат (таб янгиликлар билан ишлайверади).
+  Future<List<TvClip>> fetchFreshNonNews({
+    String districtId = '',
+    String regionId = '',
+    int perQuery = 40,
+    DateTime? now,
+  }) async {
+    final cutoff = Timestamp.fromDate((now ?? DateTime.now()).subtract(kTvNewsWindow));
+    Future<List<TvClip>> run(Query<Map<String, dynamic>> q, int n) async {
+      final snap = await q
+          .where('category', whereIn: kTvFreshCategories)
+          .where('activatedAt', isGreaterThanOrEqualTo: cutoff)
+          .orderBy('activatedAt', descending: true)
+          .limit(n)
+          .get();
+      return _playable(snap.docs);
+    }
+
+    try {
+      final active = _col.where('status', isEqualTo: 'active');
+      if (districtId.isNotEmpty) {
+        return await run(active.where('districtId', isEqualTo: districtId), perQuery);
+      }
+      if (regionId.isNotEmpty) {
+        final districts = await ServiceConfigRepository().fetchDistricts(regionId);
+        final lists = await Future.wait([
+          for (final d in districts) run(active.where('districtId', isEqualTo: d.id), perQuery),
+        ]);
+        return [for (final l in lists) ...l];
+      }
+      return await run(active, perQuery);
+    } catch (e) {
+      return const [];
+    }
   }
 
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).

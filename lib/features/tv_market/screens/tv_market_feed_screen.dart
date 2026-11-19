@@ -38,6 +38,7 @@ import '../services/tv_playback_analytics_recorder.dart';
 import '../services/tv_screen_playback.dart';
 import '../services/tv_segment_prefetcher.dart';
 import '../utils/tv_news_unread.dart';
+import '../utils/tv_news_window.dart';
 import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_comment_sheet.dart';
@@ -427,22 +428,73 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   /// уни лентада кўрмай, «йўқолди» деб ўйларди. Шунинг учун CDN'дан
   /// ўқилганда ўзининг сўнгги клиплари алоҳида, кичик сўров билан
   /// олиниб, рўйхат бошига қўшилади (1 фойдаланувчи × ≤5 ҳужжат).
-  Future<List<TvClip>> _myFreshClips(List<String>? categories) async {
+  Future<List<TvClip>> _myFreshClips(int tab) async {
     if (_mePhone.isEmpty) return const [];
     try {
       final mine = await _repo.fetchByOwner(_mePhone, limit: 5);
+      final now = DateTime.now();
       return mine.where((c) {
         if (!c.isActive || !c.isPlayable) return false;
         if (_filterDistrictId.isNotEmpty &&
             c.districtId != _filterDistrictId) {
           return false;
         }
-        return categories == null || categories.contains(c.category);
+        // Таб аъзолиги — ягона қоида (эга 2026-11-19, `tv_news_window.dart`).
+        return tvClipInFeedTab(c, tab, now);
       }).toList();
     } catch (e) {
       debugPrint('[TvMarketFeed] my fresh clips: $e');
       return const [];
     }
+  }
+
+  /// Биринчи саҳифани таб қоидасига келтиради (эга 2026-11-19, `tv_news_window.dart`):
+  ///   * «Кун янгиликлари» — CDN ҳовузида янги товар аллақачон бор (сервер қуради), фақат
+  ///     эскирганлари сузилади; Firestore йўлида янги товар/хизмат алоҳида кичик сўров билан
+  ///     қўшилади (ҳудуд қамрови аввалгидек: туман / вилоят / республика).
+  ///   * «AVAGram» — янги товар/хизмат сузилади. Firestore'да буни сўровнинг ўзида қилиб
+  ///     бўлмайди (эски ҳужжатларда `activatedAt` йўқ — тенгсизлик уларни ташлаб юборарди),
+  ///     шунинг учун саҳифа жуда қисқарса яна энг кўпи 3 саҳифа олинади.
+  ///   * «Реклама ва Эълонлар» — ўзгармайди.
+  Future<TvClipBatch> _shapeFirstPage(int tab, TvClipBatch batch) async {
+    final now = DateTime.now();
+    if (tab == kTvTabNews) {
+      if (_feedFromCdn) {
+        return TvClipBatch(
+          clips: tvFilterForFeedTab(batch.clips, tab, now),
+          cursor: batch.cursor,
+          hasMore: batch.hasMore,
+        );
+      }
+      final fresh = await _repo.fetchFreshNonNews(
+        districtId: _filterDistrictId,
+        regionId: _filterDistrictId.isEmpty ? _filterRegionId : '',
+        now: now,
+      );
+      return TvClipBatch(
+        clips: tvMergeNewsTab(batch.clips, fresh, now),
+        cursor: batch.cursor,
+        hasMore: batch.hasMore,
+      );
+    }
+    if (tab != kTvTabAll) return batch;
+    final out = tvFilterForFeedTab(batch.clips, tab, now);
+    var cursor = batch.cursor;
+    var hasMore = batch.hasMore;
+    var extra = 0;
+    while (!_feedFromCdn && hasMore && out.length < 10 && extra < 3 && mounted) {
+      extra++;
+      if (_filterDistrictId.isEmpty && _filterRegionId.isNotEmpty) {
+        _regionPerDistrictLimit += _pageSize;
+      }
+      final more = await _fetchPage(categories: _categoriesForTab(tab), cursor: cursor);
+      cursor = more.cursor;
+      hasMore = more.hasMore;
+      for (final c in tvFilterForFeedTab(more.clips, tab, now)) {
+        if (out.every((e) => e.id != c.id)) out.add(c);
+      }
+    }
+    return TvClipBatch(clips: out, cursor: cursor, hasMore: hasMore);
   }
 
   Future<void> _loadClips() async {
@@ -454,9 +506,14 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     _cdnPage = 1;
     _loadErrorKey = null;
     try {
-      final categories = _categoriesForTab(_tabController.index);
-      final batch = await _fetchPage(categories: categories, cursor: null);
+      final tab = _tabController.index;
+      final categories = _categoriesForTab(tab);
+      var batch = await _fetchPage(categories: categories, cursor: null);
       if (!mounted || gen != _loadGen) return;
+      // Эга 2026-11-19: янги (24 соат, `activatedAt`) товар/хизмат — фақат «Кун янгиликлари»да.
+      final shaped = await _shapeFirstPage(tab, batch);
+      if (!mounted || gen != _loadGen) return;
+      batch = shaped;
       final list = <TvClip>[];
       if (!_firstLoadDone && widget.initialClip != null) {
         list.add(widget.initialClip!);
@@ -468,7 +525,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       // клипинг унда ҳали йўқ. Firestore йўлида бунга ҳожат йўқ:
       // у аллақачон энг сўнгги ҳолатни беради.
       if (_feedFromCdn) {
-        final mine = await _myFreshClips(categories);
+        final mine = await _myFreshClips(tab);
         if (!mounted || gen != _loadGen) return;
         final missing =
             mine.where((m) => list.every((c) => c.id != m.id)).toList();
@@ -525,7 +582,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (_loadingMore || !_hasMore || _clips.isEmpty) return;
     _loadingMore = true;
     try {
-      final categories = _categoriesForTab(_tabController.index);
+      final tab = _tabController.index;
+      final categories = _categoriesForTab(tab);
       var attempts = 0;
       // Вилоят режимида бир уриниш бўш натижа бериши мумкин (ҳамма янги
       // номзодлар аллақачон кўрсатилган бўлса) — шунга яна бир-икки марта
@@ -539,8 +597,12 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         if (!mounted) return;
         _cursor = batch.cursor;
         _hasMore = batch.hasMore;
-        final fresh =
-            batch.clips.where((c) => _clips.every((e) => e.id != c.id)).toList();
+        // Таб қоидаси кейинги саҳифаларда ҳам (эга 2026-11-19): AVAGram'да янги товар йўқ,
+        // «Кун янгиликлари»да эскирган товар йўқ.
+        final now = DateTime.now();
+        final fresh = batch.clips
+            .where((c) => tvClipInFeedTab(c, tab, now) && _clips.every((e) => e.id != c.id))
+            .toList();
         if (fresh.isEmpty) continue;
         setState(() => _clips.addAll(fresh));
         unawaited(_hydratePublisherNames());

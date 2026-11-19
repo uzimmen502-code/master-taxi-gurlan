@@ -12,6 +12,7 @@ TvClip _clip(
   String owner = '998901112233',
   DateTime? createdAt,
   DateTime? expiresAt,
+  DateTime? activatedAt,
   String processingStatus = '',
 }) =>
     TvClip.fromMap(id, {
@@ -24,6 +25,7 @@ TvClip _clip(
       'districtId': 'gurlan',
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt),
       if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt),
+      if (activatedAt != null) 'activatedAt': Timestamp.fromDate(activatedAt),
       if (processingStatus.isNotEmpty) 'processingStatus': processingStatus,
     });
 
@@ -55,6 +57,26 @@ void main() {
         now: now,
       );
       expect(r!.isAtSameMomentAs(ago(7)), isTrue, reason: 'фақат «ok» кўринади');
+    });
+
+    test('эга 2026-11-19: вақт = activatedAt (модерациядан кейин чиққан янгилик янги ҳисобланади)', () {
+      final r = newestVisibleNewsAt(
+        [_clip('late', createdAt: ago(20), activatedAt: ago(1)), _clip('b', createdAt: ago(3))],
+        mePhone: '',
+        now: now,
+      );
+      expect(r!.isAtSameMomentAs(ago(1)), isTrue);
+    });
+
+    test('эга 2026-11-19: activatedAt дан 24 соат — эски клиент expiresAt и ўтган бўлса ҳам 23 соатда кўринади, 24 да йўқ', () {
+      final a = _clip('a', createdAt: ago(30), expiresAt: ago(6), activatedAt: ago(23));
+      final b = _clip('b', createdAt: ago(30), activatedAt: ago(24));
+      expect(newestVisibleNewsAt([a], mePhone: '', now: now)!.isAtSameMomentAs(ago(23)), isTrue);
+      expect(newestVisibleNewsAt([b], mePhone: '', now: now), isNull);
+    });
+
+    test('янги товар (news эмас) нуқтани ёқмайди', () {
+      expect(newestVisibleNewsAt([_clip('p', category: 'product', activatedAt: ago(1))], mePhone: '', now: now), isNull);
     });
 
     test('createdAt йўқ ёки рўйхат бўш — null', () {

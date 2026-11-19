@@ -945,7 +945,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         ownerName: ownerDisplay,
         category: _category,
         expiresAt:
-            isNews ? DateTime.now().add(const Duration(hours: 48)) : null,
+            isNews ? DateTime.now().add(const Duration(hours: 24)) : null,
         description: description,
         status: autoApprove ? 'active' : 'pending',
         showPhone: _showPhone,

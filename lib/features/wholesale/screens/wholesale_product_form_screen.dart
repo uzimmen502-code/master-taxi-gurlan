@@ -116,8 +116,8 @@ class _WholesaleProductFormScreenState
     );
     _currency = e?.currency.trim() ?? '';
     if (e != null) {
-      // Эски (қадоқсиз) маҳсулот — битта номсиз қадоқ: поғоналар МОҚ
-      // чегарасига қараб энг мос майдонга тушади (1..9 / 10..49 / 50+).
+      // Эски (қадоқсиз) маҳсулот — битта номсиз қадоқ: биринчи поғона — нарх майдонига,
+      // қолган поғоналар ўзгаришсиз сақланади (WholesalePackDraft.extraTiers).
       _packs.addAll(e.effectivePacks.map(WholesalePackDraft.fromPack));
       _existingImageUrls.addAll(e.imageUrls);
       _loadStock(e);
@@ -485,24 +485,26 @@ class _WholesaleProductFormScreenState
                   ? context.tr('wholesale_min_3_chars')
                   : null,
             ),
+            const SizedBox(height: 12),
+            // Бирлик — нархдан ОЛДИН (эга, 2026-11-19, B): нарх ва минимал буюртма ёрлиқлари
+            // («Нарх, сўм (1 қоп)») шу бирликка эргашади — сотувчи аввал бирликни танлайди.
+            TextFormField(
+              controller: _unitCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: context.tr('wholesale_field_unit'),
+                hintText: context.tr('piece'),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
             if (_isChina) ...[
               const SizedBox(height: 16),
               _chinaSection(),
             ],
             const SizedBox(height: 16),
             KeyedSubtree(key: _tiersKey, child: _packsSection()),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _unitCtrl,
-              // Поғона ёрлиқлари («1–9 дона» ва ҳ.к.) шу бирликка эргашади.
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: context.tr('wholesale_field_unit'),
-                hintText: context.tr('piece'),
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving ? null : _save,
               child: _saving

@@ -56,7 +56,14 @@ class WholesaleProduct implements AdSearchable {
     this.districtId = '',
     this.packs = const [],
     this.minOrderQty,
+    this.sku = '',
+    this.importBatchId = '',
   });
+
+  /// Excel юклашда (эга, 2026-11-19) сотувчи артикули ва юклаш ID'си — ФАҚАТ сервер ёзади
+  /// (`functions/wholesale_import.js`); қўлда қўшилган товарда бўш. Клиент ёзмайди.
+  final String sku;
+  final String importBatchId;
 
   /// Сотувчи ёзган минимал буюртма (эга, 2026-11-13) — фақат қадоқсиз
   /// маҳсулотда (қадоқлида ҳар қадоқнинг ўзида, [WholesalePack.minOrderQty]).
@@ -281,6 +288,8 @@ class WholesaleProduct implements AdSearchable {
           : '',
       packs: WholesalePack.parseList(d['packs']),
       minOrderQty: validMinOrderQty(d['minOrderQty']),
+      sku: d['sku'] is String ? (d['sku'] as String).trim() : '',
+      importBatchId: d['importBatchId'] is String ? d['importBatchId'] as String : '',
     );
   }
 

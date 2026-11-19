@@ -38,6 +38,7 @@ import '../widgets/wholesale_stream_builder.dart';
 import '../utils/wholesale_store.dart';
 import '../widgets/wholesale_sellers_list.dart';
 import 'wholesale_product_detail_screen.dart';
+import 'wholesale_import_screen.dart';
 import 'wholesale_product_form_screen.dart';
 import 'wholesale_seller_products_screen.dart';
 import '../wholesale_celebrations.dart';
@@ -841,6 +842,21 @@ class _MyProductsView extends StatelessWidget {
               ),
               trailing: const Icon(Icons.edit_outlined),
               onTap: () => _editChinaType(context),
+            ),
+          // Excel орқали оммавий юклаш (эга, 2026-11-19): фақат манзили бор тасдиқланган сотувчи
+          // (сервер ҳам текширади: SELLER_NOT_APPROVED / SHIP_FROM_REQUIRED).
+          if (seller.hasShipFrom)
+            ListTile(
+              key: const ValueKey('wholesale-import-row'),
+              dense: true,
+              leading: const Icon(Icons.table_chart_outlined),
+              title: Text(context.tr('wsimp_entry')),
+              subtitle: Text(context.tr('wsimp_entry_sub')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => WholesaleImportScreen(market: market)),
+              ),
             ),
           Expanded(
             // StatefulBuilder: «Қайта уриниш» шу ерни қайта қуради ва янги stream олинади.

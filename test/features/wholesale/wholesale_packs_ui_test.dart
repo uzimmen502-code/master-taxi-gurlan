@@ -80,9 +80,13 @@ void main() {
     test('нарх, вазн, қолдиқ текшируви (мусбат + манфий + чегара)', () {
       final d = WholesalePackDraft(id: 'p1');
       expect(d.collectTiers(), isEmpty);
-      d.prices[0].text = '15000';
-      d.prices[2].text = '13000';
-      expect(d.collectTiers().map((t) => t.minQty), [1, 50]);
+      d.price.text = '0';
+      expect(d.collectTiers(), isEmpty, reason: 'нол нарх — хато');
+      d.price.text = 'abc';
+      expect(d.collectTiers(), isEmpty);
+      d.price.text = '15 000';
+      expect(d.collectTiers().map((t) => (t.minQty, t.price)), [(1, 15000)],
+          reason: 'янги товар — битта нарх, minQty 1');
 
       d.weight.text = '1,5';
       expect(d.collectShipping().weightG, 1500);
@@ -99,21 +103,53 @@ void main() {
       d.dispose();
     });
 
-    test('мавжуд қадоқдан: default ID → p1, поғоналар тўғри майдонга', () {
+    test('мавжуд қадоқдан: default ID → p1; эски 3 поғона ЎЗГАРИШСИЗ сақланади', () {
       final legacy = WholesaleProduct.fromMap('y', {
         'sellerId': '998901111111',
         'title': 'Ун',
         'priceTiers': [
-          {'minQty': 1, 'price': 9000},
-          {'minQty': 10, 'price': 8500},
+          {'minQty': 20, 'price': 7000},
+          {'minQty': 5, 'price': 9000},
+          {'minQty': 12, 'price': 8500},
         ],
       }).effectivePacks.single;
       final d = WholesalePackDraft.fromPack(legacy, stock: 40);
       expect(d.id, 'p1');
-      expect(d.prices[0].text, '9000');
-      expect(d.prices[1].text, '8500');
+      expect(d.price.text, '9000');
+      expect(d.firstMinQty, 5);
+      expect(d.extraTiers.map((t) => (t.minQty, t.price)), [(12, 8500), (20, 7000)]);
+      // Таҳрирсиз сақлаш — аввалги поғоналар АЙНАН (аввалги форма 5/12/20 ни 1/10 га сиқарди).
+      expect(d.collectTiers().map((t) => (t.minQty, t.price)), [(5, 9000), (12, 8500), (20, 7000)]);
+      d.price.text = '9500';
+      expect(d.collectTiers().first.price, 9500);
+      d.extraTiers = const [];
+      expect(d.collectTiers().map((t) => (t.minQty, t.price)), [(5, 9500)]);
+      expect(effectiveMoq(d.collectTiers(), null), 5, reason: 'МОҚ қоидаси ўзгармаган');
       expect(d.label.text, isEmpty);
       expect(d.stock.text, '40');
+      d.dispose();
+    });
+
+    testWidgets('карточка: битта нарх майдони; эски поғоналар изоҳи + «Олиб ташлаш»', (tester) async {
+      final d = WholesalePackDraft.fromPack(_product().packById('p2'));
+      await tester.pumpWidget(_host(StatefulBuilder(
+        builder: (context, setState) => WholesalePackCard(
+          draft: d,
+          index: 0,
+          unitLabel: 'қоп',
+          currencyLabel: 'сўм',
+          showLabel: true,
+          onChanged: () => setState(() {}),
+          onPickPhoto: () {},
+        ),
+      )));
+      expect(find.byKey(const ValueKey('wholesale-pack-price-p2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('wholesale-pack-price-p2-1')), findsNothing, reason: '3 майдон йўқ');
+      expect(find.byKey(const ValueKey('wholesale-pack-extra-tiers-p2')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('wholesale-pack-extra-tiers-remove-p2')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('wholesale-pack-extra-tiers-p2')), findsNothing);
+      expect(d.collectTiers().length, 1);
       d.dispose();
     });
   });

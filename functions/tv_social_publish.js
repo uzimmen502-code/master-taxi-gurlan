@@ -14,6 +14,7 @@
  * йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
  */
 const axios = require('axios');
+const { stampTvClipActivation } = require('./tv_clip_activation');
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
@@ -531,6 +532,13 @@ function attachTvSocialPublish(exports, deps) {
         const after = change.after.data() || {};
         const before = change.before.exists ? (change.before.data() || {}) : {};
         const becameActive = after.status === 'active' && before.status !== 'active';
+        // Эга қарори 2026-11-19: «Кун янгиликлари» 24 соати ФАОЛЛАШУВДАН
+        // (модерация тасдиғи ёки авто-тасдиқ) — сервер вақти шу ерда
+        // ёзилади (алоҳида триггер эмас: шу ўтиш аллақачон шу ерда
+        // ушланади). Ижтимоий жойлашдан АВВАЛ ва ундан мустақил.
+        if (becameActive) {
+          await stampTvClipActivation({ db, admin }, change.after);
+        }
         const retryAfter = Number(after.socialRetryAt || 0);
         const retryBefore = Number(before.socialRetryAt || 0);
         const retryBump = retryAfter !== retryBefore && retryAfter > 0;

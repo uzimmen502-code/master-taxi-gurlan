@@ -15,6 +15,8 @@
     "test:tv-clip-output": "node test/tv_clip_output.test.js",
     "test:tv-clip-moderation": "node test/tv_clip_moderation.test.js",
     "test:tv-feed": "node test/tv_feed.test.js",
+    "test:tv-news-window": "node test/tv_news_window.test.js",
+    "test:tv-activation-cf": "firebase emulators:exec --only firestore --project demo-tv-activation \"node test/tv_clip_activation_cf.test.js\"",
     "test:yuk-cf": "node test/yuk_cf.test.js",
     "test:ev-charging": "node test/ev_charging_rules.test.js",
     "test:ev-charging-paid": "node test/ev_charging_paid.test.js",

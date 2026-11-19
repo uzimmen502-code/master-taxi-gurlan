@@ -14687,7 +14687,8 @@ exports.deleteHlsSpike = functions.https.onCall(async (data, context) => {
 //
 // Иккита чақирувчи бор ва иккиси ҳам шу ягона йўлдан ўтади:
 //   `onTvClipDeleted`  — ҳужжат ўчирилганда (эга ўчирди, админ ўчирди)
-//   `expireTvContent`  — «Кун янгиликлари» 48 соатда тугаганда
+//   `expireTvContent`  — «Кун янгиликлари» 24 соатда тугаганда
+//                        (эга 2026-11-19; аввал 48, фаоллашувдан ҳисоб)
 //
 // Реклама (`category == 'ad'`) муддати тугаганда файллари АТАЙИН
 // сақланади (кейинчалик қайта фаоллаштириш эҳтимоли) — бу қарор
@@ -14778,11 +14779,10 @@ exports.buildTvFeedJson = functions
     let removed = 0;
 
     for (const [districtId, items] of byDistrict) {
-      for (const [tab, categories] of Object.entries(tvFeed.FEED_TABS)) {
-        const picked = items
-            .filter((x) => tvFeed.clipMatchesTab(x.data, categories))
-            .map((x) => tvFeed.clipToFeedJson(x.id, x.data))
-            .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+      for (const tab of Object.keys(tvFeed.FEED_TABS)) {
+        // Эга 2026-11-19: янги (24 соат, `activatedAt`) товар/хизмат —
+        // фақат `news` ҳовузида; `all`да йўқ; `market` ўзгармаган.
+        const picked = tvFeed.clipsForFeedTab(items, tab, builtAtMs);
 
         const pages = tvFeed.buildFeedPages(picked, {
           districtId, tab, builtAtMs,
@@ -14921,12 +14921,20 @@ exports.expireTvContent = functions
   .pubsub
   .schedule('every 15 minutes')
   .onRun(async () => {
+    // Эга қарори 2026-11-19: «Кун янгиликлари» 24 соат (аввал 48) ва
+    // ФАОЛЛАШУВДАН (`activatedAt`, модерация/авто-тасдиқ) ҳисобланади.
+    // `activatedAt >= createdAt` бўлгани учун `createdAt < cutoff` сўрови
+    // тугаганларнинг ҳаммасини қамрайди (мавжуд индекс, янгиси керак
+    // эмас); модерацияда узоқ турган, яқинда тасдиқланган янгилик эса
+    // хотирада `isNewsExpired` билан қолдирилади. Эски ҳужжат
+    // (`activatedAt` йўқ) — `createdAt` бўйича.
+    const {isNewsExpired, TV_NEWS_WINDOW_MS} = require('./tv_news_window');
     const now = admin.firestore.Timestamp.now();
     const newsCutoff = admin.firestore.Timestamp.fromMillis(
-      now.toMillis() - 48 * 60 * 60 * 1000,
+      now.toMillis() - TV_NEWS_WINDOW_MS,
     );
 
-    const [expiredNewsSnap, expiredAdsSnap] = await Promise.all([
+    const [newsCandidatesSnap, expiredAdsSnap] = await Promise.all([
       db.collection('tv_clips')
         .where('category', '==', 'news')
         .where('status', '==', 'active')
@@ -14940,6 +14948,9 @@ exports.expireTvContent = functions
         .limit(200)
         .get(),
     ]);
+    const nowMs = now.toMillis();
+    const expiredNewsDocs = newsCandidatesSnap.docs.filter((doc) =>
+      isNewsExpired(doc.data() || {}, nowMs));
 
     let batch = db.batch();
     let writes = 0;
@@ -14950,7 +14961,7 @@ exports.expireTvContent = functions
       writes = 0;
     }
 
-    for (const doc of expiredNewsSnap.docs) {
+    for (const doc of expiredNewsDocs) {
       batch.update(doc.ref, {
         status: 'expired',
         expiredAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -14968,11 +14979,12 @@ exports.expireTvContent = functions
     }
     await flush();
 
-    await Promise.all(expiredNewsSnap.docs.map((doc) =>
+    await Promise.all(expiredNewsDocs.map((doc) =>
       deleteTvClipMedia(doc.id, doc.data() || {})));
 
     console.log(
-      `expireTvContent: news=${expiredNewsSnap.size} ads=${expiredAdsSnap.size}`,
+      `expireTvContent: news=${expiredNewsDocs.length}` +
+      ` (nomzod=${newsCandidatesSnap.size}) ads=${expiredAdsSnap.size}`,
     );
   });
 

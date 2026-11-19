@@ -17,6 +17,8 @@
  */
 'use strict';
 
+const {timeMillis, clipInFeedTab} = require('./tv_news_window');
+
 /** JSON схемаси версияси — йўлга киради, бузувчи ўзгаришда ошади. */
 const FEED_VERSION = 'v1';
 
@@ -30,6 +32,9 @@ const FEED_MAX_CLIPS = 200;
  * Таб → категориялар. Клиентдаги `_categoriesForTab` нинг жуфти
  * (`lib/features/tv_market/screens/tv_market_feed_screen.dart`).
  * `null` — фильтрсиз (AVAGram, ҳамма категория).
+ * Ҳовуз ҚУРИШДА эса [clipsForFeedTab] ишлатилади (эга 2026-11-19: янги
+ * товар/хизмат 24 соат `news`да, `all`да эмас) — бу рўйхат фақат
+ * категория қисми.
  */
 const FEED_TABS = {
   all: null,
@@ -92,7 +97,32 @@ function clipToFeedJson(id, data) {
   } else if (t instanceof Date) {
     out.createdAtMs = t.getTime();
   }
+  // Фаоллашув вақти (эга 2026-11-19): клиент CDN саҳифаси эскирган
+  // бўлса ҳам 24 соат чегарасини ўзи қайта текширади.
+  const act = timeMillis(d.activatedAt);
+  if (act !== null) out.activatedAtMs = act;
   return out;
+}
+
+/**
+ * Битта туман клипларидан шу таб ҳовузини танлайди ва тартиблайди.
+ *
+ * Эга қарори 2026-11-19 (`tv_news_window.js`): янги товар/хизмат (24
+ * соат, фаоллашувдан) `all`да йўқ, `news`да бор; `market` ўзгармаган.
+ * Тартиб: `news` — чиққан вақт (`activatedAt ?? createdAt`), қолганлари
+ * аввалгидек `createdAt` бўйича, янгиси биринчи.
+ * @param {Array<{id: string, data: object}>} items клиплар.
+ * @param {string} tab [FEED_TABS] калити.
+ * @param {number} nowMs қурилиш вақти.
+ * @return {Array<object>} лента JSON объектлари.
+ */
+function clipsForFeedTab(items, tab, nowMs) {
+  const key = (x) => (tab === 'news' ?
+      (x.activatedAtMs || x.createdAtMs || 0) : (x.createdAtMs || 0));
+  return (items || [])
+      .filter((x) => clipInFeedTab(x.data, tab, nowMs))
+      .map((x) => clipToFeedJson(x.id, x.data))
+      .sort((a, b) => key(b) - key(a));
 }
 
 /**
@@ -157,4 +187,5 @@ module.exports = {
   clipMatchesTab,
   isFeedPlayable,
   buildFeedPages,
+  clipsForFeedTab,
 };

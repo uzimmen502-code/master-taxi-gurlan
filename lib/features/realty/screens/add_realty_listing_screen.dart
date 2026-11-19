@@ -46,7 +46,11 @@ class AddRealtyListingScreen extends StatefulWidget {
     super.key,
     this.existing,
     this.copyFrom,
+    this.repository,
   });
+
+  /// Тест учун (бўлмаса [RealtyRepository]).
+  final RealtyRepository? repository;
 
   /// Бўш бўлмаса — таҳрирлаш режими.
   final RealtyListing? existing;
@@ -62,12 +66,14 @@ class AddRealtyListingScreen extends StatefulWidget {
 }
 
 class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
-  static const int _maxImages = 5;
+  /// Эга 2026-11-19: 5 → 10 (сервер `MAX_IMAGES` билан бир хил).
+  static const int _maxImages = RealtyFieldOptions.maxImages;
 
   bool get _isEdit => widget.existing != null;
 
-  final _repo = RealtyRepository();
-  final _storage = AdsStorageService();
+  late final RealtyRepository _repo = widget.repository ?? RealtyRepository();
+  // Ленив: фақат юборишда керак (тестда Firebase'сиз очилсин).
+  late final AdsStorageService _storage = AdsStorageService();
 
   final _titleCtrl = TextEditingController();
   final _textCtrl = TextEditingController();
@@ -80,6 +86,25 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
   final _totalFloorsCtrl = TextEditingController();
   final _areaCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+
+  // ─── Қўшимча майдонлар (эга 2026-11-19) — ҳаммаси ихтиёрий ───
+  String? _type;
+  final _sotixCtrl = TextEditingController();
+  final _yearCtrl = TextEditingController();
+  final _depositCtrl = TextEditingController();
+  String? _renovation;
+  String? _buildingType;
+  String? _documents;
+  String? _bathroom;
+  String? _rentPeriod;
+  final Set<String> _utilities = {};
+  bool _furnished = false;
+  bool _balcony = false;
+  bool _parking = false;
+  bool _negotiable = false;
+  bool _mortgage = false;
+  bool _barter = false;
+  String _currency = 'UZS';
 
   RealtyDeal _deal = RealtyDeal.sale;
   RealtyTier _tier = RealtyTier.plain;
@@ -169,10 +194,60 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     return n == null || n <= 0 ? null : n;
   }
 
+  bool get _isLand => RealtyFieldOptions.isLand(_type);
+  bool get _showSotix => _type != null && RealtyFieldOptions.hasSotix(_type);
+
+  num? get _sotix => num.tryParse(_sotixCtrl.text.trim().replaceAll(',', '.'));
+  int? get _year => int.tryParse(_yearCtrl.text.trim());
+  int? get _deposit {
+    final n = int.tryParse(_depositCtrl.text.replaceAll(RegExp(r'\D'), ''));
+    return n == null || n <= 0 ? null : n;
+  }
+
+  /// Ёзилган, лекин чегарадан ташқари қиймат (бўш — хато эмас).
+  bool get _sotixBad {
+    if (!_showSotix || _sotixCtrl.text.trim().isEmpty) return false;
+    final v = _sotix;
+    return v == null ||
+        v < RealtyFieldOptions.landSotixMin ||
+        v > RealtyFieldOptions.landSotixMax;
+  }
+
+  bool get _yearBad {
+    if (_isLand || _yearCtrl.text.trim().isEmpty) return false;
+    final v = _year;
+    return v == null ||
+        v < RealtyFieldOptions.yearMin ||
+        v > RealtyFieldOptions.yearMax;
+  }
+
+  /// Серверга кетадиган қўшимча майдонлар (ҳамма калит; `null` — тозалаш).
+  Map<String, Object?> get _extrasPayload => RealtyExtras(
+        propertyType: _type,
+        landSotix: _showSotix ? _sotix : null,
+        renovation: _renovation,
+        buildingType: _buildingType,
+        yearBuilt: _year,
+        utilities: RealtyFieldOptions.utilities.where(_utilities.contains).toList(),
+        documents: _documents,
+        furnished: _furnished,
+        bathroom: _bathroom,
+        balcony: _balcony,
+        parking: _parking,
+        priceCurrency: _currency,
+        rentPeriod: _rentPeriod,
+        deposit: _deposit,
+        negotiable: _negotiable,
+        mortgage: _mortgage,
+        barter: _barter,
+      ).toPayload(deal: _deal, hasPriceAmount: _priceAmount != null);
+
   bool get _canSubmit =>
       !_submitting &&
       _point != null &&
       _addressOk &&
+      !_sotixBad &&
+      !_yearBad &&
       _titleCtrl.text.trim().length >= 3 &&
       _textCtrl.text.trim().length >= 3;
 
@@ -199,8 +274,29 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     _textCtrl.text = source.text;
     _addressCtrl.text = source.addressText;
     _totalFloorsCtrl.text = source.totalFloors?.toString() ?? '';
+    // Уйнинг ўзига тегишли қўшимчалар нусхада ҳам қолади (тур, бино,
+    // йил, коммуникация, ҳужжат, парковка); таъмир/мебел/нарх — йўқ.
+    final x = source.extras;
+    _type = x.propertyType;
+    _buildingType = x.buildingType;
+    _yearCtrl.text = x.yearBuilt?.toString() ?? '';
+    _utilities.addAll(x.utilities);
+    _documents = x.documents;
+    _parking = x.parking;
+    _sotixCtrl.text =
+        x.landSotix == null ? '' : x.landSotix!.toString().replaceAll(RegExp(r'\.0$'), '');
 
     if (widget.existing != null) {
+      _renovation = x.renovation;
+      _bathroom = x.bathroom;
+      _furnished = x.furnished;
+      _balcony = x.balcony;
+      _currency = x.priceCurrency;
+      _rentPeriod = x.rentPeriod;
+      _depositCtrl.text = x.deposit?.toString() ?? '';
+      _negotiable = x.negotiable;
+      _mortgage = x.mortgage;
+      _barter = x.barter;
       // Таҳрир — ҳаммаси ўз ҳолича.
       _tier = source.tier;
       _priceCtrl.text = source.priceText;
@@ -326,6 +422,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         _floorCtrl.text = (d['floor'] ?? '') as String;
         _totalFloorsCtrl.text = (d['totalFloors'] ?? '') as String;
         _areaCtrl.text = (d['area'] ?? '') as String;
+        final type = d['type'];
+        _type = RealtyFieldOptions.propertyTypes.contains(type) ? type as String : null;
+        _sotixCtrl.text = (d['sotix'] ?? '') as String;
         final lat = (d['lat'] as num?)?.toDouble();
         final lng = (d['lng'] as num?)?.toDouble();
         if (lat != null && lng != null) {
@@ -360,6 +459,8 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         'floor': _floorCtrl.text,
         'totalFloors': _totalFloorsCtrl.text,
         'area': _areaCtrl.text,
+        if (_type != null) 'type': _type,
+        'sotix': _sotixCtrl.text,
         if (_point != null) 'lat': _point!.lat,
         if (_point != null) 'lng': _point!.lng,
         if (_point != null) 'pointLabel': _point!.label,
@@ -419,6 +520,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     _totalFloorsCtrl.dispose();
     _areaCtrl.dispose();
     _addressCtrl.dispose();
+    _sotixCtrl.dispose();
+    _yearCtrl.dispose();
+    _depositCtrl.dispose();
     super.dispose();
   }
 
@@ -568,12 +672,15 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               priceText: _priceCtrl.text,
               priceAmount: _priceAmount,
               addressText: _addressCtrl.text,
-              rooms: int.tryParse(_roomsCtrl.text.trim()),
-              floor: int.tryParse(_floorCtrl.text.trim()),
-              totalFloors: int.tryParse(_totalFloorsCtrl.text.trim()),
+              // Ер участкасида хона/қават йўқ (сервер ҳам тозалайди).
+              rooms: _isLand ? null : int.tryParse(_roomsCtrl.text.trim()),
+              floor: _isLand ? null : int.tryParse(_floorCtrl.text.trim()),
+              totalFloors:
+                  _isLand ? null : int.tryParse(_totalFloorsCtrl.text.trim()),
               areaM2: num.tryParse(_areaCtrl.text.trim().replaceAll(',', '.')),
               imageUrls: images,
               districtId: _district.districtId,
+              extras: _extrasPayload,
               // Бир форма сеанси — бир калит: жавоб йўқолиб қайта
               // уринилса сервер иккинчи эълон яратмайди ва ўрин емайди.
               idempotencyKey: _keys.keyFor(_submitScope),
@@ -589,12 +696,15 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               priceText: _priceCtrl.text,
               priceAmount: _priceAmount,
               addressText: _addressCtrl.text,
-              rooms: int.tryParse(_roomsCtrl.text.trim()),
-              floor: int.tryParse(_floorCtrl.text.trim()),
-              totalFloors: int.tryParse(_totalFloorsCtrl.text.trim()),
+              // Ер участкасида хона/қават йўқ (сервер ҳам тозалайди).
+              rooms: _isLand ? null : int.tryParse(_roomsCtrl.text.trim()),
+              floor: _isLand ? null : int.tryParse(_floorCtrl.text.trim()),
+              totalFloors:
+                  _isLand ? null : int.tryParse(_totalFloorsCtrl.text.trim()),
               areaM2: num.tryParse(_areaCtrl.text.trim().replaceAll(',', '.')),
               imageUrls: images,
               districtId: _district.districtId,
+              extras: _extrasPayload,
             );
       // Эга олиб ташлаган эски расмлар Storage'да қолиб кетмасин.
       final removed = existing == null
@@ -694,6 +804,16 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             ),
             const SizedBox(height: 16),
 
+            // ─── Объект тури (эга 2026-11-19) — ихтиёрий, битимдан кейин ───
+            _label(context, 'realty_field_property_type'),
+            _choiceWrap(
+              RealtyFieldOptions.propertyTypes,
+              'type',
+              _type,
+              (v) => _type = v,
+            ),
+            const SizedBox(height: 16),
+
             // ─── Даража — ЎҚИШ учун ───
             // Аввал бу ерда учта тугма бор эди, лекин фақат ОДДИЙ
             // фаол бўлиб, у аллақачон танланган турар эди: яъни
@@ -765,36 +885,97 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             const SizedBox(height: 10),
             _field(_priceCtrl, 'realty_field_price', maxLength: 80),
             const SizedBox(height: 10),
-            _field(
-              _priceAmountCtrl,
-              'realty_field_price_amount',
-              numeric: true,
-              maxLength: 13,
-              helper: context.tr(_deal == RealtyDeal.rent
-                  ? 'realty_field_price_amount_hint_rent'
-                  : 'realty_field_price_amount_hint_sale'),
-            ),
-            const SizedBox(height: 10),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: _field(_roomsCtrl, 'realty_field_rooms',
-                      numeric: true, maxLength: 2),
+                  child: _field(
+                    _priceAmountCtrl,
+                    'realty_field_price_amount',
+                    numeric: true,
+                    maxLength: 13,
+                    helper: context.tr(_deal == RealtyDeal.rent
+                        ? 'realty_field_price_amount_hint_rent'
+                        : 'realty_field_price_amount_hint_sale'),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: _field(_floorCtrl, 'realty_field_floor',
-                      numeric: true, maxLength: 3),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _field(_totalFloorsCtrl, 'realty_field_total_floors',
-                      numeric: true, maxLength: 3),
-                ),
+                // Валюта (эга 2026-11-19): сукут — сўм; эски эълонлар ҳам сўм.
+                for (final cur in RealtyFieldOptions.currencies) ...[
+                  SizedBox(
+                    width: 52,
+                    child: RealtyChoice(
+                      key: ValueKey('realty_currency_$cur'),
+                      label: context.tr('realty_currency_${cur.toLowerCase()}'),
+                      selected: _currency == cur,
+                      onTap: () => setState(() => _currency = cur),
+                    ),
+                  ),
+                  if (cur != RealtyFieldOptions.currencies.last)
+                    const SizedBox(width: 6),
+                ],
               ],
             ),
+            if (_deal == RealtyDeal.rent) ...[
+              const SizedBox(height: 10),
+              _label(context, 'realty_field_rent_period'),
+              _choiceWrap(
+                RealtyFieldOptions.rentPeriods,
+                'rent',
+                _rentPeriod,
+                (v) => _rentPeriod = v,
+              ),
+              const SizedBox(height: 10),
+              _field(_depositCtrl, 'realty_field_deposit',
+                  numeric: true, maxLength: 13),
+            ],
             const SizedBox(height: 10),
-            _field(_areaCtrl, 'realty_field_area', numeric: true, maxLength: 7),
+            // Ер участкасида хона ва қават маъносиз — яширилади.
+            if (!_isLand) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: _field(_roomsCtrl, 'realty_field_rooms',
+                        numeric: true, maxLength: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _field(_floorCtrl, 'realty_field_floor',
+                        numeric: true, maxLength: 3),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _field(_totalFloorsCtrl, 'realty_field_total_floors',
+                        numeric: true, maxLength: 3),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _field(_areaCtrl, 'realty_field_area',
+                      numeric: true, maxLength: 7),
+                ),
+                // Сотих — ҳовли ва ер учун.
+                if (_showSotix) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _field(
+                      _sotixCtrl,
+                      'realty_field_land_sotix',
+                      numeric: true,
+                      maxLength: 8,
+                      showError: _sotixBad,
+                      errorKey: 'realty_error_sotix',
+                      fieldKey: const ValueKey('realty_field_land_sotix'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: 10),
             _field(
               _addressCtrl,
@@ -805,10 +986,25 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               // таҳрирда эса эски (манзилсиз) эълон дарҳол кўрсатилади.
               showError: !_addressOk && (_isEdit || _addressCtrl.text.isNotEmpty),
               helper: context.tr('realty_field_address_hint'),
+              fieldKey: const ValueKey('realty_field_address'),
             ),
+            const SizedBox(height: 12),
+
+            _moreInfo(context),
             const SizedBox(height: 16),
 
-            _label(context, 'realty_field_photos'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${context.tr('realty_field_photos')} ($_imageCount/$_maxImages)',
+                key: const ValueKey('realty_photos_label'),
+                style: TextStyle(
+                  fontSize: AppText.labelLarge,
+                  fontWeight: FontWeight.w700,
+                  color: c.ink2,
+                ),
+              ),
+            ),
             _PhotoStrip(
               photos: _photos,
               onAdd: (_submitting || _imageCount >= _maxImages)
@@ -928,6 +1124,170 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     );
   }
 
+  /// Битта танлов чиплари (қайта босилса — бекор). Матн калити:
+  /// `realty_<prefix>_<value>`.
+  Widget _choiceWrap(
+    List<String> values,
+    String prefix,
+    String? selected,
+    void Function(String? v) assign,
+  ) {
+    final c = context.ava;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final v in values)
+          ChoiceChip(
+            key: ValueKey('realty_${prefix}_$v'),
+            label: Text(context.tr('realty_${prefix}_$v')),
+            selected: selected == v,
+            onSelected: _submitting
+                ? null
+                : (on) => setState(() => assign(on ? v : null)),
+            showCheckmark: false,
+            selectedColor: _tierColor,
+            backgroundColor: c.surface,
+            side: BorderSide(color: selected == v ? _tierColor : c.line),
+            labelStyle: TextStyle(
+              fontSize: AppText.bodySmall,
+              fontWeight: FontWeight.w600,
+              color: selected == v ? Colors.white : c.ink2,
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+      ],
+    );
+  }
+
+  /// Бир нечта белги (коммуникациялар, қулайликлар, шартлар).
+  Widget _flagChip(String labelKey, bool value, ValueChanged<bool> onChanged) {
+    final c = context.ava;
+    return FilterChip(
+      key: ValueKey(labelKey),
+      label: Text(context.tr(labelKey)),
+      selected: value,
+      onSelected: _submitting ? null : (on) => setState(() => onChanged(on)),
+      showCheckmark: true,
+      checkmarkColor: Colors.white,
+      selectedColor: _tierColor,
+      backgroundColor: c.surface,
+      side: BorderSide(color: value ? _tierColor : c.line),
+      labelStyle: TextStyle(
+        fontSize: AppText.bodySmall,
+        fontWeight: FontWeight.w600,
+        color: value ? Colors.white : c.ink2,
+      ),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  /// «Қўшимча маълумотлар» — йиғилган бўлим (CLAUDE §45: асосий форма
+  /// содда қолсин). Ер участкасида таъмир/бино/санузел/балкон/мебел/йил
+  /// кўрсатилмайди.
+  Widget _moreInfo(BuildContext context) {
+    final c = context.ava;
+    final land = _isLand;
+    Widget gap() => const SizedBox(height: 12);
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.line),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const ValueKey('realty_more_info'),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          title: Text(
+            context.tr('realty_more_info'),
+            style: TextStyle(
+              fontSize: AppText.labelLarge,
+              fontWeight: FontWeight.w700,
+              color: c.ink2,
+            ),
+          ),
+          subtitle: Text(
+            context.tr('realty_more_info_hint'),
+            style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+          ),
+          children: [
+            if (!land) ...[
+              _label(context, 'realty_field_renovation'),
+              _choiceWrap(RealtyFieldOptions.renovations, 'renovation',
+                  _renovation, (v) => _renovation = v),
+              gap(),
+              _label(context, 'realty_field_building_type'),
+              _choiceWrap(RealtyFieldOptions.buildingTypes, 'building',
+                  _buildingType, (v) => _buildingType = v),
+              gap(),
+              _field(
+                _yearCtrl,
+                'realty_field_year_built',
+                numeric: true,
+                maxLength: 4,
+                showError: _yearBad,
+                errorKey: 'realty_error_year',
+                fieldKey: const ValueKey('realty_field_year_built'),
+              ),
+              gap(),
+              _label(context, 'realty_field_bathroom'),
+              _choiceWrap(RealtyFieldOptions.bathrooms, 'bathroom', _bathroom,
+                  (v) => _bathroom = v),
+              gap(),
+            ],
+            _label(context, 'realty_field_utilities'),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final u in RealtyFieldOptions.utilities)
+                  _flagChip(
+                    'realty_utility_$u',
+                    _utilities.contains(u),
+                    (on) => on ? _utilities.add(u) : _utilities.remove(u),
+                  ),
+              ],
+            ),
+            gap(),
+            _label(context, 'realty_field_documents'),
+            _choiceWrap(RealtyFieldOptions.documents, 'documents', _documents,
+                (v) => _documents = v),
+            gap(),
+            _label(context, 'realty_field_features'),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                if (!land)
+                  _flagChip('realty_flag_furnished', _furnished,
+                      (v) => _furnished = v),
+                if (!land)
+                  _flagChip('realty_flag_balcony', _balcony, (v) => _balcony = v),
+                _flagChip('realty_flag_parking', _parking, (v) => _parking = v),
+              ],
+            ),
+            gap(),
+            _label(context, 'realty_field_terms'),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _flagChip('realty_flag_negotiable', _negotiable,
+                    (v) => _negotiable = v),
+                _flagChip('realty_flag_mortgage', _mortgage, (v) => _mortgage = v),
+                _flagChip('realty_flag_barter', _barter, (v) => _barter = v),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _field(
     TextEditingController ctrl,
     String labelKey, {
@@ -937,10 +1297,13 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     bool required = false,
     bool showError = false,
     String? helper,
+    String errorKey = 'realty_error_address',
+    Key? fieldKey,
   }) {
     final c = context.ava;
     final errColor = RealtyTabs.colorFor(RealtyTier.urgent);
     return TextField(
+      key: fieldKey,
       controller: ctrl,
       maxLines: maxLines,
       maxLength: maxLength,
@@ -958,7 +1321,8 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         helperText: helper,
         helperMaxLines: 2,
         helperStyle: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
-        errorText: showError ? context.tr('realty_error_address') : null,
+        errorText: showError ? context.tr(errorKey) : null,
+        errorMaxLines: 2,
         filled: true,
         fillColor: c.surface,
         counterText: '',

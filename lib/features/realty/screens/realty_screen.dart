@@ -61,6 +61,9 @@ class _RealtyScreenState extends State<RealtyScreen>
   /// null — иккови ҳам (Сотиш ҳам, Ижара ҳам).
   RealtyDeal? _deal;
 
+  /// Объект тури (эга 2026-11-19); null — барчаси. Клиент филтри.
+  String? _type;
+
   /// Ҳудуд (GeoMode.rings): сукут — Республика ҳалқалари; танлов фақат экран очиқ турганда.
   GeoScope _scope = GeoContext.scopeFor('realty');
 
@@ -197,6 +200,11 @@ class _RealtyScreenState extends State<RealtyScreen>
             onChanged: (d) => setState(() => _deal = d),
           ),
           const SizedBox(height: kMarketTopRowGap),
+          RealtyTypeFilter(
+            type: _type,
+            onChanged: (t) => setState(() => _type = t),
+          ),
+          const SizedBox(height: kMarketTopRowGap),
           GeoTierBar(
             compact: true,
             moduleId: 'realty',
@@ -210,9 +218,9 @@ class _RealtyScreenState extends State<RealtyScreen>
               children: [
                 for (final tier in RealtyTabs.order)
                   _TierFeed(
-                    key: ValueKey('${tier.key}_${_deal?.key}_${_scope.key}'),
+                    key: ValueKey('${tier.key}_${_deal?.key}_${_type}_${_scope.key}'),
                     source: _source,
-                    filter: RealtyRingFilter(tier: tier, deal: _deal),
+                    filter: RealtyRingFilter(tier: tier, deal: _deal, propertyType: _type),
                     scope: _scope,
                     onOpen: _openDetail,
                     onScope: (s) => setState(() => _scope = s),

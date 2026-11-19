@@ -48,6 +48,27 @@ String realtyErrorText(BuildContext context, RealtyException e) {
       return context.tr('realty_alert_error_price');
     case 'rooms_invalid':
       return context.tr('realty_alert_error_rooms');
+    // Қўшимча майдонлар (эга 2026-11-19, `functions/realty_fields.js`).
+    case 'year_built_invalid':
+      return context.tr('realty_error_year');
+    case 'land_sotix_invalid':
+      return context.tr('realty_error_sotix');
+    case 'property_type_invalid':
+    case 'renovation_invalid':
+    case 'building_type_invalid':
+    case 'utilities_invalid':
+    case 'documents_invalid':
+    case 'bathroom_invalid':
+    case 'currency_invalid':
+    case 'rent_period_invalid':
+    case 'deposit_invalid':
+    case 'furnished_invalid':
+    case 'balcony_invalid':
+    case 'parking_invalid':
+    case 'negotiable_invalid':
+    case 'mortgage_invalid':
+    case 'barter_invalid':
+      return context.tr('realty_error_field_invalid');
     default:
       return context.tr('realty_error_generic');
   }

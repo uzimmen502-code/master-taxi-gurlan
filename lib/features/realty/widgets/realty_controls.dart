@@ -212,6 +212,62 @@ class RealtyDealFilter extends StatelessWidget {
   }
 }
 
+/// Объект тури филтри (эга 2026-11-19) — ихчам, гоҳ-гоҳ сурилади.
+/// `null` — барча турлар. Филтр клиентда (`RealtyRingFilter.shows`).
+class RealtyTypeFilter extends StatelessWidget {
+  const RealtyTypeFilter({
+    super.key,
+    required this.type,
+    required this.onChanged,
+  });
+
+  final String? type;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    Widget chip(String labelKey, String? value) {
+      final selected = type == value;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          key: ValueKey('realty_type_filter_${value ?? 'all'}'),
+          label: Text(context.tr(labelKey)),
+          selected: selected,
+          onSelected: (_) => onChanged(value),
+          labelStyle: TextStyle(
+            fontSize: AppText.bodySmall,
+            fontWeight: FontWeight.w600,
+            color: selected ? c.brandInk : c.ink2,
+          ),
+          selectedColor: c.brand,
+          backgroundColor: c.chip,
+          side: BorderSide(color: c.line),
+          showCheckmark: false,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      height: 36,
+      color: c.bg,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        children: [
+          chip('realty_type_all', null),
+          for (final t in RealtyFieldOptions.propertyTypes)
+            chip('realty_type_$t', t),
+        ],
+      ),
+    );
+  }
+}
+
 /// Харита легендаси — ранг маъноси ва «нуқталар тахминий» огоҳлантириши.
 class RealtyMapLegend extends StatelessWidget {
   const RealtyMapLegend({super.key});

@@ -132,7 +132,8 @@ class FavoriteRef {
         itemId: r.id,
         title: r.titleOrText,
         photoUrl: r.imageUrls.isEmpty ? '' : r.imageUrls.first,
-        price: (r.priceAmount ?? 0) > 0 ? r.priceAmount : null,
+        // Сараланганларда нарх сўмда кўрсатилади — USD эълонда нарх берилмайди.
+        price: (r.priceAmount ?? 0) > 0 && !r.extras.isUsd ? r.priceAmount : null,
         market: 'realty',
       );
 

@@ -64,12 +64,26 @@ Set<String> farmBusinessIds(Iterable<TvShopItem> items) => {
         if (i.isActive && i.market.trim() == kNearbyAdsFarmMarket && i.businessId.trim().isNotEmpty) i.businessId.trim(),
     };
 
+/// Хусусий сотувчи маҳсулоти ҳам «Яқиндаги эълонлар»га чиқмайдиган бозорлар (эга 2026-11-19).
+const kNearbyAdsPrivateExcludedMarkets = {'meat'};
+
+/// Эга 2026-11-19: хусусий сотувчи (`businessId` бўш) маҳсулоти — ИСТАЛГАН бозорда, жумладан Аралаш
+/// (`market == ''`); фақат [kNearbyAdsPrivateExcludedMarkets] (гўшт) — йўқ.
+bool isNearbyPrivateItem(TvShopItem i) =>
+    i.businessId.trim().isEmpty && !kNearbyAdsPrivateExcludedMarkets.contains(i.market.trim());
+
 /// Маҳсулот «Яқиндаги эълонлар»га тушадими.
 bool showsInNearbyAds(TvShopItem i, Set<String> categories, {Map<String, String?> businessCategories = const {}}) =>
     i.isActive &&
     (categories.contains('${i.market.trim()}.${i.category.trim()}') ||
         isUsedPrivateGadget(i) ||
-        isNearbyFarmItem(i, businessCategories));
+        isNearbyFarmItem(i, businessCategories) ||
+        isNearbyPrivateItem(i));
+
+/// «Яқиндаги эълонлар» маҳсулот қатори: сарлавҳа · нарх (+бирлик) · туман — бўшлари ташланади
+/// (янги сақланган матн йўқ, эга 2026-11-19).
+String nearbyShopRowText({required String title, required String price, required String district}) =>
+    [title.trim(), price.trim(), district.trim()].where((s) => s.isNotEmpty).join(' · ');
 
 /// 0 — фойдаланувчи тумани, 1 — вилояти, 2 — бошқа / номаълум.
 int proximityRank({

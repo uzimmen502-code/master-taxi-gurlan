@@ -24,7 +24,7 @@ const wsPayload = (extra = {}) => ({
   videoClipIds: [], searchTokens: ['traktor'], market: 'wholesale', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...extra,
 });
 const until = (days) => Timestamp.fromMillis(Date.now() + days * DAY);
-const discount = (extra = {}) => ({ kind: 'discount', oldPrice: 12000, until: until(10), requestedAt: serverTimestamp(), ...extra });
+const discount = (extra = {}) => ({ kind: 'discount', percent: 10, until: until(10), requestedAt: serverTimestamp(), ...extra });
 const promo = (extra = {}) => ({ kind: 'promo', until: until(10), requestedAt: serverTimestamp(), ...extra });
 
 async function main() {
@@ -65,11 +65,19 @@ async function main() {
   await check('T5 until in the past — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ until: until(-1) }) })));
   await check('T6 client requestedAt (not server time) — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ requestedAt: Timestamp.now() }) })));
   await check('T7 free text key — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ label: 'MEGA' }) })));
-  await check('T8 discount without oldPrice / float oldPrice — denied', async () => {
+  await check('T8 discount without percent / float / 0 / 91 percent — denied', async () => {
     await assertFails(shop(owner).doc('s1').update({ promoRequest: { kind: 'discount', until: until(5), requestedAt: serverTimestamp() } }));
-    await assertFails(shop(owner).doc('s1').update({ promoRequest: discount({ oldPrice: 12000.5 }) }));
+    for (const pc of [10.5, 0, 91]) await assertFails(shop(owner).doc('s1').update({ promoRequest: discount({ percent: pc }) }));
+    await assertSucceeds(shop(owner).doc('s1').update({ promoRequest: discount({ percent: 90 }) }));
   });
-  await check('T9 promo with oldPrice — denied', () => assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ oldPrice: 100 }) })));
+  await check('T9 promo with percent / legacy oldPrice key — denied', async () => {
+    await assertFails(shop(owner).doc('s1').update({ promoRequest: promo({ percent: 10 }) }));
+    await assertFails(shop(owner).doc('s1').update({ promoRequest: discount({ oldPrice: 100 }) }));
+  });
+  await check('T9b owner edits price directly (active stays active) — ok; cannot write promo price fields', async () => {
+    await assertSucceeds(shop(owner).doc('s1').update({ price: 9000 }));
+    await assertFails(shop(owner).doc('s1').update({ promo: { kind: 'discount', basePrice: 1 } }));
+  });
   await check('T10 owner writes promo (approved badge) — denied', () => assertFails(shop(owner).doc('s1').update({ promo: { kind: 'discount', percent: 90 } })));
   for (const k of ['priceTracked', 'priceSince', 'priceHistory', 'promoState', 'firstActiveAt', 'stockLeft']) {
     await check(`T11 owner writes ${k} — denied`, () => assertFails(shop(owner).doc('s1').update({ [k]: 1 })));
@@ -97,6 +105,9 @@ async function main() {
     await assertFails(ws(owner).add(wsPayload({ promo: { kind: 'promo' } })));
   });
   await check('W6 existing content edit still ok', () => assertSucceeds(ws(owner).doc('w1').update({ title: 'Traktor 2', titleLower: 'traktor 2', status: 'pending', updatedAt: serverTimestamp() })));
+  await check('W6b active: price-only (priceTiers) edit keeps active — ok; title edit keeping active — denied', async () => {
+    await assertSucceeds(ws(owner).doc('w1').update({ priceTiers: [{ minQty: 1, price: 3000 }], updatedAt: serverTimestamp() }));
+  });
   await check('W7 other user — denied', () => assertFails(ws(other).doc('w1').update({ promoRequest: promo() })));
 
   await testEnv.cleanup();

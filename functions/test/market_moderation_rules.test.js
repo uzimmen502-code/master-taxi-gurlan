@@ -106,10 +106,16 @@ async function main() {
   const wcol = () => as(OWNER).collection('wholesale_products');
   await check('W1 active: контент ўзгариши + status ўзгармаса — РАД (ҳар бир контент майдони)', async () => {
     const patches = {
-      title: 'Un 25 kg', description: 'Boshqa tavsif', priceTiers: [{ minQty: 1, price: 90 }], imageUrls: ['https://e.test/b.jpg'],
-      packs: [], minOrderQty: 2, unit: 'kg', deliveryDays: 5, unitWeightG: 1000, unitDims: { l: 1, w: 1, h: 1 }, currency: 'USD',
+      title: 'Un 25 kg', description: 'Boshqa tavsif', imageUrls: ['https://e.test/b.jpg'],
+      minOrderQty: 2, unit: 'kg', deliveryDays: 5, unitWeightG: 1000, unitDims: { l: 1, w: 1, h: 1 }, currency: 'USD',
     };
     for (const [k, v] of Object.entries(patches)) await assertFails(wcol().doc('w_active').update({ [k]: v }));
+  });
+  await check('W1b active: narx-faqat (priceTiers / packs) status o\'zgarmasa - O\'TADI (ega 2026-11-20)', async () => {
+    await seed((db) => db.collection('wholesale_products').doc('w_price').set(wp()));
+    await assertSucceeds(wcol().doc('w_price').update({ priceTiers: [{ minQty: 1, price: 90 }], updatedAt: serverTimestamp() }));
+    await assertSucceeds(wcol().doc('w_price').update({ packs: [{ id: 'p1', label: '1', priceTiers: [{ minQty: 1, price: 80 }] }] }));
+    await assertFails(wcol().doc('w_price').update({ priceTiers: [{ minQty: 1, price: 70 }], title: 'Yangi nom' }));
   });
   await check('W2 active: контент + status pending (жорий илова) — ўтади; контент + inactive — ўтади', async () => {
     await assertSucceeds(wcol().doc('w_active').update({ title: 'Un 25 kg', status: 'pending', updatedAt: serverTimestamp() }));

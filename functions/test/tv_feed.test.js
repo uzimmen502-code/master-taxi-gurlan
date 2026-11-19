@@ -16,6 +16,7 @@ const {
   clipMatchesTab,
   isFeedPlayable,
   buildFeedPages,
+  clipsForFeedTab,
 } = require('../tv_feed');
 
 const results = [];
@@ -119,12 +120,44 @@ function testPages() {
   check(`${FEED_MAX_CLIPS} tadan oshmaydi`, count === FEED_MAX_CLIPS);
 }
 
+// Эга қарори 2026-11-19: янги товар/хизмат 24 соат фақат «Кун янгиликлари»
+// ҳовузида; AVAGram (all) ҳовузида йўқ; market ўзгармайди.
+function testNewsWindowPools() {
+  const H = 3600 * 1000;
+  const now = 1800000000000;
+  const ts = (ms) => ({toMillis: () => ms});
+  check('activatedAt -> activatedAtMs (CDN клиенти ҳам ҳисоблайди)',
+      clipToFeedJson('a', {activatedAt: ts(7)}).activatedAtMs === 7);
+  check('activatedAt yo‘q — activatedAtMs yozilmaydi',
+      clipToFeedJson('a', {createdAt: ts(7)}).activatedAtMs === undefined);
+  const items = [
+    {id: 'fresh', data: {category: 'product', status: 'active',
+      createdAt: ts(now - 3 * H), activatedAt: ts(now - 2 * H)}},
+    {id: 'old', data: {category: 'service', status: 'active',
+      createdAt: ts(now - 50 * H), activatedAt: ts(now - 49 * H)}},
+    {id: 'legacy', data: {category: 'product', status: 'active',
+      createdAt: ts(now - H)}},
+    {id: 'news', data: {category: 'news', status: 'active',
+      createdAt: ts(now - 5 * H), activatedAt: ts(now - H)}},
+    {id: 'ad', data: {category: 'ad', status: 'active',
+      createdAt: ts(now - 4 * H), activatedAt: ts(now - 4 * H)}},
+  ];
+  const ids = (tab) => clipsForFeedTab(items, tab, now).map((c) => c.id);
+  check('all: янги товарсиз, createdAt бўйича',
+      JSON.stringify(ids('all')) === '["legacy","ad","news","old"]');
+  check('news: янгилик + янги товар, чиққан вақт бўйича',
+      JSON.stringify(ids('news')) === '["news","fresh"]');
+  check('market: ўзгармаган (янги товар ҳам бор)',
+      JSON.stringify(ids('market')) === '["legacy","fresh","ad","old"]');
+}
+
 function main() {
   testKeys();
   testTabs();
   testPlayable();
   testLean();
   testPages();
+  testNewsWindowPools();
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

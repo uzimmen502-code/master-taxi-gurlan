@@ -97,11 +97,21 @@ void main() {
       }
     });
 
-    test('Реклама ва Эълонлар (2): ўзгармаган — товар/хизмат/реклама (янгиси ҳам), янгилик йўқ', () {
-      for (final c in [fresh, old, legacy, ad]) {
+    test('Реклама ва Эълонлар (2, пуллик режим): эски товар/хизмат, эски ҳужжат, реклама — бор; янгилик йўқ', () {
+      for (final c in [old, legacy, ad]) {
         expect(tvClipInFeedTab(c, kTvTabMarket, now), isTrue, reason: c.id);
       }
       expect(tvClipInFeedTab(news, kTvTabMarket, now), isFalse);
+    });
+
+    test('Реклама ва Эълонлар (2): ЯНГИ органик товар/хизмат 24 соат йўқ (23:59 йўқ, 24:00/24:01 бор)', () {
+      expect(tvClipInFeedTab(fresh, kTvTabMarket, now), isFalse);
+      Duration d(int hh, int mm) => Duration(hours: hh, minutes: mm);
+      expect(tvClipInFeedTab(_clip('s1', category: 'service', activatedAt: ago(d(23, 59))), kTvTabMarket, now), isFalse);
+      expect(tvClipInFeedTab(_clip('s2', category: 'service', activatedAt: ago(d(24, 0))), kTvTabMarket, now), isTrue);
+      expect(tvClipInFeedTab(_clip('s3', category: 'service', activatedAt: ago(d(24, 1))), kTvTabMarket, now), isTrue);
+      expect(tvClipInFeedTab(_clip('ad2', category: 'ad', activatedAt: ago(m)), kTvTabMarket, now), isTrue,
+          reason: 'пуллик реклама 1-дақиқадан кўринади');
     });
 
     test("24 соат ўтгач товар янгиликлардан AVAGram'га ўтади (23:59 / 24:01)", () {

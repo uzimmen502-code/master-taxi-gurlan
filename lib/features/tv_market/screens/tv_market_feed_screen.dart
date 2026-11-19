@@ -241,10 +241,18 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Future<void> _refreshNewsBadge() async {
     try {
       _newsSeenAt ??= await TvNewsSeenStore.read();
-      final clips = await _repo.fetchLatestNews(
-        districtId: _filterDistrictId,
-        regionId: _filterDistrictId.isEmpty ? _filterRegionId : '',
-      );
+      final regionId = _filterDistrictId.isEmpty ? _filterRegionId : '';
+      // Эга 2026-11-19: нуқта янги товар/хизматда ҳам ёнади — улар учун ҳам кичик сўров
+      // (туман/республика ≤3 ўқиш, вилоят — ҳар туманга ≤1).
+      final lists = await Future.wait([
+        _repo.fetchLatestNews(districtId: _filterDistrictId, regionId: regionId),
+        _repo.fetchFreshNonNews(
+          districtId: _filterDistrictId,
+          regionId: regionId,
+          perQuery: _filterDistrictId.isEmpty && regionId.isNotEmpty ? 1 : 3,
+        ),
+      ]);
+      final clips = [for (final l in lists) ...l];
       if (!mounted) return;
       setState(() => _newsLatestAt = newestVisibleNewsAt(clips, mePhone: _mePhone, now: DateTime.now()));
       if (_tabController.index == 1) _markNewsSeen();
@@ -452,10 +460,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   ///   * «Кун янгиликлари» — CDN ҳовузида янги товар аллақачон бор (сервер қуради), фақат
   ///     эскирганлари сузилади; Firestore йўлида янги товар/хизмат алоҳида кичик сўров билан
   ///     қўшилади (ҳудуд қамрови аввалгидек: туман / вилоят / республика).
-  ///   * «AVAGram» — янги товар/хизмат сузилади. Firestore'да буни сўровнинг ўзида қилиб
-  ///     бўлмайди (эски ҳужжатларда `activatedAt` йўқ — тенгсизлик уларни ташлаб юборарди),
-  ///     шунинг учун саҳифа жуда қисқарса яна энг кўпи 3 саҳифа олинади.
-  ///   * «Реклама ва Эълонлар» — ўзгармайди.
+  ///   * «AVAGram» ва «Реклама ва Эълонлар» (пуллик режим) — янги товар/хизмат сузилади.
+  ///     Firestore'да буни сўровнинг ўзида қилиб бўлмайди (эски ҳужжатларда `activatedAt` йўқ —
+  ///     тенгсизлик уларни ташлаб юборарди), шунинг учун саҳифа жуда қисқарса яна энг кўпи 3
+  ///     саҳифа олинади. CDN ҳовузлари серверда шу қоида билан қурилади.
   Future<TvClipBatch> _shapeFirstPage(int tab, TvClipBatch batch) async {
     final now = DateTime.now();
     if (tab == kTvTabNews) {
@@ -477,7 +485,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         hasMore: batch.hasMore,
       );
     }
-    if (tab != kTvTabAll) return batch;
     final out = tvFilterForFeedTab(batch.clips, tab, now);
     var cursor = batch.cursor;
     var hasMore = batch.hasMore;

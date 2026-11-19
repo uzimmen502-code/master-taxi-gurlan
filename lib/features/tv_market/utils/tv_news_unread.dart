@@ -15,7 +15,8 @@ import 'tv_news_window.dart';
 /// янгилик тасдиқланганда «янги» бўлади), бўлмаса `createdAt`; телефон соати эмас.
 /// Муддат: `activatedAt` бор бўлса — ундан 24 соат (сервер шу бўйича тугатади; клиент ёзган
 /// `expiresAt` юклаш пайтидан ҳисобланган); йўқ бўлса — аввалгидек `expiresAt`.
-/// Нуқта фақат `news` учун: янги товар/хизмат ҳам табда кўринади, лекин нуқтани ёқмайди.
+/// Эга 2026-11-19 (2-жавоб): нуқта янги (фаоллашгандан 24 соат) товар/хизмат клипида ҳам ёнади —
+/// улар ҳам «Кун янгиликлари» табида; вақти `activatedAt`.
 DateTime? newestVisibleNewsAt(
   Iterable<TvClip> clips, {
   required String mePhone,
@@ -23,13 +24,18 @@ DateTime? newestVisibleNewsAt(
 }) {
   DateTime? best;
   for (final c in clips) {
-    if (!c.isNews || !c.isActive || !c.isPlayable) continue;
-    final act = c.activatedAt;
-    if (act != null) {
-      if (now.difference(act) >= kTvNewsWindow) continue;
-    } else {
-      final exp = c.expiresAt;
-      if (exp != null && !exp.isAfter(now)) continue;
+    if (!c.isActive || !c.isPlayable) continue;
+    final freshItem = tvClipIsFreshNonNews(c, now);
+    if (!c.isNews && !freshItem) continue;
+    // Янги товар/хизматнинг 24 соати `tvClipIsFreshNonNews`да текширилган; қуйидагиси — янгилик учун.
+    if (!freshItem) {
+      final act = c.activatedAt;
+      if (act != null) {
+        if (now.difference(act) >= kTvNewsWindow) continue;
+      } else {
+        final exp = c.expiresAt;
+        if (exp != null && !exp.isAfter(now)) continue;
+      }
     }
     if (mePhone.isNotEmpty && phonesMatch(c.ownerPhone, mePhone)) continue;
     final at = tvClipShownAt(c);

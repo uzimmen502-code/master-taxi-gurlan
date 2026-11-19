@@ -75,8 +75,27 @@ void main() {
       expect(newestVisibleNewsAt([b], mePhone: '', now: now), isNull);
     });
 
-    test('янги товар (news эмас) нуқтани ёқмайди', () {
-      expect(newestVisibleNewsAt([_clip('p', category: 'product', activatedAt: ago(1))], mePhone: '', now: now), isNull);
+    test('эга 2026-11-19: янги товар/хизмат (24 соат) нуқтани ЁҚАДИ, вақти activatedAt', () {
+      final r = newestVisibleNewsAt(
+        [_clip('p', category: 'product', createdAt: ago(5), activatedAt: ago(1)), _clip('n', createdAt: ago(3))],
+        mePhone: '',
+        now: now,
+      );
+      expect(r!.isAtSameMomentAs(ago(1)), isTrue);
+    });
+
+    test('эски (24+ соат) товар, activatedAt сиз товар, реклама, ўзимнинг товарим — нуқтани ёқмайди', () {
+      final r = newestVisibleNewsAt(
+        [
+          _clip('old', category: 'service', activatedAt: ago(25)),
+          _clip('legacy', category: 'product', createdAt: ago(1)),
+          _clip('ad', category: 'ad', activatedAt: ago(1)),
+          _clip('mine', category: 'product', owner: '998907777777', activatedAt: ago(1)),
+        ],
+        mePhone: '998907777777',
+        now: now,
+      );
+      expect(r, isNull);
     });
 
     test('createdAt йўқ ёки рўйхат бўш — null', () {

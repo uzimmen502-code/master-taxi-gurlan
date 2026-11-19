@@ -14781,7 +14781,7 @@ exports.buildTvFeedJson = functions
     for (const [districtId, items] of byDistrict) {
       for (const tab of Object.keys(tvFeed.FEED_TABS)) {
         // Эга 2026-11-19: янги (24 соат, `activatedAt`) товар/хизмат —
-        // фақат `news` ҳовузида; `all`да йўқ; `market` (пуллик режим)да ҳам йўқ (эга 2026-11-19).
+        // фақат `news` ҳовузида; `all`да йўқ; `market` — фақат пуллик `ad` (эга 2026-11-19).
         const picked = tvFeed.clipsForFeedTab(items, tab, builtAtMs);
 
         const pages = tvFeed.buildFeedPages(picked, {

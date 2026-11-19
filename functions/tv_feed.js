@@ -39,7 +39,8 @@ const FEED_MAX_CLIPS = 200;
 const FEED_TABS = {
   all: null,
   news: ['news'],
-  market: ['product', 'service', 'ad'],
+  // Эга 2026-11-19: «Реклама ва Эълонлар» — фақат пуллик реклама (аввал product/service/ad).
+  market: ['ad'],
 };
 
 /**
@@ -108,7 +109,7 @@ function clipToFeedJson(id, data) {
  * Битта туман клипларидан шу таб ҳовузини танлайди ва тартиблайди.
  *
  * Эга қарори 2026-11-19 (`tv_news_window.js`): янги товар/хизмат (24
- * соат, фаоллашувдан) `all`да йўқ, `news`да бор; `market` (пуллик режим)да ҳам йўқ (эга 2026-11-19).
+ * соат, фаоллашувдан) `all`да йўқ, `news`да бор; `market` — фақат `ad` (эга 2026-11-19).
  * Тартиб: `news` — чиққан вақт (`activatedAt ?? createdAt`), қолганлари
  * аввалгидек `createdAt` бўйича, янгиси биринчи.
  * @param {Array<{id: string, data: object}>} items клиплар.

@@ -237,14 +237,16 @@ void main() {
         expect(fp.hasMatch(f), isTrue, reason: f);
       }
       expect(fps.toSet().length, fps.length, reason: 'такрор йўқ');
-      // Айнан шу иккита (JSON'да изоҳ бўлмайди — манба шу ерда):
+      // Айнан шу учта (JSON'да изоҳ бўлмайди — манба шу ерда):
       //  1) 3E:4B:… — релиз/upload калити (CONFIRMED, лойиҳа раҳбари);
-      //  2) 00:AB:… — Firebase'да androidApp uz.ava.gurlan учун рўйхатдаги калит, Play App Signing калити деб
-      //     INFERRED (2026-10-25, раҳбар фақат ўқиб текширган). Учинчи рўйхатдаги 88:58:53:… — маҳаллий debug
-      //     калити, ҚЎШИЛМАЙДИ (debug APK production ҳаволаларини тутиб олмасин).
+      //  2) 00:AB:… — Firebase'да androidApp uz.ava.gurlan учун рўйхатдаги калит (2026-10-25 Play App Signing
+      //     деб INFERRED эди; 2026-11-16 да нотўғри экани аниқланди, лекин файлда қолган — эга тасдиқлаган файл);
+      //  3) 87:C7:… — ҳақиқий Play App Signing калити (2026-11-16 жонли қўшилган, эга тасдиқлаган).
+      // 88:58:53:… — маҳаллий debug калити, ҚЎШИЛМАЙДИ (debug APK production ҳаволаларини тутиб олмасин).
       expect(fps, [
         '3E:4B:07:6D:DF:98:47:86:F0:83:D0:E2:7D:BF:08:B8:4C:3F:02:5E:CB:8B:C9:4E:76:FA:44:30:EC:34:E9:38',
         '00:AB:F3:80:BE:74:13:95:B9:2D:E3:79:7E:05:50:4D:63:D2:83:6D:5A:73:97:C4:B3:EB:C7:68:3D:C3:0A:5F',
+        '87:C7:EC:38:5C:7A:0C:7F:87:91:B9:97:05:13:DC:B4:90:3E:DC:C2:F4:8C:AD:AD:79:E6:07:41:95:1C:4F:5E',
       ]);
       expect(fps.any((f) => f.startsWith('88:58:53:')), isFalse, reason: 'debug калити йўқ');
     });

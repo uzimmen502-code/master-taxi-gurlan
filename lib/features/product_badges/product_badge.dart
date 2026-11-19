@@ -2,9 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/l10n_extension.dart';
+import '../../core/utils/formatters.dart';
 import '../../models/platform_product.dart';
 
-/// Маҳсулот карточкаси белгиси (эга 2026-11-19): расмнинг ТЕПА ЧАП бурчагида БИТТА белги.
+/// Маҳсулот карточкаси белгиси (эга 2026-11-19/20): расмнинг ТЕПА ЧАП бурчагида БИТТА белги.
+/// «−N%» (2026-11-20): жорий нарх майдонлари СЕРВЕРда чегирмали (харидор шуни тўлайди); асос promo.basePrice чизилади.
 ///
 /// Устунлик: «−N%» → «Акция» → «Сўнгги доналар» → «Янги». Белгини фақат СЕРВЕР ёзган майдонлар беради
 /// (`promo`, `firstActiveAt`, `stockLeft` — functions/product_promo.js; Rules мижозга ёпиқ). Мижоз фақат
@@ -21,7 +23,7 @@ class ProductBadgeData {
   const ProductBadgeData({
     this.promoKind = '',
     this.percent = 0,
-    this.oldPrice = 0,
+    this.basePrice = 0,
     this.until,
     this.firstActiveAt,
     this.stockLeft,
@@ -30,7 +32,7 @@ class ProductBadgeData {
     this.stateNote = '',
     this.statePercent = 0,
     this.requestKind = '',
-    this.requestOldPrice = 0,
+    this.requestPercent = 0,
     this.requestUntil,
   });
 
@@ -39,7 +41,9 @@ class ProductBadgeData {
   /// Тасдиқланган белги (`promo`): `discount` | `promo` | ''.
   final String promoKind;
   final int percent;
-  final int oldPrice;
+
+  /// Асос нарх (чегирмагача; сервер promo.basePrice). Карточкада чизилган ҳолда кўрсатилади.
+  final int basePrice;
   final DateTime? until;
 
   /// Биринчи фаоллашув (сервер) — «Янги».
@@ -56,7 +60,7 @@ class ProductBadgeData {
 
   /// Сотувчи юборган сўров (`promoRequest`) — форма учун.
   final String requestKind;
-  final int requestOldPrice;
+  final int requestPercent;
   final DateTime? requestUntil;
 
   bool get hasRequest => requestKind.isNotEmpty;
@@ -73,7 +77,7 @@ class ProductBadgeData {
     return ProductBadgeData(
       promoKind: _str(p['kind']),
       percent: _int(p['percent']),
-      oldPrice: _int(p['oldPrice']),
+      basePrice: _int(p['basePrice']),
       until: _date(p['until']),
       firstActiveAt: _date(d['firstActiveAt']),
       stockLeft: stock is int ? stock : null,
@@ -82,14 +86,18 @@ class ProductBadgeData {
       stateNote: _str(s['note']),
       statePercent: _int(s['percent']),
       requestKind: _str(r['kind']),
-      requestOldPrice: _int(r['oldPrice']),
+      requestPercent: _int(r['percent']),
       requestUntil: _date(r['until']),
     );
   }
 
-  /// AVA товари (platform_products, фақат админ ёзади): «−N%»/«Акция» йўқ; қолдиқ = remaining (лимитсиз — йўқ),
-  /// «Янги» — createdAt (админ ёзган вақт).
+  /// AVA товари (platform_products, фақат админ ёзади): «−N%»/«Акция» — админ панелдан (сервер promo);
+  /// қолдиқ = remaining (лимитсиз — йўқ), «Янги» — createdAt (админ ёзган вақт).
   factory ProductBadgeData.forPlatform(PlatformProduct p) => ProductBadgeData(
+        promoKind: p.promoData.promoKind,
+        percent: p.promoData.percent,
+        basePrice: p.promoData.basePrice,
+        until: p.promoData.until,
         stockLeft: p.isUnlimitedStock ? null : p.remaining,
         firstActiveAt: p.createdAt,
       );
@@ -102,9 +110,12 @@ class ProductBadgeData {
     return null;
   }
 
-  /// Амалдаги «−N%» (муддати ўтмаган) — тафсилотда эски нархни чизиш учун.
+  /// Амалдаги «−N%» (муддати ўтмаган) — асос нархни чизиш учун.
   bool activeDiscount(DateTime now) =>
-      promoKind == 'discount' && percent >= 1 && oldPrice > 0 && until != null && until!.isAfter(now);
+      promoKind == 'discount' && percent >= 1 && basePrice > 0 && until != null && until!.isAfter(now);
+
+  /// Карточкада чизиладиган асос нарх («10 000») ёки null (чегирма йўқ / муддати ўтган).
+  String? strikePrice(DateTime now) => activeDiscount(now) ? formatPrice(basePrice) : null;
 }
 
 @immutable
@@ -194,7 +205,7 @@ class ProductOldPriceText extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!data.activeDiscount(now ?? DateTime.now())) return const SizedBox.shrink();
     return Text(
-      format(data.oldPrice),
+      format(data.basePrice),
       key: const ValueKey('product_old_price'),
       style: TextStyle(
         fontSize: 13,

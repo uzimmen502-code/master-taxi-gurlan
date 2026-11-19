@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../favorites/domain/favorite_ref.dart';
 import '../../favorites/widgets/favorite_heart.dart';
+import '../../ads/widgets/market_grid.dart' show DiscountPriceLine;
 import '../../product_badges/product_badge.dart';
 import '../../tv_market/models/tv_shop.dart';
 import '../../tv_market/widgets/tv_shop_photo_gallery.dart';
@@ -97,10 +98,13 @@ class MarketListingCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     if (price.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(price,
-                          key: ValueKey('market_card_price_${item.id}'),
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.primaryText)),
+                      if (item.badge.strikePrice(DateTime.now()) case final old?)
+                        DiscountPriceLine(price: price, oldPrice: old, fontSize: 15)
+                      else
+                        Text(price,
+                            key: ValueKey('market_card_price_${item.id}'),
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.primaryText)),
                     ],
                     if (attrsLine.isNotEmpty) ...[
                       const SizedBox(height: 4),

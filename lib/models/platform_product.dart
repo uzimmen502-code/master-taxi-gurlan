@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../features/product_badges/product_badge.dart';
 import 'price_tier.dart';
 
 /// Платформа дўкони товари (`platform_products`).
@@ -28,6 +29,7 @@ class PlatformProduct {
     this.incentiveCategory = '',
     this.priceTiers = const [],
     this.createdAt,
+    this.promoData = ProductBadgeData.empty,
   });
 
   static const maxImages = 7;
@@ -129,6 +131,9 @@ class PlatformProduct {
   /// Жойлаштириш вақти (тартиб учун).
   final DateTime? createdAt;
 
+  /// Чегирма/акция (сервер promo; эга 2026-11-20 — AVA товарига админ қўяди). 	oMapга ёзилмайди.
+  final ProductBadgeData promoData;
+
   bool get isFood => goodsKind == kindFood;
   bool get isNonFood => goodsKind == kindNonFood;
   bool get isKindSet => isFood || isNonFood;
@@ -225,6 +230,7 @@ class PlatformProduct {
       createdAt: d['createdAt'] is Timestamp
           ? (d['createdAt'] as Timestamp).toDate()
           : null,
+      promoData: ProductBadgeData.fromMap(d),
     );
   }
 
@@ -269,6 +275,7 @@ class PlatformProduct {
       incentiveCategory: incentiveCategory ?? this.incentiveCategory,
       priceTiers: priceTiers ?? this.priceTiers,
       createdAt: createdAt ?? this.createdAt,
+      promoData: promoData,
     );
   }
 

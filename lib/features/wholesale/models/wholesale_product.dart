@@ -367,7 +367,8 @@ class WholesaleProduct implements AdSearchable {
 
   /// Эга томонидан таҳрирлаш — контент майдонлари + `pending`га қайтариш.
   /// Rules эгага ҳеч қачон `active`га ўтишга рухсат бермайди.
-  Map<String, dynamic> toFirestoreOwnerUpdate() {
+  /// [keepActive] (эга 2026-11-20): фақат нарх ўзгарган фаол товар — ctive қолади (wholesaleOnlyPriceChanged).
+  Map<String, dynamic> toFirestoreOwnerUpdate({bool keepActive = false}) {
     final tiers = sortWholesalePriceTiers(_mirrorTiers);
     return {
       'title': title,
@@ -377,7 +378,7 @@ class WholesaleProduct implements AdSearchable {
       'unit': unit,
       'imageUrls': imageUrls.take(maxImages).toList(growable: false),
       'searchTokens': AdSearchText.buildTokens(title, description),
-      'status': statusPending,
+      'status': keepActive ? statusActive : statusPending,
       'updatedAt': FieldValue.serverTimestamp(),
       // `market` бу ерда ЙЎҚ — Rules эгага маҳсулотни бир бозордан
       // бошқасига кўчиришга рухсат бермайди. Валюта ва етказиш муддати

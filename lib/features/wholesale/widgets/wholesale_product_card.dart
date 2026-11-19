@@ -136,6 +136,7 @@ class WholesaleProductCard extends StatelessWidget {
             MarketCardText(
               title: product.title,
               price: wholesalePriceLine(context, product),
+              oldPrice: product.badge.strikePrice(DateTime.now()),
               // «МОҚ» олиб ташланди (эга, 2026-11-01) — фақат сотувчи.
               // Босиладиган бўлса «›» — магазинга ўтиш белгиси.
               caption: onSellerTap != null && product.sellerCompanyName.trim().isNotEmpty

@@ -52,9 +52,9 @@ class WholesaleProductsRepository {
     return WholesaleProduct.fromFirestore(snap);
   }
 
-  Future<void> ownerUpdate(String productId, WholesaleProduct product) async {
+  Future<void> ownerUpdate(String productId, WholesaleProduct product, {bool keepActive = false}) async {
     if (productId.isEmpty) return;
-    await _col.doc(productId).update(product.toFirestoreOwnerUpdate());
+    await _col.doc(productId).update(product.toFirestoreOwnerUpdate(keepActive: keepActive));
   }
 
   Future<void> deactivate(String productId) async {

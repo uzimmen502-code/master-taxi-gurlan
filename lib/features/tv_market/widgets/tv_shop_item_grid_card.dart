@@ -116,6 +116,7 @@ class TvShopItemGridCard extends StatelessWidget {
                 title: item.title,
                 titleLines: 2,
                 price: priceText.isEmpty ? null : priceText,
+                oldPrice: item.badge.strikePrice(DateTime.now()),
                 // Нарх ранги бошқа карталардагидек (AdCard — primaryText).
               ),
             ],

@@ -13,7 +13,7 @@ void main() {
   group('resolveProductBadge — priority / expiry', () {
     test('discount wins over everything', () {
       final b = resolveProductBadge(
-        ProductBadgeData(promoKind: 'discount', percent: 20, oldPrice: 100, until: later, stockLeft: 2, firstActiveAt: now),
+        ProductBadgeData(promoKind: 'discount', percent: 20, basePrice: 100, until: later, stockLeft: 2, firstActiveAt: now),
         now,
       );
       expect(b!.kind, ProductBadgeKind.discount);
@@ -49,18 +49,21 @@ void main() {
 
   test('fromMap reads server fields only (client promoRequest never shows a badge)', () {
     final d = ProductBadgeData.fromMap({
-      'promoRequest': {'kind': 'discount', 'oldPrice': 200, 'until': Timestamp.fromDate(later)},
+      'promoRequest': {'kind': 'discount', 'percent': 30, 'until': Timestamp.fromDate(later)},
       'promoState': {'status': 'pending', 'percent': 30},
     });
     expect(resolveProductBadge(d, now), isNull);
     expect(d.hasRequest, isTrue);
     expect(d.stateStatus, 'pending');
     final ok = ProductBadgeData.fromMap({
-      'promo': {'kind': 'discount', 'percent': 30, 'oldPrice': 200, 'until': Timestamp.fromDate(later)},
+      'promo': {'kind': 'discount', 'percent': 30, 'basePrice': 200, 'price': 140, 'until': Timestamp.fromDate(later)},
       'stockLeft': 3,
     });
     expect(resolveProductBadge(ok, now)!.percent, 30);
     expect(ok.activeDiscount(now), isTrue);
+    expect(ok.strikePrice(now), isNotNull);
+    expect(d.requestPercent, 30);
+    expect(ProductBadgeData.fromMap({'promo': {'kind': 'discount', 'percent': 30, 'basePrice': 200, 'until': Timestamp.fromDate(past)}}).strikePrice(now), isNull);
   });
 
   test('platform adapter: unlimited stock → no last units; createdAt → new', () {
@@ -71,18 +74,19 @@ void main() {
   });
 
   group('seller form helpers', () {
-    test('percent floor parity with server', () {
-      expect(promoPercent(30000, 20000), 33);
-      expect(promoPercent(100, 100), 0);
+    test('discounted price floor parity with server', () {
+      expect(promoDiscountedPrice(10000, 10), 9000);
+      expect(promoDiscountedPrice(999, 10), 899);
+      expect(promoDiscountedPrice(1, 90), 1);
     });
     test('client errors', () {
-      expect(promoClientError(kind: 'discount', price: 0, oldPrice: 5), 'promo_reason_PRICE_REQUIRED');
-      expect(promoClientError(kind: 'discount', price: 100, oldPrice: 100), 'promo_reason_OLD_PRICE_NOT_HIGHER');
-      expect(promoClientError(kind: 'discount', price: 999, oldPrice: 1000), 'promo_reason_DISCOUNT_TOO_SMALL');
-      expect(promoClientError(kind: 'discount', price: 80, oldPrice: 100), isNull);
-      expect(promoClientError(kind: 'promo', price: null, oldPrice: null), isNull);
-    });
-    test('until capped to 30 days minus 5 min', () {
+      expect(promoClientError(kind: 'discount', price: 0, percent: 5), 'promo_reason_PRICE_REQUIRED');
+      expect(promoClientError(kind: 'discount', price: 100, percent: 0), 'promo_reason_PERCENT_INVALID');
+      expect(promoClientError(kind: 'discount', price: 100, percent: 91), 'promo_reason_PERCENT_INVALID');
+      expect(promoClientError(kind: 'discount', price: 1, percent: 10), 'promo_reason_DISCOUNT_TOO_SMALL');
+      expect(promoClientError(kind: 'discount', price: 10000, percent: 10), isNull);
+      expect(promoClientError(kind: 'promo', price: null, percent: null), isNull);
+    });    test('until capped to 30 days minus 5 min', () {
       final u = promoUntilFor(now.add(const Duration(days: 40)), now);
       expect(u, now.add(const Duration(days: 30)).subtract(const Duration(minutes: 5)));
       expect(promoUntilFor(now, now), DateTime(2026, 11, 19, 23, 59));
@@ -115,7 +119,7 @@ void main() {
   testWidgets('old price struck through only for active discount', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: ProductOldPriceText(
-        data: ProductBadgeData(promoKind: 'discount', percent: 20, oldPrice: 100000, until: later),
+        data: ProductBadgeData(promoKind: 'discount', percent: 20, basePrice: 100000, until: later),
         format: (p) => '$p',
         now: now,
       ),

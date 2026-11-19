@@ -103,6 +103,7 @@ class PlatformMarketCard extends StatelessWidget {
               price: wholesale
                   ? _wholesalePriceLine(context, product)
                   : formatMoney(product.displayPrice),
+              oldPrice: ProductBadgeData.forPlatform(product).strikePrice(DateTime.now()),
               caption: wholesale
                   ? _wholesaleSubLine(context, product)
                   : BrandLabels.brand,

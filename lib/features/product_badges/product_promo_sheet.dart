@@ -30,19 +30,25 @@ int? promoPriceOf(String collection, Map<String, dynamic> d) {
   return p is int && p >= 0 ? p : null;
 }
 
-/// Мижоздаги олдиндан текширув (сервер барибир текширади): калит ёки null.
-String? promoClientError({required String kind, required int? price, required int? oldPrice}) {
+/// Фоиз чегараси — сервер PERCENT_MIN/MAX ва Rules билан бир хил (PROPOSED 1..90).
+const int kPromoPercentMin = 1;
+const int kPromoPercentMax = 90;
+
+/// Мижоздаги олдиндан текширув (сервер барибир текширади, жумладан 7 кун қоидасини): калит ёки null.
+String? promoClientError({required String kind, required int? price, required int? percent}) {
   if (kind != 'discount') return null;
   if (price == null || price <= 0) return 'promo_reason_PRICE_REQUIRED';
-  if (oldPrice == null || oldPrice <= 0) return 'promo_reason_OLD_PRICE_INVALID';
-  if (oldPrice <= price) return 'promo_reason_OLD_PRICE_NOT_HIGHER';
-  if (promoPercent(oldPrice, price) < 1) return 'promo_reason_DISCOUNT_TOO_SMALL';
+  if (percent == null || percent < kPromoPercentMin || percent > kPromoPercentMax) return 'promo_reason_PERCENT_INVALID';
+  if (promoDiscountedPrice(price, percent) >= price) return 'promo_reason_DISCOUNT_TOO_SMALL';
   return null;
 }
 
-/// floor((old − price) × 100 / old) — серверники билан бир хил (кўрсатиш учун).
-int promoPercent(int oldPrice, int price) =>
-    (oldPrice <= 0 || price < 0 || price >= oldPrice) ? 0 : ((oldPrice - price) * 100) ~/ oldPrice;
+/// Чегирмали нарх: floor(price × (100 − pct) / 100), камида 1 — серверники билан бир хил (кўрсатиш учун).
+int promoDiscountedPrice(int price, int pct) {
+  if (price <= 0) return price;
+  final v = (price * (100 - pct)) ~/ 100;
+  return v < 1 ? 1 : v;
+}
 
 /// Танланган кун охири, лекин ҳозирдан ≤ 30 кун (5 дақиқа захира — сервер вақти фарқи).
 DateTime promoUntilFor(DateTime day, DateTime now) {
@@ -92,7 +98,7 @@ class ProductPromoSheet extends StatefulWidget {
 class _ProductPromoSheetState extends State<ProductPromoSheet> {
   late final FirebaseFirestore _db = widget.firestore ?? FirebaseFirestore.instance;
   late final DocumentReference<Map<String, dynamic>> _ref = _db.collection(widget.collection).doc(widget.docId);
-  final _oldPrice = TextEditingController();
+  final _percent = TextEditingController();
   String _kind = 'discount';
   DateTime _day = DateTime.now().add(const Duration(days: 7));
   bool _busy = false;
@@ -100,20 +106,20 @@ class _ProductPromoSheetState extends State<ProductPromoSheet> {
 
   @override
   void dispose() {
-    _oldPrice.dispose();
+    _percent.dispose();
     super.dispose();
   }
 
   Future<void> _submit(int? price) async {
-    final old = int.tryParse(_oldPrice.text.replaceAll(RegExp(r'\D'), ''));
-    final err = promoClientError(kind: _kind, price: price, oldPrice: old);
+    final pct = int.tryParse(_percent.text.replaceAll(RegExp(r'\D'), ''));
+    final err = promoClientError(kind: _kind, price: price, percent: pct);
     if (err != null) return setState(() => _error = err);
     setState(() { _busy = true; _error = null; });
     try {
       await _ref.update({
         'promoRequest': {
           'kind': _kind,
-          if (_kind == 'discount') 'oldPrice': old,
+          if (_kind == 'discount') 'percent': pct,
           'until': Timestamp.fromDate(promoUntilFor(_day, DateTime.now())),
           'requestedAt': FieldValue.serverTimestamp(),
         },
@@ -157,8 +163,11 @@ class _ProductPromoSheetState extends State<ProductPromoSheet> {
         final d = snap.data?.data() ?? const <String, dynamic>{};
         final badge = ProductBadgeData.fromMap(d);
         final price = promoPriceOf(widget.collection, d);
-        final old = int.tryParse(_oldPrice.text.replaceAll(RegExp(r'\D'), ''));
-        final preview = (_kind == 'discount' && old != null && price != null) ? promoPercent(old, price) : 0;
+        final pct = int.tryParse(_percent.text.replaceAll(RegExp(r'\D'), ''));
+        final preview = (_kind == 'discount' && pct != null && pct >= kPromoPercentMin && pct <= kPromoPercentMax && price != null && price > 0)
+            ? promoDiscountedPrice(price, pct)
+            : null;
+        final active = badge.activeDiscount(DateTime.now());
         return Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
           child: SingleChildScrollView(
@@ -179,23 +188,42 @@ class _ProductPromoSheetState extends State<ProductPromoSheet> {
                   onSelectionChanged: _busy ? null : (s) => setState(() { _kind = s.first; _error = null; }),
                 ),
                 const SizedBox(height: 12),
-                if (_kind == 'discount') ...[
+                if (active)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      context.tr('promo_active_line')
+                          .replaceAll('{base}', formatPrice(badge.basePrice))
+                          .replaceAll('{price}', price == null ? '—' : formatPrice(price))
+                          .replaceAll('{percent}', '${badge.percent}'),
+                      key: const ValueKey('promo_active_line'),
+                    ),
+                  ),
+                if (_kind == 'discount' && !active) ...[
                   Text('${context.tr('promo_current_price')}: ${price == null ? '—' : formatPrice(price)}'),
                   const SizedBox(height: 8),
                   TextField(
-                    key: const ValueKey('promo_old_price'),
-                    controller: _oldPrice,
+                    key: const ValueKey('promo_percent'),
+                    controller: _percent,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(2)],
                     onChanged: (_) => setState(() => _error = null),
                     decoration: InputDecoration(
-                      labelText: context.tr('promo_old_price'),
-                      helperText: context.tr('promo_old_price_rule'),
+                      labelText: context.tr('promo_percent'),
+                      helperText: context.tr('promo_percent_rule'),
                       helperMaxLines: 3,
                       border: const OutlineInputBorder(),
-                      suffixText: preview >= 1 ? '−$preview%' : null,
+                      suffixText: '%',
                     ),
                   ),
+                  if (preview != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      context.tr('promo_new_price').replaceAll('{price}', formatPrice(preview)),
+                      key: const ValueKey('promo_new_price'),
+                      style: const TextStyle(color: Color(0xFFE53935), fontWeight: FontWeight.w700),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                 ],
                 OutlinedButton.icon(
@@ -211,7 +239,7 @@ class _ProductPromoSheetState extends State<ProductPromoSheet> {
                 const SizedBox(height: 12),
                 FilledButton(
                   key: const ValueKey('promo_submit'),
-                  onPressed: _busy ? null : () => _submit(price),
+                  onPressed: _busy || (active && _kind == 'discount') ? null : () => _submit(price),
                   child: Text(context.tr(_kind == 'discount' ? 'promo_submit_review' : 'promo_submit')),
                 ),
                 if (badge.hasRequest)

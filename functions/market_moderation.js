@@ -74,7 +74,7 @@ const REJECT_STATUS = Object.freeze({
 const MESSAGES = Object.freeze({
   listing_approved: {
     uz_Cyrl: { title: '✅ Эълонингиз тасдиқланди', body: '«{title}» бозорда кўринади. Муддати — 30 кун.' },
-    uz_Latn: { title: '✅ E\'loningiz tasdiqlandi', body: '«{title}» bozorda ko\'rinadi. Muddati — 30 kun.' },
+    uz_Latn: { title: '✅ E\'loningiz tasdiqlandi', body: '«{title}» bozorda körinadi. Muddati — 30 kun.' },
     ru: { title: '✅ Объявление одобрено', body: '«{title}» опубликовано на рынке. Срок — 30 дней.' },
   },
   listing_rejected: {
@@ -84,12 +84,12 @@ const MESSAGES = Object.freeze({
   },
   listing_expired: {
     uz_Cyrl: { title: '⏳ Эълон муддати тугади', body: '«{title}» бозордан олинди. Янгилаш учун эълонингизни очинг.' },
-    uz_Latn: { title: '⏳ E\'lon muddati tugadi', body: '«{title}» bozordan olindi. Yangilash uchun e\'loningizni oching.' },
+    uz_Latn: { title: '⏳ E\'lon muddati tugadi', body: '«{title}» bozordan olindi. Yangilaş uçun e\'loningizni oçing.' },
     ru: { title: '⏳ Срок объявления истёк', body: '«{title}» снято с рынка. Откройте объявление, чтобы продлить.' },
   },
   listing_expiry_warning: {
     uz_Cyrl: { title: '⏳ Эълон муддати тугаяпти', body: '«{title}» эртага бозордан олинади. Кейин уни янгилашингиз мумкин.' },
-    uz_Latn: { title: '⏳ E\'lon muddati tugayapti', body: '«{title}» ertaga bozordan olinadi. Keyin uni yangilashingiz mumkin.' },
+    uz_Latn: { title: '⏳ E\'lon muddati tugayapti', body: '«{title}» ertaga bozordan olinadi. Keyin uni yangilaşingiz mumkin.' },
     ru: { title: '⏳ Срок объявления заканчивается', body: '«{title}» завтра будет снято с рынка. Потом его можно продлить.' },
   },
 });

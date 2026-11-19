@@ -159,13 +159,24 @@ check('N16 showInNearbyAds bool эмас → SHOW_IN_NEARBY_ADS_INVALID; false/�
   expectError(o3, 'UNKNOWN_KEY markets.auto.categories[0].showInNearbyAdz');
 });
 const V5 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'data', 'market_taxonomy_v5.json'), 'utf8'));
+const { convertText: toNewLatinText } = require('../tools/uz_latin_alphabet');
+/** Барча `uz_Latn` сатрларини янги лотин алифбосига (жойида). */
+function toNewLatin(x) {
+  if (Array.isArray(x)) x.forEach(toNewLatin);
+  else if (x && typeof x === 'object') {
+    for (const [k, v] of Object.entries(x)) {
+      if (k === 'uz_Latn' && typeof v === 'string') x[k] = toNewLatinText(v); else toNewLatin(v);
+    }
+  }
+  return x;
+}
 check('P13 v5 ўтади; v4 дан ФАҚАТ: livestock бўлимлари (all → 5 та), auto cars/tech номлари, electronics/appliances box_*_cm (эга 2026-11-19)', () => {
   expectOk(V5);
   expectOk(t.normalizeTaxonomy(V5));
   const L = V5.markets.livestock.categories;
   assert.deepStrictEqual(L.map((c) => c.id), ['cattle', 'sheep_goat', 'horse', 'poultry', 'other']);
   assert.deepStrictEqual(L.map((c) => c.names.uz_Cyrl), ['Қорамол', 'Қўй-эчки', 'От', 'Парранда', 'Бошқа']);
-  assert.deepStrictEqual(L.map((c) => c.names.uz_Latn), ['Qoramol', 'Qo\'y-echki', 'Ot', 'Parranda', 'Boshqa']);
+  assert.deepStrictEqual(L.map((c) => c.names.uz_Latn), ['Qoramol', 'Qöy-eçki', 'Ot', 'Parranda', 'Boşqa']);
   assert.deepStrictEqual(L.map((c) => c.names.ru), ['КРС', 'Овцы и козы', 'Лошади', 'Птица', 'Другое']);
   // Эски `all` билан бир хил майдонлар (orderable), showInNearbyAds true.
   const oldAll = V4.markets.livestock.categories[0];
@@ -183,17 +194,20 @@ check('P13 v5 ўтади; v4 дан ФАҚАТ: livestock бўлимлари (al
   ];
   for (const m of ['electronics', 'appliances']) {
     assert.deepStrictEqual(V5.markets[m].fields.slice(-3), BOX, m);
-    assert.deepStrictEqual(V5.markets[m].fields.slice(0, -3), V4.markets[m].fields, `${m} эски майдонлар`);
+    assert.deepStrictEqual(V5.markets[m].fields.slice(0, -3), toNewLatin(JSON.parse(JSON.stringify(V4.markets[m].fields))), `${m} эски майдонлар`);
   }
-  // Қолган ҳамма нарса v4 билан АЙНАН бир хил: юқоридаги ўзгаришларни v4 га қўлласак — v5.
-  const exp = JSON.parse(JSON.stringify(V4));
+  // Қолган ҳамма нарса v4 билан АЙНАН бир хил: юқоридаги ўзгаришларни v4 га қўлласак + барча uz_Latn номлари
+  // янги лотин алифбосида (эга 2026-11-19; tools/uz_latin_alphabet) — v5.
+  const exp = toNewLatin(JSON.parse(JSON.stringify(V4)));
   exp.markets.livestock.categories = L;
   exp.markets.auto.categories.find((c) => c.id === 'cars').names = A.cars;
   exp.markets.auto.categories.find((c) => c.id === 'tech').names = A.tech;
   for (const m of ['electronics', 'appliances']) exp.markets[m].fields.push(...BOX);
   assert.deepStrictEqual(V5, exp);
-  assert.strictEqual(JSON.stringify(V5.markets.meat), JSON.stringify(V4.markets.meat));
-  assert.strictEqual(JSON.stringify(V5.markets.farm), JSON.stringify(V4.markets.farm));
+  assert.strictEqual(JSON.stringify(V5.markets.meat), JSON.stringify(toNewLatin(JSON.parse(JSON.stringify(V4.markets.meat)))));
+  assert.strictEqual(JSON.stringify(V5.markets.farm), JSON.stringify(toNewLatin(JSON.parse(JSON.stringify(V4.markets.farm)))));
+  // v5 да эски шаклдаги лотин ном қолмаган.
+  assert.ok(!/"uz_Latn":"[^"]*([oOgG]['‘’ʻ`]|[sScC]h)/.test(JSON.stringify(V5)));
 });
 check('P14 v5 ↔ rules: ҳар бозор майдонлари ≤ 20 (attrs.size() <= 20); бозор id лари rules рўйхатида', () => {
   const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'firestore.rules'), 'utf8');
@@ -204,11 +218,11 @@ check('P14 v5 ↔ rules: ҳар бозор майдонлари ≤ 20 (attrs.si
   const mm = rules.match(/d\.get\('market', 'livestock'\) in \[([^\]]*)\]/);
   assert.deepStrictEqual(mm[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')), Object.keys(V5.markets));
 });
-check('P15 upgrade v4 → v5: changed livestock/auto/electronics/appliances, WRITE 5; қайта — NOOP; v3 кутилса — CONFLICT', () => {
+check('P15 upgrade v4 → v5: changed livestock/auto/electronics/appliances + meat/farm (лотин алифбоси), WRITE 5; қайта — NOOP; v3 кутилса — CONFLICT', () => {
   const { decide, diffMarkets, fromValue } = require('../tools/upgrade_market_taxonomy');
   const { toValue } = require('../tools/seed_market_taxonomy');
   assert.deepStrictEqual(diffMarkets(V4.markets, V5.markets),
-    { added: [], changed: ['livestock', 'auto', 'electronics', 'appliances'], removed: [], unchanged: ['meat', 'farm'] });
+    { added: [], changed: ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances'], removed: [], unchanged: [] });
   const v4doc = { exists: true, version: 4, markets: V4.markets };
   const d = decide(v4doc, 4, V5.markets);
   assert.deepStrictEqual([d.action, d.version], ['WRITE', 5]);

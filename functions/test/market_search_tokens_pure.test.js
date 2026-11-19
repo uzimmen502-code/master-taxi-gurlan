@@ -77,6 +77,21 @@ check('P10 onShopItemModeration CONTENT_FIELDS ичида searchTokens ЙЎҚ (�
   assert.strictEqual(mod.contentChanged({ title: 'a' }, { title: 'a', searchTokens: ['x'] }), false);
 });
 
+check('P-ALF янги лотин алифбоси (эга 2026-11-19): ö ğ ş ç эски шаклга, токенлар ЭСКИ матн токенлари билан бир хил', () => {
+  // Сақланган (эски шакл) токенлар ўзгармайди — эски матн учун натижа аввалгидек.
+  const oldT = m.buildSearchTokens(["Qo'y go'shti, shashlik, choy", "G'isht"]);
+  const newT = m.buildSearchTokens(['Qöy göşti, şaşlik, çoy', 'Ğişt']);
+  assert.deepStrictEqual(newT, oldT);
+  assert.ok(oldT.includes("go'shti") && oldT.includes('гўшти') && oldT.includes('shashlik') && oldT.includes('choy'));
+  // Ҳарф катталиги ва сўз бўлиниши: «ŞAŞLIK» бутун сўз (ş WORD_SPLIT да бўлиб юбормайди).
+  assert.deepStrictEqual(m.words('ŞAŞLIK Göşt'), ['shashlik', "go'sht"]);
+  assert.strictEqual(m.foldMarks('Özbekça'), "o'zbekcha");
+  assert.strictEqual(m.toCyrillic('göşt'), 'гўшт');
+  assert.strictEqual(m.toLatin('гўшт'), "go'sht"); // токен — эски шакл
+  // Клиент (AdSearchText / marketServerSearchToken) сўрови «göşt» → «go'sht» — сақланган токенда бор.
+  assert.ok(oldT.includes(m.toLatin(m.foldMarks('göşti'))));
+});
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

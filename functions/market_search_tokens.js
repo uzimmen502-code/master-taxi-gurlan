@@ -43,9 +43,18 @@ const CYR_SINGLES = Object.freeze({
   l: 'л', m: 'м', n: 'н', o: 'о', p: 'п', r: 'р', s: 'с', t: 'т', u: 'у', f: 'ф', x: 'х',
 });
 
+// Янги лотин алифбоси (эга 2026-11-19): ö ğ ş ç → ЭСКИ шакл (o' g' sh ch) — UzScript.foldLatin билан бир хил.
+// Шунда янги ёзувдаги матн ҳам аввалги токенларни беради (сақланган searchTokens ва клиент сўрови мос).
+const NEW_TO_OLD = Object.freeze({ ö: "o'", Ö: "O'", ğ: "g'", Ğ: "G'", ş: 'sh', Ş: 'Sh', ç: 'ch', Ç: 'Ch' });
+const NEW_LETTERS = /[öÖğĞşŞçÇ]/g;
+/** UzScript.foldLatin */
+function foldLatin(s) {
+  return String(s == null ? '' : s).replace(NEW_LETTERS, (m) => NEW_TO_OLD[m]);
+}
+
 /** AdSearchText.foldMarks */
 function foldMarks(s) {
-  return String(s == null ? '' : s).toLowerCase().replace(MARKS, "'");
+  return foldLatin(String(s == null ? '' : s).toLowerCase()).replace(MARKS, "'");
 }
 /** AdSearchText.toLatin */
 function toLatin(s) {
@@ -59,7 +68,7 @@ function toCyrillic(s) {
 }
 /** AdSearchText._words */
 function words(text) {
-  return String(text == null ? '' : text).toLowerCase().split(WORD_SPLIT)
+  return foldLatin(String(text == null ? '' : text).toLowerCase()).split(WORD_SPLIT)
     .map((w) => w.trim()).filter((w) => w.length >= MIN_TOKEN_LEN);
 }
 

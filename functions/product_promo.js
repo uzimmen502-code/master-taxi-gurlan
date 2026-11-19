@@ -68,12 +68,12 @@ const REASONS = Object.freeze({
 const MESSAGES = Object.freeze({
   promo_approved: {
     uz_Cyrl: { title: '✅ Чегирма тасдиқланди', body: '«{title}» карточкасида «−{percent}%» белгиси кўринади.' },
-    uz_Latn: { title: '✅ Chegirma tasdiqlandi', body: '«{title}» kartochkasida «−{percent}%» belgisi ko\'rinadi.' },
+    uz_Latn: { title: '✅ Çegirma tasdiqlandi', body: '«{title}» kartoçkasida «−{percent}%» belgisi körinadi.' },
     ru: { title: '✅ Скидка одобрена', body: 'На карточке «{title}» показан значок «−{percent}%».' },
   },
   promo_rejected: {
     uz_Cyrl: { title: '⛔ Чегирма қабул қилинмади', body: '«{title}»: {reason}' },
-    uz_Latn: { title: '⛔ Chegirma qabul qilinmadi', body: '«{title}»: {reason}' },
+    uz_Latn: { title: '⛔ Çegirma qabul qilinmadi', body: '«{title}»: {reason}' },
     ru: { title: '⛔ Скидка отклонена', body: '«{title}»: {reason}' },
   },
 });

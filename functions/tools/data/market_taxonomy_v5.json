@@ -10,7 +10,7 @@
       },
       "slogan": {
         "uz_Cyrl": "Қорамол ва паррандаларни эгасидан тўғридан-тўғри топинг — танланг, солиштиринг ва сотувчи билан келишинг.",
-        "uz_Latn": "Qoramol va parrandalarni egasidan to'g'ridan-to'g'ri toping — tanlang, solishtiring va sotuvchi bilan kelishing.",
+        "uz_Latn": "Qoramol va parrandalarni egasidan töğridan-töğri toping — tanlang, soliştiring va sotuvçi bilan kelişing.",
         "ru": "Скот и птица напрямую от владельцев — выбирайте, сравнивайте и договаривайтесь с продавцом."
       },
       "imageUrl": "",
@@ -29,7 +29,7 @@
           "id": "sheep_goat",
           "names": {
             "uz_Cyrl": "Қўй-эчки",
-            "uz_Latn": "Qo'y-echki",
+            "uz_Latn": "Qöy-eçki",
             "ru": "Овцы и козы"
           },
           "orderable": false,
@@ -59,7 +59,7 @@
           "id": "other",
           "names": {
             "uz_Cyrl": "Бошқа",
-            "uz_Latn": "Boshqa",
+            "uz_Latn": "Boşqa",
             "ru": "Другое"
           },
           "orderable": false,
@@ -86,7 +86,7 @@
           "required": false,
           "names": {
             "uz_Cyrl": "Ёши (ой)",
-            "uz_Latn": "Yoshi (oy)",
+            "uz_Latn": "Yoşi (oy)",
             "ru": "Возраст (мес.)"
           }
         },
@@ -112,7 +112,7 @@
               "id": "female",
               "names": {
                 "uz_Cyrl": "Урғочи",
-                "uz_Latn": "Urg'ochi",
+                "uz_Latn": "Urğoçi",
                 "ru": "Самка"
               }
             }
@@ -148,7 +148,7 @@
           "required": false,
           "names": {
             "uz_Cyrl": "Бўғоз",
-            "uz_Latn": "Bo'g'oz",
+            "uz_Latn": "Böğoz",
             "ru": "Стельная"
           }
         }
@@ -163,12 +163,12 @@
       "order": 20,
       "names": {
         "uz_Cyrl": "Мошина бозори",
-        "uz_Latn": "Mashina bozori",
+        "uz_Latn": "Maşina bozori",
         "ru": "Авторынок"
       },
       "slogan": {
         "uz_Cyrl": "Мошина, мото, бошқа техникалар ва эҳтиёт қисмларни нарх ва сифат бўйича танлаб, мос вариантни топинг.",
-        "uz_Latn": "Mashina, moto, boshqa texnikalar va ehtiyot qismlarni narx va sifat bo'yicha tanlab, mos variantni toping.",
+        "uz_Latn": "Maşina, moto, boşqa texnikalar va ehtiyot qismlarni narx va sifat böyiça tanlab, mos variantni toping.",
         "ru": "Автомобили, мото, другая техника и запчасти — выбирайте по цене и качеству и находите подходящий вариант."
       },
       "imageUrl": "",
@@ -286,7 +286,7 @@
           "required": false,
           "names": {
             "uz_Cyrl": "Ёқилғи",
-            "uz_Latn": "Yoqilg'i",
+            "uz_Latn": "Yoqilği",
             "ru": "Топливо"
           },
           "options": [
@@ -352,7 +352,7 @@
           "required": false,
           "names": {
             "uz_Cyrl": "Қайси машинага",
-            "uz_Latn": "Qaysi mashinaga",
+            "uz_Latn": "Qaysi maşinaga",
             "ru": "Для какого авто"
           },
           "categories": [
@@ -381,7 +381,7 @@
               "id": "used",
               "names": {
                 "uz_Cyrl": "Ишлатилган",
-                "uz_Latn": "Ishlatilgan",
+                "uz_Latn": "Işlatilgan",
                 "ru": "Б/у"
               }
             }
@@ -400,17 +400,17 @@
       "order": 30,
       "names": {
         "uz_Cyrl": "Гўшт бозори",
-        "uz_Latn": "Go'sht bozori",
+        "uz_Latn": "Göşt bozori",
         "ru": "Мясной рынок"
       },
       "slogan": {
         "uz_Cyrl": "Маҳаллий ва импорт гўштлар, парранда ва балиқларни яқин сотувчилардан танланг — нархларни солиштиринг ва етказиб беришдан фойдаланинг.",
-        "uz_Latn": "Mahalliy va import go'shtlar, parranda va baliqlarni yaqin sotuvchilardan tanlang — narxlarni solishtiring va yetkazib berishdan foydalaning.",
+        "uz_Latn": "Mahalliy va import göştlar, parranda va baliqlarni yaqin sotuvçilardan tanlang — narxlarni soliştiring va yetkazib berişdan foydalaning.",
         "ru": "Местное и импортное мясо, птица и рыба от ближайших продавцов — сравнивайте цены и пользуйтесь доставкой."
       },
       "sloganNoOrder": {
         "uz_Cyrl": "Маҳаллий ва импорт гўштлар, парранда ва балиқларни яқин сотувчилардан танланг — нархларни солиштиринг ва сотувчи билан келишинг.",
-        "uz_Latn": "Mahalliy va import go'shtlar, parranda va baliqlarni yaqin sotuvchilardan tanlang — narxlarni solishtiring va sotuvchi bilan kelishing.",
+        "uz_Latn": "Mahalliy va import göştlar, parranda va baliqlarni yaqin sotuvçilardan tanlang — narxlarni soliştiring va sotuvçi bilan kelişing.",
         "ru": "Местное и импортное мясо, птица и рыба от ближайших продавцов — сравнивайте цены и договаривайтесь с продавцом."
       },
       "imageUrl": "",
@@ -428,7 +428,7 @@
           "id": "mutton",
           "names": {
             "uz_Cyrl": "Қўй",
-            "uz_Latn": "Qo'y",
+            "uz_Latn": "Qöy",
             "ru": "Баранина"
           },
           "orderable": true
@@ -455,7 +455,7 @@
           "id": "other",
           "names": {
             "uz_Cyrl": "Бошқа",
-            "uz_Latn": "Boshqa",
+            "uz_Latn": "Boşqa",
             "ru": "Другое"
           },
           "orderable": true
@@ -468,7 +468,7 @@
           "required": false,
           "names": {
             "uz_Cyrl": "Сўйилган санаси",
-            "uz_Latn": "So'yilgan sanasi",
+            "uz_Latn": "Söyilgan sanasi",
             "ru": "Дата забоя"
           }
         }
@@ -487,7 +487,7 @@
       },
       "slogan": {
         "uz_Cyrl": "Сабзавот, мева, полиз ва донни деҳқондан тўғридан-тўғри олинг — янги маҳсулотни яхши нархда топинг.",
-        "uz_Latn": "Sabzavot, meva, poliz va donni dehqondan to'g'ridan-to'g'ri oling — yangi mahsulotni yaxshi narxda toping.",
+        "uz_Latn": "Sabzavot, meva, poliz va donni dehqondan töğridan-töğri oling — yangi mahsulotni yaxşi narxda toping.",
         "ru": "Овощи, фрукты, бахчевые и зерно напрямую от фермеров — свежие продукты по хорошей цене."
       },
       "imageUrl": "",
@@ -532,7 +532,7 @@
           "id": "other",
           "names": {
             "uz_Cyrl": "Бошқа",
-            "uz_Latn": "Boshqa",
+            "uz_Latn": "Boşqa",
             "ru": "Другое"
           },
           "orderable": true
@@ -611,7 +611,7 @@
           "id": "tablets",
           "names": {
             "uz_Cyrl": "Планшетлар",
-            "uz_Latn": "Planshetlar",
+            "uz_Latn": "Planşetlar",
             "ru": "Планшеты"
           },
           "orderable": true
@@ -647,7 +647,7 @@
           "id": "other",
           "names": {
             "uz_Cyrl": "Бошқа",
-            "uz_Latn": "Boshqa",
+            "uz_Latn": "Boşqa",
             "ru": "Другое"
           },
           "orderable": true
@@ -698,7 +698,7 @@
               "id": "used",
               "names": {
                 "uz_Cyrl": "Ишлатилган",
-                "uz_Latn": "Ishlatilgan",
+                "uz_Latn": "Işlatilgan",
                 "ru": "Б/у"
               }
             }
@@ -781,7 +781,7 @@
       "order": 60,
       "names": {
         "uz_Cyrl": "Маиший техника бозори",
-        "uz_Latn": "Maishiy texnika bozori",
+        "uz_Latn": "Maişiy texnika bozori",
         "ru": "Рынок бытовой техники"
       },
       "slogan": {
@@ -795,7 +795,7 @@
           "id": "fridges",
           "names": {
             "uz_Cyrl": "Музлаткичлар",
-            "uz_Latn": "Muzlatkichlar",
+            "uz_Latn": "Muzlatkiçlar",
             "ru": "Холодильники"
           },
           "orderable": true
@@ -804,7 +804,7 @@
           "id": "washers",
           "names": {
             "uz_Cyrl": "Кир ювиш машиналари",
-            "uz_Latn": "Kir yuvish mashinalari",
+            "uz_Latn": "Kir yuviş maşinalari",
             "ru": "Стиральные машины"
           },
           "orderable": true
@@ -831,7 +831,7 @@
           "id": "vacuums",
           "names": {
             "uz_Cyrl": "Чангюткичлар",
-            "uz_Latn": "Changyutkichlar",
+            "uz_Latn": "Çangyutkiçlar",
             "ru": "Пылесосы"
           },
           "orderable": true
@@ -840,7 +840,7 @@
           "id": "kitchen",
           "names": {
             "uz_Cyrl": "Ошхона техникалари",
-            "uz_Latn": "Oshxona texnikalari",
+            "uz_Latn": "Oşxona texnikalari",
             "ru": "Кухонная техника"
           },
           "orderable": true
@@ -849,7 +849,7 @@
           "id": "heaters",
           "names": {
             "uz_Cyrl": "Иситгич ва бойлерлар",
-            "uz_Latn": "Isitgich va boylerlar",
+            "uz_Latn": "Isitgiç va boylerlar",
             "ru": "Обогреватели и бойлеры"
           },
           "orderable": true
@@ -858,7 +858,7 @@
           "id": "other",
           "names": {
             "uz_Cyrl": "Бошқа",
-            "uz_Latn": "Boshqa",
+            "uz_Latn": "Boşqa",
             "ru": "Другое"
           },
           "orderable": true
@@ -909,7 +909,7 @@
               "id": "used",
               "names": {
                 "uz_Cyrl": "Ишлатилган",
-                "uz_Latn": "Ishlatilgan",
+                "uz_Latn": "Işlatilgan",
                 "ru": "Б/у"
               }
             }

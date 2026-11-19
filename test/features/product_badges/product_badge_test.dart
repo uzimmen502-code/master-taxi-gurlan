@@ -82,7 +82,9 @@ void main() {
     test('client errors', () {
       expect(promoClientError(kind: 'discount', price: 0, percent: 5), 'promo_reason_PRICE_REQUIRED');
       expect(promoClientError(kind: 'discount', price: 100, percent: 0), 'promo_reason_PERCENT_INVALID');
-      expect(promoClientError(kind: 'discount', price: 100, percent: 91), 'promo_reason_PERCENT_INVALID');
+      expect(promoClientError(kind: 'discount', price: 100, percent: 51), 'promo_reason_PERCENT_INVALID');
+      expect(promoClientError(kind: 'discount', price: 100, percent: 90), 'promo_reason_PERCENT_INVALID');
+      expect(promoClientError(kind: 'discount', price: 100, percent: 50), isNull); // max (эга 2026-11-20)
       expect(promoClientError(kind: 'discount', price: 1, percent: 10), 'promo_reason_DISCOUNT_TOO_SMALL');
       expect(promoClientError(kind: 'discount', price: 10000, percent: 10), isNull);
       expect(promoClientError(kind: 'promo', price: null, percent: null), isNull);

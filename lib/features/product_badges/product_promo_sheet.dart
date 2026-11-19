@@ -30,9 +30,9 @@ int? promoPriceOf(String collection, Map<String, dynamic> d) {
   return p is int && p >= 0 ? p : null;
 }
 
-/// Фоиз чегараси — сервер PERCENT_MIN/MAX ва Rules билан бир хил (PROPOSED 1..90).
+/// Фоиз чегараси — сервер PERCENT_MIN/MAX ва Rules билан бир хил (1..50, эга 2026-11-20).
 const int kPromoPercentMin = 1;
-const int kPromoPercentMax = 90;
+const int kPromoPercentMax = 50;
 
 /// Мижоздаги олдиндан текширув (сервер барибир текширади, жумладан 7 кун қоидасини): калит ёки null.
 String? promoClientError({required String kind, required int? price, required int? percent}) {

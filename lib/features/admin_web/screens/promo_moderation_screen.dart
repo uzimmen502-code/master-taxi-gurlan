@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../product_badges/product_promo_sheet.dart' show kPromoPercentMin, kPromoPercentMax;
 import '../services/admin_callable.dart';
 
 /// «Чегирмалар» (эга 2026-11-19/20), икки таб:
@@ -239,7 +240,7 @@ class _AvaDiscountsTabState extends State<AvaDiscountsTab> {
       builder: (ctx) => AlertDialog(
         title: Text('Чегирма: ${r.title}'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: pct, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Фоиз (1–90)')),
+          TextField(controller: pct, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Фоиз ($kPromoPercentMin–$kPromoPercentMax)')),
           TextField(controller: days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Неча кун (1–30)')),
           const SizedBox(height: 8),
           const Text('Нарх охирги 30 кунда ≥ 7 кун ўзгармаган бўлиши шарт (сервер текширади).', style: TextStyle(fontSize: 12)),
@@ -253,7 +254,7 @@ class _AvaDiscountsTabState extends State<AvaDiscountsTab> {
     if (ok != true) return;
     final p = int.tryParse(pct.text.trim());
     final d = int.tryParse(days.text.trim());
-    if (p == null || d == null || d < 1 || d > 30) {
+    if (p == null || p < kPromoPercentMin || p > kPromoPercentMax || d == null || d < 1 || d > 30) {
       if (mounted) _snack(context, 'Хато: PERCENT_OR_DAYS_INVALID');
       return;
     }

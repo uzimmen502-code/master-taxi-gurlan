@@ -95,6 +95,7 @@ class TvClip {
     this.viewCount = 0,
     this.status = 'active',
     this.createdAt,
+    this.activatedAt,
     this.shopItemId = '',
     this.wholesaleProductId = '',
     this.linkKind = '',
@@ -132,7 +133,7 @@ class TvClip {
   /// `product` | `service` | `news` | `ad`
   final String category;
 
-  /// `news` (48 соат) ва `ad` (танланган муддат) учун тугаш вақти.
+  /// `news` (24 соат, эга 2026-11-19; эски илова 48 ёзади — сервер барибир 24 соатда тугатади) ва `ad` (танланган муддат) учун тугаш вақти.
   /// `product`/`service` — доимий, бу майдон `null`.
   final DateTime? expiresAt;
 
@@ -167,6 +168,11 @@ class TvClip {
   /// `pending` | `active` | `blocked`
   final String status;
   final DateTime? createdAt;
+
+  /// Клип `active` бўлган СЕРВЕР вақти (модерация тасдиғи ёки авто-тасдиқ; эга 2026-11-19).
+  /// Фақат сервер ёзади (`onTvClipSocialPublish`), қоида клиентга тақиқлайди — [toMap]да йўқ.
+  /// Эски ҳужжатларда `null` — «эски» ҳисобланади (`tv_news_window.dart`).
+  final DateTime? activatedAt;
 
   /// Боғланган витрина товар/хизмати. Бўш = фақат ролик.
   final String shopItemId;
@@ -390,6 +396,7 @@ class TvClip {
       viewCount: viewCount ?? this.viewCount,
       status: status,
       createdAt: createdAt,
+      activatedAt: activatedAt,
       shopItemId: shopItemId ?? this.shopItemId,
       wholesaleProductId: wholesaleProductId ?? this.wholesaleProductId,
       linkKind: linkKind ?? this.linkKind,
@@ -446,6 +453,7 @@ class TvClip {
       viewCount: (d['viewCount'] ?? 0) as int,
       status: (d['status'] ?? 'active') as String,
       createdAt: _asDate(d['createdAt']) ?? _asDate(d['createdAtMs']),
+      activatedAt: _asDate(d['activatedAt']) ?? _asDate(d['activatedAtMs']),
       shopItemId: (d['shopItemId'] ?? '') as String,
       wholesaleProductId: (d['wholesaleProductId'] ?? '') as String,
       linkKind: (d['linkKind'] ?? '') as String,

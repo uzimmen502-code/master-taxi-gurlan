@@ -45,6 +45,9 @@ class TvFeedCdn {
     if (categories == null || categories.isEmpty) return 'all';
     final s = {...categories};
     if (s.length == 1 && s.contains('news')) return 'news';
+    // Эга 2026-11-19: market ҳовузи — фақат `ad` (сервер `FEED_TABS.market`). Эски 3 талик
+    // рўйхат ҳам шу ҳовузга (сервер уни барибир фақат реклама билан қуради).
+    if (s.length == 1 && s.contains('ad')) return 'market';
     if (s.containsAll({'product', 'service', 'ad'}) && s.length == 3) {
       return 'market';
     }

@@ -147,8 +147,8 @@ function testNewsWindowPools() {
       JSON.stringify(ids('all')) === '["legacy","ad","news","old"]');
   check('news: янгилик + янги товар, чиққан вақт бўйича',
       JSON.stringify(ids('news')) === '["news","fresh"]');
-  check('market: ўзгармаган (янги товар ҳам бор)',
-      JSON.stringify(ids('market')) === '["legacy","fresh","ad","old"]');
+  check('market (пуллик режим): янги товарсиз (эга 2026-11-19)',
+      JSON.stringify(ids('market')) === '["legacy","ad","old"]');
 }
 
 function main() {

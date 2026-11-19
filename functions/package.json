@@ -15,10 +15,11 @@
     "test:tv-social": "node test/tv_social_caption.test.js",
     "test:intercity": "node test/intercity_rules.test.js",
     "test:assistant": "node test/assistant_chat.test.js",
-    "test:ev-static-map": "node test/ev_static_map.test.js"
+    "test:ev-static-map": "node test/ev_static_map.test.js",
+    "test:realty-fields": "node test/realty_fields.test.js && node test/realty_fields_wiring.test.js"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

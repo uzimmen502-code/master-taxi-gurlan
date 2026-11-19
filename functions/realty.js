@@ -3,6 +3,11 @@
 const crypto = require('crypto');
 
 const { encode: geohashEncode } = require('./geo_hash');
+// Ихтиёрий қўшимча майдонлар (эга 2026-11-19): тур, сотих, таъмир, валюта…
+// Жонли c8c5b324 устига фақат шу майдонлар ва расм чегараси 10 кўчирилди.
+const {
+  parseRealtyExtras, extrasForCreate, extrasForUpdate, MAX_IMAGES,
+} = require('./realty_fields');
 
 /**
  * «Кўчмас мулк Кластери» — сервер томони (1-босқич).
@@ -223,6 +228,12 @@ function attachRealty(exports, deps) {
       throw fail('invalid-argument', 'location_required');
     }
 
+    // Қўшимча майдонлар — ҳаммаси ихтиёрий; нотўғриси — диагностик код
+    // (ён таъсирдан олдин текширилади).
+    const ex = parseRealtyExtras(d, { deal });
+    if (ex.error) throw fail('invalid-argument', ex.error);
+    const landBase = new Set(ex.clearBase);
+
     const ownerKey = await ensureOwnerKey(uid);
     const pro = await activeProPlan(uid);
     const used = await countActivePlain(ownerKey);
@@ -242,7 +253,7 @@ function attachRealty(exports, deps) {
 
     const imageUrls = Array.isArray(d.imageUrls)
       ? d.imageUrls.filter((u) => typeof u === 'string' && u.startsWith('http'))
-        .slice(0, 5)
+        .slice(0, MAX_IMAGES)
       : [];
 
     let ownerName = String(d.ownerName || '').trim().slice(0, 80);
@@ -261,9 +272,11 @@ function attachRealty(exports, deps) {
       new Date(Date.now() + PLAIN_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
     );
 
-    const rooms = optionalInt(d.rooms, 1, 99);
-    const floor = optionalInt(d.floor, -5, 200);
-    const totalFloors = optionalInt(d.totalFloors, 1, 200);
+    // Ер участкасида хона/қават маъносиз — тозаланади (realty_fields).
+    const rooms = landBase.has('rooms') ? null : optionalInt(d.rooms, 1, 99);
+    const floor = landBase.has('floor') ? null : optionalInt(d.floor, -5, 200);
+    const totalFloors = landBase.has('totalFloors')
+      ? null : optionalInt(d.totalFloors, 1, 200);
     const areaM2 = optionalNum(d.areaM2, 1, 100000);
 
     // Аниқ нуқта ўрнига силкитилган нуқта — бу ОЧИҚ ҳужжатга тушади.
@@ -286,6 +299,8 @@ function attachRealty(exports, deps) {
       ...(floor === null ? {} : { floor }),
       ...(totalFloors === null ? {} : { totalFloors }),
       ...(areaM2 === null ? {} : { areaM2 }),
+      // Қўшимча майдонлар — фақат тўлдирилганлари (эга 2026-11-19).
+      ...extrasForCreate(ex.values),
       imageUrls,
       areaLat: cell.lat,
       areaLng: cell.lng,
@@ -370,12 +385,24 @@ function attachRealty(exports, deps) {
 
     const imageUrls = Array.isArray(d.imageUrls)
       ? d.imageUrls.filter((u) => typeof u === 'string' && u.startsWith('http'))
-        .slice(0, 5)
+        .slice(0, MAX_IMAGES)
       : [];
 
-    const rooms = optionalInt(d.rooms, 1, 99);
-    const floor = optionalInt(d.floor, -5, 200);
-    const totalFloors = optionalInt(d.totalFloors, 1, 200);
+    const deal = d.deal === 'rent' ? 'rent' : 'sale';
+    // Қўшимча майдонлар: калит келмаса (эски APK) эски қиймат тегилмайди.
+    const ex = parseRealtyExtras(d, {
+      deal,
+      currentPropertyType: typeof current.propertyType === 'string'
+        ? current.propertyType : null,
+    });
+    if (ex.error) throw fail('invalid-argument', ex.error);
+    const landBase = new Set(ex.clearBase);
+
+    // Ер участкасида хона/қават маъносиз — тозаланади (realty_fields).
+    const rooms = landBase.has('rooms') ? null : optionalInt(d.rooms, 1, 99);
+    const floor = landBase.has('floor') ? null : optionalInt(d.floor, -5, 200);
+    const totalFloors = landBase.has('totalFloors')
+      ? null : optionalInt(d.totalFloors, 1, 200);
     const areaM2 = optionalNum(d.areaM2, 1, 100000);
 
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
@@ -398,7 +425,7 @@ function attachRealty(exports, deps) {
       : jitteredPoint(lat, lng);
 
     await ref.update({
-      deal: d.deal === 'rent' ? 'rent' : 'sale',
+      deal,
       title,
       text,
       priceText: String(d.priceText || '').trim().slice(0, 80),
@@ -411,6 +438,9 @@ function attachRealty(exports, deps) {
         ? admin.firestore.FieldValue.delete() : totalFloors,
       areaM2: areaM2 === null
         ? admin.firestore.FieldValue.delete() : areaM2,
+      // Қўшимча майдонлар: келган калит ёзилади/ўчирилади, келмагани
+      // (эски APK) тегилмайди.
+      ...extrasForUpdate(ex.values, admin.firestore.FieldValue.delete()),
       imageUrls,
       // Очиқ ҳужжатда фақат тахминий марказ (қаранг: `ensureOwnerKey`).
       areaLat: cell.lat,

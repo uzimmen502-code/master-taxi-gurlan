@@ -1377,7 +1377,7 @@ class _HomeViewState extends State<_HomeView> {
       'intercity': ('home_module_intercity', 'home_lite_intercity_caption',
           'assets/images/home/card_intercity_v1.webp', HomeLiteImageFit.cover),
       'local_taxi': ('home_lite_local_taxi_title', 'home_lite_local_taxi_caption',
-          'assets/images/banners/banner_local_taxi.jpg', HomeLiteImageFit.cover),
+          'assets/images/home/card_local_taxi_v1.webp', HomeLiteImageFit.cover),
       'marshrut': ('home_lite_marshrut_title', 'home_lite_marshrut_caption',
           'assets/images/home/card_marshrut_v1.webp', HomeLiteImageFit.cover),
       'yuk_local': ('home_lite_yuk_local_title', 'home_lite_yuk_local_caption',

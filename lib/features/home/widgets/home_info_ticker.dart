@@ -86,8 +86,8 @@ class HomeInfoTicker extends StatefulWidget {
   /// Матн алмашиш анимацияси (эга 2026-11-20: 300–400 мс).
   static const textAnimation = Duration(milliseconds: 350);
 
-  /// Расм устуни кенглиги — баннер энининг улуши (эга 2026-11-20: 15–20%).
-  static const artWidthFactor = 0.18;
+  /// Расм устуни кенглиги — баннер энининг улуши (эга 2026-11-20, 3-тур: 25%; аввал 18%).
+  static const artWidthFactor = 0.25;
 
   @override
   State<HomeInfoTicker> createState() => _HomeInfoTickerState();
@@ -183,7 +183,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
           maxScaleFactor: 1.3,
           child: LayoutBuilder(
             builder: (context, box) {
-              final artW = (box.maxWidth * HomeInfoTicker.artWidthFactor).clamp(40.0, 96.0);
+              final artW = (box.maxWidth * HomeInfoTicker.artWidthFactor).clamp(40.0, 120.0);
               return Row(
                 children: [
                   Expanded(

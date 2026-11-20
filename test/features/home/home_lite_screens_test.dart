@@ -1,7 +1,8 @@
 // Бош саҳифа «енгил дизайн» (эга 2026-11-20) скриншотлари — ҲАҚИҚИЙ виджетлар, сохта маълумот.
 // Фақат `AVA_SCREENS=1` билан ишлайди (оддий тест прогонида ўтказиб юборилади):
 //   $env:AVA_SCREENS='1'; flutter test test/features/home/home_lite_screens_test.dart
-// Натижа: build/screens/*.png (375×812 dp, pixelRatio 2).
+// Натижа: build/screens/*.png (375×812 dp, pixelRatio 2); home_full_light_N.png — тўлиқ саҳифа бўлаклари.
+// Ҳар тестни алоҳида ишга туширинг (--plain-name): бир прогонда иккинчи MaterialApp тил юкини кутиб қолади.
 //
 // Чекловлар: «Янги эълонлар» тасмаси ва қидирув натижалари Firestore'дан ўқийди — бу ерда
 // кўрсатилмайди (қидирув майдонининг ўзи кўринади); карточкалар рўйхати home_screen.dart
@@ -15,6 +16,17 @@ import 'package:ava_gurlan/features/favorites/favorites_controller.dart';
 import 'package:ava_gurlan/features/home/widgets/ava_bottom_nav.dart';
 import 'package:ava_gurlan/features/home/widgets/ava_top_bar.dart';
 import 'package:ava_gurlan/features/home/widgets/home_global_search.dart';
+import 'package:ava_gurlan/features/home/widgets/home_ads_section.dart';
+import 'package:ava_gurlan/features/home/widgets/home_business_section.dart';
+import 'package:ava_gurlan/services/location_service.dart';
+import 'package:ava_gurlan/features/home/widgets/home_market_section.dart';
+import 'package:ava_gurlan/features/home/widgets/home_restaurants_section.dart';
+import 'package:ava_gurlan/features/ads/models/ad_model.dart';
+import 'package:ava_gurlan/models/job_ad.dart';
+import 'package:ava_gurlan/features/restaurants/data/restaurants_repository.dart';
+import 'package:ava_gurlan/features/restaurants/domain/restaurant_models.dart';
+import 'package:ava_gurlan/features/tv_market/models/tv_shop.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ava_gurlan/features/home/widgets/home_info_ticker.dart';
 import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
 import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
@@ -74,9 +86,81 @@ const _images = [
   'assets/images/services/service_ev_charging.png',
   'assets/images/banners/banner_food.jpg',
   'assets/images/banners/banner_intercity.jpg',
-  'assets/images/banners/banner_local_taxi.jpg',
+  'assets/images/home/card_local_taxi_v1.webp',
+  'assets/images/home/card_services_market_v1.webp',
   'assets/images/banners/banner_marshrut.jpg',
 ];
+
+final _fakeShop = <TvShopItem>[
+  for (final (i, title, market, price) in const [
+    (1, 'Сигир, 3 ёшли', 'livestock', 18000000),
+    (2, 'Chevrolet Cobalt 2022', 'auto', 145000000),
+    (3, 'Мол гўшти, 1 кг', 'meat', 95000),
+    (4, 'Помидор, 1 кг', 'farm', 12000),
+    (5, 'Samsung Galaxy A55', 'electronics', 4300000),
+  ])
+    TvShopItem.fromMap('fake$i', {
+      'title': title,
+      'status': 'active',
+      'market': market,
+      'price': price,
+      'districtId': '',
+      'regionId': '',
+      'createdAt': Timestamp.fromDate(DateTime(2026, 11, 20, 12).subtract(Duration(minutes: i))),
+    }),
+];
+
+class _FakeRestaurants extends RestaurantsRepository {
+  static final _list = [
+    Restaurant.fromMap('r1', const {'name': 'Гурлан Палов Маркази', 'status': 'approved', 'legalType': 'llc'}),
+    Restaurant.fromMap('r2', const {'name': 'Дилноза опа ошхонаси', 'status': 'approved', 'legalType': 'individual'}),
+    Restaurant.fromMap('r3', const {'name': 'Pizza Time', 'status': 'approved', 'legalType': 'llc'}),
+  ];
+
+  @override
+  Stream<List<Restaurant>> watchApproved({int limit = 50}) => Stream.value(_list);
+}
+
+/// Скриншот учун сохта «харита»: кўча чизиқлари ва белгилар.
+class _FakeMap extends StatelessWidget {
+  const _FakeMap();
+
+  @override
+  Widget build(BuildContext context) {
+    const pins = [Offset(0.2, 0.3), Offset(0.45, 0.55), Offset(0.7, 0.25), Offset(0.82, 0.7), Offset(0.3, 0.75), Offset(0.6, 0.45)];
+    return LayoutBuilder(
+      builder: (context, box) => Stack(
+        children: [
+          Positioned.fill(child: CustomPaint(painter: _StreetsPainter())),
+          for (final o in pins)
+            Positioned(
+              left: o.dx * box.maxWidth - 14,
+              top: o.dy * box.maxHeight - 28,
+              child: const Icon(Icons.location_on, size: 28, color: Color(0xFFE53935)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreetsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFEAF0E4));
+    final road = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 8;
+    for (var i = 1; i < 5; i++) {
+      canvas.drawLine(Offset(0, size.height * i / 5), Offset(size.width, size.height * i / 5 + 20), road);
+      canvas.drawLine(Offset(size.width * i / 5, 0), Offset(size.width * i / 5 - 30, size.height), road);
+    }
+    canvas.drawCircle(Offset(size.width * 0.15, size.height * 0.85), 30, Paint()..color = const Color(0xFFBFDCF5));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 class _Preview extends StatelessWidget {
   const _Preview({required this.scroll});
@@ -102,7 +186,7 @@ class _Preview extends StatelessWidget {
       'intercity': card('intercity', 'home_module_intercity', 'home_lite_intercity_caption',
           image: 'assets/images/home/card_intercity_v1.webp'),
       'local_taxi': card('local_taxi', 'home_lite_local_taxi_title', 'home_lite_local_taxi_caption',
-          image: 'assets/images/banners/banner_local_taxi.jpg'),
+          image: 'assets/images/home/card_local_taxi_v1.webp'),
       'marshrut': card('marshrut', 'home_lite_marshrut_title', 'home_lite_marshrut_caption',
           image: 'assets/images/home/card_marshrut_v1.webp'),
       'yuk_local': card('yuk_local', 'home_lite_yuk_local_title', 'home_lite_yuk_local_caption',
@@ -133,6 +217,15 @@ class _Preview extends StatelessWidget {
               isVisible: all,
               loadTaxonomy: () async => MarketTaxonomy.fromMap(const {'version': 1, 'markets': {}}),
             ),
+            // Аралаш маҳсулот тасмаси (сохта маҳсулотлар, бозор белгилари).
+            const SizedBox(height: AvaSpace.sectionMin),
+            HomeMarketSection(
+              onOpenAll: () {},
+              onOpenAd: (_, __) {},
+              onOpenShopItem: (_, __) {},
+              watchAds: (_) => Stream.value(const <AdModel>[]),
+              loadShop: () async => _fakeShop,
+            ),
             HomeLiteSection(
               title: tr('home_lite_section_ads_services'),
               cards: [
@@ -148,7 +241,36 @@ class _Preview extends StatelessWidget {
               title: tr('home_lite_section_transport'),
               cards: [for (final id in homeTransportCardIds(all)) transport[id]!],
             ),
-            // Аралаш / Янги эълонлар / EV / Бизнес / AVAGram тасмалари Firestore'дан ўқийди — бу ерда йўқ.
+            // Кафе-ресторанлар тасмаси (сохта: битта «Уй таоми»).
+            const SizedBox(height: AvaSpace.homeSection),
+            HomeRestaurantsSection(
+              onOpenAll: () {},
+              onOpenRestaurant: (_) {},
+              repository: _FakeRestaurants(),
+              accessCheck: () async => true,
+              locate: () async => null,
+            ),
+            // «Янги эълонлар» тасмаси (эълон оқими бўш — намунавий қаторлар).
+            const SizedBox(height: AvaSpace.homeSection),
+            HomeAdsSection(
+              adType: 'ad',
+              titleKey: 'home_section_ads',
+              onOpenAll: () {},
+              onOpenAd: (_) {},
+              watchJobs: () => Stream.value(const <JobAd>[]),
+            ),
+            // EV бўлими (харита) — бу ерда йўқ; ўрни: «Янги эълонлар»дан кейин, Бизнес харитасидан олдин.
+            // Бизнес харитаси: телефон кўриниши (харита ўрнида СОХТА расм — GoogleMap тестда чизилмайди).
+            const SizedBox(height: AvaSpace.sectionMin),
+            HomeBusinessSection(
+              onOpenMap: () {},
+              onAddMine: () {},
+              showMap: true,
+              locate: () async => const LocationCoords(lat: 41.84, lng: 60.39),
+              loadPins: (_, {required gps}) async => const [],
+              mapBuilder: (_, __, ___) => const _FakeMap(),
+            ),
+            // AVAGram бўлими Firestore ўқийди — бу ерда йўқ (ўрни: шу ердан кейин).
             const SizedBox(height: 8),
             HomeAllServicesHeader(
               items: [ServiceSpotlightItem(moduleId: 'jobs', label: 'jobs', icon: Icons.circle, onTap: () {})],
@@ -206,6 +328,26 @@ Future<void> _shoot(WidgetTester t, {required String name, required ThemeData th
   await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
   await t.pump(const Duration(milliseconds: 500));
   Directory('build/screens').createSync(recursive: true);
+  if (stops.length == 1 && stops.first == 'full') {
+    // Тўлиқ саҳифа: юқоридан пастга кетма-кет кўриниш баландлигидаги бўлаклар.
+    final step = scroll.position.viewportDimension;
+    var i = 1;
+    for (var off = 0.0;; off += step) {
+      scroll.jumpTo(off.clamp(0.0, scroll.position.maxScrollExtent));
+      await t.pump();
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
+      await t.pump(const Duration(milliseconds: 100));
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final idx = i++;
+      await t.runAsync(() async {
+        final img = await boundary.toImage(pixelRatio: 2);
+        final data = await img.toByteData(format: ui.ImageByteFormat.png);
+        File('build/screens/${name}_$idx.png').writeAsBytesSync(data!.buffer.asUint8List());
+      });
+      if (off >= scroll.position.maxScrollExtent) break;
+    }
+    stops = const [];
+  }
   for (final stop in stops) {
     final target = switch (stop) {
       'top' => 0.0,
@@ -234,7 +376,7 @@ void main() {
     if (!_enabled) return;
     setupFirebaseCoreMocks();
     await Firebase.initializeApp();
-    ServiceConfigHolder.setForTest(defaults: ServiceModuleConfig(const {}));
+    ServiceConfigHolder.setForTest(defaults: ServiceModuleConfig(const {'restaurants': ModuleStatus.enabled, 'jobs': ModuleStatus.enabled}));
     // ❤ чипи FirebaseAuth'га уланмасин (меҳмон).
     FavoritesController.debugInstance = FavoritesController(uidStream: Stream.value(''));
     await _loadFonts();
@@ -248,6 +390,10 @@ void main() {
 
   testWidgets('dark 375×812 (AvaColors.dark — иловада ҳали уланмаган)', (t) async {
     await _shoot(t, name: 'home_dark', theme: AppTheme.dark, stops: stops);
+  }, skip: !_enabled);
+
+  testWidgets('full page light (тасмалар сохта маълумот билан)', (t) async {
+    await _shoot(t, name: 'home_full_light', theme: AppTheme.light, stops: const ['full']);
   }, skip: !_enabled);
 
   testWidgets('large text 1.5× light', (t) async {

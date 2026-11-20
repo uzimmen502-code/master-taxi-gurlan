@@ -93,11 +93,12 @@ const kHomeMarketEntries = <HomeMarketEntry>[
     sloganKey: 'home_market_appliances_slogan',
   ),
   // Эга 2026-11-20: бош саҳифадаги «Яқиндаги хизматлар» бўлими ўрнига — мавжуд хизматлар
-  // рўйхати (jobs, kind=service), дарвоза `jobs`. Расм — вақтинча иконка (эга кейин беради).
+  // рўйхати (jobs, kind=service), дарвоза `jobs`. Расм — эга чизгани (2026-11-20, 3-тур).
   HomeMarketEntry(
     id: 'services',
     moduleId: 'jobs',
     titleKey: 'home_market_services_title',
+    imagePath: 'assets/images/home/card_services_market_v1.webp',
     icon: Icons.handyman_rounded,
     sloganKey: 'home_market_services_slogan',
   ),

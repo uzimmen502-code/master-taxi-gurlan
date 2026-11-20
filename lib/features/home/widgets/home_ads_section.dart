@@ -41,6 +41,7 @@ class HomeAdsSection extends StatefulWidget {
     this.onOpenShopItem,
     this.onOpenRealty,
     this.onOpenRestaurant,
+    this.watchJobs,
   });
 
   /// «Яқиндаги эълонлар» қўшимчалари (фақат `adType == 'ad'`, эга 2026-11-16/17): мол/мошина (таксономия
@@ -50,6 +51,10 @@ class HomeAdsSection extends StatefulWidget {
   final void Function(TvShopItem item, List<TvShopItem> shelf)? onOpenShopItem;
   final void Function(RealtyListing listing)? onOpenRealty;
   final void Function(Restaurant restaurant)? onOpenRestaurant;
+
+  /// Тест/скриншот учун эълонлар оқими (сукут — Firestore).
+  @visibleForTesting
+  final Stream<List<JobAd>> Function()? watchJobs;
 
   /// Қўшимча қаторлар сони (маҳсулот + уй-жой).
   static const extrasLimit = 10;
@@ -185,14 +190,14 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
   void _listen() {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
-    _sub = _repo
+    _sub = (widget.watchJobs?.call() ?? _repo
         // `jobs` модули танлови (туман/вилоят/Республика) — экран билан
         // бир хил (D-GEO-1).
         .watchScoped(
           GeoContext.homeScopeFor('jobs'),
           types: [widget.adType],
           limit: HomeAdsSection.limit,
-        )
+        ))
         .listen(
       (list) {
         if (!mounted) return;

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Бош экран баннери — «енгил дизайн» (эга 2026-11-20): қора хошия ва КАТТА ҲАРФ йўқ, фон #FFF3DF,
-/// радиус 16, битта тўқ сариқ «Эълон бериш →» тугмаси, ўнгда ~18% карнай расми; фақат матн алмашади.
+/// радиус 16, битта тўқ сариқ «Эълон бериш →» тугмаси, ўнгда 25% карнай расми (3-тур); фақат матн алмашади.
 HomeTickerAd _ad(String id, String text) => HomeTickerAd(
       id: id, text: text, audience: 'all', durationSec: 6, scrollSpeed: 45,
       animationStyle: 'auto', fontSize: 13, priority: 0, active: true,
@@ -72,8 +72,9 @@ void main() {
   testWidgets('расм ўрни ~18% кенгликда, расм йўли битта константа', (t) async {
     await t.pumpWidget(_app([_ad('a', 'Матн')], width: 360));
     final art = t.getSize(find.byKey(const ValueKey('home_banner_art')));
-    // 360 − 22 px ички чет = 338 → 18% ≈ 61.
-    expect(art.width, closeTo(338 * HomeInfoTicker.artWidthFactor, 1));
+    // 360 − 22 px ички чет = 338 → 25% ≈ 84.5.
+    expect(HomeInfoTicker.artWidthFactor, 0.25);
+    expect(art.width, closeTo(338 * 0.25, 1));
     expect(kHomeBannerArtAsset, 'assets/images/home/banner_megaphone_v1.webp');
   });
 
@@ -111,10 +112,15 @@ void main() {
 
   testWidgets('чегара: узун матн, тор экран ва катта шрифт (1.5) — тошиш йўқ', (t) async {
     final long = 'Иловада истаган одам - Курьер бўлиши мумкин. Курьерлик қилинг ва даромад топинг! ' * 3;
+    // 328 = 360 px экран, 288 = 320 px экран (16 px четлар); сукут матн ҳам.
+    for (final ads in [[_ad('a', long)], <HomeTickerAd>[]]) {
+    for (final width in [328.0, 288.0]) {
     for (final scale in [1.0, 1.3, 1.5]) {
-      await t.pumpWidget(_app([_ad('a', long)], width: 328, scale: scale));
-      expect(t.takeException(), isNull, reason: 'scale $scale');
+      await t.pumpWidget(_app(ads, width: width, scale: scale));
+      expect(t.takeException(), isNull, reason: 'scale $scale, width $width');
       expect(t.getSize(find.byType(HomeInfoTicker)).height, HomeInfoTicker.height);
+    }
+    }
     }
   });
 }

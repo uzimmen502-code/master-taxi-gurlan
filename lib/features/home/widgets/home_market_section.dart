@@ -46,11 +46,19 @@ class HomeMarketSection extends StatefulWidget {
     this.onOpenWholesale,
     this.onOpenRealty,
     this.onOpenShopItem,
+    this.watchAds,
+    this.loadShop,
   });
 
   /// Бозорлар / ўз дўкони маҳсулоти (`tv_shop_items`, эга 2026-11-16) босилди: тегишли бозор устида тафсилот.
   /// [shelf] — бўлимдаги маҳсулотлар («ўхшашлар» учун, янги ўқиш йўқ). `null` — маҳсулотлар кўрсатилмайди.
   final void Function(TvShopItem item, List<TvShopItem> shelf)? onOpenShopItem;
+
+  /// Тест/скриншот учун: эълонлар оқими ва дўкон маҳсулотлари (сукут — Firestore).
+  @visibleForTesting
+  final Stream<List<AdModel>> Function(int limit)? watchAds;
+  @visibleForTesting
+  final Future<List<TvShopItem>> Function()? loadShop;
 
   /// Бўлимдаги `tv_shop_items` сони (яқиндан узоққа).
   static const shopLimit = 10;
@@ -90,7 +98,8 @@ class HomeMarketSection extends StatefulWidget {
 }
 
 class _HomeMarketSectionState extends State<HomeMarketSection> {
-  final _repo = AdsRepository();
+  // Лазй: тест оқими ([HomeMarketSection.watchAds]) берилса, репозиторий (Storage) умуман яратилмайди.
+  late final _repo = AdsRepository();
   final _scroll = ScrollController();
   final Random _rnd = sessionRandom();
   StreamSubscription<List<AdModel>>? _sub;
@@ -125,7 +134,7 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
   /// бўлим ҳудуди, яқиндан узоққа.
   Future<void> _loadShop() async {
     try {
-      final all = await HomeShopFeed.recent();
+      final all = await (widget.loadShop ?? HomeShopFeed.recent)();
       if (!mounted) return;
       final user = GeoContext.active;
       final list = aralashShopItems(
@@ -220,8 +229,8 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
     }
     // Модул танлови (туман/вилоят/Республика, D-GEO-1) — модул экрани
     // билан бир хил. Аввал бош саҳифа туман, «Барчаси» Республика эди.
-    _sub = _repo
-        .watchScoped(GeoContext.homeScopeFor('cheap_products_home'), limit: _limit)
+    _sub = (widget.watchAds?.call(_limit) ??
+            _repo.watchScoped(GeoContext.homeScopeFor('cheap_products_home'), limit: _limit))
         .listen(
       (list) {
         if (!mounted) return;

@@ -1035,6 +1035,33 @@ service cloud.firestore {
         allow create: if isOwner(userId) && favCreateOk();
         allow update: if false;
       }
+
+      // «AVA Супермаркет» ҳафталик саватлари (эга 2026-11-21): фақат эгаси. remindNextAt /
+      // remindLastSentAt — фақат CF (onSmListWrite / smWeeklyReminder). Қатор ичи (groupId,
+      // varietyId, offerId, qty) — серверда текширилади (rules list'ни айланолмайди); нарх ва
+      // буюртма — доим сервер. ≤10 рўйхат — клиент чеклови. Тест: supermarket_rules.test.js
+      match /sm_lists/{listId} {
+        function smListOk(d) {
+          return d.name is string && d.name.size() >= 1 && d.name.size() <= 40
+              && d.items is list && d.items.size() <= 100
+              && d.remind is map && d.remind.keys().hasAll(['enabled', 'weekday', 'minute'])
+              && d.remind.keys().hasOnly(['enabled', 'weekday', 'minute'])
+              && d.remind.enabled is bool
+              && d.remind.weekday is int && d.remind.weekday >= 1 && d.remind.weekday <= 7
+              && d.remind.minute is int && d.remind.minute >= 0 && d.remind.minute <= 1439
+              && d.updatedAt == request.time;
+        }
+        allow read, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && listId.matches('^[A-Za-z0-9_-]{1,40}$')
+            && request.resource.data.keys().hasAll(['name', 'items', 'remind', 'createdAt', 'updatedAt'])
+            && request.resource.data.keys().hasOnly(['name', 'items', 'remind', 'createdAt', 'updatedAt'])
+            && request.resource.data.createdAt == request.time
+            && smListOk(request.resource.data);
+        allow update: if isOwner(userId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['name', 'items', 'remind', 'updatedAt'])
+            && smListOk(request.resource.data);
+      }
     }
 
     // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)
@@ -1880,7 +1907,8 @@ service cloud.firestore {
     // оммавий амаллар йиқилмасин), ўчирмайди (smStatus 'hidden'). Эски ҳужжатлар — аввалгидек.
     function smServerFields() {
       return ['smGroupId', 'smCategoryId', 'smVariety', 'smQuality', 'packLabel', 'packQty', 'packUnit', 'qtyStep',
-              'weighed', 'stock', 'smStatus', 'smAutoOutOfStock', 'priceUpdatedAt', 'searchTokens'];
+              'weighed', 'stock', 'smStatus', 'smAutoOutOfStock', 'priceUpdatedAt', 'searchTokens',
+              'smImageSrc', 'smImportBatchId'];
     }
     match /platform_products/{id} {
       allow read: if true;

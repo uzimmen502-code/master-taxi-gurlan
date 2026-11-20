@@ -46,6 +46,7 @@ const USER_SUBCOLLECTIONS = Object.freeze([
   'dismissed_news', 'relative_join_alerts', 'realty_places', 'realty_prefs', 'realty_matches',
   'realty_alert_meta', 'realty_unlocked', 'assistant_conversations', 'assistant_memory', 'assistant_usage',
   'assistant_packages', 'fcm_tokens', 'favorites',
+  'sm_lists', // «AVA Супермаркет» ҳафталик саватлари (эга 2026-11-21)
 ]);
 
 const clampDays = (v) => {

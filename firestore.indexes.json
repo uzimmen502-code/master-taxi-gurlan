@@ -2739,6 +2739,16 @@
       ]
     },
     {
+      "collectionGroup": "sm_lists",
+      "fieldPath": "remindNextAt",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "ASCENDING" },
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION", "arrayConfig": "CONTAINS" },
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "assistant_conversations",
       "fieldPath": "expiresAt",
       "ttl": true,

@@ -26,9 +26,10 @@ const SET_FILE = path.join(__dirname, 'data', 'supermarket_settings_v1.json');
 const ACTOR = 'seed';
 
 function parseArgs(argv) {
-  const out = { apply: argv.includes('--apply'), project: null, only: null, taxFile: TAX_FILE, setFile: SET_FILE };
+  const out = { apply: argv.includes('--apply'), upgrade: argv.includes('--upgrade'), project: null, only: null, taxFile: TAX_FILE, setFile: SET_FILE };
   const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : (i >= 0 ? '' : null); };
   out.project = val('--project');
+  out.expectedVersion = val('--expected-version');
   out.only = val('--only');
   const tf = val('--taxonomy-file'); if (tf) out.taxFile = path.resolve(tf);
   const sf = val('--settings-file'); if (sf) out.setFile = path.resolve(sf);
@@ -69,9 +70,97 @@ function toValue(v) {
   return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toValue(x)])) } };
 }
 
+/**
+ * ЯНГИЛАШ (2-босқич, эга 2026-11-21): мавжуд taxonomy/supermarket vN → v(N+1) (масалан pairs қўшилган v2 файл).
+ *   node functions/tools/seed_supermarket.js --upgrade --taxonomy-file functions/tools/data/supermarket_taxonomy_v2.json \
+ *     --expected-version 1 --project <id> [--apply]
+ * Версия қулфи: ҳужжатдаги version == --expected-version бўлмаса — тўхтайди. Бир хил мазмун — ёзилмайди.
+ * Ёзилади (adminSetSupermarketTaxonomy билан бир хил шакл): taxonomy/supermarket, taxonomy_history/supermarket_v{N+1},
+ * admin_audit/supermarket_taxonomy_upgrade_v{N+1}. DRY RUN — сукут.
+ */
+async function upgrade(args, taxonomy) {
+  const expected = Number(args.expectedVersion);
+  if (!Number.isInteger(expected) || expected < 1) throw new Error('--expected-version <N> (>=1) kerak');
+  if (!args.project) throw new Error('--upgrade faqat --project <id> bilan');
+  const plan2 = (cur) => {
+    const version = Number.isInteger(cur.version) ? cur.version : 0;
+    if (version !== expected) throw new Error(`Versiya mos emas: hujjatda v${version}, kutilgan v${expected}`);
+    if (sm.stableStringify(cur.categories) === sm.stableStringify(taxonomy.categories)) return null;
+    const v = version + 1;
+    const docs = sm.buildTaxonomyVersionDocs({ categories: taxonomy.categories, version: v, previousVersion: version, actor: ACTOR, ts: null });
+    return { v, docs, auditPath: `admin_audit/supermarket_taxonomy_upgrade_v${v}`, historyPath: `${sm.HISTORY_COLLECTION}/${sm.HISTORY_PREFIX}${v}` };
+  };
+  if (!process.env.FIRESTORE_EMULATOR_HOST && process.env.GCLOUD_ACCESS_TOKEN) {
+    const token = process.env.GCLOUD_ACCESS_TOKEN;
+    const base = `https://firestore.googleapis.com/v1/projects/${args.project}/databases/(default)/documents`;
+    const headers = { Authorization: `Bearer ${token}`, 'x-goog-user-project': args.project, 'Content-Type': 'application/json' };
+    const r = await fetch(`${base}/${sm.TAXONOMY_DOC.join('/')}`, { headers });
+    if (r.status !== 200) throw new Error(`taxonomy/supermarket o'qilmadi: HTTP ${r.status}`);
+    const raw = await r.json();
+    const f = raw.fields || {};
+    const cur = { version: f.version ? Number(f.version.integerValue) : 0, categories: fromValue(f.categories) };
+    const p = plan2(cur);
+    if (!p) { console.log("O'zgarish yo'q — yozilmaydi."); return; }
+    console.log(`${args.apply ? 'APPLY' : 'DRY RUN'} — v${expected} → v${p.v} (PRODUCTION REST): ${sm.TAXONOMY_DOC.join('/')}, ${p.historyPath}, ${p.auditPath}`);
+    if (!args.apply) return;
+    const name = (x) => `projects/${args.project}/databases/(default)/documents/${x}`;
+    const w = (path, data, tsField, precondition) => ({
+      update: { name: name(path), fields: toValue(Object.fromEntries(Object.entries(data).filter(([k]) => k !== tsField))).mapValue.fields },
+      updateTransforms: [{ fieldPath: tsField, setToServerValue: 'REQUEST_TIME' }],
+      currentDocument: precondition,
+    });
+    const writes = [
+      w(sm.TAXONOMY_DOC.join('/'), p.docs.doc, 'updatedAt', { updateTime: raw.updateTime }),
+      w(p.historyPath, p.docs.history, 'updatedAt', { exists: false }),
+      w(p.auditPath, p.docs.audit, 'at', { exists: false }),
+    ];
+    const res = await fetch(`${base}:commit`, { method: 'POST', headers, body: JSON.stringify({ writes }) });
+    if (res.status !== 200) throw new Error(`Commit xatosi HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    console.log(`YANGILANDI: v${p.v}`);
+    return;
+  }
+  const admin = require('firebase-admin');
+  if (!admin.apps.length) {
+    if (process.env.FIRESTORE_EMULATOR_HOST) admin.initializeApp({ projectId: args.project });
+    else admin.initializeApp({ projectId: args.project, credential: admin.credential.applicationDefault() });
+  }
+  const db = admin.firestore();
+  const ts = admin.firestore.FieldValue.serverTimestamp();
+  const out = await db.runTransaction(async (t) => {
+    const ref = db.doc(sm.TAXONOMY_DOC.join('/'));
+    const s = await t.get(ref);
+    if (!s.exists) throw new Error("taxonomy/supermarket yo'q — avval seed (--apply)");
+    const p = plan2(s.data() || {});
+    if (!p || !args.apply) return p;
+    t.set(ref, { ...p.docs.doc, updatedAt: ts });
+    t.create(db.doc(p.historyPath), { ...p.docs.history, updatedAt: ts });
+    t.create(db.doc(p.auditPath), { ...p.docs.audit, at: ts });
+    return p;
+  });
+  if (!out) console.log("O'zgarish yo'q — yozilmaydi.");
+  else console.log(`${args.apply ? 'YANGILANDI' : 'DRY RUN (yoziladi)'}: v${expected} → v${out.v} (${process.env.FIRESTORE_EMULATOR_HOST ? 'emulator' : 'PRODUCTION API'})`);
+}
+
+function fromValue(v) {
+  if (!v) return null;
+  if ('nullValue' in v) return null;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('stringValue' in v) return v.stringValue;
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(fromValue);
+  if ('mapValue' in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fromValue(x)]));
+  return null;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const data = load(args);
+  if (args.upgrade) {
+    const tv = sm.validateSupermarketTaxonomy(data.taxonomy);
+    if (!tv.ok) { for (const e of tv.errors) console.error(`  ${e}`); process.exit(1); }
+    return upgrade(args, data.taxonomy);
+  }
   const tv = sm.validateSupermarketTaxonomy(data.taxonomy);
   const sv = sm.validateSupermarketSettings(data.settings);
   if (!tv.ok || !sv.ok) {
@@ -134,4 +223,4 @@ async function restSeed(args, docs, token) {
 
 if (require.main === module) main().catch((e) => { console.error(e.message || e); process.exit(1); });
 
-module.exports = { parseArgs, load, plan, toValue };
+module.exports = { parseArgs, load, plan, toValue, fromValue, upgrade };

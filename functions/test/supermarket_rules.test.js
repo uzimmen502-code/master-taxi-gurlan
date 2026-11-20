@@ -99,6 +99,53 @@ async function main() {
     await assertSucceeds(adm.doc('taxonomy_history/supermarket_v1').get());
   });
 
+  // ── 2-босқич (эга 2026-11-21) ──
+  const { serverTimestamp } = require('firebase/firestore');
+  const OTHER = '998901000002';
+  const other = ctx(OTHER);
+  const list = (o = {}) => ({ name: 'Ҳафталик', items: [{ groupId: 'beef', qty: 1 }], remind: { enabled: true, weekday: 6, minute: 600 }, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...o });
+  const L = `users/${USER}/sm_lists`;
+
+  await check('R7 sm_lists: фақат эгаси ўқийди/яратади/ўзгартиради/ўчиради; бошқа мижоз, аноним, админ (ёзиш) — рад', async () => {
+    await assertSucceeds(user.doc(`${L}/w1`).set(list()));
+    await assertSucceeds(user.doc(`${L}/w1`).get());
+    await assertSucceeds(user.collection(L).get());
+    await assertFails(other.doc(`${L}/w1`).get());
+    await assertFails(other.collection(L).get());
+    await assertFails(anon.doc(`${L}/w1`).get());
+    await assertFails(other.doc(`${L}/w2`).set(list()));
+    await assertFails(adm.doc(`${L}/w2`).set(list()));
+    await assertFails(other.doc(`${L}/w1`).delete());
+    await assertSucceeds(user.doc(`${L}/w1`).update({ name: 'Янги', updatedAt: serverTimestamp() }));
+    await assertSucceeds(user.doc(`users/901000001/sm_lists/legacy9`).set(list()), 'эски 9 хонали ҳужжат йўли ҳам эганики');
+  });
+
+  await check('R8 sm_lists шакли: ном 40/41, қатор 100/101, remind чегаралари, ортиқча/сервер майдонлари, вақт = request.time, ID', async () => {
+    await assertSucceeds(user.doc(`${L}/n40`).set(list({ name: 'x'.repeat(40) })));
+    await assertFails(user.doc(`${L}/n41`).set(list({ name: 'x'.repeat(41) })));
+    await assertFails(user.doc(`${L}/n0`).set(list({ name: '' })));
+    await assertSucceeds(user.doc(`${L}/i100`).set(list({ items: Array.from({ length: 100 }, () => ({ groupId: 'milk', qty: 1 })) })));
+    await assertFails(user.doc(`${L}/i101`).set(list({ items: Array.from({ length: 101 }, () => ({ groupId: 'milk', qty: 1 })) })));
+    for (const r of [{ enabled: true, weekday: 0, minute: 0 }, { enabled: true, weekday: 8, minute: 0 }, { enabled: true, weekday: 1, minute: 1440 }, { enabled: true, weekday: 1, minute: -1 }, { enabled: 'y', weekday: 1, minute: 0 }, { enabled: true, weekday: 1 }, { enabled: true, weekday: 1, minute: 0, x: 1 }]) {
+      await assertFails(user.doc(`${L}/rbad`).set(list({ remind: r })));
+    }
+    await assertSucceeds(user.doc(`${L}/redge`).set(list({ remind: { enabled: false, weekday: 7, minute: 1439 } })));
+    await assertFails(user.doc(`${L}/srv1`).set(list({ remindNextAt: serverTimestamp() })));
+    await assertFails(user.doc(`${L}/srv2`).set(list({ price: 1 })));
+    await assertFails(user.doc(`${L}/time1`).set(list({ createdAt: new Date(0) })));
+    await assertFails(user.doc(`${L}/bad%20id!`).set(list()));
+    await assertFails(user.doc(`${L}/w1`).update({ remindNextAt: new Date(), updatedAt: serverTimestamp() }));
+    await assertFails(user.doc(`${L}/w1`).update({ remindKey: '1:1', updatedAt: serverTimestamp() }));
+    await assertFails(user.doc(`${L}/w1`).update({ name: 'x', updatedAt: new Date(0) }));
+    await assertFails(user.doc(`${L}/w1`).update({ createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  });
+
+  await check('R9 импорт майдонлари smImageSrc/smImportBatchId — админ клиенти ёзолмайди (фақат CF)', async () => {
+    await assertFails(adm.doc('platform_products/sm1').update({ smImageSrc: 'https://x' }));
+    await assertFails(adm.doc('platform_products/legacy').update({ smImportBatchId: 'smi_x' }));
+    await assertFails(adm.doc('platform_products/new9').set({ name: 'x', price: 1, smImageSrc: 'https://x' }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);

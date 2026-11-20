@@ -429,4 +429,5 @@ function attachWholesaleImport(exportsObj, deps) {
   });
 }
 
-module.exports = { attachWholesaleImport, downloadUrl, pathFromDownloadUrl, pool };
+// realFileStore — «AVA Супермаркет» импорти ҳам шу Storage қатламини ишлатади (дубликат йўқ, 2026-11-21).
+module.exports = { attachWholesaleImport, downloadUrl, pathFromDownloadUrl, pool, realFileStore };

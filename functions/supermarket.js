@@ -45,6 +45,30 @@ const PACK_UNITS = Object.freeze(['kg', 'l', 'piece']);
 const REFUND_NOTES = Object.freeze({
   weigh: { key: 'sm_refund_weigh', messages: { uz_Cyrl: 'Супермаркет: тортилгандан кейинги қайтим', uz_Latn: 'Supermarket: tortilgandan keyingi qaytim', ru: 'Супермаркет: возврат после взвешивания' } },
   remove: { key: 'sm_refund_line_removed', messages: { uz_Cyrl: 'Супермаркет: маҳсулот олинди, қайтим', uz_Latn: 'Supermarket: mahsulot olindi, qaytim', ru: 'Супермаркет: товар удалён, возврат' } },
+  shortage_substitute: { key: 'sm_refund_substitute', messages: { uz_Cyrl: 'Супермаркет: арзонроқ маҳсулотга алмаштирилди, қайтим', uz_Latn: 'Supermarket: arzonroq mahsulotga almaştirildi, qaytim', ru: 'Супермаркет: замена на более дешёвый товар, возврат' } },
+  shortage_reduce: { key: 'sm_refund_reduced', messages: { uz_Cyrl: 'Супермаркет: миқдор камайтирилди, қайтим', uz_Latn: 'Supermarket: miqdor kamaytirildi, qaytim', ru: 'Супермаркет: количество уменьшено, возврат' } },
+  shortage_remove: { key: 'sm_refund_line_removed', messages: { uz_Cyrl: 'Супермаркет: маҳсулот олинди, қайтим', uz_Latn: 'Supermarket: mahsulot olindi, qaytim', ru: 'Супермаркет: товар удалён, возврат' } },
+});
+// Қўшимча ечим (фақат мижоз розилиги билан — қимматроқ алмаштириш).
+const DEBIT_NOTES = Object.freeze({
+  shortage_substitute: { key: 'sm_debit_substitute', messages: { uz_Cyrl: 'Супермаркет: алмаштирилган маҳсулот фарқи', uz_Latn: 'Supermarket: almaştirilgan mahsulot farqi', ru: 'Супермаркет: доплата за замену товара' } },
+});
+const SHORTAGE_CHOICES = Object.freeze(['substitute', 'reduce', 'remove']);
+const SHORTAGE_SUBS_MAX = 3;
+const SHORTAGE_ANSWER_MS = 30 * 60000; // 30 дақиқа — кейин админ қаторни олиши мумкин (мавжуд callable)
+const LIST_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+const WEEK_MS = 7 * 86400000;
+const REMIND_BATCH = 400;
+// Ҳафталик сават эслатмаси (эга 2026-11-21, 3 тил). Ҳеч қачон буюртма яратмайди / пул ечмайди.
+const REMIND_TEXT = Object.freeze({
+  uz_Cyrl: { title: 'AVA Супермаркет', body: 'AVA Супермаркет: ҳафталик саватингиз тайёр. Маҳсулотлар ва жорий нархларни кўриб чиқинг.' },
+  uz_Latn: { title: 'AVA Supermarket', body: 'AVA Supermarket: haftalik savatingiz tayyor. Mahsulotlar va joriy narxlarni körib çiqing.' },
+  ru: { title: 'AVA Супермаркет', body: 'AVA Супермаркет: ваша недельная корзина готова. Проверьте товары и текущие цены.' },
+});
+const SHORTAGE_TEXT = Object.freeze({
+  uz_Cyrl: { title: 'Буюртмада битта маҳсулот етишмаяпти', body: '«{name}» етарли эмас. Алмаштириш, миқдорни камайтириш ёки олиб ташлашни танланг (30 дақиқа ичида).' },
+  uz_Latn: { title: 'Buyurtmada bitta mahsulot yetişmayapti', body: '«{name}» yetarli emas. Almaştiriş, miqdorni kamaytiriş yoki olib taşlaşni tanlang (30 daqiqa içida).' },
+  ru: { title: 'В заказе не хватает товара', body: '«{name}» недостаточно. Выберите замену, уменьшение количества или удаление (в течение 30 минут).' },
 });
 
 const LANGS = Object.freeze(['uz_Cyrl', 'uz_Latn', 'ru']);
@@ -118,6 +142,13 @@ const MSG = Object.freeze({
   GROUP_UNKNOWN: ['Бундай гуруҳ йўқ.', "Bunday guruh yöq.", 'Такой группы нет.'],
   TARIFF_NOT_CONFIGURED: ['Етказиш нархи ҳали созланмаган. Кейинроқ уриниб кўринг.', 'Yetkaziş narxi hali sozlanmagan. Keyinroq urinib köring.', 'Стоимость доставки ещё не настроена. Попробуйте позже.'],
   INTERNAL: ['Амални бажариб бўлмади. Қайта уриниб кўринг.', "Amalni bajarib bölmadi. Qayta urinib köring.", 'Не удалось выполнить. Попробуйте ещё раз.'],
+  // 2-босқич: етишмовчилик (эга 2026-11-21)
+  INSUFFICIENT_FUNDS: ['Алмаштириш учун ҳамёнда маблағ етарли эмас. Ҳамённи тўлдиринг ёки бошқа вариантни танланг.', "Almaştiriş uçun hamyonda mablağ yetarli emas. Hamyonni töldiring yoki boşqa variantni tanlang.", 'Для замены недостаточно средств в кошельке. Пополните кошелёк или выберите другой вариант.'],
+  LINE_SHORTAGE_PENDING: ['Бу маҳсулот бўйича мижоз жавоби кутилмоқда.', "Bu mahsulot böyiça mijoz javobi kutilmoqda.", 'По этому товару ожидается ответ клиента.'],
+  LINE_NO_SHORTAGE: ['Бу маҳсулот бўйича савол йўқ.', "Bu mahsulot böyiça savol yöq.", 'По этому товару нет вопроса.'],
+  LINE_SHORTAGE_RESOLVED: ['Бу маҳсулот бўйича жавоб аллақачон берилган.', "Bu mahsulot böyiça javob allaqaçon berilgan.", 'Ответ по этому товару уже дан.'],
+  SUBSTITUTE_INVALID: ['Алмаштириладиган маҳсулот нотўғри ёки сотувда йўқ.', "Almaştiriladigan mahsulot notöğri yoki sotuvda yöq.", 'Товар для замены неверный или недоступен.'],
+  AVAILABLE_QTY_INVALID: ['Мавжуд миқдор нотўғри.', "Mavjud miqdor notöğri.", 'Неверное доступное количество.'],
 });
 
 function messagesOf(code) {
@@ -294,7 +325,8 @@ function stepOk(step) {
 }
 
 const CATEGORY_KEYS = ['id', 'order', 'icon', 'names', 'groups'];
-const GROUP_KEYS = ['id', 'order', 'names', 'unit', 'step', 'weighed', 'synonyms'];
+const GROUP_KEYS = ['id', 'order', 'names', 'unit', 'step', 'weighed', 'synonyms', 'pairs'];
+const PAIRS_MAX = 10; // «бирга олинади» (cross-sell) — гуруҳга ≤10 бошқа гуруҳ (эга 2026-11-21)
 
 /** taxonomy {categories:[...]} → {ok, errors}. Гуруҳ id'лари БУТУН таксономияда ягона (таклиф smGroupId'ни ишлатади). */
 function validateSupermarketTaxonomy(obj) {
@@ -308,6 +340,7 @@ function validateSupermarketTaxonomy(obj) {
   if (!Array.isArray(obj.categories) || obj.categories.length === 0) { err('CATEGORIES_EMPTY', 'categories'); return done(); }
   const catIds = new Set();
   const groupIds = new Set();
+  const pairChecks = [];
   obj.categories.forEach((c, i) => {
     const cp = `categories[${i}]`;
     if (!isPlainObject(c)) { err('CATEGORY_NOT_OBJECT', cp); return; }
@@ -335,8 +368,22 @@ function validateSupermarketTaxonomy(obj) {
       else g.synonyms.forEach((s, k) => {
         if (typeof s !== 'string' || !s.trim() || s.length > LIMITS.synonym) err('SYNONYM_INVALID', `${gp}.synonyms[${k}]`);
       });
+      // pairs — ихтиёрий; мавжуд гуруҳ id'лари (ўзи эмас, такрорсиз) — ҳамма гуруҳ йиғилгандан кейин текширилади.
+      if (g.pairs !== undefined) {
+        if (!Array.isArray(g.pairs) || g.pairs.length > PAIRS_MAX) err('PAIRS_INVALID', `${gp}.pairs`);
+        else pairChecks.push({ gp, id: g.id, pairs: g.pairs });
+      }
     });
   });
+  for (const { gp, id, pairs } of pairChecks) {
+    const seen = new Set();
+    pairs.forEach((p, k) => {
+      if (typeof p !== 'string' || !groupIds.has(p)) err('PAIR_UNKNOWN', `${gp}.pairs[${k}]`);
+      else if (p === id) err('PAIR_SELF', `${gp}.pairs[${k}]`);
+      else if (seen.has(p)) err('PAIR_DUPLICATE', `${gp}.pairs[${k}]`);
+      else seen.add(p);
+    });
+  }
   return done();
 }
 
@@ -399,6 +446,10 @@ function validateSupermarketSettings(obj) {
   }
   return done();
 }
+
+// Импортда «ўзгармади» таққослаш майдонлари (upsertOfferTx).
+const IMPORT_COMPARE_KEYS = Object.freeze(['name', 'price', 'unit', 'qtyStep', 'weighed', 'stock', 'smStatus', 'smGroupId',
+  'smCategoryId', 'smVariety', 'smQuality', 'packLabel', 'packQty', 'packUnit', 'smImageSrc', 'imageUrl']);
 
 const OFFER_KEYS = ['smGroupId', 'smVariety', 'smQuality', 'packLabel', 'unit', 'qtyStep', 'weighed', 'stock',
   'smStatus', 'packQty', 'packUnit', 'price', 'name', 'description', 'imageUrl', 'imageUrls'];
@@ -531,6 +582,7 @@ function applyWeights(lines, input, weighHoldPercent) {
     if (!l) return { ok: false, code: 'LINE_NOT_FOUND', details: { productId: pid } };
     if (l.removed) return { ok: false, code: 'LINE_ALREADY_REMOVED', details: { productId: pid } };
     if (!l.weighed) return { ok: false, code: 'LINE_NOT_WEIGHED', details: { productId: pid } };
+    if (linePending(l)) return { ok: false, code: 'LINE_SHORTAGE_PENDING', details: { productId: pid } };
     const aMilli = toMilli(row.actualQty);
     if (aMilli == null || aMilli <= 0) return { ok: false, code: 'ACTUAL_QTY_INVALID', details: { productId: pid } };
     const qMilli = toMilli(l.qty);
@@ -552,6 +604,178 @@ function applyWeights(lines, input, weighHoldPercent) {
 function adjustment(charged, target) {
   const next = Math.min(charged, target);
   return { next, refund: charged - next, capDiscount: Math.max(0, target - charged) };
+}
+
+// ══════════════════════ ЕТИШМОВЧИЛИК (тоза, 2-босқич) ══════════════════════
+
+const linePending = (l) => !!(l && !l.removed && l.shortage && l.shortage.state === 'pending');
+const stepMilliOf = (l) => (stepOk(l && l.qtyStep) ? toMilli(l.qtyStep) : 1000);
+const bad = (code, details) => ({ ok: false, code, details: details || {} });
+
+/** Каталог таклифи алмаштиришга яроқлими (сотувда, нархи бор, stock > 0). */
+function offerSellable(d) {
+  if (!d || !d.smGroupId || d.smStatus !== 'active') return false;
+  if (!Number.isInteger(d.price) || d.price <= 0) return false;
+  const s = toMilli(Number(d.stock));
+  return s != null && s > 0;
+}
+
+/** Мижозга кўрсатиладиган алмаштириш нусхаси (нарх — маълумот учун; жавобда каталогдан қайта олинади). */
+function substituteView(offerId, d) {
+  const unit = UNITS.includes(d.unit) ? d.unit : 'piece';
+  const v = {
+    offerId, name: String(d.name || offerId).slice(0, LIMITS.offerName), price: d.price, smUnit: unit,
+    unit: UNIT_LABELS[unit].uz_Cyrl, qtyStep: stepOk(d.qtyStep) ? d.qtyStep : 1, weighed: d.weighed === true,
+  };
+  if (typeof d.packLabel === 'string' && d.packLabel) v.packLabel = d.packLabel;
+  if (typeof d.imageUrl === 'string' && d.imageUrl) v.imageUrl = d.imageUrl;
+  return v;
+}
+
+/**
+ * Админ: қаторни «етишмовчилик» ҳолатига ўтказади (пулга тегмайди). subs: [{offerId, data|null}].
+ * Кутилаётган ҳолатни қайта юбориш — идемпотент (changed:false).
+ */
+function applyShortageReport(lines, { productId, availableQty, subs, actor, nowMs }) {
+  const idx = lines.findIndex((l) => l.productId === productId);
+  if (idx < 0) return bad('LINE_NOT_FOUND', { productId });
+  const l = lines[idx];
+  if (l.removed) return bad('LINE_ALREADY_REMOVED', { productId });
+  if (l.shortage && l.shortage.state !== 'pending') return bad('LINE_SHORTAGE_RESOLVED', { productId });
+  if (l.weighed && l.actualQty != null) return bad('LINE_ALREADY_SETTLED', { productId });
+  const qMilli = toMilli(l.qty);
+  const aMilli = toMilli(availableQty);
+  if (aMilli == null || aMilli < 0 || aMilli >= qMilli || aMilli % stepMilliOf(l) !== 0) {
+    return bad('AVAILABLE_QTY_INVALID', { productId, qty: l.qty, step: fromMilli(stepMilliOf(l)) });
+  }
+  const inOrder = new Set(lines.filter((x) => !x.removed).map((x) => x.productId));
+  const options = [];
+  for (const { offerId, data } of subs) {
+    if (offerId === productId || inOrder.has(offerId) || !offerSellable(data)) return bad('SUBSTITUTE_INVALID', { offerId });
+    options.push(substituteView(offerId, data));
+  }
+  const core = { state: 'pending', availableQty: fromMilli(aMilli), substitutes: options };
+  if (linePending(l) && stableStringify({ state: l.shortage.state, availableQty: l.shortage.availableQty, substitutes: l.shortage.substitutes }) === stableStringify(core)) {
+    return { ok: true, changed: false, lines };
+  }
+  const next = lines.map((x, i) => (i === idx
+    ? { ...x, shortage: { ...core, reportedBy: actor, reportedAtMs: nowMs, answerByMs: nowMs + SHORTAGE_ANSWER_MS } }
+    : x));
+  return { ok: true, changed: true, lines: next, stockDeltas: {}, pricing: 'none', info: { name: String(l.name || '') } };
+}
+
+/**
+ * Мижоз жавоби (тоза). offerData — алмаштириш таклифи (транзакцияда ўқилган, ЖОРИЙ нарх/stock).
+ * stockDeltas: милли-бирлик, мусбат — омборга қайтади, манфий — ечилади.
+ * pricing: 'delta' — алмаштириш (фарқ ечилади ёки қайтади), 'cap' — камайтириш/олиш (adminRemove математикаси).
+ */
+function applyShortageChoice(lines, { productId, choice, offerId, qty, offerData, feeBp, weighHoldPercent, actor, nowMs }) {
+  const idx = lines.findIndex((l) => l.productId === productId);
+  if (idx < 0) {
+    // Аллақачон алмаштирилган (қатор энди бошқа productId) — «жавоб берилган».
+    if (lines.some((l) => l.substitutedFrom && l.substitutedFrom.productId === productId)) return bad('LINE_SHORTAGE_RESOLVED', { productId });
+    return bad('LINE_NOT_FOUND', { productId });
+  }
+  const l = lines[idx];
+  if (!l.shortage) return bad('LINE_NO_SHORTAGE', { productId });
+  if (!linePending(l)) return bad('LINE_SHORTAGE_RESOLVED', { productId });
+  const oldQ = toMilli(l.qty);
+  const resolved = { ...l.shortage, state: 'resolved', choice, resolvedBy: actor, resolvedAtMs: nowMs };
+  const replace = (nl) => lines.map((x, i) => (i === idx ? nl : x));
+
+  if (choice === 'substitute') {
+    const opt = (l.shortage.substitutes || []).find((s) => s.offerId === offerId);
+    if (!opt) return bad('SUBSTITUTE_INVALID', { offerId });
+    if (lines.some((x, i) => i !== idx && !x.removed && x.productId === offerId)) return bad('SUBSTITUTE_INVALID', { offerId });
+    if (!offerSellable(offerData)) return bad('SUBSTITUTE_INVALID', { offerId });
+    const qMilli = qty == null ? oldQ : toMilli(qty);
+    if (qMilli == null || qMilli <= 0 || qMilli > LIMITS.qtyMilliMax) return bad('QTY_STEP_INVALID', { productId: offerId });
+    const priced = priceSupermarketOrder({ items: [{ productId: offerId, qMilli }], products: { [offerId]: offerData }, feeBp, weighHoldPercent });
+    if (!priced.ok) return bad(priced.code, priced.details);
+    const nl = {
+      ...priced.lines[0],
+      substitutedFrom: { productId: l.productId, name: l.name, price: l.price, qty: l.qty, total: l.total },
+      shortage: resolved,
+    };
+    return { ok: true, changed: true, lines: replace(nl), stockDeltas: { [l.productId]: oldQ, [offerId]: -qMilli }, pricing: 'delta' };
+  }
+  if (choice === 'reduce') {
+    const aMilli = toMilli(l.shortage.availableQty);
+    const qMilli = qty == null ? aMilli : toMilli(qty);
+    if (qMilli == null || qMilli <= 0 || qMilli > aMilli || qMilli % stepMilliOf(l) !== 0) {
+      return bad('QTY_STEP_INVALID', { productId, maxQty: fromMilli(aMilli || 0), step: fromMilli(stepMilliOf(l)) });
+    }
+    const total = lineTotalOf(l.price, qMilli);
+    const nl = {
+      ...l, qty: fromMilli(qMilli), total, holdExtra: l.weighed ? holdExtraOf(total, weighHoldPercent) : 0,
+      reducedFrom: { qty: l.qty, total: l.total }, shortage: resolved,
+    };
+    return { ok: true, changed: true, lines: replace(nl), stockDeltas: { [productId]: oldQ - qMilli }, pricing: 'cap' };
+  }
+  if (choice === 'remove') {
+    if (lines.filter((x) => !x.removed).length <= 1) return bad('LAST_LINE');
+    const nl = { ...l, removed: { reason: 'shortage', by: actor, atMs: nowMs }, shortage: resolved };
+    return { ok: true, changed: true, lines: replace(nl), stockDeltas: { [productId]: oldQ }, pricing: 'cap' };
+  }
+  return bad('INVALID_REQUEST');
+}
+
+/**
+ * Янги ечим. 'cap' — мавжуд adjustment (ҳеч қачон ошмайди); 'delta' — charged + (янги мақсад − эски мақсад),
+ * фақат мижоз танлаган алмаштиришда (ошса — ҳамёндан фарқ ечилади). Ҳеч қачон манфий эмас.
+ */
+function chargeAfter(charged, oldLines, newLines, bp, pricing) {
+  const target = computeCharge(newLines, bp).target;
+  if (pricing === 'none') return { next: charged, refund: 0, debit: 0, capDiscount: 0, target };
+  if (pricing !== 'delta') {
+    const a = adjustment(charged, target);
+    return { next: a.next, refund: a.refund, debit: 0, capDiscount: a.capDiscount, target };
+  }
+  const next = Math.max(0, charged + (target - computeCharge(oldLines, bp).target));
+  return { next, refund: Math.max(0, charged - next), debit: Math.max(0, next - charged), capDiscount: 0, target };
+}
+
+// ══════════════════════ ҲАФТАЛИК САВАТ (тоза, 2-босқич) ══════════════════════
+
+/** remind ({enabled, weekday 1=Душанба..7=Якшанба, minute 0..1439}) шакли тўғрими. */
+function remindOk(r) {
+  return isPlainObject(r) && typeof r.enabled === 'boolean' && Number.isInteger(r.weekday) && r.weekday >= 1 && r.weekday <= 7
+    && Number.isInteger(r.minute) && r.minute >= 0 && r.minute <= 1439
+    && Object.keys(r).every((k) => ['enabled', 'weekday', 'minute'].includes(k));
+}
+
+/** Рўйхат ҳужжати муаммоси ('' — тўғри). rules list ичини айланолмайди — қатор шакли шу ерда. */
+function listShapeProblem(d) {
+  const x = d || {};
+  if (typeof x.name !== 'string' || !x.name.trim() || x.name.length > 40) return 'NAME_INVALID';
+  if (!Array.isArray(x.items) || x.items.length > 100) return 'ITEMS_INVALID';
+  for (const it of x.items) {
+    if (!isPlainObject(it) || !Object.keys(it).every((k) => ['groupId', 'varietyId', 'offerId', 'qty'].includes(k))) return 'ITEM_INVALID';
+    if (typeof it.groupId !== 'string' || !ID_RE.test(it.groupId)) return 'ITEM_INVALID';
+    if (it.varietyId != null && (typeof it.varietyId !== 'string' || !ID_RE.test(it.varietyId))) return 'ITEM_INVALID';
+    if (it.offerId != null && (typeof it.offerId !== 'string' || !PRODUCT_ID_RE.test(it.offerId))) return 'ITEM_INVALID';
+    const q = toMilli(it.qty);
+    if (q == null || q <= 0 || q > LIMITS.qtyMilliMax) return 'ITEM_INVALID';
+  }
+  if (!remindOk(x.remind)) return 'REMIND_INVALID';
+  return '';
+}
+
+/** Тошкент вақти бўйича кейинги эслатма (мс), қатъий nowMs дан кейин; ўчиқ/бузуқ — null. */
+function nextRemindAtMs(remind, nowMs) {
+  if (!remindOk(remind) || remind.enabled !== true) return null;
+  const t = new Date(nowMs + TZ_OFFSET_MS);
+  const dow = ((t.getUTCDay() + 6) % 7) + 1;
+  const dayStart = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - TZ_OFFSET_MS;
+  let at = dayStart + ((remind.weekday - dow + 7) % 7) * DAY_MS + remind.minute * 60000;
+  if (at <= nowMs) at += WEEK_MS;
+  return at;
+}
+
+/** Юборилгандан кейин: 7 кунлик қадам билан келажакдаги биринчи момент (тизим тўхтаб турса ҳам спам йўқ). */
+function advanceRemindMs(dueMs, nowMs) {
+  if (dueMs > nowMs) return dueMs;
+  return dueMs + (Math.floor((nowMs - dueMs) / WEEK_MS) + 1) * WEEK_MS;
 }
 
 // ══════════════════════ CLOUD FUNCTIONS ══════════════════════
@@ -732,86 +956,99 @@ function attachSupermarket(exportsObj, deps) {
       const cv = validateCost(cost);
       if (!cv.ok) throw fail('invalid-argument', 'OFFER_INVALID', { errors: cv.errors });
     }
-    const ref = db.collection(PRODUCTS).doc(productId);
-    const costRef = ref.collection('private').doc('cost');
-    const taxRef = db.collection(TAXONOMY_DOC[0]).doc(TAXONOMY_DOC[1]);
     let out;
     try {
-      out = await db.runTransaction(async (t) => {
-        const [taxSnap, snap, costSnap] = await Promise.all([t.get(taxRef), t.get(ref), t.get(costRef)]);
-        if (!taxSnap.exists) throw fail('failed-precondition', 'TAXONOMY_MISSING');
-        const found = findGroup(taxSnap.data() || {}, offer.smGroupId);
-        if (!found) throw fail('invalid-argument', 'GROUP_UNKNOWN', { groupId: offer.smGroupId });
-        const { group, category } = found;
-        const cur = snap.exists ? (snap.data() || {}) : null;
-        const unit = offer.unit || group.unit;
-        const qtyStep = offer.qtyStep != null ? offer.qtyStep : group.step;
-        const weighed = offer.weighed != null ? offer.weighed : group.weighed;
-        const name = offer.name || `${group.names.uz_Cyrl} ${offer.smVariety.names.uz_Cyrl}`.slice(0, LIMITS.offerName);
-        const patch = {
-          name,
-          price: offer.price,
-          unit,
-          qtyStep,
-          weighed,
-          stock: fromMilli(toMilli(offer.stock)),
-          smStatus: offer.smStatus,
-          smAutoOutOfStock: false,
-          smGroupId: group.id,
-          smCategoryId: category.id,
-          smVariety: offer.smVariety,
-          smQuality: offer.smQuality || null,
-          packLabel: offer.packLabel || '',
-          packQty: offer.packQty != null ? fromMilli(toMilli(offer.packQty)) : null,
-          packUnit: offer.packQty != null ? offer.packUnit : null,
-          searchTokens: offerSearchTokens({
-            name, variety: offer.smVariety, quality: offer.smQuality, packLabel: offer.packLabel, group, category,
-          }),
-          updatedAt: ts(),
-        };
-        if (offer.description != null) patch.description = offer.description;
-        if (offer.imageUrls != null) {
-          patch.imageUrls = offer.imageUrls;
-          patch.imageUrl = offer.imageUrls[0] || '';
-        } else if (offer.imageUrl != null) {
-          patch.imageUrl = offer.imageUrl;
-          patch.imageUrls = offer.imageUrl ? [offer.imageUrl] : [];
-        }
-        const priceChanged = !cur || cur.price !== offer.price;
-        if (priceChanged) patch.priceUpdatedAt = ts();
-        if (!cur) {
-          // Эски Улгуржи/«Тавсия»/бозор лентаси `active == true` ни кутади — супермаркет таклифи у ерга тушмасин.
-          Object.assign(patch, { active: false, showInMarket: false, featuredOnHome: false, sortOrder: 0, createdAt: ts() });
-        }
-        t.set(ref, patch, { merge: true });
-        if (priceChanged) {
-          t.set(db.collection(ADMIN_AUDIT).doc(), {
-            kind: 'supermarket_offer_price', actor, target: `${PRODUCTS}/${productId}`,
-            oldPrice: cur && Number.isInteger(cur.price) ? cur.price : null, newPrice: offer.price, at: ts(),
-          });
-        }
-        let costChanged = false;
-        if (cost) {
-          const prev = costSnap.exists ? (costSnap.data() || {}) : null;
-          costChanged = !prev || prev.purchasePrice !== cost.purchasePrice || prev.supplier !== cost.supplier;
-          if (costChanged) {
-            t.set(costRef, { purchasePrice: cost.purchasePrice, supplier: cost.supplier, updatedAt: ts(), updatedBy: actor });
-            t.set(db.collection(ADMIN_AUDIT).doc(), {
-              kind: 'supermarket_offer_cost', actor, target: `${PRODUCTS}/${productId}`,
-              oldPurchasePrice: prev && Number.isInteger(prev.purchasePrice) ? prev.purchasePrice : null,
-              newPurchasePrice: cost.purchasePrice,
-              supplierChanged: !prev || prev.supplier !== cost.supplier, at: ts(),
-            });
-          }
-        }
-        return { created: !cur, priceChanged, costChanged };
-      });
+      out = await db.runTransaction((t) => upsertOfferTx(t, { productId, offer, cost, actor }));
     } catch (e) {
       rethrow(e, 'adminUpsertSupermarketOffer', { userId: actor, productId });
     }
     log({ action: 'adminUpsertSupermarketOffer', result: 'ok', userId: actor, productId, ...out });
     return { ok: true, productId, ...out };
   });
+
+  /**
+   * Таклифни ёзиш — ЯГОНА йўл (callable ва Excel импорт): таксономия текшируви, searchTokens, нарх/харид аудити.
+   * imp: {batchId, imageSrc} — импортдан; эски (smGroupId'сиз) ҳужжатга импорт ёзмайди (SKU_NOT_SUPERMARKET).
+   */
+  async function upsertOfferTx(t, { productId, offer, cost, actor, imp }) {
+    const ref = db.collection(PRODUCTS).doc(productId);
+    const costRef = ref.collection('private').doc('cost');
+    const taxRef = db.collection(TAXONOMY_DOC[0]).doc(TAXONOMY_DOC[1]);
+    const [taxSnap, snap, costSnap] = await Promise.all([t.get(taxRef), t.get(ref), t.get(costRef)]);
+    if (!taxSnap.exists) throw fail('failed-precondition', 'TAXONOMY_MISSING');
+    const found = findGroup(taxSnap.data() || {}, offer.smGroupId);
+    if (!found) throw fail('invalid-argument', 'GROUP_UNKNOWN', { groupId: offer.smGroupId });
+    const { group, category } = found;
+    const cur = snap.exists ? (snap.data() || {}) : null;
+    if (imp && cur && !cur.smGroupId) throw fail('failed-precondition', 'SKU_NOT_SUPERMARKET', { productId });
+    const unit = offer.unit || group.unit;
+    const qtyStep = offer.qtyStep != null ? offer.qtyStep : group.step;
+    const weighed = offer.weighed != null ? offer.weighed : group.weighed;
+    const name = offer.name || `${group.names.uz_Cyrl} ${offer.smVariety.names.uz_Cyrl}`.slice(0, LIMITS.offerName);
+    const patch = {
+      name,
+      price: offer.price,
+      unit,
+      qtyStep,
+      weighed,
+      stock: fromMilli(toMilli(offer.stock)),
+      smStatus: offer.smStatus,
+      smAutoOutOfStock: false,
+      smGroupId: group.id,
+      smCategoryId: category.id,
+      smVariety: offer.smVariety,
+      smQuality: offer.smQuality || null,
+      packLabel: offer.packLabel || '',
+      packQty: offer.packQty != null ? fromMilli(toMilli(offer.packQty)) : null,
+      packUnit: offer.packQty != null ? offer.packUnit : null,
+      searchTokens: offerSearchTokens({
+        name, variety: offer.smVariety, quality: offer.smQuality, packLabel: offer.packLabel, group, category,
+      }),
+      updatedAt: ts(),
+    };
+    if (offer.description != null) patch.description = offer.description;
+    if (offer.imageUrls != null) {
+      patch.imageUrls = offer.imageUrls;
+      patch.imageUrl = offer.imageUrls[0] || '';
+    } else if (offer.imageUrl != null) {
+      patch.imageUrl = offer.imageUrl;
+      patch.imageUrls = offer.imageUrl ? [offer.imageUrl] : [];
+    }
+    if (imp) {
+      patch.smImageSrc = imp.imageSrc || '';
+      patch.smImportBatchId = imp.batchId;
+    }
+    const prevCost = costSnap.exists ? (costSnap.data() || {}) : null;
+    const costChanged = !!cost && (!prevCost || prevCost.purchasePrice !== cost.purchasePrice || prevCost.supplier !== cost.supplier);
+    // Импорт: ҳеч нарса ўзгармаган қатор — ёзилмайди (қайта юклаш идемпотент, аудит шовқини йўқ).
+    if (imp && cur && !costChanged && IMPORT_COMPARE_KEYS.every((k) => stableStringify(cur[k] === undefined ? null : cur[k]) === stableStringify(patch[k] === undefined ? null : patch[k]))) {
+      return { created: false, priceChanged: false, costChanged: false, unchanged: true };
+    }
+    const priceChanged = !cur || cur.price !== offer.price;
+    if (priceChanged) patch.priceUpdatedAt = ts();
+    if (!cur) {
+      // Эски Улгуржи/«Тавсия»/бозор лентаси `active == true` ни кутади — супермаркет таклифи у ерга тушмасин.
+      Object.assign(patch, { active: false, showInMarket: false, featuredOnHome: false, sortOrder: 0, createdAt: ts() });
+    }
+    t.set(ref, patch, { merge: true });
+    const src = imp ? { source: 'import', batchId: imp.batchId } : {};
+    if (priceChanged) {
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'supermarket_offer_price', actor, target: `${PRODUCTS}/${productId}`,
+        oldPrice: cur && Number.isInteger(cur.price) ? cur.price : null, newPrice: offer.price, ...src, at: ts(),
+      });
+    }
+    if (costChanged) {
+      t.set(costRef, { purchasePrice: cost.purchasePrice, supplier: cost.supplier, updatedAt: ts(), updatedBy: actor });
+      t.set(db.collection(ADMIN_AUDIT).doc(), {
+        kind: 'supermarket_offer_cost', actor, target: `${PRODUCTS}/${productId}`,
+        oldPurchasePrice: prevCost && Number.isInteger(prevCost.purchasePrice) ? prevCost.purchasePrice : null,
+        newPurchasePrice: cost.purchasePrice,
+        supplierChanged: !prevCost || prevCost.supplier !== cost.supplier, ...src, at: ts(),
+      });
+    }
+    return { created: !cur, priceChanged, costChanged, unchanged: false };
+  }
 
   // ── 4. Буюртма ──
   function parseAddress(a) {
@@ -989,61 +1226,88 @@ function attachSupermarket(exportsObj, deps) {
   const ADJUSTABLE_STATUSES = new Set(['new', 'accepted', 'ready']);
   const COURIER_HOLD_FS = new Set(['courier_picked', 'arrived', 'completed', 'cancelled']);
 
-  /** Умумий транзакция: қаторлар ўзгаради → қайта ҳисоб → қайтим + stock. */
-  async function adjustOrder({ orderId, actor, actorRole, action, mutate, auditExtra }) {
+  const ADJUST_META = Object.freeze({
+    weigh: { audit: 'supermarket_weigh_settle', by: 'adminSettleSupermarketWeights' },
+    remove: { audit: 'supermarket_line_remove', by: 'adminRemoveSupermarketLine' },
+    shortage_report: { audit: 'supermarket_shortage_report', by: 'adminReportSupermarketShortage' },
+    shortage_substitute: { audit: 'supermarket_shortage_substitute', by: 'respondSupermarketShortage' },
+    shortage_reduce: { audit: 'supermarket_shortage_reduce', by: 'respondSupermarketShortage' },
+    shortage_remove: { audit: 'supermarket_shortage_remove', by: 'respondSupermarketShortage' },
+  });
+
+  /**
+   * Умумий транзакция: қаторлар ўзгаради → қайта ҳисоб → қайтим/қўшимча ечим + stock.
+   * preRead(t, od) — мутациядан олдин транзакцияда ўқиш (масалан алмаштириш таклифи);
+   * authorize(od) — мижоз амали учун эгалик текшируви; idem — {ref, type}: натижа шу транзакцияда сақланади.
+   */
+  async function adjustOrder({ orderId, actor, actorRole, action, mutate, auditExtra, preRead, authorize, idem }) {
     const orderRef = db.collection(ORDERS).doc(orderId);
     return db.runTransaction(async (t) => {
+      if (idem) {
+        const prev = await t.get(idem.ref);
+        if (prev.exists) return { ...(prev.data().result || {}), duplicate: true };
+      }
       const snap = await t.get(orderRef);
       if (!snap.exists) throw fail('not-found', 'ORDER_NOT_FOUND');
       const od = snap.data() || {};
       if (od.type !== 'platform' || od.subtype !== 'supermarket') throw fail('failed-precondition', 'ORDER_NOT_SUPERMARKET');
+      if (authorize) authorize(od);
       const status = String(od.status || '');
       const fs = String(od.fulfillmentStatus || '').toLowerCase();
       if (!ADJUSTABLE_STATUSES.has(status) || COURIER_HOLD_FS.has(fs)) throw fail('failed-precondition', 'ORDER_STATE_LOCKED', { status });
       const lines = Array.isArray(od.items) ? od.items : [];
-      const m = mutate(lines, od);
+      const extra = preRead ? await preRead(t, od) : undefined;
+      const m = mutate(lines, od, extra);
       if (!m.ok) throw fail('failed-precondition', m.code, m.details || {});
-      if (!m.changed) return { changed: false, refund: 0, total: od.balanceApplied };
+      if (!m.changed) return { changed: false, refund: 0, debit: 0, total: od.balanceApplied, userId: String(od.userPhone || '') };
 
       const pids = Object.keys(m.stockDeltas || {}).filter((p) => m.stockDeltas[p] !== 0);
       const pRefs = pids.map((p) => db.collection(PRODUCTS).doc(p));
       const pSnaps = await Promise.all(pRefs.map((r) => t.get(r)));
       const charged = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
-      const c = computeCharge(m.lines, feeBpOf(od.deliveryFeePercent));
-      const adj = adjustment(charged, c.target);
+      const bp = feeBpOf(od.deliveryFeePercent);
+      const c = computeCharge(m.lines, bp);
+      const adj = chargeAfter(charged, lines, m.lines, bp, m.pricing || 'cap');
       const seq = (Number.isInteger(od.smAdjustSeq) ? od.smAdjustSeq : 0) + 1;
       const walletDocId = String(od.walletUserDocId || '').trim();
+      const moves = adj.refund > 0 || adj.debit > 0;
       let customerRef = null;
-      let customerSnap = null;
+      let bal = 0;
       let bonusCtx = null;
-      if (adj.refund > 0) {
+      if (moves) {
         if (!walletDocId) throw fail('failed-precondition', 'USER_NOT_FOUND');
         customerRef = db.collection('users').doc(walletDocId);
-        customerSnap = await t.get(customerRef);
+        const customerSnap = await t.get(customerRef);
         if (!customerSnap.exists) throw fail('failed-precondition', 'USER_NOT_FOUND');
+        bal = parseInt(String((customerSnap.data() || {}).bonusBalance ?? 0), 10) || 0;
+        if (adj.debit > bal) throw fail('failed-precondition', 'INSUFFICIENT_FUNDS', { required: adj.debit, balance: bal });
         bonusCtx = await settlementLedger.prepareBonusInTx(t, db, walletDocId, { idempotencyKey: `sm_adjust_${orderId}_${seq}` });
       }
       // ── ёзишлар ──
       pSnaps.forEach((s, i) => {
         if (!s.exists) return;
+        const delta = m.stockDeltas[pids[i]];
         const curMilli = toMilli(Number((s.data() || {}).stock)) || 0;
-        const next = Math.max(0, curMilli + m.stockDeltas[pids[i]]);
+        const next = Math.max(0, curMilli + delta);
         const patch = { stock: fromMilli(next) };
         if (next > 0 && autoOut(s.data())) Object.assign(patch, { smStatus: 'active', smAutoOutOfStock: false });
+        if (next === 0 && delta < 0 && (s.data() || {}).smStatus === 'active') Object.assign(patch, { smStatus: 'out_of_stock', smAutoOutOfStock: true });
         t.update(pRefs[i], patch);
       });
-      if (adj.refund > 0) {
-        const bal = parseInt(String((customerSnap.data() || {}).bonusBalance ?? 0), 10) || 0;
-        t.set(customerRef, { bonusBalance: bal + adj.refund, balanceUpdatedAt: ts() }, { merge: true });
+      const by = ADJUST_META[action].by;
+      if (moves) {
+        const delta = adj.refund > 0 ? adj.refund : -adj.debit;
+        const note = adj.refund > 0 ? REFUND_NOTES[action] : DEBIT_NOTES[action];
+        t.set(customerRef, { bonusBalance: bal + delta, balanceUpdatedAt: ts() }, { merge: true });
         settlementLedger.commitBonusInTx(t, bonusCtx, {
-          delta: adj.refund, kind: 'sm_adjust_refund', refType: 'order', refId: orderId,
+          delta, kind: adj.refund > 0 ? 'sm_adjust_refund' : 'sm_adjust_debit', refType: 'order', refId: orderId,
           meta: { action, seq, chargedBefore: charged, chargedAfter: adj.next },
           postedBy: actor, postedRole: actorRole || 'admin',
         });
         t.set(customerRef.collection('wallet_ledger').doc(), {
-          type: 'order_partial_refund', amount: adj.refund, module: 'platform', refType: 'order', refId: orderId,
-          meta: { subtype: 'supermarket', action, noteKey: REFUND_NOTES[action].key, messages: REFUND_NOTES[action].messages, note: REFUND_NOTES[action].messages.uz_Cyrl },
-          createdAt: ts(), createdBy: action === 'weigh' ? 'adminSettleSupermarketWeights' : 'adminRemoveSupermarketLine',
+          type: adj.refund > 0 ? 'order_partial_refund' : 'purchase_debit', amount: delta, module: 'platform', refType: 'order', refId: orderId,
+          meta: { subtype: 'supermarket', action, noteKey: note.key, messages: note.messages, note: note.messages.uz_Cyrl },
+          createdAt: ts(), createdBy: by,
         });
       }
       const weighPending = m.lines.some((l) => !l.removed && l.weighed && l.actualQty == null);
@@ -1059,16 +1323,34 @@ function attachSupermarket(exportsObj, deps) {
         paidAmount: adj.next,
         smAdjustSeq: seq,
         smWeighPending: weighPending,
+        smShortagePending: m.lines.some(linePending),
         ...(adj.capDiscount > 0 ? { smCapDiscount: adj.capDiscount } : {}),
         smRefundedTotal: FV.increment(adj.refund),
+        ...(adj.debit > 0 ? { smExtraChargedTotal: FV.increment(adj.debit) } : {}),
         updatedAt: ts(),
       });
       t.set(db.collection(ADMIN_AUDIT).doc(), {
-        kind: action === 'weigh' ? 'supermarket_weigh_settle' : 'supermarket_line_remove', actor, actorRole, target: `${ORDERS}/${orderId}`,
-        seq, chargedBefore: charged, chargedAfter: adj.next, refund: adj.refund, ...auditExtra, at: ts(),
+        kind: ADJUST_META[action].audit, actor, actorRole, target: `${ORDERS}/${orderId}`,
+        seq, chargedBefore: charged, chargedAfter: adj.next, refund: adj.refund, debit: adj.debit, ...auditExtra, at: ts(),
       });
-      return { changed: true, refund: adj.refund, total: adj.next, userId: String(od.userPhone || ''), weighPending };
+      const result = { changed: true, refund: adj.refund, debit: adj.debit, total: adj.next, userId: String(od.userPhone || ''), weighPending, ...(m.info ? { info: m.info } : {}) };
+      if (idem) t.set(idem.ref, { type: idem.type, result, createdAt: ts() });
+      return result;
     });
+  }
+
+  /** Мижозга хабар (ўз тилида, best-effort). texts: {lang:{title, body}} — body'да {name}/{refund}. */
+  async function notifyCustomer(userId, texts, params, extra) {
+    try {
+      // userPhone 12 хонали, ҳужжат эски 9 хонали бўлиши мумкин (userDocRef) — langOfPhone фақат 9→12 ни синайди.
+      const u = await userDocRef(canonicalUid(userId));
+      const lang = normalizeLang(u ? u.data.appLang : await langOfPhone(db, userId));
+      const m = texts[lang] || texts.uz_Cyrl;
+      const fill = (s) => s.replace(/\{(\w+)\}/g, (_, k) => (params[k] === undefined ? '' : String(params[k])));
+      await notifyUserInApp({ userId, title: fill(m.title), body: fill(m.body), category: 'order', screen: 'orders', ...extra });
+    } catch (e) {
+      log({ action: extra.source, result: 'notify_error', errorCode: 'NOTIFY_FAILED' });
+    }
   }
 
   exportsObj.adminSettleSupermarketWeights = functions.https.onCall(async (data, context) => {
@@ -1116,7 +1398,9 @@ function attachSupermarket(exportsObj, deps) {
           if (lines.filter((l) => !l.removed).length <= 1) return { ok: false, code: 'LAST_LINE' };
           const l = lines[idx];
           const qMilli = toMilli(l.actualQty != null ? l.actualQty : l.qty);
-          const next = lines.map((x, i) => (i === idx ? { ...x, removed: { reason, by: actor, atMs: now() } } : x));
+          // Етишмовчилик жавоби келмаган (30 дақиқа) — админ олади; ҳолат тарихда қолади.
+          const sh = linePending(l) ? { shortage: { ...l.shortage, state: 'admin_removed', resolvedBy: actor, resolvedAtMs: now() } } : {};
+          const next = lines.map((x, i) => (i === idx ? { ...x, ...sh, removed: { reason, by: actor, atMs: now() } } : x));
           return { ok: true, changed: true, lines: next, stockDeltas: { [productId]: qMilli } };
         },
         auditExtra: { productId, reason },
@@ -1144,6 +1428,164 @@ function attachSupermarket(exportsObj, deps) {
     log({ action: 'adminRemoveSupermarketLine', result: 'ok', orderId, productId, userId: actor, changed: out.changed, refund: out.refund });
     return { ok: true, orderId, changed: out.changed, refund: out.refund, total: out.total };
   });
+
+  // ── 6. Етишмовчилик (2-босқич, эга 2026-11-21): админ хабар беради → мижоз танлайди ──
+  const idOk = (v, re) => typeof v === 'string' && re.test(v.trim());
+
+  exportsObj.adminReportSupermarketShortage = functions.https.onCall(async (data, context) => {
+    const { uid: actor, role: actorRole } = await requireOperator(context);
+    const d = data || {};
+    const orderId = typeof d.orderId === 'string' ? d.orderId.trim() : '';
+    const productId = typeof d.productId === 'string' ? d.productId.trim() : '';
+    const subsRaw = d.substitutes == null ? [] : d.substitutes;
+    if (!orderId || orderId.includes('/') || !productId || productId.includes('/') || typeof d.availableQty !== 'number'
+        || !Array.isArray(subsRaw) || subsRaw.length > SHORTAGE_SUBS_MAX || !subsRaw.every((s) => idOk(s, PRODUCT_ID_RE))) {
+      throw fail('invalid-argument', 'INVALID_REQUEST');
+    }
+    const subs = subsRaw.map((s) => s.trim());
+    if (new Set(subs).size !== subs.length) throw fail('invalid-argument', 'INVALID_REQUEST', { field: 'substitutes' });
+    let out;
+    try {
+      out = await adjustOrder({
+        orderId, actor, actorRole, action: 'shortage_report',
+        preRead: async (t) => {
+          const snaps = await Promise.all(subs.map((id) => t.get(db.collection(PRODUCTS).doc(id))));
+          return snaps.map((s, i) => ({ offerId: subs[i], data: s.exists ? (s.data() || {}) : null }));
+        },
+        mutate: (lines, od, subsData) => applyShortageReport(lines, { productId, availableQty: d.availableQty, subs: subsData, actor, nowMs: now() }),
+        auditExtra: { productId, availableQty: d.availableQty, substitutes: subs },
+      });
+    } catch (e) {
+      rethrow(e, 'adminReportSupermarketShortage', { orderId, productId, userId: actor });
+    }
+    if (out.changed && out.userId) {
+      await notifyCustomer(out.userId, SHORTAGE_TEXT, { name: (out.info && out.info.name) || '' }, {
+        source: 'supermarket_shortage', dataType: 'supermarket_shortage', extraNews: { orderId, productId }, extraData: { orderId, productId },
+      });
+    }
+    log({ action: 'adminReportSupermarketShortage', result: 'ok', orderId, productId, userId: actor, changed: out.changed });
+    return { ok: true, orderId, productId, changed: out.changed, answerWithinMin: SHORTAGE_ANSWER_MS / 60000 };
+  });
+
+  exportsObj.respondSupermarketShortage = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const uid = callerUidOrThrow(context);
+    const d = data || {};
+    const orderId = typeof d.orderId === 'string' ? d.orderId.trim() : '';
+    const productId = typeof d.productId === 'string' ? d.productId.trim() : '';
+    const choice = String(d.choice || '');
+    const clientRequestId = typeof d.clientRequestId === 'string' ? d.clientRequestId.trim() : '';
+    const offerId = typeof d.offerId === 'string' ? d.offerId.trim() : '';
+    const qty = d.qty == null ? null : d.qty;
+    if (!orderId || orderId.includes('/') || !productId || productId.includes('/') || !SHORTAGE_CHOICES.includes(choice)
+        || !CLIENT_REQ_RE.test(clientRequestId) || (choice === 'substitute' && !PRODUCT_ID_RE.test(offerId))
+        || (qty != null && (typeof qty !== 'number' || choice === 'remove'))) {
+      throw fail('invalid-argument', 'INVALID_REQUEST');
+    }
+    const idemRef = db.collection(IDEM).doc(`sm_short_${uid}_${clientRequestId}`);
+    let out;
+    try {
+      out = await adjustOrder({
+        orderId, actor: uid, actorRole: 'client', action: `shortage_${choice}`,
+        idem: { ref: idemRef, type: 'respondSupermarketShortage' },
+        authorize: (od) => { if (canonicalUid(String(od.userPhone || '')) !== uid) throw fail('permission-denied', 'PERMISSION_DENIED'); },
+        preRead: async (t) => {
+          if (choice !== 'substitute') return null;
+          const s = await t.get(db.collection(PRODUCTS).doc(offerId));
+          return s.exists ? (s.data() || {}) : null;
+        },
+        mutate: (lines, od, offerData) => applyShortageChoice(lines, {
+          productId, choice, offerId, qty, offerData, feeBp: feeBpOf(od.deliveryFeePercent),
+          weighHoldPercent: Number.isInteger(od.weighHoldPercent) ? od.weighHoldPercent : 10, actor: uid, nowMs: now(),
+        }),
+        auditExtra: { productId, choice, ...(offerId ? { offerId } : {}), ...(qty != null ? { qty } : {}) },
+      });
+    } catch (e) {
+      rethrow(e, 'respondSupermarketShortage', { orderId, productId, userTail: uid.slice(-4), choice });
+    }
+    log({ action: 'respondSupermarketShortage', result: 'ok', orderId, productId, userTail: uid.slice(-4), choice, refund: out.refund, debit: out.debit, duplicate: !!out.duplicate, duration: Date.now() - started });
+    return { ok: true, orderId, productId, choice, refund: out.refund || 0, debit: out.debit || 0, total: out.total, ...(out.duplicate ? { duplicate: true } : {}) };
+  });
+
+  // ── 7. Ҳафталик саватлар (2-босқич): эслатма вақти — фақат сервер ҳисоблайди ──
+  const TS = admin.firestore.Timestamp;
+  const msOf = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : null);
+
+  exportsObj.onSmListWrite = functions.firestore
+    .document('users/{userId}/sm_lists/{listId}')
+    .onWrite(async (change, context) => {
+      if (!change.after.exists) return null;
+      const ref = change.after.ref;
+      const res = await db.runTransaction(async (t) => {
+        const s = await t.get(ref);
+        if (!s.exists) return 'gone';
+        const x = s.data() || {};
+        const problem = listShapeProblem(x);
+        const key = !problem && x.remind.enabled === true ? `${x.remind.weekday}:${x.remind.minute}` : null;
+        const cur = msOf(x.remindNextAt);
+        const desired = !key ? null : (x.remindKey === key && cur != null ? cur : nextRemindAtMs(x.remind, now()));
+        const patch = {};
+        if (desired !== cur) patch.remindNextAt = desired == null ? FV.delete() : TS.fromMillis(desired);
+        if ((x.remindKey || null) !== key) patch.remindKey = key == null ? FV.delete() : key;
+        if ((x.smInvalid || null) !== (problem || null)) patch.smInvalid = problem ? problem : FV.delete();
+        if (!Object.keys(patch).length) return 'noop';
+        t.update(ref, patch);
+        return problem ? `invalid:${problem}` : 'scheduled';
+      });
+      log({ action: 'onSmListWrite', listId: context.params.listId, result: res });
+      return null;
+    });
+
+  async function runWeeklyReminders() {
+    const nowMs = now();
+    const [snap, settingsSnap] = await Promise.all([
+      db.collectionGroup('sm_lists').where('remindNextAt', '<=', TS.fromMillis(nowMs)).orderBy('remindNextAt').limit(REMIND_BATCH).get(),
+      db.collection(SETTINGS_DOC[0]).doc(SETTINGS_DOC[1]).get(),
+    ]);
+    const settings = settingsSnap.exists ? (settingsSnap.data() || {}) : null;
+    let sent = 0;
+    let skipped = 0;
+    for (const doc of snap.docs) {
+      // Даъво (claim) олдин: кейинги вақт ёзилади → бир эслатма бир марта (энг кўпи битта; push йиқилса — ўтказиб юборилади).
+      const claimed = await db.runTransaction(async (t) => {
+        const s = await t.get(doc.ref);
+        if (!s.exists) return null;
+        const x = s.data() || {};
+        const due = msOf(x.remindNextAt);
+        if (due == null || due > nowMs) return null;
+        const valid = !listShapeProblem(x) && x.remind.enabled === true;
+        t.update(doc.ref, valid
+          ? { remindNextAt: TS.fromMillis(advanceRemindMs(due, nowMs)), remindLastSentAt: ts() }
+          : { remindNextAt: FV.delete(), remindKey: FV.delete() });
+        return valid;
+      });
+      if (!claimed) { skipped += 1; continue; }
+      const userDocId = doc.ref.parent.parent.id;
+      const userSnap = await db.collection('users').doc(userDocId).get();
+      if (!userSnap.exists) { skipped += 1; continue; }
+      const u = userSnap.data() || {};
+      const uid = canonicalUid(userDocId);
+      if (!gateDecision(settings, { uid, role: String(u.role || 'user'), districtId: '', requireDistrict: false }).allowed) { skipped += 1; continue; }
+      const m = REMIND_TEXT[normalizeLang(u.appLang)] || REMIND_TEXT.uz_Cyrl;
+      try {
+        await notifyUserInApp({
+          userId: uid, title: m.title, body: m.body, category: 'info', source: 'sm_weekly_reminder', dataType: 'sm_weekly_reminder',
+          screen: 'supermarket', extraNews: { smListId: doc.id }, extraData: { smListId: doc.id },
+        });
+        sent += 1;
+      } catch (e) {
+        skipped += 1;
+        log({ action: 'smWeeklyReminder', result: 'notify_error', errorCode: 'NOTIFY_FAILED', listId: doc.id });
+      }
+    }
+    log({ action: 'smWeeklyReminder', result: 'ok', due: snap.size, sent, skipped, full: snap.size === REMIND_BATCH });
+    return { due: snap.size, sent, skipped };
+  }
+
+  exportsObj.smWeeklyReminder = functions.pubsub
+    .schedule('every 15 minutes')
+    .timeZone('Asia/Tashkent')
+    .onRun(() => runWeeklyReminders());
 
   // ── Бекор/рад → stock қайтади (бир марта) ──
   exportsObj.onSupermarketOrderCancelStock = functions.firestore
@@ -1179,6 +1621,9 @@ function attachSupermarket(exportsObj, deps) {
       log({ action: 'onSupermarketOrderCancelStock', orderId, result });
       return null;
     });
+
+  // Ички API (Excel импорт модули учун — таклиф ёзиш йўли ягона бўлсин, 7-банд).
+  return { upsertOfferTx, requireAdmin, fail, runWeeklyReminders };
 }
 
 /** Тизим ўзи «тугади» қилган (stock 0) — admin қўлда қўйган эмас. */
@@ -1210,6 +1655,10 @@ module.exports = {
   tashkentParts, availableSlots, gateDecision, validateSupermarketTaxonomy, validateSupermarketSettings,
   validateOffer, validateCost, findGroup, offerSearchTokens, priceSupermarketOrder, applyWeights, adjustment,
   buildTaxonomyVersionDocs, isCancelled, trimDeep, messagesOf,
+  // 2-босқич
+  offerSellable, applyShortageReport, applyShortageChoice, chargeAfter, remindOk, listShapeProblem, nextRemindAtMs, advanceRemindMs,
+  stableStringify, isPlainObject, stepOk,
+  DEBIT_NOTES, REMIND_TEXT, SHORTAGE_TEXT, SHORTAGE_ANSWER_MS, PAIRS_MAX, LIST_ID_RE, ID_RE, PRODUCT_ID_RE, LIMITS,
   MSG, UNITS, PACK_UNITS, OPERATOR_ROLES, REFUND_NOTES, STAGES, SM_STATUSES, LANGS, TAXONOMY_DOC, SETTINGS_DOC, HISTORY_COLLECTION, HISTORY_PREFIX,
   TARIFF_VERSION, UNIT_LABELS,
 };

@@ -180,6 +180,9 @@ class OrderModel {
   /// Тур ичидаги кичик тур (subtype): «AVA Супермаркет» — 	ype: 'platform', subtype: 'supermarket'${nl}  /// (supermarket.js, эга 2026-11-20). Эски ҳужжатларда йўқ — бўш.
   final String subtype;
 
+  /// «AVA Супермаркет» буюртмаси (`type 'platform'` + `subtype 'supermarket'`).
+  bool get isSupermarket => type == 'platform' && subtype == 'supermarket';
+
   const OrderModel({
     required this.id,
     required this.type,
@@ -333,6 +336,8 @@ class OrderModel {
     if (isRestaurant) return restaurantStatus == 'placed';
     // Бизнес буюртмаси — фақат сотувчи қабул қилгунча (`customerCancelBusinessOrder`).
     if (isBusiness) return businessStatus == 'placed';
+    // «AVA Супермаркет» (эга 2026-11-20): фақат AVA қабул қилгунча (`status == 'new'`); йиғиш бошланса — йўқ.
+    if (isSupermarket) return status == 'new';
     if (effectivePayment == 'paid' &&
         effectiveFulfillment == 'completed') {
       return false;

@@ -4,13 +4,16 @@
 /// Ихтиёрий майдонлар: smGroupId, smCategoryId, smVariety{id,names}, smQuality{3 тил}, packLabel,
 /// unit (kg|l|piece|pack|bunch), qtyStep, weighed, stock, smStatus active|out_of_stock|hidden,
 /// priceUpdatedAt; price — бутун сўм / бирлик.
-/// PROPOSED (шартномада йўқ, бирлик нархи учун): `packQty` (сон) + `packUnit` (l|kg).
+/// Бирлик нархи учун: `packQty` (сон) + `packUnit` (kg|l|piece) — эга қарори 2026-11-20, сервер қўшмоқда.
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'sm_qty.dart';
 import 'sm_taxonomy.dart';
+
+/// Қадоқ ичидаги миқдор бирлиги (эга 2026-11-20, сервер `packUnit`): «1 л — N сўм» учун.
+const kSmPackUnits = <String>{'kg', 'l', 'piece'};
 
 enum SmStatus { active, outOfStock, hidden }
 
@@ -95,7 +98,7 @@ class SmOffer {
   int? get unitPriceOfPack {
     final q = packQtyMilli;
     if (unit != 'pack' || q == null || q <= 0 || price <= 0) return null;
-    if (packUnit != 'l' && packUnit != 'kg') return null;
+    if (!kSmPackUnits.contains(packUnit)) return null;
     return (price * 1000 + q ~/ 2) ~/ q;
   }
 

@@ -78,9 +78,29 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
   }
 }
 
-String walletLedgerSubtitle(WalletLedgerEntry e, WalletTr tr) {
+/// Сервер изоҳи (эга 2026-11-20): аввал `meta.noteMessages|messages{uz_Cyrl,uz_Latn,ru}` (жорий тил →
+/// uz_Cyrl), кейин `meta.noteKey` (lang калити, таржимаси бўлса), охири — эски `meta.note` матни.
+String walletLedgerNote(WalletLedgerEntry e, WalletTr tr, {String lang = 'uz_Cyrl'}) {
+  for (final k in const ['noteMessages', 'messages']) {
+    final m = e.meta[k];
+    if (m is Map) {
+      final own = (m[lang] ?? '').toString().trim();
+      if (own.isNotEmpty) return own;
+      final cyr = (m['uz_Cyrl'] ?? '').toString().trim();
+      if (cyr.isNotEmpty) return cyr;
+    }
+  }
+  final key = (e.meta['noteKey'] ?? '').toString().trim();
+  if (key.isNotEmpty) {
+    final t = tr(key);
+    if (t.isNotEmpty && t != key) return t;
+  }
+  return (e.meta['note'] ?? '').toString().trim();
+}
+
+String walletLedgerSubtitle(WalletLedgerEntry e, WalletTr tr, {String lang = 'uz_Cyrl'}) {
   final parts = <String>[];
-  final note = (e.meta['note'] ?? '').toString().trim();
+  final note = walletLedgerNote(e, tr, lang: lang);
   if (note.isNotEmpty) parts.add(note);
 
   final orderTotal = (e.meta['orderTotal'] as num?)?.toInt();

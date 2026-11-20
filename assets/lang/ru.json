@@ -6207,5 +6207,7 @@
   "sm_step_delivered": "Доставлен",
   "wlt_m_supermarket": "AVA Супермаркет",
   "wlt_l_partial_refund": "Частичный возврат по заказу",
-  "wlt_l_partial_refund_mod": "{module} — возврат"
+  "wlt_l_partial_refund_mod": "{module} — возврат",
+  "sm_cancel_order": "Отменить заказ",
+  "sm_cancel_unavailable": "Заказ уже собирается — отменить нельзя. Если есть вопрос, напишите в поддержку."
 }

@@ -115,7 +115,7 @@ class WalletLedgerList extends StatelessWidget {
     final positive = e.isPositive;
     final amountColor = positive ? _green : _red;
     final sign = positive ? '+' : '−';
-    final subtitle = walletLedgerSubtitle(e, tr);
+    final subtitle = walletLedgerSubtitle(e, tr, lang: context.contentLang);
     final when = e.createdAt;
 
     return Padding(

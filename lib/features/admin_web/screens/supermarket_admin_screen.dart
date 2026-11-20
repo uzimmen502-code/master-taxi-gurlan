@@ -229,6 +229,9 @@ class _SmOfferEditorDialogState extends State<SmOfferEditorDialog> {
   late final _qLat = TextEditingController(text: _o.qualityNames['uz_Latn'] ?? '');
   late final _qRu = TextEditingController(text: _o.qualityNames['ru'] ?? '');
   late final _pack = TextEditingController(text: _o.packLabel);
+  late final _packQty = TextEditingController(
+      text: _o.packQtyMilli == null ? '' : smFormatQty(_o.packQtyMilli!).replaceAll(',', '.'));
+  late String _packUnit = _o.packUnit;
   late final _step = TextEditingController(text: smFormatQty(_o.stepMilli).replaceAll(',', '.'));
   late final _stock = TextEditingController(
       text: _o.stockMilli == null ? '' : smFormatQty(_o.stockMilli!).replaceAll(',', '.'));
@@ -261,6 +264,8 @@ class _SmOfferEditorDialogState extends State<SmOfferEditorDialog> {
 
   SmOfferDraft _draft() => SmOfferDraft(
         name: _name.text,
+        packQty: _packQty.text.trim().isEmpty ? null : (num.tryParse(_packQty.text.trim().replaceAll(',', '.')) ?? -1),
+        packUnit: _packUnit,
         groupId: _group,
         varietyId: _varietyId.text.trim(),
         varietyNames: _names(_vCyr, _vLat, _vRu),
@@ -343,6 +348,35 @@ class _SmOfferEditorDialogState extends State<SmOfferEditorDialog> {
               _f('quality_lat', 'Сифат (uz_Latn)', _qLat),
               _f('quality_ru', 'Сифат (ru)', _qRu),
               _f('pack', 'Қадоқ / партия ёрлиғи', _pack),
+              Row(children: [
+                Expanded(
+                  child: _f('pack_qty', 'Қадоқ ичида (масалан 0.9; бўш — йўқ)', _packQty,
+                      kb: const TextInputType.numberWithOptions(decimal: true)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: DropdownButtonFormField<String>(
+                      key: const ValueKey('sm_admin_pack_unit'),
+                      initialValue: _packUnit,
+                      decoration: const InputDecoration(labelText: 'Бирлиги', border: OutlineInputBorder(), isDense: true),
+                      items: const [
+                        DropdownMenuItem(value: '', child: Text('—')),
+                        DropdownMenuItem(value: 'l', child: Text('л')),
+                        DropdownMenuItem(value: 'kg', child: Text('кг')),
+                        DropdownMenuItem(value: 'piece', child: Text('дона')),
+                      ],
+                      onChanged: (v) => setState(() => _packUnit = v ?? ''),
+                    ),
+                  ),
+                ),
+              ]),
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('Мижозга «1 л — N сўм» кўринади (нарх / қадоқ ичидаги миқдор).',
+                    style: TextStyle(fontSize: 12, color: Colors.black54)),
+              ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 // Гуруҳ алмашса бирлик ўзи янгиланади — калит қийматга боғлиқ (initialValue қайта ўқилади).

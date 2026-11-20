@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:ava_gurlan/core/utils/wallet_ledger_labels.dart';
+import 'package:ava_gurlan/models/order_model.dart';
 import 'package:ava_gurlan/models/wallet_ledger_entry.dart';
 
 import 'package:ava_gurlan/features/supermarket/data/supermarket_repository.dart';
@@ -79,7 +80,7 @@ void main() {
       final m = smOffersFixture().firstWhere((o) => o.id == 'm1');
       expect(m.unitPriceOfPack, 13333);
       expect(offer('k', unit: 'kg').unitPriceOfPack, isNull);
-      expect(offer('p', unit: 'pack', packQty: 1, packUnit: 'piece').unitPriceOfPack, isNull);
+      expect(offer('p', unit: 'pack', packQty: 1, packUnit: 'piece').unitPriceOfPack, 5000, reason: 'дона ҳам (эга 2026-11-20)');
     });
     test('smStatus йўқ — эски active белгиси бўйича (26-банд)', () {
       final a = SmOffer.fromMap('a', {'smGroupId': 'onion', 'price': 1, 'active': true, 'stock': 5});
@@ -286,6 +287,35 @@ void main() {
       }
       expect(m['wlt_l_partial_refund_mod'], contains('{module}'));
     }
+  });
+
+  test('ҳамён изоҳи: сервер 3 тилли матни → noteKey → эски note', () {
+    String tr(String k, [Map<String, String>? p]) => k == 'known_key' ? 'Таржима' : k;
+    WalletLedgerEntry e(Map<String, dynamic> meta) => WalletLedgerEntry(id: 'x', type: 'order_partial_refund', amount: 1, meta: meta);
+    final msgs = {'uz_Cyrl': 'Қайтим', 'uz_Latn': 'Qaytim', 'ru': 'Возврат'};
+    expect(walletLedgerNote(e({'noteMessages': msgs, 'note': 'эски'}), tr, lang: 'ru'), 'Возврат');
+    expect(walletLedgerNote(e({'messages': {'uz_Cyrl': 'Қайтим'}}), tr, lang: 'uz_Latn'), 'Қайтим', reason: 'тил йўқ — uz_Cyrl');
+    expect(walletLedgerNote(e({'noteKey': 'known_key', 'note': 'эски'}), tr), 'Таржима');
+    expect(walletLedgerNote(e({'noteKey': 'unknown_key', 'note': 'эски'}), tr), 'эски', reason: 'таржимаси йўқ калит');
+    expect(walletLedgerNote(e({'note': 'эски'}), tr), 'эски');
+    expect(walletLedgerSubtitle(e({'noteMessages': msgs}), tr, lang: 'uz_Latn'), startsWith('Qaytim'));
+  });
+
+  test('мижоз бекори: супермаркетда фақат new', () {
+    OrderModel o(String status) =>
+        OrderModel(id: 'o', type: 'platform', subtype: 'supermarket', total: 1, status: status, items: const []);
+    expect(o('new').canCustomerCancel, isTrue);
+    for (final s in ['accepted', 'ready', 'in_delivery', 'delivered']) {
+      expect(o(s).canCustomerCancel, isFalse, reason: s);
+    }
+    expect(o('new').isSupermarket, isTrue);
+    expect(const OrderModel(id: 'o', type: 'platform', total: 1, status: 'new', items: []).isSupermarket, isFalse);
+  });
+
+  test('қадоқ бирлик нархи: дона ҳам (эга 2026-11-20)', () {
+    expect(offer('p', unit: 'pack', price: 12000, packQty: 10, packUnit: 'piece').unitPriceOfPack, 1200);
+    expect(offer('p', unit: 'pack', price: 12000, packQty: 0, packUnit: 'l').unitPriceOfPack, isNull);
+    expect(offer('p', unit: 'pack', price: 12000, packQty: 1, packUnit: 'm').unitPriceOfPack, isNull);
   });
 
   group('search', () {

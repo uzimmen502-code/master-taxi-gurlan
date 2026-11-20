@@ -6207,5 +6207,7 @@
   "sm_step_delivered": "Yetkazildi",
   "wlt_m_supermarket": "AVA Supermarket",
   "wlt_l_partial_refund": "Buyurtmadan qaytim",
-  "wlt_l_partial_refund_mod": "{module} — qaytim"
+  "wlt_l_partial_refund_mod": "{module} — qaytim",
+  "sm_cancel_order": "Buyurtmani bekor qiliş",
+  "sm_cancel_unavailable": "Buyurtma yiğila boşladi — endi bekor qilib bölmaydi. Savol bölsa, qöllab-quvvatlaşga yozing."
 }

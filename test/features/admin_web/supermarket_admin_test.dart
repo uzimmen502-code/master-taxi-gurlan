@@ -170,6 +170,20 @@ void main() {
       expect(_d(quality: _n3('1-сорт')).toOffer()['smQuality'], _n3('1-сорт'));
     });
 
+    test('қадоқ миқдори ва бирлиги (эга 2026-11-20): бирга ёки ҳеч бири', () {
+      final tx = SmTaxonomy.fromMap(_txRaw());
+      SmOfferDraft p(num? q, String u) => SmOfferDraft(
+            groupId: 'onion', varietyId: 'red', varietyNames: _n3('Қизил'), qualityNames: const {}, packLabel: '0,9 л',
+            unit: 'pack', qtyStep: 1, weighed: false, stock: 5, status: 'active', price: 12000, packQty: q, packUnit: u);
+      expect(p(0.9, 'l').validate(tx), isEmpty);
+      expect(p(0.9, 'l').toOffer()['packQty'], 0.9);
+      expect(p(0.9, 'l').toOffer()['packUnit'], 'l');
+      expect(p(null, '').toOffer().containsKey('packQty'), isFalse);
+      expect(p(0, 'l').validate(tx), contains('Қадоқ миқдори 0 дан катта бўлсин'));
+      expect(p(1, '').validate(tx), contains('Қадоқ бирлиги: кг, л ёки дона'));
+      expect(p(null, 'kg').validate(tx), isNotEmpty);
+    });
+
     test('сервер хатоси → Кирилл матн', () {
       expect(
         smAdminErrorText('x', 'invalid-argument', {

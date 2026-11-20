@@ -12,6 +12,7 @@ import '../../restaurants/data/restaurants_repository.dart';
 import '../../restaurants/domain/courier_tracking.dart';
 import '../../restaurants/widgets/courier_info_card.dart';
 import '../../supermarket/domain/sm_order_progress.dart';
+import '../../supermarket/widgets/sm_order_cancel_bar.dart';
 import '../../supermarket/widgets/sm_order_progress_view.dart';
 
 /// Битта буюртма: чек + барча статус хабарлари.
@@ -88,6 +89,9 @@ class OrderNewsDetailScreen extends StatelessWidget {
                     status: orderSnap.data!.status,
                     fulfillmentStatus: orderSnap.data!.fulfillmentStatus,
                   ),
+                  const SizedBox(height: 8),
+                  // Бекор — фақат `new` (эга 2026-11-20).
+                  SmOrderCancelBar(order: orderSnap.data!),
                   const SizedBox(height: 12),
                 ],
                 OrderReceiptView(order: orderSnap.data!),

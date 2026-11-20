@@ -16,7 +16,9 @@ import 'package:ava_gurlan/features/supermarket/screens/sm_checkout_screen.dart'
 import 'package:ava_gurlan/features/supermarket/screens/sm_group_screen.dart';
 import 'package:ava_gurlan/features/supermarket/screens/supermarket_home_screen.dart';
 import 'package:ava_gurlan/features/supermarket/supermarket_controller.dart';
+import 'package:ava_gurlan/features/supermarket/widgets/sm_order_cancel_bar.dart';
 import 'package:ava_gurlan/features/supermarket/widgets/sm_order_progress_view.dart';
+import 'package:ava_gurlan/models/order_model.dart';
 import 'package:ava_gurlan/models/platform_product.dart';
 import 'package:ava_gurlan/repositories/platform_products_repository.dart';
 import 'package:flutter/material.dart';
@@ -300,6 +302,28 @@ void main() {
       await t.tap(_k('sm_confirm'));
       await t.pumpAndSettle();
       expect(find.text('Маҳсулот етарли эмас.'), findsOneWidget);
+    });
+  });
+
+  group('6b. мижоз бекори', () {
+    OrderModel o(String status) =>
+        OrderModel(id: 'ord1', type: 'platform', subtype: 'supermarket', total: 1, status: status, items: const []);
+    testWidgets('new — тугма, тасдиқдан кейин сервер чақирилади', (t) async {
+      final calls = <String>[];
+      await t.pumpWidget(_app(Scaffold(body: SmOrderCancelBar(order: o('new'), cancel: (id) async => calls.add(id)))));
+      await t.tap(_k('sm_cancel_btn'));
+      await t.pumpAndSettle();
+      await t.tap(_k('sm_cancel_confirm'));
+      await t.pumpAndSettle();
+      expect(calls, ['ord1']);
+      expect(_k('sm_cancel_done'), findsOneWidget);
+    });
+    testWidgets('accepted — тугма йўқ, дўстона изоҳ; delivered — ҳеч нарса', (t) async {
+      await t.pumpWidget(_app(Scaffold(body: SmOrderCancelBar(order: o('accepted'), cancel: (_) async {}))));
+      expect(_k('sm_cancel_btn'), findsNothing);
+      expect(_k('sm_cancel_unavailable'), findsOneWidget);
+      await t.pumpWidget(_app(Scaffold(body: SmOrderCancelBar(order: o('delivered'), cancel: (_) async {}))));
+      expect(_k('sm_cancel_unavailable'), findsNothing);
     });
   });
 

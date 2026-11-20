@@ -171,7 +171,14 @@ class SmOfferDraft {
     required this.status,
     required this.price,
     this.name = '',
+    this.packQty,
+    this.packUnit = '',
   });
+
+  /// Қадоқ ичидаги миқдор (масалан 0.9) ва бирлиги (kg|l|piece) — «1 л — N сўм» учун (эга 2026-11-20).
+  /// Иккаласи бирга ёки ҳеч бири.
+  final num? packQty;
+  final String packUnit;
 
   final String groupId;
   final String varietyId;
@@ -201,6 +208,9 @@ class SmOfferDraft {
         if (stock == null) 'Қолдиқни киритинг (0 — тугаган)',
         if (stock != null && stock! < 0) 'Қолдиқ манфий бўлмасин',
         if (!['active', 'out_of_stock', 'hidden'].contains(status)) 'Ҳолат нотўғри',
+        if (packQty != null && (packQty! <= 0 || smToMilli(packQty!) <= 0)) 'Қадоқ миқдори 0 дан катта бўлсин',
+        if (packQty != null && !kSmPackUnits.contains(packUnit)) 'Қадоқ бирлиги: кг, л ёки дона',
+        if (packQty == null && packUnit.isNotEmpty) 'Қадоқ миқдорини киритинг (ёки бирликни бўш қолдиринг)',
       ];
 
   Map<String, dynamic> toOffer() => {
@@ -215,6 +225,8 @@ class SmOfferDraft {
         'smStatus': status,
         'price': price,
         if (name.trim().isNotEmpty) 'name': name.trim(),
+        if (packQty != null) 'packQty': packQty,
+        if (packQty != null) 'packUnit': packUnit,
       };
 }
 

@@ -114,11 +114,20 @@ class SmCartTotals {
   int get holdEstimate => goodsTotal + weighedHold + feeEstimate;
 }
 
+/// Сукут (сервер settings/supermarket.weighHoldPercent йўқ бўлса — 10, эга 2026-11-20).
 const int kSmWeighedHoldPercent = 10;
 
-SmCartTotals smCartTotals(SmCart cart, Map<String, SmOffer> offers, {num feePercent = 0}) {
+/// Сервер computeCharge кўзгуси (supermarket.js): ушлаш ҲАР тортиладиган қаторда алоҳида юқорига
+/// яхлитланади; ҳақ = floor((goods × bps + 5000) / 10000). Якуний рақам — сервер жавоби.
+SmCartTotals smCartTotals(
+  SmCart cart,
+  Map<String, SmOffer> offers, {
+  num feePercent = 0,
+  int weighHoldPercent = kSmWeighedHoldPercent,
+}) {
   var goods = 0;
   var weighed = 0;
+  var hold = 0;
   final bad = <String>[];
   for (final l in cart.lines) {
     final o = offers[l.productId];
@@ -128,12 +137,15 @@ SmCartTotals smCartTotals(SmCart cart, Map<String, SmOffer> offers, {num feePerc
     }
     final t = smLineTotal(o.price, l.qtyMilli);
     goods += t;
-    if (o.weighed) weighed += t;
+    if (o.weighed) {
+      weighed += t;
+      hold += smPercentCeil(t, weighHoldPercent);
+    }
   }
   return SmCartTotals(
     goodsTotal: goods,
     weighedTotal: weighed,
-    weighedHold: smPercentCeil(weighed, kSmWeighedHoldPercent),
+    weighedHold: hold,
     feeEstimate: smPercentOf(goods, feePercent),
     unavailableIds: List.unmodifiable(bad),
   );

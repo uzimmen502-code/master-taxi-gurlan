@@ -13,15 +13,20 @@ import '../domain/sm_offer.dart';
 import '../domain/sm_qty.dart';
 import '../domain/sm_taxonomy.dart';
 
+export '../domain/sm_taxonomy.dart' show smNames;
+
 /// Супермаркет сервер чақирувлари учун хато (UI калити + ички код, 25-банд).
 class SmCallError implements Exception {
-  const SmCallError(this.key, this.code);
+  const SmCallError(this.key, this.code, {this.messages = const {}});
 
-  /// lang калити (`sm_err_*`).
+  /// lang калити (`sm_err_*`) — захира матн.
   final String key;
 
   /// Ички диагностика коди (логга).
   final String code;
+
+  /// Сервер берган дўстона матн (`details.messages`, 3 тил) — бўлса шу кўрсатилади.
+  final Map<String, String> messages;
 
   @override
   String toString() => 'SmCallError($code)';
@@ -31,7 +36,8 @@ class SmCallError implements Exception {
 abstract class SupermarketApi {
   Future<SmTaxonomy> loadTaxonomy();
   Future<List<SmOffer>> loadOffers(SmTaxonomy taxonomy);
-  Future<SmAccess> getAccess();
+  /// [districtId] берилса — шу туман учун (расмийлаштириш); йўқ — профиль тумани (бош саҳифа).
+  Future<SmAccess> getAccess({String? districtId});
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload);
 }
 
@@ -70,13 +76,18 @@ class FirebaseSupermarketApi implements SupermarketApi {
       return res.data;
     } on FirebaseFunctionsException catch (e) {
       final key = smErrorKey(grpcCode: e.code, details: e.details);
-      debugPrint('[Supermarket] $name failed code=${e.code} details=${e.details is Map ? (e.details as Map)['code'] : ''}');
-      throw SmCallError(key, e.code);
+      final details = e.details is Map ? e.details as Map : const {};
+      final code = (details['code'] ?? e.code).toString();
+      debugPrint('[Supermarket] $name failed grpc=${e.code} code=$code');
+      throw SmCallError(key, code, messages: smNames(details['messages']));
     }
   }
 
   @override
-  Future<SmAccess> getAccess() async => SmAccess.fromMap(await _call('getSupermarketAccess', const {}));
+  Future<SmAccess> getAccess({String? districtId}) async => SmAccess.fromMap(await _call(
+        'getSupermarketAccess',
+        {if (districtId != null && districtId.isNotEmpty) 'districtId': districtId},
+      ));
 
   @override
   Future<SmPlaceResult> placeOrder(Map<String, dynamic> payload) async =>

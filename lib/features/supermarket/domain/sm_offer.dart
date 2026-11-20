@@ -84,7 +84,9 @@ class SmOffer {
 
   bool get isSupermarket => groupId.isNotEmpty;
   bool get visible => isSupermarket && status != SmStatus.hidden && price > 0;
-  bool get available => visible && status == SmStatus.active;
+  /// Сотувда: ҳолат active ВА қолдиқ бор. Сервер (supermarket.js) stock йўқ/0 ни «0 мавжуд» деб
+  /// ҳисоблайди — клиент ҳам шундай (буюртмада OUT_OF_STOCK бўлмасин).
+  bool get available => visible && status == SmStatus.active && (stockMilli ?? 0) >= stepMilli;
 
   String varietyName(String lang) => localizedName(varietyNames, lang, fallback: name);
   String qualityName(String lang) => localizedName(qualityNames, lang);

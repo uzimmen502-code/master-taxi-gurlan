@@ -1,4 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:ava_gurlan/core/utils/wallet_ledger_labels.dart';
+import 'package:ava_gurlan/models/wallet_ledger_entry.dart';
 
 import 'package:ava_gurlan/features/supermarket/data/supermarket_repository.dart';
 import 'package:ava_gurlan/features/supermarket/domain/sm_access.dart';
@@ -78,11 +82,21 @@ void main() {
       expect(offer('p', unit: 'pack', packQty: 1, packUnit: 'piece').unitPriceOfPack, isNull);
     });
     test('smStatus йўқ — эски active белгиси бўйича (26-банд)', () {
-      final a = SmOffer.fromMap('a', {'smGroupId': 'onion', 'price': 1, 'active': true});
+      final a = SmOffer.fromMap('a', {'smGroupId': 'onion', 'price': 1, 'active': true, 'stock': 5});
       final b = SmOffer.fromMap('b', {'smGroupId': 'onion', 'price': 1, 'active': false});
       expect(a.status, SmStatus.active);
       expect(b.status, SmStatus.hidden);
       expect(SmOffer.fromMap('c', {'price': 1}).visible, isFalse, reason: 'smGroupId йўқ — супермаркетда эмас');
+      // Сервер янги таклифни active:false ёзади — smStatus устун.
+      final d = SmOffer.fromMap('d', {'smGroupId': 'onion', 'price': 1, 'active': false, 'smStatus': 'active', 'stock': 5});
+      expect(d.available, isTrue);
+    });
+    test('қолдиқ (сервер кўзгуси): йўқ ёки бир қадамдан кам — сотувда эмас; чегара = бир қадам', () {
+      expect(offer('s0', stock: null).available, isFalse);
+      expect(offer('s1', stock: 0.4, step: 0.5).available, isFalse);
+      expect(offer('s2', stock: 0.5, step: 0.5).available, isTrue);
+      expect(offer('s3', stock: 3).maxQtyMilli, 3000);
+      expect(offer('s0', stock: null).visible, isTrue, reason: 'кўринади, лекин «Ҳозир мавжуд эмас»');
     });
     test('навлар — такрорсиз', () {
       expect(smVarieties(smOffersFixture().where((o) => o.groupId == 'onion')).map((v) => v.id), ['white', 'red']);
@@ -118,6 +132,16 @@ void main() {
       expect(t.holdEstimate, 22000 + 1000 + 2420);
       expect(t.unavailableIds, ['o_red_oos']);
     });
+    test('ушлаш ҲАР қаторда юқорига (сервер computeCharge): 1 001 + 1 001 → 101 + 101', () {
+      final offers = {
+        'a': offer('a', price: 1001, step: 1),
+        'b': offer('b', price: 1001, step: 1),
+      };
+      final t = smCartTotals(SmCart.empty.add('a', 1000).add('b', 1000), offers, feePercent: 11, weighHoldPercent: 10);
+      expect(t.weighedHold, 202, reason: 'жамидан ceil(2002×10%)=201 эмас');
+      expect(t.feeEstimate, 220, reason: 'floor((2002×1100+5000)/10000)');
+      expect(smCartTotals(SmCart.empty.add('a', 1000), offers, weighHoldPercent: 0).weighedHold, 0);
+    });
   });
 
   group('persistence', () {
@@ -141,23 +165,50 @@ void main() {
   });
 
   group('access / payload / errors', () {
-    test('getSupermarketAccess жавоби', () {
+    test('getSupermarketAccess жавоби (сервер шакли: slots {today[], tomorrow[]})', () {
       final a = SmAccess.fromMap({
         'allowed': true,
         'reason': '',
+        'districtId': 'gurlan',
         'feePercent': 11,
-        'slots': [
-          {'id': 's1', 'names': n('Эрталаб'), 'startMin': 540, 'endMin': 660, 'day': 'today'},
-          {'id': 's2', 'startMin': 900, 'endMin': 1020, 'day': 'tomorrow'},
-          {'bad': 1},
-        ],
+        'weighHoldPercent': 12,
+        'tariffVersion': 'sm-v1',
+        'slots': {
+          'today': [
+            {'id': 's1', 'names': n('Эрталаб'), 'startMin': 540, 'endMin': 660, 'date': '2026-11-20'},
+            {'bad': 1},
+          ],
+          'tomorrow': [
+            {'id': 's2', 'startMin': 900, 'endMin': 1020, 'date': '2026-11-21'},
+          ],
+        },
       });
       expect(a.allowed, isTrue);
       expect(a.feePercent, 11);
-      expect(a.slots.map((s) => s.id), ['s1', 's2']);
+      expect(a.weighHoldPercent, 12);
+      expect(a.districtId, 'gurlan');
+      expect(a.slots.map((s) => '${s.id}:${s.day}'), ['s1:today', 's2:tomorrow']);
       expect(a.days, ['today', 'tomorrow']);
       expect(a.slots[1].label('ru'), '15:00–17:00');
+      expect(a.slots[1].date, '2026-11-21');
       expect(SmAccess.fromMap(null).allowed, isFalse);
+      final denied = SmAccess.fromMap({
+        'allowed': false,
+        'reason': 'DISTRICT_NOT_SERVED',
+        'messages': {'uz_Cyrl': 'Бу ҳудудга…', 'uz_Latn': 'Bu hududga…', 'ru': 'В этот район…'},
+        'feePercent': null,
+        'slots': {'today': [], 'tomorrow': []},
+      });
+      expect(denied.allowed, isFalse);
+      expect(smServerMessage(denied.messages, 'ru'), 'В этот район…');
+      expect(denied.weighHoldPercent, 10, reason: 'сукут');
+      expect(denied.feePercent, 0);
+    });
+    test('placeSupermarketOrder натижаси (сервер майдонлари)', () {
+      final r = SmPlaceResult.fromMap({
+        'ok': true, 'orderId': 'o1', 'itemsTotal': 22000, 'weighHold': 1000, 'deliveryFee': 2420, 'total': 25420, 'duplicate': true,
+      });
+      expect([r.orderId, r.goodsTotal, r.weighHold, r.fee, r.hold, r.duplicate], ['o1', 22000, 1000, 2420, 25420, true]);
     });
     test('placeSupermarketOrder payload — шартнома шакли', () {
       final p = smOrderPayload(
@@ -179,7 +230,9 @@ void main() {
       });
     });
     test('хато коди → дўстона калит', () {
-      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'INSUFFICIENT_FUNDS'}), 'sm_err_insufficient_funds');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'INSUFFICIENT_BALANCE'}), 'sm_err_insufficient_funds');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'NOT_TESTER'}), 'sm_err_not_allowed');
+      expect(smErrorKey(grpcCode: 'failed-precondition', details: {'code': 'QTY_STEP_INVALID'}), 'sm_err_qty');
       expect(smErrorKey(grpcCode: 'failed-precondition', details: {'errorCode': 'OUT_OF_STOCK'}), 'sm_err_out_of_stock');
       expect(smErrorKey(grpcCode: 'unavailable'), 'sm_err_network');
       expect(smErrorKey(grpcCode: 'permission-denied'), 'sm_err_not_allowed');
@@ -197,16 +250,42 @@ void main() {
   });
 
   group('order progress', () {
-    test('5 босқич; номаълум — null', () {
-      expect(smOrderStep('accepted'), SmOrderStep.accepted);
-      expect(smOrderStep('preparing'), SmOrderStep.preparing);
+    test('5 босқич (сервер статуслари); рад/бекор/номаълум — null', () {
+      expect(smOrderStep('new'), SmOrderStep.accepted);
+      expect(smOrderStep('accepted'), SmOrderStep.preparing);
       expect(smOrderStep('ready'), SmOrderStep.ready);
+      expect(smOrderStep('ready', fulfillmentStatus: 'courier_picked'), SmOrderStep.courier);
       expect(smOrderStep('in_delivery'), SmOrderStep.courier);
+      expect(smOrderStep('courier'), SmOrderStep.courier);
       expect(smOrderStep('delivered'), SmOrderStep.delivered);
+      expect(smOrderStep('in_delivery', fulfillmentStatus: 'completed'), SmOrderStep.delivered);
       expect(smOrderStep('rejected'), isNull);
-      expect(isSupermarketOrderType('supermarket'), isTrue);
-      expect(isSupermarketOrderType('platform'), isFalse);
+      expect(smOrderStep('accepted', fulfillmentStatus: 'cancelled'), isNull);
+      expect(smOrderStep('???'), isNull);
+      expect(isSupermarketOrder('platform', 'supermarket'), isTrue);
+      expect(isSupermarketOrder('platform', ''), isFalse);
+      expect(isSupermarketOrder('supermarket', ''), isFalse);
     });
+  });
+
+  test('ҳамён тарихи: супермаркет тўлови ва қисман қайтим (3 тил калити)', () {
+    String tr(String k, [Map<String, String>? p]) =>
+        p == null ? '<$k>' : '<$k:${p.entries.map((e) => '${e.key}=${e.value}').join(',')}>';
+    const debit = WalletLedgerEntry(
+        id: '1', type: 'purchase_debit', amount: -25420, module: 'platform', meta: {'subtype': 'supermarket'});
+    const refund = WalletLedgerEntry(
+        id: '2', type: 'order_partial_refund', amount: 900, module: 'platform', meta: {'subtype': 'supermarket'});
+    const plain = WalletLedgerEntry(id: '3', type: 'order_partial_refund', amount: 1);
+    expect(walletLedgerTitle(debit, tr), '<wlt_l_purchase_mod:module=<wlt_m_supermarket>>');
+    expect(walletLedgerTitle(refund, tr), '<wlt_l_partial_refund_mod:module=<wlt_m_supermarket>>');
+    expect(walletLedgerTitle(plain, tr), '<wlt_l_partial_refund>');
+    for (final l in ['uz_Cyrl', 'uz_Latn', 'ru']) {
+      final m = jsonDecode(File('assets/lang/$l.json').readAsStringSync()) as Map<String, dynamic>;
+      for (final k in ['wlt_m_supermarket', 'wlt_l_partial_refund', 'wlt_l_partial_refund_mod']) {
+        expect((m[k] as String?)?.isNotEmpty, isTrue, reason: '$l $k');
+      }
+      expect(m['wlt_l_partial_refund_mod'], contains('{module}'));
+    }
   });
 
   group('search', () {

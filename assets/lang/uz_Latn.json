@@ -6158,7 +6158,7 @@
   "sm_add_to_cart": "Savatga qöşiş",
   "sm_choose_this": "Şuni tanlaş",
   "sm_added_to_cart": "{name} — {qty} savatga qöşildi",
-  "sm_weighed_note": "Tortilgandan keyin aniq summa; +10% vaqtinça uşlanadi, qolgani hamyonga qaytadi.",
+  "sm_weighed_note": "Tortilgandan keyin aniq summa; +{p}% vaqtinça uşlanadi, qolgani hamyonga qaytadi.",
   "sm_cart_title": "Savat",
   "sm_cart_empty": "Savat böş",
   "sm_cart_item_missing": "Mahsulot topilmadi",
@@ -6183,7 +6183,7 @@
   "sm_day_tomorrow": "Ertaga",
   "sm_payment_wallet": "Tölov — hamyon",
   "sm_wallet_balance": "Hamyonda",
-  "sm_weighed_hold": "Tortiladigan mahsulot uçun +10%",
+  "sm_weighed_hold": "Tortiladigan mahsulot uçun +{p}%",
   "sm_hold_total": "Jami uşlanadi",
   "sm_wallet_short": "Hamyonda {amount} yetişmayapti",
   "sm_topup": "Hamyonni töldiriş",
@@ -6204,5 +6204,8 @@
   "sm_step_preparing": "Yiğilmoqda",
   "sm_step_ready": "Tayyor",
   "sm_step_courier": "Kur'erda",
-  "sm_step_delivered": "Yetkazildi"
+  "sm_step_delivered": "Yetkazildi",
+  "wlt_m_supermarket": "AVA Supermarket",
+  "wlt_l_partial_refund": "Buyurtmadan qaytim",
+  "wlt_l_partial_refund_mod": "{module} — qaytim"
 }

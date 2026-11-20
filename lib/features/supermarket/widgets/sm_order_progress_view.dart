@@ -7,13 +7,14 @@ import '../domain/sm_order_progress.dart';
 /// Супермаркет буюртмаси: 5 босқич (мавжуд «Хабарлар» буюртма тафсилоти ичида кўрсатилади).
 /// Номаълум статус — ҳеч нарса (crash йўқ).
 class SmOrderProgressView extends StatelessWidget {
-  const SmOrderProgressView({super.key, required this.status});
+  const SmOrderProgressView({super.key, required this.status, this.fulfillmentStatus = ''});
 
   final String status;
+  final String fulfillmentStatus;
 
   @override
   Widget build(BuildContext context) {
-    final step = smOrderStep(status);
+    final step = smOrderStep(status, fulfillmentStatus: fulfillmentStatus);
     if (step == null) return const SizedBox.shrink();
     final c = context.ava;
     return Container(

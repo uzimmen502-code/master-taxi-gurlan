@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
+import '../domain/sm_cart.dart' show kSmWeighedHoldPercent;
 import '../domain/sm_qty.dart';
 import '../supermarket_controller.dart';
 
@@ -210,7 +211,10 @@ class SmQtyStepper extends StatelessWidget {
 
 /// Тортиладиган маҳсулот изоҳи (эга 2026-11-20 матни).
 class SmWeighedNote extends StatelessWidget {
-  const SmWeighedNote({super.key});
+  const SmWeighedNote({super.key, this.percent = kSmWeighedHoldPercent});
+
+  /// Сервер `weighHoldPercent` (сукут 10).
+  final int percent;
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +228,7 @@ class SmWeighedNote extends StatelessWidget {
         children: [
           Icon(Icons.scale_outlined, color: c.warn, size: 20),
           const SizedBox(width: 8),
-          Expanded(child: Text(context.tr('sm_weighed_note'), style: TextStyle(fontSize: 15, color: c.ink))),
+          Expanded(child: Text(context.tr('sm_weighed_note').replaceAll('{p}', '$percent'), style: TextStyle(fontSize: 15, color: c.ink))),
         ],
       ),
     );

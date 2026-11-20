@@ -90,7 +90,11 @@ class _SupermarketHomeScreenState extends State<SupermarketHomeScreen> {
   Future<void> _editArea() async {
     final picked = await (widget.pickArea?.call(context) ??
         Navigator.of(context).push<GeoArea>(MaterialPageRoute(builder: (_) => const GeoAreaPickScreen())));
-    if (picked != null && !picked.isEmpty) _c.deliveryArea = picked;
+    if (picked != null && !picked.isEmpty) {
+      _c.deliveryArea = picked;
+      // Рухсат ва вақтлар туманга боғлиқ — сервердан қайта (getSupermarketAccess({districtId})).
+      await _c.refreshAccessFor(picked.districtId);
+    }
   }
 
   void _soon() {

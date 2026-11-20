@@ -51,7 +51,7 @@ class SmCartScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
               ],
-              if (hasWeighed) ...[const SizedBox(height: 4), const SmWeighedNote(), const SizedBox(height: 8)],
+              if (hasWeighed) ...[const SizedBox(height: 4), SmWeighedNote(percent: controller.access.weighHoldPercent), const SizedBox(height: 8)],
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(

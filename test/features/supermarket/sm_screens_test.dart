@@ -266,6 +266,43 @@ void main() {
     });
   });
 
+  group('5b. сервер матни ва туман рухсати', () {
+    testWidgets('туман бўйича рухсат сўралади; рад — сервер матни, тугма ўчиқ', (t) async {
+      await t.binding.setSurfaceSize(const Size(420, 2600));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final api = FakeSupermarketApi(
+        access: const SmAccess(
+          allowed: false,
+          reason: 'DISTRICT_NOT_SERVED',
+          messages: {'uz_Cyrl': 'Бу ҳудудга ҳозирча етказиб бермаймиз.', 'uz_Latn': 'x', 'ru': 'y'},
+        ),
+      );
+      final c = _controller(api: api, cart: SmCart.empty.add('o_red_cheap', 1000));
+      await t.pumpWidget(_app(SmCheckoutScreen(controller: c, balance: Stream.value(1000000))));
+      await t.pumpAndSettle();
+      expect(api.accessDistricts, ['gurlan']);
+      expect(find.text('Бу ҳудудга ҳозирча етказиб бермаймиз.'), findsOneWidget);
+      expect(t.widget<FilledButton>(_k('sm_confirm')).onPressed, isNull);
+    });
+
+    testWidgets('буюртма рад этилса — сервер берган 3 тилли матн кўрсатилади', (t) async {
+      await t.binding.setSurfaceSize(const Size(420, 2600));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final api = FakeSupermarketApi()
+        ..placeResults.add(const SmCallError('sm_err_out_of_stock', 'OUT_OF_STOCK',
+            messages: {'uz_Cyrl': 'Маҳсулот етарли эмас.', 'uz_Latn': 'Mahsulot yetarli emas.', 'ru': 'Недостаточно товара.'}));
+      final c = _controller(api: api, cart: SmCart.empty.add('o_red_cheap', 1000));
+      await t.pumpWidget(_app(SmCheckoutScreen(controller: c, balance: Stream.value(1000000))));
+      await t.pumpAndSettle();
+      await t.enterText(_k('sm_addr_phone'), '+998901234567');
+      await t.tap(_k('sm_slot_s1'));
+      await t.pump();
+      await t.tap(_k('sm_confirm'));
+      await t.pumpAndSettle();
+      expect(find.text('Маҳсулот етарли эмас.'), findsOneWidget);
+    });
+  });
+
   group('6. буюртма ҳолати', () {
     testWidgets('5 босқич: ready → 3 таси ёниқ', (t) async {
       await t.pumpWidget(_app(const Scaffold(body: SmOrderProgressView(status: 'ready'))));

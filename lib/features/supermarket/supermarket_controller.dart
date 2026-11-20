@@ -76,7 +76,8 @@ class SupermarketController extends ChangeNotifier {
   List<SmGroup> visibleGroups(SmCategory c) =>
       [for (final g in c.groups) if ((offersByGroup[g.id] ?? const []).isNotEmpty) g];
 
-  SmCartTotals get totals => smCartTotals(cart, offers, feePercent: access.feePercent);
+  SmCartTotals get totals =>
+      smCartTotals(cart, offers, feePercent: access.feePercent, weighHoldPercent: access.weighHoldPercent);
 
   void _setCart(SmCart next) {
     cart = next;
@@ -90,8 +91,16 @@ class SupermarketController extends ChangeNotifier {
   void replaceOffer(String oldId, String newId, int qtyMilli) => _setCart(cart.replaceOffer(oldId, newId, qtyMilli));
   void clearCart() => _setCart(SmCart.empty);
 
-  Future<SmAccess> refreshAccess() async {
-    access = await SupermarketAccessCache.get(api, force: true);
+  /// Танланган туман учун рухсат ва вақтлар (расмийлаштириш). Хато — рад (хавфсиз томон).
+  Future<SmAccess> refreshAccessFor(String districtId) async {
+    try {
+      access = await api.getAccess(districtId: districtId);
+    } on SmCallError catch (e) {
+      access = SmAccess(allowed: false, reason: e.code, messages: e.messages);
+    } catch (e) {
+      debugPrint('[Supermarket] SUPERMARKET_ACCESS_FAILED: $e');
+      access = SmAccess.denied;
+    }
     notifyListeners();
     return access;
   }

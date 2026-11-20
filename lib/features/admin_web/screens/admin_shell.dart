@@ -63,6 +63,7 @@ import 'driver_applications_screen.dart';
 import 'finance_center_screen.dart';
 import 'payout_management_screen.dart';
 import 'platform_products_admin_screen.dart';
+import 'supermarket_admin_screen.dart';
 import 'products_manager_screen.dart';
 import 'procurement_prices_screen.dart';
 import 'oil_catalog_admin_screen.dart';
@@ -232,6 +233,15 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Бозор буюртмалари',
       icon: Icons.storefront_outlined,
       description: 'Бизнес ва ўз дўкони буюртмалари: босқич, синовчилар, пилот туманлар; етказиш тарифи',
+      access: _SectionAccess.users,
+    ),
+    // «AVA Супермаркет» (эга 2026-11-20): таклифлар (нарх, харид нархи), таксономия, тортиш/қатор олиш,
+    // босқич ва вақтлар — admin/superadmin (`users`).
+    _AdminSection(
+      group: 'Буюртма ва етказиш',
+      label: 'AVA Супермаркет',
+      icon: Icons.local_grocery_store_outlined,
+      description: 'Таклифлар, таксономия, буюртмалар (тортиш, қатор олиш), босқич ва етказиш вақтлари',
       access: _SectionAccess.users,
     ),
 
@@ -747,6 +757,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Бозор буюртмалари') {
       return const BusinessOrdersAdminScreen();
+    }
+    if (section.label == 'AVA Супермаркет') {
+      return const SupermarketAdminScreen();
     }
     if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();

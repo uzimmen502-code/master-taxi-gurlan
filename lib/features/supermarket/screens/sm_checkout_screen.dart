@@ -57,14 +57,37 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
   bool _submitting = false;
   String? _errorKey;
 
+  /// Сервер берган матн (`details.messages`) — бўлса калит ўрнига кўрсатилади.
+  Map<String, String> _errorMessages = const {};
+
   SupermarketController get _c => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    final days = _c.access.days;
-    if (days.isNotEmpty) _day = days.first;
+    _pickDefaultDay();
     _prefillPhone();
+    // Танланган туман учун рухсат ва вақтлар — сервердан (getSupermarketAccess({districtId})).
+    _refreshAccess();
+  }
+
+  void _pickDefaultDay() {
+    final days = _c.access.days;
+    if (!days.contains(_day)) {
+      _day = days.isEmpty ? null : days.first;
+      _slotId = null;
+    }
+  }
+
+  Future<void> _refreshAccess() async {
+    final d = _c.deliveryArea.districtId;
+    if (d.isEmpty) return;
+    await _c.refreshAccessFor(d);
+    if (!mounted) return;
+    setState(() {
+      _pickDefaultDay();
+      if (!_c.access.slots.any((s) => s.id == _slotId && s.day == _day)) _slotId = null;
+    });
   }
 
   Future<void> _prefillPhone() async {
@@ -96,6 +119,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
   }
 
   bool get _formOk =>
+      _c.access.allowed &&
       _c.deliveryArea.districtId.isNotEmpty &&
       phoneDigits(_phone.text).length >= 9 &&
       _day != null &&
@@ -148,10 +172,22 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
     } on SmCallError catch (e) {
       // Тармоқ/вақт хатоси — натижа номаълум: калит САҚЛАНАДИ (қайта уриниш дубль ясамайди).
       if (e.key != 'sm_err_network') _keys.settled(_scope);
-      if (mounted) setState(() => _errorKey = e.key);
+      if (mounted) {
+        setState(() {
+          _errorKey = e.key;
+          _errorMessages = e.messages;
+        });
+      }
+      // Вақт ўтиб кетган / туман ёпилган — янги вақтлар.
+      if (e.code == 'SLOT_UNAVAILABLE' || e.code == 'DISTRICT_NOT_SERVED') await _refreshAccess();
     } catch (e) {
       debugPrint('[Supermarket] SUPERMARKET_ORDER_FAILED: $e');
-      if (mounted) setState(() => _errorKey = 'sm_err_generic');
+      if (mounted) {
+        setState(() {
+          _errorKey = 'sm_err_generic';
+          _errorMessages = const {};
+        });
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -160,7 +196,15 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
   Future<void> _editArea() async {
     final picked = await (widget.pickArea?.call(context) ??
         Navigator.of(context).push<GeoArea>(MaterialPageRoute(builder: (_) => const GeoAreaPickScreen())));
-    if (picked != null && !picked.isEmpty) setState(() => _c.deliveryArea = picked);
+    if (picked != null && !picked.isEmpty) {
+      setState(() => _c.deliveryArea = picked);
+      await _refreshAccess();
+    }
+  }
+
+  String _errorText(BuildContext context) {
+    final server = smServerMessage(_errorMessages, context.contentLang);
+    return server.isNotEmpty ? server : context.tr(_errorKey!);
   }
 
   @override
@@ -204,7 +248,15 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
           ]),
           const SizedBox(height: 12),
           _Section(title: context.tr('sm_delivery_time'), children: [
-            if (access.slots.isEmpty)
+            if (!access.allowed)
+              Text(
+                smServerMessage(access.messages, lang).isNotEmpty
+                    ? smServerMessage(access.messages, lang)
+                    : context.tr('sm_not_available_here'),
+                key: const ValueKey('sm_access_denied'),
+                style: TextStyle(fontSize: 15, color: c.danger),
+              )
+            else if (access.slots.isEmpty)
               Text(context.tr('sm_no_slots'), key: const ValueKey('sm_no_slots'), style: const TextStyle(fontSize: 15))
             else ...[
               Wrap(spacing: 8, runSpacing: 8, children: [
@@ -247,7 +299,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
                 SmSumRow(label: context.tr('sm_goods_total'), amount: t.goodsTotal),
                 if (hasWeighed)
                   SmSumRow(
-                      label: context.tr('sm_weighed_hold'),
+                      label: context.tr('sm_weighed_hold').replaceAll('{p}', '${access.weighHoldPercent}'),
                       amount: t.weighedHold,
                       valueKey: const ValueKey('sm_weighed_hold')),
                 SmSumRow(
@@ -255,7 +307,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
                   amount: t.feeEstimate,
                 ),
                 SmSumRow(label: context.tr('sm_hold_total'), amount: hold, bold: true, valueKey: const ValueKey('sm_hold')),
-                if (hasWeighed) ...[const SizedBox(height: 8), const SmWeighedNote()],
+                if (hasWeighed) ...[const SizedBox(height: 8), SmWeighedNote(percent: access.weighHoldPercent)],
                 const SizedBox(height: 4),
                 Text(context.tr('sm_fee_final_note'), style: TextStyle(fontSize: 13, color: c.ink2)),
                 if (short > 0) ...[
@@ -280,7 +332,7 @@ class _SmCheckoutScreenState extends State<SmCheckoutScreen> {
           ),
           if (_errorKey != null) ...[
             const SizedBox(height: 12),
-            Text(context.tr(_errorKey!),
+            Text(_errorText(context),
                 key: const ValueKey('sm_checkout_error'), style: TextStyle(fontSize: 15, color: c.danger)),
           ],
           const SizedBox(height: 16),

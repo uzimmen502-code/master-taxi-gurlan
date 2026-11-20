@@ -6158,7 +6158,7 @@
   "sm_add_to_cart": "Саватга қўшиш",
   "sm_choose_this": "Шуни танлаш",
   "sm_added_to_cart": "{name} — {qty} саватга қўшилди",
-  "sm_weighed_note": "Тортилгандан кейин аниқ сумма; +10% вақтинча ушланади, қолгани ҳамёнга қайтади.",
+  "sm_weighed_note": "Тортилгандан кейин аниқ сумма; +{p}% вақтинча ушланади, қолгани ҳамёнга қайтади.",
   "sm_cart_title": "Сават",
   "sm_cart_empty": "Сават бўш",
   "sm_cart_item_missing": "Маҳсулот топилмади",
@@ -6183,7 +6183,7 @@
   "sm_day_tomorrow": "Эртага",
   "sm_payment_wallet": "Тўлов — ҳамён",
   "sm_wallet_balance": "Ҳамёнда",
-  "sm_weighed_hold": "Тортиладиган маҳсулот учун +10%",
+  "sm_weighed_hold": "Тортиладиган маҳсулот учун +{p}%",
   "sm_hold_total": "Жами ушланади",
   "sm_wallet_short": "Ҳамёнда {amount} етишмаяпти",
   "sm_topup": "Ҳамённи тўлдириш",
@@ -6204,5 +6204,8 @@
   "sm_step_preparing": "Йиғилмоқда",
   "sm_step_ready": "Тайёр",
   "sm_step_courier": "Курьерда",
-  "sm_step_delivered": "Етказилди"
+  "sm_step_delivered": "Етказилди",
+  "wlt_m_supermarket": "AVA Супермаркет",
+  "wlt_l_partial_refund": "Буюртмадан қайтим",
+  "wlt_l_partial_refund_mod": "{module} — қайтим"
 }

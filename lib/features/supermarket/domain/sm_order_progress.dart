@@ -1,9 +1,9 @@
 /// Супермаркет буюртмаси ҳолати — 5 босқич (эга 2026-11-20):
 /// қабул қилинди → йиғилмоқда → тайёр → курьерда → етказилди.
 ///
-/// NEEDS CONFIRMATION: сервер статус сатрлари шартномада йўқ. Мавжуд `orders` статуслари
-/// (`accepted`, `ready`, `in_delivery`, `delivered`) ва эҳтимолий синонимлар қабул қилинади;
-/// номаълум статус — `null` (UI уни кўрсатмайди, crash йўқ).
+/// Сервер (supermarket.js, feat/supermarket-srv 48a7d45f): `orders` `type: 'platform'`, `subtype: 'supermarket'`;
+/// `status`: new → accepted (+smWeighPending) → ready → courier/in_delivery → delivered; курьер ҳолати
+/// `fulfillmentStatus`да (courier_picked / arrived / completed). Номаълум / рад / бекор — `null`.
 library;
 
 enum SmOrderStep { accepted, preparing, ready, courier, delivered }
@@ -16,33 +16,22 @@ const kSmOrderStepKeys = <SmOrderStep, String>{
   SmOrderStep.delivered: 'sm_step_delivered',
 };
 
-SmOrderStep? smOrderStep(String status) {
-  switch (status.trim().toLowerCase()) {
+SmOrderStep? smOrderStep(String status, {String fulfillmentStatus = ''}) {
+  final s = status.trim().toLowerCase();
+  final fs = fulfillmentStatus.trim().toLowerCase();
+  if (s == 'rejected' || s == 'cancelled' || fs == 'cancelled') return null;
+  if (s == 'delivered' || fs == 'completed') return SmOrderStep.delivered;
+  if (s == 'courier' || s == 'in_delivery' || fs == 'courier_picked' || fs == 'arrived') return SmOrderStep.courier;
+  switch (s) {
     case 'new':
+      return SmOrderStep.accepted; // мижоз учун: буюртма қабул қилинди (тўланди)
     case 'accepted':
-    case 'paid':
-      return SmOrderStep.accepted;
-    case 'preparing':
-    case 'picking':
-    case 'cooking':
-      return SmOrderStep.preparing;
+      return SmOrderStep.preparing; // AVA йиғмоқда (тортиш шу босқичда)
     case 'ready':
-    case 'ready_for_pickup':
       return SmOrderStep.ready;
-    case 'courier':
-    case 'courier_assigned':
-    case 'picked_up':
-    case 'in_delivery':
-    case 'on_the_way':
-      return SmOrderStep.courier;
-    case 'delivered':
-    case 'completed':
-    case 'settled':
-      return SmOrderStep.delivered;
   }
   return null;
 }
 
-/// Бу буюртма супермаркетникими (`orders.type`). NEEDS CONFIRMATION: сервер `type: 'supermarket'`
-/// ёзади деб келишилиши керак.
-bool isSupermarketOrderType(String type) => type == 'supermarket';
+/// Бу буюртма супермаркетникими.
+bool isSupermarketOrder(String type, String subtype) => type == 'platform' && subtype == 'supermarket';

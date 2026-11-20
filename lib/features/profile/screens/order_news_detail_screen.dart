@@ -83,11 +83,10 @@ class OrderNewsDetailScreen extends StatelessWidget {
                 )
               else if (orderSnap.data != null) ...[
                 // «AVA Супермаркет» (эга 2026-11-20): 5 босқич — қабул → йиғилмоқда → тайёр → курьерда → етказилди.
-                if (isSupermarketOrderType(orderSnap.data!.type)) ...[
+                if (isSupermarketOrder(orderSnap.data!.type, orderSnap.data!.subtype)) ...[
                   SmOrderProgressView(
-                    status: orderSnap.data!.fulfillmentStatus.isNotEmpty
-                        ? orderSnap.data!.fulfillmentStatus
-                        : orderSnap.data!.status,
+                    status: orderSnap.data!.status,
+                    fulfillmentStatus: orderSnap.data!.fulfillmentStatus,
                   ),
                   const SizedBox(height: 12),
                 ],

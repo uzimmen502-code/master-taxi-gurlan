@@ -6158,7 +6158,7 @@
   "sm_add_to_cart": "В корзину",
   "sm_choose_this": "Выбрать этот",
   "sm_added_to_cart": "{name} — {qty} добавлено в корзину",
-  "sm_weighed_note": "Точная сумма — после взвешивания; +10% временно удерживается, остаток вернётся в кошелёк.",
+  "sm_weighed_note": "Точная сумма — после взвешивания; +{p}% временно удерживается, остаток вернётся в кошелёк.",
   "sm_cart_title": "Корзина",
   "sm_cart_empty": "Корзина пуста",
   "sm_cart_item_missing": "Товар не найден",
@@ -6183,7 +6183,7 @@
   "sm_day_tomorrow": "Завтра",
   "sm_payment_wallet": "Оплата — кошелёк",
   "sm_wallet_balance": "В кошельке",
-  "sm_weighed_hold": "+10% за весовой товар",
+  "sm_weighed_hold": "+{p}% за весовой товар",
   "sm_hold_total": "Всего удерживается",
   "sm_wallet_short": "В кошельке не хватает {amount}",
   "sm_topup": "Пополнить кошелёк",
@@ -6204,5 +6204,8 @@
   "sm_step_preparing": "Собирается",
   "sm_step_ready": "Готов",
   "sm_step_courier": "У курьера",
-  "sm_step_delivered": "Доставлен"
+  "sm_step_delivered": "Доставлен",
+  "wlt_m_supermarket": "AVA Супермаркет",
+  "wlt_l_partial_refund": "Частичный возврат по заказу",
+  "wlt_l_partial_refund_mod": "{module} — возврат"
 }

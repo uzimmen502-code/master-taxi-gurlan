@@ -78,7 +78,7 @@ class _SmGroupScreenState extends State<SmGroupScreen> {
                 ),
               if (widget.group.weighed || offers.any((o) => o.weighed)) ...[
                 const SizedBox(height: 12),
-                const SmWeighedNote(),
+                SmWeighedNote(percent: c.access.weighHoldPercent),
               ],
               const SizedBox(height: 12),
               for (final o in offers) ...[

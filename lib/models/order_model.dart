@@ -177,9 +177,13 @@ class OrderModel {
   /// муддати шундан ҳисобланади.
   final DateTime? deliveredAt;
 
+  /// Тур ичидаги кичик тур (subtype): «AVA Супермаркет» — 	ype: 'platform', subtype: 'supermarket'${nl}  /// (supermarket.js, эга 2026-11-20). Эски ҳужжатларда йўқ — бўш.
+  final String subtype;
+
   const OrderModel({
     required this.id,
     required this.type,
+    this.subtype = '',
     required this.total,
     required this.status,
     required this.items,
@@ -394,6 +398,7 @@ class OrderModel {
     return OrderModel(
       id: doc.id,
       type: d['type'] ?? 'bread',
+      subtype: d['subtype'] is String ? d['subtype'] as String : '',
       total: (d['total'] as num?)?.toInt() ?? 0,
       status: d['status'] ?? 'new',
       items: rawItems

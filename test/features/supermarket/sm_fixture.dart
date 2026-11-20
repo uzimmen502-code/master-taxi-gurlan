@@ -46,6 +46,7 @@ SmOffer offer(
   String packUnit = '',
   String quality = '',
   String packLabel = '',
+  num? stock = 100,
 }) =>
     SmOffer.fromMap(id, {
       'name': 'Offer $id',
@@ -59,6 +60,7 @@ SmOffer offer(
       'weighed': weighed,
       'smStatus': status,
       'price': price,
+      if (stock != null) 'stock': stock,
       if (packQty != null) 'packQty': packQty,
       if (packUnit.isNotEmpty) 'packUnit': packUnit,
     });
@@ -93,8 +95,13 @@ class FakeSupermarketApi implements SupermarketApi {
   /// Навбатдаги жавоблар: `Exception` — ташланади, `SmPlaceResult` — қайтарилади.
   final placeResults = <Object>[];
 
+  final accessDistricts = <String?>[];
+
   @override
-  Future<SmAccess> getAccess() async => access;
+  Future<SmAccess> getAccess({String? districtId}) async {
+    accessDistricts.add(districtId);
+    return access;
+  }
 
   @override
   Future<List<SmOffer>> loadOffers(SmTaxonomy taxonomy) async => smOffersFixture();

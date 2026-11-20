@@ -10,7 +10,10 @@ import 'formatters.dart';
 typedef WalletTr = String Function(String key, [Map<String, String>? params]);
 
 String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
-  final module = _moduleLabel(e.module, tr);
+  // «AVA Супермаркет» (эга 2026-11-20): сервер module 'platform' + meta.subtype 'supermarket' ёзади.
+  final module = e.module == 'platform' && e.meta['subtype'] == 'supermarket'
+      ? tr('wlt_m_supermarket')
+      : _moduleLabel(e.module, tr);
   String withModule(String plainKey, String modKey) =>
       module.isEmpty ? tr(plainKey) : tr(modKey, {'module': module});
 
@@ -62,6 +65,9 @@ String walletLedgerTitle(WalletLedgerEntry e, WalletTr tr) {
     // ёзилади — мижоз (+, қоплама) ва масъул курьер (−, ундирилди).
     case 'logistics_lost_refund':
       return tr(e.amount < 0 ? 'wlt_l_logistics_lost_charge' : 'wlt_l_logistics_lost_refund');
+    // Буюртманинг бир қисми қайтди (супермаркет: тортилгандан кейин / маҳсулот олинди — supermarket.js).
+    case 'order_partial_refund':
+      return withModule('wlt_l_partial_refund', 'wlt_l_partial_refund_mod');
     case 'admin_adjust':
       return tr('wlt_l_admin_adjust');
     case 'birthday_bonus':

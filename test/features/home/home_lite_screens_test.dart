@@ -1,0 +1,258 @@
+// Бош саҳифа «енгил дизайн» (эга 2026-11-20) скриншотлари — ҲАҚИҚИЙ виджетлар, сохта маълумот.
+// Фақат `AVA_SCREENS=1` билан ишлайди (оддий тест прогонида ўтказиб юборилади):
+//   $env:AVA_SCREENS='1'; flutter test test/features/home/home_lite_screens_test.dart
+// Натижа: build/screens/*.png (375×812 dp, pixelRatio 2).
+//
+// Чекловлар: «Янги эълонлар» тасмаси ва қидирув натижалари Firestore'дан ўқийди — бу ерда
+// кўрсатилмайди (қидирув майдонининг ўзи кўринади); карточкалар рўйхати home_screen.dart
+// даги каби ўша тартиб/дарвоза функцияларидан қурилади.
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:ava_gurlan/core/service_config_holder.dart';
+import 'package:ava_gurlan/core/theme/app_theme.dart';
+import 'package:ava_gurlan/features/favorites/favorites_controller.dart';
+import 'package:ava_gurlan/features/home/widgets/ava_bottom_nav.dart';
+import 'package:ava_gurlan/features/home/widgets/ava_top_bar.dart';
+import 'package:ava_gurlan/features/home/widgets/home_global_search.dart';
+import 'package:ava_gurlan/features/home/widgets/home_info_ticker.dart';
+import 'package:ava_gurlan/features/home/widgets/home_lite_cards.dart';
+import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
+import 'package:ava_gurlan/features/home/widgets/home_services_olx_row.dart';
+import 'package:ava_gurlan/features/home/widgets/service_spotlight_item.dart';
+import 'package:ava_gurlan/features/markets/domain/market_taxonomy.dart';
+import 'package:ava_gurlan/l10n/app_localizations.dart';
+import 'package:ava_gurlan/models/service_module_config.dart';
+import 'package:firebase_core/firebase_core.dart';
+// ignore: depend_on_referenced_packages
+import 'package:firebase_core_platform_interface/test.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+final _enabled = Platform.environment['AVA_SCREENS'] == '1';
+
+Future<void> _loadFonts() async {
+  final inter = FontLoader('Inter');
+  for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) {
+    final bytes = File('assets/fonts/Inter-$w.ttf').readAsBytesSync();
+    inter.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await inter.load();
+  final root = Platform.environment['FLUTTER_ROOT'] ?? r'C:\develop\flutter';
+  final icons = File('$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+  if (icons.existsSync()) {
+    final l = FontLoader('MaterialIcons')..addFont(Future.value(ByteData.view(icons.readAsBytesSync().buffer)));
+    await l.load();
+  }
+}
+
+const _images = [
+  'assets/images/home/banner_megaphone_v1.webp',
+  'assets/images/ava_logo_mark.png',
+  'assets/images/markets/market_electronics_v2.webp',
+  'assets/images/markets/market_auto_v2.webp',
+  'assets/images/markets/market_livestock_v2.webp',
+  'assets/images/markets/market_meat_v2.webp',
+  'assets/images/markets/market_farm_v2.webp',
+  'assets/images/markets/market_appliances_v2.webp',
+  'assets/images/markets/market_realty_v2.webp',
+  'assets/images/markets/market_wholesale_v2.webp',
+  'assets/images/markets/market_china_v2.webp',
+  'assets/images/markets/market_aralash_v2.webp',
+  'assets/images/services/service_jobs.png',
+  'assets/images/services/service_yuk_local.png',
+  'assets/images/services/service_ev_charging.png',
+  'assets/images/banners/banner_food.jpg',
+  'assets/images/banners/banner_intercity.jpg',
+  'assets/images/banners/banner_local_taxi.jpg',
+  'assets/images/banners/banner_marshrut.jpg',
+];
+
+class _Preview extends StatelessWidget {
+  const _Preview({required this.scroll});
+
+  final ScrollController scroll;
+
+  @override
+  Widget build(BuildContext context) {
+    String tr(String k) => AppLocalizations.of(context)!.translate(k);
+    HomeLiteCardData card(String id, String title, String caption,
+            {String? image, IconData? icon, HomeLiteImageFit fit = HomeLiteImageFit.cover}) =>
+        HomeLiteCardData(id: id, title: tr(title), caption: tr(caption), imagePath: image, icon: icon, fit: fit, onTap: () {});
+    final ads = <String, HomeLiteCardData>{
+      'dating': card('dating', 'dating_short_label', 'home_lite_dating_caption', icon: Icons.favorite_rounded),
+      'ads': card('ads', 'home_section_ads', 'home_lite_ads_caption',
+          image: 'assets/images/services/service_jobs.png', fit: HomeLiteImageFit.contain),
+      'logistics': card('logistics', 'home_lite_post_title', 'home_lite_post_caption', icon: Icons.local_post_office_rounded),
+      'pay': card('pay', 'home_lite_pay_title', 'home_lite_pay_caption', icon: Icons.account_balance_wallet_rounded),
+      'restaurants': card('restaurants', 'home_lite_restaurants_title', 'home_lite_restaurants_caption',
+          image: 'assets/images/banners/banner_food.jpg'),
+    };
+    final transport = <String, HomeLiteCardData>{
+      'intercity': card('intercity', 'home_module_intercity', 'home_lite_intercity_caption',
+          image: 'assets/images/banners/banner_intercity.jpg'),
+      'local_taxi': card('local_taxi', 'home_lite_local_taxi_title', 'home_lite_local_taxi_caption',
+          image: 'assets/images/banners/banner_local_taxi.jpg'),
+      'marshrut': card('marshrut', 'home_lite_marshrut_title', 'home_lite_marshrut_caption',
+          image: 'assets/images/banners/banner_marshrut.jpg'),
+      'yuk_local': card('yuk_local', 'home_lite_yuk_local_title', 'home_lite_yuk_local_caption',
+          image: 'assets/images/services/service_yuk_local.png', fit: HomeLiteImageFit.contain),
+    };
+    final more = <String, HomeLiteCardData>{
+      'tv_market': card('tv_market', 'home_nav_avagram', 'home_lite_avagram_caption', icon: Icons.play_circle_fill_rounded),
+      'business_map': card('business_map', 'home_lite_business_map_title', 'home_lite_business_map_caption', icon: Icons.map_rounded),
+      'ev_charging': card('ev_charging', 'home_lite_ev_title', 'home_lite_ev_caption',
+          image: 'assets/images/services/service_ev_charging.png', fit: HomeLiteImageFit.contain),
+    };
+    bool all(String _) => true;
+    return Scaffold(
+      backgroundColor: Theme.of(context).extension<AvaColors>()!.bg,
+      bottomNavigationBar: AvaBottomNav(current: AvaNavTab.home, onTap: (_) {}, messagesBadge: 3),
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AvaTopBar(onPickRegion: () {}),
+            const SizedBox(height: 2),
+            SizedBox(
+              height: HomeInfoTicker.height,
+              child: HomeInfoTicker(ads: const [], onCta: () {}),
+            ),
+            const SizedBox(height: 12),
+            HomeGlobalSearchBar(onOpenEntry: (_) async {}, onOpenClip: (_) async {}),
+            HomeMarketsBlock(
+              onOpen: (_) {},
+              isVisible: all,
+              loadTaxonomy: () async => MarketTaxonomy.fromMap(const {'version': 1, 'markets': {}}),
+            ),
+            HomeLiteSection(
+              title: tr('home_lite_section_ads_services'),
+              cards: [
+                for (final id in homeAdsServicesCardIds(
+                  isVisible: all,
+                  viewerBirthDate: '${DateTime.now().year - 30}-01-01',
+                  restaurantsAllowed: true,
+                ))
+                  ads[id]!,
+              ],
+            ),
+            HomeLiteSection(
+              title: tr('home_lite_section_transport'),
+              cards: [for (final id in homeTransportCardIds(all)) transport[id]!],
+            ),
+            HomeLiteSection(
+              title: tr('home_lite_section_more'),
+              cards: [for (final id in homeMoreCardIds(all)) more[id]!],
+            ),
+            const SizedBox(height: 8),
+            HomeAllServicesHeader(
+              items: [ServiceSpotlightItem(moduleId: 'jobs', label: 'jobs', icon: Icons.circle, onTap: () {})],
+              onTap: () {},
+            ),
+          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _shoot(WidgetTester t, {required String name, required ThemeData theme, double scale = 1.0, required List<String> stops}) async {
+  final scroll = ScrollController();
+  final key = GlobalKey();
+  await t.binding.setSurfaceSize(const Size(375, 812));
+  await t.pumpWidget(RepaintBoundary(
+    key: key,
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: theme,
+      locale: const Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Cyrl'),
+      supportedLocales: const [
+        Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Cyrl'),
+        Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn'),
+        Locale('ru'),
+      ],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale), padding: const EdgeInsets.only(top: 24)),
+        child: child!,
+      ),
+      home: _Preview(scroll: scroll),
+    ),
+  ));
+  // Тил файллари (AppLocalizations) асинхрон юкланади — экран шундан кейин қурилади.
+  for (var i = 0; i < 20 && find.byType(_Preview).evaluate().isEmpty; i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pump();
+  }
+  await t.runAsync(() async {
+    final ctx = t.element(find.byType(_Preview));
+    for (final p in _images) {
+      await precacheImage(AssetImage(p), ctx);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+  });
+  await t.pump(const Duration(milliseconds: 500));
+  await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+  await t.pump(const Duration(milliseconds: 500));
+  Directory('build/screens').createSync(recursive: true);
+  for (final stop in stops) {
+    final target = switch (stop) {
+      'top' => 0.0,
+      'markets' => t.getTopLeft(find.byKey(const ValueKey('home_markets_block'))).dy + scroll.offset - 80,
+      'sections' => t.getTopLeft(find.byKey(const ValueKey('home_lite_card_market_aralash'))).dy + scroll.offset - 80,
+      _ => scroll.position.maxScrollExtent,
+    };
+    scroll.jumpTo(target.clamp(0.0, scroll.position.maxScrollExtent));
+    await t.pump();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
+    await t.pump(const Duration(milliseconds: 100));
+    final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    await t.runAsync(() async {
+      final img = await boundary.toImage(pixelRatio: 2);
+      final data = await img.toByteData(format: ui.ImageByteFormat.png);
+      File('build/screens/${name}_$stop.png').writeAsBytesSync(data!.buffer.asUint8List());
+    });
+  }
+  expect(t.takeException(), isNull);
+  await t.pumpWidget(const SizedBox());
+  await t.binding.setSurfaceSize(null);
+}
+
+void main() {
+  setUpAll(() async {
+    if (!_enabled) return;
+    setupFirebaseCoreMocks();
+    await Firebase.initializeApp();
+    ServiceConfigHolder.setForTest(defaults: ServiceModuleConfig(const {}));
+    // ❤ чипи FirebaseAuth'га уланмасин (меҳмон).
+    FavoritesController.debugInstance = FavoritesController(uidStream: Stream.value(''));
+    await _loadFonts();
+  });
+
+  const stops = ['top', 'markets', 'sections', 'bottom'];
+
+  testWidgets('light 375×812', (t) async {
+    await _shoot(t, name: 'home_light', theme: AppTheme.light, stops: stops);
+  }, skip: !_enabled);
+
+  testWidgets('dark 375×812 (AvaColors.dark — иловада ҳали уланмаган)', (t) async {
+    await _shoot(t, name: 'home_dark', theme: AppTheme.dark, stops: stops);
+  }, skip: !_enabled);
+
+  testWidgets('large text 1.5× light', (t) async {
+    await _shoot(t, name: 'home_light_text150', theme: AppTheme.light, scale: 1.5, stops: const ['top', 'markets', 'bottom']);
+  }, skip: !_enabled);
+}

@@ -95,11 +95,18 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('баннер матни йўқ — ҳамён ёпилгач жой йиғилади', (t) async {
+  // Эга 2026-11-20: админ матни бўлмаса ҳам баннер эга сукут матни билан чиқади (аввал жой йиғиларди);
+  // ҳамён ↔ баннер алмашиш қоидаси ўзгармаган — жой 86 px, пастдаги мазмун қимирламайди.
+  testWidgets('баннер матни йўқ — ҳамён ёпилгач сукут матнли баннер, жой 86 px', (t) async {
     await t.pumpWidget(_screen(showWallet: true, ads: const []));
+    final y0 = _belowY(t);
     await t.pumpWidget(_screen(showWallet: false, ads: const []));
-    await t.pump(const Duration(milliseconds: 400));
-    expect(t.getSize(find.byType(HomeWalletTickerSlot)).height, 0);
+    await t.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 2));
+    expect(t.getSize(find.byType(HomeWalletTickerSlot)).height, 86);
+    expect(find.byType(HomeInfoTicker), findsOneWidget);
+    expect(find.text('home_banner_default_title'), findsOneWidget);
+    expect(_belowY(t), y0);
+    await t.pumpWidget(const SizedBox());
   });
 
   testWidgets('«анимацияни камайтириш» ёқилган — дарров алмашади', (t) async {

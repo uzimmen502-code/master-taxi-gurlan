@@ -1,4 +1,4 @@
-// STAGE 12 (эга, 2026-11-16): бош саҳифа — қидирув энг юқорида, «Бозорлар» блоки,
+// STAGE 12 (эга, 2026-11-16) + «енгил дизайн» (эга 2026-11-20): «Бозорлар» блоки,
 // Улгуржи/Хитой/Уй-жой плиткалари ва бўлимлари олиб ташланди.
 import 'dart:convert';
 import 'dart:io';
@@ -29,18 +29,24 @@ final _taxonomy = MarketTaxonomy.fromMap({
   },
 });
 
+// Эга тартиби (2026-11-20): Электроника, Мошина, Мол, Гўшт, Деҳқон, Маиший техника, Хизматлар,
+// Уй-жой, Улгуржи, Хитой товарлари, Аралаш.
+const _order = ['electronics', 'auto', 'livestock', 'meat', 'farm', 'appliances', 'services', 'realty', 'wholesale', 'china', 'aralash'];
 const _allIds = [
-  'livestock_market',
+  'electronics_market',
   'auto_market',
+  'livestock_market',
   'meat_market',
   'farm_market',
-  'electronics_market',
   'appliances_market',
+  'jobs',
   'realty',
   'wholesale_market',
   'china_market',
   'cheap_products_home',
 ];
+
+Finder _card(String id) => find.byKey(ValueKey('home_lite_card_market_$id'));
 
 Future<List<HomeMarketEntry>> _pump(
   WidgetTester t, {
@@ -67,24 +73,27 @@ void main() {
   tearDown(ServiceConfigHolder.resetForTest);
 
   group('HomeMarketsBlock', () {
-    testWidgets('ҳаммаси кўринса — 10 карточка эга тартибида', (t) async {
+    testWidgets('ҳаммаси кўринса — 11 карточка эга тартибида (йиғилмайди)', (t) async {
+      await t.binding.setSurfaceSize(const Size(400, 1600));
+      addTearDown(() => t.binding.setSurfaceSize(null));
       await _pump(t, isVisible: (_) => true);
       expect(find.byKey(const ValueKey('home_markets_block')), findsOneWidget);
-      expect(find.text('home_markets_block_title:'), findsOneWidget);
-      final ids = ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'china', 'aralash'];
-      final ys = [for (final id in ids) t.getTopLeft(find.byKey(ValueKey('home_market_card_$id'))).dy];
+      expect(find.text('home_markets_block_title'), findsOneWidget);
+      final ys = [for (final id in _order) t.getTopLeft(_card(id)).dy];
       for (var i = 1; i < ys.length; i++) {
-        expect(ys[i], greaterThan(ys[i - 1]), reason: ids[i]);
+        expect(ys[i], greaterThan(ys[i - 1]), reason: _order[i]);
       }
+      expect(kHomeMarketEntries.map((e) => e.id).toList(), _order);
       expect(kHomeMarketEntries.map((e) => e.moduleId).toList(), _allIds);
     });
 
     testWidgets('дарвоза: фақат кўринадиган модул карточкаси; ҳеч бири бўлмаса — блок йўқ', (t) async {
-      await _pump(t, isVisible: (id) => id == 'meat_market' || id == 'china_market');
-      expect(find.byKey(const ValueKey('home_market_card_meat')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home_market_card_china')), findsOneWidget);
+      await _pump(t, isVisible: (id) => id == 'meat_market' || id == 'china_market' || id == 'jobs');
+      expect(_card('meat'), findsOneWidget);
+      expect(_card('china'), findsOneWidget);
+      expect(_card('services'), findsOneWidget);
       for (final id in ['livestock', 'auto', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'aralash']) {
-        expect(find.byKey(ValueKey('home_market_card_$id')), findsNothing, reason: id);
+        expect(_card(id), findsNothing, reason: id);
       }
       await _pump(t, isVisible: (_) => false);
       expect(find.byKey(const ValueKey('home_markets_block')), findsNothing);
@@ -100,43 +109,42 @@ void main() {
         enforce: true,
       );
       await _pump(t);
-      expect(find.byKey(const ValueKey('home_market_card_auto')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home_market_card_aralash')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home_market_card_realty')), findsNothing);
-      expect(find.byKey(const ValueKey('home_market_card_wholesale')), findsNothing);
+      expect(_card('auto'), findsOneWidget);
+      expect(_card('aralash'), findsOneWidget);
+      expect(_card('realty'), findsNothing);
+      expect(_card('wholesale'), findsNothing);
+      expect(_card('services'), findsNothing, reason: 'Хизматлар бозори — jobs дарвозаси');
     });
 
     testWidgets('босилганда — шу карточка ёзуви чақирувчига', (t) async {
       final opened = await _pump(t, isVisible: (_) => true);
-      // 10 карта — тест экранидан пастга чиқади.
-      await t.ensureVisible(find.byKey(const ValueKey('home_market_card_china')));
-      await t.pumpAndSettle();
-      await t.tap(find.byKey(const ValueKey('home_market_card_china')));
-      await t.ensureVisible(find.byKey(const ValueKey('home_market_card_meat')));
-      await t.pumpAndSettle();
-      await t.tap(find.byKey(const ValueKey('home_market_card_meat')));
-      expect(opened.map((e) => e.id).toList(), ['china', 'meat']);
-    });
-
-    // Эга 2026-11-16: 10 та картанинг ҳаммасида қисқа шиор — lang калитидан; карта баландлиги = расм (64).
-    testWidgets('шиор: 10 та карта — lang калити; баландлик 64', (t) async {
-      await _pump(t, isVisible: (_) => true);
-      String slogan(String id) => t.widget<Text>(find.byKey(ValueKey('home_market_slogan_$id'))).data!;
-      for (final id in ['livestock', 'auto', 'meat', 'farm', 'electronics', 'appliances', 'realty', 'wholesale', 'china', 'aralash']) {
-        expect(slogan(id), 'home_market_${id}_slogan');
+      for (final id in ['china', 'meat', 'services']) {
+        await t.ensureVisible(_card(id));
+        await t.pumpAndSettle();
+        await t.tap(_card(id));
       }
-      final row = find.descendant(
-        of: find.byKey(const ValueKey('home_market_card_meat')),
-        matching: find.byWidgetPredicate((w) => w is SizedBox && w.height == 64 && w.child is Row),
-      );
-      expect(row, findsOneWidget);
+      expect(opened.map((e) => e.id).toList(), ['china', 'meat', 'services']);
     });
 
-    testWidgets('таксономия юкланмаса ҳам — шиорлар (lang) қолади, crash йўқ', (t) async {
+    testWidgets('изоҳ: 11 та карта — lang калити; расм ўрни эни 100, баландлиги ≥ 64 (карточка бўйи)', (t) async {
+      await t.binding.setSurfaceSize(const Size(400, 1600));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      await _pump(t, isVisible: (_) => true);
+      for (final e in kHomeMarketEntries) {
+        final cap = t.widget<Text>(find.byKey(ValueKey('home_lite_caption_market_${e.id}'))).data!;
+        expect(cap, e.sloganKey);
+        final img = t.getSize(find.byKey(ValueKey('home_lite_image_market_${e.id}')));
+        expect(img.width, 100);
+        expect(img.height, greaterThanOrEqualTo(64));
+        expect(img.height, t.getSize(_card(e.id)).height, reason: 'расм карточка баландлигида');
+      }
+      expect(kHomeMarketEntries.firstWhere((e) => e.id == 'services').sloganKey, 'home_market_services_slogan');
+    });
+
+    testWidgets('таксономия юкланмаса ҳам — карточкалар қолади, crash йўқ', (t) async {
       await _pump(t, isVisible: (_) => true, load: () async => throw StateError('offline'));
-      expect(find.byKey(const ValueKey('home_market_card_livestock')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home_market_slogan_livestock')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home_market_slogan_realty')), findsOneWidget);
+      expect(_card('electronics'), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_lite_caption_market_electronics')), findsOneWidget);
     });
   });
 
@@ -189,31 +197,50 @@ void main() {
 
   group('home_screen.dart манбаси', () {
     final src = File('lib/features/home/home_screen.dart').readAsStringSync();
-    // Эга 2026-11-16: қидирув аввалги жойига — хизматлар сарлавҳасидан кейин, «Бозорлар»дан олдин;
-    // тасдиқ/буюртма/ҳамён AvaTopBar тагида қолади; доира плиткалар қатори бош саҳифада йўқ.
-    test('тартиб: AvaTopBar → тасдиқ/буюртма/ҳамён → «Барча хизматларни кўриш» → қидирув → «Бозорлар»', () {
+    // Эга 2026-11-20 «енгил дизайн»: AvaTopBar → тасдиқ/буюртма/ҳамён↔баннер → қидирув → «Бозорлар» →
+    // «Эълон ва хизматлар» → «Транспорт ва логистика» → «Янги эълонлар» → «Бошқа хизматлар» → «Барча хизматларни кўриш».
+    test('тартиб — эга жойлашуви', () {
       final top = RegExp(r'AvaTopBar\(\s*onPickRegion').firstMatch(src)?.start ?? -1;
       final searchRe = RegExp(r'HomeGlobalSearchBar\(\s*key:');
       final search = searchRe.firstMatch(src)?.start ?? -1;
       final confirm = src.indexOf('const CustomerConfirmBanner()');
       final order = src.indexOf('_ActiveOrderSlot(onOpen:');
       final ticker = src.indexOf('HomeWalletTickerSlot(');
-      final header = src.indexOf('HomeAllServicesHeader(');
       final block = src.indexOf('HomeMarketsBlock(onOpen: _openHomeMarket)');
-      expect([top, search, confirm, order, ticker, header, block].every((i) => i > 0), isTrue);
-      expect(top < confirm && confirm < order && order < ticker, isTrue);
-      expect(ticker < header && header < search && search < block, isTrue);
+      final ads = src.indexOf("ValueKey('home_section_ads_services')");
+      final transport = src.indexOf("ValueKey('home_section_transport')");
+      final adsStrip = src.indexOf("titleKey: 'home_section_ads'");
+      final more = src.indexOf("ValueKey('home_section_more')");
+      final header = src.indexOf('HomeAllServicesHeader(');
+      final all = [top, confirm, order, ticker, search, block, ads, transport, adsStrip, more, header];
+      expect(all.every((i) => i > 0), isTrue, reason: '$all');
+      for (var i = 1; i < all.length; i++) {
+        expect(all[i], greaterThan(all[i - 1]), reason: 'index $i');
+      }
       expect(src.contains('HomeServicesOlxRow('), isFalse, reason: 'доира плиткалар бош саҳифада йўқ');
       expect(src.contains('onTap: _openAllServices'), isTrue);
-      // Виджет фақат бир жойда (изоҳдаги `HomeGlobalSearchBar(onIntent: …)` ҳисобга кирмайди).
       expect(RegExp(r'^\s*HomeGlobalSearchBar\(', multiLine: true).allMatches(src).length, 1);
       expect(searchRe.allMatches(src).length, 1);
       expect(src.contains('items: homeRowServices(buildHomeServices('), isTrue);
     });
-    test('Улгуржи/Хитой/Уй-жой бўлимлари йўқ; Аралаш бўлими бор', () {
-      expect(src.contains('HomeWholesaleSection('), isFalse);
-      expect(src.contains('HomeRealtySection('), isFalse);
-      expect(src.contains('HomeMarketSection('), isTrue);
+    test('карточкага алмашган бўлимлар бош саҳифада йўқ; «Янги эълонлар» бўлими қолди', () {
+      for (final w in [
+        'HomeWholesaleSection(',
+        'HomeRealtySection(',
+        'HomeMarketSection(',
+        'HomeDatingSection(',
+        'HomeRestaurantsSection(',
+        'HomeIntercitySection(',
+        'HomeYukLocalSection(',
+        'HomeEvSection(',
+        'HomeBusinessSection(',
+        'HomeAvagramSection(',
+        "titleKey: 'home_section_services'",
+      ]) {
+        expect(src.contains(w), isFalse, reason: w);
+      }
+      expect(RegExp(r'HomeAdsSection\(').allMatches(src).length, 1);
+      expect(src.contains("adType: 'ad'"), isTrue);
     });
     test('карточка йўналиши — мавжуд, дарвозали helper\'лар', () {
       expect(src.contains('await openMarket(context, taxonomyId, push: _push);'), isTrue);
@@ -221,54 +248,57 @@ void main() {
       expect(src.contains('await _openWholesale(WholesaleProduct.marketWholesale);'), isTrue);
       expect(src.contains('await _openWholesale(WholesaleProduct.marketChina);'), isTrue);
       expect(src.contains("await _openModule(HomeModulesCatalog.byId('cheap_products_home'));"), isTrue);
+      // Хизматлар бозори — мавжуд хизматлар рўйхати (jobs, kind=service).
+      expect(src.contains("await _openGated('jobs', const JobsScreen(kind: AdKind.service));"), isTrue);
     });
   });
 
-  test('lang: янги калитлар 3 тилда, эга матнлари', () {
+  test('lang: калитлар 3 тилда, эга матнлари (2026-11-20)', () {
     Map<String, dynamic> read(String l) =>
         jsonDecode(File('assets/lang/$l.json').readAsStringSync()) as Map<String, dynamic>;
     final cyr = read('uz_Cyrl'), lat = read('uz_Latn'), ru = read('ru');
-    const keys = [
-      'home_markets_block_title',
-      'home_search_hint_ava',
-      'home_market_aralash_title',
-      'home_market_realty_slogan',
-      'home_market_wholesale_slogan',
-      'home_market_china_slogan',
-      'home_market_aralash_slogan',
-    ];
-    for (final k in keys) {
+    for (final e in kHomeMarketEntries) {
       for (final m in [cyr, lat, ru]) {
-        expect((m[k] as String?)?.isNotEmpty, isTrue, reason: k);
+        expect((m[e.titleKey] as String?)?.isNotEmpty, isTrue, reason: e.titleKey);
+        expect((m[e.sloganKey] as String?)?.isNotEmpty, isTrue, reason: e.sloganKey);
       }
     }
     expect(cyr['home_markets_block_title'], 'Бозорлар');
     expect(lat['home_markets_block_title'], 'Bozorlar');
     expect(ru['home_markets_block_title'], 'Рынки');
-    expect(cyr['home_search_hint_ava'], "AVA'да қидириш…");
-    expect(lat['home_search_hint_ava'], "AVA'da qidiriş…");
-    expect(ru['home_search_hint_ava'], 'Поиск в AVA…');
-    expect(ru['home_market_aralash_title'], 'Смешанный рынок');
-    // Эга 2026-11-16: Электроника ва Маиший техника бозорлари.
-    expect(cyr['home_module_electronics_market'], 'Электроника бозори');
-    expect(lat['home_module_electronics_market'], 'Elektronika bozori');
-    expect(ru['home_module_electronics_market'], 'Рынок электроники');
-    expect(cyr['home_module_appliances_market'], 'Маиший техника бозори');
-    expect(lat['home_module_appliances_market'], 'Maişiy texnika bozori');
-    expect(ru['home_module_appliances_market'], 'Рынок бытовой техники');
-    expect(cyr['home_market_electronics_slogan'], 'Замонавий технологиялар — бир жойда!');
-    expect(lat['home_market_electronics_slogan'], 'Zamonaviy texnologiyalar — bir joyda!');
-    expect(ru['home_market_electronics_slogan'], 'Современные технологии — в одном месте!');
-    expect(cyr['home_market_appliances_slogan'], 'Уйингизга қулайлик олиб келинг!');
-    expect(lat['home_market_appliances_slogan'], 'Uyingizga qulaylik olib keling!');
-    expect(ru['home_market_appliances_slogan'], 'Комфорт для вашего дома!');
-    expect([cyr['market_short_electronics'], lat['market_short_electronics'], ru['market_short_electronics']],
-        ['Электроника', 'Elektronika', 'Электроника']);
-    expect([cyr['market_short_appliances'], lat['market_short_appliances'], ru['market_short_appliances']],
-        ['Маиший техника', 'Maişiy texnika', 'Бытовая техника']);
-    // Карточка расмлари мавжуд.
+    expect(cyr['home_search_hint_ava'], 'Маҳсулот ёки хизмат қидиринг');
+    expect(lat['home_search_hint_ava'], 'Mahsulot yoki xizmat qidiring');
+    expect(ru['home_search_hint_ava'], 'Найдите товар или услугу');
+    // Эга берган изоҳлар (uz_Cyrl айнан).
+    const owner = {
+      'home_market_electronics_slogan': 'Телефон, компьютер ва гаджетлар',
+      'home_market_auto_slogan': 'Автомобил ва эҳтиёт қисмлар',
+      'home_market_livestock_slogan': 'Қорамол, қўй, эчки ва парранда — эгасидан',
+      'home_market_meat_slogan': 'Гўшт ва балиқ — яқин сотувчилардан',
+      'home_market_farm_slogan': 'Мева, сабзавот ва дон — деҳқондан',
+      'home_market_appliances_slogan': 'Уй учун техника бир жойда',
+      'home_market_services_slogan': 'Усталар ва мутахассислар хизматидан фойдаланинг',
+      'home_market_realty_slogan': 'Сотиб олиш, сотиш ва ижара',
+      'home_market_wholesale_slogan': 'Катта партияда қулай харид',
+      'home_market_china_slogan': 'Хитой маҳсулотларига буюртма',
+      'home_market_aralash_slogan': 'Барча бозорлардаги таклифлар',
+      'home_market_services_title': 'Хизматлар бозори',
+      'home_market_china_title': 'Хитой товарлари бозори',
+    };
+    owner.forEach((k, v) => expect(cyr[k], v, reason: k));
+    // Янги лотин алифбоси (Ö Ğ Ş Ç): эски ' белгили o'/g' ва sh/ch йўқ.
     for (final e in kHomeMarketEntries) {
-      expect(File(e.imagePath).existsSync(), isTrue, reason: e.imagePath);
+      final v = (lat[e.sloganKey] as String) + (lat[e.titleKey] as String);
+      expect(RegExp("[oOgG]['ʻ‘]").hasMatch(v), isFalse, reason: v);
+      expect(RegExp(r'sh|ch|Sh|Ch').hasMatch(v), isFalse, reason: v);
+    }
+    // Карточка расмлари мавжуд (Хизматлар бозори — вақтинча иконка, эга расм бергунча).
+    for (final e in kHomeMarketEntries) {
+      if (e.imagePath == null) {
+        expect(e.icon, isNotNull, reason: e.id);
+        continue;
+      }
+      expect(File(e.imagePath!).existsSync(), isTrue, reason: e.imagePath);
     }
   });
 }

@@ -18,6 +18,14 @@ void main() {
       expect(datingSectionVisibleFor(_birthDateForAge(25)), isTrue);
     });
 
+    // Ega 2026-11-20: «Tanişuv» kartasi faqat 18..45 yoşga (ikkala çet kiradi).
+    test('45 yosh — ko‘rinadi, 46 yosh — KO‘RINMAYDI', () {
+      expect(kDatingMaxViewerAge, 45);
+      expect(datingSectionVisibleFor(_birthDateForAge(45)), isTrue);
+      expect(datingSectionVisibleFor(_birthDateForAge(46)), isFalse);
+      expect(datingSectionVisibleFor(_birthDateForAge(70)), isFalse);
+    });
+
     test('17 yosh — KO‘RINMAYDI', () {
       expect(datingSectionVisibleFor(_birthDateForAge(17)), isFalse);
     });

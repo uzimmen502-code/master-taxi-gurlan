@@ -96,7 +96,11 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
   @override
   void initState() {
     super.initState();
-    unawaited(_repo.fetchActiveCached());
+    // Олдиндан юклаш: хато (офлайн, рухсат) — фақат логда; қидирувнинг ўзи кейин қайта сўрайди
+    // (аввал ушланмаган async хато бўлиб қоларди).
+    unawaited(_repo.fetchActiveCached().then<void>((_) {}, onError: (Object e) {
+      debugPrint('[HomeSearch] SEARCH_INDEX_PREFETCH_FAILED: $e');
+    }));
     _loadIntentRouter();
   }
 
@@ -240,51 +244,34 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
             border: Border.all(color: c.line),
           ),
           clipBehavior: Clip.antiAlias,
-          // `IntrinsicHeight` шарт: скролл ичида баландлик чегарасиз
-          // келади, `stretch` эса уни infinity га чўзиб NaN матрица
-          // ҳосил қилар эди (қурилмада бутун саҳифа устма-уст тушган).
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _ctrl,
-                    focusNode: _focus,
-                    onChanged: _onChanged,
-                    textInputAction: TextInputAction.search,
-                    style: AvaText.body.copyWith(color: c.ink),
-                    decoration: InputDecoration(
-                      // «AVA'да қидириш…» (эга, 2026-11-16, STAGE 12: қидирув энг юқорида).
-                      hintText: context.tr('home_search_hint_ava'),
-                      suffixIcon: empty
-                          ? null
-                          : IconButton(
-                              tooltip: context.tr('home_search_clear'),
-                              onPressed: _clear,
-                              icon: Icon(Icons.close_rounded,
-                                  size: 18, color: c.ink3),
-                            ),
-                      filled: false,
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+          // Эга 2026-11-20 «енгил дизайн»: алоҳида тўқ сариқ тугма йўқ —
+          // қидирув иконкаси майдон ичида; «Қидириш» клавиатурадан.
+          child: TextField(
+            key: const ValueKey('home_search_field'),
+            controller: _ctrl,
+            focusNode: _focus,
+            onChanged: _onChanged,
+            onSubmitted: _onChanged,
+            textInputAction: TextInputAction.search,
+            style: AvaText.body.copyWith(color: c.ink),
+            decoration: InputDecoration(
+              // «Маҳсулот ёки хизмат қидиринг» (эга 2026-11-20).
+              hintText: context.tr('home_search_hint_ava'),
+              hintStyle: AvaText.body.copyWith(color: c.ink2),
+              prefixIcon: Icon(Icons.search_rounded, size: 22, color: c.ink2),
+              suffixIcon: empty
+                  ? null
+                  : IconButton(
+                      tooltip: context.tr('home_search_clear'),
+                      onPressed: _clear,
+                      icon: Icon(Icons.close_rounded, size: 18, color: c.ink3),
                     ),
-                  ),
-                ),
-                Material(
-                  color: c.brand,
-                  child: InkWell(
-                    onTap: () => _onChanged(_ctrl.text),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: Icon(Icons.search_rounded,
-                          size: 18, color: c.brandInk),
-                    ),
-                  ),
-                ),
-              ],
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             ),
           ),
         ),

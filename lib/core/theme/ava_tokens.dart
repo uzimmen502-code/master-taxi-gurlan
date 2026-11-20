@@ -15,107 +15,96 @@ import 'package:flutter/material.dart';
 // ичида ишлатилади (масалан `const Icon(color: AppColors.primary)`).
 
 /// Ёруғ режим хом қийматлари.
+///
+/// «Енгил дизайн» (эга 2026-11-20): оч кулранг/оқ асос, ЯГОНА тўқ сариқ акцент
+/// (фақат тугма, фаол ҳолат, асосий таклиф). Аввалги крем `FFF0D1` фон ва илиқ
+/// нейтраллар (2026-10-07) шу қарор билан алмашди.
 abstract final class AvaLight {
-  /// Экран фони = Primary light (эга қарори, 2026-10-07). Аввал `F3F5F8`.
-  /// Оқ карточка шу фонда 1.13 контраст беради — ажралиш `line` чизиғи
-  /// билан сақланади.
-  static const bg = Color(0xFFFFF0D1);
+  /// Саҳифа фони (эга 2026-11-20). Аввал крем `FFF0D1`.
+  static const bg = Color(0xFFF7F8FA);
+
+  /// Карточка (эга 2026-11-20).
   static const surface = Color(0xFFFFFFFF);
 
-  // ─── Илиқ нейтраллар (2026-10-07, эга тасдиғи) ───
-  // Аввалгилари кўк-кулранг `F3F5F8` фонга мосланган эди; крем `FFF0D1`
-  // фонда салқин кўринарди. Илиқ қийматлар оқ билан ЎША поғона фарқини
-  // сақлайди (surface2 1.13 → 1.15, chip 1.08 → 1.10, line 1.28 → 1.36).
+  /// Иккиламчи усти — расм ўрни, ботиқ майдон. `ink2` устида ≥ 4.5 (AA).
+  static const surface2 = Color(0xFFF2F4F7);
 
-  /// Аввал `EEF1F6`. `ink2` устида 4.62 (AA).
-  static const surface2 = Color(0xFFF6EEDF);
+  /// Ингичка чегара (эга 2026-11-20).
+  static const line = Color(0xFFE8EBEF);
 
-  /// Аввал `DFE4EC`. Крем фонда оқ карточкани ажратади (1.21; эскиси 1.13).
-  static const line = Color(0xFFEADBC0);
-  static const ink = Color(0xFF171717);
-  static const inkRow = Color(0xFF3A3A3A);
+  /// Асосий матн (эга 2026-11-20). Аввал `171717`.
+  static const ink = Color(0xFF1F2328);
+  static const inkRow = Color(0xFF344054);
+  static const insetEdgeTop = Color(0xFFDDE1E7);
+  static const insetEdgeBottom = Color(0xFFFFFFFF);
 
-  /// Аввал `D2D9E4`.
-  static const insetEdgeTop = Color(0xFFE2D2B4);
+  /// Ботиқ майдоннинг ички сояси — совуқ кулранг, 45% тиниқлик.
+  static const insetShadow = Color(0x73667085);
 
-  /// Аввал `FBFCFE`.
-  static const insetEdgeBottom = Color(0xFFFFFBF2);
-
-  /// Ботиқ майдоннинг ички сояси — илиқ жигарранг, 55% тиниқлик
-  /// (аввал кўк-кулранг `8C586882`). Ёруғ мавзуда соф қора соя «кир»
-  /// бўлиб кўринади, шунинг учун тус фон оиласидан олинган.
-  static const insetShadow = Color(0x8C7A6440);
-  static const ink2 = Color(0xFF6B6B6B);
+  /// Иккиламчи матн (эга 2026-11-20). Оқда 4.97, `bg` да 4.68.
+  static const ink2 = Color(0xFF667085);
+  /// Учламчи — соф нейтрал кулранг (ўзгармаган; EV харитаси нуқтаси шуни ишлатади).
   static const ink3 = Color(0xFF9E9E9E);
-  // ─── Бренд (эга қарори, 2026-10-07): AVA Primary #FFA500 ───
-  // Аввал кўк `1E4FD8` эди.
 
-  /// AVA Primary — тугма, AppBar, FAB, тўлдирилган акцент ФОНИ.
+  // ─── Бренд (эга қарори, 2026-10-07): AVA Primary #FFA500 ───
+
+  /// AVA Primary — тугма, фаол ҳолат, асосий таклиф ФОНИ (эга 2026-11-20: ягона акцент).
   /// ⚠️ Матн ранги сифатида ИШЛАТИЛМАСИН: оқ фонда контраст 1.97.
   static const brand = Color(0xFFFFA500);
 
-  /// Бренд устидаги матн/иконка — тўқ (эга қарори). `FFA500` устида
-  /// оқ матн 1.97, `171717` эса 9.08 беради.
+  /// Бренд устидаги матн/иконка — тўқ. `FFA500` устида `171717` 9.08 беради.
   static const brandInk = Color(0xFF171717);
 
-  /// Primary light — чип, белги, енгил акцент фони. Экран фони билан бир
-  /// хил, шунинг учун у фақат оқ `surface` устида ажралиб кўринади.
-  static const brandSoft = Color(0xFFFFF0D1);
+  /// Бренднинг юмшоқ фони — баннер, чип, белги (эга 2026-11-20: баннер фони `FFF3DF`).
+  static const brandSoft = Color(0xFFFFF3DF);
 
-  /// Primary dark — босилган ҳолат ва hover фони.
-  /// Матнга ЯРАМАЙДИ: оқ фонда 2.63.
+  /// Primary dark — босилган ҳолат ва hover фони. Матнга ЯРАМАЙДИ.
   static const brandPressed = Color(0xFFE68A00);
 
-  /// Оч фондаги бренд МАТНИ/иконкаси/ингичка чизиғи — нарх, ҳавола,
-  /// танланган ёрлиқ (эга қарори, 2026-10-07, «Б» варианти).
-  /// Аввал `B45309` эди — `bg` да 4.46 (AA'дан паст); бир поғона тўқроқ
-  /// `A84D08` га ўтказилди (эга тасдиғи, 2026-10-07).
-  /// Контраст: оқ `surface` да 5.63, `bg` (`FFF0D1`) да 5.00.
+  /// Оч фондаги бренд МАТНИ/иконкаси/ингичка чизиғи — нарх, ҳавола.
+  /// Оқ `surface` да 5.63, `bg` да ≥ 5.
   static const brandText = Color(0xFFA84D08);
 
   static const ok = Color(0xFF177A4C);
   static const okSoft = Color(0xFFE4F5EC);
   static const warn = Color(0xFFB4590E);
   static const warnSoft = Color(0xFFFCEEE0);
-  /// Аввал `F4F6FA` (қаранг: илиқ нейтраллар).
-  static const chip = Color(0xFFFBF4E6);
+  static const chip = Color(0xFFF2F4F7);
 
-  /// ⚠️ Тавсиф жадвалида хатолик (danger) токени йўқ, лекин кодда
-  /// `AppColors.error` 8 жойда ишлатилади ва уни йўқотиб бўлмайди.
-  /// Қиймат палитрага мослаб танланди — эга тасдиқласа, ўзгармайди.
   static const danger = Color(0xFFC0332E);
   static const dangerSoft = Color(0xFFFDECEA);
 }
 
-/// Қоронғи режим хом қийматлари (ҳозирча уланмаган).
+/// Қоронғи режим хом қийматлари (ҳали `MaterialApp`га уланмаган).
+///
+/// Эга 2026-11-20 «енгил дизайн»га мос: нейтрал кулранг-қора асос ва ўша ЯГОНА
+/// тўқ сариқ акцент (аввал вақтинча кўк `6E93FF` эди — қарор қилинмаган деб
+/// белгиланган). Қоронғида акцент бир поғона ёруғроқ (`FFB020`) — тўқ фонда
+/// тиниқ кўринади; босилгани — ёруғ режим бренди. Қийматлар PROPOSED.
 abstract final class AvaDark {
-  static const bg = Color(0xFF12151C);
-  static const surface = Color(0xFF1B1F29);
-  static const surface2 = Color(0xFF232834);
-  static const line = Color(0xFF333A48);
-  static const ink = Color(0xFFEDEFF4);
-  static const inkRow = Color(0xFFFFFFFF);
-  static const insetEdgeTop = Color(0xFF151922);
-  static const insetEdgeBottom = Color(0xFF2E3543);
+  static const bg = Color(0xFF0F1115);
+  static const surface = Color(0xFF181B20);
+  static const surface2 = Color(0xFF22262D);
+  static const line = Color(0xFF2C313A);
+  static const ink = Color(0xFFE7E9EC);
+  static const inkRow = Color(0xFFF2F4F7);
+  static const insetEdgeTop = Color(0xFF0B0D10);
+  static const insetEdgeBottom = Color(0xFF2C313A);
 
-  /// Қоронғи мавзуда соя деярли қора ва кучлироқ: фон аллақачон тўқ,
-  /// суст соя умуман кўринмай қолади.
+  /// Қоронғи мавзуда соя деярли қора ва кучлироқ.
   static const insetShadow = Color(0xB8000000);
-  static const ink2 = Color(0xFFAEB5C4);
-  static const ink3 = Color(0xFF7C8494);
-  static const brand = Color(0xFF6E93FF);
-  static const brandInk = Color(0xFF0B1020);
-  static const brandSoft = Color(0xFF1E2A4C);
-
-  /// Қоронғи режим бренди ҳали ҚАРОР ҚИЛИНМАГАН (2026-10-07): эски кўк
-  /// қийматлар турибди. Янги токенлар мавжуд [brand] га тенг.
-  static const brandPressed = brand;
-  static const brandText = brand;
+  static const ink2 = Color(0xFFA3AAB6);
+  static const ink3 = Color(0xFF757D8A);
+  static const brand = Color(0xFFFFB020);
+  static const brandInk = Color(0xFF171717);
+  static const brandSoft = Color(0xFF2B2214);
+  static const brandPressed = Color(0xFFFFA500);
+  static const brandText = Color(0xFFFFB547);
   static const ok = Color(0xFF6FD3A3);
   static const okSoft = Color(0xFF173327);
   static const warn = Color(0xFFF0A868);
   static const warnSoft = Color(0xFF3A2A18);
-  static const chip = Color(0xFF232834);
+  static const chip = Color(0xFF22262D);
 
   /// Қаранг: [AvaLight.danger].
   static const danger = Color(0xFFFF8A80);
@@ -376,8 +365,11 @@ extension AvaColorsX on BuildContext {
 
 /// Радиуслар.
 abstract final class AvaRadius {
-  /// Карточка.
-  static const double card = 12;
+  /// Карточка — 16 (эга 2026-11-20 «енгил дизайн»; аввал 12).
+  static const double card = 16;
+
+  /// Бош саҳифа баннери (эга 2026-11-20: 14–16).
+  static const double banner = 16;
 
   /// Қидирув майдони.
   static const double search = 14;
@@ -402,6 +394,12 @@ abstract final class AvaSpace {
 
   /// Қатор ичидаги кичик оралиқ.
   static const double gap = 8;
+
+  /// Бош саҳифа катта карточкалари орасидаги масофа (эга 2026-11-20: 10–12).
+  static const double cardGap = 10;
+
+  /// Бош саҳифа бўлимлари орасидаги масофа (эга 2026-11-20 «енгил дизайн»).
+  static const double homeSection = 20;
 
   /// Бўлим сарлавҳаси ↔ мазмуни орасидаги масофа (Avito услуби).
   ///
@@ -471,12 +469,26 @@ abstract final class AvaText {
     height: 1.25,
   );
 
-  /// Бош экран бўлим сарлавҳалари («Барча хизматлар», «Яқиндаги эълонлар:» …) — 14/600
-  /// (эга, 2026-10-26: «14 рх га камайтир»; аввал [sectionTitle] 16). Бошқа экранлар [sectionTitle] да қолади.
+  /// Бош экран бўлим сарлавҳалари («Бозорлар», «Янги эълонлар:» …) — 18/600
+  /// (эга 2026-11-20 «енгил дизайн»; 2026-10-26 дан 14 эди). Бошқа экранлар [sectionTitle] да қолади.
   static const homeSectionTitle = TextStyle(
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: FontWeight.w600,
     height: 1.25,
+  );
+
+  /// Бош саҳифа катта карточкаси сарлавҳаси — 16/600 (эга 2026-11-20).
+  static const homeCardTitle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    height: 1.25,
+  );
+
+  /// Бош саҳифа карточкаси изоҳи — 14/400 (эга 2026-11-20); ранги `ink2`.
+  static const homeCardCaption = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
   );
 
   /// Маҳсулот номи — 13/400 (фото биринчи, матн иккинчи даражали).

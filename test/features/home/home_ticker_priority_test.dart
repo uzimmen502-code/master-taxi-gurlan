@@ -12,7 +12,7 @@ HomeTickerAd _ad(String id, int priority, [String? text]) => HomeTickerAd(
     );
 
 String _shown(WidgetTester t) =>
-    t.widget<RichText>(find.descendant(of: find.byType(HomeInfoTicker), matching: find.byType(RichText))).text.toPlainText();
+    t.widget<Text>(find.byKey(const ValueKey('home_banner_title')).last).data!;
 
 Widget _app(List<HomeTickerAd> ads, {int seed = 1}) => MaterialApp(
       home: Scaffold(body: SizedBox(width: 360, child: HomeInfoTicker(ads: ads, random: math.Random(seed)))),
@@ -44,25 +44,25 @@ void main() {
   testWidgets('ҳар матн 5 сония (эга, 2026-10-26): 3 сонияда ҳали алмашмайди, 5 сонияда алмашади', (t) async {
     expect(HomeInfoTicker.textInterval, const Duration(seconds: 5));
     await t.pumpWidget(_app([_ad('a', 90, 'Биринчи'), _ad('b', 0, 'Иккинчи')]));
-    expect(_shown(t), 'БИРИНЧИ');
+    expect(_shown(t), 'Биринчи');
     await t.pump(const Duration(seconds: 3));
     await t.pumpAndSettle();
-    expect(_shown(t), 'БИРИНЧИ', reason: 'аввал 3 сонияда алмашарди');
+    expect(_shown(t), 'Биринчи', reason: 'аввал 3 сонияда алмашарди');
     await t.pump(const Duration(seconds: 2));
     await t.pumpAndSettle();
-    expect(_shown(t), 'ИККИНЧИ');
+    expect(_shown(t), 'Иккинчи');
     await t.pumpWidget(const SizedBox());
   });
 
   testWidgets('биринчи кўрсатиладиган — энг юқори устуворлик; кейин навбат билан', (t) async {
     await t.pumpWidget(_app([_ad('a', 0, 'Паст'), _ad('b', 90, 'Юқори'), _ad('c', 40, 'Ўрта')]));
-    expect(_shown(t), 'ЮҚОРИ');
+    expect(_shown(t), 'Юқори');
     await t.pump(HomeInfoTicker.textInterval);
     await t.pumpAndSettle();
-    expect(_shown(t), 'ЎРТА');
+    expect(_shown(t), 'Ўрта');
     await t.pump(HomeInfoTicker.textInterval);
     await t.pumpAndSettle();
-    expect(_shown(t), 'ПАСТ');
+    expect(_shown(t), 'Паст');
   });
 
   testWidgets('ота виджет янги рўйхат объекти билан қайта чизса (ўша матнлар) — кўрсатилаётган матн сакрамайди', (t) async {
@@ -74,16 +74,16 @@ void main() {
     await t.pumpWidget(_app(List.of(ads.reversed)));
     expect(_shown(t), before);
     // Матн таҳрирланди (id ва устуворлик ўша) — ўрни сақланади, янги матн кўринади.
-    final edited = [for (final a in ads) a.id == ads.firstWhere((x) => 'МАТН ${x.id.substring(1)}' == before).id ? _ad(a.id, 0, 'Таҳрир') : a];
+    final edited = [for (final a in ads) a.id == ads.firstWhere((x) => 'Матн ${x.id.substring(1)}' == before).id ? _ad(a.id, 0, 'Таҳрир') : a];
     await t.pumpWidget(_app(edited));
-    expect(_shown(t), 'ТАҲРИР');
+    expect(_shown(t), 'Таҳрир');
     await t.pumpWidget(const SizedBox());
   });
 
   testWidgets('устуворлик ўзгарса — тартиб қайта ҳисобланади, янги энг юқориси биринчи', (t) async {
     await t.pumpWidget(_app([_ad('a', 0, 'Бир'), _ad('b', 0, 'Икки')]));
     await t.pumpWidget(_app([_ad('a', 0, 'Бир'), _ad('b', 80, 'Икки')]));
-    expect(_shown(t), 'ИККИ');
+    expect(_shown(t), 'Икки');
     await t.pumpWidget(const SizedBox());
   });
 }

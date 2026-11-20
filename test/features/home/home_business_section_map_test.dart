@@ -68,7 +68,8 @@ void main() {
 
   testWidgets('харита устига босиш — тўлиқ бизнес харитаси; «қўшиш» — ўз объектлари', (t) async {
     final opened = await _pump(t);
-    await t.tap(find.textContaining('MAP '));
+    // Харита картасининг чап-юқори бурчаги (марказда «қўшиш» тугмаси туриши мумкин — эга 2026-11-20: сарлавҳа 18).
+    await t.tapAt(t.getTopLeft(find.byKey(const ValueKey('home_business_map_card'))) + const Offset(12, 12));
     await t.tap(find.text('bizmap_add_mine'));
     expect(opened, ['map', 'add']);
   });

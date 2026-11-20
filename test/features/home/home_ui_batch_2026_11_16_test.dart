@@ -1,14 +1,12 @@
-// Эга 2026-11-16 UI тўплами: бозор карталари (авто-мослаш шиор, катта қалин стрелка, ўртадаги сарлавҳа),
+// Эга 2026-11-16 UI тўплами:
 // «Барча хизматларни кўриш» сарлавҳаси, свайп кўрсатмаси йўқлиги, «Сотувчининг бошқа маҳсулотлари» қатори,
 // Уй-жой қидируви.
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:ava_gurlan/core/service_config_holder.dart';
-import 'package:ava_gurlan/features/home/widgets/home_markets_block.dart';
 import 'package:ava_gurlan/features/home/widgets/home_services_olx_row.dart';
 import 'package:ava_gurlan/features/home/widgets/service_spotlight_item.dart';
-import 'package:ava_gurlan/features/markets/domain/market_taxonomy.dart';
 import 'package:ava_gurlan/models/service_module_config.dart';
 import 'package:ava_gurlan/shared/widgets/seller_other_products_row.dart';
 import 'package:flutter/material.dart';
@@ -23,94 +21,8 @@ void main() {
     SellerOtherProductsRow.debugReset();
   });
 
-  group('fitMarketSloganFont', () {
-    const scaler = TextScaler.noScaling;
-    test('қисқа шиор — каттароқ шрифт, узун шиор — кичикроқ; иккаласи ҳам сиғади', () {
-      final short = fitMarketSloganFont(text: 'Мол', maxWidth: 200, maxHeight: 60, textScaler: scaler);
-      final long = fitMarketSloganFont(
-        text: 'Сигир, қўй, эчки ва бошқа уй ҳайвонлари',
-        maxWidth: 200,
-        maxHeight: 60,
-        textScaler: scaler,
-      );
-      expect(short.fits, isTrue);
-      expect(long.fits, isTrue);
-      expect(short.fontSize, greaterThan(long.fontSize));
-      expect(short.fontSize, lessThanOrEqualTo(kHomeMarketSloganMaxFont));
-      expect(long.fontSize, greaterThanOrEqualTo(kHomeMarketSloganMinFont));
-      expect(short.maxLines, isNull);
-    });
-
-    test('танланган шрифт — ЭНГ КАТТА сиғадигани: 0.5 px каттаси сиғмайди', () {
-      const text = 'Янги ва сифатли маҳсулотлар';
-      final fit = fitMarketSloganFont(text: text, maxWidth: 150, maxHeight: 30, textScaler: scaler);
-      expect(fit.fits, isTrue);
-      if (fit.fontSize < kHomeMarketSloganMaxFont) {
-        final tp = TextPainter(
-          text: TextSpan(text: text, style: TextStyle(fontSize: fit.fontSize + 0.5, height: kHomeMarketSloganLineHeight)),
-          textDirection: TextDirection.ltr,
-        )..layout(maxWidth: 150);
-        expect(tp.height > 30 || tp.minIntrinsicWidth > 150, isTrue);
-      }
-    });
-
-    test('9 px да ҳам сиғмаса — 9 px + ellipsis, қаторлар қутига мос', () {
-      final fit = fitMarketSloganFont(text: 'жуда узун шиор ' * 40, maxWidth: 100, maxHeight: 20, textScaler: scaler);
-      expect(fit.fits, isFalse);
-      expect(fit.fontSize, kHomeMarketSloganMinFont);
-      expect(fit.maxLines, greaterThanOrEqualTo(1));
-    });
-  });
-
-  group('бозор картаси геометрияси', () {
-    Future<void> pump(WidgetTester t) async {
-      await t.binding.setSurfaceSize(const Size(400, 1400));
-      addTearDown(() => t.binding.setSurfaceSize(null));
-      await t.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: HomeMarketsBlock(
-              onOpen: (_) {},
-              isVisible: (_) => true,
-              loadTaxonomy: () async => MarketTaxonomy.fromMap(const {'version': 1, 'markets': {}}),
-            ),
-          ),
-        ),
-      ));
-      await t.pumpAndSettle();
-    }
-
-    testWidgets('сарлавҳа 15 px w700 ўртада; шиор пастки четдан 2 px, стрелкадан 1 px; стрелка ўнгдан 2 px', (t) async {
-      await pump(t);
-      for (final id in ['livestock', 'realty', 'aralash']) {
-        final card = t.getRect(find.byKey(ValueKey('home_market_card_$id')));
-        expect(card.height, kHomeMarketCardHeight);
-        final title = t.widget<Text>(find.byKey(ValueKey('home_market_title_$id')));
-        expect(title.textAlign, TextAlign.center);
-        expect(title.style!.fontSize, 15);
-        expect(title.style!.fontWeight, FontWeight.w700);
-        expect(title.maxLines, 1);
-        final arrow = t.getRect(find.byKey(ValueKey('home_market_arrow_$id')));
-        expect(card.right - arrow.right, closeTo(kHomeMarketArrowRightGap, 0.01));
-        expect(arrow.center.dy, closeTo(card.center.dy, 0.6), reason: 'стрелка вертикал марказда');
-        final slogan = t.getRect(find.byKey(ValueKey('home_market_slogan_$id')));
-        expect(card.bottom - slogan.bottom, greaterThanOrEqualTo(kHomeMarketSloganBottomGap - 0.01));
-        expect(arrow.left - slogan.right, greaterThanOrEqualTo(1 - 0.01));
-        final titleRect = t.getRect(find.byKey(ValueKey('home_market_title_$id')));
-        expect(titleRect.top - card.top, closeTo(1, 0.01));
-        expect(slogan.top - titleRect.bottom, closeTo(1, 0.01));
-      }
-      expect(find.byType(CustomPaint), findsWidgets);
-    });
-
-    testWidgets('қисқа шиор картада катта шрифт (≥ 11 px) — авто-мослаш ишлайди', (t) async {
-      await pump(t);
-      // Тестда tr = калит матни ('home_market_china_slogan') — қисқа ва бир хил узунликда.
-      final s = t.widget<Text>(find.byKey(const ValueKey('home_market_slogan_china')));
-      expect(s.style!.fontSize, greaterThan(11));
-      expect(s.style!.height, kHomeMarketSloganLineHeight);
-    });
-  });
+  // Эски бозор картаси геометрияси (авто-мослаш шиор, қалин стрелка) тестлари олиб ташланди —
+  // эга 2026-11-20 «енгил дизайн» карточкаси: test/features/home/home_lite_layout_test.dart.
 
   group('«Барча хизматларни кўриш»', () {
     ServiceSpotlightItem item(String id) =>

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:ava_gurlan/core/service_config_holder.dart';
 import 'package:ava_gurlan/core/theme/app_theme.dart';
 import 'package:ava_gurlan/features/home/widgets/ava_bottom_nav.dart';
@@ -130,8 +133,9 @@ void main() {
   });
 
   group('AvaBottomNav', () {
-    testWidgets('бешта таб: Бош · AVAGram · ＋ · Хабарлар · Кабинет',
+    testWidgets('бешта таб: Бош · AVAGram · Қўшиш (＋) · Хабарлар · Профиль',
         (tester) async {
+      final handle = tester.ensureSemantics();
       await _pump(
         tester,
         AvaBottomNav(current: AvaNavTab.home, onTap: (_) {}),
@@ -140,8 +144,25 @@ void main() {
       expect(find.text('home_nav_avagram'), findsOneWidget);
       expect(find.text('home_nav_messages'), findsOneWidget);
       expect(find.text('home_nav_cabinet'), findsOneWidget);
-      // «＋» — ёрлиқсиз, фақат иконка.
+      // Эга 2026-11-20: «＋» тагида кўринадиган «Қўшиш» ёрлиғи; скрин-ридер уни бир марта ўқийди.
       expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+      expect(find.byKey(const ValueKey('ava_nav_create_label')), findsOneWidget);
+      expect(find.text('home_nav_create'), findsOneWidget);
+      expect(find.bySemanticsLabel('home_nav_create'), findsOneWidget);
+      // «＋» ёрлиғи иконка ТАГИДА.
+      expect(tester.getTopLeft(find.text('home_nav_create')).dy,
+          greaterThan(tester.getBottomLeft(find.byIcon(Icons.add_rounded)).dy - 1));
+      handle.dispose();
+    });
+
+    test('ёрлиқлар 3 тилда: «Кабинет» → «Профиль» (эга 2026-11-20)', () {
+      Map<String, dynamic> read(String l) =>
+          jsonDecode(File('assets/lang/$l.json').readAsStringSync()) as Map<String, dynamic>;
+      final cyr = read('uz_Cyrl'), lat = read('uz_Latn'), ru = read('ru');
+      expect([cyr['home_nav_home'], cyr['home_nav_avagram'], cyr['home_nav_create'], cyr['home_nav_messages'], cyr['home_nav_cabinet']],
+          ['Бош', 'AVAGram', 'Қўшиш', 'Хабарлар', 'Профиль']);
+      expect([lat['home_nav_create'], lat['home_nav_cabinet']], ['Qöşiş', 'Profil']);
+      expect([ru['home_nav_create'], ru['home_nav_cabinet']], ['Добавить', 'Профиль']);
     });
 
     testWidgets('«Буюртмалар» ва «Ҳамён» таблари йўқ', (tester) async {

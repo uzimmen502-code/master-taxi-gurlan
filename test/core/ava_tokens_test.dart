@@ -65,7 +65,7 @@ void main() {
     });
 
     test('ўлчамлар тавсифга мос', () {
-      expect(AvaRadius.card, 12);
+      expect(AvaRadius.card, 16); // эга 2026-11-20 «енгил дизайн» (аввал 12)
       expect(AvaRadius.search, 14);
       expect(AvaSpace.screen, 16);
       expect(AvaTap.minSize, 44);
@@ -106,9 +106,13 @@ void main() {
     test('эга берган қийматлар', () {
       expect(AvaLight.brand, const Color(0xFFFFA500));
       expect(AvaLight.brandPressed, const Color(0xFFE68A00));
-      expect(AvaLight.brandSoft, const Color(0xFFFFF0D1));
-      expect(AvaLight.bg, const Color(0xFFFFF0D1));
-      expect(AvaLight.ink, const Color(0xFF171717));
+      // Эга 2026-11-20 «енгил дизайн»: оч кулранг/оқ асос, ягона тўқ сариқ акцент.
+      expect(AvaLight.brandSoft, const Color(0xFFFFF3DF));
+      expect(AvaLight.bg, const Color(0xFFF7F8FA));
+      expect(AvaLight.surface, const Color(0xFFFFFFFF));
+      expect(AvaLight.ink, const Color(0xFF1F2328));
+      expect(AvaLight.ink2, const Color(0xFF667085));
+      expect(AvaLight.line, const Color(0xFFE8EBEF));
       expect(AvaLight.brandInk, const Color(0xFF171717));
       expect(AvaLight.brandText, const Color(0xFFA84D08));
     });
@@ -130,21 +134,30 @@ void main() {
     test('brandText: оқ устида ҳам, фонда ҳам ≥ 4.5', () {
       expect(_contrast(AvaLight.brandText, AvaLight.surface), greaterThanOrEqualTo(4.5));
       expect(_contrast(AvaLight.brandText, AvaLight.bg), greaterThanOrEqualTo(4.5));
-      expect(_contrast(const Color(0xFFB45309), AvaLight.bg), lessThan(4.5));
     });
 
-    // Илиқ нейтраллар: қават поғонаси сақланади, иккиламчи матн ўқилади.
-    test('илиқ нейтраллар — поғона ва ўқилиш', () {
-      // positive: оқ рамка ↔ ботиқ майдон фарқи эскисидан (1.13) кам эмас
-      expect(_contrast(AvaLight.surface, AvaLight.surface2), greaterThanOrEqualTo(1.13));
-      // positive: карточка чизиғи крем фонда эскисидан (1.13) кучлироқ
-      expect(_contrast(AvaLight.line, AvaLight.bg), greaterThan(1.13));
-      // boundary: иккиламчи матн ботиқ майдон ва чипда AA
-      expect(_contrast(AvaLight.ink2, AvaLight.surface2), greaterThanOrEqualTo(4.5));
-      expect(_contrast(AvaLight.ink2, AvaLight.chip), greaterThanOrEqualTo(4.5));
-      // negative: эски кўк-кулранг қийматлар қайтиб келмасин
-      expect(AvaLight.surface2, isNot(const Color(0xFFEEF1F6)));
-      expect(AvaLight.line, isNot(const Color(0xFFDFE4EC)));
+    // «Енгил дизайн» нейтраллари (эга 2026-11-20): иккиламчи матн ҳамма юзада AA, чегара оқда кўринади.
+    test('нейтраллар — ўқилиш ва поғона', () {
+      for (final bg in [AvaLight.surface, AvaLight.bg, AvaLight.surface2, AvaLight.chip, AvaLight.brandSoft]) {
+        expect(_contrast(AvaLight.ink2, bg), greaterThanOrEqualTo(4.5), reason: '$bg');
+        expect(_contrast(AvaLight.ink, bg), greaterThanOrEqualTo(7), reason: '$bg');
+      }
+      // positive: карточка (оқ) фондан ва чегара карточкадан ажралади
+      expect(_contrast(AvaLight.surface, AvaLight.bg), greaterThan(1.03));
+      expect(_contrast(AvaLight.line, AvaLight.surface), greaterThan(1.15));
+      // negative: эски крем фон қайтиб келмасин
+      expect(AvaLight.bg, isNot(const Color(0xFFFFF0D1)));
+    });
+
+    // Қоронғи палитра (PROPOSED, эга 2026-11-20): ягона тўқ сариқ акцент, матн AA.
+    test('қоронғи: акцент тўқ сариқ, матн ўқилади', () {
+      expect(AvaDark.brand.r, greaterThan(AvaDark.brand.b), reason: 'кўк эмас — тўқ сариқ');
+      expect(_contrast(AvaDark.brandInk, AvaDark.brand), greaterThanOrEqualTo(4.5));
+      for (final bg in [AvaDark.bg, AvaDark.surface, AvaDark.surface2]) {
+        expect(_contrast(AvaDark.ink, bg), greaterThanOrEqualTo(7), reason: '$bg');
+        expect(_contrast(AvaDark.ink2, bg), greaterThanOrEqualTo(4.5), reason: '$bg');
+        expect(_contrast(AvaDark.brandText, bg), greaterThanOrEqualTo(4.5), reason: '$bg');
+      }
     });
 
     test('бренд матн ранги сифатида темада ишлатилмайди', () {

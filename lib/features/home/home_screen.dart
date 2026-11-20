@@ -31,7 +31,6 @@ import '../../shared/widgets/no_internet_banner.dart';
 import '../customer_confirm/widgets/customer_confirm_banner.dart';
 import 'widgets/home_wallet_ticker_slot.dart';
 import '../../core/widgets/zone_gate.dart';
-import '../ads/models/ad_model.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../profile/screens/news_hub_screen.dart';
 import '../tv_market/screens/tv_publish_screen.dart';
@@ -52,7 +51,6 @@ import '../ads/widgets/platform_market_card.dart' show openPlatformProductDetail
 import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/open_wholesale_seller.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
-import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
@@ -113,31 +111,25 @@ import '../tv_market/screens/tv_market_feed_screen.dart';
 import '../tv_market/screens/tv_shop_item_detail_screen.dart';
 import '../tv_market/screens/tv_shop_public_screen.dart';
 import 'widgets/home_ads_section.dart';
-import 'widgets/home_restaurants_section.dart';
-import 'widgets/home_avagram_section.dart';
-import 'widgets/home_dating_section.dart';
-import 'widgets/home_ev_section.dart';
-import 'widgets/home_business_section.dart';
 import '../business_map/screens/business_map_screen.dart';
 import '../business_map/screens/my_businesses_screen.dart';
 import '../my_shop/my_shop_presence.dart';
 import '../my_shop/open_my_shop.dart';
-import 'widgets/home_intercity_section.dart';
-import 'widgets/home_market_section.dart';
 import 'widgets/home_markets_block.dart';
+import 'widgets/home_lite_cards.dart';
+import 'widgets/service_spotlight_item.dart';
+import '../restaurants/domain/restaurants_access.dart';
 import '../markets/open_market.dart';
 import '../markets/data/market_taxonomy_repository.dart';
 import '../markets/domain/market_taxonomy.dart';
 import '../markets/screens/market_screen.dart';
-import 'widgets/home_yuk_local_section.dart';
 import 'home_market_nav.dart';
 import 'create_sheet_loop.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 // Эски пастки меню ранглари (`_headerBorder`, `_brandGreen`,
 // `_inactiveTab`) билан бирга олиб ташланди — янги `AvaBottomNav`
-// токенлардан фойдаланади.
-const _bg = AvaLight.bg;
+// токенлардан фойдаланади. Фон — `context.ava.bg` (эга 2026-11-20: қоронғи палитрага тайёр).
 
 /// Юқори қатор → «ҳамён / сариқ баннер» жойи орасидаги масофа, px (эга, 2026-10-26).
 /// Аввалги экранга мослашувчи `_sectionGap` (6–10 px) ва `_homeUiScale` фақат шу ерда ишлатиларди — олиб ташланди.
@@ -220,7 +212,10 @@ class _HomeViewState extends State<_HomeView> {
       watchExtra: (uid) => _dealRepo().watchUnreadTotal(canonicalPhoneId(uid)),
     );
     _configListener = () {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      // Модул дарвозаси ўзгарса — «Кафе-ресторанлар» картаси қайта ҳал қилинади.
+      unawaited(_resolveRestaurantsCard());
     };
     ServiceConfigHolder.revision.addListener(_configListener!);
     GeoContext.revision.addListener(_configListener!);
@@ -243,6 +238,7 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(_askLocationOnce());
       unawaited(_refreshDriverRoles());
       unawaited(_refreshShopPresence());
+      unawaited(_resolveRestaurantsCard());
     });
   }
 
@@ -297,6 +293,7 @@ class _HomeViewState extends State<_HomeView> {
     if (!mounted) return;
     final home = context.read<HomeController>();
     setState(() => _refreshEpoch++);
+    _restaurantsTester = null;
     _lastLocationCheckAt = null;
     _lastDeferredBootstrapAt = null;
     await Future.wait<void>([
@@ -306,6 +303,7 @@ class _HomeViewState extends State<_HomeView> {
       _refreshDriverRoles(),
       _refreshShopPresence(),
       _syncUnread(),
+      _resolveRestaurantsCard(),
       Future<void>.delayed(const Duration(milliseconds: 500)),
     ].map((f) => f.catchError((Object _) {})));
   }
@@ -352,14 +350,6 @@ class _HomeViewState extends State<_HomeView> {
     }());
   }
 
-
-  /// Ҳудудга боғлиқ бўлимлар калити: туман ўзгарса бўлим ҚАЙТА ЯРАТИЛАДИ
-  /// ва янги сўров очади. Аввал бўлимлар туманни фақат `initState`да
-  /// ўқирди — ҳудуд алмашгач эски туман эълонлари қоларди (geo аудит).
-  ///
-  /// Фаол ҳудуд (D-GEO-1) — яшаш жойи ёки танланган/локация ҳудуди.
-  String get _geoKey =>
-      '${GeoContext.active.regionId}:${GeoContext.active.districtId}';
 
   /// Локациядан аниқланган туман (1б, D-GEO-12/13) — ҳудуд ойнасида
   /// «Ҳозирги жойим» пункти; `null` — аниқланмаган.
@@ -1174,16 +1164,6 @@ class _HomeViewState extends State<_HomeView> {
     await _push(screen);
   }
 
-  /// «Менинг бизнесларим» бош саҳифа бўлимидан: дарвоза + телефон + эга = HomeController телефони.
-  Future<void> _openMyBusinesses() async {
-    final phone = canonicalPhoneId(context.read<HomeController>().phone);
-    if (phoneDigits(phone).length < 9) {
-      needPhoneForAction(context);
-      return;
-    }
-    await _openGated('business_map', MyBusinessesScreen(ownerId: phone));
-  }
-
   /// Курьер: панели бор — панел; ариза кўриб чиқилмоқда — хабар; акс ҳолда
   /// ариза оқими ([runCourierApplyFlow] — ягона жойи шу; профилда энди йўқ).
   /// Қайтганда ҳолат янгиланади: ариза юборилса варақда «кўриб чиқилмоқда» чиқади.
@@ -1242,6 +1222,185 @@ class _HomeViewState extends State<_HomeView> {
       ),
     );
   }
+
+  // ─── «Енгил дизайн» карточкалари (эга 2026-11-20) ─────────────────────────
+  // Тартиб ва дарвоза — `home_lite_cards.dart` (ягона манба, тестланади); очиш —
+  // мавжуд йўллар: хизматлар каталоги (`buildHomeServices`) ва ушбу экран helper'лари.
+
+  /// «Кафе-ресторанлар» картаси: модул очиқ — ҳамма; «Тез кунда» — фақат INTERNAL синовчи
+  /// ([resolveRestaurantsAccess] — бош саҳифа бўлими ишлатган ўша ягона манба).
+  bool _restaurantsAllowed = false;
+  bool _restaurantsResolving = false;
+
+  /// Сервер синовчи жавоби — сеансда бир марта (тортиб янгилашда қайта); ҳар конфиг
+  /// ўзгаришида callable чақирилмасин (37-банд).
+  bool? _restaurantsTester;
+
+  Future<void> _resolveRestaurantsCard() async {
+    if (_restaurantsResolving) return;
+    _restaurantsResolving = true;
+    try {
+      final ok = await resolveRestaurantsAccess(
+        accessCheck: () async => _restaurantsTester ??= await RestaurantsRepository().hasAccess(),
+      );
+      if (mounted && ok != _restaurantsAllowed) setState(() => _restaurantsAllowed = ok);
+    } catch (e) {
+      debugPrint('[Home] RESTAURANTS_ACCESS_CHECK_FAILED: $e');
+    } finally {
+      _restaurantsResolving = false;
+    }
+  }
+
+  Map<String, ServiceSpotlightItem> _catalogById() => {
+        for (final e in buildHomeServices(context, a: _serviceActions)) e.moduleId: e,
+      };
+
+  List<HomeLiteCardData> _adsServicesCards(UserModel? user) {
+    final catalog = _catalogById();
+    final ids = homeAdsServicesCardIds(
+      isVisible: HomeModuleGate.showInGrid,
+      viewerBirthDate: user?.birthDate ?? '',
+      restaurantsAllowed: _restaurantsAllowed,
+    );
+    return [
+      for (final id in ids)
+        switch (id) {
+          'dating' => HomeLiteCardData(
+              id: 'dating',
+              title: context.tr('dating_short_label'),
+              caption: context.tr('home_lite_dating_caption'),
+              icon: Icons.favorite_rounded,
+              onTap: _openDating,
+            ),
+          'ads' => HomeLiteCardData(
+              id: 'ads',
+              title: context.tr('home_section_ads'),
+              caption: context.tr('home_lite_ads_caption'),
+              imagePath: 'assets/images/services/service_jobs.png',
+              fit: HomeLiteImageFit.contain,
+              onTap: () => _openGated('jobs', const JobsScreen(kind: AdKind.ad)),
+            ),
+          'logistics' => HomeLiteCardData(
+              id: 'logistics',
+              title: context.tr('home_lite_post_title'),
+              caption: context.tr('home_lite_post_caption'),
+              icon: Icons.local_post_office_rounded,
+              onTap: catalog['logistics']!.onTap,
+            ),
+          'pay' => HomeLiteCardData(
+              id: 'pay',
+              title: context.tr('home_lite_pay_title'),
+              caption: context.tr('home_lite_pay_caption'),
+              icon: Icons.account_balance_wallet_rounded,
+              onTap: () => _openPayTransfers(catalog),
+            ),
+          _ => HomeLiteCardData(
+              id: 'restaurants',
+              title: context.tr('home_lite_restaurants_title'),
+              caption: context.tr('home_lite_restaurants_caption'),
+              imagePath: 'assets/images/banners/banner_food.jpg',
+              onTap: () => _openRestaurants(lat: user?.address.lat, lng: user?.address.lng),
+            ),
+        },
+    ];
+  }
+
+  /// «Пул ўтказмалари»: битта провайдер ёқилган бўлса — дарҳол ўша илова; бир нечта — танлов варағи.
+  Future<void> _openPayTransfers(Map<String, ServiceSpotlightItem> catalog) async {
+    final items = [
+      for (final id in visiblePayModules(HomeModuleGate.showInGrid))
+        if (catalog[id] != null) catalog[id]!,
+    ];
+    if (items.isEmpty) return;
+    if (items.length == 1) {
+      items.first.onTap();
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                context.tr('home_lite_pay_sheet_title'),
+                style: AvaText.homeCardTitle.copyWith(color: ctx.ava.ink),
+              ),
+            ),
+            for (final it in items)
+              ListTile(
+                key: ValueKey('home_pay_option_${it.moduleId}'),
+                title: Text(it.label),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  it.onTap();
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<HomeLiteCardData> _transportCards() {
+    final catalog = _catalogById();
+    const meta = <String, (String, String, String, HomeLiteImageFit)>{
+      'intercity': ('home_module_intercity', 'home_lite_intercity_caption',
+          'assets/images/banners/banner_intercity.jpg', HomeLiteImageFit.cover),
+      'local_taxi': ('home_lite_local_taxi_title', 'home_lite_local_taxi_caption',
+          'assets/images/banners/banner_local_taxi.jpg', HomeLiteImageFit.cover),
+      'marshrut': ('home_lite_marshrut_title', 'home_lite_marshrut_caption',
+          'assets/images/banners/banner_marshrut.jpg', HomeLiteImageFit.cover),
+      'yuk_local': ('home_lite_yuk_local_title', 'home_lite_yuk_local_caption',
+          'assets/images/services/service_yuk_local.png', HomeLiteImageFit.contain),
+    };
+    return [
+      for (final id in homeTransportCardIds(HomeModuleGate.showInGrid))
+        if (catalog[id] != null && meta[id] != null)
+          HomeLiteCardData(
+            id: id,
+            title: context.tr(meta[id]!.$1),
+            caption: context.tr(meta[id]!.$2),
+            imagePath: meta[id]!.$3,
+            fit: meta[id]!.$4,
+            onTap: catalog[id]!.onTap,
+          ),
+    ];
+  }
+
+  List<HomeLiteCardData> _moreCards() => [
+        for (final id in homeMoreCardIds(HomeModuleGate.showInGrid))
+          switch (id) {
+            'tv_market' => HomeLiteCardData(
+                id: 'tv_market',
+                title: context.tr('home_nav_avagram'),
+                caption: context.tr('home_lite_avagram_caption'),
+                icon: Icons.play_circle_fill_rounded,
+                onTap: () => _openGated('tv_market', const TvMarketFeedScreen()),
+              ),
+            'business_map' => HomeLiteCardData(
+                id: 'business_map',
+                title: context.tr('home_lite_business_map_title'),
+                caption: context.tr('home_lite_business_map_caption'),
+                icon: Icons.map_rounded,
+                onTap: () => _openGated('business_map', const BusinessMapScreen()),
+              ),
+            _ => HomeLiteCardData(
+                id: 'ev_charging',
+                title: context.tr('home_lite_ev_title'),
+                caption: context.tr('home_lite_ev_caption'),
+                imagePath: 'assets/images/services/service_ev_charging.png',
+                fit: HomeLiteImageFit.contain,
+                onTap: () => _openGated('ev_charging', const EvChargingMapScreen()),
+              ),
+          },
+      ];
 
   // `_openAssistant` олиб ташланди: у фақат эски `AvaQuickActions`
   // катагида ишлатиларди. AVA ёрдамчиси ҳамон очилади — хизматлар
@@ -1302,6 +1461,9 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
     switch (entry.moduleId) {
+      // «Хизматлар бозори» (эга 2026-11-20) — мавжуд хизматлар рўйхати, дарвоза `jobs`.
+      case 'jobs':
+        await _openGated('jobs', const JobsScreen(kind: AdKind.service));
       case 'realty':
         await _openGated('realty', const RealtyScreen());
       case 'wholesale_market':
@@ -1311,50 +1473,6 @@ class _HomeViewState extends State<_HomeView> {
       case 'cheap_products_home':
         await _openModule(HomeModulesCatalog.byId('cheap_products_home'));
     }
-  }
-
-  /// Аҳоли бозори бўлимидаги қатор — АЙНАН ўша эълоннинг тафсилоти.
-  ///
-  /// Илгари бу ерда эълон объекти `(_)` билан ташлаб юбориларди ва
-  /// модулнинг умумий рўйхати очиларди — фойдаланувчи босган эълонини
-  /// рўйхатдан қайтадан қидиришга мажбур эди.
-  Future<void> _openMarketAd(AdModel ad, List<AdModel> shelf) async {
-    if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
-      _showTezKundaSnack();
-      return;
-    }
-    // Тафсилот эмас — Аралаш бозор рўйхати, босилган эълон биринчи ўринда
-    // (эга, 2026-11-03). Тафсилот рўйхатдаги карточка босилганда очилади.
-    await _push(CheapProductsScreen(pinnedAd: ad));
-  }
-
-  /// Бош саҳифадаги Аралаш бўлимидаги AVA маҳсулоти — эълон каби: бозор
-  /// рўйхати, шу маҳсулот биринчи ўринда (эга, 2026-11-03).
-  Future<void> _openMarketPlatform(PlatformProduct product) async {
-    if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
-      _showTezKundaSnack();
-      return;
-    }
-    await _push(CheapProductsScreen(pinnedPlatform: product));
-  }
-
-  /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
-  Future<void> _openWholesaleProduct(
-    WholesaleProduct product,
-    List<WholesaleProduct> shelf,
-  ) async {
-    if (!ServiceConfigHolder.isOpenable(
-        WholesaleProduct.moduleIdFor(product.market))) {
-      _showTezKundaSnack();
-      return;
-    }
-    // Орқага — шу маҳсулот бозорига (Улгуржи / Хитой), асосий экранга эмас.
-    await _pushOverMarket(
-      _wholesaleMarketScreen(product.market),
-      () => _push(
-        WholesaleProductDetailScreen(product: product, catalog: shelf),
-      ),
-    );
   }
 
   /// Аралаш бўлимидаги Уй-жой эълони: орқага — Уй-жой бозори, яна орқага — асосий экран (8-босқич).
@@ -1477,7 +1595,7 @@ class _HomeViewState extends State<_HomeView> {
     }
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: context.ava.bg,
       // Белги ўзгарганда фақат меню қайта чизилади, бутун саҳифа эмас.
       // Клавиатура очиқ вақтида меню яширилади (чат/қидирувда жой егани учун).
       bottomNavigationBar: avaNavHiddenByKeyboard(context)
@@ -1567,6 +1685,8 @@ class _HomeViewState extends State<_HomeView> {
                               builder: (context, snap) => HomeWalletTickerSlot(
                                 showWallet: _walletVisible,
                                 tickerAds: snap.data ?? const <HomeTickerAd>[],
+                                // «Эълон бериш →» — «＋» (Қўшиш) варағи: эълон/хизмат/дўкон (INFERRED, эга 2026-11-20).
+                                onBannerCta: _openCreateSheet,
                                 wallet: WalletCard(
                                   balanceAmount: formatPrice(user?.walletDisplayTotal ?? 0),
                                   balanceCurrency: kCurrencySum,
@@ -1584,21 +1704,8 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                               ),
                             ),
-                            // Карусель ва «Барча хизматлар» сарлавҳаси орасидаги масофа 2 px (эга, 2026-10-15).
-                            const SizedBox(height: 2),
-                            // «Барча хизматларни кўриш» сарлавҳаси (эга, 2026-11-16): доира плиткалар
-                            // қатори бош саҳифадан олиб ташланди — хизматлар фақат шу сарлавҳа орқали
-                            // «Барча хизматлар» экранида. Дарвоза: биронта кўринадиган хизмат бўлмаса — йўқ.
-                            HomeAllServicesHeader(
-                              items: homeRowServices(buildHomeServices(
-                                context,
-                                a: _serviceActions,
-                              )),
-                              onTap: _openAllServices,
-                            ),
-                            // Қидирув — хизматлар сарлавҳасидан кейин, «Бозорлар» блокидан олдин
-                            // (эга, 2026-11-16: аввалги жойига қайтарилди; STAGE 12 да AvaTopBar тагида эди).
-                            const SizedBox(height: 2),
+                            // Қидирув — баннердан кейин (эга 2026-11-20 «енгил дизайн»): иконка майдон ичида.
+                            const SizedBox(height: 12),
                             HomeGlobalSearchBar(
                               key: const ValueKey('home_global_search_top'),
                               // «Уста чақириш» (аудит №4): дарвоза ёпиқ бўлса
@@ -1612,22 +1719,24 @@ class _HomeViewState extends State<_HomeView> {
                                 TvMarketFeedScreen(initialClip: clip),
                               ),
                             ),
-                            // «Бозорлар» блоки (эга, 2026-11-16, STAGE 12): 8 бозор карточкаси,
-                            // ҳар бири ўз дарвозаси билан; ҳеч бири кўринмаса — блок йўқ.
+                            // «Бозорлар» (эга 2026-11-20): 11 карточка эга тартибида, ҳар бири ўз дарвозаси билан.
                             HomeMarketsBlock(onOpen: _openHomeMarket),
-                            if (HomeModuleGate.showInGrid('dating')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeDatingSection(
-                                key: _sectionKey('dating'),
-                                viewerUid: uid,
-                                viewerBirthDate: user?.birthDate ?? '',
-                                viewerGender:
-                                    user?.gender ?? home.gender,
-                                onOpenAll: _openDating,
-                              ),
-                            ],
+                            // «Эълон ва хизматлар» (эга 2026-11-20).
+                            HomeLiteSection(
+                              key: const ValueKey('home_section_ads_services'),
+                              title: context.tr('home_lite_section_ads_services'),
+                              cards: _adsServicesCards(user),
+                            ),
+                            // «Транспорт ва логистика» (эга 2026-11-20). Халқаро такси/юк — кейинга.
+                            HomeLiteSection(
+                              key: const ValueKey('home_section_transport'),
+                              title: context.tr('home_lite_section_transport'),
+                              cards: _transportCards(),
+                            ),
+                            // «Янги эълонлар» (аввал «Яқиндаги эълонлар») — мазмуни ва хатти-ҳаракати
+                            // ўзгармаган: эълонлар + янги уй ошпази + бозор/уй-жой қўшимчалари.
                             if (HomeModuleGate.showInGrid('jobs')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
+                              const SizedBox(height: AvaSpace.homeSection),
                               HomeAdsSection(
                                 key: _sectionKey(
                                     'ads_ad_${GeoContext.homeScopeFor('jobs').key}'),
@@ -1646,8 +1755,6 @@ class _HomeViewState extends State<_HomeView> {
                                     highlightAdId: ad.id,
                                   ),
                                 ),
-                                // Қўшимчалар (эга 2026-11-16/17): бозор маҳсулоти — ўз бозори устида, уй-жой —
-                                // Уй-жой бозори устида, янги уй ошпази — ресторан саҳифаси.
                                 onOpenShopItem: _openHomeShopItem,
                                 onOpenRealty: _openAralashRealty,
                                 onOpenRestaurant: (r) => _push(
@@ -1658,142 +1765,24 @@ class _HomeViewState extends State<_HomeView> {
                                   ),
                                 ),
                               ),
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeAdsSection(
-                                key: _sectionKey(
-                                    'ads_service_${GeoContext.homeScopeFor('jobs').key}'),
-                                adType: 'service',
-                                titleKey: 'home_section_services',
-                                onOpenAll: () => _openGated(
-                                  'jobs',
-                                  const JobsScreen(kind: AdKind.service),
-                                ),
-                                onOpenAd: (ad) => _openGated(
-                                  'jobs',
-                                  JobsScreen(
-                                    kind: AdKind.service,
-                                    highlightAdId: ad.id,
-                                  ),
-                                ),
-                              ),
                             ],
-                            // Кафе-ресторанлар — «Яқиндаги хизматлар»дан
-                            // кейин (эга қарори D-REST-6, 2026-10-08).
-                            // Кўриниш дарвозаси виджетнинг ўзида
-                            // (очиқ / синовчи / яширин).
-                            HomeRestaurantsSection(
-                              key: _sectionKey('restaurants'),
-                              userLat: user?.address.lat,
-                              userLng: user?.address.lng,
-                              onOpenAll: () => _openRestaurants(
-                                lat: user?.address.lat,
-                                lng: user?.address.lng,
-                              ),
-                              onOpenRestaurant: (r) => _push(
-                                RestaurantScreen(
-                                  restaurant: r,
-                                  userLat: user?.address.lat,
-                                  userLng: user?.address.lng,
-                                ),
-                              ),
+                            // «Бошқа хизматлар»: янги жойлашувда алоҳида ўрни йўқ бўлимлар (AVAGram,
+                            // Бизнес харитаси, Электр зарядлаш) бош саҳифадан йўқолмасин — ихчам карточка.
+                            HomeLiteSection(
+                              key: const ValueKey('home_section_more'),
+                              title: context.tr('home_lite_section_more'),
+                              cards: _moreCards(),
                             ),
-                            // Уй-жой бўлими олиб ташланди (эга, 2026-11-16, STAGE 12):
-                            // кириш — «Бозорлар» блокидаги карточка.
-                            if (HomeModuleGate.showInGrid('intercity')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeIntercitySection(
-                                key: _sectionKey('intercity_$_geoKey'),
-                                onOpenAll: () => _openModule(
-                                  HomeModulesCatalog.byId('intercity'),
-                                ),
-                                onOpenRide: (ride) => _push(
-                                  IntercityTaxiScreen(
-                                    autoFrom: ride.fromCity,
-                                    autoTo: ride.toCity,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (HomeModuleGate.showInGrid('yuk_local')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeYukLocalSection(
-                                key: _sectionKey(
-                                    'yuk_local_${GeoContext.homeScopeFor('yuk_local').key}'),
-                                isGuest: uid.length < 9,
-                                onRegister: () =>
-                                    unawaited(openProfileScreen(context)),
-                                onOpenAll: () => _openYukModule(
-                                  'yuk_local',
-                                  const YukLocalScreen(),
-                                ),
-                                // Аввал қатор босилса умумий рўйхат очиларди
-                                // (аудит P-5) — энди шу машина детали.
-                                onOpenDriver: (d) => _openYukModule(
-                                  'yuk_local',
-                                  YukLocalScreen(highlightListingId: d.id),
-                                ),
-                              ),
-                            ],
-                            // Аралаш бозор бўлими қолади (STAGE 12); Улгуржи/Хитой бўлимлари йўқ.
-                            if (HomeModuleGate.showInGrid(
-                                'cheap_products_home')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeMarketSection(
-                                key: _sectionKey(
-                                    'market_${GeoContext.homeScopeFor('cheap_products_home').key}'),
-                                onOpenAll: () => _openModule(
-                                  HomeModulesCatalog.byId(
-                                      'cheap_products_home'),
-                                ),
-                                // Бозор рўйхати, босилган карточка биринчи
-                                // ўринда (эга, 2026-11-03).
-                                onOpenAd: _openMarketAd,
-                                onOpenPlatform: _openMarketPlatform,
-                                // Улгуржи/Хитой маҳсулоти — ўша бозор устида тафсилот,
-                                // орқага бозор, яна орқага асосий экран (эга, 2026-11-13).
-                                onOpenWholesale: _openWholesaleProduct,
-                                // Уй-жой эълони — Уй-жой бозори устида (8-босқич, 2026-11-15).
-                                onOpenRealty: _openAralashRealty,
-                                // Бозорлар / ўз дўкони маҳсулоти — ўз бозори устида (эга 2026-11-16).
-                                onOpenShopItem: _openHomeShopItem,
-                              ),
-                            ],
-                            // Улгуржи ва Хитой бўлимлари олиб ташланди (эга, 2026-11-16,
-                            // STAGE 12): кириш — «Бозорлар» блоки; маҳсулотлари Аралашда қолади.
-                            if (HomeModuleGate.showInGrid('ev_charging')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeEvSection(
-                                key: _sectionKey('ev'),
-                                userLat: user?.address.lat,
-                                userLng: user?.address.lng,
-                                onOpenMap: () =>
-                                    _push(const EvChargingMapScreen()),
-                              ),
-                            ],
-                            // Бизнес харитаси (2026-10-23, эга): ҳамма турдаги объектлар битта харитада.
-                            // Дарвоза `business_map` — admin ёқмагунча яширин (OFF → пилот → ҳамма).
-                            if (HomeModuleGate.showInGrid('business_map')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeBusinessSection(
-                                key: _sectionKey('business_map'),
-                                // GPS бўлса шу жой, бўлмаса бутун мамлакат (эга, 2026-10-23) — профил манзили ишлатилмайди.
-                                onOpenMap: () => _openGated(
-                                    'business_map', const BusinessMapScreen()),
-                                onAddMine: () => _openMyBusinesses(),
-                              ),
-                            ],
-                            if (HomeModuleGate.showInGrid('tv_market')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeAvagramSection(
-                                key: _sectionKey(
-                                    'avagram_${GeoContext.homeScopeFor('tv_market').key}'),
-                                onOpenAll: () =>
-                                    _push(const TvMarketFeedScreen()),
-                                onOpenClip: (clip) => _push(
-                                  TvMarketFeedScreen(initialClip: clip),
-                                ),
-                              ),
-                            ],
+                            // «Барча хизматларни кўриш» (эга, 2026-11-16) — барча модуллар рўйхати
+                            // (Нон, Сут, Гилам, Курьер, Менинг машинам, AVA AI …) шу орқали.
+                            const SizedBox(height: AvaSpace.gap),
+                            HomeAllServicesHeader(
+                              items: homeRowServices(buildHomeServices(
+                                context,
+                                a: _serviceActions,
+                              )),
+                              onTap: _openAllServices,
+                            ),
                           ],
                         ),
                             ],

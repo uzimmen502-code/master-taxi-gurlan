@@ -10,9 +10,10 @@ export 'ava_business_sheet.dart';
 /// Пастки менюнинг таблари.
 enum AvaNavTab { home, avagram, create, messages, cabinet }
 
-/// Бош · AVAGram · ＋ · Хабарлар · Кабинет.
+/// Бош · AVAGram · Қўшиш (＋) · Хабарлар · Профиль (эга 2026-11-20: «Кабинет» → «Профиль»,
+/// «＋» тагида кўринадиган ёрлиқ). Таб номи кодда `cabinet` бўлиб қолади (ички ном).
 ///
-/// «Буюртмалар» алоҳида таб эмас — у Кабинет ичига кўчди (тавсиф талаби).
+/// Буюртмалар — «Хабарлар» табида (фильтр «Буюртмалар»).
 /// «Ҳамён» ҳам бу ерда йўқ: у коддан ўчирилмаган, фақат интерфейсда
 /// яширилган (AVA AI ва EV ичидаги «тўлдириш» ишлайверади).
 class AvaBottomNav extends StatelessWidget {
@@ -219,11 +220,15 @@ class _CreateItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
+    final label = context.tr('home_nav_create');
     return Expanded(
       child: Semantics(
         button: true,
-        label: context.tr('home_nav_create'),
+        label: label,
+        // Кўринадиган ёрлиқ иккинчи марта ўқилмасин.
+        excludeSemantics: true,
         child: InkWell(
+          key: const ValueKey('ava_nav_create'),
           onTap: onTap,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 56),
@@ -234,14 +239,41 @@ class _CreateItem extends StatelessWidget {
             // (2026-09-25, қурилмада: «Қўшиш» тугмаси 0..2340 px).
             child: Center(
               heightFactor: 1,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: c.brand,
-                  borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Ёрлиқ бошқа табларникига бир қаторда турсин: жой иконка
+                    // баландлигида (22), тўқ сариқ квадрат юқорига 8 px чиқади.
+                    SizedBox(
+                      height: 22,
+                      child: OverflowBox(
+                        maxHeight: 30,
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          width: 34,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: c.brand,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.add_rounded, size: 22, color: c.brandInk),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    // Эга 2026-11-20: «＋» тагида кўринадиган «Қўшиш» ёрлиғи.
+                    Text(
+                      label,
+                      key: const ValueKey('ava_nav_create_label'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: AvaText.navLabel.copyWith(color: c.ink2),
+                    ),
+                  ],
                 ),
-                child: Icon(Icons.add_rounded, size: 24, color: c.brandInk),
               ),
             ),
           ),

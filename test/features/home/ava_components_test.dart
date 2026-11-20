@@ -57,9 +57,9 @@ void main() {
         ),
       );
       final title = tester.widget<Text>(find.text('Яқиндаги эълонлар:'));
-      expect(title.style?.fontSize, 14);
+      expect(title.style?.fontSize, 18); // эга 2026-11-20 (аввал 14)
       expect(title.style?.fontWeight, FontWeight.w600);
-      expect(AvaText.homeSectionTitle.fontSize, 14);
+      expect(AvaText.homeSectionTitle.fontSize, 18);
       expect(AvaText.sectionTitle.fontSize, 16, reason: 'бошқа экранлар (ресторан, ҳайдовчи кабинети) ўзгармайди');
     });
 

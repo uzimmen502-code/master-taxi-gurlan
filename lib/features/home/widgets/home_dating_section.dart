@@ -12,17 +12,20 @@ import '../../../repositories/dating_repository.dart';
 import '../home_demo_feed.dart';
 import 'ava_section.dart';
 
-/// 18 ёш — бўлим кўриниши учун энг кичик ёш.
+/// 18 ёш — танишув кўриниши учун энг кичик ёш.
 const int kDatingMinViewerAge = 18;
 
-/// Кўрувчига бўлим кўрсатиладими.
+/// 45 ёш — энг катта ёш (эга 2026-11-20: «Танишув» картаси фақат 18..45 ёшга).
+const int kDatingMaxViewerAge = 45;
+
+/// Кўрувчига танишув (бош саҳифа картаси/бўлими) кўрсатиладими — ЯГОНА манба.
 ///
 /// Эга қарори: туғилган сана тўлдирилмаган бўлса ҳам КЎРСАТИЛМАЙДИ —
-/// ёши номаълум фойдаланувчига 18+ мазмун чиқармаймиз.
+/// ёши номаълум фойдаланувчига 18+ мазмун чиқармаймиз. 2026-11-20: 18..45 (иккала чет киради).
 bool datingSectionVisibleFor(String birthDate) {
   final age = ageFromBirthDate(birthDate);
   if (age == null) return false;
-  return age >= kDatingMinViewerAge;
+  return age >= kDatingMinViewerAge && age <= kDatingMaxViewerAge;
 }
 
 /// Исмнинг бош ҳарфи — расм ўрнига.

@@ -3831,6 +3831,24 @@ exports.customerCancelOrder = functions.https.onCall(async (data, context) => {
       return out;
     }
 
+    // «AVA Супермаркет» (эга 2026-11-20): мижоз фақат `new` ҳолатида бекор қилади; қабул
+    // қилингач (йиғиш/тортиш бошланган) — фақат админ (`adminSetOrderStatus` → rejected).
+    if (String(od.subtype || '') === 'supermarket' && status !== 'new') {
+      console.warn(JSON.stringify({
+        action: 'customerCancelOrder', result: 'refused', errorCode: 'SUPERMARKET_CANCEL_ONLY_NEW',
+        orderId, status,
+      }));
+      throw new functions.https.HttpsError('failed-precondition',
+          'Буюртма қабул қилинган — бекор қилиш учун қўллаб-қувватлашга ёзинг.', {
+            code: 'SUPERMARKET_CANCEL_ONLY_NEW',
+            messages: {
+              uz_Cyrl: 'Буюртма қабул қилинган — бекор қилиш учун қўллаб-қувватлашга ёзинг.',
+              uz_Latn: 'Buyurtma qabul qilingan — bekor qiliş uçun qöllab-quvvatlaşga yozing.',
+              ru: 'Заказ уже принят — для отмены напишите в поддержку.',
+            },
+          });
+    }
+
     // Курьер олиб кетгандан кейин / тўлангандан кейин (қисман ҳамён + нақд) — йўқ.
     const blockedFs = ['courier_picked', 'arrived', 'completed', 'in_delivery'];
     if (blockedFs.includes(fs) || status === 'in_delivery' || status === 'delivered') {

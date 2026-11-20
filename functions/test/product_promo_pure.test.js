@@ -128,6 +128,23 @@ check('seller sets price ≠ base (lower) → continues, % recomputed from base 
   assert.strictEqual(p.patch.promo.sellerChanged, true);
   assert.strictEqual(p.patch.promo.basePrice, 10000);
 });
+// Эга 2026-11-20 (а): қайта ҳисобланган фоиз 50 дан ошса — белги −50%, сотувчи нархи қолади, акция давом этади.
+for (const [price, want] of [[5100, 49], [5000, 50], [4900, 50], [2000, 50]]) {
+  check(`seller lowers price to ${price} (raw ${Math.floor((10000 - price) / 100)}%) → badge ${want}%, price kept, continues`, () => {
+    const p = P.planPromoWrite('tv_shop_items', promoOn(), promoOn({ price }), opts);
+    assert.strictEqual(p.decision, 'continued');
+    assert.strictEqual(p.patch.promo.percent, want);
+    assert.strictEqual(p.patch.promoState.percent, want);
+    assert.ok(!('price' in p.patch));
+    assert.strictEqual(p.patch.priceTracked, price);
+    assert.strictEqual(p.patch.promo.basePrice, 10000);
+  });
+}
+check('seller raises price above base → still cancelled (PRICE_ABOVE_BASE)', () => {
+  const p = P.planPromoWrite('tv_shop_items', promoOn(), promoOn({ price: 12000 }), opts);
+  assert.strictEqual(p.patch.promo, 'DEL');
+  assert.strictEqual(p.patch.promoState.reason, 'PRICE_ABOVE_BASE');
+});
 check('seller sets price > base → cancelled PRICE_ABOVE_BASE', () => {
   const p = P.planPromoWrite('tv_shop_items', promoOn(), promoOn({ price: 12000 }), opts);
   assert.strictEqual(p.patch.promoState.reason, 'PRICE_ABOVE_BASE');

@@ -334,8 +334,10 @@ function planPromoWrite(collection, before, cur, { nowMs, eventMs, fv }) {
         decision = `cancelled:${reason}`;
         view = { ...cur, promo: null, promoState: patch.promoState };
       } else {
-        patch.promo = { ...cur.promo, percent: pct, sellerChanged: true };
-        patch.promoState = { ...st, percent: pct };
+        // Белги PERCENT_MAX'дан ошмайди (эга 2026-11-20, а-вариант): сотувчи нархи ўзгармайди, акция давом этади.
+        const shown = Math.min(pct, PERCENT_MAX);
+        patch.promo = { ...cur.promo, percent: shown, sellerChanged: true };
+        patch.promoState = { ...st, percent: shown };
         decision = 'continued';
         view = { ...cur, promo: patch.promo, promoState: patch.promoState };
       }
